@@ -5,6 +5,12 @@ const input = { id: 'tool', name: 'read_application_media', args: { ref: { kind:
 const chunk = (text: string, offset: number, totalBytes: number, eof: boolean, mimeType = 'image/png') => ({ ok: true,
   data: { mimeType, base64: Buffer.from(text).toString('base64'), byteLength: Buffer.byteLength(text), offset, totalBytes, eof } })
 describe('Pi media result boundary', () => {
+  it('等待用户确认作为正常工具消息返回，不抛错或重复调用', async () => {
+    const waiting = { ok: false, executionState: 'awaiting_user_confirmation', operationId: 'original', confirmation: { continuation: '用户确认后自动继续，用原 operationId 查询' } }
+    const call = vi.fn().mockResolvedValue(waiting)
+    expect((await executePiTool({ ...input, name: 'generate_video_edit_subtitles' }, call)).content).toEqual([{ type: 'text', text: JSON.stringify(waiting) }])
+    expect(call).toHaveBeenCalledOnce()
+  })
   it('公共业务结果直接投影为 Pi 工具消息，失败抛出给 Pi 执行循环', async () => {
     const ordinary = { ...input, name: 'get_application_operation' }
     const data = { ok: true, data: { task: 'task-1' } }

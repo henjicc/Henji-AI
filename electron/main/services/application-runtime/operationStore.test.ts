@@ -12,6 +12,7 @@ import type { LocalHostRequest } from '../../../../src/core/application-control/
 import { reserveGenerationBudget } from './generationBudget'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
+import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 
@@ -33,6 +34,90 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('字幕 unknown 只保护原序列及口播，不拦截同文档代码版本/素材独立追加', () => {
+    const f = fixture()
+    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['video_edit.document', 'video_edit.code_version', 'video_edit.code_material', 'video_edit.caption']))
+    const documentRef = { kind: 'video_edit.document', id: 'video' }
+    const sequenceRef = { kind: 'video_edit.sequence', id: 'video:sequence' }
+    const args = { operationId: randomUUID(), documentRef, sequenceRef, clipRef: { kind: 'video_edit.clip', id: 'video:voice' } }
+    const first = coordinator.prepare(f.callerId, args, f.rendererEpoch, access, 'generate_video_edit_subtitles')
+    f.store.save({ ...first, state: 'unknown' })
+    for (const entityType of ['video_edit.code_version', 'video_edit.code_material']) {
+      expect(coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType, parent: documentRef, items: [{ properties: {} }] }] }, f.rendererEpoch, access).state).toBe('prepared')
+    }
+    expect(() => coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.rendererEpoch, access, 'generate_video_edit_subtitles')).toThrow('RECOVERY_REQUIRED')
+    expect(() => coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'create_items', entityType: 'video_edit.caption', parent: sequenceRef, items: [{ properties: {} }] }] }, f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+    expect(() => coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: 'video_edit.caption', target: {kind:'video_edit.caption',id:'video:existing'}, properties: {'video_edit.caption.text':'改写'} }] }, f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+    expect(() => coordinator.prepare(f.callerId, { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: 'video_edit.document', target: documentRef, properties: {'video_edit.document.name':'覆盖'} }] }, f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+  })
+  it('已记录的 native_upload_unsupported 可准确改判；未知网络失败继续保留保护', () => {
+    const f = fixture()
+    const first = f.coordinator.prepare(f.callerId, { operationId: '2c6e9a3f-7b4d-4f08-85a2-0e3d7f1b4c69', documentRef: { kind: 'video_edit.document', id: 'video' }, sequenceRef: { kind: 'video_edit.sequence', id: 'video:sequence' }, clipRef: { kind: 'video_edit.clip', id: 'video:voice' } }, f.rendererEpoch, access, 'generate_video_edit_subtitles')
+    const unknown = { ...first, state: 'unknown' as const, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: '[native_upload_unsupported] 长音频上传需要宿主接入原生文件直传；请升级宿主适配器 恢复时复用 audioDocumentRef。' } } }
+    f.store.save(unknown)
+    expect(f.coordinator.result(unknown)).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
+    expect(f.coordinator.result({ ...unknown, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: 'network failed' } } })).toMatchObject({ executionState: 'unknown' })
+  })
+  it('识别已完成未写字幕登记 partial，只允许绑定原声音结果的续做', () => {
+    const f = fixture()
+    const args = { operationId: randomUUID(), documentRef: { kind: 'video_edit.document', id: 'video' }, sequenceRef: { kind: 'video_edit.sequence', id: 'video:sequence' }, clipRef: { kind: 'video_edit.clip', id: 'video:voice' } }
+    const first = f.coordinator.prepare(f.callerId, args, f.rendererEpoch, access, 'generate_video_edit_subtitles')
+    const requestId = randomUUID(); f.coordinator.dispatched(first, requestId, f.rendererEpoch)
+    f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: false, error: { details: { execution: { billing: 'completed', targetMutation: 'none', audioDocumentId: 'audio' } } } } })
+    expect(f.store.get(first.operationId, f.callerId)?.state).toBe('partial')
+    expect(() => f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID() }, f.rendererEpoch, access, 'generate_video_edit_subtitles')).toThrow('RECOVERY_REQUIRED')
+    const resumed = f.coordinator.prepare(f.callerId, { ...args, operationId: randomUUID(), audioDocumentRef: { kind: 'audio_edit.document', id: 'audio' } }, f.rendererEpoch, access, 'generate_video_edit_subtitles')
+    expect(resumed.recoveryOf).toBe(first.operationId)
+  })
+  it.each(['external', 'embedded'] as const)('%s 确认立即返回、查询区分状态、相同 ID 不重派发、点击后完成', async callerKind => {
+    const f = fixture()
+    const bridge = new ApplicationHostBridge(() => undefined, f.coordinator)
+    let request!: LocalHostRequest
+    const send = vi.fn((channel: string, payload: unknown) => { if (channel === 'application:host:request') {
+      request = payload as LocalHostRequest
+      bridge.complete({ ...request, result: { ok: false }, progress: { phase: 'awaiting_user_confirmation', confirmation: applicationUserConfirmation({ title: '确认识别费用', message: '按模型计费', confirmLabel: '确认' }) } })
+    } })
+    bridge.register({ rendererEpoch: f.rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send })
+    const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ ...access, allowPaid: false }) }, bridge, f.coordinator, 0, callerKind)
+    const raw = input(f.baseline)
+    const signal = new AbortController().signal
+    expect(await dispatcher.call(f.callerId, 'change_application_entities', raw, signal)).toMatchObject({ executionState: 'awaiting_user_confirmation', confirmation: { location: expect.stringContaining('痕迹AI'), continuation: expect.stringContaining('不要重复提交') } })
+    const original = request
+    expect(f.coordinator.result(f.store.get(String(raw.operationId), f.callerId)!)).toMatchObject({ executionState: 'awaiting_user_confirmation', verificationState: 'unresolved' })
+    expect(await dispatcher.call(f.callerId, 'change_application_entities', raw, signal)).toMatchObject({ executionState: 'awaiting_user_confirmation' })
+    expect(send).toHaveBeenCalledOnce()
+    bridge.complete({ ...original, result: { ok: false }, progress: { phase: 'executing' } })
+    expect(f.store.get(String(raw.operationId), f.callerId)?.state).toBe('executing')
+    bridge.complete({ ...original, result: { ok: true, data: { verification: { verified: true } } } })
+    expect(await dispatcher.call(f.callerId, 'get_application_operation', { operationId: raw.operationId }, signal)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
+  })
+  it('等待确认的重启为未执行；原 executing 重启保留 unknown 可人工核对', () => {
+    const f = fixture()
+    const waiting = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    f.coordinator.dispatched(waiting, randomUUID(), f.rendererEpoch)
+    const dispatched = f.store.get(waiting.operationId, f.callerId)!
+    const confirmation = applicationUserConfirmation({ title: '确认', message: '识别费用', confirmLabel: '继续' })
+    f.coordinator.complete({ requestId: dispatched.requestId!, rendererEpoch: f.rendererEpoch, result: { ok: false }, progress: { phase: 'awaiting_user_confirmation', confirmation } })
+    f.store.recoverInterrupted()
+    expect(f.store.get(waiting.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' })
+    f.store.save({ ...dispatched, state: 'executing' })
+    f.store.recoverInterrupted()
+    expect(f.store.get(waiting.operationId, f.callerId)?.state).toBe('unknown')
+    f.store.save({ ...dispatched, state: 'awaiting_user_confirmation', confirmation: { ...confirmation, purpose: 'review' } })
+    f.store.recoverInterrupted()
+    expect(f.store.get(waiting.operationId, f.callerId)?.state).toBe('unknown')
+  })
+  it('人工核对立即返回等待状态，取消不能冒充原修改未执行', async () => {
+    const f = fixture()
+    let answer!: (value: 'not_executed' | undefined) => void
+    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), () => new Promise(resolve => { answer = resolve }))
+    const original = coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    f.store.save({ ...original, state: 'unknown', rendererEpoch: f.rendererEpoch })
+    await coordinator.review(f.store.get(original.operationId, f.callerId)!, randomUUID(), async () => true, () => undefined)
+    expect(f.store.get(original.operationId, f.callerId)?.state).toBe('awaiting_user_confirmation')
+    answer(undefined)
+    await vi.waitFor(() => expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown'))
+  })
   it('旧关闭剪辑前置拒绝自动核对，存在事务事实的同文案仍保留保护', () => {
     const f = fixture()
     const error = { code: 'CAPABILITY_REJECTED', message: '请先打开目标剪辑：在剪辑页打开所在项目，或用 open_document 打开这份剪辑（文档 ID 取自 list_documents）。' }
@@ -55,12 +140,12 @@ describe('应用原生操作记录与恢复', () => {
     expect(review).not.toHaveBeenCalled()
     const nextEpoch = randomUUID()
     await coordinator.review(record, nextEpoch, read, () => undefined)
-    expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown')
+    await vi.waitFor(() => expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown'))
     review.mockResolvedValue('not_executed')
     await expect(coordinator.review(record, nextEpoch, read, () => { throw new Error('权限已撤销') })).rejects.toThrow('权限已撤销')
     expect(f.store.get(original.operationId, f.callerId)?.state).toBe('unknown')
     await coordinator.review(record, nextEpoch, read, () => undefined)
-    expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' })
+    await vi.waitFor(() => expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' }))
     expect(read).toHaveBeenCalledWith({ kind: 'settings.registry', id: 'singleton' })
   })
   it('宿主重连时公开写入立即登记未执行和重试时间，不依赖尚未注册的领域', async () => {

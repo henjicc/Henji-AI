@@ -33,6 +33,7 @@ function setup(names: readonly string[] = ['a', 'b', 'c']) {
   const stop = vi.fn(async () => {})
   const audio: RecordingAudioPlatform = {
     microphone: vi.fn(async () => {}), write: vi.fn(async () => {}), read: vi.fn(async () => new Uint8Array()), erase: vi.fn(async () => {}), release: vi.fn(async () => {}), archive: vi.fn(), restore: vi.fn(async () => {}), cancel: vi.fn(async () => {}),
+    preflight: vi.fn(async () => {}),
     transcribe: vi.fn(async (): Promise<RecordingAudioResult> => ({ modelId: 'fixture.asr', providerId: 'fixture', requestId: 'fixture', transcript: { unit: 'ms', text: '这几个等距', words: [], granularity: 'word', segments: [{ text: '这几个等距', startMs: 100, endMs: 700, granularity: 'word', timing: 'precise' }] } })),
   }
   const confirm = vi.fn(async () => {})
@@ -44,6 +45,14 @@ function setup(names: readonly string[] = ['a', 'b', 'c']) {
   return { adapter, audio, bus, block, point, stop, confirm, values }
 }
 describe('图片静态讲解宿主', () => {
+  it('确认前逐块预检失败不改变会话、不执行转写', async () => {
+    const f = setup(); await f.adapter.start('consent'); f.block(); wall = 1200; await f.adapter.stop()
+    vi.mocked(f.audio.preflight).mockRejectedValueOnce(new Error('凭据未配置'))
+    await expect(f.adapter.preflightTranscription()).rejects.toThrow('凭据未配置')
+    expect(f.audio.transcribe).not.toHaveBeenCalled(); expect(f.adapter.snapshot().session?.state).toBe('reviewing')
+    await f.adapter.preflightTranscription(); expect(f.audio.preflight).toHaveBeenLastCalledWith(expect.objectContaining({action:'preflight',modelId:'fixture.asr'}))
+    await f.adapter.close()
+  })
   it('删除包含多页资源的讲解后可重新录制，目录顺序不影响命令资源契约', async () => {
     const f=setup();await f.adapter.start('consent');f.block();f.point();wall=1200
     await f.adapter.stop();await f.adapter.transcribe('upload')

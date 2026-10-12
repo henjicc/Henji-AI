@@ -222,6 +222,20 @@ async function clockReceipts(owner: VideoEditInstance, session: ExplanationSessi
   for (const clock of clocks) clock.anchors.sort((a, b) => a.monoUs - b.monoUs)
   return clocks
 }
+export async function preflightVideoExplanation(id: string): Promise<void> {
+  const owner = requireVideoEditInstance(id); const state = states.get(owner)?.state
+  if (!state || state.busy || !['reviewing', 'recoverable'].includes(state.collector.session.state)) throw new Error('请先结束录制。')
+  const session = state.collector.session
+  const modelId = session.asr?.moduleId ?? modelDefaultsManager.resolveTranscriptionModelId()
+  if (session.retentionStatus === 'retained' && session.audio) await restoreRetainedAudio(owner, session)
+  const completed = new Set<string>()
+  for await (const page of pages(owner, session, 'transcript')) if (page.kind === 'transcript') for (const entry of page.entries) completed.add(entry.audioSegmentRef)
+  for await (const page of pages(owner, session, 'audio')) if (page.kind === 'audio') for (const audio of page.entries) {
+    if (completed.has(audio.audioSegmentRef)) continue
+    await getPlatform().audioEdit.recording.preflight({ action: 'preflight', sessionId: session.id, chunkId: audio.audioSegmentRef, requestId: audio.audioSegmentRef, modelId, resume: session.state === 'recoverable' })
+    assertCurrent(owner, state)
+  }
+}
 export async function transcribeVideoExplanation(id: string, audioUploadReceipt: string, resume = false): Promise<void> {
   const owner = requireVideoEditInstance(id); const runtime = states.get(owner); if (!runtime) throw new Error('请先打开讲解。')
   const state = runtime.state; const session = state.collector.session

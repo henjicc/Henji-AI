@@ -1,5 +1,5 @@
 /** Existing SQLite ledger baseline. The ledger's final entry uses this constant. */
-export const SQLITE_SCHEMA_VERSION = 18
+export const SQLITE_SCHEMA_VERSION = 19
 export const VIDEO_EDIT_DOCUMENT_VERSION = 3
 export const VIDEO_EDIT_CONTENT_VERSION = 2
 export const IMAGE_HEADER_VERSION = 1

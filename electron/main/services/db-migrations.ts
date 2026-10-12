@@ -87,7 +87,10 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   // 3.4 画布接入文档文件：删两张旧画布工程表（不迁移内容）；此后 henji.db 的全部表都由账本管理
   { version: 17, name: 'retire_canvas_projects', up: retireCanvasProjectsV1, backupWhen: canvasProjectsNeedBackup },
   // 作品索引记最近打开时间（只是索引元数据，可重建）
-  { version: SQLITE_SCHEMA_VERSION, name: 'document_index_last_opened', up: addDocumentIndexLastOpenedV1 },
+  { version: 18, name: 'document_index_last_opened', up: addDocumentIndexLastOpenedV1 },
+  // TEXT state/record_json need no DDL. Register the new durable confirmation state semantics
+  // in the existing SQLite ledger; startup reconciliation owns interrupted invocations.
+  { version: SQLITE_SCHEMA_VERSION, name: 'application_operation_user_confirmation', up: () => {} },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

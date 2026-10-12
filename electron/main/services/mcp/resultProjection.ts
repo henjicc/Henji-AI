@@ -10,6 +10,6 @@ export function toMcpResult(result: ApplicationResult) {
       { type: 'image' as const, data: base64, mimeType: media.mimeType },
     ] }
   }
-  return { isError: !result.ok, structuredContent: result,
+  return { isError: !result.ok && result.executionState !== 'awaiting_user_confirmation', structuredContent: result,
     content: [{ type: 'text' as const, text: JSON.stringify(result) }] }
 }

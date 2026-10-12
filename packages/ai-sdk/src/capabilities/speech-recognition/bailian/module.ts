@@ -204,7 +204,12 @@ async function executeFile(
     if (submitted.taskId && submitted.taskId !== resumeTaskId) throw new AiRuntimeError('invalid_response', 'ASR resume returned a different task')
     submitted = { ...submitted, taskId: resumeTaskId }
   } else {
-  const audio = await resolveAsyncAudioUrl(input.audio, preset.modelId, apiKey, uploadBaseUrl, context)
+  const audio = await resolveAsyncAudioUrl(input.audio, preset.modelId, apiKey, uploadBaseUrl, context).catch((error: unknown) => {
+    // Upload/policy failures precede paid ASR submission. Do not infer this for submit/poll failures.
+    throw new AiRuntimeError(error instanceof AiRuntimeError ? error.code : 'audio_upload_failed',
+      error instanceof AiRuntimeError ? error.message.replace(`[${error.code}] `, '') : error instanceof Error ? error.message : String(error),
+      { ...(error instanceof AiRuntimeError ? error.details : {}), retryable: false, billing: 'not_charged', execution: { notExecuted: true } })
+  })
   const asyncInput = preset.asyncInputField === 'file_urls' ? { file_urls: [audio.url] } : { file_url: audio.url }
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable',

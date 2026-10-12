@@ -13,7 +13,7 @@ const MAX_IMAGE_BYTES = 16 * 1024 * 1024
 function applicationResultText(result: unknown): string {
   const parsed = z.object({ ok: z.boolean() }).passthrough().parse(result)
   const text = JSON.stringify(parsed)
-  if (!parsed.ok) throw new Error(text)
+  if (!parsed.ok && parsed.executionState !== 'awaiting_user_confirmation') throw new Error(text)
   return text
 }
 

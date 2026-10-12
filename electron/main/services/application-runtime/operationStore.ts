@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 export { operationDigest } from '../application-control/operationDigest'
 import type Database from 'better-sqlite3'
 
-export type OperationState = 'prepared' | 'preparing' | 'executing' | 'completed' | 'not_executed' | 'rolled_back' | 'partial' | 'unknown'
+export type OperationState = import('../../../../src/core/application-control/userConfirmation').ApplicationOperationState
 export interface OperationRecord {
   operationId: string
   callerId: string
@@ -22,6 +22,7 @@ export interface OperationRecord {
   rendererEpoch?: string
   /** 执行器将身份与剪辑修改原子保存，可在新渲染会话证明是否保留落位。 */
   atomicPlacement?: boolean
+  confirmation?: import('../../../../src/core/application-control/userConfirmation').ApplicationUserConfirmation
   result?: Record<string, unknown>
 }
 export interface ReadBaseline {
@@ -47,6 +48,14 @@ export class ApplicationOperationStore {
   /** 表由迁移账本第 10 项创建。 */
   constructor(private readonly db: Database.Database) {}
   recoverInterrupted(): void {
+    const waiting = this.db.prepare("SELECT record_json FROM application_invocations WHERE state = 'awaiting_user_confirmation'").all() as Array<{ record_json: string }>
+    for (const row of waiting) {
+      const record = JSON.parse(row.record_json) as OperationRecord
+      // Review concerns an earlier unknown mutation: abandoning review cannot prove it never ran.
+      this.save(record.confirmation?.purpose === 'review' ? { ...record, state: 'unknown', confirmation: undefined }
+        : { ...record, state: 'not_executed', confirmation: undefined, verificationState: 'verified',
+          result: { ok: false, error: { code: 'CONFIRMATION_INTERRUPTED', message: '应用在等待确认时退出；未继续执行或计费。', details: { execution: { notExecuted: true } } } } })
+    }
     // 准备阶段尚未派发业务；进程退出后可明确终止，不能自动重新提交。
     const preparing = this.db.prepare("SELECT record_json FROM application_invocations WHERE state = 'preparing'").all() as Array<{ record_json: string }>
     for (const row of preparing) this.save({ ...JSON.parse(row.record_json) as OperationRecord, state: 'not_executed',
@@ -64,7 +73,7 @@ export class ApplicationOperationStore {
     return row ? JSON.parse(row.record_json) as OperationRecord : undefined
   }
   unresolved(): OperationRecord[] {
-    return (this.db.prepare("SELECT record_json FROM application_invocations WHERE state IN ('preparing','executing','unknown','partial')").all() as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
+    return (this.db.prepare("SELECT record_json FROM application_invocations WHERE state IN ('preparing','awaiting_user_confirmation','executing','unknown','partial')").all() as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
   }
   /** 持久预算按所有 Agent 共用的窗口统计，换会话或重启不会重置。 */
   generationSpendSince(since: number): number {

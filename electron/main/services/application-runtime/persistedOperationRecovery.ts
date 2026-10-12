@@ -1,5 +1,6 @@
 import type { OperationRecord } from './operationStore'
 import type { GenerationHistoryStatusDto } from '../generation-history/store'
+import type { AudioEditStoredTask } from '../audio-edit/task-store'
 import { applicationGenerationTaskId, applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
 
 /** 宿主当前的修订号；恢复回执沿用它，避免对外发出缺字段的结果。 */
@@ -7,6 +8,25 @@ export interface HostRevisionSnapshot { revision: number; scopeRevisions: Record
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+/** A lost renderer receipt cannot prove caption mutation, but the native ASR receipt proves submission/results. */
+export function recoverPersistedTranscriptionOperation(
+  findTask: (id: string) => (AudioEditStoredTask & { document_id: string }) | undefined,
+  record: OperationRecord,
+): OperationRecord | undefined {
+  if (record.state !== 'unknown' || !record.requestId || !['generate_video_edit_subtitles', 'transcribe_audio_edit'].includes(record.capabilityId ?? '')) return undefined
+  const task = findTask(record.requestId)
+  if (!task) return undefined
+  const result = task.result_json ? object(JSON.parse(task.result_json)) : {}
+  const notExecuted = !task.provider_task_id && (result.billing === 'not_charged' || task.error_message?.startsWith('[native_upload_unsupported]'))
+  const billing = notExecuted ? 'not_charged' : result.output ? 'completed' : task.provider_task_id ? 'submitted' : 'unknown'
+  const audioDocumentRef = { kind: 'audio_edit.document', id: task.document_id }
+  return { ...record, state: notExecuted ? 'not_executed' : 'unknown', verificationState: notExecuted ? 'verified' : 'unresolved',
+    result: { ok: false, error: { code: 'CAPABILITY_REJECTED', recoverable: true,
+      message: notExecuted ? '识别在提交前失败，未计费；修复原因后复用原口播继续。' : '宿主重载中断回执；已核对原识别任务，字幕是否写入仍需核对，禁止重复提交识别。',
+      details: { execution: { notExecuted, billing, targetMutation: notExecuted ? 'none' : 'unknown', audioDocumentId: task.document_id },
+        recovery: { audioDocumentRef, replayRecognition: false } } } } }
 }
 
 /**

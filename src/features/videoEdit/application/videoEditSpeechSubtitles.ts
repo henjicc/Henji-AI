@@ -3,6 +3,7 @@ import type { SpeechTimings } from '@/core/media/speechTimings'
 import type { AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
 import { readGenerationResultTimings } from '@/features/generation'
 import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit } from '@/features/audioEdit'
+import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 import { getPlatform } from '@/platform/runtime'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
@@ -33,6 +34,8 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
   const release = holdVideoEditActivity(projectId, '原文字幕')
   let audioDocumentId: string | undefined
   let cancel: (() => void) | undefined
+  let billing: TranscriptionFacts['billing'] = 'not_charged'
+  let applied = false
   try {
     assertTarget()
     let timings = origin?.type === 'generation' ? (await readGenerationResultTimings(origin.recordId)).find(value => value.outputIndex === origin.outputIndex)?.timings : undefined
@@ -43,19 +46,27 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
       audioDocumentId = options.audioDocumentId
       const platform = getPlatform()
       let audio = audioDocumentId ? await loadAudioEditProject(audioDocumentId) : undefined
-      if (audio && audio.document.source.sourcePath !== media.path) throw new ApplicationPreflightFailure('恢复用口播文档必须引用这段音频的同一原始素材。')
+      if (audio && audio.document.source.sourcePath !== media.path) throw new ApplicationPreflightFailure('使用 clipRef 时不要传 prepare_video_edit_subtitle_audio 返回的混音文档；audioDocumentRef 只用于恢复 clipRef 模式上次返回的引用，且必须引用这段音频的同一原始素材。首次调用请省略 audioDocumentRef。')
       if (!audio?.document.transcript.length) {
-        const accepted = await requestAlertConfirmation({ title: '识别声音并对齐原文', message: '这段声音没有原生时间戳。将使用已配置的语音识别模型获取时间，按该模型计费；字幕文字仍以原文为准。是否继续？', type: 'warning', confirmLabel: '确认识别费用' }, signal)
+        const source = audio?.document.source ?? await platform.audioEdit.probeSource(media.path)
+        const prepared = await platform.audioEdit.preflightTranscription({ sourcePath: media.path, durationMs: source.durationFrames * 1000 / source.sampleRate, modelId: options.modelId, language: options.language, audioDocumentId })
+        const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ title: '识别声音并对齐原文', message: '这段声音没有原生时间戳。将使用已配置的语音识别模型获取时间；本次暂无法可靠预估金额，确认后按所用模型计费。字幕文字仍以原文为准。是否继续？', type: 'warning', confirmLabel: '确认识别费用' }, signal)
         if (!accepted) throw new ApplicationPreflightFailure('已取消识别，未生成字幕。')
         assertTarget()
-        audio ??= await createAudioEditDraft(await platform.audioEdit.probeSource(media.path), owner.session.documentMeta.container)
+        audio ??= await createAudioEditDraft(source, owner.session.documentMeta.container)
         audioDocumentId = audio.document.id
         await flushAudioEditProject(audioDocumentId)
         const transcriptionId = requestId ?? crypto.randomUUID()
-        cancel = () => { void platform.audioEdit.cancelTask(transcriptionId).catch(error => logger.warn('原文字幕取消失败', { event: 'video_edit.speech_subtitles.cancel_failed', error })) }
+        cancel = () => {
+          // A resume can retain the original provider task's requestId.
+          void platform.audioEdit.listTasks(audioDocumentId!).then(tasks => Promise.all(tasks.filter(task => task.state === 'running' || task.state === 'queued').map(task => platform.audioEdit.cancelTask(task.requestId))))
+            .catch(error => logger.warn('原文字幕取消失败', { event: 'video_edit.speech_subtitles.cancel_failed', error }))
+        }
         signal?.addEventListener('abort', cancel, { once: true })
         signal?.throwIfAborted()
-        await transcribeAudioEdit({ projectId: audioDocumentId, modelId: options.modelId, language: options.language, requestId: transcriptionId })
+        billing = 'unknown'
+        await transcribeAudioEdit({ projectId: audioDocumentId, modelId: prepared.modelId, language: options.language, requestId: transcriptionId })
+        billing = 'completed'
       }
       if (!audio) throw new Error('没有可用的口播识别结果。')
       timings = { granularity: audio.document.transcript.every(block => block.granularity === 'word') ? 'word' : 'sentence', items: audio.document.transcript.map(block => ({ text: block.text,
@@ -65,12 +76,13 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
     const subtitles = await buildSpeechSubtitles(originalText, timings, clip, sequence.frameRate, { maxCharacters: options.maxCharacters, maxLines: options.maxLines, pauseSeconds: options.pauseSeconds, minDurationSeconds: options.minDurationSeconds }, signal)
     assertTarget()
     appendAutoSubtitles(projectId, sequenceId, subtitles.map(value => value.caption))
+    applied = true
     await saveVideoEdit(projectId)
     logger.info('原文字幕已保存', { event: 'video_edit.speech_subtitles.completed', requestId, context: { projectId, clipId, timingSource, count: subtitles.length } })
     return { subtitles, timingSource, audioDocumentId }
   } catch (error) {
     logger.error('原文字幕失败', { event: 'video_edit.speech_subtitles.failed', requestId, error, context: { projectId, clipId, audioDocumentId } })
-    if (audioDocumentId && error instanceof Error && !(error instanceof ApplicationPreflightFailure)) throw new Error(`${error.message} 恢复时复用 audioDocumentRef={"kind":"audio_edit.document","id":"${audioDocumentId}"}，不要另建识别任务。`, { cause: error })
-    throw error
+    const facts = readTranscriptionFacts(error)
+    throw new TranscriptionFailure(error, { billing: facts?.billing ?? billing, targetMutation: applied ? 'applied' : 'none', ...(audioDocumentId ? { audioDocumentId } : {}) })
   } finally { if (cancel) signal?.removeEventListener('abort', cancel); release() }
 }

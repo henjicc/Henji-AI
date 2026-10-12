@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { localHostReplySchema, type LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { ApplicationOperationStore, operationDigest, type OperationRecord } from './operationStore'
 import { operationVerificationRecovery } from './operationVerificationRecovery'
+import { applicationUserConfirmation, USER_CONFIRMATION_TIMEOUT_MS } from '../../../../src/core/application-control/userConfirmation'
+import { createMainLogger } from '../logging'
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
 const envelopeSchema = z.object({ operationId: z.string().uuid(), baselineIds: z.array(z.string().uuid()).max(32).default([]) })
@@ -18,6 +20,13 @@ function resultRefs(value: unknown): Array<{ kind: string; id: string }> {
 
 type TargetRecord = Pick<OperationRecord, 'operationId' | 'callerId' | 'capabilityId' | 'input' | 'targetRefs'>
 const refKey = (ref: { kind: string; id: string }): string => `${ref.kind}:${ref.id}`
+const subtitleWriters = new Set(['generate_video_edit_subtitles', 'translate_video_edit_subtitles', 'segment_video_edit_subtitles'])
+function protectsCaption(record: TargetRecord, key: string): boolean {
+  const documentId = object(record.input.documentRef).id
+  // A direct caption property write has no sequence parent in the public ref. Until
+  // its original owner is known, retain protection for this document's captions only.
+  return subtitleWriters.has(record.capabilityId ?? '') && typeof documentId === 'string' && key.startsWith(`video_edit.caption:${documentId}:`)
+}
 
 /** 读依赖、集合追加和覆盖写入不是同一种冲突；访问范围从同一能力声明解析。 */
 function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> {
@@ -54,6 +63,9 @@ function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> 
 
 /** 业务事实独立于 HTTP 等待；未知写入不靠读取猜测，仅完整的最终状态证明可收敛验证失败。 */
 export class ApplicationOperationCoordinator {
+  private readonly listeners = new Set<() => void>()
+  onChange(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
+  private changed(): void { for (const listener of this.listeners) listener() }
   /**
    * `writableEntityTypes` 是公开业务写入范围，由渲染宿主从反射注册表派生后经注册送来
    * （见 externalCapabilityInventory.ts）。这里**不保留任何前缀白名单兜底**：没拿到派生结果就
@@ -61,7 +73,7 @@ export class ApplicationOperationCoordinator {
    */
   constructor(readonly store: ApplicationOperationStore, private readonly recoverPersisted?: (record: OperationRecord) => OperationRecord | undefined,
     private readonly writableEntityTypes: () => ReadonlySet<string> = () => new Set(),
-    private readonly requestReview?: (summary: string) => Promise<'completed' | 'not_executed' | undefined>) {
+    private readonly requestReview?: (summary: string, signal: AbortSignal) => Promise<'completed' | 'not_executed' | undefined>) {
     store.recoverInterrupted()
     for (const record of store.unresolved()) {
       const recovered = recoverPersisted?.(record)
@@ -75,11 +87,14 @@ export class ApplicationOperationCoordinator {
     const legacyClosedDocument = record.capabilityId === 'change_application_entities'
       && error.code === 'CAPABILITY_REJECTED'
       && error.message === '请先打开目标剪辑：在剪辑页打开所在项目，或用 open_document 打开这份剪辑（文档 ID 取自 list_documents）。'
+    // This SDK rejection is emitted before policy/upload/ASR requests, including the recorded t179 failure.
+    const nativeUploadRejected = ['generate_video_edit_subtitles', 'transcribe_audio_edit'].includes(record.capabilityId ?? '')
+      && error.code === 'CAPABILITY_REJECTED' && typeof error.message === 'string' && error.message.startsWith('[native_upload_unsupported]')
     // 旧引擎步骤内异常会包装为“操作未完整完成”并附 partial；此原文只可能在步骤外逃逸。
     if (record.state === 'unknown' && record.result?.ok === false
       && !details.transaction && !details.persistence && !details.effects && !details.partial
       && !record.result.effects && !record.result.data && !record.recoveryResult && !record.recoveryVerification
-      && (object(details.execution).notExecuted === true || legacyClosedDocument)) {
+      && (object(details.execution).notExecuted === true || legacyClosedDocument || nativeUploadRejected)) {
       const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified',
         result: { ...record.result, error: { ...error, recoverable: true, details: { ...details, execution: { notExecuted: true } } } } }
       this.store.save(recovered)
@@ -93,13 +108,29 @@ export class ApplicationOperationCoordinator {
     if (!this.requestReview) throw new Error('RECOVERY_REVIEW_UNAVAILABLE:当前宿主不能发起人工核对，请在痕迹AI桌面应用中重试。')
     const targets = record.targetRefs?.length ? record.targetRefs : resultRefs(record.input)
     for (const ref of targets) if (!await readTarget(ref)) throw new Error('RECOVERY_TARGET_UNAVAILABLE:原目标尚不能读取，请在应用中定位原文档后再核对。')
-    const decision = await this.requestReview(typeof record.input.summary === 'string' ? record.input.summary : '先前的应用修改')
     assertAuthorized()
-    if (!decision) return
     const current = this.store.get(record.operationId, record.callerId)
     if (!current || current.state !== 'unknown' || current.requestId !== record.requestId) return
-    this.store.save({ ...current, state: decision, verificationState: 'verified',
-      recoveryResult: { ok: true, verification: { verified: true, source: 'application_user_review', decision } } })
+    const summary = typeof record.input.summary === 'string' ? record.input.summary : '先前的应用修改'
+    const confirmation = applicationUserConfirmation({ title: '核对之前的修改', message: `${summary}：请查看原文档，确认已完成或未执行。本次核对不会重新执行修改。`, confirmLabel: '确认已完成 / 确认未执行' }, 'review')
+    this.store.save({ ...current, state: 'awaiting_user_confirmation', verificationState: 'unresolved', confirmation })
+    const controller = new AbortController()
+    const timer = setTimeout(() => { controller.abort(); finish() }, USER_CONFIRMATION_TIMEOUT_MS)
+    const finish = (decision?: 'completed' | 'not_executed') => {
+      const latest = this.store.get(record.operationId, record.callerId)
+      if (!latest || latest.state !== 'awaiting_user_confirmation' || latest.confirmation?.expiresAt !== confirmation.expiresAt) return
+      this.store.save({ ...latest, state: decision ?? 'unknown', confirmation: undefined,
+        ...(decision ? { verificationState: 'verified' as const, recoveryResult: { ok: true, verification: { verified: true, source: 'application_user_review', decision } } } : {}) })
+      this.changed()
+    }
+    // The invocation returns after opening the native dialog, never after the human response.
+    void this.requestReview(summary, controller.signal).then(decision => {
+      assertAuthorized()
+      finish(controller.signal.aborted ? undefined : decision)
+    }).catch(error => {
+      finish()
+      createMainLogger('main.application_runtime').warn('人工核对未完成，保留原执行屏障', { event: 'application.confirmation.review_failed', error })
+    }).finally(() => { clearTimeout(timer); controller.abort() })
   }
   /** 宿主未注册时只登记入口零执行事实；不读取领域白名单，也绝不覆盖既有执行账。 */
   rejectBeforeDispatch(callerId: string, raw: Record<string, unknown>, capabilityId: OperationRecord['capabilityId'], retryAfterMs: number): OperationRecord {
@@ -171,16 +202,35 @@ export class ApplicationOperationCoordinator {
     if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(refs)}，再提交返回的 baselineIds。`)
     const baselines = baselineIds.map((id) => this.store.readBaseline(id, callerId))
     const currentAccess = operationAccess({ operationId, callerId, capabilityId, input, targetRefs: writeRefs ?? refs })
+    let speechRecoveryOf: string | undefined
     for (const saved of this.store.unresolved()) {
       const unresolved = this.recoverPreflight(saved)
       if (unresolved.state === 'not_executed') continue
+      const facts = object(object(object(unresolved.result?.error).details).execution)
+      const originalInput = { ...unresolved.input }; delete originalInput.audioDocumentRef
+      const resumedInput = { ...input }; delete resumedInput.audioDocumentRef
+      if (unresolved.state === 'partial' && unresolved.callerId === callerId && unresolved.capabilityId === capabilityId
+        && capabilityId === 'generate_video_edit_subtitles' && facts.targetMutation === 'none'
+        && ['submitted', 'completed'].includes(String(facts.billing))
+        && object(input.audioDocumentRef).kind === 'audio_edit.document' && object(input.audioDocumentRef).id === facts.audioDocumentId
+        && operationDigest(originalInput) === operationDigest(resumedInput)) {
+        speechRecoveryOf = unresolved.operationId
+        continue
+      }
       const previousAccess = operationAccess(unresolved)
       const sameUnknownRequest = unresolved.callerId === callerId && unresolved.state === 'unknown' && unresolved.capabilityId === capabilityId
         && operationDigest(unresolved.input) === operationDigest(input)
       const overlaps = [...currentAccess].some(([key, mode]) => {
+        if (protectsCaption(unresolved, key) || [...previousAccess.keys()].some(previousKey => protectsCaption({ capabilityId, input, operationId, callerId }, previousKey))) return true
         const previousMode = previousAccess.get(key)
-        return previousMode !== undefined && !(mode === 'append' && previousMode === 'append'
-          && unresolved.state !== 'partial' && !sameUnknownRequest)
+        if (previousMode !== undefined) return !(mode === 'append' && previousMode === 'append' && unresolved.state !== 'partial' && !sameUnknownRequest)
+        // Whole-document overwrites/deletes still overlap child ranges; independent collection appends do not.
+        const documentContains = (parent: string, child: string): boolean => {
+          const split = parent.indexOf(':'); const kind = parent.slice(0, split); const id = parent.slice(split + 1)
+          const childSplit = child.indexOf(':')
+          return kind.endsWith('.document') && child.startsWith(`${kind.slice(0, -'document'.length)}`) && child.slice(childSplit + 1).startsWith(`${id}:`)
+        }
+        return [...previousAccess].some(([previousKey, previousMode]) => (mode === 'write' && documentContains(key, previousKey)) || (previousMode === 'write' && documentContains(previousKey, key)))
       })
       if (sameUnknownRequest || overlaps) throw new Error(`RECOVERY_REQUIRED:${sameUnknownRequest ? '相同请求的执行结果尚未核实，不能更换操作标识再次提交。' : '本次修改与尚未核对或保存的操作涉及同一目标。'}${unresolved.callerId === callerId
         ? `请用 get_application_operation 查询 operationId=${unresolved.operationId}；不要查询本次尚未登记的新标识。`
@@ -195,22 +245,27 @@ export class ApplicationOperationCoordinator {
       expectedRevisions[scope] = revision
     }
     return this.store.prepare({ operationId, callerId, inputDigest: digest, input, expectedRevisions: baselines.length ? expectedRevisions : undefined, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs,
+      ...(speechRecoveryOf ? { recoveryOf: speechRecoveryOf } : {}),
       ...(capabilityId === 'place_video_edit_creative_result' ? { atomicPlacement: true } : {}) })
   }
   dispatched(record: OperationRecord, requestId: string, rendererEpoch: string): void { this.store.claim(record, requestId, rendererEpoch) }
   interrupted(requestId: string, rendererEpoch: string): void {
     const record = this.store.byRequest(requestId, rendererEpoch)
-    if (record?.state === 'executing') this.store.save({ ...record, state: 'unknown' })
+    if (record?.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'execution') {
+      this.store.save({ ...record, state: 'not_executed', verificationState: 'verified', confirmation: undefined,
+        result: { ok: false, error: { code: 'CONFIRMATION_INTERRUPTED', message: '应用在确认前重载；未继续执行或计费。', details: { execution: { notExecuted: true } } } } })
+    } else if (record?.state === 'executing' || record?.state === 'awaiting_user_confirmation') this.store.save({ ...record, state: 'unknown', confirmation: undefined })
+    this.changed()
   }
   /** 未知执行只能用原宿主的执行事实核对，不能按输入或“当前值碰巧相同”推断。 */
   async reconcileReceipt(record: OperationRecord, read: (original: NonNullable<import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryOperation']>) => Promise<Record<string, unknown>>): Promise<void> {
-    if (!['unknown', 'executing'].includes(record.state) || !record.requestId || !record.rendererEpoch) return
+    if (!['unknown', 'executing', 'awaiting_user_confirmation'].includes(record.state) || !record.requestId || !record.rendererEpoch || record.confirmation?.purpose === 'review') return
     const documentId = object(record.input.documentRef).id
     const result = await read({ requestId: record.requestId, rendererEpoch: record.rendererEpoch,
       ...(record.atomicPlacement && record.capabilityId === 'place_video_edit_creative_result' && typeof documentId === 'string'
         ? { atomicPlacement: { operationId: applicationInvocationId(record.callerId, record.operationId), documentId } } : {}) })
     const reply = localHostReplySchema.safeParse(object(result.data).operationReply)
-    if (result.ok !== true || !reply.success || reply.data.requestId !== record.requestId || reply.data.rendererEpoch !== record.rendererEpoch) return
+    if (result.ok !== true || !reply.success || reply.data.progress || reply.data.requestId !== record.requestId || reply.data.rendererEpoch !== record.rendererEpoch) return
     const current = this.store.get(record.operationId, record.callerId)
     if (!current || current.inputDigest !== record.inputDigest || current.requestId !== record.requestId || current.rendererEpoch !== record.rendererEpoch) return
     this.complete(reply.data)
@@ -226,7 +281,14 @@ export class ApplicationOperationCoordinator {
   }
   complete(reply: LocalHostReply): void {
     const record = this.store.byRequest(reply.requestId, reply.rendererEpoch)
-    if (!record || (record.state !== 'executing' && record.state !== 'unknown')) return
+    if (!record || !['executing', 'unknown', 'awaiting_user_confirmation'].includes(record.state)) return
+    if (reply.progress) {
+      // A replayed progress receipt must never move a resumed operation back to waiting.
+      if (record.state === 'unknown') return
+      this.store.save({ ...record, state: reply.progress.phase, verificationState: 'unresolved',
+        confirmation: reply.progress.phase === 'awaiting_user_confirmation' ? reply.progress.confirmation : undefined })
+      return
+    }
     const details = object(object(reply.result.error).details)
     const transaction = object(details.transaction)
     const partial = object(transaction.partial)
@@ -237,15 +299,18 @@ export class ApplicationOperationCoordinator {
     const rolledBack = object(details.execution).rolledBack === true || (completed.length > 0
       && completed.every(index => compensated.includes(index)) && Array.isArray(partial.uncompensatedStepIndexes) && partial.uncompensatedStepIndexes.length === 0)
     const persistence = transaction.persistence || details.persistence
+    const speech = object(details.execution)
+    const speechPartial = speech.billing === 'submitted' || speech.billing === 'completed' || speech.targetMutation === 'applied'
     const state = reply.result.ok === true ? 'completed' : persistence ? 'partial'
-      : rolledBack ? 'rolled_back' : changed ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
+      : rolledBack ? 'rolled_back' : changed || speechPartial ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
     const verified = state === 'not_executed' || state === 'rolled_back' || object(object(reply.result.data).verification).verified === true
-    this.store.save({ ...record, state, targetRefs: [...record.targetRefs ?? [], ...resultRefs(reply.result)], verificationState: verified ? 'verified' : 'unresolved', result: reply.result })
+    this.store.save({ ...record, state, confirmation: undefined, targetRefs: [...record.targetRefs ?? [], ...resultRefs(reply.result)], verificationState: verified ? 'verified' : 'unresolved', result: reply.result })
     if (record.recoveryOf && reply.result.ok === true) {
       const original = this.store.get(record.recoveryOf, record.callerId)
       if (original) this.store.save({ ...original, state: verified ? 'completed' : original.state,
         verificationState: verified ? 'verified' : 'unresolved', recoveryResult: reply.result })
     }
+    this.changed()
   }
   prepareSaveRecovery(callerId: string, raw: Record<string, unknown>, rendererEpoch: string, access: { allowWrites: boolean }): OperationRecord {
     const { operationId, originalOperationId } = z.object({ operationId: z.string().uuid(), originalOperationId: z.string().uuid() }).strict().parse(raw)
@@ -281,6 +346,7 @@ export class ApplicationOperationCoordinator {
     if (recovered) { this.store.save(recovered); record = recovered }
     return { ok: record.state === 'completed' && record.verificationState === 'verified', operationId: record.operationId, executionState: record.state,
       verificationState: record.verificationState ?? 'unresolved', result: record.result ?? null, recoveryResult: record.recoveryResult ?? null,
+      ...(record.confirmation ? { confirmation: record.confirmation } : {}),
       recovery: record.state === 'unknown' ? '执行结果尚待核对；禁止重复原修改。先用 get_application_operation 等待原回执；原宿主已结束时调用 review_application_operation，由应用读取目标并请用户核对是否执行，再解除保护。' : undefined }
   }
 }

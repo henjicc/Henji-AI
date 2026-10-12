@@ -9,6 +9,8 @@ import { buildExternalCapabilityInventory, externalReflectionPermissions } from 
 import { rendererEpoch } from './rendererIdentity'
 import { APPLICATION_DOMAINS } from './applicationDomains'
 import { creativeIntentPrivateAccess } from './creativeIntentAuthorization'
+import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
+import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 
 const logger = createLogger('features.application_control.host')
 // 与宿主附件生命周期分开；发送回执失败或同一渲染器重新连接后，核对仍读原执行事实。
@@ -36,6 +38,18 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
     const action = readOnly ? 'read' : 'write'
     const controller = new AbortController()
     active.set(requestId, controller)
+    const unbindConfirmation = !readOnly ? bindApplicationConfirmation(controller.signal, async progress => {
+      if (progress.phase === 'executing') {
+        controller.signal.throwIfAborted()
+        const grant = grants.get(requestId)
+        if (!grant) throw new Error('操作授权已结束。')
+        assertApplicationCallerGrant(grant)
+      }
+      const reply = { rendererEpoch, requestId, result: { ok: false }, progress }
+      operationReceipts.set(requestId, { callerId, reply })
+      await platform.complete(reply)
+      logger.info('应用操作确认状态变化', { event: 'application.confirmation.progress', context: { requestId, phase: progress.phase } })
+    }) : () => undefined
     const execute = async (): Promise<void> => {
       logger.info(readOnly ? '开始读取应用内容' : '开始修改应用内容', { event: `mcp.${action}.start`, context: { requestId, capabilityId } })
       let result: Record<string, unknown>
@@ -91,7 +105,7 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
       if (!readOnly) operationReceipts.set(requestId, { callerId, reply })
       if (!readOnly || (!disposed && !controller.signal.aborted)) await platform.complete(reply)
     }
-    void execute().catch((error) => logger.error('发送操作结果失败', error, { event: `mcp.${action}.reply.failed` })).finally(() => { active.delete(requestId); grants.delete(requestId) })
+    void execute().catch((error) => logger.error('发送操作结果失败', error, { event: `mcp.${action}.reply.failed` })).finally(() => { unbindConfirmation(); active.delete(requestId); grants.delete(requestId) })
   })
   const unsubscribeCancel = platform.onCancel((id) => active.get(id)?.abort())
   const unsubscribeRevoke = platform.onRevoke((id) => { for (const [key, grant] of grants) if (grant.callerId === id) { revokeApplicationCallerGrant(grant); active.get(key)?.abort(); grants.delete(key) } })

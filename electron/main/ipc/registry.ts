@@ -1,10 +1,12 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { readTranscriptionFacts, type TranscriptionFacts } from '../../../src/core/audioEdit/transcriptionFailure'
 
 export interface IpcErrorEnvelope {
   name: string
   message: string
   code: string
   stack?: string
+  transcriptionFacts?: TranscriptionFacts
 }
 
 export type IpcResultEnvelope<T> =
@@ -59,6 +61,7 @@ function normalizeError(error: unknown): IpcErrorEnvelope {
       message: error.message,
       code: error.name || 'Error',
       stack: error.stack,
+      ...(readTranscriptionFacts(error) ? { transcriptionFacts: readTranscriptionFacts(error) } : {}),
     }
   }
 

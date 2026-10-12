@@ -20,6 +20,7 @@ import { createHenjiAIClient } from '../../../../src/core/modelCatalog/applicati
 import { getAiProviderApiKey, getKey, getLlmProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
 import { createDiagnosticTransport } from './network-transport'
+import { createNativeFileUpload } from './native-file-upload'
 
 /**
  * `packages/ai-sdk/src/runtime/*` 定义的 5 个宿主契约接口的 Electron 实现，聚合成一个
@@ -44,6 +45,7 @@ import { createDiagnosticTransport } from './network-transport'
  * 发请求、老实地把失败 throw 出去。
  */
 export const electronTransport: Transport = createDiagnosticTransport((url, init) => fetch(url, init))
+electronTransport.uploadFile = createNativeFileUpload((url, init) => electronTransport.fetch(url, init))
 
 // ---------------------------------------------------------------------------
 // CredentialStore

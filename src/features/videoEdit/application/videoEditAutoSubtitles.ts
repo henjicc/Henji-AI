@@ -15,8 +15,8 @@ import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/cor
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, videoEditTextMediaIdentity, type VideoEditTextTranscription } from '@/core/videoEdit/textTranscript'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
-import { transcribeAudioEdit } from '@/features/audioEdit/application/audioEditApplicationService'
+import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit } from '@/features/audioEdit'
+import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 import { editVideoSequence, requireVideoEditInstance, videoEditDocumentOperations, saveVideoEdit, verifyVideoEditSaved, holdVideoEditActivity, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.autoSubtitles')
@@ -127,6 +127,8 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
   const release = holdVideoEditActivity(projectId, '字幕转录')
   active.add(owner)
   let cancel: (() => void) | undefined
+  let billing: TranscriptionFacts['billing'] = 'not_charged'
+  let applied = false
   logger.info('字幕转录开始', { event: 'video_edit.subtitle.transcribe.start', requestId, context: { projectId, sequenceId, audioDocumentId } })
   try {
     signal?.throwIfAborted()
@@ -151,7 +153,11 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     if (manifest.committed) throw new Error('这批字幕已生成后被移除，不会重复回填；可从已保存转录结果重新整理。')
     cancel = () => { void platform.audioEdit.listTasks(audioDocumentId).then(tasks => Promise.all(tasks.filter(task => ['queued', 'running'].includes(task.state)).map(task => platform.audioEdit.cancelTask(task.requestId)))).catch(error => logger.warn('字幕转录取消请求失败', { event: 'video_edit.subtitle.cancel.failed', error })); void platform.audioEdit.cancelTask(requestId).catch(error => logger.warn('字幕取消失败', { event: 'video_edit.subtitle.cancel.failed', error })) }
     signal?.addEventListener('abort', cancel, { once: true })
-    if (!audio.document.transcript.length) await transcribeAudioEdit({ projectId: audioDocumentId, modelId, language, requestId })
+    if (!audio.document.transcript.length) {
+      billing = 'unknown'
+      await transcribeAudioEdit({ projectId: audioDocumentId, modelId, language, requestId })
+      billing = 'completed'
+    }
     else await flushAudioEditProject(audioDocumentId)
     await assertTarget()
     const captions = manifest.captions ?? buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings).map(caption => ({ ...caption, style: videoEditSubtitleStyleSchema.parse({}) }))
@@ -162,11 +168,15 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     const composition = current(projectId, sequenceId)
     const textTranscription = buildVideoEditTextTranscription(composition, manifest.soundClips ?? audibleVideoEditClips(composition), audio.document, manifest.startFrame)
     const result = appendAutoSubtitles(projectId, sequenceId, captions, textTranscription)
+    applied = true
     await saveVideoEdit(projectId)
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions, committed: true }))
     logger.info('字幕生成完成', { event: 'video_edit.subtitle.transcribe.completed', requestId, context: { projectId, sequenceId, count: result.length } })
     return result
-  } catch (error) { logger.error('字幕生成失败，已完成转录保留供恢复', { event: 'video_edit.subtitle.transcribe.failed', requestId, error, context: { projectId, sequenceId, audioDocumentId } }); throw error }
+  } catch (error) {
+    logger.error('字幕生成失败，已完成转录保留供恢复', { event: 'video_edit.subtitle.transcribe.failed', requestId, error, context: { projectId, sequenceId, audioDocumentId } })
+    throw new TranscriptionFailure(error, { billing: readTranscriptionFacts(error)?.billing ?? billing, targetMutation: applied ? 'applied' : 'none', audioDocumentId })
+  }
   finally { if (cancel) signal?.removeEventListener('abort', cancel); active.delete(owner); release() }
 }
 

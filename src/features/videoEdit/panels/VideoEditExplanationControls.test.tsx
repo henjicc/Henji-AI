@@ -10,8 +10,8 @@ import type { VideoEditInstance } from '../application/videoEditService'
 import type { VideoExplanationState } from '../application/videoEditExplanation'
 import { VideoEditExplanationControls } from './VideoEditExplanationControls'
 
-const control = vi.hoisted(() => ({ state: undefined as VideoExplanationState | undefined, version: 0, listeners: new Set<() => void>(), read: vi.fn(), review: vi.fn(), start: vi.fn(), transcribe: vi.fn(), erase: vi.fn() }))
-vi.mock('../application/videoEditExplanation', () => ({ videoExplanationState: () => control.state, videoExplanationRevision: () => control.version, subscribeVideoExplanation: (listener: () => void) => { control.listeners.add(listener); return () => control.listeners.delete(listener) }, readVideoExplanationPage: control.read, readVideoExplanationReview: control.review, correctVideoExplanationBinding: vi.fn(), pickVideoExplanationBinding: vi.fn(), startVideoExplanation: control.start, stopVideoExplanation: vi.fn(), pauseVideoExplanation: vi.fn(), resumeVideoExplanation: vi.fn(), transcribeVideoExplanation: control.transcribe, eraseVideoExplanation: control.erase, cancelVideoExplanationTranscription: vi.fn(), clearTemporaryVideoExplanationAudio: vi.fn(async () => {}), retryVideoExplanationSave: vi.fn(), generateVideoExplanationCandidates: vi.fn(async () => {}) }))
+const control = vi.hoisted(() => ({ state: undefined as VideoExplanationState | undefined, version: 0, listeners: new Set<() => void>(), read: vi.fn(), review: vi.fn(), start: vi.fn(), preflight: vi.fn(async () => {}), transcribe: vi.fn(), erase: vi.fn() }))
+vi.mock('../application/videoEditExplanation', () => ({ videoExplanationState: () => control.state, videoExplanationRevision: () => control.version, subscribeVideoExplanation: (listener: () => void) => { control.listeners.add(listener); return () => control.listeners.delete(listener) }, readVideoExplanationPage: control.read, readVideoExplanationReview: control.review, correctVideoExplanationBinding: vi.fn(), pickVideoExplanationBinding: vi.fn(), startVideoExplanation: control.start, stopVideoExplanation: vi.fn(), pauseVideoExplanation: vi.fn(), resumeVideoExplanation: vi.fn(), preflightVideoExplanation: control.preflight, transcribeVideoExplanation: control.transcribe, eraseVideoExplanation: control.erase, cancelVideoExplanationTranscription: vi.fn(), clearTemporaryVideoExplanationAudio: vi.fn(async () => {}), retryVideoExplanationSave: vi.fn(), generateVideoExplanationCandidates: vi.fn(async () => {}) }))
 vi.mock('../application/videoEditService', () => ({ subscribeVideoEditDomain: () => () => {}, subscribeVideoEditView: () => () => {}, videoEditDomainRevision: () => 0, videoEditViewRevision: () => 0 }))
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, value: unknown) => ReactNode }) => <div>{data.map((value, index) => <div key={index}>{itemContent(index, value)}</div>)}</div> }))
 let root: Root | undefined, element: HTMLElement | undefined
@@ -99,4 +99,12 @@ it('确认删除先收起词稿，资源移除后的宿主通知不再读已删�
   control.review.mockRejectedValue(new Error('讲解页缺失，请恢复原文件'))
   await act(async () => finish())
   expect(control.erase).toHaveBeenCalledOnce(); expect(control.review).toHaveBeenCalledOnce(); expect(onError).not.toHaveBeenCalled()
+})
+
+it('转写预检失败不会打开付费确认或调用转写', async () => {
+  control.state = state('preflight-session'); control.read.mockResolvedValue([])
+  control.preflight.mockRejectedValueOnce(new Error('凭据未配置'))
+  await mount(); await act(async () => button('转写并审阅').click())
+  expect(document.body.textContent).toContain('转写预检失败')
+  expect(button('同意上传并转写')).toBeUndefined(); expect(control.transcribe).not.toHaveBeenCalled()
 })

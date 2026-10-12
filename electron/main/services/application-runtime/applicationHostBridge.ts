@@ -104,6 +104,16 @@ export class ApplicationHostBridge {
     }
   }
   complete(reply: LocalHostReply): void {
+    if (reply.progress) {
+      const pending = this.pending.get(reply.requestId)
+      if (!pending || pending.rendererEpoch !== reply.rendererEpoch || this.rendererEpoch !== reply.rendererEpoch) throw new Error('确认所属的应用会话已结束。')
+      this.assertAuthorized(pending.callerId)
+      this.operations?.complete(reply)
+      // Release the network/model waiter while retaining invocation ownership for revoke/disconnect.
+      pending.cleanup()
+      if (reply.progress.phase === 'awaiting_user_confirmation') pending.resolve({ ok: false, executionState: reply.progress.phase, confirmation: reply.progress.confirmation })
+      return
+    }
     // 即使 HTTP 已断线/授权已撤销，已发生的执行事实仍须入账；不再向撤销者披露。
     this.operations?.complete(reply)
     const pending = this.pending.get(reply.requestId)
