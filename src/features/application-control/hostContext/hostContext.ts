@@ -36,6 +36,7 @@ import {
 } from '@/core/application-control/domainChangeSignal'
 
 import { rendererEpoch } from '../rendererIdentity'
+import type { EmbeddedSelectionSnapshot } from '@/core/assistant/embeddedAgent'
 
 /** 当前界面上下文的版本摘要；写入以目标实体读取返回的 revisions 为准。 */
 const scopeRevisions: HostScopeRevisions = {
@@ -219,6 +220,30 @@ export function getHostScopeRevisions(): HostScopeRevisions {
   return { ...scopeRevisions }
 }
 
+export function captureHostSelection(summaryOnly = false): EmbeddedSelectionSnapshot {
+  const navigation = useNavigationStore.getState()
+  const videoEdit = navigation.activeWorkspace === 'videoEdit' ? activeVideoEditInstance() : undefined
+  const canvas = useCanvasStore.getState()
+  const project = useProjectStore.getState()
+  const assets = useAssetLibraryStore.getState()
+  const audio = useAudioEditStore.getState()
+  // 高频宿主摘要只遍历首段；完整快照仅在发送时采集。
+  const visibleIds = (ids: string[]) => summaryOnly ? ids.slice(0, 32) : ids
+  const selectedRefs = [
+    ...(videoEdit?.selection ? [`video_edit.clip:${videoEdit.document.id}:${videoEdit.selection}`] : []),
+    ...visibleIds(videoEdit?.selectedItemIds ?? []).map(id => `video_edit.item:${videoEdit!.document.id}:${id}`),
+    ...(assets.selectedAsset ? [`asset:${assets.selectedAsset.id}`] : []),
+    ...(project.currentProjectId && canvas.selectedNodeId ? [`canvas.node:${project.currentProjectId}:${canvas.selectedNodeId}`] : []),
+    ...(navigation.activeWorkspace === 'tools' && navigation.activeToolId === 'audioEdit' && audio.project
+      ? visibleIds(audio.selectedBlockIds).map(id => `audio_edit.transcript_block:${audio.project!.id}:${id}`) : []),
+  ]
+  return {
+    capturedAt: new Date().toISOString(), selectedRefs: [...new Set(selectedRefs)],
+    selectedClipRefs: visibleIds(videoEdit?.selectedClipIds ?? []).map(id => `video_edit.clip:${videoEdit!.document.id}:${id}`),
+    targetTrackRefs: visibleIds(videoEdit?.targetTrackIds ?? []).map(id => `video_edit.track:${videoEdit!.document.id}:${id}`),
+  }
+}
+
 export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const navigation = useNavigationStore.getState()
   const project = useProjectStore.getState()
@@ -233,18 +258,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const activeAudioProjectRef = isAudioEditSurface && audioEdit.project
     ? `audio_edit.document:${audioEdit.project.id}`
     : null
-  const selectedRefs = [
-    // The primary clip comes first so a long item selection never hides it.
-    videoEdit?.selection ? `video_edit.clip:${videoEdit.document.id}:${videoEdit.selection}` : null,
-    ...(videoEdit?.selectedItemIds ?? []).slice(0, 16).map(id => `video_edit.item:${videoEdit!.document.id}:${id}`),
-    assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
-    project.currentProjectId && canvas.selectedNodeId
-      ? `canvas.node:${project.currentProjectId}:${canvas.selectedNodeId}`
-      : null,
-    ...isAudioEditSurface && audioEdit.project
-      ? audioEdit.selectedBlockIds.map((blockId) => `audio_edit.transcript_block:${audioEdit.project!.id}:${blockId}`)
-      : [],
-  ].filter((value): value is string => typeof value === 'string').slice(0, 32)
+  const selectedRefs = captureHostSelection(true).selectedRefs.slice(0, 32)
   const settingsSurface = ui.settingsTarget
     ? `settings.${ui.settingsTarget.tab}.${ui.settingsTarget.sectionId ?? 'root'}`
     : 'settings.general'

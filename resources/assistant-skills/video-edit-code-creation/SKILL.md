@@ -66,7 +66,7 @@ description: 在剪辑里设计、编写或修改代码素材（动态图形、�
 
 ## 执行边界
 
-目标来自宿主上下文或正式目录，不猜ID；缺工具用 `load_application_tools` 加载video_edit。写入走 `change_application_entities`，同目的合并事务，依赖新引用才分调用。源码、参数查接口，放置与恢复查时间线。
+目标来自宿主上下文或正式目录，不猜ID；普通代码素材创建与参数修改已有通用实体工具；看帧用 `load_application_tools({names:["observe_video_edit_frame","read_application_media"]})`，需要保存或撤销时再按 names 加 `save_video_edit` 或 `undo_video_edit`。不加载整个 video_edit，导出等无关工具不提前加载。写入走 `change_application_entities`，同目的合并事务，依赖新引用才分调用。源码、参数查接口，放置与恢复查时间线。
 
 概念、节拍、批注留当前对话或正式标注，不自动建文档、临时工程或偏好文件。交付指出结果位置、可修改内容与证据边界。
 

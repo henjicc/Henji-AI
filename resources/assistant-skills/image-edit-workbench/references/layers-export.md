@@ -26,7 +26,7 @@
 
 ## 结果图读取与图片导出
 
-1. 先读写入/保存回执、参数与蒙版状态。内置 Pi 可用 `observe_application_surface` 查看当前应用并实际读取图像；这是当前窗口证据，不代表已检查原尺寸导出。外部 MCP 不开放该内部截图工具。
+1. 先读写入/保存回执、参数与蒙版状态。内置 Pi 与外部 MCP 的目录均不开放 `observe_application_surface`，不要调用或为此要求用户调整权限。画布来源沿下一步导出桥梁读实际结果图；独立工作文档若没有可读的结果媒体引用，只能完成结构与保存回读，明确“视觉未验证”。公开截图与独立文档通用扁平导出仍是缺口。
 2. 画布来源中受支持的栅格层/组，用 `export_image_edit_target_to_canvas` 给原 canvasRef、sourceNodeRef、targetRef，生成普通 PNG 节点并连接来源；随后 `read_application_media(mode="image")` 用返回 nodeRef 直接查看图像。调整/效果层不能单独导出；浮点/HDR文档也不支持这个算法，不能借它假装全能图片导出。
 3. 要下载画布节点图片用 `download_canvas_media`，documentId/nodeIds 必须来自原画布发现结果，destination 只用已配置 quick/preset。核对 savedNodeIds/failedNodeIds；分批大小按本工具schema，不给整个作品节点数量设配额。读取整图时确认节点关联媒体的outputIndex，不把输入原图误当编辑结果。
 4. 独立图片编辑器已有扁平图片导出界面；当前公开工具目录未提供可指定该工作文档的通用扁平导出能力。不要发明工具或把 `commit_image_edit` 当V3工作文档导出：它只收创建预览返回的previewRef。需要这个界面导出而当前调用面无法执行时如实说明具体缺口。

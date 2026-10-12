@@ -212,7 +212,7 @@ export class EmbeddedAgentService {
       this.client = createEmbeddedApplicationClient(this.state.sessionId!, { allowWrites: input.access !== 'read', allowPaid: input.access === 'full', allowDestructive: input.access === 'full' })
       await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model, tools: [...this.client.catalog(), ...skills.tools], instructions: `${SYSTEM_INSTRUCTIONS}${skills.instructions}\n\n用户指令：\n${instructions.content}` } })
       if (!this.cancelled) {
-        await this.send({ action: 'prompt', input: { text: input.text, context: promptContext, requestId, attachments, creativeIntent: input.creativeIntent } })
+        await this.send({ action: 'prompt', input: { text: input.text, context: promptContext, selectionSnapshot: input.selectionSnapshot, requestId, attachments, creativeIntent: input.creativeIntent } })
         if (this.state.error) throw new Error(this.state.error)
       }
     } catch (error) {

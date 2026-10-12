@@ -1,5 +1,5 @@
 import type { LlmModelConfig } from '@henjicc/ai-sdk'
-import type { EmbeddedAgentSnapshot, EmbeddedIntentRequest } from '../../../../src/core/assistant/embeddedAgent'
+import type { EmbeddedAgentSnapshot, EmbeddedIntentRequest, EmbeddedSelectionSnapshot } from '../../../../src/core/assistant/embeddedAgent'
 import type { AgentAttachment } from '../../../../src/core/assistant/attachments'
 export interface PreparedEmbeddedAttachment { attachment: AgentAttachment; data: string }
 export interface EmbeddedTool { name: string; title?: string; description?: string; inputSchema: Record<string, unknown> }
@@ -8,7 +8,7 @@ export interface EngineConfiguration { directory: string; model: EmbeddedModel; 
 export type EngineCommand =
   | { action: 'initialize'; input: string }
   | { action: 'configure'; input: EngineConfiguration }
-  | { action: 'prompt'; input: { text: string; context: string; requestId?: string; creativeIntent?: EmbeddedIntentRequest; attachments?: PreparedEmbeddedAttachment[] } }
+  | { action: 'prompt'; input: { text: string; context: string; selectionSnapshot?: EmbeddedSelectionSnapshot; requestId?: string; creativeIntent?: EmbeddedIntentRequest; attachments?: PreparedEmbeddedAttachment[] } }
   | { action: 'open'; input: string }
   | { action: 'snapshot' | 'cancel' | 'new' | 'sessions'; input?: never }
 export type EngineEvent =
