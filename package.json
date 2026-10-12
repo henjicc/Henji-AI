@@ -38,6 +38,7 @@
     "check:dependency-graph": "node scripts/check-dependency-graph.cjs",
     "dependency-graph:baseline": "node scripts/check-dependency-graph.cjs --write",
     "check:ipc-contract": "node scripts/check-ipc-contract.cjs",
+    "check:media-recycle": "node scripts/check-media-recycle.cjs",
     "check:dead-code": "node scripts/check-dead-code.cjs",
     "dead-code:baseline": "node scripts/check-dead-code.cjs --write",
     "check:sdk": "node scripts/check-sdk-portability.cjs && node packages/ai-sdk/scripts/check-generation-iife.cjs && node packages/ai-sdk/scripts/check-modular-bundles.cjs && node packages/ai-sdk/scripts/check-uxp-llm-streaming.cjs",

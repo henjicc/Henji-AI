@@ -10,6 +10,7 @@ import {
   releaseManagedMediaFileLease,
 } from '../image/managed-media-leases'
 import { getGeneratedMediaDir } from '../image/path-utils'
+import { enqueueMediaCandidates, registerOwnedMedia } from '../media-recycle/queue'
 import { createMainLogger } from '../logging'
 
 const logger = createMainLogger('main.ai_runtime.media_download')
@@ -137,6 +138,7 @@ export async function saveMediaFromUrlTracked(
   const leased = await acquireManagedMediaFileLease(filePath, async () => {
     try {
       await writeBufferAtomically(filePath, bytes, undefined, { exclusive: true, signal: context.signal, validate })
+      await registerOwnedMedia(filePath)
       return true
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
@@ -152,7 +154,7 @@ export async function saveMediaFromUrlTracked(
 /** 回滚由 saveMediaFromUrlTracked 取得的一次租约；无租约的历史文件保持不动。 */
 export async function releaseSavedMediaFileLease(filePath: string): Promise<void> {
   if (releaseManagedMediaFileLease(filePath) === 'delete') {
-    await fs.rm(filePath, { force: true })
+    enqueueMediaCandidates([filePath])
   }
 }
 

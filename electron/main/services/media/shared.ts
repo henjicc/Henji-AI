@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import { getUploadsDir } from '../image/path-utils'
 import { normalizeLocalSource } from '../image/source'
+import { registerOwnedMedia } from '../media-recycle/queue'
 
 const MAX_BUFFER_BYTES = 32 * 1024 * 1024
 
@@ -54,7 +55,9 @@ async function downloadToTempFile(url: string, signal?: AbortSignal): Promise<st
   try {
     await fs.promises.writeFile(targetPath, bytes, { signal })
     signal?.throwIfAborted()
+    await registerOwnedMedia(targetPath)
   } catch (error) {
+    // media-recycle-allow: failed unpublished download, no caller has received this path.
     await fs.promises.rm(targetPath, { force: true })
     throw error
   }

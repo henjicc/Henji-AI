@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import crypto from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import fs from 'node:fs/promises'
@@ -37,7 +38,7 @@ export function audioEditCacheDirectory(projectId: string): string {
 registerDocumentProgramStateCleaner('audio_edit', async (docId) => {
   if (!/^[\w-]+$/.test(docId) || hasActiveAudioEditTask(docId)) return
   const removedTasks = deleteAudioEditTasks(docId)
-  await fs.rm(path.join(getProgramStoreDir('audioEdit'), docId), { recursive: true, force: true })
+  await removeUnmanagedCachePath(path.join(getProgramStoreDir('audioEdit'), docId), { recursive: true, force: true })
   if (removedTasks) logger.info('口播内部缓存已清理', { event: 'audio_edit.program_state.cleaned', context: { docId, removedTasks } })
 })
 
@@ -159,7 +160,7 @@ export async function prepareAudioEditAudio(project: AudioEditProjectDocument, s
     signal?.throwIfAborted()
     await fs.rename(temporary, output)
     return output
-  } finally { await fs.rm(temporary, { force: true }) }
+  } finally { await removeUnmanagedCachePath(temporary, { force: true }) }
 }
 
 /**

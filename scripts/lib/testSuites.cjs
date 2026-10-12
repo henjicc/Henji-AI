@@ -29,6 +29,7 @@ const IMAGE_EXPORT_TEST_FILES = [
 ]
 // 唯一原生 SQLite 清单：运行器与分层门禁共同消费，不以条件 skip 代替真实执行。
 const NATIVE_TEST_FILES = [
+  'electron/main/services/media-recycle/persistence.native.test.ts',
   'electron/main/services/asset-library/schema.storage.test.ts',
   'electron/main/services/application-runtime/operationStore.test.ts',
   'electron/main/services/application-runtime/mediaResources.native.test.ts',

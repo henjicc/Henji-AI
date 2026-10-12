@@ -102,22 +102,22 @@
       "supportedFrom": 1
     },
     "setting-records": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
       "supportedFrom": 19
     },
     "asset-records": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
       "supportedFrom": 19
     },
     "generation-presets": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
       "supportedFrom": 19
     },
     "sqlite": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
       "supportedFrom": 19
     },

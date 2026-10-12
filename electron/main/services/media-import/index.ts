@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { registerOwnedMedia } from '../media-recycle/queue'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
@@ -109,6 +110,7 @@ async function validateSourcePath(
 async function moveTempIntoPlace(tempPath: string, targetPath: string): Promise<boolean> {
   try {
     await fsp.access(targetPath)
+    // media-recycle-allow: unpublished import staging file, final target already exists.
     await fsp.unlink(tempPath)
     return true
   } catch {
@@ -120,6 +122,7 @@ async function moveTempIntoPlace(tempPath: string, targetPath: string): Promise<
   } catch (error) {
     try {
       await fsp.access(targetPath)
+      // media-recycle-allow: unpublished import staging file, final target already exists.
       await fsp.unlink(tempPath).catch(() => undefined)
       return true
     } catch {
@@ -145,8 +148,10 @@ async function storePathManaged(sourcePath: string, format: DetectedMediaFormat)
     const digest = hash.digest('hex')
     const targetPath = path.join(uploadsDir, `${digest}.${format.extension}`)
     const cacheHit = await moveTempIntoPlace(tempPath, targetPath)
+    if (!cacheHit) await registerOwnedMedia(targetPath)
     return { fullPath: targetPath, sizeBytes, cacheKey: digest, cacheHit }
   } catch (error) {
+    // media-recycle-allow: failed unpublished import staging file only.
     await fsp.unlink(tempPath).catch(() => undefined)
     throw error
   }
@@ -167,8 +172,10 @@ async function storeBytesManaged(bytes: Uint8Array, format: DetectedMediaFormat)
   try {
     await fsp.writeFile(tempPath, bytes, { flag: 'wx' })
     const cacheHit = await moveTempIntoPlace(tempPath, targetPath)
+    if (!cacheHit) await registerOwnedMedia(targetPath)
     return { fullPath: targetPath, sizeBytes: bytes.byteLength, cacheKey: digest, cacheHit }
   } catch (error) {
+    // media-recycle-allow: failed unpublished import staging file only.
     await fsp.unlink(tempPath).catch(() => undefined)
     throw error
   }
@@ -395,6 +402,7 @@ export async function cleanupStaleMediaImportTemps(now = Date.now()): Promise<nu
     try {
       const stat = await fsp.stat(fullPath)
       if (now - stat.mtimeMs > STALE_TEMP_AGE_MS) {
+        // media-recycle-allow: import temp prefix identifies unpublished interrupted copies.
         await fsp.unlink(fullPath)
         removed += 1
       }

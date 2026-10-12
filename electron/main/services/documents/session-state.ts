@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -69,13 +70,13 @@ export class DocumentSessionStateStore {
     const target = this.file(request)
     await this.executor.run(request.docId, async () => {
       if (request.value === null || request.value === undefined) {
-        await fsp.rm(target, { force: true })
+        await removeUnmanagedCachePath(target, { force: true })
         return
       }
       const bytes = Buffer.from(JSON.stringify(request.value), 'utf8')
       if (bytes.byteLength > (this.options.maxBytes ?? DEFAULT_MAX_BYTES)) {
         // 超过上限不写（旧值也删掉，避免下次恢复到更早的状态）；会话状态只是方便，不阻止编辑。
-        await fsp.rm(target, { force: true })
+        await removeUnmanagedCachePath(target, { force: true })
         this.options.logger.warn('文档会话状态过大，未保存', {
           event: 'documents.session_state.write.skipped', context: { documentId: request.docId, key: request.key, bytes: bytes.byteLength },
         })
@@ -88,7 +89,7 @@ export class DocumentSessionStateStore {
   async remove(docId: string): Promise<void> {
     if (!DOCUMENT_ID_PATTERN.test(docId)) return
     await this.executor.run(docId, async () => {
-      await fsp.rm(this.folder(docId), { recursive: true, force: true }).catch(() => undefined)
+      await removeUnmanagedCachePath(this.folder(docId), { recursive: true, force: true }).catch(() => undefined)
     })
   }
 }

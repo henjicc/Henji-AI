@@ -41,6 +41,7 @@ export interface ProjectServiceOptions {
   workspace: DocumentWorkspace
   logger: MainLogger
   trashItem(target: string): Promise<void>
+  retainDetachedMediaLocation?(target: string): void
   showItemInFolder(target: string): void
   grantMediaRoots(directories: readonly string[]): void
   /** 项目移到回收站后清掉其中文档的封面。 */
@@ -251,6 +252,7 @@ export class ProjectService {
       const catalog = this.workspace.catalog
       const location = catalog.listExternalLocations().find((item) => samePath(this.workspace.style, item.path, folderPath))
       if (!location) return
+      this.options.retainDetachedMediaLocation?.(location.path)
       catalog.removeExternalLocation(location.path)
       if (location.kind === 'project') {
         const project = catalog.getProjectByPath(location.path)
