@@ -65,7 +65,8 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   } else if (id === 'cancel_video_edit_export') {
     const taskId = 'taskId' in parsed ? parsed.taskId : undefined
     if (taskId) {
-      const job = videoEditExportQueue.require(taskId)
+      // 队列项与渲染任务各有编号，查询结果两者都给，调用方传哪个都应认
+      const job = videoEditExportQueue.list().find(item => item.id === taskId || item.task?.id === taskId) ?? videoEditExportQueue.require(taskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
       videoEditExportQueue.cancel(job.id)
     } else {
@@ -76,7 +77,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   }
   if (requireVideoEditInstance(documentRef.id) !== owner) throw new Error('原剪辑已关闭，请重新查询。')
   const filterId = id === 'query_video_edit_export' && 'taskId' in parsed ? parsed.taskId : undefined
-  const jobs = submitted ?? videoEditExportQueue.list().filter(job => job.owner === owner && (!filterId || job.id === filterId))
+  const jobs = submitted ?? videoEditExportQueue.list().filter(job => job.owner === owner && (!filterId || job.id === filterId || job.task?.id === filterId))
   const task = videoEditExportTask(documentRef.id)
   return { resultRef: documentRef, queue: jobs.map(videoEditExportJobSummary), message, verification: { verified, target: documentRef, condition }, ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame, ...(task.notice ? { notice: task.notice } : {}), ...(task.loudness ? { loudness: task.loudness } : {}), ...(task.loudnessMeasurement ? { loudnessMeasurement: task.loudnessMeasurement } : {}) } } : {}) }
 }
