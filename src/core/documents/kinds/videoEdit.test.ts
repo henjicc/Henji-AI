@@ -13,6 +13,13 @@ function content() {
 }
 
 describe('剪辑类型登记', () => {
+  it('3 → 4 迁移保留字幕与其他内容并初始化可见、未锁定，不改原输入', () => {
+    const before = { ...content(), sequences: [{ ...createVideoEditSequence(), captions: [{ id: 'caption', start: 0, duration: 30, text: '保留字幕' }] }] }
+    const migrated = videoEditDocumentKind.migrations![3](before)
+    expect(migrated).toEqual({ ...before, sequences: [{ ...before.sequences[0], captionTrackEnabled: true, captionTrackLocked: false }] })
+    expect(before.sequences[0]).not.toHaveProperty('captionTrackLocked')
+    expect(videoEditDocumentKind.contentSchema.parse(migrated).sequences[0].captions).toEqual(before.sequences[0].captions)
+  })
   it('新建内容没有序列，算空；显式建立空序列仍算空', () => {
     const empty = content()
     expect(empty.sequences).toHaveLength(0)

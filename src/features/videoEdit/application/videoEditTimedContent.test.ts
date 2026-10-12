@@ -7,7 +7,8 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
 import { listVideoEditInstances, closeVideoEditProject, editVideoProject, appendVideoEditSequence, switchVideoEditSequence, saveVideoEdit, undoVideoEdit, duplicateVideoEditSequence } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { createVideoEditCaption, createVideoEditMarker, appendVideoEditCaptionText, importVideoEditCaptionFile, exportVideoEditSubtitles, updateVideoEditTimedContent } from './videoEditTimedContent'
+import { createVideoEditCaption, createVideoEditMarker, appendVideoEditCaptionText, importVideoEditCaptionFile, exportVideoEditSubtitles, updateVideoEditTimedContent, updateVideoEditCaptionTrack, removeVideoEditTimedContent, moveVideoEditCaption } from './videoEditTimedContent'
+import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { appendAutoSubtitles } from './videoEditAutoSubtitles'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { reopenVideoEdit } from './videoEditDocumentTestKit'
@@ -30,6 +31,39 @@ async function fixture() {
   })
   return { owner, projectId, sequenceId }
 }
+
+it('字幕轨显示、锁定和编辑共用通用实体与撤销，锁轨拦截所有字幕写入', async () => {
+  const { owner, projectId, sequenceId } = await fixture()
+  const id = createVideoEditCaption(projectId, sequenceId, { start: 10, duration: 20, text: '字幕' })
+  const app = createApplicationHarness()
+  const target = { kind: 'video_edit.sequence', id: `${projectId}:${sequenceId}` }
+  try {
+    const baseline = await app.read(target)
+    const result = await app.call('change_application_entities', { summary: '隐藏并锁定字幕', changes: [{ kind: 'set_properties', entityType: target.kind, target, properties: { 'video_edit.sequence.caption_track_enabled': false, 'video_edit.sequence.caption_track_locked': true } }] }, baseline.revisions as Record<string, number>)
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
+    expect(videoEditCaptionClips(owner.document.sequences[0], 15)).toEqual([])
+    expect(() => updateVideoEditTimedContent(projectId, sequenceId, 'caption', id, { text: '改字' })).toThrow('锁定')
+    expect(() => removeVideoEditTimedContent(projectId, sequenceId, 'caption', [id])).toThrow('锁定')
+    expect(() => createVideoEditCaption(projectId, sequenceId, { start: 50, duration: 10, text: '新增' })).toThrow('锁定')
+    expect(() => moveVideoEditCaption(projectId, sequenceId, id, 'move', 2)).toThrow('锁定')
+    const captionRef = { kind: 'video_edit.caption', id: `${projectId}:${id}` }
+    const lockedBaseline = await app.read(captionRef)
+    const rejected = await app.call('change_application_entities', { summary: '不能越过锁定', changes: [{ kind: 'set_properties', entityType: captionRef.kind, target: captionRef, properties: { 'video_edit.caption.text': '外部改字' } }] }, lockedBaseline.revisions as Record<string, number>)
+    expect(rejected.ok).toBe(false)
+    undoVideoEdit(projectId)
+    expect(videoEditCaptionClips(owner.document.sequences[0], 15)).toHaveLength(1)
+    const history = owner.past.length
+    moveVideoEditCaption(projectId, sequenceId, id, 'move', 5)
+    expect(owner.document.sequences[0].captions![0].start).toBe(15)
+    expect(owner.past).toHaveLength(history + 1)
+    undoVideoEdit(projectId)
+    expect(owner.document.sequences[0].captions![0].start).toBe(10)
+    updateVideoEditCaptionTrack(projectId, sequenceId, { captionTrackLocked: true })
+    updateVideoEditCaptionTrack(projectId, sequenceId, { captionTrackLocked: false })
+    removeVideoEditTimedContent(projectId, sequenceId, 'caption', [id])
+    expect(owner.document.sequences[0].captions).toEqual([])
+  } finally { app.dispose() }
+})
 
 it('手工、通用实体、导入和生成共用邻近样式；显式空样式保留', async () => {
   const { owner, projectId, sequenceId } = await fixture()

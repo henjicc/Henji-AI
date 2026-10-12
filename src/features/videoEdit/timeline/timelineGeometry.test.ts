@@ -43,7 +43,7 @@ it('PR 两区：视频区在上、音频区在下，V1 贴分隔条上方、A1 �
   const layout = timelineLayout(sequence, input())
   expect(layout.rows.map(row => row.track.index)).toEqual([4, 3, 1, 0, 2])
   expect(layout.rows.map(row => [row.top, row.height])).toEqual([[-88, 40], [-48, 160], [112, 48], [168, 24], [192, 32]])
-  expect(layout.regions.video).toMatchObject({ top: 28, height: 132, content: 248 + TIMELINE_NEW_TRACK_ZONE, maxScroll: 148 })
+  expect(layout.regions.video).toMatchObject({ top: 28, height: 132, content: 248 + TIMELINE_NEW_TRACK_ZONE + 24, maxScroll: 172 })
   expect(layout.regions.audio).toMatchObject({ top: 168, height: 132, maxScroll: 0 })
   expect(layout.divider).toBe(164)
   for (const row of layout.rows) expect(row.track).toBe(original.find(track => track.id === row.track.id))
@@ -54,9 +54,9 @@ it('PR 两区：视频区在上、音频区在下，V1 贴分隔条上方、A1 �
 it('两区各自滚动并夹在范围内：视频区往上滚露出上层轨道，滚出本区的轨道不命中也不算可见', () => {
   const sequence = fixture()
   const scrolled = timelineLayout(sequence, input({ video: 1000, audio: 50 }))
-  expect(scrolled.regions.video.scroll).toBe(148); expect(scrolled.regions.audio.scroll).toBe(0)
-  expect(scrolled.rows.map(row => row.top)).toEqual([60, 100, 260, 168, 192])
-  expect(timelineTrackAt(scrolled.rows, 60)?.track.index).toBe(4)
+  expect(scrolled.regions.video.scroll).toBe(172); expect(scrolled.regions.audio.scroll).toBe(0)
+  expect(scrolled.rows.map(row => row.top)).toEqual([84, 124, 284, 168, 192])
+  expect(timelineTrackAt(scrolled.rows, 84)?.track.index).toBe(4)
   expect(timelineTrackAt(scrolled.rows, 159)?.track.index).toBe(3)
   // V1 已滚到分隔条下方：在音频区坐标里不能命中它
   expect(timelineTrackAt(scrolled.rows, 270)).toBeUndefined()
@@ -81,12 +81,30 @@ it('新序列 V1/A1 居中：最上视频轨之上、最下音频轨之下是新
   const sequence = createVideoEditDocument('新序列').sequences[0]
   const layout = timelineLayout(sequence, input())
   expect(layout.rows.map(row => [row.track.kind, row.top])).toEqual([['video', 128], ['audio', 168]])
-  expect(timelineNewTrackZone(layout, 100)).toBe('video'); expect(timelineNewTrackZone(layout, 140)).toBeUndefined()
-  expect(timelineNewTrackZone(layout, 210)).toBe('audio'); expect(timelineNewTrackZone(layout, 180)).toBeUndefined()
+  expect(timelineNewTrackZone(layout, 100)).toBe('video'); expect(timelineNewTrackZone(layout, 128)).toBeUndefined()
+  expect(timelineNewTrackZone(layout, 222)).toBe('audio'); expect(timelineNewTrackZone(layout, 168)).toBeUndefined()
   expect(timelineNewTrackZone(layout, 162)).toBeUndefined()
-  expect(timelineRegionAt(layout, 20)).toBeUndefined(); expect(timelineRegionAt(layout, 100)).toBe('video'); expect(timelineRegionAt(layout, 170)).toBe('audio')
+  expect(timelineRegionAt(layout, 20)).toBeUndefined(); expect(timelineRegionAt(layout, 40)).toBe('video'); expect(timelineRegionAt(layout, 100)).toBe('video'); expect(timelineRegionAt(layout, 170)).toBe('audio')
   // 拖动分隔条改变两区比例，每区至少留 40
   expect(timelineLayout(sequence, { ...input(), split: 0 }).regions.video.height).toBe(40)
+})
+
+it('字幕紧贴最上视频轨并共同滚动，新建视频轨落点仅在字幕上方，裁切区域一致', () => {
+  const sequence = createVideoEditDocument('字幕轨位置').sequences[0]
+  for (const tracks of [sequence.tracks, fixture().tracks, sequence.tracks.filter(track => track.kind === 'audio')]) {
+    for (const scroll of [0, 1000]) {
+      const layout = timelineLayout({ tracks }, input({ video: scroll }))
+      const { caption, regions: { video } } = layout
+      const first = layout.rows.find(row => row.region === 'video')
+      expect(caption.top + caption.height).toBe(first?.top ?? video.top + video.height + video.scroll)
+      expect(caption.clipTop).toBe(video.top); expect(caption.clipBottom).toBe(video.top + video.height)
+      const midpoint = caption.top + caption.height / 2
+      expect(timelineNewTrackZone(layout, midpoint)).toBeUndefined()
+      expect(timelineTrackAt(layout.rows, midpoint)).toBeUndefined()
+      if (caption.top > video.top) expect(timelineNewTrackZone(layout, caption.top - 1)).toBe('video')
+      expect(timelineNewTrackZone(layout, caption.top)).toBeUndefined()
+    }
+  }
 })
 
 it('边缘自动滚动只在指针朝该边移动后生效，曾离开边缘区后再进入也生效', () => {

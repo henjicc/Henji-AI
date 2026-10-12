@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Crosshair, Eye, EyeOff, Headphones, Link2, LockKeyhole, UnlockKeyhole, Volume2, VolumeX, type LucideIcon } from 'lucide-react'
 import { UiButton, UiIconButton, UiInput } from '@/components/ui'
 import { videoEditTrackHeaderButtons, type VideoEditTrackHeaderButtonId } from '@/core/videoEdit/trackHeaderButtons'
@@ -10,6 +11,7 @@ import { TIMELINE_HEADER_WIDTH } from './timelineGeometry'
 type Track = TimelineTrackRow['track']
 type TrackPatch = Partial<Pick<Track, 'locked' | 'enabled' | 'muted' | 'solo' | 'syncLocked' | 'height'>>
 interface Props {
+  caption?: boolean
   row: TimelineTrackRow
   /** 轨道编号（V1、A2…），按同类轨道自下而上/自上而下的顺序。 */
   code: string
@@ -54,13 +56,16 @@ export function videoEditTrackHeaderButtonSpecs(track: Track, targeted: boolean,
  * 轨道头（PR）：编号与名称（点击设为目标）+ 按钮编辑器里选的开关按钮。默认按 PR 只放几个——视频轨：锁定、同步锁定、
  * 切换轨道输出；音频轨：锁定、静音、独奏。右键是 PR 的轨道头菜单。声道类型是名称下的次要信息。
  */
-export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, onResize, onContextMenu, renaming = false, onRename, onStartRename, channelFormat }: Props): React.ReactElement {
+export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, onResize, onContextMenu, renaming = false, onRename, onStartRename, channelFormat, caption = false }: Props): React.ReactElement {
+  const { t } = useTranslation('ui')
   const { track } = row
   const name = track.name
-  const ids = videoEditTrackHeaderButtons(useSettingsStore(state => state.videoEditTrackHeaderButtons), track.kind)
+  const configured = useSettingsStore(state => state.videoEditTrackHeaderButtons)
+  // 字幕沿用视频轨的按钮列；不适用的操作保留同尺寸空位，避免锁与输出错列。
+  const ids = videoEditTrackHeaderButtons(configured, track.kind)
   const specs = new Map(videoEditTrackHeaderButtonSpecs(track, targeted, onPatch, onTarget).map(spec => [spec.id, spec]))
   return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
-    {renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
+    {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span><span className="truncate text-2xs">{name}</span></div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
       : <UiButton size="sm" className="min-w-0 flex-1 !justify-start !gap-1.5 !px-1" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} onDoubleClick={onStartRename} title={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
         <span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span>
         {/* 声道类型在名称下方，名称保留整行宽度。 */}
@@ -69,9 +74,13 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
           {channelFormat && <span className="mt-0.5 max-w-full truncate text-2xs text-text3" data-video-edit-track-channels={channelFormat}>{CHANNEL_LABELS[channelFormat]}</span>}
         </span>
       </UiButton>}
-    {ids.map(id => { const spec = specs.get(id)!; return <UiIconButton key={id} size="sm" on={spec.on} aria-label={`${name}${SHORT_LABELS[id]}`} aria-pressed={spec.on} title={spec.tooltip} onClick={spec.onClick}><spec.Icon className={ICON} /></UiIconButton> })}
-    <div role="separator" tabIndex={0} aria-label={`调整${name}高度`} aria-orientation="horizontal" aria-valuemin={24} aria-valuemax={160} aria-valuenow={row.height} className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize focus-visible:bg-accent" onPointerDown={onResize}
-      onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); event.stopPropagation(); onPatch({ height: Math.max(24, Math.min(160, row.height + (event.key === 'ArrowUp' ? -4 : 4))) }) } }} />
+    {ids.map(id => {
+      if (caption && id !== 'locked' && id !== 'enabled') return <span key={id} aria-hidden="true" className="h-6 w-6 shrink-0" />
+      const spec = specs.get(id)!; const label = caption ? t(`captionTrack.${id === 'enabled' ? track.enabled ? 'hide' : 'show' : track.locked ? 'unlock' : 'lock'}`) : `${name}${SHORT_LABELS[id]}`
+      return <UiIconButton key={id} size="sm" on={spec.on} aria-label={label} aria-pressed={spec.on} title={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon className={ICON} /></UiIconButton>
+    })}
+    {!caption && <div role="separator" tabIndex={0} aria-label={`调整${name}高度`} aria-orientation="horizontal" aria-valuemin={24} aria-valuemax={160} aria-valuenow={row.height} className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize focus-visible:bg-accent" onPointerDown={onResize}
+      onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); event.stopPropagation(); onPatch({ height: Math.max(24, Math.min(160, row.height + (event.key === 'ArrowUp' ? -4 : 4))) }) } }} />}
   </div>
 }
 

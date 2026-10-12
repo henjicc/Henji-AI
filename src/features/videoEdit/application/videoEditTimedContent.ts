@@ -4,8 +4,19 @@ import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions,
 import { getPlatform } from '@/platform/runtime'
 import { editVideoSequence, requireVideoEditInstance, videoEditExportRange, type VideoEditGesture } from './videoEditService'
 import { prepareVideoEditCaption, prepareVideoEditCaptions } from './videoEditCaptionCreation'
+import { retimeVideoEditCaption, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
+import type { VideoEditSequence } from '@/core/videoEdit/document'
 
 const logger = createLogger('features.videoEdit.timedContent')
+export function updateVideoEditCaptionTrack(projectId: string, sequenceId: string, patch: Partial<Pick<VideoEditSequence, 'captionTrackEnabled' | 'captionTrackLocked'>>): void {
+  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...patch }))
+}
+export function moveVideoEditCaption(projectId: string, sequenceId: string, id: string, mode: VideoEditCaptionGesture, delta: number): void {
+  editVideoSequence(projectId, sequenceId, sequence => {
+    const next = retimeVideoEditCaption(sequence, id, mode, delta)
+    return { ...sequence, captions: sequence.captions!.map(caption => caption.id === id ? next : caption) }
+  })
+}
 export function createVideoEditMarker(projectId: string, sequenceId: string, values: Omit<VideoEditMarker, 'id'>): string {
   const marker = videoEditMarkerSchema.parse({ ...values, id: crypto.randomUUID() })
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, markers: [...(sequence.markers ?? []), marker] }))

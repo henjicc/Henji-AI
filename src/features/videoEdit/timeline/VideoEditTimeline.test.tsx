@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
@@ -161,6 +162,7 @@ function layoutClock() {
 }
 
 beforeEach(async () => {
+  await i18n.changeLanguage('zh-CN')
   installHarnessNativeStorage(); onError = vi.fn()
   // 缩略帧不是这些用例的对象：取帧一直“进行中”直到用例结束被中止，不再因替身缺 video 命名空间刷失败日志。
   vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation((_request, signal) => new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('用例结束', 'AbortError')))))
@@ -230,6 +232,44 @@ it('字幕时间线点击与面板行双向选中，切换标记页后也能定�
   fireEvent.click(view.getByRole('button', { name: '定位字幕 第一条' }))
   await waitFor(() => expect(view.getByRole('tab', { name: '字幕' }).getAttribute('aria-selected')).toBe('true'))
   expect(owner.past).toHaveLength(history); expect(onError).not.toHaveBeenCalled()
+})
+
+it('字幕独占一行，拖动与双端修剪仅提交一步；取消、锁定及删除遵守相同历史', async () => {
+  const id = createVideoEditCaption(owner.document.id, current().id, { start: 40, duration: 40, text: '可编辑字幕' })
+  const view = render(<SpeedKeyboardView />)
+  const row = view.container.querySelector<HTMLElement>('[data-video-edit-caption-track]')!
+  const video = view.container.querySelector<HTMLElement>('[data-video-edit-track-kind="video"], [data-track-kind="video"]')!
+  expect(Number.parseFloat(row.style.top) + Number.parseFloat(row.style.height)).toBe(Number.parseFloat(video.style.top))
+  expect(row.style.height).toBe('24px')
+  expect(view.container.querySelector('[data-video-edit-ruler] [data-video-edit-caption-range]')).toBeNull()
+  const block = view.getByRole('button', { name: '定位字幕 可编辑字幕' })
+  act(() => setVideoEditTimelineView(owner.document.id, { snapping: false }))
+  const baseline = owner.document; const history = owner.past.length
+  fireEvent.pointerDown(block, event(header + 100, 40))
+  fireEvent.pointerMove(window, event(header + 120, 40))
+  expect(owner.document).toBe(baseline)
+  expect(block.getAttribute('data-caption-start')).toBe('50')
+  fireEvent.pointerUp(window, event(header + 120, 40))
+  expect(current().captions![0]).toMatchObject({ start: 50, duration: 40 }); expect(owner.past).toHaveLength(history + 1)
+  const inHandle = block.querySelector('[data-caption-trim="in"]')!
+  fireEvent.pointerDown(inHandle, event(header + 100, 40)); fireEvent.pointerMove(window, event(header + 110, 40)); fireEvent.pointerUp(window, event(header + 110, 40))
+  expect(current().captions![0]).toMatchObject({ start: 55, duration: 35 })
+  const outHandle = block.querySelector('[data-caption-trim="out"]')!
+  fireEvent.pointerDown(outHandle, event(header + 180, 40)); fireEvent.pointerMove(window, event(header + 170, 40)); fireEvent.pointerUp(window, event(header + 170, 40))
+  expect(current().captions![0]).toMatchObject({ start: 55, duration: 30 })
+  const beforeCancel = owner.document
+  fireEvent.pointerDown(block, event(header + 130, 40)); fireEvent.pointerMove(window, event(header + 150, 40)); fireEvent.keyDown(window, { key: 'Escape' })
+  expect(owner.document).toBe(beforeCancel)
+  fireEvent.click(view.getByRole('button', { name: '锁定字幕轨道' }))
+  fireEvent.pointerDown(block, event(header + 130, 40)); fireEvent.pointerMove(window, event(header + 150, 40)); fireEvent.pointerUp(window, event(header + 150, 40))
+  expect(current().captions![0].start).toBe(55)
+  fireEvent.keyDown(block, { key: 'Delete', code: 'Delete' }); expect(current().captions).toHaveLength(1)
+  fireEvent.click(view.getByRole('button', { name: '解锁字幕轨道' }))
+  fireEvent.keyDown(block, { key: 'Delete', code: 'Delete' })
+  await waitFor(() => expect(current().captions).toEqual([]))
+  expect(row.isConnected).toBe(true)
+  act(() => undoVideoEdit(owner.document.id)); expect(current().captions![0].id).toBe(id)
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('框选与关联选择不误定位播放头；Shift 点击关联集合整体取消', () => {
@@ -383,8 +423,8 @@ it('高度只在释放提交一次，实际32轨道与高度用于纵向命中',
   fireEvent.pointerUp(host, event(100, resizeY + 40)); expect(current().tracks[1].height).toBe(72); expect(owner.past).toHaveLength(history + 1)
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
   // 拖动中 Ctrl+滚轮把视频区往上滚，露出上层轨道（只滚光标所在的视频区）
-  fireEvent.wheel(host, { deltaY: -830, ctrlKey: true, clientX: 300, clientY: 60 }); const targetY = trackClientY(29)
-  expect(targetY).toBeGreaterThanOrEqual(28); expect(targetY).toBeLessThan(160)
+  fireEvent.wheel(host, { deltaY: -854, ctrlKey: true, clientX: 300, clientY: 60 }); const targetY = trackClientY(29)
+  expect(targetY).toBeGreaterThanOrEqual(52); expect(targetY).toBeLessThan(160)
   fireEvent.pointerMove(host, event(header + 20, targetY)); fireEvent.pointerUp(host, event(header + 20, targetY))
   expect(current().clips[0].track).toBe(29); expect(onError).not.toHaveBeenCalled()
 })

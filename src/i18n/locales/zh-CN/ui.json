@@ -1,5 +1,15 @@
 {
   "videoEdit": { "inlineCaption": "就地编辑字幕" },
+  "captionTrack": {
+    "name": "字幕",
+    "show": "显示字幕轨道",
+    "hide": "隐藏字幕轨道",
+    "lock": "锁定字幕轨道",
+    "unlock": "解锁字幕轨道",
+    "select": "定位字幕 {{text}}",
+    "trimStart": "修剪字幕开始",
+    "trimEnd": "修剪字幕结束"
+  },
   "canvasTidy": {
     "title": "整理",
     "align": "按边缘对齐",

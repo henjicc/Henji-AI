@@ -5,6 +5,9 @@ import { videoEditTransitionClipIds } from './transitions'
 export function assertVideoEditLockedTracks(before: VideoEditDocument, after: VideoEditDocument): void {
   for (const sequence of before.sequences) {
     const target = after.sequences.find(value => value.id === sequence.id)
+    if (sequence.captionTrackLocked && (!target || JSON.stringify(sequence.captions ?? []) !== JSON.stringify(target.captions ?? []))) {
+      throw new Error('字幕轨道已锁定，请先解锁再编辑。')
+    }
     for (const track of sequence.tracks.filter(value => value.locked)) {
       const nextTrack = target?.tracks.find(value => value.id === track.id)
       if (!target || !nextTrack || nextTrack.index !== track.index || nextTrack.kind !== track.kind) throw new Error(`轨道“${track.name}”已锁定，请先解锁再编辑。`)
