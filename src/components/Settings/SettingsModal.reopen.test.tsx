@@ -71,7 +71,7 @@ describe('设置弹窗淡出期间再次打开（5.8）', () => {
     expect(screen.getByRole('dialog', { name: '设置' })).toBeTruthy()
 
     fireEvent.change(search, { target: { value: '汇率' } })
-    act(() => { (screen.getByText('美元兑人民币汇率').closest('[role="listitem"]') as HTMLElement).click() })
+    act(() => { (screen.getByText('美元兑人民币汇率').closest('button') as HTMLElement).click() })
     act(() => { vi.advanceTimersByTime(500) })
     expect(screen.getByText('workspace')).toBeTruthy()
   })

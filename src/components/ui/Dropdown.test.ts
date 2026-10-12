@@ -31,6 +31,30 @@ describe('Dropdown 键盘交互', () => {
     vi.restoreAllMocks()
   })
 
+  it('空选项显示占位并禁用，清空已打开菜单时关闭，自定义面板保持可用', () => {
+    const rendered = render(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', options: [] }))
+    const trigger = rendered.getByRole('button', { name: '空态回归' }) as HTMLButtonElement
+    expect(trigger.disabled).toBe(true)
+    expect(trigger.textContent).toBe('暂无可选项')
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    rendered.rerender(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', emptyLabel: '没有可用图层', options: [] }))
+    expect(trigger.textContent).toBe('没有可用图层')
+    rendered.rerender(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', value: 'layer', options: [{ value: 'layer', label: '可用图层' }] }))
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    rendered.rerender(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', display: '过期值', options: [] }))
+    expect(trigger.disabled).toBe(true)
+    expect(trigger.textContent).toBe('暂无可选项')
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.getElementById(trigger.getAttribute('aria-controls') ?? '')).toBeNull()
+    rendered.rerender(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', display: '自定义', options: [], renderPanel: () => React.createElement('span', null, '自定义面板内容') }))
+    expect(trigger.disabled).toBe(false)
+    fireEvent.click(trigger)
+    expect(rendered.getByText('自定义面板内容')).toBeTruthy()
+    rendered.unmount()
+  })
+
   it('用方向键打开并用 Enter 选择当前选项，同时保留可访问状态', () => {
     const onSelect = vi.fn()
     const rendered = render(React.createElement(Dropdown, {

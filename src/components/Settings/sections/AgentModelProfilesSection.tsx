@@ -133,26 +133,6 @@ function createOptions(models: LlmModelConfig[], role: AgentModelRole, t: TFunct
   return choices
 }
 
-function capabilitySummary(model: LlmModelConfig | undefined, t: TFunction): string {
-  if (!model) return t('agentModels.missingModel')
-  const capabilities = model.capabilities
-  const yesNo = (value: boolean): string => t(value ? 'agentModels.yes' : 'agentModels.no')
-  const unknown = t('agentModels.unknown')
-  const inputs = [
-    capabilities.image && t('agentModels.modality.image'),
-    capabilities.video && t('agentModels.modality.video'),
-    capabilities.audio && t('agentModels.modality.audio'),
-  ].filter(Boolean).join(t('agentModels.listSeparator'))
-  return [
-    t('agentModels.summary.tools', { value: yesNo(capabilities.toolCall) }),
-    t('agentModels.summary.parallel', { value: yesNo(capabilities.parallelTools) }),
-    t('agentModels.summary.structured', { value: yesNo(capabilities.structuredOutputMode !== 'none') }),
-    t('agentModels.summary.input', { value: inputs || t('agentModels.textOnly') }),
-    t('agentModels.summary.context', { value: capabilities.contextWindow ?? unknown }),
-    t('agentModels.summary.output', { value: capabilities.maxOutputTokens ?? unknown }),
-  ].join(' · ')
-}
-
 const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSectionProps): JSX.Element | null => {
   const { t } = useI18n('settings')
   const profile = config.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config.agentProfiles[0]
@@ -282,8 +262,12 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           const roleLabel = t(`agentModels.roles.${role}`)
           const configuredReference = getRoleReference(profile, role)
           const effectiveReference = configuredReference ?? (role === 'router' || role === 'summarizer' ? profile.primary : undefined)
-          const model = findModel(models, effectiveReference)
           const verification = effectiveReference ? findAgentModelVerification(profile, effectiveReference) : undefined
+          const usageItems = verification ? [
+            verification.usage.inputTokens == null ? '' : t('agentModels.usageItems.input', { value: verification.usage.inputTokens }),
+            verification.usage.outputTokens == null ? '' : t('agentModels.usageItems.output', { value: verification.usage.outputTokens }),
+            verification.usage.reasoningTokens == null ? '' : t('agentModels.usageItems.reasoning', { value: verification.usage.reasoningTokens }),
+          ].filter(Boolean) : []
           const value = getRoleValue(profile, role)
           const display = options.find(item => item.value === value)?.label ?? t('agentModels.choose')
           const key = effectiveReference ? modelKey(effectiveReference) : ''
@@ -315,7 +299,6 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
               />
               <UiDisclosurePanel open={detailsOpen}>
                 <div className="space-y-2 pt-2">
-                  <div className={UI_TEXT_META_CLASS}>{capabilitySummary(model, t)}</div>
                   {verification ? (
                     <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
                       {verificationErrors[key] && <p className="text-xs text-text3">{t('agentModels.previousVerification')}</p>}
@@ -331,7 +314,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                           {check.status === 'failed' && <p className="mt-1 text-xs text-text2">{t(`agentModels.checkImpact.${check.id}`)}</p>}
                         </div>
                       })}
-                      <div>{t('agentModels.usage', { input: verification.usage.inputTokens ?? t('agentModels.unknown'), output: verification.usage.outputTokens ?? t('agentModels.unknown'), reasoning: verification.usage.reasoningTokens ?? t('agentModels.unknown') })}</div>
+                      {usageItems.length > 0 && <div>{t('agentModels.usage', { items: usageItems.join(t('agentModels.listSeparator')) })}</div>}
                     </div>
                   ) : <div className={UI_TEXT_META_CLASS}>{t('agentModels.notVerified')}</div>}
                   {effectiveReference ? (
@@ -340,7 +323,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                         <RefreshCw className={`h-4 w-4 ${verifyingKey === key ? 'motion-safe:animate-spin' : ''}`} />
                         {verifyingKey === key ? t('agentModels.verifying') : t('agentModels.verify')}
                       </UiButton>
-                      <span className={UI_TEXT_META_CLASS}>{t('agentModels.verifyCost')}</span>
+                      <span className="text-xs text-text3">{t('agentModels.verifyCost')}</span>
                     </div>
                   ) : null}
                   {verificationErrors[key] && effectiveReference && <UiError size="xs" align="start" title={t('agentModels.verifyFailedTitle')} message={verificationErrors[key]}

@@ -18,6 +18,7 @@ import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvi
 import { measureElementTextWidth } from './textMeasurement'
 import { Check } from 'lucide-react'
 import Tooltip from './Tooltip'
+import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
@@ -35,6 +36,8 @@ type DropdownProps<T extends string | number | boolean> = {
   value?: T
   display?: string
   options?: DropdownOption<T>[]
+  /** 普通选项下拉为空时的占位；自定义 renderPanel 不受选项数量影响。 */
+  emptyLabel?: string
   onSelect?: (value: T) => void
   renderPanel?: () => React.ReactNode
   disabled?: boolean
@@ -73,9 +76,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     value,
     display,
     options,
+    emptyLabel,
     onSelect,
     renderPanel,
-    disabled,
+    disabled: disabledOverride,
     className,
     buttonClassName,
     size = 'md',
@@ -90,6 +94,9 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     appearance: appearanceOverride,
     onOpenChange,
   } = props
+  const { t } = useTranslation('ui')
+  const empty = !renderPanel && !options?.length
+  const disabled = disabledOverride || empty
   const formRowLabelling = useUiFormRowLabelling()
   const fillControl = formRowLabelling?.fillControl === true
   const minWidthStrategy = fillControl ? 'none' : minWidthStrategyOverride
@@ -124,7 +131,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const yieldToModal = useHasOpenModalUiOverlayDescendant(overlay.id)
   const onOpenChangeRef = useRef(onOpenChange)
   onOpenChangeRef.current = onOpenChange
-  const menuShown = open && !closing
+  const menuShown = open && !closing && !disabled
   const notifiedOpenRef = useRef(false)
   useEffect(() => {
     if (notifiedOpenRef.current === menuShown) return
@@ -161,7 +168,15 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   // 选项超过可视高度时列表出现竖向滚动条，它占用的宽度要加到菜单宽度上，
   // 否则带勾的选中项会被挤成“5.”“智…”（任务 5.3）。打开后、绘制前测量一次。
   const [scrollGutterPx, setScrollGutterPx] = useState(0)
-  const resolvedDisplay = resolveDropdownDisplay(display, value, options)
+  const resolvedDisplay = empty ? emptyLabel ?? t('dropdown.emptyLabel', { defaultValue: '暂无可选项' }) : resolveDropdownDisplay(display, value, options)
+  useEffect(() => {
+    if (!disabled) return
+    window.clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = undefined
+    setOpen(false)
+    setClosing(false)
+    setActiveOptionIndex(-1)
+  }, [disabled])
   const isSelectedOption = (optValue: T): boolean => {
     if (value === undefined) return false
     return String(value) === String(optValue)
@@ -423,7 +438,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         disabled={disabled}
         size={size}
         appearance={appearance === 'text' ? 'quiet' : 'field'}
-        open={open && !closing}
+        open={menuShown}
         onClick={() => {
           if (disabled) return
           // 收起中再次点击触发器视为重新打开（与 PanelTrigger 一致）
@@ -436,7 +451,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         onKeyDown={handleTriggerKeyDown}
         data-dropdown-button
         aria-haspopup="listbox"
-        aria-expanded={open && !closing}
+        aria-expanded={menuShown}
         aria-controls={panelId}
         aria-activedescendant={open && activeOptionIndex >= 0 ? `${panelId}-option-${activeOptionIndex}` : undefined}
         id={triggerId}
@@ -447,7 +462,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       >
         {resolvedDisplay}
       </UiFieldTrigger>
-      {(open || closing) && (
+      {!disabled && (open || closing) && (
         portal && fixedPos ? (
           createPortal(
             <div

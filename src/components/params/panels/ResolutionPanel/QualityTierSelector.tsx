@@ -52,6 +52,7 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
             : option.resolution
 
           return (
+            // ui-surface-allow: S4 质量档位是网格单选集合，复用 grid 选项边界而非记录列表；u6。
             <UiOptionButton
               type="button"
               active={value === option.value}

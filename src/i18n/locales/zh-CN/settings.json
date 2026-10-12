@@ -764,7 +764,12 @@
       "failed": "不可用",
       "skipped": "未验证"
     },
-    "usage": "Token：输入 {{input}} / 输出 {{output}} / 思考 {{reasoning}}",
+    "usage": "上次验证用量：{{items}}",
+    "usageItems": {
+      "input": "输入 {{value}}",
+      "output": "输出 {{value}}",
+      "reasoning": "思考 {{value}}"
+    },
     "notVerified": "尚未进行动态能力验证",
     "verifying": "验证中",
     "verify": "验证此模型",

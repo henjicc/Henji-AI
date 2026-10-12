@@ -1,4 +1,5 @@
 {
+  "dropdown": { "emptyLabel": "暂无可选项" },
   "surfaceGrammar": {
     "curveChannel": "曲线通道",
     "curveType": "曲线类型",
@@ -11,6 +12,7 @@
     "fillRule": "路径填充规则",
     "anchor": "编辑锚点",
     "maskTarget": "蒙版目标图层",
+    "noAvailableLayers": "没有可用图层",
     "annotationFilter": "筛选批注",
     "trackingTarget": "跟踪应用目标",
     "stylePreset": "风格组件"

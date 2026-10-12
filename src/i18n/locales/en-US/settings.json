@@ -766,7 +766,12 @@
       "failed": "Unavailable",
       "skipped": "Not verified"
     },
-    "usage": "Tokens: input {{input}} / output {{output}} / reasoning {{reasoning}}",
+    "usage": "Last verification usage: {{items}}",
+    "usageItems": {
+      "input": "input {{value}}",
+      "output": "output {{value}}",
+      "reasoning": "reasoning {{value}}"
+    },
     "notVerified": "Not verified yet",
     "verifying": "Verifying",
     "verify": "Verify this model",

@@ -2,7 +2,7 @@
 const { createImageEditDocumentSizeScene } = require('./uiInspectionSceneImageEditDocumentSize.cjs')
 const { createF2UiScenes } = require('./uiInspectionSceneF2Ui.cjs')
 const { createSuperKeyframePanelScenes } = require('./uiInspectionSceneSuperKeyframePanel.cjs')
-const { createSurfaceGrammarScenes } = require('./uiInspectionSceneSurfaceGrammar.cjs')
+const { createSurfaceGrammarScenes, createUiPolishScenes } = require('./uiInspectionSceneSurfaceGrammar.cjs')
 const { createImageEditLayoutDraftScene } = require('./uiInspectionSceneImageEditLayoutDraft.cjs')
 const { createImageEditCommonWorkflowsScene } = require('./uiInspectionSceneImageEditCommonWorkflows.cjs')
 const { createImageEditCommonFeaturesScene, createImageEditQuickMosaicScene } = require('./uiInspectionSceneImageEditCommonFeatures.cjs')
@@ -133,6 +133,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
 
   return Object.freeze([
     ...createSurfaceGrammarScenes(context),
+    ...createUiPolishScenes(context),
     ...createSuperKeyframePanelScenes(context),
     createVideoEditProbeScene(),
     createVideoEditScrubScene(),

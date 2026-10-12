@@ -96,9 +96,10 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
         label={t('sections.download.presetPathsLabel')}
         info={t('sections.download.presetPathsHint')}
       >
-        <div className="space-y-1.5">
+        <div>
+          <div>
           {presetPaths.map((path) => (
-            <div key={path} className="flex items-center gap-2">
+            <div key={path} className="flex items-center gap-2 border-b border-line/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
               <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text2" />
               {/* 明文本地路径，观察截图时需要遮罩 */}
               <span data-observation-sensitive className="min-w-0 flex-1 truncate text-sm" title={path}>
@@ -115,7 +116,8 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               </UiIconButton>
             </div>
           ))}
-          <div className="flex items-center gap-2">
+          </div>
+          <div className="flex items-center gap-2 pt-3">
             <UiButton
               onClick={handleAddPresetPath}
               disabled={presetPaths.length >= DOWNLOAD_PRESET_PATH_LIMIT}

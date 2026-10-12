@@ -233,6 +233,7 @@ export function PromptOptimizationProfilesPanel({
       <div className="grid min-h-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
         <div className="space-y-2 pr-1">
           {profiles.map(profile => (
+            // ui-surface-allow: S4 配置切换是互斥菜单选项，复用 menu 的悬停与选中边界；u6。
             <UiOptionButton
               key={profile.id}
               type="button"

@@ -14,8 +14,8 @@ export function VideoEditExportQueueList(): React.ReactElement | null {
   const [notice, setNotice] = useState('')
   if (!jobs.length) return null
   return <UiGroup title="导出队列" divided>
-    <div className="max-h-64 overflow-y-auto space-y-3">
-      {jobs.map(job => <div key={job.id} className="flex flex-wrap items-center gap-3">
+    <div className="max-h-64 overflow-y-auto">
+      {jobs.map(job => <div key={job.id} className="flex flex-wrap items-center gap-2 border-b border-line/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
         <div className="min-w-0 flex-1"><p className="break-words text-sm text-text1">{job.name} · {job.presetName}</p>{job.state === 'running' ? <UiLoading size="xs" message={`正在导出 ${Math.round((job.task?.progress ?? 0) * 100)}%`} /> : <p role="status" className="text-xs text-text2">{labels[job.state]}</p>}{job.error && <UiError size="xs" align="start" message={job.error} />}</div>
         {['queued', 'running'].includes(job.state) && <UiButton size="sm" onClick={() => videoEditExportQueue.cancel(job.id)}>取消</UiButton>}
         {job.state === 'failed' && job.task?.state !== 'completed' && <UiButton size="sm" onClick={() => { try { retryVideoEditExportJob(job.id); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>重试</UiButton>}

@@ -21,6 +21,8 @@ import { useUiFieldLayout } from './fieldLayout';
 import { UiIconButton } from './primitives';
 import {
   UI_DIVIDER_CLASS,
+  UI_GROUP_SIBLING_GAP_CLASS,
+  UI_SECTION_STACK_CLASS,
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_ROW_GAP_CLASS,
   UI_STACK_GAP_CLASS,
@@ -51,7 +53,7 @@ interface UiGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   /** 在本组上方加一条分隔线（唯一允许的"画线分隔"写法） */
   divided?: boolean;
   /** 子项纵向间距档位 */
-  gap?: 'row' | 'stack' | 'none';
+  gap?: 'row' | 'stack' | 'section' | 'none';
   /**
    * 标题排版档位（刻意做成枚举而非任意 className，避免变体无限扩散）：
    * - `section`（默认）：常规分区标题
@@ -175,6 +177,7 @@ export function UiTooltipText({ tooltip, children, className = '', placement }: 
 }
 
 function resolveGapClass(gap: UiGroupProps['gap']): string {
+  if (gap === 'section') return UI_SECTION_STACK_CLASS;
   if (gap === 'stack') return UI_STACK_GAP_CLASS;
   if (gap === 'none') return '';
   return UI_ROW_GAP_CLASS;
@@ -222,7 +225,8 @@ export function UiGroup({
 
   return (
     <div
-      className={`${divided ? `${UI_DIVIDER_CLASS} ${titleTone === 'compact' ? 'pt-2.5' : 'pt-4'}` : ''} ${className}`}
+      data-ui-group
+      className={`${UI_GROUP_SIBLING_GAP_CLASS} ${divided ? `${UI_DIVIDER_CLASS} ${titleTone === 'compact' ? 'pt-2.5' : 'pt-4'}` : ''} ${className}`}
       {...props}
     >
       {hasHeader && (

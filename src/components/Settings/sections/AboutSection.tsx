@@ -85,8 +85,9 @@ const AboutSection: React.FC = () => {
         {state.status === 'loading' ? <UiLoading size="xs" message={t('sections.about.loading')} /> : null}
         {state.status === 'unavailable' ? <UiError size="xs" align="start" title={t('sections.about.unavailable')} message="" /> : null}
         {notices ? (
-          <div className="-mx-3 space-y-0.5">
+          <div className="-mx-3">
             {highlights.map((component) => (
+              <div key={component.id} className="border-b border-line/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
               <UiOptionButton
                 key={component.id}
                 type="button"
@@ -104,6 +105,7 @@ const AboutSection: React.FC = () => {
                   <ChevronRight className="h-3.5 w-3.5 text-text2" />
                 </span>
               </UiOptionButton>
+              </div>
             ))}
           </div>
         ) : null}

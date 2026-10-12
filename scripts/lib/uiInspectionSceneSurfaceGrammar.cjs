@@ -3,6 +3,7 @@ const path = require('node:path')
 const assert = require('node:assert/strict')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
+const { stubIpc, restoreIpcStubs } = require('./uiReviewIpcStub.cjs')
 const { openCanvasImageEditorV3Fixture } = require('./uiInspectionCanvasImageEditorV3.cjs')
 const { fixture } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
 const { seedVideoEditProject, openVideoEditProjectCard } = require('./uiInspectionVideoEditDocuments.cjs')
@@ -135,4 +136,115 @@ function createSurfaceGrammarScenes(context) {
       } },
   ]
 }
-module.exports = { createSurfaceGrammarScenes }
+/** u6 仅摆放隔离夹具、查看 UI；不点击模型验证或生成。 */
+function createUiPolishScenes(context) {
+  return [
+    { id: 'u6-vector-properties', surface: '图片编辑', name: '矢量属性-分组边界与空蒙版目标', writesUserData: true,
+      setup: async (page, app, { capture }) => {
+        const restore = await blockPaidGeneration(app)
+        try {
+          const factory = loadTypeScript('src/core/imageEdit/v3/documentFactory.ts')
+          const vector = loadTypeScript('src/core/imaging/vectorContent/index.ts')
+          const { fill, strokes, shadows } = vector.defaultTextStyle(600)
+          const shape = factory.createImageEditPathLayerV3('u6-shape', '可编辑路径', 'shape', {
+            operands: [{ operation: 'replace', path: vector.rectanglePath(160, 120, 240, 180) }], paint: { fill, strokes, shadows },
+          })
+          const { editor } = await openCanvasImageEditorV3Fixture({ page, context, width: 800, height: 600, label: '界面打磨', vectorLayers: [shape] })
+          await editor.locator('[data-dock-tab="layers"] > span').first().click()
+          await editor.locator('[data-layer-id="reality-gpu-source-layer"] [data-layer-select]').click()
+          await editor.locator('[data-tool-id="move"]').click()
+          await editor.locator('[data-dock-tab="properties"] > span').first().click()
+          await editor.locator('[data-properties-tab="basics"]').click()
+          await editor.getByRole('switch', { name: '锁定', exact: true }).click()
+          await editor.locator('[data-dock-tab="layers"] > span').first().click()
+          await editor.locator(`[data-layer-id="${shape.id}"] [data-layer-select]`).click()
+          await editor.locator('[data-dock-tab="properties"] > span').first().click()
+          const panel = editor.locator('[data-properties-tab-panel]')
+          await context.settlePage(page, 500)
+          const gap = await panel.evaluate(element => {
+            const rotation = element.querySelector('input[aria-label^="旋转"]')
+            const pathTitle = [...element.querySelectorAll('div')].find(item => item.textContent === '路径与组合')?.closest('[data-ui-group]')
+            if (!rotation || !pathTitle) throw new Error('分组间距目标未找到')
+            return pathTitle.getBoundingClientRect().top - rotation.getBoundingClientRect().bottom
+          })
+          assert.ok(Math.round(gap) >= 32, `变换和路径组间距须为 32px 分区档（DIP 取整），实际 ${gap}`)
+          await capture('group-spacing')
+          const target = editor.getByRole('button', { name: '蒙版目标图层', exact: true })
+          await target.scrollIntoViewIfNeeded()
+          assert.equal(await target.isDisabled(), true)
+          assert.match(await target.textContent(), /没有可用图层/)
+          await context.settlePage(page, 300)
+          await capture('empty-mask-target')
+        } finally { await restore() }
+      } },
+    { id: 'u6-assistant-details', surface: '设置', name: '助手模型详情-未知与已知验证用量', writesUserData: true,
+      setup: async (page, app, { capture }) => {
+        await stubIpc(app, { channel: 'llm:verifyModelCapabilities', mode: 'reject', message: '界面巡检禁止真实模型验证' })
+        const previous = await page.evaluate(() => window.henjiNative.llm.readConfig())
+        const provider = { providerId: 'u6-fixture', displayName: '界面验收', adapter: 'openai-compatible', enabled: true, baseUrl: 'http://127.0.0.1:9/v1', setup: { kind: 'custom' } }
+        const primary = { providerId: provider.providerId, modelId: 'u6-model' }
+        const baseline = previous?.agentProfiles?.length ? previous : {
+          providers: [provider], models: [{ ...primary, displayName: '验收助手模型', adapter: provider.adapter, enabled: true,
+            capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false,
+              jsonOutput: true, structuredOutputMode: 'json', reasoning: false, sampling: true, contextWindow: 32768, maxOutputTokens: 1024, usage: true } }],
+          promptProfiles: [], textProcessingPromptTemplates: [], selectedAgentProfileId: 'u6-agent',
+          agentProfiles: [{ id: 'u6-agent', name: '验收助手', primary, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 1024, contextWindowBudget: 32768 },
+            verifications: [], createdAt: '2026-10-13T00:00:00Z', updatedAt: '2026-10-13T00:00:00Z' }],
+          tools: [], policy: { allowedTools: [], requireHumanConfirmation: false }, memory: {},
+        }
+        try {
+          for (const known of [false, true]) {
+            await page.evaluate(async ({ baseline, known }) => {
+              const config = structuredClone(baseline)
+              const profile = config.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config.agentProfiles[0]
+              profile.verifications = [{ ...profile.primary, adapterVersion: 'u6-fixture', verifiedAt: '2026-10-13T00:00:00Z',
+                checks: [{ id: 'text', status: 'passed', latencyMs: 1 }], totalLatencyMs: 1,
+                usage: { inputTokens: known ? 120 : null, outputTokens: known ? 30 : null, reasoningTokens: null,
+                  cacheReadTokens: null, cacheWriteTokens: null, totalTokens: null }, cost: { status: 'unknown' } }]
+              await window.henjiNative.llm.writeConfig(config)
+            }, { baseline, known })
+            await page.reload()
+            await context.setupSettings(page)
+            await context.clickNamedButton(page, /^(助手模型|Assistant Models)$/i)
+            await page.getByRole('button', { name: '详情', exact: true }).first().click()
+            await context.settlePage(page, 300)
+            assert.equal(await page.getByText(/^工具 .*上下文/).count(), 0)
+            if (known) assert.ok(await page.getByText('上次验证用量：输入 120、输出 30', { exact: true }).count())
+            else assert.equal(await page.getByText(/^上次验证用量：/).count(), 0)
+            await capture(known ? 'known-usage' : 'unknown-usage')
+          }
+        } finally {
+          await page.evaluate(config => window.henjiNative.llm.writeConfig(config), baseline)
+          await restoreIpcStubs(app)
+        }
+      } },
+    { id: 'u6-settings-search', surface: '设置', name: '设置搜索-记录分隔',
+      setup: async page => {
+        await context.closeTransientUi(page)
+        await context.setupSettings(page)
+        await page.getByPlaceholder('搜索设置', { exact: true }).fill('模型')
+        await page.getByRole('listitem').first().waitFor()
+        await context.settlePage(page, 300)
+      } },
+    { id: 'u6-preset-records', surface: '生成', name: '提示词预设-记录分隔', writesUserData: true,
+      setup: async (page, app) => {
+        await context.closeTransientUi(page)
+        const restore = await blockPaidGeneration(app)
+        try {
+          await page.evaluate(async () => {
+            for (const [index, name] of ['海边日落', '人像柔光', '城市夜景'].entries()) {
+              await window.henjiNative.presets.insert({ id: `u6-preset-${index}`, name, description: null, modelId: null,
+                params: { prompt: name, saveMode: 'prompt' }, isFavorite: false })
+            }
+          })
+          // 预设面板常驻生成页，夹具写入后重载以触发正式读取，不借用陈旧的组件状态。
+          await page.reload()
+          await context.setupGeneration(page)
+          await page.getByRole('button', { name: /^预设/ }).first().click()
+          await page.locator('[data-preset-item]').first().waitFor()
+          await context.settlePage(page, 300)
+        } finally { await restore() }
+      } },
+  ]
+}
+module.exports = { createSurfaceGrammarScenes, createUiPolishScenes }

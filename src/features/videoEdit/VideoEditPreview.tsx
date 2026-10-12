@@ -634,6 +634,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       {dropZone && <div className="pointer-events-none absolute grid grid-cols-4 grid-rows-5 bg-media-scrim" style={dropZone.frame} aria-hidden>
         {PROGRAM_DROP_ZONES.map(zone => {
           const disabled = zone.mode === 'replace' && !dropZone.replaceable; const active = dropZone.mode === zone.mode && !disabled
+          // ui-surface-allow: S4 节目画面上的拖放热区是空间叠层，各格已有边界，不是纵向记录列表；u6。
           return <div key={zone.mode} className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden border px-2 text-center text-on-media transition-colors duration-120 ${zone.cell} ${active ? 'border-accent bg-accent/30' : 'border-media-line'} ${disabled ? 'opacity-50' : ''}`}>
             <span className="truncate text-13 font-semibold">{zone.label}</span>
             <span className="max-w-full truncate text-2xs">{disabled ? '播放头下没有片段' : zone.hint}</span>

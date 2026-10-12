@@ -147,6 +147,8 @@ export const UI_DIVIDER_CLASS = 'border-t border-line/60';
  * 若将来需要更强切分，只改这一处（加 `divide-y divide-line/60 [&>*+*]:pt-8`）。
  */
 export const UI_SECTION_STACK_CLASS = 'space-y-8';
+/** 相邻分组按同一 32px 分区档留白；比父级行间距优先，首组不增空白。 */
+export const UI_GROUP_SIBLING_GAP_CLASS = '[&+[data-ui-group]]:mt-8';
 
 export const UI_PANEL_SURFACE_CLASS =
   'bg-panel border border-line text-text1 shadow-panel';
