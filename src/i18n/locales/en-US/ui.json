@@ -141,7 +141,8 @@
     "deleteTitle": "Delete preset",
     "confirmDelete": "Delete this preset?",
     "alerts": {
-      "saveFailed": "Failed to save preset",
+      "loadFailed": "Could not read presets. Your existing presets are unchanged. Check access to the data folder, then restart and try again.",
+      "saveFailed": "Could not save the preset. Existing presets were not overwritten. Check access to the data folder and try again.",
       "deleteFailed": "Failed to delete preset"
     },
     "create": {

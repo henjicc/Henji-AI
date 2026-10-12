@@ -54,7 +54,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本', () => {
     } finally { db.close() }
   })
 
-  it('追加迁移按顺序在各自事务里执行；失败整体回滚、账本不记；账本名称不一致拒绝；未知更高版本保留', () => {
+  it('追加迁移事务回滚、账本名称核验；更新版本拒绝并禁止连接继续写入', () => {
     const db = new Database(':memory:')
     try {
       runSchemaMigrations(db)
@@ -66,7 +66,9 @@ describe.skipIf(!process.versions.electron)('统一迁移账本', () => {
       const second: SchemaMigration = { version: next, name: 'second', up: (conn) => conn.exec('CREATE TABLE second_table (id TEXT)') }
       expect(runSchemaMigrations(db, [...SCHEMA_MIGRATIONS, second]).applied).toEqual([next])
       expect(() => runSchemaMigrations(db, [...SCHEMA_MIGRATIONS, { ...second, name: 'renamed' }])).toThrow('迁移账本与程序不一致')
-      expect(runSchemaMigrations(db).currentVersion).toBe(next)
+      expect(() => runSchemaMigrations(db)).toThrow(expect.objectContaining({ code: 'newer-version' }))
+      expect(() => db.exec('CREATE TABLE forbidden_write (id TEXT)')).toThrow(/readonly/i)
+      expect(db.prepare('SELECT max(version) AS version FROM schema_migrations').get()).toEqual({ version: next })
       expect(() => runSchemaMigrations(db, [{ ...SCHEMA_MIGRATIONS[0], version: 2 }])).toThrow('连续递增')
     } finally { db.close() }
   })

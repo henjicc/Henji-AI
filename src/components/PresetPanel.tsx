@@ -1,14 +1,10 @@
 import { createLogger } from '@/core/logging'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Preset, PresetSaveMode } from '../types/preset'
 import { loadPresets, createPreset, deletePreset, formatTimeAgo } from '../utils/preset'
-import { canDeleteFile, type Task } from '../utils/fileRefCount'
-import { readJsonFromAppData } from '../utils/save'
-import { remove } from '@/platform/desktopApi'
 import PanelTrigger from './ui/PanelTrigger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
-import { checkAssetPaths } from '@/commands/assetLibrary'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useNotification } from '@/contexts/NotificationContext'
 import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument'
@@ -43,13 +39,20 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     const [presetName, setPresetName] = useState('')
     // 删除确认是预设面板里的子浮层（共享 PanelTrigger，任务 5.9）：在它里面点击不会关掉预设面板
     const [deletingPresetId, setDeletingPresetId] = useState<string | null>(null)
-    useEffect(() => {
-        loadPresetsData()
-    }, [])
-    const loadPresetsData = async () => {
+    const loadPresetsData = useCallback(async (): Promise<void> => {
         const data = await loadPresets()
         setPresets(data)
-    }
+    }, [])
+    useEffect(() => {
+        void loadPresetsData().catch(error => {
+            logger.error('读取预设失败，原库已保留', { event: 'presets.read.failed', error })
+            showAlertDialog({
+                title: t('common:error'),
+                message: t('ui:presets.alerts.loadFailed'),
+                type: 'error',
+            })
+        })
+    }, [loadPresetsData, t])
     const handleQuickSave = async (mode: PresetSaveMode) => {
         const state = getCurrentState()
         const input = state.input
@@ -109,31 +112,11 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
         const preset = presets.find(p => p.id === deletingPresetId)
         if (!preset) return
         try {
-            const presetFiles = preset.images?.filePaths || []
             await deletePreset(deletingPresetId)
             const updatedPresets = await loadPresets()
             setPresets(updatedPresets)
-            if (presetFiles.length > 0) {
-                const tasks = await readJsonFromAppData<Task[]>('Henji-AI/history.json') || []
-                for (const filePath of presetFiles) {
-                    const [assetReferenced] = await checkAssetPaths([filePath]).catch(() => [true])
-                    if (assetReferenced) {
-                        logger.info('[PresetPanel] 保留文件（资产库仍在引用）:', filePath)
-                        continue
-                    }
-                    const canDelete = canDeleteFile(filePath, tasks, updatedPresets)
-                    if (canDelete) {
-                        try {
-                            await remove(filePath)
-                            logger.info('[PresetPanel] 删除无引用文件:', filePath)
-                        } catch (error) {
-                            logger.error('[PresetPanel] 删除文件失败:', { data: [filePath, error] })
-                        }
-                    } else {
-                        logger.info('[PresetPanel] 保留文件(仍有引用):', filePath)
-                    }
-                }
-            }
+            // A preset does not own its media. Other documents and unsaved canvases
+            // may still reference these files; deletion only removes the preset row.
         } catch (error) {
             logger.error('删除预设失败:', error)
             showAlertDialog({

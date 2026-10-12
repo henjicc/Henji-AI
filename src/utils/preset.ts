@@ -1,34 +1,31 @@
 import { createLogger } from '@/core/logging'
 import { Preset, PresetSaveMode } from '../types/preset'
-import { readJsonFromAppData, writeJsonToAppData } from './save'
+import { presetService } from '@/services/presets/PresetService'
+import type { Preset as StoredPreset } from '@/core/types/Preset'
 import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument'
 
 const logger = createLogger('utils.preset')
 
-const PRESETS_FILE = 'presets.json'
-
-// 生成 UUID
-function generateId(): string {
-    return `preset_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-}
-
-// 读取所有预设
-export async function loadPresets(): Promise<Preset[]> {
-    try {
-        const presets = await readJsonFromAppData<Preset[]>(PRESETS_FILE)
-        return presets || []
-    } catch (error) {
-        logger.error('加载预设失败:', error)
-        return []
+// The panel is a projection of the existing SQLite preset service, not a second library.
+function toPanelPreset(record: StoredPreset): Preset {
+    const data = record.params as Partial<Preset>
+    return {
+        ...data,
+        id: record.id,
+        name: record.name,
+        createdAt: new Date(record.createdAt).getTime(),
+        updatedAt: new Date(record.updatedAt).getTime(),
+        prompt: typeof data.prompt === 'string' ? data.prompt : typeof record.params.input === 'string' ? record.params.input : '',
+        saveMode: data.saveMode ?? 'full',
+        params: data.params ?? record.params,
     }
 }
 
-// 保存预设列表
-async function savePresets(presets: Preset[]): Promise<void> {
+export async function loadPresets(): Promise<Preset[]> {
     try {
-        await writeJsonToAppData(PRESETS_FILE, presets)
+        return (await presetService.getPresets()).map(toPanelPreset)
     } catch (error) {
-        logger.error('保存预设失败:', error)
+        logger.error('加载预设失败，未修改原库', { event: 'presets.read.failed', error })
         throw error
     }
 }
@@ -48,10 +45,9 @@ export async function createPreset(
         params?: Preset['params']
     }
 ): Promise<Preset> {
-    const presets = await loadPresets()
+    await loadPresets()
 
-    const newPreset: Preset = {
-        id: generateId(),
+    const newPreset: Omit<Preset, 'id'> = {
         name,
         prompt,
         saveMode,
@@ -82,39 +78,25 @@ export async function createPreset(
         }
     }
 
-    presets.push(newPreset)
-    await savePresets(presets)
-
-    return newPreset
+    const { name: storedName, createdAt: _createdAt, updatedAt: _updatedAt, ...params } = newPreset
+    const created = await presetService.createPreset({ name: storedName, modelId: options?.model?.modelId, params })
+    return toPanelPreset(created)
 }
 
-// 删除预设
+// SQLite mutations affect only the selected row; a failed read never becomes an empty-library write.
 export async function deletePreset(id: string): Promise<void> {
-    const presets = await loadPresets()
-    const filtered = presets.filter(p => p.id !== id)
-    await savePresets(filtered)
+    await presetService.deletePreset(id)
 }
 
-// 重命名预设
 export async function renamePreset(id: string, newName: string): Promise<void> {
-    const presets = await loadPresets()
-    const preset = presets.find(p => p.id === id)
-    if (preset) {
-        preset.name = newName
-        preset.updatedAt = Date.now()
-        await savePresets(presets)
-    }
+    await presetService.updatePreset(id, { name: newName })
 }
 
-// 更新预设
 export async function updatePreset(id: string, updates: Partial<Preset>): Promise<void> {
-    const presets = await loadPresets()
-    const preset = presets.find(p => p.id === id)
-    if (preset) {
-        Object.assign(preset, updates)
-        preset.updatedAt = Date.now()
-        await savePresets(presets)
-    }
+    const stored = await presetService.getPresetById(id)
+    if (!stored) return
+    const { id: _id, name, createdAt: _createdAt, updatedAt: _updatedAt, ...params } = { ...toPanelPreset(stored), ...updates }
+    await presetService.updatePreset(id, { name, params })
 }
 
 // 格式化时间为 "刚刚"、"5分钟前" 等

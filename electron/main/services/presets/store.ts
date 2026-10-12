@@ -3,6 +3,8 @@ import type Database from 'better-sqlite3'
 import type { PresetInsertDto, PresetQuery, PresetRecordDto, PresetUpdateDto } from '../../../../src/core/localRecords/types'
 import { getDb } from '../db'
 import { databaseLocations, type DatabaseLocations, type LocationScope } from '../db-locations'
+import { PersistenceError } from '../../../../src/core/persistence/migrations'
+import { SQLITE_SCHEMA_VERSION } from '../../../../src/core/persistence/schemaVersions'
 
 /*
  * 预设表的唯一读写入口（存储底座 2.3）。渲染层经 IPC `presets:*` 访问。
@@ -22,12 +24,13 @@ interface PresetRow {
 }
 
 function parseParams(text: string | null, scope: LocationScope): Record<string, unknown> {
-  if (!text) return {}
   try {
+    if (text === null) throw new Error('Preset params are missing')
     const value = scope.decodeValue(JSON.parse(text) as unknown)
-    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-  } catch {
-    return {}
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Preset params must be an object')
+    return value as Record<string, unknown>
+  } catch (cause) {
+    throw new PersistenceError('invalid-content', 'generation-presets', '生成预设', SQLITE_SCHEMA_VERSION, SQLITE_SCHEMA_VERSION, ['params'], undefined, { cause })
   }
 }
 

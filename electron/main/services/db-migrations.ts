@@ -1,4 +1,5 @@
 import { SQLITE_SCHEMA_VERSION } from '../../../src/core/persistence/schemaVersions'
+import { PersistenceError } from '../../../src/core/persistence/migrations'
 import { migrateApplicationReviewsV20 } from './application-runtime/operationStore'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -98,6 +99,20 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'
 
+/** Read-only preflight: reject a newer ledger before any initialization writes. */
+export function assertDatabaseVersionSupported(
+  db: Database.Database,
+  supportedVersion = SQLITE_SCHEMA_VERSION,
+): void {
+  if (!db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?").get(SCHEMA_MIGRATIONS_TABLE)) return
+  const row = db.prepare(`SELECT MAX(version) AS version FROM ${SCHEMA_MIGRATIONS_TABLE}`).get() as { version: number | null }
+  if (row.version !== null && row.version > supportedVersion) {
+    // Even callers retaining an initializeSchema connection must not write it.
+    db.pragma('query_only = ON')
+    throw new PersistenceError('newer-version', 'sqlite-ledger', '应用数据', row.version, supportedVersion)
+  }
+}
+
 export class SchemaMigrationError extends Error {
   constructor(message: string) {
     super(message)
@@ -165,6 +180,7 @@ export function runSchemaMigrations(
   options: SchemaMigrationOptions = {},
 ): SchemaMigrationResult {
   validateMigrationList(migrations)
+  assertDatabaseVersionSupported(db, migrations.length)
   db.exec(`
     CREATE TABLE IF NOT EXISTS ${SCHEMA_MIGRATIONS_TABLE} (
       version INTEGER PRIMARY KEY,
@@ -180,10 +196,7 @@ export function runSchemaMigrations(
       throw new SchemaMigrationError(`数据库迁移账本与程序不一致：版本 ${row.version} 记录为 ${row.name}，程序为 ${known.name}`)
     }
     if (!known) {
-      getLogger().warn('数据库由更新版本的程序写过，保留未知迁移', {
-        event: 'db.migrations.unknown_version',
-        context: { version: row.version, name: row.name },
-      })
+      throw new SchemaMigrationError(`数据库迁移账本包含无效版本：${row.version}`)
     }
     appliedVersions.add(row.version)
   }
