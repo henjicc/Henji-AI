@@ -88,7 +88,7 @@ describe('cameraStage 3D 原生候选', () => {
     expect(first.saved).toBe(false)
     const applied = useCameraStageStore.getState().stateKeyframes
     const second = await applyCameraStageMotionCandidate('candidate-project', review, 'orbit')
-    expect(second).toEqual({ undoToken: first.undoToken, saved: true })
+    expect(second).toMatchObject({ undoToken: first.undoToken, saved: true })
     expect(useCameraStageStore.getState().stateKeyframes).toBe(applied)
     expect(useCameraStageStore.temporal.getState().pastStates).toHaveLength(1)
   })

@@ -209,9 +209,10 @@ function toFailure(error: unknown): ApplicationCapabilityFailure {
   const failure = projectFailure(error)
   const match = /^([A-Z][A-Z_]*)(?::|：)\s*/.exec(failure.error.message)
   const code = hostErrorCodeSchema.safeParse(match?.[1])
-  if (match) return { ok: false, error: { ...failure.error, ...(code.success ? { code: code.data } : {}),
-    message: failure.error.message.replace(/^(?:[A-Z][A-Z_]*(?::|：)\s*)+/, ''),
-    recoverable: code.success && CALLER_CORRECTABLE_ERROR_CODES.has(code.data) || failure.error.recoverable } }
+  // 只剥离与正式错误码重复的前缀；领域子码（ENTITY_NOT_FOUND、PROPERTY_NOT_WRITABLE 等）是调用方自纠的依据，保留在消息里。
+  if (match && code.success) return { ok: false, error: { ...failure.error, code: code.data,
+    message: failure.error.message.slice(match[0].length),
+    recoverable: CALLER_CORRECTABLE_ERROR_CODES.has(code.data) || failure.error.recoverable } }
   return failure
 }
 
