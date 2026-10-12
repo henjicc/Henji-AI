@@ -472,6 +472,7 @@ test('输出目录相对项目根解析且绝对路径保持不变', () => {
 test('场景覆盖应用界面和原生窗口且规则数固定为十八条', () => {
   // 界面名是固定词汇表：新增界面要在这里登记，拼错或漏登记必须红。
   assert.deepEqual([...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].sort(), [
+    '付费确认',
     '剪贴板',
     '剪辑',
     '助手',
