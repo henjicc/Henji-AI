@@ -31,6 +31,7 @@ import type {
   SetProjectMainDocumentRequest,
 } from '@/core/documents/types'
 import { createLogger, type Logger } from '@/core/logging/logger'
+import { applicationWritePreflight, type ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 
 import { isDocumentServiceError, toError } from './documentErrors'
 import { setEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'
@@ -96,6 +97,8 @@ export interface DocumentCreateOptions {
 }
 
 export interface OpenDocumentWithOptions extends DocumentOpenOptions {
+  /** 公共写通道的准备事实；界面直接调用时同样使用正式预检。 */
+  execution?: ApplicationWriteExecution
   /** 嵌入模式：从宿主（剪辑）里打开，工具命令带左端显示“返回剪辑 · 项目名”。 */
   embedIn?: EmbeddedHost
 }
@@ -486,8 +489,20 @@ export class DocumentOperations {
    * embedIn 给出时以嵌入模式打开（4.1），否则清掉以前留下的嵌入标记；part 定位到文档里的部位。
    */
   async openDocument(document: DocumentSummary, options: OpenDocumentWithOptions = {}): Promise<void> {
-    const opener = this.openers.get(document.kind)
-    if (!opener) throw new DocumentNotOpenableError(document.kind)
+    const opener = await applicationWritePreflight(options, async () => {
+      const registered = this.openers.get(document.kind)
+      if (!registered) throw new DocumentNotOpenableError(document.kind)
+      if (document.missing) {
+        const error = new Error('找不到这份文档文件，请检查所在磁盘是否已连接；若文件已移动，请重新导入后再打开。')
+        error.name = 'DocumentNotFoundError'
+        throw error
+      }
+      // 包文档由专用 persistence 读取，不能交给 JSON 仓库。已打开会话以其内存为真相源。
+      if (this.kinds.require(document.kind).storage === 'json' && !this.registry().get(document.id)) {
+        await this.readDocument({ id: document.id, path: document.path })
+      }
+      return registered
+    })
     setEmbeddedHost(document.id, options.embedIn ?? null)
     await opener(document, { ...(options.part !== undefined ? { part: options.part } : {}) })
     this.logger.info('打开文档', { event: 'documents.operations.open.completed', context: { docId: document.id, kind: document.kind, embedded: Boolean(options.embedIn), part: options.part !== undefined } })

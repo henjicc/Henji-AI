@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerCameraStageCapabilityHandlers } from '@/features/cameraStage/application/registerCameraStageCapabilityHandlers'
 import { registerImageEditCapabilityHandlers } from '@/features/imageEdit/application/registerImageEditCapabilityHandlers'
 
@@ -62,6 +62,7 @@ function registeredHandlers(): Map<string, CapabilityHandler> {
 }
 
 describe('toolbox capability handlers', () => {
+  afterEach(() => { vi.restoreAllMocks() })
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.openApplicationSurface.mockImplementation((surfaceId: string) => ({ surfaceId }))
@@ -70,6 +71,7 @@ describe('toolbox capability handlers', () => {
   it('镜头参考登记了通用打开方式：文档打开成功后才进入 3D Surface；失败时不切换界面', async () => {
     registeredHandlers()
     const document = { id: 'stage-1', kind: 'camera_stage', path: '/work/镜头参考/a.henji-stage' } as DocumentSummary
+    vi.spyOn(getDocumentOperations(), 'readDocument').mockResolvedValue({ meta: document, content: {}, missingPaths: [], externalDirectories: [], unresolved: [] })
     expect(getDocumentOperations().canOpen('camera_stage')).toBe(true)
     mocks.openCameraStageDocument.mockResolvedValue(undefined)
     await getDocumentOperations().openDocument(document)

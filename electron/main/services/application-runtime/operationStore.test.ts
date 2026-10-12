@@ -1,4 +1,5 @@
 import { applicationInvocationId } from '../../../../src/core/application-control/operationIdentity'
+import { applicationWriteChannel, ApplicationWriteFailure } from '../../../../src/core/application-control/execution/writeExecution'
 import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { unlinkSync } from 'node:fs'
@@ -34,6 +35,28 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('open_document 加载前被拒，统一写回执落原生账本为 not_executed / verified', async () => {
+    const f = fixture()
+    const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), documentId: 'rejected-document' }, f.rendererEpoch, access, 'open_document')
+    const requestId = randomUUID()
+    f.coordinator.dispatched(record, requestId, f.rendererEpoch)
+    const open = applicationWriteChannel(async (_input, context) => context.execution.preflight(() => {
+      throw Object.assign(new Error('文档格式不支持，请改用支持的文档。'), { name: 'PersistenceError' })
+    }))
+    let failure: ApplicationWriteFailure | undefined
+    try { await open({}, {}) } catch (error) {
+      if (!(error instanceof ApplicationWriteFailure)) throw error
+      failure = error
+    }
+    expect(failure).toBeDefined()
+    expect(failure!.execution).toEqual({ billing: 'not_charged', targetMutation: 'none', notExecuted: true })
+    f.coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result: { ok: false, error: {
+      code: 'CAPABILITY_REJECTED', message: failure!.message, recoverable: true, details: { execution: failure!.execution },
+    } } })
+    const stored = f.store.get(record.operationId, f.callerId)!
+    expect(f.coordinator.result(stored)).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
+    expect(new ApplicationOperationStore(f.db).get(record.operationId, f.callerId)).toMatchObject({ state: 'not_executed', verificationState: 'verified' })
+  })
   it('字幕 unknown 只保护原序列及口播，不拦截同文档代码版本/素材独立追加', () => {
     const f = fixture()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['video_edit.document', 'video_edit.code_version', 'video_edit.code_material', 'video_edit.caption']))

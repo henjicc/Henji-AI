@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DocumentKindDescriptor } from '@/core/documents/kinds'
 
 import { DocumentOperations } from './documentOperations'
+import { applicationWriteChannel } from '@/core/application-control/execution/writeExecution'
+import { getEmbeddedHost, setEmbeddedHost } from './embeddedDocuments'
 import { createTestRegistry, testDocumentKind, TestToolInstance, type TestContent } from './documentSessionTestKit'
 
 /*
@@ -127,11 +129,30 @@ describe('名称与重名', () => {
 })
 
 describe('打开、通知与版本', () => {
+  it('读取前置失败时不调用工具打开器、不改嵌入标记或作品，报告零执行', async () => {
+    const kit = setup()
+    const meta = kit.commands.seed({ name: '无法打开的文档', content: { items: ['原内容'] } })
+    const summary = await kit.operations.findDocument(meta.id)
+    const original = kit.commands.stored(meta.id)
+    const host = { label: '原剪辑', returnToHost: async () => {} }
+    setEmbeddedHost(meta.id, host)
+    const opener = vi.fn()
+    kit.operations.registerOpener('canvas', opener)
+    vi.spyOn(kit.commands, 'readDocument').mockRejectedValueOnce(Object.assign(new Error('损坏'), { name: 'DocumentFormatError' }))
+    const open = applicationWriteChannel((_input, context) => kit.operations.openDocument(summary, { execution: context.execution }))
+    try {
+      await expect(open({}, {})).rejects.toMatchObject({ execution: { billing: 'not_charged', targetMutation: 'none', notExecuted: true } })
+      expect(opener).not.toHaveBeenCalled()
+      expect(getEmbeddedHost(meta.id)).toBe(host)
+      expect(kit.commands.stored(meta.id)).toEqual(original)
+      expect(kit.operations.revision()).toBe(0)
+    } finally { setEmbeddedHost(meta.id, null) }
+  })
   it('打开交给该类型登记的打开方式；没有登记时说明原因', async () => {
     const kit = setup()
     const meta = kit.commands.seed({ name: '海报', content: { items: [] } })
     const summary = await kit.operations.findDocument(meta.id)
-    await expect(kit.operations.openDocument(summary)).rejects.toMatchObject({ name: 'DocumentNotOpenableError' })
+    await expect(kit.operations.openDocument(summary)).rejects.toMatchObject({ cause: { name: 'DocumentNotOpenableError' } })
     const opener = vi.fn()
     const unregister = kit.operations.registerOpener('canvas', opener)
     await kit.operations.openDocument(summary)

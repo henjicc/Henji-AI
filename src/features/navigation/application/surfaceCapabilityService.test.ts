@@ -21,10 +21,17 @@ vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({
 }))
 
 import { useNavigationStore } from '@/stores/navigationStore'
+import { applicationWriteChannel } from '@/core/application-control/execution/writeExecution'
 
 import { focusApplicationEntity, openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 
 describe('application surface registry', () => {
+  it('页面不存在的加载前拒绝通过统一包装报告零执行，导航保持原状', async () => {
+    const before = useNavigationStore.getState()
+    const open = applicationWriteChannel(() => openApplicationSurface('missing-surface'))
+    await expect(open({}, {})).rejects.toMatchObject({ execution: { billing: 'not_charged', targetMutation: 'none', notExecuted: true } })
+    expect(useNavigationStore.getState()).toBe(before)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     useNavigationStore.setState({

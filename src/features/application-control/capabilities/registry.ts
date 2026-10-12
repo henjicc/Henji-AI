@@ -213,6 +213,12 @@ function toFailure(error: unknown): ApplicationCapabilityFailure {
     if (failure) return failure
   }
   if (error instanceof ApplicationPreflightFailure) {
+    if (error.cause instanceof ApplicationPreflightFailure) return toFailure(error.cause)
+    if (error.cause instanceof Error && ['DocumentNotFoundError', 'ProjectNotFoundError', 'PersistenceError', 'DocumentFormatError', 'DocumentUnsupportedError', 'DocumentNotOpenableError'].includes(error.cause.name)) {
+      const original = toFailure(error.cause)
+      return { ok: false, error: { ...original.error,
+        details: { ...original.error.details, execution: { notExecuted: true } } } }
+    }
     const conflict = /^(?:CONFLICT|REVISION_CONFLICT|PLAN_REVISION_CONFLICT)(?::|$)/.test(error.message)
     const providerCode = (['PROVIDER_PRODUCT_NOT_ACTIVATED', 'PROVIDER_MODEL_ACCESS_DENIED', 'PROVIDER_INSUFFICIENT_BALANCE'] as const)
       .find(code => error.message.startsWith(`${code}:`))
@@ -232,6 +238,13 @@ function toFailure(error: unknown): ApplicationCapabilityFailure {
       recoverable: true, details: { persistence: error.facts } } }
   }
   const message = error instanceof Error ? error.message : String(error)
+  if (error instanceof Error && ['DocumentNotFoundError', 'ProjectNotFoundError'].includes(error.name)) {
+    return { ok: false, error: { code: 'NOT_FOUND', message: `${message} 请检查文件所在磁盘，或用 list_documents / list_projects 重新获取现有目标。`, recoverable: true } }
+  }
+  if (error instanceof Error && ['PersistenceError', 'DocumentFormatError', 'DocumentUnsupportedError'].includes(error.name)) {
+    return { ok: false, error: { code: 'CAPABILITY_REJECTED',
+      message: `${message} 请改用当前版本支持的文档；文件损坏时从备份恢复后重试，旧格式请用支持它的版本打开并导出素材。`, recoverable: true } }
+  }
   if (message === 'PERMISSION_DENIED' || message.startsWith('PROPERTY_NOT_WRITABLE:')) {
     return { ok: false, error: {
       code: 'CAPABILITY_REJECTED',

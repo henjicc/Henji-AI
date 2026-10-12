@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
@@ -68,7 +69,7 @@ export function openApplicationSurface(
   correlation: SurfaceNavigationCorrelation = {}
 ): SurfaceNavigationResult {
   const surface = getApplicationSurface(surfaceId)
-  if (!surface) throw new Error('NOT_FOUND')
+  if (!surface) throw new ApplicationPreflightFailure(new Error('NOT_FOUND:找不到目标页面，请从应用能力目录获取可用的页面后重试。'))
   const beforeRevision = useNavigationStore.getState().revision
   if (isApplicationSurfaceActive(surface)) {
     return { surfaceId, status: 'already_active', navigationRevision: beforeRevision }
@@ -111,7 +112,7 @@ export function closeApplicationSurface(
 ): SurfaceNavigationResult {
   const target = surfaceId ? getApplicationSurface(surfaceId) : listApplicationSurfaces()
     .find((surface) => isApplicationSurfaceActive(surface))
-  if (surfaceId && !target) throw new Error('NOT_FOUND')
+  if (surfaceId && !target) throw new ApplicationPreflightFailure(new Error('NOT_FOUND:找不到目标页面，请从应用能力目录获取可用的页面后重试。'))
   const targetId = target?.id ?? surfaceId ?? 'none'
   logger.info('应用 Surface 关闭开始', {
     event: 'navigation.surface.close.start', ...correlation, surfaceId: targetId,
