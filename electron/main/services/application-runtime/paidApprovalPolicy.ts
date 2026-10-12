@@ -46,9 +46,11 @@ export function approvePaidOperation(store: Pick<ApplicationOperationStore, 'get
   return decision
 }
 
-/** The existing trusted UI reply channel also accounts for explanation prompts initiated in the editor. */
+/** UI 讲解与音色克隆使用同一费用策略、确认回执和账本。 */
 export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince' | 'prepare'>, reply: LocalHostReply): PaidApprovalDecision | void {
   const command = reply.uiPaidApproval!
+  const generation = command.capabilityId === 'create_visible_generation_task'
+  if (command.request.category !== (generation ? 'generation' : 'explanation')) throw new Error('付费类别与正式操作不一致。')
   const callerId = reply.rendererEpoch
   let record = store.get(reply.requestId, callerId)
   if (command.action === 'prepare') {
@@ -58,7 +60,7 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
     const decision = approvePaidOperation(store, record, command.request, true)
     const current = store.get(record.operationId, callerId)!
     store.save({ ...current, state: decision.decision === 'ask' ? 'awaiting_user_confirmation' : 'preparing',
-      confirmation: decision.decision === 'ask' ? applicationUserConfirmation({ title: '发送讲解给 AI？', message: '将发送讲解文字和画面给模型。', confirmLabel: '允许本次', paid: decision }) : undefined })
+      confirmation: decision.decision === 'ask' ? applicationUserConfirmation({ title: generation ? '生成内容' : '发送讲解给 AI？', message: generation ? '将上传素材并按模型计费。' : '将发送讲解文字和画面给模型。', confirmLabel: '允许本次', paid: decision }) : undefined })
     return decision
   }
   if (!record || record.inputDigest !== JSON.stringify(command.request)) throw new Error('付费请求与原授权不一致。')
@@ -69,13 +71,13 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
     return decision
   }
   if (command.action === 'start') {
-    if (record.state !== 'preparing' || !record.approval) throw new Error('请先确认发送讲解。')
+    if (record.state !== 'preparing' || !record.approval) throw new Error('请先确认本次付费操作。')
     store.save({ ...record, state: 'executing' })
   } else if (command.action === 'reject') {
     if (!['preparing', 'awaiting_user_confirmation'].includes(record.state)) throw new Error('已开始发送，无法撤回计费。')
     store.save({ ...record, state: 'not_executed', confirmation: undefined, verificationState: 'verified' })
   } else {
-    if (record.state !== 'executing') throw new Error('讲解发送尚未开始。')
+    if (record.state !== 'executing') throw new Error('付费操作尚未开始。')
     store.save({ ...record, state: command.action === 'complete' ? 'completed' : 'unknown', verificationState: command.action === 'complete' ? 'verified' : 'unresolved' })
   }
 }

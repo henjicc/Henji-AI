@@ -8,8 +8,8 @@ import type { ApplicationCapabilityFailure, ApplicationCapabilityResult, HostErr
 import { createLogger } from '@/core/logging'
 
 import { ZodError } from 'zod'
-import { readTranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
-import { ApplicationTransactionFailure, ApplicationPreflightFailure, ApplicationOperationNotExecutedFailure } from '@/core/application-control/execution/transactionFailure'
+import { ApplicationWriteFailure, applicationWriteChannel, assertApplicationWriteChannel } from '@/core/application-control/execution/writeExecution'
+import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { capabilityVerificationEnvelope } from '@/core/application-control/capabilityVerification'
 import { transactionFailureFacts } from '@/core/application-control/applicationTransactionFailureFacts'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
@@ -41,11 +41,31 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     if (this.handlers.has(id)) throw new Error(`应用能力处理器重复：${id}`)
     if (!definition.permission.trim()) throw new Error(`应用能力未声明权限：${id}`)
     if (definition.successEvidence.length === 0) throw new Error(`应用能力缺少成功证据：${id}`)
-    this.handlers.set(id, handler)
+    const invoke: CapabilityHandler = async (input, context) => {
+      const result = await handler(input, context)
+      context.execution?.report({ targetMutation: 'applied' })
+      const snapshot = createHostContextSnapshot()
+      const enriched = { ...result, revision: snapshot.revision, scopeRevisions: snapshot.scopeRevisions }
+      const enrichedOutput = definition.outputSchema.safeParse(enriched)
+      const output = (enrichedOutput.success ? enrichedOutput.data : definition.outputSchema.parse(result)) as Record<string, unknown>
+      return capabilityVerificationEnvelope(definition, input, output)
+    }
+    const executable = definition.readOnly ? invoke : applicationWriteChannel(invoke)
+    if (!definition.readOnly) assertApplicationWriteChannel(id, executable)
+    this.handlers.set(id, executable)
   }
 
   listIds(): string[] {
     return [...this.handlers.keys()]
+  }
+
+  assertWriteChannels(): void {
+    for (const definition of this.definitions.values()) {
+      if (definition.side !== 'frontend' || definition.readOnly) continue
+      const handler = this.handlers.get(definition.id)
+      if (!handler) throw new Error(`WRITE_EXECUTION_REQUIRED:${definition.id} 缺少处理器`)
+      assertApplicationWriteChannel(definition.id, handler)
+    }
   }
 
   async execute(
@@ -58,6 +78,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     const definition = this.definitions.get(invocation.id)
     const handler = this.handlers.get(invocation.id)
     if (!definition || !handler) throw new Error('NOT_FOUND')
+    if (!definition.readOnly) assertApplicationWriteChannel(invocation.id, handler)
     if (context.signal.aborted) throw new Error('ABORTED')
     if (context.callerGrant) assertApplicationCapabilityAllowed(context.callerGrant, definition)
     if (definition.version !== invocation.version) throw new Error('VERSION_MISMATCH')
@@ -115,15 +136,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
       getExecutionEngine: getApplicationControlExecutionEngine,
       expectedRevisions: invocation.expectedRevisions,
     })
-    const snapshot = createHostContextSnapshot()
-    const enriched = {
-      ...result,
-      revision: snapshot.revision,
-      scopeRevisions: snapshot.scopeRevisions,
-    }
-    const enrichedOutput = definition.outputSchema.safeParse(enriched)
-    const output = (enrichedOutput.success ? enrichedOutput.data : definition.outputSchema.parse(result)) as Record<string, unknown>
-    return capabilityVerificationEnvelope(definition, input, output)
+    return result
     } catch (error) {
       if (!handlerStarted) throw new ApplicationPreflightFailure(error)
       throw error
@@ -183,17 +196,17 @@ const CALLER_CORRECTABLE_ERROR_CODES = new Set<HostErrorCode>([
 ])
 
 function toFailure(error: unknown): ApplicationCapabilityFailure {
-  const transcription = readTranscriptionFacts(error)
-  if (transcription) {
-    const audioDocumentRef = transcription.audioDocumentId ? { kind: 'audio_edit.document', id: transcription.audioDocumentId } : undefined
-    const notExecuted = transcription.billing === 'not_charged' && transcription.targetMutation === 'none'
-    return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error instanceof Error ? error.message : String(error), recoverable: true,
-      details: { execution: { notExecuted, ...transcription }, ...(audioDocumentRef ? { recovery: { audioDocumentRef, replayRecognition: false,
+  if (error instanceof ApplicationWriteFailure) {
+    const original = toFailure(error.original)
+    const domainExecution = original.error.details?.execution as { notExecuted?: boolean; rolledBack?: boolean } | undefined
+    const execution = { ...error.execution,
+      ...(domainExecution?.notExecuted && error.execution.billing === 'not_charged' && error.execution.targetMutation === 'none' && !error.effects.length ? { notExecuted: true } : {}),
+      ...(domainExecution?.rolledBack ? { rolledBack: true } : {}),
+    }
+    const audioDocumentRef = error.execution.audioDocumentId ? { kind: 'audio_edit.document', id: error.execution.audioDocumentId } : undefined
+    return { ok: false, error: { ...original.error, details: { ...original.error.details, execution,
+      ...(error.effects.length ? { effects: error.effects } : {}), ...(audioDocumentRef ? { recovery: { audioDocumentRef, replayRecognition: false,
         message: '复用 audioDocumentRef 继续原识别或字幕任务；已完成识别不重复计费。' } } : {}) } } }
-  }
-  if (error instanceof ApplicationOperationNotExecutedFailure) {
-    const failure = toFailure(error.original)
-    return { ok: false, error: { ...failure.error, recoverable: true, details: { ...failure.error.details, execution: { notExecuted: true } } } }
   }
   for (const domain of APPLICATION_DOMAINS) {
     const failure = domain.failure?.(error, toFailure)
@@ -329,4 +342,8 @@ export async function executeApplicationCapabilityResult(
 
 export function listRendererApplicationCapabilityIds(): string[] {
   return registry.listIds()
+}
+
+export function assertRendererApplicationWriteChannels(): void {
+  registry.assertWriteChannels()
 }

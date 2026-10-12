@@ -7,7 +7,7 @@ import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
 import { getPlatform } from '@/platform/runtime'
-import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { applicationWritePreflight, ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 import { join } from '@/platform/desktopApi'
 import { getDocumentOperations, registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
@@ -51,7 +51,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     const input = audioEditOperationInput.parse(raw)
     context.signal.throwIfAborted()
     const id = input.documentRef.id
-    const instance = await loadAudioEditProject(id).catch(error => { throw new ApplicationPreflightFailure(error) })
+    const instance = await applicationWritePreflight(context, () => loadAudioEditProject(id))
     const requestId = context.requestId ?? crypto.randomUUID()
     const api = getPlatform().audioEdit
     const cancel = () => {
@@ -60,6 +60,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     }
     context.signal.addEventListener('abort', cancel, { once: true })
     let recognized = false
+    const execute = async () => {
     try {
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.document', id }, message: '' }
       switch (definition.id) {
@@ -69,27 +70,33 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'compress_audio_edit_silence': Object.assign(result, await compressAudioEditSilence(id, input.range, requestId)); result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
         case 'transcribe_audio_edit': {
-          const prepared = await preflightAudioEditTranscription(id, input.modelId)
+          const prepared = await applicationWritePreflight(context, () => preflightAudioEditTranscription(id, input.modelId))
           if (prepared.requiresConfirmation) await requestAlertConfirmation({ title: '识别口播', message: '将使用已配置的语音识别模型转写这段声音。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', id, context.signal, transcriptionEstimatedCny(prepared)) }, context.signal)
           await transcribeAudioEdit({ projectId: id, modelId: prepared.modelId ?? input.modelId, requestId }); recognized = true; result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
         }
         case 'process_audio_edit_sound': await prepareAudioEditProcessing(id, requestId); result.message = '全长声音处理已完成。'; break
         case 'query_audio_edit_tasks': result.tasks = (await api.listTasks(id)).map(({ projectId, ...task }) => ({ ...task, documentId: projectId })); result.message = '已读取这份口播的处理任务。'; break
         case 'cancel_audio_edit_task': {
-          if (!input.taskId || !(await api.listTasks(id)).some((task) => task.requestId === input.taskId)) throw new Error('请使用这份口播查询返回的任务引用。')
-          await api.cancelTask(input.taskId); result.message = '已请求取消任务，请查询最终状态。'; break
+          const taskId = await applicationWritePreflight(context, async () => {
+            if (!input.taskId || !(await api.listTasks(id)).some((task) => task.requestId === input.taskId)) throw new Error('请使用这份口播查询返回的任务引用。')
+            return input.taskId
+          })
+          await api.cancelTask(taskId); result.message = '已请求取消任务，请查询最终状态。'; break
         }
         case 'retry_audio_edit_save': await flushAudioEditProject(id); result.message = '口播已保存，未重复执行剪辑。'; break
         case 'export_audio_edit': {
-          if (!input.destination) throw new Error('请选择已配置的快速下载或预设目录。')
           const format = input.format ?? 'xml'
           const fileName = `${instance.document.name.replace(/[<>:"/\\|?*]/g, '_')}-${crypto.randomUUID()}`
-          const targetPath = await join(resolveConfiguredDestination(input.destination), `${fileName}.${format}`)
+          const targetPath = await applicationWritePreflight(context, () => {
+            if (!input.destination) throw new Error('请选择已配置的快速下载或预设目录。')
+            return join(resolveConfiguredDestination(input.destination), `${fileName}.${format}`)
+          })
           const exported = await exportAudioEdit({ projectId: id, targetPath, format, includeProcessing: input.includeProcessing ?? false, requestId, ...(input.includeSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '.srt') } : {}) })
           result.durationFrames = exported.durationFrames; result.message = `已导出 ${format.toUpperCase()} 到所选目录。`; break
         }
       }
       if (AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(definition.id)) {
+        context.execution?.report({ targetMutation: 'applied', ...(recognized ? { billing: 'completed' as const, audioDocumentId: id } : {}) })
         // 从文档文件回读核对（3.3：口播是 .henji-audio 文档）
         const read = await getDocumentOperations().readDocument({ id })
         const persisted = audioEditProjectFromDocument(read.meta, read.content).project
@@ -101,5 +108,9 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
       if (definition.id === 'transcribe_audio_edit' && !readTranscriptionFacts(error)) throw new TranscriptionFailure(error, { billing: recognized ? 'completed' : 'not_charged', targetMutation: recognized ? 'applied' : 'none', audioDocumentId: id })
       throw error
     } finally { context.signal.removeEventListener('abort', cancel) }
+    }
+    return AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(definition.id)
+      ? (context.execution ?? new ApplicationWriteExecution()).atomic(() => instance.document, execute)
+      : execute()
   })
 }

@@ -3,6 +3,7 @@ import type { CanvasNodePlacement } from '@/core/application-control/domains/can
 import { OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID, RETRY_LAYER_STACK_RESULT_CAPABILITY_ID } from '@/core/application-control/domains/canvas/canvasEditorApplicationCapabilities'
 import type { ApplicationRef } from '@/core/application-control/index'
 import { retryLayerStackResult } from '@/features/canvas/application/layerStackResultRecoveryService'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import type { AssistantCanvasImageCapabilityId } from '@/core/canvas/imageCapabilityIds'
 import type { CanvasDownloadDestination } from '@/core/application-control/domains/canvas/canvasExportApplicationCapabilities'
 import { CANVAS_NODE_CONTROL_CATALOG_VERSION, getCanvasNodeSchema, searchCanvasNodeTypes } from '@/features/canvas/domain/nodeControlRegistry'
@@ -190,20 +191,21 @@ export function registerCanvasCapabilityHandlers(
     }) }
   })
 
-  registrar.registerHandler(RETRY_LAYER_STACK_RESULT_CAPABILITY_ID, (input, context) => {
+  registrar.registerHandler(RETRY_LAYER_STACK_RESULT_CAPABILITY_ID, async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ canvasRef: ApplicationRef; nodeRef: ApplicationRef }>(
       RETRY_LAYER_STACK_RESULT_CAPABILITY_ID, input,
     )
     const prefix = `${parsed.canvasRef.id}:`
     if (!parsed.nodeRef.id.startsWith(prefix) || parsed.nodeRef.id.length === prefix.length) {
-      throw new Error(`请读取目标画布的完整节点引用，格式为 ${prefix}<nodeId>。`)
+      throw new ApplicationPreflightFailure(`请读取目标画布的完整节点引用，格式为 ${prefix}<nodeId>。`)
     }
-    return { ...retryLayerStackResult({
+    return { ...await retryLayerStackResult({
       projectId: parsed.canvasRef.id,
       nodeId: parsed.nodeRef.id.slice(prefix.length),
       signal: context.signal,
       correlation: context,
+      execution: context.execution,
     }) }
   })
 

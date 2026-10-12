@@ -5,7 +5,8 @@ import { aiCancelTask, aiContinuePolling, aiGenerate } from '@/commands/aiRuntim
 import { GenerationService } from './GenerationService'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { useAlertDialogStore, showAlertDialog, requestAlertConfirmation } from '@/stores/alertDialogStore'
-import { configureGenerationSubmissionConfirmation } from './generationSubmissionConfirmation'
+import { configureGenerationSubmissionConfirmation, transferGenerationPaidApproval } from './generationSubmissionConfirmation'
+import { bindApplicationConfirmation, requestApplicationPaidApproval } from '../application-control/userConfirmation'
 import { ttsPresentation } from '@/models/presentation/tts'
 import { clearProviderAvailability, getProviderAvailabilityFailure } from './providerAvailability'
 
@@ -13,11 +14,14 @@ vi.mock('@/commands/aiRuntime', () => ({
   aiCancelTask: vi.fn(async () => undefined), aiGenerate: vi.fn(), aiContinuePolling: vi.fn(),
   aiGetProgressEstimate: vi.fn(async () => null), aiRecordProgressSample: vi.fn(async () => null),
 }))
+const paid = vi.hoisted(() => ({ prepare: vi.fn(), confirm: vi.fn(), start: vi.fn(), complete: vi.fn(), failed: vi.fn(), reject: vi.fn() }))
+vi.mock('@/services/paidApproval', () => ({ prepareGenerationPaidApproval: paid.prepare }))
 const service = GenerationService.getInstance()
 beforeEach(() => {
   clearProviderAvailability('fixture')
   configureGenerationSubmissionConfirmation(requestAlertConfirmation)
   vi.clearAllMocks()
+  paid.prepare.mockResolvedValue({ ...paid, project: undefined, decision: { decision: 'ask', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
   useAlertDialogStore.setState({ queue: [] })
   vi.spyOn(service, 'getProgressEstimate').mockResolvedValue(null)
   registry.register({ meta: { id: 'cancel-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } },
@@ -48,7 +52,7 @@ it.each(['dialog', 'signal', 'task'] as const)('克隆等待 %s 取消时不上�
   enableConfirmation()
   showAlertDialog({ title: '已有提示', message: '保留' })
   const controller = new AbortController()
-  const run = service.generate('cancel-fixture', { volcIclMode: 'clone' }, undefined, { requestId: 'confirmation', signal: controller.signal })
+  const run = service.generate('cancel-fixture', { volcIclMode: 'clone', prompt: '试听' }, undefined, { requestId: 'confirmation', signal: controller.signal })
   const assertion = expect(run).rejects.toMatchObject({ name: 'GenerationSubmissionCancelledError' })
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(2))
   expect(service.getProgressEstimate).not.toHaveBeenCalled()
@@ -64,7 +68,7 @@ it.each(['dialog', 'signal', 'task'] as const)('克隆等待 %s 取消时不上�
 it('确认后只提交当时的参数，每次重试克隆都重新确认，语音合成不弹克隆确认', async () => {
   enableConfirmation()
   vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', urls: ['C:/result.mp3'], filePaths: [] })
-  const params = { volcIclMode: 'clone', volcCloneAudio: ['original.wav'] }
+  const params = { volcIclMode: 'clone', volcCloneAudio: ['original.wav'], prompt: '试听' }
   const run = service.generate('cancel-fixture', params)
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
   params.volcCloneAudio[0] = 'changed.wav'
@@ -81,6 +85,30 @@ it('确认后只提交当时的参数，每次重试克隆都重新确认，语�
   await service.generate('cancel-fixture', { volcIclMode: 'speech' })
   expect(aiGenerate).toHaveBeenCalledTimes(2)
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+})
+
+it('克隆采用统一 auto 策略，人工模式使用现有付费弹窗，记录实际提交阶段', async () => {
+  enableConfirmation()
+  paid.prepare.mockResolvedValueOnce({ ...paid, decision: { decision: 'auto', reason: '额度内', estimatedCny: 0.1, dailySpentCny: 0 } })
+  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', urls: [], filePaths: [] })
+  await service.generate('cancel-fixture', { volcIclMode: 'clone', prompt: '试听' })
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect(paid.start).toHaveBeenCalledOnce()
+  expect(paid.complete).toHaveBeenCalledOnce()
+})
+
+it('外部操作已通过统一授权的异步克隆只消费原回执，不再单独确认或重复预留', async () => {
+  enableConfirmation()
+  const controller = new AbortController()
+  const unbind = bindApplicationConfirmation(controller.signal, async () => ({ decision: 'auto', reason: '额度内', estimatedCny: 0.1, dailySpentCny: 0 }))
+  await requestApplicationPaidApproval(controller.signal, { category: 'generation', estimatedCny: 0.1 })
+  transferGenerationPaidApproval('approved-clone', controller.signal)
+  unbind()
+  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', urls: [], filePaths: [] })
+  await service.generate('cancel-fixture', { volcIclMode: 'clone' }, undefined, { requestId: 'approved-clone' })
+  expect(paid.prepare).not.toHaveBeenCalled()
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect(aiGenerate).toHaveBeenCalledOnce()
 })
 
 it('媒体准备期间取消不会提交供应商请求', async () => {

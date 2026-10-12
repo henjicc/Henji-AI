@@ -83,7 +83,7 @@ it('真实SDK客户端读取媒体，缺少凭据和撤销连接后均不能读�
     const request = payload as LocalHostRequest
     expect(request.capabilityId).toBe('read_application_entity')
     expect(request.input.ref).toEqual({ kind: 'asset', id: 'asset-result' })
-    bridge.complete({ ...request, result: { ok: true, data: { ref: request.input.ref, properties: {} } } })
+    bridge.complete({ ...request, result: { ok: true, data: { ref: request.input.ref, entityType: 'asset', properties: {}, revisions: {}, capturedAt: new Date().toISOString() } } })
   } })
   const server = new LocalMcpServer(connections, bridge)
   const client = new Client({ name: 'native-media', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })

@@ -14,6 +14,7 @@ import { semanticVisualBatches, type SemanticIntentImage } from '@/core/creative
 import { prepareSemanticImage } from './creativeIntentImages'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { creativeExplanationRegistration, CreativeExplanationMutationExecutor } from './creativeIntentExplanation'
+import { ApplicationWriteExecution, applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 const logger = createLogger('features.applicationControl.creativeIntent')
 type InputProgress = { baseline: string; offset: number; imageOffset: number; receipt?: string }
 const inputReads = new WeakMap<object, Map<string, InputProgress>>()
@@ -102,10 +103,10 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
           logger.info('讲解文字批次已读取', { event: 'creative_intent.process.completed', requestId: context.requestId })
           return { resultRef: input.documentRef, lines, nextOffset, nextImageOffset, semanticImages, inputReceipt: progress.receipt, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) }
         }
-        const record = intentRecord(input.draftRef)
+        const record = await applicationWritePreflight(context, () => intentRecord(input.draftRef))
         let status: 'candidate' | 'confirmation_required' | 'local_fallback' = 'candidate'; let questions: string[] = []
         const finish = () => ({ resultRef: input.draftRef, candidateRefs: record.host.read().drafts.find(d => d.id === record.draftId)!.candidateRefs.map(c => intentRef(record.documentRef, 'intent_candidate', record.draftId, c.resourceId)), status, questions, revision: intentRevisions(domain)[domain], scopeRevisions: intentRevisions(domain) })
-        let review
+        const review = await applicationWritePreflight(context, async () => {
         if ('semanticPlan' in input) {
           if (!('sessionId' in input) || typeof input.sessionId !== 'string' || !input.sessionId) throw new Error('语义计划需要已授权的原讲解 sessionId；不能伪造绑定或否定保护。')
           const source = recordingSource(record.documentRef, input.sessionId, context)
@@ -114,13 +115,17 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
           if (!progress?.receipt || progress.receipt !== ('inputReceipt' in input ? input.inputReceipt : undefined) || progress.baseline !== JSON.stringify(source.session)) throw new Error('请完整读取当前讲解与必要附图，再提交意图；不能省略未处理指代。')
           const resolutions = await semanticRecordingResolutions(source.session, source.read); source.assertCurrent()
           reads.delete(recordingKey(record.documentRef, input.sessionId, context))
-          review = reviewSemanticIntent(input.semanticPlan, record.draft, resolutions)
+          return reviewSemanticIntent(input.semanticPlan, record.draft, resolutions)
+        }
+        })
+        if (review) {
           status = review.status; questions = review.questions
           if (review.protectedRefs.length) { status = 'confirmation_required'; questions.push('请先核对并钉住否定保护的对象，再重新整理；不会修改受保护对象。') }
-          if (status === 'confirmation_required') return finish()
         }
+        if (status === 'confirmation_required') return finish()
         const originalHead = structuredClone(record.host.read())
-        await record.host.prepare(record.draft); context.signal.throwIfAborted()
+        await applicationWritePreflight(context, async () => { await record.host.prepare(record.draft); context.signal.throwIfAborted() })
+        return (context.execution ?? new ApplicationWriteExecution()).atomic(() => record.host.read(), async () => {
         try {
         if (review?.plan) {
           const actions = review.plan.actions
@@ -147,6 +152,7 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
         await record.host.save()
         logger.info('意图候选处理完成', { event: 'creative_intent.process.completed', requestId: context.requestId, context: { status } })
         return finish()
+        })
       } catch (error) { logger.warn('意图处理未完成', { event: 'creative_intent.process.failed', requestId: context.requestId, error }); throw error }
     })
   },

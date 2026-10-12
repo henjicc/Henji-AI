@@ -5,6 +5,8 @@ import { createMediaGeneratorPromptReferences } from '@/components/MediaGenerato
 import { toLegacyPromptString } from '@/core/inputs/promptDocument/index'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { generationService } from '@/core/services/GenerationService'
+import { transferGenerationPaidApproval } from '@/core/services/generationSubmissionConfirmation'
+import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
 import { resolveGenerationMediaReferences } from '@/features/generation/application/generationMediaReferences'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -181,18 +183,22 @@ export function registerGenerationCapabilityHandlers(
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<GenerationInput>('create_visible_generation_task', input)
     const destination = generationDestination(parsed)
-    const resolved = await prepareInput(parsed, destination)
+    const resolved = await applicationWritePreflight(context, () => prepareInput(parsed, destination))
     const providerId = registry.getModel(resolved.modelId)?.meta.provider
     const unavailable = providerId && getProviderAvailabilityFailure(providerId, resolved.modelId)
     if (unavailable) throw new ApplicationPreflightFailure(new Error(`${unavailable.code}:${unavailable.message}`))
     throwIfCapabilityAborted(context.signal)
+    const taskId = context.callerGrant && context.requestId ? applicationGenerationTaskId(context.requestId) : context.requestId ?? crypto.randomUUID()
+    const releaseApproval = transferGenerationPaidApproval(taskId, context.signal)
+    try {
     if (destination.mode === 'canvas') {
       const { submitCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
       const preparation = generationApplicationService.prepare(resolved)
-      return submitCanvasGenerationTask({ ...resolved, options: preparation.options as Record<string, unknown> }, destination,
-        applicationGenerationTaskId(context.requestId ?? crypto.randomUUID()))
+      return await submitCanvasGenerationTask({ ...resolved, options: preparation.options as Record<string, unknown> }, destination,
+        taskId)
     }
-    return await generationApplicationService.submit(resolved, context.callerGrant && context.requestId ? applicationGenerationTaskId(context.requestId) : context.requestId)
+    return await generationApplicationService.submit(resolved, taskId)
+    } catch (error) { releaseApproval(); throw error }
   })
 
   registrar.registerHandler('get_generation_task', async (input) => {
@@ -224,7 +230,10 @@ export function registerGenerationCapabilityHandlers(
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<CanvasNodeGenerationInput & { inputSignature: string }>('submit_canvas_node_generation', input)
     const { submitCanvasNodeGeneration } = await import('@/features/canvas/application/canvasGenerationTaskService')
-    return submitCanvasNodeGeneration(parsed, applicationGenerationTaskId(context.requestId ?? crypto.randomUUID()), context.signal)
+    const taskId = applicationGenerationTaskId(context.requestId ?? crypto.randomUUID())
+    const releaseApproval = transferGenerationPaidApproval(taskId, context.signal)
+    try { return await submitCanvasNodeGeneration(parsed, taskId, context.signal) }
+    catch (error) { releaseApproval(); throw error }
   })
   registrar.registerHandler('resume_canvas_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)

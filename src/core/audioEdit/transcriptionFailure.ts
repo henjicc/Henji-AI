@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ApplicationWriteFailure } from '../application-control/execution/writeExecution'
 
 export const transcriptionPreflightSchema = z.object({ sourcePath: z.string().min(1), durationMs: z.number().positive(), modelId: z.string().optional(), language: z.string().optional(), audioDocumentId: z.string().optional() }).strict()
 export type TranscriptionPreflight = z.infer<typeof transcriptionPreflightSchema>
@@ -15,9 +16,9 @@ export const transcriptionFactsSchema = z.object({
   audioDocumentId: z.string().optional(),
 }).strict()
 export type TranscriptionFacts = z.infer<typeof transcriptionFactsSchema>
-export class TranscriptionFailure extends Error {
+export class TranscriptionFailure extends ApplicationWriteFailure {
   constructor(cause: unknown, readonly transcriptionFacts: TranscriptionFacts) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause })
+    super(cause, { ...transcriptionFacts, notExecuted: transcriptionFacts.billing === 'not_charged' && transcriptionFacts.targetMutation === 'none' })
     this.name = 'TranscriptionFailure'
   }
 }

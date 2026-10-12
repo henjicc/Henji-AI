@@ -262,7 +262,7 @@ it('整序列分块、选择范围、静音和错误轨道拒绝均不进入付�
   expect(subtitleRange(owner, sequence().id, 'sequence')).toEqual({ startFrame: 0, endFrame: 300 })
   await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
   expect(boundary.mixes).toEqual([{ start: 0, duration: 5 }, { start: 5, duration: 5 }])
-  await expect(prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence', 'missing')).rejects.toThrow('移除')
+  await expect(prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence', 'missing')).rejects.toMatchObject({ message: expect.stringContaining('移除'), execution: { notExecuted: true } })
   editVideoProject(owner.document.id, doc => { doc.sequences[0].tracks[0].muted = true; return doc })
   await expect(prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')).rejects.toThrow('可听声音')
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()

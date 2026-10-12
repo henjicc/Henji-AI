@@ -81,7 +81,7 @@ describe('图片扩图正式队列编排（无网络模拟供应商）', () => {
   it('HDR 拒绝在提交前；准备失败清理参考，尺寸改变拒绝迟到落位', async () => {
     const doc = fake.bus.getSnapshot().document;
     fake.bus.dispose(); fake.bus = new ImageEditCommandBusV3({ ...doc, color: { ...doc.color, transferFunction: 'pq' } });
-    await expect(startImageEditOutpaintV3(request())).rejects.toThrow('HDR'); expect(fake.submit).not.toHaveBeenCalled();
+    await expect(startImageEditOutpaintV3(request())).rejects.toMatchObject({ message: expect.stringContaining('HDR'), execution: { notExecuted: true } }); expect(fake.submit).not.toHaveBeenCalled();
     fake.bus.dispose(); fake.bus = new ImageEditCommandBusV3(doc);
     const job = await startImageEditOutpaintV3(request());
     fake.bus.dispatch({ type: 'document.set-canvas-size', commandId: 'manual-size', expectedRevision: 0, width: 200, height: 80, rasterCanvases: {} });

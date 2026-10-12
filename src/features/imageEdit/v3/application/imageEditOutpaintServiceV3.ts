@@ -1,4 +1,5 @@
 import { createDocumentGeometryCommandV3 } from '@/core/imageEdit/v3/documentGeometry';
+import { executeApplicationWrite } from '@/core/application-control/execution/writeExecution';
 import { rebaseImageEditSelectionForOutpaintV3 } from '@/core/imageEdit/v3/aiWorkflows/outpaint';
 import { z } from 'zod';
 import { registry } from '@/core/ModelRegistry';
@@ -136,6 +137,7 @@ async function complete(job: ImageEditOutpaintJobV3, controller: AbortController
 
 /** 提交后立即返回，生成占位独立于工具面板与视图生命周期。费用确认由界面或正式 R2 调用边界负责。 */
 export async function startImageEditOutpaintV3(request: ImageEditOutpaintRequestV3, options: { operationId?: string; signal?: AbortSignal } = {}) {
+  return executeApplicationWrite(async execution => {
   const prepared = await prepareImageEditOutpaintV3(request);
   const { bus } = requireImageEditDocumentInstanceV3(request.documentId);
   const taskId = options.operationId ?? createImageEditIdV3('outpaint-task');
@@ -160,8 +162,8 @@ export async function startImageEditOutpaintV3(request: ImageEditOutpaintRequest
     if (original.revision !== prepared.plan.sourceVersion) throw new Error('图片在检查后已改变，请重新确认扩图');
     const resized = applyImageEditCommandV3(original, createDocumentGeometryCommandV3(original, prepared.plan.output, [1, 0, 0, 1, prepared.plan.offset.x, prepared.plan.offset.y], `${taskId}:reference-size`)).document;
     const padded = { ...resized, id: temporaryId, revision: 0, namedRegions: [], color: { ...resized.color, bitDepth: 8 as const, transferFunction: 'srgb' as const } };
-    const ref = await saveImageEditorV3Document({ requestId: `${taskId}:reference-save`, document: padded, expectedRevision: 0,
-      resourceRefs: collectImageEditJsonResourceIdsV3(padded) as ImageEditorV3ResourceRef[], history: null });
+    const ref = await execution.run(() => saveImageEditorV3Document({ requestId: `${taskId}:reference-save`, document: padded, expectedRevision: 0,
+      resourceRefs: collectImageEditJsonResourceIdsV3(padded) as ImageEditorV3ResourceRef[], history: null }));
     temporaryRevision = ref.revision;
     const snapshot = await loadImageEditorV3Document({ requestId: `${taskId}:reference-read`, documentRef: temporaryRef }, signal);
     if (!snapshot) throw new Error('扩图参考画面没有保存成功');
@@ -171,6 +173,7 @@ export async function startImageEditOutpaintV3(request: ImageEditOutpaintRequest
     const prompt = `Extend the image naturally into the transparent margins of the reference canvas. Keep the existing image at its reference position unchanged. Fill only the transparent added margins on all requested sides, matching perspective, lighting and texture. Output a complete canvas of aspect ${prepared.plan.output.width}:${prepared.plan.output.height}. ${request.prompt}`;
     const task = await generationApplicationService.submit({ modelId: prepared.modelId, mediaType: 'image', prompt,
       options: { ...prepared.params, images: [toFetchableMediaUrl(path)], uploadedFilePaths: [path], imageEditOutpaint: { documentId: request.documentId, margins: request.margins, original: prepared.plan.original } } }, taskId);
+    execution.report({ billing: 'submitted' });
     if (task.taskId !== taskId) throw new Error('生成任务身份与扩图落点不一致，请从生成记录核对');
     submitted = true;
     if (signal.aborted) controller.abort(signal.reason);
@@ -191,6 +194,7 @@ export async function startImageEditOutpaintV3(request: ImageEditOutpaintRequest
     release();
     if (!submitted && temporaryRevision !== undefined) await deleteImageEditorV3DocumentIfRevision({ requestId: `${taskId}:reference-delete`, documentRef: temporaryRef, expectedRevision: temporaryRevision }).catch(error => logger.warn('扩图参考清理未确认', { event: 'image_edit.outpaint.reference_cleanup_failed', error, taskId }));
   }
+  });
 }
 
 export async function recoverImageEditOutpaintV3(documentId: string, taskId: string): Promise<ImageEditOutpaintJobV3> {
