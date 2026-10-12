@@ -15,7 +15,7 @@ afterEach(() => vi.useRealTimers())
 describe('Seed-ICL V3 voice training', () => {
   it.each(['zh_female_vv_uranus_bigtts', 'ICL_uranus_en_female_charlie_tob'])('routes official system voice %s to TTS without clone activation', speaker => {
     const params = { volcIclMode: 'speech', volcSeedIclSpeaker: speaker }
-    expect(build(params)).toEqual({ resource_id: 'seed-tts-2.0', req_params: { text: '你好，欢迎试听。', speaker, audio_params: { format: 'mp3', sample_rate: 24000 } } })
+    expect(build(params)).toEqual({ resource_id: 'seed-tts-2.0', req_params: { text: '你好，欢迎试听。', speaker, audio_params: { format: 'mp3', sample_rate: 24000, enable_subtitle: true } } })
     const consent = model.params.find(param => param.id === 'volcIclActivationConsent')!
     expect(consent.visible?.condition?.(params)).toBe(false)
   })
