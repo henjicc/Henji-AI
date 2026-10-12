@@ -269,7 +269,8 @@ export function buildApplicationContract(input: {
 }): Record<string, unknown> {
   const requested = new Set(input.requestedDomains)
   const names = input.names === undefined ? undefined : new Set(input.names)
-  const toolSchemas = input.catalog.tools.filter(tool => names === undefined || names.has(tool.name)).map(tool => ({
+  // 不指定 names 时只给目录整体哈希，避免默认响应列出全部工具；需要逐个核对时按 names 查询。
+  const toolSchemas = names === undefined ? undefined : input.catalog.tools.filter(tool => names.has(tool.name)).map(tool => ({
     name: tool.name, schemaHash: applicationToolSchemaHash(tool),
     ...(input.includeSchemas && names ? { description: tool.description, inputSchema: tool.inputSchema } : {}),
   }))
@@ -285,8 +286,8 @@ export function buildApplicationContract(input: {
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },
     catalogSchemaHash: applicationCatalogSchemaHash(input.catalog),
-    schemaHashAlgorithm: 'SHA-256 UTF-8 JSON({name,description,inputSchema})，递归按对象键排序，数组顺序保留；十六进制前16位。目录哈希为按 name 排序的 [{name,schemaHash}] 用同一算法取前16位。',
-    toolSchemas,
+    schemaHashAlgorithm: 'SHA-256(键排序 JSON{name,description,inputSchema}) 前16位；目录哈希为按 name 排序的 [{name,schemaHash}] 同算法。',
+    ...(toolSchemas ? { toolSchemas } : { toolSchemasHint: '按 names 查询各工具 schemaHash；加 includeSchemas:true 取完整参数。' }),
     access: {
       read: true, write: input.access.allowWrites, destructive: input.access.allowDestructive, paid: input.access.allowPaid,
       hiddenTools: input.catalog.hidden,

@@ -69,7 +69,7 @@ describe('本地 MCP 协议与边界', () => {
     expect(tool.inputSchema.additionalProperties).toBe(false)
     const context = await client.callTool({ name: 'get_current_application_context', arguments: {} })
     expect(context.structuredContent).toMatchObject({ data: { externalContractVersion: EXTERNAL_CONTRACT_VERSION } })
-    const contract = await client.callTool({ name: 'describe_application_contract', arguments: {} })
+    const contract = await client.callTool({ name: 'describe_application_contract', arguments: { names: [tool.name] } })
     expect(contract.structuredContent).toMatchObject({ data: { contract: { externalContractVersion: EXTERNAL_CONTRACT_VERSION, transport: { listChangedNotifications: true, listChangedPolicy: expect.stringContaining('应用重启') } } } })
     const summary = (contract.structuredContent as { data: { catalogSchemaHash: string; toolSchemas: Array<{ name: string; schemaHash: string }> } }).data
     expect(context.structuredContent).toMatchObject({ data: { catalogSchemaHash: summary.catalogSchemaHash } })

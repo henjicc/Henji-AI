@@ -11,8 +11,8 @@ describe('专用写 handler 的事务前拒绝', () => {
   it('D：多余字段、缺失必填和类型错误均返回可纠正字段说明，不泄露 Zod JSON', async () => {
     for (const [input, field, expected] of [
       [{ documentRef, foo: true }, 'foo', 'documentRef'],
-      [{}, 'documentRef', 'object'],
-      [{ documentRef, activeOnly: 'true' }, 'activeOnly', 'boolean'],
+      [{}, 'documentRef', '缺少必填参数'],
+      [{ documentRef, activeOnly: 'true' }, 'activeOnly', '布尔值'],
     ] as const) {
       const result = await executeApplicationCapabilityResult({ id: 'query_video_edit_export', version: 1, input }, { signal: new AbortController().signal })
       expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', recoverable: true, message: expect.stringContaining(field) } })
