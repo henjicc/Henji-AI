@@ -23,6 +23,7 @@ export interface RetryLayerStackResultResult {
   nodeRef: ApplicationRef & { kind: 'canvas.node' }
   status: 'retrieving' | 'already_retrieving'
   resultRefs: Array<ApplicationRef & { kind: 'canvas.node' }>
+  verification: { verified: boolean; condition: string }
 }
 
 /** 租用原文档并显式启动正式后台续查；不依赖活动画布或组件 hook。 */
@@ -53,7 +54,7 @@ export async function retryLayerStackResult(input: RetryLayerStackResultInput): 
       && node.data.isGenerating && !node.data.generationError && readResumableServerTask(node.data)) {
       logger.info('多图层结果正在获取', { event: 'canvas.layer_stack.retrieve.completed', status: 'already_retrieving', ...context })
       await resumeCanvasGenerationInProject(input.projectId, new Set([node.id]))
-      return { nodeRef, status: 'already_retrieving', resultRefs: [nodeRef] }
+      return { nodeRef, status: 'already_retrieving', resultRefs: [nodeRef], verification: { verified: true, condition: '原节点已有续取状态，正式后台续查入口已接受。' } }
     }
     canvas.updateNodeData(node.id, {
       serverTaskId: task.taskId,
@@ -67,7 +68,8 @@ export async function retryLayerStackResult(input: RetryLayerStackResultInput): 
     logger.info('多图层结果已进入续取', {
       event: 'canvas.layer_stack.retrieve.completed', taskId: task.taskId, modelId: task.modelId, ...context,
     })
-    return { nodeRef, status: 'retrieving', resultRefs: [nodeRef] }
+    const current = owned.runtime.store.getState().nodes.find(item => item.id === node.id)
+    return { nodeRef, status: 'retrieving', resultRefs: [nodeRef], verification: { verified: Boolean(current && (current.data.isGenerating || hasLayerStackRecoveryResult(current.data))), condition: '回读原节点确认已进入续取或取得结果。' } }
   } catch (error) {
     logger.error('重新获取多图层图片失败', error, { event: 'canvas.layer_stack.retrieve.failed', ...context })
     throw error

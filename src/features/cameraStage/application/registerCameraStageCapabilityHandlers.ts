@@ -37,7 +37,7 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     await ensureCameraStageProjectRuntime(projectId)
     const child = (ref: { id: string }): string => { const prefix = `${projectId}:`; if (!ref.id.startsWith(prefix) || !ref.id.slice(prefix.length)) throw new Error('机位和状态关键帧必须属于目标文档。'); return ref.id.slice(prefix.length) }
     const review = await organizeCameraMotion(projectId, child(input.cameraRef), input.stateKeyframeRefs.map(child))
-    return { baseRevision: getHostScopeRevisions().toolbox, resultRef: input.documentRef, reviewId: cameraMotionDraft(projectId)!.reviewId!, ...review, revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
+    return { resultRef: input.documentRef, reviewId: cameraMotionDraft(projectId)!.reviewId!, ...review, revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
   })
   publicRegistrar.registerHandler(applyCameraIntentCapability.id, async (raw, context) => {
     context.signal.throwIfAborted()
@@ -46,7 +46,7 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     if (cameraMotionDraft(projectId)?.reviewId !== input.reviewId) throw new Error('候选已失效，请重新整理。')
     const result = await applyCameraMotion(projectId, input.candidateId)
     notifyHostScopeChanged('toolbox')
-    return { ...result, baseRevision: getHostScopeRevisions().toolbox, resultRef: input.documentRef, stateKeyframeRefs: cameraStageProjectStore(projectId).getState().stateKeyframes.map(frame => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${frame.id}` })), revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
+    return { ...result, resultRef: input.documentRef, stateKeyframeRefs: cameraStageProjectStore(projectId).getState().stateKeyframes.map(frame => ({ kind: 'camera_stage.state_keyframe', id: `${projectId}:${frame.id}` })), revision: getHostScopeRevisions().toolbox, scopeRevisions: getHostScopeRevisions() }
   })
   configureCameraStageControlDependencies({
     readRevision: () => getHostScopeRevisions().toolbox,

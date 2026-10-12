@@ -143,7 +143,7 @@ export function previewCameraMotion(projectId: string, candidateId: string): voi
   draft.preview = candidateId === 'original' ? draft.original : readCameraStageMotionPreview(projectId, draft.review, candidateId)
   draft.selected = candidateId; publish()
 }
-export async function applyCameraMotion(projectId: string, candidateId?: string): Promise<{ undoToken: string; saved: boolean }> {
+export async function applyCameraMotion(projectId: string, candidateId?: string): Promise<Awaited<ReturnType<typeof applyCameraStageMotionCandidate>>> {
   const draft = requireDraft(projectId)
   if (!draft.review) throw new Error('请先整理机位。')
   const selected = candidateId ?? draft.selected

@@ -26,11 +26,11 @@ export class ApplicationHostBridge {
   private pending = new Map<string, Pending>()
   private attachmentSequence = -1
   private context?: HostContextSnapshot
-  private listeners = new Set<() => void>()
+  private listeners = new Set<(kind: 'context' | 'catalog') => void>()
   getContext(): HostContextSnapshot | undefined { return this.context }
-  publishContext(context: HostContextSnapshot): void { this.context = context; this.changed() }
-  onChange(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
-  private changed(): void { for (const listener of this.listeners) listener() }
+  publishContext(context: HostContextSnapshot): void { this.context = context; this.changed('context') }
+  onChange(listener: (kind: 'context' | 'catalog') => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
+  private changed(kind: 'context' | 'catalog' = 'catalog'): void { for (const listener of this.listeners) listener(kind) }
   private waitUntilReady(callerId: string, signal: AbortSignal, deadline: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const cleanup = () => { clearTimeout(timer); unsubscribe(); signal.removeEventListener('abort', aborted) }

@@ -205,8 +205,8 @@ export class ApplicationOperationCoordinator {
       destructive = definition.destructive
       const parsed = definition.inputSchema.parse(input)
       refs.push(...definition.resolveOperationTargets(parsed))
-      if (destructive) deletionRefs.push(...refs)
       writeRefs = definition.resolveOperationWriteTargets?.(parsed, applicationInvocationId(callerId, operationId))
+      if (destructive) deletionRefs.push(...(writeRefs ?? refs))
     } else {
     const changes = z.array(z.object({ kind: z.string(), entityType: z.string() }).passthrough()).min(1).max(32).parse(input.changes)
     const writable = this.writableEntityTypes()
@@ -221,7 +221,7 @@ export class ApplicationOperationCoordinator {
       }
     }
     }
-    if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(refs)}，再提交返回的 baselineIds。`)
+    if (destructive && !baselineIds.length) throw new Error(`BASELINE_REQUIRED:删除操作需要先核对目标。请用 read_application_entity 读取 ${JSON.stringify(deletionRefs)}，再提交返回的 baselineIds。`)
     const baselines = baselineIds.map((id) => this.store.readBaseline(id, callerId))
     const currentAccess = operationAccess({ operationId, callerId, capabilityId, input, targetRefs: writeRefs ?? refs })
     let speechRecoveryOf: string | undefined

@@ -58,5 +58,6 @@ export async function downloadCanvasMedia(input: {
     projectId: input.projectId,
     ...summary,
     destinationMode: input.destination.mode,
+    verification: { verified: summary.failedNodeIds.length === 0 && summary.savedNodeIds.length > 0, condition: '正式文件保存服务已逐项确认写入；失败项保留在 failedNodeIds。' },
   }
 }

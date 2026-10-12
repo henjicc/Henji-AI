@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { verifyCanvasWrite } from './canvasQueryService'
 import i18n from '@/i18n'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -253,7 +254,7 @@ export async function executeCanvasImageCapabilityForProject(input: {
   projectId: string
   sourceNodeId: string
   capabilityId: CanvasImageCapabilityId
-}): Promise<Extract<CanvasImageCapabilityExecutionResult, { kind: 'canvas-node' }> & { projectId: string }> {
+}) {
   requireCurrentCanvasProject(input.projectId)
   const definition = getCanvasImageCapability(input.capabilityId)
   if (
@@ -279,7 +280,7 @@ export async function executeCanvasImageCapabilityForProject(input: {
       { capabilityId: input.capabilityId },
     )
   }
-  return { ...result, projectId: input.projectId }
+  return { ...result, projectId: input.projectId, verification: await verifyCanvasWrite(input.projectId) }
 }
 
 export function resetCanvasImageCapabilityApplicationStateForTests(): void {

@@ -73,7 +73,7 @@ export const prepareVideoEditInPlaceGenerationCapability = defineApplicationCapa
   control: capabilityControl('observe', ['video_edit.document', 'generation.preparation']), summarize: result => result.message,
 })
 
-const generateOutput = z.object({ documentRef, taskRef, plan: planOutput, status: z.literal('submitted'), message: z.string() }).strict()
+const generateOutput = z.object({ documentRef, taskRef, plan: planOutput, status: z.literal('submitted'), verified: z.boolean(), message: z.string() }).strict()
 export const generateVideoEditInPlaceCapability = defineApplicationCapability({
   id: 'generate_video_edit_in_place', title: '在剪辑时间线原地生成',
   description: '缺镜头、要换画面、要配音时在时间线上直接生成并落进当前位置：generate_shot 在指定秒数生成镜头（如“3 秒处生成 4 秒的日落空镜”= startSeconds 3、durationSeconds 4），replace_shot 把片段换成新生成的版本（原镜头保留，可用 restore_video_edit_clip_take 切回），extend_shot 以片段尾帧续接后续镜头，generate_audio 生成配音或配乐。自动带入参考帧并按序列画幅与落点换算模型的时长和比例。提交后时间线上立刻出现占位，用户可以继续剪辑；生成完成后结果复制进项目素材并一步落进时间线（一次撤销），生成期间原落点被占用时改放到新轨道。返回生成任务 taskRef：用 wait_generation_task 等待，再用 get_video_edit_in_place_generation 读取落位结果；cancel_generation_task 取消会一并撤回占位。会产生付费生成。',
@@ -88,8 +88,8 @@ export const generateVideoEditInPlaceCapability = defineApplicationCapability({
   resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: parsed => [parsed.documentRef],
   control: capabilityControl('execute', ['generation.task'], { revisionScopes: ['generation', 'video_edit'], verificationRequired: false, resultState: 'submitted', alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task'] }] }),
   resolveObservedEffects: (_input, output) => [
-    { effect: 'execute', entityTypes: ['generation.task'], propertyIds: [], targetRefs: [output.taskRef], count: 1, verified: false, evidence: [`generation.task:${output.taskRef.id}:submitted`] },
-    { effect: 'create', entityTypes: ['generation.task'], propertyIds: [], targetRefs: [output.taskRef], count: 1, verified: false, evidence: [`generation.task:${output.taskRef.id}:created`] },
+    { effect: 'execute', entityTypes: ['generation.task'], propertyIds: [], targetRefs: [output.taskRef], count: 1, verified: output.verified, evidence: [`generation.task:${output.taskRef.id}:submitted`] },
+    { effect: 'create', entityTypes: ['generation.task'], propertyIds: [], targetRefs: [output.taskRef], count: 1, verified: output.verified, evidence: [`generation.task:${output.taskRef.id}:created`] },
   ],
   summarize: result => result.message,
 })

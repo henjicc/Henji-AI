@@ -40,6 +40,7 @@ describe('image edit application service', () => {
 
   it('编辑后直接作为生成参考，实际合成编辑步骤且不收藏、不删除预览', async () => {
     const result = await createImageEditPreview({ sourceRef: 'generation.result:previous', source: '/original.png', operations: [{ kind: 'rotate_cw', degrees: 90 }] })
+    expect(result.verification).toMatchObject({ verified: true })
     const previewRef = String(result.previewRef)
     const input = { uploadedImages: [{ kind: 'image_edit.preview', id: previewRef }] }
     const [prepared, submitted] = await Promise.all([resolveGenerationMediaReferences(input), resolveGenerationMediaReferences(input)])

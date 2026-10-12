@@ -125,6 +125,7 @@ describe('画布图片能力应用服务', () => {
       capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
     })
     expect(result.nodeId).toBeTruthy()
+    expect(result.verification).toMatchObject({ verified: true })
     expect(result.edgeId).toBeTruthy()
     expect(result.undoRef).toBeTruthy()
   })

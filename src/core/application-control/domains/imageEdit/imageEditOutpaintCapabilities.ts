@@ -23,11 +23,11 @@ export const generateImageEditOutpaintCapability = defineApplicationCapability({
   description: '按原画幅比例向任意方向扩展当前图片。先取当前合成画面与透明新增边缘作为参考，复用正式图片生成队列；按所选模型计费。提交立即返回 taskRef，当前图片显示进度占位，用户可继续编辑。完成后扩边和带蒙版的智能对象新层作为一步可撤销编辑进入原文档，原图像素不改。先 prepare_image_edit_outpaint 确认参数和费用，再提交；用 get_image_edit_outpaint 读回落位，不把生成完成当成文档已保存。取消走 cancel_generation_task；生成成功但落位或保存失败用 recover_image_edit_outpaint 恢复原结果，禁止重复付费。',
   readOnly: false, risk: 'R2', permission: 'generation:create', timeoutMs: 180000, supportsUndo: true, completionKind: 'submitted', requiredScopes: ['image_edit', 'generation'],
   executionPrerequisites: ['prepare_image_edit_outpaint'], paidGenerationPreparation: 'prepare_image_edit_outpaint',
-  inputSchema: imageEditOutpaintInputSchema, outputSchema: z.object({ documentRef, taskRef, status: z.literal('submitted'), message: z.string() }).strict(),
+  inputSchema: imageEditOutpaintInputSchema, outputSchema: z.object({ documentRef, taskRef, status: z.literal('submitted'), message: z.string(), verified: z.boolean() }).strict(),
   resolveOperationTargets: input => [input.documentRef], resolveConcurrencyKey: input => `image_edit_outpaint:${input.documentRef.id}`,
   resolveOperationWriteTargets: input => [input.documentRef], control: capabilityControl('execute', ['generation.task'], { revisionScopes: ['image_edit', 'generation'], resultState: 'submitted', verificationRequired: false, alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task'] }] }),
   successEvidence: ['返回正式生成任务；落位与保存须进一步读回 status=placed。'], failureRecovery: ['恢复原任务只续落位或保存，不重复生成。'], summarize: result => result.message,
-  resolveObservedEffects: (_input, output) => [{ effect: 'create', entityTypes: ['generation.task'], propertyIds: [], targetRefs: [output.taskRef], count: 1, verified: false, evidence: [] }],
+  resolveObservedEffects: (_input, output) => [{ effect: 'create', entityTypes: ['generation.task'], propertyIds: [], targetRefs: [output.taskRef], count: 1, verified: output.verified, evidence: ['从原扩图任务源确认提交已登记；不代表最终落位。'] }],
 });
 const recoveryInput = z.object({ documentRef, taskRef }).strict();
 const statusOutput = z.object({ documentRef, taskRef, status: z.enum(['preparing', 'generating', 'placing', 'placed', 'failed', 'cancelled']), progress: z.number(), layerRef: z.object({ kind: z.literal('image_edit.layer'), id: z.string() }).strict().optional(), error: z.string().optional(), message: z.string() }).strict();
@@ -39,7 +39,7 @@ export const getImageEditOutpaintCapability = defineApplicationCapability({ ...c
 });
 export const recoverImageEditOutpaintCapability = defineApplicationCapability({ ...common,
   id: 'recover_image_edit_outpaint', title: '恢复原图片扩图任务', aliases: ['恢复扩图', '扩图保存重试'], description: '按原任务引用恢复等待、落位或保存，不提交新的生成、不产生第二次生成费用。读取生成记录中的原画幅与目标图片；已落位的智能对象来源作为持久回执，只续保存。原画幅已变化时拒绝错误落位。',
-  readOnly: false, risk: 'R1', permission: 'image_edit:write', timeoutMs: 60000, supportsUndo: true, completionKind: 'submitted', inputSchema: recoveryInput, outputSchema: statusOutput,
+  readOnly: false, risk: 'R1', permission: 'image_edit:write', timeoutMs: 60000, supportsUndo: true, completionKind: 'submitted', inputSchema: recoveryInput, outputSchema: statusOutput.extend({ verification: z.object({ verified: z.boolean(), condition: z.string() }).strict() }),
   resolveOperationTargets: input => [input.documentRef], resolveConcurrencyKey: input => `image_edit_outpaint:${input.documentRef.id}`,
   resolveOperationWriteTargets: input => [input.documentRef], control: capabilityControl('execute', ['image_edit.document'], { revisionScopes: ['image_edit'], verificationRequired: false, resultState: 'submitted' }), summarize: result => result.message,
 });

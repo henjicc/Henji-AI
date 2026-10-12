@@ -45,14 +45,18 @@ export function directOnlyObservedEffects<TOutput>(
 ): (_input: unknown, output: TOutput) => ApplicationObservedEffect[] {
   return (_input, output) => {
     const targetRefs = directResultRefs(output)
+    const record = asRecord(output)
+    const verification = asRecord(record?.verification)
+    const verified = verification?.verified === true || record?.verified === true
+    const evidence = verification?.condition ?? record?.message
     return control.impacts.map((impact) => ({
       effect: impact.effect,
       entityTypes: impact.entityTypes,
       propertyIds: impact.propertyIds,
       targetRefs,
       count: Math.max(1, targetRefs.length),
-      verified: impact.effect === 'observe',
-      evidence: [],
+      verified: impact.effect === 'observe' || verified,
+      evidence: verified ? [typeof evidence === 'string' && evidence ? evidence : '领域处理器已回读正式状态确认结果。'] : [],
     }))
   }
 }

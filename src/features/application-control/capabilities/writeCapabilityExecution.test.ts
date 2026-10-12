@@ -8,6 +8,20 @@ const sequenceRef = { kind: 'video_edit.sequence', id: 'missing-document:sequenc
 const audioRef = { kind: 'audio_edit.document', id: 'missing-audio' }
 
 describe('专用写 handler 的事务前拒绝', () => {
+  it('D：多余字段、缺失必填和类型错误均返回可纠正字段说明，不泄露 Zod JSON', async () => {
+    for (const [input, field, expected] of [
+      [{ documentRef, foo: true }, 'foo', 'documentRef'],
+      [{}, 'documentRef', 'object'],
+      [{ documentRef, activeOnly: 'true' }, 'activeOnly', 'boolean'],
+    ] as const) {
+      const result = await executeApplicationCapabilityResult({ id: 'query_video_edit_export', version: 1, input }, { signal: new AbortController().signal })
+      expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', recoverable: true, message: expect.stringContaining(field) } })
+      if (!result.ok) {
+        expect(result.error.message).toContain(expected)
+        expect(result.error.message).not.toContain('"code"')
+      }
+    }
+  })
   it.each<[string, Record<string, unknown>]>([
     ['prepare_video_edit_subtitle_audio', { documentRef, sequenceRef, scope: 'sequence' }],
     ['generate_video_edit_subtitles', { documentRef, sequenceRef, audioDocumentRef: audioRef }],
@@ -25,5 +39,6 @@ describe('专用写 handler 的事务前拒绝', () => {
     expect(definition.inputSchema.safeParse(input).success).toBe(true)
     const result = await executeApplicationCapabilityResult({ id, version: definition.version, input }, { signal: new AbortController().signal, requestId: 'preflight-fixture' })
     expect(result).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
+    if (!result.ok) expect(result.error.message).not.toMatch(/^[A-Z][A-Z_]*[:：]/)
   })
 })

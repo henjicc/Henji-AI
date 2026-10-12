@@ -1,7 +1,7 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { canvasFromDocumentContent, canvasHistoryFromSessionState, DEFAULT_CANVAS_VIEWPORT, type Project, type ProjectSummary } from './canvasDocumentContent'
+import { canvasFromDocumentContent, canvasToDocumentContent, canvasHistoryFromSessionState, DEFAULT_CANVAS_VIEWPORT, type Project, type ProjectSummary } from './canvasDocumentContent'
 import { canvasDocumentCommands } from './canvasDocumentEnvironment'
 import { listCanvasDocumentSummaries } from './canvasProjectService'
 
@@ -71,6 +71,13 @@ export async function listCanvasProjectSummaries(): Promise<Record<string, unkno
 
 export async function readCanvasProjectSnapshot(projectId: string): Promise<Project> {
   return (await getCanvasProjectInstance(projectId)).snapshot()
+}
+
+/** 核对正式实例已提交的图与文档回读；使用同一序列化规则排除临时选中/任务状态。 */
+export async function verifyCanvasWrite(projectId: string) {
+  const expected = canvasToDocumentContent(await readCanvasProjectSnapshot(projectId))
+  const saved = canvasToDocumentContent(await readPersistedCanvasProjectSnapshot(projectId))
+  return { verified: JSON.stringify(expected) === JSON.stringify(saved), condition: '已从画布文档回读并核对提交后的节点、属性及连线。', target: { kind: 'canvas.document', id: projectId } }
 }
 
 /** 只读取已落盘的画布文件；后台任务终态不能用尚未确认的内存投影冒充持久结果。 */

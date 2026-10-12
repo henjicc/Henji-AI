@@ -10,7 +10,7 @@ export const retryVideoEditSmartRegionCapability = defineApplicationCapability({
   version: 1, domain: 'video_edit', aliases: ['重试区域', '重新分析人脸'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: false,
   completionKind: 'submitted', requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.effect'], producesRefs: ['video_edit.effect'],
   inputSchema: z.object({ documentRef, effectRef }).strict(),
-  outputSchema: z.object({ resultRef: effectRef, status: z.literal('analyzing'), message: z.string() }).strict(),
+  outputSchema: z.object({ resultRef: effectRef, status: z.literal('analyzing'), message: z.string(), verified: z.boolean() }).strict(),
   resolveOperationTargets: parsed => [parsed.documentRef, parsed.effectRef], resolveOperationWriteTargets: parsed => [parsed.documentRef],
   concurrencyKey: 'video_edit_smart_region', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`,
   control: capabilityControl('execute', ['video_edit.effect'], { revisionScopes: ['video_edit'], verificationRequired: false, resultState: 'submitted' }),

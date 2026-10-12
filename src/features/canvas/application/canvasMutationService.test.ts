@@ -71,7 +71,7 @@ describe('画布清空与解散分组', () => {
 
       const result = await clearCanvasProject(projectId)
 
-      expect(result).toMatchObject({ projectId, clearedNodeCount: 2, clearedEdgeCount: 0 })
+      expect(result).toMatchObject({ projectId, clearedNodeCount: 2, clearedEdgeCount: 0, verification: { verified: true } })
       expect(useCanvasStore.getState().nodes).toHaveLength(0)
     })
 
@@ -243,6 +243,7 @@ describe('画布清空与解散分组', () => {
         nodeId: String(created.nodeId),
         placement: { mode: 'right_of_node', anchorNodeId: String(created.nodeId) },
       })
+      expect(duplicated.verification).toMatchObject({ verified: true })
       const copy = useCanvasStore.getState().nodes.find((node) => node.id === duplicated.nodeId)
 
       expect(copy?.data).toMatchObject({

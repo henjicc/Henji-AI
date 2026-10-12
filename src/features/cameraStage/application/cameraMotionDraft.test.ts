@@ -66,7 +66,8 @@ it('正式助手发现/整理/应用同源候选并可一步撤销，不依赖�
     expect(useCameraStageStore.getState().stateKeyframes).toEqual(original)
     const applied = await app.requireResult('apply_camera_stage_motion_candidate', { documentRef, reviewId: result.reviewId, candidateId: 'orbit' }, baseline.revisions as Record<string, number>)
     expect(applied.saved).toBe(true)
-    expect(applied.baseRevision).toBeGreaterThan(result.baseRevision as number)
+    expect(applied.verification).toMatchObject({ verified: true })
+    expect(applied).not.toHaveProperty('baseRevision')
     expect(useCameraStageStore.getState().stateKeyframes).not.toEqual(original)
     expect(useCameraStageStore.temporal.getState().pastStates).toHaveLength(1)
     await restoreCameraStageUndo(applied.undoToken as string)
@@ -81,7 +82,7 @@ it('保存失败保留同一次应用，钉点不覆盖恢复句柄，重试只�
   const applied = useCameraStageStore.getState().stateKeyframes
   expect(() => pinCameraMotion(projectId)).toThrow('重试保存')
   const retry = await applyCameraMotion(projectId, 'orbit')
-  expect(retry).toEqual({ undoToken: first.undoToken, saved: true })
+  expect(retry).toEqual({ undoToken: first.undoToken, saved: true, verification: { verified: true, condition: expect.any(String) } })
   expect(useCameraStageStore.getState().stateKeyframes).toBe(applied)
   expect(useCameraStageStore.temporal.getState().pastStates).toHaveLength(1)
 })

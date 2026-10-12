@@ -104,6 +104,7 @@ export async function createImageEditPreview(input: {
       width: info.width,
       height: info.height,
       document,
+      verification: { verified: getStoredImageEditPreview(previewRef)?.document === document, condition: '从正式预览会话回读确认新预览文档及操作结果。', target: { kind: 'image_edit.preview', id: previewRef } },
     }
   } catch (error) {
     logger.error('图片编辑预览失败', error, {

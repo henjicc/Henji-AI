@@ -38,7 +38,7 @@ export function registerImageEditOutpaintHandlers(registrar: ApplicationCapabili
     });
     const job = await startImageEditOutpaintV3({ documentId, margins: parsed.margins, prompt: parsed.prompt, modelId: parsed.modelId, params: parsed.params }, { operationId, signal: context.signal });
     context.execution?.report({ billing: 'submitted' });
-    return { documentRef: parsed.documentRef, taskRef: { kind: 'generation.task', id: job.taskId }, status: 'submitted', message: '扩图已提交；请读回原任务，等待结果落入当前图片。' };
+    return { documentRef: parsed.documentRef, taskRef: { kind: 'generation.task', id: job.taskId }, status: 'submitted', verified: readImageEditOutpaintJobV3(job.taskId)?.documentId === documentId, message: '扩图已提交；请读回原任务，等待结果落入当前图片。' };
   });
   registrar.registerHandler(getImageEditOutpaintCapability.id, async (input, context) => {
     const parsed = getImageEditOutpaintCapability.inputSchema.parse(input), { documentId } = splitImageEditV3DocumentRef(parsed.documentRef);
@@ -50,6 +50,8 @@ export function registerImageEditOutpaintHandlers(registrar: ApplicationCapabili
   registrar.registerHandler(recoverImageEditOutpaintCapability.id, async (input, context) => {
     const parsed = recoverImageEditOutpaintCapability.inputSchema.parse(input), { documentId } = splitImageEditV3DocumentRef(parsed.documentRef);
     await applicationWritePreflight(context, () => assertHost(documentId, context, true));
-    return status(await recoverImageEditOutpaintV3(documentId, parsed.taskRef.id), parsed.documentRef);
+    const recovered = await recoverImageEditOutpaintV3(documentId, parsed.taskRef.id);
+    const current = readImageEditOutpaintJobV3(parsed.taskRef.id);
+    return { ...status(recovered, parsed.documentRef), verification: { verified: current?.documentId === documentId && ['generating', 'placing', 'placed'].includes(current.status), condition: '从原扩图任务源回读确认恢复等待、落位或保存已生效；最终结果请查询原任务。' } };
   });
 }

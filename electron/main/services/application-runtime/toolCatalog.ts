@@ -1,4 +1,5 @@
 import { z } from 'zod'
+export { invalidInputMessage } from '../../../../src/core/application-control/inputValidation'
 import type { ApplicationToolDescriptor as Tool } from '../../../../src/core/application-control/capabilityMetadata'
 import {
   EXTERNAL_CONTRACT_VERSION, EXTERNAL_DEPRECATION_POLICY, EXTERNAL_LIMITS, EXTERNAL_PROTOCOL_VERSIONS,
@@ -38,7 +39,7 @@ export interface ApplicationAccess { allowWrites: boolean; allowDestructive: boo
 
 /** 协议信封：所有写工具共用，不只是 change_application_entities。 */
 const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '调用者范围内唯一的幂等键；调用前生成并保存，丢响应后复用此值查询，不得重新生成重放。' }
-const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 32, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除时必须提供每个目标及集合父对象读取返回的 baselineId。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
+const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 32, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除时必须提供每个被删除实体经 read_application_entity 读取返回的 baselineId，相关文档或集合父对象的 baselineId 可选。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
 
 export interface ProtocolToolSpec {
   name: string
@@ -118,10 +119,6 @@ export const describeContractInputSchema = z.object({
  * 收敛成同一句兜底文案，调用方就只能靠猜——媒体工具原先正是这样，多传一个字段和引用不存在
  * 返回完全相同的话。业务失败仍然保持脱敏（不回传本地路径），参数失败则原样点名。
  */
-export function invalidInputMessage(error: unknown): string | null {
-  if (!(error instanceof z.ZodError)) return null
-  return `INVALID_INPUT:${error.issues.slice(0, 8).map((issue) => `${issue.path.join('.') || '(根)'} ${issue.message}`).join('；')}`
-}
 
 /** 只能经 retry_application_operation_save 触发的原领域恢复能力；有意不作为独立工具开放。 */
 export const EXCLUDED_TOOLS = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
@@ -256,7 +253,7 @@ export function buildApplicationContract(input: {
       server: EXTERNAL_SERVER_INFO,
       protocolVersions: [...EXTERNAL_PROTOCOL_VERSIONS],
       sdkVersion: EXTERNAL_SDK_VERSION,
-      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，宿主注册、断开或重连时发送 notifications/tools/list_changed，客户端重新 tools/list。授权范围调整须新建连接；撤销或到期关闭旧订阅，新连接重新发现。应用重启会关闭旧连接，重连后须重新订阅并读取目录。' },
+      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，宿主登记变更时核对目录，仅工具定义或契约版本真实变化才发送 notifications/tools/list_changed；普通上下文更新及相同目录重连不发送，客户端重新 tools/list。授权范围调整须新建连接；撤销或到期关闭旧订阅，新连接重新发现。应用重启会关闭旧连接，重连后须重新订阅并读取目录。' },
       limits: EXTERNAL_LIMITS,
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },
