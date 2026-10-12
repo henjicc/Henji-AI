@@ -3,6 +3,7 @@
  * Electron 用 protocol.handle 自定义协议提供本地媒体展示 URL。
  */
 export interface MediaPlatform {
+  enqueueRecycle(paths: string[], protectedBy?: string[]): Promise<void>
   allowRoot(rootPath: string): Promise<void>
   /** 判断某个绝对路径是否在媒体协议允许读取的根目录范围内 */
   isPathAllowed(targetPath: string): Promise<boolean>

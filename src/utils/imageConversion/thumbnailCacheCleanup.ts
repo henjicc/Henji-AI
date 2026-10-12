@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
-import { basename, exists, join, remove } from '@/platform/desktopApi'
+import { basename, exists, join } from '@/platform/desktopApi'
+import { getPlatform } from '@/platform'
 
 const logger = createLogger('utils.imageConversion.thumbnailCacheCleanup')
 
@@ -20,8 +21,8 @@ export async function deleteThumbnailCache(mediaPath: string): Promise<boolean> 
     const oldPath = await join(thumbnailsDir, thumbName)
     const oldExists = await exists(oldPath)
     if (oldExists) {
-      await remove(oldPath)
-      logger.info('[缩略图缓存] 已删除:', oldPath)
+      await getPlatform().media.enqueueRecycle([oldPath], [mediaPath])
+      logger.info('[缩略图缓存] 已提交回收:', oldPath)
       deleted = true
     }
 
@@ -29,8 +30,8 @@ export async function deleteThumbnailCache(mediaPath: string): Promise<boolean> 
     const historyPath = await join(thumbnailsDir, '540', thumbName)
     const historyExists = await exists(historyPath)
     if (historyExists) {
-      await remove(historyPath)
-      logger.info('[缩略图缓存] 已删除:', historyPath)
+      await getPlatform().media.enqueueRecycle([historyPath], [mediaPath])
+      logger.info('[缩略图缓存] 已提交回收:', historyPath)
       deleted = true
     }
 

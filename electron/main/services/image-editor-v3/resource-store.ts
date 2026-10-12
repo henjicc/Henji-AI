@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
@@ -161,7 +162,7 @@ export class ContentAddressedResourceStore {
     const removeIfStale = async (candidate: string): Promise<void> => {
       const stats = await fsp.lstat(candidate).catch(() => null)
       if (!stats || stats.mtimeMs > cutoff) return
-      await fsp.rm(candidate, { recursive: stats.isDirectory(), force: true })
+      await removeUnmanagedCachePath(candidate, { recursive: stats.isDirectory(), force: true })
     }
     const stagingEntries = await fsp.readdir(this.stagingDir, { withFileTypes: true }).catch(() => [])
     await Promise.all(stagingEntries
@@ -283,14 +284,14 @@ export class ContentAddressedResourceStore {
           const quarantine = `${destination}.${crypto.randomUUID()}.corrupt`
           try {
             await fsp.rename(destination, quarantine)
-            await fsp.rm(quarantine, { force: true })
+            await removeUnmanagedCachePath(quarantine, { force: true })
           } catch (error) {
             if (!isMissing(error)) throw error
           }
         }
         throw new Error(`Unable to replace corrupt resource object: ${id}`)
       })
-      await fsp.rm(stagedPath, { force: true })
+      await removeUnmanagedCachePath(stagedPath, { force: true })
       logger.debug('图片编辑资源写入完成', {
         event: 'image_editor_v3.resource.put.completed',
         context: { resourceId: id, byteLength, created },
@@ -298,7 +299,7 @@ export class ContentAddressedResourceStore {
       return { id, sha256, byteLength, mediaType: options.mediaType, created }
     } catch (error) {
       await handle?.close().catch(() => undefined)
-      await fsp.rm(stagedPath, { force: true }).catch(() => undefined)
+      await removeUnmanagedCachePath(stagedPath, { force: true }).catch(() => undefined)
       logger.error('图片编辑资源写入失败', {
         event: 'image_editor_v3.resource.put.failed',
         error,
@@ -427,7 +428,7 @@ export class ContentAddressedResourceStore {
         const resourcePath = this.getFilesystemPath(resourceId)
         const existed = await fsp.access(resourcePath).then(() => true).catch(() => false)
         if (!existed) continue
-        await fsp.rm(resourcePath, { force: true })
+        await removeUnmanagedCachePath(resourcePath, { force: true })
         deleted.push(resourceId)
       }
       return deleted
@@ -463,7 +464,7 @@ export class ContentAddressedResourceStore {
           if (Date.now() - stats.mtimeMs < minimumAgeMs) continue
           deleted.push(resourceId)
           reclaimedBytes += stats.size
-          if (!options.dryRun) await fsp.rm(resourcePath, { force: true })
+          if (!options.dryRun) await removeUnmanagedCachePath(resourcePath, { force: true })
         }
       }
       logger.info('图片编辑资源垃圾回收完成', {

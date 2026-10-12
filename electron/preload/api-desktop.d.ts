@@ -92,6 +92,7 @@ export interface HenjiHttpApi {
 }
 
 export interface HenjiMediaApi {
+  enqueueRecycle(paths: string[], protectedBy?: string[]): Promise<void>
   allowRoot(rootPath: string): Promise<void>
   /** 判断某个绝对路径是否在 henji-media:// 协议允许读取的根目录范围内
    *  （应用本地数据目录/系统下载目录/系统临时目录/已动态注册的根目录）。

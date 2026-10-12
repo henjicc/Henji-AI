@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ dataDir: '' }))
+const mocks = vi.hoisted(() => ({ dataDir: '', enqueue: vi.fn() }))
+vi.mock('../media-recycle/queue', () => ({ enqueueMediaCandidates: mocks.enqueue, registerOwnedMedia: vi.fn() }))
 
 vi.mock('../appPaths', async () => {
   const nodeFs = await import('node:fs')
@@ -93,7 +94,7 @@ describe('AI Runtime 受管媒体所有权', () => {
     expect(second).toEqual({ filePath: first?.filePath, created: false })
   })
 
-  it('同进程两次相同输出各持有租约，交错释放时最后一份才删除', async () => {
+  it('同进程两次相同输出各持有租约，最后释放只提交回收候选', async () => {
     const [first, second] = await Promise.all([
       saveMediaFromUrlTracked('https://media.example.test/result.png'),
       saveMediaFromUrlTracked('https://cdn.example.test/same.png'),
@@ -107,7 +108,8 @@ describe('AI Runtime 受管媒体所有权', () => {
     await expect(fs.stat(filePath)).resolves.toBeDefined()
 
     await releaseManagedGenerationMediaPaths([filePath])
-    await expect(fs.stat(filePath)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.stat(filePath)).resolves.toBeDefined()
+    expect(mocks.enqueue).toHaveBeenCalledWith([filePath])
   })
 
   it('响应头成功但读取图片中途断流时重取完整图片，不落盘半张图', async () => {

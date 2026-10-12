@@ -64,6 +64,10 @@ import {
 } from './assistant-cli/arguments'
 import { runAssistantCli } from './assistant-cli/runner'
 import { runAssistantModelVerification } from './assistant-cli/verify-model'
+import { runMediaRecycle } from './services/media-recycle/runtime'
+import { mediaRecycleLifecycle } from './services/media-recycle/lifecycle'
+import { configureCacheDeletionBoundary } from './services/media-recycle/cache-deletion'
+import { managedMediaRoots } from './services/media-recycle/queue'
 
 /*
  * 自动化隔离的唯一开关。
@@ -80,6 +84,7 @@ if (isolatedAppData) {
 
 // henji.db 第一次打开时执行迁移账本；位置换算与备份目录在这里登记（数据库模块本身不依赖作品目录）。
 configureDatabaseMigrations(databaseMigrationOptions)
+configureCacheDeletionBoundary(managedMediaRoots)
 
 registerMediaProtocolScheme()
 if (!isAssistantCliMode()) {
@@ -101,7 +106,7 @@ if (remoteDebuggingPort) {
   app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   try {
     getDb()
   } catch (error) {
@@ -113,6 +118,8 @@ app.whenReady().then(() => {
     app.exit(1)
     return
   }
+  // Await the complete census before any renderer or external application server can open documents.
+  if (!isAssistantCliMode() && !process.argv.includes('--verify-model')) await mediaRecycleLifecycle.startup(runMediaRecycle)
   configureMacDockIcon()
   registerMediaProtocolHandler()
   restoreAllowedMediaRoots()
@@ -215,4 +222,8 @@ app.on('window-all-closed', () => {
 
 bindApplicationShutdown(app, [disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
+}, async () => {
+  if (isAssistantCliMode() || process.argv.includes('--verify-model')) return
+  const outcome = await mediaRecycleLifecycle.exit(runMediaRecycle)
+  createMainLogger('main.media_recycle').info('退出媒体回收结束', { event: 'media_recycle.exit.completed', context: { outcome } })
 })

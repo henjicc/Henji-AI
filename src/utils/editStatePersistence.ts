@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
-import { appLocalDataDir, exists, join, mkdir, readFile, remove, writeFile } from '@/platform/desktopApi'
+import { appLocalDataDir, exists, join, mkdir, readFile, writeFile } from '@/platform/desktopApi'
+import { getPlatform } from '@/platform'
 
 const logger = createLogger('utils.editStatePersistence')
 
@@ -81,8 +82,8 @@ export async function deleteEditState(taskIdOrFilename: string): Promise<void> {
 
         const fileExists = await exists(filePath)
         if (fileExists) {
-            await remove(filePath)
-            logger.info('[EditState] Deleted edit state file', filePath)
+            await getPlatform().media.enqueueRecycle([filePath])
+            logger.info('[EditState] Queued edit state reclamation', filePath)
         }
     } catch (error) {
         logger.error('[EditState] Failed to delete edit state', error)

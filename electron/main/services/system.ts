@@ -4,6 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { writeBufferAtomically } from './fs/atomic-file'
 import { getAppBaseDir } from './appBasePaths'
+import { enqueueMediaCandidates, isManagedMediaPath, overlapsManagedMediaRoot, registerOwnedMedia } from './media-recycle/queue'
+import { removeUnmanagedCachePath } from './media-recycle/cache-deletion'
 
 export interface FsDirEntryDto {
   name: string
@@ -95,8 +97,10 @@ export async function writeFileBytes(
     } finally { await handle.close() }
     return
   }
+  const existed = await pathExists(targetPath)
   if (options?.exclusive) await writeBufferAtomically(targetPath, data, undefined, { exclusive: true })
   else { await fs.mkdir(path.dirname(targetPath), { recursive: true }); await fs.writeFile(targetPath, data) }
+  await registerOwnedMedia(targetPath, undefined, !existed)
 }
 
 export async function writeTextFile(targetPath: string, data: string): Promise<void> {
@@ -131,13 +135,22 @@ export async function readDirectory(targetPath: string): Promise<FsDirEntryDto[]
 export async function copyFilePath(src: string, dest: string): Promise<void> {
   ensureValidPath(src)
   ensureValidPath(dest)
+  const existed = await pathExists(dest)
   await fs.mkdir(path.dirname(dest), { recursive: true })
   await fs.copyFile(src, dest)
+  await registerOwnedMedia(dest, undefined, !existed)
 }
 
 export async function removePath(targetPath: string, recursive = false): Promise<void> {
   ensureValidPath(targetPath)
-  await fs.rm(targetPath, { recursive, force: true })
+  if (recursive && overlapsManagedMediaRoot(targetPath)) throw new Error('Managed media directories must be reclaimed file by file')
+  if (isManagedMediaPath(targetPath)) {
+    if (recursive) throw new Error('Managed media directories must be reclaimed file by file')
+    enqueueMediaCandidates([targetPath])
+    return
+  }
+  // Also reject aliases through junctions: lexical checks do not establish deletion permission.
+  await removeUnmanagedCachePath(targetPath, { recursive, force: true })
 }
 
 export async function showSaveDialog(options?: DialogSaveOptionsDto): Promise<string | null> {

@@ -10,11 +10,12 @@ export function selectedVideoEditSubtitleId(instance: VideoEditInstance, sequenc
   const selected = selections.get(instance)
   return selected?.sequenceId === sequenceId && instance.document.sequences.find(sequence => sequence.id === sequenceId)?.captions?.some(caption => caption.id === selected.captionId) ? selected.captionId : undefined
 }
-export function selectVideoEditSubtitle(projectId: string, sequenceId: string, captionId: string): void {
+export function selectVideoEditSubtitle(projectId: string, sequenceId: string, captionId: string | null, options: { preserveFrame?: boolean } = {}): void {
   const owner = requireVideoEditInstance(projectId)
+  if (captionId === null) { if (selections.delete(owner)) { revision++; listeners.forEach(listener => listener()) } return }
   const caption = owner.document.sequences.find(sequence => sequence.id === sequenceId)?.captions?.find(caption => caption.id === captionId)
   if (!caption) throw new Error('原字幕已移除，请重新选择。')
   if (owner.activeSequenceId !== sequenceId) switchVideoEditSequence(projectId, sequenceId)
-  setVideoEditView(projectId, { frame: caption.start, playing: false, selection: caption.clipId ?? null })
+  setVideoEditView(projectId, { ...(options.preserveFrame ? {} : { frame: caption.start }), playing: false, selection: caption.clipId ?? null })
   selections.set(owner, { sequenceId, captionId }); revision++; listeners.forEach(listener => listener())
 }

@@ -1,3 +1,7 @@
+// @vitest-environment jsdom
+import { installPaidApprovalTestBridge } from '@/tests/paidApprovalTestKit'
+import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { webcrypto } from 'node:crypto'
 import { createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -23,8 +27,8 @@ vi.mock('./imageEditLayoutDraft', () => ({ imageEditLayoutDraft: () => ({ organi
 const organize = vi.hoisted(() => vi.fn(async () => {}))
 const move = vi.hoisted(() => vi.fn(async () => {}))
 let wall = 0
-beforeEach(() => { vi.stubGlobal('crypto', webcrypto); wall = 0; vi.spyOn(performance, 'now').mockImplementation(() => wall); organize.mockClear() })
-afterEach(() => { vi.restoreAllMocks() })
+beforeEach(() => { installHarnessNativeStorage(); installPaidApprovalTestBridge(); vi.spyOn(getDocumentOperations(), 'findDocument').mockRejectedValue(Object.assign(new Error('工具箱文档'), { name: 'DocumentNotFoundError' })); vi.stubGlobal('crypto', webcrypto); wall = 0; vi.spyOn(performance, 'now').mockImplementation(() => wall); organize.mockClear() })
+afterEach(() => { vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 function setup(names: readonly string[] = ['a', 'b', 'c']) {
   const doc = createImageEditDocumentV3({ documentId: 'record-image', width: 600, height: 400 })
   doc.layers = ['a', 'b', 'c'].map((id, index) => createImageEditRasterLayerV3(id, names[index]))
@@ -74,8 +78,10 @@ describe('图片静态讲解宿主', () => {
     await f.adapter.close()
   })
   it('墙钟采集、分页持久化、本地转写、选中目标进入唯一随手摆服务', async () => {
+    const bridge = installPaidApprovalTestBridge()
     const f = setup(); await f.adapter.start('user-consent'); f.block(); f.point(); wall = 1200
     await f.adapter.stop(); await f.adapter.transcribe('upload-consent')
+    expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'recognition' }] }])
     const session = explanationSessionSchema.parse(f.bus.getSnapshot().document.creativeIntents!.sessions[0])
     expect(session.mode).toBe('static'); expect(session.clockSegments.every(c => !c.start && !c.end)).toBe(true)
     const events = []; for await (const e of f.adapter.events()) events.push(e)

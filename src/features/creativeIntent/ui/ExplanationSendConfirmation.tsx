@@ -1,21 +1,29 @@
-import { useI18n } from '@/hooks/useI18n'
-import { formatPaidApprovalMessage } from '@/i18n/paidApproval'
-import { UiButton, UiModal } from '@/components/ui'
-import { UI_TEXT_BODY_CLASS } from '@/components/ui/styleTokens'
+import i18n from '@/i18n'
+import { useEffect, useRef } from 'react'
+import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import type { ExplanationSendRequest } from '../application/explanationGeneration'
 
-export function ExplanationSendConfirmation({ request, generating, onCancel, onSend }: {
+export function ExplanationSendConfirmation(props: {
   request?: ExplanationSendRequest; generating: boolean; onCancel(): void; onSend(project?: boolean): void
-}): JSX.Element {
-  const { t } = useI18n('common')
-  return <UiModal size="compact" title={t('paidApproval.sendExplanation')} isOpen={!!request} onClose={onCancel} footer={<>
-    <UiButton variant="quiet" disabled={generating} onClick={onCancel}>{t('paidApproval.deny')}</UiButton>
-    {request?.hasProject && <UiButton variant="quiet" disabled={generating} onClick={() => onSend(true)}>{t('paidApproval.alwaysAllowProject')}</UiButton>}
-    <UiButton variant="primary" disabled={generating} onClick={() => onSend(false)}>{t('paidApproval.allowOnce')}</UiButton>
-  </>}>
-    {request && <div className="space-y-4">
-      <p className={UI_TEXT_BODY_CLASS}>{t('paidApproval.explanationContent', { count: request.imageCount, modelName: request.modelName })}</p>
-      <p className={`whitespace-pre-line ${UI_TEXT_BODY_CLASS}`}>{formatPaidApprovalMessage(request.paidDetails)}</p>
-    </div>}
-  </UiModal>
+}): null {
+  const latest = useRef(props)
+  latest.current = props
+  useEffect(() => {
+    const request = props.request
+    if (!request) return
+    const controller = new AbortController()
+    let project = false
+    void requestAlertConfirmation({ title: i18n.t('paidApproval.sendExplanation', { ns: 'common' }),
+      message: i18n.t('paidApproval.explanationContent', { ns: 'common', count: request.imageCount, modelName: request.modelName }),
+      paidDetails: request.paidDetails,
+      confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paidConfirmation: true, projectConfirmation: request.hasProject,
+      onProject: () => { project = true },
+    }, controller.signal).then(accepted => {
+      if (controller.signal.aborted) return
+      if (accepted) latest.current.onSend(project)
+      else latest.current.onCancel()
+    })
+    return () => controller.abort()
+  }, [props.request])
+  return null
 }

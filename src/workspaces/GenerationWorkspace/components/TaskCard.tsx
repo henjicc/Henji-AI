@@ -17,6 +17,7 @@ import { getModelDisplayName } from "@/utils/modelHelpers"
 import type { GenerationTask, ResultImageDimensions } from "../types"
 import { resolveResultImageDimensions } from "../utils/resultImageDimensions"
 import { formatMediaDuration, formatTaskCreatedAt, joinTaskMeta } from "../utils/taskMeta"
+import { taskErrorMessage } from '../utils/taskErrorMessage'
 import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
 import { CopyIcon, DownloadIcon } from "./TaskActionIcons"
@@ -170,9 +171,7 @@ const TaskCard = React.memo(function TaskCard({
   const metaLine = joinTaskMeta([
     typeLabel,
     modelName,
-    task.dimensions,
-    (task.type === "video" || task.type === "audio") ? task.duration : undefined,
-    statusLabel ?? createdAtLabel,
+    createdAtLabel,
   ])
 
   const renderResult = () => {
@@ -192,25 +191,32 @@ const TaskCard = React.memo(function TaskCard({
         <UiError
           size="xs"
           align="start"
-          title={t("common:error")}
-          message={task.error || t("common:status.failed")}
+          title={t('history:failure.title')}
+          message={taskErrorMessage(task.error, task.provider, t)}
           // 只有拿得到供应商任务号时“继续获取结果”才有意义；没有任务号的失败（如提交即被拒）用工具条的“重新生成”
-          onRetry={resolveResumableServerTaskId(task) ? () => void onRetryPolling(task) : undefined}
-          retryLabel={t("ui:retry")}
           actions={
-            <UiButton
-              className="gap-1.5"
-              onClick={() => openAssistantForDiagnosis({
-                title: '生成任务失败',
-                message: task.error || '生成任务失败',
-                taskId: task.id,
-                errorCode: 'GENERATION_FAILED',
-                domain: 'core.services.GenerationService',
-                occurredAt: task.createdAt.toISOString(),
-              })}
-            >
-              <MessageCircleQuestion className="h-3.5 w-3.5" />问助手
-            </UiButton>
+            <>
+              <UiButton
+                variant="quiet"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => openAssistantForDiagnosis({
+                  title: t('history:failure.title'),
+                  message: task.error || t('history:failure.title'),
+                  taskId: task.id,
+                  errorCode: 'GENERATION_FAILED',
+                  domain: 'core.services.GenerationService',
+                  occurredAt: task.createdAt.toISOString(),
+                })}
+              >
+                <MessageCircleQuestion className="h-3.5 w-3.5" />{t('history:askAssistant')}
+              </UiButton>
+              {resolveResumableServerTaskId(task) && (
+                <UiButton variant="quiet" size="sm" onClick={() => void onRetryPolling(task)}>
+                  {t('ui:retry')}
+                </UiButton>
+              )}
+            </>
           }
         />
       )
@@ -428,37 +434,15 @@ const TaskCard = React.memo(function TaskCard({
     // 视口上方的内容尺寸突变，滚动锚定晚一帧补偿，表现就是"闪一下又跳回来"。
     // content-visibility 只适合**行高基本一致**的长列表（如助手历史/记忆的等高行）。
     //
-    // 生成记录不加卡片背景（重要记录 001）：提示词一行 + 辅助信息一行，靠列表间距分组；
+    // 生成记录不加卡片背景：提示词标题 + 元信息 + 结果，分隔线和留白由列表项绘制；
     // 操作按钮悬停或键盘聚焦到这条记录时才出现。
     <article
-      className="group/task flex flex-col gap-2.5 outline-none"
+      className="group/task flex flex-col gap-2 outline-none"
       data-generation-task-id={task.id}
       tabIndex={-1}
     >
-      <div className="flex items-start gap-4">
-        <TaskInputPreview
-          taskId={task.id}
-          inputImages={inputImages}
-          inputVideos={inputVideos}
-          uploadedFilePaths={task.uploadedFilePaths}
-          uploadedVideoFilePaths={task.uploadedVideoFilePaths}
-          onOpenImage={handleImageClick}
-          onOpenVideo={handleInputVideoClick}
-          onStartImageDrag={startImageDrag}
-          onStartVideoDrag={startVideoDrag}
-          onStartImageNativeDrag={startImageNativeDrag}
-          onStartVideoNativeDrag={startVideoNativeDrag}
-          onNativeDragEnd={endNativeDrag}
-          nativeFileDragEnabled={isNativeFileDragEnabled}
-          shouldIgnoreClick={shouldIgnoreClick}
-       />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <TaskPrompt prompt={task.prompt} />
-          <div className="truncate text-xs text-text3" title={createdAtLabel}>
-            {metaLine}
-          </div>
-        </div>
-
+      <div className="flex items-start gap-2">
+        <TaskPrompt prompt={task.prompt} />
         <TaskCardToolbar
           task={task}
           collecting={collecting}
@@ -478,6 +462,24 @@ const TaskCard = React.memo(function TaskCard({
           onDelete={() => onDelete(task.id)}
         />
       </div>
+      <div className="truncate text-xs text-text3" title={metaLine}>{metaLine}</div>
+      <TaskInputPreview
+        taskId={task.id}
+        inputImages={inputImages}
+        inputVideos={inputVideos}
+        uploadedFilePaths={task.uploadedFilePaths}
+        uploadedVideoFilePaths={task.uploadedVideoFilePaths}
+        onOpenImage={handleImageClick}
+        onOpenVideo={handleInputVideoClick}
+        onStartImageDrag={startImageDrag}
+        onStartVideoDrag={startVideoDrag}
+        onStartImageNativeDrag={startImageNativeDrag}
+        onStartVideoNativeDrag={startVideoNativeDrag}
+        onNativeDragEnd={endNativeDrag}
+        nativeFileDragEnabled={isNativeFileDragEnabled}
+        shouldIgnoreClick={shouldIgnoreClick}
+      />
+      {statusLabel && <span className="text-xs text-text3" role={isInProgress ? 'status' : undefined}>{statusLabel}</span>}
       {result}
       {videoEditSend && <VideoEditSendDialog mediaKind={videoEditSend.mediaKind} resolveSource={() => ({ type: 'generation', recordId: task.id, outputIndex: videoEditSend.outputIndex })} notify={notify} onClose={() => setVideoEditSend(null)} />}
     </article>

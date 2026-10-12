@@ -1,3 +1,4 @@
+import { installPaidApprovalTestBridge } from '@/tests/paidApprovalTestKit'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
@@ -38,7 +39,7 @@ vi.mock('mediabunny', async importOriginal => {
 const texts = new Map<string, string>(); const files = new Set<string>()
 let owner: VideoEditInstance
 beforeEach(async () => {
-  installHarnessNativeStorage(); texts.clear(); files.clear(); boundary.mixes.length = 0; boundary.disposed.mockClear()
+  installHarnessNativeStorage(); installPaidApprovalTestBridge(); texts.clear(); files.clear(); boundary.mixes.length = 0; boundary.disposed.mockClear()
   const system = getPlatform().system
   vi.spyOn(system.paths, 'join').mockImplementation(async (...parts) => parts.join('/'))
   vi.spyOn(system.dialog, 'save').mockResolvedValue('D:/subtitles.henji-video')
@@ -260,6 +261,7 @@ it('识别完成后片段变化保留计费事实和恢复引用，不写字幕�
     editVideoProject(owner.document.id, doc => { doc.sequences[0].clips[0].start += 1; return doc })
     return result
   })
+  installPaidApprovalTestBridge('ask')
   const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' })
   const failed = pending.catch(error => error as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure)
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
@@ -281,6 +283,7 @@ it('公共调用识别确认通过同一弹窗发布等待事实，拒绝为零�
   const controller = new AbortController()
   const progress = vi.fn().mockImplementation(async progress => progress.phase === 'paid_approval' ? { decision: 'ask', reason: '每次询问', estimatedCny: null, dailySpentCny: 0 } : undefined)
   const unbind = bindApplicationConfirmation(controller.signal, progress)
+  installPaidApprovalTestBridge('ask')
   const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' }, controller.signal)
   const rejected = expect(pending).rejects.toThrow('未执行本次操作')
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
@@ -293,6 +296,7 @@ it('公共调用识别确认通过同一弹窗发布等待事实，拒绝为零�
 })
 it('recognition fallback waits for billing confirmation and cancellation never starts ASR', async () => {
   const controller = new AbortController()
+  installPaidApprovalTestBridge('ask')
   const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: '你好' }, controller.signal)
   const rejected = expect(pending).rejects.toThrow()
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
@@ -302,12 +306,14 @@ it('recognition fallback waits for billing confirmation and cancellation never s
 })
 it('confirmed fallback keeps original words and reuses its saved ASR document after undo', async () => {
   vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, channels: 1, durationFrames: 12000 })
+  const bridge = installPaidApprovalTestBridge('ask')
   const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello worlds.' })
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
   useAlertDialogStore.getState().confirmCurrent()
   const result = await pending
   expect(result.timingSource).toBe('recognition')
+  expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'recognition' }] }])
   expect(result.subtitles.map(value => value.caption.text).join('')).toBe('Hello worlds.')
   expect(result.subtitles.some(value => value.estimated)).toBe(true)
   expect(result.audioDocumentId).toBeTruthy()
@@ -478,6 +484,7 @@ it('显式选择序列时钟时SRT保留序列时间，默认与成片一致从�
   } finally { app.dispose() }
 })
 it('费用确认取消不提交识别，取消任务保存稳定声音引用可恢复', async () => {
+  installPaidApprovalTestBridge('ask')
   const run = runVideoEditSubtitleJob(owner, sequence().id, 'sequence', undefined, {})
   while (!useAlertDialogStore.getState().queue.length) await new Promise(resolve => setTimeout(resolve, 0))
   expect(readSubtitleJob(owner, sequence().id)?.audioDocumentId).toBeTruthy()

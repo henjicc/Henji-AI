@@ -101,6 +101,8 @@ export const videoEditSequenceSchema = z.object({
   sampleRate: z.union([z.literal(44100), z.literal(48000)]), channels: z.union([z.literal(1), z.literal(2)]),
   tracks: z.array(videoEditTrackSchema).min(1), clips: z.array(videoEditClipSchema), annotations: z.array(videoEditAnnotationSchema),
   markers: z.array(videoEditMarkerSchema).optional(), captions: z.array(videoEditCaptionSchema).optional(),
+  captionTrackEnabled: z.boolean().optional().describe('字幕轨道是否输出到节目画面，省略时显示。'),
+  captionTrackLocked: z.boolean().optional().describe('锁定字幕轨道后禁止修改、添加或删除字幕，省略时未锁定。'),
   transitions: z.array(videoEditTransitionSchema).optional(),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export const videoEditExportHistorySchema = z.array(z.object({

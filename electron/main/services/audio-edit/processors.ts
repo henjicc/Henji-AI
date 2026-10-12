@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -127,7 +128,7 @@ export async function processAudioEditVstChain(inputPath: string, workingDirecto
   }
   return { outputPath: currentPath, temporaryPaths }
   } catch (error) {
-    await Promise.all(temporaryPaths.map((file) => fs.rm(file, { force: true })))
+    await Promise.all(temporaryPaths.map((file) => removeUnmanagedCachePath(file, { force: true })))
     throw error
   }
 }
@@ -146,7 +147,7 @@ export async function prepareAudioEditProcessedAudio(project: AudioEditProjectDo
     await fs.mkdir(directory, { recursive: true })
     const processed = await processAudioEditVstChain(source, directory, project.processorChain, signal, progress)
     try { await validateAudioEditAudio(processed.outputPath, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal); signal?.throwIfAborted(); await fs.rename(processed.outputPath, output); return output }
-    finally { await Promise.all(processed.temporaryPaths.map((file) => fs.rm(file, { force: true }))) }
+    finally { await Promise.all(processed.temporaryPaths.map((file) => removeUnmanagedCachePath(file, { force: true }))) }
   })()
   preparing.set(output, operation)
   try { return await operation } finally { preparing.delete(output) }

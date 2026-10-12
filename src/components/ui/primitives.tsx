@@ -372,7 +372,7 @@ const UI_OPTION_SIZE_CLASS: Record<UiControlSize | 'auto', string> = {
  * 外观只由 variant / size / active / selection 决定，className 只放布局（check:surface 规则 E）。
  */
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
-  ({ className = '', active = false, variant = 'default', size, gridCell, selection = 'single', highlighted = false, ...props }, ref) => {
+  ({ className = '', active = false, variant = 'default', size, gridCell, selection = 'single', segmentFrame = 'standalone', highlighted = false, ...props }, ref) => {
     if (variant === 'cover') {
       // 封面内容卡：状态全部由子元素封面框（UI_COVER_FRAME_CLASS）经 `ui-cover-group` + data-selected 表达，
       // 按钮本身不画底、框与焦点环（焦点环画在封面框上，避免被封面盖住）。
@@ -387,10 +387,11 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     }
     if (variant === 'segment' || variant === 'tile' || variant === 'swatch') {
       const neutral = UI_OPTION_NEUTRAL_VARIANT_CLASS[variant];
+      const inset = variant === 'segment' && segmentFrame === 'inset';
       return (
         <button
           ref={ref}
-          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${neutral.layout} ${active ? neutral.active : neutral.rest} ${className}`}
+          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'md' ? 'text-13' : 'text-xs'}` : neutral.layout} ${active ? inset ? 'border-transparent bg-accent text-on-accent hover:bg-accent-hover' : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
           {...props}
         />
       );

@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -27,12 +28,12 @@ async function publishOutputs(outputs: StagedOutput[]): Promise<void> {
     }
   } catch (error) {
     for (const output of [...outputs].reverse()) {
-      if (output.published) await fs.rm(output.target, { force: true })
+      if (output.published) await removeUnmanagedCachePath(output.target, { force: true })
       if (output.backup) await fs.rename(output.backup, output.target)
     }
     throw error
   }
-  await Promise.all(outputs.map((output) => output.backup ? fs.rm(output.backup, { force: true }) : Promise.resolve()))
+  await Promise.all(outputs.map((output) => output.backup ? removeUnmanagedCachePath(output.backup, { force: true }) : Promise.resolve()))
 }
 
 export async function exportAudioEditProject(request: AudioEditExportRequest): Promise<AudioEditExportResult> {
@@ -93,6 +94,6 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
       await publishOutputs(outputs)
       progress(1)
       return { audioPath: exportedAudioPath, ...(timeline ? { xmlPath: target } : {}), ...(subtitleTarget ? { subtitlePath: subtitleTarget } : {}), durationFrames: editedDurationFrames(spans) }
-    } finally { await Promise.all(temporaryPaths.map((file) => fs.rm(file, { force: true }))) }
+    } finally { await Promise.all(temporaryPaths.map((file) => removeUnmanagedCachePath(file, { force: true }))) }
   }, request.requestId, JSON.stringify([project.revision, project.source.identity, request]))
 }

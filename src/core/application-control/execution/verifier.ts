@@ -6,18 +6,23 @@ import type {
 } from '../transactions'
 import type { JsonValue } from '../identifiers'
 import type { ApplicationCustomVerifier, ApplicationExecutionContext } from './types'
+import { isHexColorSchema, propertySchemaAtPath } from '../registry/propertyValidationErrors'
 
-function jsonEqual(left: JsonValue | undefined, right: JsonValue): boolean {
+function jsonEqual(left: JsonValue | undefined, right: JsonValue, schema?: unknown): boolean {
   if (left === right) return true
+  // 只容忍双精度运算的末位误差；不把业务精度或任意字符串视为等价。
+  if (typeof left === 'number' && typeof right === 'number') return !(Number.isInteger(left) && Number.isInteger(right))
+    && Math.abs(left - right) <= Number.EPSILON * 8 * Math.max(Math.abs(left), Math.abs(right))
+  if (typeof left === 'string' && typeof right === 'string' && isHexColorSchema(schema)) return left.toLowerCase() === right.toLowerCase()
   if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length && left.every((value, index) => jsonEqual(value, right[index]))
+    return left.length === right.length && left.every((value, index) => jsonEqual(value, right[index], propertySchemaAtPath(schema, [index])))
   }
   if (left && right && typeof left === 'object' && typeof right === 'object'
     && !Array.isArray(left) && !Array.isArray(right)) {
     const leftKeys = Object.keys(left).sort()
     const rightKeys = Object.keys(right).sort()
     return leftKeys.length === rightKeys.length
-      && leftKeys.every((key, index) => key === rightKeys[index] && jsonEqual(left[key], right[key]))
+      && leftKeys.every((key, index) => key === rightKeys[index] && jsonEqual(left[key], right[key], propertySchemaAtPath(schema, [key])))
   }
   return false
 }
@@ -59,7 +64,8 @@ export class ApplicationTransactionVerifier {
         continue
       }
       try {
-        const propertyIds = condition.kind === 'property_equals' ? [condition.propertyId] : undefined
+        const propertyIds = condition.kind === 'property_equals'
+          ? [(this.registry.getProperty(condition.propertyId) ?? this.registry.getProperty(`${condition.target.kind}.${condition.propertyId}`))?.id ?? condition.propertyId] : undefined
         const snapshot = await this.registry.readEntity(condition.target, propertyIds, context)
         if (condition.kind === 'entity_absent') {
           unmetConditions.push(`目标实体仍然存在：${condition.target.kind}/${condition.target.id}`)
@@ -74,12 +80,18 @@ export class ApplicationTransactionVerifier {
           })
           continue
         }
-        const actual = snapshot.properties[condition.propertyId]
-        const unordered = this.registry.getProperty(condition.propertyId)?.valueComparison === 'unordered_set'
-        const matches = unordered && Array.isArray(actual) && Array.isArray(condition.expected)
-          ? actual.every(value => (condition.expected as JsonValue[]).some(expected => jsonEqual(value, expected)))
-            && condition.expected.every(expected => actual.some(value => jsonEqual(value, expected)))
-          : jsonEqual(actual, condition.expected)
+        const property = this.registry.getProperty(condition.propertyId) ?? this.registry.getProperty(`${condition.target.kind}.${condition.propertyId}`)
+        if (!property) throw new Error('PROPERTY_NOT_FOUND')
+        const actual = snapshot.properties[property.id]
+        // 旧账本保存的是调用方原值；每次核对都用正式属性 schema 补默认值/规范化。
+        const expected = this.registry.validatePropertyValueShape(property.entityType, property.id, condition.expected, context)
+        const schema = property.value.kind === 'json' ? this.registry.resolveSchema(property.value.schemaRef, context)
+          : property.value.kind === 'color' && property.value.format === 'hex' ? { 'x-value-format': 'hex-color' } : undefined
+        const unordered = property.valueComparison === 'unordered_set'
+        const matches = unordered && Array.isArray(actual) && Array.isArray(expected)
+          ? actual.every(value => expected.some(item => jsonEqual(value, item, propertySchemaAtPath(schema, [0]))))
+            && expected.every(item => actual.some(value => jsonEqual(value, item, propertySchemaAtPath(schema, [0]))))
+          : jsonEqual(actual, expected, schema)
         if (!matches) {
           unmetConditions.push(`属性验证失败：${condition.propertyId}`)
         } else {

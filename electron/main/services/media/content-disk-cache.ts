@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -66,7 +67,7 @@ export function createContentDiskCache(options: ContentDiskCacheOptions): Conten
         try {
           const stat = await fs.stat(target)
           if (name.endsWith('.tmp')) {
-            if (now - stat.mtimeMs > STALE_TEMPORARY_MS) { await fs.rm(target, { force: true }); removed++ }
+            if (now - stat.mtimeMs > STALE_TEMPORARY_MS) { await removeUnmanagedCachePath(target, { force: true }); removed++ }
           } else if (name.endsWith(extension) && stat.isFile()) entries.push({ file: target, size: stat.size, used: stat.mtimeMs })
         } catch { /* 并发删除或无权限：跳过该项 */ }
       }
@@ -76,7 +77,7 @@ export function createContentDiskCache(options: ContentDiskCacheOptions): Conten
         const target = budget * 0.8
         for (const entry of entries) {
           if (total <= target) break
-          try { await fs.rm(entry.file, { force: true }); total -= entry.size; removed++ } catch (error) { options.onError?.('prune', error) }
+          try { await removeUnmanagedCachePath(entry.file, { force: true }); total -= entry.size; removed++ } catch (error) { options.onError?.('prune', error) }
         }
       }
       return { removed, bytes: total }
@@ -137,7 +138,7 @@ export function createContentDiskCache(options: ContentDiskCacheOptions): Conten
         await fs.writeFile(temporary, bytes)
         await fs.rename(temporary, target)
       } catch (error) {
-        await fs.rm(temporary, { force: true }).catch(() => undefined)
+        await removeUnmanagedCachePath(temporary, { force: true }).catch(() => undefined)
         throw error
       }
       pruneAfterWrite()
@@ -155,7 +156,7 @@ export function createContentDiskCache(options: ContentDiskCacheOptions): Conten
       try {
         await fs.rename(temporaryFile, target)
       } catch (error) {
-        await fs.rm(temporaryFile, { force: true }).catch(() => undefined)
+        await removeUnmanagedCachePath(temporaryFile, { force: true }).catch(() => undefined)
         throw error
       }
       pruneAfterWrite()
@@ -163,7 +164,7 @@ export function createContentDiskCache(options: ContentDiskCacheOptions): Conten
     },
     async remove(key) {
       const target = file(key)
-      if (target) await fs.rm(target, { force: true })
+      if (target) await removeUnmanagedCachePath(target, { force: true })
     },
     prune,
   }

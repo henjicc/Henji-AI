@@ -410,9 +410,12 @@ export async function configureVideoMotionConstraints(id: string, choice: { anno
     constraints.annotations = [...constraints.annotations.filter(a => a.id !== mark.id), { id: mark.id, role: choice.annotation.role, span: annotation.span! }]
   }
   if (choice.referenceId !== undefined) {
-    const reference = sequence.clips.find(c => c.id === choice.referenceId)
-    if (!reference || reference.id === clip.id) throw new Error('请选择另一个画面片段作为参照')
-    constraints.reference = constraints.reference?.clip.id === reference.id ? { ...constraints.reference, mode: choice.referenceMode ?? constraints.reference.mode } : captureVideoMotionReference(sequence, reference, choice.referenceMode ?? 'local')
+    if (choice.referenceId === '') delete constraints.reference
+    else {
+      const reference = sequence.clips.find(c => c.id === choice.referenceId)
+      if (!reference || reference.id === clip.id) throw new Error('请选择另一个画面片段作为参照')
+      constraints.reference = constraints.reference?.clip.id === reference.id ? { ...constraints.reference, mode: choice.referenceMode ?? constraints.reference.mode } : captureVideoMotionReference(sequence, reference, choice.referenceMode ?? 'local')
+    }
   }
   const parsed = videoMotionConstraintOptionsSchema.parse(constraints)
   const resource = await storeMotionResource(id, parsed, 'recipe')

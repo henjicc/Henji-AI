@@ -1,4 +1,4 @@
-import { validateJsonValueShape } from './jsonValueShape'
+import { objectDefaultsDescription, validateJsonValueShape } from './jsonValueShape'
 import {
   applicationSchemaRefSchema,
   jsonValueSchema,
@@ -32,6 +32,7 @@ import type {
   ApplicationSchemaDocument,
 } from './types'
 import { normalizeApplicationPropertyValue } from './valueValidation'
+import { annotatePropertyValueFormats } from './propertyValidationErrors'
 
 const DATA_CLASS_RANK = { C0: 0, C1: 1, C2: 2, C3: 3 } as const
 
@@ -80,6 +81,12 @@ export class ApplicationReflectionRegistry {
 
     const parsedProperties = registration.properties.map((input) => {
       const property = applicationPropertyDescriptorSchema.parse(input)
+      if (property.value.kind === 'json') {
+        const valueRef = property.value.schemaRef
+        const schema = registration.schemaDocuments?.find(document => schemaKey(document.ref) === schemaKey(valueRef))
+        const defaults = objectDefaultsDescription(schema?.value)
+        if (defaults && !property.description.includes('未提供的字段')) property.description += defaults
+      }
       if (property.entityType !== entity.id) {
         throw new Error(`属性实体类型不一致：${property.id}/${property.entityType}`)
       }
@@ -126,7 +133,7 @@ export class ApplicationReflectionRegistry {
     for (const document of documents) {
       this.schemaDocuments.set(schemaKey(document.ref), {
         ref: applicationSchemaRefSchema.parse(document.ref),
-        value: jsonValueSchema.parse(document.value),
+        value: annotatePropertyValueFormats(jsonValueSchema.parse(document.value)),
         validator: document.validator,
       })
     }
@@ -224,8 +231,8 @@ export class ApplicationReflectionRegistry {
     if (!this.canReadProperty(property, context)) throw new Error(`PERMISSION_DENIED:${propertyId}`)
     const normalized = normalizeApplicationPropertyValue(property, value)
     if (property.value.kind === 'json' && !(value === null && property.nullable)) {
-      validateJsonValueShape(property.id, this.resolveSchema(property.value.schemaRef, context), normalized,
-        this.schemaDocuments.get(schemaKey(property.value.schemaRef))?.validator)
+      return validateJsonValueShape(property.id, this.resolveSchema(property.value.schemaRef, context), normalized,
+        this.schemaDocuments.get(schemaKey(property.value.schemaRef))?.validator, property.title, property.unit)
     }
     return normalized
   }

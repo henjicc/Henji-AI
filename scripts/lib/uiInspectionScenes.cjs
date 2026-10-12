@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
 const { createImageEditDocumentSizeScene } = require('./uiInspectionSceneImageEditDocumentSize.cjs')
 const { createF2UiScenes } = require('./uiInspectionSceneF2Ui.cjs')
+const { createSuperKeyframePanelScenes } = require('./uiInspectionSceneSuperKeyframePanel.cjs')
 const { createImageEditLayoutDraftScene } = require('./uiInspectionSceneImageEditLayoutDraft.cjs')
 const { createImageEditCommonWorkflowsScene } = require('./uiInspectionSceneImageEditCommonWorkflows.cjs')
 const { createImageEditCommonFeaturesScene, createImageEditQuickMosaicScene } = require('./uiInspectionSceneImageEditCommonFeatures.cjs')
@@ -24,9 +25,11 @@ const { createVideoEditScrubScene } = require('./uiInspectionSceneVideoEditScrub
 const { createVideoEditPlayStartScene } = require('./uiInspectionSceneVideoEditPlayStart.cjs')
 const { createVideoEditFilmstripScene } = require('./uiInspectionSceneVideoEditFilmstrip.cjs')
 const { createVideoEditTimelineScene } = require('./uiInspectionSceneVideoEditTimeline.cjs')
+const { createVideoEditCaptionsScene } = require('./uiInspectionSceneVideoEditCaptions.cjs')
 const { createVideoEditMotionDraftScene } = require('./uiInspectionSceneVideoEditMotionDraft.cjs')
 const { createVideoEditExplanationScene } = require('./uiInspectionSceneVideoEditExplanation.cjs')
 const { createVideoEditPrimitivesScene } = require('./uiInspectionSceneVideoEditPrimitives.cjs')
+const { createVideoEditCaptionTextScene } = require('./uiInspectionSceneVideoEditCaptionText.cjs')
 const { createVideoEditAnnotationRelativeScene } = require('./uiInspectionSceneVideoEditAnnotationRelative.cjs')
 const { createVideoEditMonitorScene } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { createVideoEditPictureGestureScene } = require('./uiInspectionSceneVideoEditPictureGesture.cjs')
@@ -127,14 +130,17 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionSupport(context)
 
   return Object.freeze([
+    ...createSuperKeyframePanelScenes(context),
     createVideoEditProbeScene(),
     createVideoEditScrubScene(),
     createVideoEditPlayStartScene(),
     createVideoEditFilmstripScene(),
     createVideoEditTimelineScene(),
+    createVideoEditCaptionsScene(),
     createVideoEditMotionDraftScene(),
     createVideoEditExplanationScene(),
     createVideoEditPrimitivesScene(),
+    createVideoEditCaptionTextScene(),
     createVideoEditAnnotationRelativeScene(),
     createVideoEditMonitorScene(),
     createVideoEditPictureGestureScene(),

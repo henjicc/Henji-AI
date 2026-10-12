@@ -115,6 +115,7 @@ export function exportVideoEditCaptions(sequence: VideoEditSequence, format: 'sr
 
 /** Burned-in captions use the existing full-resolution text compositor, above video tracks. */
 export function videoEditCaptionClips(sequence: VideoEditSequence, frame: number): VideoEditClip[] {
+  if (sequence.captionTrackEnabled === false) return []
   return (sequence.captions ?? []).filter(caption => frame >= caption.start && frame < caption.start + caption.duration).map((caption, index) => ({
     id: `caption:${caption.id}`, itemId: '', name: '字幕', kind: 'text', track: 31,
     start: caption.start, duration: caption.duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 },

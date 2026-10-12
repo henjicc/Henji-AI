@@ -2,10 +2,21 @@ import { joinVideoEditOutputPath } from './videoEditExportQueue'
 import { createLogger } from '@/core/logging'
 import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions, exportVideoEditCaptions, type VideoEditCaption, type VideoEditMarker } from '@/core/videoEdit/timedContent'
 import { getPlatform } from '@/platform/runtime'
-import { editVideoSequence, requireVideoEditInstance, videoEditExportRange } from './videoEditService'
+import { editVideoSequence, requireVideoEditInstance, videoEditExportRange, type VideoEditGesture } from './videoEditService'
 import { prepareVideoEditCaption, prepareVideoEditCaptions } from './videoEditCaptionCreation'
+import { retimeVideoEditCaption, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
+import type { VideoEditSequence } from '@/core/videoEdit/document'
 
 const logger = createLogger('features.videoEdit.timedContent')
+export function updateVideoEditCaptionTrack(projectId: string, sequenceId: string, patch: Partial<Pick<VideoEditSequence, 'captionTrackEnabled' | 'captionTrackLocked'>>): void {
+  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...patch }))
+}
+export function moveVideoEditCaption(projectId: string, sequenceId: string, id: string, mode: VideoEditCaptionGesture, delta: number): void {
+  editVideoSequence(projectId, sequenceId, sequence => {
+    const next = retimeVideoEditCaption(sequence, id, mode, delta)
+    return { ...sequence, captions: sequence.captions!.map(caption => caption.id === id ? next : caption) }
+  })
+}
 export function createVideoEditMarker(projectId: string, sequenceId: string, values: Omit<VideoEditMarker, 'id'>): string {
   const marker = videoEditMarkerSchema.parse({ ...values, id: crypto.randomUUID() })
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, markers: [...(sequence.markers ?? []), marker] }))
@@ -17,14 +28,14 @@ export function createVideoEditCaption(projectId: string, sequenceId: string, va
   return id
 }
 export function updateVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'marker', id: string, values: Partial<Omit<VideoEditMarker, 'id'>>): void
-export function updateVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'caption', id: string, values: Partial<Omit<VideoEditCaption, 'id'>>): void
-export function updateVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'marker' | 'caption', id: string, values: Partial<Omit<VideoEditMarker, 'id'>> | Partial<Omit<VideoEditCaption, 'id'>>): void {
+export function updateVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'caption', id: string, values: Partial<Omit<VideoEditCaption, 'id'>>, gesture?: VideoEditGesture): void
+export function updateVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'marker' | 'caption', id: string, values: Partial<Omit<VideoEditMarker, 'id'>> | Partial<Omit<VideoEditCaption, 'id'>>, gesture?: VideoEditGesture): void {
   editVideoSequence(projectId, sequenceId, sequence => {
     const schema = kind === 'marker' ? videoEditMarkerSchema : videoEditCaptionSchema
     const key = kind === 'marker' ? 'markers' : 'captions'
     if (!sequence[key]?.some(value => value.id === id)) throw new Error('此字幕或标记已移除，请重新选择。')
     return { ...sequence, [key]: sequence[key]!.map(value => value.id === id ? schema.parse({ ...value, ...values }) : value) }
-  })
+  }, gesture)
 }
 export function removeVideoEditTimedContent(projectId: string, sequenceId: string, kind: 'marker' | 'caption', ids: string[]): void {
   editVideoSequence(projectId, sequenceId, sequence => {

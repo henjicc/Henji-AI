@@ -50,8 +50,7 @@ export class GenerationSubmissionCancelledError extends Error {
 }
 
 export async function confirmGenerationSubmission(model: ModelDefinition, params: DynamicValueMap, signal: AbortSignal, projectId?: string): Promise<GenerationPaidExecution | undefined> {
-  const confirmation = model.submissionConfirmation
-  if (!confirmation?.condition(params)) return
+  const confirmation = model.submissionConfirmation?.condition(params) ? model.submissionConfirmation : undefined
   signal.throwIfAborted()
   if (!requestConfirmation) throw new Error('生成提交确认未初始化')
   const paid = await prepareGenerationPaidApproval(model.meta.id, params, projectId)
@@ -62,8 +61,8 @@ export async function confirmGenerationSubmission(model: ModelDefinition, params
   let project = false
   const accepted = await requestConfirmation({
     type: 'warning',
-    title: getI18nText(confirmation.title, i18n.language),
-    message: getI18nText(confirmation.message, i18n.language),
+    title: confirmation ? getI18nText(confirmation.title, i18n.language) : i18n.t('paidApproval.generateContent', { ns: 'common' }),
+    message: confirmation ? getI18nText(confirmation.message, i18n.language) : i18n.t('paidApproval.operationContent', { ns: 'common' }),
     paidDetails: paidApprovalMessage(paid.decision, 'generation', getI18nText(model.meta.name, i18n.language)),
     confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paidConfirmation: true, projectConfirmation: !!paid.project,
     onProject: () => { project = true },

@@ -15,6 +15,12 @@ interface NotificationContextValue {
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
 
+const notificationEvents = new EventTarget()
+/** Domain services use the existing root toast without mounting another provider. */
+export function notifyUser(message: string): void {
+    notificationEvents.dispatchEvent(new CustomEvent<string>('notification', { detail: message }))
+}
+
 export const useNotification = () => {
     const context = useContext(NotificationContext)
     if (!context) {
@@ -52,6 +58,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }, [clearTimers])
 
     useEffect(() => clearTimers, [clearTimers])
+    useEffect(() => {
+        const receive = (event: Event): void => showNotification((event as CustomEvent<string>).detail)
+        notificationEvents.addEventListener('notification', receive)
+        return () => notificationEvents.removeEventListener('notification', receive)
+    }, [showNotification])
 
     return (
         <NotificationContext.Provider value={{ notification, notificationVisible, showNotification }}>

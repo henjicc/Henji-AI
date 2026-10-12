@@ -33,6 +33,7 @@ async function readBlob(localPath: string, mimeHint?: string): Promise<Blob> {
 
 export function createElectronMedia(): MediaPlatform {
   return {
+    enqueueRecycle: (paths, protectedBy) => getNative().media.enqueueRecycle(paths, protectedBy),
     async allowRoot(rootPath: string): Promise<void> {
       await getNative().media.allowRoot(rootPath)
     },

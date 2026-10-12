@@ -1,13 +1,11 @@
-import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { executeApplicationWrite } from '@/core/application-control/execution/writeExecution'
-import { applicationPaidRequest } from '@/services/paidApproval'
+import { withPaidOperation, isPaidOperationCancelled } from '@/services/paidApproval'
 import { z } from 'zod'
 import { llmChatStream, llmCancelTask } from '@/commands/llmRuntime'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
 import { describeLlmProviderError } from '@/core/llm/providerErrorMessage'
 import { createLogger } from '@/core/logging'
 import { TITLE_TEMPLATE_KINDS, titleTemplateParametersSchema, titleTemplateSchema, type TitleTemplate } from '@/core/videoEdit/titleTemplates'
-import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
 import { applyTitleTemplate } from './videoEditTitleTemplates'
 import type { VideoEditDropPlacement } from './videoEditDrop'
@@ -32,7 +30,7 @@ export async function generateTitleFromDescription(projectId: string, sequenceId
     const model = config.models.find(value => value.enabled && value.capabilities.text && (!options.modelId || value.modelId === options.modelId) && (!options.providerId || value.providerId === options.providerId) && config.providers.some(provider => provider.enabled && provider.providerId === value.providerId))
     const provider = config.providers.find(value => value.providerId === model?.providerId)
     if (!provider || !model) throw new Error('请在设置中配置并启用文本模型。')
-    if (hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '描述生成标题', message: '将描述发给已配置的文本模型，按模型计费。生成结果放入当前序列，可一步撤销。', confirmLabel: '允许本次', paid: await applicationPaidRequest('title', projectId, signal) }, signal)
+    return await withPaidOperation({ category: 'title', documentId: projectId, titleKey: 'paidApproval.describeTitle' }, async paidSignal => {
     let output = ''; let completed = false; let failure = ''
     started = true
     await execution.paid(() => llmChatStream({ requestId, providerId: provider.providerId, providerFamilyId: provider.providerFamilyId, endpointProfile: provider.endpointProfile, credentialId: provider.credentialId, modelId: model.modelId, adapter: model.adapter || provider.adapter, baseUrl: model.baseUrl ?? provider.baseUrl, reasoning: provider.reasoning, capabilities: model.capabilities,
@@ -42,7 +40,7 @@ export async function generateTitleFromDescription(projectId: string, sequenceId
       if (event.type === 'Token' && !failure) { output += event.data; if (output.length > 16000) { failure = '标题生成内容过长，请缩短描述后重试。'; cancel() } }
       else if (event.type === 'Done') completed = true
       else if (event.type === 'Error') failure = describeLlmProviderError(event.data)
-    }))
+    }, { category: 'title', signal: paidSignal }))
     signal?.throwIfAborted()
     if (failure) throw new Error(failure)
     if (!completed) throw new Error('标题生成未完整返回，请重试。')
@@ -54,14 +52,14 @@ export async function generateTitleFromDescription(projectId: string, sequenceId
     execution.report({ targetMutation: 'applied' })
     logger.info('title_description.generate.completed', '描述标题已落入原序列', { requestId, context: { projectId, sequenceId, clipIds } })
     return { template, clipIds }
+    }, signal)
   } catch (error) { logger.error('title_description.generate.failed', '描述生成标题失败', { requestId, error }); throw error }
   finally { started = false; signal?.removeEventListener('abort', cancel); release() }
   })
 }
 export async function confirmTitleFromDescription(projectId: string, sequenceId: string, options: TitleDescriptionOptions, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(projectId); const placement = options.placement ?? { frame: owner.frame }
-  const accepted = hasApplicationConfirmation(signal) || await requestAlertConfirmation({ title: '描述生成标题', message: '将描述发给已配置的文本模型，按模型计费。生成结果放入当前序列，可一步撤销。', type: 'warning', confirmLabel: '确认生成' }, signal)
-  signal?.throwIfAborted(); if (!accepted) return
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，请重新生成。')
-  await generateTitleFromDescription(projectId, sequenceId, { ...options, placement }, signal)
+  try { await generateTitleFromDescription(projectId, sequenceId, { ...options, placement }, signal) }
+  catch (error) { if (!isPaidOperationCancelled(error)) throw error }
 }

@@ -148,7 +148,7 @@ function modelDescriptionText(model: ModelDefinition): string {
  * 将模型当前参数的价格规则转为可安全提供给 Agent 的估算值。
  * 搜索阶段使用配置默认值；真正提交前会再次用已解析的参数计算一次。
  */
-function createPriceEstimate(
+export function createPriceEstimate(
   model: ModelDefinition,
   params = registry.getDefaultValues(model.meta.id),
   usdToCnyRate = readPriceEstimateDisplaySettings().usdToCnyRate

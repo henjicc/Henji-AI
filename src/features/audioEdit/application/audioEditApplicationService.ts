@@ -2,6 +2,7 @@ import type { AudioEditExportRequest, AudioEditExportResult, AudioEditRange, Aud
 import { applyAudioEditSuggestion, cleanAudioEditFillers, DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { getPlatform } from '@/platform/runtime'
+import { withPaidOperation, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
@@ -72,16 +73,22 @@ export async function cleanProjectAudioEditFillers(projectId: string, range?: Au
   return next.transcript.filter((block) => !block.included).length - before
 }
 
-export async function transcribeAudioEdit(request: AudioEditTranscriptionRequest): Promise<void> {
+export async function transcribeAudioEdit(request: AudioEditTranscriptionRequest, signal?: AbortSignal, approvalDocumentId = request.projectId): Promise<void> {
   let dispatched = false
   let completed = false
   let applied = false
   try {
   await withAudioEditProjectOperation(request.projectId, async (instance) => {
     const version = instance.version
-    await preflightAudioEditTranscription(request.projectId, request.modelId, request.language)
-    dispatched = true
-    const result = await getPlatform().audioEdit.transcribe(request)
+    const prepared = await preflightAudioEditTranscription(request.projectId, request.modelId, request.language)
+    const transcribe = async () => {
+      signal?.throwIfAborted()
+      dispatched = true
+      return getPlatform().audioEdit.transcribe({ ...request, modelId: prepared.modelId ?? request.modelId })
+    }
+    const result = prepared.requiresConfirmation
+      ? await withPaidOperation({ category: 'recognition', documentId: approvalDocumentId, estimatedCny: transcriptionEstimatedCny(prepared), titleKey: 'paidApproval.recognizeAudio' }, transcribe, signal)
+      : await transcribe()
     completed = true
     acceptAudioEditNativeResult(request.projectId, result.project, version)
     applied = true

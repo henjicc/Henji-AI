@@ -14,7 +14,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
   const { t } = useTranslation('common')
   const adapter = useMemo(() => imageEditExplanation(bus), [bus])
   const state = useSyncExternalStore(adapter.subscribe, adapter.snapshot)
-  const [open, setOpen] = useState(false), [upload, setUpload] = useState(false), [deleting, setDeleting] = useState(false)
+  const [open, setOpen] = useState(false), [deleting, setDeleting] = useState(false)
   const [failed, setFailed] = useState(false)
   const hasRecorded = useExplanationHasRecorded(!!controller.document.creativeIntents?.sessions.length || state.session?.state === 'recording')
   const retryWork = useRef<() => Promise<void>>()
@@ -53,16 +53,13 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
       <PanelTrigger open={open} onOpenChange={changeOpen} size="sm" alignment="bottomRight" panelPadding="content" panelWidth={360}
         renderPanel={() => <div data-image-explanation-controls><ExplanationPanel entries={entries} stage={stage} elapsedUs={state.elapsedUs} busy={state.busy} loading={loading} hasRecorded={hasRecorded}
           failed={failed || !!state.message?.includes('未保存')} failureTitle={failed ? failureTitle : t('explanation.saveFailed')} onRetry={() => run(retryWork.current ?? (failed ? async () => { retry() } : () => adapter.save()), failed ? failureTitle : t('explanation.saveFailed'))}
-          onStart={() => run(() => adapter.snapshot().session?.state === 'paused' ? adapter.resume() : adapter.start(crypto.randomUUID()), '录制失败')} onTranscribe={() => run(async () => { await adapter.preflightTranscription(); setUpload(true) }, '转写预检失败')} onCancel={() => run(() => adapter.cancelTranscription())} onDelete={state.session ? () => setDeleting(true) : undefined}
+          onStart={() => run(() => adapter.snapshot().session?.state === 'paused' ? adapter.resume() : adapter.start(crypto.randomUUID()), '录制失败')} onTranscribe={() => run(async () => { await adapter.preflightTranscription(); await adapter.transcribe(crypto.randomUUID()) }, '转写预检失败')} onCancel={() => run(() => adapter.cancelTranscription())} onDelete={state.session ? () => setDeleting(true) : undefined}
           onRead={onRead} onBind={onBind} onPick={onPick} onError={onError} contextKey={`${state.session?.id}:${controller.document.revision}`} generationKey={state.session?.id} prepareGeneration={() => adapter.prepareGeneration()} onGenerate={generate} canGenerate={canGenerate} />
         </div>}>
         {controls => <UiButton size="sm" aria-label="录制讲解" onClick={controls.togglePanel} aria-expanded={controls.open}>{active ? <><span aria-hidden className="h-2 w-2 rounded-full bg-danger-solid" />{explanationDuration(state.elapsedUs)}</> : <><Mic size={14} />讲解</>}</UiButton>}
       </PanelTrigger>
       {active && <><UiIconButton size="sm" aria-label={stage === 'paused' ? '继续图片讲解' : '暂停图片讲解'} disabled={state.busy} onClick={() => run(() => stage === 'paused' ? adapter.resume() : adapter.pause())}>{stage === 'paused' ? <Play size={14} /> : <Pause size={14} />}</UiIconButton><UiIconButton size="sm" aria-label="结束图片讲解" disabled={state.busy} onClick={() => run(async () => { await adapter.stop(); setOpen(true) })}><Square size={14} /></UiIconButton></>}
     </div>
-    <UiModal isOpen={upload} title="确认转写音频外发" onClose={() => setUpload(false)} footer={<UiButton variant="primary" onClick={() => { setUpload(false); run(() => adapter.transcribe(crypto.randomUUID()), '转写失败') }}>确认上传音频并转写</UiButton>}>
-      <p className={UI_TEXT_META_CLASS}>将录音发送给默认转写模型，供应商可能收费。此次只发送录音，候选在本机生成。</p>
-    </UiModal>
     <UiModal isOpen={deleting} title="删除本次讲解" onClose={() => setDeleting(false)} footer={<UiButton variant="dangerSolid" onClick={() => { setDeleting(false); run(() => adapter.remove()) }}>删除</UiButton>}>
       <p className={UI_TEXT_META_CLASS}>删除本次讲解并释放本机录音，作品保留。</p>
     </UiModal>

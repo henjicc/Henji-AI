@@ -1,4 +1,6 @@
 import type { ApplicationResult } from '../../../../src/core/application-control/invocation'
+import { z } from 'zod'
+import { commonToolInputSchema } from '../../../../src/core/application-control/inputValidation'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 
 export interface ResultDetailOptions {
@@ -7,17 +9,10 @@ export interface ResultDetailOptions {
   includeDetails?: boolean
 }
 
-export const RESULT_DETAIL_FIELDS = {
-  includeRevisions: { type: 'boolean' },
-  includeEvidence: { type: 'boolean', description: '验证证据明细。' },
-  includeDetails: { type: 'boolean', description: '完整元数据。' },
-} as const
+export const RESULT_DETAIL_FIELDS = z.toJSONSchema(commonToolInputSchema, { io: 'input' }).properties! as Record<keyof ResultDetailOptions, Record<string, unknown>>
 
-export function resultDetailFields(name: string) {
-  return { includeRevisions: RESULT_DETAIL_FIELDS.includeRevisions,
-    includeEvidence: RESULT_DETAIL_FIELDS.includeEvidence,
-    ...(['list_application_entities', 'describe_application_entities', 'search_models', 'get_model_schema'].includes(name)
-      ? { includeDetails: RESULT_DETAIL_FIELDS.includeDetails } : {}) }
+export function resultDetailFields(_name: string) {
+  return RESULT_DETAIL_FIELDS
 }
 
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}

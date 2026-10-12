@@ -18,7 +18,8 @@ import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipb
 import { videoEditTimelineViewport } from './videoEditTimelineViewport'
 import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, VIDEO_EDIT_TRACK_HEIGHT_MAX, VIDEO_EDIT_TRACK_HEIGHT_MIN, videoEditAdjacentPoint, videoEditClipsAtFrame, videoEditEditPoints } from '@/core/videoEdit/timelineNavigation'
 import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
-import { createVideoEditMarker } from './videoEditTimedContent'
+import { createVideoEditMarker, removeVideoEditTimedContent } from './videoEditTimedContent'
+import { selectedVideoEditSubtitleId, selectVideoEditSubtitle } from './videoEditSubtitleSelection'
 import { createVideoEditBin } from './videoEditProjectItems'
 import { applyVideoEditDefaultTransitions, selectVideoEditTransition, selectedVideoEditTransitionId, videoEditDefaultTransitionTargets, type VideoEditDefaultTransitionRequest } from './videoEditTransitions'
 import { deleteVideoEditTransition } from './videoEditCompositing'
@@ -210,6 +211,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
       assertVideoEditClipsEditable(sequence, pairs.flatMap(videoEditTransitionClipIds))
       return { enabled: true }
     }
+    if (id === 'delete' && selectedVideoEditSubtitleId(owner, sequence.id)) return { enabled: !sequence.captionTrackLocked, reason: '字幕轨道已锁定，请先解锁再编辑。' }
     // 选中时间线上的过渡块（没有选中片段）时，Delete／Backspace 删除这个过渡（PR）。
     if ((id === 'delete' || id === 'ripple_delete') && !context.clipIds.length && selectedVideoEditTransitionId(owner)) return { enabled: true }
     if (['split', 'delete', 'ripple_delete', 'link', 'unlink', 'group', 'ungroup', 'separate_audio'].includes(id)) {
@@ -273,8 +275,11 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   if (id === 'open_in_source') { await updateVideoEditSource(projectId, { itemId: owner!.document.items.find(item => context.itemIds.includes(item.id) && item.mediaId)!.id }); focusVideoEditPanel(projectId, 'source'); return }
   if (id === 'deselect_all' && context.scope === 'project') { setVideoEditProjectView(projectId, { selectedItemIds: [] }); return }
   const sequenceId = context.sequenceId!; const sequence = getActiveVideoEditSequence(owner!)
+  if (id === 'select_all' || id === 'deselect_all') selectVideoEditSubtitle(projectId, sequenceId, null)
   const transitionRequest = TRANSITION_COMMANDS[id]
   if (transitionRequest) { await applyVideoEditDefaultTransitions(projectId, sequenceId, videoEditDefaultTransitionTargets(owner!, transitionRequest, context.clipIds, context.frame)); return }
+  const captionId = id === 'delete' ? selectedVideoEditSubtitleId(owner!, sequenceId) : undefined
+  if (captionId) { removeVideoEditTimedContent(projectId, sequenceId, 'caption', [captionId]); selectVideoEditSubtitle(projectId, sequenceId, null); return }
   const transitionId = (id === 'delete' || id === 'ripple_delete') && !context.clipIds.length ? selectedVideoEditTransitionId(owner!) : undefined
   if (transitionId) { await deleteVideoEditTransition(projectId, sequenceId, transitionId); selectVideoEditTransition(projectId, null); return }
   const intent = timelineIntent(context, id)

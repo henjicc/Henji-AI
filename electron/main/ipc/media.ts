@@ -18,6 +18,11 @@ import {
   type SurfaceCaptureResult,
 } from '../../../src/core/application-control/surfaceObservation'
 import { parseRecord, registerIpcHandler } from './registry'
+import { enqueueMediaCandidates } from '../services/media-recycle/queue'
+function parsePaths(input: unknown): string[] {
+  if (!Array.isArray(input) || !input.every(value => typeof value === 'string')) throw new Error('Invalid media paths')
+  return input
+}
 
 interface AllowRootPayload {
   rootPath: string
@@ -113,6 +118,13 @@ function parseBundledResourcePayload(input: unknown): BundledResourcePayload {
 }
 
 export function registerMediaIpc(): void {
+  registerIpcHandler<{ paths: string[]; protectedBy: string[] }, void>('media:enqueueRecycle', input => {
+    const raw = parseRecord(input)
+    return { paths: parsePaths(raw.paths),
+      protectedBy: parsePaths(raw.protectedBy) }
+  }, report => {
+    enqueueMediaCandidates(report.paths, report.protectedBy)
+  }, assertTrustedMainRenderer)
   registerIpcHandler<AllowRootPayload, void>('media:allowRoot', parseAllowRootPayload, ({ rootPath }) => {
     allowMediaRoot(rootPath)
   })

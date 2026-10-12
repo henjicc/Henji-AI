@@ -2,8 +2,8 @@
   "releasedCompatibility": false,
   "formats": {
     "document.video_edit": {
-      "version": 3,
-      "fingerprint": "0168a7cce972977761121d20cc6c752b3a1f5e68009d961da997865ed38346d9",
+      "version": 4,
+      "fingerprint": "46c8998b3296f9b34c37d025ed34b635200cd6db0f0d0ae4d350fb58568ce291",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -82,8 +82,8 @@
       "supportedFrom": 1
     },
     "title-templates": {
-      "version": 1,
-      "fingerprint": "334b11b6b893d4ba85c4525a9bdeef88beff272a54a71c835e17f24f98ef20cb",
+      "version": 2,
+      "fingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9",
       "supportedFrom": 1
     },
     "text-presets": {
@@ -102,22 +102,22 @@
       "supportedFrom": 1
     },
     "setting-records": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
       "supportedFrom": 19
     },
     "asset-records": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
       "supportedFrom": 19
     },
     "generation-presets": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
       "supportedFrom": 19
     },
     "sqlite": {
-      "version": 20,
+      "version": 21,
       "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
       "supportedFrom": 19
     },

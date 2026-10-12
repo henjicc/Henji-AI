@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { registerOwnedMedia } from '../media-recycle/queue'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { getProgramStoreDir } from '../appPaths'
@@ -71,7 +72,9 @@ async function writeThumbnail(filePath: string, mediaType: AssetMediaType, targe
     await requireThumbnailIdentity(filePath, identity)
     signal.throwIfAborted()
     const pending = `${target}.${crypto.randomUUID()}.tmp`
+    // media-recycle-allow: unpublished unique thumbnail staging file only.
     try { await fs.writeFile(pending, bytes, { signal }); signal.throwIfAborted(); await requireThumbnailIdentity(filePath, identity); signal.throwIfAborted(); await fs.rename(pending, target) } finally { await fs.rm(pending, { force: true }) }
+    await registerOwnedMedia(target, filePath)
   }
   await requireThumbnailIdentity(filePath, identity)
   signal.throwIfAborted()

@@ -4,7 +4,6 @@ import {
   mkdir,
   nativeFetch as httpFetch,
   readFile,
-  remove,
   toDisplaySrc,
   writeFile,
 } from '@/platform/desktopApi'
@@ -233,13 +232,8 @@ export async function isWithinUploadsDir(filePath: string): Promise<boolean> {
 }
 
 export async function deleteUploads(paths: string[]): Promise<void> {
-  for (const p of paths) {
-    try {
-      await remove(p)
-    } catch (e) {
-      logger.error('[save] delete upload failed', { data: [p, e] })
-    }
-  }
+  const { getPlatform } = await import('@/platform')
+  await getPlatform().media.enqueueRecycle(paths)
 }
 
 export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {

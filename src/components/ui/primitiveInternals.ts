@@ -194,6 +194,8 @@ export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElem
   gridCell?: 'ratio' | 'tier' | 'tier-detail' | 'preset'
   /** 选中语义：默认 `single`（单选，中性抬升）；`multiple` 表示多选集合中已选（强调描边 + 强调文字）。 */
   selection?: 'single' | 'multiple'
+  /** 统一分段控件的内嵌项：填满轨道高度，单选使用强实底状态令牌。 */
+  segmentFrame?: 'standalone' | 'inset'
   /** 键盘导航当前项（下拉 aria-activedescendant、模型网格方向键指向的项），未选中时显示悬停底。 */
   highlighted?: boolean
 }

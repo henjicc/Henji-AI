@@ -8,6 +8,14 @@
   ],
   "entries": [
     {
+      "file": "src/components/ui/layout.tsx",
+      "category": "arbitraryValue",
+      "values": [
+        "w-[72px]"
+      ],
+      "reason": "UiFormRow 的 panel 标签列按超级关键帧设计规格固定为 72px；Tailwind 默认没有 18 档，仅该有限枚举使用"
+    },
+    {
       "file": "src/components/AudioPlayer.tsx",
       "category": "arbitraryValue",
       "values": ["max-w-[32.5rem]", "w-[36rem]", "h-[72px]"],

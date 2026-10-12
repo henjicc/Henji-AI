@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
@@ -36,13 +37,13 @@ export class ExplanationAudioService {
     await fs.mkdir(this.directory(request.sessionId), { recursive: true })
     const bytes = encodeRecordingWav(request.samples, request.sampleRate)
     const file = this.file(request.sessionId, request.chunkId)
-    if (this.erased.has(request.sessionId)) { await fs.rm(this.directory(request.sessionId), { recursive: true, force: true }); throw new Error('原录音已删除。') }
+    if (this.erased.has(request.sessionId)) { await removeUnmanagedCachePath(this.directory(request.sessionId), { recursive: true, force: true }); throw new Error('原录音已删除。') }
     try { await fs.writeFile(file, bytes, { flag: 'wx' }) }
     catch (error) {
       if (!(error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST')) throw error
       const existing = await fs.readFile(file); if (!existing.equals(Buffer.from(bytes))) throw new Error('录音块已存在且内容不同。')
     }
-    if (this.erased.has(request.sessionId)) { await fs.rm(this.directory(request.sessionId), { recursive: true, force: true }); throw new Error('原录音已删除。') }
+    if (this.erased.has(request.sessionId)) { await removeUnmanagedCachePath(this.directory(request.sessionId), { recursive: true, force: true }); throw new Error('原录音已删除。') }
     const now = new Date(); await fs.utimes(this.directory(request.sessionId), now, now)
   }
   async read(sessionId: string, chunkId: string): Promise<Uint8Array> { return new Uint8Array(await fs.readFile(this.file(sessionId, chunkId))) }
@@ -50,7 +51,7 @@ export class ExplanationAudioService {
   async release(sessionId: string): Promise<void> {
     this.cancel(sessionId)
     // Keep submission receipts until privacy erasure. Audio TTL must not permit a second charge.
-    await this.serial(sessionId, async () => { await fs.rm(this.directory(sessionId), { recursive: true, force: true }) })
+    await this.serial(sessionId, async () => { await removeUnmanagedCachePath(this.directory(sessionId), { recursive: true, force: true }) })
   }
   async erase(sessionId: string): Promise<void> {
     this.erased.add(sessionId)
@@ -77,7 +78,7 @@ export class ExplanationAudioService {
       await archive.finalize(); await completed
       if (this.erased.has(sessionId)) throw new Error('原录音已删除。')
       return { path: file, ...await this.identity(file) }
-    } catch (error) { archive.abort(); output.destroy(); await fs.rm(file, { force: true }); throw error }
+    } catch (error) { archive.abort(); output.destroy(); await removeUnmanagedCachePath(file, { force: true }); throw error }
   }
   async restore(request: Extract<RecordingAudioRequest, { action: 'restore' }>): Promise<void> {
     return this.serial(request.sessionId, () => this.restoreChunks(request))

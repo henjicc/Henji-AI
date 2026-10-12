@@ -348,8 +348,10 @@ async function moveCompletedOutputToUploads(
   try {
     await fs.promises.copyFile(sourcePath, stagedPath)
     await fs.promises.rename(stagedPath, targetPath)
+    // media-recycle-allow: source is this export session's unpublished staged output.
     await fs.promises.unlink(sourcePath)
   } catch (error) {
+    // media-recycle-allow: failed unpublished cross-device output staging file.
     await fs.promises.rm(stagedPath, { force: true })
     throw error
   }
@@ -368,6 +370,7 @@ async function cleanupStagedVideoArtifacts(): Promise<void> {
       && entry.name.endsWith(STAGED_OUTPUT_SUFFIX))
     .map((entry) => path.join(uploadsDir, entry.name))
   if (stalePaths.length === 0) return
+  // media-recycle-allow: filtered by this exporter's unpublished staging prefix and suffix.
   await Promise.all(stalePaths.map((stalePath) => fs.promises.rm(stalePath, { force: true })))
   logger.warn('已清理上次异常遗留的视频暂存产物', {
     event: 'video_frame_export.staged_artifacts.cleaned',
@@ -388,5 +391,6 @@ async function copyToTarget(mediaPath: string, targetPath: string): Promise<stri
 }
 
 async function cleanupSessionDir(dir: string): Promise<void> {
+  // media-recycle-allow: frame encoder session staging directory, never a published media root.
   await fs.promises.rm(dir, { recursive: true, force: true })
 }

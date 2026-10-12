@@ -483,6 +483,7 @@ test('场景覆盖应用界面和原生窗口且规则数固定为十八条', ()
     '设置',
     '诊断',
     '资产库',
+    '镜头参考',
   ])
   // 4.3 新增 nestedSameBackground、menuOptionTruncated；5.8 新增 stackedBands、toolbarWrap、shortTextTruncated、selectedStateWeak、overlayClipped
   assert.equal(UI_AUDIT_RULES.length, 18)

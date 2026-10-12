@@ -5,10 +5,8 @@ import NumberInput from '@/components/ui/NumberInput';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSelectorPanel';
 import { parseLegacyPromptString, toPromptPlainText } from '@/core/inputs/promptDocument';
-import { requestAlertConfirmation } from '@/stores/alertDialogStore';
 import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types';
-import { formatPriceEstimate, readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay';
 import type { GenerationModelFilterType } from '@/features/generation';
 import type { ToolOptionsProps } from '../../toolFramework/types';
 import { imageEditOutpaintVersionV3, listImageEditOutpaintJobsV3, subscribeImageEditOutpaintV3 } from '../../application/imageEditOutpaintJobsV3';
@@ -57,14 +55,7 @@ export function OutpaintOptionsV3({ bus }: ToolOptionsProps): JSX.Element {
       const { prepareImageEditOutpaintV3, startImageEditOutpaintV3 } = await loadOutpaint();
       const request = { documentId, margins: { left: left / 100, top: top / 100, right: right / 100, bottom: bottom / 100 }, prompt: toPromptPlainText(prompt) || text('defaultPrompt'), ...(modelId ? { modelId } : {}) };
       const prepared = await prepareImageEditOutpaintV3(request);
-      const price = prepared.preparation.priceEstimate as { amount?: number; currency?: string } | null;
-      const settings = readPriceEstimateDisplaySettings();
-      const estimate = price && typeof price.amount === 'number' && typeof price.currency === 'string'
-        ? formatPriceEstimate({ amount: price.amount, sourceCurrencySymbol: price.currency, displayCurrencyMode: settings.currencyMode,
-          language: i18n.resolvedLanguage ?? i18n.language, usdToCnyRate: settings.usdToCnyRate }).display : '';
-      const name = getI18nText(registry.getModel(prepared.modelId)?.meta.name ?? prepared.modelId, i18n.language);
       setOpen(false);
-      if (!await requestAlertConfirmation({ title: text('confirmTitle'), type: 'warning', message: `${name} ${estimate}\n${text('cost')}`, confirmLabel: text('confirm') })) { setOpen(true); return; }
       await startImageEditOutpaintV3({ ...request, modelId: prepared.modelId, params: prepared.params });
       setOpen(false);
     } catch (failure) {

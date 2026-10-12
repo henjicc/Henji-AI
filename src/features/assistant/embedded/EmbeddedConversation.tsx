@@ -1,3 +1,4 @@
+import { withPaidOperation } from '@/services/paidApproval'
 import { assistantErrorMessage } from '@/core/assistant/assistantErrorPresentation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LoaderCircle, RotateCcw, Sparkles } from 'lucide-react'
@@ -67,9 +68,9 @@ export function EmbeddedConversation(): JSX.Element {
     const sentAttachments = attachments
     if (!request) { setDocument(createEmptyPromptDocument()); setAttachments([]) }
     const context = createHostContextSnapshot()
-    void getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
+    void withPaidOperation({ category: 'generation', titleKey: 'paidApproval.assistantChat', capabilityId: 'ui_assistant_chat', messageKey: 'paidApproval.assistantChatContent' }, () => getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
       ...(prepared?.context === undefined ? { selectionSnapshot: captureHostSelection() } : {}),
-      context: prepared?.context ?? JSON.stringify({ workspace: context.workspace, canvas: context.canvas, surface: context.surface, ...(context.videoEdit ? { videoEdit: context.videoEdit } : {}) }), attachments: submittedAttachments, delivery: request || switching ? 'wait' : delivery })
+      context: prepared?.context ?? JSON.stringify({ workspace: context.workspace, canvas: context.canvas, surface: context.surface, ...(context.videoEdit ? { videoEdit: context.videoEdit } : {}) }), attachments: submittedAttachments, delivery: request || switching ? 'wait' : delivery }))
       .then(() => { setPreparedRequest(undefined) })
       .catch(error => {
         try { prepared?.onRejected?.() } catch (rollbackError) { reportEmbeddedAgentError(rollbackError) }

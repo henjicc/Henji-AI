@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 此 .cjs 门禁由 Node CommonJS 加载，文件系统和 TypeScript 解析器复用 require。 */
 /**
  * check:surface 规则 E：按钮、选项、标签、导航与字段触发器的调用点不得用 className 覆盖外观
  * （重要记录 003，任务 2.1 建立、2.2 扩展）。
@@ -32,6 +33,7 @@ const CHECKED_ATTRIBUTES = {
   UiButton: 'className',
   UiIconButton: 'className',
   UiOptionButton: 'className',
+  UiSegmented: 'className',
   UiChipButton: 'className',
   UiNavButton: 'className',
   UiFieldTrigger: 'className',
