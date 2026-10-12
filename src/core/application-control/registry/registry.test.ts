@@ -229,7 +229,7 @@ describe('ApplicationReflectionRegistry', () => {
     registry.register(registration())
     expect(registry.normalizePropertyValue('sample.item', 'sample.level', 4, assistantContext)).toBe(4)
     expect(() => registry.normalizePropertyValue('sample.item', 'sample.level', 11, assistantContext))
-      .toThrow('不能大于')
+      .toThrow('应在 0 到 10 级 之间')
     expect(() => registry.normalizePropertyValue('sample.item', 'sample.level', 3, assistantContext))
       .toThrow('递增')
     expect(() => registry.normalizePropertyValue('sample.item', 'sample.mode', 'unknown', assistantContext))

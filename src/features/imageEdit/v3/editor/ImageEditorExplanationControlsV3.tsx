@@ -21,6 +21,10 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
   const [failureTitle, setFailureTitle] = useState('讲解未完成')
   const onError = useCallback(() => { retryWork.current = undefined; setFailureTitle('讲解读取失败'); setFailed(true) }, [])
   const run = (work: () => Promise<void>, title = '讲解未完成'): void => { setFailed(false); void Promise.resolve().then(work).catch(() => { onError(); retryWork.current = work; setFailureTitle(title) }) }
+  const transcribe = (): void => run(async () => {
+    await adapter.preflightTranscription()
+    run(() => adapter.transcribe(crypto.randomUUID()), '转写失败')
+  }, '转写预检失败')
   const onRead = useCallback((entry: TranscriptEntry, mentionId?: string) => adapter.readReview(entry, mentionId, !!mentionId), [adapter])
   const onBind = useCallback((entry: TranscriptEntry, binding: ExplanationBinding) => adapter.bind(entry, binding), [adapter])
   const readPage = useCallback((index: number) => adapter.transcript(index), [adapter])
@@ -53,7 +57,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
       <PanelTrigger open={open} onOpenChange={changeOpen} size="sm" alignment="bottomRight" panelPadding="content" panelWidth={360}
         renderPanel={() => <div data-image-explanation-controls><ExplanationPanel entries={entries} stage={stage} elapsedUs={state.elapsedUs} busy={state.busy} loading={loading} hasRecorded={hasRecorded}
           failed={failed || !!state.message?.includes('未保存')} failureTitle={failed ? failureTitle : t('explanation.saveFailed')} onRetry={() => run(retryWork.current ?? (failed ? async () => { retry() } : () => adapter.save()), failed ? failureTitle : t('explanation.saveFailed'))}
-          onStart={() => run(() => adapter.snapshot().session?.state === 'paused' ? adapter.resume() : adapter.start(crypto.randomUUID()), '录制失败')} onTranscribe={() => run(async () => { await adapter.preflightTranscription(); await adapter.transcribe(crypto.randomUUID()) }, '转写预检失败')} onCancel={() => run(() => adapter.cancelTranscription())} onDelete={state.session ? () => setDeleting(true) : undefined}
+          onStart={() => run(() => adapter.snapshot().session?.state === 'paused' ? adapter.resume() : adapter.start(crypto.randomUUID()), '录制失败')} onTranscribe={transcribe} onCancel={() => run(() => adapter.cancelTranscription())} onDelete={state.session ? () => setDeleting(true) : undefined}
           onRead={onRead} onBind={onBind} onPick={onPick} onError={onError} contextKey={`${state.session?.id}:${controller.document.revision}`} generationKey={state.session?.id} prepareGeneration={() => adapter.prepareGeneration()} onGenerate={generate} canGenerate={canGenerate} />
         </div>}>
         {controls => <UiButton size="sm" aria-label="录制讲解" onClick={controls.togglePanel} aria-expanded={controls.open}>{active ? <><span aria-hidden className="h-2 w-2 rounded-full bg-danger-solid" />{explanationDuration(state.elapsedUs)}</> : <><Mic size={14} />讲解</>}</UiButton>}

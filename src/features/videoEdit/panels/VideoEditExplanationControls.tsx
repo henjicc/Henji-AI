@@ -22,6 +22,10 @@ export function VideoEditExplanationControls({ owner, onError }: { owner: VideoE
   const [failureTitle, setFailureTitle] = useState('讲解未完成')
   const error = useCallback((reason: unknown) => { retryWork.current = undefined; setFailureTitle('讲解读取失败'); setFailed(true); onError(reason) }, [onError])
   const run = (work: () => Promise<void>, title = '讲解未完成'): void => { setFailed(false); void Promise.resolve().then(work).catch(reason => { error(reason); retryWork.current = work; setFailureTitle(title) }) }
+  const transcribe = (): void => run(async () => {
+    await preflightVideoExplanation(id)
+    run(() => transcribeVideoExplanation(id, crypto.randomUUID(), videoExplanationState(owner)?.collector.session.state === 'recoverable'), '转写失败')
+  }, '转写预检失败')
   const read = useCallback((entry: TranscriptEntry, mentionId?: string) => readVideoExplanationReview(id, entry, mentionId, !!mentionId), [id])
   const bind = useCallback((entry: TranscriptEntry, binding: ExplanationBinding) => correctVideoExplanationBinding(id, entry, binding), [id])
   const readPage = useCallback(async (index: number) => (await readVideoExplanationPage(id, index)).filter((entry): entry is TranscriptEntry => entry.kind === 'transcript'), [id])
@@ -44,7 +48,7 @@ export function VideoEditExplanationControls({ owner, onError }: { owner: VideoE
     <div className="flex shrink-0 items-center gap-1" role="group" aria-label="录制讲解控制">
       <PanelTrigger size="sm" open={open} onOpenChange={changeOpen} alignment="aboveCenter" panelPadding="content" panelWidth={360} renderPanel={() => open ? <ExplanationPanel entries={entries} stage={state?.erased || !pageCount && session?.retentionStatus === 'deleted' && !active ? undefined : session?.state} elapsedUs={state?.elapsedUs ?? 0} busy={state?.busy ?? false} loading={loading} hasRecorded={hasRecorded}
         failed={failed || !!state?.message?.includes('未保存')} failureTitle={failed ? failureTitle : t('explanation.saveFailed')} onRetry={() => run(retryWork.current ?? (failed ? async () => { retry() } : () => retryVideoExplanationSave(id)), failed ? failureTitle : t('explanation.saveFailed'))}
-        onStart={() => run(() => startVideoExplanation(id, crypto.randomUUID()), '录制失败')} onTranscribe={() => run(async () => { await preflightVideoExplanation(id); await transcribeVideoExplanation(id, crypto.randomUUID(), videoExplanationState(owner)?.collector.session.state === 'recoverable') }, '转写预检失败')} onCancel={() => run(() => cancelVideoExplanationTranscription(id))} onDelete={session && !state?.erased ? () => setDeleting(true) : undefined}
+        onStart={() => run(() => startVideoExplanation(id, crypto.randomUUID()), '录制失败')} onTranscribe={transcribe} onCancel={() => run(() => cancelVideoExplanationTranscription(id))} onDelete={session && !state?.erased ? () => setDeleting(true) : undefined}
         onRead={read} onBind={bind} onPick={pick} onError={error} onGenerate={async paragraphs => { await generateVideoExplanationCandidates(id, paragraphs); setOpen(false) }} contextKey={`${sessionId}:${owner.version}:${owner.activeSequenceId}:${owner.playing ? 'playing' : owner.frame}`} generationKey={sessionId} prepareGeneration={() => prepareVideoExplanationGeneration(id)} /> : null }>
         {controls => <UiButton size="sm" aria-label="录制讲解" aria-expanded={controls.open} onClick={controls.togglePanel}>{active ? <><span aria-hidden className="h-2 w-2 rounded-full bg-danger-solid" />{explanationDuration(state?.elapsedUs ?? 0)}</> : <><Mic size={14} />讲解</>}</UiButton>}
       </PanelTrigger>

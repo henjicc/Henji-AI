@@ -175,9 +175,11 @@ export function normalizeApplicationPropertyValue(
     const code = detail.split('（')[0]
     const value = descriptor.value
     const range = value.kind === 'number' || value.kind === 'integer' ? value.hardRange : value.kind === 'vector2' || value.kind === 'vector3' ? value.componentRange : undefined
+    const boundedRange = range?.min !== undefined && range.max !== undefined
+      ? `应在 ${range.min} 到 ${range.max}${descriptor.unit ? ` ${descriptor.unit}` : ''} 之间` : undefined
     const constraints: Record<string, string> = {
       EXPECTED_BOOLEAN: '应为布尔值', EXPECTED_STRING: '应为字符串', EXPECTED_NUMBER: '应为有限数字', EXPECTED_INTEGER: '应为整数',
-      NULL_NOT_ALLOWED: '不能为 null', BELOW_MINIMUM: `不能小于 ${range?.min}`, ABOVE_MAXIMUM: `不能大于 ${range?.max}`,
+      NULL_NOT_ALLOWED: '不能为 null', BELOW_MINIMUM: boundedRange ?? `不能小于 ${range?.min}`, ABOVE_MAXIMUM: boundedRange ?? `不能大于 ${range?.max}`,
       INVALID_STEP: `应以 ${range?.min ?? 0} 为起点、按 ${range?.step} 递增`,
       STRING_TOO_SHORT: `长度至少 ${value.kind === 'string' ? value.minLength : ''} 个字符`, STRING_TOO_LONG: `长度最多 ${value.kind === 'string' ? value.maxLength : ''} 个字符`,
       UNKNOWN_ENUM_VALUE: `只能取 ${value.kind === 'enum' ? value.values.map(item => JSON.stringify(item.value)).join('、') : ''}`,

@@ -105,7 +105,7 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
       <ControlledSelectionEditor onDocumentChange={(document) => changes.push(document)} />,
     )
     fireEvent.click(await screen.findByRole('button', { name: '矩形选择' }))
-    expect((screen.getByRole('button', { name: '添加' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('radio', { name: '添加' }) as HTMLButtonElement).disabled).toBe(true)
     const overlay = await waitFor(() => (
       rendered.container.querySelector('[data-selection-mask-overlay]') as SVGSVGElement
     ))
@@ -130,7 +130,7 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
       tiles: { '0/0/0': `sha256:${'f'.repeat(64)}` },
     })
     await waitFor(() => expect(
-      (screen.getByRole('button', { name: '添加' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('radio', { name: '添加' }) as HTMLButtonElement).disabled,
     ).toBe(false))
   })
 

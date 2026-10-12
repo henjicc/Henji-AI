@@ -11,12 +11,14 @@ vi.mock('../appPaths', () => ({
   getUserRootDir: () => '/',
 }))
 vi.mock('../logging', () => ({ createMainLogger: () => mocks }))
+vi.mock('../media-recycle/queue', () => ({ registerOwnedMedia: vi.fn(async () => undefined), enqueueMediaCandidates: vi.fn() }))
 vi.mock('./panorama-metadata', () => ({
   embedPanoramaMetadataInImage: async (bytes: Buffer) => ({ bytes, format: 'png' }),
 }))
 
 import { loadImage, saveImageSourceToDirectory, savePanoramaImageSourceToDirectory } from './image-file-ops'
 import { encodeImageBase64, ensureUniquePath, hashImageBytes, persistImageBytesTracked, rollbackPersistedImageBytes, writeReservedImage } from './path-utils'
+import { enqueueMediaCandidates, registerOwnedMedia } from '../media-recycle/queue'
 
 const target = path.join('/outputs', 'same.png')
 const bytes = Buffer.from([0, 255, 128, 17, 12])
@@ -121,11 +123,17 @@ describe('原子输出路径', () => {
     vi.spyOn(fs.promises, 'open').mockResolvedValueOnce(first).mockResolvedValueOnce(retry)
     const rm = vi.spyOn(fs.promises, 'rm').mockResolvedValue(undefined)
     await expect(persistImageBytesTracked(bytes, 'png')).rejects.toThrow('disk full')
+    expect(registerOwnedMedia).not.toHaveBeenCalled()
     const saved = await persistImageBytesTracked(bytes, 'png')
     expect(rm).toHaveBeenCalledWith(saved.filePath, { force: true })
     expect(saved.created).toBe(true)
     expect(retry.writeFile).toHaveBeenCalledWith(bytes, { signal: undefined })
+    expect(registerOwnedMedia).toHaveBeenCalledOnce()
+    expect(registerOwnedMedia).toHaveBeenCalledWith(saved.filePath)
     await rollbackPersistedImageBytes(saved)
+    expect(enqueueMediaCandidates).toHaveBeenCalledOnce()
+    expect(enqueueMediaCandidates).toHaveBeenCalledWith([saved.filePath])
+    expect(rm).toHaveBeenCalledTimes(1)
   })
 
   it('非碰撞错误立即失败并记录日志', async () => {

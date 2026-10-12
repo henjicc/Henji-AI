@@ -3,7 +3,7 @@ import { canvasTestRegistry, seedCanvasTestProject } from '@/tests/canvasProject
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('react-i18next', async (importOriginal) => ({ ...await importOriginal<typeof import('react-i18next')>(), useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-i18next', async (importOriginal) => ({ ...await importOriginal<typeof import('react-i18next')>(), useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'zh-CN' } }) }));
 vi.mock('@xyflow/react', async (importOriginal) => ({ ...await importOriginal<typeof import('@xyflow/react')>(), ReactFlowProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@/features/canvas/Canvas', () => ({ Canvas: () => <div data-testid="canvas">canvas</div> }));
 vi.mock('@/features/canvas/application/canvasProjectCover', () => ({ updateCanvasProjectCover: vi.fn() }));

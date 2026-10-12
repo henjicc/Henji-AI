@@ -51,7 +51,7 @@ function readVideoEditFile(file) {
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decode(item)]))
     return value
   }
-  return { format: 'henji-video-project', version: 4, id: raw.id, name: raw.name, revision: raw.revision, ...decode(raw.content) }
+  return { format: 'henji-video-project', version: 5, id: raw.id, name: raw.name, revision: raw.revision, ...decode(raw.content) }
 }
 
 /**
