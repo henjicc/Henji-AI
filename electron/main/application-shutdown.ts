@@ -8,6 +8,7 @@ export function bindApplicationShutdown(
   application: ShutdownApplication,
   dispose: readonly (() => void | Promise<void>)[],
   reportFailure: (error: unknown) => void,
+  afterDispose?: () => Promise<void>,
 ): void {
   let finished = false
   let pending = false
@@ -16,9 +17,10 @@ export function bindApplicationShutdown(
     event.preventDefault()
     if (pending) return
     pending = true
-    void Promise.allSettled(dispose.map(async (close) => close())).then((results) => {
+    void Promise.allSettled(dispose.map(async (close) => close())).then(async (results) => {
       for (const result of results) if (result.status === 'rejected') reportFailure(result.reason)
-    }).finally(() => {
+      if (results.every(result => result.status === 'fulfilled')) await afterDispose?.()
+    }).catch(reportFailure).finally(() => {
       finished = true
       // 原生 will-quit 尚未退出时，微任务内的 quit 可能被 Electron 的重入保护忽略。
       setImmediate(() => application.quit())

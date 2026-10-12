@@ -5,6 +5,7 @@ import { setImmediate as yieldToIO } from 'node:timers/promises'
 import { getProgramStoreDir, getUserFolderDir, getUserRootDir } from '../appPaths'
 import { createMainLogger } from '../logging'
 import { releaseManagedMediaFileLease } from './managed-media-leases'
+import { enqueueMediaCandidates, registerOwnedMedia } from '../media-recycle/queue'
 
 const uploadImageLeaseCounts = new Map<string, number>()
 const imagePathLocks = new Map<string, Promise<void>>()
@@ -143,6 +144,7 @@ async function persistContentAddressedImage(
     }
     if (handle) {
       await writeReservedImage({ filePath, handle }, bytes)
+      await registerOwnedMedia(filePath)
       created = true
     }
     const currentLeaseCount = uploadImageLeaseCounts.get(filePath) ?? 0
@@ -161,14 +163,14 @@ async function releaseUploadImageLease(filePath: string): Promise<void> {
   return withImagePathLock(filePath, async () => {
     const leaseCount = uploadImageLeaseCounts.get(filePath)
     if (leaseCount === undefined) {
-      await fs.promises.rm(filePath, { force: true })
+      enqueueMediaCandidates([filePath])
       return
     }
     if (leaseCount > 1) {
       uploadImageLeaseCounts.set(filePath, leaseCount - 1)
       return
     }
-    await fs.promises.rm(filePath, { force: true })
+    enqueueMediaCandidates([filePath])
     uploadImageLeaseCounts.delete(filePath)
   }).catch((error: unknown) => {
     logger.error('释放图片文件失败', { event: 'image.file.release.failed', error })
@@ -220,7 +222,7 @@ export async function releaseManagedGenerationMediaPaths(filePaths: readonly str
       continue
     }
     if (isMedia && releaseManagedMediaFileLease(resolved) === 'retained') continue
-    await fs.promises.rm(resolved, { force: true })
+    enqueueMediaCandidates([resolved])
   }
 }
 
@@ -234,6 +236,8 @@ export function sanitizeFileStem(raw: string | undefined): string {
     .replace(/^\.+|\.+$/g, '')
   return sanitized || 'storyboard-image'
 }
+
+export function listUploadImageLeases(): string[] { return [...new Set([...uploadImageLeaseCounts.keys(), ...imagePathLocks.keys()])] }
 
 function isBlockedFilenameChar(char: string): boolean {
   return char.charCodeAt(0) < 32 || '<>:"/\\|?*'.includes(char)
@@ -285,6 +289,7 @@ export async function writeReservedImage(reservation: ReservedImagePath, bytes: 
       logger.error('关闭预留图片失败', { event: 'image.file.close.failed', error: cleanupError })
     }
     try {
+      // media-recycle-allow: unpublished reservation failed before returning a usable media path.
       await fs.promises.rm(reservation.filePath, { force: true })
     } catch (cleanupError) {
       logger.error('清理预留图片失败', { event: 'image.file.cleanup.failed', error: cleanupError })

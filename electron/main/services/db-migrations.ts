@@ -1,4 +1,5 @@
 import { SQLITE_SCHEMA_VERSION } from '../../../src/core/persistence/schemaVersions'
+import { createMediaRecycleTablesV21 } from './media-recycle/schema'
 import { PersistenceError } from '../../../src/core/persistence/migrations'
 import { migrateApplicationReviewsV20 } from './application-runtime/operationStore'
 import fs from 'node:fs'
@@ -93,8 +94,9 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   // TEXT state/record_json need no DDL. Register the new durable confirmation state semantics
   // in the existing SQLite ledger; startup reconciliation owns interrupted invocations.
   { version: 19, name: 'application_operation_user_confirmation', up: () => {} },
-  { version: SQLITE_SCHEMA_VERSION, name: 'application_operation_persistent_review', up: migrateApplicationReviewsV20,
+  { version: 20, name: 'application_operation_persistent_review', up: migrateApplicationReviewsV20,
     backupWhen: db => !!db.prepare("SELECT 1 FROM application_invocations WHERE json_extract(record_json, '$.confirmation.purpose') = 'review' LIMIT 1").get() },
+  { version: SQLITE_SCHEMA_VERSION, name: 'global_media_recycle', up: createMediaRecycleTablesV21 },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

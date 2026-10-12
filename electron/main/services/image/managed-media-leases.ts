@@ -68,3 +68,5 @@ export function resetManagedMediaFileLeasesForTest(): void {
   leases.clear()
   acquisitionTails.clear()
 }
+
+export function listManagedMediaFileLeases(): string[] { return [...new Set([...leases.keys(), ...acquisitionTails.keys()])] }

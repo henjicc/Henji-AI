@@ -1,4 +1,6 @@
 import { shell } from 'electron'
+import { retainDetachedMediaLocation } from '../media-recycle/queue'
+import { recordDocumentMediaPublished } from '../media-recycle/providers'
 import { execFile } from 'node:child_process'
 
 import { allowMediaRoot } from '../../protocol'
@@ -66,7 +68,9 @@ function getServices(): DocumentServices {
     catalog: new DocumentIndexStore(getDb(), STYLE),
     storeDirectory: getProgramStoreDir('documentStore'),
     logger: createMainLogger,
-    trashItem: (target) => shell.trashItem(target),
+    trashItem: target => shell.trashItem(target),
+    retainDetachedMediaLocation,
+    mediaPublished: recordDocumentMediaPublished,
     showItemInFolder: (target) => shell.showItemInFolder(target),
     grantMediaRoots,
     renderCover: renderCoverImage,

@@ -27,6 +27,8 @@ export interface DocumentEnvironment {
   storeDirectory: string
   logger(domain: string): MainLogger
   trashItem(target: string): Promise<void>
+  retainDetachedMediaLocation?(target: string): void
+  mediaPublished?(target: string): Promise<void>
   showItemInFolder(target: string): void
   grantMediaRoots(directories: readonly string[]): void
   renderCover(sources: readonly DocumentCoverSource[]): Promise<{ bytes: Buffer; selected: DocumentCoverSource[] }>
@@ -89,6 +91,8 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     logger: environment.logger('main.documents'),
     lockDirectory: path.join(environment.storeDirectory, 'locks'),
     trashItem: environment.trashItem,
+    retainDetachedMediaLocation: environment.retainDetachedMediaLocation,
+    mediaPublished: environment.mediaPublished,
     showItemInFolder: environment.showItemInFolder,
     grantMediaRoots: environment.grantMediaRoots,
     removeCover: removeProgramState,
@@ -98,6 +102,7 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     workspace,
     logger: environment.logger('main.documents.projects'),
     trashItem: environment.trashItem,
+    retainDetachedMediaLocation: environment.retainDetachedMediaLocation,
     showItemInFolder: environment.showItemInFolder,
     grantMediaRoots: environment.grantMediaRoots,
     removeCovers: async (docIds) => { await Promise.all(docIds.map((docId) => removeProgramState(docId))) },

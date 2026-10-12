@@ -1,11 +1,7 @@
 /**
- * Remove history records only. The history persistence owner saves this projection.
- *
- * Asset-library membership is not proof that a file is unused: documents (including
- * unsaved canvases), other tasks and presets can share the same result/source/edit
- * state. Until an authoritative application-wide reference check and atomic reclaim
- * operation exist, retain every file and its caches. Never infer ownership from a
- * missing record, an incomplete query, or a failed read.
+ * The history persistence owner saves this projection. SQLite's retirement outbox
+ * records media candidates in the SAME transaction that removes each history row.
+ * The global collector alone decides when those files are no longer referenced.
  */
 export function removeGenerationHistoryRecords<T extends { id: string }>(
   records: readonly T[],

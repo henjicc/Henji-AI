@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ root: '' }))
+const mocks = vi.hoisted(() => ({ root: '', enqueue: vi.fn() }))
+vi.mock('../media-recycle/queue', () => ({ enqueueMediaCandidates: mocks.enqueue, registerOwnedMedia: vi.fn() }))
 
 vi.mock('../appPaths', async () => {
   const nodeFs = await import('node:fs')
@@ -41,7 +42,7 @@ describe('受管生成媒体释放边界', () => {
     fs.rmSync(mocks.root, { recursive: true, force: true })
   })
 
-  it('通用生成回滚只删除 Uploads 与 Media 内的目标', async () => {
+  it('通用生成回滚只提交 Uploads 与 Media 内的回收候选', async () => {
     const upload = path.join(mocks.root, 'Uploads', 'image.png')
     const media = path.join(mocks.root, 'Media', 'video.mp4')
     fs.mkdirSync(path.dirname(upload), { recursive: true })
@@ -51,8 +52,10 @@ describe('受管生成媒体释放边界', () => {
 
     await releaseManagedGenerationMediaPaths([upload, media])
 
-    expect(fs.existsSync(upload)).toBe(false)
-    expect(fs.existsSync(media)).toBe(false)
+    expect(fs.existsSync(upload)).toBe(true)
+    expect(fs.existsSync(media)).toBe(true)
+    expect(mocks.enqueue).toHaveBeenCalledWith([upload])
+    expect(mocks.enqueue).toHaveBeenCalledWith([media])
   })
 
   it('图层专用释放仍拒绝 Media，通用入口拒绝数据根外路径', async () => {
@@ -84,7 +87,8 @@ describe('受管生成媒体释放边界', () => {
     expect(fs.existsSync(first.filePath)).toBe(true)
 
     await releaseManagedGenerationMediaPaths([second.filePath])
-    expect(fs.existsSync(first.filePath)).toBe(false)
+    expect(fs.existsSync(first.filePath)).toBe(true)
+    expect(mocks.enqueue).toHaveBeenCalledWith([first.filePath])
   })
 
   it('批处理回滚与显式释放共享同一 Uploads lease 计数', async () => {
@@ -96,7 +100,8 @@ describe('受管生成媒体释放边界', () => {
     expect(fs.existsSync(first.filePath)).toBe(true)
 
     await releaseManagedImagePaths([second.filePath])
-    expect(fs.existsSync(first.filePath)).toBe(false)
+    expect(fs.existsSync(first.filePath)).toBe(true)
+    expect(mocks.enqueue).toHaveBeenCalledWith([first.filePath])
   })
 
   it('无进程内 lease 的既有内容寻址文件不会被声明为本次可释放资源', async () => {
@@ -125,7 +130,8 @@ describe('受管生成媒体释放边界', () => {
     await releaseManagedGenerationMediaPaths(first.createdFilePaths)
     expect(fs.existsSync(first.imagePath)).toBe(true)
     await releaseManagedGenerationMediaPaths(second.createdFilePaths)
-    expect(fs.existsSync(first.imagePath)).toBe(false)
+    expect(fs.existsSync(first.imagePath)).toBe(true)
+    expect(mocks.enqueue).toHaveBeenCalledWith([first.imagePath])
   })
 
   it('tracked source 不会取得启动前既有内容寻址文件的删除权', async () => {

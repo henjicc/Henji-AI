@@ -1,3 +1,4 @@
+import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -83,7 +84,7 @@ export class DocumentCoverStore {
         const previous = names.filter((name) => name.endsWith(COVER_EXTENSION)).at(-1)
         await Promise.all(names
           .filter((name) => name !== previous)
-          .map((name) => fsp.rm(path.join(folder, name), { force: true }).catch(() => undefined)))
+          .map((name) => removeUnmanagedCachePath(path.join(folder, name), { force: true }).catch(() => undefined)))
         ;(await this.loadCache()).set(request.docId, target)
         logger.info('文档封面已更新', {
           event: 'documents.cover.save.completed',
@@ -100,7 +101,7 @@ export class DocumentCoverStore {
   async remove(docId: string): Promise<void> {
     if (!DOCUMENT_ID_PATTERN.test(docId)) return
     await this.executor.run(docId, async () => {
-      await fsp.rm(this.folder(docId), { recursive: true, force: true }).catch(() => undefined)
+      await removeUnmanagedCachePath(this.folder(docId), { recursive: true, force: true }).catch(() => undefined)
       this.cache?.delete(docId)
     })
   }

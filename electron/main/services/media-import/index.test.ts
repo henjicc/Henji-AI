@@ -1,4 +1,5 @@
 import fsp from 'node:fs/promises'
+vi.mock('../media-recycle/queue', () => ({ registerOwnedMedia: vi.fn() }))
 import os from 'node:os'
 import path from 'node:path'
 

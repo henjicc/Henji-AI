@@ -85,6 +85,8 @@ export interface DocumentRepositoryOptions {
   /** 跨进程文档锁所在目录（程序目录）。 */
   lockDirectory: string
   trashItem(filePath: string): Promise<void>
+  retainDetachedMediaLocation?(target: string): void
+  mediaPublished?(target: string): Promise<void>
   showItemInFolder(filePath: string): void
   /** 授权媒体协议读取这些目录（作品目录始终已授权）。 */
   grantMediaRoots(directories: readonly string[]): void
@@ -252,7 +254,10 @@ export class DocumentRepository {
         const unchanged = file.envelope.kindVersion === file.kind.version
           && file.envelope.name === name
           && JSON.stringify(encoded.content) === JSON.stringify(file.envelope.content)
-        if (unchanged) return { meta: metaFromFile(file, container), unchanged: true }
+        if (unchanged) {
+          await this.options.mediaPublished?.(file.path)
+          return { meta: metaFromFile(file, container), unchanged: true }
+        }
         const envelope = this.withHeader(file.envelope, {
           name,
           kindVersion: file.kind.version,
@@ -261,6 +266,7 @@ export class DocumentRepository {
           content: encoded.content,
         })
         await writeBufferAtomically(file.path, this.bytes(envelope))
+        await this.options.mediaPublished?.(file.path)
         const saved = await describeWrittenDocument(file.kind, file.path, envelope)
         this.workspace.catalog.upsertDocument(indexedFromFile(saved, container, file.kind.summarize(content)))
         this.warnProgramReferences('save', saved, encoded.report)
@@ -460,6 +466,7 @@ export class DocumentRepository {
       if (file && file.header.id === documentId) {
         throw new DocumentLocationError('这份文档的文件还在，不能只从列表移除；如要删除请移到回收站。')
       }
+      this.options.retainDetachedMediaLocation?.(row.path)
       this.workspace.catalog.removeDocument(documentId)
       await this.options.removeCover?.(documentId)
     }))
@@ -496,6 +503,7 @@ export class DocumentRepository {
         content: encoded.content,
       })
       await writeBufferAtomically(file.path, this.bytes(envelope))
+      await this.options.mediaPublished?.(file.path)
       const saved = await describeWrittenDocument(file.kind, file.path, envelope)
       this.workspace.catalog.upsertDocument(indexedFromFile(saved, container, file.kind.summarize(content)))
       this.logger.info('素材已收集进容器', {
@@ -757,6 +765,7 @@ export class DocumentRepository {
       const envelope = build(target.name)
       try {
         await createFileExclusively(target.path, this.bytes(envelope))
+        await this.options.mediaPublished?.(target.path)
         return { path: target.path, envelope }
       } catch (error) {
         if (!(error instanceof EntryExistsError)) throw error
@@ -795,6 +804,7 @@ export class DocumentRepository {
       updated = await loadDocumentFile(target, this.fileDependencies(), file.header.id)
     }
     this.workspace.catalog.upsertDocument(indexedFromFile(updated, container, summarizeFile(updated, container, this.workspace)))
+    await this.options.mediaPublished?.(target)
     return updated
   }
 

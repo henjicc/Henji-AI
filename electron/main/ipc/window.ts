@@ -4,6 +4,7 @@ import { parseWindowAppearance, windowAppearance } from '../services/window-appe
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
 import { controlVideoEditPopout } from '../windows/video-edit-popout'
 import { parseVideoEditPopoutControl } from '../windows/video-edit-popout-policy'
+import { mediaRecycleLifecycle } from '../services/media-recycle/lifecycle'
 
 const WINDOW_MINIMIZE = 'window:minimize'
 const WINDOW_TOGGLE_MAXIMIZE = 'window:toggleMaximize'
@@ -63,6 +64,8 @@ function toggleMaximizeWindow(win: BrowserWindow): void {
 }
 
 export function bindWindowStateEvents(win: BrowserWindow): void {
+  mediaRecycleLifecycle.opened(win.id)
+  win.once('closed', () => mediaRecycleLifecycle.closed(win.id))
   const emit = (): void => {
     sendWindowState(win)
   }
@@ -75,6 +78,7 @@ export function bindWindowStateEvents(win: BrowserWindow): void {
   win.on('close', (event) => {
     if (approvedCloseWindows.has(win)) {
       approvedCloseWindows.delete(win)
+      mediaRecycleLifecycle.saved(win.id)
       return
     }
     event.preventDefault()
