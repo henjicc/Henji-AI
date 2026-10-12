@@ -53,7 +53,9 @@ export async function resolveAsyncAudioUrl(
   }
 
   if (source.kind === 'media-ref' && !context.runtime.transport.uploadFile) {
-    throw new AiRuntimeError('native_upload_unsupported', '长音频上传需要宿主接入原生文件直传；请升级宿主适配器')
+    throw new AiRuntimeError('native_upload_unsupported', '宿主未提供本地文件直传；请升级宿主适配器', {
+      retryable: false, billing: 'not_charged', execution: { notExecuted: true },
+    })
   }
   const policyResponse = await context.runtime.transport.fetch(
     `${apiBaseUrl}/uploads?action=getPolicy&model=${encodeURIComponent(modelId)}`,

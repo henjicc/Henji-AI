@@ -102,24 +102,24 @@
       "supportedFrom": 1
     },
     "setting-records": {
-      "version": 18,
+      "version": 19,
       "fingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
-      "supportedFrom": 18
+      "supportedFrom": 19
     },
     "asset-records": {
-      "version": 18,
+      "version": 19,
       "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
-      "supportedFrom": 18
+      "supportedFrom": 19
     },
     "generation-presets": {
-      "version": 18,
+      "version": 19,
       "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
-      "supportedFrom": 18
+      "supportedFrom": 19
     },
     "sqlite": {
-      "version": 18,
-      "fingerprint": "18c5e5c3db7a828ad00b815dd386c5ba711ebd91b86bf439b3a5124c0e2e7f56",
-      "supportedFrom": 18
+      "version": 19,
+      "fingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
+      "supportedFrom": 19
     },
     "preset-export": {
       "version": 1,
@@ -1213,6 +1213,42 @@
       "reason": "t177 原文字幕保留首尾空白和换行，移除 caption.text 的隐式 trim，仍拒绝纯空白；开发期语义变更，不迁移旧字幕。",
       "previousFingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
       "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T05:34:11.228Z",
+      "format": "setting-records",
+      "version": 19,
+      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
+      "previousFingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
+      "fingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T05:34:11.230Z",
+      "format": "asset-records",
+      "version": 19,
+      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
+      "previousFingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
+      "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T05:34:11.230Z",
+      "format": "generation-presets",
+      "version": 19,
+      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
+      "previousFingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
+      "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T05:34:11.230Z",
+      "format": "sqlite",
+      "version": 19,
+      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
+      "previousFingerprint": "18c5e5c3db7a828ad00b815dd386c5ba711ebd91b86bf439b3a5124c0e2e7f56",
+      "fingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
       "waivedFixtureVersions": []
     }
   ]

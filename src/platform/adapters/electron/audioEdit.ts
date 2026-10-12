@@ -1,4 +1,5 @@
 import type { AudioEditPlatform } from '@/platform/contracts/audioEdit'
+import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 
 function api() {
   if (!window.henjiNative?.audio) throw new Error('Audio edit platform is unavailable')
@@ -42,6 +43,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
       read: (sessionId, chunkId) => api().recording.read(sessionId, chunkId),
       erase: sessionId => api().recording.erase(sessionId),
       transcribe: input => api().recording.transcribe(input),
+      preflight: input => api().recording.preflight(input),
       cancel: sessionId => api().recording.cancel(sessionId),
     },
     loudness: {
@@ -61,7 +63,14 @@ export function createElectronAudioEdit(): AudioEditPlatform {
     cancelTask: (requestId) => api().cancelEditTask(requestId),
     prepareProcessing: (projectId, requestId) => api().prepareEditProcessing(projectId, requestId),
     listAsrModels: () => api().listAsrModels(),
-    transcribe: (request) => api().transcribeEditProject(request),
+    preflightTranscription: input => api().preflightTranscription(input),
+    transcribe: async request => {
+      const reply = await api().transcribeEditProject(request)
+      if (reply.ok) return reply.data
+      const error = new Error(reply.error.message)
+      const facts = readTranscriptionFacts(reply.error)
+      throw facts ? new TranscriptionFailure(error, facts) : error
+    },
     exportProject: (request) => api().exportEditProject(request),
     listProcessors: () => api().listEditProcessors(),
     preparePreviewChunk: (request) => api().prepareEditPreviewChunk(request),

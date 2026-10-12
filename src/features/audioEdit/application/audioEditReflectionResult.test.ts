@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { editAudioEditProject, loadAudioEditProject, undoAudioEditProject, flushAudioEditProject, resetAudioEditProjectInstancesForTests } from './audioEditProjectInstances'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { getPlatform } from '@/platform/runtime'
 
 import { editedDurationFrames, buildAudioEditTimeline, buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
@@ -30,6 +31,17 @@ beforeEach(() => {
 })
 
 afterEach(async () => { await resetAudioEditProjectInstancesForTests(); uninstallHarnessNativeStorage() })
+
+it('口播识别预检失败经正式能力返回未执行事实', async () => {
+  registerHarnessAudioEditProject({ ...fixture(), transcript: [] })
+  const app = createApplicationHarness()
+  const preflight = vi.spyOn(getPlatform().audioEdit, 'preflightTranscription').mockRejectedValue(new Error('没有配置识别模型'))
+  const submit = vi.spyOn(getPlatform().audioEdit, 'transcribe')
+  try {
+    expect(await app.call('transcribe_audio_edit', { documentRef: { kind: 'audio_edit.document', id: 'audio-result' } })).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true, billing: 'not_charged' } } } })
+    expect(submit).not.toHaveBeenCalled()
+  } finally { preflight.mockRestore(); submit.mockRestore(); app.dispose() }
+})
 
 it('口播名就是文件名：内容实体的名称只读，读到的是文档名（改名走 documents.document.name）', async () => {
   const app = createApplicationHarness()

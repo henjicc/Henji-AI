@@ -300,6 +300,18 @@ export class ImageEditExplanation {
     }
     await this.save(context); this.publish()
   }
+  async preflightTranscription(): Promise<void> {
+    const collector = this.require(), session = collector.session
+    if (this.state.busy || !['reviewing', 'recoverable'].includes(session.state)) throw new Error('请先结束录制。')
+    const modelId = session.asr?.moduleId ?? await this.ports.model()
+    const completed = new Set<string>()
+    for await (const event of this.events('transcript')) if (event.kind === 'transcript') completed.add(event.audioSegmentRef)
+    for await (const audio of this.events('audio')) {
+      if (audio.kind !== 'audio' || completed.has(audio.audioSegmentRef)) continue
+      await this.ports.audio.preflight({ action: 'preflight', sessionId: session.id, chunkId: audio.audioSegmentRef, requestId: audio.audioSegmentRef, modelId, resume: session.state === 'recoverable' })
+      this.assert(collector)
+    }
+  }
   async transcribe(receipt: string): Promise<void> {
     const collector = this.require(), session = collector.session
     if (!receipt || this.state.busy || !['reviewing', 'recoverable'].includes(session.state)) throw new Error('请结束录制并确认转写授权。')

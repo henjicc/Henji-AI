@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { HostContextSnapshot } from './hostContracts'
 import { applicationVerificationConditionSchema, applicationEvidenceSchema } from './transactions'
 import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
+import { applicationUserConfirmationSchema } from './userConfirmation'
 
 export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
 export const APPLICATION_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
@@ -23,6 +24,10 @@ export type LocalHostRequest = z.infer<typeof localHostRequestSchema>
 export const localHostReplySchema = z.object({
   requestId: z.string().uuid(), rendererEpoch: z.string().uuid(),
   result: z.record(z.string(), z.unknown()),
+  progress: z.discriminatedUnion('phase', [
+    z.object({ phase: z.literal('awaiting_user_confirmation'), confirmation: applicationUserConfirmationSchema }).strict(),
+    z.object({ phase: z.literal('executing') }).strict(),
+  ]).optional(),
 }).strict()
 export type LocalHostReply = z.infer<typeof localHostReplySchema>
 export const localToolSchema = z.object({
@@ -73,7 +78,7 @@ export function externalWritableEntityTypes(domains: readonly LocalDomainSurface
  *
  * 当前只支持新应用契约，不提供旧工具或旧协议兼容入口。
  */
-export const EXTERNAL_CONTRACT_VERSION = '2.1.2' as const
+export const EXTERNAL_CONTRACT_VERSION = '2.2.1' as const
 /** 正式支持的现代协议；旧握手和其他版本拒绝，不降级。 */
 export const EXTERNAL_PROTOCOL_VERSIONS = ['2026-07-28'] as const
 export const EXTERNAL_SDK_VERSION = '2.0.0' as const

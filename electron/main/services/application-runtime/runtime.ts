@@ -3,12 +3,15 @@ import { dialog } from 'electron'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationOperationStore } from './operationStore'
-import { recoverPersistedGenerationOperation } from './persistedOperationRecovery'
+import { recoverPersistedGenerationOperation, recoverPersistedTranscriptionOperation } from './persistedOperationRecovery'
+import { getAudioEditStoredTask } from '../audio-edit/task-store'
 import type { ApplicationAccess } from './toolCatalog'
 import { getDb } from '../db'
 import { getGenerationHistoryStore } from '../generation-history/store'
 
 const embeddedCallers = new Map<string, ApplicationAccess>()
+const attachedEmbeddedCallers = new Set<string>()
+const retainedCallers = new Map<string, () => void>()
 let externalAuthority: ((id: string) => void) | undefined
 let runtime: { host: ApplicationHostBridge; operations: ApplicationOperationCoordinator; embedded: ApplicationToolDispatcher } | undefined
 
@@ -18,13 +21,13 @@ export function initializeApplicationRuntime() {
   const operations: ApplicationOperationCoordinator = new ApplicationOperationCoordinator(new ApplicationOperationStore(getDb()),
     // 第三个参数不是可选装饰：恢复回执必须带上 revision/scopeRevisions，否则按 schema
     // 校验的标准 MCP 客户端会拒收整条结果。原回执没有时用宿主当前快照兜住。
-    record => recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, () => {
+    record => recoverPersistedTranscriptionOperation(getAudioEditStoredTask, record) ?? recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, () => {
       const context = host.getContext()
       return context ? { revision: context.revision, scopeRevisions: context.scopeRevisions } : undefined
-    }), () => host.writableEntityTypes(), async summary => {
+    }), () => host.writableEntityTypes(), async (summary, signal) => {
       const result = await dialog.showMessageBox({ type: 'question', title: '核对之前的修改',
         message: '请查看原文档，确认这次修改是否已经完成', detail: `${summary}\n重启前的修改结果尚未确认。仅在确认目标内容后选择；本次核对不会重新执行修改。`,
-        buttons: ['暂不处理', '确认已完成', '确认未执行'], defaultId: 0, cancelId: 0, noLink: true })
+        buttons: ['暂不处理', '确认已完成', '确认未执行'], defaultId: 0, cancelId: 0, noLink: true, signal })
       return result.response === 1 ? 'completed' : result.response === 2 ? 'not_executed' : undefined
     })
   const host: ApplicationHostBridge = new ApplicationHostBridge(id => {
@@ -48,12 +51,30 @@ export function getApplicationRuntime() {
 export function registerExternalApplicationAuthority(authorize: (id: string) => void): void { externalAuthority = authorize }
 
 export function createEmbeddedApplicationClient(callerId: string, access: ApplicationAccess) {
-  const { host, embedded } = getApplicationRuntime()
-  if (embeddedCallers.has(callerId)) throw new Error('调用者身份已在使用。')
+  const { host, embedded, operations } = getApplicationRuntime()
+  if (attachedEmbeddedCallers.has(callerId)) throw new Error('调用者身份已在使用。')
+  retainedCallers.get(callerId)?.(); retainedCallers.delete(callerId)
+  attachedEmbeddedCallers.add(callerId)
   embeddedCallers.set(callerId, access)
+  let closed = false
+  const assertOpen = () => { if (closed) throw new Error('助手操作授权已结束。') }
   return {
-    catalog: () => embedded.catalog(callerId).tools,
-    call: (name: string, input: Record<string, unknown>, signal: AbortSignal) => embedded.call(callerId, name, input, signal),
-    close: () => { embeddedCallers.delete(callerId); host.releaseCaller(callerId) },
+    catalog: () => { assertOpen(); return embedded.catalog(callerId).tools },
+    call: (name: string, input: Record<string, unknown>, signal: AbortSignal) => { assertOpen(); return embedded.call(callerId, name, input, signal) },
+    close: () => {
+      if (closed) return
+      closed = true
+      attachedEmbeddedCallers.delete(callerId)
+      host.releaseCaller(callerId)
+      // A finished model turn does not revoke a committed invocation awaiting the human.
+      // Keep its existing access until completion; the next turn may explicitly replace access.
+      const release = () => {
+        if (operations.store.unresolved().some(record => record.callerId === callerId && ['preparing', 'executing', 'awaiting_user_confirmation'].includes(record.state))) return
+        retainedCallers.get(callerId)?.(); retainedCallers.delete(callerId)
+        embeddedCallers.delete(callerId)
+      }
+      retainedCallers.set(callerId, operations.onChange(release))
+      release()
+    },
   }
 }

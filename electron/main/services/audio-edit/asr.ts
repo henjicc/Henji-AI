@@ -1,5 +1,7 @@
 import crypto from 'node:crypto'
+import { AiRuntimeError } from '@henjicc/ai-sdk'
 import { timestampedAsrService } from './timestamped-asr'
+import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts, type TranscriptionPreflight, type TranscriptionPreparation } from '../../../../src/core/audioEdit/transcriptionFailure'
 import { audioEditTranscriptBlocks } from '../../../../src/core/audioEdit/timestampedTranscript'
 
 import type {
@@ -20,29 +22,63 @@ const client = timestampedAsrService.client
 
 export const listAudioEditAsrModels = timestampedAsrService.listModels
 
+export async function preflightAudioEditTranscription(input: TranscriptionPreflight): Promise<TranscriptionPreparation> {
+  if (input.audioDocumentId) {
+    const project = await requireAudioEditProject(input.audioDocumentId)
+    if (project.source.sourcePath !== input.sourcePath) throw new Error('恢复的口播文档与当前声音素材不一致。')
+    await verifyAudioEditSource(project)
+    if (project.transcript.length) return { requiresConfirmation: false }
+    const task = findAudioEditTranscription(project.id)
+    if (task) {
+      if (isAudioEditTaskActive(task.request_id)) throw new Error('原口播识别仍在执行，请查询原任务。')
+      const prior = task.result_json ? JSON.parse(task.result_json) as { sourceDigest?: string; modelId?: string; output?: AudioEditTranscriptionResult; billing?: string } : undefined
+      if (prior?.sourceDigest !== (project.source.identity?.digest ?? project.source.sourcePath)) throw new Error('素材已变化，不能复用旧识别任务。')
+      if (prior.output) return { modelId: prior.modelId, requiresConfirmation: false }
+      if (task.provider_task_id) {
+        const plan = timestampedAsrService.prepare({ audioPath: input.sourcePath, durationMs: input.durationMs, modelId: prior.modelId })
+        if (!client.get(plan.modelId)?.descriptor.features?.includes('resume-task')) throw new Error('原模型不能恢复查询，禁止重复提交识别。')
+        return { modelId: plan.modelId, requiresConfirmation: false }
+      }
+      if (task.state !== 'failed' || !(prior.billing === 'not_charged' || task.error_message?.startsWith('[native_upload_unsupported]'))) throw new Error('原口播提交结果尚未确认，请核对原任务；不会再次请求付费确认。')
+    }
+  }
+  return { ...await timestampedAsrService.preflight(input), requiresConfirmation: true }
+}
+
 
 export async function transcribeAudioEditProject(
   request: AudioEditTranscriptionRequest,
 ): Promise<AudioEditTranscriptionResult> {
+  let billing: TranscriptionFacts['billing'] = 'not_charged'
+  try {
   const project = await requireAudioEditProject(request.projectId)
   if (project.transcript.length) throw new Error('口播已有转写，请保留当前编辑；需要重新识别时另建口播。')
   await verifyAudioEditSource(project)
   const previous = findAudioEditTranscription(project.id)
+  if (previous) billing = 'unknown'
   if (previous && isAudioEditTaskActive(previous.request_id)) throw new Error('该口播正在转写，请等待或取消。')
-  const priorInput = previous?.result_json ? JSON.parse(previous.result_json) as { modelId?: string; sourceDigest?: string; language?: string } : undefined
-  if (previous && (!previous.provider_task_id || !priorInput?.modelId)) throw new Error('上次转写的提交结果无法确认，已阻止重复付费。请核对供应商任务后另建口播识别。')
+  const priorInput = previous?.result_json ? JSON.parse(previous.result_json) as { modelId?: string; sourceDigest?: string; language?: string; output?: AudioEditTranscriptionResult; billing?: TranscriptionFacts['billing'] } : undefined
+  const neverSubmitted = previous?.state === 'failed' && !previous.provider_task_id && (priorInput?.billing === 'not_charged' || previous.error_message?.startsWith('[native_upload_unsupported]'))
+  if (neverSubmitted) billing = 'not_charged'
+  if (priorInput?.output && priorInput.sourceDigest === (project.source.identity?.digest ?? project.source.sourcePath)) {
+    const cached = priorInput.output
+    return { ...cached, project: { ...project, transcript: cached.project.transcript, suggestions: cached.project.suggestions,
+      selectedAsrModelId: cached.modelId, editBaseline: cached.project.editBaseline } }
+  }
+  if (previous && !neverSubmitted && (!previous.provider_task_id || !priorInput?.modelId)) throw new Error('上次转写的提交结果无法确认，已阻止重复付费。请核对原口播任务。')
   const plan = timestampedAsrService.prepare({
     modelId: priorInput?.modelId ?? request.modelId, audioPath: project.source.sourcePath,
     durationMs: project.source.durationFrames * 1_000 / project.source.sampleRate,
     language: priorInput?.language ?? request.language,
   })
   const modelId = plan.modelId
-  if (previous && !client.get(modelId)?.descriptor.features?.includes('resume-task')) throw new Error('此模型不支持恢复查询，已阻止自动重复提交。')
+  if (previous && !neverSubmitted && !client.get(modelId)?.descriptor.features?.includes('resume-task')) throw new Error('此模型不支持恢复查询，已阻止自动重复提交。')
   const sourceDigest = project.source.identity?.digest ?? project.source.sourcePath
   if (previous && priorInput?.sourceDigest !== sourceDigest) throw new Error('素材已变化，旧转写任务不能覆盖当前口播。')
   const language = priorInput?.language ?? request.language ?? 'zh'
   const inputDigest = crypto.createHash('sha256').update(JSON.stringify({ projectId: project.id, sourceDigest, modelId, language })).digest('hex')
   const requestId = previous?.request_id ?? request.requestId ?? crypto.randomUUID()
+  if (!previous || neverSubmitted) await timestampedAsrService.preflight({ sourcePath: plan.audioPath, durationMs: plan.durationMs, modelId })
   assertAudioEditProjectIdle(project.id)
   const controller = new AbortController()
   const release = registerAudioEditTaskController(requestId, project.id, controller)
@@ -56,22 +92,24 @@ export async function transcribeAudioEditProject(
     context: { projectId: project.id },
   })
   try {
-    const audioPath = previous ? project.source.audioPath : await prepareAudioEditAudio(project, controller.signal)
+    const audioPath = previous && !neverSubmitted ? project.source.audioPath : await prepareAudioEditAudio(project, controller.signal)
     controller.signal.throwIfAborted()
+    billing = previous?.provider_task_id ? 'submitted' : 'unknown'
     const output = await timestampedAsrService.execute(Object.freeze({ ...plan, audioPath }), {
       requestId,
       signal: controller.signal,
       resumeTaskId: previous?.provider_task_id ?? undefined,
       onEvent: (event) => {
         if (event.type === 'started' && event.sessionId) {
+          billing = 'submitted'
           updateAudioEditTask(requestId, { state: 'running', providerTaskId: event.sessionId })
         } else if (event.type === 'processing') {
+          billing = 'submitted'
           updateAudioEditTask(requestId, { state: 'running', providerTaskId: event.taskId })
         }
       },
     })
-    controller.signal.throwIfAborted()
-    await verifyAudioEditSource(project)
+    billing = 'completed'
     const transcript = audioEditTranscriptBlocks(output, project.source.sampleRate)
     if (!transcript.length) throw new Error('识别结果没有可用时间戳，请选择支持时间戳的模型重试。')
     const granularity = transcript.some((block) => block.granularity === 'word')
@@ -91,12 +129,18 @@ export async function transcribeAudioEditProject(
       event: 'audio_edit.transcription.completed', requestId, modelId,
       context: { projectId: project.id, blockCount: transcript.length, granularity },
     })
-    updateAudioEditTask(requestId, { state: 'completed', result: { modelId, granularity, blockCount: transcript.length } })
-    return { project: next, modelId, granularity }
+    const result: AudioEditTranscriptionResult = { project: next, modelId, granularity }
+    // Keep the paid result in the existing task receipt before IPC delivery; reload can retrieve it.
+    updateAudioEditTask(requestId, { state: 'completed', result: { modelId, sourceDigest, language, billing, output: result } })
+    controller.signal.throwIfAborted()
+    await verifyAudioEditSource(project)
+    return result
   } catch (error) {
+    if ((error instanceof AiRuntimeError && error.details?.billing === 'not_charged') || (error instanceof Error && error.message.startsWith('[native_upload_unsupported]'))) billing = 'not_charged'
     updateAudioEditTask(requestId, {
       state: controller.signal.aborted ? 'cancelled' : 'failed',
       errorMessage: error instanceof Error ? error.message : String(error),
+      ...(billing === 'not_charged' ? { result: { modelId, sourceDigest, language, billing } } : {}),
     })
     logger.error('口播转写失败', {
       event: 'audio_edit.transcription.failed', requestId, modelId,
@@ -106,6 +150,9 @@ export async function transcribeAudioEditProject(
   } finally {
     controllers.delete(requestId)
     release()
+  }
+  } catch (error) {
+    throw new TranscriptionFailure(error, { ...readTranscriptionFacts(error), billing, targetMutation: 'none', audioDocumentId: request.projectId })
   }
 }
 

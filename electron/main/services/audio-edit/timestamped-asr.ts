@@ -11,6 +11,8 @@ import { normalizeTimestampedTranscript, type TimestampedTranscript } from '../.
 import { getAiProviderApiKey } from '../keystore'
 import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
 import { createMainLogger } from '../logging'
+import { scopedUploadFile } from '../ai-runtime/native-file-upload'
+import type { TranscriptionPreflight } from '../../../../src/core/audioEdit/transcriptionFailure'
 
 const logger = createMainLogger('main.audio_edit.asr')
 
@@ -36,11 +38,12 @@ export interface TimestampedAsrModel {
 export interface TimestampedAsrService {
   client: ReturnType<typeof createCapabilityClient>
   listModels(): TimestampedAsrModel[]
+  preflight(input: TranscriptionPreflight): Promise<{ modelId: string }>
   prepare(input: { modelId?: string; providerId?: string; audioPath: string; durationMs: number; language?: string }): TimestampedTranscriptionPlan
   execute(plan: TimestampedTranscriptionPlan, context: { requestId: string; signal: AbortSignal; resumeTaskId?: string; onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void> }): Promise<TimestampedTranscript>
 }
 
-export function createTimestampedAsrService(runtime: RuntimeContext, isConfigured: (providerId: string) => boolean): TimestampedAsrService {
+export function createTimestampedAsrService(runtime: RuntimeContext, isConfigured: (providerId: string) => boolean, checkMedia: (ref: string) => Promise<unknown> = scopedUploadFile): TimestampedAsrService {
   const client = createCapabilityClient({ runtime, modules: [
     ...bailianNonRealtimeAsrPresets.map((preset) => createBailianAsrModule(preset)),
     createGroqAsrModule(groqWhisperLargeV3Turbo), createGroqAsrModule(groqWhisperLargeV3),
@@ -49,6 +52,13 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
   ] })
   return {
     client,
+    async preflight(input) {
+      const selected = resolveTimestampedLocalAsr(isConfigured, input.modelId)
+      const preset = bailianNonRealtimeAsrPresets.find(value => value.descriptor.id === selected.descriptor.id)
+      if (preset?.asyncInputField && !runtime.transport.uploadFile) throw new Error('native_upload_unsupported：宿主未提供本地文件直传；未提交识别、未计费。')
+      await checkMedia(input.sourcePath)
+      return { modelId: selected.descriptor.id }
+    },
     listModels: (): TimestampedAsrModel[] => client.list('speech-recognition').filter((descriptor) => {
       const entry = ASR_CATALOG.find((entry) => entry.descriptor.id === descriptor.id)
       return entry !== undefined && isTimestampedLocalAsr(entry)

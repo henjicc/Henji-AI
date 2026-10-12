@@ -2,12 +2,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createElectronAudioEdit } from './audioEdit'
 import type { AudioWaveformRangeRequest } from '@/platform/contracts/audioWaveform'
+import { readTranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 
 afterEach(() => { vi.unstubAllGlobals() })
 const request = { source: 'C:/media.wav', startUs: 0, endUs: 1000, bucketCount: 16, channels: 2 as const }
 const result = { ...request, sampleRate: 48000, durationSeconds: 1, channelCount: 2 as const, channels: [], fileIdentity: 'file' }
 
 describe('audio waveform range PAL', () => {
+  it('rehydrates transcription facts from the plain IPC envelope after contextBridge', async () => {
+    const facts = { billing: 'completed', targetMutation: 'none', audioDocumentId: 'saved-audio' }
+    const transcribeEditProject = vi.fn(async () => JSON.parse(JSON.stringify({ok:false,error:{message:'字幕未写入',transcriptionFacts:facts}})) as unknown)
+    vi.stubGlobal('window', { henjiNative: { audio: { transcribeEditProject } } })
+    try { await createElectronAudioEdit().transcribe({ projectId:'saved-audio', requestId:'operation' }); throw new Error('expected rejection') }
+    catch (error) { expect(readTranscriptionFacts(error)).toEqual(facts) }
+  })
   it('retains requestId for native cancellation and ignores late native completion', async () => {
     let finish!: (value: typeof result) => void
     const extractRangeSamples = vi.fn<[AudioWaveformRangeRequest & { requestId: string }], Promise<typeof result>>(() => new Promise<typeof result>(resolve => { finish = resolve }))

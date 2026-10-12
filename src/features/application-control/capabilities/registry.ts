@@ -8,6 +8,7 @@ import type { ApplicationCapabilityFailure, ApplicationCapabilityResult, HostErr
 import { createLogger } from '@/core/logging'
 
 import { ZodError } from 'zod'
+import { readTranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 import { ApplicationTransactionFailure, ApplicationPreflightFailure, ApplicationOperationNotExecutedFailure } from '@/core/application-control/execution/transactionFailure'
 import { capabilityVerificationEnvelope } from '@/core/application-control/capabilityVerification'
 import { transactionFailureFacts } from '@/core/application-control/applicationTransactionFailureFacts'
@@ -182,6 +183,14 @@ const CALLER_CORRECTABLE_ERROR_CODES = new Set<HostErrorCode>([
 ])
 
 function toFailure(error: unknown): ApplicationCapabilityFailure {
+  const transcription = readTranscriptionFacts(error)
+  if (transcription) {
+    const audioDocumentRef = transcription.audioDocumentId ? { kind: 'audio_edit.document', id: transcription.audioDocumentId } : undefined
+    const notExecuted = transcription.billing === 'not_charged' && transcription.targetMutation === 'none'
+    return { ok: false, error: { code: 'CAPABILITY_REJECTED', message: error instanceof Error ? error.message : String(error), recoverable: true,
+      details: { execution: { notExecuted, ...transcription }, ...(audioDocumentRef ? { recovery: { audioDocumentRef, replayRecognition: false,
+        message: '复用 audioDocumentRef 继续原识别或字幕任务；已完成识别不重复计费。' } } : {}) } } }
+  }
   if (error instanceof ApplicationOperationNotExecutedFailure) {
     const failure = toFailure(error.original)
     return { ok: false, error: { ...failure.error, recoverable: true, details: { ...failure.error.details, execution: { notExecuted: true } } } }

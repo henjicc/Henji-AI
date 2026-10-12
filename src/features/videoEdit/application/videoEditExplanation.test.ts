@@ -12,7 +12,7 @@ import { createVideoEditTestProject, failVideoEditSaves, savedVideoEdit } from '
 import { appendVideoEditClip, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, editVideoProject, setVideoEditView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture } from './videoEditService'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { storeMotionResource, storeMotionResourceBytes, readMotionResource, readMotionResourceBytes } from './videoEditMotionResources'
-import { startVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, stopVideoExplanation, videoExplanationState, recordVideoExplanationPresentation, recordVideoExplanationPointer, transcribeVideoExplanation, readVideoExplanationPage, correctVideoExplanationText, videoExplanationJsonl, eraseVideoExplanation, reopenVideoExplanation, retryVideoExplanationSave, retainVideoExplanationAudio, readVideoExplanationReview, correctVideoExplanationBinding, pickVideoExplanationBinding } from './videoEditExplanation'
+import { startVideoExplanation, pauseVideoExplanation, resumeVideoExplanation, stopVideoExplanation, videoExplanationState, recordVideoExplanationPresentation, recordVideoExplanationPointer, preflightVideoExplanation, transcribeVideoExplanation, readVideoExplanationPage, correctVideoExplanationText, videoExplanationJsonl, eraseVideoExplanation, reopenVideoExplanation, retryVideoExplanationSave, retainVideoExplanationAudio, readVideoExplanationReview, correctVideoExplanationBinding, pickVideoExplanationBinding } from './videoEditExplanation'
 
 const capture = vi.hoisted(()=>({block:undefined as ((block:CapturedAudioBlock)=>void)|undefined,interrupt:undefined as ((message:string)=>void)|undefined,stop:vi.fn(async()=>{}),deny:false}))
 vi.mock('./videoEditExplanationVisual',()=>({captureExplanationPixels:vi.fn(async()=>({bytes:new Uint8Array([137,80,78,71,13,10,26,10]),size:[200,100]}))}))
@@ -31,6 +31,7 @@ beforeEach(()=>{
   vi.spyOn(api,'erase').mockImplementation(async()=>{chunks.clear()});vi.spyOn(api,'release').mockImplementation(async()=>{chunks.clear()});vi.spyOn(api,'cancel').mockResolvedValue();vi.spyOn(api,'restore').mockResolvedValue()
   vi.spyOn(api,'archive').mockImplementation(async()=>{const path='D:/temp/retained.zip';const bytes=new Uint8Array([1,2,3]);files.set(path,bytes);return{path,digest:`sha256:${'3'.repeat(64)}`,bytes:3}})
   vi.spyOn(modelDefaultsManager,'resolveTranscriptionModelId').mockReturnValue('groq.speech-recognition.whisper-large-v3')
+  vi.spyOn(api,'preflight').mockResolvedValue()
   vi.spyOn(api,'transcribe').mockImplementation(async input=>({modelId:input.modelId,providerId:'groq',requestId:input.requestId,transcript:normalizeTimestampedTranscript({text:'向左移动',segments:[{text:'向左移动',startMs:0,endMs:100}]},100,'word')}))
 })
 afterEach(async()=>{failVideoEditSaves(false);for(const owner of listVideoEditInstances())await closeVideoEditProject(owner.document.id);vi.restoreAllMocks();vi.unstubAllGlobals();uninstallHarnessNativeStorage()})
@@ -201,4 +202,13 @@ it('粗时间人工校正不伪造历史画面，当前节目点选要求实际�
   monitor.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 10, clientY: 10 })); await refused
   const cancel = new AbortController(), cancelled = pickVideoExplanationBinding(owner, entry, mention, cancel.signal)
   cancel.abort(); await cancelled; monitor.remove()
+})
+
+it('讲解确认前预检所有待识别块，不调用识别、不改变会话', async () => {
+  const owner=await setup();const id=owner.document.id
+  await startVideoExplanation(id,crypto.randomUUID());clock=200;present(owner,0);audio();clock=400;await stopVideoExplanation(id)
+  vi.mocked(getPlatform().audioEdit.recording.preflight).mockRejectedValueOnce(new Error('本地媒体不可读'))
+  await expect(preflightVideoExplanation(id)).rejects.toThrow('本地媒体不可读')
+  expect(getPlatform().audioEdit.recording.transcribe).not.toHaveBeenCalled();expect(videoExplanationState(owner)!.collector.session.state).toBe('reviewing')
+  await preflightVideoExplanation(id);expect(getPlatform().audioEdit.recording.preflight).toHaveBeenLastCalledWith(expect.objectContaining({action:'preflight',sessionId:videoExplanationState(owner)!.collector.session.id}))
 })

@@ -46,6 +46,7 @@ export function registerExplanationAudioHandlers(): void {
       case 'restore': return explanationAudioService.restore(request)
       case 'cancel': return explanationAudioService.cancel(request.sessionId)
       case 'transcribe': return explanationAudioService.transcribe(request)
+      case 'preflight': return explanationAudioService.preflight(request)
     }
   }, assertTrustedApplicationSender)
 }

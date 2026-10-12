@@ -2,6 +2,7 @@ import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import { getPlatform } from '@/platform/runtime'
+import { preflightAudioEditTranscription } from '@/features/audioEdit'
 import { requireVideoEditInstance, videoEditDocumentOperations, type VideoEditInstance } from './videoEditService'
 import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, type SubtitleScope, type SubtitleTranscriptionOptions } from './videoEditAutoSubtitles'
 
@@ -28,13 +29,14 @@ export async function runVideoEditSubtitleJob(owner: VideoEditInstance, sequence
   const { signal } = job.controller
   try {
     job.audioDocumentId ??= await prepareVideoEditSubtitleAudio(owner.document.id, sequenceId, scope, trackId, signal, progress => { job.progress = progress; publish() })
+    const prepared = await preflightAudioEditTranscription(job.audioDocumentId, undefined, options.language)
     job.state = 'confirming'; publish()
-    const accepted = await requestAlertConfirmation({ title: '转录并生成字幕', message: '复用口播识别：使用已配置、支持时间戳的语音模型。识别按该模型计费；若已有转录结果，继续整理字幕不会重复识别。是否继续？', type: 'warning', confirmLabel: '确认转录' }, signal)
+    const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ title: '转录并生成字幕', message: '复用口播识别：使用已配置、支持时间戳的语音模型。识别按该模型计费；若已有转录结果，继续整理字幕不会重复识别。是否继续？', type: 'warning', confirmLabel: '确认转录' }, signal)
     if (!accepted) { job.state = 'cancelled'; return }
     signal.throwIfAborted()
     if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原剪辑已关闭，请重新准备字幕。')
     job.state = 'transcribing'; publish()
-    await generateVideoEditSubtitles(owner.document.id, sequenceId, job.audioDocumentId, undefined, options, signal)
+    await generateVideoEditSubtitles(owner.document.id, sequenceId, job.audioDocumentId, prepared.modelId, options, signal)
     job.state = 'completed'
   } catch (error) {
     job.state = signal.aborted ? 'cancelled' : 'failed'; job.error = error instanceof Error ? error.message : String(error)

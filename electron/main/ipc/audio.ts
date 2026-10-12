@@ -7,7 +7,8 @@ import { detectAudioEditSilence } from '../services/audio-edit/silence'
 import { cancelAudioEditTask, listAudioEditTasks, runAudioEditTask } from '../services/audio-edit/task-store'
 import { audioEditSettingsSchema, audioEditRangeSchema, audioEditFrameRateSchema } from '../../../src/core/audioEdit/schema'
 import { requireAudioEditProject } from '../services/audio-edit/project-store'
-import { listAudioEditAsrModels, transcribeAudioEditProject } from '../services/audio-edit/asr'
+import { listAudioEditAsrModels, transcribeAudioEditProject, preflightAudioEditTranscription } from '../services/audio-edit/asr'
+import { transcriptionPreflightSchema } from '../../../src/core/audioEdit/transcriptionFailure'
 import { exportAudioEditProject } from '../services/audio-edit/export'
 import { listAudioEditProcessors, prepareAudioEditProcessedAudio } from '../services/audio-edit/processors'
 import { prepareAudioEditPreviewChunk } from '../services/audio-edit/preview'
@@ -28,6 +29,7 @@ export function registerAudioIpc(): void {
 
   registerIpcHandler('audioEdit:source:probe', (input) => parseStringField(input, 'sourcePath'), probeAudioEditImport)
   registerIpcHandler('audioEdit:asr:list', parseVoid, () => listAudioEditAsrModels())
+  registerIpcHandler('audioEdit:asr:preflight', input => transcriptionPreflightSchema.parse(input), preflightAudioEditTranscription)
   registerIpcHandler('audioEdit:source:verify', (input) => parseStringField(input, 'projectId'), async (id) => verifyAudioEditSource(await requireAudioEditProject(id)))
   registerIpcHandler('audioEdit:source:relink', (input) => {
     const record = parseRecord(input)

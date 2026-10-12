@@ -137,13 +137,13 @@ export function findActiveAudioEditTask(projectId: string, kind: string, inputDi
   return row ? { requestId: row.request_id, state: row.state } : null
 }
 
-export interface AudioEditStoredTask { request_id: string; state: AudioEditTaskState; provider_task_id: string | null; input_digest: string; result_json: string | null }
+export interface AudioEditStoredTask { request_id: string; state: AudioEditTaskState; provider_task_id: string | null; input_digest: string; result_json: string | null; error_message?: string | null }
 export function getAudioEditStoredTask(requestId: string): (AudioEditStoredTask & { document_id: string }) | undefined {
   const row = getDb().prepare('SELECT request_id,document_id,state,provider_task_id,input_digest,result_json FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as (AudioEditStoredTask & { document_id: string }) | undefined
   return row?.result_json ? { ...row, result_json: JSON.stringify(decodeTaskResult(row.result_json)) } : row
 }
 export function findAudioEditTranscription(projectId: string): AudioEditStoredTask | undefined {
-  const row = getDb().prepare("SELECT request_id,state,provider_task_id,input_digest,result_json FROM audio_edit_tasks WHERE document_id = ? AND kind = 'transcription' ORDER BY created_at DESC LIMIT 1").get(projectId) as AudioEditStoredTask | undefined
+  const row = getDb().prepare("SELECT request_id,state,provider_task_id,input_digest,result_json,error_message FROM audio_edit_tasks WHERE document_id = ? AND kind = 'transcription' ORDER BY created_at DESC LIMIT 1").get(projectId) as AudioEditStoredTask | undefined
   return row?.result_json ? { ...row, result_json: JSON.stringify(decodeTaskResult(row.result_json)) } : row
 }
 export function isAudioEditTaskActive(requestId: string): boolean { return active.has(requestId) }

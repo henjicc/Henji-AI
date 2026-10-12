@@ -24,6 +24,7 @@ import { LOCAL_LIBRARY_FORMATS } from './versionedJson'
 import { presetExportSchema, themePayloadSchema } from './auxiliarySchemas'
 import { THEME_STORAGE_VERSION, CODE_COMPONENT_SCHEMA_VERSION, SQLITE_SCHEMA_VERSION } from './schemaVersions'
 import { MODEL_DEFAULTS_VERSION, modelDefaultsSchema, NODE_DEFAULTS_VERSION, nodeDefaultsSchema, ONBOARDING_VERSION, onboardingSchema } from './preferenceSchemas'
+import { applicationOperationStateSchema, applicationUserConfirmationSchema } from '../application-control/userConfirmation'
 
 export interface PersistenceFormat extends PersistenceContract {
   readonly versionSource: string
@@ -72,7 +73,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('setting-records', '设置记录', SQLITE_SCHEMA_VERSION, 'schema_migrations（现有SQLite账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger'),
   format('asset-records', '素材库记录', SQLITE_SCHEMA_VERSION, 'schema_migrations（现有SQLite账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger'),
   format('generation-presets', '生成预设', SQLITE_SCHEMA_VERSION, 'schema_migrations（现有SQLite账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),
-  format('sqlite', '应用数据库', SQLITE_SCHEMA_VERSION, 'SCHEMA_MIGRATIONS / schema_migrations', 'electron/main/services/db-migrations.ts::runSchemaMigrations', z.object({ version: z.number().int().positive(), name: z.string(), applied_at: z.number() }), 'sqlite-ledger'),
+  format('sqlite', '应用数据库', SQLITE_SCHEMA_VERSION, 'SCHEMA_MIGRATIONS / schema_migrations', 'electron/main/services/db-migrations.ts::runSchemaMigrations', z.object({ version: z.number().int().positive(), name: z.string(), applied_at: z.number() }), 'sqlite-ledger', { operationState: applicationOperationStateSchema, userConfirmation: applicationUserConfirmationSchema }),
 ]
 
 /** Deliberate scope boundary: rebuildable projections and external formats are not user-project migrations. */

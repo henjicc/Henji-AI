@@ -1,5 +1,6 @@
 import type { ApplicationCallerGrant } from './callerContext'
 import type { ApplicationObservedEffect } from './observedEffect'
+import type { ApplicationOperationState } from './userConfirmation'
 
 /** 仅可信宿主构建，授权不属于能力参数。 */
 export interface ApplicationInvocationContext {
@@ -14,7 +15,7 @@ export interface ApplicationResult<T = Record<string, unknown>> {
   ok: boolean
   data?: T
   error?: { code: string; message: string; recoverable?: boolean; details?: unknown }
-  executionState?: 'prepared' | 'preparing' | 'executing' | 'completed' | 'not_executed' | 'rolled_back' | 'partial' | 'unknown' | 'not_found'
+  executionState?: ApplicationOperationState | 'not_found'
   persistence?: { state: 'saved' | 'dirty' | 'not_required' | 'unknown'; recovery?: unknown }
   observedEffects?: ApplicationObservedEffect[]
   taskRef?: { kind: string; id: string }

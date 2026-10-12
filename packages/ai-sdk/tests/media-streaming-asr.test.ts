@@ -251,7 +251,7 @@ describe('ASR bounded media requests', () => {
     const rt = runtime(1)
     const context = { runtime: resolveRuntimeContext(rt), requestId: 'test', signal: new AbortController().signal, emit: async () => {} }
     await expect(resolveAsyncAudioUrl(audio, 'fun-asr', 'key', 'https://api.example', context))
-      .rejects.toMatchObject({ code: 'native_upload_unsupported' })
+      .rejects.toMatchObject({ code: 'native_upload_unsupported', details: { retryable: false, billing: 'not_charged', execution: { notExecuted: true } } })
     const policy = fixture('bailian/asr-upload-policy.json') as { data: Record<string, unknown> }
     policy.data.max_file_size_mb = 'invalid'
     rt.transport.fetch = async () => json(policy)
@@ -259,6 +259,19 @@ describe('ASR bounded media requests', () => {
     await expect(resolveAsyncAudioUrl(audio, 'fun-asr', 'key', 'https://api.example', context))
       .rejects.toMatchObject({ code: 'invalid_response' })
     expect(rt.transport.uploadFile).not.toHaveBeenCalled()
+    expect(rt.media.read).not.toHaveBeenCalled()
+  })
+  it('public execution classifies native and upload failures before ASR submission as non-billable', async () => {
+    const preset = bailianNonRealtimeAsrPresets.find(value => value.protocol === 'file-async')!
+    const rt = runtime(1)
+    const client = createCapabilityClient({runtime:rt,modules:[createBailianAsrModule(preset)]})
+    await expect(client.execute(preset.id,{audio})).rejects.toMatchObject({code:'native_upload_unsupported',details:{retryable:false,billing:'not_charged',execution:{notExecuted:true}}})
+    expect(rt.transport.fetch).not.toHaveBeenCalled()
+    rt.transport.fetch = vi.fn(async () => json(fixture('bailian/asr-upload-policy.json')))
+    rt.transport.uploadFile = vi.fn(async () => { throw new TypeError('upload connection interrupted') })
+    await expect(client.execute(preset.id,{audio})).rejects.toMatchObject({code:'audio_upload_failed',details:{retryable:false,billing:'not_charged',execution:{notExecuted:true}}})
+    expect(rt.transport.fetch).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(rt.transport.fetch).mock.calls[0][0]).toContain('/uploads?')
     expect(rt.media.read).not.toHaveBeenCalled()
   })
 })

@@ -2,3 +2,4 @@
 export { generationApplicationService } from './application/generationApplicationService';
 export type { GenerationModelFilterType } from './domain/generationDraft';
 export { waitForGenerationCompletion } from './application/waitForGenerationCompletion';
+export { readGenerationResultTimings } from './application/generationResultTimings';

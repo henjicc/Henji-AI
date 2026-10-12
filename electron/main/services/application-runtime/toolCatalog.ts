@@ -12,6 +12,11 @@ import { GENERATION_BUDGET } from './generationBudget'
 import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
 import { capabilityPublicOutputSchema } from '../../../../src/core/application-control/capabilityVerification'
+import { applicationUserConfirmationSchema } from '../../../../src/core/application-control/userConfirmation'
+
+const confirmationGuidance = '可能立即返回 awaiting_user_confirmation：请用户到痕迹AI确认对话框核对费用或发送内容，应用随后自动继续；用原 operationId 查询 get_application_operation，不要重复提交。'
+const waitingOutput = z.object({ ok: z.literal(false), operationId: z.string().uuid(), executionState: z.literal('awaiting_user_confirmation'),
+  verificationState: z.literal('unresolved'), confirmation: applicationUserConfirmationSchema }).passthrough()
 
 /**
  * 对外目录的唯一投影处。
@@ -71,7 +76,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
-    description: '读取本连接操作的持久事实；未知状态不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。',
+    description: '读取本连接操作的持久事实；未知状态不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。' + confirmationGuidance,
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, ...RESULT_DETAIL_FIELDS }, required: ['operationId'], additionalProperties: false },
   },
   {
@@ -81,7 +86,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'review_application_operation', tier: 'write', readOnly: false, requiresOperations: true,
-    description: '原宿主结束且执行回执遗失时，由应用读取原目标并弹窗请用户核对是否已执行。只修正本连接原操作账本，不重放修改；不能由智能体代替用户确认。',
+    description: '原宿主结束且执行回执遗失时，由应用读取原目标并弹窗请用户核对是否已执行。只修正本连接原操作账本，不重放修改；不能由智能体代替用户确认。取消或超时保留原 unknown 屏障。' + confirmationGuidance,
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false },
   },
 ]
@@ -150,12 +155,12 @@ function capabilityTool(tool: LocalTool): Tool {
     if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
   }
   return {
-    name: tool.id, title: tool.title, description: tool.description + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
+    name: tool.id, title: tool.title, description: tool.description + (write ? ` ${confirmationGuidance}` : '') + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
     inputSchema: { ...schema, properties: { ...schema.properties as Record<string, unknown>, ...resultDetailFields(tool.id) }, type: 'object' },
-    ...(definition ? { outputSchema: projectToolOutputSchema(z.toJSONSchema(write
-      ? z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough() }).passthrough()
+    ...(definition ? { outputSchema: { type: 'object', ...projectToolOutputSchema(z.toJSONSchema(write
+      ? z.union([z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough() }).passthrough(), waitingOutput])
       : z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough(),
-    { io: 'output' }), tool.id) as Tool['inputSchema'] } : {}),
+    { io: 'output' }), tool.id) } as Tool['inputSchema'] } : {}),
     annotations: { readOnlyHint: !write, destructiveHint: tool.id === 'change_application_entities' || Boolean(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.id)?.destructive), openWorldHint: false },
   }
 }
@@ -215,6 +220,7 @@ export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]
 }
 
 const WORKFLOWS = [
+  confirmationGuidance,
   '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
   '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
   '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。不要传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',

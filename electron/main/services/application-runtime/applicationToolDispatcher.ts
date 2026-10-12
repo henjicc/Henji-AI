@@ -101,7 +101,7 @@ export class ApplicationToolDispatcher {
                 this.connections.assertActive(callerId)
                 signal.throwIfAborted()
                 return result.ok === true || (result.error as { code?: string } | undefined)?.code === 'NOT_FOUND'
-              }, () => { this.connections.assertActive(callerId); signal.throwIfAborted(); if (!this.connections.access(callerId).allowWrites) throw new Error('PERMISSION_DENIED:修改授权已撤销。') })
+              }, () => { this.connections.assertActive(callerId); if (!this.connections.access(callerId).allowWrites) throw new Error('PERMISSION_DENIED:修改授权已撤销。') })
             } catch (error) { return applicationFailure(error instanceof Error ? error.message : '操作核对未完成。') }
           }
         }

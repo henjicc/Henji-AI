@@ -19,6 +19,7 @@ import { videoEditComposition } from '@/core/videoEdit/document'
 import { resolveVideoEditTextRanges, videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
 import { generateClipSpeechSubtitles } from './videoEditSpeechSubtitles'
 import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability'
+import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 
 const boundary = vi.hoisted(() => ({ mixes: [] as Array<{ start: number; duration: number }>, disposed: vi.fn() }))
 // Pixel/encoder boundaries only; ASR, document instances, edits, history and persistence remain real.
@@ -45,6 +46,7 @@ beforeEach(async () => {
   vi.spyOn(system.fs, 'readTextFile').mockImplementation(async path => { if (!texts.has(path)) throw new Error('不存在'); return texts.get(path)! })
   vi.spyOn(getPlatform().audioEdit, 'probeSource').mockImplementation(async path => ({ mediaType: 'audio', sourcePath: path, audioPath: path, sampleRate: 1000, channels: 1, durationFrames: Math.round(boundary.mixes.reduce((sum, chunk) => sum + chunk.duration, 0) * 1000) }))
   vi.spyOn(getPlatform().audioEdit, 'listTasks').mockResolvedValue([])
+  vi.spyOn(getPlatform().audioEdit, 'preflightTranscription').mockResolvedValue({ modelId: 'test-asr', requiresConfirmation: true })
   vi.spyOn(getPlatform().audioEdit, 'cancelTask').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([{ id: 'test-asr', providerId: 'test', timestamps: true, configured: true, longAudio: true }])
   vi.spyOn(getPlatform().audioEdit, 'transcribe').mockImplementation(async request => {
@@ -81,6 +83,56 @@ it('native-only mode rejects missing timings without charging or creating a capt
   await expect(generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: '你好', timeSource: 'native' })).rejects.toThrow('没有原生时间戳')
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
   expect(sequence().captions ?? []).toHaveLength(0)
+})
+it('auto 预检失败在确认前返回零执行事实，native 缺时间戳同样明确未执行', async () => {
+  const app = createApplicationHarness()
+  const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, originalText: '你好' }
+  try {
+    vi.mocked(getPlatform().audioEdit.preflightTranscription).mockRejectedValue(new Error('宿主未提供本地文件直传'))
+    expect(await app.call('generate_video_edit_subtitles', input)).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true, billing: 'not_charged' } } } })
+    expect(await app.call('generate_video_edit_subtitles', { ...input, timeSource: 'native' })).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
+    expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+    expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  } finally { app.dispose() }
+})
+it('识别完成后片段变化保留计费事实和恢复引用，不写字幕、不重复识别', async () => {
+  const platform = getPlatform().audioEdit
+  const original = vi.mocked(platform.transcribe).getMockImplementation()!
+  vi.mocked(platform.transcribe).mockImplementation(async request => {
+    const result = await original(request)
+    editVideoProject(owner.document.id, doc => { doc.sequences[0].clips[0].start += 1; return doc })
+    return result
+  })
+  const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' })
+  const failed = pending.catch(error => error as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure)
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  useAlertDialogStore.getState().confirmCurrent()
+  const error = await failed
+  expect(error).toMatchObject({ transcriptionFacts: { billing: 'completed', targetMutation: 'none', audioDocumentId: expect.any(String) } })
+  const audioDocumentId = (error as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure).transcriptionFacts.audioDocumentId!
+  expect(sequence().captions ?? []).toHaveLength(0)
+  await generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello', audioDocumentId })
+  expect(platform.transcribe).toHaveBeenCalledTimes(1)
+})
+it('clipRef 混用 prepare 的混音引用时给出可行动的字段修正，不识别也不弹窗', async () => {
+  const audioDocumentId = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
+  await expect(generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello', audioDocumentId })).rejects.toThrow('使用 clipRef 时不要传 prepare_video_edit_subtitle_audio 返回的混音文档')
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+})
+it('公共调用识别确认通过同一弹窗发布等待事实，拒绝为零执行', async () => {
+  const controller = new AbortController()
+  const progress = vi.fn().mockResolvedValue(undefined)
+  const unbind = bindApplicationConfirmation(controller.signal, progress)
+  const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' }, controller.signal)
+  const rejected = expect(pending).rejects.toThrow('未执行本次操作')
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'awaiting_user_confirmation' }))
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  useAlertDialogStore.getState().dismissCurrent()
+  await rejected
+  expect(sequence().captions ?? []).toHaveLength(0)
+  unbind()
 })
 it('recognition fallback waits for billing confirmation and cancellation never starts ASR', async () => {
   const controller = new AbortController()

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { withApplicationConfirmation } from '@/core/application-control/userConfirmation'
 
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 
@@ -57,6 +58,13 @@ export function showAlertDialog(request: AlertDialogRequest): void {
 
 /** 一次性的人机确认；任务中止时精确移除自己的弹窗，不影响其他排队提示。 */
 export function requestAlertConfirmation(
+  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger' },
+  signal?: AbortSignal,
+): Promise<boolean> {
+  return withApplicationConfirmation(signal, { title: request.title, message: request.message, confirmLabel: request.confirmLabel }, scopedSignal => showAlertConfirmation(request, scopedSignal))
+}
+
+function showAlertConfirmation(
   request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger' },
   signal?: AbortSignal,
 ): Promise<boolean> {

@@ -202,6 +202,18 @@ const validator = new AjvJsonSchemaValidator()
 const uncoveredTools: Record<string, string> = {}
 
 describe('外部客户端成功输出 JSON Schema 契约', () => {
+  it('全部写工具允许等待确认的非错误回执，且不得缺少确认位置和恢复指引', async () => {
+    const { applicationUserConfirmation } = await import('../../../../src/core/application-control/userConfirmation')
+    const raw = { ok: false, operationId: '3e8b1d7c-6a2f-4c95-9d40-7f1e5a3c8b26', executionState: 'awaiting_user_confirmation' as const, verificationState: 'unresolved',
+      confirmation: applicationUserConfirmation({ title: '费用确认', message: '按模型计费', confirmLabel: '确认' }) }
+    for (const tool of tools.filter(tool => APPLICATION_WRITE_CAPABILITY_IDS.includes(tool.name))) {
+      const result = toMcpResult(projectApplicationToolResult(tool.name, {}, raw))
+      expect(result.isError).toBe(false)
+      const validate = validator.getValidator(tool.outputSchema!)
+      expect(validate(result.structuredContent).valid, tool.name).toBe(true)
+      expect(validate({ ...result.structuredContent, confirmation: { title: '缺少说明' } }).valid, tool.name).toBe(false)
+    }
+  })
   for (const [name, data] of Object.entries(successData)) {
     it(`${name}：完整领域校验→公共 verification→紧凑/完整投影→MCP structuredContent`, () => {
       const tool = tools.find(tool => tool.name === name)!

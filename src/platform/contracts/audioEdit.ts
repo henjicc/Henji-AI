@@ -40,6 +40,7 @@ export interface AudioEditPlatform {
   cancelTask(requestId: string): Promise<void>
   prepareProcessing(projectId: string, requestId: string): Promise<void>
   listAsrModels(): Promise<AudioEditAsrModel[]>
+  preflightTranscription(input: import('@/core/audioEdit/transcriptionFailure').TranscriptionPreflight): Promise<import('@/core/audioEdit/transcriptionFailure').TranscriptionPreparation>
   transcribe(request: AudioEditTranscriptionRequest): Promise<AudioEditTranscriptionResult>
   exportProject(request: AudioEditExportRequest): Promise<AudioEditExportResult>
   listProcessors(): Promise<AudioEditProcessorDescriptor[]>

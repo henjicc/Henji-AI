@@ -410,3 +410,85 @@ async function removePiFixtureDirectory(directory: string): Promise<void> {
   }
   await fs.rm(directory, { recursive: true, force: true })
 }
+
+it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂起工具，查询和确认/拒绝共用原 SQLite 操作', async callerKind => {
+  const dom = new JSDOM('', { url: 'http://localhost' })
+  vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document)
+  vi.stubGlobal('navigator', dom.window.navigator); vi.stubGlobal('localStorage', dom.window.localStorage)
+  const { installHarnessNativeStorage, uninstallHarnessNativeStorage } = await import('@/tests/harnessNativeStorage')
+  const { createVideoEditTestProject } = await import('@/features/videoEdit/application/videoEditDocumentTestKit')
+  const { editVideoProject, closeVideoEditProject } = await import('@/features/videoEdit/application/videoEditService')
+  const { loadAudioEditProject, resetAudioEditProjectInstancesForTests } = await import('@/features/audioEdit/application/audioEditProjectInstances')
+  const { useAlertDialogStore } = await import('@/stores/alertDialogStore')
+  const { getPlatform } = await import('@/platform/runtime')
+  const { attachLocalApplicationHost } = await import('./localApplicationHost')
+  const { executePiTool } = await import('../../../electron/main/services/embedded-agent/toolResult')
+  installHarnessNativeStorage()
+  const owner = await createVideoEditTestProject()
+  editVideoProject(owner.document.id, document => {
+    document.media.push({ id: 'audio', name: '声音', kind: 'audio', path: 'D:/voice.wav', durationSeconds: 12, width: 0, height: 0 })
+    document.items.push({ id: 'audio-item', name: '声音', kind: 'audio', mediaId: 'audio' })
+    document.sequences[0].clips.push({ id: 'voice', itemId: 'audio-item', name: '声音', kind: 'audio', start: 0, duration: 300, track: 0, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })
+    return document
+  })
+  const audio = getPlatform().audioEdit
+  vi.spyOn(audio, 'probeSource').mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, channels: 1, durationFrames: 12000 })
+  vi.spyOn(audio, 'listAsrModels').mockResolvedValue([{ id: 'test-asr', providerId: 'test', timestamps: true, configured: true, longAudio: true }])
+  vi.spyOn(audio, 'listTasks').mockResolvedValue([])
+  vi.spyOn(audio, 'preflightTranscription').mockResolvedValue({ modelId: 'test-asr', requiresConfirmation: true })
+  const transcribe = vi.spyOn(audio, 'transcribe').mockImplementation(async request => {
+    const project = await loadAudioEditProject(request.projectId)
+    return { project: { ...project.document, transcript: [{ id: 'word', text: 'Hello', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' }] }, modelId: 'test-asr', granularity: 'word' }
+  })
+  const connections = new McpConnections({ read: () => null, write: () => {} })
+  const identity = connections.create('确认回执测试', { allowWrites: true, allowPaid: true })
+  const db = new Database(':memory:'); createApplicationOperationTablesV1(db)
+  const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => bridge.writableEntityTypes())
+  const bridge: ApplicationHostBridge = new ApplicationHostBridge(id => connections.assertActive(id), operations)
+  let handler: (request: LocalHostRequest) => void = () => {}
+  let cancel: (id: string) => void = () => {}
+  const detach = attachLocalApplicationHost({
+    publishContext: async value => bridge.publishContext(value), onRequest: value => { handler = value; return () => {} },
+    onCancel: value => { cancel = value; return () => {} }, onRevoke: () => () => {},
+    registerHost: async value => bridge.register(value, { send: (channel, payload) => {
+      if (channel === 'application:host:request') handler(payload as LocalHostRequest)
+      if (channel === 'application:host:cancel') cancel(payload as string)
+    } }), complete: async value => bridge.complete(value),
+  }, true)
+  const dispatcher = new ApplicationToolDispatcher({ assertActive: id => connections.assertActive(id), access: id => connections.access(id) }, bridge, operations, 0, callerKind)
+  const server = new LocalMcpServer(connections, bridge, undefined, operations)
+  const client = new Client({ name: '确认测试', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
+  try {
+    await server.start(0)
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(identity.id)}` } } }))
+    await client.listTools()
+    const args = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.document.sequences[0].id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, originalText: 'Hello', timeSource: 'auto' }
+    for (const accepted of [true, false]) {
+      const operationId = randomUUID()
+      let returned = false
+      const invoke = callerKind === 'external'
+        ? client.callTool({ name: 'generate_video_edit_subtitles', arguments: { ...args, operationId } }).then(result => { expect(result.isError).toBe(false); return result.structuredContent })
+        : executePiTool({ id: randomUUID(), name: 'generate_video_edit_subtitles', args: { ...args, operationId }, vision: false }, (_id, name, input) => dispatcher.call(identity.id, name, input, new AbortController().signal)).then(result => {
+          const content = result.content[0]; if (content.type !== 'text') throw new Error('缺少回执'); return JSON.parse(content.text) as Record<string, unknown>
+        })
+      const pending = invoke.then(result => { returned = true; return result })
+      await vi.waitFor(() => expect(returned).toBe(true), { timeout: 2000 })
+      expect(await pending).toMatchObject({ executionState: 'awaiting_user_confirmation', operationId, confirmation: { title: '识别声音并对齐原文' } })
+      await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+      const query = () => dispatcher.call(identity.id, 'get_application_operation', { operationId }, new AbortController().signal)
+      expect(await query()).toMatchObject({ executionState: 'awaiting_user_confirmation' })
+      expect(transcribe).toHaveBeenCalledTimes(accepted ? 0 : 1)
+      const captionsBefore = owner.document.sequences[0].captions?.length ?? 0
+      if (accepted) useAlertDialogStore.getState().confirmCurrent()
+      else useAlertDialogStore.getState().dismissCurrent()
+      await vi.waitFor(() => expect(operations.store.get(operationId, identity.id)?.state).toBe(accepted ? 'completed' : 'not_executed'), { timeout: 3000 })
+      expect(await query()).toMatchObject({ executionState: accepted ? 'completed' : 'not_executed', verificationState: 'verified' })
+      expect(owner.document.sequences[0].captions?.length ?? 0).toBe(captionsBefore + (accepted ? 1 : 0))
+      expect(transcribe).toHaveBeenCalledTimes(1)
+    }
+  } finally {
+    await client.close(); await server.stop(); detach(); bridge.disconnect(); db.close()
+    await resetAudioEditProjectInstancesForTests(); await closeVideoEditProject(owner.document.id)
+    vi.restoreAllMocks(); uninstallHarnessNativeStorage(); vi.unstubAllGlobals()
+  }
+}, 15_000)

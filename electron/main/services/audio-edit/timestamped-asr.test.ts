@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeContext, SpeechRecognitionEvent } from '@henjicc/ai-sdk'
 
 vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
+vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn(async (ref: string) => ref) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined }, media: { read: async () => { throw new Error('REAL_MEDIA_FORBIDDEN') } } } }))
 
@@ -21,6 +22,18 @@ function runtime(fetch: RuntimeContext['transport']['fetch']): RuntimeContext {
 const context = (): { requestId: string; signal: AbortSignal } => ({ requestId: 'fixture-transcription', signal: new AbortController().signal })
 
 describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
+  it('预检拒绝缺凭据、缺原生直传与不可读素材，始终不请求供应商', async () => {
+    const fetch = vi.fn()
+    const media = vi.fn().mockRejectedValue(new Error('unreadable'))
+    const input = { sourcePath: 'voice.wav', durationMs: 1000, modelId: 'bailian.speech-recognition.fun-asr' }
+    await expect(createTimestampedAsrService(runtime(fetch), () => false, media).preflight(input)).rejects.toThrow('ASR_MODEL_UNAVAILABLE')
+    await expect(createTimestampedAsrService(runtime(fetch), () => true, media).preflight(input)).rejects.toThrow('宿主未提供本地文件直传')
+    const rt = runtime(fetch); rt.transport.uploadFile = vi.fn()
+    await expect(createTimestampedAsrService(rt, () => true, media).preflight(input)).rejects.toThrow('unreadable')
+    media.mockResolvedValue('voice.wav')
+    await expect(createTimestampedAsrService(rt, () => true, media).preflight(input)).resolves.toEqual({ modelId: input.modelId })
+    expect(fetch).not.toHaveBeenCalled(); expect(rt.transport.uploadFile).not.toHaveBeenCalled()
+  })
   it('Groq 字段构造 fixture 的秒由 SDK 变为毫秒，明确同时请求 word+segment', async () => {
     const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const form = init?.body as FormData

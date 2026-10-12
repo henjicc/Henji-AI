@@ -14,7 +14,7 @@ export class ExplanationAudioService {
   private active = new Map<string, AbortController>()
   private erased = new Set<string>()
   private io = new Map<string, Promise<unknown>>()
-  constructor(private readonly root = path.join(os.tmpdir(), 'henji-explanation-audio'), private readonly asr: Pick<TimestampedAsrService, 'prepare' | 'execute'> = timestampedAsrService) {}
+  constructor(private readonly root = path.join(os.tmpdir(), 'henji-explanation-audio'), private readonly asr: Pick<TimestampedAsrService, 'prepare' | 'execute' | 'preflight'> = timestampedAsrService) {}
   private directory(id: string): string { if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('录音会话身份无效。'); return path.join(this.root, id) }
   private file(sessionId: string, chunkId: string): string { if (!/^[0-9a-f-]{36}$/i.test(chunkId)) throw new Error('录音块身份无效。'); return path.join(this.directory(sessionId), `${chunkId}.wav`) }
   async cleanupExpired(now = Date.now()): Promise<void> {
@@ -98,14 +98,8 @@ export class ExplanationAudioService {
       }
     } finally { zip.close() }
   }
-  async transcribe(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>): Promise<RecordingAudioResult> {
-    if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
-    const controller = new AbortController(); this.active.set(request.sessionId, controller)
-    try { return await this.performTranscription(request, controller) } finally { this.active.delete(request.sessionId) }
-  }
-  private async performTranscription(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>, controller: AbortController): Promise<RecordingAudioResult> {
+  private async prepareRecording(request: Extract<RecordingAudioRequest, { action: 'transcribe' | 'preflight' }>) {
     if (this.erased.has(request.sessionId)) throw new Error('原录音已删除。')
-    if (!request.audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
     const audioPath = this.file(request.sessionId, request.chunkId)
     const handle = await fs.open(audioPath, 'r'); const header = Buffer.alloc(44)
     let bytes: number
@@ -117,8 +111,26 @@ export class ExplanationAudioService {
     const inputDigest = crypto.createHash('sha256').update(JSON.stringify([request.sessionId, request.chunkId, request.modelId, identity.digest, identity.bytes])).digest('hex')
     const existing = getAudioEditStoredTask(request.requestId)
     if (existing && (existing.document_id !== projectId || existing.input_digest !== inputDigest)) throw new Error('转写任务与录音不符。')
+    if (existing && !(existing.state === 'completed' && existing.result_json) && (!request.resume || !existing.provider_task_id)) throw new Error('提交结果尚未确认，禁止重新发送收费请求。请核对原任务。')
+    return { audioPath, durationMs, projectId, inputDigest, existing }
+  }
+  async preflight(request: Extract<RecordingAudioRequest, { action: 'preflight' }>): Promise<void> {
+    if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
+    const { audioPath, durationMs, existing } = await this.prepareRecording(request)
+    if (existing?.state === 'completed' && existing.result_json) return
+    if (existing?.provider_task_id) { this.asr.prepare({ modelId: request.modelId, audioPath, durationMs }); return }
+    await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
+  }
+  async transcribe(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>): Promise<RecordingAudioResult> {
+    if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
+    const controller = new AbortController(); this.active.set(request.sessionId, controller)
+    try { return await this.performTranscription(request, controller) } finally { this.active.delete(request.sessionId) }
+  }
+  private async performTranscription(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>, controller: AbortController): Promise<RecordingAudioResult> {
+    if (!request.audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
+    const { audioPath, durationMs, projectId, inputDigest, existing } = await this.prepareRecording(request)
     if (existing?.state === 'completed' && existing.result_json) return JSON.parse(existing.result_json) as RecordingAudioResult
-    if (existing && (!request.resume || !existing.provider_task_id)) throw new Error('提交结果尚未确认，禁止重新发送收费请求。请核对原任务。')
+    if (!existing) await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
     const plan = this.asr.prepare({ modelId: request.modelId, audioPath, durationMs })
     controller.signal.throwIfAborted()
     if (this.erased.has(request.sessionId)) throw new Error('原录音已删除。')

@@ -2,6 +2,7 @@ import type { AudioEditExportRequest, AudioEditExportResult, AudioEditRange, Aud
 import { applyAudioEditSuggestion, cleanAudioEditFillers, DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { getPlatform } from '@/platform/runtime'
+import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
@@ -72,13 +73,32 @@ export async function cleanProjectAudioEditFillers(projectId: string, range?: Au
 }
 
 export async function transcribeAudioEdit(request: AudioEditTranscriptionRequest): Promise<void> {
+  let dispatched = false
+  let completed = false
+  let applied = false
+  try {
   await withAudioEditProjectOperation(request.projectId, async (instance) => {
     const version = instance.version
+    await preflightAudioEditTranscription(request.projectId, request.modelId, request.language)
+    dispatched = true
     const result = await getPlatform().audioEdit.transcribe(request)
+    completed = true
     acceptAudioEditNativeResult(request.projectId, result.project, version)
+    applied = true
     // 付费识别结果立即写进文档文件，不等防抖
     await flushAudioEditProject(request.projectId)
   })
+  } catch (error) {
+    throw new TranscriptionFailure(error, { billing: completed ? 'completed' : dispatched ? 'unknown' : 'not_charged', targetMutation: applied ? 'applied' : 'none',
+      ...readTranscriptionFacts(error), audioDocumentId: request.projectId })
+  }
+}
+
+export async function preflightAudioEditTranscription(projectId: string, modelId?: string, language?: string): Promise<import('@/core/audioEdit/transcriptionFailure').TranscriptionPreparation> {
+  const instance = await loadAudioEditProject(projectId)
+  if (instance.document.transcript.length) return { requiresConfirmation: false }
+  const source = instance.document.source
+  return getPlatform().audioEdit.preflightTranscription({ sourcePath: source.sourcePath, durationMs: source.durationFrames * 1000 / source.sampleRate, modelId, language, audioDocumentId: projectId })
 }
 export async function exportAudioEdit(request: AudioEditExportRequest): Promise<AudioEditExportResult> {
   return withAudioEditProjectOperation(request.projectId, () => getPlatform().audioEdit.exportProject(request))

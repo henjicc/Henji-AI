@@ -4,6 +4,8 @@ import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
 import { getPlatform } from '@/platform/runtime'
+import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 import { join } from '@/platform/desktopApi'
 import { getDocumentOperations, registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
@@ -46,7 +48,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     const input = audioEditOperationInput.parse(raw)
     context.signal.throwIfAborted()
     const id = input.documentRef.id
-    const instance = await loadAudioEditProject(id)
+    const instance = await loadAudioEditProject(id).catch(error => { throw new ApplicationPreflightFailure(error) })
     const requestId = context.requestId ?? crypto.randomUUID()
     const api = getPlatform().audioEdit
     const cancel = () => {
@@ -54,6 +56,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
       if (definition.id === 'transcribe_audio_edit') void api.listTasks(id).then((tasks) => Promise.all(tasks.filter((task) => task.kind === 'transcription' && task.state === 'running').map((task) => api.cancelTask(task.requestId))))
     }
     context.signal.addEventListener('abort', cancel, { once: true })
+    let recognized = false
     try {
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.document', id }, message: '' }
       switch (definition.id) {
@@ -62,7 +65,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'quick_process_audio_edit': Object.assign(result, await quickProcessAudioEdit(id, input.range, requestId)); result.message = `已压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。`; break
         case 'compress_audio_edit_silence': Object.assign(result, await compressAudioEditSilence(id, input.range, requestId)); result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
-        case 'transcribe_audio_edit': await transcribeAudioEdit({ projectId: id, modelId: input.modelId, requestId }); result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
+        case 'transcribe_audio_edit': await transcribeAudioEdit({ projectId: id, modelId: input.modelId, requestId }); recognized = true; result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
         case 'process_audio_edit_sound': await prepareAudioEditProcessing(id, requestId); result.message = '全长声音处理已完成。'; break
         case 'query_audio_edit_tasks': result.tasks = (await api.listTasks(id)).map(({ projectId, ...task }) => ({ ...task, documentId: projectId })); result.message = '已读取这份口播的处理任务。'; break
         case 'cancel_audio_edit_task': {
@@ -87,6 +90,9 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         result.verified = true
       }
       return result
+    } catch (error) {
+      if (definition.id === 'transcribe_audio_edit' && !readTranscriptionFacts(error)) throw new TranscriptionFailure(error, { billing: recognized ? 'completed' : 'not_charged', targetMutation: recognized ? 'applied' : 'none', audioDocumentId: id })
+      throw error
     } finally { context.signal.removeEventListener('abort', cancel) }
   })
 }

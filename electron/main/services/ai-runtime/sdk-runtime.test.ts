@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn(), 
 vi.mock('../logging', () => ({ createMainLogger: () => mocks }))
 vi.mock('../keystore', () => ({ getAiProviderApiKey: vi.fn(), getLlmProviderApiKey: vi.fn(), getKey: vi.fn() }))
 vi.mock('../../../../src/core/modelCatalog/applicationModelProfile', () => ({ createHenjiAIClient: vi.fn(() => ({})) }))
-vi.mock('./network-transport', () => ({ createDiagnosticTransport: vi.fn() }))
+vi.mock('./network-transport', () => ({ createDiagnosticTransport: vi.fn(() => ({ fetch: vi.fn() })) }))
+vi.mock('../../protocol', () => ({ isPathWithinAllowedMediaRoots: () => true }))
 
 import { electronMediaReader } from './sdk-runtime'
 
