@@ -1,8 +1,9 @@
+import { UiSegmented } from '@/components/ui'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { getLogCaptureMode } from '@/commands/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { UiButton, UiCheckbox, UiInput, UiOptionButton, UiSelect, UiToolbar, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiButton, UiCheckbox, UiInput, UiSelect, UiToolbar } from '@/components/ui'
 import type { LogLevel } from '../eventDisplay'
 
 export type SourceFilter = 'all' | 'frontend' | 'backend'
@@ -208,26 +209,7 @@ export function LogFilterToolbar({
       }
     >
       {surfaceSwitch}
-      <div className={UI_SEGMENTED_TRACK_CLASS}>
-        <UiOptionButton
-          type="button"
-          variant="segment"
-          active={mode === 'live'}
-          aria-pressed={mode === 'live'}
-          onClick={() => onModeChange('live')}
-        >
-          {t('logsWindow.toolbar.mode.live')}
-        </UiOptionButton>
-        <UiOptionButton
-          type="button"
-          variant="segment"
-          active={mode === 'history'}
-          aria-pressed={mode === 'history'}
-          onClick={() => onModeChange('history')}
-        >
-          {t('logsWindow.toolbar.mode.history')}
-        </UiOptionButton>
-      </div>
+      <UiSegmented ariaLabel={t('logsWindow.toolbar.mode.live')} value={mode} onChange={onModeChange} options={[{ value: 'live', label: t('logsWindow.toolbar.mode.live') }, { value: 'history', label: t('logsWindow.toolbar.mode.history') }]} />
     </UiToolbar>
   )
 }

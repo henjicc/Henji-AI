@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires, no-console -- 正式 Electron 巡检场景使用 CommonJS，失败时输出几何诊断。 */
 const { writeFile } = require('node:fs/promises')
 const { findPanePoint, readCanvasState, resetViewport } = require('./canvasPanBench.cjs')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
@@ -332,9 +333,9 @@ function attachUiInspectionCanvasPanorama(context) {
     await sphere.waitFor({ state: 'visible', timeout: 12000 })
     await page.mouse.wheel(0, -180)
 
-    await viewer.getByRole('button', { name: /^(平面|Flat)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(平面|Flat)$/i }).click()
     await viewer.locator('[data-panorama-surface="flat"]').waitFor({ state: 'visible', timeout: 8000 })
-    await viewer.getByRole('button', { name: /^(球面|Sphere)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(球面|Sphere)$/i }).click()
     await sphere.waitFor({ state: 'visible', timeout: 8000 })
     await viewer.getByTitle(/^(重置视图|Reset View)$/i).click()
 

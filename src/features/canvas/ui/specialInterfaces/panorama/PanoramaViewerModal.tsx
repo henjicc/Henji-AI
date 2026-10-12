@@ -1,3 +1,4 @@
+import { UiSegmented } from '@/components/ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronLeft,
@@ -10,14 +11,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import {
-  UiButton,
-  UiOptionButton,
-  UiError,
-  UiErrorBoundary,
-  UiIconButton,
-  UiLoading,
-} from '@/components/ui';
+import { UiButton, UiError, UiErrorBoundary, UiIconButton, UiLoading } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import { createLogger } from '@/core/logging';
 import { ICON_PANORAMA } from '@/core/theme/icons';
@@ -286,25 +280,7 @@ export function PanoramaViewerModal({
 
         <div className="ml-auto flex items-center gap-1.5">
           {/* 球面 / 平面是单选视图模式：玻璃里的分段选择（压在画面上） */}
-          <div className="ui-glass flex items-center gap-0.5 rounded-lg p-0.5" role="group">
-            <UiOptionButton
-              variant="segment"
-              active={viewMode === 'sphere' && isSphereAvailable}
-              aria-pressed={viewMode === 'sphere' && isSphereAvailable}
-              disabled={isReady && !resource.isEquirectangular}
-              onClick={() => setViewMode('sphere')}
-            >
-              {t('viewer.panorama.spherical')}
-            </UiOptionButton>
-            <UiOptionButton
-              variant="segment"
-              active={showFlat}
-              aria-pressed={showFlat}
-              onClick={() => setViewMode('flat')}
-            >
-              {t('viewer.panorama.flat')}
-            </UiOptionButton>
-          </div>
+          <UiSegmented ariaLabel={t('viewer.panorama.spherical')} value={showFlat ? 'flat' : viewMode} onChange={setViewMode} options={[{ value: 'sphere', label: t('viewer.panorama.spherical'), disabled: isReady && !resource.isEquirectangular }, { value: 'flat', label: t('viewer.panorama.flat') }]} />
           <UiIconButton size="lg" tone="media" shape="circle"
             onClick={() => setResetRevision((revision) => revision + 1)}
             disabled={!renderSphere}

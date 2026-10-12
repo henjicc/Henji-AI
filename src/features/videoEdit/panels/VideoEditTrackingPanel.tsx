@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useSyncExternalStore } from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, Square, Trash2, Eye, MousePointer2 } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiLoading, UiOptionButton, UiSwitch } from '@/components/ui'
@@ -10,6 +11,7 @@ import { runVideoEditTracking, stopVideoEditTracking, subscribeVideoEditTracking
 import { updateVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 
 function VideoEditTrackingPanelContent({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
+  const { t: surfaceText } = useTranslation('ui')
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   useSyncExternalStore(subscribeVideoEditTracking, videoEditTrackingRevision)
@@ -72,8 +74,8 @@ function VideoEditTrackingPanelContent({ instance, onError }: { instance: VideoE
         <UiIconButton size="sm" aria-label="显示跟踪框" aria-pressed={selectedEditing?.mode === 'show'} on={selectedEditing?.mode === 'show'} onClick={() => selectedEditing?.mode === 'show' ? setVideoEditTrackingEditing(null) : show()}><Eye size={14} /></UiIconButton>
         {tracker.method === 'shape' && <UiIconButton size="sm" aria-label="补点纠错" disabled={locked} onClick={() => setVideoEditTrackingEditing({ ...target, trackerId: tracker.id, method: tracker.method, mode: 'point' })}><MousePointer2 size={14} /></UiIconButton>}
       </div>
-      <UiGroup title="应用到" titleTone="compact">
-        <Dropdown ariaLabel="跟踪应用目标" size="sm" value={destination} options={[{ value: '', label: '选择效果、遮罩或片段' }, ...destinations]} onSelect={setDestination} />
+      <UiGroup labelWidth={96} title="应用到" titleTone="compact">
+        <UiFormRow label={surfaceText('surfaceGrammar.trackingTarget')} density="compact" labelColumn="panel"><Dropdown ariaLabel="跟踪应用目标" size="sm" value={destination} options={[{ value: '', label: '选择效果、遮罩或片段' }, ...destinations]} onSelect={setDestination} /></UiFormRow>
         {destination.startsWith('clip:') && <UiFormRow label="跟随缩放" inline density="compact"><UiSwitch checked={scale} onCheckedChange={setScale} /></UiFormRow>}
         <UiButton size="sm" variant="secondary" disabled={locked || !destinations.some(entry => entry.value === destination)} onClick={apply}>应用跟踪</UiButton>
       </UiGroup>

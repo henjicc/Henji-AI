@@ -1,3 +1,4 @@
+import { UiFormRow } from '@/components/ui'
 import React, { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Tags, Trash2 } from 'lucide-react'
 import { Dropdown, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiError, UiGroup, UiInput } from '@/components/ui'
@@ -79,8 +80,8 @@ export const AssetBatchManager: React.FC<Props> = ({
           </div>
         </UiGroup>
 
-        <UiGroup divided title={t('assetLibrary.batchLibraries')} className="mt-5">
-          <Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" buttonClassName="w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} />
+        <UiGroup labelWidth={96} divided title={t('assetLibrary.batchLibraries')} className="mt-5">
+          <UiFormRow label={t('assetLibrary.batchLibraries')} density="compact" labelColumn="panel"><Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" buttonClassName="w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} /></UiFormRow>
           <div className="flex gap-2">
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'add')}>{t('assetLibrary.batchLibraryAdd')}</UiButton>
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'remove')}>{t('assetLibrary.batchLibraryRemove')}</UiButton>

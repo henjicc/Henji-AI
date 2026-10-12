@@ -1,4 +1,20 @@
 {
+  "surfaceGrammar": {
+    "curveChannel": "Channel",
+    "curveType": "Curve type",
+    "retainPosition": "Keep original positions",
+    "documentSource": "Document source",
+    "paragraph": "Paragraph",
+    "paragraphDirection": "Text direction",
+    "path": "Path",
+    "pathOperation": "Path operation",
+    "fillRule": "Fill rule",
+    "anchor": "Anchor point",
+    "maskTarget": "Mask target",
+    "annotationFilter": "Filter annotations",
+    "trackingTarget": "Tracking target",
+    "stylePreset": "Style kit"
+  },
   "videoEdit": { "inlineCaption": "Edit caption in place" },
   "captionTrack": {
     "name": "Captions",

@@ -1,8 +1,9 @@
+import { UiSegmented } from '@/components/ui'
 import { ImageEditorSubjectParametersV3 } from './ImageEditorSubjectParametersV3'
 import { SelectionAdvancedOptionsV3 } from '../tools/selectionAdvanced/SelectionAdvancedOptions'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UiButton, UiError, UiRangeInput, UiOptionButton, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiButton, UiError, UiRangeInput } from '@/components/ui'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { applyImageEditSelectionV3 } from '../application/imageEditSelectionServiceV3'
 import { useImageEditorSessionStoreV3 } from '../store'
@@ -33,10 +34,7 @@ export function ImageEditorSelectionParametersV3({ bus, controller }: { bus: Ima
   return <div className="flex min-w-max shrink-0 items-center gap-3 whitespace-nowrap" data-selection-parameters>
     <SelectionAdvancedOptionsV3 tool={session?.activeTool ?? ''} hasSelection={Boolean(selection)} />
     {session?.activeTool.startsWith('select-subject') ? <ImageEditorSubjectParametersV3 /> : null}
-    <div role="group" aria-label={t('imageEditor.v3.selection.combineMode')} className={UI_SEGMENTED_TRACK_CLASS}>
-      {(['replace', 'add', 'subtract', 'intersect'] as const).map(mode => <UiOptionButton key={mode} variant="segment" active={session?.toolSettings.selectionCombineMode === mode}
-        onClick={() => useImageEditorSessionStoreV3.getState().setToolSetting(controller.sessionId, 'selectionCombineMode', mode)}>{t(`imageEditor.v3.selection.${mode}`)}</UiOptionButton>)}
-    </div>
+    <UiSegmented ariaLabel={t('imageEditor.v3.selection.combineMode')} value={session?.toolSettings.selectionCombineMode ?? 'replace'} onChange={mode => useImageEditorSessionStoreV3.getState().setToolSetting(controller.sessionId, 'selectionCombineMode', mode)} options={(['replace', 'add', 'subtract', 'intersect'] as const).map(value => ({ value, label: t(`imageEditor.v3.selection.${value}`) }))} />
     {session?.activeTool === 'select-brush' ? <label className="flex items-center gap-2 text-xs text-text2">{t('imageEditor.v3.toolSettings.size')}
       <UiRangeInput min={1} max={Math.min(controller.document.geometry.width, controller.document.geometry.height)} step={1} value={session.toolSettings.brushSize}
         onChange={e => useImageEditorSessionStoreV3.getState().setToolSetting(controller.sessionId, 'brushSize', Number(e.currentTarget.value))} />

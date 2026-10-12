@@ -101,7 +101,7 @@ export function ImageEditorLayerTransformPropertiesV3({
     <UiGroup titleTone="compact" divided title={t('imageEditor.v3.properties.transform')} gap="stack">
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         {FIELD_KEYS.map((field) => (
-          <UiFormRow density="compact" key={field} label={labels[field]}>
+          <UiFormRow density="compact" labelColumn="auto" className={field === 'rotationDegrees' ? 'col-span-2' : undefined} key={field} label={labels[field]}>
             <UiInput
               type="number"
               step={field === 'rotationDegrees' ? 0.1 : 1}

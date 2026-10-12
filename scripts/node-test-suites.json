@@ -44,6 +44,7 @@
     "scripts/lib/uiInspectionVideoEditExportDialog.test.cjs",
     "scripts/lib/uiInspectionVideoEditMonitorFixtures.test.cjs",
     "scripts/lib/uiResidueRules.test.cjs",
+    "scripts/lib/uiSurfaceGrammar.test.cjs",
     "scripts/lib/uiReviewMetrics.test.cjs",
     "scripts/lib/uiReviewSteps.test.cjs",
     "scripts/lib/uiReviewSummary.test.cjs",

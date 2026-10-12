@@ -1,5 +1,6 @@
+import { UiSegmented } from '@/components/ui'
 import { useTranslation } from 'react-i18next'
-import { UiButton, UiError, UiOptionButton, UiRangeInput, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiButton, UiError, UiRangeInput } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { useLocalModels, formatLocalModelSize } from '@/components/Settings/hooks/useLocalModels'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
@@ -25,9 +26,7 @@ export function ImageEditorRepairParametersV3({ bus, controller }: { bus: ImageE
         <UiRangeInput aria-label={t('imageEditor.v3.toolSettings.size')} min={1} max={Math.min(controller.document.geometry.width, controller.document.geometry.height)} step={1} value={session.toolSettings.brushSize}
           disabled={view.busy} onChange={event => useImageEditorSessionStoreV3.getState().setToolSetting(controller.sessionId, 'brushSize', Number(event.currentTarget.value))} />
       </label>
-      <div className={UI_SEGMENTED_TRACK_CLASS} role="group" aria-label={t('imageEditor.v3.repair.quality')}>
-        {(['auto', 'fast', 'fine'] as const).map(quality => <UiOptionButton key={quality} variant="segment" active={view.quality === quality} disabled={view.busy} onClick={() => view.setQuality(quality)}>{t(`imageEditor.v3.repair.${quality}`)}</UiOptionButton>)}
-      </div>
+      <UiSegmented ariaLabel={t('imageEditor.v3.repair.quality')} value={view.quality} disabled={view.busy} onChange={view.setQuality} options={(['auto', 'fast', 'fine'] as const).map(value => ({ value, label: t(`imageEditor.v3.repair.${value}`) }))} />
       <UiButton size="sm" disabled={!bus.getSnapshot().selection || view.busy} onClick={() => void view.run({ action: 'remove' })}>{t('imageEditor.v3.repair.remove-selection')}</UiButton>
       {model && model.status !== 'ready' ? <>
         <span className="text-xs text-text3">{t('imageEditor.v3.repair.download-hint', { size: formatLocalModelSize(model.sizeBytes) })}</span>

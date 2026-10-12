@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import { UiFormRow } from '@/components/ui'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { PanelTrigger, UiButton, UiEmpty, UiError, UiGroup, UiLoading, UiOptionButton, UiRangeInput } from '@/components/ui'
 import { LayoutGrid, Pin, PinOff } from 'lucide-react'
@@ -13,6 +15,7 @@ const CANDIDATE_LABELS: Readonly<Record<string, string>> = { align: '边缘对�
 
 /** Both writable hosts compose the same primitives over the document-owned layout adapter. */
 export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; openRequest?: number }): JSX.Element | null {
+  const { t: surfaceText } = useTranslation('ui')
   const adapter = useMemo(() => imageEditLayoutDraft(bus), [bus])
   const state = useSyncExternalStore(adapter.subscribe, adapter.snapshot)
   const selected = useImageEditorSessionStoreV3(s => s.sessions[controller.sessionId]?.selectedLayerIds ?? EMPTY)
@@ -83,14 +86,14 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
         </div>
       </UiGroup>}
       {state.draft && !movement && <>
-        <UiGroup title="保留原稿位置" titleTone="compact">
+        <UiGroup labelWidth={96} title="保留原稿位置" titleTone="compact">
           <div className="flex items-center justify-between text-xs text-text2"><span>完全整理</span><span className="tabular-nums">{retained}%</span><span>保持原位</span></div>
-          <UiRangeInput aria-label="保留原稿位置" aria-valuetext={retained === 0 ? '完全整理' : retained === 100 ? '保持原位' : `保留原稿位置 ${retained}%`}
+          <UiFormRow label={surfaceText('surfaceGrammar.retainPosition')} density="compact" labelColumn="panel"><UiRangeInput aria-label="保留原稿位置" aria-valuetext={retained === 0 ? '完全整理' : retained === 100 ? '保持原位' : `保留原稿位置 ${retained}%`}
             min={0} max={1} step={.01} value={fidelity ?? state.draft.fidelity} disabled={busy || state.needsSave}
             onChange={event => { pendingFidelity.current = Number(event.target.value); setFidelity(pendingFidelity.current) }}
             onPointerUp={() => finishFidelity(true)} onPointerCancel={() => finishFidelity(false)} onBlur={() => finishFidelity(true)}
             onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finishFidelity(false) } }}
-            onKeyUp={event => { if (event.key.startsWith('Arrow') || ['Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) finishFidelity(true) }} />
+            onKeyUp={event => { if (event.key.startsWith('Arrow') || ['Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) finishFidelity(true) }} /></UiFormRow>
         </UiGroup>
         <UiGroup title="固定位置" titleTone="compact">
           <UiButton size="sm" aria-label="钉住所选图层的原稿位置"
