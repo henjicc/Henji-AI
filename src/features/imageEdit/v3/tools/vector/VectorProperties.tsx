@@ -18,6 +18,7 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
   const [operandIndex, setOperand] = useState(0)
   const [pointIndex, setPoint] = useState(0)
   const [maskTarget,setMaskTarget]=useState('')
+  const maskTargets = collectImageEditV3LiveLayers(controller.document).filter(row => row.layer.id !== layer.id && !row.layer.locked && !row.ancestors.some(ancestor => ancestor.locked)).map(row => ({ value: row.layer.id, label: row.layer.name }))
   const [error, setError] = useState('')
   const fail = (cause: unknown): void => setError(cause instanceof Error ? cause.message : '无法更新内容，请重试。')
   const write = (content: RichTextContent | VectorPathContent): boolean => {
@@ -41,7 +42,7 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
           <UiFormRow label={surfaceText('surfaceGrammar.paragraphDirection')} density="compact" labelColumn="panel"><Dropdown ariaLabel="段落方向" size="sm" value={paragraph.direction} options={[{ value: 'auto', label: '自动方向' }, { value: 'ltr', label: '从左到右' }, { value: 'rtl', label: '从右到左' }]} onSelect={value => updateParagraph({ direction: value as typeof paragraph.direction })} /></UiFormRow>
           {number('段前间距', paragraph.spaceBefore, spaceBefore => updateParagraph({ spaceBefore }), 0)}
           {number('段后间距', paragraph.spaceAfter, spaceAfter => updateParagraph({ spaceAfter }), 0)}
-          <UiButton size="sm" onClick={() => write({ ...content, paragraphs: content.paragraphs.filter((_, index) => index !== p) })}>删除段落</UiButton>
+          <UiFormRow label="" density="compact"><div className="flex"><UiButton size="sm" variant="danger" onClick={() => write({ ...content, paragraphs: content.paragraphs.filter((_, index) => index !== p) })}>{surfaceText('surfaceGrammar.deleteParagraph')}</UiButton></div></UiFormRow>
         </>}
         {number('文本框宽度', content.box.width, width => write({ ...content, box: { ...content.box, width } }), 0, '设为 0 时按文字自动确定宽度。')}
         {number('文本框高度', content.box.height, height => write({ ...content, box: { ...content.box, height } }), 0, '设为 0 时按文字自动确定高度。')}
@@ -67,14 +68,14 @@ export function VectorProperties({ controller, layer, locked, onContentChange, m
         <UiFormRow label={surfaceText('surfaceGrammar.fillRule')} density="compact" labelColumn="panel"><Dropdown size="sm" ariaLabel="路径填充规则" value={operand.path.fillRule} options={[{ value: 'nonzero', label: '按绕向填充' }, { value: 'evenodd', label: '交替填充' }]} onSelect={value => updateOperand({ path: { ...operand.path, fillRule: value as typeof operand.path.fillRule } })} /></UiFormRow>
         <UiFormRow label={surfaceText('surfaceGrammar.anchor')} density="compact" labelColumn="panel"><Dropdown size="sm" ariaLabel="编辑锚点" value={String(c)} options={operand.path.commands.map((value, index) => ({ value: String(index), label: value.kind === 'close' ? '闭合路径' : `锚点 ${index + 1}${value.kind === 'cubic' || value.kind === 'quadratic' ? ' · 曲线' : ''}` }))} onSelect={value => setPoint(Number(value))} /></UiFormRow>
         {command && command.kind !== 'close' && <>{number('锚点横向', command.x, x => updateCommand({ ...command, x }))}{number('锚点纵向', command.y, y => updateCommand({ ...command, y }))}
-          {command.kind === 'line' && <UiButton size="sm" onClick={() => updateCommand({ kind: 'cubic', x: command.x, y: command.y, cx1: command.x - 40, cy1: command.y, cx2: command.x, cy2: command.y - 40 })}>转为曲线</UiButton>}
+          {command.kind === 'line' && <UiFormRow label="" density="compact"><div className="flex"><UiButton size="sm" onClick={() => updateCommand({ kind: 'cubic', x: command.x, y: command.y, cx1: command.x - 40, cy1: command.y, cx2: command.x, cy2: command.y - 40 })}>{surfaceText('surfaceGrammar.convertCurve')}</UiButton></div></UiFormRow>}
           {command.kind === 'quadratic' && <>{number('控制柄横向', command.cx, cx => updateCommand({ ...command, cx }))}{number('控制柄纵向', command.cy, cy => updateCommand({ ...command, cy }))}</>}
           {command.kind === 'cubic' && <>{(['cx1', 'cy1', 'cx2', 'cy2'] as const).map((key, index) => number(`控制柄 ${index < 2 ? 1 : 2}${index % 2 ? '纵向' : '横向'}`, command[key], value => updateCommand({ ...command, [key]: value })))}</>}
         </>}
-        <UiButton size="sm" onClick={() => write({ ...content, operands: content.operands.filter((_, index) => index !== o) })}>删除路径</UiButton>
+        <UiFormRow label="" density="compact"><div className="flex"><UiButton size="sm" variant="danger" onClick={() => write({ ...content, operands: content.operands.filter((_, index) => index !== o) })}>{surfaceText('surfaceGrammar.deletePath')}</UiButton></div></UiFormRow>
       </>}
     </UiGroup>
-    {!maskOnly && <UiGroup title="路径蒙版" titleTone="compact"><UiFormRow label={surfaceText('surfaceGrammar.maskTarget')} density="compact" labelColumn="panel"><Dropdown size="sm" emptyLabel={surfaceText('surfaceGrammar.noAvailableLayers')} ariaLabel={surfaceText('surfaceGrammar.maskTarget')} value={maskTarget} options={collectImageEditV3LiveLayers(controller.document).filter(row=>row.layer.id!==layer.id&&!row.layer.locked&&!row.ancestors.some(ancestor=>ancestor.locked)).map(row=>({value:row.layer.id,label:row.layer.name}))} onSelect={setMaskTarget} /></UiFormRow><UiButton size="sm" disabled={!maskTarget} onClick={()=>{try{attachImageEditVectorMaskV3(controller.document.id,layer.id,maskTarget);setError('')}catch(cause){fail(cause)}}}>用路径作为蒙版</UiButton></UiGroup>}
+    {!maskOnly && !locked && maskTargets.length > 0 && <UiGroup title={surfaceText('surfaceGrammar.pathMask')} titleTone="compact"><UiFormRow label={surfaceText('surfaceGrammar.maskTarget')} density="compact"><Dropdown size="sm" ariaLabel={surfaceText('surfaceGrammar.maskTarget')} value={maskTarget} options={maskTargets} onSelect={setMaskTarget} /></UiFormRow><UiFormRow label="" density="compact"><div className="flex"><UiButton size="sm" disabled={!maskTargets.some(target => target.value === maskTarget)} title={!maskTargets.some(target => target.value === maskTarget) ? surfaceText('surfaceGrammar.selectMaskTarget') : undefined} onClick={()=>{try{attachImageEditVectorMaskV3(controller.document.id,layer.id,maskTarget);setError('')}catch(cause){fail(cause)}}}>{surfaceText('surfaceGrammar.applyPathMask')}</UiButton></div></UiFormRow></UiGroup>}
     {!maskOnly && <TypographyPanel fields="appearance" style={style} onChange={next => write({ ...content, paint: { fill: next.fill, strokes: next.strokes, shadows: next.shadows } })} onError={fail} />}
     {error && <UiError message={error} />}
     </UiGroup>

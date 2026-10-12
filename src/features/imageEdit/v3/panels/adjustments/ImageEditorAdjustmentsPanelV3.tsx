@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Virtuoso } from 'react-virtuoso';
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiModal, UiOptionButton, UiSwitch } from '@/components/ui';
@@ -17,6 +17,10 @@ import { useImageEditorShellV3 } from '../../shell/ImageEditorShellContextV3';
 import { showImageEditorPanelV3 } from '../../panelFramework/layout';
 
 const EMPTY_IDS: readonly string[] = [];
+function FilterParametersFooterV3({ context }: { context?: { parameters: ReactNode } }): JSX.Element {
+  return <>{context?.parameters}</>;
+}
+const FILTER_LIST_COMPONENTS = { Footer: FilterParametersFooterV3 };
 export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEditorPanelContextV3): JSX.Element {
   const { t } = useTranslation('ui');
   const shell = useImageEditorShellV3();
@@ -56,6 +60,15 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
       setError(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
   };
+  const parameters = filter && adapter && layer ? <div data-filter-parameters className="px-3 py-3">
+    <UiGroup labelWidth={96} titleTone="compact" title={title(filter.effectId, filter.operationType)} divided>
+      <FilterBlendControlsV3 key={filter.id} preview={imageEditFilterMixPreviewV3(controller, layer, filter.id, `filter-mix:${layer.id}:${filter.id}`)} filter={filter} disabled={locked} onChange={patch => change(filter.id, { kind: 'update', patch })} />
+      {filter.mask && <UiFormRow density="compact" label={t('imageEditor.v3.filterWorkspace.mask', { defaultValue: '局部蒙版' })}>
+        <UiIconButton size="sm" disabled={locked} aria-label={t('imageEditor.v3.filterWorkspace.removeMask', { defaultValue: '移除滤镜蒙版' })} onClick={() => change(filter.id, { kind: 'update', patch: { mask: null } })}><X className="h-3.5 w-3.5" /></UiIconButton>
+      </UiFormRow>}
+      <ImageEditorEffectParametersV3 key={`${layer.id}:${filter.id}`} controller={adapter.controller} layer={adapter.layer} disabled={locked} />
+    </UiGroup>
+  </div> : null;
   return <section data-adjustments-panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
     <div className="flex shrink-0 items-center gap-2 px-3 py-2">
       <Dropdown<'content' | 'below'> className="min-w-0 flex-1" minWidthStrategy="none"
@@ -98,8 +111,9 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
       }}>{t('imageEditor.v3.filterWorkspace.convertConfirm')}</UiButton>
     </>}>
       {conversion && <div className="flex flex-col gap-3 text-sm text-text2">
-        <p>{t('imageEditor.v3.filterWorkspace.beforeScope', { names: conversion.beforeTargets.join('、') })}</p>
-        <p>{t('imageEditor.v3.filterWorkspace.afterScope', { names: conversion.afterTargets.join('、') })}</p>
+        <p>{t(`imageEditor.v3.filterWorkspace.${filterLayer ? 'beforeComposite' : 'beforeContent'}`, { names: conversion.beforeTargets.join('、') })}</p>
+        <p>{t(`imageEditor.v3.filterWorkspace.${filterLayer ? 'afterContent' : 'afterComposite'}`, { names: conversion.afterTargets.join('、') })}</p>
+        <p>{t(`imageEditor.v3.filterWorkspace.${filterLayer ? 'contentImpact' : 'compositeImpact'}`)}</p>
         {conversion.changesOrder && <p>{t('imageEditor.v3.filterWorkspace.orderNotice')}</p>}
       </div>}
     </UiModal>
@@ -116,7 +130,7 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
             if (definition) showImageEditorPanelV3(shell.api, definition, t(definition.titleKey, { defaultValue: definition.title }));
           }}>{t('imageEditor.v3.filterWorkspace.editLayerParameters', { defaultValue: '编辑图层参数' })}</UiButton>} /> : <>
           {!layer.filters.length ? <UiEmpty size="sm" title={t('imageEditor.v3.filterWorkspace.empty', { defaultValue: '当前图层还没有滤镜' })} /> :
-            <div className={filter ? 'h-32 shrink-0' : 'min-h-0 flex-1'}><Virtuoso className="h-full" data={layer.filters} computeItemKey={(_index, item) => item.id}
+            <Virtuoso className="min-h-0 flex-1" data={layer.filters} context={{ parameters }} components={FILTER_LIST_COMPONENTS} computeItemKey={(_index, item) => item.id}
               itemContent={(index, item) => <div data-filter-row={item.id} className="flex items-center gap-1 px-3 py-1">
                 <UiSwitch aria-label={t('imageEditor.v3.filterWorkspace.enabled', { defaultValue: '启用{{title}}', title: title(item.effectId, item.operationType) })} checked={item.enabled} disabled={locked} onCheckedChange={enabled => change(item.id, { kind: 'update', patch: { enabled } })} />
                 <UiOptionButton variant="menu" size="sm" className="min-w-0 flex-1" title={title(item.effectId, item.operationType)} active={filter?.id === item.id} onClick={() => setSelectedFilter(item.id)}><span className="truncate">{title(item.effectId, item.operationType)}</span></UiOptionButton>
@@ -128,16 +142,7 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
                 </div>}>
                   {({ open, togglePanel }) => <UiIconButton size="sm" on={open} aria-haspopup="menu" aria-expanded={open} aria-label={t('imageEditor.v3.filterWorkspace.actions', { defaultValue: '滤镜操作' })} onClick={togglePanel}><MoreHorizontal className="h-3.5 w-3.5" /></UiIconButton>}
                 </PanelTrigger>
-              </div>} /></div>}
-          {filter && adapter && <div data-filter-parameters className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-            <UiGroup titleTone="compact" title={title(filter.effectId, filter.operationType)}>
-              <FilterBlendControlsV3 key={filter.id} preview={imageEditFilterMixPreviewV3(controller, layer, filter.id, `filter-mix:${layer.id}:${filter.id}`)} filter={filter} disabled={locked} onChange={patch => change(filter.id, { kind: 'update', patch })} />
-              {filter.mask && <UiFormRow density="compact" label={t('imageEditor.v3.filterWorkspace.mask', { defaultValue: '局部蒙版' })} inline>
-                <UiIconButton size="sm" disabled={locked} aria-label={t('imageEditor.v3.filterWorkspace.removeMask', { defaultValue: '移除滤镜蒙版' })} onClick={() => change(filter.id, { kind: 'update', patch: { mask: null } })}><X className="h-3.5 w-3.5" /></UiIconButton>
-              </UiFormRow>}
-              <ImageEditorEffectParametersV3 key={`${layer.id}:${filter.id}`} controller={adapter.controller} layer={adapter.layer} disabled={locked} />
-            </UiGroup>
-          </div>}
+              </div>} />}
         </>}
         {filterLayer && <UiButton size="sm" disabled={locked} onClick={() => prepareConversion()}>{t('imageEditor.v3.filterWorkspace.convertContent')}</UiButton>}
       </div>}

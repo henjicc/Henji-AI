@@ -4,6 +4,12 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+test('巡检按等号前缀精确选择场景，不带出同名前缀的性能变体', () => {
+  const scenes = [{ id: 'image-edit-layout-draft', surface: '图片编辑', name: '布局' }, { id: 'image-edit-layout-draft-100', surface: '图片编辑', name: '100层布局' }]
+  assert.deepEqual(filterScenes(scenes, ['=image-edit-layout-draft']).map(scene => scene.id), ['image-edit-layout-draft'])
+  assert.equal(filterScenes(scenes, ['image-edit-layout-draft']).length, 2)
+})
+
 test('可编辑代码资产场景只在显式写入验收下登记且可独立选择', () => {
   const { createVideoEditCodeAssetsScene } = require('./uiInspectionSceneVideoEditCodeAssets.cjs')
   const scene = createVideoEditCodeAssetsScene()

@@ -8,6 +8,7 @@ import {
   UiEmpty,
   UiChipButton,
   UiFormRow,
+  UiSegmented,
   UiGroup,
   UiInput,
   Dropdown,
@@ -276,10 +277,11 @@ export function ImageEditorPropertiesPanelV3({
           <UiGroup titleTone="compact" divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
           {selected.mask ? (
             <>
-              <div className="flex gap-1">
-                <UiChipButton active={editTarget === 'pixels'} size="sm" onClick={() => selectImageEditTargetV3(controller, selected.id, 'pixels')}>{t('imageEditor.v3.workflow.content')}</UiChipButton>
-                <UiChipButton active={editTarget === 'mask'} size="sm" onClick={() => selectImageEditTargetV3(controller, selected.id, 'mask')}>{t('imageEditor.v3.workflow.mask')}</UiChipButton>
-              </div>
+              <UiFormRow density="compact" label={t('surfaceGrammar.editTarget')}>
+                <UiSegmented size="sm" ariaLabel={t('surfaceGrammar.editTarget')} value={editTarget}
+                  options={[{ value: 'pixels', label: t('imageEditor.v3.workflow.content') }, { value: 'mask', label: t('imageEditor.v3.workflow.mask') }]}
+                  onChange={target => selectImageEditTargetV3(controller, selected.id, target)} />
+              </UiFormRow>
               <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskEnabled')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskEnabled')} checked={selected.maskAttachment.enabled} disabled={contentLocked} onCheckedChange={enabled => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, enabled } })} /></UiFormRow>
               <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskLinked')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskLinked')} checked={selected.maskAttachment.linked} disabled={contentLocked} onCheckedChange={linked => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, linked } })} /></UiFormRow>
               <ImageEditorLayerScalarsV3 controller={controller} layer={selected} disabled={contentLocked} mask />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiLoading, UiModal } from '@/components/ui';
+import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiModal } from '@/components/ui';
 import NumberInput from '@/components/ui/NumberInput';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { canvasAnchorSchemaV3, type CanvasAnchorV3 } from '@/core/imageEdit/v3/documentGeometry';
@@ -61,19 +61,21 @@ export function DocumentGeometryOptionsV3({ bus }: ToolOptionsProps): JSX.Elemen
     {error && !open && <UiError size="xs" message={error} />}
     <UiModal isOpen={open} title={label('title')} onClose={() => { cancel(); setOpen(false); }} size="compact"
       footer={<><UiButton onClick={() => { cancel(); setOpen(false); }}>{label('cancel')}</UiButton><UiButton variant="primary" disabled={busy || width === grid.width && height === grid.height} onClick={() => void preview()}>{label('preview')}</UiButton></>}>
-      <div className="flex flex-col gap-4" data-document-size-configuration>
+      <UiGroup labelWidth={96} gap="stack" data-document-size-configuration>
         <UiFormRow label={label('mode')}><Dropdown value={mode} display={label(mode)} options={(['canvas', 'resample', 'content-aware'] as const).map(value => ({ value, label: label(value) }))}
           onSelect={value => { reset(); setMode(value as GeometryRequestV3['mode']); }} /></UiFormRow>
         <p className="text-sm text-text2">{label(`${mode}Hint`)}</p>
         {grid.crop && <p className="text-xs text-text3">{label('cropHint')}</p>}
-        <UiFormRow label={label('width')}><NumberInput ariaLabel={label('width')} value={width} min={1} step={1} disabled={busy} onChange={value => changeSize('width', value)} /></UiFormRow>
-        <UiFormRow label={label('height')}><NumberInput ariaLabel={label('height')} value={height} min={1} step={1} disabled={busy} onChange={value => changeSize('height', value)} /></UiFormRow>
+        <div className="grid grid-cols-2 gap-3">
+          <UiFormRow label={label('width')} labelColumn="auto"><NumberInput ariaLabel={label('width')} widthClassName="w-full" value={width} min={1} step={1} disabled={busy} onChange={value => changeSize('width', value)} /></UiFormRow>
+          <UiFormRow label={label('height')} labelColumn="auto"><NumberInput ariaLabel={label('height')} widthClassName="w-full" value={height} min={1} step={1} disabled={busy} onChange={value => changeSize('height', value)} /></UiFormRow>
+        </div>
         {mode === 'canvas' ? <UiFormRow label={label('anchor')}><Dropdown value={anchor} display={label(`anchors.${anchor}`)} options={canvasAnchorSchemaV3.options.map(value => ({ value, label: label(`anchors.${value}`) }))} onSelect={value => { reset(); setAnchor(value as CanvasAnchorV3); }} /></UiFormRow>
-          : <div className="flex items-center gap-2"><UiCheckbox checked={proportional} onCheckedChange={value => { reset(); setProportional(value); }} aria-label={label('proportional')} /><span>{label('proportional')}</span></div>}
-        {mode === 'content-aware' && <div className="flex items-center gap-2"><UiCheckbox checked={protect} onCheckedChange={value => { reset(); setProtect(value); }} aria-label={label('protect')} /><span>{label('protect')}</span></div>}
+          : <UiFormRow label={label('proportional')}><UiCheckbox checked={proportional} onCheckedChange={value => { reset(); setProportional(value); }} aria-label={label('proportional')} /></UiFormRow>}
+        {mode === 'content-aware' && <UiFormRow label={label('protect')}><UiCheckbox checked={protect} onCheckedChange={value => { reset(); setProtect(value); }} aria-label={label('protect')} /></UiFormRow>}
         {busy && <UiLoading message={label('preparing')}><ProgressBar progress={progress} appearance="hairline" /><UiButton onClick={cancel}>{label('cancel')}</UiButton></UiLoading>}
         {error && <UiError message={error} />}
-      </div>
+      </UiGroup>
     </UiModal>
   </div>;
 }

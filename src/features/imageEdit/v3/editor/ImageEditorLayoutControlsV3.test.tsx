@@ -7,6 +7,7 @@ import type { ImageLayoutState } from '../application/imageEditLayoutDraft'
 import type { ImageEditorV3Controller } from './types'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorLayoutControlsV3 } from './ImageEditorLayoutControlsV3'
+import i18n from '@/i18n/config'
 
 type ControlsState = Omit<ImageLayoutState, 'draft' | 'entries' | 'candidates'> & {
   draft?: Pick<NonNullable<ImageLayoutState['draft']>, 'id' | 'fidelity' | 'pins'>
@@ -33,7 +34,7 @@ const fake = vi.hoisted(() => {
 })
 vi.mock('../application/imageEditLayoutDraft', () => ({ imageEditLayoutDraft: () => ({ ...fake, snapshot: () => fake.state }) }))
 
-beforeEach(() => { fake.state = fake.initial(); fake.preview.mockImplementation((id: string) => fake.update({ selected: id })) })
+beforeEach(async () => { await i18n.changeLanguage('zh-CN'); fake.state = fake.initial(); fake.preview.mockImplementation((id: string) => fake.update({ selected: id })) })
 afterEach(() => { cleanup(); vi.clearAllMocks(); useImageEditorSessionStoreV3.getState().disposeSession('layout-ui') })
 function mount(profile: 'full' | 'canvas-edit' | 'quick' | 'mask'): void {
   const document = createImageEditDocumentV3({ width: 1000, height: 600, documentId: 'layout-ui' })
@@ -66,7 +67,7 @@ it.each(['quick', 'mask'] as const)('%s 不提供布局写入口', profile => {
 it('候选用方向键循环、Home/End 选择并保留键盘焦点', async () => {
   mount('full'); await open()
   const last = screen.getByRole('radio', { name: '等距排列' })
-  last.focus(); fireEvent.keyDown(last, { key: 'ArrowDown' })
+  last.focus(); fireEvent.keyDown(last, { key: 'ArrowRight' })
   const original = screen.getByRole('radio', { name: '原稿' })
   expect(document.activeElement).toBe(original)
   expect(original.tabIndex).toBe(0)

@@ -4,7 +4,10 @@ import React from 'react'
 import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Dropdown from './Dropdown'
+import i18n from '@/i18n/config'
 import { DROPDOWN_MENU_MAX_WIDTH_PX, resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
+
+beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
 
 describe('Dropdown 显示文本', () => {
   const options = [
@@ -19,6 +22,21 @@ describe('Dropdown 显示文本', () => {
   it('显式 display 优先于选项标签，未知值回退原值', () => {
     expect(resolveDropdownDisplay('当前路径', 'bezier', options)).toBe('当前路径')
     expect(resolveDropdownDisplay(undefined, 'unknown', options)).toBe('unknown')
+  })
+
+  it('有选项时未选中或当前值失效显示占位，保留有效零值与自定义触发器', () => {
+    const options = [{ label: '零', value: 0 }, { label: '一', value: 1 }]
+    const view = render(React.createElement(Dropdown, { ariaLabel: '目标', value: undefined, options }))
+    const trigger = view.getByRole('button', { name: '目标' })
+    expect(trigger.textContent).toBe(i18n.t('ui:dropdown.unselectedLabel'))
+    expect((trigger as HTMLButtonElement).disabled).toBe(false)
+    view.rerender(React.createElement(Dropdown, { ariaLabel: '目标', value: 42, options }))
+    expect(trigger.textContent).toBe(i18n.t('ui:dropdown.unselectedLabel'))
+    view.rerender(React.createElement(Dropdown, { ariaLabel: '目标', value: 0, options }))
+    expect(trigger.textContent).toBe('零')
+    view.rerender(React.createElement(Dropdown, { ariaLabel: '目标', display: '自定义动作', renderPanel: () => null }))
+    expect(trigger.textContent).toBe('自定义动作')
+    view.unmount()
   })
 })
 
