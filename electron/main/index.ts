@@ -1,5 +1,5 @@
 import { registerApplicationControlIpc } from './ipc/application-control'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
@@ -12,7 +12,8 @@ import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerLocalRecordsIpc } from './ipc/local-records'
 import { registerFontsIpc } from './ipc/fonts'
 import { registerTestFixturesIpc } from './ipc/test-fixtures'
-import { configureDatabaseMigrations } from './services/db'
+import { configureDatabaseMigrations, getDb } from './services/db'
+import { PersistenceError } from '../../src/core/persistence/migrations'
 import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
 import { registerWorkRootIpc } from './ipc/work-root'
@@ -101,6 +102,17 @@ if (remoteDebuggingPort) {
 }
 
 app.whenReady().then(() => {
+  try {
+    getDb()
+  } catch (error) {
+    if (!(error instanceof PersistenceError) || error.code !== 'newer-version') throw error
+    // The renderer is not ready yet; use the native error surface instead of
+    // leaving startup rejected in the background with no actionable message.
+    if (isAssistantCliMode()) process.stderr.write(`${error.message}\n`)
+    else dialog.showErrorBox('Henji AI', error.message)
+    app.exit(1)
+    return
+  }
   configureMacDockIcon()
   registerMediaProtocolHandler()
   restoreAllowedMediaRoots()

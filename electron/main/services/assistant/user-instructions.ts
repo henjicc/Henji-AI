@@ -12,6 +12,7 @@ import {
 } from '../../../../src/core/assistant/userInstructions'
 import { createMainLogger } from '../logging'
 import { getAppLocalDataDir } from '../system'
+import { writeBufferAtomically } from '../fs/atomic-file'
 
 const logger = createMainLogger('main.assistant_user_instructions')
 const USER_INSTRUCTIONS_FILE_NAME = 'user-instructions.md'
@@ -23,8 +24,7 @@ export function getAssistantUserInstructionsFilePath(): string {
 async function persistInstructions(content: string): Promise<AssistantUserInstructions> {
   const normalized = normalizeAssistantUserInstructionsContent(content)
   const filePath = getAssistantUserInstructionsFilePath()
-  await fs.mkdir(path.dirname(filePath), { recursive: true })
-  await fs.writeFile(filePath, normalized ? `${normalized}\n` : '', 'utf8')
+  await writeBufferAtomically(filePath, Buffer.from(normalized ? `${normalized}\n` : '', 'utf8'))
   const stats = await fs.stat(filePath)
   return assistantUserInstructionsSchema.parse({
     schemaVersion: ASSISTANT_USER_INSTRUCTIONS_SCHEMA_VERSION,

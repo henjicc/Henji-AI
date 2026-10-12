@@ -2,7 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
 import { getProgramDataDir } from './appBasePaths'
-import { runSchemaMigrations, type SchemaMigrationOptions } from './db-migrations'
+import { assertDatabaseVersionSupported, runSchemaMigrations, type SchemaMigrationOptions } from './db-migrations'
 
 const DB_FILE_NAME = 'henji.db'
 
@@ -43,11 +43,12 @@ export function getDb(): Database.Database {
 
   fs.mkdirSync(getHenjiDataDir(), { recursive: true })
   const connection = new Database(getHenjiDbPath())
-  connection.pragma('journal_mode = WAL')
-  connection.pragma('foreign_keys = ON')
-  // 迁移期间解析作品目录会经 settings 读回本连接，所以先登记连接再初始化。
-  db = connection
   try {
+    assertDatabaseVersionSupported(connection)
+    connection.pragma('journal_mode = WAL')
+    connection.pragma('foreign_keys = ON')
+    // 版本预检通过后才允许迁移参数经 settings 读回本连接。
+    db = connection
     initializeSchema(connection, migrationOptionsProvider(connection))
   } catch (error) {
     db = null

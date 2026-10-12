@@ -141,7 +141,8 @@
     "deleteTitle": "删除预设",
     "confirmDelete": "确定删除预设？",
     "alerts": {
-      "saveFailed": "保存预设失败",
+      "loadFailed": "预设读取失败，原有预设未修改。请检查数据目录的访问权限并重启后重试。",
+      "saveFailed": "保存预设失败，原有预设未被覆盖。请检查数据目录的访问权限并重试。",
       "deleteFailed": "删除预设失败"
     },
     "create": {

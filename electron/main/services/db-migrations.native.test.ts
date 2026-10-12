@@ -375,5 +375,11 @@ describe.skipIf(!process.versions.electron)('数据库仓库按位置写法存�
     expect(presets.list({ modelId: 'any-model' })).toMatchObject([{ id: 'p', params: { ref: sample }, useCount: 1 }])
     presets.update('p', { isFavorite: true })
     expect(presets.list({ onlyFavorites: true })).toHaveLength(1)
+    for (const invalid of ['', '{', '[]']) {
+      db.prepare('UPDATE presets SET params = ? WHERE id = ?').run(invalid, 'p')
+      expect(() => presets.list()).toThrow(expect.objectContaining({ code: 'invalid-content' }))
+      expect(() => presets.get('p')).toThrow(expect.objectContaining({ code: 'invalid-content' }))
+      expect(db.prepare('SELECT params FROM presets WHERE id = ?').get('p')).toEqual({ params: invalid })
+    }
   })
 })

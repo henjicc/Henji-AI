@@ -38,11 +38,6 @@ const DEFAULT_OPERATIONS: AtomicFileOperations = {
   syncDirectory,
 }
 
-function isReplaceCompatibilityError(error: unknown): boolean {
-  if (!(error instanceof Error) || !('code' in error)) return false
-  return error.code === 'EEXIST' || error.code === 'EPERM' || error.code === 'ENOTEMPTY'
-}
-
 async function syncPublishedDirectory(
   targetPath: string,
   operations: AtomicFileOperations,
@@ -61,40 +56,23 @@ async function syncPublishedDirectory(
 }
 
 /**
- * POSIX 下 rename 会直接原子替换；Windows 不允许覆盖时才退到带备份的兼容路径。
- * 兼容路径若第二次 rename 失败，会尽力恢复旧目标，绝不把半成品当成成功结果。
+ * 同目录 rename 使用系统替换原语（Windows 的 libuv 使用 MoveFileExW /
+ * MOVEFILE_REPLACE_EXISTING）。占用、权限或文件系统不支持替换时直接失败，
+ * 绝不先搬走旧目标：那会产生崩溃或恢复失败后原路径消失的窗口。
  */
 export async function replaceFileAtomically(
   stagedPath: string,
   targetPath: string,
   operations: AtomicFileOperations = DEFAULT_OPERATIONS,
 ): Promise<void> {
-  try {
-    await operations.rename(stagedPath, targetPath)
-    await syncPublishedDirectory(targetPath, operations)
-    return
-  } catch (error) {
-    if (!isReplaceCompatibilityError(error)) throw error
+  // Windows 上杀毒/索引器短暂占用目标会让替换报 EPERM/EBUSY；短退避重试，原件始终留在原路径。
+  for (let attempt = 0; ; attempt++) {
+    try { await operations.rename(stagedPath, targetPath); break } catch (error) {
+      const code = error instanceof Error && 'code' in error ? String(error.code) : ''
+      if (attempt >= 4 || !['EPERM', 'EBUSY', 'EACCES'].includes(code)) throw error
+      await new Promise(resolve => setTimeout(resolve, 50 * 2 ** attempt))
+    }
   }
-
-  const targetExists = await operations.access(targetPath).then(() => true).catch(() => false)
-  if (!targetExists) {
-    await operations.rename(stagedPath, targetPath)
-    await syncPublishedDirectory(targetPath, operations)
-    return
-  }
-
-  const backupPath = `${targetPath}.${crypto.randomUUID()}.bak`
-  await operations.rename(targetPath, backupPath)
-  try {
-    await operations.rename(stagedPath, targetPath)
-  } catch (error) {
-    await operations.rename(backupPath, targetPath).catch(() => undefined)
-    throw error
-  }
-  // 新目标已经发布后，旧备份清理失败不能再被当成发布失败，更不能尝试用旧文件
-  // 覆盖已发布目标。残留 backup 可由后续维护清理，目标文件仍是唯一权威结果。
-  await operations.remove(backupPath).catch(() => undefined)
   await syncPublishedDirectory(targetPath, operations)
 }
 
