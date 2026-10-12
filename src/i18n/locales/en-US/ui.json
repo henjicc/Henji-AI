@@ -1,4 +1,5 @@
 {
+  "dropdown": { "emptyLabel": "No options available" },
   "surfaceGrammar": {
     "curveChannel": "Channel",
     "curveType": "Curve type",
@@ -11,6 +12,7 @@
     "fillRule": "Fill rule",
     "anchor": "Anchor point",
     "maskTarget": "Mask target",
+    "noAvailableLayers": "No available layers",
     "annotationFilter": "Filter annotations",
     "trackingTarget": "Tracking target",
     "stylePreset": "Style kit"

@@ -84,6 +84,7 @@ export const AssetGroupMemberSection = memo(({
           const isDragging = dragState.isDragging && dragState.fromIndex === index;
           const isDropTarget = dragState.isDragging && dragState.toIndex === index && !isDragging;
           return (
+            // ui-surface-allow: S4 素材成员是可独立拖动与打开的预览网格，inset 和 gap-4 已区分边界；u6。
             <UiPanel
               key={member.id}
               ref={(element) => { itemRefs.current[index] = element; }}

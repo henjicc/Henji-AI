@@ -97,6 +97,7 @@ export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTe
 export function AudioEditMatchedText({ block, search }: { block: AudioEditTranscriptBlock; search: AudioEditTextSearch }) {
   const fragments = search.fragments.get(block.id)
   if (!fragments) return <>{block.text}</>
+  // ui-surface-allow: S4 这些 span 是同一段正文的查找高亮片段，分隔线会割裂连续文本；u6。
   return <>{fragments.map((fragment, index) => fragment.matchIndex === undefined ? <span key={index}>{fragment.text}</span> : <span key={index}
     data-audio-search-current={fragment.matchIndex === search.currentIndex ? 'true' : undefined}
     className={fragment.matchIndex === search.currentIndex ? 'rounded-sm bg-warning-tint text-text1 ring-1 ring-accent-ring' : 'rounded-sm bg-warning-tint text-text1'}>

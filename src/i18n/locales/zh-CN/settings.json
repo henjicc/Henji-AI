@@ -763,7 +763,12 @@
     },
     "declaredNote": "图片、视频与音频由配置声明；“仅声明”表示协议可表达但尚未用真实媒体验证。",
     "failedNote": "某个模态显示“失败”表示智能助手当前的请求协议带不了它，模型本身仍可能支持——画布文本处理等功能不受影响。",
-    "usage": "Token：输入 {{input}} / 输出 {{output}} / 思考 {{reasoning}}",
+    "usage": "上次验证用量：{{items}}",
+    "usageItems": {
+      "input": "输入 {{value}}",
+      "output": "输出 {{value}}",
+      "reasoning": "思考 {{value}}"
+    },
     "notVerified": "尚未进行动态能力验证",
     "verifying": "验证中",
     "verify": "验证此模型",

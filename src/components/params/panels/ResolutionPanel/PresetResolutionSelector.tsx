@@ -31,6 +31,7 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
           const label = getI18nText(option.label, i18n.language)
 
           return (
+            // ui-surface-allow: S4 分辨率是二维网格选项，grid 底色和格间距表达边界；u6。
             <UiOptionButton
               type="button"
               active={value === option.value}

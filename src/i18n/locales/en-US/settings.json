@@ -765,7 +765,12 @@
     },
     "declaredNote": "Image, video and audio come from the configuration; “declared only” means the protocol can carry it but it hasn't been verified with real media.",
     "failedNote": "A modality marked “failed” can't be carried by the assistant's current request protocol; the model may still support it, and features such as canvas text processing are unaffected.",
-    "usage": "Tokens: input {{input}} / output {{output}} / reasoning {{reasoning}}",
+    "usage": "Last verification usage: {{items}}",
+    "usageItems": {
+      "input": "input {{value}}",
+      "output": "output {{value}}",
+      "reasoning": "reasoning {{value}}"
+    },
     "notVerified": "Not verified yet",
     "verifying": "Verifying",
     "verify": "Verify this model",

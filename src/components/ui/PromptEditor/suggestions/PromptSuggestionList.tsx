@@ -90,6 +90,7 @@ export const PromptSuggestionList = forwardRef<
         const reference = item.kind === 'reference' ? item.value : null
         const variable = item.kind === 'variable' ? item.value : null
         return (
+          // ui-surface-allow: S4 自动补全是键盘选值菜单，menu 选项自带悬停与选中边界；u6。
           <UiOptionButton
             key={`${item.kind}:${getSuggestionKey(item)}`}
             active={index === selectedIndex}

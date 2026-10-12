@@ -247,7 +247,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                         {presets.length === 0 ? (
                             <UiEmpty size="sm" title={t('ui:presets.empty')} />
                         ) : (
-                            <div className="space-y-2">
+                            <div>
                                 {presets.map(preset => (
                                     <div
                                         key={preset.id}
@@ -255,7 +255,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         onClick={() => {
                                             onLoadPreset(preset)
                                         }}
-                                        className="group relative cursor-pointer rounded-lg px-3 py-2 transition-colors duration-120 hover:bg-hover"
+                                        className="group relative cursor-pointer border-b border-line/60 px-3 py-3 first:pt-0 last:border-b-0 last:pb-0 transition-colors duration-120 hover:bg-hover"
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2 flex-1 min-w-0">

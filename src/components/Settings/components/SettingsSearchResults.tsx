@@ -16,11 +16,11 @@ const SettingsSearchResults: React.FC<SettingsSearchResultsProps> = ({ results, 
     return <UiEmpty size="sm" title={t('search.empty')} description={t('search.emptyHint')} />
   }
   return (
-    <div role="list" aria-label={t('search.resultsLabel')} className="space-y-0.5">
+    <div role="list" aria-label={t('search.resultsLabel')}>
       {results.map((result) => (
+        <div key={`${result.entry.sectionId}:${result.entry.labelKey}`} role="listitem" className="border-b border-line/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
         <UiOptionButton
           key={`${result.entry.sectionId}:${result.entry.labelKey}`}
-          role="listitem"
           type="button"
           variant="menu"
           size="lg"
@@ -36,6 +36,7 @@ const SettingsSearchResults: React.FC<SettingsSearchResultsProps> = ({ results, 
           </span>
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text2" />
         </UiOptionButton>
+        </div>
       ))}
     </div>
   )
