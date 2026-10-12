@@ -340,7 +340,7 @@ export async function executeApplicationCapabilityResult(
     const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(invocation.id)
     if (definition) {
       const parsed = definition.inputSchema.safeParse(invocation.input)
-      if (!parsed.success) throw new ApplicationPreflightFailure(new Error(`INVALID_INPUT:${describeInputIssues(parsed.error, definition.inputSchema)}`))
+      if (!parsed.success) throw new ApplicationPreflightFailure(new Error(`INVALID_INPUT:${describeInputIssues(parsed.error, definition.inputSchema, invocation.input)}`))
     }
     const data = await registry.execute(invocation, context)
     const snapshot = createHostContextSnapshot()
