@@ -1,4 +1,5 @@
 {
+  "videoEdit": { "inlineCaption": "Edit caption in place" },
   "canvasTidy": {
     "title": "Tidy",
     "align": "Align edges",
