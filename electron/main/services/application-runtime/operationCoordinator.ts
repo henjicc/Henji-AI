@@ -4,7 +4,10 @@ import { z } from 'zod'
 import { localHostReplySchema, type LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { ApplicationOperationStore, operationDigest, type OperationRecord } from './operationStore'
 import { operationVerificationRecovery } from './operationVerificationRecovery'
-import { applicationUserConfirmation, USER_CONFIRMATION_TIMEOUT_MS } from '../../../../src/core/application-control/userConfirmation'
+import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
+import { requiresMutationReview } from '../../../../src/core/application-control/applicationCapabilities'
+import type { OperationReviewItem } from '../../../../src/core/application-control/operationReview'
+import { reviewPresentation } from './operationReviewPresentation'
 import { createMainLogger } from '../logging'
 
 const refSchema = z.object({ kind: z.string(), id: z.string() }).passthrough()
@@ -31,6 +34,8 @@ function protectsCaption(record: TargetRecord, key: string): boolean {
 /** 读依赖、集合追加和覆盖写入不是同一种冲突；访问范围从同一能力声明解析。 */
 function operationAccess(record: TargetRecord): Map<string, 'append' | 'write'> {
   const targets = new Map<string, 'append' | 'write'>()
+  const policy = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(record.capabilityId)
+  if (policy && !requiresMutationReview(policy)) return targets
   const add = (value: unknown, mode: 'append' | 'write'): void => {
     const parsed = refSchema.safeParse(value)
     if (parsed.success && targets.get(refKey(parsed.data)) !== 'write') targets.set(refKey(parsed.data), mode)
@@ -73,15 +78,22 @@ export class ApplicationOperationCoordinator {
    */
   constructor(readonly store: ApplicationOperationStore, private readonly recoverPersisted?: (record: OperationRecord) => OperationRecord | undefined,
     private readonly writableEntityTypes: () => ReadonlySet<string> = () => new Set(),
-    private readonly requestReview?: (summary: string, signal: AbortSignal) => Promise<'completed' | 'not_executed' | undefined>) {
+    private readonly requestReview?: (item: OperationReviewItem) => void) {
     store.recoverInterrupted()
     for (const record of store.unresolved()) {
+      this.recoverPreflight(record)
       const recovered = recoverPersisted?.(record)
       if (recovered) store.save(recovered)
     }
   }
   /** 只识别旧通用事务入口的已知前置拒绝，不以缺少回执或目标当前值相等推断。 */
   private recoverPreflight(record: OperationRecord): OperationRecord {
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(record.capabilityId)
+    if (definition && !requiresMutationReview(definition) && ['unknown', 'partial', 'awaiting_user_confirmation'].includes(record.state)) {
+      const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified', confirmation: undefined }
+      this.store.save(recovered)
+      return recovered
+    }
     const error = object(record.result?.error)
     const details = object(error.details)
     const legacyClosedDocument = record.capabilityId === 'change_application_entities'
@@ -105,35 +117,40 @@ export class ApplicationOperationCoordinator {
     }
     return record
   }
-  async review(record: OperationRecord, rendererEpoch: string, readTarget: (ref: { kind: string; id: string }) => Promise<boolean>, assertAuthorized: () => void): Promise<void> {
-    if (record.state !== 'unknown') return
+  async review(record: OperationRecord, rendererEpoch: string, readTarget: (ref: { kind: string; id: string }) => Promise<Record<string, unknown>>, assertAuthorized: () => void): Promise<void> {
+    record = this.recoverPreflight(record)
+    if (record.state !== 'unknown' && !(record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review')) return
     if (!rendererEpoch || rendererEpoch === record.rendererEpoch) throw new Error('RECOVERY_SESSION_ACTIVE:原执行宿主尚未结束，请先查询回执；应用重新加载后可核对。')
     if (!this.requestReview) throw new Error('RECOVERY_REVIEW_UNAVAILABLE:当前宿主不能发起人工核对，请在痕迹AI桌面应用中重试。')
-    const targets = record.targetRefs?.length ? record.targetRefs : resultRefs(record.input)
-    for (const ref of targets) if (!await readTarget(ref)) throw new Error('RECOVERY_TARGET_UNAVAILABLE:原目标尚不能读取，请在应用中定位原文档后再核对。')
+    const targets = [...new Map([...(record.targetRefs ?? []), ...resultRefs(record.input)].map(ref => [refKey(ref), ref])).values()]
+    const observations: Record<string, unknown>[] = []
+    for (const ref of targets) {
+      try { observations.push(await readTarget(ref)) } catch { /* 读不到仍能由用户核对，面板明确说明。 */ }
+    }
     assertAuthorized()
     const current = this.store.get(record.operationId, record.callerId)
-    if (!current || current.state !== 'unknown' || current.requestId !== record.requestId) return
-    const summary = typeof record.input.summary === 'string' ? record.input.summary : '先前的应用修改'
-    const confirmation = applicationUserConfirmation({ title: '核对之前的修改', message: `${summary}：请查看原文档，确认已完成或未执行。本次核对不会重新执行修改。`, confirmLabel: '确认已完成 / 确认未执行' }, 'review')
+    if (!current || !['unknown', 'awaiting_user_confirmation'].includes(current.state) || current.requestId !== record.requestId) return
+    const item = reviewPresentation(record, observations)
+    const confirmation = applicationUserConfirmation({ title: item.title, message: item.message, confirmLabel: '已经生效' }, 'review')
     this.store.save({ ...current, state: 'awaiting_user_confirmation', verificationState: 'unresolved', confirmation })
-    const controller = new AbortController()
-    const timer = setTimeout(() => { controller.abort(); finish() }, USER_CONFIRMATION_TIMEOUT_MS)
-    const finish = (decision?: 'completed' | 'not_executed') => {
-      const latest = this.store.get(record.operationId, record.callerId)
-      if (!latest || latest.state !== 'awaiting_user_confirmation' || latest.confirmation?.expiresAt !== confirmation.expiresAt) return
-      this.store.save({ ...latest, state: decision ?? 'unknown', confirmation: undefined,
-        ...(decision ? { verificationState: 'verified' as const, recoveryResult: { ok: true, verification: { verified: true, source: 'application_user_review', decision } } } : {}) })
-      this.changed()
-    }
-    // The invocation returns after opening the native dialog, never after the human response.
-    void this.requestReview(summary, controller.signal).then(decision => {
-      assertAuthorized()
-      finish(controller.signal.aborted ? undefined : decision)
-    }).catch(error => {
-      finish()
-      createMainLogger('main.application_runtime').warn('人工核对未完成，保留原执行屏障', { event: 'application.confirmation.review_failed', error })
-    }).finally(() => { clearTimeout(timer); controller.abort() })
+    this.changed()
+    this.requestReview(item)
+  }
+  pendingReviews(): OperationReviewItem[] {
+    return this.store.unresolved().map(record => this.recoverPreflight(record))
+      .filter(record => record.state === 'unknown' || record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review')
+      .map(record => ({ ...reviewPresentation(record),
+        targets: [...operationAccess(record).keys()].map(key => ({ kind: key.slice(0, key.indexOf(':')), id: key.slice(key.indexOf(':') + 1) })),
+        ...(record.confirmation ? { title: record.confirmation.title, message: record.confirmation.message } : {}) }))
+  }
+  /** 仅可信应用界面调用；外部工具不接受人工决定参数。稍后处理只关闭呈现，保留账本。 */
+  resolveReview(operationId: string, callerId: string, decision: 'completed' | 'not_executed' | 'later'): void {
+    const record = this.store.get(operationId, callerId)
+    if (!record || record.state !== 'awaiting_user_confirmation' || record.confirmation?.purpose !== 'review') return
+    if (decision !== 'later') this.store.save({ ...record, state: decision, confirmation: undefined, verificationState: 'verified',
+      recoveryResult: { ok: true, verification: { verified: true, source: 'application_user_review', decision } } })
+    createMainLogger('main.application_runtime').info('应用内核对已处理', { event: 'application.confirmation.review_resolved', context: { operationId, decision } })
+    this.changed()
   }
   /** 宿主未注册时只登记入口零执行事实；不读取领域白名单，也绝不覆盖既有执行账。 */
   rejectBeforeDispatch(callerId: string, raw: Record<string, unknown>, capabilityId: OperationRecord['capabilityId'], retryAfterMs: number): OperationRecord {
@@ -162,7 +179,7 @@ export class ApplicationOperationCoordinator {
     const baseline = this.store.baseline(callerId, refs.data, revisions.data, rendererEpoch)
     return { ...result, baselineId: baseline.id }
   }
-  prepare(callerId: string, raw: Record<string, unknown>, rendererEpoch: string, access: { allowWrites: boolean; allowDestructive: boolean; allowPaid?: boolean }, capabilityId: OperationRecord['capabilityId'] = 'change_application_entities'): OperationRecord {
+  prepare(callerId: string, raw: Record<string, unknown>, rendererEpoch: string, access: { allowWrites: boolean; allowDestructive: boolean; allowPaid?: boolean }, capabilityId: OperationRecord['capabilityId'] = 'change_application_entities', actor: 'external' | 'embedded' = 'external'): OperationRecord {
     const { operationId, baselineIds } = envelopeSchema.parse(raw)
     const input = { ...raw }; delete input.operationId; delete input.baselineIds
     if ('expectedRevisions' in input) throw new Error('INVALID_INPUT:并发基线由 baselineIds 提供。')
@@ -252,7 +269,7 @@ export class ApplicationOperationCoordinator {
       if (scope in expectedRevisions && expectedRevisions[scope] !== revision) throw new Error(`BASELINE_CONFLICT:${scope} 的读取基线不一致。普通操作可省略 baselineIds 由应用自动核对；严格写入请重新读取相关目标。`)
       expectedRevisions[scope] = revision
     }
-    return this.store.prepare({ operationId, callerId, inputDigest: digest, input, expectedRevisions: baselines.length ? expectedRevisions : undefined, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs,
+    return this.store.prepare({ operationId, callerId, inputDigest: digest, input, origin: { at: Date.now(), actor }, expectedRevisions: baselines.length ? expectedRevisions : undefined, state: 'prepared', capabilityId, targetRefs: writeRefs ?? refs,
       ...(speechRecoveryOf ? { recoveryOf: speechRecoveryOf } : {}),
       ...(capabilityId === 'place_video_edit_creative_result' ? { atomicPlacement: true } : {}) })
   }
@@ -262,12 +279,14 @@ export class ApplicationOperationCoordinator {
     if (record?.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'execution') {
       this.store.save({ ...record, state: 'not_executed', verificationState: 'verified', confirmation: undefined,
         result: { ok: false, error: { code: 'CONFIRMATION_INTERRUPTED', message: '应用在确认前重载；未继续执行或计费。', details: { execution: { notExecuted: true } } } } })
-    } else if (record?.state === 'executing' || record?.state === 'awaiting_user_confirmation') this.store.save({ ...record, state: 'unknown', confirmation: undefined })
+    } else if (record?.state === 'executing') {
+      this.store.save(this.recoverPreflight({ ...record, state: 'unknown', confirmation: undefined }))
+    }
     this.changed()
   }
   /** 未知执行只能用原宿主的执行事实核对，不能按输入或“当前值碰巧相同”推断。 */
   async reconcileReceipt(record: OperationRecord, read: (original: NonNullable<import('../../../../src/core/application-control/localHostContracts').LocalHostRequest['recoveryOperation']>) => Promise<Record<string, unknown>>): Promise<void> {
-    if (!['unknown', 'executing', 'awaiting_user_confirmation'].includes(record.state) || !record.requestId || !record.rendererEpoch || record.confirmation?.purpose === 'review') return
+    if (!['unknown', 'executing', 'awaiting_user_confirmation'].includes(record.state) || !record.requestId || !record.rendererEpoch) return
     const documentId = object(record.input.documentRef).id
     const result = await read({ requestId: record.requestId, rendererEpoch: record.rendererEpoch,
       ...(record.atomicPlacement && record.capabilityId === 'place_video_edit_creative_result' && typeof documentId === 'string'
@@ -284,8 +303,9 @@ export class ApplicationOperationCoordinator {
     const result = await verify(proof)
     if (result.ok !== true || object(object(result.data).verification).verified !== true) return
     const current = this.store.get(record.operationId, record.callerId)
-    if (!current || current.state !== 'partial' || current.inputDigest !== record.inputDigest) return
-    this.store.save({ ...current, state: 'completed', verificationState: 'verified', recoveryResult: result })
+    if (!current || !['partial', 'unknown', 'awaiting_user_confirmation'].includes(current.state) || current.inputDigest !== record.inputDigest) return
+    this.store.save({ ...current, state: 'completed', confirmation: undefined, verificationState: 'verified', recoveryResult: result })
+    this.changed()
   }
   complete(reply: LocalHostReply): void {
     if (reply.progress?.phase === 'paid_approval') return
@@ -303,7 +323,9 @@ export class ApplicationOperationCoordinator {
     const partial = object(transaction.partial)
     const changed = (Array.isArray(transaction.effects) && transaction.effects.length > 0)
       || (Array.isArray(details.effects) && details.effects.length > 0)
-    const cleanFailure = object(details.execution).notExecuted === true || (Array.isArray(partial.completedStepIndexes) && partial.completedStepIndexes.length === 0 && !transaction.persistence)
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(record.capabilityId)
+    const reviewExempt = definition && !requiresMutationReview(definition)
+    const cleanFailure = object(details.execution).notExecuted === true || (object(details.execution).targetMutation === 'none' && object(details.execution).billing === 'not_charged') || (Array.isArray(partial.completedStepIndexes) && partial.completedStepIndexes.length === 0 && !transaction.persistence)
     const completed = Array.isArray(partial.completedStepIndexes) ? partial.completedStepIndexes : []
     const compensated = Array.isArray(partial.compensatedStepIndexes) ? partial.compensatedStepIndexes : []
     const rolledBack = object(details.execution).rolledBack === true || (completed.length > 0
@@ -311,7 +333,7 @@ export class ApplicationOperationCoordinator {
     const persistence = transaction.persistence || details.persistence
     const execution = object(details.execution)
     const executionPartial = execution.billing === 'submitted' || execution.billing === 'completed' || execution.targetMutation === 'applied'
-    const state = reply.result.ok === true ? 'completed' : persistence ? 'partial'
+    const state = reply.result.ok === true ? 'completed' : reviewExempt ? 'not_executed' : persistence ? 'partial'
       : executionPartial ? 'partial' : execution.billing === 'unknown' ? 'unknown' : rolledBack ? 'rolled_back' : changed ? 'partial' : cleanFailure ? 'not_executed' : 'unknown'
     const verified = state === 'not_executed' || state === 'rolled_back' || object(object(reply.result.data).verification).verified === true
     this.store.save({ ...record, state, confirmation: undefined, targetRefs: [...record.targetRefs ?? [], ...resultRefs(reply.result)], verificationState: verified ? 'verified' : 'unresolved', result: reply.result })

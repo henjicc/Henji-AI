@@ -2,11 +2,13 @@ import { useEffect } from 'react'
 import { getApplicationHostService } from '@/commands/applicationControl'
 import { createLogger } from '@/core/logging'
 import { createHostContextSnapshot, retainHostContextTracking, subscribeHostContext } from './hostContext/hostContext'
+import { attachOperationReviews } from './operationReviews'
 
 const logger = createLogger('features.application_control.host')
 
 /** 根应用装配，页面不拥有公共工具桥和上下文通道。 */
 export function useApplicationHost(uiReady: boolean): void {
+  useEffect(() => attachOperationReviews(getApplicationHostService()), [])
   useEffect(() => {
     let disposed = false
     let detach: (() => void) | undefined

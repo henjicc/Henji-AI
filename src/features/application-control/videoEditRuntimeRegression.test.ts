@@ -60,7 +60,7 @@ function runtime() {
     complete: async reply => { bridge.complete(reply) },
     publishContext: async snapshot => { bridge.publishContext(snapshot) },
     onRequest: callback => { request = callback; return () => undefined },
-    onCancel: () => () => undefined, onRevoke: () => () => undefined,
+    reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: () => () => undefined, onRevoke: () => () => undefined,
   }
   const dispose = attachLocalApplicationHost(platform, true)
   const access = { allowWrites: true, allowDestructive: true, allowPaid: false }

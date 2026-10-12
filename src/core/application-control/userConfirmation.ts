@@ -8,7 +8,7 @@ export const applicationOperationStateSchema = z.enum(['prepared', 'preparing', 
 export type ApplicationOperationState = z.infer<typeof applicationOperationStateSchema>
 export const applicationUserConfirmationSchema = z.object({
   title: z.string(), message: z.string(), confirmLabel: z.string(),
-  location: z.string(), expiresAt: z.number(), continuation: z.string(),
+  location: z.string(), expiresAt: z.number().nullable(), continuation: z.string(),
   purpose: z.enum(['execution', 'review']),
   paid: paidApprovalDecisionSchema.optional(),
 }).strict()
@@ -48,8 +48,9 @@ export async function requestApplicationPaidApproval(signal: AbortSignal, reques
 
 export function applicationUserConfirmation(request: { title: string; message: string; confirmLabel: string; paid?: PaidApprovalDecision }, purpose: ApplicationUserConfirmation['purpose'] = 'execution'): ApplicationUserConfirmation {
   return { ...request, purpose, location: '痕迹AI主窗口的确认对话框（如有其他提示，会依次显示）',
-    expiresAt: Date.now() + USER_CONFIRMATION_TIMEOUT_MS,
-    continuation: '请用户在应用中确认；确认后应用自动继续。用原 operationId 查询 get_application_operation，不要重复提交。' }
+    expiresAt: purpose === 'review' ? null : Date.now() + USER_CONFIRMATION_TIMEOUT_MS,
+    continuation: purpose === 'review' ? '用户已收到提示，可在应用中处理。稍后处理不会解除保护；用原 operationId 查询 get_application_operation，不要重复提交。'
+      : '请用户在应用中确认；确认后应用自动继续。用原 operationId 查询 get_application_operation，不要重复提交。' }
 }
 
 /** Acknowledge the durable waiting/executing transition before allowing any paid or modifying continuation. */

@@ -4,11 +4,23 @@ import { z } from 'zod'
 import {
   ApplicationCapabilityRegistry,
   applicationCapabilityDescriptorSchema,
+  requiresMutationReview,
+  isNavigationOnlyCapability,
   type ApplicationCapabilityDefinition,
 } from './applicationCapabilities'
 import {
   BUILTIN_APPLICATION_CAPABILITY_REGISTRY,
 } from './builtinApplicationCapabilityRegistry'
+
+it('只读与幂等导航不进入修改保护；新增导航沿注册表自动覆盖，业务写入继续受保护', () => {
+  const definitions = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
+  const navigation = definitions.filter(definition => isNavigationOnlyCapability(definition) && definition.idempotent)
+  expect(navigation.map(value => value.id)).toEqual(expect.arrayContaining(['open_document', 'open_application_surface', 'close_application_surface', 'focus_application_entity', 'switch_workspace']))
+  for (const definition of definitions) {
+    if (definition.readOnly || navigation.includes(definition)) expect(requiresMutationReview(definition), definition.id).toBe(false)
+  }
+  expect(requiresMutationReview(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('change_application_entities')!)).toBe(true)
+})
 
 function capability(
   id: string,

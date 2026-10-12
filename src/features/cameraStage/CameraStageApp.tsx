@@ -1,3 +1,4 @@
+import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { UiLoading } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -37,6 +38,7 @@ const describeDocument = (document: { summary: Record<string, string | number | 
 
 const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox }) => {
   const { showNotification } = useNotification()
+  const reviewDocumentId = useCameraStageStore(state => state.currentProjectId)
   const view = useCameraStageSessionStore((state) => state.appView)
   const lastDocumentId = useCameraStageSessionStore((state) => state.lastDocumentId)
   const stageViewMode = useCameraStageSessionStore((state) => state.stageViewMode)
@@ -137,7 +139,7 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
   }
 
   if (view === 'editor') {
-    return <CameraStageEditor onBackToList={handleBackToList} />
+    return <div className="flex h-full min-h-0 flex-col">{reviewDocumentId && <ApplicationOperationReviewBanner documentId={reviewDocumentId} domain="camera_stage" label="镜头参考" />}<div className="min-h-0 flex-1"><CameraStageEditor onBackToList={handleBackToList} /></div></div>
   }
   return (
     <DocumentLibraryPage

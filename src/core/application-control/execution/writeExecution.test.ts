@@ -46,3 +46,8 @@ describe('统一写执行通道', () => {
     expect(execution.failure(transaction)).toMatchObject({ original: transaction, execution: { notExecuted: false, billing: 'completed' } })
   })
 })
+
+it('导航失败不留下未知业务修改事实', async () => {
+  const handler = applicationWriteChannel(() => { throw new Error('connection interrupted') }, false)
+  await expect(handler({}, {})).rejects.toMatchObject({ execution: { targetMutation: 'none', billing: 'not_charged', notExecuted: true } })
+})

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { videoEditUserErrorMessage } from './application/videoEditUserError'
@@ -147,6 +148,7 @@ export default function VideoEditApp(): React.ReactElement {
     run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusPanelElement(panel) })
   }}>
     {instance ? <>
+      <ApplicationOperationReviewBanner documentId={instance.document.id} domain="video_edit" label="剪辑" />
       <VideoEditImportProgress projectId={instance.document.id} />
       <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
       <VideoEditFontWarnings document={videoEditCommittedDocument(instance)} />

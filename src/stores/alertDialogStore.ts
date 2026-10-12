@@ -4,6 +4,7 @@ import { paidApprovalMessage, type PaidApprovalRequest } from '@/core/applicatio
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
+import type { OperationReviewItem } from '@/core/application-control/operationReview'
 
 export type AlertDialogType = 'info' | 'warning' | 'error'
 
@@ -15,6 +16,7 @@ export type AlertDialogType = 'info' | 'warning' | 'error'
  * 这样调用方不需要碰 i18n 之外的东西，也不需要知道 uiStore 的存在。
  */
 export interface AlertDialogRequest {
+  review?: Pick<OperationReviewItem, 'operationId' | 'callerId' | 'preferred'> & { resolve: (decision: 'completed' | 'not_executed' | 'later') => void }
   title: string
   message: string
   type?: AlertDialogType
@@ -48,6 +50,7 @@ export const useAlertDialogStore = create<AlertDialogState>((set, get) => ({
   dismissCurrent: () => {
     const current = get().queue[0]
     if (current?.confirmation) current.confirmation.resolve(false)
+    else if (current?.review) current.review.resolve('later')
     else set((state) => ({ queue: state.queue.slice(1) }))
   },
   confirmCurrent: (project) => get().queue[0]?.confirmation?.resolve(true, project),

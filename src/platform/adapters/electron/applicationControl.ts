@@ -7,6 +7,8 @@ export function createElectronApplicationControl(): ApplicationHostPlatform {
     return api
   }
   return {
+    reviewOperations: input => native().reviewOperations(input),
+    onReviews: handler => native().onReviews(handler),
     publishContext: input => native().publishContext(input),
     registerHost: input => native().registerHost(input), complete: input => native().complete(input),
     onRequest: handler => native().onRequest(handler), onCancel: handler => native().onCancel(handler),

@@ -23,7 +23,7 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
   let handler: (request: LocalHostRequest) => void = () => {}
   const platform: ApplicationHostPlatform = {
     publishContext: async snapshot => bridge.publishContext(snapshot),
-    onRequest: (value) => { handler = value; return () => {} }, onCancel: () => () => {}, onRevoke: () => () => {},
+    onRequest: (value) => { handler = value; return () => {} }, reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: () => () => {}, onRevoke: () => () => {},
     registerHost: async (registration) => bridge.register(registration, { send: (channel, payload) => { if (channel === 'application:host:request') handler(payload as LocalHostRequest) } }),
     complete: async (reply) => bridge.complete(reply),
   }

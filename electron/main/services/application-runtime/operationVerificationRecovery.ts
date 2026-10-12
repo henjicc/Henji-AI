@@ -4,9 +4,16 @@ import type { OperationRecord } from './operationStore'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
-/** 仅接受已经全部落地、仅最终值核对失败的事务；未知执行和保存失败绝不能靠回读解除。 */
+/** 只接受原执行器的恢复证明或已全部落地的验证失败；不能从当前值猜执行，也不替代保存恢复。 */
 export function operationVerificationRecovery(record: OperationRecord): NonNullable<OperationRecord['recoveryVerification']> | undefined {
-  const transaction = object(object(object(record.result?.error).details).transaction)
+  const details = object(object(record.result?.error).details)
+  const transaction = object(details.transaction)
+  // 原执行器留下的精确条件/证据可以重读验证；失败不等于没执行，保存失败也不能借此解除。
+  const proof = record.recoveryVerification ?? transaction.recoveryVerification
+  if (['unknown', 'awaiting_user_confirmation'].includes(record.state) && !transaction.persistence && !details.persistence && proof && typeof proof === 'object') {
+    const value = proof as NonNullable<OperationRecord['recoveryVerification']>
+    if (value.conditions?.length && value.evidence?.length) return value
+  }
   if (record.state !== 'partial' || transaction.code !== 'VERIFICATION_FAILED' || transaction.persistence) return undefined
   const changes = record.input.changes
   const partial = object(transaction.partial)

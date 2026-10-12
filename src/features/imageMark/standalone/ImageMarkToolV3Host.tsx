@@ -1,3 +1,4 @@
+import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
 import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -81,6 +82,8 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
   ) : null
 
   return (
+    <>
+    <ApplicationOperationReviewBanner documentId={props.document.id} domain="image_edit" label="图片" />
     <ImageEditorV3
       layoutWorkspaceId="toolbox"
       sourceImageUrl={host.sourceImageUrl}
@@ -109,5 +112,6 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       )}
       className="min-h-0 flex-1"
     />
+    </>
   )
 }

@@ -44,6 +44,8 @@ interface AlertDialogProps {
   closeVariant?: 'secondary' | 'quiet'
   /** 费用确认取消后立即撤销操作，避免退出动画期间仍能确认。 */
   closeImmediately?: boolean
+  /** 核对面板保留两个结果按钮顺序，“稍后处理”在最后。 */
+  actionLayout?: 'standard' | 'review'
 }
 
 /**
@@ -61,6 +63,7 @@ export default function AlertDialog({
   closeLabel,
   closeVariant = 'secondary',
   closeImmediately = false,
+  actionLayout = 'standard',
 }: AlertDialogProps): JSX.Element | null {
   const { t } = useI18n('common')
   const [opacity, setOpacity] = useState(0)
@@ -186,14 +189,14 @@ export default function AlertDialog({
 
         {/* 动作按钮：与 UiModal 底部同一顺序——关闭/取消在左，其余动作在右，主动作固定在最右（任务 5.7） */}
         <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <UiButton
+          {actionLayout === 'standard' && <UiButton
             type="button"
             variant={closeVariant}
             onClick={handleClose}
           >
             {closeLabel ?? t('close')}
-          </UiButton>
-          {orderAlertActions(actions ?? []).map((action) => (
+          </UiButton>}
+          {(actionLayout === 'review' ? actions ?? [] : orderAlertActions(actions ?? [])).map((action) => (
             <UiButton
               key={action.label}
               type="button"
@@ -203,6 +206,7 @@ export default function AlertDialog({
               {action.label}
             </UiButton>
           ))}
+          {actionLayout === 'review' && <UiButton type="button" variant={closeVariant} onClick={handleClose}>{closeLabel ?? t('close')}</UiButton>}
         </div>
       </UiPanel>
       </UiOverlayLayerProvider>

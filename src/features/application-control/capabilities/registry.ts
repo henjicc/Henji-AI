@@ -2,7 +2,7 @@ import { APPLICATION_DOMAINS, initializeApplicationDomainBindings } from '../app
 
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 
-import { applicationCapabilityInvocationSchema, isNavigationOnlyCapability, type ApplicationCapabilityDefinition, type ApplicationCapabilityInvocation } from '@/core/application-control/applicationCapabilities'
+import { applicationCapabilityInvocationSchema, isNavigationOnlyCapability, requiresMutationReview, type ApplicationCapabilityDefinition, type ApplicationCapabilityInvocation } from '@/core/application-control/applicationCapabilities'
 import type { ApplicationCapabilityFailure, ApplicationCapabilityResult, HostErrorCode } from '@/core/application-control/hostContracts'
 
 import { createLogger } from '@/core/logging'
@@ -50,7 +50,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
       const output = (enrichedOutput.success ? enrichedOutput.data : definition.outputSchema.parse(result)) as Record<string, unknown>
       return capabilityVerificationEnvelope(definition, input, output)
     }
-    const executable = definition.readOnly ? invoke : applicationWriteChannel(invoke)
+    const executable = definition.readOnly ? invoke : applicationWriteChannel(invoke, requiresMutationReview(definition))
     if (!definition.readOnly) assertApplicationWriteChannel(id, executable)
     this.handlers.set(id, executable)
   }

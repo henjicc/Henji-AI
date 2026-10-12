@@ -56,7 +56,7 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
   if (command.action === 'prepare') {
     if (record) throw new Error('此付费请求已登记，请继续原请求。')
     record = store.prepare({ operationId: reply.requestId, callerId, capabilityId: command.capabilityId,
-      input: { paid: command.request }, inputDigest: JSON.stringify(command.request), state: 'preparing' })
+      input: { paid: command.request }, inputDigest: JSON.stringify(command.request), state: 'preparing', origin: { at: Date.now(), actor: 'user' } })
     const decision = approvePaidOperation(store, record, command.request, true)
     const current = store.get(record.operationId, callerId)!
     store.save({ ...current, state: decision.decision === 'ask' ? 'awaiting_user_confirmation' : 'preparing',
@@ -65,7 +65,7 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
   }
   if (!record || record.inputDigest !== JSON.stringify(command.request)) throw new Error('付费请求与原授权不一致。')
   if (command.action === 'approve') {
-    if (record.state !== 'awaiting_user_confirmation' || !record.confirmation || record.confirmation.expiresAt <= Date.now()) throw new Error('付费确认已结束，请重新发起。')
+    if (record.state !== 'awaiting_user_confirmation' || !record.confirmation || record.confirmation.expiresAt === null || record.confirmation.expiresAt <= Date.now()) throw new Error('付费确认已结束，请重新发起。')
     const decision = approvePaidOperation(store, record, command.request, true, command.projectConsent ? 'project' : 'once')
     store.save({ ...store.get(record.operationId, callerId)!, state: 'preparing', confirmation: undefined })
     return decision

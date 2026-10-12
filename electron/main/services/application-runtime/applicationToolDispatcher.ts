@@ -100,10 +100,10 @@ export class ApplicationToolDispatcher {
             if (!this.connections.access(callerId).allowWrites) return applicationFailure('PERMISSION_DENIED:此连接没有修改授权。')
             try {
               await this.operations.review(this.operations.store.get(operation.operationId, callerId)!, this.host.rendererEpoch, async ref => {
-                const result = await this.host.execute(callerId, 'read_application_entity', { ref }, signal, this.connections.access(callerId))
+                const result = await this.host.execute(callerId, 'read_application_entity', { ref }, signal, { ...this.connections.access(callerId), reviewTarget: true })
                 this.connections.assertActive(callerId)
                 signal.throwIfAborted()
-                return result.ok === true || (result.error as { code?: string } | undefined)?.code === 'NOT_FOUND'
+                return result
               }, () => { this.connections.assertActive(callerId); if (!this.connections.access(callerId).allowWrites) throw new Error('PERMISSION_DENIED:修改授权已撤销。') })
             } catch (error) { return applicationFailure(error instanceof Error ? error.message : '操作核对未完成。') }
           }
@@ -132,7 +132,7 @@ export class ApplicationToolDispatcher {
           }
           const operation = name === 'retry_application_operation_save'
             ? this.operations.prepareSaveRecovery(callerId, args ?? {}, this.host.rendererEpoch, access)
-            : this.operations.prepare(callerId, args ?? {}, this.host.rendererEpoch, access, APPLICATION_WRITE_CAPABILITY_IDS.find((id) => id === name))
+            : this.operations.prepare(callerId, args ?? {}, this.host.rendererEpoch, access, APPLICATION_WRITE_CAPABILITY_IDS.find((id) => id === name), this.callerKind)
           if (operation.state === 'prepared' && this.operations.store.beginPreparation(operation)) {
             this.connections.assertActive(callerId)
             const preparationId = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(operation.capabilityId)?.paidGenerationPreparation
@@ -182,7 +182,7 @@ export class ApplicationToolDispatcher {
         return applicationFailure(error instanceof Error ? error.message : '应用读取失败，请稍后重试。')
       }
   }
-  private async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {
+  async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {
     await this.operations?.reconcileReceipt(record, async original => {
       const result = await this.host.execute(callerId, 'get_current_application_context', {}, signal,
         { ...this.connections.access(callerId), recoveryOperation: original })

@@ -49,6 +49,9 @@ export class ApplicationHostBridge {
   constructor(private readonly assertAuthorized: (callerId: string) => void, private readonly operations?: ApplicationOperationCoordinator) {}
   get rendererEpoch(): string { return this.host?.registration.rendererEpoch ?? '' }
   get ready(): boolean { return this.host?.registration.ready === true }
+  publishReviews(open?: { operationId: string; callerId: string }): void {
+    if (this.ready) this.host?.transport.send('application:host:reviews', { items: this.operations?.pendingReviews() ?? [], ...(open ? { open } : {}) })
+  }
   tools(): LocalTool[] { return EXTERNAL_APPLICATION_CAPABILITIES.all.map(definition => ({
     id: definition.id as LocalTool['id'], version: definition.version, title: definition.title, description: definition.description,
     inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }),
@@ -119,7 +122,7 @@ export class ApplicationHostBridge {
         if (!record || !this.operations) throw new Error('付费操作账本不可用。')
         const { request, consent } = reply.progress
         if (consent && (record.state !== 'awaiting_user_confirmation' || !pending.paidRequest || JSON.stringify(pending.paidRequest) !== JSON.stringify(request))) throw new Error('付费确认与原请求不一致。')
-        if (consent && (!record.confirmation || record.confirmation.expiresAt <= Date.now())) throw new Error('付费确认已过期。')
+        if (consent && (!record.confirmation || record.confirmation.expiresAt === null || record.confirmation.expiresAt <= Date.now())) throw new Error('付费确认已过期。')
         if (!consent && record.state !== 'executing') throw new Error('付费操作当前不可执行。')
         // Generation amounts come from the official preparation result in the main-process ledger.
         const official = request.category === 'generation' && record.paidGenerationEstimate !== undefined
@@ -148,7 +151,7 @@ export class ApplicationHostBridge {
     this.pending.delete(reply.requestId)
   }
   async execute(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
-    options: { operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
+    options: { reviewTarget?: boolean; operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): Promise<Record<string, unknown>> {
     const readOnly = !options.operation && BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.readOnly === true
     // 只读才可重新派发；写操作的未知执行事实仍交给原账本恢复。
     let reconnectDeadline: number | undefined
@@ -164,7 +167,7 @@ export class ApplicationHostBridge {
     }
   }
   private async dispatch(callerId: string, capabilityId: LocalHostRequest['capabilityId'], input: Record<string, unknown>, signal: AbortSignal,
-    options: { operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }, reconnectDeadline?: number): Promise<Record<string, unknown>> {
+    options: { reviewTarget?: boolean; operation?: OperationRecord; recoveryVerification?: OperationRecord['recoveryVerification']; recoveryOperation?: LocalHostRequest['recoveryOperation']; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }, reconnectDeadline?: number): Promise<Record<string, unknown>> {
     this.assertAuthorized(callerId)
     if (!this.ready || !this.host) {
       const readOnly = BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.readOnly === true
@@ -197,7 +200,7 @@ export class ApplicationHostBridge {
           allowWrites: options.allowWrites, allowDestructive: options.allowDestructive, allowPaid: options.allowPaid,
           operationId: options.operation ? applicationInvocationId(callerId, options.operation.operationId) : undefined, expectedRevisions: options.operation?.expectedRevisions,
           paidGenerationEstimate: options.operation?.paidGenerationEstimate,
-          recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification, recoveryOperation: options.operation?.recoveryOperation ?? options.recoveryOperation } satisfies LocalHostRequest)
+          reviewTarget: options.reviewTarget, recoveryVerification: options.operation?.recoveryVerification ?? options.recoveryVerification, recoveryOperation: options.operation?.recoveryOperation ?? options.recoveryOperation } satisfies LocalHostRequest)
       } catch (error) {
         this.operations?.interrupted(requestId, host.registration.rendererEpoch)
         this.pending.get(requestId)?.cleanup()

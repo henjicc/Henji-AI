@@ -6,6 +6,7 @@ export type OperationState = import('../../../../src/core/application-control/us
 export interface OperationRecord {
   operationId: string
   callerId: string
+  origin?: import('zod').infer<typeof import('../../../../src/core/application-control/operationReview').operationOriginSchema>
   inputDigest: string
   input: Record<string, unknown>
   expectedRevisions?: Record<string, number>
@@ -47,6 +48,26 @@ export function createApplicationOperationTablesV1(db: Database.Database): void 
       baseline_id TEXT PRIMARY KEY, caller_id TEXT NOT NULL, record_json TEXT NOT NULL, created_at INTEGER NOT NULL);`)
 }
 
+/** v19 → v20：人工核对无截止期限，已有待确认记录原地保留，不删除业务事实。 */
+export function migrateApplicationReviewsV20(db: Database.Database): void {
+  const update = db.prepare('UPDATE application_invocations SET record_json = ? WHERE caller_id = ? AND operation_id = ?')
+  const read = db.prepare('SELECT rowid, record_json FROM application_invocations WHERE rowid > ? ORDER BY rowid LIMIT 256')
+  let cursor = 0
+  for (;;) {
+    // 分批释放 SELECT 游标后才能在同一 better-sqlite3 连接写入；256 只是批量大小。
+    const rows = read.all(cursor) as Array<{ rowid: number; record_json: string }>
+    if (!rows.length) break
+    for (const row of rows) {
+      const record = JSON.parse(row.record_json) as OperationRecord
+      if (record.confirmation?.purpose !== 'review') continue
+      const confirmation = { ...record.confirmation, expiresAt: null,
+        continuation: '用户已收到提示，可在应用中处理。稍后处理不会解除保护；用原 operationId 查询 get_application_operation，不要重复提交。' }
+      update.run(JSON.stringify({ ...record, confirmation }), record.callerId, record.operationId)
+    }
+    cursor = rows[rows.length - 1].rowid
+  }
+}
+
 export class ApplicationOperationStore {
   /** 表由迁移账本第 10 项创建。 */
   constructor(private readonly db: Database.Database) {}
@@ -55,7 +76,7 @@ export class ApplicationOperationStore {
     for (const row of waiting) {
       const record = JSON.parse(row.record_json) as OperationRecord
       // Review concerns an earlier unknown mutation: abandoning review cannot prove it never ran.
-      this.save(record.confirmation?.purpose === 'review' ? { ...record, state: 'unknown', confirmation: undefined }
+      this.save(record.confirmation?.purpose === 'review' ? record
         : { ...record, state: 'not_executed', confirmation: undefined, verificationState: 'verified',
           result: { ok: false, error: { code: 'CONFIRMATION_INTERRUPTED', message: '应用在等待确认时退出；未继续执行或计费。', details: { execution: { notExecuted: true } } } } })
     }
@@ -87,6 +108,7 @@ export class ApplicationOperationStore {
     }, 0)
   }
   prepare(record: OperationRecord): OperationRecord {
+    record = { ...record, origin: record.origin ?? { at: Date.now(), actor: 'external' } }
     return this.db.transaction(() => {
       const existing = this.get(record.operationId, record.callerId)
       if (existing) {

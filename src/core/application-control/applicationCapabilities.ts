@@ -79,6 +79,11 @@ export function isNavigationOnlyCapability(definition: Pick<ApplicationCapabilit
   return !definition.readOnly && definition.control.impacts.every(impact => impact.effect === 'navigate')
 }
 
+/** 读取和可重复的视图导航不占用业务修改保护；幂等删除/保存仍有持久副作用。 */
+export function requiresMutationReview(definition: Pick<ApplicationCapabilityDescriptor, 'readOnly' | 'idempotent' | 'control'>): boolean {
+  return !definition.readOnly && !(definition.idempotent && isNavigationOnlyCapability(definition))
+}
+
 export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unknown>
   extends Omit<ApplicationCapabilityDescriptor, 'available' | 'control'> {
   inputSchema: z.ZodType<TInput>

@@ -38,7 +38,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
   let handler: (request: LocalHostRequest) => void = () => {}
   const platform: ApplicationHostPlatform = {
     publishContext: async snapshot => bridge.publishContext(snapshot),
-    onRequest: (value) => { handler = value; return () => {} }, onCancel: () => () => {}, onRevoke: () => () => {},
+    onRequest: (value) => { handler = value; return () => {} }, reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: () => () => {}, onRevoke: () => () => {},
     registerHost: async (registration) => bridge.register(registration, { send: (channel, payload) => { if (channel === 'application:host:request') handler(payload as LocalHostRequest) } }),
     complete: async (reply) => bridge.complete(reply),
   }
@@ -337,7 +337,7 @@ it('t82：超长素材名的零提交拒绝不锁文档；丢失回执可只读�
   let dropped: AbortController | undefined
   const hostPlatform: ApplicationHostPlatform = {
     publishContext: async snapshot => bridge.publishContext(snapshot),
-    onRequest: value => { handler = value; return () => {} }, onCancel: () => () => {}, onRevoke: () => () => {},
+    onRequest: value => { handler = value; return () => {} }, reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: () => () => {}, onRevoke: () => () => {},
     registerHost: async registration => bridge.register(registration, { send: (channel, payload) => { if (channel === 'application:host:request') handler(payload as LocalHostRequest) } }),
     complete: async reply => {
       if (dropped && reply.result.ok !== undefined) { const waiting = dropped; dropped = undefined; waiting.abort(); return }
@@ -451,7 +451,7 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
   let cancel: (id: string) => void = () => {}
   const detach = attachLocalApplicationHost({
     publishContext: async value => bridge.publishContext(value), onRequest: value => { handler = value; return () => {} },
-    onCancel: value => { cancel = value; return () => {} }, onRevoke: () => () => {},
+    reviewOperations: async () => ({ items: [] }), onReviews: () => () => {}, onCancel: value => { cancel = value; return () => {} }, onRevoke: () => () => {},
     registerHost: async value => bridge.register(value, { send: (channel, payload) => {
       if (channel === 'application:host:request') handler(payload as LocalHostRequest)
       if (channel === 'application:host:cancel') cancel(payload as string)

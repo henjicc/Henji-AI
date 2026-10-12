@@ -14,6 +14,8 @@ export interface ApplicationDomainModule {
   resolvePersistenceParticipants?: ApplicationPersistenceResolver
   validate?(): void
   failure?(error: unknown, normalize: (error: unknown) => ApplicationCapabilityFailure): ApplicationCapabilityFailure | undefined
+  /** 已通过正式实体读取的目标，只提供用户可理解的当前情况，不能据数量猜测原执行结果。 */
+  reviewTarget?(ref: { kind: string; id: string }): { name: string; situation: string } | undefined
   /** 新宿主按领域持久事实核对原操作，不派发修改或付费任务。 */
   recoverOperation?(request: NonNullable<LocalHostRequest['recoveryOperation']>, context: ApplicationExecutionContext): Promise<Record<string, unknown> | undefined>
 }

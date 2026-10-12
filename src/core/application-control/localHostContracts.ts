@@ -4,6 +4,7 @@ import { applicationVerificationConditionSchema, applicationEvidenceSchema } fro
 import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 import { applicationUserConfirmationSchema, paidApprovalProgressSchema } from './userConfirmation'
 import { uiPaidApprovalSchema, type PaidApprovalDecision } from './paidApproval'
+import type { OperationReviewCommand, OperationReviewSnapshot } from './operationReview'
 
 export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
 export const APPLICATION_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
@@ -15,6 +16,7 @@ export const localHostRequestSchema = z.object({
   capabilityId: z.enum(APPLICATION_CAPABILITY_IDS), input: z.record(z.string(), z.unknown()),
   allowWrites: z.boolean().optional(), allowDestructive: z.boolean().optional(), allowPaid: z.boolean().optional(), operationId: z.string().uuid().optional(),
   expectedRevisions: z.record(z.string(), z.number()).optional(),
+  reviewTarget: z.boolean().optional(),
   paidGenerationEstimate: z.number().nonnegative().nullable().optional(),
   recoveryVerification: z.object({ conditions: z.array(applicationVerificationConditionSchema).max(256), evidence: z.array(applicationEvidenceSchema).max(256) }).optional(),
   /** 可信宿主只读核对：取回原执行回执，不重放业务。 */
@@ -82,7 +84,7 @@ export function externalWritableEntityTypes(domains: readonly LocalDomainSurface
  *
  * 当前只支持新应用契约，不提供旧工具或旧协议兼容入口。
  */
-export const EXTERNAL_CONTRACT_VERSION = '2.4.1' as const
+export const EXTERNAL_CONTRACT_VERSION = '2.4.2' as const
 /** 正式支持的现代协议；旧握手和其他版本拒绝，不降级。 */
 export const EXTERNAL_PROTOCOL_VERSIONS = ['2026-07-28'] as const
 export const EXTERNAL_SDK_VERSION = '2.0.0' as const
@@ -107,6 +109,8 @@ export interface McpPlatform {
   connectionConfig(input: { id: string }): Promise<string>
 }
 export interface ApplicationHostPlatform {
+  reviewOperations(input: OperationReviewCommand): Promise<OperationReviewSnapshot>
+  onReviews(handler: (snapshot: OperationReviewSnapshot) => void): () => void
   publishContext(snapshot: HostContextSnapshot): Promise<void>
   registerHost(input: LocalHostRegistrationInput): Promise<void>
   complete(input: LocalHostReply): Promise<void | PaidApprovalDecision>

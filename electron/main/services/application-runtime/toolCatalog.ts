@@ -85,7 +85,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'review_application_operation', tier: 'write', readOnly: false, requiresOperations: true,
-    description: '原宿主结束且执行回执遗失时，由应用读取原目标并弹窗请用户核对是否已执行。只修正本连接原操作账本，不重放修改；不能由智能体代替用户确认。取消或超时保留原 unknown 屏障。' + confirmationGuidance,
+    description: '先自动核对原执行回执与领域读回证明；可判定就直接结案。仍无法确认时，在痕迹AI应用内打开“这次修改生效了吗？”面板并立即返回 awaiting_user_confirmation。用户已收到提示，可在应用中处理；没有生效、已经生效、稍后处理是三个独立选择。待处理项不过期，关闭或稍后处理保留保护。只修正本连接账本，不重放修改；智能体不能代替用户确认。' + confirmationGuidance,
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false },
   },
 ]

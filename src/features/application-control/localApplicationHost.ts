@@ -76,6 +76,11 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
         }
         dispatched = true
         result = await createApplicationCapabilitySession(grant).execute({ id: capabilityId, version: definition.version, input, expectedRevisions }, { requestId: request.data.operationId ?? requestId, signal: controller.signal })
+        if (result.ok === true && request.data.reviewTarget && capabilityId === 'read_application_entity') {
+          const ref = input.ref as ApplicationRef
+          const summary = APPLICATION_DOMAINS.map(domain => domain.reviewTarget?.(ref)).find(Boolean)
+          if (summary) result = { ...result, data: { ...result.data as Record<string, unknown>, reviewSummary: summary } }
+        }
         if (result.ok === true && request.data.recoveryOperation && capabilityId === 'save_video_edit') {
           let verification: unknown = { verified: false, condition: '保存已完成，原放入尚未核对。' }
           for (const domain of APPLICATION_DOMAINS) {
