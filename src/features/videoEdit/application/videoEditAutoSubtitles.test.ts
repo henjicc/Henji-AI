@@ -4,7 +4,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
-import { closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, type VideoEditInstance } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, videoEditDocumentContent, videoEditDocumentFromContent, type VideoEditInstance } from './videoEditService'
 import { loadAudioEditProject, resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles, styleVideoEditSubtitles, segmentVideoEditSubtitles, subtitleRange } from './videoEditAutoSubtitles'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
@@ -22,6 +22,7 @@ import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { getVideoEditClipPauseMap } from './videoEditPauseMap'
 import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
+import { buildAutoSubtitles } from '@/core/videoEdit/autoSubtitles'
 import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
 
 const boundary = vi.hoisted(() => ({ mixes: [] as Array<{ start: number; duration: number }>, disposed: vi.fn() }))
@@ -67,6 +68,61 @@ beforeEach(async () => {
 })
 afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const sequence = () => owner.document.sequences[0]
+
+it('免费整理在独立组词边界吸附后延长前条接续，生成路径也只保留零或至少500ms的间隔', async () => {
+  const parts = ['它不只是会聊天还能帮你写代码！', '画图、做视频……', '下一句！']
+  const items = parts.map((text, index) => ({ text, startMs: [235, 386, 486][index] / 60 * 1000, endMs: [374, 456, 556][index] / 60 * 1000 }))
+  editVideoProject(owner.document.id, document => {
+    document.sequences[0].frameRate = { numerator: 60, denominator: 1 }; document.sequences[0].clips[0].duration = 600
+    document.media[0].creativeSource = { type: 'generation', recordId: 'gap', outputIndex: 0, prompt: parts.join('') }
+    return document
+  })
+  const timings = { granularity: 'word' as const, items }
+  vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings }] } })
+  appendAutoSubtitles(owner.document.id, sequence().id, parts.map((text, index) => ({ id: `gap-${index}`, clipId: 'voice', text, start: [235, 386, 486][index], duration: [151, 70, 70][index], ...(index === 0 ? { style: videoEditSubtitleStyleSchema.parse({}) } : {}) })))
+  const before = owner.past.length
+  const result = await segmentVideoEditSubtitles(owner.document.id, sequence().id, {})
+  expect(sequence().captions).toMatchObject([{ start: 235, duration: 151 }, { start: 386, duration: 70 }, { start: 486 }])
+  expect(result.updatedIds).toContain('gap-0')
+  expect(owner.past).toHaveLength(before + 1)
+  const blocks = items.map((item, index) => ({ id: String(index), text: item.text, startFrame: item.startMs, endFrame: item.endMs, granularity: 'word' as const, included: true, locked: false }))
+  for (const captions of [sequence().captions!, buildAutoSubtitles(blocks, 1000, sequence().frameRate, { startFrame: 0, endFrame: 600 }), (await buildSpeechSubtitles(parts.join(''), timings, sequence().clips[0], sequence().frameRate)).map(value => value.caption)]) {
+    expect(captions.length).toBeGreaterThan(1)
+    const gaps = captions.slice(1).map((caption, index) => caption.start - captions[index].start - captions[index].duration)
+    expect(gaps.every(gap => gap === 0 || gap >= 30)).toBe(true)
+    expect(gaps).toContain(0); expect(gaps).toContain(30)
+  }
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+})
+
+it('免费整理不锁定手动拆分，两行容得下的同一意群合并并恢复段尾顿号', async () => {
+  appendAutoSubtitles(owner.document.id, sequence().id, [
+    { id: 'manual-left', clipId: 'voice', text: '它不只是会聊天\n还能帮你写代码', sourceText: '它不只是会聊天，还能帮你写代码、\n', start: 0, duration: 99 },
+    { id: 'manual-right', clipId: 'voice', text: '画图、做视频……', sourceText: '画图、做视频……', start: 99, duration: 70 },
+  ])
+  const result = await segmentVideoEditSubtitles(owner.document.id, sequence().id, {})
+  expect(result.removedIds).toEqual(['manual-right'])
+  expect(sequence().captions).toMatchObject([{ id: 'manual-left', text: '它不只是会聊天\n还能帮你写代码、画图、做视频……', sourceText: '它不只是会聊天，还能帮你写代码、画图、做视频……' }])
+  expect(sequence().captions).toHaveLength(1)
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+})
+
+it('生成、写入、保存和读取已有source_text均去首尾空白，保留原文内部空白且不修改读取原件', async () => {
+  const sourceText = '这个东西！'
+  const generated = buildAutoSubtitles([{ id: 'source', text: ` ${sourceText}\n`, startFrame: 0, endFrame: 1000, granularity: 'word', included: true, locked: false }], 1000, sequence().frameRate, { startFrame: 0, endFrame: 30 })
+  expect(generated[0].sourceText).toBe(sourceText)
+  appendAutoSubtitles(owner.document.id, sequence().id, [{ ...generated[0], sourceText: `\n ${sourceText}\t` }])
+  expect(sequence().captions![0].sourceText).toBe(sourceText)
+  const content = structuredClone(videoEditDocumentContent(owner.document))
+  const caption = (content.sequences[0].captions as Array<{ sourceText: string }>)[0]
+  expect(caption.sourceText).toBe(sourceText)
+  caption.sourceText = '\n 第一行\n第二行！ \t'
+  const loaded = videoEditDocumentFromContent(content, { id: owner.document.id, name: owner.document.name })
+  expect(loaded.sequences[0].captions![0].sourceText).toBe('第一行\n第二行！')
+  expect(caption.sourceText).toBe('\n 第一行\n第二行！ \t')
+  owner = await reopenVideoEdit(owner.document.id)
+  expect(sequence().captions![0].sourceText).toBe(sourceText)
+})
 
 it('免费跨段整理从生成原文及保存原句恢复行尾顿号，不覆盖人工改字', async () => {
   const original = '它不只是会聊天，还能帮你写代码、画图、做视频……'

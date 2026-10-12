@@ -11,8 +11,9 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { VIDEO_EDIT_EXPORT_PRESETS, patchVideoEditExportSettings, videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
+import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit, setVideoEditTimelineView } from './videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, editVideoProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit, setVideoEditTimelineView } from './videoEditService'
 import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
@@ -593,6 +594,35 @@ it('completed exports survive a fresh document instance and either ID resolves; 
     }
     const missing = await app.call('query_video_edit_export', { documentRef, taskId: 'missing' })
     expect(missing).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', recoverable: true } })
+  } finally { app.dispose() }
+})
+
+it('7.776秒声音在60fps占466帧，字幕到456不会裁短内容；修剪声音后新导出才到456', async () => {
+  const owner = await project()
+  editVideoProject(owner.document.id, document => {
+    document.media.push({ id: 'voice-media', kind: 'audio', name: '旁白', path: file('voice.mp3'), durationSeconds: 7.776, width: 0, height: 0 })
+    document.items.push({ id: 'voice-item', kind: 'audio', name: '旁白', mediaId: 'voice-media' })
+    const sequence = document.sequences[0]; sequence.frameRate = { numerator: 60, denominator: 1 }
+    sequence.clips = [makeVideoEditItemClip(document, 'voice-item', sequence.id, { frame: 0 })]
+    sequence.captions = [{ id: 'first', start: 9, duration: 226, text: '第一句' }, { id: 'second', start: 235, duration: 139, text: '第二句' }, { id: 'third', start: 386, duration: 70, text: '第三句' }]
+    sequence.markers = []; sequence.transitions = []
+    return document
+  })
+  expect(getActiveVideoEditSequence(owner).clips[0].duration).toBe(466)
+  expect(videoEditExportRange(owner)).toEqual({ startFrame: 0, endFrame: 466 })
+  const [full] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('full-voice.mp4') }])
+  await videoEditExportQueue.wait(full.id)
+  editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, duration: 456 })) }))
+  expect(videoEditExportRange(owner)).toEqual({ startFrame: 0, endFrame: 456 })
+  const [trimmed] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('trimmed-voice.mp4') }])
+  await videoEditExportQueue.wait(trimmed.id)
+  const app = createApplicationHarness()
+  try {
+    const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: owner.document.id } })
+    expect(read.queue).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: full.id, state: 'completed', range: { startFrame: 0, endFrame: 466 }, rangeSource: 'content' }),
+      expect.objectContaining({ id: trimmed.id, state: 'completed', range: { startFrame: 0, endFrame: 456 }, rangeSource: 'content' }),
+    ]))
   } finally { app.dispose() }
 })
 

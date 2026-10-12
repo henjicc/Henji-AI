@@ -106,7 +106,7 @@ export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { 
   const result: SegmentedSubtitle[] = []
   const widths = [0]
   for (const token of tokens) widths.push(widths.at(-1)! + subtitleWidth(normalizeSubtitlePunctuation(token.text, policy)))
-  const textOf = (first: number, last: number): string => tokens.slice(first, last + 1).map(token => token.text).join('')
+  const textOf = (first: number, last: number): string => tokens.slice(first, last + 1).map(token => token.text).join('').trim()
   function emit(first: number, last: number): void {
     const startMs = Math.max(range.startMs, tokens[first].startMs)
     const speechEnd = Math.min(range.endMs, tokens[last].endMs)

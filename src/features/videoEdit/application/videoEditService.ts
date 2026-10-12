@@ -538,7 +538,7 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   const requested = update(structuredClone(instance.document))
   assertCodeSourcesUnchanged(instance.document, requested)
-  const next = videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors))
+  const next = normalizeVideoEditCaptionSources(videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors)))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
   if (!restoring && !gestures.has(instance)) validateVideoEditFontChanges(instance.document, next, readVideoEditCodeMetadata(instance, instance.document), readVideoEditCodeMetadata(instance, next))
@@ -707,9 +707,15 @@ export async function saveVideoEdit(id: string): Promise<void> {
   void updateVideoEditProjectCover(instance.document)
 }
 
+/** Source text is reference prose; edge whitespace is never a subtitle boundary. */
+function normalizeVideoEditCaptionSources(document: VideoEditDocument): VideoEditDocument {
+  return { ...document, sequences: document.sequences.map(sequence => sequence.captions?.some(caption => caption.sourceText !== undefined && caption.sourceText !== caption.sourceText.trim())
+    ? { ...sequence, captions: sequence.captions.map(caption => caption.sourceText === undefined ? caption : { ...caption, sourceText: caption.sourceText.trim() }) }
+    : sequence) }
+}
 /** 文档内容（剪辑的持久部分）：去掉外壳表达的 format / version / id / name / revision。 */
 export function videoEditDocumentContent(document: VideoEditDocument): VideoEditDocumentContent {
-  const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = pruneCodeSources(document)
+  const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = pruneCodeSources(normalizeVideoEditCaptionSources(document))
   return content as VideoEditDocumentContent
 }
 /** 文档内容 → 剪辑（完整 schema 校验）；内容读不懂时报错，原文件不动。 */
@@ -723,7 +729,7 @@ export function videoEditDocumentFromContent(content: unknown, meta: { id: strin
     const oldCode = versions.some(value => value && typeof value === 'object' && 'source' in value && !('files' in value))
     throw new Error(persistenceMessage(oldCode ? 'unsupported-version' : 'invalid-content', { format: '剪辑' }))
   }
-  return parsed.data
+  return normalizeVideoEditCaptionSources(parsed.data)
 }
 
 /**
