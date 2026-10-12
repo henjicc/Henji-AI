@@ -10,7 +10,7 @@ export const VOLC_CLONE_LANGUAGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1
 export const volcengineSeedIcl20Model = defineModel({
   meta: {
     id: 'volcengine-seed-icl-2.0', canonicalModelId: 'seed-icl-2.0', provider: 'volcengine-speech', type: 'audio',
-    tags: ['text-to-audio', 'voice-clone', 'provider-volcengine'],
+    tags: ['text-to-audio', 'voice-clone', 'provider-volcengine', 'timestamps'],
     polling: { interval: 3000, maxAttempts: 120 },
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
@@ -56,7 +56,7 @@ export const volcengineSeedIcl20Model = defineModel({
       if (!systemVoice && !/^S_/i.test(speaker) && params.volcIclActivationConsent !== true) throw new Error('后付费音色首次正式合成将收取 138 元槽位费并锁定音色，请先确认费用')
       return {
         resource_id: systemVoice ? 'seed-tts-2.0' : 'seed-icl-2.0',
-        req_params: { text: speechText(params), ...(!systemVoice ? { model: 'seed-tts-2.0-standard' } : {}), speaker, audio_params: { format: 'mp3', sample_rate: 24000 } },
+        req_params: { text: speechText(params), ...(!systemVoice ? { model: 'seed-tts-2.0-standard' } : {}), speaker, audio_params: { format: 'mp3', sample_rate: 24000, enable_subtitle: true } },
       }
     },
   },

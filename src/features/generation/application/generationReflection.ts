@@ -13,6 +13,9 @@ import { normalizeGenerationTaskStatus } from '@/core/application-control/domain
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { databaseService, type HistoryRecord } from '@/services/database'
 import { readStoredResultUrls } from '../domain/storedResultUrls'
+import { readGenerationResultTimings } from './generationResultTimings'
+import { generationOutputTimingsSchema } from '@/core/media/speechTimings'
+import { z } from 'zod'
 
 import { useGenerationDraftStore } from '../store/generationDraftStore'
 import { GENERATION_DRAFT_FIELDS, GENERATION_DRAFT_SCHEMA_DOCUMENTS } from './generationDraftFields'
@@ -93,6 +96,7 @@ const properties: Record<GenerationEntityType, ApplicationPropertyDescriptor[]> 
     property(GENERATION_ENTITY_TYPES.result, 'record_ref', '历史记录引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.record] }, true),
     property(GENERATION_ENTITY_TYPES.result, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }),
     property(GENERATION_ENTITY_TYPES.result, 'media_ref', '稳定媒体引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.result] }),
+    property(GENERATION_ENTITY_TYPES.result, 'output_timings', '各输出的语音时间戳（毫秒）', { kind: 'json', schemaRef: schemaRef('property', 'generation.result.output_timings.value') }),
   ],
   [GENERATION_ENTITY_TYPES.record]: [
     property(GENERATION_ENTITY_TYPES.record, 'model_ref', '模型引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.model] }),
@@ -208,6 +212,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
         'generation.result.record_ref': { kind: GENERATION_ENTITY_TYPES.record, id: record.id },
         'generation.result.media_type': record.type,
         'generation.result.media_ref': { kind: GENERATION_ENTITY_TYPES.result, id: record.id },
+        'generation.result.output_timings': record.type === 'audio' ? await readGenerationResultTimings(record.id) : [],
       }, revision: historyRevision(record) }
     }
     if (!task || (this.entityType === GENERATION_ENTITY_TYPES.result && !task.resultAvailable)) throw new Error('NOT_FOUND')
@@ -217,6 +222,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
       'generation.result.record_ref': null,
       'generation.result.media_type': task.mediaType,
       'generation.result.media_ref': { kind: GENERATION_ENTITY_TYPES.result, id: task.taskId },
+      'generation.result.output_timings': task.mediaType === 'audio' ? await readGenerationResultTimings(task.taskId) : [],
     }, revision: taskRevision(task) }
   }
 }
@@ -346,7 +352,7 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       { ref: schemaRef('property', 'generation.model.tags.value'), value: { type: 'array', items: { type: 'string' } } as JsonValue },
       { ref: schemaRef('property', 'generation.model.parameter_schema_ref.value'), value: { type: 'object', description: 'ApplicationSchemaRef' } as JsonValue },
       ...modelSchemaDocuments(),
-    ] : [],
+    ] : entityType === GENERATION_ENTITY_TYPES.result ? [{ ref: schemaRef('property', 'generation.result.output_timings.value'), value: z.toJSONSchema(generationOutputTimingsSchema) as JsonValue }] : [],
   }))
   const historyRegistration: ApplicationEntityRegistration = {
     entity: {

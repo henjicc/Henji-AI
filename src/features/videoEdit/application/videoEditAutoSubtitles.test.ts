@@ -17,6 +17,8 @@ import { reopenVideoEdit } from './videoEditDocumentTestKit'
 import { editVideoEditText, restoreVideoEditText } from './videoEditTextEditing'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { resolveVideoEditTextRanges, videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
+import { generateClipSpeechSubtitles } from './videoEditSpeechSubtitles'
+import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability'
 
 const boundary = vi.hoisted(() => ({ mixes: [] as Array<{ start: number; duration: number }>, disposed: vi.fn() }))
 // Pixel/encoder boundaries only; ASR, document instances, edits, history and persistence remain real.
@@ -59,6 +61,52 @@ beforeEach(async () => {
 })
 afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const sequence = () => owner.document.sequences[0]
+it('native generation timestamps create readable frame/us captions in one undo without ASR or approval', async () => {
+  const original = ' 聊天的叫AI，画画的叫AI，配音、做视频的，也叫AI。它们是同一个东西吗？\n不是。它们更像一个剧组，各管一摊。大语言模型，懂文字、会思考；图片模型，只会画；音频模型，只会出声；视频模型，负责让画面动起来。但它们能接力：你说一句话，大语言模型先听懂、拆好任务、写出指令，再交给画图的、配音的、做视频的去干活。所以，AI看着五花八门，真正把这一切串起来的，是那个听得懂人话的——大语言模型。 '
+  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = 60; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = 1800; return document })
+  vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'char', items: Array.from(original).map((text, index) => ({ text, startMs: index * 100, endMs: (index + 1) * 100 })) } }] } })
+  const past = owner.past.length
+  const raw = await handleVideoEditSubtitleCapability('generate_video_edit_subtitles', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, timeSource: 'native' }, { signal: new AbortController().signal })
+  const result = generateVideoEditSubtitleCapability.outputSchema.parse(raw)
+  expect(result.verified).toBe(true); expect(result.timingSource).toBe('native')
+  expect(result.captions?.map(value => value.text).join('')).toBe(original)
+  expect(result.captions?.[0]).toMatchObject({ startFrame: 0, startUs: 0, confidence: 1, estimated: false })
+  expect(sequence().captions?.map(value => value.text).join('')).toBe(original)
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect(owner.past.length).toBe(past + 1)
+  undoVideoEdit(owner.document.id); expect(sequence().captions ?? []).toHaveLength(0)
+})
+it('native-only mode rejects missing timings without charging or creating a caption', async () => {
+  await expect(generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: '你好', timeSource: 'native' })).rejects.toThrow('没有原生时间戳')
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  expect(sequence().captions ?? []).toHaveLength(0)
+})
+it('recognition fallback waits for billing confirmation and cancellation never starts ASR', async () => {
+  const controller = new AbortController()
+  const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: '你好' }, controller.signal)
+  const rejected = expect(pending).rejects.toThrow()
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  controller.abort(); await rejected
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+})
+it('confirmed fallback keeps original words and reuses its saved ASR document after undo', async () => {
+  vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, channels: 1, durationFrames: 12000 })
+  const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello worlds.' })
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  useAlertDialogStore.getState().confirmCurrent()
+  const result = await pending
+  expect(result.timingSource).toBe('recognition')
+  expect(result.subtitles.map(value => value.caption.text).join('')).toBe('Hello worlds.')
+  expect(result.subtitles.some(value => value.estimated)).toBe(true)
+  expect(result.audioDocumentId).toBeTruthy()
+  undoVideoEdit(owner.document.id)
+  await generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello worlds.', audioDocumentId: result.audioDocumentId })
+  expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledTimes(1)
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+})
 it('saved word recognition maps through later speed/trim edits and restores from the original mix without paid ASR replay', async () => {
   vi.mocked(getPlatform().audioEdit.transcribe).mockImplementation(async request => {
     const audio = await loadAudioEditProject(request.projectId)

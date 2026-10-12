@@ -5,7 +5,7 @@ import { speechCharacterPrice, speechString, speechText } from '../audio/tts-com
 export const volcengineSeedTts20Model = defineModel({
   meta: {
     id: 'volcengine-seed-tts-2.0', canonicalModelId: 'seed-tts-2.0', provider: 'volcengine-speech', type: 'audio',
-    tags: ['text-to-audio', 'provider-volcengine'],
+    tags: ['text-to-audio', 'provider-volcengine', 'timestamps'],
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
@@ -18,7 +18,7 @@ export const volcengineSeedTts20Model = defineModel({
       req_params: {
         text: speechText(params),
         speaker: speechString(params.volcSeedTtsSpeaker) ?? 'zh_female_vv_uranus_bigtts',
-        audio_params: { format: 'mp3', sample_rate: 24000 },
+        audio_params: { format: 'mp3', sample_rate: 24000, enable_subtitle: true },
       },
     }),
   },

@@ -43,6 +43,15 @@ function historyRow(id: string, status: 'completed' | 'queued' | 'success', task
 }
 
 describe('原生生成提交事实', () => {
+  it('语音输出时间戳随生成回执持久保存且可以反复读取', () => {
+    state.db = openSubmissions()
+    claimGenerationSubmission('tts', { modelId: 'fixture-tts', params: { prompt: '你好' } })
+    const outputTimings = [{ outputIndex: 0, timings: { granularity: 'char', items: [{ text: '你', startMs: 195, endMs: 335, confidence: .9 }] } }]
+    completeGenerationSubmission('tts', { status: 'completed', urls: [], filePaths: ['/managed/tts.mp3'], metadata: { outputTimings } })
+    expect(readGenerationSubmission('tts')?.metadata).toEqual({ outputTimings })
+    expect(readGenerationSubmission('tts')?.metadata).toEqual({ outputTimings })
+    expect(() => completeGenerationSubmission('tts', { status: 'completed', urls: [], filePaths: [], metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'char', items: [{ text: '错', startMs: 5, endMs: 1 }] } }] } })).toThrow()
+  })
   it('同业务字段乱序重传复用回执，新请求独立；未知原请求不能二次派发', () => {
     state.db = openSubmissions()
     const request: AiGenerateRequestDto = { requestId: 'original', modelId: 'model', params: { prompt: 'test', width: 2 } }

@@ -4,9 +4,19 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCap
 import { applyTitleTemplateCapability } from './domains/videoEdit/videoEditTitleTemplateCapabilities'
 import { capabilityVerificationEnvelope } from './capabilityVerification'
 import { VIDEO_EDIT_TEXT_CAPABILITIES } from './domains/videoEdit/videoEditTextCapabilities'
+import { prepareVideoEditSubtitleCapability } from './domains/videoEdit/videoEditSubtitleCapabilities'
 
 const input = { documentRef: { kind: 'video_edit.document', id: 'doc' }, sequenceRef: { kind: 'video_edit.sequence', id: 'doc:seq' }, frame: 12, templateRef: { kind: 'video_edit.title_template', id: 'title:chapter' } }
 const output = { resultRef: input.documentRef, clipRefs: [{ kind: 'video_edit.clip', id: 'doc:clip' }], message: '已保存', verified: true }
+it('字幕准备的 execute/create 共用证据只出现一次，不丢失不同证据', () => {
+  const prepared = { documentRef: input.documentRef, audioDocumentRef: { kind: 'audio_edit.document', id: 'audio' }, message: '声音已准备', verified: true }
+  expect(capabilityVerificationEnvelope(prepareVideoEditSubtitleCapability, input, prepared)).toMatchObject({
+    verification: { verified: true, condition: '已保存混音口播文档，可按引用续查识别。' },
+  })
+  expect(capabilityVerificationEnvelope(applyTitleTemplateCapability, input, output)).toMatchObject({
+    verification: { condition: '标题实例已保存并从原剪辑回读核对。；新文字与图形组合已从原剪辑回读。' },
+  })
+})
 it('D1：领域 verified 经已声明效果回执桥接；没有写入、证据或验证不能成为成功终态', () => {
   expect(capabilityVerificationEnvelope(applyTitleTemplateCapability, input, output)).toMatchObject({ verification: { verified: true } })
   expect(capabilityVerificationEnvelope(applyTitleTemplateCapability, input, { ...output, verified: false })).toMatchObject({ verification: { verified: false } })

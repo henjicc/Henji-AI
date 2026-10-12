@@ -7,6 +7,7 @@ import { audioBytesToDataUri } from './audio-data'
 import { isJsonObject, normalizeEndpoint } from './helpers'
 import { fetchProvider } from './provider-fetch'
 import { executeVoiceClone, pollVoiceClone } from './volcengine-voice-clone'
+import type { SpeechTimings } from '../types/speechTimings'
 
 const BASE_URL = 'https://openspeech.bytedance.com'
 const ENDPOINT = '/api/v3/tts/unidirectional'
@@ -19,7 +20,7 @@ function decodeChunk(encoded: string): Uint8Array {
   }
 }
 
-function parseFrame(payload: string, audio: Uint8Array[], usage: { textWords?: number }): void {
+function parseFrame(payload: string, audio: Uint8Array[], usage: { textWords?: number }, items: SpeechTimings['items']): void {
   if (!payload) return
   let value: JsonValue
   try {
@@ -32,9 +33,20 @@ function parseFrame(payload: string, audio: Uint8Array[], usage: { textWords?: n
   }
   if (typeof value.data === 'string' && value.data.length > 0) audio.push(decodeChunk(value.data))
   if (isJsonObject(value.usage) && typeof value.usage.text_words === 'number') usage.textWords = value.usage.text_words
+  if (isJsonObject(value.sentence) && Array.isArray(value.sentence.words)) {
+    for (const word of value.sentence.words) {
+      if (!isJsonObject(word) || typeof word.word !== 'string' || typeof word.startTime !== 'number' || typeof word.endTime !== 'number'
+        || !Number.isFinite(word.startTime) || !Number.isFinite(word.endTime) || word.startTime < 0 || word.endTime < word.startTime) {
+        throw new AiRuntimeError('invalid_response', 'Volcengine speech returned invalid subtitle timing')
+      }
+      items.push({ text: word.word, startMs: word.startTime * 1000, endMs: word.endTime * 1000,
+        ...(typeof word.confidence === 'number' && word.confidence >= 0 && word.confidence <= 1 ? { confidence: word.confidence } : {}),
+      })
+    }
+  }
 }
 
-function consumeFrames(buffer: string, audio: Uint8Array[], usage: { textWords?: number }): string {
+function consumeFrames(buffer: string, audio: Uint8Array[], usage: { textWords?: number }, items: SpeechTimings['items']): string {
   let start = -1
   let depth = 0
   let quoted = false
@@ -58,7 +70,7 @@ function consumeFrames(buffer: string, audio: Uint8Array[], usage: { textWords?:
     else if (character === '}') {
       depth -= 1
       if (depth === 0) {
-        parseFrame(buffer.slice(start, index + 1), audio, usage)
+        parseFrame(buffer.slice(start, index + 1), audio, usage, items)
         start = -1
         consumed = index + 1
       }
@@ -97,19 +109,23 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
   const decoder = createUtf8StreamDecoder()
   const audio: Uint8Array[] = []
   const usage: { textWords?: number } = {}
+  const items: SpeechTimings['items'] = []
   let pending = ''
   const cancelReader = () => { void reader.cancel(input.signal?.reason).catch(() => undefined) }
   input.signal?.addEventListener('abort', cancelReader, { once: true })
   try {
-    while (true) {
+    for (;;) {
       input.signal?.throwIfAborted()
       const { done, value } = await reader.read()
       input.signal?.throwIfAborted()
       pending += done ? decoder.decode() : decoder.decode(value, { stream: true })
-      pending = consumeFrames(pending, audio, usage)
+      pending = consumeFrames(pending, audio, usage, items)
       if (done) break
     }
     if (pending.trim()) throw new AiRuntimeError('invalid_response', 'Volcengine speech returned incomplete JSON frame')
+  } catch (error) {
+    await reader.cancel(error).catch(() => undefined)
+    throw error
   } finally {
     input.signal?.removeEventListener('abort', cancelReader)
     reader.releaseLock()
@@ -122,6 +138,7 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
     status: 'completed',
     url: audioBytesToDataUri(joined, 'mp3'),
     metadata: { byteLength: total, ...(usage.textWords === undefined ? {} : { textWords: usage.textWords }),
+      ...(items.length ? { outputTimings: [{ outputIndex: 0, timings: { granularity: 'char', items } }] } : {}),
       ...(resourceId === 'seed-icl-2.0' && typeof input.body.req_params.speaker === 'string'
         ? { activatedVoiceId: input.body.req_params.speaker } : {}),
     },

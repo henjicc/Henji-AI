@@ -3,6 +3,7 @@ import type { AiGenerateRequestDto } from '@henjicc/ai-sdk'
 import { readStringArray, type HostGenerateResponse } from './host-response'
 import { getDb } from '../db'
 import { databaseLocations } from '../db-locations'
+import { readGenerationOutputTimings } from '../../../../src/core/media/speechTimings'
 
 /*
  * 生成提交账本（generation_submissions，迁移账本第 11 项）的唯一读写入口。
@@ -10,12 +11,14 @@ import { databaseLocations } from '../db-locations'
  */
 
 function encodeResponse(response: HostGenerateResponse): string {
+  readGenerationOutputTimings(response.metadata)
   return databaseLocations.use((scope) => JSON.stringify(scope.encodeValue(response)))
 }
 
 function decodeResponse(text: string): HostGenerateResponse {
   const parsed = JSON.parse(text) as unknown
   const decoded = databaseLocations.use((scope) => scope.decodeValue(parsed)) as HostGenerateResponse
+  readGenerationOutputTimings(decoded.metadata)
   return { ...decoded, urls: readStringArray(decoded.urls), filePaths: readStringArray(decoded.filePaths) }
 }
 

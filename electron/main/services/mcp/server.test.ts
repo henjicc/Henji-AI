@@ -10,6 +10,8 @@ import { ApplicationResourceSubscriptions } from './resourceSubscriptions'
 import { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { readApplicationMediaResource } from '../application-runtime/mediaResources'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
+import { z } from 'zod'
 
 vi.mock('../application-runtime/mediaResources', async importOriginal => ({
   ...await importOriginal<typeof import('../application-runtime/mediaResources')>(),
@@ -66,9 +68,41 @@ describe('本地 MCP 协议与边界', () => {
     expect(tool.inputSchema.properties?.mode).toMatchObject({ enum: ['chunk', 'image'], description: expect.stringContaining('图片默认 image') })
     expect(tool.inputSchema.additionalProperties).toBe(false)
     const context = await client.callTool({ name: 'get_current_application_context', arguments: {} })
-    expect(context.structuredContent).toMatchObject({ data: { externalContractVersion: '2.1.0' } })
+    expect(context.structuredContent).toMatchObject({ data: { externalContractVersion: EXTERNAL_CONTRACT_VERSION } })
     const contract = await client.callTool({ name: 'describe_application_contract', arguments: {} })
-    expect(contract.structuredContent).toMatchObject({ data: { contract: { externalContractVersion: '2.1.0', transport: { listChangedNotifications: true } } } })
+    expect(contract.structuredContent).toMatchObject({ data: { contract: { externalContractVersion: EXTERNAL_CONTRACT_VERSION, transport: { listChangedNotifications: true, listChangedPolicy: expect.stringContaining('应用重启') } } } })
+  })
+  it('同一订阅的 schema 变化通知促使重新发现；应用重启后须重连、重订阅再收到通知', async () => {
+    const f = await fixture()
+    const { client } = await f.connect()
+    const notifications = vi.fn()
+    client.setNotificationHandler('notifications/tools/list_changed', notifications)
+    const subscription = await client.listen({ toolsListChanged: true })
+    const findContext = async () => (await client.listTools()).tools.find(tool => tool.name === 'get_current_application_context')!
+    const originalSchema = (await findContext()).outputSchema
+    const get = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
+    const changed = vi.spyOn(BUILTIN_APPLICATION_CAPABILITY_REGISTRY, 'get').mockImplementation(id => {
+      const definition = get(id)
+      return id === 'get_current_application_context' && definition ? { ...definition,
+        outputSchema: (definition.outputSchema as z.ZodObject).extend({ schemaChangeFixture: z.boolean().optional() }),
+      } : definition
+    })
+    try {
+      f.change()
+      await vi.waitFor(() => expect(notifications).toHaveBeenCalled())
+      expect((await findContext()).outputSchema).not.toEqual(originalSchema)
+    } finally { changed.mockRestore() }
+    await f.server.stop()
+    expect(await subscription.closed).toBe('graceful')
+    await f.server.start(0)
+    const reconnected = await f.connect()
+    expect((await reconnected.client.listTools()).tools.find(tool => tool.name === 'get_current_application_context')!.outputSchema).toEqual(originalSchema)
+    const afterRestart = vi.fn()
+    reconnected.client.setNotificationHandler('notifications/tools/list_changed', afterRestart)
+    const renewed = await reconnected.client.listen({ toolsListChanged: true })
+    f.reconnect()
+    await vi.waitFor(() => expect(afterRestart).toHaveBeenCalled())
+    await renewed.close()
   })
   it('同一现代订阅真实收到工具变更通知，撤销后关闭且不能继续发现', async () => {
     const f = await fixture()

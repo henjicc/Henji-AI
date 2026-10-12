@@ -1,9 +1,8 @@
 import crypto from 'node:crypto'
 import { timestampedAsrService } from './timestamped-asr'
-import type { TimestampedTranscript } from '../../../../src/core/audioEdit/timestampedTranscript'
+import { audioEditTranscriptBlocks } from '../../../../src/core/audioEdit/timestampedTranscript'
 
 import type {
-  AudioEditTranscriptBlock,
   AudioEditTranscriptionRequest,
   AudioEditTranscriptionResult,
 } from '../../../../src/core/audioEdit/types'
@@ -21,24 +20,6 @@ const client = timestampedAsrService.client
 
 export const listAudioEditAsrModels = timestampedAsrService.listModels
 
-function toBlocks(output: TimestampedTranscript, sampleRate: number): AudioEditTranscriptBlock[] {
-  const blocks: AudioEditTranscriptBlock[] = []
-  for (const segment of output.segments) {
-    const words = segment.words ?? []
-    // 不丢缺时间的字词；音频编辑当前只支持 word/segment，字级保留为整句粗窗口。
-    const precise = words.length > 0 && words.every((word) => word.granularity === 'word')
-      && words.every((word) => word.timing === 'precise')
-    for (const part of precise ? words : [segment]) {
-      if (part.startMs === null || part.endMs === null) continue
-      const startFrame = Math.round(part.startMs * sampleRate / 1_000)
-      const endFrame = Math.round(part.endMs * sampleRate / 1_000)
-      if (endFrame <= startFrame) continue
-      blocks.push({ id: `transcript-${blocks.length}`, text: part.text, startFrame, endFrame,
-        confidence: part.confidence, included: true, locked: false, granularity: precise ? 'word' : 'segment' })
-    }
-  }
-  return blocks
-}
 
 export async function transcribeAudioEditProject(
   request: AudioEditTranscriptionRequest,
@@ -91,7 +72,7 @@ export async function transcribeAudioEditProject(
     })
     controller.signal.throwIfAborted()
     await verifyAudioEditSource(project)
-    const transcript = toBlocks(output, project.source.sampleRate)
+    const transcript = audioEditTranscriptBlocks(output, project.source.sampleRate)
     if (!transcript.length) throw new Error('识别结果没有可用时间戳，请选择支持时间戳的模型重试。')
     const granularity = transcript.some((block) => block.granularity === 'word')
       ? 'word'
