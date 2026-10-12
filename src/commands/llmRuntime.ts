@@ -61,7 +61,7 @@ export async function llmDeleteProviderSettings(
 export async function llmChatStream(
   request: LlmChatRequest,
   onEvent: (event: LlmStreamEvent) => void,
-  paidContext: PaidOperationOptions & { signal?: AbortSignal } = { category: 'generation', title: '生成文本' },
+  paidContext: PaidOperationOptions & { signal?: AbortSignal } = { category: 'generation', titleKey: 'paidApproval.generateText' },
 ): Promise<void> {
   ensureDesktopRuntime()
   const requestId = request.requestId ?? crypto.randomUUID()
@@ -107,7 +107,7 @@ export async function llmModelStep(
 ): Promise<ModelStepResult> {
   ensureDesktopRuntime()
   try {
-    return await withPaidOperation({ category: 'generation', title: '生成模型回复' }, () => getPlatform().llmRuntime.modelStep(input, onEvent))
+    return await withPaidOperation({ category: 'generation', titleKey: 'paidApproval.generateReply' }, () => getPlatform().llmRuntime.modelStep(input, onEvent))
   } catch (error) {
     logger.error('模型单步 IPC 调用失败', error, {
       event: 'llm_model_step.invoke.failed',
@@ -124,7 +124,7 @@ export async function llmVerifyModelCapabilities(
   request: ModelCapabilitySmokeRequest
 ): Promise<ModelCapabilitySmokeResult> {
   ensureDesktopRuntime()
-  return await withPaidOperation({ category: 'generation', title: '测试模型能力', capabilityId: 'ui_verify_model', message: '将发送测试内容给模型，可能产生模型调用费用。' }, () => getPlatform().llmRuntime.verifyModelCapabilities(request))
+  return await withPaidOperation({ category: 'generation', titleKey: 'paidApproval.verifyModel', capabilityId: 'ui_verify_model', messageKey: 'paidApproval.verifyModelContent' }, () => getPlatform().llmRuntime.verifyModelCapabilities(request))
 }
 
 export async function llmCancelTask(taskId: string): Promise<void> {

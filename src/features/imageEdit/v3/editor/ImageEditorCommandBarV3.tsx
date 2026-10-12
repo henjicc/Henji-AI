@@ -1,8 +1,13 @@
 import { Redo2, Undo2 } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiIconButton, UiToolbar } from '@/components/ui'
+import { UiPrimaryActionContext } from '@/components/ui/actionPriority'
+import { useImageEditorBusSnapshotV3 } from './useImageEditorControllerV3'
+import { useSelectionAdvancedV3 } from '../tools/selectionAdvanced/SelectionAdvancedContext'
+import { useImageEditorRepairV3 } from './ImageEditorRepairContextV3'
+import { transformSession } from '../tools/transform/session'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorToolParametersV3 } from './ImageEditorToolParametersV3'
@@ -17,6 +22,7 @@ interface ImageEditorCommandBarV3Props {
   toolbarLeading?: React.ReactNode
   toolbarActions?: React.ReactNode
   panelActions?: React.ReactNode
+  contentDisabled?: boolean
 }
 
 /**
@@ -31,7 +37,15 @@ export function ImageEditorCommandBarV3({
   toolbarLeading,
   toolbarActions,
   panelActions,
+  contentDisabled,
 }: ImageEditorCommandBarV3Props): JSX.Element {
+  const snapshot = useImageEditorBusSnapshotV3(bus)
+  const selection = useSelectionAdvancedV3()
+  const repair = useImageEditorRepairV3()
+  const transform = transformSession(bus)
+  const transformDraft = useSyncExternalStore(transform.subscribe, transform.snapshot)
+  const pendingConfirmation = Boolean(selection?.preview || repair?.previewReady || (transformDraft && !transformDraft.error))
+    || Object.values(snapshot.previewOverrides).some(preview => preview.kind === 'document-geometry' || preview.kind === 'crop')
   const { t } = useTranslation('ui')
   const activeTool = useImageEditorSessionStoreV3(
     (state) => state.sessions[controller.sessionId]?.activeTool,
@@ -75,6 +89,7 @@ export function ImageEditorCommandBarV3({
   const parameters = (
     <div
       ref={parameterViewportRef}
+      {...(contentDisabled ? { inert: '' } : {})}
       data-tool-parameter-viewport
       data-stacked={stacked ? 'true' : undefined}
       className={stacked
@@ -96,10 +111,10 @@ export function ImageEditorCommandBarV3({
           data-command-bar-actions
           className="flex min-w-0 shrink-0 items-center gap-1.5"
         >
-          {toolbarActions}
-          {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorExplanationControlsV3 bus={bus} controller={controller} onGenerated={() => setLayoutOpenRequest(value => value + 1)} />}
-          {(controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorLayoutControlsV3 bus={bus} controller={controller} openRequest={layoutOpenRequest} />}
-          {panelActions}
+          <UiPrimaryActionContext.Provider value={!pendingConfirmation}>{toolbarActions}</UiPrimaryActionContext.Provider>
+          {!contentDisabled && (controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorExplanationControlsV3 bus={bus} controller={controller} onGenerated={() => setLayoutOpenRequest(value => value + 1)} />}
+          {!contentDisabled && (controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorLayoutControlsV3 bus={bus} controller={controller} openRequest={layoutOpenRequest} />}
+          {!contentDisabled && panelActions}
         </div>
       )}
     >
@@ -109,17 +124,17 @@ export function ImageEditorCommandBarV3({
       </span>
       <UiIconButton size="lg"
         className="ml-1 shrink-0"
-        disabled={!controller.canUndo}
+        disabled={contentDisabled || !controller.canUndo}
         aria-label={t('imageEditor.actions.undo')}
         title={t('imageEditor.actions.undo')}
         onClick={controller.undo}
       >
         <Undo2 className="h-4 w-4" />
       </UiIconButton>
-      <ImageEditorClipboardV3 bus={bus} controller={controller} />
+      <div {...(contentDisabled ? { inert: '' } : {})}><ImageEditorClipboardV3 bus={bus} controller={controller} /></div>
       <UiIconButton size="lg"
         className="shrink-0"
-        disabled={!controller.canRedo}
+        disabled={contentDisabled || !controller.canRedo}
         aria-label={t('imageEditor.actions.redo')}
         title={t('imageEditor.actions.redo')}
         onClick={controller.redo}

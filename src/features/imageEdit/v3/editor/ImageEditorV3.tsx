@@ -63,6 +63,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
         }
       }}
       data-image-editor-v3
+      data-editor-input-disabled={props.contentDisabled ? 'true' : undefined}
       data-host-profile={controller.profile.id}
       className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gap text-text1 ${props.className ?? ''}`}
     >
@@ -74,6 +75,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
         <UiError className="flex-1" message={t('imageEditor.v3.tools.loadFailed')} />
       </> : <ImageEditorShellV3
         controller={controller}
+        contentDisabled={props.contentDisabled}
         layoutStore={imageEditorWorkspaceLayoutStoreV3(props.layoutWorkspaceId ?? props.profileId)}
         commandBar={panelActions => (
           <ImageEditorCommandBarV3
@@ -81,6 +83,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
             bus={bus}
             toolbarLeading={props.toolbarLeading}
             toolbarActions={props.toolbarActions}
+            contentDisabled={props.contentDisabled}
             panelActions={panelActions}
           />
         )}

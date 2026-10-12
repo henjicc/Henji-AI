@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import { convertPriceAmount, readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
 import { z } from 'zod'
 import { registry } from '@/core/ModelRegistry'
@@ -7,7 +8,7 @@ import type { TranscriptionPreparation } from '@/core/audioEdit/transcriptionFai
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { hasApplicationConfirmation, hasApplicationPaidApproval } from '@/core/application-control/userConfirmation'
 import type { PaidApprovalRequest, PaidOperationCategory } from '@/core/application-control/paidApproval'
-import { paidApprovalDecisionSchema, paidApprovalMessage, PAID_OPERATION_LABELS } from '@/core/application-control/paidApproval'
+import { paidApprovalDecisionSchema, paidApprovalMessage } from '@/core/application-control/paidApproval'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { notifyUser } from '@/contexts/NotificationContext'
 import { getPlatform } from '@/platform/runtime'
@@ -70,8 +71,8 @@ export interface PaidOperationOptions {
   category: PaidOperationCategory
   documentId?: string | ApplicationRef
   estimatedCny?: number | null
-  title?: string
-  message?: string
+  titleKey?: string
+  messageKey?: string
   capabilityId?: NonNullable<LocalHostReply['uiPaidApproval']>['capabilityId']
 }
 // Receipts only live for this call. They cannot be supplied by tools or carried to another UI action.
@@ -94,10 +95,10 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
   if (signal && (activeApprovals.get(signal) === options.category || hasApplicationPaidApproval(signal, options.category))) return work(signal)
   const request = await applicationPaidRequest(options.category, options.documentId, signal, options.estimatedCny ?? null)
   const { requestAlertConfirmation } = await import('@/stores/alertDialogStore')
-  const title = options.title ?? PAID_OPERATION_LABELS[options.category]
-  const message = options.message ?? '你发起的操作将使用已配置的模型，按模型计费。'
+  const title = i18n.t(options.titleKey ?? `paidApproval.categories.${options.category}`, { ns: 'common' })
+  const message = i18n.t(options.messageKey ?? 'paidApproval.operationContent', { ns: 'common' })
   if (hasApplicationConfirmation(signal)) {
-    await requestAlertConfirmation({ title, message, confirmLabel: '允许本次', paid: request }, signal)
+    await requestAlertConfirmation({ title, message, confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paid: request }, signal)
     signal!.throwIfAborted()
     return work(signal!)
   }
@@ -112,7 +113,7 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
     if (paid.decision.decision === 'deny') throw new ApplicationPreflightFailure(paid.decision.reason)
     if (paid.decision.decision === 'ask') {
       let project = false
-      const accepted = await requestAlertConfirmation({ title, message: `${message}\n\n${paidApprovalMessage(paid.decision)}`, confirmLabel: '允许本次',
+      const accepted = await requestAlertConfirmation({ title, message, paidDetails: paidApprovalMessage(paid.decision, options.category), confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }),
         paidConfirmation: true, projectConfirmation: !!paid.project, onProject: () => { project = true } }, controller.signal)
       if (!accepted) throw new PaidOperationCancelledError('已取消，未执行本次操作，也未提交付费请求。')
       controller.signal.throwIfAborted()

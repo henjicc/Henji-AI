@@ -3,9 +3,23 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { UiFormRow, UiGroup, UiToolbar, UiTooltipText } from './layout'
+import { UiDisclosurePanel, UiFormRow, UiGroup, UiToolbar, UiTooltipText } from './layout'
+import { UiPrimaryActionContext } from './actionPriority'
 
 afterEach(cleanup)
+
+it('待确认预览只让宿主主动作降级，取消后恢复主动作', async () => {
+  const { UiButton } = await import('./primitives')
+  const view = (pending: boolean) => <UiToolbar variant="command" center={<UiButton variant="primary">应用</UiButton>}
+    trailing={<UiPrimaryActionContext.Provider value={!pending}><UiButton variant="primary">导出</UiButton><UiButton variant="secondary">另存为</UiButton></UiPrimaryActionContext.Provider>} />
+  const rendered = render(view(true))
+  expect(screen.getByRole('button', { name: '应用' }).getAttribute('data-variant')).toBe('primary')
+  expect(screen.getByRole('button', { name: '导出' }).getAttribute('data-variant')).toBe('quiet')
+  expect(screen.getByRole('button', { name: '另存为' }).getAttribute('data-variant')).toBe('quiet')
+  rendered.rerender(view(false))
+  expect(screen.getByRole('button', { name: '导出' }).getAttribute('data-variant')).toBe('primary')
+  expect(screen.getByRole('button', { name: '另存为' }).getAttribute('data-variant')).toBe('secondary')
+})
 
 describe('参数名本身触发说明（不加 ⓘ 图标）', () => {
   it('UiFormRow 有 info 时标签文字可聚焦并显示说明，不再渲染“查看说明”按钮', () => {
@@ -132,4 +146,21 @@ describe('UiFormRow 标签关联到行内控件（任务 5.8，B-50）', () => {
     const switches = screen.getAllByRole('switch')
     expect(switches[1].getAttribute('aria-labelledby')).toBeNull()
   })
+})
+
+
+it('收起详情关闭隐藏交互并把内部焦点交回展开按钮，再展开恢复语义', async () => {
+  const { UiButton } = await import('./primitives')
+  const view = (open: boolean) => <div><div><UiButton aria-expanded={open}>详情</UiButton></div><UiDisclosurePanel open={open}><UiButton>验证</UiButton></UiDisclosurePanel></div>
+  const rendered = render(view(true))
+  screen.getByRole('button', { name: '验证' }).focus()
+  rendered.rerender(view(false))
+  const panel = screen.getByText('验证').closest('[aria-hidden]')
+  expect(panel?.hasAttribute('inert')).toBe(true)
+  expect(panel?.getAttribute('aria-hidden')).toBe('true')
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: '详情' }))
+  expect(screen.queryByRole('button', { name: '验证' })).toBeNull()
+  rendered.rerender(view(true))
+  expect(panel?.hasAttribute('inert')).toBe(false)
+  expect(screen.getByRole('button', { name: '验证' })).toBeTruthy()
 })

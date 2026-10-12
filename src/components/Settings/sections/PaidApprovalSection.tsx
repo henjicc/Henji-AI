@@ -4,7 +4,7 @@ import { UiButton, UiError, UiFormRow, UiGroup } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
 import NumberInput from '@/components/ui/NumberInput'
 import { getAppSetting, setAppSetting } from '@/commands/appSettings'
-import { DEFAULT_PAID_APPROVAL_SETTINGS, PAID_APPROVAL_SETTING_KEY, PAID_OPERATION_LABELS, paidApprovalSettingsSchema, type PaidApprovalSettings } from '@/core/application-control/paidApproval'
+import { DEFAULT_PAID_APPROVAL_SETTINGS, PAID_APPROVAL_SETTING_KEY, paidApprovalSettingsSchema, type PaidApprovalSettings } from '@/core/application-control/paidApproval'
 import { createLogger } from '@/core/logging'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 
@@ -50,7 +50,7 @@ export default function PaidApprovalSection(): JSX.Element {
         onChange={value => { void save(current => ({ ...current, dailyLimitCny: value })) }} /><span>{t('paidApproval.unit')}</span></div>
     </UiFormRow>}
     {!!settings.projects.length && <UiGroup title={t('paidApproval.projects')}>
-      {settings.projects.map(project => <UiFormRow key={`${project.id}:${project.category}`} label={`${project.name} · ${PAID_OPERATION_LABELS[project.category]}`} inline>
+      {settings.projects.map(project => <UiFormRow key={`${project.id}:${project.category}`} label={`${project.name} · ${t(`paidApproval.categories.${project.category}`)}`} inline>
         <UiButton variant="quiet" disabled={busy} onClick={() => { void save(current => ({ ...current, projects: current.projects.filter(value => value.id !== project.id || value.category !== project.category) })) }}>{t('paidApproval.revoke')}</UiButton>
       </UiFormRow>)}
     </UiGroup>}

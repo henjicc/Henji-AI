@@ -1,15 +1,15 @@
+// @vitest-environment jsdom
 import i18n from '@/i18n/config'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render as renderView, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CreativeIntentControls, type CreativeIntentControlsProps } from './CreativeIntentControls'
 
 function render(ui: React.ReactElement) { return renderView(ui, { wrapper: ({ children }) => <>{children}<GlobalAlertDialog /></> }) }
 afterEach(() => useAlertDialogStore.setState({ queue: [] }))
-afterEach(cleanup)
 beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
+afterEach(cleanup)
 function props(): Extract<CreativeIntentControlsProps, { profile?: 'motion' }> {
   return { status: 'reviewing', candidates: [{ id: 'candidate', label: '保留节奏' }], selected: 'candidate', fidelity: .5, intent: 'path', mode: 'navigate', speed: 1, property: 'position', capture: 'place', pins: [], takes: [], canPin: true,
     onStart: vi.fn(), onStop: vi.fn(), onPause: vi.fn(), onResume: vi.fn(), onCancel: vi.fn(), onOptimize: vi.fn(), onApply: vi.fn(), onPreview: vi.fn(), onFidelity: vi.fn(), onPin: vi.fn(), onUnpin: vi.fn(), onTake: vi.fn(), onMode: vi.fn(), onSpeed: vi.fn(), onProperty: vi.fn(), onCapture: vi.fn(), onIntent: vi.fn(), onPlay: vi.fn() }
@@ -81,7 +81,7 @@ it('机位配置隐藏二维选项，候选预览与钉住走同源回调', () =
 })
 
 it('整理通过共享外发确认预检，取消不生成，发送后只生成一次', async () => {
-  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
+  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, hasProject: true, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
   render(<CreativeIntentControls {...p} contextKey="session" prepareGeneration={prepareGeneration} />)
   fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
   await screen.findByRole('alertdialog'); expect(p.onOptimize).not.toHaveBeenCalled()

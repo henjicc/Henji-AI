@@ -669,7 +669,9 @@
     "openDirectory": "打开技能目录",
     "skippedHeading": "以下文件因为不是纯文本被丢弃：",
     "cancel": "取消",
-    "confirm": "确定"
+    "confirm": "确定",
+    "failedTitle": "技能操作没有完成",
+    "retry": "重试"
   },
   "agentInstructions": {
     "reading": "正在读取用户指令…",
@@ -694,7 +696,9 @@
     "clearTitle": "清空用户指令",
     "clearDescription": "会清空已保存的全部用户指令，此操作不可撤销。",
     "cancel": "取消",
-    "clearConfirm": "清空"
+    "clearConfirm": "清空",
+    "failedTitle": "指令操作没有完成",
+    "retry": "重试"
   },
   "agentModels": {
     "roles": {
@@ -756,19 +760,44 @@
     "details": "详情",
     "verifiedAt": "验证于 {{time}} · {{latency}} ms · 费用{{cost}}",
     "check": {
-      "passed": "通过",
-      "declaredOnly": "仅声明",
-      "undeclared": "未声明",
-      "failed": "失败"
+      "passed": "可用",
+      "failed": "不可用",
+      "skipped": "未验证"
     },
-    "declaredNote": "图片、视频与音频由配置声明；“仅声明”表示协议可表达但尚未用真实媒体验证。",
-    "failedNote": "某个模态显示“失败”表示智能助手当前的请求协议带不了它，模型本身仍可能支持——画布文本处理等功能不受影响。",
     "usage": "Token：输入 {{input}} / 输出 {{output}} / 思考 {{reasoning}}",
     "notVerified": "尚未进行动态能力验证",
     "verifying": "验证中",
     "verify": "验证此模型",
     "verifyCost": "会向该模型发起一次最小真实请求",
-    "advanced": "高级设置"
+    "advanced": "高级设置",
+    "checkNames": {
+      "text": "文字对话",
+      "toolCall": "调用工具",
+      "structuredOutput": "按格式输出",
+      "streaming": "逐步显示回复",
+      "usage": "用量统计",
+      "cancel": "中途停止",
+      "image": "理解图片",
+      "video": "理解视频",
+      "audio": "理解音频"
+    },
+    "checkImpact": {
+      "text": "助手无法使用此模型回复。",
+      "toolCall": "助手无法操作应用，只能对话。",
+      "structuredOutput": "助手可能无法可靠地整理或执行复杂任务。",
+      "streaming": "需要等待完整回复后才能看到内容。",
+      "usage": "无法查看此模型的用量统计。",
+      "cancel": "发出请求后可能无法及时停止。",
+      "image": "助手无法通过此模型理解图片。",
+      "video": "助手无法通过此模型理解视频。",
+      "audio": "助手无法通过此模型理解音频。"
+    },
+    "verifyFailedTitle": "验证没有完成",
+    "verifyFailedMessage": "无法完成验证或保存结果。请检查模型配置后重试。",
+    "verifyTimeout": "模型回复超时，请稍后重试。",
+    "verifyConnectionFailed": "暂时无法连接模型服务，请检查网络后重试。",
+    "previousVerification": "以下为上次验证结果",
+    "retry": "重试"
   },
   "llmModelDialog": {
     "capabilities": {
@@ -843,6 +872,13 @@
     "projects": "已始终允许的项目",
     "revoke": "撤销",
     "loadFailed": "AI 付费设置读取失败，请重新打开设置。",
-    "saveFailed": "保存失败，请重试。"
+    "saveFailed": "保存失败，请重试。",
+    "categories": {
+      "generation": "生成",
+      "recognition": "识别",
+      "translation": "翻译",
+      "title": "标题",
+      "explanation": "讲解外发"
+    }
   }
 }

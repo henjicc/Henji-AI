@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import { registry } from '@/core/ModelRegistry'
 import { aiCancelTask, aiContinuePolling, aiGenerate } from '@/commands/aiRuntime'
 import { GenerationService } from './GenerationService'
@@ -97,14 +98,21 @@ it('普通主生成没有模型专用确认也必须授权、记账；拒绝不�
   expect(paid.complete).toHaveBeenCalledOnce()
   vi.clearAllMocks()
   paid.prepare.mockResolvedValue({ ...paid, decision: { decision: 'ask', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
+  await i18n.changeLanguage('en-US')
   const run = service.generate('cancel-fixture', { prompt: '拒绝生成' })
   const rejected = expect(run).rejects.toMatchObject({ name: 'GenerationSubmissionCancelledError' })
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  expect(useAlertDialogStore.getState().queue[0]).toMatchObject({
+    title: 'Generate content', message: i18n.t('paidApproval.operationContent', { ns: 'common' }),
+    paidDetails: { estimatedCny: 0.1, dailySpentCny: 0, category: 'generation', modelName: 'Test' },
+    confirmation: { paid: true, label: 'Allow once' },
+  })
   useAlertDialogStore.getState().dismissCurrent()
   await rejected
   expect(aiGenerate).not.toHaveBeenCalled()
   expect(paid.start).not.toHaveBeenCalled()
   expect(paid.reject).toHaveBeenCalledOnce()
+  await i18n.changeLanguage('zh-CN')
 })
 
 it('克隆采用统一 auto 策略，人工模式使用现有付费弹窗，记录实际提交阶段', async () => {

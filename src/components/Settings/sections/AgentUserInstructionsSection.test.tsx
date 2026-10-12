@@ -50,16 +50,18 @@ describe('助手用户指令（5.6 第二批）', () => {
     await waitFor(() => expect(mocks.reset).toHaveBeenCalledOnce())
   })
 
-  it('读取失败的状态行用危险文字色，加载成功不再常驻实现说明', async () => {
-    mocks.get.mockRejectedValueOnce(new Error('指令文件损坏'))
-    const view = render(<AgentUserInstructionsSection />)
-    const line = await screen.findByText('指令文件损坏')
-    expect(line.className).toContain('text-danger-text')
-    view.unmount()
-
+  it('首次读取显示加载，失败显示统一错误，重试成功后恢复编辑器', async () => {
+    let reject: (error: Error) => void = () => {}
+    mocks.get.mockReturnValueOnce(new Promise((_, fail) => { reject = fail }))
     render(<AgentUserInstructionsSection />)
-    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.queryByText('正在读取用户指令…')).toBeNull())
-    expect(screen.queryByText(/主进程/)).toBeNull()
+    expect(screen.getByRole('status')).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    reject(new Error('指令文件损坏'))
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(screen.getByText('指令文件损坏').closest('[role="alert"]')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    await screen.findByRole('textbox')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(mocks.get).toHaveBeenCalledTimes(2)
   })
 })

@@ -1,7 +1,7 @@
+// @vitest-environment jsdom
 import i18n from '@/i18n/config'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render as renderView, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { TranscriptEntry } from '@/core/creativeIntent/schema'
@@ -9,20 +9,20 @@ import type { ExplanationReviewResult } from './ExplanationReview'
 import { ExplanationPanel, type ExplanationPanelProps } from './ExplanationPanel'
 import { useExplanationHasRecorded, useExplanationTranscript } from './explanationPresentation'
 
-beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
 function render(ui: React.ReactElement) { return renderView(ui, { wrapper: ({ children }) => <>{children}<GlobalAlertDialog /></> }) }
 afterEach(() => useAlertDialogStore.setState({ queue: [] }))
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: TranscriptEntry[]; itemContent: (index: number, value: TranscriptEntry) => React.ReactNode }) => <div data-testid="virtual-paragraphs">{data.map((entry, index) => <div key={entry.eventId}>{itemContent(index, entry)}</div>)}</div> }))
+beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
 afterEach(cleanup)
 afterEach(() => localStorage.clear())
 it('模型外发先确认；取消不生成，项目授权且只执行一次', async () => {
   const onGenerate = vi.fn(async () => {}), confirm = vi.fn(async () => {})
-  const prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '测试模型', imageCount: 3, confirm }))
+  const prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, hasProject: true, cancel: vi.fn(async () => {}), modelName: '测试模型', imageCount: 3, confirm }))
   render(<ExplanationPanel {...props({ onGenerate, prepareGeneration })} />)
   await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   await screen.findByRole('alertdialog', { name: '发送讲解给 AI？' })
-  expect(screen.getByText(/你将发送讲解文字和 3 张画面给 测试模型。/)).toBeTruthy()
+  expect(screen.getByText(/将发送讲解文字和 3 张画面给 测试模型。/)).toBeTruthy()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '拒绝' })) })
   expect(confirm).not.toHaveBeenCalled(); expect(onGenerate).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
@@ -133,7 +133,7 @@ it('手动点选期间收起证据后，读回新绑定而不是段落预读缓�
 
 it('保存会话同意使审阅版本变化后仍执行生成，切换会话才作废', async () => {
   const onGenerate = vi.fn(async () => {}), onRead = async () => result
-  const prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '模型', imageCount: 1, confirm: async () => {
+  const prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, hasProject: true, cancel: vi.fn(async () => {}), modelName: '模型', imageCount: 1, confirm: async () => {
     view.rerender(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:2', generationKey: 'session' })} />)
   } }))
   const view = render(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:1', generationKey: 'session' })} />)
@@ -141,4 +141,25 @@ it('保存会话同意使审阅版本变化后仍执行生成，切换会话才�
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   fireEvent.click(await screen.findByRole('button', { name: '本项目始终允许' }))
   await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
+})
+
+
+it('英文讲解确认沿全局弹窗显示内容与费用，卸载撤下请求', async () => {
+  await i18n.changeLanguage('en-US')
+  const confirm = vi.fn(async () => {})
+  const prepareGeneration = vi.fn(async () => ({
+    paidDetails: { estimatedCny: 1.25, dailySpentCny: 3, category: 'explanation' as const, modelName: 'Example model' },
+    hasProject: true, cancel: vi.fn(async () => {}), modelName: 'Example model', imageCount: 3, confirm,
+  }))
+  const view = render(<ExplanationPanel {...props({ prepareGeneration })} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
+  const dialog = await screen.findByRole('alertdialog', { name: 'Send this explanation to AI?' })
+  expect(dialog.textContent).toContain('Send the explanation text and 3 images to Example model.')
+  expect(dialog.textContent).toContain('Estimated cost: CNY 1.25')
+  expect(dialog.textContent).not.toMatch(/[\u3400-\u9fff]|\[object Object\]/)
+  expect(screen.getByRole('button', { name: 'Always allow in this project' })).toBeTruthy()
+  view.unmount()
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect(confirm).not.toHaveBeenCalled()
 })

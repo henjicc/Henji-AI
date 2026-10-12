@@ -13,7 +13,7 @@
  *   Surface  UiPanel variant=inset 仅更暗底色
  *   Card     UiPanel               唯一允许画完整卡片的一层（浮层/弹窗/侧栏/画布节点）
  */
-import { createContext, useContext, useId, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useId, useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Tooltip, { type TooltipPlacement } from './Tooltip';
 import { UiFormRowLabelContext } from './formRowLabel';
@@ -370,8 +370,26 @@ interface UiDisclosurePanelProps {
  * 不要在每个调用点各写一遍这段 grid-rows 过渡。
  */
 export function UiDisclosurePanel({ open, children, className = '' }: UiDisclosurePanelProps): JSX.Element {
+  const contentRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    if (!open && content.contains(content.ownerDocument.activeElement)) {
+      // 展开按钮位于内容前；跳过下拉菜单触发器，不要求调用方增加 ref。
+      let sibling = content.previousElementSibling;
+      while (sibling) {
+        const trigger = sibling.matches('button[aria-expanded]:not([aria-haspopup])')
+          ? sibling : sibling.querySelector('button[aria-expanded]:not([aria-haspopup])');
+        if (trigger instanceof HTMLElement) { trigger.focus({ preventScroll: true }); break; }
+        sibling = sibling.previousElementSibling;
+      }
+    }
+    content.toggleAttribute('inert', !open);
+    content.setAttribute('aria-hidden', String(!open));
+  }, [open]);
   return (
     <div
+      ref={contentRef}
       className={`grid transition-[grid-template-rows,opacity] duration-180 ease-out ${
         open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
       }`}

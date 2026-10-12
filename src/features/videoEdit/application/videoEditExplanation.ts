@@ -255,7 +255,7 @@ export async function transcribeVideoExplanation(id: string, audioUploadReceipt:
     for await (const page of pages(owner, session, 'transcript')) if (page.kind === 'transcript') for (const entry of page.entries) alignedIds.add(entry.audioSegmentRef)
     let hasPendingAudio = false
     for await (const page of pages(owner, session, 'audio')) if (page.kind === 'audio' && page.entries.some(audio => !alignedIds.has(audio.audioSegmentRef))) { hasPendingAudio = true; break }
-    if (hasPendingAudio) await withPaidOperation({ category: 'recognition', documentId: id, title: '转写讲解录音', message: '将录音发送给已配置的转写模型，按模型计费。此次只发送录音。' }, async () => {
+    if (hasPendingAudio) await withPaidOperation({ category: 'recognition', documentId: id, titleKey: 'paidApproval.explanationAudio', messageKey: 'paidApproval.explanationAudioContent' }, async () => {
     for await (const page of pages(owner, session, 'audio')) {
       if (page.kind !== 'audio') continue
       for (const audio of page.entries) {

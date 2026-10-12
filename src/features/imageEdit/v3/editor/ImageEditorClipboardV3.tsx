@@ -1,3 +1,4 @@
+import { isImageEditorInputBlockedV3 } from './imageEditorInputScopeV3'
 import { Clipboard, Copy, Layers } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
@@ -34,7 +35,7 @@ export function ImageEditorClipboardV3({ bus, controller }: { bus: ImageEditComm
     const root = anchor.current?.closest('[data-image-editor-v3]')
     const editable = (target: EventTarget | null): boolean => target instanceof Element && Boolean(target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="slider"]'))
     const down = (event: KeyboardEvent): void => {
-      if (!(event.target instanceof Node) || !root?.contains(event.target) || editable(event.target) || event.defaultPrevented || event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey) || root.closest('[inert]')) return
+      if (!(event.target instanceof Node) || !root?.contains(event.target) || editable(event.target) || event.defaultPrevented || event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey) || isImageEditorInputBlockedV3(root)) return
       if ([...document.querySelectorAll('[role="dialog"],[role="menu"]')].some(element => !element.contains(root) && element.getClientRects().length > 0 && !element.closest('[inert],[aria-hidden="true"]'))) return
       const key = event.key.toLowerCase()
       if (key !== 'c' && (key !== 'v' || event.shiftKey)) return

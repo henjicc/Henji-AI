@@ -1,5 +1,5 @@
 import { ExternalLink, RefreshCw, RotateCcw, Save } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   getAssistantUserInstructions,
@@ -14,6 +14,8 @@ import {
   UI_TEXT_META_CLASS,
   UiButton,
   UiFormRow,
+  UiError,
+  UiLoading,
 } from '@/components/ui'
 import {
   ASSISTANT_USER_INSTRUCTIONS_MAX_CHARACTERS,
@@ -41,6 +43,8 @@ export default function AgentUserInstructionsSection(): JSX.Element {
     createPlainTextPromptDocument('')
   )
   const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const retry = useRef<() => Promise<void>>(async () => {})
   const [status, setStatus] = useState<StatusLine>(() => info(t('agentInstructions.reading')))
   const [confirmReset, setConfirmReset] = useState(false)
   const content = useMemo(() => toModelPromptText(document), [document])
@@ -50,12 +54,15 @@ export default function AgentUserInstructionsSection(): JSX.Element {
   )
 
   const load = async (): Promise<void> => {
+    retry.current = load
+    setStatus(info(''))
     setBusy(true)
     logger.info('读取智能助手用户指令开始', {
       event: 'settings.agent_user_instructions.read.start',
     })
     try {
       const instructions = await getAssistantUserInstructions()
+      setLoaded(true)
       setDocument(createPlainTextPromptDocument(instructions.content))
       // 加载完成不再常驻一句实现说明（原文写着“从主进程重新读取”），状态行留空
       setStatus(info(''))
@@ -79,6 +86,8 @@ export default function AgentUserInstructionsSection(): JSX.Element {
   }, [])
 
   const save = async (): Promise<void> => {
+    retry.current = save
+    setStatus(info(''))
     setBusy(true)
     setStatus(info(t('agentInstructions.saving')))
     logger.info('保存智能助手用户指令开始', {
@@ -102,6 +111,8 @@ export default function AgentUserInstructionsSection(): JSX.Element {
   }
 
   const reset = async (): Promise<void> => {
+    retry.current = reset
+    setStatus(info(''))
     setBusy(true)
     try {
       const instructions = await resetAssistantUserInstructions()
@@ -115,6 +126,8 @@ export default function AgentUserInstructionsSection(): JSX.Element {
   }
 
   const openFile = async (): Promise<void> => {
+    retry.current = openFile
+    setStatus(info(''))
     try {
       const filePath = await openAssistantUserInstructionsFile()
       setStatus(info(t('agentInstructions.fileOpened', { path: filePath })))
@@ -130,7 +143,8 @@ export default function AgentUserInstructionsSection(): JSX.Element {
         剩下的两段文字：第一段是写之前必须知道的优先级规则（常驻），
         第二段是"这里会保存什么、不会保存什么"的隐私边界（也常驻——不看可能误填密钥）。
       */}
-      <UiFormRow
+      {status.failed && <UiError size="sm" align="start" title={t('agentInstructions.failedTitle')} message={status.text} onRetry={() => void retry.current()} retryLabel={t('agentInstructions.retry')} />}
+      {!loaded ? (!status.failed && <UiLoading size="sm" message={t('agentInstructions.reading')} />) : <UiFormRow
         label={t('agentInstructions.label')}
         hint={t('agentInstructions.hint')}
       >
@@ -150,10 +164,10 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           editorClassName={`min-h-56 max-h-96 px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
         />
         <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>{t('agentInstructions.privacy')}</p>
-      </UiFormRow>
+      </UiFormRow>}
 
       <div className="flex flex-wrap items-center gap-2">
-        <UiButton type="button" variant="primary" disabled={busy} onClick={() => void save()}>
+        <UiButton type="button" variant="primary" disabled={busy || !loaded} onClick={() => void save()}>
           <Save className="h-4 w-4" />
           {t('agentInstructions.save')}
         </UiButton>
@@ -166,17 +180,11 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           {t('agentInstructions.openFile')}
         </UiButton>
         {/* 清空会丢掉已写的全部指令：危险档（静息静默、悬停显红），点后二次确认 */}
-        <UiButton type="button" variant="danger" disabled={busy} onClick={() => setConfirmReset(true)}>
+        <UiButton type="button" variant="danger" disabled={busy || !loaded} onClick={() => setConfirmReset(true)}>
           <RotateCcw className="h-4 w-4" />
           {t('agentInstructions.clear')}
         </UiButton>
       </div>
-      {/* 「打开指令文件」的状态行会带出本地绝对路径，它不是输入控件，必须显式声明为
-          观察敏感区域，否则会被 Surface 截图原样带给模型。 */}
-      {status.text ? (
-        <p data-observation-sensitive className={`break-all leading-5 ${status.failed ? 'text-2xs font-medium text-danger-text' : UI_TEXT_META_CLASS}`}>{status.text}</p>
-      ) : null}
-
       <SettingsDialog
         open={confirmReset}
         title={t('agentInstructions.clearTitle')}

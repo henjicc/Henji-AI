@@ -1372,6 +1372,19 @@
           "float16": "Half float",
           "float32": "32 bit float"
         }
+      },
+      "smartContentEditing": {
+        "discard": "Discard and return",
+        "apply": "Apply and return",
+        "retrySave": "Retry save and return",
+        "return": "Return to original image",
+        "saving": "Saving content",
+        "preparing": "Preparing content",
+        "updating": "Updating content",
+        "cancel": "Cancel",
+        "failed": "Content could not be updated. Try again.",
+        "selectSmartObject": "Select a smart object.",
+        "selectManagedSource": "This object contains embedded content. Select a managed source."
       }
     }
   },

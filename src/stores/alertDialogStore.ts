@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { withApplicationConfirmation, hasApplicationConfirmation, requestApplicationPaidApproval } from '@/core/application-control/userConfirmation'
-import { paidApprovalMessage, type PaidApprovalRequest } from '@/core/application-control/paidApproval'
+import { paidApprovalMessage, type PaidApprovalDisplay, type PaidApprovalRequest } from '@/core/application-control/paidApproval'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
@@ -17,6 +17,7 @@ export type AlertDialogType = 'info' | 'warning' | 'error'
  */
 export interface AlertDialogRequest {
   review?: Pick<OperationReviewItem, 'operationId' | 'callerId' | 'preferred'> & { resolve: (decision: 'completed' | 'not_executed' | 'later') => void }
+  paidDetails?: PaidApprovalDisplay
   title: string
   message: string
   type?: AlertDialogType
@@ -71,11 +72,11 @@ export async function requestAlertConfirmation(
     const decision = await requestApplicationPaidApproval(signal!, paid)
     if (decision.decision === 'deny') throw new ApplicationPreflightFailure(decision.reason)
     if (decision.decision === 'auto') return true
-    const confirmation = { title: request.title, message: `${request.message}\n\n${paidApprovalMessage(decision)}`, confirmLabel: '允许本次', paid: decision }
+    const confirmation = { title: request.title, message: request.message, confirmLabel: request.confirmLabel, paid: decision }
     return withApplicationConfirmation(signal, confirmation, async scopedSignal => {
       let project = false
       const accepted = await showAlertConfirmation({ ...request, message: confirmation.message, confirmLabel: confirmation.confirmLabel,
-        paidConfirmation: true, projectConfirmation: !!paid.project, onProject: () => { project = true } }, scopedSignal)
+        paidDetails: paidApprovalMessage(decision, paid.category), paidConfirmation: true, projectConfirmation: !!paid.project, onProject: () => { project = true } }, scopedSignal)
       if (accepted) {
         scopedSignal?.throwIfAborted()
         const approved = await requestApplicationPaidApproval(signal!, paid, project ? 'project' : 'once')

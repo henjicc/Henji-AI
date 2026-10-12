@@ -15,7 +15,8 @@
     "goToSettings": "去设置",
     "goToConfigure": "去配置",
     "copyDetail": "复制错误详情",
-    "detailCopied": "已复制"
+    "detailCopied": "已复制",
+    "askAssistant": "问助手"
   },
   "providerKeyRequired": {
     "title": "还没有配置密钥",
@@ -63,8 +64,57 @@
     "configureModels": "在设置中配置语音识别供应商后继续。"
   },
   "paidApproval": {
+    "canvasText": "画布文本处理",
+    "generateContent": "生成内容",
+    "operationContent": "你发起的操作将使用已配置的模型，按模型计费。",
+    "generateText": "生成文本",
+    "generateReply": "生成模型回复",
+    "verifyModel": "测试模型能力",
+    "verifyModelContent": "将发送测试内容给模型，可能产生模型调用费用。",
+    "assistantChat": "发送给助手",
+    "assistantChatContent": "你发送的内容将由所选模型处理，按模型实际计费。",
+    "bilingualSubtitles": "生成双语字幕",
+    "recognizeAudio": "识别声音",
+    "explanationAudio": "转写讲解录音",
+    "explanationAudioContent": "将录音发送给已配置的转写模型，按模型计费。此次只发送录音。",
+    "describeTitle": "描述生成标题",
+    "alignSpeech": "识别声音并对齐原文",
     "allowOnce": "允许本次",
     "alwaysAllowProject": "本项目始终允许",
-    "deny": "拒绝"
+    "deny": "拒绝",
+    "categories": {
+      "generation": "生成",
+      "recognition": "识别",
+      "translation": "翻译",
+      "title": "标题",
+      "explanation": "讲解外发"
+    },
+    "operation": "本次操作：{{category}}",
+    "operationWithModel": "本次操作：{{category}} · {{modelName}}",
+    "unknownCost": "费用暂无法预估，按模型实际计费",
+    "estimatedCost": "预计 ¥{{amount}}",
+    "dailySpent": "今日已用 ¥{{amount}}",
+    "sendExplanation": "发送讲解给 AI？",
+    "explanationContent": "将发送讲解文字和 {{count}} 张画面给 {{modelName}}。"
+  },
+  "operationReview": {
+    "title": "这次修改生效了吗？",
+    "notExecuted": "没有生效，可以重新做",
+    "completed": "已经生效",
+    "later": "稍后处理",
+    "locked": "有一项 AI 修改还没确认是否生效，暂时不能修改这份{{label}}。",
+    "document": "文档",
+    "open": "去确认",
+    "domains": {
+      "canvas": "画布",
+      "video_edit": "剪辑",
+      "image_edit": "图片",
+      "audio_edit": "口播",
+      "camera_stage": "镜头参考"
+    },
+    "saveFailedTitle": "核对结果未保存",
+    "saveFailedMessage": "这项修改仍在待处理列表中，请稍后再试。",
+    "openFailedTitle": "暂时无法核对",
+    "openFailedMessage": "应用正在连接，请稍后再试。待确认的修改会保留。"
   }
 }

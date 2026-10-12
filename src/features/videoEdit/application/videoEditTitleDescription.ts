@@ -30,7 +30,7 @@ export async function generateTitleFromDescription(projectId: string, sequenceId
     const model = config.models.find(value => value.enabled && value.capabilities.text && (!options.modelId || value.modelId === options.modelId) && (!options.providerId || value.providerId === options.providerId) && config.providers.some(provider => provider.enabled && provider.providerId === value.providerId))
     const provider = config.providers.find(value => value.providerId === model?.providerId)
     if (!provider || !model) throw new Error('请在设置中配置并启用文本模型。')
-    return await withPaidOperation({ category: 'title', documentId: projectId, title: '描述生成标题' }, async paidSignal => {
+    return await withPaidOperation({ category: 'title', documentId: projectId, titleKey: 'paidApproval.describeTitle' }, async paidSignal => {
     let output = ''; let completed = false; let failure = ''
     started = true
     await execution.paid(() => llmChatStream({ requestId, providerId: provider.providerId, providerFamilyId: provider.providerFamilyId, endpointProfile: provider.endpointProfile, credentialId: provider.credentialId, modelId: model.modelId, adapter: model.adapter || provider.adapter, baseUrl: model.baseUrl ?? provider.baseUrl, reasoning: provider.reasoning, capabilities: model.capabilities,

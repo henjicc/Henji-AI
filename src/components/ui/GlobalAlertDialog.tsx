@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react'
 
 import AlertDialog, { type AlertDialogAction } from './AlertDialog'
+import { formatPaidApprovalMessage } from '@/i18n/paidApproval'
 import { useI18n } from '@/hooks/useI18n'
 import { createLogger } from '@/core/logging'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
@@ -49,7 +50,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     }
     const result: AlertDialogAction[] = []
 
-    if (current.review) return ([['not_executed', '没有生效，可以重新做'], ['completed', '已经生效']] as const).map(([decision, label]) => ({
+    if (current.review) return ([['not_executed', t('operationReview.notExecuted')], ['completed', t('operationReview.completed')]] as const).map(([decision, label]) => ({
       label, variant: current.review?.preferred === decision ? 'primary' : 'quiet', onClick: () => {
         if (useAlertDialogStore.getState().queue[0] === current) current.review?.resolve(decision)
       },
@@ -75,7 +76,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
 
     if (onAskAssistant && current.type !== 'info') {
       result.push({
-        label: '问助手',
+        label: t('alertDialog.askAssistant'),
         variant: 'secondary',
         onClick: () => {
           const context = { title: current.title, message: current.message, ...current.diagnostic }
@@ -111,11 +112,11 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     <AlertDialog
       key={dialogKey}
       isOpen
-      title={current.title}
-      message={current.message}
+      title={current.review ? t('operationReview.title') : current.title}
+      message={current.paidDetails ? `${current.message}\n\n${formatPaidApprovalMessage(current.paidDetails)}` : current.message}
       type={current.type ?? 'error'}
       actions={actions}
-      closeLabel={current.review ? '稍后处理' : current.confirmation?.paid ? t('paidApproval.deny') : current.confirmation ? t('cancel') : undefined}
+      closeLabel={current.review ? t('operationReview.later') : current.confirmation?.paid ? t('paidApproval.deny') : current.confirmation ? t('cancel') : undefined}
       closeVariant={current.review || current.confirmation?.paid ? 'quiet' : 'secondary'}
       actionLayout={current.review ? 'review' : 'standard'}
       closeImmediately={Boolean(current.confirmation || current.review)}

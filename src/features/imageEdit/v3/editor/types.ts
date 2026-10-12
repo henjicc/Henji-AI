@@ -75,6 +75,8 @@ export interface ImageEditorV3Props {
   } | null) => void
   toolbarLeading?: ReactNode
   toolbarActions?: ReactNode
+  /** 宿主保存期间冻结内容，命令带的返回与重试入口仍可用。 */
+  contentDisabled?: boolean
   previewRenderer?: ImageEditorV3PreviewRenderer
   annotationOverlay?: ReactNode
   /** 已有内容寻址资源的实际字节数；读取可编辑文件中的稀疏画笔瓦片时用于完整性校验。 */

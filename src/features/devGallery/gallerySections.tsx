@@ -1,3 +1,5 @@
+import { requestAlertConfirmation } from '@/stores/alertDialogStore'
+import { useI18n } from '@/hooks/useI18n'
 /**
  * 组件样张页的各分区（任务 5.11）。每个样本都直接用 `@/components/ui` 的正式组件与枚举，
  * 不在这里改任何外观；新增共享组件时在这里补一个样本（uiGalleryCoverage.test 会提醒）。
@@ -503,11 +505,17 @@ export function ContentSection(): JSX.Element {
 }
 
 export function FilterSection(): JSX.Element {
+  const { t } = useI18n('common')
   const [keyword, setKeyword] = useState('')
   // UiModal 是视口级模态（焦点陷阱），不常开：点按钮打开后目视；截图里由常开的 AlertDialog 代表弹窗外观
   const [modalOpen, setModalOpen] = useState(false)
   return (
     <GallerySection title="筛选条">
+      <UiButton data-paid-approval-fixture onClick={() => { void requestAlertConfirmation({
+        title: t('paidApproval.sendExplanation'), message: t('paidApproval.explanationContent', { count: 2, modelName: 'Example model' }),
+        confirmLabel: t('paidApproval.allowOnce'), paidConfirmation: true, projectConfirmation: true,
+        paidDetails: { estimatedCny: 1.25, dailySpentCny: 3, category: 'explanation', modelName: 'Example model' },
+      }) }}>{t('paidApproval.allowOnce')}</UiButton>
       <UiOverlayLayerProvider id="dev-gallery-filter">
         <UiTaskHistoryFilterBar
           mode="always"

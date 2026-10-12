@@ -1,3 +1,4 @@
+import { isImageEditorInputBlockedV3 } from '../editor/imageEditorInputScopeV3'
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import type { InteractionCancelReason, InteractionPointerInput, InteractionSample, InteractionPoint } from '@/core/imaging/interaction/contracts'
 import { createLogger } from '@/core/logging'
@@ -109,19 +110,19 @@ export function useToolInputRouter(
       if (historyScope && !event.defaultPrevented && !event.isComposing && !composing.current && !event.altKey
         && !isEditable(target) && (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
         event.preventDefault(); event.stopImmediatePropagation()
-        if (root()?.closest('[inert]')) return
+        if (isImageEditorInputBlockedV3(root())) return
         cancelRef.current('escape')
         const host = currentController.current
         const redo = event.key.toLowerCase() === 'y' || event.shiftKey
         if (redo ? host.canRedo : host.canUndo) { if (redo) host.redo(); else host.undo() }
         return
       }
-      if (!inScope(target)) return
+      if (!inScope(target) || isImageEditorInputBlockedV3(root())) return
       const editable = isEditable(event.target)
       const modal = [...document.querySelectorAll('[role="dialog"],[role="menu"]')].some(element =>
         !element.contains(root()) && !element.closest('[inert],[aria-hidden="true"]')
         && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden')
-      if (!event.defaultPrevented && !editable && !modal && !root()?.closest('[inert]')
+      if (!event.defaultPrevented && !editable && !modal && !isImageEditorInputBlockedV3(root())
         && !event.isComposing && !composing.current && event.keyCode !== 229
         && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
         && ['0', '1'].includes(event.key) && ports.current?.viewport) {

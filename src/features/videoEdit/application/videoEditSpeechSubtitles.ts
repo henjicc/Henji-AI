@@ -69,7 +69,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
         billing = 'completed'
         }
         if (prepared.requiresConfirmation) {
-          await withPaidOperation({ category: 'recognition', documentId: projectId, estimatedCny: transcriptionEstimatedCny(prepared), title: '识别声音并对齐原文' }, transcribe, signal)
+          await withPaidOperation({ category: 'recognition', documentId: projectId, estimatedCny: transcriptionEstimatedCny(prepared), titleKey: 'paidApproval.alignSpeech' }, transcribe, signal)
         } else {
           await transcribe(signal)
         }

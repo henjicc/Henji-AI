@@ -1,5 +1,5 @@
 import { FolderOpen, Package, RefreshCw, Trash2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TFunction } from 'i18next'
 
 import {
@@ -15,6 +15,8 @@ import {
   UI_TEXT_META_CLASS,
   UiButton,
   UiEmpty,
+  UiError,
+  UiLoading,
   UiGroup,
   UiIconButton,
   UiSwitch,
@@ -65,6 +67,8 @@ export default function AgentSkillsSection(): JSX.Element {
   const { t } = useI18n('settings')
   const [manifest, setManifest] = useState<AssistantSkillManifest>(EMPTY_MANIFEST)
   const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const retry = useRef<() => Promise<void>>(async () => {})
   const [dragging, setDragging] = useState(false)
   const [status, setStatus] = useState<StatusLine>(() => info(t('agentSkills.reading')))
   const [skipped, setSkipped] = useState<AssistantSkillInstallResult['skippedFiles']>([])
@@ -80,9 +84,12 @@ export default function AgentSkillsSection(): JSX.Element {
   )
 
   const load = useCallback(async (): Promise<void> => {
+    retry.current = load
     setBusy(true)
+    setStatus(info(t('agentSkills.reading')))
     try {
       const next = await listAssistantSkills()
+      setLoaded(true)
       setManifest(next)
       setStatus(info(t('agentSkills.summary', { total: next.skills.length, disabled: next.skills.filter((skill) => !skill.enabled).length })))
     } catch (error) {
@@ -98,6 +105,7 @@ export default function AgentSkillsSection(): JSX.Element {
   }, [load])
 
   const runInstall = useCallback(async (sourcePath: string, overwrite: boolean): Promise<void> => {
+    retry.current = () => runInstall(sourcePath, overwrite)
     setBusy(true)
     setSkipped([])
     setStatus(info(t('agentSkills.installing')))
@@ -158,6 +166,8 @@ export default function AgentSkillsSection(): JSX.Element {
 
   const toggleSkill = useCallback((skill: AssistantSkillMetadata): void => {
     const apply = async (): Promise<void> => {
+      retry.current = apply
+      setStatus(info(''))
       setBusy(true)
       try {
         setManifest(await setAssistantSkillEnabled({ name: skill.name, enabled: !skill.enabled }))
@@ -190,7 +200,9 @@ export default function AgentSkillsSection(): JSX.Element {
       title: t('agentSkills.uninstallTitle', { name: skill.name }),
       description: t('agentSkills.uninstallDescription'),
       confirmLabel: t('agentSkills.uninstallConfirm'),
-      run: async () => {
+      run: async function remove() {
+        retry.current = remove
+        setStatus(info(''))
         setBusy(true)
         try {
           await uninstallAssistantSkill(skill.name)
@@ -206,6 +218,8 @@ export default function AgentSkillsSection(): JSX.Element {
   }, [load, t])
 
   const openDirectory = useCallback(async (): Promise<void> => {
+    retry.current = openDirectory
+    setStatus(info(''))
     try {
       await openAssistantSkillsDirectory()
       // 刻意不显示目录的绝对路径：这段文本会被 Surface 观察截图原样带给模型。
@@ -254,6 +268,8 @@ export default function AgentSkillsSection(): JSX.Element {
 
   return (
     <div className={UI_FORM_ROW_GAP_CLASS}>
+      {status.failed ? <UiError size="sm" align="start" title={t('agentSkills.failedTitle')} message={status.text} onRetry={() => void retry.current()} retryLabel={t('agentSkills.retry')} />
+        : !loaded ? <UiLoading size="sm" message={t('agentSkills.reading')} /> : <>
       <UiGroup title={t('agentSkills.userGroup')}>
         {userSkills.length > 0
           ? userSkills.map(renderSkillRow)
@@ -284,6 +300,7 @@ export default function AgentSkillsSection(): JSX.Element {
         </UiGroup>
       ) : null}
 
+      </>}
       <UiGroup title={t('agentSkills.installGroup')} divided>
         <div
           onDragOver={(event) => {
@@ -324,7 +341,6 @@ export default function AgentSkillsSection(): JSX.Element {
             ))}
           </div>
         ) : null}
-        <p className={`leading-5 ${status.failed ? 'text-2xs font-medium text-danger-text' : UI_TEXT_META_CLASS}`}>{status.text}</p>
       </UiGroup>
 
       <SettingsDialog

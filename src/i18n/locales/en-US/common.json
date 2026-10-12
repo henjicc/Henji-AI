@@ -15,7 +15,8 @@
     "goToSettings": "Open Settings",
     "goToConfigure": "Configure",
     "copyDetail": "Copy error details",
-    "detailCopied": "Copied"
+    "detailCopied": "Copied",
+    "askAssistant": "Ask the assistant"
   },
   "providerKeyRequired": {
     "title": "Provider key not configured",
@@ -63,8 +64,57 @@
     "configureModels": "Configure a speech recognition provider in Settings to continue."
   },
   "paidApproval": {
+    "canvasText": "Process canvas text",
+    "generateContent": "Generate content",
+    "operationContent": "This operation uses your configured model and is billed at its rates.",
+    "generateText": "Generate text",
+    "generateReply": "Generate a model reply",
+    "verifyModel": "Test model capabilities",
+    "verifyModelContent": "Test content will be sent to the model and may incur charges.",
+    "assistantChat": "Send to the assistant",
+    "assistantChatContent": "Your content will be processed by the selected model at its actual rates.",
+    "bilingualSubtitles": "Generate bilingual subtitles",
+    "recognizeAudio": "Transcribe audio",
+    "explanationAudio": "Transcribe the explanation recording",
+    "explanationAudioContent": "Only the recording will be sent to your configured transcription model and billed at its rates.",
+    "describeTitle": "Generate a title from a description",
+    "alignSpeech": "Transcribe audio and align the original text",
     "allowOnce": "Allow once",
     "alwaysAllowProject": "Always allow in this project",
-    "deny": "Deny"
+    "deny": "Deny",
+    "categories": {
+      "generation": "Generation",
+      "recognition": "Recognition",
+      "translation": "Translation",
+      "title": "Titles",
+      "explanation": "Send explanation"
+    },
+    "operation": "Operation: {{category}}",
+    "operationWithModel": "Operation: {{category}} · {{modelName}}",
+    "unknownCost": "Cost cannot be estimated yet; actual model charges apply.",
+    "estimatedCost": "Estimated cost: CNY {{amount}}",
+    "dailySpent": "Spent today: CNY {{amount}}",
+    "sendExplanation": "Send this explanation to AI?",
+    "explanationContent": "Send the explanation text and {{count}} images to {{modelName}}."
+  },
+  "operationReview": {
+    "title": "Did this change take effect?",
+    "notExecuted": "No change; allow a retry",
+    "completed": "The change took effect",
+    "later": "Review later",
+    "locked": "An AI change still needs your review. Editing this {{label}} is paused until you confirm the result.",
+    "document": "document",
+    "open": "Review now",
+    "domains": {
+      "canvas": "canvas",
+      "video_edit": "edit",
+      "image_edit": "image",
+      "audio_edit": "voice project",
+      "camera_stage": "camera reference"
+    },
+    "saveFailedTitle": "Review result could not be saved",
+    "saveFailedMessage": "This change is still pending review. Try again shortly.",
+    "openFailedTitle": "Review is temporarily unavailable",
+    "openFailedMessage": "The app is reconnecting. Try again shortly; the pending change will be kept."
   }
 }

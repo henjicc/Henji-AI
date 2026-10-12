@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+import i18n from '@/i18n'
+import { createElement } from 'react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installPaidApprovalTestBridge } from '@/tests/paidApprovalTestKit'
 import { withPaidOperation, prepareGenerationPaidApproval } from './paidApproval'
@@ -14,13 +18,14 @@ vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => true, getPlatform
 vi.mock('@/features/documents/documentOperations', () => ({ getDocumentOperations: () => ports }))
 vi.mock('@/contexts/NotificationContext', () => ({ notifyUser: vi.fn() }))
 let bridge: ReturnType<typeof installPaidApprovalTestBridge>
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('zh-CN')
   vi.clearAllMocks(); useAlertDialogStore.setState({ queue: [] })
   ports.findDocument.mockResolvedValue({ container: { kind: 'project', projectId: 'project' } })
   ports.findProject.mockResolvedValue({ id: 'project', name: '作品' })
   bridge = installPaidApprovalTestBridge('auto')
 })
-afterEach(() => { vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
 
 it.each(Object.entries(UI_PAID_CAPABILITIES))('界面入口 %s 共用策略、user 身份、项目授权、预留和完成账本', async (capability, category) => {
   const work = vi.fn(async () => 'result')
@@ -59,12 +64,12 @@ it('项目同意与并发每日额度共用，超额仍询问，未知价格不�
   useAlertDialogStore.getState().confirmCurrent(true); await first
   await run()
   const third = run(); const rejected = expect(third).rejects.toThrow()
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue[0].message).toContain('每日上限'))
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue[0].paidDetails).toMatchObject({ estimatedCny: 1, dailySpentCny: 2, category: 'translation' }))
   useAlertDialogStore.getState().dismissCurrent(); await rejected
   expect(bridge.store.generationSpendSince(0)).toBe(2)
   const unknown = withPaidOperation({ category: 'title' }, async () => undefined)
   const unknownRejected = expect(unknown).rejects.toThrow()
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue[0].message).toContain('费用暂无法预估'))
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue[0].paidDetails).toMatchObject({ estimatedCny: null, category: 'title' }))
   useAlertDialogStore.getState().dismissCurrent(); await unknownRejected
 })
 
@@ -114,5 +119,25 @@ it('提示词优化在等待费用确认时取消，撤下弹窗且不发模型�
   await llmCancelTask('optimizer'); await rejected
   expect(ports.chatStream).not.toHaveBeenCalled()
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect(bridge.store.generationSpendSince(0)).toBe(0)
+})
+
+
+it.each(['generation', 'recognition', 'translation', 'title', 'explanation'] as const)('%s 共用英文结构化费用展示，拒绝不派发', async category => {
+  await i18n.changeLanguage('en-US')
+  bridge.setSettings({ mode: 'ask' })
+  const work = vi.fn(async () => undefined)
+  const pending = withPaidOperation({ category, estimatedCny: category === 'title' ? null : 1.25 }, work)
+  const rejected = expect(pending).rejects.toThrow()
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  render(createElement(GlobalAlertDialog))
+  const dialog = screen.getByRole('alertdialog')
+  expect(dialog.textContent).not.toMatch(/[\u3400-\u9fff]|\[object Object\]/)
+  expect(dialog.textContent).toContain(category === 'title' ? 'Cost cannot be estimated yet' : 'Estimated cost: CNY 1.25')
+  expect(dialog.textContent).toContain('Spent today: CNY 0.00')
+  expect(screen.getByRole('button', { name: 'Allow once' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+  await rejected
+  expect(work).not.toHaveBeenCalled()
   expect(bridge.store.generationSpendSince(0)).toBe(0)
 })

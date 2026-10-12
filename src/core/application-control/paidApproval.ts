@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const PAID_APPROVAL_SETTING_KEY = 'ai.paid_approval'
 export const paidOperationCategorySchema = z.enum(['generation', 'recognition', 'translation', 'title', 'explanation'])
 export type PaidOperationCategory = z.infer<typeof paidOperationCategorySchema>
+/** 仅用于主进程操作账本的确认元数据；界面类别文案由 i18n 格式化。 */
 export const PAID_OPERATION_LABELS: Record<PaidOperationCategory, string> = {
   generation: '生成', recognition: '识别', translation: '翻译', title: '标题', explanation: '讲解外发',
 }
@@ -46,8 +47,13 @@ export type PaidApprovalReceipt = z.infer<typeof paidApprovalReceiptSchema>
 export const paidReservationSchema = paidApprovalRequestSchema.extend({
   reservedAt: z.number(), approval: paidApprovalReceiptSchema,
 }).strict()
-export function paidApprovalMessage(value: PaidApprovalDecision): string {
-  const cost = value.estimatedCny === null ? '费用暂无法预估，按模型实际计费' : `预计 ¥${value.estimatedCny.toFixed(2)}`
-  return value.decision === 'ask' && (value.reason.startsWith('超出') || value.reason.startsWith('今日已用'))
-    ? `${cost}\n${value.reason}` : cost
+export interface PaidApprovalDisplay {
+  estimatedCny: number | null
+  dailySpentCny: number
+  category: PaidOperationCategory
+  modelName?: string
+}
+/** 业务层只提供费用事实；展示层按当前语言组织确认文案。 */
+export function paidApprovalMessage(value: PaidApprovalDecision, category: PaidOperationCategory, modelName?: string): PaidApprovalDisplay {
+  return { estimatedCny: value.estimatedCny, dailySpentCny: value.dailySpentCny, category, ...(modelName ? { modelName } : {}) }
 }

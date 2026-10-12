@@ -331,7 +331,7 @@ export class ImageEditExplanation {
       const completed = new Set<string>(); for await (const event of this.events('transcript')) if (event.kind === 'transcript') completed.add(event.audioSegmentRef)
       let hasPendingAudio = false
       for await (const audio of this.events('audio')) if (audio.kind === 'audio' && !completed.has(audio.audioSegmentRef)) { hasPendingAudio = true; break }
-      if (hasPendingAudio) await withPaidOperation({ category: 'recognition', documentId: imageEditV3DocumentRef(this.bus.getSnapshot().document.id), title: '转写讲解录音', message: '将录音发送给已配置的转写模型，按模型计费。此次只发送录音。' }, async () => {
+      if (hasPendingAudio) await withPaidOperation({ category: 'recognition', documentId: imageEditV3DocumentRef(this.bus.getSnapshot().document.id), titleKey: 'paidApproval.explanationAudio', messageKey: 'paidApproval.explanationAudioContent' }, async () => {
       for await (const audio of this.events('audio')) {
         if (audio.kind !== 'audio' || completed.has(audio.audioSegmentRef)) continue
         transcription.signal.throwIfAborted(); this.assert(collector)

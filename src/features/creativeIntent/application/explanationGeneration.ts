@@ -1,5 +1,5 @@
 import { prepareExplanationPaidApproval } from '@/services/paidApproval'
-import { paidApprovalMessage } from '@/core/application-control/paidApproval'
+import { paidApprovalMessage, type PaidApprovalDisplay } from '@/core/application-control/paidApproval'
 import type { ApplicationRef } from '@/core/application-control'
 import type { ExplanationSession } from '@/core/creativeIntent/schema'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
@@ -9,7 +9,7 @@ import { getPlatform } from '@/platform/runtime'
 import type { EmbeddedIntentRequest } from '@/core/assistant/embeddedAgent'
 
 export interface ExplanationSendRequest {
-  modelName: string; imageCount: number; costMessage: string; hasProject: boolean
+  modelName: string; imageCount: number; paidDetails: PaidApprovalDisplay; hasProject: boolean
   cancel(): Promise<void>
   confirm(project: boolean): Promise<void>
 }
@@ -53,7 +53,7 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
   const cancel = async () => { if (!consumed) { consumed = true; await paid.reject() } }
   try { assertCurrent() } catch (error) { await cancel(); throw error }
   const request: ExplanationSendRequest | undefined = authorized ? undefined : {
-    modelName: model.name, imageCount, costMessage: paidApprovalMessage(paid.decision), hasProject: !!paid.project,
+    modelName: model.name, imageCount, paidDetails: paidApprovalMessage(paid.decision, 'explanation', model.name), hasProject: !!paid.project,
     cancel,
     confirm: async project => {
       const current = assertCurrent()

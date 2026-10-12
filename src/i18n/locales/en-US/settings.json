@@ -671,7 +671,9 @@
     "openDirectory": "Open skills folder",
     "skippedHeading": "These files were discarded because they aren't plain text:",
     "cancel": "Cancel",
-    "confirm": "OK"
+    "confirm": "OK",
+    "failedTitle": "Skill operation did not finish",
+    "retry": "Retry"
   },
   "agentInstructions": {
     "reading": "Reading user instructions…",
@@ -696,7 +698,9 @@
     "clearTitle": "Clear user instructions",
     "clearDescription": "Clears all saved user instructions. This can't be undone.",
     "cancel": "Cancel",
-    "clearConfirm": "Clear"
+    "clearConfirm": "Clear",
+    "failedTitle": "Instruction operation did not finish",
+    "retry": "Retry"
   },
   "agentModels": {
     "roles": {
@@ -758,19 +762,44 @@
     "details": "Details",
     "verifiedAt": "Verified {{time}} · {{latency}} ms · cost {{cost}}",
     "check": {
-      "passed": "passed",
-      "declaredOnly": "declared only",
-      "undeclared": "not declared",
-      "failed": "failed"
+      "passed": "Available",
+      "failed": "Unavailable",
+      "skipped": "Not verified"
     },
-    "declaredNote": "Image, video and audio come from the configuration; “declared only” means the protocol can carry it but it hasn't been verified with real media.",
-    "failedNote": "A modality marked “failed” can't be carried by the assistant's current request protocol; the model may still support it, and features such as canvas text processing are unaffected.",
     "usage": "Tokens: input {{input}} / output {{output}} / reasoning {{reasoning}}",
     "notVerified": "Not verified yet",
     "verifying": "Verifying",
     "verify": "Verify this model",
     "verifyCost": "Sends one minimal real request to this model",
-    "advanced": "Advanced"
+    "advanced": "Advanced",
+    "checkNames": {
+      "text": "Text conversation",
+      "toolCall": "Use tools",
+      "structuredOutput": "Formatted output",
+      "streaming": "Show replies as they arrive",
+      "usage": "Usage reporting",
+      "cancel": "Stop a reply",
+      "image": "Understand images",
+      "video": "Understand video",
+      "audio": "Understand audio"
+    },
+    "checkImpact": {
+      "text": "The assistant cannot reply using this model.",
+      "toolCall": "The assistant can chat but cannot operate the app.",
+      "structuredOutput": "The assistant may not reliably organize or carry out complex tasks.",
+      "streaming": "The full reply must finish before it can be shown.",
+      "usage": "Usage statistics are unavailable for this model.",
+      "cancel": "A request may not stop promptly after it is sent.",
+      "image": "The assistant cannot understand images using this model.",
+      "video": "The assistant cannot understand video using this model.",
+      "audio": "The assistant cannot understand audio using this model."
+    },
+    "verifyFailedTitle": "Verification did not finish",
+    "verifyFailedMessage": "Could not finish verification or save its result. Check the model configuration and try again.",
+    "verifyTimeout": "The model took too long to respond. Try again shortly.",
+    "verifyConnectionFailed": "Cannot connect to the model service. Check your connection and try again.",
+    "previousVerification": "Previous verification results below",
+    "retry": "Retry"
   },
   "llmModelDialog": {
     "capabilities": {
@@ -845,6 +874,13 @@
     "projects": "Always-allowed projects",
     "revoke": "Revoke",
     "loadFailed": "Unable to load AI payment settings. Reopen settings to retry.",
-    "saveFailed": "Unable to save. Please try again."
+    "saveFailed": "Unable to save. Please try again.",
+    "categories": {
+      "generation": "Generation",
+      "recognition": "Recognition",
+      "translation": "Translation",
+      "title": "Titles",
+      "explanation": "Send explanation"
+    }
   }
 }

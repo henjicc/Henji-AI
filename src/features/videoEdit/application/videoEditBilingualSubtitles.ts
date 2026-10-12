@@ -48,7 +48,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
     const model = config.models.find(model => model.enabled && model.capabilities.text && (!options.modelId || model.modelId === options.modelId) && (!options.providerId || model.providerId === options.providerId) && config.providers.some(provider => provider.enabled && provider.providerId === model.providerId))
     const provider = config.providers.find(provider => provider.providerId === model?.providerId)
     if (!model || !provider) throw new Error('请在设置中配置并启用可用的文本模型。')
-    return await withPaidOperation({ category: 'translation', documentId: projectId, title: '生成双语字幕' }, async paidSignal => {
+    return await withPaidOperation({ category: 'translation', documentId: projectId, titleKey: 'paidApproval.bilingualSubtitles' }, async paidSignal => {
     const translations = new Map<string, string>()
     for (let offset = 0; offset < captions.length; offset += 12) {
       assertTarget()

@@ -2,7 +2,7 @@ import i18n from '@/i18n'
 import { getI18nText } from '@/core/types/I18nText'
 import type { ModelDefinition } from '@/core/types/ModelDefinition'
 import { hasApplicationPaidApproval } from '../application-control/userConfirmation'
-import { paidApprovalMessage } from '../application-control/paidApproval'
+import { paidApprovalMessage, type PaidApprovalDisplay } from '../application-control/paidApproval'
 import { prepareGenerationPaidApproval } from '@/services/paidApproval'
 
 export interface GenerationSubmissionConfirmationRequest {
@@ -10,6 +10,7 @@ export interface GenerationSubmissionConfirmationRequest {
   title: string
   message: string
   confirmLabel: string
+  paidDetails?: PaidApprovalDisplay
   paidConfirmation?: boolean
   projectConfirmation?: boolean
   onProject?: () => void
@@ -60,9 +61,10 @@ export async function confirmGenerationSubmission(model: ModelDefinition, params
   let project = false
   const accepted = await requestConfirmation({
     type: 'warning',
-    title: confirmation ? getI18nText(confirmation.title, i18n.language) : '生成内容',
-    message: `${confirmation ? getI18nText(confirmation.message, i18n.language) : '你发起的生成将使用已配置的模型，按模型计费。'}\n\n${paidApprovalMessage(paid.decision)}`,
-    confirmLabel: '允许本次', paidConfirmation: true, projectConfirmation: !!paid.project,
+    title: confirmation ? getI18nText(confirmation.title, i18n.language) : i18n.t('paidApproval.generateContent', { ns: 'common' }),
+    message: confirmation ? getI18nText(confirmation.message, i18n.language) : i18n.t('paidApproval.operationContent', { ns: 'common' }),
+    paidDetails: paidApprovalMessage(paid.decision, 'generation', getI18nText(model.meta.name, i18n.language)),
+    confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paidConfirmation: true, projectConfirmation: !!paid.project,
     onProject: () => { project = true },
   }, signal)
   if (!accepted || signal.aborted) throw new GenerationSubmissionCancelledError()

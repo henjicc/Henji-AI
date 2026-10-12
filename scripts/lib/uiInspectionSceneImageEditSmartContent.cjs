@@ -94,7 +94,7 @@ function createImageEditSmartContentScene(context) {
           const channel = 'imageEditorV3:document:save'; globalThis.__smartContentHandlers ??= {}; globalThis.__smartContentHandlers[channel] = ipcMain._invokeHandlers.get(channel)
           ipcMain.removeHandler(channel); ipcMain.handle(channel, () => ({ ok: false, error: { name: 'Error', code: 'ENOSPC', message: '磁盘空间不足，请清理空间后重试保存' } }))
         })
-        await page.getByRole('button', { name: '应用内容并返回', exact: true }).click()
+        await page.getByRole('button', { name: '应用并返回', exact: true }).click()
         try { await page.getByRole('button', { name: '重试保存并返回', exact: true }).waitFor({ timeout: 30000 }) }
         catch (error) { await shoot('content-apply-failed'); throw new Error(`${error.message}\n${await page.locator('[data-smart-content-editor]').innerText()}`) }
         await shoot('nested-save-failed-content-retained')

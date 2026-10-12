@@ -17,7 +17,7 @@ import { ImageEditorShellContextV3 } from './ImageEditorShellContextV3'
 const entries = import.meta.glob<readonly ImageEditorPanelDefinitionV3[]>(['../panelEntries/*.ts', '../panelEntries/*.tsx', '!../panelEntries/shell.tsx', '!../panelEntries/history.tsx', '!../panelEntries/channels.tsx', '!../panelEntries/adjustments.tsx'], { eager: true, import: 'default' })
 const defaultRegistry = new ImageEditorPanelRegistryV3([...shellPanels, ...historyPanels, ...channelPanels, ...adjustmentPanels, ...Object.values(entries).flat()])
 
-export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, registry = defaultRegistry, layoutStore, onDockApiChange }: {
+export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, registry = defaultRegistry, layoutStore, onDockApiChange, contentDisabled }: {
   controller: ImageEditorV3Controller
   commandBar: (panelActions: ReactNode) => ReactNode
   toolRail: ReactNode
@@ -25,6 +25,7 @@ export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, 
   registry?: ImageEditorPanelRegistryV3
   layoutStore?: ImageEditorLayoutStoreV3
   onDockApiChange?: (api: DockviewApi | null) => void
+  contentDisabled?: boolean
 }): JSX.Element {
   const { t } = useTranslation('ui')
   const memoryStore = useRef<ImageEditorLayoutStoreV3>()
@@ -51,7 +52,7 @@ export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, 
   }, [api, panels, t])
   return <ImageEditorShellContextV3.Provider value={{ controller, preview, panels, api, collapsed, toggleCollapsed, restoreDefault }}>
     {commandBar(<ImageEditorPanelMenuV3 />)}
-    <div className="relative flex min-h-0 min-w-0 flex-1">
+    <div className="relative flex min-h-0 min-w-0 flex-1" {...(contentDisabled ? { inert: '' } : {})}>
       {toolRail}
       <ImageEditorDockV3 key={controller.profile.id} layoutStore={layoutStore ?? memoryStore.current}
         onApiChange={acceptApi} onRestoreCollapsed={restoreCollapsed} />

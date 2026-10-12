@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import { useEffect, useRef } from 'react'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import type { ExplanationSendRequest } from '../application/explanationGeneration'
@@ -12,9 +13,10 @@ export function ExplanationSendConfirmation(props: {
     if (!request) return
     const controller = new AbortController()
     let project = false
-    void requestAlertConfirmation({ title: '发送讲解给 AI？',
-      message: `你将发送讲解文字和 ${request.imageCount} 张画面给 ${request.modelName}。\n\n${request.costMessage}`,
-      confirmLabel: '允许本次', paidConfirmation: true, projectConfirmation: request.hasProject,
+    void requestAlertConfirmation({ title: i18n.t('paidApproval.sendExplanation', { ns: 'common' }),
+      message: i18n.t('paidApproval.explanationContent', { ns: 'common', count: request.imageCount, modelName: request.modelName }),
+      paidDetails: request.paidDetails,
+      confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paidConfirmation: true, projectConfirmation: request.hasProject,
       onProject: () => { project = true },
     }, controller.signal).then(accepted => {
       if (controller.signal.aborted) return

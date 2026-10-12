@@ -87,7 +87,7 @@ export async function transcribeAudioEdit(request: AudioEditTranscriptionRequest
       return getPlatform().audioEdit.transcribe({ ...request, modelId: prepared.modelId ?? request.modelId })
     }
     const result = prepared.requiresConfirmation
-      ? await withPaidOperation({ category: 'recognition', documentId: approvalDocumentId, estimatedCny: transcriptionEstimatedCny(prepared), title: '识别声音' }, transcribe, signal)
+      ? await withPaidOperation({ category: 'recognition', documentId: approvalDocumentId, estimatedCny: transcriptionEstimatedCny(prepared), titleKey: 'paidApproval.recognizeAudio' }, transcribe, signal)
       : await transcribe()
     completed = true
     acceptAudioEditNativeResult(request.projectId, result.project, version)
