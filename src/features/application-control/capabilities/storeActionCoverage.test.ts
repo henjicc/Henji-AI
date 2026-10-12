@@ -21,6 +21,8 @@ import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraS
 import { useCameraStageToolStore } from '@/features/cameraStage/store/cameraStageToolStore'
 import { useCameraStageViewportStore } from '@/features/cameraStage/store/cameraStageViewportStore'
 import { CANVAS_EXECUTION_STATE_STORE_LEDGER } from '@/features/canvas/application/canvasExecutionStateStoreLedger'
+import { CAMERA_STAGE_RENDER_PROGRESS_STORE_LEDGER } from '@/features/canvas/application/cameraStageRenderProgressStoreLedger'
+import { useCameraStageRenderProgressStore } from '@/features/canvas/application/cameraStageRenderProgress'
 import { CANVAS_GENERATION_PROGRESS_STORE_LEDGER } from '@/features/canvas/application/canvasGenerationProgressStoreLedger'
 import { CANVAS_NODE_FOCUS_STORE_LEDGER } from '@/features/canvas/application/canvasNodeFocusStoreLedger'
 import { CANVAS_TEXT_STREAM_STORE_LEDGER } from '@/features/canvas/application/canvasTextStreamStoreLedger'
@@ -105,6 +107,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: ALERT_DIALOG_STORE_LEDGER, state: () => useAlertDialogStore.getState() },
   { ledger: LARGE_UPLOAD_POLICY_STORE_LEDGER, state: () => useLargeUploadPromptStore.getState() },
   { ledger: CANVAS_EXECUTION_STATE_STORE_LEDGER, state: () => useCanvasExecutionStateStore.getState() },
+  { ledger: CAMERA_STAGE_RENDER_PROGRESS_STORE_LEDGER, state: () => useCameraStageRenderProgressStore.getState() },
   { ledger: CANVAS_GENERATION_PROGRESS_STORE_LEDGER, state: () => useCanvasGenerationProgressStore.getState() },
   { ledger: CANVAS_TEXT_STREAM_STORE_LEDGER, state: () => useCanvasTextStreamStore.getState() },
   { ledger: CANVAS_NODE_FOCUS_STORE_LEDGER, state: () => useCanvasNodeFocusStore.getState() },

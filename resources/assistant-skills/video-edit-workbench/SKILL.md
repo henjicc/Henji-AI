@@ -14,20 +14,12 @@ description: 在痕迹AI剪辑工作台做粗剪、整理时间线、节奏、�
 ## 铁律：只约束真实契约
 
 1. 先从宿主上下文或 `list_documents` 确定文档，再用 `describe_application_entities`、`list_application_entities`、`read_application_entity` 读目标序列、轨道、片段与关联。引用来自返回值，不猜 ID，不靠同名定位，不随前台切换换目标。
-2. 普通读改增删用 `change_application_entities` 的 `set_properties`、`create_items`、`remove_items`；算法操作用正式能力。属性、必填项、枚举和单位按发现结果，缺工具时内置 Pi 用 `load_application_tools` 的 names 加载本步骤精确工具组合；外部 MCP 从 `describe_application_contract` 发现。
+2. 普通读改增删用 `change_application_entities` 的 `set_properties`、`create_items`、`remove_items`；算法操作用正式能力。属性、必填项、枚举和单位按发现结果，缺工具时内置 Pi 用 `load_application_tools` 按 names 只加载本步骤工具；外部 MCP 从 `describe_application_contract` 发现。
 3. 序列时间用整数帧，源入点用微秒，标为 Seconds 的字段用秒；有理帧率精确换算，范围通常半开。不要把改 duration 的修剪当成保持内容的变速。
 4. 同目的独立修改合并事务，依赖新返回引用才分调用；删除先读目标与父集合，外部 MCP 写入带 operationId，删除带相关 baselineIds。结果未知用 `get_application_operation` 查原操作，不能换标识重放。
 5. 尊重锁轨、链接、编组、用户手调和来源身份。失败先读动态可用性与恢复提示；不要为绕过拒绝自动解锁、删关联内容或手算整个波纹链。`undo_video_edit` / `redo_video_edit` 仅作用于明确剪辑的一步历史。
 6. 识别、翻译、模型生成可能计费，遵守正式审批与授权；准备不等于付费提交，不能代替用户批准。已有生成或已完成导出只复用，不重新付费。
 7. 修改后回读结构；画面用 `observe_video_edit_frame` 离屏出帧并用 `read_application_media` 真读图。静帧不能证明节奏、听感或编码成片质量；没看到或没听到就说明证据边界。
-
-## 按任务加载工具
-
-通用实体读写已提供；内置 Pi 用 `load_application_tools({names:[...]})` 按当前步骤追加，不加载整个 video_edit：
-
-- 修剪与保存：`trim_video_edit_clip`、`save_video_edit`；需要撤销才加 `undo_video_edit`。
-- 核对画面：`observe_video_edit_frame`、`read_application_media`（剪辑界面已提供）。
-- 导出：`export_video_edit`。
 
 ## 拒绝与保存恢复
 

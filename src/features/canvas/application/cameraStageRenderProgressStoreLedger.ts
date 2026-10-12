@@ -1,12 +1,20 @@
 import type { ApplicationStoreActionLedger } from '@/core/application-control/storeActionLedger';
 
-/**
- * 私有 Store 只有 tasks 数据，没有用户动作或函数键，故动作账本为空。
- * 进度由 cameraStageRenderApplicationService / 编辑器导出回调派生，不接受实体写入。
- * 助手查询和取消后台任务仍走既有 camera_stage.render_task 能力；这不是第二份任务事实。
- */
-export const CAMERA_STAGE_RENDER_PROGRESS_STORE_LEDGER: ApplicationStoreActionLedger<never> = {
+import type { useCameraStageRenderProgressStore } from './cameraStageRenderProgress';
+
+type State = ReturnType<typeof useCameraStageRenderProgressStore.getState>
+type ActionName = {
+  [K in keyof State]-?: State[K] extends (...args: never[]) => unknown ? K : never
+}[keyof State]
+
+const REASON = '镜头参考渲染进度是渲染任务回调写入的瞬态投影，不属于作品、撤销或持久化内容；'
+  + '助手查询与取消渲染走既有 camera_stage.render_task 能力，不需要读写这份进度。'
+
+export const CAMERA_STAGE_RENDER_PROGRESS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'cameraStageRenderProgress',
-  title: '镜头参考渲染进度投影（内部瞬态）',
-  entries: {},
+  title: '镜头参考渲染进度投影',
+  entries: {
+    setProgress: { kind: 'excluded', category: 'derived', reason: REASON },
+    clearAll: { kind: 'excluded', category: 'derived', reason: REASON },
+  },
 };

@@ -74,10 +74,11 @@ it('内置及本机样式批量应用一笔历史，不把预设库存入剪辑�
   const a = createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '第一条' })
   const b = createVideoEditCaption(owner.document.id, sequence().id, { start: 30, duration: 30, text: '第二条' })
   const history = owner.past.length
+  const before = JSON.stringify(sequence().captions?.map(caption => caption.style))
   applyVideoEditSubtitlePreset(owner.document.id, sequence().id, 'builtin:variety')
   expect(sequence().captions?.every(caption => caption.style && caption.style.fontSize === 80)).toBe(true)
   expect(owner.past).toHaveLength(history + 1)
-  undoVideoEdit(owner.document.id); expect(sequence().captions?.every(caption => !caption.style)).toBe(true)
+  undoVideoEdit(owner.document.id); expect(JSON.stringify(sequence().captions?.map(caption => caption.style))).toBe(before)
   const preset = videoEditTextPresetLibrary.save('自定义底框', videoEditTextStyleSchema.parse({ fontSize: 48, background: { enabled: true } }))
   applyVideoEditSubtitlePreset(owner.document.id, sequence().id, preset.id, [a, b])
   expect(owner.past).toHaveLength(history + 1)
@@ -85,7 +86,7 @@ it('内置及本机样式批量应用一笔历史，不把预设库存入剪辑�
   const baseline = owner.document
   expect(() => applyVideoEditSubtitlePreset(owner.document.id, sequence().id, preset.id, [a, 'missing'])).toThrow('移除')
   expect(owner.document).toBe(baseline)
-  undoVideoEdit(owner.document.id); expect(sequence().captions?.every(caption => !caption.style)).toBe(true)
+  undoVideoEdit(owner.document.id); expect(JSON.stringify(sequence().captions?.map(caption => caption.style))).toBe(before)
 })
 
 it('助手发现四种内置和本机预设，经通用样式事务批量应用，一步撤销与UI相同', async () => {
@@ -97,10 +98,11 @@ it('助手发现四种内置和本机预设，经通用样式事务批量应用�
     expect(listed.refs).toHaveLength(VIDEO_EDIT_SUBTITLE_PRESETS.length + 1)
     const read = await app.read({ kind: 'video_edit.subtitle_preset', id: preset.id }, ['video_edit.subtitle_preset.style'])
     const history = owner.past.length
+    const before = JSON.stringify(sequence().captions?.map(caption => caption.style))
     await app.requireResult('change_application_entities', { summary: '批量套用字幕样式', changes: ids.map(id => ({ kind: 'set_properties', entityType: 'video_edit.caption', target: { kind: 'video_edit.caption', id: `${owner.document.id}:${id}` }, properties: { 'video_edit.caption.style': (read.properties as Record<string, unknown>)['video_edit.subtitle_preset.style'] } })) })
     expect(sequence().captions?.every(caption => caption.style && caption.style.fontSize === 64)).toBe(true)
     expect(owner.past).toHaveLength(history + 1)
-    undoVideoEdit(owner.document.id); expect(sequence().captions?.every(caption => !caption.style)).toBe(true)
+    undoVideoEdit(owner.document.id); expect(JSON.stringify(sequence().captions?.map(caption => caption.style))).toBe(before)
   } finally { app.dispose() }
 })
 

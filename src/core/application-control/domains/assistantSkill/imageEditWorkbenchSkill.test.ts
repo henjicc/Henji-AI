@@ -97,7 +97,7 @@ describe('图片编辑工作台技能的渐进披露与真实契约', () => {
   it('不把工作文档当可读媒体，不把候选或已提交状态当视觉/画质验收', () => {
     expect(APPLICATION_READABLE_MEDIA_KINDS).not.toContain('image_edit.document')
     expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('observe_application_surface')?.external?.kind).toBe('internal')
-    expect(all).toContain('外部 MCP 不开放该截图')
+    expect(all).toContain('外部 MCP 均不可调用 `observe_application_surface`')
     expect(all).toContain('未做视觉验证')
     expect(all).toContain('status=candidates 只返回候选、不改选区')
     expect(all).toContain('候选过期，重新识别')
