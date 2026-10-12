@@ -53,6 +53,15 @@
     "apply": "应用",
     "preview": "预览"
   },
+  "explanation": {
+    "saveFailed": "讲解保存失败"
+  },
+  "subtitles": {
+    "modelsLoading": "正在读取语音识别模型…",
+    "modelsFailed": "语音识别模型读取失败",
+    "modelsUnconfigured": "尚未配置时间戳识别模型",
+    "configureModels": "在设置中配置语音识别供应商后继续。"
+  },
   "paidApproval": {
     "allowOnce": "允许本次",
     "alwaysAllowProject": "本项目始终允许",

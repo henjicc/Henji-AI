@@ -7,7 +7,6 @@ import { joinAudioEditText } from '../audioEdit/captions'
 import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange, videoEditClipSpeedValue, type VideoEditClipTiming } from './clipSpeed'
 import { videoEditFps, type VideoEditRatio } from './time'
 import type { VideoEditCaption } from './timedContent'
-import { videoEditSubtitleStyleSchema } from './subtitleStyle'
 
 export interface SpeechSubtitle { caption: VideoEditCaption; startUs: number; endUs: number; confidence: number; estimated: boolean }
 /** Original text is authoritative; provider/ASR text supplies only matching anchors. */
@@ -45,7 +44,7 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
       const anchored = timings.granularity !== 'sentence'
         && timings.items.some(item => frameAt(clip.reverse ? item.endMs : item.startMs) === start)
         && timings.items.some(item => frameAt(item.endMs) === end || frameAt(item.startMs) === end)
-      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text: group.text, sourceText: group.sourceText, start, duration: Math.max(1, end - start), style: videoEditSubtitleStyleSchema.parse({}) },
+      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text: group.text, sourceText: group.sourceText, start, duration: Math.max(1, end - start) },
         startUs: Math.round(start / fps * 1e6), endUs: Math.round(end / fps * 1e6), confidence: mismatch ? 0 : Math.min(first?.confidence ?? 0, last?.confidence ?? 0) * Number(anchored), estimated: mismatch || !anchored }
     }).sort((a, b) => a.caption.start - b.caption.start)
     for (let index = 0; index + 1 < result.length; index++) {
@@ -84,7 +83,7 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
       const startExact = (boundaryStart <= boundaryEnd ? first.startExact : last.endExact) && start === subtitleFrameBoundary(Math.min(boundaryStart, boundaryEnd))
       const endExact = (boundaryStart <= boundaryEnd ? last.endExact : first.startExact) && end === subtitleFrameBoundary(Math.max(boundaryStart, boundaryEnd))
       const estimated = !startExact || !endExact || mismatched
-      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text, start, duration: end - start, style: videoEditSubtitleStyleSchema.parse({}) },
+      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text, start, duration: end - start },
       startUs: Math.round(start * rate.denominator * 1e6 / rate.numerator), endUs: Math.round(end * rate.denominator * 1e6 / rate.numerator),
       confidence: mismatched ? 0 : Math.min(first.confidence, last.confidence) * (Number(Boolean(startExact)) + Number(Boolean(endExact))) / 2, estimated }
     })

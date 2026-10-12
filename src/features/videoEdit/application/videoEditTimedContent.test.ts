@@ -7,7 +7,8 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
 import { listVideoEditInstances, closeVideoEditProject, editVideoProject, appendVideoEditSequence, switchVideoEditSequence, saveVideoEdit, undoVideoEdit, duplicateVideoEditSequence } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { createVideoEditCaption, createVideoEditMarker, importVideoEditCaptionFile, exportVideoEditSubtitles, updateVideoEditTimedContent } from './videoEditTimedContent'
+import { createVideoEditCaption, createVideoEditMarker, appendVideoEditCaptionText, importVideoEditCaptionFile, exportVideoEditSubtitles, updateVideoEditTimedContent } from './videoEditTimedContent'
+import { appendAutoSubtitles } from './videoEditAutoSubtitles'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { reopenVideoEdit } from './videoEditDocumentTestKit'
 const files = new Map<string, string>()
@@ -29,6 +30,27 @@ async function fixture() {
   })
   return { owner, projectId, sequenceId }
 }
+
+it('手工、通用实体、导入和生成共用邻近样式；显式空样式保留', async () => {
+  const { owner, projectId, sequenceId } = await fixture()
+  const style = videoEditSubtitleStyleSchema.parse({ fontSize: 72 })
+  createVideoEditCaption(projectId, sequenceId, { start: 0, duration: 30, text: '片段样式', clipId: 'text-clip', style })
+  createVideoEditCaption(projectId, sequenceId, { start: 35, duration: 5, text: '其他样式', style: videoEditSubtitleStyleSchema.parse({ fontSize: 20 }) })
+  const manual = createVideoEditCaption(projectId, sequenceId, { start: 40, duration: 10, text: '手工', clipId: 'text-clip' })
+  const imported = appendVideoEditCaptionText(projectId, sequenceId, '1\n00:00:01,400 --> 00:00:01,800\n导入', { clipId: 'text-clip' })[0]
+  appendAutoSubtitles(projectId, sequenceId, [{ id: 'generated', start: 45, duration: 5, text: '生成', clipId: 'text-clip' }])
+  const empty = createVideoEditCaption(projectId, sequenceId, { start: 50, duration: 5, text: '不设样式', style: '' })
+  const app = createApplicationHarness()
+  try {
+    const parent = { kind: 'video_edit.sequence', id: `${projectId}:${sequenceId}` }
+    const baseline = await app.read(parent)
+    const result = await app.call('change_application_entities', { summary: '创建同样式字幕', changes: [{ kind: 'create_items', entityType: 'video_edit.caption', parent, items: [{ properties: { 'video_edit.caption.start': 55, 'video_edit.caption.duration': 5, 'video_edit.caption.text': '通用', 'video_edit.caption.clip_id': 'text-clip' } }] }] }, baseline.revisions as Record<string, number>)
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
+    const captions = owner.document.sequences[0].captions!
+    for (const id of [manual, imported, 'generated', captions.find(caption => caption.text === '通用')!.id]) expect(captions.find(caption => caption.id === id)?.style).toEqual(style)
+    expect(captions.find(caption => caption.id === empty)?.style).toBe('')
+  } finally { app.dispose() }
+})
 
 it('通用字幕/标记集合、修改、片段级联和手动撤销保存重开共用正式事务', async () => {
   const { owner, projectId, sequenceId } = await fixture(); const app = createApplicationHarness()

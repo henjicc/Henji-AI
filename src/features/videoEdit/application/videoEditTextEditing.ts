@@ -5,7 +5,8 @@ import { deleteVideoEditTextRanges, extractVideoEditTextRanges, insertVideoEditT
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { getPlatform } from '@/platform/runtime'
 import { loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
-import { videoEditSubtitleManifestSchema, videoEditSubtitleSequenceSignature } from './videoEditAutoSubtitles'
+import { videoEditSubtitleSequenceSignature } from './videoEditAutoSubtitles'
+import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
 import { editVideoProject, editVideoSequence, holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 
@@ -51,7 +52,7 @@ export async function restoreVideoEditText(projectId: string, sequenceId: string
     for (const id of documents) {
       signal?.throwIfAborted()
       const audio = await loadAudioEditProject(id); const audioSnapshot = audio.document
-      const manifest = videoEditSubtitleManifestSchema.parse(JSON.parse(await getPlatform().system.fs.readTextFile(`${audioSnapshot.source.sourcePath}.subtitle.json`)))
+      const manifest = await readVideoEditSubtitleManifest(`${audioSnapshot.source.sourcePath}.subtitle.json`)
       if (manifest.projectId !== projectId || manifest.sequenceId !== sequenceId && !known.includes(id)) throw new Error('此转录稿不属于目标序列。')
       if ((!manifest.soundClips || !manifest.soundIdentities) && await videoEditSubtitleSequenceSignature(composition) !== manifest.signature) throw new Error('旧转录没有保存原片段范围，剪辑已改变，请重新转录。')
       if (!audioSnapshot.transcript.length) throw new Error('上次识别尚未完成，请继续上次转录。')

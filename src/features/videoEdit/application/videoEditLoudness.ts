@@ -12,7 +12,7 @@ export function videoEditClipHasSound(composition: VideoEditComposition, clip: V
   return (clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video') && videoEditClipMedia(composition, clip)?.hasAudio !== false && Boolean(videoEditClipMedia(composition, clip))
 }
 /** Shared preview/export mixer; only the PCM spool/FFmpeg DSP is additional. At most one second per IPC. */
-export async function spoolVideoEditAudio(composition: VideoEditComposition, range: { startFrame: number; endFrame: number }, signal?: AbortSignal, supplied?: VideoEditRenderSession): Promise<string> {
+export async function spoolVideoEditAudio(composition: VideoEditComposition, range: { startFrame: number; endFrame: number }, signal?: AbortSignal, supplied?: VideoEditRenderSession, onProgress?: (fraction: number) => void): Promise<string> {
   const api = getPlatform().audioEdit.loudness
   const id = crypto.randomUUID()
   let renderer: VideoEditRenderSession | undefined = supplied
@@ -27,6 +27,7 @@ export async function spoolVideoEditAudio(composition: VideoEditComposition, ran
       const buffer = await renderer.mixAudio(frame / composition.fps, (end - frame) / composition.fps)
       signal?.throwIfAborted()
       await api.append(id, Array.from({ length: buffer.numberOfChannels }, (_, channel) => buffer.getChannelData(channel))); frame = end
+      onProgress?.((frame - range.startFrame) / (range.endFrame - range.startFrame))
     }
     return id
   } catch (error) { await api.close(id); throw error }

@@ -1,3 +1,4 @@
+import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
@@ -55,8 +56,8 @@ export async function findRecoverableSubtitleAudio(owner: VideoEditInstance, seq
       const source = audioEditProjectFromDocument(read.meta, read.content).project.source.sourcePath
       const path = `${source}.subtitle.json`
       if (!await getPlatform().system.fs.exists(path)) continue
-      const manifest: unknown = JSON.parse(await getPlatform().system.fs.readTextFile(path))
-      if (typeof manifest === 'object' && manifest !== null && 'projectId' in manifest && 'sequenceId' in manifest && (includeCommitted || !('committed' in manifest && manifest.committed === true)) && manifest.projectId === owner.document.id && manifest.sequenceId === sequenceId) return document.id
+      const manifest = await readVideoEditSubtitleManifest(path)
+      if ((includeCommitted || !manifest.committed) && manifest.projectId === owner.document.id && manifest.sequenceId === sequenceId) return document.id
     } catch (error) { logger.warn('字幕恢复记录无法读取', { event: 'video_edit.subtitle.recovery.failed', error, context: { audioDocumentId: document.id } }) }
   }
   return undefined

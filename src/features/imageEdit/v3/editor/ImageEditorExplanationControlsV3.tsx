@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Mic, Pause, Play, Square } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { PanelTrigger, UiButton, UiIconButton, UiModal } from '@/components/ui'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import { ExplanationPanel, explanationDuration, useExplanationTranscript, useExplanationHasRecorded, type ExplanationReviewResult } from '@/features/creativeIntent'
@@ -10,6 +11,7 @@ import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import type { ImageEditorV3Controller } from './types'
 
 export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated }: { bus: ImageEditCommandBusV3; controller: ImageEditorV3Controller; onGenerated?: () => void }): JSX.Element {
+  const { t } = useTranslation('common')
   const adapter = useMemo(() => imageEditExplanation(bus), [bus])
   const state = useSyncExternalStore(adapter.subscribe, adapter.snapshot)
   const [open, setOpen] = useState(false), [upload, setUpload] = useState(false), [deleting, setDeleting] = useState(false)
@@ -24,7 +26,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
   const readPage = useCallback((index: number) => adapter.transcript(index), [adapter])
   const stage = state.session?.state, active = stage === 'recording' || stage === 'paused'
   const transcriptKey = open && state.session && !active ? `${state.session.id}:${state.session.pages.filter(p => p.kind === 'transcript').map(p => p.resourceId).join(',')}` : undefined
-  const { entries, loading } = useExplanationTranscript(transcriptKey, readPage, undefined, onError)
+  const { entries, loading, retry } = useExplanationTranscript(transcriptKey, readPage, undefined, onError)
   const changeOpen = (value: boolean): void => {
     setOpen(value)
     if (!value && !adapter.hasPendingPick() && entries.length) run(() => adapter.finishReview())
@@ -50,7 +52,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
     <div className="flex shrink-0 items-center gap-1" role="group" aria-label="录制讲解控制">
       <PanelTrigger open={open} onOpenChange={changeOpen} size="sm" alignment="bottomRight" panelPadding="content" panelWidth={360}
         renderPanel={() => <div data-image-explanation-controls><ExplanationPanel entries={entries} stage={stage} elapsedUs={state.elapsedUs} busy={state.busy} loading={loading} hasRecorded={hasRecorded}
-          failed={failed || !!state.message?.includes('未保存')} failureTitle={failed ? failureTitle : undefined} onRetry={() => run(retryWork.current ?? (failed ? async () => {} : () => adapter.save()), failureTitle)}
+          failed={failed || !!state.message?.includes('未保存')} failureTitle={failed ? failureTitle : t('explanation.saveFailed')} onRetry={() => run(retryWork.current ?? (failed ? async () => { retry() } : () => adapter.save()), failed ? failureTitle : t('explanation.saveFailed'))}
           onStart={() => run(() => adapter.snapshot().session?.state === 'paused' ? adapter.resume() : adapter.start(crypto.randomUUID()), '录制失败')} onTranscribe={() => run(async () => { await adapter.preflightTranscription(); setUpload(true) }, '转写预检失败')} onCancel={() => run(() => adapter.cancelTranscription())} onDelete={state.session ? () => setDeleting(true) : undefined}
           onRead={onRead} onBind={onBind} onPick={onPick} onError={onError} contextKey={`${state.session?.id}:${controller.document.revision}`} generationKey={state.session?.id} prepareGeneration={() => adapter.prepareGeneration()} onGenerate={generate} canGenerate={canGenerate} />
         </div>}>

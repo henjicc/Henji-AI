@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TranscriptEntry } from '@/core/creativeIntent/schema'
 import type { ExplanationReviewResult } from './ExplanationReview'
 
@@ -47,25 +47,29 @@ export function explanationDuration(elapsedUs: number): string {
 }
 
 /** Storage pages are batches, never pages in the user's transcript. */
-export function useExplanationTranscript(key: string | undefined, readPage: (index: number) => Promise<TranscriptEntry[]>, pageCount: number | undefined, onError: (error: unknown) => void): { entries: TranscriptEntry[]; loading: boolean } {
+export function useExplanationTranscript(key: string | undefined, readPage: (index: number) => Promise<TranscriptEntry[]>, pageCount: number | undefined, onError: (error: unknown) => void): { entries: TranscriptEntry[]; loading: boolean; retry: () => void } {
   const [data, setData] = useState<{ key?: string; entries: TranscriptEntry[]; loading: boolean }>({ entries: [], loading: false })
+  const [attempt, setAttempt] = useState(0)
+  const generation = useRef(0)
+  const retry = useCallback((): void => { generation.current++; setAttempt(value => value + 1) }, [])
   useEffect(() => {
     let current = true
+    const reading = ++generation.current
     setData({ key, entries: [], loading: !!key })
     if (key) void (async () => {
       const seen = new Set<string>()
       for (let index = 0; pageCount === undefined || index < pageCount; index++) {
         const batch = await readPage(index)
-        if (!current) return
+        if (!current || reading !== generation.current) return
         if (pageCount === undefined && !batch.length) break
         const fresh = batch.filter(entry => !seen.has(entry.eventId))
         fresh.forEach(entry => seen.add(entry.eventId))
         setData(previous => ({ key, entries: [...previous.entries, ...fresh], loading: true }))
       }
-      if (current) setData(previous => ({ ...previous, loading: false }))
-    })().catch(error => { if (current) { setData(previous => ({ ...previous, loading: false })); onError(error) } })
+      if (current && reading === generation.current) setData(previous => ({ ...previous, loading: false }))
+    })().catch(error => { if (current && reading === generation.current) { setData(previous => ({ ...previous, loading: false })); onError(error) } })
     return () => { current = false }
-  }, [key, readPage, pageCount, onError])
-  return data.key === key ? data : { entries: [], loading: !!key }
+  }, [key, readPage, pageCount, onError, attempt])
+  return { ...(data.key === key ? data : { entries: [], loading: !!key }), retry }
 }
 

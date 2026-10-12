@@ -458,7 +458,7 @@ it('字幕拆分合并、通用实体文字写入与样式一笔撤销、重开�
     expect(sequence().captions![0]).toMatchObject({ text: '公共修改', start: 45 })
     styleVideoEditSubtitles(owner.document.id, sequence().id, videoEditSubtitleStyleSchema.parse({ background: { enabled: true }, fontFamily: 'serif' }))
     expect(sequence().captions![0].style).toMatchObject({ background: { enabled: true } })
-    undoVideoEdit(owner.document.id); expect(sequence().captions![0].style).toBeUndefined()
+    undoVideoEdit(owner.document.id); expect(sequence().captions![0].style).toEqual(videoEditSubtitleStyleSchema.parse({}))
     const reopened = await reopenVideoEdit(owner.document.id); owner = reopened
     expect(sequence().captions![0]).toMatchObject({ text: '公共修改', start: 45 })
   } finally { app.dispose() }
@@ -520,7 +520,7 @@ it('整序列字幕能力回执分批覆盖500行，符合公共单条回执引�
 })
 
 it('未设置样式的通用回读与schema一致，空字符串可恢复既有默认样式', async () => {
-  const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '默认字幕' })
+  const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '默认字幕', style: '' })
   const app = createApplicationHarness(); const ref = { kind: 'video_edit.caption', id: `${owner.document.id}:${id}` }
   try {
     expect(await app.read(ref, ['video_edit.caption.style'])).toMatchObject({ properties: { 'video_edit.caption.style': '' } })
