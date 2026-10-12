@@ -104,8 +104,8 @@ export const videoEditSequenceSchema = z.object({
   transitions: z.array(videoEditTransitionSchema).optional(),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
 export const videoEditExportHistorySchema = z.array(z.object({
-  id: z.string().min(1), taskId: z.string().min(1), sequenceId: z.string().min(1), name: z.string(),
-  path: z.string().min(1), completedAt: z.number().finite().nonnegative(),
+  id: z.string().min(1), taskId: z.string().min(1), sequenceId: z.string().min(1), name: z.string(), presetName: z.string(),
+  path: z.string().min(1), completedAt: z.number().finite().nonnegative(), rangeSource: z.enum(['explicit', 'in-out', 'content']),
   settings: videoEditExportSettingsSchema, range: z.object({ startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).strict(),
   assetRef: z.object({ kind: z.literal('asset'), id: z.string().min(1) }).strict().optional(),
 }).strict())

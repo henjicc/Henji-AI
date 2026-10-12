@@ -38,11 +38,14 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
       const start = Math.max(clip.start, subtitleFrameBoundary(Math.min(a, b)))
       const end = Math.min(clip.start + clip.duration, subtitleFrameBoundary(Math.max(a, b)))
       const chars = aligned.filter(char => (char.endMs > tokens[group.first].startMs || char.endMs === char.startMs && char.startMs >= tokens[group.first].startMs) && char.startMs < tokens[group.last].endMs)
-      const first = chars[0]; const last = chars.at(-1)
+      const spoken = chars.filter(char => /[\p{L}\p{N}]/u.test(char.text))
+      const first = spoken[0]; const last = spoken.at(-1)
       const mismatch = chars.some(char => char.mismatch && /[\p{L}\p{N}]/u.test(char.text))
-      const anchored = timings.items.some(item => Math.abs(item.startMs - group.startMs) < 1e-6)
-        && timings.items.some(item => Math.abs(item.endMs - group.endMs) < 1e-6 || Math.abs(item.startMs - group.endMs) < 1e-6)
-      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text: group.text, start, duration: Math.max(1, end - start), style: videoEditSubtitleStyleSchema.parse({}) },
+      const frameAt = (ms: number) => subtitleFrameBoundary(videoEditClipFrameBoundaryAtSource(clip, ms / 1000, fps))
+      const anchored = timings.granularity !== 'sentence'
+        && timings.items.some(item => frameAt(clip.reverse ? item.endMs : item.startMs) === start)
+        && timings.items.some(item => frameAt(item.endMs) === end || frameAt(item.startMs) === end)
+      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text: group.text, sourceText: group.sourceText, start, duration: Math.max(1, end - start), style: videoEditSubtitleStyleSchema.parse({}) },
         startUs: Math.round(start / fps * 1e6), endUs: Math.round(end / fps * 1e6), confidence: mismatch ? 0 : Math.min(first?.confidence ?? 0, last?.confidence ?? 0) * Number(anchored), estimated: mismatch || !anchored }
     }).sort((a, b) => a.caption.start - b.caption.start)
     for (let index = 0; index + 1 < result.length; index++) {

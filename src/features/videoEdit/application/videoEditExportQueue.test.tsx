@@ -12,7 +12,7 @@ import { VIDEO_EDIT_EXPORT_PRESETS, patchVideoEditExportSettings, videoEditSeque
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit, setVideoEditTimelineView } from './videoEditService'
 import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
@@ -83,7 +83,7 @@ async function project() {
   return owner
 }
 function localJob(owner: Awaited<ReturnType<typeof project>>, name: string): VideoEditExportJob {
-  return { id: name, name, owner, presetName: name, snapshot: structuredClone(getActiveVideoEditSequence(owner)), range: videoEditExportRange(owner), settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, loudness: null }, path: file(`${name}.mp4`), state: 'queued', controller: new AbortController(), release: vi.fn() }
+  return { id: name, name, owner, presetName: name, snapshot: structuredClone(getActiveVideoEditSequence(owner)), range: videoEditExportRange(owner), rangeSource: 'content', settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, loudness: null }, path: file(`${name}.mp4`), state: 'queued', controller: new AbortController(), release: vi.fn() }
 }
 it('队列严格顺序；等待项可取消；失败不阻断后续；重试排到末尾且只释放各自租用', async () => {
   const owner = await project(); const gate = deferred<void>(); const order: string[] = []; let fail = true
@@ -578,7 +578,7 @@ it('completed exports survive a fresh document instance and either ID resolves; 
   const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('archived.mp4') }])
   await videoEditExportQueue.wait(job.id)
   expect(job.state).toBe('completed')
-  const expected = { id: job.id, taskId: job.task!.id, assetRef: job.task!.assetRef, path: file('archived.mp4'), completedAt: expect.any(Number), settings: expect.objectContaining({ format: 'mp4' }) }
+  const expected = { id: job.id, taskId: job.task!.id, presetName: job.presetName, rangeSource: 'content', assetRef: job.task!.assetRef, path: file('archived.mp4'), completedAt: expect.any(Number), settings: expect.objectContaining({ format: 'mp4' }) }
   expect(owner.document.exportHistory).toEqual([expect.objectContaining(expected)])
   undoVideoEdit(owner.document.id)
   expect(owner.document.exportHistory).toEqual([expect.objectContaining(expected)])
@@ -593,5 +593,28 @@ it('completed exports survive a fresh document instance and either ID resolves; 
     }
     const missing = await app.call('query_video_edit_export', { documentRef, taskId: 'missing' })
     expect(missing).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', recoverable: true } })
+  } finally { app.dispose() }
+})
+
+it('默认导出没有十帧余量，包含字幕尾部并读回内容、入出点和显式区间来源', async () => {
+  const owner = await project()
+  editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, duration: 456 })) }))
+  expect(videoEditExportRange(owner)).toEqual({ startFrame: 0, endFrame: 456 })
+  editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, captions: [{ id: 'tail', start: 450, duration: 16, text: '片尾字幕' }] }))
+  const [content] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('content.mp4') }])
+  setVideoEditTimelineView(owner.document.id, { inFrame: 1, outFrame: 3 })
+  const [marked, explicit] = await enqueueVideoEditExports([
+    { projectId: owner.document.id, path: file('marked.mp4') },
+    { projectId: owner.document.id, path: file('explicit.mp4'), range: { startFrame: 2, endFrame: 4 } },
+  ])
+  for (const job of [content, marked, explicit]) await videoEditExportQueue.wait(job.id)
+  const app = createApplicationHarness()
+  try {
+    const read = await app.requireResult('query_video_edit_export', { documentRef: { kind: 'video_edit.document', id: owner.document.id } })
+    expect(read.queue).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: content.id, range: { startFrame: 0, endFrame: 466 }, rangeSource: 'content' }),
+      expect.objectContaining({ id: marked.id, range: { startFrame: 1, endFrame: 3 }, rangeSource: 'in-out' }),
+      expect.objectContaining({ id: explicit.id, range: { startFrame: 2, endFrame: 4 }, rangeSource: 'explicit' }),
+    ]))
   } finally { app.dispose() }
 })

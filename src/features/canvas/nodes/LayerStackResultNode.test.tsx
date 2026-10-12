@@ -1,6 +1,8 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setCanvasTestProjectState, readCanvasTestProject } from '@/tests/canvasProjectFixture'
+import { resumeCanvasGenerationInProject } from '../application/canvasResumePollingService'
 import { ReactFlowProvider } from '@xyflow/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -18,6 +20,7 @@ import { LayerStackResultNode } from './LayerStackResultNode'
 const nodeMocks = vi.hoisted(() => ({
   openMultiLayerDocumentNodeEditor: vi.fn(async () => ({ status: 'opened' })),
 }))
+vi.mock('../application/canvasResumePollingService', () => ({ resumeCanvasGenerationInProject: vi.fn(async () => 1) }))
 
 vi.mock('@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService', () => ({
   openMultiLayerDocumentNodeEditor: nodeMocks.openMultiLayerDocumentNodeEditor,
@@ -140,7 +143,7 @@ describe('LayerStackResultNode V3 编辑入口', () => {
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
   })
 
-  it('下载失败显示续取入口，只重新激活原任务，不打开编辑器或新建生成', () => {
+  it('下载失败显示续取入口，保存原任务后显式后台续取，不打开编辑器或新建生成', async () => {
     const failed = data({
       imageUrl: null, previewImageUrl: null, imageEditSession: undefined,
       isGenerating: false, generationError: '图片已生成，但下载未完成。请重试获取结果。',
@@ -149,7 +152,7 @@ describe('LayerStackResultNode V3 编辑入口', () => {
     useCanvasStore.getState().setCanvasData([
       { id: 'multi-layer-node', type: 'layerStackResultNode', position: { x: 0, y: 0 }, data: failed },
     ], [], { past: [], future: [] })
-    useProjectStore.setState({ currentProject: {
+    setCanvasTestProjectState({ currentProjectId: 'project-a', currentProject: {
       id: 'project-a', name: '图层测试', createdAt: 1, updatedAt: 1, nodeCount: 1, coverPath: null,
       nodes: useCanvasStore.getState().nodes, edges: [], viewport: { x: 0, y: 0, zoom: 1 },
       history: { past: [], future: [] },
@@ -158,10 +161,12 @@ describe('LayerStackResultNode V3 编辑入口', () => {
     expect(screen.getByRole('alert').textContent).toContain('下载未完成')
     expect(screen.queryByText(/多图层图片暂不可用|Multi-layer image unavailable/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /^(重新获取结果|Fetch result again)$/ }))
+    await waitFor(() => expect(resumeCanvasGenerationInProject).toHaveBeenCalledWith('project-a', new Set(['multi-layer-node'])))
     expect(useCanvasStore.getState().nodes[0]?.data).toMatchObject({
       isGenerating: true, generationError: null, serverTaskId: 'existing-kie-task',
       serverTaskModelId: 'kie-seedream-5.0-pro',
     })
+    expect(readCanvasTestProject('project-a')?.nodes[0]?.data).toMatchObject({ isGenerating: true, serverTaskId: 'existing-kie-task' })
     expect(nodeMocks.openMultiLayerDocumentNodeEditor).not.toHaveBeenCalled()
   })
 

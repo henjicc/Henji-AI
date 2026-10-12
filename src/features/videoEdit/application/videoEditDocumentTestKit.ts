@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { createVideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
@@ -13,7 +14,7 @@ export function savedVideoEdit(owner: VideoEditInstance | string): VideoEditDocu
   const id = typeof owner === 'string' ? owner : owner.document.id
   const stored = harnessDocumentStore().stored(id)
   if (!stored) throw new Error(`剪辑 ${id} 不在测试文档仓库里`)
-  return { format: 'henji-video-project', version: 3, id, name: stored.meta.name, revision: 0, ...(stored.content as object) } as VideoEditDocument
+  return { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id, name: stored.meta.name, revision: 0, ...(stored.content as object) } as VideoEditDocument
 }
 
 /** 把一份剪辑写进测试文档仓库（建同名项目并放进去），保留原 ID，返回文档 ID。 */

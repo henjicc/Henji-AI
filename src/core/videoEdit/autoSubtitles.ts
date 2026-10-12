@@ -129,7 +129,7 @@ export function buildAutoSubtitles(blocks: readonly AudioEditTranscriptBlock[], 
     return segmentTimedSubtitles(tokens, { startMs: range.startFrame / fps * 1000, endMs: range.endFrame / fps * 1000 }, options, pauses).map(cue => {
       const start = Math.max(range.startFrame, subtitleFrameBoundary(cue.startMs * fps / 1000)); const end = Math.min(range.endFrame, subtitleFrameBoundary(cue.endMs * fps / 1000))
       if (end <= start) throw new Error('字幕时长不足一帧，请扩大声音范围。')
-      return { id: crypto.randomUUID(), text: cue.text, start, duration: Math.max(1, end - start) }
+      return { id: crypto.randomUUID(), text: cue.text, sourceText: cue.sourceText, start, duration: Math.max(1, end - start) }
     })
   }
   // English keeps the existing layout and timing policy until a separate profile is defined.

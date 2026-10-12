@@ -2,7 +2,7 @@ import { z } from 'zod'
 export const NODE_DEFAULTS_VERSION = 1
 export const MODEL_DEFAULTS_VERSION = 2
 export const ONBOARDING_VERSION = 2
-export const SUBTITLE_MANIFEST_VERSION = 1
+export const SUBTITLE_MANIFEST_VERSION = 2
 export const STORYBOARD_METADATA_VERSION = 1
 export const nodeDefaultsSchema = z.record(z.string(), z.record(z.string(), z.json()))
 export const modelDefaultsSchema = z.object({ version: z.literal(MODEL_DEFAULTS_VERSION), providerId: z.string(), models: z.object({ image: z.string(), video: z.string(), audio: z.string(), transcription: z.string() }) })
