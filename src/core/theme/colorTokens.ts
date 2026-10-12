@@ -12,6 +12,8 @@ export const THEME_SEED_ACCENT_HEX = {
   rose: '#D9467A',
 } as const;
 export const WHITE_HEX = '#ffffff';
+/** 属性取值说明的六位十六进制示例，不用于界面配色或内容默认值。 */
+export const HEX_COLOR_EXAMPLE = '#FFCC00';
 /** 剪辑内置效果“色度抠像”的默认抠像颜色（画面内容色，纯绿）。 */
 export const VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX = '#00ff00';
 export const BLACK_HEX = '#000000';
