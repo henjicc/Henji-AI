@@ -1,3 +1,5 @@
+import { useCameraStageNodeRenderProgress } from '@/features/canvas/application/cameraStageRenderProgress';
+import { readStoryboardFrameNote } from '@/features/canvas/application/storyboardPromptDocument';
 import { isCanvasNodeUnavailable } from '../domain/nodeAvailability';
 import { useNodeToolbarBoundary } from './useNodeToolbarBoundary'
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
@@ -75,6 +77,8 @@ const toolIconMap: Record<ToolIconKey, typeof Crop> = {
 };
 
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
+  const canvasProjectId = useProjectStore((state) => state.currentProjectId);
+  const cameraStageRender = useCameraStageNodeRenderProgress(canvasProjectId, node.id);
   const toolbarPanelRef = useNodeToolbarBoundary(node.id)
   const { t } = useTranslation();
   const isImageEdit = isImageEditNode(node);
@@ -224,7 +228,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       return orderedFrames
         .map((frame, index) => t('nodeToolbar.storyboardLine', {
           index: String(index + 1).padStart(2, '0'),
-          content: sanitizeStoryboardText(frame.note ?? '', ignoreAtTagWhenCopyingAndGenerating),
+          content: sanitizeStoryboardText(readStoryboardFrameNote(frame), ignoreAtTagWhenCopyingAndGenerating),
         }))
         .join('\n');
     }
@@ -296,7 +300,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {isCameraStage && (node.data.outputKind ?? 'image') === 'image' && (
             <UiButton
               variant="secondary"
-              disabled={Boolean(node.data.imageExporting || node.data.videoExporting)}
+              disabled={cameraStageRender !== null}
               onClick={(event) => {
                 event.stopPropagation();
                 canvasEventBus.publish('camera-stage/render-image', { nodeId: node.id });
@@ -309,7 +313,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {isCameraStage && node.data.outputKind === 'video' && (
             <UiButton
               variant="secondary"
-              disabled={Boolean(node.data.videoExporting)}
+              disabled={cameraStageRender !== null}
               onClick={(event) => {
                 event.stopPropagation();
                 canvasEventBus.publish('camera-stage/render-video', { nodeId: node.id });

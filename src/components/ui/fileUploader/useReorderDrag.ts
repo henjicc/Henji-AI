@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RefObject } from 'react'
+import type { MutableRefObject, RefObject } from 'react'
 
 export interface FilePreviewDragState {
   isDragging: boolean
@@ -39,7 +39,14 @@ const INITIAL_DRAG_STATE: FilePreviewDragState = {
   currentY: 0
 }
 
-export function useReorderDrag(params: UseReorderDragParams) {
+export interface ReorderDragResult {
+  dragState: FilePreviewDragState
+  itemRefs: MutableRefObject<(HTMLDivElement | null)[]>
+  handleMouseDown: (index: number, event: React.MouseEvent) => void
+  handlePointerDown: (index: number, event: React.PointerEvent) => void
+}
+
+export function useReorderDrag(params: UseReorderDragParams): ReorderDragResult {
   const {
     disabled,
     isCustomDragging,
@@ -57,6 +64,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
   const dragStateRef = useRef(dragState)
   /** 本次拖动越过阈值后是否收到过移动（监听随回调变化会重建，不能放在闭包里）。 */
   const sawDragMoveRef = useRef(false)
+  const pointerIdRef = useRef<number | null>(null)
   const dropTimer = useRef<ReturnType<typeof setTimeout>>()
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])
   const originalScrollTopRef = useRef(0)
@@ -82,12 +90,13 @@ export function useReorderDrag(params: UseReorderDragParams) {
   const resetDragState = useCallback(() => {
     clearTimeout(dropTimer.current)
     dropTimer.current = undefined
+    pointerIdRef.current = null
     dragStateRef.current = INITIAL_DRAG_STATE
     dragBoundaryRectRef.current = null
     setDragState(INITIAL_DRAG_STATE)
   }, [])
 
-  const handleMouseDown = useCallback((index: number, e: React.MouseEvent) => {
+  const startDrag = useCallback((index: number, e: React.MouseEvent | React.PointerEvent) => {
     const target = e.target as HTMLElement
     if (!allowButtonTarget && (target.tagName === 'BUTTON' || target.closest('button'))) {
       e.preventDefault()
@@ -96,6 +105,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
 
     if (disabled || isCustomDragging || e.button !== 0) return
     e.preventDefault()
+    pointerIdRef.current = 'pointerId' in e ? e.pointerId : null
     setDragState({
       isDragging: false,
       isDropping: false,
@@ -108,9 +118,21 @@ export function useReorderDrag(params: UseReorderDragParams) {
     })
   }, [allowButtonTarget, disabled, isCustomDragging])
 
+  const handleMouseDown = useCallback((index: number, e: React.MouseEvent): void => {
+    startDrag(index, e)
+  }, [startDrag])
+  const handlePointerDown = useCallback((index: number, e: React.PointerEvent): void => {
+    startDrag(index, e)
+  }, [startDrag])
+
+  const matchesPointer = useCallback((event: MouseEvent): boolean =>
+    pointerIdRef.current === null || !('pointerId' in event) || event.pointerId === pointerIdRef.current, [])
+
   useEffect(() => {
     if (!dragState.isDragging) return
     const eventWindow = itemRefs.current[dragState.fromIndex ?? 0]?.ownerDocument.defaultView ?? window
+    const moveEvent = pointerIdRef.current === null ? 'mousemove' : 'pointermove'
+    const upEvent = pointerIdRef.current === null ? 'mouseup' : 'pointerup'
 
     // 按鼠标位置求目标槛位；越过阈值后还没收到移动就松手（快速短距拖动，移动早于监听挂上）时按松手位置算。
     const update = (e: MouseEvent): void => {
@@ -197,10 +219,11 @@ export function useReorderDrag(params: UseReorderDragParams) {
       }
       scrollFrame = eventWindow.requestAnimationFrame(autoScroll)
     }
-    const handleMouseMove = (e: MouseEvent) => { pointer = e; sawDragMoveRef.current = true; update(e) }
+    const handleMouseMove = (e: MouseEvent) => { if (!matchesPointer(e)) return; pointer = e; sawDragMoveRef.current = true; update(e) }
     if (virtualVertical) scrollFrame = eventWindow.requestAnimationFrame(autoScroll)
 
     const handleMouseUp = (e: MouseEvent) => {
+      if (!matchesPointer(e)) return
       if (scrollFrame !== undefined) eventWindow.cancelAnimationFrame(scrollFrame)
       if (!sawDragMoveRef.current) update(e)
       const { fromIndex, toIndex } = dragStateRef.current
@@ -215,14 +238,14 @@ export function useReorderDrag(params: UseReorderDragParams) {
       }
     }
 
-    eventWindow.addEventListener('mousemove', handleMouseMove)
-    eventWindow.addEventListener('mouseup', handleMouseUp)
+    eventWindow.addEventListener(moveEvent, handleMouseMove)
+    eventWindow.addEventListener(upEvent, handleMouseUp)
     return () => {
       if (scrollFrame !== undefined) eventWindow.cancelAnimationFrame(scrollFrame)
-      eventWindow.removeEventListener('mousemove', handleMouseMove)
-      eventWindow.removeEventListener('mouseup', handleMouseUp)
+      eventWindow.removeEventListener(moveEvent, handleMouseMove)
+      eventWindow.removeEventListener(upEvent, handleMouseUp)
     }
-  }, [dragState.isDragging, dragState.fromIndex, layout, onReorder, resetDragState, virtualVertical, dragBoundaryRef, files.length])
+  }, [dragState.isDragging, dragState.fromIndex, layout, onReorder, resetDragState, virtualVertical, dragBoundaryRef, files.length, matchesPointer])
 
   useEffect(() => {
     if (dragState.fromIndex === null) return
@@ -231,9 +254,14 @@ export function useReorderDrag(params: UseReorderDragParams) {
       if (event.key !== 'Escape') return
       event.preventDefault(); event.stopPropagation(); resetDragState()
     }
+    const cancelPointer = (event: PointerEvent): void => { if (matchesPointer(event)) resetDragState() }
+    eventWindow.addEventListener('pointercancel', cancelPointer)
     eventWindow.addEventListener('keydown', cancel, true)
-    return () => eventWindow.removeEventListener('keydown', cancel, true)
-  }, [dragState.fromIndex, resetDragState])
+    return () => {
+      eventWindow.removeEventListener('pointercancel', cancelPointer)
+      eventWindow.removeEventListener('keydown', cancel, true)
+    }
+  }, [dragState.fromIndex, resetDragState, matchesPointer])
   useEffect(() => () => { clearTimeout(dropTimer.current) }, [])
   useEffect(() => { if (disabled) resetDragState() }, [disabled, resetDragState])
 
@@ -244,12 +272,15 @@ export function useReorderDrag(params: UseReorderDragParams) {
   useEffect(() => {
     if (dragState.fromIndex === null || dragState.isDragging || dragState.isDropping) return
     const eventWindow = itemRefs.current[dragState.fromIndex]?.ownerDocument.defaultView ?? window
+    const moveEvent = pointerIdRef.current === null ? 'mousemove' : 'pointermove'
+    const upEvent = pointerIdRef.current === null ? 'mouseup' : 'pointerup'
 
     let moved = false
     const startX = dragState.startX
     const startY = dragState.startY
 
     const handleMouseMove = (e: MouseEvent) => {
+      if (!matchesPointer(e)) return
       const deltaX = Math.abs(e.clientX - startX)
       const deltaY = Math.abs(e.clientY - startY)
       const crossedDragThreshold = layout === 'vertical'
@@ -288,7 +319,8 @@ export function useReorderDrag(params: UseReorderDragParams) {
       }
     }
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!matchesPointer(e)) return
       if (!moved) {
         const clickedIndex = dragState.fromIndex
         if (clickedIndex !== null && onImageClick) {
@@ -296,16 +328,16 @@ export function useReorderDrag(params: UseReorderDragParams) {
         }
         resetDragState()
       }
-      eventWindow.removeEventListener('mousemove', handleMouseMove)
-      eventWindow.removeEventListener('mouseup', handleMouseUp)
+      eventWindow.removeEventListener(moveEvent, handleMouseMove)
+      eventWindow.removeEventListener(upEvent, handleMouseUp)
     }
 
-    eventWindow.addEventListener('mousemove', handleMouseMove)
-    eventWindow.addEventListener('mouseup', handleMouseUp)
+    eventWindow.addEventListener(moveEvent, handleMouseMove)
+    eventWindow.addEventListener(upEvent, handleMouseUp)
 
     return () => {
-      eventWindow.removeEventListener('mousemove', handleMouseMove)
-      eventWindow.removeEventListener('mouseup', handleMouseUp)
+      eventWindow.removeEventListener(moveEvent, handleMouseMove)
+      eventWindow.removeEventListener(upEvent, handleMouseUp)
     }
   }, [
     dragState.fromIndex,
@@ -319,12 +351,14 @@ export function useReorderDrag(params: UseReorderDragParams) {
     dragThreshold,
     virtualVertical,
     onImageClick,
+    matchesPointer,
     resetDragState
   ])
 
   return {
     dragState,
     itemRefs,
-    handleMouseDown
+    handleMouseDown,
+    handlePointerDown
   }
 }

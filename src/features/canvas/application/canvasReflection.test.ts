@@ -1,3 +1,5 @@
+import { resolveStoryboardPromptDocument } from './storyboardPromptDocument'
+import { toModelPromptText } from '@/core/inputs/promptDocument'
 import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 
@@ -223,7 +225,7 @@ describe('canvas reflection and mutation', () => {
   it('分镜格子按 id 定点更新 note 与 order，并可整体撤销', async () => {
     const storyboardNodeId = 'node-storyboard'
     const frames: StoryboardFrameItem[] = [
-      { id: 'frame-1', imageUrl: null, note: '第一格', order: 0 },
+      { id: 'frame-1', imageUrl: null, note: '第一格', order: 0, noteDocument: resolveStoryboardPromptDocument({ legacyText: '第一格', carrierType: 'storyboard-split-note', carrierId: 'frame-1', references: [] }).document },
       { id: 'frame-2', imageUrl: null, note: '第二格', order: 1 },
     ]
     const storyboardNode: CanvasNode = {
@@ -261,9 +263,11 @@ describe('canvas reflection and mutation', () => {
       { id: 'frame-2', note: '第二格', order: 0 },
     ])
 
+    const document = updatedNode?.data.frames?.[0].noteDocument
+    expect(document && toModelPromptText(document)).toBe('改过的第一格')
     await executor.undo(String(result.undoToken), context)
     const restoredNode = useCanvasStore.getState().nodes.find((item) => item.id === storyboardNodeId)
-    expect(restoredNode?.data.frames).toEqual(baselineFrames)
+    expect(restoredNode?.data.frames).toMatchObject(baselineFrames)
   })
 
   it('分镜格子 id 不存在时整批拒绝，不改动任何格子', async () => {
@@ -301,6 +305,33 @@ describe('canvas reflection and mutation', () => {
     }
 
     await expect(executor.applyAtomic([step], context)).rejects.toThrow('目标节点不是分镜格子节点')
+  })
+
+  it('多节点属性与分镜多格的一次通用事务只产生一步用户撤销', async () => {
+    const storyboard: CanvasNode = { id: 'storyboard', type: CANVAS_NODE_TYPES.storyboardSplit,
+      position: { x: 0, y: 0 }, data: { gridRows: 1, gridCols: 2, aspectRatio: '1:1', frames: [
+        { id: 'a', note: '原说明一', imageUrl: null, order: 0 },
+        { id: 'b', note: '原说明二', imageUrl: null, order: 1 },
+      ] } }
+    useCanvasStore.getState().setCanvasData([node(), storyboard], [], { past: [], future: [] })
+    const before = structuredClone(useCanvasStore.getState().nodes)
+    const executor = new CanvasNodeMutationExecutor()
+    await executor.applyAtomic([
+      { kind: 'mutation', entityType: CANVAS_ENTITY_TYPES.node,
+        target: { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${nodeId}` }, expectedRevisions: { canvas: 2 },
+        mutations: [{ propertyId: 'canvas.node.display_name', operation: 'set', value: '新标题' }] },
+      { kind: 'mutation', entityType: CANVAS_ENTITY_TYPES.node,
+        target: { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:storyboard` }, expectedRevisions: { canvas: 2 },
+        mutations: [{ propertyId: 'canvas.node.storyboard_frames', operation: 'set', value: [
+          { id: 'a', note: '新说明一' }, { id: 'b', note: '新说明二' },
+        ] }] },
+    ], context)
+    expect(useCanvasStore.getState().history.past).toHaveLength(1)
+    const after = structuredClone(useCanvasStore.getState().nodes)
+    expect(useCanvasStore.getState().undo()).toBe(true)
+    expect(useCanvasStore.getState().nodes).toEqual(before)
+    expect(useCanvasStore.getState().redo()).toBe(true)
+    expect(useCanvasStore.getState().nodes).toEqual(after)
   })
 
   it('非法属性使整组变更回滚', async () => {

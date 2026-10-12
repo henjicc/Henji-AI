@@ -1,3 +1,4 @@
+import type { StoryboardFrameItem } from '../domain/canvasNodes'
 import {
   compactPromptMediaReferenceSpacing,
   readPromptDocument,
@@ -59,4 +60,25 @@ export function storyboardPromptDocumentsEqual(
   right: PromptDocumentV1,
 ): boolean {
   return Boolean(left) && JSON.stringify(left) === JSON.stringify(right)
+}
+
+/** 纯文本只是文档投影；文字写入必须重新解析，不能继续采用旧文档。 */
+export function patchStoryboardFrameNote(
+  frame: StoryboardFrameItem,
+  patch: Partial<StoryboardFrameItem>,
+  carrierId: string,
+  references: readonly LegacyPromptReference[] = [],
+): StoryboardFrameItem {
+  const next = { ...frame, ...patch }
+  const textWrite = patch.note !== undefined && patch.noteDocument === undefined
+  const resolved = resolveStoryboardPromptDocument({
+    document: textWrite ? undefined : next.noteDocument,
+    legacyText: next.note,
+    carrierType: 'storyboard-split-note', carrierId, references,
+  })
+  return { ...next, noteDocument: resolved.document, note: resolved.legacyText }
+}
+
+export function readStoryboardFrameNote(frame: StoryboardFrameItem): string {
+  return frame.noteDocument ? toLegacyPromptString(frame.noteDocument) : frame.note
 }

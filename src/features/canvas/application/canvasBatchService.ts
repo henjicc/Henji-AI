@@ -1,3 +1,4 @@
+import { createSnapshot } from '@/stores/canvasStoreHelpers';
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
 import { v4 as uuidv4 } from 'uuid';
 import { ZodError } from 'zod';
@@ -239,7 +240,7 @@ export async function runCanvasTransaction(
   undos.set(undoRef, {
     undoRef,
     projectId,
-    beforeNodes,
+    beforeNodes: createSnapshot(beforeNodes, beforeEdges).nodes,
     beforeEdges,
     beforeHistory,
     beforeSelectedNodeId,
@@ -247,7 +248,7 @@ export async function runCanvasTransaction(
     afterEdges: after.edges,
   })
   // 整批只留一条撤销记录：步骤内部各自记录的历史在这里合并。
-  const groupedPast = [...beforeHistory.past, { nodes: beforeNodes, edges: beforeEdges }]
+  const groupedPast = [...beforeHistory.past, createSnapshot(beforeNodes, beforeEdges)]
     .slice(-Math.max(after.history.past.length, 1))
   const groupedHistory: CanvasHistoryState = {
     past: groupedPast,

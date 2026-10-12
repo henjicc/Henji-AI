@@ -1,3 +1,7 @@
+import { collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
+import { createCanvasOutputPromptResourceId } from '@/features/canvas/application/generationPromptDocument';
+import { createLegacyPromptMediaLabels, createPromptMediaLabel } from '@/core/inputs/promptDocument';
+import { patchStoryboardFrameNote } from '@/features/canvas/application/storyboardPromptDocument';
 import {
   CANVAS_NODE_TYPES,
   MODEL_SELECTOR_COLLAPSED_DEFAULT_HEIGHT,
@@ -53,6 +57,10 @@ export function createCanvasNodeUpdateActions(
           ...node.data,
           ...data,
         } as CanvasNodeData;
+        if (isStoryboardSplitNode(node) && 'frames' in data && Array.isArray(data.frames)) {
+          (mergedData as typeof node.data).frames = data.frames.map((frame) =>
+            patchStoryboardFrameNote(frame, {}, `${nodeId}:${frame.id}`));
+        }
         const resizedNode = maybeApplyMediaAutoResize(node, mergedData, data);
 
         changed = true;
@@ -266,10 +274,11 @@ export function createCanvasNodeUpdateActions(
           }
 
           changed = true;
-          return {
-            ...frame,
-            ...data,
-          };
+          const references = collectInputMediaByKind(nodeId, state.nodes, state.edges, 'image').map((output, index) => ({
+            resourceId: createCanvasOutputPromptResourceId(output, index), mediaType: 'image' as const,
+            label: createPromptMediaLabel('image', index + 1), legacyLabels: createLegacyPromptMediaLabels('image', index + 1),
+          }));
+          return patchStoryboardFrameNote(frame, data, `${nodeId}:${frameId}`, references);
         });
 
         return {
@@ -286,7 +295,7 @@ export function createCanvasNodeUpdateActions(
       }
 
       const historyGroup = options?.historyGroup;
-      const shouldRecordHistory = !historyGroup || state.activeHistoryGroup !== historyGroup;
+      const shouldRecordHistory = !options?.skipHistory && (!historyGroup || state.activeHistoryGroup !== historyGroup);
       return {
         nodes: nextNodes,
         history: shouldRecordHistory
@@ -295,7 +304,7 @@ export function createCanvasNodeUpdateActions(
               future: [],
             }
           : state.history,
-        activeHistoryGroup: historyGroup ?? null,
+        activeHistoryGroup: options?.skipHistory ? state.activeHistoryGroup : historyGroup ?? null,
         dragHistorySnapshot: null,
       };
     });
