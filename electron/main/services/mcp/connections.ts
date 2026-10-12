@@ -1,11 +1,15 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import type { McpConnectionInfo } from '../../../../src/core/application-control/localHostContracts'
+import { MCP_CONNECTION_LIFETIME_MS, mcpConnectionExpiryState, type McpConnectionReminderState } from '../../../../src/core/application-control/mcpConnectionExpiry'
 
-const recordSchema = z.object({ id: z.string().uuid(), name: z.string().min(1).max(80), expiresAt: z.number(), token: z.string().length(64), allowWrites: z.boolean().default(false), allowDestructive: z.boolean().default(false), allowPaid: z.boolean().default(false) }).strict()
-const storageSchema = z.object({ version: z.literal(1), connections: z.array(recordSchema).max(32) }).strict()
+const recordSchema = z.object({ id: z.string().uuid(), name: z.string().min(1).max(80), expiresAt: z.number().finite(), token: z.string().regex(/^[a-f0-9]{64}$/), allowWrites: z.boolean().default(false), allowDestructive: z.boolean().default(false), allowPaid: z.boolean().default(false),
+  reminders: z.object({ expiresAt: z.number().finite(), states: z.array(z.enum(['expiring', 'expired'])) }).strict().optional(),
+}).strict()
+const storageSchema = z.object({ version: z.literal(1), connections: z.array(recordSchema) }).strict()
 type Connection = z.infer<typeof recordSchema>
 export interface ConnectionStorage { read(): string | null; write(value: string): void }
+export type McpAuthentication = { status: 'valid' | 'expired'; connectionId: string; expiresAt: number } | { status: 'unknown' }
 
 /** 主进程所有；网络客户端只能提交令牌，不能提交权限或授权对象。 */
 export class McpConnections {
@@ -16,31 +20,55 @@ export class McpConnections {
       const saved = this.storage.read()
       this.records = saved ? storageSchema.parse(JSON.parse(saved)).connections : []
     }
+    const retained = this.records.filter(record => record.expiresAt + MCP_CONNECTION_LIFETIME_MS > this.now())
+    if (retained.length !== this.records.length) this.save(retained)
     return this.records
   }
   private save(records: Connection[]): void {
     this.storage.write(JSON.stringify({ version: 1, connections: records }))
     this.records = records
   }
-  list(): McpConnectionInfo[] { return this.load().map(({ id, name, expiresAt, allowWrites, allowDestructive, allowPaid }) => ({ id, name, expiresAt, allowWrites, allowDestructive, allowPaid })) }
+  list(): McpConnectionInfo[] {
+    return this.load().map(({ id, name, expiresAt, allowWrites, allowDestructive, allowPaid, reminders }) => {
+      const state = mcpConnectionExpiryState(expiresAt, this.now())
+      const reminder = state !== 'active' && !(reminders?.expiresAt === expiresAt && reminders.states.includes(state)) ? state : undefined
+      return { id, name, expiresAt, allowWrites, allowDestructive, allowPaid, ...(reminder ? { reminder } : {}) }
+    })
+  }
   access(id: string): { allowWrites: boolean; allowDestructive: boolean; allowPaid: boolean } {
     this.assertActive(id)
     const record = this.load().find((item) => item.id === id)!
     return { allowWrites: record.allowWrites, allowPaid: record.allowWrites && record.allowPaid, allowDestructive: record.allowWrites && record.allowDestructive }
   }
   create(name: string, access: { allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean } = {}): McpConnectionInfo {
-    const records = this.load().filter((record) => record.expiresAt > this.now())
-    if (records.length >= 32) throw new Error('连接数量已达上限，请先撤销不再使用的连接。')
-    const record = recordSchema.parse({ id: randomUUID(), name: name.trim(), expiresAt: this.now() + 30 * 24 * 60 * 60 * 1000, token: randomBytes(32).toString('hex'), allowWrites: access.allowWrites ?? false, allowPaid: access.allowWrites === true && access.allowPaid === true, allowDestructive: access.allowWrites === true && access.allowDestructive === true })
+    const records = this.load()
+    const record = recordSchema.parse({ id: randomUUID(), name: name.trim(), expiresAt: this.now() + MCP_CONNECTION_LIFETIME_MS, token: randomBytes(32).toString('hex'), allowWrites: access.allowWrites ?? false, allowPaid: access.allowWrites === true && access.allowPaid === true, allowDestructive: access.allowWrites === true && access.allowDestructive === true })
     this.save([...records, record])
     return { id: record.id, name: record.name, expiresAt: record.expiresAt, allowWrites: record.allowWrites, allowDestructive: record.allowDestructive, allowPaid: record.allowPaid }
   }
   assertActive(id: string): void {
     if (!this.load().some((record) => record.id === id && record.expiresAt > this.now())) throw new Error('连接已撤销或过期，请在应用中重新授权。')
   }
-  authenticate(token: string): string | null {
-    if (!/^[a-f0-9]{64}$/.test(token)) return null
-    return this.load().find((record) => record.expiresAt > this.now() && timingSafeEqual(Buffer.from(token), Buffer.from(record.token)))?.id ?? null
+  authenticate(token: string): McpAuthentication {
+    if (!/^[a-f0-9]{64}$/.test(token)) return { status: 'unknown' }
+    const record = this.load().find((record) => timingSafeEqual(Buffer.from(token), Buffer.from(record.token)))
+    return record ? { status: record.expiresAt > this.now() ? 'valid' : 'expired', connectionId: record.id, expiresAt: record.expiresAt } : { status: 'unknown' }
+  }
+  renew(id: string): McpConnectionInfo {
+    const records = this.load()
+    if (!records.some(record => record.id === id)) throw new Error('连接已撤销或超过续期期限，请重新授权。')
+    this.save(records.map(record => record.id === id ? { ...record, expiresAt: this.now() + MCP_CONNECTION_LIFETIME_MS } : record))
+    return this.list().find(record => record.id === id)!
+  }
+  acknowledgeReminder(id: string, expiresAt: number, state: McpConnectionReminderState): boolean {
+    const records = this.load()
+    const record = records.find(item => item.id === id)
+    // 提醒显示期间发生续期或撤销时，旧提醒不能标记新授权。
+    if (!record || record.expiresAt !== expiresAt || mcpConnectionExpiryState(expiresAt, this.now()) !== state) return false
+    const states = record.reminders?.expiresAt === expiresAt ? record.reminders.states : []
+    if (states.includes(state)) return false
+    this.save(records.map(item => item.id === id ? { ...item, reminders: { expiresAt, states: [...states, state] } } : item))
+    return true
   }
   token(id: string): string {
     this.assertActive(id)

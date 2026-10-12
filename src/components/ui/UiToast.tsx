@@ -1,9 +1,10 @@
 import { Check, CircleAlert } from 'lucide-react';
 
-import { UiPanel } from './primitives';
+import { UiButton, UiPanel } from './primitives';
 import { UI_TEXT_BODY_CLASS } from './styleTokens';
 
-export type UiToastTone = 'success' | 'error';
+export type UiToastTone = 'success' | 'error' | 'warning';
+export interface UiToastAction { label: string; onClick: () => void }
 
 export interface UiToastProps {
   message: string;
@@ -18,6 +19,7 @@ export interface UiToastProps {
    * 定位：`window` 固定在窗口顶部、标题栏下方居中；`container` 相对最近的定位祖先顶部居中（画布内）。
    */
   placement?: 'window' | 'container';
+  action?: UiToastAction;
 }
 
 const PLACEMENT_CLASS: Record<NonNullable<UiToastProps['placement']>, string> = {
@@ -29,25 +31,26 @@ const PLACEMENT_CLASS: Record<NonNullable<UiToastProps['placement']>, string> = 
  * 通知提示（任务 5.7 收敛：全局通知、生成页通知、画布连线提示原为三套实现）。
  * 浮层表面 + 正文文字，状态只进图标颜色；不抢焦点、不拦截指针。状态与时长由调用方管理。
  */
-export function UiToast({ message, tone, visible = true, surface = 'solid', placement = 'window' }: UiToastProps): JSX.Element {
+export function UiToast({ message, tone, visible = true, surface = 'solid', placement = 'window', action }: UiToastProps): JSX.Element {
   const Icon = tone === 'success' ? Check : CircleAlert;
   return (
     <div
-      className={`pointer-events-none ${PLACEMENT_CLASS[placement]} left-1/2 z-toast -translate-x-1/2 transition-[opacity,transform] duration-240 ${
+      className={`${action && visible ? 'pointer-events-auto' : 'pointer-events-none'} ${PLACEMENT_CLASS[placement]} left-1/2 z-toast -translate-x-1/2 transition-[opacity,transform] duration-240 ${
         visible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
       }`}
     >
       <UiPanel
         variant={surface === 'glass' ? 'glass' : 'panel'}
-        role={tone === 'error' ? 'alert' : 'status'}
+        role={tone === 'success' ? 'status' : 'alert'}
         data-tone={tone}
         className="flex max-w-lg items-start gap-2.5 px-4 py-2.5"
       >
         <Icon
           aria-hidden="true"
-          className={`mt-0.5 h-4 w-4 shrink-0 ${tone === 'success' ? 'text-success-text' : 'text-danger-text'}`}
+          className={`mt-0.5 h-4 w-4 shrink-0 ${tone === 'success' ? 'text-success-text' : tone === 'warning' ? 'text-warning-text' : 'text-danger-text'}`}
         />
         <span className={`${UI_TEXT_BODY_CLASS} min-w-0 break-words`}>{message}</span>
+        {action && <UiButton size="sm" variant="quiet" className="shrink-0" disabled={!visible} onClick={action.onClick}>{action.label}</UiButton>}
       </UiPanel>
     </div>
   );

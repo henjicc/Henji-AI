@@ -44,7 +44,8 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
     },
   }
   host.register(registration, transportHost)
-  const server = new LocalMcpServer(connections, host)
+  const rejected = vi.fn()
+  const server = new LocalMcpServer(connections, host, undefined, undefined, undefined, rejected)
   await server.start(0)
   closers.push(() => server.stop())
   const url = () => `http://127.0.0.1:${server.listeningPort}/mcp`
@@ -55,7 +56,7 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
     await client.connect(transport)
     return { client, transport }
   }
-  return { server, connections, first, second, host, calls, cancellations, url, connect,
+  return { server, connections, first, second, host, calls, cancellations, url, connect, rejected,
     reconnect: () => host.register({ ...registration, rendererEpoch: randomUUID(), attachmentSequence: 2, ready: true }, transportHost),
     change: () => host.register(registration, transportHost), advance: () => { now += 31 * 86400_000 } }
 }
@@ -334,10 +335,23 @@ describe('本地 MCP 协议与边界', () => {
     const token = f.connections.token(f.first.id)
     f.connections.revoke(f.first.id)
     await f.server.revoke(f.first.id)
-    expect((await fetch(f.url(), { headers: { Authorization: `Bearer ${token}` } })).status).toBe(401)
+    const invalid = await fetch(f.url(), { headers: { Authorization: `Bearer ${token}` } })
+    expect(invalid.status).toBe(401)
+    expect(invalid.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"')
+    expect(await invalid.json()).toMatchObject({ error: 'invalid_token', message: expect.stringContaining('重新授权') })
+    expect(f.rejected).toHaveBeenLastCalledWith({ reason: 'invalid_token' })
     const tokenB = f.connections.token(f.second.id)
     f.advance()
-    expect((await fetch(f.url(), { headers: { Authorization: `Bearer ${tokenB}` } })).status).toBe(401)
+    const expired = await fetch(f.url(), { headers: { Authorization: `Bearer ${tokenB}` } })
+    expect(expired.status).toBe(401)
+    expect(expired.headers.get('www-authenticate')).toBe('Bearer error="invalid_token", error_description="connection expired"')
+    expect(await expired.json()).toMatchObject({ error: 'token_expired', message: expect.stringContaining('续期后令牌不变') })
+    expect(f.rejected).toHaveBeenLastCalledWith({ reason: 'token_expired', connectionId: f.second.id, expiresAt: f.second.expiresAt })
+    f.connections.renew(f.second.id)
+    expect(f.connections.token(f.second.id)).toBe(tokenB)
+    // 正式客户端沿同一传输配置继续调用；不重新创建授权或换令牌。
+    const b = await f.connect(f.second.id)
+    expect((await b.client.listTools()).tools.length).toBeGreaterThan(0)
   })
   it('未就绪仍可发现目录，只读等待超时返回就绪失败和重试时间', async () => {
     const f = await fixture({ ready: false })
