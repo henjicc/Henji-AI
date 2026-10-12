@@ -80,6 +80,14 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
     const entityType = result.objectType === 'camera'
       ? CAMERA_STAGE_ENTITY_TYPES.camera
       : CAMERA_STAGE_ENTITY_TYPES.object
+    const snapshot = await cameraStageApplicationService.readSnapshot(parsed.projectId)
+    const object = snapshot.objects.find(item => item.id === result.objectId)
+    if (!object || object.type !== parsed.objectType
+      || JSON.stringify(object.transform.position) !== JSON.stringify(result.position)
+      || (parsed.placement.rotation && JSON.stringify(object.transform.rotation) !== JSON.stringify(parsed.placement.rotation))
+      || (parsed.placement.scale && JSON.stringify(object.transform.scale) !== JSON.stringify(parsed.placement.scale))) {
+      throw new Error('布置后正式场景中的对象属性与结果不一致。')
+    }
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },

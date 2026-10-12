@@ -18,5 +18,6 @@ export function retryVideoEditSmartRegionFromCapability(raw: unknown, signal: Ab
   if (status?.state !== 'failed' && status?.state !== 'analyzing') throw new ApplicationPreflightFailure('这个智能区域已经完成，无需重试。')
   signal.throwIfAborted()
   if (status?.state === 'failed') retryVideoEditSmartRegion(request)
-  return { resultRef: input.effectRef, status: 'analyzing' as const, message: '已请求重试共享区域分析；读取 effect.region_status 核对完成或失败。' }
+  const current = videoEditSmartRegionStatus(owner.document, sequence.frameRate, clip, effect)
+  return { resultRef: input.effectRef, status: 'analyzing' as const, verified: current?.state === 'analyzing' || current?.state === 'ready', message: '已请求重试共享区域分析；读取 effect.region_status 核对完成或失败。' }
 }

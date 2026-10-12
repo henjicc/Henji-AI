@@ -326,6 +326,13 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
 
   async execute(input: JsonValue, _context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const result = await applyCameraStageMotion(motionInputSchema.parse(input))
+    const snapshot = await cameraStageApplicationService.readSnapshot(result.projectId)
+    const [start, end] = result.affectedStateKeyframeIds.map(id => snapshot.stateKeyframes.find(frame => frame.id === id))
+    if (!start || !end || !start.transition.perObject[result.cameraId]?.spatialPath
+      || JSON.stringify(start.objectStates[result.cameraId]?.transform.position) !== JSON.stringify(result.path.start)
+      || JSON.stringify(end.objectStates[result.cameraId]?.transform.position) !== JSON.stringify(result.path.end)) {
+      throw new Error('运镜后正式状态关键帧中的轨迹与结果不一致。')
+    }
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     return {

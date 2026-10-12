@@ -18,7 +18,8 @@ it('运镜能力委托上下文注入的事务引擎并保留并发基线与回�
     input: { projectId: 'document-1' }, expectedRevisions: { toolbox: 4 },
   }])
   expect(commit.mock.calls[0][0]).toMatchObject({ planRef: 'plan-1', expectedRevisions: { toolbox: 4 } })
-  expect(result).toMatchObject({ status: 'completed', baseRevision: 4 })
+  expect(result).toMatchObject({ status: 'completed', resultingRevisions: { toolbox: 4 } })
+  expect(result).not.toHaveProperty('baseRevision')
 })
 
 it.each([

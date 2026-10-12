@@ -266,12 +266,12 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
 export async function cancelCanvasGenerationTask(taskId: string): Promise<Record<string, unknown> | null> {
   const task = await getCanvasGenerationTask(taskId)
   if (!task) return null
-  if (task.resultAvailable || task.status === 'cancelled') return { taskId, status: task.status }
+  if (task.resultAvailable || task.status === 'cancelled') return { taskId, status: task.status, verification: { verified: true, condition: '已从正式任务源确认原任务结束。' } }
   const controllers = [activeTasks.get(taskId)?.controller, ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
   if (!controllers.length) throw new CanvasApplicationError('INVALID_INPUT', '原画布任务当前没有可停止的本地执行。', true, { execution: { notExecuted: true } })
   controllers.forEach(controller => controller.abort(new Error('本地任务已停止')))
   logger.info('已请求停止原画布任务', { event: 'canvas.generationTask.cancel_requested', requestId: taskId, taskId })
-  return { taskId, status: 'cancelling' }
+  return { taskId, status: 'cancelling', verification: { verified: controllers.every(controller => controller.signal.aborted), condition: '原任务的全部执行控制器已收到取消；终态请查询原任务。' } }
 }
 
 export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeInput, signal?: AbortSignal) {
@@ -282,7 +282,7 @@ export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeIn
   if (nodeRef.id !== `${input.documentId}:${input.sourceNodeId}`) {
     return reject('画布或来源节点与原任务不一致，请使用 get_generation_task 返回的 resumeInput。')
   }
-  if (task.resultAvailable) return { taskId: input.taskId, status: 'success', task }
+  if (task.resultAvailable) return { taskId: input.taskId, status: 'success', task, verification: { verified: true, condition: '已从正式任务源确认原结果可用。' } }
   const expected = task.resumeInput as CanvasGenerationResumeInput | null
   if (!expected) return reject('原任务没有可续查的供应商任务标识，不能通过恢复入口重新生成。')
   const selected = new Set(input.resultNodeIds)
@@ -299,5 +299,5 @@ export async function resumeCanvasGenerationTask(input: CanvasGenerationResumeIn
   const current = await getCanvasGenerationTask(input.taskId)
   if (!current) throw new Error('恢复期间原任务已不存在。')
   if (!started && !current.waitingExternal && !current.resultAvailable) return reject('原任务未能开始续查，请检查原结果节点。')
-  return { taskId: input.taskId, status: String(current.status), task: current }
+  return { taskId: input.taskId, status: String(current.status), task: current, verification: { verified: Boolean(current.waitingExternal || current.resultAvailable || started), condition: '已回读原任务并确认续查已启动或原结果已可用。' } }
 }

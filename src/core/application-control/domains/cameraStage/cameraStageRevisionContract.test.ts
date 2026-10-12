@@ -42,9 +42,9 @@ describe('三维写入的 revision 契约', () => {
     expect(withoutBaseRevision).toEqual([])
   })
 
-  it('每个写能力都回带 baseRevision，形状与读能力一致', () => {
+  it('全部场景写能力仅使用统一修订信封，不回带 baseRevision', () => {
     const missing = cameraStageSceneWrites
-      .filter((capability) => !schemaKeys(capability.outputSchema).includes('baseRevision'))
+      .filter((capability) => schemaKeys(capability.outputSchema).includes('baseRevision'))
       .map((capability) => capability.id)
     expect(missing).toEqual([])
   })

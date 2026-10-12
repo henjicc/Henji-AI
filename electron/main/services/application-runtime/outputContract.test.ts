@@ -118,9 +118,9 @@ const successData: Record<string, Record<string, unknown>> = {
   repair_image_edit_region: { ref: layerRef, documentRef: imageDocumentRef, commandId: 'command', verification: { verified: true }, ...revisions },
   resample_image_edit_image: { ref: imageDocumentRef, width: 1280, height: 720, commandId: 'command', createdLayers: [], removedLayers: [], verification: { verified: true }, ...revisions },
   use_image_edit_clipboard: { ref: layerRef, verified: true, ...revisions },
-  generate_image_edit_outpaint: { documentRef: imageDocumentRef, taskRef: ref('generation.task', 'task'), status: 'submitted', message },
+  generate_image_edit_outpaint: { documentRef: imageDocumentRef, taskRef: ref('generation.task', 'task'), status: 'submitted', verified: true, message },
   get_image_edit_outpaint: { documentRef: imageDocumentRef, taskRef: ref('generation.task', 'task'), status: 'placed', progress: 100, layerRef, message },
-  recover_image_edit_outpaint: { documentRef: imageDocumentRef, taskRef: ref('generation.task', 'task'), status: 'placed', progress: 100, layerRef, message },
+  recover_image_edit_outpaint: { documentRef: imageDocumentRef, taskRef: ref('generation.task', 'task'), status: 'placed', progress: 100, layerRef, message, verification: { verified: true, condition: message } },
   apply_video_edit_scenes: { resultRef: documentRef, changedRefs: [clipRef], cutFrames: [60], ...verified },
   detect_video_edit_scenes: { resultRef: documentRef, analysisId: 'analysis', cutsSeconds: [1], cutFrames: [60], message },
   auto_reframe_video_edit: { resultRef: sequenceRef, documentRef, clipRefs: [clipRef], created: true, faceFrames: 5, missingFrames: 0, exportJobIds: [], ...verified },
@@ -137,15 +137,15 @@ const successData: Record<string, Record<string, unknown>> = {
   get_video_edit_in_place_generation: { documentRef, taskRef: ref('generation.task', 'task'), status: 'placed', progress: 100, clipRef, takeIndex: 0, message },
   discard_video_edit_in_place_generation: { documentRef, taskRef: ref('generation.task', 'task'), status: 'removed', ...verified },
   recover_video_edit_in_place_generation: { documentRef, taskRef: ref('generation.task', 'task'), status: 'placed', ...verified },
-  retry_video_edit_smart_region: { resultRef: ref('video_edit.effect'), status: 'analyzing', message },
+  retry_video_edit_smart_region: { resultRef: ref('video_edit.effect'), status: 'analyzing', message, verified: true },
   export_image_edit_target_to_canvas: { canvasRef, sourceNodeRef: nodeRef, targetRef: layerRef, nodeRef, edgeRef: ref('canvas.edge', 'canvas:edge'), undoRef: 'undo', width: 1280, height: 720, mediaType: 'image/png', verification: verification(canvasRef), ...revisions },
   cancel_local_model_download: { resultRef: ref('local_model.item', 'model'), cancelled: true, status: 'not_downloaded', message, verification: verification(ref('local_model.item', 'model')) },
-  delete_camera_stage_object: { documentId: 'camera', objectId: 'object', status: 'deleted', baseRevision: 1, ...revisions },
-  duplicate_camera_stage_object: { documentId: 'camera', objectId: 'copy', duplicatedFromObjectId: 'object', undoRef: 'undo', baseRevision: 1, ...revisions },
-  observe_camera_stage_scene: { scene: { objects: [{ id: 'object' }] }, baseRevision: 1, ...revisions },
-  verify_camera_stage_scene: { verified: true, checkedAt: new Date(0).toISOString(), evidence: [], unmetConditions: [], baseRevision: 1, ...revisions },
-  organize_camera_stage_motion: { resultRef: ref('camera_stage.document', 'camera'), reviewId: 'review', candidates: [{ id: 'candidate', label: '移动' }], unavailable: [], baseRevision: 1, ...revisions },
-  apply_camera_stage_motion_candidate: { resultRef: ref('camera_stage.document', 'camera'), saved: true, undoToken: 'undo', stateKeyframeRefs: [ref('camera_stage.state_keyframe', 'camera:key')], baseRevision: 1, ...revisions },
+  delete_camera_stage_object: { documentId: 'camera', objectId: 'object', status: 'deleted', ...revisions },
+  duplicate_camera_stage_object: { documentId: 'camera', objectId: 'copy', duplicatedFromObjectId: 'object', undoRef: 'undo', ...revisions },
+  observe_camera_stage_scene: { scene: { objects: [{ id: 'object' }] }, ...revisions },
+  verify_camera_stage_scene: { verified: true, checkedAt: new Date(0).toISOString(), evidence: [], unmetConditions: [], ...revisions },
+  organize_camera_stage_motion: { resultRef: ref('camera_stage.document', 'camera'), reviewId: 'review', candidates: [{ id: 'candidate', label: '移动' }], unavailable: [], ...revisions },
+  apply_camera_stage_motion_candidate: { resultRef: ref('camera_stage.document', 'camera'), saved: true, undoToken: 'undo', stateKeyframeRefs: [ref('camera_stage.state_keyframe', 'camera:key')], verification: { verified: true, condition: message }, ...revisions },
   render_camera_stage_output: { taskRef: ref('camera_stage.render_task', 'task'), status: 'submitted', resultRefs: [ref('camera_stage.render_task', 'task')], ...revisions },
   cancel_camera_stage_render_task: { taskRef: ref('camera_stage.render_task', 'task'), status: 'cancelled', resultRefs: [nodeRef], ...revisions },
   prepare_canvas_node_generation: { preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'image', options: {} }, submitInput: { documentId: 'canvas', nodeId: 'node' }, ...revisions },
@@ -158,9 +158,9 @@ successData.wait_camera_stage_render_task = { ...taskObservation, waitReason: 't
 successData.recover_camera_stage_render_task = { ...taskObservation, recoveryAttempted: true }
 const transaction = { status: 'completed', transactionRef: 'transaction', undoRef: 'undo', verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: new Date(0).toISOString() }, resultingRevisions: { 'video_edit:document': 29 }, resultRefs: [documentRef], effects: [], evidence: [], ...revisions }
 for (const name of ['change_application_entities', 'undo_application_changes']) successData[name] = transaction
-for (const name of ['apply_camera_stage_camera_move', 'place_camera_stage_object']) successData[name] = { ...transaction, baseRevision: 1 }
+for (const name of ['apply_camera_stage_camera_move', 'place_camera_stage_object']) successData[name] = { ...transaction }
 const generationPlan = { action: 'generate_shot', sequenceRef, startSeconds: 1, durationSeconds: 5, trackRef: null, placement: 'add', references: [] }
-successData.generate_video_edit_in_place = { documentRef, taskRef: ref('generation.task', 'task'), plan: generationPlan, status: 'submitted', message }
+successData.generate_video_edit_in_place = { documentRef, taskRef: ref('generation.task', 'task'), plan: generationPlan, status: 'submitted', verified: true, message }
 successData.prepare_video_edit_in_place_generation = { documentRef, plan: generationPlan, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'video', options: {} }, message }
 for (const name of ['export_video_edit', 'query_video_edit_export', 'cancel_video_edit_export']) {
   successData[name] = { resultRef: documentRef, message, verification: verification(), queue: [], task: { id: 'export', state: 'completed', progress: 1, revision: 29, startFrame: 0, endFrame: 60 } }

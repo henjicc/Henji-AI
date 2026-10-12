@@ -6,6 +6,7 @@ const commands = vi.hoisted(() => ({
   addAssetToLibrary: vi.fn(),
   deleteAsset: vi.fn(),
   inspectAsset: vi.fn(),
+  inspectAssets: vi.fn(),
   listAssetLibraries: vi.fn(),
   listAssetTags: vi.fn(),
   queryAssets: vi.fn(),
@@ -45,6 +46,13 @@ const asset = {
 }
 
 describe('asset application service', () => {
+  it('删除素材后回读索引，残留目标不得判为 verified', async () => {
+    for (const remaining of [[], [asset]]) {
+      commands.inspectAssets.mockResolvedValueOnce(remaining)
+      expect(await assetApplicationService.delete(asset.id)).toMatchObject({ verification: { verified: remaining.length === 0 } })
+      expect(commands.inspectAssets).toHaveBeenLastCalledWith([asset.id])
+    }
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     commands.inspectAsset.mockResolvedValue(asset)

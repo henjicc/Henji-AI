@@ -11,8 +11,6 @@ export const cameraStageVec3Schema = z.object({
   z: z.number(),
 }).strict()
 
-export const cameraStageBaseRevisionSchema = z.number().int().nonnegative()
-
 /**
  * 镜头参考文档 ID（3.2）：取自 list_documents（kind=camera_stage）或 camera_stage.document 实体的 id。
  * 4.3 起字段统一叫 documentId，指一份镜头参考文档，不是 documents 里装文档的“项目”。
@@ -65,17 +63,12 @@ export const cameraStageMoveSchema = z.discriminatedUnion('kind', [
 ])
 
 /** 并发基线由可信宿主提供，调用者通过正式实体读取刷新。 */
-export const CONFLICT_RECOVERY = 'CONFLICT 时调用 read_application_entity，ref 使用原 camera_stage.document 引用、propertyIds=[]，取得 baselineId；删除对象还需读取该对象。用新 baselineIds 提交，禁止猜测 revision。'
+export const CONFLICT_RECOVERY = 'CONFLICT 时调用 read_application_entity 取得 baselineId；删除时读取被删除的 camera_stage.object 或 camera_stage.camera，文档 baseline 可选；其他操作读取 camera_stage.document。用新 baselineIds 提交，禁止猜测 revision。'
 
 
 export const cameraStageTransactionResultShape = {
   status: z.literal('completed'),
   transactionRef: z.string().min(1),
-  /**
-   * 写入后的并发基线，直接用于下一次写入，不必再读一遍镜头参考。
-   * 与不走事务的三维能力（复制、删除对象）返回同名同形状的字段。
-   */
-  baseRevision: cameraStageBaseRevisionSchema,
   resultingRevisions: z.record(z.string(), z.number().int().nonnegative()),
   resultRefs: z.array(z.object({
     kind: z.string(),

@@ -83,7 +83,7 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
     const references = selectedVideoEditInPlaceReferences(started.job.plan, started.job.request, started.job.modelId,
       { ...videoEditInPlaceDefaultParams(started.job.modelId, started.job.plan), ...started.job.request.params })
       .map(reference => videoEditInPlaceReferenceLabel(reference, started.job.plan.fps))
-    return { documentRef: input.documentRef, taskRef: { kind: 'generation.task', id: started.taskId }, plan: planSummary(input.documentRef.id, started.job.plan, references), status: 'submitted',
+    return { documentRef: input.documentRef, taskRef: { kind: 'generation.task', id: started.taskId }, plan: planSummary(input.documentRef.id, started.job.plan, references), status: 'submitted', verified: findVideoEditInPlaceJobByTask(started.taskId)?.projectId === input.documentRef.id,
       message: `已提交${videoEditInPlaceActionLabel(started.job.plan.action)}，时间线上已放占位。用 wait_generation_task 等待，再用 get_video_edit_in_place_generation 确认落位。` }
   }
   if (id === getVideoEditInPlaceGenerationCapability.id) {
@@ -106,16 +106,17 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
     context.signal.throwIfAborted()
     const current = findVideoEditInPlaceJobByTask(input.taskRef.id)
     if (id === recoverVideoEditInPlaceGenerationCapability.id) {
-      if (current?.projectId === input.documentRef.id && current.status === 'placing') return { ...input, status: 'placing', message: '原任务正在恢复，请查询落位结果。' }
+      if (current?.projectId === input.documentRef.id && current.status === 'placing') return { ...input, status: 'placing', verified: true, message: '原任务正在恢复，请查询落位结果。' }
       if ((!current || current.status === 'placed') && findVideoEditPlacedGeneration(input.documentRef.id, input.taskRef.id)) {
         await saveVideoEdit(input.documentRef.id)
-        return { ...input, status: 'placed', message: '原结果已保留在片段或镜头版本中，保存已确认，未重新生成。' }
+        return { ...input, status: 'placed', verified: Boolean(findVideoEditPlacedGeneration(input.documentRef.id, input.taskRef.id)), message: '原结果已保留在片段或镜头版本中，保存已确认，未重新生成。' }
       }
     }
     const job = requireVideoEditFailedGeneration(input.documentRef.id, input.taskRef.id)
     if (id === recoverVideoEditInPlaceGenerationCapability.id) {
       const resumed = await retryVideoEditInPlaceJob(job.id, { recoveryOnly: true })
-      return { ...input, status: resumed.job.status, message: '已恢复原任务结果，未发起新的付费生成。请查询最终落位状态。' }
+      const observed = findVideoEditInPlaceJobByTask(input.taskRef.id)
+      return { ...input, status: resumed.job.status, verified: observed?.projectId === input.documentRef.id && ['placing', 'placed', 'generating'].includes(observed.status), message: '已恢复原任务结果，未发起新的付费生成。请查询最终落位状态。' }
     }
     dismissVideoEditInPlaceJob(job.id)
     try { await saveVideoEdit(input.documentRef.id) } catch (error) {

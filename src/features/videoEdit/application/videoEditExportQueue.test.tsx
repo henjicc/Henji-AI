@@ -602,7 +602,9 @@ it('completed exports survive a fresh document instance and either ID resolves; 
     const live = vi.spyOn(videoEditExportQueue, 'list').mockReturnValueOnce([{ ...job, owner: reopened, state: 'running' }])
     expect(await app.requireResult('query_video_edit_export', { documentRef, activeOnly: true })).toMatchObject({ queue: [{ id: job.id, state: 'running' }], total: 1 })
     live.mockRestore()
-    expect((await app.call('query_video_edit_export', { documentRef, activeOnly: true, cursor: first.nextCursor })).ok).toBe(false)
+    const invalidCursor = await app.call('query_video_edit_export', { documentRef, activeOnly: true, cursor: first.nextCursor })
+    expect(invalidCursor).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', recoverable: true, message: expect.stringContaining('cursor') } })
+    if (!invalidCursor.ok) expect(invalidCursor.error.message).not.toMatch(/^[A-Z_]+:/)
     const missing = await app.call('query_video_edit_export', { documentRef, taskId: 'missing' })
     expect(missing).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', recoverable: true } })
   } finally { app.dispose() }

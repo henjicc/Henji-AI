@@ -15,7 +15,7 @@ import { registerDocumentCoverProvider } from '@/features/documents/documentCove
 import { findGeneratedCoverSources } from './canvasProjectCover'
 import type { CanvasNode } from '@/stores/canvasStore'
 import { clearCanvasProject, connectAssetGroupToTarget, deleteCanvasNodes, disconnectAssetGroupFromTarget, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, ungroupCanvasNode, updateCanvasNode } from '@/features/canvas/application/canvasMutationService'
-import { getCanvasNode, getCanvasProject } from '@/features/canvas/application/canvasQueryService'
+import { getCanvasNode, getCanvasProject, verifyCanvasWrite } from '@/features/canvas/application/canvasQueryService'
 import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
 import { addGenerationResultToCanvas } from '@/features/canvas/application/generationResultCanvasApplicationService'
 import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloadService'
@@ -62,7 +62,7 @@ export function registerCanvasCapabilityHandlers(
       'retry_canvas_document_save', input,
     )
     await confirmCanvasPersistence(documentRef.id)
-    return { ref: documentRef, status: 'persisted' }
+    return { ref: documentRef, status: 'persisted', verification: await verifyCanvasWrite(documentRef.id) }
   })
   // 画布文档的通用打开与后台释放（3.4）：列出、新建、改名、移动、副本、回收站走通用文档能力，
   // 这里只登记“打开到哪里”（画布工作区）和“后台持有的实例怎么释放”。

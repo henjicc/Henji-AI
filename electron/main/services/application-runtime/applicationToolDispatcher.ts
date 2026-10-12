@@ -40,7 +40,7 @@ export class ApplicationToolDispatcher {
       if (signal.aborted) return applicationFailure('ABORTED:媒体读取已取消。')
       return { ok: true, data: metadataOnly ? { ref: input.ref, mimeType: media.mimeType, totalBytes: media.totalBytes } : media }
     } catch (error) {
-      const message = invalidInputMessage(error) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
+      const message = invalidInputMessage(error, readMediaInputSchema) ?? (error instanceof ApplicationMediaResourceError ? `${error.code}:${error.message}` : '媒体读取失败，请稍后重试。')
       return applicationFailure(message)
     }
   }
@@ -76,7 +76,7 @@ export class ApplicationToolDispatcher {
           const result = { ok: true, data }
           return result
         } catch (error) {
-          return applicationFailure(invalidInputMessage(error) ?? (error instanceof Error ? error.message : '契约发现失败，请稍后重试。'))
+          return applicationFailure(invalidInputMessage(error, describeContractInputSchema) ?? (error instanceof Error ? error.message : '契约发现失败，请稍后重试。'))
         }
       }
       if (name === 'read_application_media') {
@@ -87,15 +87,16 @@ export class ApplicationToolDispatcher {
         let result: ApplicationResult
         try { result = await loadAgentSkill(args ?? {}, signal, 'external') } catch (error) {
           if (signal.aborted) return applicationFailure('ABORTED:技能读取已取消。')
-          result = applicationFailure(invalidInputMessage(error) ?? (isAssistantSkillError(error) ? `${error.code}:${error.message}` : '技能读取失败，请稍后重试。'))
+          result = applicationFailure(invalidInputMessage(error, BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema) ?? (isAssistantSkillError(error) ? `${error.code}:${error.message}` : '技能读取失败，请稍后重试。'))
         }
         // 读取期间连接被撤销时不交付内容。
         this.connections.assertActive(callerId)
         return result
       }
       if ((name === 'get_application_operation' || name === 'review_application_operation') && this.operations) {
-        const parsed = (name === 'get_application_operation' ? operationReadInputSchema : z.object({ operationId: z.string().uuid() }).strict()).safeParse(args)
-        if (!parsed.success) return applicationFailure(invalidInputMessage(parsed.error)!)
+        const schema = name === 'get_application_operation' ? operationReadInputSchema : z.object({ operationId: z.string().uuid() }).strict()
+        const parsed = schema.safeParse(args)
+        if (!parsed.success) return applicationFailure(invalidInputMessage(parsed.error, schema)!)
         const operation = this.operations.store.get(parsed.data.operationId, callerId)
         if (operation) {
           try { await this.reconcileVerification(callerId, operation, signal) } catch { /* 核实不可用时保留原事实与屏障。 */ }
@@ -191,7 +192,7 @@ export class ApplicationToolDispatcher {
           this.connections.assertActive(callerId)
           const result = this.operations.result(this.operations.store.get(operation.operationId, callerId)!)
           return { ...result, ok: result.ok === true }
-        } catch (error) { return applicationFailure(invalidInputMessage(error) ?? (error instanceof Error ? error.message : '写入未完成。')) }
+        } catch (error) { return applicationFailure(invalidInputMessage(error, BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema) ?? (error instanceof Error ? error.message : '写入未完成。')) }
       }
       const id = APPLICATION_READ_CAPABILITY_IDS.find((value) => value === name)
       if (!id) return applicationFailure('此连接只允许读取。请用 tools/list 查看可用工具。')
@@ -204,7 +205,7 @@ export class ApplicationToolDispatcher {
         return { ...result, ok: result.ok === true }
       } catch (error) {
         if (error instanceof ApplicationHostNotReadyError) return { ok: false, error: { code: 'APPLICATION_NOT_READY', message: error.message, recoverable: true, details: { retryAfterMs: error.retryAfterMs, execution: { notExecuted: true } } } }
-        return applicationFailure(error instanceof Error ? error.message : '应用读取失败，请稍后重试。')
+        return applicationFailure(invalidInputMessage(error, BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)?.inputSchema) ?? (error instanceof Error ? error.message : '应用读取失败，请稍后重试。'))
       }
   }
   async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {

@@ -1,5 +1,6 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance, leaseCanvasProject } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { verifyCanvasWrite } from './canvasQueryService'
 import { createLogger } from '@/core/logging'
 
 import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
@@ -340,7 +341,7 @@ export async function duplicateCanvasNode(input: {
     }, options)
     const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'duplicate_node')
     await confirmCanvasPersistence(input.projectId, options)
-    return { ...result, ...(undoRef ? { undoRef } : {}), duplicatedFromNodeId: node.id }
+    return { ...result, ...(undoRef ? { undoRef } : {}), duplicatedFromNodeId: node.id, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(input.projectId) } : {}) }
   } finally { release() }
 }
 
@@ -488,7 +489,7 @@ export async function clearCanvasProject(projectId: string, options: CanvasCommi
       context: { nodeCount: documentNodes.length },
     })
   })
-  return { projectId, clearedNodeCount, clearedEdgeCount, undoRef }
+  return { projectId, clearedNodeCount, clearedEdgeCount, undoRef, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(projectId) } : {}) }
 }
 
 export function selectCanvasNode(projectId: string, nodeId: string | null): Record<string, unknown> {
@@ -509,13 +510,13 @@ export async function groupCanvasNodes(
   if (groupKind === 'asset') {
     const result = await createAssetGroup({ projectId, memberIds: nodeIds }, options)
     const undoRef = rememberCanvasUndo(projectId, 'group_asset_nodes')
-    return { projectId, groupNodeId: result.groupId, groupKind, accepted: result.accepted, undoRef }
+    return { projectId, groupNodeId: result.groupId, groupKind, accepted: result.accepted, undoRef, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(projectId) } : {}) }
   }
   const groupNodeId = requireCanvasProjectInstance(projectId).store.getState().groupNodes(nodeIds)
   if (!groupNodeId) throw new CanvasApplicationError('INVALID_INPUT', '至少需要两个存在且不相互嵌套的节点才能分组', true)
   const undoRef = rememberCanvasUndo(projectId, 'group_nodes')
   await confirmCanvasPersistence(projectId, options)
-  return { projectId, groupNodeId, groupKind, undoRef }
+  return { projectId, groupNodeId, groupKind, undoRef, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(projectId) } : {}) }
 }
 
 /**
@@ -532,14 +533,14 @@ export async function ungroupCanvasNode(projectId: string, groupNodeId: string, 
   if (candidate && isAssetGroupNode(candidate)) {
     await dissolveAssetGroup({ projectId, groupId: groupNodeId }, options)
     const undoRef = rememberCanvasUndo(projectId, 'ungroup_asset_node')
-    return { projectId, groupNodeId, undoRef }
+    return { projectId, groupNodeId, undoRef, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(projectId) } : {}) }
   }
   if (!requireCanvasProjectInstance(projectId).store.getState().ungroupNode(groupNodeId)) {
     throw new CanvasApplicationError('NOT_FOUND', '目标不是可解散的分组节点，或分组内没有子节点', true, { groupNodeId })
   }
   const undoRef = rememberCanvasUndo(projectId, 'ungroup_node')
   await confirmCanvasPersistence(projectId, options)
-  return { projectId, groupNodeId, undoRef }
+  return { projectId, groupNodeId, undoRef, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(projectId) } : {}) }
 }
 
 export async function connectAssetGroupToTarget(
@@ -552,7 +553,7 @@ export async function connectAssetGroupToTarget(
   assertCanvasCommitContext(projectId, options)
   const status = await bindAssetGroup({ projectId, groupId: groupNodeId, targetNodeId }, options)
   const undoRef = rememberCanvasUndo(projectId, 'connect_asset_group')
-  return { projectId, groupNodeId, targetNodeId, ...status, undoRef }
+  return { projectId, groupNodeId, targetNodeId, ...status, undoRef, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(projectId) } : {}) }
 }
 
 export async function disconnectAssetGroupFromTarget(
@@ -565,7 +566,7 @@ export async function disconnectAssetGroupFromTarget(
   assertCanvasCommitContext(projectId, options)
   await disconnectAssetGroup({ projectId, groupId: groupNodeId, targetNodeId }, options)
   const undoRef = rememberCanvasUndo(projectId, 'disconnect_asset_group')
-  return { projectId, groupNodeId, targetNodeId, undoRef }
+  return { projectId, groupNodeId, targetNodeId, undoRef, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(projectId) } : {}) }
 }
 
 export async function disconnectCanvasEdge(projectId: string, edgeId: string, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {

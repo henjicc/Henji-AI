@@ -212,7 +212,7 @@ export function readCameraStageMotionPreview(projectId: string, review: CameraMo
 
 
 /** Commit one native state-keyframe change; a failed save retains the change and retries only the original save. */
-export const applyCameraStageMotionCandidate = bindCameraStageProjectOperation(async (projectId: string, review: CameraMotionReview, candidateId: string): Promise<{ undoToken: string; saved: boolean }> => {
+export const applyCameraStageMotionCandidate = bindCameraStageProjectOperation(async (projectId: string, review: CameraMotionReview, candidateId: string) => {
   logger.info('三维机位候选应用开始', { event: 'camera_stage.motion.candidate.apply.start', projectId, candidateId })
   const record = reviews.get(review)
   try {
@@ -233,14 +233,18 @@ export const applyCameraStageMotionCandidate = bindCameraStageProjectOperation(a
       store.setState({ stateKeyframes: native.stateKeyframes, animation: native.animation, objects: applyAnimationAtTime(state.objects, native.animation, state.playback.currentTime) })
       record.applied = { candidateId, undoToken, sourceKey: cameraMotionSourceKey(store.getState()) }
     }
+    const candidate = record.result.candidates.find(item => item.id === candidateId)!
+    const current = store.getState()
+    const verification = { verified: JSON.stringify(current.stateKeyframes) === JSON.stringify(candidate.native.stateKeyframes)
+      && JSON.stringify(current.animation) === JSON.stringify(candidate.native.animation), condition: '从正式场景回读确认候选状态关键帧及编译动画一致。' }
     try {
       await saveCameraStageProjectRuntime(projectId)
     } catch (error) {
       logger.error('三维机位候选已应用但保存失败', error, { event: 'camera_stage.motion.candidate.save.failed', projectId, candidateId })
-      return { undoToken: record.applied.undoToken, saved: false }
+      return { undoToken: record.applied.undoToken, saved: false, verification }
     }
     logger.info('三维机位候选应用完成', { event: 'camera_stage.motion.candidate.apply.completed', projectId, candidateId })
-    return { undoToken: record.applied.undoToken, saved: true }
+    return { undoToken: record.applied.undoToken, saved: true, verification }
   } catch (error) {
     logger.error('三维机位候选应用失败', error, { event: 'camera_stage.motion.candidate.apply.failed', projectId, candidateId })
     throw error

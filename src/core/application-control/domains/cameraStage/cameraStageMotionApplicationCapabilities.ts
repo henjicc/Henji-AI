@@ -5,7 +5,6 @@ import type { ApplicationCapabilityDefinition } from '../../applicationCapabilit
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityOutputSchema, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import {
-  cameraStageBaseRevisionSchema,
   cameraStageDocumentIdSchema,
   cameraStageControl,
   cameraStageMoveSchema,
@@ -92,7 +91,6 @@ const verifyScene = defineApplicationCapability({
   }).strict(),
   outputSchema: capabilityOutputSchema({
     verified: z.boolean(), evidence: z.array(z.record(z.string(), z.unknown())), unmetConditions: z.array(z.string()), checkedAt: z.string(),
-    baseRevision: cameraStageBaseRevisionSchema,
   }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.documentId}:verify`, resolveTargetIds: (input) => cameraStageTarget(input.documentId),
   control: cameraStageControl('observe', [

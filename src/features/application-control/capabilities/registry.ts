@@ -8,6 +8,8 @@ import type { ApplicationCapabilityFailure, ApplicationCapabilityResult, HostErr
 import { createLogger } from '@/core/logging'
 
 import { ZodError } from 'zod'
+import { describeInputIssues } from '@/core/application-control/inputValidation'
+import { hostErrorCodeSchema } from '@/core/application-control/hostContracts'
 import { ApplicationWriteFailure, applicationWriteChannel, assertApplicationWriteChannel } from '@/core/application-control/execution/writeExecution'
 import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { capabilityVerificationEnvelope } from '@/core/application-control/capabilityVerification'
@@ -204,6 +206,16 @@ const CALLER_CORRECTABLE_ERROR_CODES = new Set<HostErrorCode>([
 ])
 
 function toFailure(error: unknown): ApplicationCapabilityFailure {
+  const failure = projectFailure(error)
+  const match = /^([A-Z][A-Z_]*)(?::|：)\s*/.exec(failure.error.message)
+  const code = hostErrorCodeSchema.safeParse(match?.[1])
+  if (match) return { ok: false, error: { ...failure.error, ...(code.success ? { code: code.data } : {}),
+    message: failure.error.message.replace(/^(?:[A-Z][A-Z_]*(?::|：)\s*)+/, ''),
+    recoverable: code.success && CALLER_CORRECTABLE_ERROR_CODES.has(code.data) || failure.error.recoverable } }
+  return failure
+}
+
+function projectFailure(error: unknown): ApplicationCapabilityFailure {
   if (error instanceof CapabilityOutputFailure) return { ok: false, error: {
     code: 'CAPABILITY_REJECTED', message: error.message, recoverable: false,
     details: { outputContract: true, execution: { notExecuted: error.readOnly, targetMutation: error.readOnly ? 'none' : 'applied' }, replayMutation: false },
@@ -227,6 +239,7 @@ function toFailure(error: unknown): ApplicationCapabilityFailure {
   }
   if (error instanceof ApplicationPreflightFailure) {
     if (error.cause instanceof ApplicationPreflightFailure) return toFailure(error.cause)
+    if (error.cause instanceof ZodError) return { ok: false, error: { ...toFailure(error.cause).error, details: { execution: { notExecuted: true } } } }
     if (error.cause instanceof Error && ['DocumentNotFoundError', 'ProjectNotFoundError', 'PersistenceError', 'DocumentFormatError', 'DocumentUnsupportedError', 'DocumentNotOpenableError'].includes(error.cause.name)) {
       const original = toFailure(error.cause)
       return { ok: false, error: { ...original.error,
@@ -273,7 +286,7 @@ function toFailure(error: unknown): ApplicationCapabilityFailure {
         // 只回"参数无效"等于让调用方猜。实测助手按 describe 的 requiredPropertyIds 逐字段
         // 填好了关键帧写入，仍被这一句挡下，它无从判断是 ref 格式、值类型还是多余字段错了，
         // 只能回头问用户——一次本可自纠的失败就此变成任务中断。
-        message: `应用能力参数无效：${describeSchemaIssues(error)}`,
+        message: describeInputIssues(error),
         recoverable: true,
       },
     }
@@ -327,7 +340,7 @@ export async function executeApplicationCapabilityResult(
     const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(invocation.id)
     if (definition) {
       const parsed = definition.inputSchema.safeParse(invocation.input)
-      if (!parsed.success) throw new ApplicationPreflightFailure(parsed.error)
+      if (!parsed.success) throw new ApplicationPreflightFailure(new Error(`INVALID_INPUT:${describeInputIssues(parsed.error, definition.inputSchema)}`))
     }
     const data = await registry.execute(invocation, context)
     const snapshot = createHostContextSnapshot()

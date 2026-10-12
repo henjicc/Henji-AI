@@ -2,6 +2,7 @@ import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProje
 import { v4 as uuidv4 } from 'uuid'
 
 import { useCanvasStore } from '@/stores/canvasStore'
+import { verifyCanvasWrite } from './canvasQueryService'
 import { useProjectStore } from '@/stores/projectStore'
 import { maintainMultiLayerDocumentReleaseCandidates } from './multiLayerDocumentLifecycleService'
 import { createLogger } from '@/core/logging'
@@ -374,7 +375,7 @@ export async function undoCanvasChange(projectId: string, undoRef: string): Prom
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   if (undoRef.startsWith('canvas-batch-undo:')) {
     const result = await undoCanvasBatch(projectId, undoRef)
-    if (result) return result
+    if (result) return { ...result, verification: await verifyCanvasWrite(projectId) }
   }
   requireCanvasProjectInstance(projectId)
   const record = undoRecords.get(undoRef)
@@ -390,7 +391,7 @@ export async function undoCanvasChange(projectId: string, undoRef: string): Prom
   }, record)
   undoRecords.delete(undoRef)
   void maintainMultiLayerDocumentReleaseCandidates(projectId)
-  return { projectId, undoRef, operation: record.operation, status: 'undone' }
+  return { projectId, undoRef, operation: record.operation, status: 'undone', verification: await verifyCanvasWrite(projectId) }
 }
 
 /**
@@ -407,7 +408,7 @@ export async function redoCanvasChange(projectId: string): Promise<Record<string
   }
   await confirmCanvasPersistence(projectId)
   void maintainMultiLayerDocumentReleaseCandidates(projectId)
-  return { projectId, status: 'redone' }
+  return { projectId, status: 'redone', verification: await verifyCanvasWrite(projectId) }
 }
 
 

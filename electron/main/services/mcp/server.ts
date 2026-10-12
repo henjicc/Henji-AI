@@ -9,6 +9,8 @@ import type { McpConnections } from './connections'
 import type { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
+import { buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
+import { EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
 
 /** 无协议会话；授权、任务与持久操作均由应用运行时持有。 */
 export class LocalMcpServer {
@@ -53,8 +55,14 @@ export class LocalMcpServer {
       return server
     }, { legacy: 'reject', onerror: this.onError, maxSubscriptions: 16, bus: subscriptions })
     this.handler = handler
-    this.detach = this.host.onChange(() => {
-      handler.notify.toolsChanged()
+    const directorySignature = () => JSON.stringify({ version: EXTERNAL_CONTRACT_VERSION,
+      tools: buildApplicationToolCatalog({ tools: this.host.tools(), access: { allowWrites: true, allowDestructive: true, allowPaid: true }, operationsEnabled: Boolean(this.operations), includeSkillTool: true }).tools })
+    let signature = directorySignature()
+    this.detach = this.host.onChange(kind => {
+      if (kind === 'catalog') {
+        const current = directorySignature()
+        if (current !== signature) { signature = current; handler.notify.toolsChanged() }
+      }
       handler.notify.resourcesChanged()
     })
     this.authorizationTimer = setInterval(() => {
