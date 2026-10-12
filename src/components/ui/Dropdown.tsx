@@ -85,13 +85,16 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     ariaLabelledBy,
     portal = true,
     zIndex = Z_LAYERS.popover,
-    minWidthStrategy = 'display',
+    minWidthStrategy: minWidthStrategyOverride = 'display',
     panelWidthStrategy = 'options',
     appearance: appearanceOverride,
     onOpenChange,
   } = props
+  const formRowLabelling = useUiFormRowLabelling()
+  const fillControl = formRowLabelling?.fillControl === true
+  const minWidthStrategy = fillControl ? 'none' : minWidthStrategyOverride
   const fieldLayout = useUiFieldLayout()
-  const toolbarLayout = fieldLayout === 'toolbar'
+  const toolbarLayout = !fillControl && fieldLayout === 'toolbar'
   const appearance = appearanceOverride ?? (toolbarLayout ? 'text' : 'field')
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -143,7 +146,6 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const panelId = `dropdown-panel-${dropdownId}`
   const triggerId = `dropdown-trigger-${dropdownId}`
   // 放在 UiFormRow 里且没有自己的名称：读作“行标签 + 当前值”（任务 5.8，B-50）
-  const formRowLabelling = useUiFormRowLabelling()
   const rowLabelledBy = !ariaLabel && !label && !ariaLabelledBy && formRowLabelling ? `${formRowLabelling.labelId} ${triggerId}` : undefined
   const [fixedPos, setFixedPos] = useState<{
     top: number
@@ -414,7 +416,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const menuContent = <UiOverlayLayerProvider id={overlay.id}>{menuBody}</UiOverlayLayerProvider>
 
   return (
-    <div className={`relative ${toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} ref={ref}>
+    <div className={`relative ${fillControl ? 'block min-w-0' : toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} style={fillControl ? { width: '100%' } : undefined} ref={ref}>
       {label ? <label className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiFieldTrigger
         ref={triggerRef}
@@ -440,7 +442,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         id={triggerId}
         aria-label={ariaLabelledBy || rowLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
         aria-labelledby={ariaLabelledBy ?? rowLabelledBy}
-        className={`${disabled ? '' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
+        className={`${disabled ? '' : 'cursor-pointer'} ${fillControl ? 'w-full' : buttonClassName || 'w-full'}`}
         style={buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : undefined}
       >
         {resolvedDisplay}

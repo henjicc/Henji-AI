@@ -1,6 +1,7 @@
+import { UiSegmented } from '@/components/ui'
 import { useEffect, useMemo, useState } from 'react'
-import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiInput, UiLoading, UiModal, UiOptionButton } from '@/components/ui'
-import { UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
+import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiGroup, UiInput, UiLoading, UiModal } from '@/components/ui'
+import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import { PromptEditor } from '@/components/ui/PromptEditor'
@@ -138,14 +139,12 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
     <UiButton onClick={onClose}>取消</UiButton>
     <UiButton variant="primary" disabled={!plan || !modelId || Boolean(mismatch) || Boolean(selected.error) || !text || busy} onClick={() => { void submit() }}>{busy ? '正在提交…' : '生成'}</UiButton>
   </>}>
-    <div className="space-y-4" data-video-edit-in-place={intent.action}>
+    <UiGroup labelWidth={96} gap="stack" data-video-edit-in-place={intent.action}>
       {'error' in planned ? <UiError message={planned.error} /> : <>
         <p className={UI_TEXT_META_CLASS}>{describe(projectId, plan!)}</p>
         <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}提示词`} placeholder={PLACEHOLDERS[intent.action]} autoFocus editorClassName="min-h-24 max-h-60" />
         {intent.action === 'extend_shot' && <UiFormRow label="放置方式" info="插入会让后面的片段后移；覆盖会替换后面的画面。" inline>
-          <div className={UI_SEGMENTED_TRACK_CLASS} role="radiogroup" aria-label="放置方式">
-            {([['insert', '插入'], ['overwrite', '覆盖']] as const).map(([value, label]) => <UiOptionButton key={value} variant="segment" size="sm" active={mode === value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)}>{label}</UiOptionButton>)}
-          </div>
+          <UiSegmented ariaLabel="放置方式" size="sm" value={mode} onChange={setMode} options={[{ value: 'insert', label: '插入' }, { value: 'overwrite', label: '覆盖' }]} />
         </UiFormRow>}
         {plan?.mediaType === 'video' && <UiFormRow label="参考画面" hint={modelId && referenceLimit < wanted.length ? referenceLimit === 0 ? '所选模型不使用参考画面，将只按提示词生成。' : `所选模型只用前 ${referenceLimit} 张参考画面。` : undefined}>
           <div className="flex flex-col gap-1.5">
@@ -169,6 +168,6 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
         {mismatch && <UiError message={mismatch} />}
       </>}
       {error && <UiError message={error} />}
-    </div>
+    </UiGroup>
   </UiModal>
 }

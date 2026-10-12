@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 
 import { SCRUB_PIXELS_PER_STEP, SCRUB_START_THRESHOLD_PX, resolveScrubFactor } from './numberScrub'
 import { UiInput, UiNumberStepper } from './primitives'
+import { useUiFormRowLabelling } from './formRowLabel'
 import {
   UI_FIELD_FOCUS_WITHIN_CLASS,
   UI_FIELD_LABEL_CLASS,
@@ -102,14 +103,14 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     min,
     max,
     step = 1,
-    widthClassName = 'w-24',
+    widthClassName: widthClassNameOverride = 'w-24',
     className,
     precision,
     disabled = false,
     placeholder,
     size = 'md',
     align = 'left',
-    widthStrategy = 'fixed',
+    widthStrategy: widthStrategyOverride = 'fixed',
     increaseLabel = label ? `增加${label}` : '增加数值',
     decreaseLabel = label ? `减少${label}` : '减少数值',
     textHistory,
@@ -118,6 +119,9 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     onScrubStart,
     onScrubEnd,
   } = props
+  const fillControl = useUiFormRowLabelling()?.fillControl === true
+  const widthClassName = fillControl ? 'w-full' : widthClassNameOverride
+  const widthStrategy = fillControl ? 'fixed' : widthStrategyOverride
 
   const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : (min ?? 0)
   const effectivePrecision = precision ?? resolvePrecision(step)

@@ -2,6 +2,7 @@
 const { createImageEditDocumentSizeScene } = require('./uiInspectionSceneImageEditDocumentSize.cjs')
 const { createF2UiScenes } = require('./uiInspectionSceneF2Ui.cjs')
 const { createSuperKeyframePanelScenes } = require('./uiInspectionSceneSuperKeyframePanel.cjs')
+const { createSurfaceGrammarScenes } = require('./uiInspectionSceneSurfaceGrammar.cjs')
 const { createImageEditLayoutDraftScene } = require('./uiInspectionSceneImageEditLayoutDraft.cjs')
 const { createImageEditCommonWorkflowsScene } = require('./uiInspectionSceneImageEditCommonWorkflows.cjs')
 const { createImageEditCommonFeaturesScene, createImageEditQuickMosaicScene } = require('./uiInspectionSceneImageEditCommonFeatures.cjs')
@@ -89,6 +90,7 @@ const { createImageEditCompositeScene } = require('./uiInspectionSceneImageEditC
 const { createGpuAnnotationScenes } = require('./uiInspectionSceneCatalogGpuAnnotation.cjs')
 const { createSupportScenes } = require('./uiInspectionSceneCatalogSupport.cjs')
 const { createMcpScenes } = require('./uiInspectionSceneMcp.cjs')
+const { createMcpExpiryScene } = require('./uiInspectionSceneMcpExpiry.cjs')
 const { createEmbeddedAgentScenes } = require('./uiInspectionSceneEmbeddedAgent.cjs')
 const { createMcpDomainScenes } = require('./uiInspectionSceneMcpDomains.cjs')
 const { createMcpBackgroundDocumentScenes, createMcpResourceScenes } = require('./uiInspectionSceneMcpBackgroundDocument.cjs')
@@ -130,6 +132,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionSupport(context)
 
   return Object.freeze([
+    ...createSurfaceGrammarScenes(context),
     ...createSuperKeyframePanelScenes(context),
     createVideoEditProbeScene(),
     createVideoEditScrubScene(),
@@ -179,6 +182,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createNetworkScenes(),
     ...createEmbeddedAgentScenes(context),
     ...createMcpScenes(context),
+    createMcpExpiryScene(context),
     ...createMcpDomainScenes(context),
     ...createMcpBackgroundDocumentScenes(context),
     ...createMcpResourceScenes(context),

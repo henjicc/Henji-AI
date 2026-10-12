@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { act, cleanup, render, renderHook } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NotificationProvider, useNotification } from '@/contexts/NotificationContext';
@@ -32,6 +32,16 @@ describe('UiToast（通知提示唯一实现，任务 5.7）', () => {
     expect(wrapper.className).toContain('absolute');
     expect(wrapper.className).toContain('pointer-events-none');
     expect(wrapper.className).toContain('opacity-0');
+  });
+  it('到期提醒动作可用键盘或点击，淡出后不再可操作', () => {
+    const onClick = vi.fn();
+    const action = { label: '打开连接设置', onClick };
+    const { getByRole, rerender } = render(<UiToast message="连接即将到期" tone="warning" action={action} />);
+    fireEvent.click(getByRole('button', { name: action.label }));
+    expect(onClick).toHaveBeenCalledOnce();
+    rerender(<UiToast message="连接即将到期" tone="warning" action={action} visible={false} />);
+    fireEvent.click(getByRole('button', { name: action.label }));
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });
 

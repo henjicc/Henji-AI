@@ -1,9 +1,10 @@
+import { UiSegmented } from '@/components/ui'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
 import { BrainCircuit, ListTree } from 'lucide-react'
 import { queryLogEvents } from '@/commands/logging'
 import { createLogger } from '@/core/logging'
-import { UiOptionButton, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+
 import { selectEventsByRequestId, useLogWindowStore } from './logStore'
 import { useLogHistoryQuery } from './useLogHistoryQuery'
 import { matchesKeyword, type DisplayLogEvent } from './eventDisplay'
@@ -134,14 +135,7 @@ export function LogsPanel(): JSX.Element {
 
   // 视图切换注入到各自命令带的最左端：窗口标题栏下只有一条命令带 + 一条过滤从属带（任务 5.7）
   const surfaceSwitch = (
-    <div className={UI_SEGMENTED_TRACK_CLASS}>
-      <UiOptionButton type="button" variant="segment" active={surface === 'events'} aria-pressed={surface === 'events'} onClick={() => setSurface('events')}>
-        <ListTree className="mr-1.5 h-3.5 w-3.5" />事件日志
-      </UiOptionButton>
-      <UiOptionButton type="button" variant="segment" active={surface === 'assistant'} aria-pressed={surface === 'assistant'} onClick={() => setSurface('assistant')}>
-        <BrainCircuit className="mr-1.5 h-3.5 w-3.5" />助手追踪
-      </UiOptionButton>
-    </div>
+    <UiSegmented ariaLabel="日志视图" value={surface} onChange={setSurface} options={[{ value: 'events', label: '事件日志', icon: <ListTree className="mr-1.5 h-3.5 w-3.5" /> }, { value: 'assistant', label: '助手追踪', icon: <BrainCircuit className="mr-1.5 h-3.5 w-3.5" /> }]} />
   )
 
   return (

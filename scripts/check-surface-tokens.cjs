@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires, no-console -- Node CLI 门禁使用 CommonJS，并向 CI 输出诊断。 */
 /**
  * 表面层级检查：找出业务组件里手写的"卡片表面"，防止卡片套卡片。
  *
@@ -25,6 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 const { findButtonAppearanceOverrides } = require('./lib/buttonAppearanceOverrides.cjs');
+const { findUiSurfaceGrammar } = require('./lib/uiSurfaceGrammar.cjs');
 
 const projectRoot = process.cwd();
 const srcRoot = path.join(projectRoot, 'src');
@@ -326,6 +328,16 @@ const buttonOverrides = findButtonAppearanceOverrides({
   files: collectSourceFiles(srcRoot),
 });
 
+const grammarFindings = collectSourceFiles(srcRoot)
+  .filter(file => !/\.(?:test|spec)\.tsx$/.test(file))
+  .flatMap(file => findUiSurfaceGrammar(fs.readFileSync(file, 'utf8'), file)
+    .map(finding => ({ ...finding, relativePath: path.relative(projectRoot, file).replace(/\\/g, '/') })));
+for (const finding of grammarFindings) {
+  const logFinding = finding.severity === 'warning' ? console.warn : console.error;
+  logFinding(`[${finding.rule}${finding.severity === 'warning' ? ' 告警' : ''}] ${finding.relativePath}:${finding.lineNo} ${finding.message}`);
+}
+const grammarErrors = grammarFindings.filter(finding => finding.severity === 'error');
+
 if (
   fileReports.length === 0 &&
   dialogBypasses.length === 0 &&
@@ -333,8 +345,8 @@ if (
   buttonOverrides.length === 0 &&
   fileLevelAllows.length === 0
 ) {
-  console.log('[check-surface-tokens] 通过：未检测到手写面板表面、卡片套卡片、手写弹窗、手写毛玻璃或按钮外观覆盖。');
-  process.exit(0);
+  console.log(`[check-surface-tokens] 原有表面规则通过；界面语法错误 ${grammarErrors.length} 处，启发式告警 ${grammarFindings.length - grammarErrors.length} 处。`);
+  process.exit(strict && grammarErrors.length > 0 ? 1 : 0);
 }
 
 const log = strict ? console.error : console.warn;

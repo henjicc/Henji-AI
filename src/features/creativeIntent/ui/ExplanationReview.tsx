@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { LockKeyhole, MapPin } from 'lucide-react'
-import { UiButton, UiError, UiOptionButton, UiTextToken } from '@/components/ui'
+import { UiButton, UiError, UiSegmented, UiTextToken } from '@/components/ui'
 import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import { confirmedExplanationBinding, type DeicticMention, type DeixisResolution, type ExplanationBinding } from '@/core/creativeIntent/deixis'
 import type { IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
@@ -107,10 +107,12 @@ export function ExplanationReview({ entry, onRead, onBind, onError, onPick, onRe
         <p className={UI_TEXT_META_CLASS}>说“{active.text}”时指向：{(active.selected?.targetRefs ?? active.candidates[0]?.targetRefs ?? []).map(objectLabel).join('、') || '画面位置'}</p>
         {needsConfirmation(active) && <>
           {explanationIssue(active.issues) && <p className={UI_TEXT_META_CLASS}>{explanationIssue(active.issues)}</p>}
-          <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="指的是">
+          <div className="flex flex-wrap items-center gap-1">
             <span className={UI_TEXT_META_CLASS}>指的是：</span>
-            {options.slice(0, 2).map((option, index) => <UiOptionButton key={`${active.id}:${index}`} variant="segment" size="sm" role="radio" aria-checked={false} disabled={busy} onMouseEnter={() => setHighlight(option.target)} onMouseLeave={() => setHighlight(undefined)} onFocus={() => setHighlight(option.target)} onBlur={() => setHighlight(undefined)} onClick={() => mutate(() => onBind(entry, confirmedExplanationBinding(active, option.candidate, option.target)))}>{option.label}</UiOptionButton>)}
-            <UiOptionButton variant="segment" size="sm" role="radio" aria-checked={false} disabled={busy || !onPick} title={!onPick ? '请在作品宿主中点选对象' : undefined} onClick={() => onPick && mutate(() => onPick(entry, active))}>其他…</UiOptionButton>
+            <UiSegmented key={active.id} ariaLabel="指的是" size="sm" value={-1} disabled={busy}
+              options={[...options.slice(0, 2).map((option, index) => ({ value: index, label: option.label })), { value: -2, label: '其他…', disabled: !onPick, title: !onPick ? '请在作品宿主中点选对象' : undefined }]}
+              onPreview={index => setHighlight(index === undefined ? undefined : options[index]?.target)}
+              onChange={index => { const option = options[index]; if (option) mutate(() => onBind(entry, confirmedExplanationBinding(active, option.candidate, option.target))); else if (onPick) mutate(() => onPick(entry, active)) }} />
           </div>
         </>}
         {active.selected && <UiButton size="sm" variant="link" disabled={busy || !onPick} onClick={() => onPick && mutate(() => onPick(entry, active))}>重新点选</UiButton>}

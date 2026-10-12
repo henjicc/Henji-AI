@@ -1,16 +1,17 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { UI_TOAST_DISPLAY_MS, UI_TOAST_EXIT_MS } from '@/components/ui/motion'
-import { UiToast, type UiToastTone } from '@/components/ui/UiToast'
+import { UiToast, type UiToastTone, type UiToastAction } from '@/components/ui/UiToast'
 
 interface NotificationState {
     message: string
     type: UiToastTone
+    action?: UiToastAction
 }
 
 interface NotificationContextValue {
     notification: NotificationState | null
     notificationVisible: boolean
-    showNotification: (message: string, type?: UiToastTone) => void
+    showNotification: (message: string, type?: UiToastTone, action?: UiToastAction) => void
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
@@ -46,9 +47,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         clearTimerRef.current = null
     }, [])
 
-    const showNotification = useCallback((message: string, type: UiToastTone = 'success') => {
+    const showNotification = useCallback((message: string, type: UiToastTone = 'success', action?: UiToastAction) => {
         clearTimers()
-        setNotification({ message, type })
+        setNotification({ message, type, ...(action ? { action } : {}) })
         setNotificationVisible(true)
         // 停留后淡出，淡出结束再卸载（时长与 UiToast 的 duration-240 同档）
         hideTimerRef.current = setTimeout(() => {
@@ -68,7 +69,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         <NotificationContext.Provider value={{ notification, notificationVisible, showNotification }}>
             {children}
             {notification && (
-                <UiToast message={notification.message} tone={notification.type} visible={notificationVisible} />
+                <UiToast message={notification.message} tone={notification.type} visible={notificationVisible} action={notification.action} />
             )}
         </NotificationContext.Provider>
     )

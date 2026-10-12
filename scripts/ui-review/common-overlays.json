@@ -812,7 +812,7 @@
       },
       {
         "click": {
-          "role": "button",
+          "role": "radio",
           "name": "历史",
           "exact": true
         }
@@ -825,7 +825,7 @@
       },
       {
         "click": {
-          "role": "button",
+          "role": "radio",
           "name": "实时",
           "exact": true
         }

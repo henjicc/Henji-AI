@@ -9,6 +9,7 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }));
 vi.mock('@/components/ui', async () => {
   const React = await import('react');
   return {
+    UiSegmented: (await import('@/components/ui/UiSegmented')).UiSegmented,
     UiButton: React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }>(
       ({ variant: _variant, size: _size, ...props }, ref) => <button {...props} ref={ref} />),
     UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => <button {...props} />,
@@ -54,7 +55,7 @@ describe('图片查看与同步对比', () => {
   });
   it('两张不同分辨率的图在任意一侧缩放和平移时同步，重置会停止进行中的缩放', async () => {
     render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);
-    fireEvent.click(screen.getByRole('button', { name: '左右对比' }));
+    fireEvent.click(screen.getByRole('radio', { name: '左右对比' }));
     const original = screen.getByAltText('原图') as HTMLImageElement;
     await act(async () => { fireEvent.load(original); });
     const result = screen.getByAltText('放大后') as HTMLImageElement;
@@ -89,7 +90,7 @@ describe('图片查看与同步对比', () => {
   });
   it('分界线键盘调整不翻页，原图失效回退普通结果且换图后不残留错误', async () => {
     const view = render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);
-    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    fireEvent.click(screen.getByRole('radio', { name: '叠加对比' }));
     await act(async () => { fireEvent.load(screen.getByAltText('原图')); });
     const slider = screen.getByRole('slider');
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
@@ -103,7 +104,7 @@ describe('图片查看与同步对比', () => {
     expect(screen.getByRole('alert')).toBeTruthy();
     view.rerender(<ImageViewerModal {...props} imageUrl="other.png" comparisonImageUrl="other-original.png" />);
     expect(screen.queryByRole('alert')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    fireEvent.click(screen.getByRole('radio', { name: '叠加对比' }));
     await act(async () => { fireEvent.load(screen.getByAltText('原图')); });
     expect(screen.getByRole('slider').getAttribute('aria-valuenow')).toBe('50');
   });
@@ -118,22 +119,22 @@ describe('图片查看与同步对比', () => {
     const original = screen.getByAltText('原图') as HTMLImageElement;
     original.decode = vi.fn(() => new Promise<void>((resolve) => { completeDecode = resolve; }));
     fireEvent.load(original);
-    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    fireEvent.click(screen.getByRole('radio', { name: '叠加对比' }));
     expect(screen.queryByRole('slider')).toBeNull();
     expect(screen.getByAltText('图片')).toBe(result);
     await act(async () => completeDecode());
     expect(screen.getByAltText('放大后')).toBe(result);
     expect(result.style.transform).toBe(zoomedTransform);
     expect(screen.getByRole('slider')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '仅结果' }));
-    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    fireEvent.click(screen.getByRole('radio', { name: '仅结果' }));
+    fireEvent.click(screen.getByRole('radio', { name: '叠加对比' }));
     expect(screen.getByAltText('原图')).toBe(original);
     expect(screen.getByAltText('放大后')).toBe(result);
     expect(original.decode).toHaveBeenCalledTimes(1);
     // 切换另一张图后，上一张尚未结束的解码不得切换当前视图。
     fireEvent.load(original);
     view.rerender(<ImageViewerModal {...props} imageUrl="other.png" comparisonImageUrl="other-original.png" />);
-    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    fireEvent.click(screen.getByRole('radio', { name: '叠加对比' }));
     await act(async () => completeDecode());
     expect(screen.queryByRole('slider')).toBeNull();
     await act(async () => { fireEvent.load(screen.getByAltText('原图')); });
@@ -144,7 +145,7 @@ describe('图片查看与同步对比', () => {
     render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);
     const original = screen.getByAltText('原图') as HTMLImageElement;
     original.decode = vi.fn(() => Promise.reject(new Error('decode failed')));
-    fireEvent.click(screen.getByRole('button', { name: '叠加对比' }));
+    fireEvent.click(screen.getByRole('radio', { name: '叠加对比' }));
     await act(async () => { fireEvent.load(original); });
     expect(screen.queryByRole('slider')).toBeNull();
     expect(screen.getByAltText('图片').getAttribute('src')).toBe('result.png');
@@ -156,7 +157,7 @@ describe('图片查看与同步对比', () => {
     const original = screen.getByAltText('原图') as HTMLImageElement;
     const result = screen.getByAltText('图片') as HTMLImageElement;
     await act(async () => { fireEvent.load(original); });
-    const side = screen.getByRole('button', { name: '左右对比' });
+    const side = screen.getByRole('radio', { name: '左右对比' });
     fireEvent.click(side);
     expect(result.parentElement?.style.left).toBe('0px');
     expect(original.parentElement?.style.right).toBe('0px');
@@ -171,7 +172,7 @@ describe('图片查看与同步对比', () => {
     expect(screen.getByAltText('放大后')).toBe(result);
     expect(result.style.transform).toBe(zoomed);
     expect(original.style.transform).toBe(zoomed);
-    const overlay = screen.getByRole('button', { name: '叠加对比' });
+    const overlay = screen.getByRole('radio', { name: '叠加对比' });
     fireEvent.click(overlay);
     const slider = screen.getByRole('slider');
     fireEvent.keyDown(slider, { key: 'ArrowRight' });

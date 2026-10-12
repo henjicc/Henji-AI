@@ -1,7 +1,8 @@
+import { UiSegmented } from '@/components/ui'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UI_SEGMENTED_TRACK_CLASS, UiOptionButton, UiSwitch } from '@/components/ui'
+import { UiSwitch } from '@/components/ui'
 import type { ImageEditCommandBusV3 } from '../../application/imageEditCommandBus'
 import { useImageEditorSessionStoreV3 } from '../../store'
 import { findImageEditLayerLocationV3 } from '../../editor/layerTreeV3'
@@ -56,28 +57,7 @@ export function LegacyToolOptions({
         </label>
       ) : null}
       {selectionLike ? (
-        <div
-          role="group"
-          aria-label={t('imageEditor.v3.selection.combineMode')}
-          className={`shrink-0 ${UI_SEGMENTED_TRACK_CLASS}`}
-        >
-          {(['replace', 'add', 'subtract', 'intersect'] as const).map((mode) => {
-            const disabled = !allowedSelectionModes.includes(mode)
-            return (
-              <UiOptionButton
-                key={mode}
-                variant="segment"
-                active={session.toolSettings.selectionCombineMode === mode}
-                aria-pressed={session.toolSettings.selectionCombineMode === mode}
-                disabled={disabled}
-                title={disabled ? t('imageEditor.v3.selection.replaceOnly') : undefined}
-                onClick={() => setToolSetting(controller.sessionId, 'selectionCombineMode', mode)}
-              >
-                {t(`imageEditor.v3.selection.${mode}`)}
-              </UiOptionButton>
-            )
-          })}
-        </div>
+        <UiSegmented ariaLabel={t('imageEditor.v3.selection.combineMode')} value={session.toolSettings.selectionCombineMode} onChange={mode => setToolSetting(controller.sessionId, 'selectionCombineMode', mode)} options={(['replace', 'add', 'subtract', 'intersect'] as const).map(value => ({ value, label: t(`imageEditor.v3.selection.${value}`), disabled: !allowedSelectionModes.includes(value), title: !allowedSelectionModes.includes(value) ? t('imageEditor.v3.selection.replaceOnly') : undefined }))} />
       ) : null}
     </div>
   )

@@ -26,7 +26,8 @@ export function registerMcpIpc(): void {
   host = applicationHost
   registerExternalApplicationAuthority((id) => connections.assertActive(id))
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations,
-    (info) => logger.info('外部请求已通过授权', { event: 'mcp.request.authorized', context: { callerId: info.callerId } }))
+    (info) => logger.info('外部请求已通过授权', { event: 'mcp.request.authorized', context: { callerId: info.callerId } }),
+    (info) => logger.warn('外部连接认证失败', { event: 'mcp.request.rejected', context: info }))
   try { preferences = readMcpPreferences() } catch (error) {
     preferences = { ...DEFAULT_MCP_PREFERENCES, enabled: false, defaultAccess: { allowWrites: false, allowDestructive: false, allowPaid: false } }
     logger.error('读取外部连接设置失败，已保持关闭', { event: 'mcp.preferences.read.failed', error })
@@ -67,6 +68,19 @@ export function registerMcpIpc(): void {
     return connection
   }, trusted)
   const identity = (value: unknown): { id: string } => z.object({ id: z.string().uuid() }).strict().parse(value)
+  registerIpcHandler('mcp:renew', identity, ({ id }) => {
+    logger.info('开始续期外部连接', { event: 'mcp.renew.start', context: { connectionId: id } })
+    try {
+      const connection = connections.renew(id)
+      logger.info('外部连接已续期', { event: 'mcp.renew.completed', context: { connectionId: id, expiresAt: connection.expiresAt } })
+      return connection
+    } catch (error) {
+      logger.error('外部连接续期失败', { event: 'mcp.renew.failed', context: { connectionId: id }, error })
+      throw error
+    }
+  }, trusted)
+  registerIpcHandler('mcp:reminder:acknowledge', value => z.object({ id: z.string().uuid(), expiresAt: z.number().finite(), state: z.enum(['expiring', 'expired']) }).strict().parse(value),
+    ({ id, expiresAt, state }) => connections.acknowledgeReminder(id, expiresAt, state), trusted)
   registerIpcHandler('mcp:revoke', identity, async ({ id }) => {
     connections.revoke(id)
     await server.revoke(id)

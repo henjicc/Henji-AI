@@ -1,12 +1,11 @@
+/* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检场景使用 CommonJS。 */
 const { writeFile } = require('node:fs/promises')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 
 function attachUiInspectionCanvasEnhance(context) {
   const {
     settlePage,
-    clickCanvasCapabilityAction,
     resizeCanvasNodeAndAssertHitBox,
-    paramFieldFromLabel,
     seedAndOpenCanvasPanoramaProject,
     reopenCanvasProjectFromStorage,
   } = context
@@ -147,7 +146,7 @@ function attachUiInspectionCanvasEnhance(context) {
       }
       const stage = await viewer.locator('[data-comparison-stage]').boundingBox()
       const controls = await viewer.locator('[data-viewer-controls]').boundingBox()
-      const modes = await viewer.getByRole('group', { name: /^(对比查看|Compare)$/i }).boundingBox()
+      const modes = await viewer.getByRole('radiogroup', { name: /^(对比查看|Compare)$/i }).locator('..').boundingBox()
       const scale = await viewer.locator('[data-viewer-scale]').boundingBox()
       const transparentPlanes = await viewer.locator('[data-comparison-stage], [data-comparison-pane]').evaluateAll((elements) =>
         elements.every((element) => getComputedStyle(element).backgroundColor === 'rgba(0, 0, 0, 0)'))
@@ -161,7 +160,7 @@ function attachUiInspectionCanvasEnhance(context) {
         throw new Error(`对比画面未充分利用视口，或底部工具未合并为一行：${JSON.stringify({ singleViewport, stage, controls, modes, reset })}`)
       }
     }
-    await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(左右对比|Side by side)$/i }).click()
     const original = viewer.locator('[data-comparison-pane="original"] img')
     const result = viewer.locator('[data-comparison-pane="result"] img')
     await original.waitFor({ state: 'visible' })
@@ -190,7 +189,7 @@ function attachUiInspectionCanvasEnhance(context) {
     await page.mouse.move(resultBox.x + resultBox.width / 2 + 60, resultBox.y + resultBox.height / 2 + 30, { steps: 8 })
     await page.mouse.up()
     const pannedSide = await assertSynchronized(zoomed)
-    await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(左右对比|Side by side)$/i }).click()
     const swappedOriginal = await original.boundingBox()
     const swappedResult = await result.boundingBox()
     if (!swappedOriginal || !swappedResult || swappedOriginal.x >= swappedResult.x
@@ -200,10 +199,10 @@ function attachUiInspectionCanvasEnhance(context) {
     await page.mouse.move(swappedOriginal.x + swappedOriginal.width / 2, swappedOriginal.y + swappedOriginal.height / 2)
     await page.mouse.wheel(0, -120)
     await assertSynchronized(pannedSide)
-    await viewer.getByRole('button', { name: /^(左右对比|Side by side)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(左右对比|Side by side)$/i }).click()
     if ((await original.boundingBox()).x <= (await result.boundingBox()).x) throw new Error('再次交换未恢复放大图在左')
     await writeFile('.ui-tour/canvas-upscale-side-by-side.png', await captureInspectionPage(electronApp, page))
-    await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(叠加对比|Overlay)$/i }).click()
     await viewer.locator('[role="slider"]').waitFor({ state: 'visible' })
     await assertFullComparisonViewport()
     const divider = viewer.getByRole('slider')
@@ -234,7 +233,7 @@ function attachUiInspectionCanvasEnhance(context) {
     await page.mouse.move(stageBox.x + stageBox.width * 0.7 - 80, stageBox.y + stageBox.height / 2 - 40, { steps: 8 })
     await page.mouse.up()
     const pannedOverlay = await assertSynchronized(overlayZoom)
-    await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(叠加对比|Overlay)$/i }).click()
     const swappedClips = await viewer.locator('[data-comparison-pane]')
       .evaluateAll((panes) => panes.map((pane) => ({ kind: pane.dataset.comparisonPane, clip: pane.style.clipPath })))
     const resultClip = swappedClips.find((pane) => pane.kind === 'result')?.clip
@@ -244,7 +243,7 @@ function attachUiInspectionCanvasEnhance(context) {
       || (await readTransforms()).some((transform) => transform !== pannedOverlay)) {
       throw new Error(`叠加交换丢失图片顺序或视图：${JSON.stringify(swappedClips)}`)
     }
-    await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(叠加对比|Overlay)$/i }).click()
     // 只观测目标图片与分界线：操作结束后不应存在持续更新的动画循环。
     const idleMutations = await viewer.evaluate(async (element) => {
       let count = 0
@@ -262,7 +261,7 @@ function attachUiInspectionCanvasEnhance(context) {
     await resultNode.locator('img').first().dblclick()
     await viewer.waitFor({ state: 'visible' })
     if (await viewer.getAttribute('data-comparison-mode') !== 'single') throw new Error('重新打开未重置查看模式')
-    await viewer.getByRole('button', { name: /^(叠加对比|Overlay)$/i }).click()
+    await viewer.getByRole('radio', { name: /^(叠加对比|Overlay)$/i }).click()
     await page.mouse.move(1200, 750)
     await settlePage(page, 900)
   }

@@ -1,7 +1,9 @@
+import { UiFormRow, UiSegmented } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw, WandSparkles, Upload } from 'lucide-react'
-import { Dropdown, UiButton, UiEmpty, UiGroup, UiIconButton, UiLoading, UiOptionButton } from '@/components/ui'
-import { UI_SEGMENTED_TRACK_CLASS } from '@/components/ui/styleTokens'
+import { Dropdown, UiButton, UiEmpty, UiGroup, UiIconButton, UiLoading } from '@/components/ui'
+
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { COLOR_GRADE_BASIC_PARAMS, COLOR_GRADE_CREATIVE_PARAMS, COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HSL_PARAMS, COLOR_GRADE_HUE_CURVES, COLOR_GRADE_HUE_CURVE_NAMES, COLOR_GRADE_LUT_PARAMS, COLOR_GRADE_POINT_PARAMS, COLOR_GRADE_VIGNETTE_PARAMS, COLOR_GRADE_WHEEL_PARAMS, COLOR_GRADE_WHEEL_REGIONS, VIDEO_EDIT_COLOR_GRADE } from '@/core/videoEdit/colorGrade'
 import type { VideoEditClip } from '@/core/videoEdit/document'
@@ -23,6 +25,7 @@ function Section({ title, children }: { title: string; children: ReactNode }): R
 }
 
 function ColorGradeEditor({ target, clip, selectedId, onError }: { target: VideoEditCompositeTarget; clip: VideoEditClip; selectedId: string; onError: (reason: unknown) => void }): React.ReactElement {
+  const { t } = useTranslation('ui')
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const effect = selectedId ? clip.effects?.find(effect => effect.id === selectedId) : clip.effects?.find(effect => effect.builtin?.id === VIDEO_EDIT_COLOR_GRADE.id)
   const frame = requireVideoEditInstance(target.projectId).frame
@@ -54,20 +57,20 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
   const [channel, setChannel] = useState('master')
-  return <div className="flex flex-col gap-2">
+  return <UiGroup labelWidth={96} className="flex flex-col gap-2" gap="row">
     <div className="flex flex-wrap items-center justify-end gap-1">
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} title="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles size={14} />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
       <UiIconButton size="sm" title="重置全能调色" aria-label="重置全能调色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE) })}><RotateCcw size={14} /></UiIconButton>
     </div>
-    <Dropdown ariaLabel="校色参考片段" value={reference} options={[{ value: '', label: '自动校色' }, ...getActiveVideoEditSequence(requireVideoEditInstance(target.projectId)).clips.filter(value => value.id !== clip.id && value.kind !== 'audio' && value.kind !== 'adjustment').map(value => ({ value: value.id, label: value.name }))]} onSelect={setReference} />
-    {reference && <Dropdown ariaLabel="颜色匹配方式" value={matchMethod} options={[{ value: 'moments', label: '均值与反差' }, { value: 'histogram', label: '颜色分布' }]} onSelect={value => setMatchMethod(value as 'moments' | 'histogram')} />}
+    <UiFormRow label="校色参考片段" density="compact"><Dropdown ariaLabel="校色参考片段" value={reference} options={[{ value: '', label: '自动校色' }, ...getActiveVideoEditSequence(requireVideoEditInstance(target.projectId)).clips.filter(value => value.id !== clip.id && value.kind !== 'audio' && value.kind !== 'adjustment').map(value => ({ value: value.id, label: value.name }))]} onSelect={setReference} /></UiFormRow>
+    {reference && <UiFormRow label="颜色匹配方式" density="compact"><Dropdown ariaLabel="颜色匹配方式" value={matchMethod} options={[{ value: 'moments', label: '均值与反差' }, { value: 'histogram', label: '颜色分布' }]} onSelect={value => setMatchMethod(value as 'moments' | 'histogram')} /></UiFormRow>}
     {busy && <UiLoading size="xs" message="正在处理颜色…" />}
     <Section title="基本校正">{lutControl('input')}<VideoEditBuiltinParamRows params={COLOR_GRADE_LUT_PARAMS.filter(param => param.key === 'input_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={COLOR_GRADE_BASIC_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
     <Section title="创意">{lutControl('look')}<VideoEditBuiltinParamRows params={COLOR_GRADE_LUT_PARAMS.filter(param => param.key === 'look_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={COLOR_GRADE_CREATIVE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
     <Section title="曲线">
-      <div className={UI_SEGMENTED_TRACK_CLASS} role="group" aria-label="曲线通道">{COLOR_GRADE_CURVE_CHANNELS.map((value, i) => <UiOptionButton key={value} variant="segment" size="sm" active={value === channel} onClick={() => setChannel(value)}>{['RGB 主', '红', '绿', '蓝'][i]}</UiOptionButton>)}</div>
+      <UiFormRow label={t('surfaceGrammar.curveChannel')} density="compact" labelColumn="panel"><UiSegmented ariaLabel="曲线通道" size="sm" fullWidth value={channel} onChange={setChannel} options={COLOR_GRADE_CURVE_CHANNELS.map((value, i) => ({ value, label: ['RGB 主', '红', '绿', '蓝'][i] }))} /></UiFormRow>
       <VideoEditBuiltinParamRows params={COLOR_GRADE_POINT_PARAMS.filter(param => param.key === `curve_${channel}_points`)} values={values} gesture={gesture} animation={animation} />
-      <div className={`${UI_SEGMENTED_TRACK_CLASS} max-w-full flex-wrap`} role="group" aria-label="色相饱和度曲线类型">{COLOR_GRADE_HUE_CURVES.map((value, i) => <UiOptionButton key={value} variant="segment" size="sm" active={value === hueCurve} onClick={() => setHueCurve(value)}>{COLOR_GRADE_HUE_CURVE_NAMES[i]}</UiOptionButton>)}</div>
+      <UiFormRow label={t('surfaceGrammar.curveType')} density="compact" labelColumn="panel"><Dropdown ariaLabel="色相饱和度曲线类型" size="sm" value={hueCurve} onSelect={setHueCurve} options={COLOR_GRADE_HUE_CURVES.map((value, i) => ({ value, label: COLOR_GRADE_HUE_CURVE_NAMES[i] }))} /></UiFormRow>
       <VideoEditBuiltinParamRows params={COLOR_GRADE_POINT_PARAMS.filter(param => param.key === `curve_${hueCurve}_points`)} values={values} gesture={gesture} animation={animation} />
     </Section>
     <Section title="色轮">
@@ -75,7 +78,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     </Section>
     <Section title="HSL 辅助"><VideoEditBuiltinParamRows params={COLOR_GRADE_HSL_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
     <Section title="晕影"><VideoEditBuiltinParamRows params={COLOR_GRADE_VIGNETTE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
-  </div>
+  </UiGroup>
 }
 
 /** Dock and native popout use this same body. Selection follows the existing primary selected clip. */

@@ -1,18 +1,13 @@
+import { UiSegmented } from '@/components/ui'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import Dropdown from '@/components/ui/Dropdown'
 import FileUploader from '@/components/ui/FileUploader'
 import { UiTooltipText } from '@/components/ui/layout'
-import { UiButton, UiOptionButton, UiSwitch, UiTextAreaField } from '@/components/ui/primitives'
+import { UiButton, UiSwitch, UiTextAreaField } from '@/components/ui/primitives'
 import { UiModal } from '@/components/ui/UiModal'
-import {
-  UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
-  UI_GLASS_ADAPTIVE_REGION_CLASS,
-  UI_SEGMENTED_TRACK_CLASS,
-  UI_TEXT_LABEL_CLASS,
-  UI_TEXT_META_CLASS,
-} from '@/components/ui/styleTokens'
+import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import {
   RELIGHT_SMART_PRESETS,
@@ -128,22 +123,7 @@ export function RelightWorkbench({
           <div className="flex min-h-full flex-col">
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           {/* 二选一模式用分段选择（淡强调底选中），不是两颗菜单项（任务 5.4） */}
-          <div role="radiogroup" aria-label={t('node.relightGeneration.editor.mode')} className={`${UI_SEGMENTED_TRACK_CLASS} !w-full`}>
-            {(['manual', 'smart'] as const).map((mode) => (
-              <UiOptionButton
-                key={mode}
-                type="button"
-                variant="segment"
-                role="radio"
-                aria-checked={settings.lightingMode === mode}
-                active={settings.lightingMode === mode}
-                className="flex-1"
-                onClick={() => updateSettings({ ...settings, lightingMode: mode })}
-              >
-                {t(`node.relightGeneration.editor.${mode}`)}
-              </UiOptionButton>
-            ))}
-          </div>
+          <UiSegmented ariaLabel={t('node.relightGeneration.editor.mode')} fullWidth value={settings.lightingMode} onChange={lightingMode => updateSettings({ ...settings, lightingMode })} options={(['manual', 'smart'] as const).map(value => ({ value, label: t(`node.relightGeneration.editor.${value}`) }))} />
 
           {settings.lightingMode === 'manual' ? (
             <div className="mt-4 flex flex-1 flex-col gap-3">

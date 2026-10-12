@@ -11,6 +11,7 @@ import type { ApplicationOperationCoordinator } from '../application-runtime/ope
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
 import { buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
 import { EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
+import { mcpConnectionLocalDate } from '../../../../src/core/application-control/mcpConnectionExpiry'
 
 /** 无协议会话；授权、任务与持久操作均由应用运行时持有。 */
 export class LocalMcpServer {
@@ -23,7 +24,8 @@ export class LocalMcpServer {
   private subscriptions?: ApplicationResourceSubscriptions
   constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge,
     private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: ApplicationOperationCoordinator,
-    private readonly onRequest: (info: { callerId: string }) => void = () => {}) {}
+    private readonly onRequest: (info: { callerId: string }) => void = () => {},
+    private readonly onRejected: (info: { reason: 'token_expired' | 'invalid_token'; connectionId?: string; expiresAt?: number }) => void = () => {}) {}
   get listening(): boolean { return this.http?.listening === true }
   get listeningPort(): number { return this.port }
 
@@ -128,8 +130,22 @@ export class LocalMcpServer {
     if (request.headers.host !== `127.0.0.1:${this.port}` || request.headers.origin !== undefined) return this.reject(response, 403)
     const authorization = request.headers.authorization
     const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : ''
-    const callerId = this.connections.authenticate(token)
-    if (!callerId) return this.reject(response, 401)
+    const authentication = this.connections.authenticate(token)
+    if (authentication.status !== 'valid') {
+      const expired = authentication.status === 'expired'
+      this.onRejected({
+        reason: expired ? 'token_expired' : 'invalid_token',
+        ...(expired ? { connectionId: authentication.connectionId, expiresAt: authentication.expiresAt } : {}),
+      })
+      response.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8',
+        'WWW-Authenticate': expired ? 'Bearer error="invalid_token", error_description="connection expired"' : 'Bearer error="invalid_token"',
+      })
+      response.end(JSON.stringify({ error: expired ? 'token_expired' : 'invalid_token', message: expired
+        ? `这个连接已于 ${mcpConnectionLocalDate(authentication.expiresAt)} 到期，请在痕迹AI 设置 → 智能助手 → 外部智能体连接 中续期，续期后令牌不变。`
+        : '令牌无效或连接已撤销，请在痕迹AI 中重新授权。' }))
+      return
+    }
+    const callerId = authentication.connectionId
     if (request.method !== 'POST') return this.reject(response, 405)
     if (request.headers['mcp-session-id'] !== undefined) return this.reject(response, 400)
     if (this.active.size >= EXTERNAL_LIMITS.concurrentRequests) return this.reject(response, 429)

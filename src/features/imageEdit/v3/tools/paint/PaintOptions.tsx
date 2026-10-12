@@ -65,18 +65,18 @@ export function PaintOptionsV3({ controller }: ToolOptionsProps): JSX.Element | 
     </>}
     {painting && <PanelTrigger panelPadding="content" panelWidth={280} renderPanel={() => <div className="flex flex-col gap-3" data-paint-brush-settings>
       <PaintTipPreview brush={brush} />
-      <UiGroup title={label('tip')} titleTone="compact">
-        <UiFormRow label={label('tip')} density="compact"><Dropdown value={dynamics.tip ?? 'round'} display={label(dynamics.tip ?? 'round')} options={(['round', 'chisel'] as const).map(value => ({ value, label: label(value) }))}
+      <UiGroup labelWidth={96} title={label('tip')} titleTone="compact">
+        <UiFormRow label={label('tip')} density="compact" labelColumn="panel"><Dropdown value={dynamics.tip ?? 'round'} display={label(dynamics.tip ?? 'round')} options={(['round', 'chisel'] as const).map(value => ({ value, label: label(value) }))}
           onSelect={value => setDynamics({ tip: value as 'round' | 'chisel' })} /></UiFormRow>
         {([['hardness', settings.brushHardness], ['spacing', dynamics.spacing ?? .15], ['smoothing', dynamics.smoothing ?? 0], ['texture', dynamics.texture ?? 0], ['scatter', dynamics.scatter ?? 0]] as const).map(([key, value]) =>
-          <UiFormRow key={key} density="compact" label={label(key)}><UiRangeInput aria-label={label(key)} min={key === 'spacing' ? .01 : 0} max={1} step={.01} value={value}
+          <UiFormRow key={key} density="compact" labelColumn="panel" label={label(key)}><UiRangeInput aria-label={label(key)} min={key === 'spacing' ? .01 : 0} max={1} step={.01} value={value}
             onChange={event => key === 'hardness' ? store.setToolSetting(controller.sessionId, 'brushHardness', Number(event.currentTarget.value)) : setDynamics({ [key]: Number(event.currentTarget.value) })} /></UiFormRow>)}
-        <NumberInput size="sm" label={label('angle')} ariaLabel={label('angle')} value={dynamics.angle ?? 0} step={1} widthClassName="w-full" onChange={angle => setDynamics({ angle })} />
+        <UiFormRow label={label('angle')} density="compact" labelColumn="panel"><NumberInput size="sm" ariaLabel={label('angle')} value={dynamics.angle ?? 0} step={1} widthClassName="w-full" onChange={angle => setDynamics({ angle })} /></UiFormRow>
       </UiGroup>
-      <UiGroup title={label('pressure')} titleTone="compact">
-        <UiFormRow density="compact" label={label('curve')}><Dropdown value={dynamics.pressureCurve ?? 'linear'} display={label(dynamics.pressureCurve ?? 'linear')}
+      <UiGroup labelWidth={96} title={label('pressure')} titleTone="compact">
+        <UiFormRow density="compact" labelColumn="panel" label={label('curve')}><Dropdown value={dynamics.pressureCurve ?? 'linear'} display={label(dynamics.pressureCurve ?? 'linear')}
           options={(['linear', 'soft', 'firm'] as const).map(value => ({ value, label: label(value) }))} onSelect={value => setDynamics({ pressureCurve: value as 'linear' | 'soft' | 'firm' })} /></UiFormRow>
-        {(['pressureSize', 'pressureFlow', 'tilt'] as const).map(key => <UiFormRow key={key} density="compact" label={label(key)} inline><UiSwitch aria-label={label(key)} checked={Boolean(dynamics[key])} onCheckedChange={value => setDynamics({ [key]: value })} /></UiFormRow>)}
+        {(['pressureSize', 'pressureFlow', 'tilt'] as const).map(key => <UiFormRow key={key} density="compact" labelColumn="panel" label={label(key)} inline><UiSwitch aria-label={label(key)} checked={Boolean(dynamics[key])} onCheckedChange={value => setDynamics({ [key]: value })} /></UiFormRow>)}
       </UiGroup>
     </div>}>
       {({ open, togglePanel }) => <UiButton size="sm" aria-expanded={open} onClick={togglePanel}>{label('settings')}</UiButton>}

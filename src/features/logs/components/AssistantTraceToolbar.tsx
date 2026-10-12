@@ -1,7 +1,8 @@
+import { UiSegmented } from '@/components/ui'
 import type { ReactNode } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 
-import { UiCheckbox, UiIconButton, UiSearchInput, UiOptionButton, UiSelect, UiToolbar, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiCheckbox, UiIconButton, UiSearchInput, UiSelect, UiToolbar } from '@/components/ui'
 import type { AgentTraceCaptureMode, AgentTraceStatus } from '@/core/assistant/trace'
 
 export type AssistantTraceViewMode = 'live' | 'history'
@@ -99,10 +100,7 @@ export function AssistantTraceToolbar({
       }
     >
       {surfaceSwitch}
-      <div className={UI_SEGMENTED_TRACK_CLASS}>
-        <UiOptionButton type="button" variant="segment" active={mode === 'live'} aria-pressed={mode === 'live'} onClick={() => onModeChange('live')}>实时</UiOptionButton>
-        <UiOptionButton type="button" variant="segment" active={mode === 'history'} aria-pressed={mode === 'history'} onClick={() => onModeChange('history')}>历史</UiOptionButton>
-      </div>
+      <UiSegmented ariaLabel="追踪模式" value={mode} onChange={onModeChange} options={[{ value: 'live', label: '实时' }, { value: 'history', label: '历史' }]} />
     </UiToolbar>
   )
 }

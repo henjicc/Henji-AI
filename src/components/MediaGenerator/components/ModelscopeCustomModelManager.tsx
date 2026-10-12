@@ -1,18 +1,9 @@
+import { UiSegmented } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import { requestAlertConfirmation, showAlertDialog } from '@/stores/alertDialogStore'
-import {
-  UI_TEXT_BODY_CLASS,
-  UI_TEXT_LABEL_CLASS,
-  UI_TEXT_META_CLASS,
-  UI_SEGMENTED_TRACK_CLASS,
-  UiButton,
-  UiEmpty,
-  UiIconButton,
-  UiOptionButton,
-  UiPanel,
-} from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiIconButton, UiPanel } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
 import { checkModelscopeModelAvailability } from '@/services/modelscopeCustomModels/availability'
@@ -256,26 +247,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
             />
             <div className="flex flex-col gap-2">
               <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
-              <div className={`${UI_SEGMENTED_TRACK_CLASS} w-full`}>
-                <UiOptionButton
-                  type="button"
-                  variant="segment"
-                  active={newModelType === 'imageGeneration'}
-                  className="flex-1 justify-center"
-                  onClick={() => setNewModelType('imageGeneration')}
-                >
-                  {t('modelscopeCustomModel.types.imageGeneration')}
-                </UiOptionButton>
-                <UiOptionButton
-                  type="button"
-                  variant="segment"
-                  active={newModelType === 'imageEditing'}
-                  className="flex-1 justify-center"
-                  onClick={() => setNewModelType('imageEditing')}
-                >
-                  {t('modelscopeCustomModel.types.imageEditing')}
-                </UiOptionButton>
-              </div>
+              <UiSegmented ariaLabel={t('modelscopeCustomModel.form.modelType')} fullWidth value={newModelType} onChange={setNewModelType} options={(['imageGeneration', 'imageEditing'] as const).map(value => ({ value, label: t(`modelscopeCustomModel.types.${value}`) }))} />
             </div>
             <div className="flex gap-2">
               <UiButton
@@ -330,26 +302,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                     />
                     <div className="flex flex-col gap-2">
                       <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
-                      <div className={`${UI_SEGMENTED_TRACK_CLASS} w-full`}>
-                        <UiOptionButton
-                          type="button"
-                          variant="segment"
-                          active={editModelType === 'imageGeneration'}
-                          className="flex-1 justify-center"
-                          onClick={() => setEditModelType('imageGeneration')}
-                        >
-                          {t('modelscopeCustomModel.types.imageGeneration')}
-                        </UiOptionButton>
-                        <UiOptionButton
-                          type="button"
-                          variant="segment"
-                          active={editModelType === 'imageEditing'}
-                          className="flex-1 justify-center"
-                          onClick={() => setEditModelType('imageEditing')}
-                        >
-                          {t('modelscopeCustomModel.types.imageEditing')}
-                        </UiOptionButton>
-                      </div>
+                      <UiSegmented ariaLabel={t('modelscopeCustomModel.form.modelType')} fullWidth value={editModelType} onChange={setEditModelType} options={(['imageGeneration', 'imageEditing'] as const).map(value => ({ value, label: t(`modelscopeCustomModel.types.${value}`) }))} />
                     </div>
                     <div className="flex gap-2">
                       {/* 行内编辑的保存用次级：这块面板的主动作是顶部“添加”，一个表面只留一个实底 */}

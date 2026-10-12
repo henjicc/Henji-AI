@@ -3,7 +3,6 @@ import { UiFormRow } from '@/components/ui'
 import { UI_SCALE_MODES, type UiScaleMode } from '@/core/theme/uiScale'
 import { useI18n } from '@/hooks/useI18n'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 
 export default function UiScaleSection(): JSX.Element {
   const { t } = useI18n('settings')
@@ -25,7 +24,6 @@ export default function UiScaleSection(): JSX.Element {
         options={options}
         display={options.find((option) => option.value === uiScaleMode)?.label}
         onSelect={(value) => setUiScaleMode(value as UiScaleMode)}
-        className={SETTINGS_INLINE_CONTROL_CLASS}
       />
     </UiFormRow>
   )

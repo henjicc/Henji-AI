@@ -1,8 +1,9 @@
+import { UiSegmented } from '@/components/ui'
 import type { ReactNode } from 'react'
 import { MoreHorizontal, Search, Trash2 } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UI_TEXT_META_CLASS, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiButton, UiIconButton } from '@/components/ui'
 import type { GenerationHistoryMediaType } from '@/stores/generationHistoryFilterStore'
 
 export interface GenerationHistoryToolbarProps {
@@ -42,21 +43,7 @@ export function GenerationHistoryToolbar({
 
   return (
     <div className="flex h-10 items-center justify-between gap-3">
-      <div role="radiogroup" aria-label={t('ui:workspaceFilters.typeTabs')} className="flex min-w-0 items-center gap-0.5">
-        {/* 只有“全部”一项（还没有任何记录）时不显示：单个选项不构成选择 */}
-        {mediaOptions.length > 1 && mediaOptions.map((option) => (
-          <UiOptionButton
-            key={option.value}
-            variant="segment"
-            role="radio"
-            aria-checked={mediaType === option.value}
-            active={mediaType === option.value}
-            onClick={() => onMediaTypeChange(option.value)}
-          >
-            {option.label}
-          </UiOptionButton>
-        ))}
-      </div>
+      <div className="min-w-0">{mediaOptions.length > 1 && <UiSegmented ariaLabel={t('ui:workspaceFilters.typeTabs')} value={mediaType} onChange={onMediaTypeChange} options={mediaOptions} />}</div>
       <div className="flex shrink-0 items-center gap-0.5">
         {trailingStatus ? <span className="mr-1.5 flex items-center">{trailingStatus}</span> : null}
         {filtering && (

@@ -1,8 +1,9 @@
+import { UiSegmented } from '@/components/ui'
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X, GripVertical } from 'lucide-react';
 
-import { isTopmostUiOverlay, UiButton, UiIconButton, UiOptionButton, UiError, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui';
+import { isTopmostUiOverlay, UiButton, UiIconButton, UiError, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import type {
   ImageEditSessionData,
@@ -454,30 +455,9 @@ export function ImageViewerModal({
           <div data-viewer-controls="true" className="absolute bottom-8 left-1/2 z-sticky flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 items-center gap-3 overflow-x-auto">
             {comparisonImageUrl && (
               // 与同排查看器控件（缩放读数、重置视图 xl）同高 40；段本身保持分段 28 高。
-              <div className="ui-glass flex h-10 shrink-0 items-center gap-0.5 rounded-lg p-1" role="group" aria-label={t('viewer.compare', '对比查看')}>
-                {(['single', 'side-by-side', 'overlay'] as const).map((value) => (
-                  <UiOptionButton
-                    key={value}
-                    variant="segment"
-                    active={(comparisonAvailable ? requestedMode : 'single') === value}
-                    aria-pressed={(comparisonAvailable ? requestedMode : 'single') === value}
-                    disabled={value !== 'single' && !comparisonAvailable}
-                    title={value !== 'single' && requestedMode === value
-                      ? t('viewer.swapImages', '再次点击交换原图与放大图') : undefined}
-                    onClick={() => {
-                      if (value !== 'single' && requestedMode === value) {
-                        setSwappedModes((previous) => ({ ...previous, [value]: !previous[value] }));
-                      } else {
-                        setRequestedMode(value);
-                      }
-                    }}
-                  >
-                    {value === 'single' ? t('viewer.resultOnly', '仅结果')
-                      : value === 'side-by-side' ? t('viewer.sideBySide', '左右对比')
-                        : t('viewer.overlay', '叠加对比')}
-                  </UiOptionButton>
-                ))}
-              </div>
+              <div className="ui-glass flex h-10 shrink-0 items-center rounded-lg p-1"><UiSegmented ariaLabel={t('viewer.compare', '对比查看')} value={comparisonAvailable ? requestedMode : 'single'}
+                options={(['single', 'side-by-side', 'overlay'] as const).map(value => ({ value, label: value === 'single' ? t('viewer.resultOnly', '仅结果') : value === 'side-by-side' ? t('viewer.sideBySide', '左右对比') : t('viewer.overlay', '叠加对比'), disabled: value !== 'single' && !comparisonAvailable, title: value !== 'single' && requestedMode === value ? t('viewer.swapImages', '再次点击交换原图与放大图') : undefined }))}
+                onChange={value => { if (value !== 'single' && requestedMode === value) setSwappedModes(previous => ({ ...previous, [value]: !previous[value] })); else setRequestedMode(value) }} /></div>
             )}
             {imageList.length > 1 && (
               <div className="flex shrink-0 items-center gap-3">

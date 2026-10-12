@@ -1,7 +1,8 @@
+import { UiSegmented } from '@/components/ui'
 import React, { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import NumberInput from '@/components/ui/NumberInput'
-import { Dropdown, UI_SEGMENTED_TRACK_CLASS, UiButton, UiFormRow, UiGroup, UiOptionButton, UiRangeInput } from '@/components/ui'
+import { Dropdown, UiButton, UiFormRow, UiGroup, UiRangeInput } from '@/components/ui'
 import { BODY_VARIANTS } from '../domain/bodyVariants'
 import {
   CHARACTER_ANIMATION_CLIPS,
@@ -116,7 +117,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
 
   return (
     <>
-      <UiGroup title="角色" titleTone="compact" divided>
+      <UiGroup labelWidth={96} title="角色" titleTone="compact" divided>
         <UiFormRow label="动作" density="compact">
           <Dropdown<CharacterMotionValue>
             ariaLabel="动作"
@@ -142,21 +143,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
           />
         )}
         <UiFormRow label="体型" density="compact">
-          <div role="radiogroup" aria-label="体型" className={`${UI_SEGMENTED_TRACK_CLASS} w-full`}>
-            {BODY_VARIANTS.map((variant) => (
-              <UiOptionButton
-                key={variant.id}
-                variant="segment"
-                role="radio"
-                aria-checked={object.variant === variant.id}
-                active={object.variant === variant.id}
-                className="flex-1"
-                onClick={() => updateObject(object.id, { variant: variant.id })}
-              >
-                {variant.name}
-              </UiOptionButton>
-            ))}
-          </div>
+          <UiSegmented ariaLabel="体型" fullWidth value={object.variant} onChange={variant => updateObject(object.id, { variant })} options={BODY_VARIANTS.map(variant => ({ value: variant.id, label: variant.name }))} />
         </UiFormRow>
         <UiFormRow label="预设姿势" density="compact">
           <div className="flex flex-wrap gap-1.5">
@@ -174,7 +161,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
         </UiFormRow>
       </UiGroup>
 
-      <UiGroup title="姿态调节" titleTone="compact" divided gap="none">
+      <UiGroup labelWidth={96} title="姿态调节" titleTone="compact" divided gap="none">
         {POSE_JOINT_GROUPS.map((group) => {
           const open = openGroupId === group.id
           return (
