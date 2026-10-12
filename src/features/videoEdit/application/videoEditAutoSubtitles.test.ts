@@ -363,7 +363,7 @@ it('分块混音复用渲染器，指定入出点换算后生成一笔历史，�
   const history = owner.past.length
   const id = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'in-out')
   expect(boundary.mixes).toEqual([{ start: 2, duration: 3 }]); expect(boundary.disposed).toHaveBeenCalledTimes(1)
-  console.log('AFTER', JSON.stringify(sequence().captions)); expect(owner.past).toHaveLength(history)
+  expect(owner.past).toHaveLength(history)
   const ids = await generateVideoEditSubtitles(owner.document.id, sequence().id, id)
   expect(sequence().captions).toMatchObject([{ id: ids[0], text: 'Hello world.', start: 60, duration: 30 }]); expect(owner.past).toHaveLength(history + 1)
   await generateVideoEditSubtitles(owner.document.id, sequence().id, id)
