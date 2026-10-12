@@ -48,6 +48,7 @@ import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runt
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
 import { configureMacDockIcon } from './app-icon'
 import { sdkRuntimeContext } from './services/ai-runtime/sdk-runtime'
+import { runElectronHostSelfCheck } from './services/ai-runtime/host-capabilities'
 import { getAiProviderApiKey } from './services/keystore'
 import { createMainLogger, runLogRetention } from './services/logging'
 import { bindApplicationShutdown } from './application-shutdown'
@@ -103,6 +104,7 @@ app.whenReady().then(() => {
   configureMacDockIcon()
   registerMediaProtocolHandler()
   restoreAllowedMediaRoots()
+  runElectronHostSelfCheck(sdkRuntimeContext)
   registerAiRuntimeIpc()
   registerAudioIpc()
   registerAssetLibraryIpc()

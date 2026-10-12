@@ -11,9 +11,6 @@ import {
   type CredentialStore,
   type Logger,
   type MediaBinary,
-  type MediaReader,
-  type RuntimeContext,
-  type Transport,
 } from '@henjicc/ai-sdk'
 
 import { createHenjiAIClient } from '../../../../src/core/modelCatalog/applicationModelProfile'
@@ -21,6 +18,9 @@ import { getAiProviderApiKey, getKey, getLlmProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
 import { createDiagnosticTransport } from './network-transport'
 import { createNativeFileUpload } from './native-file-upload'
+import { createNativeStreamFetch } from './native-stream-fetch'
+import { nativeMediaChunks } from './native-media-chunks'
+import type { ElectronHostTransport, ElectronHostMediaReader, ElectronHostRuntime } from './host-capabilities'
 
 /**
  * `packages/ai-sdk/src/runtime/*` 定义的 5 个宿主契约接口的 Electron 实现，聚合成一个
@@ -44,8 +44,12 @@ import { createNativeFileUpload } from './native-file-upload'
  * 迁移成包在 `Transport` 外层的 SDK 内部包装函数），`Transport` 实现本身只需要老实地
  * 发请求、老实地把失败 throw 出去。
  */
-export const electronTransport: Transport = createDiagnosticTransport((url, init) => fetch(url, init))
-electronTransport.uploadFile = createNativeFileUpload((url, init) => electronTransport.fetch(url, init))
+const diagnosticTransport = createDiagnosticTransport((url, init) => fetch(url, init))
+export const electronTransport: ElectronHostTransport = {
+  fetch: diagnosticTransport.fetch,
+  uploadFile: createNativeFileUpload(diagnosticTransport.fetch),
+  fetchStream: createNativeStreamFetch(diagnosticTransport.fetch),
+}
 
 // ---------------------------------------------------------------------------
 // CredentialStore
@@ -81,7 +85,8 @@ export const electronCredentialStore: CredentialStore = {
  * 本文件只保留 Electron 独有的部分：异步本地文件系统读取与路径处理
  * （`path.basename`，取文件名——这一步不是"推断 MIME"，SDK 侧没有对应函数）。
  */
-export const electronMediaReader: MediaReader = {
+export const electronMediaReader: ElectronHostMediaReader = {
+  ...nativeMediaChunks,
   async read(ref: string): Promise<MediaBinary> {
     const trimmed = ref.trim()
     const dataUri = parseDataUri(trimmed)
@@ -147,7 +152,7 @@ export const electronTracer = noopTracer
 // RuntimeContext 单例
 // ---------------------------------------------------------------------------
 
-export const sdkRuntimeContext: RuntimeContext = {
+export const sdkRuntimeContext: ElectronHostRuntime = {
   transport: electronTransport,
   credentials: electronCredentialStore,
   media: electronMediaReader,
