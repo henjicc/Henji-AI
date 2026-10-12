@@ -429,6 +429,7 @@
       "usePrompt": "Use Prompt"
     },
     "status": {
+      "cancelled": "Cancelled",
       "queued": "Queued...",
       "waiting": "Waiting for previous task",
       "preparing": "Preparing...",

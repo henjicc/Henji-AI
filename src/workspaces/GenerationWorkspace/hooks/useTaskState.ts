@@ -1,10 +1,10 @@
 import type React from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import { createLogger } from '@/core/logging'
 import { persistGenerationTask, deletePersistedGenerationTask } from './useTaskHistory'
 import type { GenerationTask, ResultImageDimensions } from '../types'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
-import { publishVisibleGenerationTaskStatus } from '../application/visibleGenerationTaskCommand'
+import { readGenerationTasks, replaceGenerationTasks, subscribeGenerationTasks } from '../application/generationTaskProjection'
 
 export interface UseTaskStateReturn {
   tasks: GenerationTask[]
@@ -20,14 +20,13 @@ export interface UseTaskStateReturn {
 }
 
 export function useTaskState(): UseTaskStateReturn {
-  const [tasks, setReactTasks] = useState<GenerationTask[]>([])
-  const latest = useRef(tasks)
+  const tasks = useSyncExternalStore(subscribeGenerationTasks, readGenerationTasks)
   const hydrateTasks = useCallback<React.Dispatch<React.SetStateAction<GenerationTask[]>>>((input) => {
-    latest.current = typeof input === 'function' ? input(latest.current) : input
-    setReactTasks(latest.current)
+    const current = readGenerationTasks()
+    replaceGenerationTasks(typeof input === 'function' ? input(current) : input)
   }, [])
   const setTasks = useCallback<React.Dispatch<React.SetStateAction<GenerationTask[]>>>((input) => {
-    const previous = latest.current
+    const previous = readGenerationTasks()
     const next = typeof input === 'function' ? input(previous) : input
     if (next === previous) return
     // 对象身份仍是“需要保存”的依据；建一次索引，避免 N 项各自扫描旧列表。
@@ -36,19 +35,11 @@ export function useTaskState(): UseTaskStateReturn {
     const report = (error: unknown): void => createLogger('features.generation.persistence').error('生成任务保存失败，保留内存结果', error, { event: 'generation.history.failed' })
     for (const task of next) if (!previousTasks.has(task)) void persistGenerationTask(task).catch(report)
     for (const task of previous) if (!ids.has(task.id)) void deletePersistedGenerationTask(task.id).catch(report)
-    latest.current = next
-    setReactTasks(next)
+    replaceGenerationTasks(next)
   }, [])
 
   const updateTask = useCallback((taskId: string, updates: Partial<GenerationTask>): void => {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)))
-    if (updates.status && !['success', 'error'].includes(updates.status)) publishVisibleGenerationTaskStatus({
-      taskId,
-      status: updates.status,
-      resultAvailable: Boolean(updates.result),
-      errorCode: updates.error ? 'GENERATION_FAILED' : null,
-      errorMessage: updates.error?.slice(0, 1_000) ?? null,
-    })
   }, [setTasks])
 
   // 进度是高频瞬态状态：写独立 store 而非 setTasks，避免每次进度回调都重建 tasks 数组、

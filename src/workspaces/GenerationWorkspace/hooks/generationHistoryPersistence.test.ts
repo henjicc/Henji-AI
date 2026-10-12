@@ -16,6 +16,9 @@ vi.mock('@/utils/save', () => ({ isDesktop: () => true }))
 vi.mock('@/utils/dataPath', () => ({ getThumbnailsPath: async () => '/program/Thumbnails' }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/utils/historyThumbnail', () => ({ prepareHistoryThumbnails: vi.fn(async () => undefined) }))
+import { publishPersistedGenerationTask } from '../application/generationTaskHistory'
+import { replaceGenerationTasks } from '../application/generationTaskProjection'
+import { readGenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
 import { databaseService } from '@/services/database/DatabaseService'
 import { useTaskState } from './useTaskState'
 import { awaitGenerationTaskPersistence, createPersistedGenerationTask, deletePersistedGenerationTask, persistGenerationTask, useSaveTaskHistory, useLoadTaskHistory } from './useTaskHistory'
@@ -25,7 +28,7 @@ import { prepareHistoryThumbnails } from '@/utils/historyThumbnail'
 function gate() { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve }); return { promise, release } }
 function task(id = crypto.randomUUID()): GenerationTask { return { id, createdAt: new Date(), type: 'image', prompt: '保存测试', model: 'model', status: 'queued', options: { size: 'small' } } }
 function saved(id: string) { return storage.rows.get(id) as HistoryRecord | undefined }
-afterEach(() => { cleanup(); storage.beforeWrite = undefined; vi.useRealTimers(); vi.clearAllMocks(); storage.rows.clear(); storage.writes.length = 0 })
+afterEach(() => { cleanup(); replaceGenerationTasks([]); storage.beforeWrite = undefined; vi.useRealTimers(); vi.clearAllMocks(); storage.rows.clear(); storage.writes.length = 0 })
 
 it('后台缩略图按唯一结果路径提交，更新或卸载会取消旧批次', async () => {
   vi.useFakeTimers()
@@ -57,7 +60,7 @@ it('已停止画布任务加载为非活动历史，保留说明且不重新保�
   vi.mocked(databaseService.getHistory).mockResolvedValueOnce([record])
   const setTasks = vi.fn()
   renderHook(() => useLoadTaskHistory({ setTasks, setIsTasksLoaded: vi.fn(), isInitialLoadRef: { current: true } }))
-  await vi.waitFor(() => expect(setTasks).toHaveBeenCalledWith([expect.objectContaining({ id: value.id, status: 'error', error: '本地任务已停止' })]))
+  await vi.waitFor(() => expect(setTasks).toHaveBeenCalledWith([expect.objectContaining({ id: value.id, status: 'cancelled', error: '本地任务已停止' })]))
   expect(databaseService.updateHistory).not.toHaveBeenCalled()
   expect(databaseService.insertHistory).not.toHaveBeenCalled()
 })
@@ -145,4 +148,18 @@ it('操作身份派生的任务主键可重用且隔离客户端原始标识', (
   expect(applicationGenerationTaskId(operationId)).toBe(taskId)
   expect(taskId).not.toBe(operationId)
   expect(applicationGenerationTaskId(crypto.randomUUID())).not.toBe(taskId)
+})
+
+it('画布任务发布持久终态后，同步已挂载历史列表与实体投影并保留来源', async () => {
+  const value = task()
+  const { result } = renderHook(() => useTaskState())
+  const record: HistoryRecord = { id: value.id, providerId: 'fixture', modelId: value.model, type: 'image', prompt: value.prompt,
+    params: { __canvasGeneration: { version: 2, projectId: 'project', nodeId: 'node' }, __resultUrl: ['https://example.test/result.png'] },
+    resultPaths: [], taskId: null, status: 'success', errorMessage: null, cost: null, duration: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  storage.rows.set(value.id, record)
+  await act(async () => { await publishPersistedGenerationTask(value.id) })
+  expect(result.current.tasks).toEqual([expect.objectContaining({ id: value.id, status: 'success', result: expect.objectContaining({ urls: ['https://example.test/result.png'] }) })])
+  expect(readGenerationTaskStatusSnapshot(value.id)).toMatchObject({ status: 'success', origin: 'canvas', resultAvailable: true })
+  expect(storage.writes).toEqual([])
 })

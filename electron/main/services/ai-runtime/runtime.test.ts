@@ -2,6 +2,7 @@ import { AiRuntimeError } from '@henjicc/ai-sdk'
 import type { HostGenerateResponse } from './host-response'
 const submissions = vi.hoisted(() => new Map<string, { response: HostGenerateResponse; phase: string }>())
 vi.mock('./generation-submissions', () => ({
+  completePolledGenerationSubmission: vi.fn(),
   claimGenerationSubmission: (id: string) => submissions.get(id)?.response ?? null,
   completeGenerationSubmission: (id: string, response: HostGenerateResponse, phase = 'completed') => submissions.set(id, { response, phase }),
   readGenerationSubmission: (id: string) => submissions.get(id)?.response ?? null,
@@ -20,7 +21,8 @@ const mocks = vi.hoisted(() => ({
   continuePolling: vi.fn(),
   saveMediaFromUrlTracked: vi.fn(),
   releaseSavedMediaFileLease: vi.fn(),
-  savePendingResult: vi.fn(),
+  pendingWrite: vi.fn(),
+  pendingRows: new Map<string, { result_json: string; completed_at: number }>(),
 }))
 
 vi.mock('../keystore', () => ({
@@ -38,9 +40,11 @@ vi.mock('./media-store', () => ({
   releaseSavedMediaFileLease: mocks.releaseSavedMediaFileLease,
 }))
 
-vi.mock('./pending-results', () => ({
-  savePendingResult: mocks.savePendingResult,
-}))
+vi.mock('../db', () => ({ getDb: () => ({ prepare: () => ({
+  run: (id: string, json: string, time: number) => { mocks.pendingWrite(id, json, time); mocks.pendingRows.set(id, { result_json: json, completed_at: time }) },
+  get: (id: string) => mocks.pendingRows.get(id),
+}) }) }))
+vi.mock('../db-locations', () => ({ databaseLocations: { use: (action: (scope: { encodeValue: (value: unknown) => unknown; decodeValue: (value: unknown) => unknown }) => unknown) => action({ encodeValue: value => value, decodeValue: value => value }) } }))
 
 vi.mock('./progress', () => ({
   getProgressEstimate: vi.fn(),
@@ -74,7 +78,8 @@ vi.mock('./trace', () => ({
   })),
 }))
 
-import { continuePolling, generate } from './runtime'
+import { consumePendingResult } from './pending-results'
+import { cancelRuntimeTask, hasActiveGenerationWork, continuePolling, generate } from './runtime'
 import { createDiagnosticTransport } from './network-transport'
 
 const request = {
@@ -165,6 +170,8 @@ describe('ai-runtime continuePolling 日志闭环', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     submissions.clear()
+    mocks.pendingRows.clear()
+    mocks.pendingWrite.mockReset()
     mocks.saveMediaFromUrlTracked.mockResolvedValue({
       filePath: '/tmp/result.png',
       created: true,
@@ -209,7 +216,7 @@ describe('ai-runtime continuePolling 日志闭环', () => {
       createdFilePaths: ['/tmp/result.png'],
     })
 
-    expect(mocks.savePendingResult).toHaveBeenCalledWith('task-1', expect.any(Object))
+    expect(consumePendingResult('task-1')).toMatchObject({ filePaths: ['/tmp/result.png'] })
     expect(mocks.continuePolling).toHaveBeenCalledWith(
       expect.objectContaining({ requestId: 'local-redraw-chain-1' }),
       expect.any(Object),
@@ -257,23 +264,33 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     })
   })
 
-  it('落盘后的 pending 保存失败也记录 failed，首个异常保持原样抛出', async () => {
+  it('真实回执的数据库写失败明确报未确认，保留媒体并可在超过一天后恢复', async () => {
     mockCompletedProviderResult()
     const failure = new Error('pending store unavailable')
-    mocks.savePendingResult.mockImplementation(() => {
-      throw failure
-    })
+    mocks.pendingWrite.mockImplementationOnce(() => undefined).mockImplementationOnce(() => { throw failure })
+    await expect(continuePolling(request)).rejects.toThrow('结果已生成、保存未确认')
+    expect(mocks.releaseSavedMediaFileLease).not.toHaveBeenCalled()
+    expect(mocks.logger.error).toHaveBeenCalledWith('结果已生成，保存尚未确认', expect.objectContaining({ taskId: 'task-1', error: failure }))
+    expect(consumePendingResult('task-1')).toMatchObject({ filePaths: ['/tmp/result.png'] })
+    mocks.pendingRows.get('task-1')!.completed_at = Date.now() - 48 * 60 * 60 * 1000
+    expect(consumePendingResult('task-1')).toMatchObject({ filePaths: ['/tmp/result.png'] })
+  })
 
-    await expect(continuePolling(request)).rejects.toBe(failure)
-
-    expect(mocks.releaseSavedMediaFileLease).toHaveBeenCalledWith('/tmp/result.png')
-    expect(mocks.logger.error).toHaveBeenCalledWith(
-      '后端轮询失败',
-      expect.objectContaining({
-        event: 'ai_runtime.poll.failed',
-        taskId: 'task-1',
-        error: expect.objectContaining({ message: 'pending store unavailable' }),
-      }),
-    )
+  it('取消贯穿主进程保存，及时释放忙碌状态并保留供应商回执', async () => {
+    mockCompletedProviderResult()
+    let started!: () => void
+    const saving = new Promise<void>(resolve => { started = resolve })
+    mocks.saveMediaFromUrlTracked.mockImplementationOnce((_url: string, context: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true })
+      started()
+    }))
+    const result = continuePolling(request)
+    const failed = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    await saving
+    expect(hasActiveGenerationWork()).toBe(true)
+    cancelRuntimeTask('task-1')
+    await failed
+    expect(hasActiveGenerationWork()).toBe(false)
+    expect(consumePendingResult('task-1')).toMatchObject({ urls: ['https://media.example.test/result.png'] })
   })
 })

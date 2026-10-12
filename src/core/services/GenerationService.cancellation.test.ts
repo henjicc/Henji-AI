@@ -137,10 +137,11 @@ it.each(['generate', 'poll'] as const)('%s 只取消实际运行标识，不把�
     : service.continuePolling('cancel-fixture', 'provider-task', {}, undefined, { requestId: 'original-request', signal: controller.signal })
   const dispatch = phase === 'generate' ? aiGenerate : aiContinuePolling
   await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1))
+  const cancelled = expect(run).rejects.toMatchObject({ name: 'AbortError' })
   controller.abort()
+  await cancelled
   await vi.waitFor(() => expect(aiCancelTask).toHaveBeenCalledWith(phase === 'generate' ? 'original-request' : 'provider-task'))
   release()
-  await run
   expect(aiCancelTask).toHaveBeenCalledTimes(1)
   expect(vi.mocked(dispatch).mock.calls[0][0]).not.toHaveProperty('signal')
 })

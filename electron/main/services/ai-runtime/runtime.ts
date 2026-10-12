@@ -1,5 +1,5 @@
 import { networkRequestContext, type NetworkRequestScope } from './network-transport'
-import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission, readGenerationSubmissionStage } from './generation-submissions'
+import { claimGenerationSubmission, completeGenerationSubmission, completePolledGenerationSubmission, readGenerationSubmission, readGenerationSubmissionStage } from './generation-submissions'
 import {
   AiRuntimeError,
   type AIClientGenerationRequestInfo,
@@ -17,7 +17,7 @@ import { getAiProviderApiKey, getAiProviderKeyStatus } from '../keystore'
 import { createMainLogger, sanitizeJsonValue } from '../logging'
 import { releaseSavedMediaFileLease, saveMediaFromUrlTracked, type MediaDownloadContext } from './media-store'
 import { getProgressEstimate, recordProgressSample } from './progress'
-import { savePendingResult } from './pending-results'
+import { consumePendingResult, savePendingResult } from './pending-results'
 import { materializeStructuredOutput } from './structured-output'
 import { toHostGenerateResponse, type HostGenerateResponse } from './host-response'
 import { sdkAIClient } from './sdk-runtime'
@@ -68,6 +68,12 @@ export function getProviderKeyStatus(): ProviderKeyStatusDto[] {
 const activeGenerationSubmissions = new Set<string>()
 /** 正在轮询（之后会把结果保存进作品目录）的任务数。 */
 let activePolls = 0
+const hostExecutions = new Set<{ ids: Set<string>; controller: AbortController }>()
+function beginHostExecution(...ids: string[]) {
+  const execution = { ids: new Set(ids), controller: new AbortController() }
+  hostExecutions.add(execution)
+  return execution
+}
 
 /** 还有生成结果正在取回或保存（会往作品目录写文件）；更换作品目录前据此拒绝（任务 4.2）。 */
 export function hasActiveGenerationWork(): boolean {
@@ -88,16 +94,17 @@ export async function recoverSavedGenerationResult(requestId: string, output: Ge
   if (activeGenerationSubmissions.has(requestId)) throw new Error('GENERATION_IN_PROGRESS:原生成还在保存，请稍后查询')
   if (!stage?.modelId) throw new Error('GENERATION_RECOVERY_REQUIRED:旧回执缺少精确保存信息，请核对原任务')
   activeGenerationSubmissions.add(requestId)
+  const execution = beginHostExecution(requestId, response.taskId ?? requestId)
   try {
     const media = response.filePaths.length > 0 ? { filePaths: response.filePaths, createdFilePaths: response.createdFilePaths ?? [] }
-      : response.status === 'completed' ? await saveMediaPaths(response.urls, { requestId, modelId: stage.modelId, taskId: response.taskId }, output.outputDirectory)
+      : response.status === 'completed' ? await saveMediaPaths(response.urls, { requestId, modelId: stage.modelId, taskId: response.taskId, signal: execution.controller.signal }, output.outputDirectory)
       : { filePaths: [], createdFilePaths: [] }
     const saved = { ...response, ...media }
     completeGenerationSubmission(requestId, saved, 'media')
     const completed = { ...saved, structuredOutput: materializeStructuredOutput(saved.structuredOutput, saved.filePaths) }
     completeGenerationSubmission(requestId, completed)
     return completed
-  } finally { activeGenerationSubmissions.delete(requestId) }
+  } finally { activeGenerationSubmissions.delete(requestId); hostExecutions.delete(execution) }
 }
 
 export async function generate(
@@ -108,6 +115,7 @@ export async function generate(
   const previous = claimGenerationSubmission(requestId, request)
   if (previous) return await recoverSavedGenerationResult(requestId, output) ?? previous
   activeGenerationSubmissions.add(requestId)
+  const execution = beginHostExecution(requestId)
   let ownedMediaPaths: string[] = []
   logger.info('后端开始生成', {
     event: 'ai_runtime.generate.start',
@@ -134,6 +142,7 @@ export async function generate(
       },
     }))
     const providerResult = toHostGenerateResponse(sdkResult)
+    if (providerResult.taskId) execution.ids.add(providerResult.taskId)
     // 先封存供应商真实回执；媒体转换或日志后续失败不抹去已提交结果。
     completeGenerationSubmission(requestId, providerResult, 'provider')
     const info = requireRequestInfo(requestInfo)
@@ -147,7 +156,7 @@ export async function generate(
       sdkResult.metadata
     )
     const persistedMedia = providerResult.status === 'completed'
-      ? await saveMediaPaths(providerResult.urls, { requestId, modelId: request.modelId, taskId: providerResult.taskId }, output.outputDirectory)
+      ? await saveMediaPaths(providerResult.urls, { requestId, modelId: request.modelId, taskId: providerResult.taskId, signal: execution.controller.signal }, output.outputDirectory)
       : { filePaths: [], createdFilePaths: [] }
     const { filePaths, createdFilePaths } = persistedMedia
     ownedMediaPaths = createdFilePaths
@@ -188,6 +197,10 @@ export async function generate(
     return response
   } catch (error) {
     // 已产生媒体属于原提交；不删除已经落盘的真实供应商结果。
+    if (execution.controller.signal.aborted) {
+      logger.info('本地生成已停止，原结果可继续恢复', { event: 'ai_runtime.generate.cancelled', requestId })
+      throw error
+    }
     logger.warn('生成收尾失败，保留原提交结果', { event: 'ai_runtime.generate.recovery_required', requestId, context: { retainedMediaCount: ownedMediaPaths.length } })
     logger.error('后端生成失败', {
       event: 'ai_runtime.generate.failed',
@@ -196,7 +209,7 @@ export async function generate(
       error: toLogError(error),
     })
     throw error
-  } finally { activeGenerationSubmissions.delete(requestId) }
+  } finally { activeGenerationSubmissions.delete(requestId); hostExecutions.delete(execution) }
 }
 
 export async function continuePolling(
@@ -207,6 +220,7 @@ export async function continuePolling(
   const taskId = request.taskId.trim()
   const pollScope: NetworkRequestScope = { requestId, modelId: request.modelId, taskId, phase: 'poll' }
   let ownedMediaPaths: string[] = []
+  const execution = beginHostExecution(requestId, taskId)
   activePolls += 1
   logger.info('后端开始轮询', {
     event: 'ai_runtime.poll.start',
@@ -217,22 +231,25 @@ export async function continuePolling(
 
   try {
     let requestInfo: AIClientGenerationRequestInfo | undefined
-    const sdkResult = await networkRequestContext.run(pollScope, () => sdkAIClient.continuePolling({ ...request, requestId }, {
+    const cached = consumePendingResult(taskId)
+    const sdkResult = cached ? { ...cached, status: cached.status ?? 'completed', urls: cached.urls ?? [] } as Parameters<typeof toHostGenerateResponse>[0] : await networkRequestContext.run(pollScope, () => sdkAIClient.continuePolling({ ...request, requestId }, {
       onRequestBuilt: (info) => {
         requestInfo = info
         // 此回调携带模型创建端点；真实轮询请求日志由宿主 transport 记录。
         pollScope.providerId = info.providerId
       },
     }))
-    const providerResult = toHostGenerateResponse(sdkResult)
-    const info = requireRequestInfo(requestInfo)
+    const providerResult = cached ? { ...toHostGenerateResponse(sdkResult), filePaths: cached.filePaths ?? [], createdFilePaths: cached.createdFilePaths } : toHostGenerateResponse(sdkResult)
+    // 供应商结果先留恢复回执，下载或取消不再迫使用户重查已过期的远端任务。
+    savePendingResult(taskId, { ...providerResult, taskId })
+    const info = cached ? { providerId: pollScope.providerId ?? '', route: '', method: 'GET', requestBody: {} } : requireRequestInfo(requestInfo)
     const trace = buildContinuePollingTrace(
       request.modelId,
       info.providerId,
       requestId,
       pollScope.lastRequest?.route ?? info.route,
       taskId,
-      pollScope.lastResponse ?? sdkResult.metadata
+      pollScope.lastResponse ?? sdkResult.metadata ?? null
     )
     logger.info('后端轮询响应', {
       event: 'generation.runtime.response_json',
@@ -247,8 +264,12 @@ export async function continuePolling(
         responseBody: trace.responseBody,
       },
     })
-    const { filePaths, createdFilePaths } = await saveMediaPaths(providerResult.urls, { requestId, modelId: request.modelId, taskId }, output.outputDirectory)
+    execution.controller.signal.throwIfAborted()
+    const { filePaths, createdFilePaths } = providerResult.filePaths.length === providerResult.urls.length
+      ? { filePaths: providerResult.filePaths, createdFilePaths: providerResult.createdFilePaths ?? [] }
+      : await saveMediaPaths(providerResult.urls, { requestId, modelId: request.modelId, taskId, signal: execution.controller.signal }, output.outputDirectory)
     ownedMediaPaths = createdFilePaths
+    savePendingResult(taskId, { ...providerResult, taskId, filePaths, createdFilePaths })
     const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePaths)
     const responseResult: HostGenerateResponse = {
       status: providerResult.status,
@@ -261,12 +282,19 @@ export async function continuePolling(
       trace,
     }
     savePendingResult(taskId, {
+      status: providerResult.status,
+      taskId,
       urls: providerResult.urls,
       filePaths,
       createdFilePaths,
       metadata: providerResult.metadata,
       structuredOutput,
     })
+    try {
+      completePolledGenerationSubmission(taskId, responseResult)
+    } catch (cause) {
+      throw new Error('结果已生成、保存未确认。请从原任务继续获取结果。', { cause })
+    }
     logger.info('后端轮询结果', {
       event: 'ai_runtime.poll.result',
       requestId,
@@ -277,7 +305,11 @@ export async function continuePolling(
     })
     return responseResult
   } catch (error) {
-    await rollbackCreatedMedia(ownedMediaPaths)
+    if (execution.controller.signal.aborted) {
+      logger.info('本地续查已停止，原结果可继续恢复', { event: 'ai_runtime.poll.cancelled', requestId, taskId })
+      throw error
+    }
+    logger.warn('轮询收尾未确认，保留原任务结果', { event: 'ai_runtime.poll.recovery_required', taskId, context: { retainedMediaCount: ownedMediaPaths.length } })
     logger.error('后端轮询失败', {
       event: 'ai_runtime.poll.failed',
       requestId,
@@ -290,10 +322,12 @@ export async function continuePolling(
     throw error
   } finally {
     activePolls -= 1
+    hostExecutions.delete(execution)
   }
 }
 
 export function cancelRuntimeTask(taskId: string): void {
+  for (const execution of hostExecutions) if (execution.ids.has(taskId)) execution.controller.abort()
   sdkAIClient.cancel({ namespace: 'generation', taskId })
 }
 
@@ -338,6 +372,7 @@ async function saveMediaPaths(urls: readonly string[], context: MediaDownloadCon
   const createdPathSet = new Set<string>()
   try {
     for (const [outputIndex, url] of urls.entries()) {
+      context.signal?.throwIfAborted()
       const saved = await saveMediaFromUrlTracked(url, { ...context, outputIndex }, directory)
       if (saved) {
         savedPaths.push(saved.filePath)

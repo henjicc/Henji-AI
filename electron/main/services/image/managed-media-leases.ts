@@ -35,11 +35,13 @@ async function withAcquisitionLock<T>(filePath: string, action: () => Promise<T>
 export async function acquireManagedMediaFileLease(
   filePath: string,
   tryCreate: () => Promise<boolean>,
+  validateExisting?: () => Promise<void>,
 ): Promise<boolean> {
   const key = normalize(filePath)
   return await withAcquisitionLock(key, async () => {
     const active = leases.get(key)
     if (active) {
+      await validateExisting?.()
       active.count += 1
       return true
     }

@@ -48,6 +48,7 @@ vi.mock('@/core/logging', () => ({
   createLogger: () => ({ info: vi.fn(), error: vi.fn() }),
 }))
 
+import { cancelGenerationTaskExecution, beginGenerationTaskExecution } from '../application/generationTaskExecution'
 import { continuePollingTask } from './continuePollingTask'
 
 function createTask(): GenerationTask {
@@ -120,7 +121,7 @@ describe('GenerationWorkspace 缓存续查媒体所有权', () => {
     expect(mocks.releaseManagedGenerationMedia).not.toHaveBeenCalled()
   })
 
-  it('pending 缓存已消费但结果提交失败时回收本次新建文件', async () => {
+  it('结果处理失败保留回执引用的媒体以便继续恢复', async () => {
     mocks.consumePendingResult.mockResolvedValue({
       filePaths: ['/data/Media/result.png'],
       createdFilePaths: ['/data/Media/result.png'],
@@ -136,9 +137,7 @@ describe('GenerationWorkspace 缓存续查媒体所有权', () => {
       toUserMessage: () => '本地结果处理失败',
     })
 
-    expect(mocks.releaseManagedGenerationMedia).toHaveBeenCalledWith([
-      '/data/Media/result.png',
-    ])
+    expect(mocks.releaseManagedGenerationMedia).not.toHaveBeenCalled()
   })
 
   it('pending 缓存没有新建文件所有权时失败也不触发释放', async () => {
@@ -159,4 +158,28 @@ describe('GenerationWorkspace 缓存续查媒体所有权', () => {
 
     expect(mocks.releaseManagedGenerationMedia).not.toHaveBeenCalled()
   })
+})
+
+it('取消/新执行之后迟到的续查结果和进度不提交终态、不删除恢复媒体', async () => {
+  mocks.consumePendingResult.mockResolvedValue(null)
+  let finish!: (value: unknown) => void
+  let progress!: (value: { progress: number }) => void
+  mocks.continuePolling.mockImplementation((_model, _task, _options, callback) => {
+    progress = callback
+    return new Promise(resolve => { finish = resolve })
+  })
+  const updateTask = vi.fn(), updateProgress = vi.fn()
+  const polling = continuePollingTask({ task: createTask(), genericGenerateFailed: '生成失败', notify: vi.fn(), updateTask, updateProgress, toUserMessage: String })
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  cancelGenerationTaskExecution('task-1')
+  const next = beginGenerationTaskExecution('task-1')
+  updateTask.mockClear(); updateProgress.mockClear()
+  progress({ progress: 90 })
+  finish({ urls: ['https://example.test/result.png'], filePaths: ['/result.png'], createdFilePaths: ['/result.png'] })
+  await polling
+  expect(updateTask).not.toHaveBeenCalled()
+  expect(updateProgress).not.toHaveBeenCalled()
+  expect(mocks.releaseManagedGenerationMedia).not.toHaveBeenCalled()
+  expect(next.isCurrent()).toBe(true)
+  next.finish()
 })

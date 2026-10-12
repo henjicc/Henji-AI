@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
+import { setTimeout as delay } from 'node:timers/promises'
+import { writeBufferAtomically } from '../fs/atomic-file'
 import { AiRuntimeError } from '@henjicc/ai-sdk'
 
 import {
@@ -19,12 +21,17 @@ export interface MediaDownloadContext {
   modelId?: string
   taskId?: string
   outputIndex?: number
+  signal?: AbortSignal
 }
 
 class MediaHttpError extends Error {
   constructor(readonly status: number) {
     super(`HTTP ${status} while downloading media`)
   }
+}
+
+class MediaIntegrityError extends Error {
+  constructor() { super('结果文件未完整保存，请重新获取结果。') }
 }
 
 function isTransientDownloadError(error: unknown): boolean {
@@ -39,25 +46,30 @@ async function downloadMedia(
   url: string,
   context: MediaDownloadContext,
 ): Promise<{ bytes: Uint8Array; contentType: string }> {
-  const { outputIndex, ...identity } = context
+  const { outputIndex, signal, ...identity } = context
   logger.info('开始下载生成结果', {
     event: 'ai_runtime.media_download.start', ...identity, context: { outputIndex },
   })
   for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+      signal?.throwIfAborted()
+      const timeout = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
+      const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined)
         throw new MediaHttpError(response.status)
       }
       // 响应头成功不代表文件完整；body 中途断流也必须重取整个文件。
       const bytes = new Uint8Array(await response.arrayBuffer())
+      signal?.throwIfAborted()
+      if (!bytes.byteLength) throw new Error('Empty media response')
       logger.info('生成结果下载完成', {
         event: 'ai_runtime.media_download.completed', ...identity,
         context: { outputIndex, attempt, byteLength: bytes.byteLength },
       })
       return { bytes, contentType: response.headers.get('content-type') ?? 'application/octet-stream' }
     } catch (error) {
+      signal?.throwIfAborted()
       const retry = attempt < DOWNLOAD_ATTEMPTS && isTransientDownloadError(error)
       const details = {
         ...identity,
@@ -72,7 +84,7 @@ async function downloadMedia(
         throw failure
       }
       logger.warn('生成结果下载中断，正在重试', { event: 'ai_runtime.media_download.retry', ...details })
-      await new Promise((resolve) => setTimeout(resolve, 250 * attempt))
+      await delay(250 * attempt, undefined, { signal })
     }
   }
   throw new Error('Unreachable media download state')
@@ -105,15 +117,35 @@ export async function saveMediaFromUrlTracked(
   const mediaDir = directory ?? getGeneratedMediaDir()
   await fs.mkdir(mediaDir, { recursive: true })
   const filePath = path.join(mediaDir, fileName)
+  const digest = createHash('sha256').update(bytes).digest('hex')
+  const validate = async (candidate: string): Promise<void> => {
+    context.signal?.throwIfAborted()
+    const stat = await fs.stat(candidate)
+    if (stat.size !== bytes.byteLength) throw new MediaIntegrityError()
+    const existing = await fs.readFile(candidate, { signal: context.signal })
+    if (createHash('sha256').update(existing).digest('hex') !== digest) throw new MediaIntegrityError()
+  }
+  const validateOrRepair = async (): Promise<void> => {
+    try { await validate(filePath) } catch (error) {
+      if (!(error instanceof MediaIntegrityError)) throw error
+      logger.warn('已有生成文件不完整，使用已下载的完整结果修复', {
+        event: 'ai_runtime.media_integrity.repair', requestId: context.requestId, taskId: context.taskId,
+      })
+      await writeBufferAtomically(filePath, bytes, undefined, { signal: context.signal, validate })
+    }
+  }
   const leased = await acquireManagedMediaFileLease(filePath, async () => {
     try {
-      await fs.writeFile(filePath, bytes, { flag: 'wx' })
+      await writeBufferAtomically(filePath, bytes, undefined, { exclusive: true, signal: context.signal, validate })
       return true
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        await validateOrRepair()
+        return false
+      }
       throw error
     }
-  })
+  }, validateOrRepair)
   return { filePath, created: leased }
 }
 

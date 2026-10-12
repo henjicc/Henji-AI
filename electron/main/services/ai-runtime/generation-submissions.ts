@@ -43,6 +43,12 @@ export function completeGenerationSubmission(requestId: string, response: HostGe
   getDb().prepare('UPDATE generation_submissions SET response_json = ?, phase = ? WHERE request_id = ?').run(encodeResponse(response), phase, requestId)
 }
 
+/** 续查结束时同步原提交回执，按供应商任务身份关联，不重放提交。 */
+export function completePolledGenerationSubmission(taskId: string, response: HostGenerateResponse): void {
+  getDb().prepare("UPDATE generation_submissions SET response_json = ?, phase = 'completed' WHERE json_extract(response_json, '$.taskId') = ?")
+    .run(encodeResponse(response), taskId)
+}
+
 export function readGenerationSubmissionStage(requestId: string): { phase: string; modelId: string | null } | undefined {
   return getDb().prepare('SELECT phase, model_id AS modelId FROM generation_submissions WHERE request_id = ?').get(requestId) as { phase: string; modelId: string | null } | undefined
 }

@@ -29,6 +29,7 @@ import { resumeCanvasGenerationInProject, getCanvasResumeControllers } from './c
 import { createCanvasGenerationTaskRecord, completedTaskOutputPaths, canvasGenerationTaskControls as activeTasks,
   canvasGenerationNodeTasks as activeNodeTasks, CANVAS_GENERATION_TASK_MARKER as marker } from './canvasGenerationTaskRecord'
 import { CANVAS_GENERATION_CANCELLED_MESSAGE } from '../domain/generationFailure'
+import { publishPersistedGenerationTask } from '@/workspaces/GenerationWorkspace/application/generationTaskHistory'
 
 type CanvasDestination = Extract<GenerationDestination, { mode: 'canvas' }>
 const logger = createLogger('features.canvas.generationTask')
@@ -249,6 +250,7 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
     : status === 'pending' ? '原供应商任务已登记，等待续查；不会重新提交生成。' : null
   const controllers = [activeTasks.get(taskId)?.controller, ...getCanvasResumeControllers(taskId)].filter((value): value is AbortController => Boolean(value))
   const cancellable = !resultAvailable && controllers.some(controller => !controller.signal.aborted)
+  await publishPersistedGenerationTask(taskId)
   publishCanvasGenerationTaskStatus({ taskId, status, progress, modelId: record.modelId, mediaType: record.type,
     resultAvailable, cancellable, waitingExternal, errorCode, errorMessage })
   return { taskId, status, normalizedStatus: status, progress, modelId: record.modelId, mediaType: record.type,

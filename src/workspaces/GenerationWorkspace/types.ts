@@ -3,7 +3,7 @@ import type { MediaResult } from '@/types'
 
 export type MediaType = 'image' | 'video' | 'audio'
 
-export type TaskStatus = 'queued' | 'pending' | 'generating' | 'success' | 'error'
+export type TaskStatus = 'queued' | 'pending' | 'generating' | 'success' | 'error' | 'cancelled'
 
 export interface ResultImageDimensions {
   width: number

@@ -166,7 +166,7 @@ const TaskCard = React.memo(function TaskCard({
       ? t("ui:workspace.status.preparing")
       : task.status === "generating"
         ? `${t("ui:workspace.status.generating")}${progressValue !== undefined ? ` ${Math.floor(progressValue)}%` : ''}`
-        : null
+        : task.status === "cancelled" ? t("ui:workspace.status.cancelled") : null
   const metaLine = joinTaskMeta([
     typeLabel,
     modelName,
