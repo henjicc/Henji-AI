@@ -83,10 +83,19 @@ export class LocalMcpServer {
     http.headersTimeout = 10_000
     this.http = http
     try {
-      await new Promise<void>((resolve, reject) => {
-        http.once('error', reject)
-        http.listen(port, '127.0.0.1', () => { http.removeListener('error', reject); resolve() })
-      })
+      // 重启应用时旧实例可能尚未释放端口：EADDRINUSE 短暂退避重试，避免外部连接整轮掉线。
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            http.once('error', reject)
+            http.listen(port, '127.0.0.1', () => { http.removeListener('error', reject); resolve() })
+          })
+          break
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE' || attempt >= 7) throw error
+          await new Promise(resolve => setTimeout(resolve, 250 * 2 ** attempt))
+        }
+      }
       const address = http.address()
       this.port = address && typeof address !== 'string' ? address.port : port
     } catch (error) { await this.stop(); throw error }
