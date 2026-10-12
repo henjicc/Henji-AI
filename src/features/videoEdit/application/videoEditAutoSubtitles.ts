@@ -6,6 +6,7 @@ import { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchema
 import { SUBTITLE_MANIFEST_VERSION } from '@/core/persistence/preferenceSchemas'
 import { formatMigrations } from '@/core/persistence/formatMigrations'
 import { migratePersistenceContent } from '@/core/persistence/migrations'
+
 export { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchemas'
 import { z } from 'zod'
 import { AudioBufferSource, Output, StreamTarget, WavOutputFormat } from 'mediabunny'
@@ -269,7 +270,7 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
       const pauses = clip ? await energyTimings.get(clip.id) ?? [] : []
       const boundary = all[positions.get(last.id)! + 1]?.start ?? videoEditDuration(sequence)
       const endFrame = Math.min(boundary, clip ? clip.start + clip.duration : boundary)
-      const text = group.map(caption => caption.text).join(' ')
+      const text = joinCaptionText(group.flatMap(caption => caption.text.split('\n')))
       const scopedClip = clip ? { ...clip, ...advanceVideoEditClipSource(clip, Math.max(first.start, clip.start) - clip.start, sequence.frameRate), start: Math.max(first.start, clip.start), duration: endFrame - Math.max(first.start, clip.start) } : undefined
       const sequencePauses = clip ? pauses.map(pause => {
         const a = videoEditClipFrameBoundaryAtSource(clip, pause.startMs / 1000, fps) / fps * 1000
@@ -297,3 +298,12 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
   finally { release() }
 }
 export async function verifyAutoSubtitles(projectId: string): Promise<boolean> { return verifyVideoEditSaved(projectId) }
+
+/**
+ * 把已有字幕（及其排版换行）拼回连续原文再重新断句。只有两侧都是拉丁字母或数字时才补空格；
+ * 中文之间直接相连——旧断句可能把一个词切成两条（“标点符”“号”），插空格会变成“符 号”。
+ */
+export function joinCaptionText(parts: readonly string[]): string {
+  return parts.map(part => part.trim()).filter(Boolean).reduce((text, part) =>
+    !text ? part : /[A-Za-z0-9]$/.test(text) && /^[A-Za-z0-9]/.test(part) ? `${text} ${part}` : `${text}${part}`, '')
+}

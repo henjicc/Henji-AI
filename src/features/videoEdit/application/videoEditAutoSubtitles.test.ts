@@ -20,6 +20,9 @@ import { resolveVideoEditTextRanges, videoEditTranscriptWords } from '@/core/vid
 import { generateClipSpeechSubtitles } from './videoEditSpeechSubtitles'
 import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
+import { getVideoEditClipPauseMap } from './videoEditPauseMap'
+import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
+import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
 
 const boundary = vi.hoisted(() => ({ mixes: [] as Array<{ start: number; duration: number }>, disposed: vi.fn() }))
 // Pixel/encoder boundaries only; ASR, document instances, edits, history and persistence remain real.
@@ -64,6 +67,27 @@ beforeEach(async () => {
 })
 afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const sequence = () => owner.document.sequences[0]
+
+it('停顿图原生与已存词边界统一取整，不重叠且与字幕吸附一致', async () => {
+  const items = [{ text: '这是。', startMs: 310, endMs: 725 }, { text: '第一。', startMs: 725, endMs: 1390 }, { text: '第二。', startMs: 4880, endMs: 5520 }, { text: '行。', startMs: 5520, endMs: 5890 }]
+  const timings = { granularity: 'word' as const, items }
+  editVideoProject(owner.document.id, document => { document.media[0].creativeSource = { type: 'generation', recordId: 'fractional', outputIndex: 0, prompt: items.map(item => item.text).join('') }; return document })
+  vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings }] } })
+  const captions = await buildSpeechSubtitles(items.map(item => item.text).join(''), timings, sequence().clips[0], sequence().frameRate, { maxCharacters: 2, maxLines: 1, minDurationSeconds: 0, maxReadingSpeed: 1000, joinGapMs: 0 })
+  const fps = sequence().frameRate.numerator / sequence().frameRate.denominator
+  const expected = items.map(item => ({ text: item.text, startFrame: Math.floor(item.startMs * fps / 1000), endFrame: Math.floor(item.endMs * fps / 1000) }))
+  for (const saved of [false, true]) {
+    if (saved) editVideoProject(owner.document.id, document => {
+      const composition = videoEditComposition(document, sequence().id)
+      document.sequences[0].textTranscription = { audioDocumentId: 'saved', sources: [{ itemId: 'audio-item', mediaIdentity: videoEditTextMediaIdentity(composition, 'audio-item'), silences: [], blocks: items.map((item, index) => ({ id: String(index), text: item.text, startFrame: item.startMs * 1000, endFrame: item.endMs * 1000, included: true, locked: false, granularity: 'word' })) }] }
+      return document
+    })
+    const result = await getVideoEditClipPauseMap(owner.document.id, sequence().id, 'voice')
+    expect(result.words).toEqual(expected)
+    expect(result.words.every((word, index) => !result.words[index + 1] || word.endFrame <= result.words[index + 1].startFrame)).toBe(true)
+    expect(captions.map(cue => [cue.caption.start, cue.caption.start + cue.caption.duration])).toEqual(expected.map(word => [word.startFrame, word.endFrame]))
+  }
+})
 it('native generation timestamps create readable frame/us captions in one undo without ASR or approval', async () => {
   const original = ' 聊天的叫AI，画画的叫AI，配音、做视频的，也叫AI。它们是同一个东西吗？\n不是。它们更像一个剧组，各管一摊。大语言模型，懂文字、会思考；图片模型，只会画；音频模型，只会出声；视频模型，负责让画面动起来。但它们能接力：你说一句话，大语言模型先听懂、拆好任务、写出指令，再交给画图的、配音的、做视频的去干活。所以，AI看着五花八门，真正把这一切串起来的，是那个听得懂人话的——大语言模型。 '
   editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = 60; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = 1800; return document })
@@ -117,12 +141,12 @@ it('片段停顿图免费只读：优先词时间，缺少时使用已有能量�
   const before = owner.document; const history = owner.past.length
   try {
     const result = await app.requireResult('get_video_edit_clip_pauses', { clipRef })
-    expect(result).toMatchObject({ source: 'words', words: [{ text: '你好', startFrame: 60, endFrame: 66 }, { text: '世界', startFrame: 70, endFrame: 77 }], pauses: [{ startFrame: 66, endFrame: 70 }] })
+    expect(result).toMatchObject({ source: 'words', words: [{ text: '你好', startFrame: 60, endFrame: 66 }, { text: '世界', startFrame: 70, endFrame: 76 }], pauses: [{ startFrame: 66, endFrame: 70 }] })
     expect(getPlatform().audioEdit.detectSilence).not.toHaveBeenCalled()
     read.mockResolvedValue({ status: 'completed' })
     vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, durationFrames: 12000, channels: 1 })
     vi.mocked(getPlatform().audioEdit.detectSilence).mockResolvedValue({ revision: 0, suggestions: [{ id: 'pause', kind: 'long_silence', evidence: 'audio', title: '', detail: '', startFrame: 1400, endFrame: 1700, blockIds: [], confidence: 'high', status: 'pending' }] })
-    expect(await app.requireResult('get_video_edit_clip_pauses', { clipRef })).toMatchObject({ source: 'energy', words: [], pauses: [{ startFrame: 66, endFrame: 71, kind: 'silence' }] })
+    expect(await app.requireResult('get_video_edit_clip_pauses', { clipRef })).toMatchObject({ source: 'energy', words: [], pauses: [{ startFrame: 66, endFrame: 70, kind: 'silence' }] })
     expect(await app.requireResult('detect_video_edit_text_silence', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef })).toMatchObject({ changed: false, verified: true, ranges: [{ from: 66, to: 71 }] })
     expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
     expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
@@ -432,4 +456,9 @@ it('AI 付费策略 auto 不弹窗直接识别，预检估值进入同一授权�
     expect(useAlertDialogStore.getState().queue).toHaveLength(0)
     expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ phase: 'awaiting_user_confirmation' }))
   } finally { unbind() }
+})
+it('规范化已有字幕时把被旧断句切开的中文词直接拼回，不插空格；英文之间补空格', async () => {
+  const { joinCaptionText } = await import('./videoEditAutoSubtitles')
+  expect(joinCaptionText(['第二行故意写得很长很长没有任何标点符', '号看看它到底会在哪里断开'])).toBe('第二行故意写得很长很长没有任何标点符号看看它到底会在哪里断开')
+  expect(joinCaptionText(['最后一句提到 Large', 'Language', 'Model'])).toBe('最后一句提到 Large Language Model')
 })

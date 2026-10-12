@@ -1,4 +1,4 @@
-import { subtitleStyleOptionsSchema, resolveSubtitleStyle, subtitleWidth } from './subtitleStyleProfiles'
+import { subtitleStyleOptionsSchema, resolveSubtitleStyle, subtitleWidth, subtitleFrameBoundary } from './subtitleStyleProfiles'
 import { segmentTimedSubtitles, subtitleTokensFromCharacters, type SubtitlePause } from './subtitleSegmentation'
 import type { AudioEditTranscriptBlock } from '../audioEdit/types'
 import { joinAudioEditText } from '../audioEdit/captions'
@@ -58,7 +58,7 @@ export function wrapSubtitleText(text: string, maximum: number): string {
 
 export function audioTimestampToVideoFrame(sample: number, sampleRate: number, rate: VideoEditRatio): number {
   if (!Number.isFinite(sample) || sample < 0 || !Number.isFinite(sampleRate) || sampleRate <= 0 || rate.numerator <= 0 || rate.denominator <= 0) throw new Error('识别时间戳或帧率无效。')
-  return Math.round(sample * rate.numerator / (sampleRate * rate.denominator))
+  return subtitleFrameBoundary(sample * rate.numerator / (sampleRate * rate.denominator))
 }
 
 /** Wrapping retains word boundaries; punctuation is preferred to a full cue at the line limit. */
@@ -127,7 +127,7 @@ export function buildAutoSubtitles(blocks: readonly AudioEditTranscriptBlock[], 
       token.endMs = Math.max(token.endMs, range.startFrame / fps * 1000 + block.endFrame / sampleRate * 1000)
     }
     return segmentTimedSubtitles(tokens, { startMs: range.startFrame / fps * 1000, endMs: range.endFrame / fps * 1000 }, options, pauses).map(cue => {
-      const start = Math.max(range.startFrame, Math.ceil(cue.startMs * fps / 1000 - 1e-7)); const end = Math.min(range.endFrame, Math.ceil(cue.endMs * fps / 1000 - 1e-7))
+      const start = Math.max(range.startFrame, subtitleFrameBoundary(cue.startMs * fps / 1000)); const end = Math.min(range.endFrame, subtitleFrameBoundary(cue.endMs * fps / 1000))
       if (end <= start) throw new Error('字幕时长不足一帧，请扩大声音范围。')
       return { id: crypto.randomUUID(), text: cue.text, start, duration: Math.max(1, end - start) }
     })
