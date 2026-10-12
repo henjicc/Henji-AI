@@ -7,6 +7,7 @@ import type {
 import { ApplicationReflectionRegistry } from './registry'
 import { unrestrictedCollectionAvailability, type ApplicationPropertyDescriptor } from '../reflection'
 import type { JsonValue } from '../identifiers'
+import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '../domains/shared/applicationReflectionApplicationCapabilities'
 
 const catalogVersion = 'application-capabilities/v2'
 const digest = `sha256:${'a'.repeat(64)}`
@@ -255,6 +256,19 @@ describe('ApplicationReflectionRegistry', () => {
     )
     expect(availability.find((item) => item.propertyId === 'sample.enabled')?.writable).toBe(true)
     expect(availability.find((item) => item.propertyId === 'sample.mode')?.writable).toBe(false)
+  })
+
+  it('通用读取省略 propertyIds 后返回全部授权可读属性，显式空数组仍只读基线', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register(registration())
+    const capability = APPLICATION_REFLECTION_APPLICATION_CAPABILITIES.find(item => item.id === 'read_application_entity')!
+    const input = capability.inputSchema.parse({ ref: { kind: 'sample.item', id: 'one' } }) as {
+      ref: { kind: string; id: string }; propertyIds?: string[]
+    }
+    expect(input).not.toHaveProperty('propertyIds')
+    const snapshot = await registry.readEntity(input.ref, input.propertyIds, assistantContext)
+    expect(snapshot.properties).toEqual({ 'sample.enabled': true, 'sample.level': 4, 'sample.mode': 'safe', 'sample.created_at': '2026-08-01T00:00:00.000Z' })
+    expect((await registry.readEntity(input.ref, [], assistantContext)).properties).toEqual({})
   })
 
   it('集合可用性同时合并静态声明、provider 当前状态与调用方权限', async () => {

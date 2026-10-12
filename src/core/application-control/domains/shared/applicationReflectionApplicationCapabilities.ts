@@ -111,7 +111,7 @@ const listEntities = defineApplicationCapability({
 
 const readEntity = defineApplicationCapability({
   id: 'read_application_entity', version: 1, title: '读取应用实体属性',
-  description: '按稳定引用读取一个实体实例的属性值和并发基线。',
+  description: '按稳定引用读取一个实体实例的属性值和并发基线。省略 propertyIds 时返回当前授权及数据等级允许读取的全部已登记属性；显式传 [] 只返回实体与基线，传属性列表则仅返回指定的可读属性。大属性可用 propertyIds 按需选择。',
   domain: 'application',
   aliases: ['读取属性', '看看这个对象', 'read entity'],
   readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'application:read',
@@ -119,7 +119,7 @@ const readEntity = defineApplicationCapability({
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
   inputSchema: z.object({
     ref: refSchema,
-    propertyIds: z.array(z.string().min(1)).max(64).default([]),
+    propertyIds: z.array(z.string().min(1)).max(64).optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     ref: refSchema,

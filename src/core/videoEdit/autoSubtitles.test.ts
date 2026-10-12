@@ -28,14 +28,14 @@ describe('自动字幕分行与节目时间', () => {
     expect(cues[1].start + cues[1].duration).toBe(105)
     expect(cues[2].start + cues[2].duration).toBe(120)
   })
-  it('中文句读优先拆分，中英文行数受限且不丢文字，超长英文词可按字拆', () => {
+  it('中文句读优先拆分，中英文行数受限且不丢文字，超长英文词独占一行', () => {
     expect(splitSubtitleText('欢迎来到，这里继续，最后结束。', 6, 2)).toEqual(['欢迎来到，\n这里继续，', '最后结束。'])
     expect(splitSubtitleText('欢迎来到，接下来的内容没有句读结束', 6, 2)[0]).toBe('欢迎来到，')
     const english = splitSubtitleText('Hello friend, today we edit subtitles together.', 14, 1)
     expect(english.every(cue => Array.from(cue).length <= 14)).toBe(true)
     expect(english.join(' ')).toBe('Hello friend, today we edit subtitles together.')
-    expect(splitSubtitleText('supercalifragilistic', 5, 1).join('')).toBe('supercalifragilistic')
-    expect(splitSubtitleText('abcdefghijklmnop', 4, 4)).toEqual(['abcd\nefgh\nijkl\nmnop'])
+    expect(splitSubtitleText('supercalifragilistic', 5, 1)).toEqual(['supercalifragilistic'])
+    expect(splitSubtitleText('abcdefghijklmnop', 4, 4)).toEqual(['abcdefghijklmnop'])
     expect(() => splitSubtitleText('text', 4, 0)).toThrow('正整数')
   })
   it('非均匀词级时刻优先于字数比例，并保留真实停顿', () => {
@@ -47,7 +47,8 @@ describe('自动字幕分行与节目时间', () => {
   it('段级比例换算共用绝对边界、裁剪范围，不丢尾字；不足一帧时拒绝而非丢字幕', () => {
     const text = '甲乙丙丁戊己庚辛壬癸'
     const cues = buildAutoSubtitles([{ ...word(text, 0, 1000), granularity: 'segment' }], 1000, { numerator: 30000, denominator: 1001 }, { startFrame: 60, endFrame: 85 }, { maxCharacters: 4, maxLines: 1, minDurationSeconds: 0 })
-    expect(cues.map(cue => [cue.start, cue.duration])).toEqual([[60, 12], [72, 12], [84, 1]])
+    expect(cues.map(cue => [cue.start, cue.duration])).toEqual([[60, 12], [72, 13]])
+    expect(cues.map(cue => cue.text)).toEqual(['甲乙丙丁', '戊己庚辛壬癸'])
     expect(cues.map(cue => cue.text).join('')).toBe(text)
     expect(() => buildAutoSubtitles([{ ...word(text, 0, 20), granularity: 'segment' }], 1000, { numerator: 30, denominator: 1 }, { startFrame: 0, endFrame: 30 }, { maxCharacters: 4, maxLines: 1 })).toThrow('时长不足')
   })
