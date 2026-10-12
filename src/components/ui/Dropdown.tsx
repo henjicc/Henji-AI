@@ -170,13 +170,13 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [scrollGutterPx, setScrollGutterPx] = useState(0)
   const resolvedDisplay = empty ? emptyLabel ?? t('dropdown.emptyLabel', { defaultValue: '暂无可选项' }) : resolveDropdownDisplay(display, value, options)
   useEffect(() => {
-    if (!disabled) return
+    if (!disabled || (!open && !closing)) return
     window.clearTimeout(closeTimerRef.current)
     closeTimerRef.current = undefined
     setOpen(false)
     setClosing(false)
     setActiveOptionIndex(-1)
-  }, [disabled])
+  }, [disabled, open, closing])
   const isSelectedOption = (optValue: T): boolean => {
     if (value === undefined) return false
     return String(value) === String(optValue)
