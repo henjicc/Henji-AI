@@ -1,3 +1,5 @@
+import { convertPriceAmount, readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
+import type { TranscriptionPreparation } from '@/core/audioEdit/transcriptionFailure'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import type { PaidApprovalRequest, PaidOperationCategory } from '@/core/application-control/paidApproval'
@@ -40,4 +42,9 @@ export async function prepareExplanationPaidApproval(documentRef: { kind: string
   })
   const decision = paidApprovalDecisionSchema.parse(await send('prepare'))
   return { decision, project: request.project, confirm: (project: boolean) => send('approve', project), start: () => send('start'), complete: () => send('complete'), reject: () => send('reject'), failed: () => send('failed') }
+}
+
+export function transcriptionEstimatedCny(prepared: TranscriptionPreparation): number | null {
+  return prepared.cost?.status === 'estimated'
+    ? convertPriceAmount(prepared.cost.amount, prepared.cost.currency, 'CNY', readPriceEstimateDisplaySettings().usdToCnyRate) : null
 }

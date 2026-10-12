@@ -32,8 +32,9 @@ const verification = (target = documentRef) => ({ verified: true, condition: mes
 const successData: Record<string, Record<string, unknown>> = {
   prepare_video_edit_subtitle_audio: { documentRef, audioDocumentRef, ...verified },
   generate_video_edit_subtitles: { documentRef, audioDocumentRef, captionRefs: [ref('video_edit.caption')], createdCaptionRefs: [ref('video_edit.caption')], ...verified },
+  get_video_edit_clip_pauses: { clipRef, source: 'words', pauses: [{ startFrame: 30, endFrame: 42, durationMs: 200, kind: 'breath' }], words: [{ text: '你好', startFrame: 0, endFrame: 30 }], message },
   translate_video_edit_subtitles: { documentRef, captionRefs: [ref('video_edit.caption')], ...verified },
-  segment_video_edit_subtitles: { documentRef, captionRefs: [ref('video_edit.caption')], createdCaptionRefs: [ref('video_edit.caption')], updatedCaptionRefs: [ref('video_edit.caption')], ...verified },
+  segment_video_edit_subtitles: { documentRef, captionRefs: [ref('video_edit.caption')], createdCaptionRefs: [ref('video_edit.caption')], updatedCaptionRefs: [ref('video_edit.caption')], removedCaptionRefs: [], ...verified },
   observe_video_edit_frame: { byteLength: 26670, resultRef: assetRef, documentRef, target: { kind: 'program', sequenceRef, frame: 60 }, width: 1280, height: 720, sourceWidth: 1920, sourceHeight: 1080, documentRevision: 29, documentVersion: 'host:document:29', message, verification: { verified: true, condition: '已保存合成帧', target: assetRef } },
   analyze_video_edit_color: { resultRef: clipRef, parameters: { exposure: 0 }, frame: 60, frames: [60], documentRevision: 29, documentVersion: 'host:document:29', message },
   analyze_video_edit_beats: { resultRef: documentRef, markerRefs: [ref('video_edit.marker')], ...verified },

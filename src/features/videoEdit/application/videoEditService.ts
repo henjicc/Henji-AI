@@ -1,3 +1,4 @@
+import { videoEditExportHistorySchema, type VideoEditExportHistoryEntry } from '@/core/videoEdit/document'
 import { persistenceMessage } from '@/core/persistence/messages'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { creativeIntentsSchema, creativeIntentLiveResources, type CreativeIntents } from '@/core/creativeIntent/persistence'
@@ -162,9 +163,11 @@ export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   gestures.set(owner, { handle, before: owner.document, finished, release, maskChanges: new Map() })
   return handle
 }
-function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, inPlaceGenerations: undefined, creativeIntents: undefined }) === JSON.stringify({ ...right, revision: 0, inPlaceGenerations: undefined, creativeIntents: undefined }) }
+function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }) === JSON.stringify({ ...right, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }) }
 function withInPlaceMetadata(document: VideoEditDocument, current: VideoEditDocument): VideoEditDocument {
   const next = { ...document }
+  if (current.exportHistory) next.exportHistory = current.exportHistory
+  else delete next.exportHistory
   if (current.creativeIntents) next.creativeIntents = current.creativeIntents
   else delete next.creativeIntents
   if (current.inPlaceGenerations?.length) next.inPlaceGenerations = current.inPlaceGenerations
@@ -191,6 +194,16 @@ export function purgeVideoEditExplanationSession(id: string, sessionId: string):
   owner.past = owner.past.map(scrub); owner.future = owner.future.map(scrub); if (gesture) gesture.before = scrub(gesture.before)
   updateVideoEditCreativeIntents(id, scrub(owner.document).creativeIntents ?? { drafts: [], sessions: [], resources: [] })
   return [...resources.values()]
+}
+/** Completed output facts share document persistence but are not undone with timeline edits. */
+export function recordVideoEditExport(id: string, entry: VideoEditExportHistoryEntry): void {
+  assertApplicationWritesAllowed()
+  const owner = requireVideoEditInstance(id)
+  if (closing.has(owner) || owner.session.isEnded) throw new Error('原剪辑正在关闭，无法保存导出记录。')
+  const exportHistory = videoEditExportHistorySchema.parse([...(owner.document.exportHistory ?? []).filter(value => value.taskId !== entry.taskId), entry])
+  const previous = owner.document
+  owner.document = { ...previous, exportHistory }; inheritVideoEditCompositions(previous, owner.document)
+  owner.version++; notifyVideoEditContent(owner); publishVideoEdit()
 }
 /** 任务元数据沿用会话保存屏障，不增加撤销步、不清空重做，也不推进剪辑内容版本。 */
 export function updateVideoEditInPlaceMetadata(id: string, records: readonly VideoEditInPlaceRecord[]): void {

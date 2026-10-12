@@ -69,3 +69,24 @@ export function resolveTimestampedLocalAsr(
   if (!selected) throw new Error('ASR_UNAVAILABLE：请先配置支持带时间转写的供应商。')
   return selected
 }
+
+/** Host authorization metadata from packages/ai-sdk/docs/model-adaptation (Fun/Qwen3, Groq, SenseVoice).
+ * SDK capability descriptors have no pricing field; unknown/token-priced models remain unknown.
+ * Beijing is the SDK Bailian module's endpoint. Account free quotas are deliberately not assumed.
+ */
+const asrDurationPrices: Readonly<Record<string, { currency: 'CNY' | 'USD'; perSecond: number; minimumSeconds?: number }>> = {
+  'bailian.speech-recognition.fun-asr': { currency: 'CNY', perSecond: .00022 },
+  'bailian.speech-recognition.fun-asr-flash-2026-06-15': { currency: 'CNY', perSecond: .00022 },
+  'bailian.speech-recognition.qwen3-asr-flash': { currency: 'CNY', perSecond: .00022 },
+  'bailian.speech-recognition.qwen3-asr-flash-2026-02-10': { currency: 'CNY', perSecond: .00022 },
+  'bailian.speech-recognition.qwen3-asr-flash-filetrans': { currency: 'CNY', perSecond: .00022 },
+  [groqWhisperLargeV3.descriptor.id]: { currency: 'USD', perSecond: .111 / 3600, minimumSeconds: 10 },
+  [groqWhisperLargeV3Turbo.descriptor.id]: { currency: 'USD', perSecond: .04 / 3600, minimumSeconds: 10 },
+  [siliconFlowSenseVoiceSmall.descriptor.id]: { currency: 'CNY', perSecond: 0 },
+}
+export type AsrCostEstimate = { status: 'estimated'; amount: number; currency: 'CNY' | 'USD' } | { status: 'unknown'; amount: null; currency: null }
+export function estimateAsrCost(modelId: string, durationMs: number): AsrCostEstimate {
+  const price = asrDurationPrices[modelId]
+  if (!price || !Number.isFinite(durationMs) || durationMs <= 0) return { status: 'unknown', amount: null, currency: null }
+  return { status: 'estimated', amount: Math.max(durationMs / 1000, price.minimumSeconds ?? 0) * price.perSecond, currency: price.currency }
+}

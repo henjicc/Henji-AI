@@ -78,6 +78,15 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   if (requireVideoEditInstance(documentRef.id) !== owner) throw new Error('原剪辑已关闭，请重新查询。')
   const filterId = id === 'query_video_edit_export' && 'taskId' in parsed ? parsed.taskId : undefined
   const jobs = submitted ?? videoEditExportQueue.list().filter(job => job.owner === owner && (!filterId || job.id === filterId || job.task?.id === filterId))
-  const task = videoEditExportTask(documentRef.id)
-  return { resultRef: documentRef, queue: jobs.map(videoEditExportJobSummary), message, verification: { verified, target: documentRef, condition }, ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame, ...(task.notice ? { notice: task.notice } : {}), ...(task.loudness ? { loudness: task.loudness } : {}), ...(task.loudnessMeasurement ? { loudnessMeasurement: task.loudnessMeasurement } : {}) } } : {}) }
+  const liveIds = new Set(jobs.flatMap(job => [job.id, job.task?.id]))
+  const archived = (id === 'query_video_edit_export' ? owner.document.exportHistory ?? [] : []).filter(entry => !liveIds.has(entry.id) && !liveIds.has(entry.taskId) && (!filterId || entry.id === filterId || entry.taskId === filterId))
+    .map(({ sequenceId, ...entry }) => ({ ...entry, presetName: '已完成导出', documentRef, sequenceRef: { kind: 'video_edit.sequence', id: `${documentRef.id}:${sequenceId}` }, state: 'completed', progress: 1, archived: true, outputReady: true }))
+  const latestTask = videoEditExportTask(documentRef.id)
+  const task = latestTask && (!filterId || latestTask.id === filterId || jobs.some(job => job.task === latestTask)) ? latestTask : undefined
+  if (filterId && !jobs.length && !archived.length && !task) throw new Error('EXPORT_TASK_NOT_FOUND:此剪辑没有匹配的导出任务或归档记录；请省略 taskId 查询可用导出。')
+  const queue = jobs.map(job => {
+    const entry = owner.document.exportHistory?.find(entry => entry.taskId === job.task?.id)
+    return { ...videoEditExportJobSummary(job), ...(entry ? { path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
+  })
+  return { resultRef: documentRef, queue: [...queue, ...archived], message, verification: { verified, target: documentRef, condition }, ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame, ...(task.notice ? { notice: task.notice } : {}), ...(task.loudness ? { loudness: task.loudness } : {}), ...(task.loudnessMeasurement ? { loudnessMeasurement: task.loudnessMeasurement } : {}) } } : {}) }
 }

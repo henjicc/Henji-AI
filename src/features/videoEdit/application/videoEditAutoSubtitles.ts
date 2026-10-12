@@ -1,5 +1,5 @@
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
-import { applicationPaidRequest } from '@/services/paidApproval'
+import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { hasApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { videoEditSubtitleManifestSchema } from '@/core/persistence/storedSchemas'
@@ -11,6 +11,10 @@ import { z } from 'zod'
 import { AudioBufferSource, Output, StreamTarget, WavOutputFormat } from 'mediabunny'
 import { createLogger } from '@/core/logging'
 import { buildAutoSubtitles, autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
+import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
+import { resolveSubtitleStyle } from '@/core/videoEdit/subtitleStyleProfiles'
+import { advanceVideoEditClipSource, videoEditClipFrameBoundaryAtSource } from '@/core/videoEdit/clipSpeed'
+import { readClipSpeechTimings, readClipEnergyPauses, readSourceEnergyPauses } from './videoEditPauseMap'
 import { videoEditComposition, videoEditDuration, audibleVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditAudioContent } from '@/core/videoEdit/audioContent'
 import { videoEditCaptionSchema, type VideoEditCaption } from '@/core/videoEdit/timedContent'
@@ -123,7 +127,7 @@ export function appendAutoSubtitles(projectId: string, sequenceId: string, capti
 
 /** UI and approved capability calls share ASR, cancellation, saved paid results and a single edit commit. */
 export async function generateVideoEditSubtitles(projectId: string, sequenceId: string, audioDocumentId: string, modelId?: string, options: SubtitleTranscriptionOptions = {}, signal?: AbortSignal, requestId: string = crypto.randomUUID()): Promise<string[]> {
-  const settings = autoSubtitleOptionsSchema.parse({ maxCharacters: options.maxCharacters, maxLines: options.maxLines, pauseSeconds: options.pauseSeconds, minDurationSeconds: options.minDurationSeconds })
+  const settings = autoSubtitleOptionsSchema.strip().parse(options)
   const language = z.enum(['zh', 'en']).optional().parse(options.language)
   const owner = requireVideoEditInstance(projectId)
   if (active.has(owner)) throw new Error('这份剪辑正在生成字幕。')
@@ -158,15 +162,18 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     signal?.addEventListener('abort', cancel, { once: true })
     if (!audio.document.transcript.length) {
       const prepared = await preflightAudioEditTranscription(audioDocumentId, modelId, language)
-      if (prepared.requiresConfirmation && hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '转录并生成字幕', message: '使用已配置的语音模型转录声音并生成字幕。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', projectId, signal) }, signal)
+      if (prepared.requiresConfirmation && hasApplicationConfirmation(signal)) await requestAlertConfirmation({ title: '转录并生成字幕', message: '使用已配置的语音模型转录声音并生成字幕。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', projectId, signal, transcriptionEstimatedCny(prepared)) }, signal)
       await assertTarget()
       billing = 'unknown'
-      await transcribeAudioEdit({ projectId: audioDocumentId, modelId, language, requestId })
+      await transcribeAudioEdit({ projectId: audioDocumentId, modelId: prepared.modelId ?? modelId, language, requestId })
       billing = 'completed'
     }
     else await flushAudioEditProject(audioDocumentId)
     await assertTarget()
-    const captions = manifest.captions ?? buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings).map(caption => ({ ...caption, style: videoEditSubtitleStyleSchema.parse({}) }))
+    const fps = current(projectId, sequenceId).fps
+    const pauses = !manifest.captions && audio.document.transcript.some(block => block.granularity !== 'word')
+      ? (await readSourceEnergyPauses(audio.document.source.sourcePath, signal)).map(pause => ({ startMs: pause.startMs + manifest.startFrame / fps * 1000, endMs: pause.endMs + manifest.startFrame / fps * 1000 })) : []
+    const captions = manifest.captions ?? buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses).map(caption => ({ ...caption, style: videoEditSubtitleStyleSchema.parse({}) }))
     if (!captions.length) throw new Error('识别结果没有可用字幕。')
     // Record planned IDs before committing, so a lost save acknowledgement cannot create a duplicate batch.
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions }))
@@ -222,27 +229,71 @@ export function styleVideoEditSubtitles(projectId: string, sequenceId: string, s
     return { ...sequence, captions: sequence.captions?.map(cue => !ids || ids.includes(cue.id) ? { ...cue, style: parsed } : cue) }
   }, gesture)
 }
-/** Existing cues only have cue-level times; reorganizing their text estimates internal boundaries proportionally. */
-export function segmentVideoEditSubtitles(projectId: string, sequenceId: string, options: AutoSubtitleOptions, ids?: readonly string[]): { captionIds: string[]; createdIds: string[]; updatedIds: string[] } {
+/** Reuse saved speech anchors; cue-only text falls back to proportional timing without recognition. */
+export async function segmentVideoEditSubtitles(projectId: string, sequenceId: string, options: AutoSubtitleOptions, ids?: readonly string[], signal?: AbortSignal): Promise<{ captionIds: string[]; createdIds: string[]; updatedIds: string[]; removedIds: string[] }> {
   const settings = autoSubtitleOptionsSchema.parse(options)
-  const captionIds: string[] = []; const createdIds: string[] = []; const updatedIds: string[] = []
-  editVideoSequence(projectId, sequenceId, sequence => {
-    if (ids?.some(id => !sequence.captions?.some(caption => caption.id === id))) throw new Error('原字幕已移除，请重新选择。')
-    const captions = sequence.captions?.flatMap(caption => {
-      if (ids && !ids.includes(caption.id)) return [caption]
-      if (caption.translation) throw new Error('请先清除第二语言，再整理长句；整理后可重新生成双语。')
-      const cues = buildAutoSubtitles([{ id: caption.id, text: caption.text, startFrame: 0, endFrame: caption.duration * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false }], sequence.frameRate.numerator, sequence.frameRate, { startFrame: caption.start, endFrame: caption.start + caption.duration }, { ...settings, minDurationSeconds: 0 })
-      return cues.map((cue, index) => {
-        const id = index === 0 ? caption.id : cue.id
-        captionIds.push(id); if (index > 0) createdIds.push(id)
-        const value = { ...caption, ...cue, id }
-        if (index === 0 && JSON.stringify(value) !== JSON.stringify(caption)) updatedIds.push(id)
-        return value
-      })
-    })
-    if (!captionIds.length) throw new Error('没有可整理的字幕。')
-    return { ...sequence, captions }
-  })
-  return { captionIds, createdIds, updatedIds }
+  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document
+  const sequence = snapshot.sequences.find(value => value.id === sequenceId)
+  if (!sequence) throw new Error('序列不存在。')
+  const all = [...(sequence.captions ?? [])].sort((a, b) => a.start - b.start)
+  const positions = new Map(all.map((caption, index) => [caption.id, index]))
+  if (ids?.some(id => !positions.has(id))) throw new Error('原字幕已移除，请重新选择。')
+  const selectedIds = new Set(ids ?? all.map(caption => caption.id))
+  const selected = all.filter(caption => selectedIds.has(caption.id))
+  if (!selected.length) throw new Error('没有可整理的字幕。')
+  if (selected.some(caption => caption.translation)) throw new Error('请先清除第二语言，再整理长句；整理后可重新生成双语。')
+  const captionIds: string[] = []; const createdIds: string[] = []; const updatedIds: string[] = []; const removedIds: string[] = []
+  const captions = all.filter(caption => !selectedIds.has(caption.id))
+  const savedTimings = new Map<string, ReturnType<typeof readClipSpeechTimings>>()
+  const energyTimings = new Map<string, ReturnType<typeof readClipEnergyPauses>>()
+  const groups: VideoEditCaption[][] = []
+  const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
+  const profile = resolveSubtitleStyle(settings)
+  for (const caption of selected) {
+    const group = groups.at(-1); const previous = group?.at(-1)
+    if (previous && caption.clipId === previous.clipId && JSON.stringify(caption.style) === JSON.stringify(previous.style)
+      && positions.get(caption.id)! === positions.get(previous.id)! + 1 && caption.start >= previous.start + previous.duration
+      && (caption.start - previous.start - previous.duration) / fps * 1000 < profile.joinGapMs) group!.push(caption)
+    else groups.push([caption])
+  }
+  const release = holdVideoEditActivity(projectId, '整理字幕')
+  logger.info('整理字幕开始', { event: 'video_edit.subtitle.normalize.start', context: { projectId, sequenceId } })
+  try {
+    for (const group of groups) {
+      signal?.throwIfAborted()
+      const first = group[0]; const last = group.at(-1)!
+      const clip = sequence.clips.find(clip => clip.id === first.clipId)
+      if (clip && !savedTimings.has(clip.id)) savedTimings.set(clip.id, readClipSpeechTimings(projectId, sequenceId, clip.id))
+      const timings = clip ? await savedTimings.get(clip.id) : undefined
+      if (clip && timings?.granularity !== 'word' && !energyTimings.has(clip.id)) energyTimings.set(clip.id, readClipEnergyPauses(projectId, sequenceId, clip.id, signal))
+      const pauses = clip ? await energyTimings.get(clip.id) ?? [] : []
+      const boundary = all[positions.get(last.id)! + 1]?.start ?? videoEditDuration(sequence)
+      const endFrame = Math.min(boundary, clip ? clip.start + clip.duration : boundary)
+      const text = group.map(caption => caption.text).join(' ')
+      const scopedClip = clip ? { ...clip, ...advanceVideoEditClipSource(clip, Math.max(first.start, clip.start) - clip.start, sequence.frameRate), start: Math.max(first.start, clip.start), duration: endFrame - Math.max(first.start, clip.start) } : undefined
+      const sequencePauses = clip ? pauses.map(pause => {
+        const a = videoEditClipFrameBoundaryAtSource(clip, pause.startMs / 1000, fps) / fps * 1000
+        const b = videoEditClipFrameBoundaryAtSource(clip, pause.endMs / 1000, fps) / fps * 1000
+        return { startMs: Math.min(a, b), endMs: Math.max(a, b) }
+      }) : []
+      const cues = timings && scopedClip ? (await buildSpeechSubtitles(text, timings, scopedClip, sequence.frameRate, settings, signal, pauses, 'clip')).map(value => value.caption)
+        : buildAutoSubtitles(group.map(caption => ({ id: caption.id, text: caption.text, startFrame: (caption.start - first.start) * sequence.frameRate.denominator, endFrame: (caption.start + caption.duration - first.start) * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false })), sequence.frameRate.numerator, sequence.frameRate, { startFrame: first.start, endFrame }, settings, sequencePauses)
+      if (!cues.length) throw new Error('已有时间信息无法覆盖这些字幕，请检查字幕与声音片段的对应位置。')
+      for (let index = 0; index < cues.length; index++) {
+        const original = group[index]; const id = original?.id ?? cues[index].id
+        const value = { ...first, ...cues[index], id, style: first.style, clipId: first.clipId }
+        captions.push(value); captionIds.push(id)
+        if (!original) createdIds.push(id)
+        else if (JSON.stringify(value) !== JSON.stringify(original)) updatedIds.push(id)
+      }
+      removedIds.push(...group.slice(cues.length).map(caption => caption.id))
+    }
+    signal?.throwIfAborted()
+    if (owner.document !== snapshot) throw new Error('整理期间字幕已有修改，请重新整理。')
+    editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions: captions.sort((a, b) => a.start - b.start) }))
+    logger.info('整理字幕完成', { event: 'video_edit.subtitle.normalize.completed', context: { projectId, sequenceId, count: captionIds.length } })
+    return { captionIds, createdIds, updatedIds, removedIds }
+  } catch (error) { logger.error('整理字幕失败', { event: 'video_edit.subtitle.normalize.failed', context: { projectId, sequenceId }, error }); throw error }
+  finally { release() }
 }
 export async function verifyAutoSubtitles(projectId: string): Promise<boolean> { return verifyVideoEditSaved(projectId) }

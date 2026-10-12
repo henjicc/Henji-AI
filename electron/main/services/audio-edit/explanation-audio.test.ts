@@ -24,7 +24,7 @@ const synthetic = () => Float32Array.from({length:4800},(_,i)=>Math.sin(i*.1)*.2
 const request = (): Extract<RecordingAudioRequest,{action:'transcribe'}> => ({action:'transcribe',sessionId,chunkId,requestId:chunkId,modelId:'fixture.speech-recognition.asr',audioUploadReceipt:crypto.randomUUID(),resume:false})
 const dto = normalizeTimestampedTranscript({text:'本地夹具',segments:[{text:'本地夹具',startMs:0,endMs:100}]},100,'word')
 function fixtureAsr(): Pick<TimestampedAsrService,'prepare'|'execute'|'preflight'> {
-  return {preflight:vi.fn(async input=>({modelId:input.modelId!})),prepare: input=>Object.freeze({modelId:input.modelId!,providerId:'fixture',audioPath:input.audioPath,durationMs:input.durationMs,language:'zh',cost:{status:'unknown' as const,amount:null,currency:null}}),execute:vi.fn(async()=>dto)}
+  return {preflight:vi.fn(async input=>({modelId:input.modelId!,cost:{status:'unknown' as const,amount:null,currency:null}})),prepare: input=>Object.freeze({modelId:input.modelId!,providerId:'fixture',audioPath:input.audioPath,durationMs:input.durationMs,language:'zh',cost:{status:'unknown' as const,amount:null,currency:null}}),execute:vi.fn(async()=>dto)}
 }
 beforeEach(async()=>{ root=await fs.mkdtemp(path.join(os.tmpdir(),'henji-recording-test-')); ledger.clear() })
 afterEach(async()=>{ await fs.rm(root,{recursive:true,force:true}) })

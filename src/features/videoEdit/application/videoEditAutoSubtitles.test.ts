@@ -6,7 +6,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
 import { closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, type VideoEditInstance } from './videoEditService'
 import { loadAudioEditProject, resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
-import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles, styleVideoEditSubtitles, subtitleRange } from './videoEditAutoSubtitles'
+import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles, styleVideoEditSubtitles, segmentVideoEditSubtitles, subtitleRange } from './videoEditAutoSubtitles'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { createVideoEditCaption, updateVideoEditTimedContent, exportVideoEditSubtitles } from './videoEditTimedContent'
 import { readSubtitleJob, runVideoEditSubtitleJob, cancelSubtitleJob } from './videoEditSubtitleJobs'
@@ -48,6 +48,7 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().audioEdit, 'listTasks').mockResolvedValue([])
   vi.spyOn(getPlatform().audioEdit, 'preflightTranscription').mockResolvedValue({ modelId: 'test-asr', requiresConfirmation: true })
   vi.spyOn(getPlatform().audioEdit, 'cancelTask').mockResolvedValue(undefined)
+  vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockResolvedValue({ revision: 0, suggestions: [] })
   vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([{ id: 'test-asr', providerId: 'test', timestamps: true, configured: true, longAudio: true }])
   vi.spyOn(getPlatform().audioEdit, 'transcribe').mockImplementation(async request => {
     const audio = await loadAudioEditProject(request.projectId)
@@ -72,7 +73,7 @@ it('native generation timestamps create readable frame/us captions in one undo w
   const result = generateVideoEditSubtitleCapability.outputSchema.parse(raw)
   expect(result.verified).toBe(true); expect(result.timingSource).toBe('native')
   // 原文换行与首尾空白不进字幕，行内换行来自排版；文字须与原文逐字一致
-  const visible = (text: string) => text.replace(/\s/g, '')
+  const visible = (text: string) => text.replace(/[\s，。,.;；:：—、]/g, '')
   expect(visible(result.captions?.map(value => value.text).join('') ?? '')).toBe(visible(original))
   // 原文开头的空格（0–100ms）不计入字幕时间，首条从第一个可见字开始
   expect(result.captions?.[0]).toMatchObject({ startUs: 100_000, confidence: 1, estimated: false })
@@ -86,6 +87,46 @@ it('native-only mode rejects missing timings without charging or creating a capt
   await expect(generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: '你好', timeSource: 'native' })).rejects.toThrow('没有原生时间戳')
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
   expect(sequence().captions ?? []).toHaveLength(0)
+})
+it('仅规范化所选字幕，复用片段范围内同名词的时间，不识别且一步撤销', async () => {
+  editVideoProject(owner.document.id, document => { document.media[0].creativeSource = { type: 'generation', recordId: 'existing', outputIndex: 0, prompt: '你好。你好。下一句。' }; return document })
+  vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'word', items: [
+    { text: '你好。', startMs: 0, endMs: 700 }, { text: '你好。', startMs: 2000, endMs: 2700 }, { text: '下一句。', startMs: 4000, endMs: 4700 },
+  ] } }] } })
+  createVideoEditCaption(owner.document.id, sequence().id, { clipId: 'voice', start: 0, duration: 30, text: '你好。' })
+  const selected = createVideoEditCaption(owner.document.id, sequence().id, { clipId: 'voice', start: 60, duration: 30, text: '你好。' })
+  createVideoEditCaption(owner.document.id, sequence().id, { clipId: 'voice', start: 120, duration: 30, text: '下一句。' })
+  const previous = sequence().captions; const history = owner.past.length
+  await segmentVideoEditSubtitles(owner.document.id, sequence().id, {}, [selected])
+  expect(sequence().captions).toMatchObject([{ text: '你好。', start: 0, duration: 30 }, { text: '你好', start: 60, duration: 25 }, { text: '下一句。', start: 120, duration: 30 }])
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  expect(owner.past).toHaveLength(history + 1)
+  undoVideoEdit(owner.document.id); expect(sequence().captions).toEqual(previous)
+})
+it('片段停顿图免费只读：优先词时间，缺少时使用已有能量检测；clipRef静音路径无需序列转录', async () => {
+  editVideoProject(owner.document.id, document => {
+    document.media[0].creativeSource = { type: 'generation', recordId: 'tts-pauses', outputIndex: 0, prompt: '你好 世界' }
+    document.sequences[0].clips[0].start = 60
+    document.sequences[0].clips[0].sourceInUs = 1_000_000
+    document.sequences[0].clips[0].speed = { numerator: 2, denominator: 1 }
+    document.sequences[0].clips[0].duration = 90
+    return document
+  })
+  const read = vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'word', items: [{ text: '你好', startMs: 1000, endMs: 1400 }, { text: '世界', startMs: 1700, endMs: 2100 }] } }] } })
+  const app = createApplicationHarness(); const clipRef = { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }
+  const before = owner.document; const history = owner.past.length
+  try {
+    const result = await app.requireResult('get_video_edit_clip_pauses', { clipRef })
+    expect(result).toMatchObject({ source: 'words', words: [{ text: '你好', startFrame: 60, endFrame: 66 }, { text: '世界', startFrame: 70, endFrame: 77 }], pauses: [{ startFrame: 66, endFrame: 70 }] })
+    expect(getPlatform().audioEdit.detectSilence).not.toHaveBeenCalled()
+    read.mockResolvedValue({ status: 'completed' })
+    vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, durationFrames: 12000, channels: 1 })
+    vi.mocked(getPlatform().audioEdit.detectSilence).mockResolvedValue({ revision: 0, suggestions: [{ id: 'pause', kind: 'long_silence', evidence: 'audio', title: '', detail: '', startFrame: 1400, endFrame: 1700, blockIds: [], confidence: 'high', status: 'pending' }] })
+    expect(await app.requireResult('get_video_edit_clip_pauses', { clipRef })).toMatchObject({ source: 'energy', words: [], pauses: [{ startFrame: 66, endFrame: 71, kind: 'silence' }] })
+    expect(await app.requireResult('detect_video_edit_text_silence', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef })).toMatchObject({ changed: false, verified: true, ranges: [{ from: 66, to: 71 }] })
+    expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+    expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
+  } finally { app.dispose() }
 })
 it('auto 预检失败在确认前返回零执行事实，native 缺时间戳同样明确未执行', async () => {
   const app = createApplicationHarness()
@@ -193,6 +234,7 @@ it('silence detection restores every saved selection batch and commits once with
   await generateVideoEditSubtitles(owner.document.id, sequence().id, second)
   expect(sequence().textTranscription?.audioDocumentIds).toEqual([first, second])
   const detect = vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async request => {
+    if (request.projectId === undefined) throw new Error('此路径须检测已保存口播')
     const audio = await loadAudioEditProject(request.projectId)
     return { revision: audio.persistedRevision, suggestions: [{ id: 'pause', kind: 'long_silence', evidence: 'audio', title: '停顿', detail: '', startFrame: 1000, endFrame: 1900, blockIds: [], confidence: 'high', status: 'pending' }] }
   })
@@ -375,7 +417,8 @@ it('未设置样式的通用回读与schema一致，空字符串可恢复既有�
   } finally { app.dispose() }
 })
 
-it('AI 付费策略 auto 不弹窗直接识别，仍先做媒体预检并保存字幕', async () => {
+it('AI 付费策略 auto 不弹窗直接识别，预检估值进入同一授权请求并保存字幕', async () => {
+  vi.mocked(getPlatform().audioEdit.preflightTranscription).mockResolvedValue({ modelId: 'test-asr', requiresConfirmation: true, cost: { status: 'estimated', amount: .01, currency: 'CNY' } })
   vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, channels: 1, durationFrames: 12000 })
   const controller = new AbortController()
   const progress = vi.fn().mockImplementation(async progress => progress.phase === 'paid_approval' ? { decision: 'auto', reason: '全部放行', estimatedCny: null, dailySpentCny: 0 } : undefined)
@@ -384,6 +427,7 @@ it('AI 付费策略 auto 不弹窗直接识别，仍先做媒体预检并保存�
     await generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' }, controller.signal)
     expect(getPlatform().audioEdit.preflightTranscription).toHaveBeenCalled()
     expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledOnce()
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'paid_approval', request: expect.objectContaining({ category: 'recognition', estimatedCny: .01 }) }))
     expect(sequence().captions?.map(value => value.text).join('')).toBe('Hello')
     expect(useAlertDialogStore.getState().queue).toHaveLength(0)
     expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ phase: 'awaiting_user_confirmation' }))

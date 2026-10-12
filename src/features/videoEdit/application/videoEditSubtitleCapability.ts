@@ -7,6 +7,7 @@ import { requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { generateClipSpeechSubtitles } from './videoEditSpeechSubtitles'
 import { TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
+import { autoSubtitleOptionsSchema } from '@/core/videoEdit/autoSubtitles'
 
 export async function handleVideoEditSubtitleCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
   if (![prepareVideoEditSubtitleCapability.id, generateVideoEditSubtitleCapability.id, translateVideoEditSubtitleCapability.id, segmentVideoEditSubtitleCapability.id].includes(id)) return undefined
@@ -22,10 +23,10 @@ export async function handleVideoEditSubtitleCapability(id: string, raw: unknown
   }
   if (id === segmentVideoEditSubtitleCapability.id) {
     const input = segmentVideoEditSubtitleCapability.inputSchema.parse(raw)
-    const result = segmentVideoEditSubtitles(input.documentRef.id, child(input.documentRef.id, input.sequenceRef), { maxCharacters: input.maxCharacters, maxLines: input.maxLines }, input.captionRefs?.map(ref => child(input.documentRef.id, ref)))
+    const result = await segmentVideoEditSubtitles(input.documentRef.id, child(input.documentRef.id, input.sequenceRef), autoSubtitleOptionsSchema.strip().parse(input), input.captionRefs?.map(ref => child(input.documentRef.id, ref)), context.signal)
     await saveVideoEdit(input.documentRef.id)
     const refs = (ids: string[]): Array<{ kind: string; id: string }> => ids.map(id => ({ kind: 'video_edit.caption', id: `${input.documentRef.id}:${id}` }))
-    return { documentRef: input.documentRef, captionRefs: refs(result.captionIds), createdCaptionRefs: refs(result.createdIds), updatedCaptionRefs: refs(result.updatedIds), message: `已整理为 ${result.captionIds.length} 条字幕。`, verified: await verifyAutoSubtitles(input.documentRef.id) }
+    return { documentRef: input.documentRef, captionRefs: refs(result.captionIds), createdCaptionRefs: refs(result.createdIds), updatedCaptionRefs: refs(result.updatedIds), removedCaptionRefs: refs(result.removedIds), message: `已整理为 ${result.captionIds.length} 条字幕。`, verified: await verifyAutoSubtitles(input.documentRef.id) }
   }
   if (id === translateVideoEditSubtitleCapability.id) {
     const input = translateVideoEditSubtitleCapability.inputSchema.parse(raw)
@@ -54,7 +55,7 @@ export async function handleVideoEditSubtitleCapability(id: string, raw: unknown
     return { documentRef: input.documentRef, ...(result.audioDocumentId ? { audioDocumentRef: { kind: 'audio_edit.document', id: result.audioDocumentId } } : {}), captionRefs, createdCaptionRefs: captionRefs, captions, timingSource: result.timingSource, message: `已按原文生成 ${captions.length} 段字幕。`, verified: await verifyWritten(result.audioDocumentId) }
   }
   if (!input.audioDocumentRef) throw new ApplicationPreflightFailure('请提供音频片段 clipRef 或已准备的 audioDocumentRef。')
-  const ids = await generateVideoEditSubtitles(input.documentRef.id, sequenceId, input.audioDocumentRef.id, input.modelId, { maxCharacters: input.maxCharacters, maxLines: input.maxLines, pauseSeconds: input.pauseSeconds, minDurationSeconds: input.minDurationSeconds, language: input.language }, context.signal, context.requestId)
+  const ids = await generateVideoEditSubtitles(input.documentRef.id, sequenceId, input.audioDocumentRef.id, input.modelId, { ...autoSubtitleOptionsSchema.strip().parse(input), language: input.language }, context.signal, context.requestId)
   const captionRefs = ids.map(id => ({ kind: 'video_edit.caption', id: `${input.documentRef.id}:${id}` }))
   return { documentRef: input.documentRef, audioDocumentRef: input.audioDocumentRef, captionRefs, createdCaptionRefs: captionRefs.filter((_ref, index) => !previous.has(ids[index])), message: `已生成 ${ids.length} 段字幕，可逐行校正或导出 SRT。`, verified: await verifyWritten(input.audioDocumentRef.id) }
 }

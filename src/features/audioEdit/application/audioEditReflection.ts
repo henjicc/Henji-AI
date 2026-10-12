@@ -33,12 +33,12 @@ async function project(projectId: string): Promise<AudioEditProjectDocument> {
 
 /**
  * 口播文档（3.3）：作品索引里已保存、文件还在、已导入素材的口播，加上已打开的草稿。
- * 没打开的草稿不列：读它会打开会话，草稿区就看不到这份遗留草稿了。没有素材的空文档读不出内容，也不列。
+ * 有素材的草稿也可后台读取；载入会话不打开界面。空文档不列。
  */
 async function listAudioEditDocuments(): Promise<Array<{ id: string; name: string }>> {
   const documents = await getDocumentOperations().listDocuments({ kind: 'audio_edit', container: { kind: 'any' }, includeDrafts: true, includeMissing: false })
   return documents
-    .filter((document) => document.summary.mediaType !== null && (!document.draft || getAudioEditProjectInstance(document.id)))
+    .filter((document) => document.summary.mediaType !== null)
     .map((document) => ({ id: document.id, name: document.name }))
 }
 
@@ -49,7 +49,8 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
     const summaries = await listAudioEditDocuments()
     const projectScoped = this.entityType === AUDIO_EDIT_ENTITY_TYPES.project || this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain || this.entityType === AUDIO_EDIT_ENTITY_TYPES.render
     // 口播级实体只要名称，不为列出而打开每一份口播；词块与线索才需要读内容
-    const loaded = projectScoped ? [] : (await Promise.allSettled(summaries.map((summary) => project(summary.id)))).flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+    const loaded: AudioEditProjectDocument[] = []
+    if (!projectScoped) for (const summary of summaries) loaded.push(await project(summary.id))
     const refs = projectScoped ? summaries.map((summary) => ({ kind: this.entityType, id: summary.id, label: summary.name })) : loaded.flatMap((document) => {
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock) return document.transcript.map((block) => childRef(this.entityType, document.id, block.id, block.text))
       return document.suggestions.map((suggestion) => childRef(this.entityType, document.id, suggestion.id, suggestion.title))
@@ -110,7 +111,7 @@ const entityMeta: Record<EntityType, { title: string; parents: EntityType[] }> =
 export function createAudioEditReflectionRegistrations(): ApplicationEntityRegistration[] {
   return Object.values(AUDIO_EDIT_ENTITY_TYPES).map((entityType) => ({
     entity: {
-      id: entityType, domain: 'audio_edit', version: 1, title: entityMeta[entityType].title,
+      id: entityType, domain: 'audio_edit', version: schemaRef('entity', entityType).version, title: entityMeta[entityType].title,
       description: `${entityMeta[entityType].title}的稳定应用实体。`, refKind: entityType,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityMeta[entityType].parents,
       revisionScopes: ['audio_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),

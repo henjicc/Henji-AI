@@ -11,11 +11,13 @@
 
 ## 分段刻度与校对
 
-常用中文起点：每行14–18字、1–2行，约6–9字/秒，单条1–7秒；竖屏或高密信息可更短，歌词、无障碍字幕、客户规格可不同。断在语义边界，不拆姓名、数字单位或英语词；听觉断句与字幕断行可以不同。不要统一去标点或强迫“上短下长”。
+默认 `style=netflix_zh_hans`：每行最多16字、最多2行，半角计半字，能一行就一行；最短5/6秒、最长7秒，成人阅读速度≤9字/秒。句中逗号句号、分号冒号破折号换一个半角空格，句尾删除；？！…保留，顿号不放行尾或字幕末尾。相邻间隔<500ms，前条结束接到后条开始。用户另有规范以用户为准；英语暂沿用原有规则。
 
-maxCharacters 是每行字数，maxLines 是每条行数；pauseSeconds 可试0.4–0.8秒，minDurationSeconds 可试1秒，它只利用下一句前的空隙延伸，不保证每条强制达到目标。缺词级时刻时按比例估算，不冒充逐词对齐；数值不能代替看画面和校对专有名词。
+分句先看意群，再结合音频停顿，不能只按字数均分。读已有逐词时间，或免费调用 `get_video_edit_clip_pauses(clipRef)` 取得序列帧的 words 与 pauses；字幕边界吸附词边界，不在词念完前切换，零间隔连读短语尽量不拆。`audio_edit.transcript_block.start_frame/end_frame` 是源采样帧，除以该块 sample_rate 才是秒，不能当作序列帧。停顿图已计入片段起点、入点、变速。
 
-已有长句用免费 `segment_video_edit_subtitles`，documentRef、sequenceRef，可给 captionRefs 与 maxCharacters/maxLines。以下只是调用形状，引用需换成真实返回引用；不是对所有片子的样式限制。JSON 包含工具名与业务 input，外部 MCP 写入还需正式 operationId 信封。
+maxCharacters/maxLines、minDurationSeconds/maxDurationSeconds、maxReadingSpeed、joinGapMs 和 punctuation 均可覆盖。pauseSeconds 默认省略，按说话人停顿分布自适应；需要固定值时 TTS 可从0.2–0.3秒校正，0.6秒往往漏过真实气口。时间不足时保留完整词和原文；缺词级时间按已有字幕范围估算，不能冒充识别精度。
+
+已有字幕用免费 `segment_video_edit_subtitles`，documentRef、sequenceRef，可给 captionRefs 和相同规范参数；不重新识别、不计费，一步撤销。以下只是调用形状，引用需换成真实返回引用；不是对所有片子的样式限制。JSON 包含工具名与业务 input，外部 MCP 写入还需正式 operationId 信封。
 
 ```json
 {
@@ -23,13 +25,14 @@ maxCharacters 是每行字数，maxLines 是每条行数；pauseSeconds 可试0.
   "input": {
     "documentRef": {"kind": "video_edit.document", "id": "替换为文档引用"},
     "sequenceRef": {"kind": "video_edit.sequence", "id": "替换为序列引用"},
+    "style": "netflix_zh_hans",
     "maxCharacters": 16,
     "maxLines": 2
   }
 }
 ```
 
-后续用 `video_edit.caption.text` / `video_edit.caption.start` / `video_edit.caption.duration` / `video_edit.caption.translation` 校正。重新分段前已有译文需先清除，再分段重译；原引用保留第一段，新段引用读返回值。
+后续用 `video_edit.caption.text` / `video_edit.caption.start` / `video_edit.caption.duration` / `video_edit.caption.translation` 校正。重新分段前已有译文需先清除，再分段重译；尽量复用原引用，新增与合并移除的引用读返回值。
 
 ## 翻译和样式
 
@@ -40,4 +43,4 @@ maxCharacters 是每行字数，maxLines 是每条行数；pauseSeconds 可试0.
 
 ## 核对
 
-读回文字与范围；用 `observe_video_edit_frame` 选长句、亮背景、译文与人脸拥挤处，`read_application_media(mode="image")` 真读。按需检查入出帧和相邻接缝。SRT/VTT 与烧录见 deliver：结构回读不代替最终成片字幕检查。
+读回文字与范围；用 `observe_video_edit_frame` 选长句、亮背景、译文与人脸拥挤处，`read_application_media(mode="image")` 真读。按需检查入出帧和相邻接缝；抽查每条字幕结束时间是否不早于最后一个词结束，尤其检查强气口与零间隔连读。SRT/VTT 与烧录见 deliver：结构回读不代替最终成片字幕检查。

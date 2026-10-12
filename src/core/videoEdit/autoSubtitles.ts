@@ -1,20 +1,17 @@
-import { z } from 'zod'
+import { subtitleStyleOptionsSchema, resolveSubtitleStyle, subtitleWidth } from './subtitleStyleProfiles'
+import { segmentTimedSubtitles, subtitleTokensFromCharacters, type SubtitlePause } from './subtitleSegmentation'
 import type { AudioEditTranscriptBlock } from '../audioEdit/types'
 import { joinAudioEditText } from '../audioEdit/captions'
 import type { VideoEditRatio } from './time'
 import type { VideoEditCaption } from './timedContent'
 
-export const autoSubtitleOptionsSchema = z.object({
-  maxCharacters: z.number().int().min(4).max(80).default(24).describe('每行目标字数，优先标点断句；短尾合并或尾部标点最多超出 2 字符，英文单词完整保留，超长词独占一行。原文换行强制开始下一条字幕。'),
-  maxLines: z.number().int().min(1).default(2).describe('每条字幕最多行数，超出时拆成多条。'),
-  pauseSeconds: z.number().min(.1).max(2).default(.6).describe('词间停顿达到此秒数时开始下一条字幕。'),
-  minDurationSeconds: z.number().min(0).max(5).default(1),
-}).strict()
-export type AutoSubtitleOptions = z.input<typeof autoSubtitleOptionsSchema>
-const subtitleWords = new Intl.Segmenter('en', { granularity: 'word' })
+export const autoSubtitleOptionsSchema = subtitleStyleOptionsSchema
+export type { SubtitleStyleOptions as AutoSubtitleOptions } from './subtitleStyleProfiles'
+import type { SubtitleStyleOptions as AutoSubtitleOptions } from './subtitleStyleProfiles'
+const subtitleWords = new Intl.Segmenter('zh', { granularity: 'word' })
 
 const subtitlePunctuation = /^[，。；：、？！—…,.!?;:-]$/u
-const subtitleLength = (text: string): number => Array.from(text).length
+const subtitleLength = (text: string): number => Array.from(text).reduce((sum, char) => sum + (/[\p{Script=Latin}\p{N}]/u.test(char) ? .5 : 1), 0)
 const spokenLength = (text: string): number => Array.from(text).filter(char => /[\p{L}\p{N}]/u.test(char)).length
 
 /** Shared line boundaries: nearest punctuation, then word boundaries; never split an English word. */
@@ -24,7 +21,7 @@ export function wrapSubtitleText(text: string, maximum: number): string {
   for (const paragraph of text.split(/\r\n|[\r\n\u2028\u2029]/u)) {
     const normalized = paragraph.trim().replace(/[^\S\r\n]+/gu, ' ').replace(/([a-z0-9][,;:])(?=[a-z0-9])/gi, '$1 ')
     const tokens = Array.from(subtitleWords.segment(normalized), value => value.segment)
-      .flatMap(token => /\p{Script=Han}/u.test(token) || /^[—…]+$/u.test(token) ? Array.from(token) : [token])
+      .flatMap(token => /^[—…]+$/u.test(token) ? Array.from(token) : [token])
     // Prefix sums avoid repeatedly joining/scanning a long narration.
     const sizes = [0]; const spoken = [0]
     for (const token of tokens) { sizes.push(sizes.at(-1)! + subtitleLength(token)); spoken.push(spoken.at(-1)! + spokenLength(token)) }
@@ -86,21 +83,69 @@ export function splitSubtitleText(text: string, maximum: number, maxLines: numbe
 }
 const weight = (text: string): number => Array.from(text.replace(/\s/gu, '')).length
 
+/** One second leaves time to acquire a cue. Merge if gaps cannot supply it; a shorter source range is the only exception. */
+export function ensureSubtitleDuration<T extends { start: number; end: number; text: string }>(cues: readonly T[], minimum: number, range: { startFrame: number; endFrame: number }, merge: (left: T, right: T) => T): T[] {
+  const result: T[] = []
+  for (let index = 0; index < cues.length; index++) {
+    let cue = { ...cues[index] }
+    while (cue.end - cue.start < minimum && index + 1 < cues.length && cues[index + 1].start < cue.start + minimum) {
+      cue = merge(cue, cues[++index])
+    }
+    cue.end = Math.min(range.endFrame, Math.max(cue.end, Math.min(cue.start + minimum, cues[index + 1]?.start ?? range.endFrame)))
+    if (cue.end - cue.start < minimum) cue.start = Math.max(result.at(-1)?.end ?? range.startFrame, cue.end - minimum)
+    if (cue.end - cue.start < minimum && result.length) {
+      const previous = result.pop()!
+      result.push(merge(previous, cue))
+    } else result.push(cue)
+  }
+  return result
+}
+
 /** Word timestamps win at recognized boundaries; intra-word/segment splits are proportional estimates. */
-export function buildAutoSubtitles(blocks: readonly AudioEditTranscriptBlock[], sampleRate: number, rate: VideoEditRatio, range: { startFrame: number; endFrame: number }, options: AutoSubtitleOptions = {}): VideoEditCaption[] {
-  const settings = autoSubtitleOptionsSchema.parse(options)
+export function buildAutoSubtitles(blocks: readonly AudioEditTranscriptBlock[], sampleRate: number, rate: VideoEditRatio, range: { startFrame: number; endFrame: number }, options: AutoSubtitleOptions = {}, pauses: readonly SubtitlePause[] = []): VideoEditCaption[] {
+  const text = blocks.map(block => block.text).join('')
+  const settings = resolveSubtitleStyle(options, text)
+  if (settings.chinese) {
+    audioTimestampToVideoFrame(0, sampleRate, rate)
+    const fps = rate.numerator / rate.denominator
+    const chars = [...blocks].sort((a, b) => a.startFrame - b.startFrame).filter(block => block.included).flatMap((block, wordId) => {
+      if (block.endFrame <= block.startFrame) throw new Error('识别结果包含无效时间戳。')
+      const points = Array.from(block.text)
+      const end = block.granularity === 'segment' ? Math.min(block.endFrame, (range.endFrame - range.startFrame) / fps * sampleRate) : block.endFrame
+      if ((end - block.startFrame) / sampleRate * fps < 1 && subtitleWidth(block.text) > settings.maxCharacters * settings.maxLines) throw new Error('字幕时长不足以拆分长句，请扩大声音范围。')
+      return points.map((text, index) => ({ text, wordId: block.granularity === 'word' ? wordId : undefined,
+        startMs: range.startFrame / fps * 1000 + (block.startFrame + (end - block.startFrame) * index / points.length) / sampleRate * 1000,
+        endMs: range.startFrame / fps * 1000 + (block.startFrame + (end - block.startFrame) * (index + 1) / points.length) / sampleRate * 1000,
+        timing: block.granularity === 'word' ? 'word' as const : 'estimated' as const }))
+    })
+    const tokens = subtitleTokensFromCharacters(chars)
+    // Restore complete ASR word intervals (including trailing punctuation).
+    const ordered = [...blocks].sort((a, b) => a.startFrame - b.startFrame).filter(block => block.included)
+    for (const token of tokens) if (token.wordId !== undefined) {
+      const block = ordered[token.wordId]
+      token.startMs = Math.min(token.startMs, range.startFrame / fps * 1000 + block.startFrame / sampleRate * 1000)
+      token.endMs = Math.max(token.endMs, range.startFrame / fps * 1000 + block.endFrame / sampleRate * 1000)
+    }
+    return segmentTimedSubtitles(tokens, { startMs: range.startFrame / fps * 1000, endMs: range.endFrame / fps * 1000 }, options, pauses).map(cue => {
+      const start = Math.max(range.startFrame, Math.ceil(cue.startMs * fps / 1000 - 1e-7)); const end = Math.min(range.endFrame, Math.ceil(cue.endMs * fps / 1000 - 1e-7))
+      if (end <= start) throw new Error('字幕时长不足一帧，请扩大声音范围。')
+      return { id: crypto.randomUUID(), text: cue.text, start, duration: Math.max(1, end - start) }
+    })
+  }
+  // English keeps the existing layout and timing policy until a separate profile is defined.
+  const legacy = { ...settings, maxCharacters: options.maxCharacters ?? 24, minDurationSeconds: options.minDurationSeconds ?? 1, pauseSeconds: options.pauseSeconds ?? .6 }
   const groups: Array<{ text: string; start: number; end: number; word: boolean; blocks: AudioEditTranscriptBlock[] }> = []
   for (const block of [...blocks].sort((a, b) => a.startFrame - b.startFrame)) {
     if (!block.included || !block.text.trim()) continue
     if (!Number.isFinite(block.startFrame) || !Number.isFinite(block.endFrame) || block.endFrame <= block.startFrame) throw new Error('识别结果包含无效时间戳。')
     const previous = groups.at(-1); const text = block.text.trim()
     const joined = previous ? joinAudioEditText(previous.text, text) : text
-    if (previous?.word && block.granularity === 'word' && !/[。！？.!?；;]$/.test(previous.text) && block.startFrame >= previous.end && block.startFrame - previous.end < sampleRate * settings.pauseSeconds) {
+    if (previous?.word && block.granularity === 'word' && !/[。！？.!?；;]$/.test(previous.text) && block.startFrame >= previous.end && block.startFrame - previous.end < sampleRate * legacy.pauseSeconds) {
       previous.text = joined; previous.end = block.endFrame; previous.blocks.push(block)
     } else groups.push({ text, start: block.startFrame, end: block.endFrame, word: block.granularity === 'word', blocks: [block] })
   }
   const converted = groups.flatMap(group => {
-    const texts = splitSubtitleText(group.text, settings.maxCharacters, settings.maxLines)
+    const texts = splitSubtitleText(group.text, legacy.maxCharacters, legacy.maxLines)
     const frameAt = (sample: number): number => range.startFrame + audioTimestampToVideoFrame(sample, sampleRate, rate)
     const start = Math.max(range.startFrame, frameAt(group.start)); const end = Math.min(range.endFrame, frameAt(group.end))
     if (end <= start) return []
@@ -125,12 +170,7 @@ export function buildAutoSubtitles(blocks: readonly AudioEditTranscriptBlock[], 
       return { start: from, end: to, text }
     })
   })
-  const minimum = Math.round(settings.minDurationSeconds * rate.numerator / rate.denominator)
-  return converted.flatMap((group, index) => {
-    const start = Math.max(range.startFrame, group.start)
-    const next = converted[index + 1]?.start ?? range.endFrame
-    // Extend a short cue only into an actual gap; speech in the next cue always wins.
-    const end = Math.min(range.endFrame, Math.max(group.end, Math.min(start + minimum, next)))
-    return end > start ? [{ id: crypto.randomUUID(), start, duration: end - start, text: group.text }] : []
-  })
+  const minimum = Math.ceil(legacy.minDurationSeconds * rate.numerator / rate.denominator)
+  return ensureSubtitleDuration(converted, minimum, range, (left, right) => ({ ...left, end: right.end, text: wrapSubtitleText(joinAudioEditText(left.text, right.text), legacy.maxCharacters) }))
+    .map(group => ({ id: crypto.randomUUID(), start: group.start, duration: group.end - group.start, text: group.text }))
 }

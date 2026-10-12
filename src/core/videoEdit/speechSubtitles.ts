@@ -1,21 +1,59 @@
 import { alignSpeechTimings } from '../media/alignSpeechTimings'
 import type { SpeechTimings } from '../media/speechTimings'
-import { autoSubtitleOptionsSchema, splitSubtitleText, type AutoSubtitleOptions } from './autoSubtitles'
-import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange, type VideoEditClipTiming } from './clipSpeed'
+import { splitSubtitleText, wrapSubtitleText, ensureSubtitleDuration, type AutoSubtitleOptions } from './autoSubtitles'
+import { resolveSubtitleStyle } from './subtitleStyleProfiles'
+import { segmentTimedSubtitles, subtitleTokensFromCharacters, type SubtitlePause } from './subtitleSegmentation'
+import { joinAudioEditText } from '../audioEdit/captions'
+import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange, videoEditClipSpeedValue, type VideoEditClipTiming } from './clipSpeed'
 import { videoEditFps, type VideoEditRatio } from './time'
 import type { VideoEditCaption } from './timedContent'
 import { videoEditSubtitleStyleSchema } from './subtitleStyle'
 
 export interface SpeechSubtitle { caption: VideoEditCaption; startUs: number; endUs: number; confidence: number; estimated: boolean }
 /** Original text is authoritative; provider/ASR text supplies only matching anchors. */
-export async function buildSpeechSubtitles(original: string, timings: SpeechTimings, clip: VideoEditClipTiming & { id: string }, rate: VideoEditRatio, options: AutoSubtitleOptions = {}, signal?: AbortSignal): Promise<SpeechSubtitle[]> {
-  const settings = autoSubtitleOptionsSchema.parse(options)
+export async function buildSpeechSubtitles(original: string, timings: SpeechTimings, clip: VideoEditClipTiming & { id: string }, rate: VideoEditRatio, options: AutoSubtitleOptions = {}, signal?: AbortSignal, pauses: readonly SubtitlePause[] = [], textScope: 'source' | 'clip' = 'source'): Promise<SpeechSubtitle[]> {
+  const profile = resolveSubtitleStyle(options, original)
+  const settings = profile.chinese ? profile : { ...profile, maxCharacters: options.maxCharacters ?? 24, minDurationSeconds: options.minDurationSeconds ?? 1 }
   const fps = videoEditFps(rate)
   const range = videoEditClipSourceRange(clip, fps)
-  const aligned = (await alignSpeechTimings(original, timings, signal)).filter(char =>
+  const scopedTimings = textScope === 'clip' ? { ...timings, items: timings.items.filter(item => item.endMs > range.from * 1000 && item.startMs < range.to * 1000) } : timings
+  const aligned = (await alignSpeechTimings(original, scopedTimings, signal)).filter(char =>
     (char.endMs > range.from * 1000 + 1e-6 || char.endMs === char.startMs && char.startMs >= range.from * 1000 - 1e-6) && char.startMs < range.to * 1000 - 1e-6)
+  if (settings.chinese) {
+    const tokens = subtitleTokensFromCharacters(aligned.map(char => ({ ...char, timing: timings.granularity === 'word' ? 'word' as const : 'estimated' as const })))
+    for (const token of tokens) if (token.wordId !== undefined) {
+      const item = scopedTimings.items[token.wordId]
+      token.startMs = Math.max(range.from * 1000, Math.min(token.startMs, item.startMs))
+      token.endMs = Math.min(range.to * 1000, Math.max(token.endMs, item.endMs))
+    }
+    // Profile limits describe playback time, while aligner and energy clocks describe source time.
+    const speed = videoEditClipSpeedValue(clip)
+    const sourceOptions = { ...options, minDurationSeconds: settings.minDurationSeconds * speed, maxDurationSeconds: settings.maxDurationSeconds * speed,
+      maxReadingSpeed: settings.maxReadingSpeed / speed, joinGapMs: settings.joinGapMs * speed,
+      ...(settings.pauseSeconds === undefined ? {} : { pauseSeconds: settings.pauseSeconds * speed }) }
+    const groups = segmentTimedSubtitles(tokens, { startMs: range.from * 1000, endMs: range.to * 1000 }, sourceOptions, pauses)
+    const result = groups.map(group => {
+      const a = videoEditClipFrameBoundaryAtSource(clip, group.startMs / 1000, fps)
+      const b = videoEditClipFrameBoundaryAtSource(clip, group.endMs / 1000, fps)
+      const start = Math.max(clip.start, Math.ceil(Math.min(a, b) - 1e-7))
+      const end = Math.min(clip.start + clip.duration, Math.ceil(Math.max(a, b) - 1e-7))
+      const chars = aligned.filter(char => (char.endMs > tokens[group.first].startMs || char.endMs === char.startMs && char.startMs >= tokens[group.first].startMs) && char.startMs < tokens[group.last].endMs)
+      const first = chars[0]; const last = chars.at(-1)
+      const mismatch = chars.some(char => char.mismatch && /[\p{L}\p{N}]/u.test(char.text))
+      const anchored = timings.items.some(item => Math.abs(item.startMs - group.startMs) < 1e-6)
+        && timings.items.some(item => Math.abs(item.endMs - group.endMs) < 1e-6 || Math.abs(item.startMs - group.endMs) < 1e-6)
+      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text: group.text, start, duration: Math.max(1, end - start), style: videoEditSubtitleStyleSchema.parse({}) },
+        startUs: Math.round(start / fps * 1e6), endUs: Math.round(end / fps * 1e6), confidence: mismatch ? 0 : Math.min(first?.confidence ?? 0, last?.confidence ?? 0) * Number(anchored), estimated: mismatch || !anchored }
+    }).sort((a, b) => a.caption.start - b.caption.start)
+    for (let index = 0; index + 1 < result.length; index++) {
+      const cue = result[index]; const next = result[index + 1]
+      const gap = next.caption.start - cue.caption.start - cue.caption.duration
+      if (gap >= 0 && gap / fps * 1000 < settings.joinGapMs) { cue.caption.duration += gap; cue.endUs = next.startUs }
+    }
+    return result
+  }
   const parts = splitSubtitleText(aligned.map(char => char.text).join(''), settings.maxCharacters, settings.maxLines)
-  const result: SpeechSubtitle[] = []
+  const groups: Array<{ start: number; end: number; text: string; chars: typeof aligned }> = []
   let offset = 0
   for (const part of parts) {
     // Whitespace carries no speech timing; only shared layout may introduce line breaks.
@@ -30,9 +68,21 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
     const start = Math.max(clip.start, Math.round(Math.min(a, b)))
     const end = Math.min(clip.start + clip.duration, Math.round(Math.max(a, b)))
     if (end <= start) continue
-    result.push({ caption: { id: crypto.randomUUID(), clipId: clip.id, text: part, start, duration: end - start, style: videoEditSubtitleStyleSchema.parse({}) },
-      startUs: Math.round(start * rate.denominator * 1e6 / rate.numerator), endUs: Math.round(end * rate.denominator * 1e6 / rate.numerator),
-      confidence: chars.reduce((sum, char) => sum + char.confidence, 0) / chars.length, estimated: chars.some(char => char.estimated) })
+    groups.push({ start, end, text: part, chars })
   }
-  return result.sort((a, b) => a.caption.start - b.caption.start)
+  return ensureSubtitleDuration(groups.sort((a, b) => a.start - b.start), Math.ceil(settings.minDurationSeconds * fps), { startFrame: clip.start, endFrame: clip.start + clip.duration },
+    (left, right) => ({ ...left, end: right.end, text: wrapSubtitleText(joinAudioEditText(left.text, right.text), settings.maxCharacters), chars: [...left.chars, ...right.chars] }))
+    .map(({ start, end, text, chars }): SpeechSubtitle => {
+      const ordered = [...chars].sort((a, b) => a.startMs - b.startMs)
+      const first = ordered[0]; const last = ordered[ordered.length - 1]
+      const mismatched = ordered.some(char => char.mismatch)
+      const boundaryStart = videoEditClipFrameBoundaryAtSource(clip, first.startMs / 1000, fps)
+      const boundaryEnd = videoEditClipFrameBoundaryAtSource(clip, last.endMs / 1000, fps)
+      const startExact = (boundaryStart <= boundaryEnd ? first.startExact : last.endExact) && start === Math.round(Math.min(boundaryStart, boundaryEnd))
+      const endExact = (boundaryStart <= boundaryEnd ? last.endExact : first.startExact) && end === Math.round(Math.max(boundaryStart, boundaryEnd))
+      const estimated = !startExact || !endExact || mismatched
+      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text, start, duration: end - start, style: videoEditSubtitleStyleSchema.parse({}) },
+      startUs: Math.round(start * rate.denominator * 1e6 / rate.numerator), endUs: Math.round(end * rate.denominator * 1e6 / rate.numerator),
+      confidence: mismatched ? 0 : Math.min(first.confidence, last.confidence) * (Number(Boolean(startExact)) + Number(Boolean(endExact))) / 2, estimated }
+    })
 }

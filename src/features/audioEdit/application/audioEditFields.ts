@@ -12,8 +12,9 @@ export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcr
 export type AudioEditEntityType = typeof AUDIO_EDIT_ENTITY_TYPES[keyof typeof AUDIO_EDIT_ENTITY_TYPES]
 export interface AudioEditFieldSource { document: AudioEditProjectDocument; childId: string; availableProcessors?: AudioEditProcessorDescriptor[] }
 export function audioEditSchemaRef(kind: 'entity' | 'property', id: string) {
-  const value = [...id].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
-  return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: `sha256:${value.padEnd(64, value).slice(0, 64)}` } as const
+  const version = id === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock || id.startsWith(`${AUDIO_EDIT_ENTITY_TYPES.transcriptBlock}.`) ? 2 : 1
+  const value = [...(version === 1 ? id : `${id}:v${version}`)].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
+  return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version, digest: `sha256:${value.padEnd(64, value).slice(0, 64)}` } as const
 }
 function json(value: unknown): JsonValue { return JSON.parse(JSON.stringify(value)) as JsonValue }
 function string(value: unknown): string { if (typeof value !== 'string') throw new Error('INVALID_VALUE'); return value }
@@ -22,7 +23,7 @@ function block(source: AudioEditFieldSource) { const found = source.document.tra
 function suggestion(source: AudioEditFieldSource) { const found = source.document.suggestions.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = []): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
-  return { propertyId: id, descriptor: { id, entityType, version: 1, title, description: `口播剪辑${title}。`, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
+  return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description: `口播剪辑${title}。`, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
 }
 function readOnly(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>, reason: string): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   return { ...definition, descriptor: { ...definition.descriptor, readOnlyReason: reason } }
@@ -52,8 +53,9 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.transcriptBlock, 'original_text', '保留的初始文本（旧口播为升级时的文字）', TEXT, (s) => s.document.editBaseline?.transcript.find((item) => item.id === s.childId)?.text ?? block(s).text),
     field(E.transcriptBlock, 'text', '校正文本', TEXT, (s) => block(s).text, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.text = string(v) }),
     field(E.transcriptBlock, 'caption_break_after', '此词之后结束字幕段（不改变声音或时间戳）', BOOL, (s) => block(s).captionBreakAfter ?? false, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.captionBreakAfter = boolean(v) }),
-    field(E.transcriptBlock, 'start_frame', '开始帧', INT, (s) => block(s).startFrame),
-    field(E.transcriptBlock, 'end_frame', '结束帧', INT, (s) => block(s).endFrame),
+    field(E.transcriptBlock, 'start_frame', '开始采样帧（除以 sample_rate 得秒，非视频帧）', INT, (s) => block(s).startFrame),
+    field(E.transcriptBlock, 'end_frame', '结束采样帧（除以 sample_rate 得秒，非视频帧）', INT, (s) => block(s).endFrame),
+    field(E.transcriptBlock, 'sample_rate', '时间戳采样率（每秒采样帧数）', INT, (s) => s.document.source.sampleRate),
     field(E.transcriptBlock, 'included', '是否保留', BOOL, (s) => block(s).included, (s, v) => { if (block(s).locked) throw new Error('词块已锁定'); s.document = setAudioEditBlocks(s.document, [s.childId], boolean(v)) }, ['toggleBlock', 'setBlocksIncluded']),
     field(E.transcriptBlock, 'locked', '是否锁定', BOOL, (s) => block(s).locked, (s, v) => { block(s).locked = boolean(v) }),
     field(E.transcriptBlock, 'granularity', '时间戳粒度', { kind: 'enum', values: [{ value: 'word', label: '逐词' }, { value: 'segment', label: '句段' }] }, (s) => block(s).granularity),

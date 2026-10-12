@@ -31,7 +31,7 @@ describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
     const rt = runtime(fetch); rt.transport.uploadFile = vi.fn()
     await expect(createTimestampedAsrService(rt, () => true, media).preflight(input)).rejects.toThrow('unreadable')
     media.mockResolvedValue('voice.wav')
-    await expect(createTimestampedAsrService(rt, () => true, media).preflight(input)).resolves.toEqual({ modelId: input.modelId })
+    await expect(createTimestampedAsrService(rt, () => true, media).preflight(input)).resolves.toMatchObject({ modelId: input.modelId, cost: { status: 'estimated', currency: 'CNY', amount: input.durationMs / 1000 * .00022 } })
     expect(fetch).not.toHaveBeenCalled(); expect(rt.transport.uploadFile).not.toHaveBeenCalled()
   })
   it('Groq 字段构造 fixture 的秒由 SDK 变为毫秒，明确同时请求 word+segment', async () => {
@@ -48,7 +48,7 @@ describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
     const plan = service.prepare({ audioPath: 'recording.wav', durationMs: 2_400 })
     expect(Object.isFrozen(plan)).toBe(true)
     expect(Object.isFrozen(plan.cost)).toBe(true)
-    expect(plan.cost).toEqual({ status: 'unknown', amount: null, currency: null })
+    expect(plan.cost).toEqual({ status: 'estimated', amount: 10 * .04 / 3600, currency: 'USD' })
     expect(await service.execute(plan, context())).toMatchObject({ unit: 'ms', granularity: 'word', words: [{ startMs: 0, endMs: 1_100 }, { startMs: 1_100, endMs: 2_400 }] })
     expect(fetch).toHaveBeenCalledTimes(1)
   })

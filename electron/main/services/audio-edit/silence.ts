@@ -1,13 +1,15 @@
 import type { AudioEditRange, AudioEditSilenceRequest, AudioEditSuggestion } from '../../../../src/core/audioEdit/types'
 import { subtractRanges } from '../../../../src/core/audioEdit/edits'
 import { requireAudioEditProject } from './project-store'
-import { verifyAudioEditSource } from './media'
+import { probeAudioEditImport, verifyAudioEditSource } from './media'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { runAudioEditProcess } from './process'
 import { runAudioEditTask } from './task-store'
 
 export async function detectAudioEditSilence(request: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }> {
-  const project = await requireAudioEditProject(request.projectId)
+  // Source-only analysis is read-only: no draft, transcript, or navigation side effect.
+  const project = request.projectId !== undefined ? await requireAudioEditProject(request.projectId)
+    : { id: request.requestId ?? crypto.randomUUID(), revision: 0, source: await probeAudioEditImport(request.sourcePath), transcript: [] }
   await verifyAudioEditSource(project)
   const settings = request.settings
   if (!(settings.noiseDb >= -80 && settings.noiseDb <= -10 && settings.silenceThresholdMs >= 100 && settings.silenceThresholdMs <= 10000

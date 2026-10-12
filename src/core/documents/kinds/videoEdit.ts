@@ -39,6 +39,7 @@ const sequenceSchema = z.looseObject({
 })
 
 export const videoEditContentSchema = z.object({
+  exportHistory: videoEditDocumentSchema.shape.exportHistory,
   creativeIntents: creativeIntentsSchema.optional(),
   styleKits: z.array(styleKitSchema).optional(),
   colorLuts: z.array(colorLutAssetSchema).optional(),
@@ -76,7 +77,8 @@ function sequenceHasContent(sequence: VideoEditDocumentContent['sequences'][numb
  * 新建后只是改了序列规格或多建了一条空序列的草稿项目离开时直接丢弃，不询问。
  */
 function isEmptyVideoEditContent(content: VideoEditDocumentContent): boolean {
-  return content.media.length === 0
+  return (content.exportHistory?.length ?? 0) === 0
+    && content.media.length === 0
     && (content.creativeIntents?.drafts.length ?? 0) === 0
     && (content.creativeIntents?.sessions.length ?? 0) === 0
     && (content.colorLuts?.length ?? 0) === 0

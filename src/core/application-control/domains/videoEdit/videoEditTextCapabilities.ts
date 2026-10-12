@@ -27,10 +27,19 @@ export const VIDEO_EDIT_TEXT_CAPABILITIES = ([
   summarize: value => value.message,
 }))
 export const detectVideoEditTextSilenceCapability = defineApplicationCapability({
-  id: 'detect_video_edit_text_silence', title: '检测文本剪辑停顿', description: '用已保存的口播声音免费检测真实静音，复用口播噪声阈值、停顿阈值和保留时长；记录到转录稿，不删除媒体。完成后读序列 transcript 或用 ripple_delete_video_edit_text 的 silence 选择器清理。没有转录稿时先用既有字幕转录流程；不会发起付费识别。',
-  version: 1, domain: 'video_edit', aliases: ['检测静音', '文本剪辑停顿'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
-  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence'], producesRefs: ['video_edit.sequence'], inputSchema: z.object({ documentRef, sequenceRef }).strict(), outputSchema: output,
+  id: 'detect_video_edit_text_silence', title: '检测文本剪辑停顿', description: '用已保存的口播声音免费检测真实静音，复用口播噪声阈值、停顿阈值和保留时长；记录到转录稿，不删除媒体。完成后读序列 transcript 或用 ripple_delete_video_edit_text 的 silence 选择器清理。提供 clipRef 时直接检测该片段声音并只返回序列帧 ranges，无需转录稿且不修改序列；该分支的结果可供人工或算法检查，不会填充文本剪辑 silence 选择器。不会发起付费识别。',
+  version: 2, domain: 'video_edit', aliases: ['检测静音', '文本剪辑停顿'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: true, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.clip'], producesRefs: ['video_edit.sequence'], inputSchema: z.object({ documentRef, sequenceRef, clipRef: ref('video_edit.clip').optional().describe('提供片段时直接检测原声音并返回序列帧范围，不要求序列转录稿，不修改转录稿。') }).strict(), outputSchema: output,
   concurrencyKey: 'video_edit', resolveConcurrencyKey: value => `video_edit:${value.documentRef.id}`, resolveOperationTargets: value => [value.documentRef, value.sequenceRef], resolveOperationWriteTargets: value => [value.documentRef, value.sequenceRef],
   control: capabilityControl('execute', ['video_edit.sequence'], { revisionScopes: ['video_edit'], cancelable: true }),
-  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true }, resolveObservedEffects: (_input, value) => [{ effect: 'execute' as const, entityTypes: ['video_edit.sequence'], propertyIds: [], targetRefs: [value.resultRef], count: 1, verified: value.verified, evidence: value.verified ? ['音频检测的静音范围已保存并回读。'] : [] }], summarize: value => value.message,
+  verificationContract: { kind: 'effect_receipt', requireEffects: false, requireVerifiedEffects: true }, resolveObservedEffects: (_input, value) => value.changed ? [{ effect: 'execute' as const, entityTypes: ['video_edit.sequence'], propertyIds: [], targetRefs: [value.resultRef], count: 1, verified: value.verified, evidence: value.verified ? ['音频检测的静音范围已保存并回读。'] : [] }] : [], summarize: value => value.message,
+})
+
+export const getVideoEditClipPausesCapability = defineApplicationCapability({
+  id: 'get_video_edit_clip_pauses', title: '取片段停顿图', description: '免费只读分析音频/视频片段的停顿，字幕断句、卡点和剪辑共用。优先已有逐词识别时间，没有时复用本地能量静音检测，不调用识别、不计费、不切换页面。返回 pauses 与 words 的 startFrame/endFrame 均为序列帧，已考虑片段起点、入点、变速、倒放。breath/punct 是词间停顿候选，不作为删除静音的证据；只有 silence 来自能量检测。',
+  version: 1, domain: 'video_edit', aliases: ['气口', '片段停顿', '字幕断点'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.clip'], producesRefs: [],
+  inputSchema: z.object({ clipRef: ref('video_edit.clip') }).strict(),
+  outputSchema: z.object({ clipRef: ref('video_edit.clip'), source: z.enum(['words', 'energy']), pauses: z.array(z.object({ startFrame: z.number().int().nonnegative(), endFrame: z.number().int().nonnegative(), durationMs: z.number().nonnegative(), kind: z.enum(['silence', 'breath', 'punct']) }).strict()), words: z.array(z.object({ text: z.string(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).strict()), message: z.string() }).strict(),
+  control: capabilityControl('observe', ['video_edit.clip'], { cancelable: true }), summarize: value => value.message,
 })

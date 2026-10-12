@@ -155,8 +155,7 @@ export interface AudioEditPreviewChunkRequest {
   processing?: boolean
 }
 
-export interface AudioEditSilenceRequest {
-  projectId: string
+export type AudioEditSilenceRequest = ({ projectId: string; sourcePath?: never } | { sourcePath: string; projectId?: never }) & {
   settings: AudioEditBatchSettings
   range?: AudioEditRange
   requestId?: string

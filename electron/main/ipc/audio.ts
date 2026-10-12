@@ -37,7 +37,9 @@ export function registerAudioIpc(): void {
   }, ({ projectId, sourcePath }) => relinkAudioEditSource(projectId, sourcePath))
   registerIpcHandler('audioEdit:silence', (input) => {
     const record = parseRecord(input)
-    return { projectId: readString(record, 'projectId'), settings: audioEditSettingsSchema.parse(record.settings), range: record.range === undefined ? undefined : audioEditRangeSchema.parse(record.range), requestId: readOptionalString(record, 'requestId') }
+    if (record.projectId !== undefined && record.sourcePath !== undefined) throw new Error('只提供 projectId 或 sourcePath。')
+    const target = record.sourcePath === undefined ? { projectId: readString(record, 'projectId') } : { sourcePath: readString(record, 'sourcePath') }
+    return { ...target, settings: audioEditSettingsSchema.parse(record.settings), range: record.range === undefined ? undefined : audioEditRangeSchema.parse(record.range), requestId: readOptionalString(record, 'requestId') }
   }, detectAudioEditSilence)
   registerIpcHandler('audioEdit:tasks:list', (input) => parseStringField(input, 'projectId'), listAudioEditTasks)
   registerIpcHandler('audioEdit:tasks:cancel', (input) => parseStringField(input, 'requestId'), cancelAudioEditTask)

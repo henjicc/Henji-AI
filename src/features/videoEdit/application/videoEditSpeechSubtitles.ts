@@ -1,7 +1,8 @@
-import { applicationPaidRequest } from '@/services/paidApproval'
+import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
 import type { SpeechTimings } from '@/core/media/speechTimings'
-import type { AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
+import { autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
+import { readClipEnergyPauses } from './videoEditPauseMap'
 import { readGenerationResultTimings } from '@/features/generation'
 import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit } from '@/features/audioEdit'
 import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
@@ -51,7 +52,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
       if (!audio?.document.transcript.length) {
         const source = audio?.document.source ?? await platform.audioEdit.probeSource(media.path)
         const prepared = await platform.audioEdit.preflightTranscription({ sourcePath: media.path, durationMs: source.durationFrames * 1000 / source.sampleRate, modelId: options.modelId, language: options.language, audioDocumentId })
-        const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ paid: await applicationPaidRequest('recognition', projectId, signal), title: '识别声音并对齐原文', message: '这段声音没有原生时间戳。将使用已配置的语音识别模型获取时间；本次暂无法可靠预估金额，确认后按所用模型计费。字幕文字仍以原文为准。是否继续？', type: 'warning', confirmLabel: '确认识别费用' }, signal)
+        const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ paid: await applicationPaidRequest('recognition', projectId, signal, transcriptionEstimatedCny(prepared)), title: '识别声音并对齐原文', message: '这段声音没有原生时间戳。将使用已配置的语音识别模型获取时间；费用按音频时长和所选模型估算，最终以供应商账单为准。字幕文字仍以原文为准。是否继续？', type: 'warning', confirmLabel: '确认识别费用' }, signal)
         if (!accepted) throw new ApplicationPreflightFailure('已取消识别，未生成字幕。')
         assertTarget()
         audio ??= await createAudioEditDraft(source, owner.session.documentMeta.container)
@@ -74,7 +75,8 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
         startMs: block.startFrame * 1000 / audio.document.source.sampleRate, endMs: block.endFrame * 1000 / audio.document.source.sampleRate, ...(block.confidence === undefined ? {} : { confidence: block.confidence }) })) } satisfies SpeechTimings
     }
     assertTarget()
-    const subtitles = await buildSpeechSubtitles(originalText, timings, clip, sequence.frameRate, { maxCharacters: options.maxCharacters, maxLines: options.maxLines, pauseSeconds: options.pauseSeconds, minDurationSeconds: options.minDurationSeconds }, signal)
+    const pauses = timings.granularity === 'word' ? [] : await readClipEnergyPauses(projectId, sequenceId, clipId, signal)
+    const subtitles = await buildSpeechSubtitles(originalText, timings, clip, sequence.frameRate, autoSubtitleOptionsSchema.strip().parse(options), signal, pauses)
     assertTarget()
     appendAutoSubtitles(projectId, sequenceId, subtitles.map(value => value.caption))
     applied = true

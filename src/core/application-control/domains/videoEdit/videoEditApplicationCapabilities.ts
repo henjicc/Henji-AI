@@ -7,7 +7,7 @@ import { generateVideoEditProxyCapability } from './videoEditProxyCapability'
 import { reframeVideoEditCapability } from './videoEditReframeCapability'
 import { z } from 'zod'
 import { analyzeVideoEditBeatsCapability } from './videoEditBeatCapability'
-import { VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability } from './videoEditTextCapabilities'
+import { VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, getVideoEditClipPausesCapability } from './videoEditTextCapabilities'
 import { nestVideoEditClipsCapability } from './videoEditNestCapability'
 import { VIDEO_EDIT_EXPORT_CAPABILITIES } from './videoEditExportCapabilities'
 import { VIDEO_EDIT_WORKSPACE_TRANSFER_CAPABILITIES } from './videoEditWorkspaceTransferCapabilities'
@@ -156,4 +156,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), ...VIDEO_EDIT_STYLE_KIT_CAPABILITIES, ...VIDEO_EDIT_EXPORT_CAPABILITIES, ...VIDEO_EDIT_WORKSPACE_TRANSFER_CAPABILITIES, analyzeVideoEditColorGradeCapability, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability, ...VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES, ...VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, ...VIDEO_EDIT_SUBTITLE_CAPABILITIES, ...VIDEO_EDIT_LOUDNESS_CAPABILITIES, ...VIDEO_EDIT_SCENE_CAPABILITIES, generateVideoEditProxyCapability]
+})), ...VIDEO_EDIT_STYLE_KIT_CAPABILITIES, ...VIDEO_EDIT_EXPORT_CAPABILITIES, ...VIDEO_EDIT_WORKSPACE_TRANSFER_CAPABILITIES, analyzeVideoEditColorGradeCapability, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability, ...VIDEO_EDIT_IN_PLACE_GENERATION_CAPABILITIES, ...VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, getVideoEditClipPausesCapability, ...VIDEO_EDIT_SUBTITLE_CAPABILITIES, ...VIDEO_EDIT_LOUDNESS_CAPABILITIES, ...VIDEO_EDIT_SCENE_CAPABILITIES, generateVideoEditProxyCapability]

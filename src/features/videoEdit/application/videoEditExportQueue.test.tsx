@@ -1,4 +1,4 @@
-import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
+import { createVideoEditTestProject as createVideoEditProject, reopenVideoEdit } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import path from 'node:path'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -12,7 +12,7 @@ import { VIDEO_EDIT_EXPORT_PRESETS, patchVideoEditExportSettings, videoEditSeque
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange } from './videoEditService'
+import { appendVideoEditClip, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit } from './videoEditService'
 import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
@@ -571,4 +571,27 @@ it('非法自定义宽高保持面板可用但禁止提交，修正后恢复导�
   expect(view.getByText(/请使用偶数宽高/)).toBeTruthy(); expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', true)
   fireEvent.change(view.getByLabelText('导出宽度'), { target: { value: '1920' } }); fireEvent.blur(view.getByLabelText('导出宽度'))
   await waitFor(() => expect(view.getByRole('button', { name: '导出' })).toHaveProperty('disabled', false))
+})
+
+it('completed exports survive a fresh document instance and either ID resolves; unknown ID is NOT_FOUND', async () => {
+  const owner = await project(); const documentRef = { kind: 'video_edit.document', id: owner.document.id }
+  const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('archived.mp4') }])
+  await videoEditExportQueue.wait(job.id)
+  expect(job.state).toBe('completed')
+  const expected = { id: job.id, taskId: job.task!.id, assetRef: job.task!.assetRef, path: file('archived.mp4'), completedAt: expect.any(Number), settings: expect.objectContaining({ format: 'mp4' }) }
+  expect(owner.document.exportHistory).toEqual([expect.objectContaining(expected)])
+  undoVideoEdit(owner.document.id)
+  expect(owner.document.exportHistory).toEqual([expect.objectContaining(expected)])
+  videoEditExportQueue.clearFinished()
+  const reopened = await reopenVideoEdit(owner.document.id)
+  expect(reopened).not.toBe(owner)
+  const app = createApplicationHarness()
+  try {
+    for (const taskId of [undefined, job.id, job.task!.id]) {
+      const read = await app.requireResult('query_video_edit_export', { documentRef, ...(taskId ? { taskId } : {}) })
+      expect(read.queue).toEqual([expect.objectContaining({ ...expected, archived: true })])
+    }
+    const missing = await app.call('query_video_edit_export', { documentRef, taskId: 'missing' })
+    expect(missing).toMatchObject({ ok: false, error: { code: 'NOT_FOUND', recoverable: true } })
+  } finally { app.dispose() }
 })

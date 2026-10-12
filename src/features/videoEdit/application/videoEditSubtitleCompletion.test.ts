@@ -189,7 +189,7 @@ it('手动拆分和合并双语保留两份文本，译文按词边界比例拆�
 it('已有长句免费整理，原引用保留第一段、比例分配时间，一步撤销；助手整理与UI走同一入口', async () => {
   const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 30, duration: 60, text: '甲乙丙丁戊己庚辛' })
   const history = owner.past.length
-  const result = segmentVideoEditSubtitles(owner.document.id, sequence().id, { maxCharacters: 4, maxLines: 1 })
+  const result = await segmentVideoEditSubtitles(owner.document.id, sequence().id, { maxCharacters: 4, maxLines: 1 })
   expect(result.createdIds).toHaveLength(1)
   expect(sequence().captions).toMatchObject([{ id, text: '甲乙丙丁', start: 30, duration: 30 }, { text: '戊己庚辛', start: 60, duration: 30 }])
   expect(owner.past).toHaveLength(history + 1); expect(llmChatStream).not.toHaveBeenCalled()
@@ -200,7 +200,7 @@ it('已有长句免费整理，原引用保留第一段、比例分配时间，�
     expect(output.verified).toBe(true); expect(output.createdCaptionRefs).toHaveLength(1)
     expect(owner.past).toHaveLength(history + 1)
     expect(sequence().captions?.map(caption => [caption.text, caption.start, caption.duration])).toEqual([['甲乙丙丁', 30, 30], ['戊己庚辛', 60, 30]])
-    const unchanged = segmentVideoEditSubtitles(owner.document.id, sequence().id, { maxCharacters: 4, maxLines: 1 })
+    const unchanged = await segmentVideoEditSubtitles(owner.document.id, sequence().id, { maxCharacters: 4, maxLines: 1 })
     expect(unchanged.createdIds).toEqual([]); expect(unchanged.updatedIds).toEqual([])
     expect(owner.past).toHaveLength(history + 1)
   } finally { app.dispose() }

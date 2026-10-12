@@ -10,7 +10,7 @@ import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type V
 import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoOptions, videoEditExportAudioOptions } from '../engine/videoEditExportEncoder'
-import { getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
+import { recordVideoEditExport, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
@@ -29,6 +29,7 @@ const tasks = new WeakMap<VideoEditInstance, VideoEditExportTask>()
 export function videoEditExportTask(projectId: string): VideoEditExportTask | undefined { return tasks.get(requireVideoEditInstance(projectId)) }
 export function cancelVideoEditExport(projectId: string): void { videoEditExportTask(projectId)?.controller.abort() }
 export interface VideoEditExportOptions {
+  queueId?: string
   snapshot: VideoEditComposition
   range: { startFrame: number; endFrame: number }
   settings: VideoEditExportSettings
@@ -178,7 +179,15 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     }
     published = true; task.state = 'completed'
     task.output = await publishVideoEditOutput({ owner: instance, sequenceId: document.id, revision: document.revision, path, name: `${snapshot.name} · ${format === 'mp4' ? '成片' : '声音'}`, kind: format === 'mp4' ? 'video' : 'audio' })
-    if (settings.addToLibrary) { const asset = await collectVideoEditOutput(task.output); task.assetRef = { kind: 'asset', id: asset.id } }
+    const completedAt = Date.now()
+    const persistReceipt = async (): Promise<void> => {
+      recordVideoEditExport(projectId, { id: options?.queueId ?? task.id, taskId: task.id, sequenceId: document.id,
+        name: snapshot.name, path, completedAt, settings, range, ...(task.assetRef ? { assetRef: task.assetRef } : {}) })
+      await saveVideoEdit(projectId)
+    }
+    // Save publication before optional collection/import so a later failure cannot erase the output fact.
+    await persistReceipt()
+    if (settings.addToLibrary) { const asset = await collectVideoEditOutput(task.output); task.assetRef = { kind: 'asset', id: asset.id }; await persistReceipt() }
     if (settings.importToProject) {
       // Publication already committed. Import has its own undo/save boundary in the same original project.
       if (!listVideoEditInstances().includes(instance)) throw new Error('成片已保存，但原剪辑已关闭，请从文件导入。')
