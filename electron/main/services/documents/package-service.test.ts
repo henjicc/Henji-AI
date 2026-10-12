@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createTestEnvironment, listFiles, type TestEnvironment } from './documents.test-support'
 import { remapDocumentLinks } from './package-service'
+import { videoEditExportHistorySchema } from '../../../../src/core/videoEdit/document'
 
 let env: TestEnvironment
 
@@ -129,6 +130,61 @@ describe('通用单文件包（4.1）', () => {
     })
     // 暂存文件夹不留
     expect((await fsp.readdir(path.join(env.workRoot, '项目'))).filter((name) => name.startsWith('.'))).toEqual([])
+  })
+
+  it('成片历史不作依赖：读取、收集、文档包与项目包忽略缺失成片；项目目录内现有成片仍随目录带走', async () => {
+    const { service } = env.services
+    const project = await service.createProject({ name: '成片历史' })
+    const container = { kind: 'project' as const, projectId: project.id }
+    const internal = write(path.join(project.path, '导出', '内置成片.mp4'), 'internal-output')
+    const external = write(path.join(env.outside, '外部成片.mp4'), 'external-output')
+    const golden = await readJson('tests/fixtures/persistence/document.video_edit/v4.json')
+    const history = videoEditExportHistorySchema.parse((golden.content as Record<string, unknown>).exportHistory)
+    const outputPaths = ['/persistence-project/导出/黄金.mp4', 'Z:\\缺失\\成片.mp4', path.join(project.path, '导出', '已删除.mp4'), internal, external]
+    const exportHistory = outputPaths.map((output, index) => ({ ...history[0], id: `output-${index}`, path: output }))
+    const edit = await service.createDocument({ kind: 'video_edit', container, name: '剪辑',
+      content: { media: [], bins: [], items: [], sequences: [], exportHistory } })
+    expect(edit.missingPaths).toEqual([])
+    expect((await service.readDocument({ id: edit.meta.id })).missingPaths).toEqual([])
+    expect(await service.collectDocumentMedia({ id: edit.meta.id })).toMatchObject({ copiedFiles: 0, missingPaths: [] })
+
+    const single = await service.exportDocumentPackage({ target: { id: edit.meta.id } })
+    expect(single.missingPaths).toEqual([])
+    expect(single.files).toBe(1)
+    const exported = await service.exportProjectPackage({ projectId: project.id })
+    expect(exported.missingPaths).toEqual([])
+    const imported = await service.importPackage({ source: exported.path })
+    if (imported.type !== 'project') throw new Error('应为项目包')
+    expect(await listFiles(imported.project.path)).toEqual(['.henji/project.json', '剪辑.henji-video', '导出/内置成片.mp4'])
+    const document = env.catalog.listDocuments({ projectId: imported.project.id, kind: 'video_edit' })[0]
+    const read = await service.readDocument({ id: document.id })
+    expect(read.missingPaths).toEqual([])
+    const reopened = videoEditExportHistorySchema.parse((read.content as Record<string, unknown>).exportHistory)
+    expect(reopened.map(entry => entry.path)).toEqual(outputPaths.map(output => output === internal ? path.join(imported.project.path, '导出', '内置成片.mp4') : output === outputPaths[2] ? path.join(imported.project.path, '导出', '已删除.mp4') : output))
+    const destination = await service.createProject({ name: '移动成片历史' })
+    expect(await service.moveDocument({ target: { id: document.id }, container: { kind: 'project', projectId: destination.id } })).toMatchObject({ copiedFiles: 0, missingPaths: [] })
+    expect(await listFiles(destination.path)).toEqual(['.henji/project.json', '剪辑.henji-video'])
+  })
+
+  it('成片重新作为源素材使用时仍是依赖，Windows 与 POSIX 缺失源素材均如实报告', async () => {
+    const { service } = env.services
+    const project = await service.createProject({ name: '成片复用' })
+    const golden = await readJson('tests/fixtures/persistence/document.video_edit/v4.json')
+    const history = videoEditExportHistorySchema.parse((golden.content as Record<string, unknown>).exportHistory)
+    const missing = ['/persistence-project/导出/黄金.mp4', 'Z:\\缺失\\成片.mp4']
+    const source = write(path.join(env.outside, '复用成片.mp4'), 'source-output')
+    const edit = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '复用剪辑',
+      content: { media: [...missing, source].map((file, index) => ({ id: `media-${index}`, path: file })), bins: [], items: [], sequences: [],
+        exportHistory: [...missing, source].map((file, index) => ({ ...history[0], id: `output-${index}`, path: file })) } })
+    // 读取会并发 stat，本机与异平台路径的完成顺序可以不同。
+    expect([...edit.missingPaths].sort()).toEqual([...missing].sort())
+    expect((await service.readDocument({ id: edit.meta.id })).missingPaths.sort()).toEqual([...missing].sort())
+    const exported = await service.exportProjectPackage({ projectId: project.id })
+    expect(exported.missingPaths).toEqual(missing)
+    const imported = await service.importPackage({ source: exported.path })
+    if (imported.type !== 'project') throw new Error('应为项目包')
+    expect(await listFiles(imported.project.path)).toContain('素材/复用成片.mp4')
+    expect((await service.collectDocumentMedia({ id: edit.meta.id })).missingPaths).toEqual(missing)
   })
 
   it('不安全或无法识别的包：拒绝且不留暂存', async () => {

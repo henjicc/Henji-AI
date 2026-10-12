@@ -30,6 +30,8 @@ export interface DocumentKindDescriptor<TContent = unknown> {
   readonly contentSchema: z.ZodType<TContent>
   /** Key N owns N → N+1; a missing step explicitly rejects old content. */
   readonly migrations: PersistenceMigrations
+  /** 用于缺失检查、收集与搬运的依赖内容；不含产出记录。省略时整份内容都参与。位置编码仍处理完整内容。 */
+  dependencyContent?(content: TContent): unknown
   createEmptyContent(): TContent
   /** 草稿离开时内容为空就直接删除，不询问。 */
   isEmptyContent(content: TContent): boolean

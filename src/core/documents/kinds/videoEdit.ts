@@ -119,6 +119,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 2 → 3（t187）：字幕新增可选 sourceText，原样保留；导出归档新增必填 presetName / rangeSource。
   // 旧归档没有记下预设名与区间来源，按升级前的展示补齐，不改动其他内容。
   migrations: { 2: migrateVideoEditContentV2, 3: migrateVideoEditContentV3 },
+  dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,
   isEmptyContent: isEmptyVideoEditContent,
   summarize: summarizeVideoEdit,

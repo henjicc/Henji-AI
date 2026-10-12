@@ -29,7 +29,7 @@ import type {
   RenameDocumentRequest,
   SaveDocumentRequest,
 } from '../../../../src/core/documents/types'
-import { createLocationCodec, type LocationReport } from '../../../../src/core/storage/locationCodec'
+import type { LocationReport } from '../../../../src/core/storage/locationCodec'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
 import { writeBufferAtomically } from '../fs/atomic-file'
 import { withFileLock } from '../fs/file-lock'
@@ -40,6 +40,7 @@ import {
   decodeDocumentContent,
   describeWrittenDocument,
   documentNameOf,
+  encodeDocumentContent,
   indexedFromFile,
   loadDocumentFile,
   metaFromFile,
@@ -214,7 +215,7 @@ export class DocumentRepository {
       const content = this.validateContent(kind, request.content === undefined ? kind.createEmptyContent() : request.content)
       const userName = request.name === undefined ? null : requireEntryName(request.name)
       const draft = request.draft ?? userName === null
-      const encoded = this.encode(container, content)
+      const encoded = this.encode(kind, container, content)
       const now = this.workspace.now().toISOString()
       if (request.id !== undefined && this.workspace.catalog.getDocument(request.id)) throw new DocumentLocationError('已有同一 ID 的文档。')
       const id = request.id ?? this.workspace.randomId()
@@ -249,7 +250,7 @@ export class DocumentRepository {
         }
         const content = this.validateContent(file.kind, request.content)
         const container = await this.workspace.containerForPath(file.path)
-        const encoded = this.encode(container, content)
+        const encoded = this.encode(file.kind, container, content)
         const name = documentNameOf(file.kind, file.path)
         const unchanged = file.envelope.kindVersion === file.kind.version
           && file.envelope.name === name
@@ -409,7 +410,7 @@ export class DocumentRepository {
       missingPaths = transfer.missingPaths
       const relocated = rewriteContentPaths(decoded.content, transfer.mapping, this.workspace.style)
       const content = this.validateContent(file.kind, file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(relocated, file.header.id, id, destination.root) : relocated)
-      const encoded = this.encode(destination, content)
+      const encoded = this.encode(file.kind, destination, content)
       const now = this.workspace.now().toISOString()
       const written = await this.writeNewDocumentFile(folder, file.kind, (fileName) => this.withHeader(original, {
         id, name: fileName, draft: false, createdAt: now, updatedAt: now, revision: 0, kindVersion: file.kind.version, content: encoded.content,
@@ -494,7 +495,7 @@ export class DocumentRepository {
       })
       if (!collected.mapping.size && !documents.links.size) return { meta: metaFromFile(file, container), copiedFiles: 0, copiedDocuments: 0, missingPaths: collected.missingPaths }
       const content = this.validateContent(file.kind, rewriteDocumentLinks(rewriteContentPaths(decoded.content, collected.mapping, this.workspace.style), documents.links))
-      const encoded = this.encode(container, content)
+      const encoded = this.encode(file.kind, container, content)
       const envelope = this.withHeader(file.envelope, {
         name: documentNameOf(file.kind, file.path),
         kindVersion: file.kind.version,
@@ -646,8 +647,8 @@ export class DocumentRepository {
     return decodeDocumentContent(file, container, this.workspace)
   }
 
-  private encode(container: ResolvedContainer, content: unknown): { content: unknown; report: LocationReport } {
-    return createLocationCodec(this.workspace.locationContext(container)).encodeContent(content)
+  private encode(kind: DocumentKindDescriptor, container: ResolvedContainer, content: unknown): { content: unknown; report: LocationReport } {
+    return encodeDocumentContent(kind, content, this.workspace.locationContext(container))
   }
 
   private validateContent(kind: DocumentKindDescriptor, content: unknown): unknown {
@@ -671,7 +672,8 @@ export class DocumentRepository {
     const queue = [...report.references]
     const worker = async (): Promise<void> => {
       for (let reference = queue.shift(); reference; reference = queue.shift()) {
-        const exists = await fsp.stat(reference.path).then(() => true, () => false)
+        const exists = pathKey(this.workspace.style, reference.path) !== null
+          && await fsp.stat(reference.path).then(() => true, () => false)
         if (!exists) {
           missingPaths.push(reference.path)
           continue
@@ -925,7 +927,7 @@ export class DocumentRepository {
         copiedFiles = transfer.copied
         missingPaths = transfer.missingPaths
       }
-      const encoded = this.encode(destination, content)
+      const encoded = this.encode(file.kind, destination, content)
       const updatedAt = this.workspace.now().toISOString()
       const revision = rewritten ? file.header.revision + 1 : file.header.revision
       const written = await this.writeNewDocumentFile(folder, file.kind, (name) => this.withHeader(original, {
