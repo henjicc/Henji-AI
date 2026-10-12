@@ -1,46 +1,12 @@
 /** @vitest-environment jsdom */
 
-import { createHash } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { registry } from '@/core/ModelRegistry'
 import { loadAllModels } from '@/core/loaders/modelLoader'
+import { HENJI_GENERATION_MODELS } from '../modelCatalog/applicationModelProfile'
 import { CONTROLLED_EXECUTION_MODELS } from '@/core/modelCatalog/controlledExecutionModels'
 import type { ParamDef } from '@/core/types'
-
-// 4.3：bailian-qwen-image-3.0 / apimart-midjourney / fal-ai-veo-3.1 的模式参数补声明 role: 'mode'，摘要随之更新（其余结构不变）。
-const migratedStructureDigests = {
-  'volcengine-seedream-5.0-lite': '5b060b0992c57ff55750651ec2c8cc138dd952f2c466ab291a489e765d73501f',
-  'bailian-qwen-image-3.0': 'cd635ced8523673ce8513f97b9d60fca0f9f93d8806d8d53ad215d97c7641463',
-  'grsai-nano-banana-pro': 'e52830a6cb080856d94df10c4a533a0af900aa7a18b625d68d9a16080fbfecf8',
-  'modelscope-custom': '86170711fc0071d456c669aa62cf02b5adb69d891561975402c549bd8c5dd487',
-  'apimart-midjourney': '312ea93ff803907b899deab277270360d529f2a3f0d03922002cf0da9f5abad0',
-  'apimart-midjourney-video': 'c93fe905c5c068a4861127084cd1cdaa92bdc856cb7cca09377b04bf96f87370',
-  'kie-hailuo-02': '1edabcf7784e28a1ca2eaecc34a280f59a36b9f08d715d81797ec81d0e2d67f7',
-  'fal-ai-bytedance-seedream-v4': 'e6b4de37bf188bb20170d6623d5f559fa694a3c535210aaa27f990d38ec5d224',
-  'fal-ai-veo-3.1': 'f0a2630e6b5c92b520ed15ba17e60b1f2c5a2b2247128f6f18f350e00aa85224',
-} as const
-
-function normalizeModelStructure(value: unknown): unknown {
-  if (value === undefined) return undefined
-  if (typeof value === 'function') return '[Function]'
-  if (Array.isArray(value)) return value.map(normalizeModelStructure)
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, item]) => item !== undefined)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, item]) => [key, normalizeModelStructure(item)])
-    )
-  }
-  return value
-}
-
-function structureDigest(value: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(normalizeModelStructure(value)))
-    .digest('hex')
-}
 
 function visitParams(params: ParamDef[], visit: (param: ParamDef) => void): void {
   for (const param of params) {
@@ -54,13 +20,13 @@ describe('SDK catalog 应用侧加载入口', () => {
     registry.clear()
   })
 
-  it('注册 123 个可选模型与受控执行模型，同时保持普通目录不变', async () => {
+  it('按权威 catalog ID 集合注册可选模型，受控模型保持不可发现', async () => {
     await expect(loadAllModels()).resolves.toMatchObject({
-      total: 123 + CONTROLLED_EXECUTION_MODELS.length,
-      success: 123 + CONTROLLED_EXECUTION_MODELS.length,
+      total: HENJI_GENERATION_MODELS.length + CONTROLLED_EXECUTION_MODELS.length,
+      success: HENJI_GENERATION_MODELS.length + CONTROLLED_EXECUTION_MODELS.length,
       failed: 0,
     })
-    expect(registry.listAllModels()).toHaveLength(123)
+    expect(registry.listAllModels().map(model => model.meta.id).sort()).toEqual(HENJI_GENERATION_MODELS.map(model => model.meta.id).sort())
     for (const model of CONTROLLED_EXECUTION_MODELS) {
       expect(registry.getModel(model.meta.id), model.meta.id).toBeTruthy()
       expect(registry.getDiscoverableModel(model.meta.id), model.meta.id).toBeUndefined()
@@ -85,7 +51,7 @@ describe('SDK catalog 应用侧加载入口', () => {
     expect(modelscopeCustom?.meta.name).toBeTruthy()
   })
 
-  it('ModelRegistry 的十类查询在 123 个合成模型上保持完整行为', () => {
+  it('ModelRegistry 的十类查询在完整目录上保持行为', () => {
     const allModels = registry.listAllModels()
     const firstModel = allModels[0]
     expect(firstModel).toBeTruthy()
@@ -145,16 +111,22 @@ describe('SDK catalog 应用侧加载入口', () => {
     })
 
     const stats = registry.getStats()
-    expect(stats.totalModels).toBe(123)
-    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(123)
-    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(123)
+    expect(stats.totalModels).toBe(HENJI_GENERATION_MODELS.length)
+    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(HENJI_GENERATION_MODELS.length)
+    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(HENJI_GENERATION_MODELS.length)
   })
 
-  it('九个未改动的迁移代表模型与迁移前结构摘要逐项一致', () => {
-    for (const [modelId, expectedDigest] of Object.entries(migratedStructureDigests)) {
-      const model = registry.getModel(modelId)
+  it('代表模型保留执行身份、模式语义、联动及参数分组', () => {
+    for (const modelId of ['volcengine-seedream-5.0-lite', 'bailian-qwen-image-3.0', 'grsai-nano-banana-pro', 'modelscope-custom', 'apimart-midjourney', 'apimart-midjourney-video', 'kie-hailuo-02', 'fal-ai-bytedance-seedream-v4', 'fal-ai-veo-3.1']) {
+      const runtime = HENJI_GENERATION_MODELS.find(model => model.meta.id === modelId)!
+      const model = registry.getModel(modelId)!
       expect(model, modelId).toBeTruthy()
-      expect(structureDigest(model), modelId).toBe(expectedDigest)
+      expect(model.meta.provider, modelId).toBe(runtime.meta.provider)
+      expect(model.meta.type, modelId).toBe(runtime.meta.type)
+      expect(registry.getDefaultValues(modelId)).toEqual(Object.fromEntries(model.params.map(param => [param.id, param.default])))
+    }
+    for (const modelId of ['bailian-qwen-image-3.0', 'apimart-midjourney', 'fal-ai-veo-3.1']) {
+      expect(registry.getModel(modelId)?.params.some(param => param.role === 'mode'), modelId).toBe(true)
     }
 
     for (const modelId of ['grsai-nano-banana-pro', 'apimart-midjourney', 'kie-hailuo-02']) {

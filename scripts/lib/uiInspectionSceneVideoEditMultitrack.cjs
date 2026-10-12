@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const { execFileSync } = require('node:child_process')
-const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
+const mediaBinaries = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { installNativeMixHarness } = require('./uiInspectionSceneVideoEditNativeAudio.cjs')
@@ -64,12 +64,12 @@ function prepare() {
   fs.mkdirSync(ROOT, { recursive: true })
   return Object.fromEntries(SAMPLES.map(sample => {
     const file = path.join(ROOT, sample.file)
-    if (!fs.existsSync(file)) execFileSync(ffmpegPath, ['-v', 'error', '-y', ...sample.args, file], { windowsHide: true, timeout: 180000 })
-    const probe = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
+    if (!fs.existsSync(file)) execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-y', ...sample.args, file], { windowsHide: true, timeout: 180000 })
+    const probe = JSON.parse(execFileSync(mediaBinaries.ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
     const audio = probe.streams.filter(stream => stream.codec_type === 'audio')
     assert.deepEqual(audio.map(stream => stream.channels), sample.streams.map(stream => stream.length), `${sample.file} 声音流与设计不符`)
     const streams = audio.map((stream, index) => {
-      const raw = execFileSync(ffmpegPath, ['-v', 'error', '-i', file, '-map', `0:a:${index}`, '-af', `aresample=${RATE}:resampler=soxr:precision=28`, '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
+      const raw = execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-i', file, '-map', `0:a:${index}`, '-af', `aresample=${RATE}:resampler=soxr:precision=28`, '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
       // FFmpeg starts the output at the stream's first sample; place it on the absolute source timeline.
       const offset = Math.max(0, Math.round(Number(stream.start_time ?? 0) * RATE))
       const frames = raw.length / 4 / stream.channels
@@ -396,9 +396,9 @@ function createVideoEditMultitrackScene() {
         await confirmVideoEditExport(page)
         await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 15000 })
         await button(page, '导出视频').waitFor({ state: 'visible', timeout: 300000 })
-        const exported = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { windowsHide: true, encoding: 'utf8' }))
+        const exported = JSON.parse(execFileSync(mediaBinaries.ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { windowsHide: true, encoding: 'utf8' }))
         const exportedAudio = exported.streams.find(stream => stream.codec_type === 'audio'); assert.ok(exportedAudio, '导出文件应有音轨'); assert.equal(exportedAudio.channels, 2)
-        const raw = execFileSync(ffmpegPath, ['-v', 'error', '-i', output, '-vn', '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 512 * 1024 * 1024 })
+        const raw = execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-i', output, '-vn', '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 512 * 1024 * 1024 })
         const frames = raw.length / 8; const exportedPlanes = [new Float32Array(frames), new Float32Array(frames)]
         for (let index = 0; index < frames; index++) { exportedPlanes[0][index] = raw.readFloatLE(index * 8); exportedPlanes[1][index] = raw.readFloatLE(index * 8 + 4) }
         project = readProject(file)

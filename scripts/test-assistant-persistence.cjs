@@ -168,11 +168,13 @@ async function runNativePersistence({
 }
 
 async function main() {
+  const requested = process.argv.slice(2).map((file) => path.relative(workspaceRoot, path.resolve(workspaceRoot, file)).split(path.sep).join('/'))
+  if (requested.some((file) => !NATIVE_TEST_FILES.includes(file))) throw new Error('精确原生测试必须属于唯一 SQLite 清单')
   const controller = new AbortController()
   const cancel = () => controller.abort()
   process.once('SIGINT', cancel); process.once('SIGTERM', cancel)
   try {
-    const result = await runNativePersistence({ signal: controller.signal })
+    const result = await runNativePersistence({ signal: controller.signal, testFiles: requested.length ? [...new Set(requested)] : NATIVE_TEST_FILES })
     console.log(`Electron 原生 SQLite 验证通过：${result.files} 文件，${result.passed} 用例，0 跳过`)
   } finally { process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel) }
 }

@@ -44,7 +44,7 @@ describe('motion-draft-benchmark-v1 synthetic P1', () => {
     const score = scoreMotionFixture(f, candidate)
     expect(score.hardFailures.some(f => f.startsWith('pin:'))).toBe(true)
   })
-  it('short 10s/120Hz motion and 100-layer layout meet pure computation budgets after 5 warmups/30 measurements', () => {
+  if (process.env.HENJI_TEST_PERFORMANCE === '1') it('short 10s/120Hz motion and 100-layer layout meet pure computation budgets after 5 warmups/30 measurements', () => {
     const motion = createMotionFixture('S01', { duration: 10, noisy: true }); const layout = createLayoutFixture(100); const identity = motionCandidateIdentity(motion.input.draft)
     const measurements: number[] = []; const layouts: number[] = []
     for (let i = 0; i < 35; i++) {

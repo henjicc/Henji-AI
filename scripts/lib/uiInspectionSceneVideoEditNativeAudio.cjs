@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
+const mediaBinaries = require('./mediaBinaries.cjs')
 
 /**
  * 原生声音解码与混音（2.3）：真实 Electron 里由正式渲染 Worker 的 `mixAudio` 混出声音（Worker → 帧通道端口 →
@@ -32,6 +32,8 @@ const SAMPLES = [
 ]
 
 function prepare(sample) {
+  // 纯场景注册与检查器自测不需要原生二进制；真正准备媒体时仍强制检查。
+  const { ffmpegPath, ffprobePath } = mediaBinaries
   const file = path.join(ROOT, sample.file)
   if (!fs.existsSync(file)) execFileSync(ffmpegPath, ['-v', 'error', '-y', ...sample.args(file)], { windowsHide: true, timeout: 120000 })
   const probe = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true }).toString())

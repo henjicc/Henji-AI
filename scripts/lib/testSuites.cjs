@@ -58,6 +58,12 @@ const FORK_POOL_TEST_FILES = [
 ]
 const FORK_POOL_MATCH_GLOBS = FORK_POOL_TEST_FILES.map((file) => [`**/${file}`, 'forks'])
 const ALL_TEST_PATTERNS = ['src/**/*.test.{ts,tsx}', 'electron/**/*.test.ts', 'packages/*/**/*.test.ts']
+// 同文件的正确性仍进普通层；性能模式额外注册原阈值的机器性能断言。
+const PERFORMANCE_TEST_FILES = [
+  'src/core/creativeIntent/worker.test.ts',
+  'src/core/creativeIntent/benchmark.test.ts',
+  'src/features/videoEdit/VideoEditCodeElementOverlay.test.tsx',
+]
 
 function testSuiteForFile(file) {
   if (GPU_TEST_FILES.includes(file)) return 'gpu'
@@ -68,6 +74,8 @@ function testSuiteForFile(file) {
 }
 
 function testSuiteOptions(mode, defaultExcludes = []) {
+  if (mode === 'performance') return { include: PERFORMANCE_TEST_FILES, env: { HENJI_TEST_PERFORMANCE: '1' },
+    pool: 'forks', minWorkers: 1, maxWorkers: 1, fileParallelism: false }
   if (mode === 'unit') return { include: ALL_TEST_PATTERNS, exclude: [...defaultExcludes, ...GPU_TEST_FILES, ...IMAGE_EXPORT_TEST_FILES, ...NATIVE_TEST_FILES, ...FFMPEG_CLI_TEST_FILES], poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
   // 原生 Dawn 不在多线程中并发初始化；重图测试独占 worker，避免全量单测争抢 CPU/内存。
   if (mode === 'gpu' || mode === 'image-export' || mode === 'native') return {
@@ -78,4 +86,4 @@ function testSuiteOptions(mode, defaultExcludes = []) {
   return { include: ALL_TEST_PATTERNS, poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
 }
 
-module.exports = { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FFMPEG_CLI_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteForFile, testSuiteOptions }
+module.exports = { PERFORMANCE_TEST_FILES, GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FFMPEG_CLI_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteForFile, testSuiteOptions }

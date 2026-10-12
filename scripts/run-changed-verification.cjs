@@ -5,9 +5,11 @@ const { spawn } = require('node:child_process')
 const {
   buildChangedVerificationPlan,
   parseChangedVerificationArgs,
+  validateChangedVerificationOptions,
 } = require('./lib/changedVerificationPlan.cjs')
 
 const root = path.resolve(__dirname, '..')
+const { resolveChangedTests } = require('./lib/resolveChangedTests.cjs')
 
 function printHelp() {
   console.log(`Henji-AI 局部验证
@@ -18,6 +20,7 @@ function printHelp() {
   npm run verify:changed -- --level L2 electron/main/example.ts
 
 必须显式列出本次文件，不会读取整个 git diff。支持 --dry-run 只查看计划。
+related 先预检并合并去重，超过 20 文件或零覆盖停止；--test <文件> 显式选择直接消费者，替代 related。
 L0 只核查非运行时文件；L1 跑精确/相关测试与局部 ESLint；L2 再追加受影响工程的增量类型检查。
 `)
 }
@@ -52,7 +55,10 @@ async function main() {
     printHelp()
     return
   }
-  const plan = buildChangedVerificationPlan(options, root)
+  // 先检查级别/基础设施限制，避免为无效输入启动依赖分析。
+  validateChangedVerificationOptions(options)
+  const tests = options.level === 'L0' ? [] : await resolveChangedTests(options, root)
+  const plan = buildChangedVerificationPlan(options, root, undefined, tests)
   console.log(`验证级别 ${options.level}；显式文件 ${options.files.length} 个。`)
   if (plan.length === 0) {
     console.log('无需运行 ESLint、TypeScript 或测试。')

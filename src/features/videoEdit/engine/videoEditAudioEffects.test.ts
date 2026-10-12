@@ -1,9 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest'
+import { sampleDifference } from '../../../../scripts/lib/sampleDifference'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { normalizeVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { planVideoEditAudioEffectBlock, VideoEditAudioEffectChain, videoEditCompressorCurve, videoEditFft, VIDEO_EDIT_RNNOISE_LATENCY } from './videoEditAudioEffects'
 
 const RATE = 48000
+function expectSamples(actual: ArrayLike<number>, expected: ArrayLike<number> | ((index: number) => number), precision?: number): void {
+  expect(sampleDifference(actual, expected, precision)).toEqual({ differences: 0, first: -1, maximumError: 0, lengthDifference: 0 })
+}
 // RNNoise 的 WebAssembly 只认浏览器或工作线程环境（运行时在剪辑渲染工作线程里）；单测在 Node 里模拟工作线程全局。
 beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {} })
 
@@ -53,13 +57,13 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
   it('增益与声道平衡：+6.02 dB 为两倍；平衡 +100 只剩右声道；合成单声道两边相同；效果强度按比例混入原声', async () => {
     const left = sine(300, .2, 4800); const right = sine(500, .1, 4800)
     const doubled = (await run([effect('gain_balance', { gain: 20 * Math.log10(2) })], stereo(left, right))).output
-    doubled[0].forEach((value, index) => expect(value).toBeCloseTo(left[index] * 2, 6))
+    expectSamples(doubled[0], index => left[index] * 2, 6)
     const panned = (await run([effect('gain_balance', { balance: 100 })], stereo(left, right))).output
-    expect(peak(panned[0])).toBe(0); expect(panned[1]).toEqual(right)
+    expect(peak(panned[0])).toBe(0); expectSamples(panned[1], right)
     const mono = (await run([effect('gain_balance', { mono: true })], stereo(left, right))).output
-    mono[0].forEach((value, index) => { expect(value).toBe(mono[1][index]); expect(value).toBeCloseTo((left[index] + right[index]) / 2, 6) })
+    expectSamples(mono[0], mono[1]); expectSamples(mono[0], index => (left[index] + right[index]) / 2, 6)
     const half = (await run([effect('gain_balance', { gain: 20 * Math.log10(2) }, .5)], stereo(left, right))).output
-    half[0].forEach((value, index) => expect(value).toBeCloseTo(left[index] * 1.5, 6))
+    expectSamples(half[0], index => left[index] * 1.5, 6)
   })
   it('压缩器：按压缩量的阈值与比率压低大声并自动补偿；小声只被补偿抬高', async () => {
     const curve = videoEditCompressorCurve(40)
@@ -82,7 +86,7 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
     const quiet = sine(150, .3, 9600)
     const passed = await run([effect('limiter')], stereo(quiet))
     expect(passed.latency).toBe(239)
-    for (let index = passed.latency; index < quiet.length; index++) expect(passed.output[0][index]).toBeCloseTo(quiet[index - passed.latency], 6)
+    expectSamples(passed.output[0].subarray(passed.latency), quiet.subarray(0, quiet.length - passed.latency), 6)
     const boosted = await run([effect('limiter', { boost: 6 })], stereo(quiet))
     expect(peak(boosted.output[0], RATE / 10)).toBeCloseTo(Math.min(ceiling, .3 * 10 ** (6 / 20)), 2)
   })
@@ -104,7 +108,7 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
     const tone = sine(440, .3, RATE)
     const neutral = await run([effect('pitch_shift')], stereo(tone))
     expect(neutral.latency).toBe(1536)
-    for (let index = 1536; index < RATE; index++) expect(neutral.output[0][index]).toBe(tone[index - 1536])
+    expectSamples(neutral.output[0].subarray(1536), tone.subarray(0, RATE - 1536))
     const dominant = (data: Float32Array): number => {
       const size = 16384; const real = Float64Array.from({ length: size }, (_, index) => data[RATE / 2 + index] * (.5 - .5 * Math.cos(2 * Math.PI * index / size))); const imaginary = new Float64Array(size)
       videoEditFft(real, imaginary, -1)
@@ -122,7 +126,7 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
     const noise = Float32Array.from({ length: RATE * 2 }, () => random() * .1)
     const off = await run([effect('noise_reduction', { strength: 0 })], stereo(noise))
     expect(off.latency).toBe(VIDEO_EDIT_RNNOISE_LATENCY)
-    for (let index = off.latency; index < noise.length; index++) expect(off.output[0][index]).toBe(noise[index - off.latency])
+    expectSamples(off.output[0].subarray(off.latency), noise.subarray(0, noise.length - off.latency))
     const cleaned = await run([effect('noise_reduction', { strength: 100 })], stereo(noise))
     expect(db(rms(cleaned.output[0], RATE) / rms(noise, RATE))).toBeLessThan(-10)
     // 类人声的谐波信号：输出与输入在声明的延迟处最相关（干声按同一延迟混入才不会梳状失真）。
@@ -147,7 +151,7 @@ describe('音频内置效果的逐样本处理（4.7c）', () => {
     for (const channel of [0, 1]) {
       const joined = new Float32Array(RATE); let offset = 0
       for (const piece of pieces) { joined.set(piece[channel], offset); offset += piece[channel].length }
-      expect(joined).toEqual(whole.output[channel])
+      expectSamples(joined, whole.output[channel])
     }
   })
   it('分块计划：连续时接着上一块读（跳过延迟），不连续时预读一段并丢掉预读与延迟部分', () => {

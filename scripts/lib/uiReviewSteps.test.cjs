@@ -208,11 +208,24 @@ test('参数：--steps 可重复与逗号分隔，--contrast，副屏坐标默�
   const options = parseUiInspectionArgs(['--steps', 'a.json,b.json', '--steps=c.cjs', '--contrast'], '.ui-tour')
   assert.deepEqual(options.steps, ['a.json', 'b.json', 'c.cjs'])
   assert.equal(options.contrast, true)
+  assert.equal(parseUiInspectionArgs(['--audit'], '.ui-tour').audit, true)
   assert.equal(resolveDisplayPoint(undefined, {}), DEFAULT_UI_INSPECTION_DISPLAY_POINT)
   assert.equal(resolveDisplayPoint(undefined, { HENJI_DEV_DISPLAY_POINT: '-1920,10' }), '-1920,10')
   assert.equal(resolveDisplayPoint('100,200', { HENJI_DEV_DISPLAY_POINT: '1,1' }), '100,200')
   assert.equal(resolveDisplayPoint('none', {}), null)
   assert.throws(() => resolveDisplayPoint('left', {}), /--display-point/)
+})
+
+test('一次巡检的审计结果保留中途对比度、终态DOM和跨场景标题门禁', () => {
+  const { createPageTitleIssues, countIssues } = require('./uiAuditReport.cjs')
+  const results = {
+    intermediate: { lowContrast: [{ ratio: 2 }], pageTitles: [] },
+    first: { hardTextClip: [{}], pageTitles: [{ surface: 'A', scene: 'A', text: 'A', fontSize: 20 }] },
+    second: { pageTitles: [{ surface: 'B', scene: 'B', text: 'B', fontSize: 16 }] },
+  }
+  const crossScene = { pageTitleInconsistency: createPageTitleIssues(results) }
+  assert.equal(crossScene.pageTitleInconsistency.length, 1)
+  assert.equal(countIssues(results, crossScene), 3)
 })
 
 test('步骤上下文：复用正式场景的助手，缺失时立即报错', () => {

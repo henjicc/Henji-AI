@@ -9,7 +9,7 @@ const workerSource = `
   import { parentPort } from 'node:worker_threads';
   import { createMotionFixture } from './src/core/creativeIntent/fixtures/motionFixtures';
   import { optimizeMotionBatches, optimizeMotionDraft } from './src/core/creativeIntent/candidates';
-  for (let i=0;i<5;i++) optimizeMotionDraft(createMotionFixture('S02').input);
+  if(process.env.HENJI_TEST_PERFORMANCE==='1')for(let i=0;i<5;i++)optimizeMotionDraft(createMotionFixture('S02').input);
   parentPort.postMessage({kind:'ready'});
   parentPort.on('message', async ({count, flag}) => {
     const atomic=new Int32Array(flag); const before=process.memoryUsage(); let peakHeap=before.heapUsed; let peakRss=before.rss; const checkpoints=[]; let samples=0; let completed=0; let tail=-1;
@@ -59,16 +59,21 @@ async function runWorker(count: number, cancel: boolean): Promise<{ report: Work
 }
 
 describe('portable kernel in a real Worker', () => {
-  it('S18 streams 1h/1200 takes through the tail without accumulating raw pages', async () => {
-    const result = await runWorker(1200, false)
-    expect(result.report.kind).toBe('done'); expect(result.report.completed).toBe(1200); expect(result.report.samples).toBe(433200); expect(result.report.tail).toBe(216000)
-    expect(result.report.heapIncrement).toBeLessThanOrEqual(256 * 1024 ** 2)
-    expect(result.report.rssIncrement).toBeLessThanOrEqual(256 * 1024 ** 2)
+  const performanceSuite = process.env.HENJI_TEST_PERFORMANCE === '1'
+  it(performanceSuite ? 'S18 streams 1h/1200 takes within the memory budget' : 'streaming preserves every batch and the final tail in a real Worker', async () => {
+    const count = performanceSuite ? 1200 : 3
+    const result = await runWorker(count, false)
+    expect(result.report.kind).toBe('done'); expect(result.report.completed).toBe(count); expect(result.report.samples).toBe(count * 361); expect(result.report.tail).toBe(count * 180)
+    if (performanceSuite) {
+      expect(result.report.heapIncrement).toBeLessThanOrEqual(256 * 1024 ** 2)
+      expect(result.report.rssIncrement).toBeLessThanOrEqual(256 * 1024 ** 2)
+    }
     if (process.env.HENJI_P1_BENCH_DIR) writeFileSync(join(process.env.HENJI_P1_BENCH_DIR, 'worker-long.json'), JSON.stringify(result, null, 2))
   }, 60000)
   it('SharedArrayBuffer cancellation interrupts bounded computation without a completed partial draft', async () => {
     const result = await runWorker(1200, true)
-    expect(result.report.kind).toBe('cancelled'); expect(result.report.message).toContain('取消'); expect(result.report.completed).toBeLessThan(1200); expect(result.cancellationMs).toBeLessThanOrEqual(100)
+    expect(result.report.kind).toBe('cancelled'); expect(result.report.message).toContain('取消'); expect(result.report.completed).toBeLessThan(1200)
+    if (performanceSuite) expect(result.cancellationMs).toBeLessThanOrEqual(100)
     if (process.env.HENJI_P1_BENCH_DIR) writeFileSync(join(process.env.HENJI_P1_BENCH_DIR, 'worker-cancel.json'), JSON.stringify(result, null, 2))
   }, 15000)
 })

@@ -1,0 +1,11 @@
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const test = require('node:test')
+const { suites, checkNodeTestOwnership } = require('./nodeTestSuites.cjs')
+test('全部 Node 测试唯一归属，漏登记、重复和过期登记拒绝', () => {
+  const root = path.resolve(__dirname, '../..')
+  assert.ok(checkNodeTestOwnership(root) > 0)
+  assert.throws(() => checkNodeTestOwnership(root, {}), /归属/)
+  assert.throws(() => checkNodeTestOwnership(root, { ...suites, duplicate: [suites.fast[0]] }), /归属/)
+  assert.throws(() => checkNodeTestOwnership(root, { ...suites, stale: ['scripts/missing.test.cjs'] }), /归属/)
+})

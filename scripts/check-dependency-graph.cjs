@@ -188,15 +188,14 @@ function compare(current, baseline) {
     if (isPureCoreViolation(edge)) failures.push(`纯 core 禁止跨层边：${edgeKey(edge)}；${edge.reason}。`)
     else if (!oldForbidden.has(edgeKey(edge))) failures.push(`新增禁止跨层边：${edgeKey(edge)}；${edge.reason}。`)
   }
-  for (const [cell, count] of Object.entries(current.featureMatrix)) {
-    const limit = baseline.featureMatrix[cell] ?? 0
-    if (count > limit) {
-      const old = new Set(baseline.featureEdges.filter((edge) => edge.cell === cell)
-        .map((edge) => `${edgeKey(edge)}:${edge.kind}:${edge.specifier}`))
-      const candidates = current.featureEdges.filter((edge) => edge.cell === cell
-        && !old.has(`${edgeKey(edge)}:${edge.kind}:${edge.specifier}`))
-      failures.push(`跨 feature 非 index 导入 ${cell}：${count} > 基线 ${limit}；走公开 index 入口或提取纯契约。新增候选：${(candidates.length ? candidates : current.featureEdges.filter((edge) => edge.cell === cell)).map((edge) => `${edge.from}:${edge.line} → ${edge.to} (${edge.kind})`).join('；')}`)
-    }
+  // 具体边逐语句冻结；删除旧边不能腾出额度给另一条新边，行号移动不算新增。
+  const oldFeatures = new Map()
+  const featureKey = (edge) => `${edgeKey(edge)}:${edge.kind}:${edge.specifier}`
+  for (const edge of baseline.featureEdges) oldFeatures.set(featureKey(edge), (oldFeatures.get(featureKey(edge)) ?? 0) + 1)
+  for (const edge of current.featureEdges) {
+    const key = featureKey(edge), remaining = oldFeatures.get(key) ?? 0
+    if (!remaining) failures.push(`新增跨 feature 非 index 导入 ${edge.cell}：${edge.from}:${edge.line} → ${edge.to} (${edge.kind})；走公开 index 入口或提取纯契约。`)
+    else oldFeatures.set(key, remaining - 1)
   }
   return failures
 }

@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
+import { sampleDifference } from '../../../../../../scripts/lib/sampleDifference';
 import { createFloat32PremultipliedRgbaTile } from '@/core/imageEdit/v3/effects/contracts';
 import type { PaintBrush, PaintDab, PaintSurface } from '@/core/imaging/paint';
 import { rasterizeRetouchDabs, type RetouchSource } from '@/core/imaging/retouch';
@@ -44,7 +45,12 @@ it('4K/8K 同一跨瓦片修复结果一致，稀疏读取、选区边界及旧�
     timings.push({ size, durationMs: performance.now() - started, loadedTiles: reads });
     expect(reads).toBeLessThan(20); outputs.push(...results); compute.dispose();
   }
-  expect(outputs[0]).toEqual(outputs[2]); expect(outputs[1]).toEqual(outputs[3]);
+  try {
+    for (const index of [0, 1]) expect(sampleDifference(outputs[index], outputs[index + 2])).toEqual({ differences: 0, first: -1, maximumError: 0, lengthDifference: 0 });
+  } catch (error) { await diagnostics(); throw error; }
+  if (process.env.HENJI_TEST_DIAGNOSTICS === '1') await diagnostics();
+  async function diagnostics(): Promise<void> {
   await fs.mkdir('.reality/t119-11-quality', { recursive: true });
   await fs.writeFile('.reality/t119-11-quality/sparse-stroke-metrics.json', JSON.stringify(timings, null, 2));
+  }
 }, 30_000); // 4K/8K 真实尺寸稀疏读取在 CI 共享机器上约需 5–15 秒

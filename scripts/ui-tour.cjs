@@ -2,7 +2,7 @@
  * 真实 Electron 界面截图巡检。
  *
  * 这个命令只负责产出供人查看的截图与 Markdown 索引，不把像素差异作为 CI 门禁。
- * 可自动判定的 DOM 规则由 check:ui-visual 单独负责。
+ * --audit 同步执行 DOM 与像素规则；check:ui-visual 复用这个循环。
  *
  * 界面核对（skill henji-ui-surface references/review.md）也走这里：`--steps` 用一份步骤描述
  * 驱动“进入 → 动作 → 等待稳定 → 截图（+自动指标）”，`--matrix review` 展开四预设 + 960，
@@ -10,6 +10,8 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
+const { UI_AUDIT_RULES, auditUiDom } = require('./lib/uiAuditDom.cjs')
+const { createPageTitleIssues, countIssues } = require('./lib/uiAuditReport.cjs')
 const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
 const { auditPageContrast, loadContrastExceptions } = require('./lib/uiContrastAudit.cjs')
 const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./lib/runtimeEvidence.cjs')
@@ -58,6 +60,7 @@ function printHelp() {
                   references/review.md 第 6 节，样例在 scripts/ui-review/
   --matrix <名>   核对矩阵：review = 石墨 1440+960、深海/胶片/纸白 1440；screen = 石墨 1440+960。
                   与 --size / --theme-preset 互斥
+  --audit         同一次巡检产出 audit.json、截图及运行时证据，规则命中时失败
   --contrast      对每张截图（含场景中途截图）做像素对比度审计，结果写 contrast.json 并汇总进 index.md
   --display-point <x,y|none> 测试窗口放到哪块显示器；默认取 HENJI_DEV_DISPLAY_POINT，未设置时用本机副屏 2561,1
 `)
@@ -115,8 +118,9 @@ function createIndex(rows, failures, metadata) {
   return `${lines.join('\n')}\n`
 }
 
-async function main() {
-  const options = parseUiInspectionArgs(process.argv.slice(2), '.ui-tour')
+async function main(argv = process.argv.slice(2), defaultOutDir = '.ui-tour') {
+  const options = parseUiInspectionArgs(argv, defaultOutDir)
+  if (options.audit) options.contrast = true
   if (options.help) {
     printHelp()
     return
@@ -149,6 +153,8 @@ async function main() {
     console.log(`\n多预设索引：${path.join(rootDir, 'index.md')}`)
   }
   const failureCount = summaries.reduce((total, summary) => total + summary.failures, 0)
+  const issueCount = summaries.reduce((total, summary) => total + (summary.issueCount ?? 0), 0)
+  if (issueCount > 0) throw new Error(`视觉规则审计未通过：${issueCount} 个规则命中，${failureCount} 个场景失败`)
   if (failureCount > 0) {
     throw new Error(`${failureCount} 个场景未能完成，已保留成功截图和失败索引`)
   }
@@ -163,6 +169,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
   const evidence = {}
   const metrics = []
   const contrastResults = {}
+  const ruleResults = {}
   // 带启动参数 / 环境变量 / GPU 初始化失败注入 / 启动位置检查的场景各自单独启动一次应用（5.8）：
   // 这些设置只对整个进程生效，与其他场景同进程跑时不会注入，场景必然失败。
   for (const batch of partitionLaunchBatches(scenes)) {
@@ -186,12 +193,17 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
     let launchInspected = false
 
     // 截图已落盘后再审：审计会临时隐藏文字取背景，不能影响截图本身
-    const auditContrast = async (key, targetPage, scene) => {
+    const auditContrast = async (key, targetPage, scene, final = false) => {
       if (!options.contrast) return
       const result = await auditPageContrast(targetPage, (page) => captureInspectionPage(app.app, page), {
         scene: scene.name, themePreset: run.themePreset, exceptions,
       })
       contrastResults[key] = { issues: result.issues, exempted: result.exempted, stats: result.stats }
+      if (options.audit) {
+        const rules = final ? await targetPage.evaluate(auditUiDom, { scene: scene.name, surface: scene.surface })
+          : { ...Object.fromEntries(UI_AUDIT_RULES.map(rule => [rule.key, []])), pageTitles: [], notes: ['中途状态，只审对比度'] }
+        ruleResults[key] = { ...rules, lowContrast: result.issues, contrastExempted: result.exempted, contrastStats: result.stats }
+      }
       if (result.issues.length) console.error(`  对比度不达标 ${result.issues.length} 处：${key}`)
     }
 
@@ -245,7 +257,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,
               pixels })
             rows.push({ ...scene, size: sizeLabel, file: fileName })
-            await auditContrast(evidenceKey, app.page, scene)
+            await auditContrast(evidenceKey, app.page, scene, true)
             console.log(`✓ ${sizeLabel} / ${scene.name}`)
           } catch (error) {
             sceneFailed = true
@@ -303,6 +315,17 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
     metadata.variantSummary = { rows: summary.length, suspicious: summary.filter((row) => row.suspicious).length }
   }
   if (contrast) fs.writeFileSync(path.join(outDir, 'contrast.json'), JSON.stringify(contrast, null, 2), 'utf8')
+  let issueCount = 0
+  if (options.audit) {
+    const crossScene = { pageTitleInconsistency: createPageTitleIssues(ruleResults) }
+    issueCount = countIssues(ruleResults, crossScene)
+    const exempted = Object.values(ruleResults).flatMap(result => result.contrastExempted ?? [])
+    fs.writeFileSync(path.join(outDir, 'audit.json'), JSON.stringify({ metadata: {
+      generatedAt: new Date().toISOString(), ruleCount: UI_AUDIT_RULES.length, sceneCount: Object.keys(ruleResults).length,
+      failures, profile: options.profile, themePreset: run.themePreset, skippedWriteScenes: selection.blocked.map(scene => scene.name),
+      contrastExceptions: { registered: exceptions.map(entry => entry.id), used: [...new Set(exempted.map(item => item.exception))], exempted: exempted.length },
+    }, scenes: ruleResults, crossScene, runtimeEvidence: evidence }, null, 2), 'utf8')
+  }
   const index = createIndex(rows, failures, metadata)
   const indexPath = path.join(outDir, 'index.md')
   fs.writeFileSync(indexPath, index, 'utf8')
@@ -311,10 +334,11 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
   console.log(index)
   return { themePreset: run.themePreset ?? 'default', sizes: run.sizes.map(formatWindowSize).join('、'),
     rows: rows.length, failures: failures.length, suspicious: metrics.filter((item) => item.metrics.suspicious).length,
-    contrastIssues: contrast?.issueCount ?? null }
+    contrastIssues: contrast?.issueCount ?? null, issueCount }
 }
 
-main().catch((error) => {
+module.exports = { main }
+if (require.main === module) main().catch((error) => {
   console.error(`FAILED: ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1
 })
