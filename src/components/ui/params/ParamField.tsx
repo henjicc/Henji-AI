@@ -1,4 +1,4 @@
-import { UiSegmented } from '@/components/ui'
+import { UiSegmented } from '../UiSegmented'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Dropdown from '../Dropdown'
 import { UiColorInput, UiRangeInput, UiSwitch, UiTextAreaField } from '../primitives'
