@@ -55,7 +55,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
       read: (...args) => api().loudness.read(...args),
       close: (...args) => api().loudness.close(...args),
     },
-    probeSource: (sourcePath) => api().probeEditSource(sourcePath),
+    probeSource: (sourcePath, requestId) => api().probeEditSource(sourcePath, requestId),
     verifySource: (projectId) => api().verifyEditSource(projectId),
     relinkSource: (projectId, sourcePath) => api().relinkEditSource(projectId, sourcePath),
     detectSilence: (request) => api().detectEditSilence(request),

@@ -37,7 +37,6 @@ async function publishOutputs(outputs: StagedOutput[]): Promise<void> {
 
 export async function exportAudioEditProject(request: AudioEditExportRequest): Promise<AudioEditExportResult> {
   const project = await requireAudioEditProject(request.projectId)
-  await verifyAudioEditSource(project)
   const format = request.format ?? 'wav'
   const target = path.resolve(request.targetPath ?? request.audioTargetPath ?? '')
   if (!request.targetPath && !request.audioTargetPath) throw new Error('请选择导出位置。')
@@ -54,6 +53,7 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
   const spans = timeline?.spans ?? buildProjectAudioEditTimeline(project)
   if (!spans.length) throw new Error('当前没有可导出的声音。')
   return runAudioEditTask(project.id, 'export', async (signal, progress) => {
+    await verifyAudioEditSource(project, true, signal)
     const outputs: StagedOutput[] = []
     const temporaryPaths: string[] = []
     const stage = async (file: string): Promise<string> => {
@@ -88,7 +88,7 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
         exportedAudioPath = target
       }
       signal.throwIfAborted()
-      await verifyAudioEditSource(project)
+      await verifyAudioEditSource(project, true, signal)
       for (const output of outputs) if (!(await fs.stat(output.temporary)).size && output.target !== subtitleTarget) throw new Error('生成的交付文件为空，未提交导出。')
       await publishOutputs(outputs)
       progress(1)

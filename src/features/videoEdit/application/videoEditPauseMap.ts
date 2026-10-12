@@ -54,7 +54,7 @@ export async function readSourceEnergyPauses(sourcePath: string, signal?: AbortS
   signal?.addEventListener('abort', cancel, { once: true })
   try {
     signal?.throwIfAborted()
-    const source = await platform.audioEdit.probeSource(sourcePath)
+    const source = await platform.audioEdit.probeSource(sourcePath, requestId)
     signal?.throwIfAborted()
     const result = await platform.audioEdit.detectSilence({ sourcePath, requestId,
       settings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, silenceThresholdMs: 100, retainedSilenceMs: 0, trimEdges: true },

@@ -9,10 +9,12 @@ import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { requireAudioEditProject } from './project-store'
 import { runAudioEditProcess } from './process'
-import { assertAudioEditProjectIdle, deleteAudioEditTasks, hasActiveAudioEditTask } from './task-store'
+import { assertAudioEditProjectIdle, deleteAudioEditTasks, hasActiveAudioEditTask, registerAudioEditTaskController } from './task-store'
 import { registerDocumentProgramStateCleaner } from '../documents/program-state-cleaners'
 
 const logger = createMainLogger('main.audio_edit')
+// 无输出/无读取进展的退出预算，与素材总长度无关。
+const SOURCE_IDLE_TIMEOUT_MS = 30_000
 interface ProbeStream {
   index: number; codec_type?: string; sample_rate?: string; channels?: number; duration?: string
   duration_ts?: number; time_base?: string; start_time?: string; avg_frame_rate?: string; r_frame_rate?: string
@@ -39,26 +41,38 @@ registerDocumentProgramStateCleaner('audio_edit', async (docId) => {
   if (removedTasks) logger.info('口播内部缓存已清理', { event: 'audio_edit.program_state.cleaned', context: { docId, removedTasks } })
 })
 
-export async function identifyAudioEditSource(sourcePath: string): Promise<AudioEditSourceIdentity> {
+export async function identifyAudioEditSource(sourcePath: string, signal?: AbortSignal): Promise<AudioEditSourceIdentity> {
+  signal?.throwIfAborted()
   const before = await fs.stat(sourcePath)
   const digest = crypto.createHash('sha256')
-  for await (const chunk of createReadStream(sourcePath)) digest.update(chunk)
+  const stream = createReadStream(sourcePath, { signal })
+  const timer = setTimeout(() => stream.destroy(new Error('素材读取长时间没有进展，请检查文件所在磁盘后重试。')), SOURCE_IDLE_TIMEOUT_MS)
+  timer.unref()
+  try {
+    for await (const chunk of stream) {
+      signal?.throwIfAborted()
+      timer.refresh()
+      digest.update(chunk)
+    }
+  } finally { clearTimeout(timer); stream.destroy() }
+  signal?.throwIfAborted()
   const after = await fs.stat(sourcePath)
   if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) throw new Error('素材正在被修改，请稍后重新导入。')
   return { size: after.size, mtimeMs: after.mtimeMs, digest: digest.digest('hex') }
 }
-export async function verifyAudioEditSource(project: Pick<AudioEditProjectDocument, 'source'>, deep = true): Promise<void> {
+export async function verifyAudioEditSource(project: Pick<AudioEditProjectDocument, 'source'>, deep = true, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
   let stat
   try { stat = await fs.stat(project.source.sourcePath) }
   catch { throw new Error('找不到原素材，请重新定位文件。') }
   const identity = project.source.identity
   if (!identity) return
   if (!deep && identity.size === stat.size && identity.mtimeMs === stat.mtimeMs) return
-  const current = await identifyAudioEditSource(project.source.sourcePath)
+  const current = await identifyAudioEditSource(project.source.sourcePath, signal)
   if (current.digest !== identity.digest) throw new Error('原素材内容已改变，请重新导入；旧剪辑不能用于新的录音。')
 }
 
-async function verifyVideoPacketTiming(ffprobe: string, sourcePath: string, frameRate: { numerator: number; denominator: number }): Promise<boolean> {
+async function verifyVideoPacketTiming(ffprobe: string, sourcePath: string, frameRate: { numerator: number; denominator: number }, signal?: AbortSignal): Promise<boolean> {
   const fps = frameRate.numerator / frameRate.denominator
   if (!(fps > 0 && Number.isFinite(fps))) return false
   let origin: number | undefined
@@ -66,7 +80,7 @@ async function verifyVideoPacketTiming(ffprobe: string, sourcePath: string, fram
   let count = 0
   let valid = true
   const pending = new Set<number>()
-  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time,duration_time', '-of', 'csv=p=0', sourcePath], undefined, undefined, (line) => {
+  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time,duration_time', '-of', 'csv=p=0', sourcePath], signal, undefined, (line) => {
     if (!line.trim()) return
     const [pts, duration] = line.split(',').map(Number)
     if (!Number.isFinite(pts) || !(duration > 0) || Math.abs(duration * fps - 1) > 0.02) { valid = false; return }
@@ -77,13 +91,14 @@ async function verifyVideoPacketTiming(ffprobe: string, sourcePath: string, fram
     if (Math.abs(frame - position) > 0.02 || frame < cursor || frame > cursor + 256 || pending.has(frame)) { valid = false; return }
     pending.add(frame)
     while (pending.delete(cursor)) cursor += 1
-  })
+  }, SOURCE_IDLE_TIMEOUT_MS)
   return valid && count > 0 && pending.size === 0
 }
 
-export async function probeAudioEditSource(sourcePath: string): Promise<AudioEditSourceMetadata> {
+export async function probeAudioEditSource(sourcePath: string, signal?: AbortSignal): Promise<AudioEditSourceMetadata> {
+  signal?.throwIfAborted()
   const ffprobe = await loadFfprobePath()
-  const parsed = JSON.parse(await runAudioEditProcess(ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', sourcePath])) as { format?: { duration?: string }; streams?: ProbeStream[] }
+  const parsed = JSON.parse(await runAudioEditProcess(ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', sourcePath], signal, undefined, undefined, SOURCE_IDLE_TIMEOUT_MS)) as { format?: { duration?: string }; streams?: ProbeStream[] }
   const audio = parsed.streams?.find((stream) => stream.codec_type === 'audio')
   if (!audio) throw new Error('所选文件没有可用音轨。')
   const video = parsed.streams?.find((stream) => stream.codec_type === 'video')
@@ -91,16 +106,16 @@ export async function probeAudioEditSource(sourcePath: string): Promise<AudioEdi
   const duration = streamDuration(audio, Number(parsed.format?.duration))
   if (!(sampleRate > 0 && duration > 0 && Number.isFinite(duration))) throw new Error('无法读取音频的准确时长或采样率。')
   let durationFrames = 0
-  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_frames', '-show_entries', 'frame=nb_samples', '-of', 'csv=p=0', sourcePath], undefined, undefined, (line) => {
+  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_frames', '-show_entries', 'frame=nb_samples', '-of', 'csv=p=0', sourcePath], signal, undefined, (line) => {
     const samples = Number(line.split(',')[0])
     if (Number.isSafeInteger(samples) && samples > 0) durationFrames += samples
-  })
+  }, SOURCE_IDLE_TIMEOUT_MS)
   if (!Number.isSafeInteger(durationFrames) || durationFrames <= 0) throw new Error('无法确认音频的实际采样长度。')
   const frameRate = fraction(video?.r_frame_rate)
   const averageRate = fraction(video?.avg_frame_rate)
-  const stableVideo = video ? await verifyVideoPacketTiming(ffprobe, sourcePath, frameRate) : true
+  const stableVideo = video ? await verifyVideoPacketTiming(ffprobe, sourcePath, frameRate, signal) : true
   return {
-    sourcePath, audioPath: sourcePath, ownership: 'external', identity: await identifyAudioEditSource(sourcePath),
+    sourcePath, audioPath: sourcePath, ownership: 'external', identity: await identifyAudioEditSource(sourcePath, signal),
     mediaType: video ? 'video' : 'audio', sampleRate, durationFrames,
     channels: audio.channels ?? 1, audioStreamIndex: audio.index, audioStartSeconds: Number(audio.start_time ?? 0),
     ...(video ? { video: { frameRate, width: video.width ?? 0, height: video.height ?? 0, startSeconds: Number(video.start_time ?? 0), durationSeconds: streamDuration(video, Number(parsed.format?.duration)),
@@ -112,22 +127,27 @@ export async function probeAudioEditSource(sourcePath: string): Promise<AudioEdi
  * 导入音频或视频（3.3：导入即建草稿）：只探测素材、计算内容指纹，返回素材信息；
  * 草稿文档由渲染层经文档会话新建（默认引用原文件，重要记录 006），主进程不写口播内容。
  */
-export async function probeAudioEditImport(sourcePath: string): Promise<AudioEditSourceMetadata> {
-  const requestId = crypto.randomUUID()
+export async function probeAudioEditImport(sourcePath: string, requestId: string = crypto.randomUUID(), signal?: AbortSignal): Promise<AudioEditSourceMetadata> {
+  const controller = new AbortController()
+  const abort = (): void => controller.abort(signal?.reason)
+  signal?.addEventListener('abort', abort, { once: true })
+  if (signal?.aborted) abort()
+  const release = registerAudioEditTaskController(requestId, requestId, controller, true)
   logger.info('开始读取口播素材', { event: 'audio_edit.source.probe.start', requestId })
   try {
-    const source = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)))
+    const source = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)), controller.signal)
+    controller.signal.throwIfAborted()
     logger.info('口播素材读取完成', { event: 'audio_edit.source.probe.completed', requestId, context: { mediaType: source.mediaType } })
     return source
   } catch (error) {
-    logger.error('口播素材读取失败', { event: 'audio_edit.source.probe.failed', requestId, error })
+    logger.error('口播素材读取未完成', { event: controller.signal.aborted ? 'audio_edit.source.probe.cancelled' : 'audio_edit.source.probe.failed', requestId, error })
     throw error
-  }
+  } finally { release(); signal?.removeEventListener('abort', abort) }
 }
 
 /** Only algorithms that require WAV request this rebuildable derivative. */
 export async function prepareAudioEditAudio(project: AudioEditProjectDocument, signal?: AbortSignal): Promise<string> {
-  await verifyAudioEditSource(project, false)
+  await verifyAudioEditSource(project, false, signal)
   if (project.source.ownership !== 'external') return project.source.audioPath
   const directory = audioEditCacheDirectory(project.id)
   await fs.mkdir(directory, { recursive: true })

@@ -411,7 +411,7 @@ export class DocumentPackageService {
       await this.extract(source, staging)
       const catalog = this.workspace.catalog
       // 项目说明：包里没有时按包说明补一份；ID 已被占用（同一个项目导入第二次）时换新
-      const existing = await this.workspace.readManifest(staging).catch(() => null)
+      const existing = await this.workspace.readManifest(staging)
       let projectManifest: ProjectManifest = existing ?? buildProjectManifest({
         id: this.workspace.randomId(),
         createdAt: this.workspace.now().toISOString(),
@@ -423,15 +423,25 @@ export class DocumentPackageService {
       const idMap = new Map<string, string>()
       const seen = new Set<string>()
       const documents: Array<{ path: string; file: LoadedDocumentFile }> = []
+      const unreadable: string[] = []
+      const stagedContainer = this.workspace.containerOfProject(staging, projectManifest)
       for (const entry of manifest.documents) {
         const absolute = path.join(staging, ...entry.path.split('/'))
-        const file = await loadDocumentFile(absolute, this.fileDependencies()).catch(() => null)
-        if (!file) continue
+        let file: LoadedDocumentFile
+        try {
+          file = await loadDocumentFile(absolute, this.fileDependencies())
+          if (file.envelope) decodeDocumentContent(file, stagedContainer, this.workspace)
+        } catch (error) {
+          unreadable.push(entry.path)
+          this.options.logger.warn('项目包文档无法读取', { event: 'documents.package.document_read.failed', context: { path: entry.path, source }, error })
+          continue
+        }
         const id = file.header.id
         if (seen.has(id) || catalog.getDocument(id)) idMap.set(id, this.workspace.randomId())
         seen.add(id)
         documents.push({ path: absolute, file })
       }
+      if (unreadable.length) throw new DocumentFormatError(`项目包未导入，以下文档无法读取：${unreadable.join('、')}。原包已保留，请修复这些文档后重试。`)
       for (const { path: filePath, file } of documents) {
         const nextId = idMap.get(file.header.id)
         if (file.envelope) {

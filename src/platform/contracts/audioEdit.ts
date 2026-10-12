@@ -31,7 +31,7 @@ export interface AudioEditPlatform {
   recording: import('@/core/audioEdit/recordingAudio').RecordingAudioPlatform
   loudness: AudioLoudnessPlatform
   /** 导入音频或视频：探测素材并计算内容指纹（不建文档）。 */
-  probeSource(sourcePath: string): Promise<AudioEditSourceMetadata>
+  probeSource(sourcePath: string, requestId?: string): Promise<AudioEditSourceMetadata>
   verifySource(projectId: string): Promise<void>
   /** 确认所选文件与原素材内容相同，返回新的素材信息（不写文档）。 */
   relinkSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata>

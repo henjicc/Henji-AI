@@ -27,7 +27,10 @@ export function registerAudioIpc(): void {
   registerExplanationAudioHandlers()
   registerAudioLoudnessHandlers()
 
-  registerIpcHandler('audioEdit:source:probe', (input) => parseStringField(input, 'sourcePath'), probeAudioEditImport)
+  registerIpcHandler('audioEdit:source:probe', input => {
+    const record = parseRecord(input)
+    return { sourcePath: readString(record, 'sourcePath'), requestId: readOptionalString(record, 'requestId') }
+  }, ({ sourcePath, requestId }) => probeAudioEditImport(sourcePath, requestId))
   registerIpcHandler('audioEdit:asr:list', parseVoid, () => listAudioEditAsrModels())
   registerIpcHandler('audioEdit:asr:preflight', input => transcriptionPreflightSchema.parse(input), preflightAudioEditTranscription)
   registerIpcHandler('audioEdit:source:verify', (input) => parseStringField(input, 'projectId'), async (id) => verifyAudioEditSource(await requireAudioEditProject(id)))
