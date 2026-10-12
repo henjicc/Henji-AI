@@ -71,9 +71,12 @@ it('native generation timestamps create readable frame/us captions in one undo w
   const raw = await handleVideoEditSubtitleCapability('generate_video_edit_subtitles', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, timeSource: 'native' }, { signal: new AbortController().signal })
   const result = generateVideoEditSubtitleCapability.outputSchema.parse(raw)
   expect(result.verified).toBe(true); expect(result.timingSource).toBe('native')
-  expect(result.captions?.map(value => value.text).join('')).toBe(original)
-  expect(result.captions?.[0]).toMatchObject({ startFrame: 0, startUs: 0, confidence: 1, estimated: false })
-  expect(sequence().captions?.map(value => value.text).join('')).toBe(original)
+  // 原文换行与首尾空白不进字幕，行内换行来自排版；文字须与原文逐字一致
+  const visible = (text: string) => text.replace(/\s/g, '')
+  expect(visible(result.captions?.map(value => value.text).join('') ?? '')).toBe(visible(original))
+  // 原文开头的空格（0–100ms）不计入字幕时间，首条从第一个可见字开始
+  expect(result.captions?.[0]).toMatchObject({ startUs: 100_000, confidence: 1, estimated: false })
+  expect(visible(sequence().captions?.map(value => value.text).join('') ?? '')).toBe(visible(original))
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   expect(owner.past.length).toBe(past + 1)
