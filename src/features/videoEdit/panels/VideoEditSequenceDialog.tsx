@@ -112,22 +112,23 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
     <UiButton disabled={busy} onClick={onClose}>取消</UiButton>
     <UiButton variant="primary" disabled={busy || Boolean(sizeError)} onClick={() => { void submit() }}>{mode === 'edit' ? '保存' : '新建'}</UiButton>
   </>}>
-    <div className="space-y-5">
+    <UiGroup labelWidth={96} gap="stack">
       <UiGroup>
-        <UiFormRow label="名称" inline><UiInput aria-label="序列名称" className="w-72" disabled={busy} value={values.name} maxLength={200} onChange={event => setValues({ ...values, name: event.target.value })} /></UiFormRow>
-        <UiFormRow label="素材箱" inline><UiSelect aria-label="序列素材箱" className="w-72" disabled={busy} value={values.binId} onChange={event => setValues({ ...values, binId: event.target.value })}><option value="">素材根目录</option>{bins.map(bin => <option key={bin.id} value={bin.id}>{bin.name}</option>)}</UiSelect></UiFormRow>
+        <UiFormRow label="名称" inline><UiInput aria-label="序列名称" className="w-full" disabled={busy} value={values.name} maxLength={200} onChange={event => setValues({ ...values, name: event.target.value })} /></UiFormRow>
+        <UiFormRow label="素材箱" inline><UiSelect aria-label="序列素材箱" className="w-full" disabled={busy} value={values.binId} onChange={event => setValues({ ...values, binId: event.target.value })}><option value="">素材根目录</option>{bins.map(bin => <option key={bin.id} value={bin.id}>{bin.name}</option>)}</UiSelect></UiFormRow>
       </UiGroup>
-      <div className="flex flex-col items-center gap-5 sm:flex-row">
+      <div className="flex justify-center">
         <UiPanel variant="inset" className="flex h-40 w-40 shrink-0 items-center justify-center p-3" aria-label="序列预览"><div className="flex h-full w-full items-center justify-center"><FrameShape size={size} custom={preset.ratio === '自定义'} /></div></UiPanel>
-        <UiGroup className="min-w-0 w-full flex-1">
-          <UiFormRow label="比例" inline><Dropdown ariaLabel="画面比例" className="w-48" disabled={busy} value={preset.ratio} options={[...VIDEO_EDIT_SEQUENCE_RATIOS, '自定义' as const].map(value => ({ label: value, value }))} onSelect={chooseRatio} /></UiFormRow>
-          <UiFormRow label="分辨率" inline><Dropdown ariaLabel="分辨率" className="w-48" disabled={busy} value={preset.tier} options={[
+      </div>
+        <UiGroup className="min-w-0 w-full">
+          <UiFormRow label="比例" inline><Dropdown ariaLabel="画面比例" className="w-full" disabled={busy} value={preset.ratio} options={[...VIDEO_EDIT_SEQUENCE_RATIOS, '自定义' as const].map(value => ({ label: value, value }))} onSelect={chooseRatio} /></UiFormRow>
+          <UiFormRow label="分辨率" inline><Dropdown ariaLabel="分辨率" className="w-full" disabled={busy} value={preset.tier} options={[
             ...VIDEO_EDIT_SEQUENCE_TIERS.map(({ label }) => {
               const enabled = isVideoEditSequenceSize(videoEditSequenceTierSize(tierAspect, label))
               return { label, value: label, disabled: !enabled, tooltip: !enabled ? '超过 8K 上限' : label === '8K' ? PREVIEW_HINT : undefined }
             }), { label: '自定义', value: '自定义' as const },
           ]} onSelect={chooseTier} /></UiFormRow>
-          <UiFormRow label="尺寸" inline><div className="w-48">
+          <UiFormRow label="尺寸" inline><div className="w-full">
             <div className="flex items-center gap-1">
               <UiInput ref={widthRef} type="number" aria-label="宽度" className="min-w-0 w-full" disabled={busy} min={VIDEO_EDIT_SEQUENCE_LIMITS.minDimension} max={VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} step={2} value={values.width} aria-invalid={Boolean(sizeError)} aria-describedby={sizeError ? sizeErrorId : undefined} onChange={event => editSize('width', event.target.value)} onBlur={event => editSize('width', event.target.value, true)} />
               <UiIconButton tone="bare" on={locked} size="sm" aria-label="锁定比例" disabled={busy} onClick={() => { if (!locked) lockedAspect.current = currentAspect; setLocked(value => !value) }}>{locked ? <Link className="h-4 w-4" /> : <Unlink className="h-4 w-4" />}</UiIconButton>
@@ -135,24 +136,23 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
             </div>
             {sizeError && <div id={sizeErrorId} className="mt-1"><UiError size="xs" align="start" title={sizeError} message="" /></div>}
           </div></UiFormRow>
-          <UiFormRow label="帧率" inline><Dropdown ariaLabel="帧率" className="w-48" disabled={busy} value={rateKey} display={`${Number(videoEditFps(values.frameRate).toFixed(3))} 帧`} options={VIDEO_EDIT_FRAME_RATES.map(rate => {
+          <UiFormRow label="帧率" inline><Dropdown ariaLabel="帧率" className="w-full" disabled={busy} value={rateKey} display={`${Number(videoEditFps(values.frameRate).toFixed(3))} 帧`} options={VIDEO_EDIT_FRAME_RATES.map(rate => {
             const fps = videoEditFps(rate)
             return { label: `${Number(fps.toFixed(3))} 帧`, value: `${rate.numerator}/${rate.denominator}`, tooltip: fps > 60 ? PREVIEW_HINT : undefined }
           })} onSelect={value => { const [numerator, denominator] = value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) }} /></UiFormRow>
         </UiGroup>
-      </div>
       <div>
         <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}更多设置</UiButton>
         {advanced && <UiGroup className="mt-3">
-          <UiFormRow label="像素长宽比" inline><UiSelect aria-label="像素长宽比" className="w-72" disabled={busy} value={par ? `${par.numerator}/${par.denominator}` : parKey} onChange={event => { const [numerator, denominator] = event.target.value.split('/').map(Number); setValues({ ...values, pixelAspectRatio: { numerator, denominator } }) }}>
+          <UiFormRow label="像素长宽比" inline><UiSelect aria-label="像素长宽比" className="w-full" disabled={busy} value={par ? `${par.numerator}/${par.denominator}` : parKey} onChange={event => { const [numerator, denominator] = event.target.value.split('/').map(Number); setValues({ ...values, pixelAspectRatio: { numerator, denominator } }) }}>
             {PIXEL_ASPECT_RATIOS.map(value => <option key={value.label} value={`${value.numerator}/${value.denominator}`}>{value.label}</option>)}
             {!par && <option value={parKey}>素材像素 {Number((values.pixelAspectRatio.numerator / values.pixelAspectRatio.denominator).toFixed(3))}</option>}
           </UiSelect></UiFormRow>
-          <UiFormRow label="音频采样率" inline><UiSelect aria-label="音频采样率" className="w-72" disabled={busy} value={values.sampleRate} onChange={event => setValues({ ...values, sampleRate: Number(event.target.value) as 44100 | 48000 })}><option value={48000}>48000 Hz</option><option value={44100}>44100 Hz</option></UiSelect></UiFormRow>
-          <UiFormRow label="声道" inline><UiSelect aria-label="声道" className="w-72" disabled={busy} value={values.channels} onChange={event => setValues({ ...values, channels: Number(event.target.value) as 1 | 2 })}><option value={2}>立体声</option><option value={1}>单声道</option></UiSelect></UiFormRow>
+          <UiFormRow label="音频采样率" inline><UiSelect aria-label="音频采样率" className="w-full" disabled={busy} value={values.sampleRate} onChange={event => setValues({ ...values, sampleRate: Number(event.target.value) as 44100 | 48000 })}><option value={48000}>48000 Hz</option><option value={44100}>44100 Hz</option></UiSelect></UiFormRow>
+          <UiFormRow label="声道" inline><UiSelect aria-label="声道" className="w-full" disabled={busy} value={values.channels} onChange={event => setValues({ ...values, channels: Number(event.target.value) as 1 | 2 })}><option value={2}>立体声</option><option value={1}>单声道</option></UiSelect></UiFormRow>
         </UiGroup>}
       </div>
       {error && <UiError size="xs" align="start" title={error} message="" />}
-    </div>
+    </UiGroup>
   </UiModal>
 }

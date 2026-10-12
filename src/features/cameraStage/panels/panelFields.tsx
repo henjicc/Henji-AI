@@ -26,7 +26,7 @@ interface SliderNumberRowProps {
   readout?: React.ReactNode
 }
 
-/** 滑杆 + 数值框：标签在上，滑杆铺满，右侧数值框可拖动改值。 */
+/** 滑杆与读数共占控件列，列宽继承所在面板。 */
 export const SliderNumberRow: React.FC<SliderNumberRowProps> = ({
   label,
   ariaLabel,
@@ -40,7 +40,7 @@ export const SliderNumberRow: React.FC<SliderNumberRowProps> = ({
   readout,
 }) => (
   <UiFormRow label={label} info={info} density="compact">
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       <UiRangeInput
         aria-label={ariaLabel}
         min={min}
@@ -49,7 +49,7 @@ export const SliderNumberRow: React.FC<SliderNumberRowProps> = ({
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      {readout ?? (
+      <div className="w-16 shrink-0">{readout ?? (
         <NumberInput
           ariaLabel={ariaLabel}
           size="sm"
@@ -65,7 +65,7 @@ export const SliderNumberRow: React.FC<SliderNumberRowProps> = ({
           wheelStep
           onChange={onChange}
         />
-      )}
+      )}</div>
     </div>
   </UiFormRow>
 )

@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
 import { UiButton, UiIconButton } from '../primitives'
-import { UiGroup, UiTooltipText } from '../layout'
+import { UiFormRow, UiGroup, UiTooltipText } from '../layout'
 import type { CodeParameterValue } from '@/core/imaging/parameterTypes'
 import type { ParamFieldSpec } from './fieldSpec'
 
@@ -60,11 +60,12 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
   const props = store.props
   const wheel = (field.type === 'grade' && field.layout === 'wheel') || (field.type === 'curve' && field.source === 'builtin')
   return <div className={highlighted ? 'flex flex-col gap-1 bg-selected-accent' : 'flex flex-col gap-1'} data-video-edit-code-parameter={field.source === 'code' ? field.key : undefined} data-video-edit-builtin-param={field.source === 'builtin' ? field.key : undefined} data-code-element-parameter={highlighted || undefined}>
-    <div className="flex min-h-8 items-start gap-1.5">
-      <span className={wheel ? 'min-w-0 flex-1 pt-1 text-xs text-text2' : 'w-24 shrink-0 pt-1 text-xs text-text2'}><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>
-      {!wheel && <div className="min-w-0 flex-1">{props.renderControl(field, value)}</div>}
-      {props.onReset && <UiIconButton size="xs" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw size={12} /></UiIconButton>}
-    </div>
+    {wheel ? <div className="flex min-h-8 items-start gap-1.5"><span className="min-w-0 flex-1 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>{props.onReset && <UiIconButton size="xs" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw size={12} /></UiIconButton>}</div> : <UiFormRow label={field.title} info={field.tooltip} density="compact">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <div className="min-w-0 flex-1">{props.renderControl(field, value)}</div>
+        {props.onReset && <UiIconButton size="xs" className="shrink-0" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw size={12} /></UiIconButton>}
+      </div>
+    </UiFormRow>}
     {wheel && <div className="min-w-0">{props.renderControl(field, value)}</div>}
     {field.animatable && props.renderAnimation?.(field, value)}
   </div>
@@ -93,5 +94,5 @@ export function ParamList(props: ParamListProps): React.ReactElement {
     for (const field of fields) { const name = field.group ?? ''; const group = result.get(name) ?? []; group.push(field); result.set(name, group) }
     return [...result].filter(([, group]) => group.length)
   }, [fields])
-  return <div className="flex flex-col gap-2">{groups.map(([title, group]) => <FieldGroup key={title} title={title} fields={group} store={store} />)}</div>
+  return <UiGroup labelWidth={96} gap="row">{groups.map(([title, group]) => <FieldGroup key={title} title={title} fields={group} store={store} />)}</UiGroup>
 }

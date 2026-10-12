@@ -1034,6 +1034,18 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   font-weight: 500;
 }
 
+/* 部分可见标签交给 dockview 原生溢出菜单；菜单里的副本仍正常显示。 */
+.dockview-host .dv-tabs-container > .dv-tab[data-dock-tab-clipped] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 原生菜单按标题自然宽度测量，PopupService 可据此在窗口右缘向内避让。 */
+.dockview-host .dv-tabs-overflow-container {
+  min-width: max-content;
+  white-space: nowrap;
+}
+
 .henji-cameraStage-dock.dockview-theme-abyss .dv-groupview > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
   box-shadow: inset 0 -1.5px 0 rgb(var(--accent-rgb));
 }

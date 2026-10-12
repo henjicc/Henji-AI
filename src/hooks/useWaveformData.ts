@@ -5,6 +5,7 @@ import {
 } from '@/services/waveform/waveformDataService'
 
 export type { WaveformData, WaveformDetailWindow, WaveformScope, WaveformSourceRef, WaveformState }
+export { retryWaveform } from '@/services/waveform/waveformDataService'
 
 function useWaveformRevision(): number {
   return useSyncExternalStore(subscribeWaveformData, waveformDataRevision, waveformDataRevision)
