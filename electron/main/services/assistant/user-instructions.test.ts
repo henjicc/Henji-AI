@@ -13,7 +13,7 @@ it('用户指令保存失败保留原文件，重新读取仍是完整原文，�
   state.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-instructions-'))
   try {
     await updateAssistantUserInstructions({ content: '保留这份原始指令' })
-    const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EPERM' }))
+    const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EIO' }))
     await expect(updateAssistantUserInstructions({ content: '新指令' })).rejects.toThrow('busy')
     rename.mockRestore()
     expect((await getAssistantUserInstructions()).content).toBe('保留这份原始指令')
