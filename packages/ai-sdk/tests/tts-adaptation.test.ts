@@ -1,5 +1,3 @@
-import { z } from 'zod'
-import turboContract from './fixtures/tts/kie-turbo-input.json'
 import { shouldRetry } from '../src/runtime/retry'
 import { describe, expect, it, vi } from 'vitest'
 import fixture from './fixtures/tts/speech-protocols.json'
@@ -13,7 +11,7 @@ import type { JsonObject, ProviderExecutionInput } from '../src/types/runtime'
 const addedModels = [
   'bailian-cosyvoice-v3.5', 'bailian-minimax-speech-2.8', 'bailian-qwen-audio-3.1-tts-flash',
   'fal-eleven-v3-tts', 'fal-minimax-speech-2.8', 'fal-qwen3-tts-1.7b',
-  'kie-eleven-turbo-2.5-tts', 'kie-eleven-v3-dialogue', 'kie-gemini-3.1-flash-tts',
+  'kie-eleven-v3-dialogue', 'kie-gemini-3.1-flash-tts',
   'siliconflow-cosyvoice2-tts', 'siliconflow-moss-ttsd-0.5',
   'volcengine-seed-icl-2.0', 'volcengine-seed-tts-2.0',
 ] as const
@@ -59,7 +57,6 @@ describe('TTS model catalog', () => {
     expect(build('bailian-cosyvoice-v3.5', { bailianCosyVoiceId: 'clone-voice', bailianCosyVoiceSpec: 'plus' })).toMatchObject({
       model: 'cosyvoice-v3.5-plus', input: { voice: 'clone-voice' },
     })
-    expect(build('kie-eleven-turbo-2.5-tts')).toMatchObject({ model: 'elevenlabs/text-to-speech-turbo-2-5', input: { text: '你好' } })
     expect(build('kie-eleven-v3-dialogue', { kieElevenDialogue: [{ text: 'Hello', voice: 'voice-1' }] })).toMatchObject({
       model: 'elevenlabs/text-to-dialogue-v3', input: { dialogue: [{ text: 'Hello', voice: 'voice-1' }] },
     })
@@ -88,22 +85,6 @@ describe('TTS model catalog', () => {
 })
 
 describe('TTS media provider protocols', () => {
-  it('KIE Turbo 默认中文请求符合当前官方输入契约，语言可省略，音色必须是 ID', () => {
-    const request = build('kie-eleven-turbo-2.5-tts') as { input: Record<string, unknown> }
-    const schema = z.fromJSONSchema(turboContract.inputSchema)
-    expect(schema.safeParse(request.input).success).toBe(true)
-    expect(request.input).not.toHaveProperty('language_code')
-    expect(schema.safeParse({ ...request.input, voice: 'Rachel' }).success).toBe(false)
-    expect(schema.safeParse({ ...request.input, voice: 'Brian' }).success).toBe(false)
-    expect(schema.safeParse({ ...request.input, speed: 1.3 }).success).toBe(false)
-    expect(() => build('kie-eleven-turbo-2.5-tts', { kieElevenTurboVoice: 'Brian' })).toThrow('音色 ID')
-    expect(() => build('kie-eleven-turbo-2.5-tts', { kieElevenTurboVoice: 'Rachel' })).toThrow('音色 ID')
-    expect(build('kie-eleven-turbo-2.5-tts', { prompt: '字'.repeat(5000) })).toBeTruthy()
-    expect(() => build('kie-eleven-turbo-2.5-tts', { prompt: '字'.repeat(5001) })).toThrow('最多 5000 字')
-    expect(build('kie-eleven-turbo-2.5-tts', { prompt: '测试一下。', kieElevenTurboSpeed: 1.05, kieElevenTurboStability: .5 }))
-      .toMatchObject({ model: 'elevenlabs/text-to-speech-turbo-2-5', input: { text: '测试一下。', voice: 'EkK5I93UQWFDigLMpZcX', speed: 1.05, stability: .5 } })
-  })
-
   it.each([200, 400, 403])('百炼产品未开通（HTTP %s）归一化且禁止重试，保留原码', async (status) => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 'InvalidParameter', message: 'The product is not activated. Please activate the product first.' }), { status }))
     const input = execution(build('bailian-minimax-speech-2.8'), '/api/v1/services/aigc/multimodal-generation/generation', fetch)

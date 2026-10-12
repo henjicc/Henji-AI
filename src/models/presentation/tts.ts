@@ -55,14 +55,6 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
       bailianCosyVoiceSpeed: speed,
     },
   ),
-  'kie-eleven-turbo-2.5-tts': speechModel(
-    { zh: 'Eleven Turbo 2.5', en: 'Eleven Turbo 2.5' },
-    {
-      kieElevenTurboVoice: voice,
-      kieElevenTurboStability: { zh: '稳定度', en: 'Stability' },
-      kieElevenTurboSpeed: speed,
-    },
-  ),
   'kie-eleven-v3-dialogue': speechModel(
     { zh: 'Eleven v3 对话语音', en: 'Eleven v3 Dialogue' },
     { kieElevenDialogueVoice: voice },
@@ -151,7 +143,6 @@ const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
   'bailian-minimax-speech-2.8': 'bailianMinimaxSpeechVoice',
   'bailian-qwen-audio-3.1-tts-flash': 'bailianQwenTtsVoice',
   'bailian-cosyvoice-v3.5': 'bailianCosyVoiceId',
-  'kie-eleven-turbo-2.5-tts': 'kieElevenTurboVoice',
   'kie-eleven-v3-dialogue': 'kieElevenDialogueVoice',
   'kie-gemini-3.1-flash-tts': 'kieGeminiTtsVoice',
   'siliconflow-cosyvoice2-tts': 'siliconflowCosyVoice',

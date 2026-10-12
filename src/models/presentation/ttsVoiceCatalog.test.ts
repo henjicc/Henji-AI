@@ -2,16 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ttsPresentation } from './tts'
 import { TTS_VOICE_SELECTORS } from './ttsVoiceCatalog'
 import { volcengineSeedIcl20Model } from '../../../packages/ai-sdk/src/catalog/volcengine-speech/seed-icl-2.0.model'
-import { kieElevenTurbo25TtsModel } from '../../../packages/ai-sdk/src/catalog/kie/eleven-turbo-2.5-tts.model'
-import turboContract from '../../../packages/ai-sdk/tests/fixtures/tts/kie-turbo-input.json'
 
 describe('TTS voice selection', () => {
-  it('KIE Turbo 音色选择器提交官方 ID，并与 SDK 默认音色一致', () => {
-    const voices = TTS_VOICE_SELECTORS['kie-eleven-turbo-2.5-tts'].voices
-    for (const voice of voices) expect(turboContract.inputSchema.properties.voice.enum).toContain(voice.id)
-    expect(voices.some(voice => voice.id === kieElevenTurbo25TtsModel.params[0].default)).toBe(true)
-    expect(voices.find(voice => voice.name === 'Brian')?.id).toBe('nPczCjzI2devNBz1zQrb')
-  })
   it('offers the complete official Qwen 3.1 and Seed-TTS 2.0 catalogs', () => {
     const qwen = TTS_VOICE_SELECTORS['bailian-qwen-audio-3.1-tts-flash'].voices
     const volc = TTS_VOICE_SELECTORS['volcengine-seed-tts-2.0'].voices
@@ -41,7 +33,6 @@ describe('TTS voice selection', () => {
       'bailian-minimax-speech-2.8': 'bailianMinimaxSpeechVoice',
       'bailian-qwen-audio-3.1-tts-flash': 'bailianQwenTtsVoice',
       'bailian-cosyvoice-v3.5': 'bailianCosyVoiceId',
-      'kie-eleven-turbo-2.5-tts': 'kieElevenTurboVoice',
       'kie-eleven-v3-dialogue': 'kieElevenDialogueVoice',
       'kie-gemini-3.1-flash-tts': 'kieGeminiTtsVoice',
       'siliconflow-cosyvoice2-tts': 'siliconflowCosyVoice',

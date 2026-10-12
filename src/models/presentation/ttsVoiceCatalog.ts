@@ -58,16 +58,6 @@ export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
     remoteModelId: 'bailian-cosyvoice-v3.5',
     customIdHint: '请先在百炼创建 CosyVoice 3.5 音色，再从列表选择',
   },
-  'kie-eleven-turbo-2.5-tts': {
-    voices: [
-      systemVoice('EkK5I93UQWFDigLMpZcX', 'James'),
-      systemVoice('nPczCjzI2devNBz1zQrb', 'Brian'),
-      systemVoice('Z3R5wn05IrDiVCyEkUrK', 'Arabella'),
-    ],
-    allowSearch: true,
-    allowCustomId: true,
-    customIdHint: '填写 KIE 官方音色 ID（不能填写 Rachel、Brian 等名称）',
-  },
   'kie-eleven-v3-dialogue': {
     voices: [
       systemVoice('EkK5I93UQWFDigLMpZcX', '示例音色 1'),

@@ -148,7 +148,7 @@ describe('ai-runtime continuePolling 日志闭环', () => {
       await transport.fetch('https://api.kie.ai/api/v1/jobs/recordInfo?taskId=task-1')
       throw new AiRuntimeError('provider_internal_error', 'KIE 服务内部错误，可稍后手动重试。')
     })
-    await expect(continuePolling({ ...request, modelId: 'kie-eleven-turbo-2.5-tts' })).rejects.toThrow('KIE 服务内部错误')
+    await expect(continuePolling({ ...request, modelId: 'kie-eleven-v3-dialogue' })).rejects.toThrow('KIE 服务内部错误')
     expect(mocks.logger.error).toHaveBeenCalledWith('后端轮询失败', expect.objectContaining({ requestId: request.requestId, taskId: 'task-1', providerId: 'kie', context: { phase: 'poll', route: 'https://api.kie.ai/api/v1/jobs/recordInfo', method: 'GET', responseBody: { ...payload, data: { ...payload.data, param: {} } } } }))
     expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain('/api/v1/jobs/createTask')
   })

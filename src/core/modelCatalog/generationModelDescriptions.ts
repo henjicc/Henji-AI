@@ -87,7 +87,6 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'eleven-v3-tts': { zh: 'ElevenLabs 的表现力语音合成模型，适合有情绪变化的朗读。', en: 'Expressive speech synthesis for natural narration.' },
   'qwen-audio-3.1-tts-flash': { zh: '通义千问快速语音合成模型，支持系统音色与演绎指令。', en: 'Fast speech synthesis with built-in voices and delivery instructions.' },
   'cosyvoice-v3.5': { zh: '百炼自定义音色语音合成，需要预先创建复刻或设计音色。', en: 'Speech synthesis using a previously created custom voice.' },
-  'eleven-turbo-2.5-tts': { zh: 'ElevenLabs 快速语音合成模型，侧重生成速度与较低费用。', en: 'Fast speech synthesis with a lower per-character price.' },
   'eleven-v3-dialogue': { zh: 'ElevenLabs 对话语音合成，支持按说话人组织台词。', en: 'Dialogue speech synthesis with per-turn voices.' },
   'gemini-3.1-flash-tts': { zh: 'Gemini 语音合成，可通过结构化说话人和台词生成对话。', en: 'Speech synthesis using structured speakers and dialogue turns.' },
   'cosyvoice2-0.5b': { zh: '硅基流动托管的 CosyVoice2 语音合成模型。', en: 'CosyVoice2 speech synthesis hosted by SiliconFlow.' },

@@ -87,7 +87,7 @@ describe('catalog consumer contract', () => {
     expect(catalog.filter(model => model.meta.tags?.includes('reference-mode')).length).toBeGreaterThan(0)
   })
 
-  it('锁定真实 124 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
+  it('锁定真实 123 catalog 的 RuntimeParamDef type、数量与实际字段集合', () => {
     const rows = new Map<string, { count: number; fields: Set<string> }>()
     for (const model of catalog) {
       for (const param of model.params) {
@@ -103,7 +103,7 @@ describe('catalog consumer contract', () => {
       fields: [...row.fields].sort(),
     }]))).toEqual({
       composite: {
-        count: 16,
+        count: 15,
         fields: ['default', 'id', 'order', 'required', 'type', 'valueType', 'visible'],
       },
       dropdown: {
@@ -119,7 +119,7 @@ describe('catalog consumer contract', () => {
         fields: ['accept', 'default', 'format', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType', 'visible'],
       },
       number: {
-        count: 97,
+        count: 95,
         fields: ['default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
       },
       switch: {
@@ -139,7 +139,7 @@ describe('catalog consumer contract', () => {
     })
   })
 
-  it('client.catalog 的 6 个公开查询函数直接消费真实 124 catalog', () => {
+  it('client.catalog 的 6 个公开查询函数直接消费真实 123 catalog', () => {
     const client = createAIClient({ runtime })
     try {
       expect(client.catalog.listByType('image')).toHaveLength(64)
