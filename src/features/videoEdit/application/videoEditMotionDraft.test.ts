@@ -19,10 +19,12 @@ import { proposeVideoExplanationMotion } from './videoEditMotionDraft'
 import { motionDigest } from './videoEditMotionResources'
 import { updateVideoEditClipProperties } from './videoEditClipProperties'
 import type { IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
+import i18n from '@/i18n/config'
 
 vi.mock('./videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => { const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted(); input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined, beatFrames: undefined }).candidates[0] } } }))
 const files = new Map<string, Uint8Array>()
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('zh-CN')
   installHarnessNativeStorage(); files.clear(); vi.stubGlobal('crypto', webcrypto)
   vi.spyOn(getPlatform().system.paths, 'tempDir').mockResolvedValue('D:/temp')
   vi.spyOn(getPlatform().system.paths, 'join').mockImplementation(async (...parts) => parts.join('/'))
@@ -124,6 +126,19 @@ it('参照改变拒绝旧候选，重新整理仍保留录制时的局部偏移�
   const reopened = await reopenVideoEdit(id); await reopenVideoMotion(id, state.draft.id)
   expect(videoMotionState(reopened)!.constraints?.reference?.clip.x).toBe(.1)
   expect(motionClipPose(getActiveVideoEditSequence(reopened).clips[0], 60).position[0]).toBeCloseTo(.9)
+})
+it('相对参照选择不使用只清除参照，保留已选标注约束', async () => {
+  const owner = await setup(), id = owner.document.id, clip = getActiveVideoEditSequence(owner).clips[0]
+  appendVideoEditClip(id)
+  const reference = getActiveVideoEditSequence(owner).clips[1]
+  const annotationId = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, endFrame: 60, clipId: clip.id, target: { kind: 'stroke', strokes: [[{ x: .2, y: .3 }, { x: .8, y: .6 }]] }, text: '沿箭头走' })
+  setVideoEditView(id, { selection: clip.id, frame: 0 })
+  await startVideoMotion(id, 'place')
+  await configureVideoMotionConstraints(id, { referenceId: reference.id, annotation: { id: annotationId, role: 'path', span: [0, 60] } })
+  const annotations = structuredClone(videoMotionState(owner)!.constraints!.annotations)
+  await configureVideoMotionConstraints(id, { referenceId: '' })
+  expect(videoMotionState(owner)!.constraints!.reference).toBeUndefined()
+  expect(videoMotionState(owner)!.constraints!.annotations).toEqual(annotations)
 })
 it('录制不自动播放；找位置没有示范；仅真实呈现姿态进入原稿；一步应用撤销重做且重开保留钉点和原稿', async () => {
   const owner = await setup(); const id = owner.document.id; const history = owner.past.length

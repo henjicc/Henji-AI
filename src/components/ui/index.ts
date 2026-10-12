@@ -25,6 +25,7 @@ export * from './UiGradeWheel';
 export * from './UiCurveEditor';
 export * from './UiEasingEditor';
 export * from './UiSeedInput';
+export * from './UiSegmented';
 export type { ParameterControlProps } from './parameterControl';
 export * from './UiFontPicker';
 export * from './UiToast';

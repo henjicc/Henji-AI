@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import i18n from '@/i18n/config'
 import { CreativeIntentControls, type CreativeIntentControlsProps } from './CreativeIntentControls'
 
 afterEach(cleanup)
-function props(): CreativeIntentControlsProps {
+beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
+function props(): Extract<CreativeIntentControlsProps, { profile?: 'motion' }> {
   return { status: 'reviewing', candidates: [{ id: 'candidate', label: '保留节奏' }], selected: 'candidate', fidelity: .5, intent: 'path', mode: 'navigate', speed: 1, property: 'position', capture: 'place', pins: [], takes: [], canPin: true,
     onStart: vi.fn(), onStop: vi.fn(), onPause: vi.fn(), onResume: vi.fn(), onCancel: vi.fn(), onOptimize: vi.fn(), onApply: vi.fn(), onPreview: vi.fn(), onFidelity: vi.fn(), onPin: vi.fn(), onUnpin: vi.fn(), onTake: vi.fn(), onMode: vi.fn(), onSpeed: vi.fn(), onProperty: vi.fn(), onCapture: vi.fn(), onIntent: vi.fn(), onPlay: vi.fn() }
 }
@@ -15,6 +17,22 @@ it('保真滑杆拖动只更新本地预览，取消不重算，放手只提交�
   fireEvent.keyDown(slider, { key: 'Escape' }); fireEvent.blur(slider); expect(p.onFidelity).not.toHaveBeenCalled()
   fireEvent.change(slider, { target: { value: '.6' } }); fireEvent.pointerUp(slider); fireEvent.blur(slider)
   expect(p.onFidelity).toHaveBeenCalledOnce(); expect(p.onFidelity).toHaveBeenCalledWith(.6)
+})
+it('仅录制轨迹显示速度，分段切换继续委托原回调', () => {
+  const p = props(), view = render(<CreativeIntentControls {...p} />)
+  expect(screen.queryByLabelText('录制速度')).toBeNull()
+  fireEvent.click(screen.getByRole('radio', { name: '录制轨迹' })); expect(p.onCapture).toHaveBeenCalledWith('record')
+  view.rerender(<CreativeIntentControls {...p} capture="record" />)
+  expect(screen.getByLabelText('录制速度')).toBeDefined()
+  fireEvent.click(screen.getByRole('radio', { name: '示范运动' })); expect(p.onMode).toHaveBeenCalledWith('demonstrate')
+})
+it('无可钉姿态时隐藏整个区块，已有钉点仍保留；idle 主动作说明下一步', () => {
+  const p = props(), view = render(<CreativeIntentControls {...p} status="idle" canPin={false} candidates={[]} />)
+  expect(screen.queryByText('钉住姿态')).toBeNull()
+  const organize = screen.getByRole('button', { name: '整理' }) as HTMLButtonElement
+  expect(organize.disabled).toBe(true); expect(organize.title).toBe('先示范一次运动')
+  view.rerender(<CreativeIntentControls {...p} canPin={false} pins={[{ id: 'pin', label: '姿态' }]} />)
+  expect(screen.getByText('钉住姿态')).toBeDefined()
 })
 it('原稿与候选切换只发送选择意图，钉住按钮保持键盘焦点与单一应用动作', () => {
   const p = props(); render(<CreativeIntentControls {...p} />)
