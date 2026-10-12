@@ -92,6 +92,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   const stepValues = []
   let matrix = null
   let contrast = false
+  let audit = false
   let displayPointValue
   let help = false
   let positionalOutUsed = false
@@ -173,6 +174,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
       matrix = token.slice('--matrix='.length)
       continue
     }
+    if (token === '--audit') { audit = true; continue }
     if (token === '--contrast') {
       contrast = true
       continue
@@ -210,7 +212,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   }
   const steps = stepValues.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean)
   const displayPoint = resolveDisplayPoint(displayPointValue)
-  return { allowWrites, contrast, displayPoint, help, matrix, only, outDir, profile, sizes, steps, themePresets }
+  return { allowWrites, audit, contrast, displayPoint, help, matrix, only, outDir, profile, sizes, steps, themePresets }
 }
 
 /** `--theme-preset` 可重复或逗号分隔，`all` 表示四个预设；按登记顺序去重。 */

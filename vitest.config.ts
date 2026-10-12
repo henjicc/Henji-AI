@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import path from 'path'
 import { configDefaults, defineConfig } from 'vitest/config'
 import testSuites from './scripts/lib/testSuites.cjs'
+import CostSequencer from './scripts/lib/costSequencer.mjs'
 
 /**
  * Vitest 配置覆盖 domain 纯函数与按文件声明 jsdom 的 React 组件测试。
@@ -9,6 +10,7 @@ import testSuites from './scripts/lib/testSuites.cjs'
  * alias 对齐 vite.config.ts 的 `@/` -> `src/`，供被测代码间接依赖的模块解析使用。
  */
 export default defineConfig(({ mode }) => ({
+  cacheDir: path.resolve(__dirname, '.tmp/vite-test-cache'),
   plugins: [{
     name: 'vitest-wgsl-raw',
     enforce: 'pre',
@@ -26,5 +28,11 @@ export default defineConfig(({ mode }) => ({
   },
   test: {
     ...testSuites.testSuiteOptions(mode, configDefaults.exclude),
+    ...(mode === 'unit' && process.env.HENJI_TEST_COSTS ? {
+      sequence: { sequencer: CostSequencer },
+    } : {}),
+    ...(mode === 'unit' && process.env.HENJI_TEST_COST_REPORT ? {
+      reporters: ['default', './scripts/lib/costReporter.cjs'],
+    } : {}),
   },
 }))

@@ -1,9 +1,10 @@
 const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.cjs')
+/* global VideoFrame -- page.evaluate 在真实 Electron 页面中执行 WebCodecs。 */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
+const mediaBinaries = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
@@ -57,8 +58,8 @@ const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"
 const readProject = readVideoEditFile
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
 const range = (from, to) => Array.from({ length: to - from }, (_, index) => from + index)
-const ffmpeg = (args, timeout = 900000) => execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, stdio: 'pipe', timeout })
-const probe = file => JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
+const ffmpeg = (args, timeout = 900000) => execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, stdio: 'pipe', timeout })
+const probe = file => JSON.parse(execFileSync(mediaBinaries.ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
 
 async function saved(page, file, matches, message, attempts = 300) {
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -71,7 +72,7 @@ async function saved(page, file, matches, message, attempts = 300) {
 
 /** The frame number in the code band of every picture of a video (16 cells averaged to one gray value each). */
 function frameCodes(file) {
-  const raw = execFileSync(ffmpegPath, ['-v', 'error', '-i', file, '-vf', `crop=${WIDTH}:${CODE_HEIGHT}:0:0,scale=${CODE_BITS}:1:flags=area,format=gray`, '-f', 'rawvideo', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
+  const raw = execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-i', file, '-vf', `crop=${WIDTH}:${CODE_HEIGHT}:0:0,scale=${CODE_BITS}:1:flags=area,format=gray`, '-f', 'rawvideo', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
   const codes = []
   for (let offset = 0; offset + CODE_BITS <= raw.length; offset += CODE_BITS) {
     let code = 0; let margin = 255
@@ -84,7 +85,7 @@ function frameCodes(file) {
 /** Every sound stream decoded by FFmpeg and resampled with soxr at 48kHz, on the absolute source timeline. */
 function referenceStreams(file, audio) {
   return audio.map((stream, index) => {
-    const raw = execFileSync(ffmpegPath, ['-v', 'error', '-i', file, '-map', `0:a:${index}`, '-af', `aresample=${RATE}:resampler=soxr:precision=28`, '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
+    const raw = execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-i', file, '-map', `0:a:${index}`, '-af', `aresample=${RATE}:resampler=soxr:precision=28`, '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
     const offset = Math.max(0, Math.round(Number(stream.start_time ?? 0) * RATE)); const frames = raw.length / 4 / stream.channels
     return Array.from({ length: stream.channels }, (_, channel) => {
       const plane = new Float32Array(offset + frames)
@@ -337,7 +338,7 @@ function createVideoEditExportNativeScene() {
           const wrong = codes.map((entry, index) => ({ index, frame: from + index, expected: expected[index], actual: entry.code, margin: entry.margin })).filter(entry => entry.expected !== entry.actual)
           assert.deepEqual(wrong.slice(0, 10), [], `${label} 每一帧应是应有的源帧（帧号条码）`)
           assert.ok(Math.min(...codes.map(entry => entry.margin)) > 40, `${label} 帧号条码对比度不足`)
-          const raw = execFileSync(ffmpegPath, ['-v', 'error', '-i', output, '-vn', '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 1024 * 1024 * 1024 })
+          const raw = execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-i', output, '-vn', '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { windowsHide: true, maxBuffer: 1024 * 1024 * 1024 })
           const frames = raw.length / 8; const planes = [new Float32Array(frames), new Float32Array(frames)]
           for (let index = 0; index < frames; index++) { planes[0][index] = raw.readFloatLE(index * 8); planes[1][index] = raw.readFloatLE(index * 8 + 4) }
           const reference = expectedMix(document, document.sequences[0], samples, frames, from)

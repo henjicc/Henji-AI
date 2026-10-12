@@ -141,7 +141,11 @@ test('矩阵逐语句计数且逐格冻结，公开 index 允许', async (t) => 
   write(root, 'src/features/a/probe.ts', "export { value } from '../b/private'; export const lazy = () => import('../b/private')")
   const current = await scan(root)
   assert.equal(current.featureMatrix['a → b'], 2)
-  assert.ok(compare(current, baseline).some((failure) => failure.includes('a → b：2 > 基线 1')))
+  assert.ok(compare(current, baseline).some((failure) => failure.includes('新增跨 feature 非 index 导入 a → b')))
+  // 同方向总数未增长，替换具体依赖也必须拒绝。
+  write(root, 'src/features/b/another.ts', 'export const value = 2')
+  write(root, 'src/features/a/probe.ts', "export { value } from '../b/another'")
+  assert.ok(compare(await scan(root), baseline).some((failure) => failure.includes('b/another.ts')))
   write(root, 'src/features/a/probe.ts', "export { value } from '../b/index'")
   assert.deepEqual(compare(await scan(root), baseline), [])
   write(root, 'src/features/b/private/index.ts', 'export const value = 1')

@@ -115,3 +115,14 @@ test('CI 对每层执行明确命令，初始化失败不能自动跳过，发�
   assert.ok(decoderJob.indexOf('npm run test:ffmpeg-cli') > decoderJob.indexOf(steps[0]), 'test:ffmpeg-cli 必须在获取校验 FFmpeg 之后执行')
   assert.ok(decoderJob.indexOf('run: npm ci') > 0 && decoderJob.indexOf('run: npm ci') < decoderJob.indexOf('npm run test:ffmpeg-cli'), 'test:ffmpeg-cli 前需要安装依赖')
 })
+
+test('性能专项显式启用，普通层保留同文件正确性', () => {
+  const options = testSuiteOptions('performance')
+  assert.equal(options.env.HENJI_TEST_PERFORMANCE, '1')
+  assert.equal(options.maxWorkers, 1)
+  for (const file of options.include) assert.ok(!testSuiteOptions('unit').exclude.includes(file))
+  assert.equal(scripts['test:performance'], 'vitest run --mode performance')
+  const performance = require('yaml').parse(read('.github/workflows/performance.yml'))
+  assert.deepEqual(Object.keys(performance.on), ['workflow_dispatch'])
+  assert.doesNotMatch(workflow, /test:performance|performance\.yml/)
+})

@@ -16,10 +16,10 @@ it.each(['mask', 'rectangle', 'fractional'] as const)('固定大面积砖墙 %s 
     pixels[i * 4 + 3] = alpha;
   }
   const started = performance.now(), result = completeRetouchTexture({ pixels: { width: w, height: h, originX: 0, originY: 0, data: pixels }, coverage, seed: 1 });
-  const durationMs = performance.now() - started, output = new Uint8Array(source); let n = 0, error = 0, squared = 0, red = 0, boundary = 0, bn = 0;
+  const durationMs = performance.now() - started, output = new Uint8Array(source); let n = 0, error = 0, squared = 0, red = 0, boundary = 0, bn = 0, outsideChanged = 0, alphaChanged = 0, firstChanged = -1;
   for (let i = 0; i < coverage.length; i++) {
-    if (!coverage[i]) { expect(result.data.subarray(i * 4, i * 4 + 4)).toEqual(pixels.subarray(i * 4, i * 4 + 4)); continue; }
-    expect(result.data[i * 4 + 3]).toBe(pixels[i * 4 + 3]); n++;
+    if (!coverage[i]) { for (let c = 0; c < 4; c++) if (!Object.is(result.data[i * 4 + c], pixels[i * 4 + c])) { outsideChanged++; if (firstChanged === -1) firstChanged = i * 4 + c; } continue; }
+    if (!Object.is(result.data[i * 4 + 3], pixels[i * 4 + 3])) { alphaChanged++; if (firstChanged === -1) firstChanged = i * 4 + 3; } n++;
     const edge = [i - 1, i + 1, i - w, i + w].some(j => j < 0 || j >= coverage.length || !coverage[j]);
     for (let c = 0; c < 3; c++) {
       const linear = result.data[i * 4 + c] / result.data[i * 4 + 3];
@@ -28,11 +28,17 @@ it.each(['mask', 'rectangle', 'fractional'] as const)('固定大面积砖墙 %s 
     }
     red += Math.max(0, output[i * 4] - truth[i * 4] - Math.max(0, output[i * 4 + 1] - truth[i * 4 + 1]));
   }
-  const metrics = { durationMs, selectedMAE: error / n / 3, selectedPSNR: 10 * Math.log10(255 ** 2 / (squared / n / 3)), boundaryMAE: boundary / bn, excessRed: red / n, ringError: result.ringError, offsets: result.offsets.slice(0, 8), outsideChanged: 0, alphaChanged: 0 };
+  const metrics = { durationMs, selectedMAE: error / n / 3, selectedPSNR: 10 * Math.log10(255 ** 2 / (squared / n / 3)), boundaryMAE: boundary / bn, excessRed: red / n, ringError: result.ringError, offsets: result.offsets.slice(0, 8), outsideChanged, alphaChanged, firstChanged };
+  try {
+    expect({ outsideChanged, alphaChanged, firstChanged }).toEqual({ outsideChanged: 0, alphaChanged: 0, firstChanged: -1 });
+    expect(metrics.selectedMAE).toBeLessThan(5); expect(metrics.selectedPSNR).toBeGreaterThan(30);
+    expect(metrics.boundaryMAE).toBeLessThan(5); expect(metrics.excessRed).toBeLessThan(3.2);
+  } catch (error) { await diagnostics(); throw error; }
+  if (process.env.HENJI_TEST_DIAGNOSTICS === '1') await diagnostics();
+  async function diagnostics(): Promise<void> {
   await fs.mkdir('.reality/t119-11-quality', { recursive: true });
   const suffix = region === 'mask' ? '' : `-${region}`;
   await fs.writeFile(`.reality/t119-11-quality/texture${suffix}-metrics.json`, JSON.stringify(metrics, null, 2));
   await sharp(output, { raw: { width: w, height: h, channels: 4 } }).png().toFile(`.reality/t119-11-quality/brick-texture${suffix}.png`);
-  expect(metrics.selectedMAE).toBeLessThan(5); expect(metrics.selectedPSNR).toBeGreaterThan(30);
-  expect(metrics.boundaryMAE).toBeLessThan(5); expect(metrics.excessRed).toBeLessThan(3.2);
+  }
 }, 60_000);

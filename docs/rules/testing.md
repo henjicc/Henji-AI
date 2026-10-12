@@ -34,7 +34,7 @@ npx eslint path/to/changed.ts path/to/changed.tsx --report-unused-disable-direct
 - 纯样式、文案、静态资源替换不因“文件是 `.tsx`”就自动跑全量单测或全量类型检查
 - 只改测试文件时，只运行该测试文件；除非同时改了共享测试设施，不跑全量套件
 - `vitest related` 只接收**源文件**；已知测试路径时优先直接运行测试文件
-- `related` 是找不到对应测试时的后备，不是默认兜底：被广泛引用的组件、store、引擎文件一次会牵出上百个测试文件。先用 `--dry-run` 或 `vitest list` 看规模，超过约 20 个文件就不跑，改为挑直接消费者的测试文件，剩下交给 CI
+- `related` 是找不到对应测试时的后备，不是默认兜底：被广泛引用的组件、store、引擎文件一次会牵出上百个测试文件。先用 `verify:changed --dry-run` 看解析规模，超过约 20 个文件就不跑，改为挑直接消费者的测试文件，剩下交给 CI
 - `related` 找不到测试不等于已有覆盖；必须补充或指出真正覆盖该行为的测试，不能凭 `--passWithNoTests` 的退出码报通过
 
 Agent 日常优先使用统一入口，并显式列出**本次任务自己的文件**：
@@ -43,7 +43,7 @@ Agent 日常优先使用统一入口，并显式列出**本次任务自己的文
 npm run verify:changed -- --level L1 src/path/source.ts src/path/source.test.ts
 ```
 
-该命令只支持 L0–L2，不读取整个 `git diff`。先加 `--dry-run` 核对范围与去重：现实现可能同时安排精确测试和 `related --passWithNoTests`，必要时手动执行去重后的明确命令。它对 package/锁文件、workflow、tsconfig、Vite/Vitest 配置固定拒绝局部验证；有界改动可按本规则说明风险依据、手选检查，但不能声称自动入口已经支持，也不能绕过必需 CI 门禁。
+该命令只支持 L0–L2，不读取整个 `git diff`。先加 `--dry-run`：精确测试与后备 related 解析结果合并去重后只执行一次；related 超过 20 个文件、解析超过 45 秒或零覆盖时停止，使用 `--test <直接消费者测试>`（可重复）明确选择，零测试不能报通过。原生 SQLite 文件按唯一清单交给 Electron 原生验收器，可只执行本次子集。共享 core 双工程、导入变化、登记格式和 IPC 通道的专项随文件与内容选择。它对 package/锁文件、workflow、tsconfig、Vite/Vitest 配置固定拒绝局部验证；有界改动可按本规则说明风险依据、手选检查，但不能声称自动入口已经支持，也不能绕过必需 CI 门禁。
 
 ### L2：共享或高风险模块改动
 
@@ -147,6 +147,12 @@ npx vitest run
 
 基准、视觉、真实服务、长耗时和人工探针测试可以有价值，但必须是**显式专项命令或环境变量启用**，不得混成日常必跑项。不要仅因文件名含 `benchmark`、`probe`、`baseline` 就删除；先判断它实际是否快速、确定、保护稳定约束。
 
+- `npm run test:performance` 显式启用创作意图长规模内存、5 次预热/30 次测量和代码元素 P95 专项；原阈值不变。普通层同文件只执行完整性、取消和几何正确性。修改相关算法、调度或性能预算时显式选专项文件；定期/发布评估可运行全专项，CI `显式性能专项` 工作流手动触发。
+- CI 普通层从同一份历史成本按最长任务优先分三片，逐文件保存执行、收集和环境/准备耗时；未知文件用历史中位数，首次无历史按等成本分配。三个片消费一次固定的快照，避免缓存更新造成重测或漏测。
+- Node 测试归属唯一登记于 `scripts/node-test-suites.json`。`check:node-test-ownership` 拦漏登记、重复与过期；快速解析/规则/夹具自测在 CI 的 `test:validation-tools` 去重运行，原生验收器自测在原生 job，真实设备及长任务继续走专项。归属登记不能把实际设备调用当快速自测。
+- 全像素/样本检查优先累计差异、首个差异与最大误差后集中断言，保持 exact/close 比较语义和原阈值。诊断 PNG/指标只在失败或 `HENJI_TEST_DIAGNOSTICS=1` 时写出。
+
+
 
 ### 真实性测试统一入口
 
@@ -213,11 +219,11 @@ npm run check:ui-residue
 `check:colors`、`check:surface:strict`、`check:icons:strict`、`check:ui-residue` 已接入 `build` / `electron:build` 与 CI 代码检查。`check:colors` 含未定义颜色类规则（按 Tailwind 实际配置判定 `bg-overlay`、`bg-selected-accent/50` 这类不生成样式的类，不可登记）。`check:ui-residue` 是代码残留门禁：任意值类、内联尺寸与颜色、调用点覆盖、豁免理由、私有样式、零引用与旧文案按 skill `henji-ui-surface` 的 `references/review.md` 第 3 节口径判为违规 / 待登记 / 合规，固定几何尺寸等例外登记在 `scripts/ui-residue.allowlist.json`（≥ 8 字理由，过期登记同样失败）。确需例外时加**行级** `ui-surface-allow` 注释并写明理由，文件级 `ui-surface-allow-file` 会被判违规；`check:colors` 的登记文件只能下调（已清零的规则不可再登记，其余总数受脚本上限约束）。改了 `.claude/skills` 或 `.codex/skills` 任一侧时跑 `npm run check:skill-sync`（CI 门禁，两份 skill 必须逐字一致）。
 
 - 局部样式/文案：专项静态检查 + 用户人工验证即可，不要求 `electron:build`、`ui:tour` 或全量 Vitest
-- **改公共组件或令牌**（`@/components/ui` 共享组件、`styleTokens.ts`、`src/index.css` 组件皮肤、主题引擎或语义令牌）：默认验收是“组件样张页 + 主题组合测试”，替代按界面大范围截图——`npx vitest run src/core/theme`（含 `themeCombination.test.ts` 固定种子属性测试：预设 × 任意强调色 × 对比度全范围，失败输出最小反例；不达标修引擎求解，不放宽门槛），再 `electron:bundle` 后只截样张页：`npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --contrast` 与同一步骤的 `npm run check:ui-visual -- --steps scripts/ui-review/ui-gallery.json --matrix review`（四预设 1440 + 石墨 960 共 5 张），Agent 逐张目视。样张页经 `--dev-surface=dev.ui_gallery` 进入，正式界面没有入口；新增 `@/components/ui` 导出组件未上样张页时 `uiGalleryCoverage.test.ts` 失败。细则见 skill `henji-ui-surface` 的 `references/review.md` 第 8 节
+- **公共组件改动先判断风险**：只改业务逻辑、事件或无视觉影响的属性时，跑对应组件精确测试，不因目录是 `@/components/ui` 扩大为主题矩阵。颜色/主题令牌变化才选相关主题引擎精确测试（求解变化包含 `themeCombination.test.ts`，原阈值保留）；公共布局、滚动、溢出或跨主题外观风险无法由精确测试证明时，才升级真实样张页或受影响宿主场景。升级后一次运行 `npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --audit` 同时产出截图、`audit.json`、对比度和运行时证据，不再叠加同矩阵的 `check:ui-visual`。只在令牌/主题或明确布局矩阵风险时使用四预设 1440 + 石墨 960；其他情况选一个故障尺寸与受影响预设。需新产物时 `electron:bundle`，Agent 目视实际截图。样张页经 `--dev-surface=dev.ui_gallery` 进入，新增导出组件的登记由 `uiGalleryCoverage.test.ts` 保护。细则见 skill `henji-ui-surface` 的 `references/review.md` 第 8 节
 - 共享页面骨架、弹窗/滚动/溢出机制：再考虑构建后运行相关视觉检查
 - `ui:tour` 必须用 `--only` 和必要的 `--size` 缩小场景；只有全局 UI 改造才跑全部场景
 - 改了主题引擎、语义令牌或跨主题外观：按预设运行。`--theme-preset` 可重复或逗号分隔（`graphite`/`ocean`/`film`/`paper`，`all` = 四个），每个预设单独启动一次应用，结果分到 `<输出目录>/<预设>/`，`ui:tour` 另写汇总 `index.md`；`test:reality --suite ui|ui-audit` 透传该参数。视觉验收至少看“石墨”“纸白”两个预设
-- 界面视觉验收与全界面核对的判据、旧界面残留的定义和操作规范以 skill `henji-ui-surface` 的 `references/review.md` 为准。需要截交互态或数据变体（悬停、菜单打开、逐个模型）时用一份步骤描述驱动 `ui:tour -- --steps <文件>`，配合 `--matrix review|screen`（四预设 + 960 / 石墨双尺寸）、`--contrast`（像素对比度）与自动指标（行数、溢出、截断）；代码残留用 `npm run ui:residue` 出按文件与区域的报告（门禁结论另由 `check:ui-residue` 给出）。步骤解析、矩阵、指标、残留扫描与未定义颜色类规则的改动跑 `npm run test:ui-inspection`
+- 界面视觉验收与全界面核对的判据、旧界面残留的定义和操作规范以 skill `henji-ui-surface` 的 `references/review.md` 为准。需要截交互态或数据变体（悬停、菜单打开、逐个模型）时用一份步骤描述驱动 `ui:tour -- --steps <文件>`，配合 `--matrix review|screen`（四预设 + 960 / 石墨双尺寸）、`--contrast`（像素对比度）与自动指标（行数、溢出、截断）；代码残留用 `npm run ui:residue` 出按文件与区域的报告（门禁结论另由 `check:ui-residue` 给出）。步骤解析、矩阵、指标、残留扫描与未定义颜色类规则的改动跑对应 Node 精确测试；全组合修改才运行 `npm run test:ui-inspection`
 
 ```bash
 npm run ui:tour -- --only 设置 --size 960x640
@@ -227,7 +233,7 @@ npm run ui:tour -- --steps scripts/ui-review/generation-seedance-kie.json --matr
 npm run ui:residue
 ```
 
-`check:ui-visual` 的对比度规则（`lowContrast`）按**渲染后像素**判定：隐藏文字与 lucide 图标截一张只有背景的图，在每个候选区域取样并合成前景，取最差 10% 分位；正文与辅助文字 ≥ 4.5:1，大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；禁用控件、`aria-hidden`、被遮挡或不可见部分不判。场景终态审全部规则，中途 `capture()` 的状态只审对比度。合理例外登记在 `scripts/ui-visual-contrast-exceptions.json`（唯一 `id`、≥ 8 字理由、`text`/`element` 正则，可限定 `scene`/`presets`/`minRatio`），只给装饰、品牌或用户内容色；界面色不达标改令牌，不登记。审计逻辑改动跑 `npm run test:validation-tools`（含 `uiContrastAudit.test.cjs`）。
+`check:ui-visual` 的对比度规则（`lowContrast`）按**渲染后像素**判定：隐藏文字与 lucide 图标截一张只有背景的图，在每个候选区域取样并合成前景，取最差 10% 分位；正文与辅助文字 ≥ 4.5:1，大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；禁用控件、`aria-hidden`、被遮挡或不可见部分不判。场景终态审全部规则，中途 `capture()` 的状态只审对比度。合理例外登记在 `scripts/ui-visual-contrast-exceptions.json`（唯一 `id`、≥ 8 字理由、`text`/`element` 正则，可限定 `scene`/`presets`/`minRatio`），只给装饰、品牌或用户内容色；界面色不达标改令牌，不登记。审计逻辑改动跑对应精确测试（如 `uiContrastAudit.test.cjs`）。`check:ui-visual` 与 `ui:tour --audit` 共用唯一循环，也同时产出截图；同一场景矩阵二选一。
 
 `check:ui-visual` 另有 5.8 起的五条结构规则：`stackedBands`（横向条带连续 > 2）、`toolbarWrap`（工具条或底栏折行）、`shortTextTruncated`（≤ 16 字的界面文案被省略号截断）、`selectedStateWeak`（选中与静息的底色、文字色、描边 OKLab 距离都 < 0.03 且无其他差异）、`overlayClipped`（浮层伸出窗口或被祖先裁切），判据见 `references/review.md` 第 7 节。改这些规则的判据时跑 `npm run test:ui-visual-rules`（需要最新 `electron:bundle` 产物）：把“未修复 / 已修复”样例注入真实 Electron 窗口逐条对账，未修复必须命中、已修复不得命中；应用界面不误报再用 `check:ui-visual` 的相关场景确认。
 
@@ -262,7 +268,7 @@ MCP 应用执行链用正式协议／直接调用入口、统一注册表、领�
 
 | 本次改动 | 验证范围 |
 |---|---|
-| 能力声明、注册、schema、调用面 | `check:assistant-capabilities` 与受影响注册、反射及输出契约测试 |
+| 能力声明、注册、schema、调用面 | 全注册表结构 `check:assistant-capabilities:structure`，以及受影响域的注册、反射、输出契约与覆盖/invariant 精确测试；跨域契约变化才运行聚合 `check:assistant-capabilities` |
 | 通用读写、事务、保存与恢复 | 对应 `applicationHarness.*.test.ts`，通过正式公共入口执行并读取领域状态 |
 | 公共跨域执行链 | `test:application-harness`，不能只选一个页面 |
 | 调用者权限、账本、幂等、预算或宿主连接 | 公共运行时精确测试；涉及 SQLite 时使用原生 Electron runner |

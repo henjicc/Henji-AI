@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { ffmpegPath } = require('./mediaBinaries.cjs')
+const mediaBinaries = require('./mediaBinaries.cjs')
 
 /**
  * 高位深合成管线（2.7）：真实 Electron 里由构建产物的正式渲染 Worker（帧通道端口 → 原生服务，或浏览器解码）合成
@@ -29,12 +29,12 @@ const SAMPLES = [
 
 function prepare(sample) {
   const file = path.join(ROOT, sample.file)
-  if (!fs.existsSync(file)) execFileSync(ffmpegPath, ['-v', 'error', '-y', ...sample.args(file)], { windowsHide: true, timeout: 300000 })
+  if (!fs.existsSync(file)) execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-y', ...sample.args(file)], { windowsHide: true, timeout: 300000 })
   // Reference: the decoded luma codes of frame 0 on the sampled row, read from plane 0 of the decoder output; deep
   // material is widened to 16-bit YUV first (ProRes 4444 decodes as 12-bit), so the codes are on one scale. Grey
   // (neutral chroma), so R=G=B=(Y-black)/range.
   const deep = sample.depth > 8
-  const raw = execFileSync(ffmpegPath, ['-v', 'error', '-i', file, '-frames:v', '1', ...(deep ? ['-pix_fmt', 'yuv444p16le'] : []), '-f', 'rawvideo', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
+  const raw = execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-i', file, '-frames:v', '1', ...(deep ? ['-pix_fmt', 'yuv444p16le'] : []), '-f', 'rawvideo', '-'], { windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
   const [black, range] = deep ? [64 * 64, 876 * 64] : [16, 219]
   const code = x => deep ? raw.readUInt16LE((ROW * WIDTH + x) * 2) : raw[ROW * WIDTH + x]
   const reference = Array.from({ length: WIDTH }, (_, x) => Math.min(1, Math.max(0, (code(x) - black) / range)))
@@ -183,7 +183,7 @@ function createVideoEditHighPrecisionScene() {
         // Source monitor scrub over 4K60 10-bit long GOP (GOP 120, 2 B-frames): native seeks decode one-second windows
         // into the 3GiB source cache. Cold reverse drag, then the same drag again (warm).
         const long = path.join(ROOT, 'scrub_hevc10_4k60_gop120.mp4')
-        if (!fs.existsSync(long)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=3840x2160:r=60:d=8,format=yuv420p10le', '-c:v', 'libx265', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p10le', '-x265-params', 'log-level=error:keyint=120:min-keyint=120:scenecut=0:bframes=2', '-b:v', '40M', '-tag:v', 'hvc1', ...TAGS, long], { windowsHide: true, timeout: 600000 })
+        if (!fs.existsSync(long)) execFileSync(mediaBinaries.ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=3840x2160:r=60:d=8,format=yuv420p10le', '-c:v', 'libx265', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p10le', '-x265-params', 'log-level=error:keyint=120:min-keyint=120:scenecut=0:bframes=2', '-b:v', '40M', '-tag:v', 'hvc1', ...TAGS, long], { windowsHide: true, timeout: 600000 })
         const longUrl = `henji-media://local/${encodeURIComponent(long)}`
         const source = { file: path.basename(long), url: longUrl }
         const sourceDocument = { ...composition('precision-source-scrub', ++revision, [{ sample: source, start: 0, duration: 480 }]), width: 3840, height: 2160, fps: 60, frameRate: { numerator: 60, denominator: 1 } }

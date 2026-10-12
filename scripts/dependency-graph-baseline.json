@@ -106,7 +106,7 @@
       "to": "src/features/assistant/application/applicationDomain.ts",
       "kind": "static",
       "specifier": "@/features/assistant/application/applicationDomain",
-      "line": 9,
+      "line": 8,
       "cell": "application-control → assistant"
     },
     {
@@ -114,7 +114,7 @@
       "to": "src/features/audioEdit/application/applicationDomain.ts",
       "kind": "static",
       "specifier": "@/features/audioEdit/application/applicationDomain",
-      "line": 11,
+      "line": 10,
       "cell": "application-control → audioEdit"
     },
     {
@@ -138,7 +138,7 @@
       "to": "src/features/canvas/application/imageEditDocumentProjectionBinding.ts",
       "kind": "static",
       "specifier": "@/features/canvas/application/imageEditDocumentProjectionBinding",
-      "line": 17,
+      "line": 18,
       "cell": "application-control → canvas"
     },
     {
@@ -154,7 +154,7 @@
       "to": "src/features/generation/application/applicationDomain.ts",
       "kind": "static",
       "specifier": "@/features/generation/application/applicationDomain",
-      "line": 6,
+      "line": 5,
       "cell": "application-control → generation"
     },
     {
@@ -170,16 +170,8 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentBindings.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentBindings",
-      "line": 16,
+      "line": 17,
       "cell": "application-control → imageEdit"
-    },
-    {
-      "from": "src/features/application-control/applicationDomains.ts",
-      "to": "src/features/imageMark/application/applicationDomain.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/application/applicationDomain",
-      "line": 5,
-      "cell": "application-control → imageMark"
     },
     {
       "from": "src/features/application-control/applicationDomains.ts",
@@ -194,7 +186,7 @@
       "to": "src/features/navigation/application/applicationDomain.ts",
       "kind": "static",
       "specifier": "@/features/navigation/application/applicationDomain",
-      "line": 10,
+      "line": 9,
       "cell": "application-control → navigation"
     },
     {
@@ -202,7 +194,7 @@
       "to": "src/features/settings/application-control/applicationDomain.ts",
       "kind": "static",
       "specifier": "@/features/settings/application-control/applicationDomain",
-      "line": 7,
+      "line": 6,
       "cell": "application-control → settings"
     },
     {
@@ -210,7 +202,7 @@
       "to": "src/features/toolbox/application/applicationDomain.ts",
       "kind": "static",
       "specifier": "@/features/toolbox/application/applicationDomain",
-      "line": 8,
+      "line": 7,
       "cell": "application-control → toolbox"
     },
     {
@@ -218,7 +210,7 @@
       "to": "src/features/videoEdit/application/applicationDomain.ts",
       "kind": "static",
       "specifier": "@/features/videoEdit/application/applicationDomain",
-      "line": 12,
+      "line": 11,
       "cell": "application-control → videoEdit"
     },
     {
@@ -242,7 +234,7 @@
       "to": "src/features/audioEdit/store/audioEditStore.ts",
       "kind": "static",
       "specifier": "@/features/audioEdit/store/audioEditStore",
-      "line": 29,
+      "line": 28,
       "cell": "application-control → audioEdit"
     },
     {
@@ -290,7 +282,7 @@
       "to": "src/features/generation/application/generationModelFields.ts",
       "kind": "static",
       "specifier": "@/features/generation/application/generationModelFields",
-      "line": 27,
+      "line": 26,
       "cell": "application-control → generation"
     },
     {
@@ -298,7 +290,7 @@
       "to": "src/features/generation/store/generationDraftStore.ts",
       "kind": "static",
       "specifier": "@/features/generation/store/generationDraftStore",
-      "line": 28,
+      "line": 27,
       "cell": "application-control → generation"
     },
     {
@@ -306,16 +298,8 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 26,
-      "cell": "application-control → imageEdit"
-    },
-    {
-      "from": "src/features/application-control/hostContext/hostContext.ts",
-      "to": "src/features/imageMark/application/imageMarkSessionAccess.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/application/imageMarkSessionAccess",
       "line": 25,
-      "cell": "application-control → imageMark"
+      "cell": "application-control → imageEdit"
     },
     {
       "from": "src/features/application-control/hostContext/hostContext.ts",
@@ -578,7 +562,7 @@
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 4,
+      "line": 7,
       "cell": "audioEdit → application-control"
     },
     {
@@ -586,7 +570,7 @@
       "to": "src/features/canvas/application/canvasDownloadService.ts",
       "kind": "static",
       "specifier": "@/features/canvas/application/canvasDownloadService",
-      "line": 5,
+      "line": 8,
       "cell": "audioEdit → canvas"
     },
     {
@@ -594,7 +578,7 @@
       "to": "src/features/documents/documentCovers.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentCovers",
-      "line": 10,
+      "line": 15,
       "cell": "audioEdit → documents"
     },
     {
@@ -602,7 +586,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 8,
+      "line": 13,
       "cell": "audioEdit → documents"
     },
     {
@@ -610,7 +594,7 @@
       "to": "src/features/documents/documentSessionRegistry.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentSessionRegistry",
-      "line": 9,
+      "line": 14,
       "cell": "audioEdit → documents"
     },
     {
@@ -618,7 +602,7 @@
       "to": "src/features/navigation/application/surfaceCapabilityService.ts",
       "kind": "static",
       "specifier": "@/features/navigation/application/surfaceCapabilityService",
-      "line": 12,
+      "line": 17,
       "cell": "audioEdit → navigation"
     },
     {
@@ -626,7 +610,7 @@
       "to": "src/features/assistant/store/assistantUiStore.ts",
       "kind": "static",
       "specifier": "@/features/assistant/store/assistantUiStore",
-      "line": 42,
+      "line": 43,
       "cell": "audioEdit → assistant"
     },
     {
@@ -634,7 +618,7 @@
       "to": "src/features/documents/DocumentLibraryPage.tsx",
       "kind": "static",
       "specifier": "@/features/documents/DocumentLibraryPage",
-      "line": 39,
+      "line": 40,
       "cell": "audioEdit → documents"
     },
     {
@@ -642,7 +626,7 @@
       "to": "src/features/documents/embeddedDocuments.ts",
       "kind": "static",
       "specifier": "@/features/documents/embeddedDocuments",
-      "line": 40,
+      "line": 41,
       "cell": "audioEdit → documents"
     },
     {
@@ -650,7 +634,7 @@
       "to": "src/features/videoEdit/application/videoEditSourceRefs.ts",
       "kind": "static",
       "specifier": "@/features/videoEdit/application/videoEditSourceRefs",
-      "line": 67,
+      "line": 68,
       "cell": "audioEdit → videoEdit"
     },
     {
@@ -658,7 +642,7 @@
       "to": "src/features/videoEdit/panels/VideoEditSendMenu.tsx",
       "kind": "static",
       "specifier": "@/features/videoEdit/panels/VideoEditSendMenu",
-      "line": 66,
+      "line": 67,
       "cell": "audioEdit → videoEdit"
     },
     {
@@ -762,7 +746,7 @@
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 6,
+      "line": 9,
       "cell": "cameraStage → application-control"
     },
     {
@@ -770,7 +754,7 @@
       "to": "src/features/application-control/capabilities/handlerUtils.ts",
       "kind": "static",
       "specifier": "@/features/application-control/capabilities/handlerUtils",
-      "line": 8,
+      "line": 11,
       "cell": "cameraStage → application-control"
     },
     {
@@ -778,7 +762,7 @@
       "to": "src/features/application-control/hostContext/hostContext.ts",
       "kind": "static",
       "specifier": "@/features/application-control/hostContext/hostContext",
-      "line": 2,
+      "line": 5,
       "cell": "cameraStage → application-control"
     },
     {
@@ -786,7 +770,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 14,
+      "line": 17,
       "cell": "cameraStage → documents"
     },
     {
@@ -794,7 +778,7 @@
       "to": "src/features/documents/documentSessionRegistry.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentSessionRegistry",
-      "line": 13,
+      "line": 16,
       "cell": "cameraStage → documents"
     },
     {
@@ -802,7 +786,7 @@
       "to": "src/features/navigation/application/surfaceCapabilityService.ts",
       "kind": "static",
       "specifier": "@/features/navigation/application/surfaceCapabilityService",
-      "line": 9,
+      "line": 12,
       "cell": "cameraStage → navigation"
     },
     {
@@ -810,7 +794,7 @@
       "to": "src/features/documents/DocumentLibraryPage.tsx",
       "kind": "static",
       "specifier": "@/features/documents/DocumentLibraryPage",
-      "line": 5,
+      "line": 6,
       "cell": "cameraStage → documents"
     },
     {
@@ -818,7 +802,7 @@
       "to": "src/features/documents/embeddedDocuments.ts",
       "kind": "static",
       "specifier": "@/features/documents/embeddedDocuments",
-      "line": 6,
+      "line": 7,
       "cell": "cameraStage → documents"
     },
     {
@@ -978,7 +962,7 @@
       "to": "src/features/cameraStage/projects/cameraStageProjectService.ts",
       "kind": "dynamic",
       "specifier": "@/features/cameraStage/projects/cameraStageProjectService",
-      "line": 182,
+      "line": 188,
       "cell": "canvas → cameraStage"
     },
     {
@@ -1066,7 +1050,7 @@
       "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
-      "line": 3,
+      "line": 1,
       "cell": "canvas → imageEdit"
     },
     {
@@ -1098,7 +1082,7 @@
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 25,
+      "line": 26,
       "cell": "canvas → application-control"
     },
     {
@@ -1106,7 +1090,7 @@
       "to": "src/features/application-control/capabilities/handlerUtils.ts",
       "kind": "static",
       "specifier": "@/features/application-control/capabilities/handlerUtils",
-      "line": 26,
+      "line": 27,
       "cell": "canvas → application-control"
     },
     {
@@ -1114,7 +1098,7 @@
       "to": "src/features/application-control/hostContext/hostContext.ts",
       "kind": "static",
       "specifier": "@/features/application-control/hostContext/hostContext",
-      "line": 24,
+      "line": 25,
       "cell": "canvas → application-control"
     },
     {
@@ -1122,7 +1106,7 @@
       "to": "src/features/assets/application/assetCanvasApplicationService.ts",
       "kind": "static",
       "specifier": "@/features/assets/application/assetCanvasApplicationService",
-      "line": 18,
+      "line": 19,
       "cell": "canvas → assets"
     },
     {
@@ -1130,7 +1114,7 @@
       "to": "src/features/documents/documentCovers.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentCovers",
-      "line": 13,
+      "line": 14,
       "cell": "canvas → documents"
     },
     {
@@ -1138,7 +1122,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 12,
+      "line": 13,
       "cell": "canvas → documents"
     },
     {
@@ -1146,7 +1130,7 @@
       "to": "src/features/navigation/application/surfaceCapabilityService.ts",
       "kind": "static",
       "specifier": "@/features/navigation/application/surfaceCapabilityService",
-      "line": 37,
+      "line": 38,
       "cell": "canvas → navigation"
     },
     {
@@ -1271,14 +1255,6 @@
     },
     {
       "from": "src/features/canvas/imageEditV3/MultiLayerDocumentEditorDialog.tsx",
-      "to": "src/features/imageEdit/v3/store/imageEditorInteractionStoreV3.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/store/imageEditorInteractionStoreV3",
-      "line": 19,
-      "cell": "canvas → imageEdit"
-    },
-    {
-      "from": "src/features/canvas/imageEditV3/MultiLayerDocumentEditorDialog.tsx",
       "to": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/store/imageEditorSessionStoreV3",
@@ -1314,14 +1290,6 @@
       "to": "src/features/imageEdit/v3/editor/layerTreeV3.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/editor/layerTreeV3",
-      "line": 5,
-      "cell": "canvas → imageEdit"
-    },
-    {
-      "from": "src/features/canvas/imageEditV3/multiLayerDocumentExportSelection.ts",
-      "to": "src/features/imageEdit/v3/store/imageEditorInteractionStoreV3.ts",
-      "kind": "type",
-      "specifier": "@/features/imageEdit/v3/store/imageEditorInteractionStoreV3",
       "line": 4,
       "cell": "canvas → imageEdit"
     },
@@ -1530,7 +1498,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 200,
+      "line": 204,
       "cell": "generation → canvas"
     },
     {
@@ -1538,7 +1506,7 @@
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 17,
+      "line": 19,
       "cell": "generation → application-control"
     },
     {
@@ -1546,7 +1514,7 @@
       "to": "src/features/application-control/capabilities/handlerUtils.ts",
       "kind": "static",
       "specifier": "@/features/application-control/capabilities/handlerUtils",
-      "line": 18,
+      "line": 20,
       "cell": "generation → application-control"
     },
     {
@@ -1554,7 +1522,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 185,
+      "line": 195,
       "cell": "generation → canvas"
     },
     {
@@ -1562,7 +1530,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 209,
+      "line": 220,
       "cell": "generation → canvas"
     },
     {
@@ -1570,7 +1538,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 215,
+      "line": 226,
       "cell": "generation → canvas"
     },
     {
@@ -1578,7 +1546,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 221,
+      "line": 232,
       "cell": "generation → canvas"
     },
     {
@@ -1586,7 +1554,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 227,
+      "line": 241,
       "cell": "generation → canvas"
     },
     {
@@ -1594,7 +1562,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 233,
+      "line": 247,
       "cell": "generation → canvas"
     },
     {
@@ -1602,7 +1570,7 @@
       "to": "src/features/canvas/application/canvasGenerationTaskService.ts",
       "kind": "dynamic",
       "specifier": "@/features/canvas/application/canvasGenerationTaskService",
-      "line": 51,
+      "line": 53,
       "cell": "generation → canvas"
     },
     {
@@ -1610,7 +1578,7 @@
       "to": "src/features/settings/modelDefaultsManager.ts",
       "kind": "static",
       "specifier": "@/features/settings/modelDefaultsManager",
-      "line": 15,
+      "line": 17,
       "cell": "generation → settings"
     },
     {
@@ -1618,7 +1586,7 @@
       "to": "src/features/application-control/domainModule.ts",
       "kind": "type",
       "specifier": "@/features/application-control/domainModule",
-      "line": 1,
+      "line": 3,
       "cell": "imageEdit → application-control"
     },
     {
@@ -1658,7 +1626,7 @@
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 18,
+      "line": 30,
       "cell": "imageEdit → application-control"
     },
     {
@@ -1666,7 +1634,7 @@
       "to": "src/features/application-control/capabilities/handlerUtils.ts",
       "kind": "static",
       "specifier": "@/features/application-control/capabilities/handlerUtils",
-      "line": 21,
+      "line": 33,
       "cell": "imageEdit → application-control"
     },
     {
@@ -1674,7 +1642,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 22,
+      "line": 34,
       "cell": "imageEdit → documents"
     },
     {
@@ -1682,7 +1650,7 @@
       "to": "src/features/imageMark/standalone/blankImage.ts",
       "kind": "static",
       "specifier": "@/features/imageMark/standalone/blankImage",
-      "line": 24,
+      "line": 36,
       "cell": "imageEdit → imageMark"
     },
     {
@@ -1690,7 +1658,7 @@
       "to": "src/features/imageMark/standalone/imageDocumentFromSource.ts",
       "kind": "static",
       "specifier": "@/features/imageMark/standalone/imageDocumentFromSource",
-      "line": 25,
+      "line": 37,
       "cell": "imageEdit → imageMark"
     },
     {
@@ -1698,7 +1666,7 @@
       "to": "src/features/navigation/application/surfaceCapabilityService.ts",
       "kind": "static",
       "specifier": "@/features/navigation/application/surfaceCapabilityService",
-      "line": 26,
+      "line": 38,
       "cell": "imageEdit → navigation"
     },
     {
@@ -1758,324 +1726,12 @@
       "cell": "imageEdit → documents"
     },
     {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
-      "to": "src/features/imageMark/domain/geometry.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/geometry",
-      "line": 12,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
-      "to": "src/features/imageMark/domain/metrics.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/metrics",
-      "line": 13,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
-      "to": "src/features/imageMark/domain/types.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/types",
-      "line": 11,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
-      "to": "src/features/imageMark/render/drawMarks.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/render/drawMarks",
-      "line": 19,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationOverlayV3.tsx",
-      "to": "src/features/imageMark/shared/TextEditOverlay.tsx",
-      "kind": "static",
-      "specifier": "@/features/imageMark/shared/TextEditOverlay",
-      "line": 20,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationParametersV3.tsx",
-      "to": "src/features/imageMark/domain/geometry.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/geometry",
-      "line": 21,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationParametersV3.tsx",
-      "to": "src/features/imageMark/domain/metrics.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/metrics",
-      "line": 23,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationParametersV3.tsx",
-      "to": "src/features/imageMark/domain/types.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/types",
-      "line": 22,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationPropertiesV3.tsx",
-      "to": "src/features/imageMark/domain/geometry.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/geometry",
-      "line": 7,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationPropertiesV3.tsx",
-      "to": "src/features/imageMark/domain/metrics.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/metrics",
-      "line": 9,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorAnnotationPropertiesV3.tsx",
-      "to": "src/features/imageMark/domain/types.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/types",
-      "line": 8,
-      "cell": "imageEdit → imageMark"
-    },
-    {
       "from": "src/features/imageEdit/v3/editor/ImageEditorCropOverlayV3.tsx",
       "to": "src/features/imageMark/shared/CropOverlayBox.tsx",
       "kind": "static",
       "specifier": "@/features/imageMark/shared/CropOverlayBox",
       "line": 4,
       "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
-      "to": "src/features/imageMark/domain/arrowGeometry.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/arrowGeometry",
-      "line": 8,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
-      "to": "src/features/imageMark/domain/geometry.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/geometry",
-      "line": 9,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
-      "to": "src/features/imageMark/domain/metrics.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/metrics",
-      "line": 10,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
-      "to": "src/features/imageMark/shared/ArrowCurveControl.tsx",
-      "kind": "static",
-      "specifier": "@/features/imageMark/shared/ArrowCurveControl",
-      "line": 14,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
-      "to": "src/features/imageMark/shared/markShapes.tsx",
-      "kind": "static",
-      "specifier": "@/features/imageMark/shared/markShapes",
-      "line": 15,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
-      "to": "src/features/imageMark/shared/nodeSync.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/shared/nodeSync",
-      "line": 16,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/ImageEditorLiveAnnotationLayersV3.tsx",
-      "to": "src/features/imageMark/shared/textEditorState.ts",
-      "kind": "type",
-      "specifier": "@/features/imageMark/shared/textEditorState",
-      "line": 17,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/useImageEditorAnnotationTextV3.ts",
-      "to": "src/features/imageMark/domain/metrics.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/metrics",
-      "line": 7,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/useImageEditorAnnotationTextV3.ts",
-      "to": "src/features/imageMark/domain/types.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/types",
-      "line": 6,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/editor/useImageEditorAnnotationTextV3.ts",
-      "to": "src/features/imageMark/shared/textEditorState.ts",
-      "kind": "type",
-      "specifier": "@/features/imageMark/shared/textEditorState",
-      "line": 14,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/execution/previewPixelsV3.ts",
-      "to": "src/features/imageMark/render/drawMarks.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/render/drawMarks",
-      "line": 16,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/execution/viewportCompositePixelsV3.ts",
-      "to": "src/features/imageMark/render/drawMarks.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/render/drawMarks",
-      "line": 21,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/export/annotations.ts",
-      "to": "src/features/imageMark/render/drawMarks.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/render/drawMarks",
-      "line": 9,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
-      "to": "src/features/imageMark/domain/metrics.ts",
-      "kind": "static",
-      "specifier": "@/features/imageMark/domain/metrics",
-      "line": 6,
-      "cell": "imageEdit → imageMark"
-    },
-    {
-      "from": "src/features/imageMark/application/applicationDomain.ts",
-      "to": "src/features/application-control/domainModule.ts",
-      "kind": "type",
-      "specifier": "@/features/application-control/domainModule",
-      "line": 1,
-      "cell": "imageMark → application-control"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 15,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
-      "line": 16,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationCollectionExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
-      "line": 1,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 13,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
-      "line": 14,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkAnnotationMutationExecutor.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
-      "line": 1,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkReflection.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentCatalog.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentCatalog",
-      "line": 12,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkReflection.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 11,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkReflection.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentLoading.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentLoading",
-      "line": 14,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkReflection.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentRefs",
-      "line": 13,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkReflection.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditPersistenceOperations.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditPersistenceOperations",
-      "line": 18,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/application/imageMarkSessionAccess.ts",
-      "to": "src/features/imageEdit/v3/application/imageEditDocumentInstances.ts",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/v3/application/imageEditDocumentInstances",
-      "line": 1,
-      "cell": "imageMark → imageEdit"
-    },
-    {
-      "from": "src/features/imageMark/editor/MarkEditor.tsx",
-      "to": "src/features/imageEdit/shell/ImageEditorShell.tsx",
-      "kind": "static",
-      "specifier": "@/features/imageEdit/shell/ImageEditorShell",
-      "line": 27,
-      "cell": "imageMark → imageEdit"
     },
     {
       "from": "src/features/imageMark/standalone/imageDocumentFromSource.ts",
@@ -2138,7 +1794,7 @@
       "to": "src/features/documents/embeddedDocuments.ts",
       "kind": "static",
       "specifier": "@/features/documents/embeddedDocuments",
-      "line": 13,
+      "line": 14,
       "cell": "imageMark → documents"
     },
     {
@@ -2146,7 +1802,7 @@
       "to": "src/features/imageEdit/v3/editor/index.ts",
       "kind": "static",
       "specifier": "@/features/imageEdit/v3/editor",
-      "line": 12,
+      "line": 13,
       "cell": "imageMark → imageEdit"
     },
     {
@@ -2474,7 +2130,7 @@
       "to": "src/features/assets/store/assetLibraryStore.ts",
       "kind": "static",
       "specifier": "@/features/assets/store/assetLibraryStore",
-      "line": 3,
+      "line": 4,
       "cell": "navigation → assets"
     },
     {
@@ -2482,7 +2138,7 @@
       "to": "src/features/assistant/store/assistantUiStore.ts",
       "kind": "static",
       "specifier": "@/features/assistant/store/assistantUiStore",
-      "line": 4,
+      "line": 5,
       "cell": "navigation → assistant"
     },
     {
@@ -2594,7 +2250,7 @@
       "to": "src/features/application-control/domainModule.ts",
       "kind": "type",
       "specifier": "@/features/application-control/domainModule",
-      "line": 12,
+      "line": 15,
       "cell": "videoEdit → application-control"
     },
     {
@@ -2602,7 +2258,7 @@
       "to": "src/features/assets/application/assetApplicationService.ts",
       "kind": "static",
       "specifier": "@/features/assets/application/assetApplicationService",
-      "line": 47,
+      "line": 50,
       "cell": "videoEdit → assets"
     },
     {
@@ -2610,7 +2266,7 @@
       "to": "src/features/documents/documentCovers.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentCovers",
-      "line": 24,
+      "line": 27,
       "cell": "videoEdit → documents"
     },
     {
@@ -2618,7 +2274,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 25,
+      "line": 28,
       "cell": "videoEdit → documents"
     },
     {
@@ -2626,7 +2282,7 @@
       "to": "src/features/navigation/application/surfaceCapabilityService.ts",
       "kind": "static",
       "specifier": "@/features/navigation/application/surfaceCapabilityService",
-      "line": 26,
+      "line": 29,
       "cell": "videoEdit → navigation"
     },
     {
@@ -2660,22 +2316,6 @@
       "specifier": "@/features/assets/application/assetApplicationService",
       "line": 2,
       "cell": "videoEdit → assets"
-    },
-    {
-      "from": "src/features/videoEdit/application/videoEditAutoSubtitles.ts",
-      "to": "src/features/audioEdit/application/audioEditApplicationService.ts",
-      "kind": "static",
-      "specifier": "@/features/audioEdit/application/audioEditApplicationService",
-      "line": 19,
-      "cell": "videoEdit → audioEdit"
-    },
-    {
-      "from": "src/features/videoEdit/application/videoEditAutoSubtitles.ts",
-      "to": "src/features/audioEdit/application/audioEditProjectInstances.ts",
-      "kind": "static",
-      "specifier": "@/features/audioEdit/application/audioEditProjectInstances",
-      "line": 18,
-      "cell": "videoEdit → audioEdit"
     },
     {
       "from": "src/features/videoEdit/application/videoEditCodeAssets.ts",
@@ -2826,7 +2466,7 @@
       "to": "src/features/application-control/capabilities/handlerTypes.ts",
       "kind": "type",
       "specifier": "@/features/application-control/capabilities/handlerTypes",
-      "line": 3,
+      "line": 2,
       "cell": "videoEdit → application-control"
     },
     {
@@ -2922,7 +2562,7 @@
       "to": "src/features/generation/application/generationApplicationService.ts",
       "kind": "static",
       "specifier": "@/features/generation/application/generationApplicationService",
-      "line": 10,
+      "line": 11,
       "cell": "videoEdit → generation"
     },
     {
@@ -2948,6 +2588,14 @@
       "specifier": "@/features/assets/services/assetCollectionService",
       "line": 5,
       "cell": "videoEdit → assets"
+    },
+    {
+      "from": "src/features/videoEdit/application/videoEditPauseMap.ts",
+      "to": "src/features/audioEdit/application/audioEditProjectInstances.ts",
+      "kind": "static",
+      "specifier": "@/features/audioEdit/application/audioEditProjectInstances",
+      "line": 11,
+      "cell": "videoEdit → audioEdit"
     },
     {
       "from": "src/features/videoEdit/application/videoEditPlacementRecovery.ts",
@@ -3018,7 +2666,7 @@
       "to": "src/features/documents/documentErrors.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentErrors",
-      "line": 20,
+      "line": 23,
       "cell": "videoEdit → documents"
     },
     {
@@ -3026,7 +2674,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 24,
+      "line": 27,
       "cell": "videoEdit → documents"
     },
     {
@@ -3034,7 +2682,7 @@
       "to": "src/features/documents/documentSession.ts",
       "kind": "type",
       "specifier": "@/features/documents/documentSession",
-      "line": 21,
+      "line": 24,
       "cell": "videoEdit → documents"
     },
     {
@@ -3042,7 +2690,7 @@
       "to": "src/features/documents/documentSessionRegistry.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentSessionRegistry",
-      "line": 22,
+      "line": 25,
       "cell": "videoEdit → documents"
     },
     {
@@ -3050,7 +2698,7 @@
       "to": "src/features/documents/documentSessionTypes.ts",
       "kind": "type",
       "specifier": "@/features/documents/documentSessionTypes",
-      "line": 23,
+      "line": 26,
       "cell": "videoEdit → documents"
     },
     {
@@ -3218,7 +2866,7 @@
       "to": "src/features/assets/store/assetLibraryStore.ts",
       "kind": "static",
       "specifier": "@/features/assets/store/assetLibraryStore",
-      "line": 25,
+      "line": 26,
       "cell": "videoEdit → assets"
     },
     {
@@ -3226,7 +2874,7 @@
       "to": "src/features/documents/documentOperations.ts",
       "kind": "static",
       "specifier": "@/features/documents/documentOperations",
-      "line": 28,
+      "line": 29,
       "cell": "videoEdit → documents"
     },
     {
@@ -3234,7 +2882,7 @@
       "to": "src/features/assets/store/assetLibraryStore.ts",
       "kind": "static",
       "specifier": "@/features/assets/store/assetLibraryStore",
-      "line": 47,
+      "line": 53,
       "cell": "videoEdit → assets"
     },
     {
@@ -3303,7 +2951,6 @@
     "application-control → assets": 2,
     "application-control → assistant": 1,
     "application-control → generation": 3,
-    "application-control → imageMark": 2,
     "application-control → localModels": 1,
     "application-control → navigation": 1,
     "application-control → settings": 1,
@@ -3332,7 +2979,7 @@
     "canvas → cameraStage": 7,
     "canvas → documents": 8,
     "canvas → generation": 8,
-    "canvas → imageEdit": 22,
+    "canvas → imageEdit": 20,
     "canvas → navigation": 2,
     "canvas → maskEditor": 8,
     "canvas → settings": 1,
@@ -3348,9 +2995,8 @@
     "imageEdit → generation": 1,
     "imageEdit → navigation": 2,
     "imageEdit → documents": 8,
-    "imageEdit → imageMark": 28,
-    "imageMark → application-control": 1,
-    "imageMark → imageEdit": 38,
+    "imageEdit → imageMark": 3,
+    "imageMark → imageEdit": 25,
     "imageMark → documents": 3,
     "imageMark → videoEdit": 3,
     "localModels → application-control": 2,
@@ -3374,15 +3020,15 @@
     "videoEdit → documents": 28,
     "videoEdit → navigation": 3,
     "videoEdit → assistant": 3,
-    "videoEdit → audioEdit": 5,
     "videoEdit → generation": 10,
+    "videoEdit → audioEdit": 4,
     "videoEdit → canvas": 5,
     "videoEdit → imageEdit": 6,
     "videoEdit → imageMark": 1
   },
   "firstScreen": {
     "entry": "src/main.tsx",
-    "moduleCount": 971,
+    "moduleCount": 1053,
     "heavyModules": []
   },
   "dynamicBackEdges": [
@@ -3446,6 +3092,12 @@
         "跨 feature 非 index 导入 imageMark → imageEdit：40 > 基线 38；走公开 index 入口或提取纯契约。新增候选：src/features/imageMark/standalone/ImageMarkToolV3Host.tsx:12 → src/features/imageEdit/v3/editor/index.ts (static)；src/features/imageMark/standalone/imageMarkV3RasterExport.ts:3 → src/features/imageEdit/v3/export/index.ts (static)",
         "跨 feature 非 index 导入 maskEditor → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/maskEditor/v3/MaskEditorV3Host.tsx:32 → src/features/imageEdit/v3/editor/index.ts (static)",
         "跨 feature 非 index 导入 videoEdit → imageEdit：6 > 基线 5；走公开 index 入口或提取纯契约。新增候选：src/features/videoEdit/application/videoEditCreativeSources.ts:15 → src/features/imageEdit/v3/export/index.ts (static)"
+      ]
+    },
+    {
+      "reason": "B8 收紧为逐边冻结：审查 r7⑩ 指出的 videoEditPauseMap → audioEditProjectInstances 已存在于基线提交 742267aff 及 main；登记唯一历史漏记边，不给新依赖腾挪额度，后续只能缩减。",
+      "changes": [
+        "新增跨 feature 非 index 导入 videoEdit → audioEdit：src/features/videoEdit/application/videoEditPauseMap.ts:11 → src/features/audioEdit/application/audioEditProjectInstances.ts (static)；走公开 index 入口或提取纯契约。"
       ]
     }
   ]
