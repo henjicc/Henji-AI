@@ -90,11 +90,14 @@ export class ApplicationOperationCoordinator {
     // This SDK rejection is emitted before policy/upload/ASR requests, including the recorded t179 failure.
     const nativeUploadRejected = ['generate_video_edit_subtitles', 'transcribe_audio_edit'].includes(record.capabilityId ?? '')
       && error.code === 'CAPABILITY_REJECTED' && typeof error.message === 'string' && error.message.startsWith('[native_upload_unsupported]')
+    // t184 统一写包装记录的结构化事实：未改动目标且未计费，即 t188 修复前被误记为 unknown 的执行前拒绝（如打开不支持格式的文档）。
+    const execution = object(details.execution)
+    const recordedNoEffect = execution.targetMutation === 'none' && execution.billing === 'not_charged'
     // 旧引擎步骤内异常会包装为“操作未完整完成”并附 partial；此原文只可能在步骤外逃逸。
     if (record.state === 'unknown' && record.result?.ok === false
       && !details.transaction && !details.persistence && !details.effects && !details.partial
       && !record.result.effects && !record.result.data && !record.recoveryResult && !record.recoveryVerification
-      && (object(details.execution).notExecuted === true || legacyClosedDocument || nativeUploadRejected)) {
+      && (execution.notExecuted === true || legacyClosedDocument || nativeUploadRejected || recordedNoEffect)) {
       const recovered: OperationRecord = { ...record, state: 'not_executed', verificationState: 'verified',
         result: { ...record.result, error: { ...error, recoverable: true, details: { ...details, execution: { notExecuted: true } } } } }
       this.store.save(recovered)

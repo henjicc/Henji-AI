@@ -81,6 +81,14 @@ describe('应用原生操作记录与恢复', () => {
     expect(f.coordinator.result(unknown)).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
     expect(f.coordinator.result({ ...unknown, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: 'network failed' } } })).toMatchObject({ executionState: 'unknown' })
   })
+  it('统一写包装已记下“未改动且未计费”的旧 unknown（如打开不支持格式的文档）自动改判；已计费未写入仍保留保护', () => {
+    const f = fixture()
+    const first = f.coordinator.prepare(f.callerId, { operationId: '4b0d2f6a-9c3e-4f72-b7a1-6a1d9f3b8e20', documentRef: { kind: 'video_edit.document', id: 'video' }, sequenceRef: { kind: 'video_edit.sequence', id: 'video:sequence' }, clipRef: { kind: 'video_edit.clip', id: 'video:voice' } }, f.rendererEpoch, access, 'generate_video_edit_subtitles')
+    const facts = (billing: string) => ({ ...first, state: 'unknown' as const, result: { ok: false, error: { code: 'CAPABILITY_REJECTED', message: '这份剪辑是旧版本格式，当前开发版不再支持打开；原文件未被修改。', details: { execution: { billing, targetMutation: 'none', notExecuted: false } } } } })
+    f.store.save(facts('not_charged'))
+    expect(f.coordinator.result(facts('not_charged'))).toMatchObject({ executionState: 'not_executed', verificationState: 'verified' })
+    expect(f.coordinator.result(facts('completed'))).toMatchObject({ executionState: 'unknown' })
+  })
   it('识别已完成未写字幕登记 partial，只允许绑定原声音结果的续做', () => {
     const f = fixture()
     const args = { operationId: randomUUID(), documentRef: { kind: 'video_edit.document', id: 'video' }, sequenceRef: { kind: 'video_edit.sequence', id: 'video:sequence' }, clipRef: { kind: 'video_edit.clip', id: 'video:voice' } }
