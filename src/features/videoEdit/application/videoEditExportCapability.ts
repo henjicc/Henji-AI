@@ -14,7 +14,7 @@ import { ApplicationWriteExecution } from '@/core/application-control/execution/
 
 export function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: job.state === 'completed' ? 1 : job.task?.progress ?? 0, range: job.range, settings: job.settings,
-    outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
+    rangeSource: job.rangeSource, outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
 }
 
 /** 能力调用没有人点保存对话框：默认放进剪辑所在项目的“导出”文件夹，也可指定已配置的快速下载/预设目录。 */
@@ -87,7 +87,7 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   const jobs = submitted ?? videoEditExportQueue.list().filter(job => job.owner === owner && (!filterId || job.id === filterId || job.task?.id === filterId))
   const liveIds = new Set(jobs.flatMap(job => [job.id, job.task?.id]))
   const archived = (id === 'query_video_edit_export' ? owner.document.exportHistory ?? [] : []).filter(entry => !liveIds.has(entry.id) && !liveIds.has(entry.taskId) && (!filterId || entry.id === filterId || entry.taskId === filterId))
-    .map(({ sequenceId, ...entry }) => ({ ...entry, presetName: '已完成导出', documentRef, sequenceRef: { kind: 'video_edit.sequence', id: `${documentRef.id}:${sequenceId}` }, state: 'completed', progress: 1, archived: true, outputReady: true }))
+    .map(({ sequenceId, ...entry }) => ({ ...entry, documentRef, sequenceRef: { kind: 'video_edit.sequence', id: `${documentRef.id}:${sequenceId}` }, state: 'completed', progress: 1, archived: true, outputReady: true }))
   const latestTask = videoEditExportTask(documentRef.id)
   const task = latestTask && (!filterId || latestTask.id === filterId || jobs.some(job => job.task === latestTask)) ? latestTask : undefined
   if (filterId && !jobs.length && !archived.length && !task) throw new Error('EXPORT_TASK_NOT_FOUND:此剪辑没有匹配的导出任务或归档记录；请省略 taskId 查询可用导出。')

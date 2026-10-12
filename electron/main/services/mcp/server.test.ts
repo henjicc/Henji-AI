@@ -119,7 +119,11 @@ describe('本地 MCP 协议与边界', () => {
     await expect(client.listTools()).rejects.toThrow()
   })
   it('重载期间在途截帧与新发上下文读取都等待新渲染器后成功', async () => {
-    const options = { pending: true, result: { ok: true, data: { source: 'new-renderer' } } }
+    const options = { pending: true, reply: (request: LocalHostRequest) => ({ ok: true, data: request.capabilityId === 'observe_video_edit_frame'
+      ? { byteLength: 8, resultRef: { kind: 'asset', id: 'new-renderer' }, documentRef: request.input.documentRef, target: request.input.target,
+        width: 1280, height: 720, sourceWidth: 1920, sourceHeight: 1080, documentRevision: 1, documentVersion: 'new-renderer',
+        message: 'new-renderer', verification: { verified: true, condition: '已保存合成帧', target: { kind: 'asset', id: 'new-renderer' } } }
+      : { surface: { id: 'workspace.videoEdit', kind: 'workspace', focusedRef: 'new-renderer', selectedRefs: [] }, catalogRevision: 1, ready: true, revision: 0 } }) }
     const f = await fixture(options)
     const { client } = await f.connect()
     const frame = client.callTool({ name: 'observe_video_edit_frame', arguments: { documentRef: { kind: 'video_edit.document', id: 'document' }, target: { kind: 'program', frame: 0 } } })
@@ -159,7 +163,8 @@ describe('本地 MCP 协议与边界', () => {
   it('实体和文本资源隐藏本机路径，媒体元信息与分块共用实体授权', async () => {
     const media = vi.mocked(readApplicationMediaResource)
     media.mockClear()
-    const f = await fixture({ result: { ok: true, data: { properties: { name: '文档', nested: { source: 'C:\\private\\image.png' } } } } })
+    const f = await fixture({ reply: request => ({ ok: true, data: { ref: request.input.ref, entityType: (request.input.ref as { kind: string }).kind,
+      capturedAt: new Date(0).toISOString(), properties: { name: '文档', nested: { source: 'C:\\private\\image.png' } } } }) })
     const { client } = await f.connect()
     const text = await client.readResource({ uri: 'henji://text/settings.registry/singleton' })
     expect(text.contents[0]).toMatchObject({ mimeType: 'text/plain' })
@@ -185,7 +190,7 @@ describe('本地 MCP 协议与边界', () => {
     closers.push(async () => { subscriptionSpy.mockRestore() })
     const allowed = new Set<string>()
     const f = await fixture({ reply: request => allowed.has(request.callerId)
-      ? { ok: true, data: { ref: request.input.ref, properties: { name: '可读' } } }
+      ? { ok: true, data: { ref: request.input.ref, entityType: 'settings.registry', capturedAt: new Date(0).toISOString(), properties: { name: '可读' } } }
       : { ok: false, error: { code: 'PERMISSION_DENIED', message: 'PERMISSION_DENIED:资源不可读取。' } } })
     allowed.add(f.first.id)
     const a = await f.connect()

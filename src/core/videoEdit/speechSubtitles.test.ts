@@ -7,6 +7,24 @@ export const narration = '聊天的叫AI，画画的叫AI，配音、做视频�
 const rate = { numerator: 30, denominator: 1 }
 const clip = { id: 'voice', start: 90, duration: 3000, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
 
+it('ASR 多出句末标点仍采用词边界与对齐置信度，原文标点不降级精度', async () => {
+  const result = await buildSpeechSubtitles('它会写代码、画图。', { granularity: 'word', items: [
+    { text: '它', startMs: 300, endMs: 500, confidence: .98 },
+    { text: '会', startMs: 500, endMs: 800, confidence: .97 },
+    { text: '写代码，', startMs: 800, endMs: 1800, confidence: .9 },
+    { text: '画图！', startMs: 1800, endMs: 2800, confidence: .86 },
+  ] }, { ...clip, start: 0, duration: 84 }, rate)
+  expect(result).toHaveLength(1)
+  expect(result[0]).toMatchObject({ caption: { start: 9, duration: 75 }, estimated: false, confidence: .86 })
+})
+
+it('两行容得下的同一列举意群不在顿号处另起字幕', async () => {
+  const original = '它不只是会聊天，还能帮你写代码、画图、做视频……'
+  const parts = ['它', '不', '只是', '会', '聊天，', '还', '能', '帮', '你', '写', '代码、', '画图、', '做', '视频……']
+  const result = await buildSpeechSubtitles(original, { granularity: 'word', items: parts.map((text, index) => ({ text, startMs: index * 300, endMs: index * 300 + 200 })) }, { ...clip, start: 0, duration: 126 }, rate)
+  expect(result.map(value => value.caption.text)).toEqual(['它不只是会聊天\n还能帮你写代码、画图、做视频……'])
+})
+
 it('识别在原文词内拆词或多出标点时不插空格、不拆符号一词', async () => {
   const original = '第二行故意写得很长很长没有任何标点符号看看它到底会在哪里断开。'
   const parts = ['第二行', '故意', '写得', '很长', '很长', '没有', '任何', '标点符', '号，', '看看', '它', '到底', '会', '在', '哪里', '断开。']

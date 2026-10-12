@@ -225,7 +225,7 @@ export function mergeVideoEditSubtitles(projectId: string, sequenceId: string, i
     const first = selected[0]; const last = selected.at(-1)
     if (ids.length < 2 || selected.length !== ids.length || !first || !last || all.slice(all.indexOf(first), all.indexOf(last) + 1).length !== selected.length || selected.some(cue => cue.clipId !== first.clipId)) throw new Error('请选择相邻且跟随同一片段的字幕。')
     if (selected.some(cue => Boolean(cue.translation)) && !selected.every(cue => Boolean(cue.translation))) throw new Error('请先为这些字幕统一生成或清除第二语言，再合并。')
-    const merged = videoEditCaptionSchema.parse({ ...first, text: selected.map(cue => cue.text).join('\n'), ...(first.translation ? { translation: selected.map(cue => cue.translation).join(' ') } : {}), duration: Math.max(...selected.map(cue => cue.start + cue.duration)) - first.start })
+    const merged = videoEditCaptionSchema.parse({ ...first, text: selected.map(cue => cue.text).join('\n'), sourceText: joinCaptionText(selected.map(cue => restoreCaptionSourceText(cue.text, cue.sourceText))), ...(first.translation ? { translation: selected.map(cue => cue.translation).join(' ') } : {}), duration: Math.max(...selected.map(cue => cue.start + cue.duration)) - first.start })
     return { ...sequence, captions: sequence.captions!.flatMap(cue => cue.id === first.id ? [merged] : ids.includes(cue.id) ? [] : [cue]) }
   })
 }
@@ -276,7 +276,10 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
       const pauses = clip ? await energyTimings.get(clip.id) ?? [] : []
       const boundary = all[positions.get(last.id)! + 1]?.start ?? videoEditDuration(sequence)
       const endFrame = Math.min(boundary, clip ? clip.start + clip.duration : boundary)
-      const text = joinCaptionText(group.flatMap(caption => caption.text.split('\n')))
+      const item = snapshot.items.find(item => item.id === clip?.itemId)
+      const origin = snapshot.media.find(media => media.id === item?.mediaId)?.creativeSource
+      const texts = group.map(caption => restoreCaptionSourceText(caption.text, caption.sourceText ?? (origin?.type === 'generation' ? origin.prompt : undefined)))
+      const text = restoreCaptionSourceText(joinCaptionText(texts.flatMap(text => text.split('\n'))), origin?.type === 'generation' ? origin.prompt : undefined)
       const scopedClip = clip ? { ...clip, ...advanceVideoEditClipSource(clip, Math.max(first.start, clip.start) - clip.start, sequence.frameRate), start: Math.max(first.start, clip.start), duration: endFrame - Math.max(first.start, clip.start) } : undefined
       const sequencePauses = clip ? pauses.map(pause => {
         const a = videoEditClipFrameBoundaryAtSource(clip, pause.startMs / 1000, fps) / fps * 1000
@@ -284,7 +287,7 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
         return { startMs: Math.min(a, b), endMs: Math.max(a, b) }
       }) : []
       const cues = timings && scopedClip ? (await buildSpeechSubtitles(text, timings, scopedClip, sequence.frameRate, settings, signal, pauses, 'clip')).map(value => value.caption)
-        : buildAutoSubtitles(group.map(caption => ({ id: caption.id, text: caption.text, startFrame: (caption.start - first.start) * sequence.frameRate.denominator, endFrame: (caption.start + caption.duration - first.start) * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false })), sequence.frameRate.numerator, sequence.frameRate, { startFrame: first.start, endFrame }, settings, sequencePauses)
+        : buildAutoSubtitles(group.map((caption, index) => ({ id: caption.id, text: texts[index], startFrame: (caption.start - first.start) * sequence.frameRate.denominator, endFrame: (caption.start + caption.duration - first.start) * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false })), sequence.frameRate.numerator, sequence.frameRate, { startFrame: first.start, endFrame }, settings, sequencePauses)
       if (!cues.length) throw new Error('已有时间信息无法覆盖这些字幕，请检查字幕与声音片段的对应位置。')
       for (let index = 0; index < cues.length; index++) {
         const original = group[index]; const id = original?.id ?? cues[index].id
@@ -312,4 +315,19 @@ export async function verifyAutoSubtitles(projectId: string): Promise<boolean> {
 export function joinCaptionText(parts: readonly string[]): string {
   return parts.map(part => part.trim()).filter(Boolean).reduce((text, part) =>
     !text ? part : /[A-Za-z0-9]$/.test(text) && /^[A-Za-z0-9]/.test(part) ? `${text} ${part}` : `${text}${part}`, '')
+}
+
+/** Recover punctuation only from an unambiguous matching reference; never undo a user's word edits. */
+export function restoreCaptionSourceText(text: string, source?: string): string {
+  if (!source) return text
+  const lexical = (value: string) => value.replace(/[\s\p{P}]/gu, '')
+  const needle = lexical(text)
+  const points = Array.from(source)
+  const offsets = points.flatMap((char, index) => lexical(char) ? [index] : [])
+  const haystack = offsets.map(index => points[index]).join('')
+  const at = haystack.indexOf(needle)
+  if (!needle || at < 0 || haystack.indexOf(needle, at + 1) >= 0) return text
+  const first = Array.from(haystack.slice(0, at)).length
+  const end = first + Array.from(needle).length
+  return points.slice(offsets[first], offsets[end] ?? points.length).join('')
 }

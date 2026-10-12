@@ -58,13 +58,13 @@ export async function alignSpeechTimings(original: string, input: SpeechTimings,
   // Deleted recognition text also weakens alignment, including leading/trailing deletions.
   let previous = -1; let previousTarget: number | undefined
   for (const [targetIndex, recognizedIndex] of [...matches].sort(([a], [b]) => a - b)) {
-    if (recognized.slice(previous + 1, recognizedIndex).some(char => !/\s/u.test(char.text))) {
+    if (recognized.slice(previous + 1, recognizedIndex).some(char => /[\p{L}\p{N}]/u.test(char.text))) {
       result[targetIndex].mismatch = true
       if (previousTarget !== undefined) result[previousTarget].mismatch = true
     }
     previous = recognizedIndex; previousTarget = targetIndex
   }
-  if (previousTarget !== undefined && recognized.slice(previous + 1).some(char => !/\s/u.test(char.text))) result[previousTarget].mismatch = true
+  if (previousTarget !== undefined && recognized.slice(previous + 1).some(char => /[\p{L}\p{N}]/u.test(char.text))) result[previousTarget].mismatch = true
   for (let i = 0; i < result.length;) {
     if (matches.has(i)) { i++; continue }
     const begin = i; while (i < result.length && !matches.has(i)) i++

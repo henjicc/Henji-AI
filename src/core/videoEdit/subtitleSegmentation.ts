@@ -2,12 +2,12 @@ import { adaptiveSubtitlePause, normalizeSubtitlePunctuation, resolveSubtitleSty
 
 export interface SubtitleToken { text: string; startMs: number; endMs: number; wordId?: number; timing?: 'word' | 'estimated' }
 export interface SubtitlePause { startMs: number; endMs: number }
-export interface SegmentedSubtitle { text: string; startMs: number; endMs: number; first: number; last: number }
+export interface SegmentedSubtitle { text: string; sourceText: string; startMs: number; endMs: number; first: number; last: number }
 const words = new Intl.Segmenter('zh', { granularity: 'word' })
 const sentenceEnd = /[。？！!?…]\s*$/u
 const clauseEnd = /[；;]\s*$/u
 const punctuationEnd = /[，,；;：:—、]\s*$/u
-const conjunction = /^(?:但|而|所以|因为|如果|然后|再|并且|以及|和|与|把|被|给|在|对|从|向|为了)/u
+const conjunction = /^(?:但|而|所以|因为|如果|然后|再|还|并且|以及|和|与|把|被|给|在|对|从|向|为了)/u
 
 /** ICU word segmentation is also used for native character timings and cue-only estimates. */
 export function subtitleTokensFromCharacters(chars: readonly SubtitleToken[]): SubtitleToken[] {
@@ -43,11 +43,12 @@ export function wrapStyledSubtitle(text: string, options: SubtitleStyleOptions =
     .flatMap(part => settings.chinese && latinPhrase.test(part) ? [part] : Array.from(words.segment(part), value => value.segment))
   const lines: string[] = []
   for (let start = 0; start < tokens.length;) {
-    let end = start; let preferred = -1
+    let end = start; let preferred = -1; let preferredScore = Infinity
     let width = 0
     while (end < tokens.length && width + subtitleWidth(tokens[end]) <= settings.maxCharacters) {
       width += subtitleWidth(tokens[end]); end++
-      if (width >= settings.maxCharacters / 3 && (/\s|[？！…、]$/u.test(tokens[end - 1]) || conjunction.test(tokens[end] ?? ''))) preferred = end
+      const score = /\s|[？！…]$/u.test(tokens[end - 1]) ? 0 : conjunction.test(tokens[end] ?? '') ? 1 : /、$/u.test(tokens[end - 1]) ? 2 : Infinity
+      if (width >= settings.maxCharacters / 3 && score < Infinity && score <= preferredScore) { preferred = end; preferredScore = score }
     }
     if (end === start) end++ // An indivisible word is a real technical constraint, never truncate it.
     else if (end < tokens.length && preferred > start) end = preferred
@@ -113,7 +114,7 @@ export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { 
     const text = wrapStyledSubtitle(textOf(first, last), options)
     const reading = subtitleWidth(text) / settings.maxReadingSpeed * 1000
     const endMs = Math.max(speechEnd, Math.min(nextStart, startMs + maximum, Math.max(speechEnd, startMs + minimum, startMs + reading)))
-    result.push({ text, startMs, endMs, first, last })
+    result.push({ text, sourceText: textOf(first, last), startMs, endMs, first, last })
   }
   function split(first: number, last: number): void {
     const text = textOf(first, last)
@@ -131,9 +132,9 @@ export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { 
       const rightMs = (tokens[last + 1]?.startMs ?? range.endMs) - tokens[index + 1].startMs
       if (!over && (leftMs < minimum || rightMs < minimum)) continue
       const boundary = boundaries[index]
-      const strongPause = boundary.gap >= threshold && boundary.score < 100
-      // Prefer a single line when possible, but do not split a short phrase just for balance.
-      if (!over && !(width > settings.maxCharacters && (strongPause || punctuationEnd.test(tokens[index].text)))) continue
+      const strongPause = (boundary.gap >= threshold || energyGaps.has(index)) && boundary.score < 100
+      // A fitting meaning group may use both lines; enumeration punctuation alone is not a cue break.
+      if (!over && !(width > settings.maxCharacters && strongPause && !/、\s*$/u.test(tokens[index].text))) continue
       const leftWidth = widths[index + 1] - widths[first]
       const rightWidth = width - leftWidth
       const readingPenalty = Math.max(0, leftWidth / Math.max(.001, leftMs / 1000) - settings.maxReadingSpeed)
@@ -162,7 +163,7 @@ export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { 
       const text = wrapStyledSubtitle(textOf(left.first, right.last), options)
       if (text.split('\n').length > settings.maxLines || right.endMs - left.startMs > maximum || right.startMs - left.endMs >= settings.joinGapMs) continue
       const at = left === cue ? index : index - 1
-      result.splice(at, 2, { ...left, text, last: right.last, endMs: right.endMs }); index = Math.max(-1, at - 1)
+      result.splice(at, 2, { ...left, text, sourceText: textOf(left.first, right.last), last: right.last, endMs: right.endMs }); index = Math.max(-1, at - 1)
       break
     }
   }

@@ -30,6 +30,8 @@ export function videoEditExportTask(projectId: string): VideoEditExportTask | un
 export function cancelVideoEditExport(projectId: string): void { videoEditExportTask(projectId)?.controller.abort() }
 export interface VideoEditExportOptions {
   queueId?: string
+  presetName?: string
+  rangeSource?: 'explicit' | 'in-out' | 'content'
   snapshot: VideoEditComposition
   range: { startFrame: number; endFrame: number }
   settings: VideoEditExportSettings
@@ -42,6 +44,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   const instance = requireVideoEditInstance(projectId)
   const snapshot = structuredClone(options?.snapshot ?? getActiveVideoEditSequence(instance))
   const range = options?.range ?? videoEditExportRange(instance)
+  const rangeSource = options?.rangeSource ?? (options ? 'explicit' : instance.inFrame !== null || instance.outFrame !== null ? 'in-out' : 'content')
   const resolved = resolveVideoEditExportSettings(options?.settings ?? videoEditSequenceExportSettings(snapshot), snapshot)
   const settings = options?.settings ? resolved : await adaptVideoEditExportPreset(resolved)
   const loudness = settings.audioEnabled ? loudnessSettings === undefined ? settings.loudness ?? undefined : videoEditLoudnessSettingsSchema.parse(loudnessSettings) : undefined
@@ -182,7 +185,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     const completedAt = Date.now()
     const persistReceipt = async (): Promise<void> => {
       recordVideoEditExport(projectId, { id: options?.queueId ?? task.id, taskId: task.id, sequenceId: document.id,
-        name: snapshot.name, path, completedAt, settings, range, ...(task.assetRef ? { assetRef: task.assetRef } : {}) })
+        name: snapshot.name, presetName: options?.presetName ?? '自定义导出', rangeSource, path, completedAt, settings, range, ...(task.assetRef ? { assetRef: task.assetRef } : {}) })
       await saveVideoEdit(projectId)
     }
     // Save publication before optional collection/import so a later failure cannot erase the output fact.

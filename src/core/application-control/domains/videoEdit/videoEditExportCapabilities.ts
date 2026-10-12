@@ -20,6 +20,7 @@ export const videoEditExportJobSummarySchema = z.object({
   id: z.string(), documentRef, sequenceRef: ref('video_edit.sequence'), name: z.string(), presetName: z.string(),
   state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().min(0).max(1), range, settings: videoEditExportSettingsSchema,
   path: z.string().optional(), completedAt: z.number().optional(), archived: z.boolean().optional(),
+  rangeSource: z.enum(['explicit', 'in-out', 'content']).describe('区间来源：explicit 为调用指定，in-out 为序列入出点，content 为片段、字幕、标记的最远末尾；不加尾部余量。'),
   taskId: z.string().optional(), error: z.string().optional(), notice: z.string().optional(), outputReady: z.boolean(), assetRef: ref('asset').optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(),
 }).strict()
 const task = z.object({ id: z.string(), state: z.enum(['running', 'completed', 'failed', 'cancelled']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), loudness: videoEditLoudnessSettingsSchema.optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(), notice: z.string().optional() }).strict()

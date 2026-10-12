@@ -5,7 +5,7 @@ import type { LocalHostRequest } from '../../../../src/core/application-control/
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 import { initializeApplicationRuntime, createEmbeddedApplicationClient } from './runtime'
 
-vi.mock('electron', () => ({ dialog: { showMessageBox: vi.fn() } }))
+vi.mock('electron', () => ({ app: { isPackaged: false }, dialog: { showMessageBox: vi.fn() } }))
 vi.mock('../db', () => ({ getDb: () => undefined }))
 vi.mock('../generation-history/store', () => ({ getGenerationHistoryStore: () => { throw new Error('本测试不得访问生成记录') } }))
 // Storage boundary only; ownership, bridge, authorization and runtime lifecycle stay real.

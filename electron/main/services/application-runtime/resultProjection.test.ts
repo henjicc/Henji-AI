@@ -74,8 +74,8 @@ describe('Pi 与 MCP 的公共响应裁剪', () => {
   })
 
   it('交付选项不进入业务参数/幂等身份；Pi 与 MCP 消费同一结果', async () => {
-    const execute = vi.fn().mockResolvedValue({ ok: true, data: { ref, properties: { name: '名称' }, revisions, revision: 9, scopeRevisions: scopes } })
-    const host = { execute, rendererEpoch: 'epoch' } as unknown as ApplicationHostBridge
+    const execute = vi.fn().mockResolvedValue({ ok: true, data: { ref, entityType: ref.kind, capturedAt: new Date(0).toISOString(), properties: { name: '名称' }, revisions, revision: 9, scopeRevisions: scopes } })
+    const host = { execute, rendererEpoch: 'epoch', tools: () => [] } as unknown as ApplicationHostBridge
     const dispatcher = new ApplicationToolDispatcher({ assertActive: () => {}, access: () => ({ allowWrites: false, allowDestructive: false, allowPaid: false }) }, host)
     const signal = new AbortController().signal
     const compact = await dispatcher.call('caller', 'read_application_entity', { ref }, signal)

@@ -68,6 +68,36 @@ beforeEach(async () => {
 afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const sequence = () => owner.document.sequences[0]
 
+it('免费跨段整理从生成原文及保存原句恢复行尾顿号，不覆盖人工改字', async () => {
+  const original = '它不只是会聊天，还能帮你写代码、画图、做视频……'
+  const parts = ['它', '不', '只是', '会', '聊天，', '还', '能', '帮', '你', '写', '代码、', '画图、', '做', '视频……']
+  const items = parts.map((text, index) => ({ text, startMs: index * 300, endMs: index * 300 + 200 }))
+  editVideoProject(owner.document.id, document => { document.media[0].creativeSource = { type: 'generation', recordId: 'source', outputIndex: 0, prompt: original }; return document })
+  vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'word', items } }] } })
+  appendAutoSubtitles(owner.document.id, sequence().id, [
+    { id: 'left', clipId: 'voice', text: '它不只是会聊天\n还能帮你写代码', start: 0, duration: 99 },
+    { id: 'right', clipId: 'voice', text: '画图、做视频……', start: 99, duration: 24 },
+  ])
+  await segmentVideoEditSubtitles(owner.document.id, sequence().id, {})
+  expect(sequence().captions?.map(caption => caption.text)).toEqual(['它不只是会聊天\n还能帮你写代码、画图、做视频……'])
+  owner = await reopenVideoEdit(owner.document.id)
+  expect(sequence().captions![0].sourceText).toBe(original)
+  editVideoProject(owner.document.id, document => {
+    delete document.media[0].creativeSource
+    document.sequences[0].captions = [
+      { id: 'saved-left', clipId: 'voice', text: '它不只是会聊天\n还能帮你写代码', sourceText: '它不只是会聊天，还能帮你写代码、', start: 0, duration: 99 },
+      { id: 'saved-right', clipId: 'voice', text: '画图、做视频……', sourceText: '画图、做视频……', start: 99, duration: 24 },
+    ]
+    return document
+  })
+  await segmentVideoEditSubtitles(owner.document.id, sequence().id, {})
+  expect(sequence().captions?.map(caption => caption.text)).toEqual(['它不只是会聊天\n还能帮你写代码、画图、做视频……'])
+  const { restoreCaptionSourceText } = await import('./videoEditAutoSubtitles')
+  expect(restoreCaptionSourceText('写代码画图', '写代码、画图')).toBe('写代码、画图')
+  expect(restoreCaptionSourceText('写文章画图', '写代码、画图')).toBe('写文章画图')
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+})
+
 it('停顿图原生与已存词边界统一取整，不重叠且与字幕吸附一致', async () => {
   const items = [{ text: '这是。', startMs: 310, endMs: 725 }, { text: '第一。', startMs: 725, endMs: 1390 }, { text: '第二。', startMs: 4880, endMs: 5520 }, { text: '行。', startMs: 5520, endMs: 5890 }]
   const timings = { granularity: 'word' as const, items }
