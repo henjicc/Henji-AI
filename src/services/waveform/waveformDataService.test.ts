@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const platform = vi.hoisted(() => ({ audioEdit: { extractWaveformPyramid: vi.fn(), extractWaveformRange: vi.fn() } }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => platform }))
 import type { AudioWaveformPyramid, AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeResult } from '@/platform/contracts/audioWaveform'
-import { acquireWaveform, acquireWaveformDetail, planWaveformDetailWindow, readWaveformDetail, readWaveformState, resetWaveformDataForTests, waveformDetailKey, WAVEFORM_OVERVIEW_MAX_BUCKETS } from './waveformDataService'
+import { acquireWaveform, acquireWaveformDetail, planWaveformDetailWindow, readWaveformDetail, readWaveformState, resetWaveformDataForTests, retryWaveform, waveformDetailKey, WAVEFORM_OVERVIEW_MAX_BUCKETS } from './waveformDataService'
 
 function pyramid(version = 'v1', peakMax = 0.5): AudioWaveformPyramid {
   return { version, sampleRate: 48000, frameCount: 48000, startSeconds: 0, endSeconds: 1, amplitudeScale: 1, peakMax, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 375, peak: [new Uint16Array(375)], rms: [new Uint16Array(375)] }] }
@@ -17,6 +17,18 @@ beforeEach(() => {
 afterEach(() => { resetWaveformDataForTests(); vi.resetAllMocks(); vi.useRealTimers() })
 
 describe('renderer waveform data service', () => {
+  it('失败来源可重试，同源消费者共享一次恢复请求，释放后不再重试', async () => {
+    const ref = { source: '/media/retry.wav', channels: 1 as const }
+    const releaseA = acquireWaveform(ref, 'full'); const releaseB = acquireWaveform(ref, 'full')
+    calls[0].reject(new Error('decoder unavailable')); await flush()
+    retryWaveform(ref, 'full'); retryWaveform(ref, 'full')
+    expect(calls).toHaveLength(2)
+    expect(readWaveformState(ref, 'full').status).toBe('loading')
+    calls[1].resolve(pyramid()); await flush()
+    expect(readWaveformState(ref, 'full').status).toBe('ready')
+    releaseA(); releaseB(); retryWaveform(ref, 'full')
+    expect(calls).toHaveLength(2)
+  })
   it('shares one request per source, normalises once per source and cancels when the last user leaves', async () => {
     const ref = { source: 'D:/a.wav', channels: 2 as const }
     const releaseA = acquireWaveform(ref, 'full'); const releaseB = acquireWaveform({ ...ref, audioStream: 0 }, 'full')

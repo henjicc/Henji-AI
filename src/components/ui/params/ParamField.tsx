@@ -44,7 +44,7 @@ function Numeric({ value, min, max, step = 1, label, gesture, unit }: { value: n
     <NumberInput key={gesture.epoch} className="min-w-0 flex-1" size="sm" value={value} min={min} max={max} step={step} ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} widthClassName="w-full" commitOnChange
       onScrubStart={() => { touched.current = true; gesture.begin() }} onScrubEnd={cancelled => { if (cancelled) { touched.current = false; gesture.cancel() } else gesture.finish() }}
       onChange={next => { if (touched.current) { if (gesture.active()) gesture.write(next); else gesture.atomic(next) } }} />
-    {unit && <span className="text-2xs text-text3">{unit}</span>}
+    {unit && <span className="shrink-0 whitespace-nowrap text-2xs text-text3">{unit}</span>}
   </div>
 }
 function Color({ field, value, label, gesture }: { field: ParamFieldSpec & { type: 'color' }; value: CodeColor; label: string; gesture: ParamGesture }) {

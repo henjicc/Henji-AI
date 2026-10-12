@@ -1,5 +1,6 @@
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from '../application/videoEditProxy'
 import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, AudioLines, BetweenVerticalStart, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Film, Link2, Pause, Play, Replace, Rewind, Square, X, type LucideIcon } from 'lucide-react'
@@ -20,7 +21,7 @@ import { WaveformView } from '@/components/waveform/WaveformView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { timelineCommandPresentation } from '../timeline/timelineCommandPresentation'
 import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonitorButtonIds, type VideoEditMonitorButtonSpec } from './VideoEditMonitorButtons'
-import { useWaveformData } from '@/hooks/useWaveformData'
+import { retryWaveform, useWaveformData } from '@/hooks/useWaveformData'
 import { useMonitorZoom } from './useMonitorZoom'
 import { VideoEditSourceInOut } from './VideoEditSourceInOut'
 
@@ -37,6 +38,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   useSyncExternalStore(subscribeVideoEditSource, videoEditSourceRevision)
   const host = useRef<HTMLDivElement>(null)
   const presenterRef = useRef<ReturnType<typeof createVideoEditSourcePresenter> | null>(null)
+  const { t } = useTranslation('ui')
   const projectId = instance.document.id
   const state = readVideoEditSource(projectId)
   const item = instance.document.items.find(item => item.id === state.itemId)
@@ -53,7 +55,8 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   const waveStartUs = state.inUs ?? 0
   const waveEndUs = Math.min(sourceDurationUs, state.outUs ?? sourceDurationUs)
   const hasWave = !!media && (media.kind === 'audio' || media.kind === 'video' && media.hasAudio === true) && waveEndUs > waveStartUs
-  const waveform = useWaveformData(hasWave ? { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}), channels: 2 } : null, 'full', visible)
+  const waveRef = hasWave ? { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}), channels: 2 as const } : null
+  const waveform = useWaveformData(waveRef, 'full', visible)
   const editingTime = useRef(false)
   useEffect(() => { if (!editingTime.current) setDraftTime((state.timeUs / 1e6).toFixed(6)) }, [state.timeUs])
   const run = (values: Parameters<typeof updateVideoEditSource>[1]): void => { void updateVideoEditSource(projectId, values).catch(error => {
@@ -138,7 +141,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
         <span className="font-mono text-2xs tabular-nums text-text3">{videoEditSourceTimecode(waveStartUs)} — {videoEditSourceTimecode(waveEndUs)}</span>
         <WaveformView waveform={waveform} startSeconds={waveStartUs / 1e6} endSeconds={waveEndUs / 1e6} playedSeconds={state.timeUs / 1e6} height={20 * waveform.data.pyramid.channelCount} />
       </div>}
-      {hasWave && waveform.status === 'error' && <UiError size="xs" align="start" title="波形未能读取" message={waveform.error ?? ''} />}
+      {hasWave && waveform.status === 'error' && <UiError size="xs" align="start" title={t('surfaceGrammar.waveformFailed')} message={t('surfaceGrammar.waveformRetryHint')} onRetry={() => { if (waveRef) retryWaveform(waveRef, 'full') }} />}
       {media?.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : videoEditSourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : videoEditSourceTimecode(state.outUs)}</span>}
     </div>}
     {state.itemId && <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-center gap-x-1 gap-y-0.5 border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">

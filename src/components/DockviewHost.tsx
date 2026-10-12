@@ -47,9 +47,60 @@ function ActiveGroupOutline({ host }: { host: React.RefObject<HTMLDivElement> })
   return <div ref={outline} aria-hidden="true" data-dock-active-outline className="dock-active-outline pointer-events-none absolute z-raised" style={{ display: 'none' }} />
 }
 
+/** Dockview 的溢出菜单收纳不完整标签；滚动条边缘不再露出残字，缩窄后当前标签仍完整可见。 */
+function useWholeDockTabs(host: React.RefObject<HTMLDivElement>): void {
+  useEffect(() => {
+    const root = host.current
+    if (!root) return
+    let pending = false
+    let disposed = false
+    let restoreFrame: number | undefined
+    const strips = new Set<HTMLElement>()
+    const update = (): void => {
+      pending = false
+      if (disposed) return
+      for (const strip of root.querySelectorAll<HTMLElement>('.dv-tabs-container')) {
+        if (!strips.has(strip)) { strips.add(strip); resize.observe(strip) }
+        const tabs = Array.from(strip.children).filter((child): child is HTMLElement => child instanceof HTMLElement && child.classList.contains('dv-tab'))
+        const active = tabs.find(tab => tab.classList.contains('dv-active-tab'))
+        if (active && strip.clientWidth) {
+          const bounds = strip.getBoundingClientRect(); const rect = active.getBoundingClientRect()
+          if (rect.left < bounds.left || rect.right > bounds.right) strip.scrollLeft += rect.left < bounds.left ? rect.left - bounds.left : rect.right - bounds.right
+        }
+        const bounds = strip.getBoundingClientRect()
+        for (const tab of tabs) {
+          const rect = tab.getBoundingClientRect()
+          const clipped = rect.left < bounds.left - .5 || rect.right > bounds.right + .5
+          if (clipped !== tab.hasAttribute('data-dock-tab-clipped')) tab.toggleAttribute('data-dock-tab-clipped', clipped)
+        }
+      }
+      for (const strip of strips) if (!root.contains(strip)) { resize.unobserve(strip); strips.delete(strip) }
+    }
+    const schedule = (): void => { if (!pending) { pending = true; queueMicrotask(update) } }
+    const keepOuterScroll = (event: MouseEvent): void => {
+      if (!(event.target instanceof Element) || !event.target.closest('.dv-tabs-overflow-container')) return
+      const ancestors: Array<{ element: HTMLElement; top: number; left: number }> = []
+      for (let element: HTMLElement | null = root; element; element = element.parentElement) ancestors.push({ element, top: element.scrollTop, left: element.scrollLeft })
+      if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
+      // 第三方菜单有独立 React root；原生捕获监听不依赖跨 root 的合成事件，布局提交后、绘制前恢复。
+      restoreFrame = requestAnimationFrame(() => { restoreFrame = undefined; if (!disposed) for (const { element, top, left } of ancestors) { element.scrollTop = top; element.scrollLeft = left } })
+    }
+    const resize = new ResizeObserver(schedule)
+    const mutations = new MutationObserver(records => {
+      if (records.some(record => record.target instanceof Element && (record.target.matches('.dv-tab, .dv-tabs-container, .dv-groupview, .dv-view, .dv-shell') || record.target.closest('.dv-tabs-and-actions-container')))) schedule()
+    })
+    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] })
+    root.addEventListener('scroll', schedule, true)
+    root.addEventListener('click', keepOuterScroll, true)
+    schedule()
+    return () => { disposed = true; mutations.disconnect(); resize.disconnect(); root.removeEventListener('scroll', schedule, true); root.removeEventListener('click', keepOuterScroll, true); if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame); strips.forEach(strip => strip.querySelectorAll('[data-dock-tab-clipped]').forEach(tab => tab.removeAttribute('data-dock-tab-clipped'))) }
+  }, [host])
+}
+
 export const DockviewHost = forwardRef<HTMLDivElement, { className?: string; children: ReactNode }>(function DockviewHost({ className = '', children }, ref) {
   const sashPress = useRef(false)
   const host = useRef<HTMLDivElement | null>(null)
+  useWholeDockTabs(host)
   return (
     <div
       ref={element => { host.current = element; if (typeof ref === 'function') ref(element); else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = element }}
