@@ -18,6 +18,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
 import { hasOpenAssetChildOverlay } from '@/features/assets/assetOverlayOwnership'
 import { NotificationProvider } from '@/contexts/NotificationContext'
+import { McpExpiryNotifications } from '@/features/settings/McpExpiryNotifications'
 import { useUiStore } from '@/stores/uiStore'
 import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
@@ -264,6 +265,7 @@ const App: React.FC = () => {
 
   return (
     <NotificationProvider>
+      {isReady && <McpExpiryNotifications />}
       <GenerationLifecycleProvider>
       <CameraStageRenderLifecycleHost />
       <div

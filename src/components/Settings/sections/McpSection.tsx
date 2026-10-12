@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { UI_TEXT_META_CLASS, UiButton, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiPanel, UiSwitch } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS, UiButton, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiPanel, UiSwitch } from '@/components/ui'
+import { Virtuoso } from 'react-virtuoso'
 import NumberInput from '@/components/ui/NumberInput'
 import { getMcpConnectionService } from '@/commands/mcp'
 import { writeClipboardText } from '@/commands/clipboard'
-import { DEFAULT_MCP_PREFERENCES, type McpStatus, type McpPreferences } from '@/core/application-control/localHostContracts'
+import { DEFAULT_MCP_PREFERENCES, type McpConnectionInfo, type McpStatus, type McpPreferences } from '@/core/application-control/localHostContracts'
+import { MCP_CONNECTION_DAY_MS, mcpConnectionExpiryState, mcpConnectionLocalDate } from '@/core/application-control/mcpConnectionExpiry'
 import { useI18n } from '@/hooks/useI18n'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import SettingsDependentRows from '../components/SettingsDependentRows'
@@ -25,14 +27,44 @@ export default function McpSection(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [config, setConfig] = useState('')
   const [port, setPort] = useState(43821)
+  const [now, setNow] = useState(Date.now)
   const { allowWrites, allowPaid, allowDestructive } = status?.defaultAccess ?? DEFAULT_MCP_PREFERENCES.defaultAccess
   const saveAccess = (defaultAccess: McpPreferences['defaultAccess']): void => { void act(() => getMcpConnectionService().configure({ enabled: status!.enabled, port, defaultAccess })) }
   const refresh = async (): Promise<void> => { const next = await getMcpConnectionService().status(); setStatus(next); setPort(next.port) }
-  useEffect(() => { void refresh().catch((cause) => setError(describeMcpError(cause))) }, [])
+  useEffect(() => {
+    const update = (): void => { setNow(Date.now()); void refresh().catch((cause) => setError(describeMcpError(cause))) }
+    update()
+    const timer = setInterval(update, 60_000)
+    window.addEventListener('focus', update)
+    return () => { clearInterval(timer); window.removeEventListener('focus', update) }
+  }, [])
   const act = async (action: () => Promise<unknown>): Promise<void> => {
     setBusy(true); setError('')
     try { await action(); await refresh() } catch (cause) { setError(describeMcpError(cause)) }
     finally { setBusy(false) }
+  }
+  const connectionRow = (index: number, connection: McpConnectionInfo): React.JSX.Element => {
+    const state = mcpConnectionExpiryState(connection.expiresAt, now)
+    const date = mcpConnectionLocalDate(connection.expiresAt)
+    const expiryText = state === 'expired' ? t('mcp.expiredOn', { date: date.slice(5) })
+      : state === 'expiring' ? t('mcp.expiresInDays', { count: Math.ceil((connection.expiresAt - now) / MCP_CONNECTION_DAY_MS) })
+      : t('mcp.expiresOn', { date })
+    return <div key={connection.id} className={`flex flex-col gap-2 py-5 ${index ? 'border-t border-line' : ''}`}>
+      <UiFormRow label={<span className="break-words">{connection.name}</span>} inline>
+        <span className={`text-xs ${state === 'expired' ? 'text-danger-text' : state === 'expiring' ? 'text-warning-text' : 'text-text3'}`}>{expiryText}</span>
+      </UiFormRow>
+      <UiFormRow label={<span className={UI_TEXT_SECONDARY_CLASS}>{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</span>} inline>
+        <div className="flex items-center gap-2">
+          {state !== 'active' && <UiButton variant="quiet" disabled={busy} onClick={() => void act(() => getMcpConnectionService().renew({ id: connection.id }))}>{t('mcp.renew')}</UiButton>}
+          {state !== 'expired' && <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => {
+            const value = await getMcpConnectionService().connectionConfig({ id: connection.id })
+            setConfig(value)
+            await writeClipboardText(value)
+          })}>{t('mcp.copy')}</UiButton>}
+          <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
+        </div>
+      </UiFormRow>
+    </div>
   }
   return <>
     {error && <UiError size="xs" align="start" title={error} message="" onRetry={() => void act(refresh)} />}
@@ -66,17 +98,9 @@ export default function McpSection(): React.JSX.Element {
 
       <UiGroup title={t('mcp.connectionsTitle')} titleTone="overline">
         {status.connections.length === 0 ? <p className={UI_TEXT_META_CLASS}>{t('mcp.noConnections')}</p> : null}
-        {status.connections.map((connection) => <UiFormRow key={connection.id} label={connection.name} inline>
-          <div className="flex items-center gap-2">
-            <span className={UI_TEXT_META_CLASS}>{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</span>
-            <UiButton variant="secondary" disabled={busy} onClick={() => void act(async () => {
-              const value = await getMcpConnectionService().connectionConfig({ id: connection.id })
-              setConfig(value)
-              await writeClipboardText(value)
-            })}>{t('mcp.copy')}</UiButton>
-            <UiButton variant="danger" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
-          </div>
-        </UiFormRow>)}
+        {status.connections.length > 50
+          ? <Virtuoso className="h-96" data={status.connections} computeItemKey={(_index, connection) => connection.id} itemContent={connectionRow} />
+          : status.connections.map((connection, index) => connectionRow(index, connection))}
         {/* 复制出的连接配置是只读预览：下沉为 inset 面，等宽字体 */}
         {config && <UiPanel variant="inset" className="p-3"><pre data-observation-sensitive className="overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-text2">{config}</pre></UiPanel>}
       </UiGroup>
