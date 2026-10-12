@@ -14,11 +14,22 @@ description: 在痕迹AI修图、调色、抠出或选中主体、移除物体�
 ## 铁律：只约束真实契约
 
 1. 从宿主或 `list_documents` 确认来源与目标，用 `describe_application_entities`、`list_application_entities`、`read_application_entity` 取得完整引用和实例可用性。引用来自返回值，不猜 ID，不把目录文档引用冒充图片工作文档引用。
-2. 参数、图层与组的读改增删走 `change_application_entities` 的 `set_properties`、`create_items`、`remove_items`；分割、应用选区、移除和修补走算法能力。内置 Pi 缺工具用 `load_application_tools` 按域加载，外部 MCP 从 `describe_application_contract` 发现；技能不增授权。
+2. 参数、图层与组的读改增删走 `change_application_entities` 的 `set_properties`、`create_items`、`remove_items`；分割、应用选区、移除和修补走算法能力。内置 Pi 缺工具用 `load_application_tools` 的 names 只加载本步骤工具，外部 MCP 从 `describe_application_contract` 发现；技能不增授权。
 3. 选区与作品修改进入图片文档同一撤销历史，移除/修补一次提交一次撤销。保留原引用与结果；公开目录没有 V3 图片专用撤销工具，不借用标注撤销工具。撤销入口以当前宿主实际提供的路径为准，不能声称已撤回未执行的操作。
 4. 外部 MCP 写入带 operationId，删除还需相关目标与父集合读取返回的 baselineIds。未知结果用 `get_application_operation` 查原操作；修改保留但保存失败用 `retry_application_operation_save`，originalOperationId 指向原调用，不重放修补或另换标识重试。
 5. 本地算法不等于云端付费生成；首次可能下载模型，占用网络与磁盘。遵守当前下载、取消与权限边界，不擅自删除模型。需要云端生成时走正式费用审批，不代替用户批准，不以重新付费掩盖保存失败。
-6. 改完回读结构并取回结果图核对。`read_application_media(mode="image")` 只读已落盘的 asset、生成结果或画布节点，不能直接传图片工作文档/选区。按[图层与交付](references/layers-export.md)取得真实结果引用；内置 Pi 可用 `observe_application_surface` 看当前应用并实际读取图像，外部 MCP 不开放该截图。没看到像素就写明未做视觉验证。
+6. 改完回读结构并取回结果图核对。`read_application_media(mode="image")` 只读已落盘的 asset、生成结果或画布节点，不能直接传图片工作文档/选区。按[图层与交付](references/layers-export.md)取得真实结果引用；内置 Pi 与外部 MCP 均不可调用 `observe_application_surface`；画布来源用正式导出桥梁取得结果节点，再读取图像。独立编辑器当前缺少公开截图及通用扁平导出，须明确此缺口，不反复加载或要求调整权限。没看到像素就写明未做视觉验证。
+
+## 按任务加载工具
+
+通用实体工具已提供，调色与图层普通改动不追加整领域。只在当前任务需要时调用 `load_application_tools({names:[...]})`：
+
+- 主体选区：`select_image_edit_region`；应用蒙版再加 `apply_image_edit_selection`。
+- 干净纹理修补：`repair_image_edit_region`；需要先选主体才加 `select_image_edit_region`。
+- 画布来源交付：`export_image_edit_target_to_canvas`、`read_application_media`；下载再加 `download_canvas_media`。
+- 保存恢复：`get_application_operation`、`retry_application_operation_save`。
+
+不加载整个 image_edit；没有授权的工具反复加载也不会出现。
 
 ## 按需读取
 

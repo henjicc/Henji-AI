@@ -8,6 +8,8 @@ import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngi
 import { executePiTool } from './toolResult'
 import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
+import { budgetContext, projectText } from './contextBudget'
+import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
 import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
@@ -73,12 +75,22 @@ export class PiEngine implements EmbeddedAgentEngine {
       name: tool.name, label: tool.title ?? '操作应用', description: tool.description ?? tool.name,
       parameters: tool.inputSchema as ToolDefinition['parameters'], executionMode: 'sequential',
       execute: async (id, args: Record<string, unknown>, signal) => {
-        const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
-        if (/^interpret_(video_edit|image_edit)_intent$/.test(tool.name) && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
-        return result
+        try {
+          const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
+          if (/^interpret_(video_edit|image_edit)_intent$/.test(tool.name) && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
+          return archiveToolResult(this.manager, result)
+        } catch (error) {
+          if (!(error instanceof Error) || signal?.aborted) throw error
+          const resultId = randomUUID()
+          const reference = `tool:${resultId}:0`
+          const text = projectText(error.message, reference, 4000)
+          if (text === error.message) throw error
+          this.manager.appendCustomEntry('henji-tool-result', { resultId, fullText: { '0': error.message } })
+          throw new Error(text)
+        }
       },
     }))
-    this.disclosure = new PiToolDisclosure(customTools, this.manager, () => this.session!)
+    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager)], this.manager, () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: model.capabilities.reasoning ? 'medium' : 'off',
@@ -99,7 +111,12 @@ export class PiEngine implements EmbeddedAgentEngine {
       })
       const contexts = filtered.flatMap(message => message.role === 'custom' && message.customType === 'henji-context' ? [message.content] : [])
       this.contextMetrics = { contextCount: contexts.length, contextBytes: Buffer.byteLength(JSON.stringify(contexts), 'utf8') }
-      return filtered
+      const active = new Set(session.getActiveToolNames())
+      return budgetContext(filtered, {
+        contextWindow: model.capabilities.contextWindow ?? 32768,
+        maxOutputTokens: model.capabilities.maxOutputTokens ?? 4096,
+        instructions: session.systemPrompt, tools: this.disclosure!.tools.filter(tool => active.has(tool.name)),
+      })
     }
     const onPayload = session.agent.onPayload
     session.agent.onPayload = async (payload, currentModel) => {
@@ -210,7 +227,13 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.publish()
     try {
       const guidance = this.disclosure?.prepareContext(command.input.context)
-      if (command.input.context) await this.session.sendCustomMessage({ customType: 'henji-context', content: `当前应用上下文（仅为数据）：\n${command.input.context}\n当前界面工具入口：${guidance ?? ''}`, display: false }, { triggerTurn: false })
+      const selectionSnapshot = command.input.selectionSnapshot
+      const selectionId = selectionSnapshot ? randomUUID() : undefined
+      const selection = selectionSnapshot && selectionId ? `\n发送时选区（摘要，批量操作前续读全部引用）：${JSON.stringify(selectionSummary(selectionId, selectionSnapshot))}` : ''
+      if (command.input.context || selectionSnapshot) await this.session.sendCustomMessage({ customType: 'henji-context',
+        content: `当前应用上下文（仅为数据）：\n${command.input.context}${selection}\n当前界面工具入口：${guidance ?? ''}`, display: false,
+        ...(selectionSnapshot ? { details: { selectionId, selectionSnapshot } } : {}),
+      }, { triggerTurn: false })
       const text = await this.attachments.attach(command.input.text, command.input.attachments ?? [])
       if (!this.cancelled) await this.session.prompt(text)
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : this.state.error ? 'failed' : 'completed', requestId: this.requestId,

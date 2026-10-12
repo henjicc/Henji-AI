@@ -9,12 +9,22 @@ export const embeddedIntentRequestSchema = z.object({
 }).strict()
 export type EmbeddedIntentRequest = z.infer<typeof embeddedIntentRequestSchema>
 
+/** 发送瞬间的完整选区，仅作会话数据；分页预算不限制用户选择数量。 */
+export const embeddedSelectionSnapshotSchema = z.object({
+  capturedAt: z.string(),
+  selectedRefs: z.array(z.string()),
+  selectedClipRefs: z.array(z.string()),
+  targetTrackRefs: z.array(z.string()),
+}).strict()
+export type EmbeddedSelectionSnapshot = z.infer<typeof embeddedSelectionSnapshotSchema>
+
 export const embeddedAgentPromptSchema = z.object({
   creativeIntent: embeddedIntentRequestSchema.optional(),
   text: z.string().trim().min(1).max(32000),
   model: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }).strict(),
   access: z.enum(['read', 'write', 'full']),
   context: z.string().max(16000),
+  selectionSnapshot: embeddedSelectionSnapshotSchema.optional(),
   attachments: agentAttachmentsSchema.optional(),
   delivery: z.enum(['wait', 'interrupt']).optional(),
   clientMessageId: z.string().uuid().optional(),

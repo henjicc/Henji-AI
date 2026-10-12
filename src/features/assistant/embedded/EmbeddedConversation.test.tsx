@@ -10,7 +10,7 @@ import { openAssistant, useAssistantUiStore } from '../store/assistantUiStore'
 const mocks = vi.hoisted(() => ({ prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn() }))
 vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
-vi.mock('../../application-control/hostContext/hostContext', () => ({ createHostContextSnapshot: () => ({ workspace: {}, project: {}, surface: {} }) }))
+vi.mock('../../application-control/hostContext/hostContext', () => ({ captureHostSelection: () => ({ capturedAt: "sent", selectedRefs: [], selectedClipRefs: [], targetTrackRefs: [] }), createHostContextSnapshot: () => ({ workspace: {}, project: {}, surface: {} }) }))
 vi.mock('../conversation/useConversationAutoScroll', () => ({ useConversationAutoScroll: () => ({ scrollToBottom: vi.fn(), suspendFollowing: vi.fn() }) }))
 vi.mock('../conversation/AssistantComposer', () => ({ AssistantComposer: ({ onSubmit, disabled, value }: { onSubmit(text: string, attachments: []): void; disabled: boolean; value: PromptDocumentV1 }) =>
   <><div data-testid="draft">{toModelPromptText(value)}</div><UiButton disabled={disabled} onClick={() => onSubmit('第一条消息', [])}>发送</UiButton></> }))

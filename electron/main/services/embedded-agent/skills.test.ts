@@ -164,3 +164,13 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     await expect(callEmbeddedSkill({ name: 'video-edit-code-creation', reason: '旧调用' }, signal)).rejects.toThrow('停用')
   })
 })
+
+
+it('图片核对说明与当前公开调用面一致，明确截图缺口并给出结果媒体路径', async () => {
+  for (const relativePath of [undefined, 'references/layers-export.md']) {
+    const content = (await callEmbeddedSkill({ name: 'image-edit-workbench', path: relativePath, reason: '核对真实调用面' }, signal)).data.content
+    expect(content).not.toContain('内置 Pi 可用 `observe_application_surface`')
+    expect(content).toContain('read_application_media')
+    expect(content).toContain('缺口')
+  }
+})

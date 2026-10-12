@@ -5,6 +5,9 @@ import os from 'node:os'
 import path from 'node:path'
 import type { LlmModelConfig } from '@henjicc/ai-sdk'
 import { PiEngine } from './piEngine'
+import { PiToolDisclosure } from './toolDisclosure'
+import { contextReader } from './contextReader'
+import { SessionManager, type AgentSession, type ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { EngineEvent } from './contracts'
 import { z } from 'zod'
 import { buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
@@ -259,7 +262,7 @@ describe('Pi official SDK engine', () => {
     expect(initialTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
       'get_canvas_document', 'change_application_entities', 'load_application_tools',
     ]))
-    expect(initialTools).toHaveLength(6)
+    expect(initialTools).toHaveLength(7)
     expect(initialTools.map(tool => tool.name)).not.toEqual(expect.arrayContaining(['render_camera_stage_output']))
     expect(initialTools.map(tool => tool.name)).not.toContain('create_visible_generation_task')
     expect(initialTools.map(tool => tool.name)).not.toContain('get_canvas_node_schema')
@@ -279,7 +282,7 @@ describe('Pi official SDK engine', () => {
     for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
       const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
-      expect(names).toHaveLength(6)
+      expect(names).toHaveLength(7)
       expect(names).toContain(basic)
       expect(names).not.toContain('get_canvas_document')
       expect(names).not.toContain('create_visible_generation_task')
@@ -295,7 +298,7 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'configure', input: configuration })
     await f.engine.command({ action: 'prompt', input: { text: '在这里生成图片', context: canvas } })
     const names = (index: number) => f.requests.at(index)!.tools.map(tool => tool.function.name)
-    expect(names(0)).toHaveLength(6)
+    expect(names(0)).toHaveLength(7)
     expect(names(0)).not.toContain('get_model_schema')
     expect(names(1)).toEqual(expect.arrayContaining(['get_model_schema', 'prepare_generation_task', 'create_visible_generation_task', 'wait_generation_task']))
     expect(names(1)).not.toContain('render_camera_stage_output')
@@ -351,7 +354,7 @@ describe('Pi official SDK engine', () => {
     expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toContain(name)
     await restored.command({ action: 'configure', input: f.configuration })
     await restored.command({ action: 'prompt', input: { text: '只读', context: '' } })
-    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toEqual(['read_project'])
+    expect(f.requests.at(-1)!.tools.map(tool => tool.function.name)).toEqual(['read_assistant_context', 'read_project'])
     await restored.command({ action: 'configure', input: configuration })
     await restored.command({ action: 'new' })
     f.setMode('error')
@@ -367,7 +370,7 @@ describe('Pi official SDK engine', () => {
       const logs = f.events.filter(event => event.type === 'log' && event.requestId === requestId)
       expect(logs).toEqual([
         expect.objectContaining({ phase: 'start' }),
-        expect.objectContaining({ phase: 'model_requested', requestMetrics: expect.objectContaining({ toolCount: 1, toolBytes: expect.any(Number) }) }),
+        expect.objectContaining({ phase: 'model_requested', requestMetrics: expect.objectContaining({ toolCount: 2, toolBytes: expect.any(Number) }) }),
         expect.objectContaining({ phase: 'model_completed', modelId: 'fixture', providerId: 'test', durationMs: expect.any(Number),
           metrics: { input: 70, output: 10, cacheRead: 30, cacheWrite: 0, totalTokens: 110 } }),
         expect.objectContaining({ phase: 'completed', durationMs: expect.any(Number) }),
@@ -463,7 +466,7 @@ describe('Pi official SDK engine', () => {
     expect(f.tool).toHaveBeenCalledOnce()
     expect(f.tool.mock.calls[0]).toMatchObject(['call_fixture', 'read_project', { id: 'project' }, expect.any(AbortSignal)])
     expect(f.requests).toHaveLength(2)
-    expect(f.requests[0].tools.map((tool) => tool.function.name)).toEqual(['read_project'])
+    expect(f.requests[0].tools.map((tool) => tool.function.name)).toEqual(['read_assistant_context', 'read_project'])
     expect(f.requests[0].messages[0].content).toContain('痕迹助手')
     const final = f.events.filter((event) => event.type === 'snapshot').at(-1)
     expect(final).toMatchObject({ value: { busy: false, error: null, messages: [{ text: '读取项目' }, { kind: 'tool', status: 'completed' }, { text: '已经读取项目。', kind: 'answer' }] } })
@@ -506,4 +509,66 @@ it('正式 Pi 模型失败自动调用同源本地整理，不重试模型或应
   expect(f.requests).toHaveLength(1)
   expect(f.tool).toHaveBeenCalledWith(expect.any(String), 'organize_video_edit_intent', { draftRef, operationId: expect.any(String) }, undefined)
   expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ busy: false, error: null })
+})
+
+
+it('任务精确 names 保持目录排序与基础工具稳定，避免整领域 schema 开销', async () => {
+  const catalog = [...applicationCatalog().tools, ...(await embeddedSkillCatalog()).tools]
+  const measurements: Record<string, unknown> = {}
+  for (const [surface, domain, names] of [
+    ['workspace.video_edit', 'video_edit', ['trim_video_edit_clip', 'save_video_edit', 'undo_video_edit']],
+    ['tool.image_edit', 'image_edit', ['select_image_edit_region', 'repair_image_edit_region', 'export_image_edit_target_to_canvas']],
+  ] as const) {
+    const measure = (request: { names?: string[]; domains?: string[] }) => {
+      const manager = SessionManager.inMemory()
+      let active: string[] = []
+      const session = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names } } as AgentSession
+      const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
+        parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
+      const disclosure = new PiToolDisclosure([...tools, contextReader(manager)], manager, () => session)
+      disclosure.prepareContext(JSON.stringify({ surface: { id: surface } }))
+      const initial = [...active]
+      disclosure.activate(request)
+      expect(active).toEqual([...active].sort())
+      expect(active).toEqual(expect.arrayContaining(initial))
+      return disclosure.tools.filter(tool => active.includes(tool.name)).map(tool => ({ name: tool.name, description: tool.description, parameters: tool.parameters }))
+    }
+    const initial = measure({ domains: [] })
+    const full = measure({ domains: [domain] })
+    const precise = measure({ names: [...names] })
+    expect(precise.map(tool => tool.name)).toEqual(expect.arrayContaining([...names]))
+    expect(JSON.stringify(precise).length).toBeLessThan(JSON.stringify(full).length * 0.3)
+    measurements[domain] = { initial, full, precise }
+  }
+  if (process.env.HENJI_PI_MEASURE_FILE) await fs.writeFile(process.env.HENJI_PI_MEASURE_FILE, JSON.stringify(measurements))
+})
+
+it('发送时选区保留完整数量与分页，改变选区及冷恢复后仍读取原快照', async () => {
+  const f = await fixture()
+  const selected = { capturedAt: '2026-10-12T00:00:00Z', selectedRefs: Array.from({ length: 90 }, (_, i) => `video_edit.item:original:${i}`),
+    selectedClipRefs: Array.from({ length: 160 }, (_, i) => `video_edit.clip:original:${i}`), targetTrackRefs: [] as string[] }
+  f.setToolPlan([])
+  await f.engine.command({ action: 'prompt', input: { text: '处理全部选中对象', context: '{}', selectionSnapshot: selected } })
+  const request = JSON.stringify(f.requests[0])
+  expect(request).toContain(JSON.stringify('"count":160').slice(1, -1))
+  expect(request).not.toContain('video_edit.clip:original:159')
+  const sessionId = (await f.engine.command({ action: 'snapshot' }) as { sessionId: string }).sessionId
+  const sessions = await SessionManager.list(f.directory, path.join(f.directory, 'sessions'))
+  const file = sessions.find(item => item.id === sessionId)!.path
+  selected.selectedClipRefs.splice(0)
+  const manager = SessionManager.open(file, path.join(f.directory, 'sessions'), f.directory)
+  const entry = manager.getBranch().find(entry => entry.type === 'custom_message')!
+  if (entry.type !== 'custom_message') throw new Error('missing context')
+  const id = (entry.details as { selectionId: string }).selectionId
+  const reader = contextReader(manager)
+  const refs: string[] = []; let offset = 0; let hasMore = true
+  while (hasMore) {
+    const result = await reader.execute('page', { reference: `selection:${id}:selectedClipRefs`, offset }, undefined, undefined, {} as never)
+    const content = result.content[0]
+    if (content.type !== 'text') throw new Error('missing page')
+    const page = JSON.parse(content.text) as { data: string[]; total: number; nextOffset: number; hasMore: boolean }
+    expect(page.total).toBe(160); refs.push(...page.data); offset = page.nextOffset; hasMore = page.hasMore
+  }
+  expect(refs).toEqual(Array.from({ length: 160 }, (_, i) => `video_edit.clip:original:${i}`))
+  expect(f.tool).not.toHaveBeenCalled()
 })

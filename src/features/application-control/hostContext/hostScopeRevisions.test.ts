@@ -21,7 +21,7 @@ import { createScriptedPrompter, FakeDocumentCommands } from '@/features/documen
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { adoptImageEditDocumentInstanceForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 
-import { createHostContextSnapshot, getHostScopeRevisions, retainHostContextTracking } from './hostContext'
+import { captureHostSelection, createHostContextSnapshot, getHostScopeRevisions, retainHostContextTracking } from './hostContext'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
 
 /**
@@ -68,7 +68,7 @@ describe('宿主作用域 revision', () => {
     const project: AudioEditProjectDocument = {
       id: 'audio-project', name: '测试口播', referenceScript: '', vstEnabled: false,
       source: { mediaType: 'audio', sourcePath: 'C:/source.wav', audioPath: 'C:/source.wav', durationFrames: 48_000, sampleRate: 48_000, channels: 1 },
-      transcript: [{ id: 'word-1', text: '测试', startFrame: 0, endFrame: 12_000, included: true, locked: false, granularity: 'word' }],
+      transcript: Array.from({ length: 80 }, (_, i) => ({ id: `word-${i + 1}`, text: '测试', startFrame: i * 100, endFrame: (i + 1) * 100, included: true, locked: false, granularity: 'word' as const })),
       suggestions: [], createdAt: 1, updatedAt: 1, revision: 7,
     }
     // 口播是通用文档（3.3）：界面只能显示已经打开的口播
@@ -88,6 +88,12 @@ describe('宿主作用域 revision', () => {
     })
     expect(snapshot.scopeRevisions.audio_edit).toBe(getAudioEditRevision())
     expect(snapshot.scopeRevisions.audio_edit).toBeGreaterThan(0)
+    useAudioEditStore.getState().setSelectedBlockIds(project.transcript.map(block => block.id))
+    const sent = captureHostSelection()
+    expect(sent.selectedRefs).toHaveLength(80)
+    expect(createHostContextSnapshot().surface?.selectedRefs).toHaveLength(32)
+    useAudioEditStore.getState().setSelectedBlockIds([])
+    expect(sent.selectedRefs.at(-1)).toBe('audio_edit.transcript_block:audio-project:word-80')
   })
 
   it('画布选中与素材库开合不推进各自的数据作用域', () => {
