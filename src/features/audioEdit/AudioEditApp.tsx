@@ -1,4 +1,4 @@
-import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
+import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { useShallow } from 'zustand/react/shallow'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'

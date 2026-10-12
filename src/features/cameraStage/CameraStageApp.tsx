@@ -1,4 +1,4 @@
-import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
+import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { UiLoading } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'

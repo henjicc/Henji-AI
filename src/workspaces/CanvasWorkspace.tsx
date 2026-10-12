@@ -1,4 +1,4 @@
-import { ApplicationOperationReviewBanner } from '@/features/application-control/ApplicationOperationReviewBanner'
+import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { useCallback, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
