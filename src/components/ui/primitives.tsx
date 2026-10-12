@@ -391,7 +391,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       return (
         <button
           ref={ref}
-          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'md' ? 'text-13' : 'text-xs'}` : neutral.layout} ${active ? inset ? 'border-transparent bg-accent text-on-accent hover:bg-accent-hover' : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
+          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'md' ? 'text-13' : 'text-xs'}` : neutral.layout} ${active ? inset ? 'border-transparent bg-raised text-text1' : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
           {...props}
         />
       );
@@ -622,7 +622,8 @@ UiCheckbox.displayName = 'UiCheckbox';
  */
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
   ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'field', ...props }, ref) => {
-    const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
+    const formRow = useUiFormRowLabelling();
+    const rowLabelling = resolveFormRowLabelling(formRow, props);
     const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
       onClick?.(event);
       if (!event.defaultPrevented) {
@@ -632,8 +633,8 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
 
     if (appearance === 'segmented') {
       const sizeClass = size === 'compact'
-        ? `${UI_CONTROL_HEIGHT_CLASS.sm} w-20 text-xs`
-        : `${UI_CONTROL_HEIGHT_CLASS.md} w-28 text-13`;
+        ? `${UI_CONTROL_HEIGHT_CLASS.sm} ${formRow?.fillControl ? 'w-full' : 'w-20'} text-xs`
+        : `${UI_CONTROL_HEIGHT_CLASS.md} ${formRow?.fillControl ? 'w-full' : 'w-28'} text-13`;
 
       return (
         <button
@@ -648,20 +649,20 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
         >
           <span
             aria-hidden="true"
-            className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%_-_0.125rem)] rounded-md transition-transform duration-180 ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} ${
+            className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%_-_0.125rem)] rounded-md transition-transform duration-180 bg-raised ${
               checked ? 'translate-x-full' : 'translate-x-0'
             }`}
           />
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
-              checked ? 'text-text2' : 'text-accent-text'
+              checked ? 'text-text2' : 'text-text1'
             }`}
           >
             {offLabel}
           </span>
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
-              checked ? 'text-accent-text' : 'text-text2'
+              checked ? 'text-text1' : 'text-text2'
             }`}
           >
             {onLabel}

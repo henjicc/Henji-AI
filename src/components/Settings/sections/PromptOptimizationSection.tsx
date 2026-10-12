@@ -1,7 +1,6 @@
 import React from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import { UiFormRow, UiSwitch } from '@/components/ui'
-import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
 import type { PromptOptimizationButtonBehavior } from '@/core/llm/promptOptimizationBehavior'
 
@@ -36,7 +35,7 @@ const PromptOptimizationSection: React.FC<PromptOptimizationSectionProps> = ({
           options={options}
           display={options.find((option) => option.value === behavior)?.label}
           onSelect={(value) => onChangeBehavior(value as PromptOptimizationButtonBehavior)}
-          className={SETTINGS_INLINE_CONTROL_CLASS}
+          className="w-full"
         />
       </UiFormRow>
       <UiFormRow label={t('sections.display.autoFocusLabel')} info={t('sections.display.autoFocusHint')} inline>

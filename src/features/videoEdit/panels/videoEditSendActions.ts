@@ -1,3 +1,4 @@
+import { notificationText } from '@/i18n/notifications'
 import type { VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
 import type { MenuItem } from '@/hooks/useContextMenu'
 import { planVideoEditSend, sendCreativeResultToVideoEdit, type VideoEditSendMediaKind, type VideoEditSendMode } from '../application/videoEditResultSend'
@@ -13,16 +14,18 @@ const errorMessage = (error: unknown): string => error instanceof Error ? error.
 function isAbort(error: unknown): boolean { return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError' }
 
 export async function runVideoEditSend(run: () => Promise<VideoEditResultReceipt>, notify: VideoEditSendNotify): Promise<void> {
-  try { await run(); notify('已加入剪辑并保存，可在剪辑中撤销。', 'success') }
-  catch (error) { if (!isAbort(error)) notify(`未能加入剪辑：${errorMessage(error)}`, 'error') }
+  try { await run(); notify(notificationText('sentToEdit'), 'success') }
+  catch (error) { if (!isAbort(error)) notify(notificationText('sendToEditFailed', { reason: errorMessage(error) }), 'error') }
 }
 
 /** Context-menu entries for hosts that already own a right-click menu (generation results). */
 export function videoEditSendMenuItems(mediaKind: VideoEditSendMediaKind, resolveSource: VideoEditSendSourceResolver, notify: VideoEditSendNotify, icon: React.ReactNode, chooseDestination?: () => void): MenuItem[] {
-  return [...(chooseDestination ? [{ id: 'video-edit-choose', label: '发送到剪辑…', icon, onClick: chooseDestination }] : []), ...VIDEO_EDIT_SEND_MODES.map(({ mode, title }) => {
+  const actions = VIDEO_EDIT_SEND_MODES.map(({ mode, title }) => {
     const plan = planVideoEditSend({ mediaKind, mode })
     return { id: `video-edit-${mode}`, label: `剪辑：${title}`, icon, disabled: !plan.available,
       onClick: () => { void runVideoEditSend(async () => sendCreativeResultToVideoEdit(resolveSource, { mediaKind, mode }), notify) } }
-  })]
+  })
+  return [...(chooseDestination ? [{ id: 'video-edit-choose', label: '发送到剪辑…', icon, onClick: chooseDestination }] : []),
+    ...(actions.some(action => !action.disabled) ? actions : [])]
 }
 

@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from 'react'
 import { UiOptionButton } from './primitives'
 import { UI_CONTROL_HEIGHT_CLASS } from './styleTokens'
 import { useUiFormRowLabelling } from './formRowLabel'
+import Dropdown from './Dropdown'
 
 export interface UiSegmentedOption<T extends string | number> {
   value: T
@@ -31,6 +32,7 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
   const fillControl = fullWidth || formRow?.fillControl === true
   const enabled = options.filter(option => !option.disabled)
   const tabValue = enabled.some(option => option.value === value) ? value : enabled[0]?.value
+  if (options.length > 5) return <Dropdown ariaLabel={ariaLabel} options={[...options]} value={value} onSelect={onChange} size={size} disabled={disabled} />
   return <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined}
     className={`inline-grid auto-cols-fr grid-flow-col gap-0.5 rounded-lg bg-gap p-0.5 ${UI_CONTROL_HEIGHT_CLASS[size]} ${fillControl ? 'w-full' : 'w-fit'}`}>
     {/* ui-surface-allow: S1 u5 统一分段组件内部使用原语渲染选项，调用方必须用 UiSegmented。 */}

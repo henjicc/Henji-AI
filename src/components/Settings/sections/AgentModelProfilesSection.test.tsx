@@ -23,7 +23,7 @@ it('验证失败可就地重试，保留上次结果并用能力名称说明影�
   const save = vi.fn(async () => {})
   render(<AgentModelProfilesSection config={config} saveConfig={save} />)
   const details = screen.getAllByRole('button', { name: '详情' })[0]
-  const modelDetails = within(details.parentElement!.parentElement!)
+  const modelDetails = within(details.closest('[data-ui-group]') as HTMLElement)
   fireEvent.click(details)
   fireEvent.click(screen.getByRole('button', { name: '验证此模型' }))
   const error = await screen.findByRole('alert')

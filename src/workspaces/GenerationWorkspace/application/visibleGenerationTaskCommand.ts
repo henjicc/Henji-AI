@@ -1,3 +1,4 @@
+import { notificationText } from '@/i18n/notifications'
 import { createLogger } from '@/core/logging'
 import type { GenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
 import { registry } from '@/core/ModelRegistry'
@@ -243,7 +244,7 @@ export async function createVisibleGenerationTask(
       uploadedVideoFilePaths.push((await saveUploadVideo(options.video, 'persist')).fullPath)
     } catch (error) {
       logger.error('持久化上传视频失败', error, { event: 'visible_generation.video_persist.failed', modelId: model })
-      dependencies.notify('视频保存失败，请重试上传后再生成', 'error')
+      dependencies.notify(notificationText('videoSaveFailed'), 'error')
       return null
     }
   }
@@ -288,7 +289,7 @@ export async function createVisibleGenerationTask(
         options.minimaxCloneAudioFilePath = (await saveUploadAudio(cloneAudioInput.cloneAudioFile, 'persist')).fullPath
       } catch (error) {
         logger.error('持久化复刻音频失败', error, { event: 'visible_generation.clone_audio_persist.failed', modelId: model })
-        dependencies.notify('复刻音频保存失败，请重新上传后再试', 'error')
+        dependencies.notify(notificationText('cloneAudioSaveFailed'), 'error')
         return null
       }
     }
@@ -302,7 +303,7 @@ export async function createVisibleGenerationTask(
         options.minimaxClonePromptAudioFilePath = (await saveUploadAudio(cloneSettings.promptAudioFile, 'persist')).fullPath
       } catch (error) {
         logger.error('持久化示例音频失败', error, { event: 'visible_generation.prompt_audio_persist.failed', modelId: model })
-        dependencies.notify('示例音频保存失败，请重新上传后再试', 'error')
+        dependencies.notify(notificationText('exampleAudioSaveFailed'), 'error')
         return null
       }
     }
@@ -310,7 +311,7 @@ export async function createVisibleGenerationTask(
     delete cloneSettings.promptAudioUrl
     const cloneAudioPath = normalizeNonEmptyString(options.minimaxCloneAudioFilePath)
     if (!cloneAudioPath) {
-      dependencies.notify('音色克隆模式需要上传复刻音频文件', 'error')
+      dependencies.notify(notificationText('cloneAudioRequired'), 'error')
       return null
     }
     options.minimaxCloneAudioFilePath = cloneAudioPath

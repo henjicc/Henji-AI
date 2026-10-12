@@ -253,7 +253,8 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
         </UiFormRow>
       </UiGroup>
 
-      <UiGroup title={t('sections.theme.portable.label')} titleTone="overline">
+      <UiGroup labelWidth={120}>
+        <UiFormRow label={t('sections.theme.portable.label')}>
         <div className="flex flex-wrap items-center gap-2">
           <UiButton variant="secondary" onClick={onExportTheme}>
             {t('sections.theme.portable.export')}
@@ -281,6 +282,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
             }}
           />
         </div>
+        </UiFormRow>
       </UiGroup>
 
       <SettingsDialog

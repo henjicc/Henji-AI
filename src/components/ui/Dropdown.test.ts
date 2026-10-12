@@ -3,6 +3,7 @@
 import React from 'react'
 import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n/config'
 import Dropdown from './Dropdown'
 import { DROPDOWN_MENU_MAX_WIDTH_PX, resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
 
@@ -23,7 +24,8 @@ describe('Dropdown 显示文本', () => {
 })
 
 describe('Dropdown 键盘交互', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('zh-CN')
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
   })
 
@@ -40,6 +42,9 @@ describe('Dropdown 键盘交互', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     rendered.rerender(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', emptyLabel: '没有可用图层', options: [] }))
     expect(trigger.textContent).toBe('没有可用图层')
+    rendered.rerender(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', options: [{ value: 'layer', label: '可用图层' }] }))
+    expect(trigger.disabled).toBe(false)
+    expect(trigger.textContent).toBe('未选择')
     rendered.rerender(React.createElement(Dropdown<string>, { ariaLabel: '空态回归', value: 'layer', options: [{ value: 'layer', label: '可用图层' }] }))
     fireEvent.click(trigger)
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
@@ -165,7 +170,8 @@ describe('Dropdown 键盘交互', () => {
 })
 
 describe('Dropdown 字段触发器与浮层（任务 2.2）', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('zh-CN')
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
   })
 

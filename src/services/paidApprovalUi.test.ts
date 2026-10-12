@@ -35,7 +35,7 @@ it.each(Object.entries(UI_PAID_CAPABILITIES))('界面入口 %s 共用策略、us
     approval: { decision: 'auto' }, paidReservations: [{ category, estimatedCny: 1, project: { id: 'project' } }] }])
   expect(bridge.store.generationSpendSince(0)).toBe(1)
   expect(notifyUser).toHaveBeenCalledOnce()
-  expect(notifyUser).toHaveBeenCalledWith('已按自动同意规则执行，预计 ¥1.00')
+  expect(notifyUser).toHaveBeenCalledWith({ key: 'autoApprovedEstimate', values: { amount: '1.00' } })
 })
 
 it('ask 取消 / 等待时中止：零模型执行、零费用', async () => {

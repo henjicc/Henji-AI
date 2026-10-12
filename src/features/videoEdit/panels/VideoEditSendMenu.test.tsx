@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { VideoEditSendMenu } from './VideoEditSendMenu'
+import { notificationText } from '@/i18n/notifications'
 import { videoEditSendMenuItems } from './videoEditSendActions'
 
 const send = vi.hoisted(() => ({ plan: vi.fn(), send: vi.fn(), run: vi.fn(), create: vi.fn(), list: vi.fn(), prepare: vi.fn() }))
@@ -22,7 +23,7 @@ it('菜单列出实际落点与不可用原因；点击时才解析来源并交�
   await act(async () => { fireEvent.click(view.getByRole('menuitem', { name: /加入播放头/ })) })
   expect(send.send).toHaveBeenCalledWith(resolveSource, { mediaKind: 'video', mode: 'add' }, expect.any(AbortSignal))
   expect(resolveSource).not.toHaveBeenCalled() // 服务负责先固定落点，再解析来源。
-  expect(notify).toHaveBeenCalledWith(expect.stringContaining('已加入剪辑'), 'success')
+  expect(notify).toHaveBeenCalledWith(notificationText('sentToEdit'), 'success')
 })
 
 it('选择另一剪辑后在背景打开目标，发送方式与目标工程同时传给统一服务', async () => {
@@ -54,5 +55,6 @@ it('原位置回填走固定目标；失败提示原因，取消不提示', asyn
   await act(async () => { fireEvent.click(view.getByRole('menuitem', { name: /替换回剪辑/ })) })
   expect(notify).not.toHaveBeenCalled()
   const items = videoEditSendMenuItems('audio', () => ({ type: 'document', docRef: { docId: 'v', path: 'D:/作品/口播/v.henji-audio' } }), notify, null)
-  expect(items.map(item => [item.label, item.disabled])).toEqual([['剪辑：加入素材面板', true], ['剪辑：播放头处覆盖', true], ['剪辑：播放头处插入', true], ['剪辑：加入播放头', true], ['剪辑：替换所选片段', true]])
+  expect(items).toEqual([])
+  expect(videoEditSendMenuItems('audio', () => ({ type: 'document', docRef: { docId: 'v', path: 'v' } }), notify, null, () => undefined).map(item => item.id)).toEqual(['video-edit-choose'])
 })

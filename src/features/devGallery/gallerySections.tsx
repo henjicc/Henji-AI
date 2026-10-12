@@ -1,3 +1,4 @@
+import { notificationMessage } from '@/i18n/notifications'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { useI18n } from '@/hooks/useI18n'
 /**
@@ -453,10 +454,10 @@ export function DialogSection(): JSX.Element {
         />
       </div>
       <div className="relative h-12">
-        <UiToast placement="container" tone="success" message="已保存" />
+        <UiToast placement="container" tone="success" message={notificationMessage('saved')} />
       </div>
       <div className="relative h-12">
-        <UiToast placement="container" tone="error" message="导出失败" />
+        <UiToast placement="container" tone="error" message={notificationMessage('exportFailed')} />
       </div>
     </GallerySection>
   )
@@ -467,7 +468,7 @@ export function MediaSection(): JSX.Element {
     <GallerySection title="媒体叠层与玻璃">
       <div className="relative flex h-52 flex-col justify-between overflow-hidden rounded-overlay bg-media p-3">
         {/* 通知（玻璃）压在画面顶部居中：容器铺满整个画面，短文案不会被挤成竖排 */}
-        <UiToast placement="container" surface="glass" tone="success" message="已复制" />
+        <UiToast placement="container" surface="glass" tone="success" message={notificationMessage('copied')} />
         <div className="flex items-end justify-between gap-2 pt-12">
           <UiPanel variant="glass" className="flex flex-col gap-0.5 px-3 py-2">
             <span className="text-13 text-text1">主要文字</span>

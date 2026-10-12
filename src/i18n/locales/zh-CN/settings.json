@@ -427,6 +427,7 @@
       }
     },
     "about": {
+      "unversioned": "未标版本",
       "authorLabel": "作者",
       "homepageLabel": "项目主页",
       "licenseLabel": "开源协议",
@@ -622,6 +623,8 @@
     }
   },
   "agentSkills": {
+    "videoEditDescription": "剪辑视频、整理时间线、调整节奏、字幕、配乐、调色、转场、多机位与画幅，导出成片，并与其他工作区互传素材。",
+    "imageEditDescription": "修图、调色、选择主体、移除物体、修补瑕疵、编辑图层与蒙版，以及导出图片。",
     "listSeparator": "、",
     "clauseSeparator": "，",
     "installed": "已安装 {{names}}",
@@ -684,7 +687,7 @@
     "fileOpened": "已打开用户指令文件：{{path}}。编辑保存后请点击“重新读取”。",
     "openFileFailed": "打开用户指令文件失败",
     "label": "用户指令",
-    "hint": "直接用自然语言描述长期偏好和工作习惯。除安全、权限、审批、真实能力和当前明确要求等硬约束外，用户指令优先于产品默认与模型描述。",
+    "hint": "用自然语言描述长期偏好和工作习惯。",
     "editorLabel": "智能助手用户指令",
     "placeholder": "例如：\n图片生成优先使用派欧云；兼容时优先质量。\n回答尽量简洁，修改代码后先完成自动化检查。",
     "warningSeparator": "；",

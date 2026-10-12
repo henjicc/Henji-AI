@@ -353,6 +353,8 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs
   })
   try {
     await waitForApp(app.page)
+    // 等待后台启动完成再划定场景日志区间；端口占用仍保留在启动日志，不混入后续纯 UI 场景。
+    await app.page.evaluate(() => window.henjiNative.mcp.status())
     const shouldSeedCanvasFixture = profile === 'temporary' || !readOnly
     if (shouldSeedCanvasFixture) {
       const fixtureSeededAt = await seedCanvasInspectionFixture(app.page)

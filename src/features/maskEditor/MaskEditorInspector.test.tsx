@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '@/i18n/config';
 import { MaskEditorInspector } from './MaskEditorInspector';
 
+beforeEach(async () => { await i18n.changeLanguage('zh-CN'); });
 afterEach(cleanup);
 
 describe('MaskEditorInspector', () => {
@@ -23,8 +25,8 @@ describe('MaskEditorInspector', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: '绘制' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '擦除' }));
+    expect(screen.getByRole('radio', { name: '绘制' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('radio', { name: '擦除' }));
     expect(onModeChange).toHaveBeenCalledWith('erase');
     expect(screen.getByRole('slider', { name: '画笔大小' })).toBeTruthy();
     expect(screen.getByRole('slider', { name: '画笔硬度' }).getAttribute('value')).toBe('75');
@@ -45,7 +47,7 @@ describe('MaskEditorInspector', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: '擦除' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('radio', { name: '擦除' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.queryByRole('slider', { name: '画笔大小' })).toBeNull();
     expect(screen.queryByRole('slider', { name: '画笔硬度' })).toBeNull();
     expect(screen.getByText('拖动框出矩形区域，松开后从重绘遮罩中移除。')).toBeTruthy();

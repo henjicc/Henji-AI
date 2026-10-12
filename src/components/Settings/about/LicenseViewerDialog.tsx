@@ -17,6 +17,7 @@ import { useI18n } from '@/hooks/useI18n'
 import { useExternalLink } from '../hooks/useExternalLink'
 import {
   filterThirdPartyComponents,
+  readableThirdPartyVersion,
   type ThirdPartyComponent,
   type ThirdPartyNotices,
 } from './thirdPartyLicenses'
@@ -57,7 +58,7 @@ const ComponentDetail: React.FC<{ component: ThirdPartyComponent; texts: Record<
       <div>
         <h3 className={UI_TEXT_TITLE_CLASS}>{component.name}</h3>
         <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>
-          {[component.version, license].filter(Boolean).join(' · ')}
+          {[readableThirdPartyVersion(component.version) ?? t('sections.about.unversioned'), license].filter(Boolean).join(' · ')}
         </p>
       </div>
 
@@ -166,7 +167,7 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
                 >
                   <span className="w-full truncate text-sm">{component.name}</span>
                   <span className={`w-full truncate ${UI_TEXT_META_CLASS}`}>
-                    {[component.version, component.license].filter(Boolean).join(' · ')}
+                    {[readableThirdPartyVersion(component.version) ?? t('sections.about.unversioned'), component.license].filter(Boolean).join(' · ')}
                   </span>
                 </UiNavButton>
               )}

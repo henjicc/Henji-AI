@@ -11,6 +11,7 @@ import { registry } from '@/core/ModelRegistry'
 import { getI18nText, type ParamDef } from '@/core/types'
 import { LinkageEngine } from '@/core/linkage'
 import { ParamRenderer } from '@/components/params/ParamRenderer'
+import { ParamPanelRowsContext } from '@/components/params/paramPanelRows'
 import {
   countChangedParams,
   findMissingRequiredParams,
@@ -60,19 +61,7 @@ function resolveMorePanelWidth(entries: OverflowEntry[]): number | 'content' {
   const groupWidths = entries.flatMap((entry) => entry.kind === 'group' ? [entry.item.group.panelWidth ?? 440] : [])
   const hasBlock = entries.some((entry) => entry.kind === 'param' && isToolbarBlockParam(entry.param))
   if (groupWidths.length > 0) return Math.max(...groupWidths)
-  return hasBlock ? 440 : 'content'
-}
-
-/** 零散参数的列数：≤3 项一行排完，4 项两两成行，更多时三列，列宽按每列最宽项对齐。 */
-function resolveMorePanelColumns(simpleCount: number): number {
-  if (simpleCount <= 3) return Math.max(1, simpleCount)
-  return simpleCount === 4 ? 2 : 3
-}
-
-const MORE_PANEL_GRID_CLASS: Record<number, string> = {
-  1: 'grid-cols-1',
-  2: 'grid-cols-[repeat(2,auto)]',
-  3: 'grid-cols-[repeat(3,auto)]',
+  return hasBlock ? 440 : 360
 }
 
 function focusFirstControl(root: ParentNode | null | undefined, paramId: string): void {
@@ -224,11 +213,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }, [overflowEntries, panelOnlyIds])
 
   const renderOverflowPanel = (entries: OverflowEntry[]): React.ReactNode => {
-    // 表单排布：零散参数按列网格对齐（列宽取该列最宽项），大块控件与展示分组独占一行
-    const simpleCount = entries.filter((entry) => entry.kind === 'special' || (entry.kind === 'param' && !isToolbarBlockParam(entry.param))).length
-    const columns = resolveMorePanelColumns(simpleCount)
     return (
-    <div className={`grid ${MORE_PANEL_GRID_CLASS[columns]} items-start justify-start gap-x-6 gap-y-3 p-3`}>
+    <ParamPanelRowsContext.Provider value>
+    <UiGroup labelWidth={120} className="p-3">
       {entries.map((entry, index) => {
         if (entry.kind === 'param') {
           return (
@@ -266,7 +253,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           </UiGroup>
         )
       })}
-    </div>
+    </UiGroup>
+    </ParamPanelRowsContext.Provider>
     )
   }
 

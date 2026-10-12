@@ -1,3 +1,4 @@
+import { notificationMessage } from '@/i18n/notifications'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { UiLoading } from '@/components/ui'
@@ -55,7 +56,7 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
 
   const notifyError = useCallback((error: unknown) => {
     if (error instanceof CameraStageLeaveCancelledError) return
-    showNotification(error instanceof Error ? error.message : '操作失败，请重试', 'error')
+    showNotification(error instanceof Error ? error.message : notificationMessage('operationFailed'), 'error')
   }, [showNotification])
 
   useEffect(() => {

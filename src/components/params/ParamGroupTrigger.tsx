@@ -7,6 +7,7 @@ import { LinkageEngine } from '@/core/linkage'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiGroup } from '@/components/ui'
 import { ParamRenderer } from './ParamRenderer'
+import { ParamPanelRowsContext } from './paramPanelRows'
 import { countChangedParams, isParamDisabled } from './paramVisibility'
 
 interface ParamGroupTriggerProps {
@@ -60,7 +61,7 @@ export function ParamGroupSections({
     [group, params]
   )
   return (
-    <>
+    <ParamPanelRowsContext.Provider value>
       {sections.map(({ section, params: sectionParams }, index) => (
         <UiGroup
           key={section.id}
@@ -68,11 +69,10 @@ export function ParamGroupSections({
           titleTone={sectionTitleTone}
           divided={index > 0}
           gap="none"
+          labelWidth={120}
           className={index > 0 ? 'mt-4' : ''}
         >
-          {/* 表单排布标签在上：按顶端对齐，控件高度不一（上传格、数值框、分段）时标签仍在同一行。
-              字段之间横向留 24：标签比控件宽时（“风格化强度”配窄数值框），12 会让相邻标签连成一串（任务 5.3） */}
-          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+          <div className="space-y-3">
             {sectionParams.map((param) => (
               <div
                 key={param.id}
@@ -97,7 +97,7 @@ export function ParamGroupSections({
           </div>
         </UiGroup>
       ))}
-    </>
+    </ParamPanelRowsContext.Provider>
   )
 }
 

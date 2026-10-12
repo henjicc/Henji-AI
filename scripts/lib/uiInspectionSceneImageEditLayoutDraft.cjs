@@ -28,7 +28,7 @@ function createImageEditLayoutDraftScene(context, canvas = false, benchmark = fa
     setup: async (page, app, { capture }) => {
       page.setDefaultTimeout(15000)
       const reviewWidth = panelReview ? await page.evaluate(() => innerWidth) : undefined
-      const root = path.resolve(`node_modules/.cache/${explanation ? 't157-explanation' : 't149-layout'}-${canvas ? 'canvas' : 'toolbox'}${panelReview ? `-panel-${reviewWidth}` : benchmark ? '-100' : ''}`)
+      const root = path.resolve(`.tmp/ui-inspection/${explanation ? 't157-explanation' : 't149-layout'}-${canvas ? 'canvas' : 'toolbox'}${panelReview ? `-panel-${reviewWidth}` : benchmark ? '-100' : ''}`)
       fs.mkdirSync(root, { recursive: true })
       const evidence = { frames: [], candidateMs: [], abMs: [], fidelityMs: [], visualReview: '待逐张目视', benchmark: panelReview ? '仅面板验收，不测性能' : '5次预热，30次测量；输入到合成回执与下一帧；非物理屏幕延迟' }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))

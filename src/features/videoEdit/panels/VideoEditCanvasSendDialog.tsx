@@ -1,3 +1,4 @@
+import { notificationMessage } from '@/i18n/notifications'
 import { useEffect, useRef, useState } from 'react'
 import { Dropdown, UiButton, UiError, UiModal } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -35,12 +36,12 @@ export function VideoEditCanvasSendDialog({ request, onClose }: { request: Video
     try {
       if (savePending) {
         await confirmCanvasPersistence(savePending)
-        showNotification('画布已保存，请检查已有节点；可在画布中撤销。', 'success'); onClose(); return
+        showNotification(notificationMessage('canvasSaved'), 'success'); onClose(); return
       }
       if (requireVideoEditInstance(request.projectId).document !== baseline) throw new Error('原剪辑已修改，请重新选择要发送的内容。')
       const result = await sendVideoEditToCanvas({ ...request, canvasId, placement: { mode: 'viewport_center' } }, controller.signal)
       if (!result.verification.verified) throw new Error('画布已有新增节点，但保存回读尚未核实，请在画布检查并保存。')
-      showNotification('已发送到画布，可在画布中撤销。', 'success'); onClose()
+      showNotification(notificationMessage('sentToCanvas'), 'success'); onClose()
     } catch (cause) {
       if (cause instanceof CanvasPersistenceError) setSavePending(cause.projectId)
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))

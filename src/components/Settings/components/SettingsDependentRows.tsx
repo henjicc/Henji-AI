@@ -4,6 +4,7 @@ import { UI_FORM_ROW_GAP_CLASS } from '@/components/ui'
 interface SettingsDependentRowsProps {
   /** 主开关或主选项是否让这些从属项生效 */
   open: boolean
+  aligned?: boolean
   children: React.ReactNode
 }
 
@@ -13,8 +14,8 @@ interface SettingsDependentRowsProps {
  * 以前从属项只是 `opacity-50` 变灰，关闭时照样占着位置，也看不出谁管谁。
  * 不生效的行不渲染（而不是收到 0 高）：父级是 `space-y-*`，留一个空节点会多出一段间距。
  */
-const SettingsDependentRows: React.FC<SettingsDependentRowsProps> = ({ open, children }) => (
-  open ? <div className={`pl-6 ${UI_FORM_ROW_GAP_CLASS}`}>{children}</div> : null
+const SettingsDependentRows: React.FC<SettingsDependentRowsProps> = ({ open, children, aligned = false }) => (
+  open ? <div className={`${aligned ? '' : 'pl-6'} ${UI_FORM_ROW_GAP_CLASS}`}>{children}</div> : null
 )
 
 export default SettingsDependentRows

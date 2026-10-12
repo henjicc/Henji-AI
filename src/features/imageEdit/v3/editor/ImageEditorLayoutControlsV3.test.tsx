@@ -44,7 +44,7 @@ function mount(profile: 'full' | 'canvas-edit' | 'quick' | 'mask'): void {
 }
 async function open(): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: '随手摆' }))
-  await screen.findByRole('button', { name: '整理' })
+  await waitFor(() => expect(document.querySelector('[data-image-layout-controls]')).toBeTruthy())
 }
 it.each(['full', 'canvas-edit'] as const)('%s 共用候选、原稿钉点与一次应用', async profile => {
   mount(profile); await open()
@@ -86,7 +86,8 @@ it('无草稿且不足三层时给出条件提示并禁止整理', async () => {
   act(() => useImageEditorSessionStoreV3.getState().setSelectedLayerIds('layout-ui', ['a']))
   await open()
   expect(screen.getByText('至少选择三个独立图层')).toBeTruthy()
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: '整理' }).disabled).toBe(true)
+  expect(screen.queryByRole('button', { name: '整理' })).toBeNull()
+  expect(screen.queryByRole('button', { name: '应用' })).toBeNull()
   act(() => useImageEditorSessionStoreV3.getState().setSelectedLayerIds('layout-ui', ['a', 'b', 'c']))
   expect(screen.queryByText('至少选择三个独立图层')).toBeNull()
   expect(screen.getByRole<HTMLButtonElement>('button', { name: '整理' }).disabled).toBe(false)
@@ -117,8 +118,10 @@ it('保存失败只显示一次，重试保存期间禁止重复应用', async (
   await waitFor(() => expect(screen.getAllByText('请腾出磁盘空间后重试')).toHaveLength(1))
   let finish: (() => void) | undefined
   fake.apply.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
-  fireEvent.click(screen.getByRole('button', { name: '重试保存' }))
-  fireEvent.click(screen.getByRole('button', { name: '重试保存' }))
+  const retry = screen.getByRole('button', { name: '重试保存' })
+  fireEvent.click(retry)
+  expect(screen.queryByRole('button', { name: '重试保存' })).toBeNull()
+  fireEvent.click(retry)
   await waitFor(() => expect(fake.apply).toHaveBeenCalledTimes(2))
   await act(async () => { finish?.() })
 })

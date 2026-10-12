@@ -105,7 +105,7 @@ function createImageEditPaintParameterScene(context) {
         const hardness = dialog.getByRole('slider', { name: '画笔硬度' }); await hardness.press('Home')
         for (let i = 0; i < 30; i++) await hardness.press('ArrowRight')
         await draw([.2, .3], [.8, .7]); await capture('parameter-shared-soft-brush')
-        await dialog.getByRole('button', { name: '擦除', exact: true }).click()
+        await dialog.getByRole('radio', { name: '擦除', exact: true }).click()
         await draw([.3, .5], [.7, .5]); await capture('parameter-shared-eraser')
         await dialog.getByRole('button', { name: '取消', exact: true }).click()
       } finally { await restore() }

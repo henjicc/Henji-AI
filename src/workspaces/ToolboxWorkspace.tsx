@@ -1,3 +1,4 @@
+import { notificationMessage } from '@/i18n/notifications'
 import React, { Suspense, useEffect, useMemo, useState } from 'react'
 import { ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
 import { TOOLBOX_RUNTIME } from './toolboxRuntime'
@@ -54,7 +55,7 @@ const ToolboxHome: React.FC = () => {
   const locale = i18n.language || 'zh-CN'
 
   const openRecent = (file: ToolboxRecentFile): void => {
-    void openToolboxRecentFile(file).catch(() => showNotification(`无法打开「${file.name}」，已进入项目列表`, 'error'))
+    void openToolboxRecentFile(file).catch(() => showNotification(notificationMessage('openRecentFailed', { name: file.name }), 'error'))
   }
 
   return (

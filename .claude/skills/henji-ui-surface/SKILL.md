@@ -51,7 +51,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 |---|---|---|
 | 颜色 | 三层：**种子**（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的**语义令牌**（CSS 变量 + Tailwind 类）→ 组件内部令牌。**界面只引用语义令牌**；预设石墨/深海/胶片/纸白只是种子组合，文字三档按对比度 ≥ 4.5:1 求解 | `references/color-and-material.md` |
 | 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
-| 选中 | 一眼可辨：**淡强调底**（`selected-accent`，强调色低透明度）+ 强调文字 / 勾 / 指示条（重要记录 012，修订 003 的中性抬升）；强调色**实底**只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
+| 选中 | 分段例外：**中性抬起底 + 强文字**（`UiSegmented` / 双段开关）；其余一眼可辨：**淡强调底**（`selected-accent`，强调色低透明度）+ 强调文字 / 勾 / 指示条（重要记录 012，修订 003 的中性抬升）；强调色**实底**只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
 | 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 4/8/12/16/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
 | 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`），纯色界面上的浮层一律实底 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
@@ -319,7 +319,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 语义 | 表达 | 通用落点 |
 |---|---|---|
 | 导航：正在看哪里 | 淡强调底 + 主要文字（图标强调色）+ 强调色方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（纯文字 28 高，底部短指示条；`aria-current` 只给当前工作区，同栏里只打开浮层的开关项用 `on`：淡强调底无指示条 + `aria-pressed`）；面板标签底线用强调色 |
-| 单选：当前值是什么 | 淡强调底；分段、格子、小样用强调文字，菜单项标签保持主要文字 + 强调色勾（重要记录 012，不用强调色实底） | `UiOptionButton active`：菜单 `menu`、分段 `segment`（放在 `UI_SEGMENTED_TRACK_CLASS` 轨道里）、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为主要文字色外圈一环——强调色外圈压在强调色样上看不清）、封面内容卡 `cover`（强调描边，只画在 `UI_COVER_FRAME_CLASS` 封面框上）；双段开关 `UiSwitch appearance="segmented"` 同此 |
+| 单选：当前值是什么 | 分段用中性抬起底 + 强文字；格子、小样用淡强调底 + 强调文字，菜单项保持主要文字 + 强调色勾；不用强调色实底 | 分段统一 `UiSegmented`；`UiOptionButton active`：菜单 `menu`、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为主要文字色外圈一环——强调色外圈压在强调色样上看不清）、封面内容卡 `cover`（强调描边，只画在 `UI_COVER_FRAME_CLASS` 封面框上）；双段开关 `UiSwitch appearance="segmented"` 同此 |
 | 多选/标签：集合中哪些已选 | 强调描边 + 淡强调底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"`；逐字稿词块 `UiTextToken selected` |
 | 布尔：功能是否开启 | 强调色只进入开关轨道、复选框本体或图标本身，整行保持静息 | `UiSwitch checked` / `UiCheckbox checked`；图标开关 `UiIconButton on`（淡强调底 + 强调色图标，写 `aria-pressed`）；标题栏导航里的浮层开关 `UiChipButton on` |
 
@@ -488,7 +488,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 </UiGroup>
 ```
 
-### 2. 分段选择（2~4 个短选项的单选）
+### 2. 分段选择（2~5 个短选项的单选）
 
 - 一律 `UiSegmented`（一个整体容器、选项等宽）。**选中项用中性抬起底 + 强文字，不用强调色实底**：
   分段是“当前值”，一页常有多个，强调色实底只留给唯一主动作（2026-10-13 修订，原“单选强实底”与主动作冲突）。禁止把几个
@@ -564,7 +564,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 建一个「本目录自己的图标模块」 | 删掉，调用点直接用 lucide；私有图标集＝又一套平行体系 |
 | 一个表面出现两个 `variant="primary"` | 只留一个主动作，其余降到 `secondary` 或 `quiet` |
 | 破坏性动作用 `primary` 或手写红底 | `danger`（静息静默、悬停显红）；确认弹窗里的最终确认用 `dangerSolid` |
-| 选中/当前值用强调色实底（蓝底白字的分段、选项、标签） | 淡强调底（`UiOptionButton active`、`UiChipButton`），强调色实底只给唯一主动作 |
+| 选中/当前值用强调色实底（蓝底白字的分段、选项、标签） | 分段用中性抬起底 + 强文字（`UiSegmented`）；其他选择用淡强调底（`UiOptionButton active`、`UiChipButton`）；强调色实底只给唯一主动作 |
 | 给压在纯色界面上的浮层、按钮加玻璃 | 不透明实底；玻璃只给压在图片、视频、画布上的浮层（`surface="glass"` / `UiPanel variant="glass"` / `ui-glass`） |
 | 为了省宽度把同组动作里的一个降档 | 缩短文案 / 图标化**整组** / 接受轻微偏移，不要只动一个 |
 | 用分隔线分开两组同类动作 | 加大间距；分隔线只用于交互语义根本不同的两侧，一条 bar 最多一条 |
@@ -591,8 +591,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
-| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；内嵌底与强实底选中态由 primitive 维护 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
-| 分段 / 网格 / 小样 / 色样选择 | `UiOptionButton variant="segment"`（放在 `UI_SEGMENTED_TRACK_CLASS` 里）/ `grid` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
+| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底与强文字选中态由 primitive 维护；最多五项，超过五项转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
+| 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |
@@ -611,7 +611,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 全能调色曲线 / 色轮 | `UiCurveEditor` / `UiGradeWheel`（`@/components/ui`，受控值与开始/结束/取消手势；曲线可传领域采样器保留样条显示；色相区间用 `UiRangeSlider wrap`） | 自写曲线、色轮或区间控件 |
 | 参数面板（效果/调整/代码参数，按分组、更多折叠、条件显示渲染字段） | `ParamList` / `ParamField`（`@/components/ui/params`，中立字段描述 + 手势适配器；剪辑效果、代码参数与图片调整层共用） | 每个面板自写参数行、各自处理拖动撤销 |
 | 长列表 | `react-virtuoso`（已是依赖） | 全量 map 渲染上百项 |
-| 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiOptionButton variant="segment"` + `UI_SEGMENTED_TRACK_CLASS`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
+| 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：
 1. 在 `@/components/ui` 与本表中确认没有可复用或可扩展的组件
@@ -649,6 +649,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - [ ] 交互态（悬停、选中、菜单打开）与数据变体（如逐个模型）截过图，并按 `references/review.md` 第 2 节逐项看过吗？
 - [ ] **从窗口顶到内容区横着切了几刀？** > 2 条（命令带 + 从属带）就是骨架错了
 - [ ] 每一条新增文字、数字、徽标和状态是否至少服务于行动、决策、理解结果或恢复失败？否则删除
+- [ ] 系统通知、成功提示与失败兜底是否进入 i18n，并在英文界面检查过？统一 Toast 保留消息键直到显示，不能把固定中文传到通知入口
 - [ ] 有没有把 `revision`、schema/协议版本、ID、哈希、缓存/Worker/渲染管线状态或调试计数放进正式界面？全部移到日志、诊断页、开发模式或测试断言
 - [ ] 有没有用专业术语解释实现，或给本来就能理解的控件添加常驻说明？删除；确有影响时改写为用户可感知的后果
 - [ ] 外层壳是不是已经有命令带了？有的话内层不能再长一条，改成注入
@@ -667,7 +668,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - [ ] 用到跨界面的业务概念图标了吗？走 `@/core/theme/icons` 的登记常量，别在调用点自己挑
 - [ ] 有没有固定调色板、黑白类、rgba、命名色或旧别名类（`bg-app`、`text-text-muted`…）？换主题预设时它们不会跟着动，一律改语义令牌
 - [ ] 用 `accent` 当文字色了吗？文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`，黑白由引擎按对比度决定）
-- [ ] 选中/当前值是不是淡强调底且与悬停可辨？强调色实底只属于唯一主动作；悬停/选中的容器里行内控件仍可辨
+- [ ] 分段是否中性抬起底 + 强文字，其他选中/当前值是否淡强调底且与悬停可辨？强调色实底只属于唯一主动作；悬停/选中的容器里行内控件仍可辨
 - [ ] 至少在“石墨”“纸白”两个预设下看过吗？浅色模式下白纱（`veil`）、黑白类、媒体叠层令牌放错位置最容易露馅
 - [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该用 `danger`（静息中性、hover 才出危险色），确认弹窗里用 `dangerSolid`
 - [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`

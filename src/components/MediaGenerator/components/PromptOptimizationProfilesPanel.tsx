@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import React, { useMemo } from 'react'
 import { Plus, Save, Star, Trash2 } from 'lucide-react'
 import {
@@ -5,6 +6,8 @@ import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
   UI_TEXT_PANEL_TITLE_CLASS,
+  UiFormRow,
+  UiGroup,
   UiButton,
   UiCheckbox,
   UiInput,
@@ -108,6 +111,7 @@ export function PromptOptimizationProfilesPanel({
   onSelectedProfileIdChange,
   onConfigChange,
 }: PromptOptimizationProfilesPanelProps): JSX.Element {
+  const { t } = useTranslation('ui')
   const profiles = useMemo(() => config?.promptProfiles ?? [], [config?.promptProfiles])
   const activeConfig = useMemo(() => config ?? createDefaultLlmConfig(), [config])
   const selectedProfile = useMemo(() => {
@@ -265,9 +269,10 @@ export function PromptOptimizationProfilesPanel({
             placeholder="配置名称"
           />
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <UiGroup labelWidth={96}>
+            <UiFormRow label={t('promptProfileFields.provider')}>
             <Dropdown
-              label="供应商"
+              ariaLabel={t('promptProfileFields.provider')}
               value={selectedProfile.providerId}
               display={providerOptions.find(provider => provider.providerId === selectedProfile.providerId)?.displayName
                 ?? (selectedProfile.providerId || '未选择供应商')}
@@ -287,8 +292,10 @@ export function PromptOptimizationProfilesPanel({
               className="w-full"
             />
 
+            </UiFormRow>
+            <UiFormRow label={t('promptProfileFields.model')}>
             <Dropdown
-              label="模型"
+              ariaLabel={t('promptProfileFields.model')}
               value={selectedProfile.modelId}
               display={modelOptions.find(model => model.modelId === selectedProfile.modelId)?.displayName
                 ?? (selectedProfile.modelId || '未选择模型')}
@@ -306,7 +313,8 @@ export function PromptOptimizationProfilesPanel({
               }}
               className="w-full"
             />
-          </div>
+            </UiFormRow>
+          </UiGroup>
 
           <PromptTemplateEditor
             value={systemPromptDocument}

@@ -110,12 +110,12 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
       {failure ? <UiError title={state.needsSave ? '布局尚未保存' : '布局未完成'} message={failure} size="xs" align="start" />
         : state.message && <div role="status" className="text-xs text-text2">{state.message}</div>}
       {state.status === 'optimizing' && <UiLoading size="xs" message="正在整理布局…" />}
-      <div className="flex items-center justify-end gap-2">
+      {(state.status === 'optimizing' || (!busy && (canOrganize || canApply || state.needsSave))) && <div className="flex items-center justify-end gap-2">
         {state.status === 'optimizing' ? <UiButton size="sm" onClick={() => adapter.cancel()}>取消整理</UiButton>
           : <UiButton size="sm" disabled={busy || !canOrganize || state.needsSave} onClick={() => run(() => adapter.organize(selected.length >= 3 ? selected : []))}>整理</UiButton>}
         <UiButton size="sm" variant="primary" disabled={busy || (!state.needsSave && !canApply)}
           onClick={() => run(() => adapter.apply())}>{state.needsSave ? '重试保存' : '应用'}</UiButton>
-      </div>
+      </div>}
     </div>}>
     {controls => <UiButton size="sm" onClick={controls.togglePanel} aria-expanded={controls.open}><LayoutGrid size={14} />随手摆</UiButton>}
   </PanelTrigger>

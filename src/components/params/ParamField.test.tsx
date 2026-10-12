@@ -6,8 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiFieldLayoutContext, useUiFieldLayout } from '@/components/ui'
+import { UiGroup } from '@/components/ui'
+import { ParamPanelRowsContext } from './paramPanelRows'
 import type { DropdownParamDef, SwitchParamDef, TextParamDef } from '@/core/types'
 import { DropdownInput } from './base/DropdownInput'
+import { NumberInput as SchemaNumberInput } from './base/NumberInput'
 import { SwitchInput } from './base/SwitchInput'
 import { TextInput } from './base/TextInput'
 import { FileUpload } from './upload/FileUpload'
@@ -38,6 +41,20 @@ const durationParam: DropdownParamDef = {
     { value: '10', label: { zh: '10 秒', en: '10s' } },
   ],
 }
+
+it('生成浮层的下拉与开关共用固定标签列，底栏仍保持行内布局', () => {
+  const view = render(<ParamPanelRowsContext.Provider value><UiGroup labelWidth={120}>
+    <DropdownInput param={durationParam} value="6" onChange={() => undefined} />
+    <SchemaNumberInput param={{ id: 'strength', type: 'number', order: 2, name: { zh: '强度', en: 'Strength' }, default: 100 }} value={100} onChange={() => undefined} />
+    <SwitchInput param={{ id: 'search', type: 'switch', order: 2, name: { zh: '联网搜索', en: 'Web search' }, default: false }} value={false} onChange={() => undefined} />
+  </UiGroup></ParamPanelRowsContext.Provider>)
+  const rows = view.container.querySelectorAll('[data-ui-form-row="panel"]')
+  expect(rows).toHaveLength(3)
+  for (const row of rows) expect(row.getAttribute('data-label-width')).toBe('120')
+  expect(view.getByRole('button', { name: /时长/ })).toBeTruthy()
+  expect(view.getByRole('spinbutton', { name: '强度' }).closest('[data-ui-field-control]')?.parentElement?.className).toContain('flex-1')
+  expect(view.getByRole('switch', { name: '联网搜索' }).className).toContain('w-full')
+})
 
 const extendParam: SwitchParamDef = {
   id: 'prompt_extend',
