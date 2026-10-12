@@ -46,7 +46,7 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
     const key = props.contextKey
     void (async () => {
       if (confirmation) await confirmation.confirm(project)
-      else { const prepared = await props.prepareGeneration?.(); if (currentKey.current !== key) { await prepared?.cancel(); return }; if (prepared) { setRequest({ key, value: prepared }); return } }
+      else { const prepared = await props.prepareGeneration?.(); if (currentKey.current !== key) { await prepared?.cancel(); return } if (prepared) { setRequest({ key, value: prepared }); return } }
       if (currentKey.current !== key) return
       setRequest(undefined); await props.onOptimize()
     })().catch(error => props.onError?.(error)).finally(() => { pendingGeneration.current = false; setGenerating(false) })
