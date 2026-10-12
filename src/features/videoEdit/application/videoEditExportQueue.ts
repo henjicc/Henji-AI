@@ -87,7 +87,7 @@ export const videoEditExportQueue = new VideoEditExportQueue(async job => {
   job.controller.signal.throwIfAborted()
   if (!listVideoEditInstances().includes(job.owner)) throw new Error('原剪辑已关闭，请重新加入导出。')
   const result = await exportVideoEdit(job.owner.document.id, job.path, false, job.controller.signal, job.settings.loudness ?? undefined, {
-    snapshot: job.snapshot, range: job.range, settings: job.settings, signal: job.controller.signal, loudnessRequested: job.loudnessRequested ?? false, onTask: task => { job.task = task },
+    queueId: job.id, snapshot: job.snapshot, range: job.range, settings: job.settings, signal: job.controller.signal, loudnessRequested: job.loudnessRequested ?? false, onTask: task => { job.task = task },
   })
   if (!result && !job.controller.signal.aborted && job.task?.state !== 'cancelled') throw new Error('导出未生成文件，请重试。')
 })

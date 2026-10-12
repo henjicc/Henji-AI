@@ -174,6 +174,7 @@ export class ApplicationOperationCoordinator {
     }
     if (!access.allowWrites) throw new Error('PERMISSION_DENIED:请在应用内授权修改。')
     const refs: Array<{ kind: string; id: string }> = []
+    const deletionRefs: Array<{ kind: string; id: string }> = []
     let destructive = false
     let writeRefs: Array<{ kind: string; id: string }> | undefined
     if (capabilityId !== 'change_application_entities') {
@@ -184,6 +185,7 @@ export class ApplicationOperationCoordinator {
       destructive = definition.destructive
       const parsed = definition.inputSchema.parse(input)
       refs.push(...definition.resolveOperationTargets(parsed))
+      if (destructive) deletionRefs.push(...refs)
       writeRefs = definition.resolveOperationWriteTargets?.(parsed, applicationInvocationId(callerId, operationId))
     } else {
     const changes = z.array(z.object({ kind: z.string(), entityType: z.string() }).passthrough()).min(1).max(32).parse(input.changes)
@@ -195,7 +197,7 @@ export class ApplicationOperationCoordinator {
       if (change.kind === 'set_properties' || change.kind === 'mutate_properties') refs.push(refSchema.parse(change.target))
       else {
         refs.push(refSchema.parse(change.parent))
-        if (change.kind === 'remove_items') refs.push(...z.array(refSchema).parse(change.targets))
+        if (change.kind === 'remove_items') { const targets = z.array(refSchema).parse(change.targets); refs.push(...targets); deletionRefs.push(...targets) }
       }
     }
     }
@@ -237,7 +239,7 @@ export class ApplicationOperationCoordinator {
         : '原操作属于另一连接，请在应用中核对对应目标。'}独立追加可并行，覆盖、删除、保存失败或重复未知请求不能绕过保护。`)
     }
     if (baselines.some((baseline) => baseline.rendererEpoch !== rendererEpoch)) throw new Error('BASELINE_EXPIRED:应用宿主已重载，请重新读取目标。')
-    const missing = refs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
+    const missing = deletionRefs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
     if (baselines.length && missing.length) throw new Error(`BASELINE_TARGET_MISMATCH:缺少 ${JSON.stringify(missing)} 的读取。普通操作可省略 baselineIds 由应用自动核对；删除操作请先用 read_application_entity 读取以上目标。`)
     const expectedRevisions: Record<string, number> = {}
     for (const baseline of baselines) for (const [scope, revision] of Object.entries(baseline.revisions)) {

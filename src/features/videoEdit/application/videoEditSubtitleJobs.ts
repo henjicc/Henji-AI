@@ -1,4 +1,4 @@
-import { applicationPaidRequest } from '@/services/paidApproval'
+import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
@@ -32,7 +32,7 @@ export async function runVideoEditSubtitleJob(owner: VideoEditInstance, sequence
     job.audioDocumentId ??= await prepareVideoEditSubtitleAudio(owner.document.id, sequenceId, scope, trackId, signal, progress => { job.progress = progress; publish() })
     const prepared = await preflightAudioEditTranscription(job.audioDocumentId, undefined, options.language)
     job.state = 'confirming'; publish()
-    const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ paid: await applicationPaidRequest('recognition', owner.document.id, signal), title: '转录并生成字幕', message: '复用口播识别：使用已配置、支持时间戳的语音模型。识别按该模型计费；若已有转录结果，继续整理字幕不会重复识别。是否继续？', type: 'warning', confirmLabel: '确认转录' }, signal)
+    const accepted = !prepared.requiresConfirmation || await requestAlertConfirmation({ paid: await applicationPaidRequest('recognition', owner.document.id, signal, transcriptionEstimatedCny(prepared)), title: '转录并生成字幕', message: '复用口播识别：使用已配置、支持时间戳的语音模型。识别按该模型计费；若已有转录结果，继续整理字幕不会重复识别。是否继续？', type: 'warning', confirmLabel: '确认转录' }, signal)
     if (!accepted) { job.state = 'cancelled'; return }
     signal.throwIfAborted()
     if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原剪辑已关闭，请重新准备字幕。')

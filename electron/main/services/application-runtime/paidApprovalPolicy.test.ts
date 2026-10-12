@@ -1,3 +1,4 @@
+import { reserveGenerationBudget } from './generationBudget'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { decidePaidApproval, localDayStart, approvePaidOperation, handleUiPaidApproval } from './paidApprovalPolicy'
 import type { LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
@@ -79,4 +80,19 @@ it('讲解授权绑定原请求：拒绝不记费，确认不能重放，执行�
   send('confirmed', 'complete')
   expect(records.get('confirmed')).toMatchObject({ state: 'completed', approval: { decision: 'user' } })
   expect(store.generationSpendSince()).toBe(1)
+})
+
+it('generation and recognition share unknown/estimated decisions and disclose upper-bound approval', () => {
+  let record: OperationRecord = { operationId: 'estimate', callerId: 'caller', capabilityId: 'create_visible_generation_task', input: {}, inputDigest: '', state: 'preparing' }
+  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, generationSpendSince: () => 0 }
+  reserveGenerationBudget(store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: null } } } })
+  expect(approvePaidOperation(store, record, { category: 'generation', estimatedCny: record.paidGenerationEstimate! }, true).decision).toBe('ask')
+  reserveGenerationBudget(store, record, { ok: true, data: { preparation: { priceEstimate: { comparableCnyAmount: .01, estimateKind: 'upper-bound' } } } })
+  approvePaidOperation(store, record, { category: 'generation', estimatedCny: record.paidGenerationEstimate! }, true)
+  expect(record.approval).toMatchObject({ decision: 'auto', reason: expect.stringContaining('按上限估算 ¥0.0100') })
+  for (const category of ['generation', 'recognition'] as const) {
+    expect(decidePaidApproval(DEFAULT_PAID_APPROVAL_SETTINGS, { category, estimatedCny: null }, 0, true).decision).toBe('ask')
+    expect(decidePaidApproval({ ...DEFAULT_PAID_APPROVAL_SETTINGS, mode: 'bypass' }, { category, estimatedCny: null }, 0, true).decision).toBe('auto')
+    expect(decidePaidApproval(DEFAULT_PAID_APPROVAL_SETTINGS, { category, estimatedCny: .01 }, 0, true, 'upper-bound')).toMatchObject({ decision: 'auto', estimatedCny: .01, reason: expect.stringContaining('按上限估算 ¥0.0100') })
+  }
 })

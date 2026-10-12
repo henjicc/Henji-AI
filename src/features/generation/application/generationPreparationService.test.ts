@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { bailianQwenAudio31TtsFlashModel } from '../../../../packages/ai-sdk/src/catalog/bailian/qwen-audio-3.1-tts-flash.model'
 import { catalog } from '@henjicc/ai-sdk'
 import { volcengineSeedIcl20Model } from '../../../../packages/ai-sdk/src/catalog/volcengine-speech/seed-icl-2.0.model'
 import { kieGemini31FlashTtsModel } from '../../../../packages/ai-sdk/src/catalog/kie/gemini-3.1-flash-tts.model'
@@ -76,6 +77,17 @@ describe('generationPreparation', () => {
     registry.clear()
     registry.register(composeModelDefinition(kieGemini31FlashTtsModel, modelPresentations[kieGemini31FlashTtsModel.meta.id]))
     expect(getGenerationModelSchema(kieGemini31FlashTtsModel.meta.id).priceEstimate).toMatchObject({ amount: 0.2351104, billingMode: 'estimated', basis: expect.stringContaining('上限估价') })
+  })
+
+  it('Qwen TTS discloses its actual upper estimate and failed calculators stay unknown', () => {
+    const model = composeModelDefinition(bailianQwenAudio31TtsFlashModel, modelPresentations[bailianQwenAudio31TtsFlashModel.meta.id])
+    registry.register(model)
+    const result = prepareGenerationTask({ modelId: model.meta.id, mediaType: 'audio', prompt: '测试上限估价' })
+    expect(result.priceEstimate).toMatchObject({ estimateKind: 'upper-bound', amount: expect.any(Number), comparableCnyAmount: expect.any(Number), display: expect.stringContaining('按上限估算') })
+    expect((result.priceEstimate as { amount: number }).amount).toBeGreaterThan(0)
+    registry.clear()
+    registry.register({ ...testModel, pricing: { currency: '¥', calculator: () => { throw new Error('no estimate') } } })
+    expect(getGenerationModelSchema(testModel.meta.id).priceEstimate).toMatchObject({ amount: null, comparableCnyAmount: null })
   })
 
   it('按配置搜索并裁剪单模型 schema', () => {

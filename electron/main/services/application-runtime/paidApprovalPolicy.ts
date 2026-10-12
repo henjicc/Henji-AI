@@ -10,7 +10,7 @@ export function localDayStart(now: number): number {
   const date = new Date(now); date.setHours(0, 0, 0, 0); return date.getTime()
 }
 /** All callers share these limits; only official application estimates enter this service. */
-export function decidePaidApproval(settings: PaidApprovalSettings, request: PaidApprovalRequest, dailySpentCny: number, allowPaid: boolean): PaidApprovalDecision {
+export function decidePaidApproval(settings: PaidApprovalSettings, request: PaidApprovalRequest, dailySpentCny: number, allowPaid: boolean, estimateKind?: 'upper-bound' | 'estimate'): PaidApprovalDecision {
   const base = { estimatedCny: request.estimatedCny, dailySpentCny }
   const decision = (decision: PaidApprovalDecision['decision'], reason: string): PaidApprovalDecision => ({ ...base, decision, reason })
   if (!allowPaid) return decision('deny', '此连接没有付费操作授权。')
@@ -20,7 +20,8 @@ export function decidePaidApproval(settings: PaidApprovalSettings, request: Paid
   if (settings.mode === 'bypass') return decision('auto', '全部放行')
   if (request.estimatedCny === null) return decision('ask', '费用暂无法预估')
   if (request.estimatedCny > settings.singleLimitCny) return decision('ask', `超出单次自动通过额度 ¥${settings.singleLimitCny}`)
-  return decision('auto', granted ? '项目已授权且费用在额度内' : '费用在自动通过额度内')
+  const cost = `${estimateKind === 'upper-bound' ? '按上限估算' : '预计'} ¥${request.estimatedCny.toFixed(4)}`
+  return decision('auto', `${cost}，${granted ? '项目已授权且费用在额度内' : '费用在自动通过额度内'}`)
 }
 export function readPaidApprovalSettings(): PaidApprovalSettings {
   const raw = getSettingsStore().get(PAID_APPROVAL_SETTING_KEY)
@@ -30,7 +31,7 @@ export function readPaidApprovalSettings(): PaidApprovalSettings {
 export function approvePaidOperation(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince'>, record: OperationRecord, request: PaidApprovalRequest,
   allowPaid: boolean, consent?: 'once' | 'project', now = Date.now()): PaidApprovalDecision {
   const settings = readPaidApprovalSettings()
-  const decision = decidePaidApproval(settings, request, store.generationSpendSince(localDayStart(now)), allowPaid)
+  const decision = decidePaidApproval(settings, request, store.generationSpendSince(localDayStart(now)), allowPaid, request.category === 'generation' ? record.paidGenerationEstimateKind : undefined)
   if (decision.decision === 'deny') return decision
   if (consent === 'project' && request.project) {
     const projects = settings.projects.filter(value => value.id !== request.project!.id || value.category !== request.category)

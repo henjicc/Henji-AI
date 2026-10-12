@@ -19,6 +19,7 @@ export const videoEditExportInputSchema = z.object({ documentRef, format: z.enum
 export const videoEditExportJobSummarySchema = z.object({
   id: z.string(), documentRef, sequenceRef: ref('video_edit.sequence'), name: z.string(), presetName: z.string(),
   state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().min(0).max(1), range, settings: videoEditExportSettingsSchema,
+  path: z.string().optional(), completedAt: z.number().optional(), archived: z.boolean().optional(),
   taskId: z.string().optional(), error: z.string().optional(), notice: z.string().optional(), outputReady: z.boolean(), assetRef: ref('asset').optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(),
 }).strict()
 const task = z.object({ id: z.string(), state: z.enum(['running', 'completed', 'failed', 'cancelled']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), loudness: videoEditLoudnessSettingsSchema.optional(), loudnessMeasurement: videoEditLoudnessMeasurementSchema.optional(), notice: z.string().optional() }).strict()
@@ -26,7 +27,7 @@ const output = z.object({ resultRef: documentRef, message: z.string(), verificat
 export const videoEditExportQuerySchema = z.object({ documentRef, taskId: z.string().min(1).optional() }).strict()
 const descriptions = {
   export_video_edit: ['导出剪辑成片或字幕', '导出后用 query_video_edit_export 查完成。默认与序列一致；通用实体 video_edit.export_preset 提供预设，批量 exports 每项指定 presetRef/完整 settings，可用 documentRef/sequenceRef 选择原剪辑/序列。完整 settings 不支持则拒绝；预设/缺省设置按设备适配，queue.settings 回读实际值。followSequence 在提交时读取序列值；videoEnabled/audioEnabled 控制画面/声音，sampleRate 为 Hz，wav 为24位PCM；loudness=null 不标准化。captionMode 导出同名字幕，以导出入点为零；独立 srt/vtt 的 subtitleClock 默认 range，可选 sequence。useProxies 只用代理画面、声音用原片；importToProject 导入原项目；addToLibrary 默认 true，需 assets:write，否则设 false 再收录。range 为整数帧半开范围；省略用入出点，无标记则整序列。retryTaskId 只重试未发布文件的失败项。'],
-  query_video_edit_export: ['查询剪辑导出', '读取此剪辑的全部导出项：排队、进度、取消、失败原因、预设、范围、PCM 响度和最终状态。assetRef 为自动收录的素材引用；outputReady 表示有已核验输出，可用 collect_video_edit_output 与 id 或 taskId 收录。只观察，不等待、不取消。'],
+  query_video_edit_export: ['查询剪辑导出', '读取此剪辑的全部导出项，包含重启后保留的完成记录（assetRef、path、completedAt、settings）；taskId 接受队列或渲染编号，不存在时报 NOT_FOUND。可查排队、进度、取消、失败原因、预设、范围、PCM 响度和最终状态。assetRef 为自动收录的素材引用；outputReady 表示有已核验输出，当前会话可用 collect_video_edit_output 与 id 或 taskId 收录；归档优先复用 assetRef，无素材引用时从 path 导入。只观察，不等待、不取消。'],
   cancel_video_edit_export: ['取消剪辑导出', 'taskId 指定此剪辑的单项导出（取 queue.id）；省略则取消此剪辑全部未完成项及旧导出。清理未完成文件，保留已发布文件。'],
 } as const
 export const VIDEO_EDIT_EXPORT_CAPABILITIES = (Object.keys(descriptions) as Array<keyof typeof descriptions>).map(id => defineApplicationCapability({

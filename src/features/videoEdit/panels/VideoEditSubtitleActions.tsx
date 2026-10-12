@@ -15,17 +15,24 @@ import { listVideoEditSubtitlePresets } from '../application/videoEditSubtitlePr
 import { confirmVideoEditBilingualSubtitles, type SubtitleTranslationLanguage } from '../application/videoEditBilingualSubtitles'
 import { useVideoEditFontPreview } from './useVideoEditFontPreview'
 import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
+import { SUBTITLE_STYLE_PROFILES } from '@/core/videoEdit/subtitleStyleProfiles'
+
+const netflix = SUBTITLE_STYLE_PROFILES.netflix_zh_hans
 
 export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId, onError }: { instance: VideoEditInstance; sequence: VideoEditSequence; selectedCaptionId?: string; onError: (error: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   sequence = instance.document.sequences.find(value => value.id === sequence.id) ?? sequence
   useSyncExternalStore(subscribeSubtitleJobs, subtitleJobsRevision)
   const [scope, setScope] = useState<SubtitleScope>('sequence'); const [trackId, setTrackId] = useState('')
-  const [maxCharacters, setMaxCharacters] = useState(24); const [minDurationSeconds, setMinimum] = useState(1)
-  const [maxLines, setMaxLines] = useState(2); const [pauseSeconds, setPauseSeconds] = useState(.6)
+  const [maxCharacters, setMaxCharacters] = useState(netflix.maxCharacters); const [minDurationSeconds, setMinimum] = useState(netflix.minDurationSeconds)
+  const [maxLines, setMaxLines] = useState(netflix.maxLines); const [pauseSeconds, setPauseSeconds] = useState(.25)
+  const [subtitleProfile, setSubtitleProfile] = useState<'netflix_zh_hans' | 'custom'>('netflix_zh_hans')
+  const subtitleOptions = subtitleProfile === 'netflix_zh_hans' ? { style: subtitleProfile } : { style: subtitleProfile, maxCharacters, maxLines, pauseSeconds, minDurationSeconds }
   const [presetId, setPresetId] = useState('')
   const [targetLanguage, setTargetLanguage] = useState<SubtitleTranslationLanguage>('en')
   const [translating, setTranslating] = useState(false)
+  const [normalizing, setNormalizing] = useState(false)
+  const normalization = useRef<AbortController>()
   const translation = useRef<AbortController>()
   const presets = listVideoEditSubtitlePresets()
   const [language, setLanguage] = useState<'zh' | 'en'>('zh')
@@ -41,7 +48,7 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   const [available, setAvailable] = useState<boolean | null>(null); const [recoverable, setRecoverable] = useState<string>()
   const mounted = useRef(true)
   const errorHandler = useRef(onError); errorHandler.current = onError
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; translation.current?.abort(new Error('字幕面板已关闭。')) } }, [])
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; translation.current?.abort(new Error('字幕面板已关闭。')); normalization.current?.abort(new Error('字幕面板已关闭。')) } }, [])
   useEffect(() => {
     let current = true
     void getPlatform().audioEdit.listAsrModels().then(models => { if (current) setAvailable(models.some(model => model.configured && model.timestamps)) }, error => { if (current) errorHandler.current(error) })
@@ -50,11 +57,15 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   }, [instance, sequence.id])
   const job = readSubtitleJob(instance, sequence.id)
   const transcribing = Boolean(job && ['preparing', 'confirming', 'transcribing'].includes(job.state))
-  const busy = transcribing || translating
+  const busy = transcribing || translating || normalizing
   const retry = job?.state !== 'completed' ? job?.audioDocumentId ?? recoverable : undefined
-  const run = (resume?: string): void => { void runVideoEditSubtitleJob(instance, sequence.id, scope, trackId || undefined, { maxCharacters, maxLines, pauseSeconds, minDurationSeconds, language }, resume).catch(error => { if (mounted.current) onError(error) }) }
+  const run = (resume?: string): void => { void runVideoEditSubtitleJob(instance, sequence.id, scope, trackId || undefined, { ...subtitleOptions, language }, resume).catch(error => { if (mounted.current) onError(error) }) }
   const applyStyle = (selected = false): void => { try { styleVideoEditSubtitles(instance.document.id, sequence.id, style, selected && selectedCaptionId ? [selectedCaptionId] : undefined) } catch (error) { onError(error) } }
   const changeStyle = (value: VideoEditSubtitleStyle): void => { setPresetId(''); setStyle(value) }
+  const normalize = (): void => {
+    const controller = new AbortController(); normalization.current = controller; setNormalizing(true)
+    void segmentVideoEditSubtitles(instance.document.id, sequence.id, subtitleOptions, undefined, controller.signal).catch(error => { if (mounted.current && !controller.signal.aborted) onError(error) }).finally(() => { if (mounted.current) setNormalizing(false); if (normalization.current === controller) normalization.current = undefined })
+  }
   const translate = (): void => {
     const controller = new AbortController(); translation.current = controller; setTranslating(true)
     void confirmVideoEditBilingualSubtitles(instance.document.id, sequence.id, { targetLanguage }, controller.signal).catch(error => { if (mounted.current && !controller.signal.aborted) onError(error) }).finally(() => { if (mounted.current) setTranslating(false); if (translation.current === controller) translation.current = undefined })
@@ -64,14 +75,16 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
       <UiFormRow label="范围" density="compact"><Dropdown ariaLabel="字幕转录范围" size="sm" value={scope} onSelect={setScope} disabled={busy} options={[{ value: 'sequence', label: '整个序列' }, { value: 'in-out', label: '序列入出点' }, { value: 'selection', label: '选中片段' }]} /></UiFormRow>
       <UiFormRow label="声音" density="compact"><Dropdown ariaLabel="字幕声音来源" size="sm" value={trackId} onSelect={setTrackId} disabled={busy} options={[{ value: '', label: '可听混音' }, ...sequence.tracks.map(track => ({ value: track.id, label: track.name }))]} /></UiFormRow>
       <UiFormRow label="语言" density="compact"><Dropdown ariaLabel="字幕识别语言" size="sm" value={language} onSelect={setLanguage} disabled={busy} options={[{ value: 'zh', label: '中文' }, { value: 'en', label: '英语' }]} /></UiFormRow>
-      <UiFormRow label="每行最多字数" info="长句会自动拆分；部分识别结果的拆分时刻为估算值，生成后可校正。" density="compact"><NumberInput ariaLabel="每行最多字数" size="sm" value={maxCharacters} min={4} max={80} step={1} precision={0} disabled={busy} onChange={setMaxCharacters} /></UiFormRow>
-      <UiFormRow label="每条最多行数" density="compact"><NumberInput ariaLabel="每条字幕最多行数" size="sm" value={maxLines} min={1} step={1} precision={0} disabled={busy} onChange={setMaxLines} /></UiFormRow>
-      <UiFormRow label="停顿断句（秒）" density="compact"><NumberInput ariaLabel="字幕停顿断句秒数" size="sm" value={pauseSeconds} min={.1} max={2} step={.1} precision={1} disabled={busy} onChange={setPauseSeconds} /></UiFormRow>
-      <UiFormRow label="最短显示（秒）" density="compact"><NumberInput ariaLabel="字幕最短显示秒数" size="sm" value={minDurationSeconds} min={0} max={5} step={.1} precision={1} disabled={busy} onChange={setMinimum} /></UiFormRow>
+      <UiFormRow label="字幕规范" density="compact"><Dropdown ariaLabel="字幕规范" size="sm" value={subtitleProfile} onSelect={value => { setSubtitleProfile(value); if (value === 'netflix_zh_hans') { setMaxCharacters(netflix.maxCharacters); setMaxLines(netflix.maxLines); setMinimum(netflix.minDurationSeconds) } }} disabled={busy} options={[{ value: 'netflix_zh_hans', label: 'Netflix 简体中文' }, { value: 'custom', label: '自定义' }]} /></UiFormRow>
+      <UiFormRow label="每行最多字数" info="长句会自动拆分；部分识别结果的拆分时刻为估算值，生成后可校正。" density="compact"><NumberInput ariaLabel="每行最多字数" size="sm" value={maxCharacters} min={1} step={1} precision={0} disabled={busy} onChange={value => { setSubtitleProfile('custom'); setMaxCharacters(value) }} /></UiFormRow>
+      <UiFormRow label="每条最多行数" density="compact"><NumberInput ariaLabel="每条字幕最多行数" size="sm" value={maxLines} min={1} step={1} precision={0} disabled={busy} onChange={value => { setSubtitleProfile('custom'); setMaxLines(value) }} /></UiFormRow>
+      {subtitleProfile === 'custom' && <UiFormRow label="停顿断句（秒）" density="compact"><NumberInput ariaLabel="字幕停顿断句秒数" size="sm" value={pauseSeconds} min={.01} step={.05} precision={2} disabled={busy} onChange={setPauseSeconds} /></UiFormRow>}
+      <UiFormRow label="最短显示（秒）" density="compact"><NumberInput ariaLabel="字幕最短显示秒数" size="sm" value={minDurationSeconds} min={0} max={netflix.maxDurationSeconds} step={.1} precision={3} disabled={busy} onChange={value => { setSubtitleProfile('custom'); setMinimum(value) }} /></UiFormRow>
       <p className={UI_TEXT_META_CLASS}>语音识别按所选模型计费。</p>
       {available === false && <UiEmpty title="尚未配置时间戳识别模型" description="在设置中配置语音识别供应商后继续。" size="sm" />}
       <div className="flex flex-wrap items-center gap-2"><UiButton size="sm" variant="primary" disabled={busy || !available} onClick={() => run()}>转录并生成字幕</UiButton>{retry && <UiButton size="sm" disabled={busy} onClick={() => run(retry)}>继续上次转录</UiButton>}</div>
-      <UiButton size="sm" disabled={busy || !sequence.captions?.length} onClick={() => { try { segmentVideoEditSubtitles(instance.document.id, sequence.id, { maxCharacters, maxLines, pauseSeconds }) } catch (error) { onError(error) } }}>整理已有长句</UiButton>
+      <UiButton size="sm" disabled={busy || !sequence.captions?.length} onClick={normalize}>规范化已有字幕</UiButton>
+      {normalizing && <UiLoading size="xs" message="正在整理字幕"><UiButton size="sm" onClick={() => normalization.current?.abort()}>取消</UiButton></UiLoading>}
       {transcribing && <UiLoading size="xs" message={job?.state === 'preparing' ? `准备声音 ${Math.round(job.progress * 100)}%` : job?.state === 'confirming' ? '等待费用确认' : '正在识别声音'}><UiButton size="sm" onClick={() => cancelSubtitleJob(instance, sequence.id)}>取消</UiButton></UiLoading>}
     </UiGroup>
     <UiGroup title="统一字幕样式" titleTone="compact" divided>

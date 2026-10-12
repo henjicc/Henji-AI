@@ -529,6 +529,56 @@
           "kind": "candidate"
         }
       ]
-    }
+    },
+    "exportHistory": [
+      {
+        "id": "golden-export",
+        "taskId": "golden-render",
+        "sequenceId": "golden-sequence",
+        "name": "黄金导出",
+        "path": "/persistence-project/导出/黄金.mp4",
+        "completedAt": 1791504000000,
+        "settings": {
+          "format": "mp4",
+          "width": 1920,
+          "height": 1080,
+          "fps": null,
+          "videoBitrateMbps": 12,
+          "audioBitrateKbps": 192,
+          "fit": "fit",
+          "loudness": {
+            "targetLufs": -14,
+            "truePeakDbtp": -1
+          },
+          "codec": "avc",
+          "bitrateMode": "vbr",
+          "keyframeInterval": "auto",
+          "encoderPreference": "hardware",
+          "videoEnabled": true,
+          "audioEnabled": true,
+          "audioCodec": "aac",
+          "sampleRate": 48000,
+          "channels": 2,
+          "captionMode": "none",
+          "followSequence": {
+            "resolution": true,
+            "fps": true,
+            "sampleRate": true,
+            "channels": true
+          },
+          "importToProject": false,
+          "addToLibrary": true,
+          "useProxies": false
+        },
+        "range": {
+          "startFrame": 0,
+          "endFrame": 30
+        },
+        "assetRef": {
+          "kind": "asset",
+          "id": "golden-export-asset"
+        }
+      }
+    ]
   }
 }

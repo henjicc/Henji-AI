@@ -50,6 +50,9 @@ sequence.clips.push(clip)
 sequence.captions = [{ id: 'golden-caption', start: 5, duration: 40, text: '字幕原文', translation: 'Golden caption' }]
 sequence.transitions = [{ id: 'golden-transition', kind: 'cross_dissolve', rightClipId: clip.id, durationFrames: 10 }]
 sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }, { id: 'golden-beat', frame: 30, name: '重音', type: 'beat', strength: .9 }]
+document.exportHistory = [{ id: 'golden-export', taskId: 'golden-render', sequenceId: sequence.id, name: '黄金导出',
+  path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings,
+  range: { startFrame: 0, endFrame: 30 }, assetRef: { kind: 'asset', id: 'golden-export-asset' } }]
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()

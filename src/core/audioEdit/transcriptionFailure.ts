@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const transcriptionPreflightSchema = z.object({ sourcePath: z.string().min(1), durationMs: z.number().positive(), modelId: z.string().optional(), language: z.string().optional(), audioDocumentId: z.string().optional() }).strict()
 export type TranscriptionPreflight = z.infer<typeof transcriptionPreflightSchema>
-export interface TranscriptionPreparation { modelId?: string; requiresConfirmation: boolean }
+export interface TranscriptionPreparation { modelId?: string; requiresConfirmation: boolean; cost?: import('./asrCatalog').AsrCostEstimate }
 /** Rejections through contextBridge discard Error custom properties; transfer a plain DTO instead. */
 export type TranscriptionReply =
   | { ok: true; data: import('./types').AudioEditTranscriptionResult }

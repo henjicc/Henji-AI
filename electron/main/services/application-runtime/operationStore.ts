@@ -10,6 +10,7 @@ export interface OperationRecord {
   input: Record<string, unknown>
   expectedRevisions?: Record<string, number>
   paidGenerationEstimate?: number | null
+  paidGenerationEstimateKind?: 'upper-bound' | 'estimate'
   paidReservations?: Array<import('zod').infer<typeof import('../../../../src/core/application-control/paidApproval').paidReservationSchema>>
   approval?: import('../../../../src/core/application-control/paidApproval').PaidApprovalReceipt
   state: OperationState

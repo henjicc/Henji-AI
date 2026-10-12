@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
@@ -11,6 +12,8 @@ import {
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
 import { getI18nText, type ModelDefinition, type ModelType, type ParamDef } from '@/core/types'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
+
+const logger = createLogger('features.generation.preparation')
 
 export type GenerationMediaType = 'image' | 'video' | 'audio'
 export type GenerationModelSearchSort = 'registry' | 'recommended' | 'lowest_estimated_price'
@@ -150,7 +153,10 @@ function createPriceEstimate(
   params = registry.getDefaultValues(model.meta.id),
   usdToCnyRate = readPriceEstimateDisplaySettings().usdToCnyRate
 ): Record<string, unknown> {
-  const calculated = registry.calculatePrice(model.meta.id, params)
+  // The UI registry falls back to zero on calculator failure; authorization must retain unknown.
+  let calculated = Number.NaN
+  try { calculated = model.pricing.fixed ?? model.pricing.calculator?.(params) ?? Number.NaN } catch (error) { logger.warn('生成费用暂无法估算', { event: 'generation.price_estimate.failed', modelId: model.meta.id, error }) }
+  const upperBound = model.pricing.estimateKind === 'upper-bound' || model.pricing.billingMode === 'estimated'
   const amount = Number.isFinite(calculated) && calculated >= 0 ? calculated : null
   const sourceCurrency = resolvePricingCurrency(model.pricing.currency)
   const comparableCnyAmount = amount !== null && sourceCurrency
@@ -160,14 +166,15 @@ function createPriceEstimate(
   return {
     amount,
     currency: model.pricing.currency,
-    display: amount === null ? '价格暂不可估算' : `${model.pricing.currency}${amount.toFixed(4)}`,
+    display: amount === null ? '价格暂不可估算' : `${upperBound ? '按上限估算 ' : ''}${model.pricing.currency}${amount.toFixed(4)}`,
+    estimateKind: upperBound ? 'upper-bound' : 'estimate',
     billingMode: model.pricing.billingMode ?? (model.pricing.fixed !== undefined ? 'fixed' : 'dynamic'),
-    basis: model.pricing.billingMode === 'estimated' ? '保守上限估价，依据见模型计费说明，实际以供应商账单为准' : '当前参数估算',
+    basis: upperBound ? '保守上限估价，依据见模型计费说明，实际以供应商账单为准' : '当前参数估算',
     description: model.pricing.description ?? null,
     comparableCnyAmount,
     comparableCnyExchangeRate: sourceCurrency === 'USD' ? usdToCnyRate : null,
     comparisonNote: sourceCurrency
-      ? '人民币比较值仅用于候选排序；动态计费模型以提交前的实际参数估算为准。'
+      ? '人民币估值用于候选排序和统一付费授权；动态计费模型以提交前的实际参数估算为准。'
       : '该货币暂不参与跨币种比较；以模型原始价格为准。',
   }
 }
@@ -179,6 +186,7 @@ function createCatalogPriceEstimate(model: ModelDefinition, usdToCnyRate: number
     currency: estimate.currency,
     display: estimate.display,
     billingMode: estimate.billingMode,
+    ...(estimate.estimateKind === 'upper-bound' ? { estimateKind: estimate.estimateKind, basis: estimate.basis } : {}),
     comparableCnyAmount: estimate.comparableCnyAmount,
     description: typeof estimate.description === 'string' ? estimate.description.slice(0, 80) : null,
   }

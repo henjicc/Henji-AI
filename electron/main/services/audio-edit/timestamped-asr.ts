@@ -6,7 +6,7 @@ import {
   siliconFlowSenseVoiceSmall, siliconFlowTeleSpeechAsr, volcengineSeedAsrFile,
   type RuntimeContext, type SpeechRecognitionEvent, type SpeechRecognitionOutput,
 } from '@henjicc/ai-sdk'
-import { ASR_CATALOG, asrProviderId, isTimestampedLocalAsr, resolveTimestampedLocalAsr } from '../../../../src/core/audioEdit/asrCatalog'
+import { ASR_CATALOG, estimateAsrCost, type AsrCostEstimate, asrProviderId, isTimestampedLocalAsr, resolveTimestampedLocalAsr } from '../../../../src/core/audioEdit/asrCatalog'
 import { normalizeTimestampedTranscript, type TimestampedTranscript } from '../../../../src/core/audioEdit/timestampedTranscript'
 import { getAiProviderApiKey } from '../keystore'
 import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
@@ -22,8 +22,8 @@ export interface TimestampedTranscriptionPlan {
   readonly audioPath: string
   readonly durationMs: number
   readonly language: string
-  /** SDK descriptor 未提供价格；未知不得当作零费用，授权由任务所属领域取得。 */
-  readonly cost: Readonly<{ status: 'unknown'; amount: null; currency: null }>
+  /** 时长乘 SDK 资料中的所选模型单价；缺少单价时明确未知。 */
+  readonly cost: Readonly<AsrCostEstimate>
 }
 
 export interface TimestampedAsrModel {
@@ -38,7 +38,7 @@ export interface TimestampedAsrModel {
 export interface TimestampedAsrService {
   client: ReturnType<typeof createCapabilityClient>
   listModels(): TimestampedAsrModel[]
-  preflight(input: TranscriptionPreflight): Promise<{ modelId: string }>
+  preflight(input: TranscriptionPreflight): Promise<{ modelId: string; cost: AsrCostEstimate }>
   prepare(input: { modelId?: string; providerId?: string; audioPath: string; durationMs: number; language?: string }): TimestampedTranscriptionPlan
   execute(plan: TimestampedTranscriptionPlan, context: { requestId: string; signal: AbortSignal; resumeTaskId?: string; onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void> }): Promise<TimestampedTranscript>
 }
@@ -57,7 +57,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
       const preset = bailianNonRealtimeAsrPresets.find(value => value.descriptor.id === selected.descriptor.id)
       if (preset?.asyncInputField && !runtime.transport.uploadFile) throw new Error('native_upload_unsupported：宿主未提供本地文件直传；未提交识别、未计费。')
       await checkMedia(input.sourcePath)
-      return { modelId: selected.descriptor.id }
+      return { modelId: selected.descriptor.id, cost: estimateAsrCost(selected.descriptor.id, input.durationMs) }
     },
     listModels: (): TimestampedAsrModel[] => client.list('speech-recognition').filter((descriptor) => {
       const entry = ASR_CATALOG.find((entry) => entry.descriptor.id === descriptor.id)
@@ -76,7 +76,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
       return Object.freeze({
         modelId: selected.descriptor.id, providerId: asrProviderId(selected), audioPath: input.audioPath,
         durationMs: input.durationMs, language: input.language ?? 'zh',
-        cost: Object.freeze({ status: 'unknown' as const, amount: null, currency: null }),
+        cost: Object.freeze(estimateAsrCost(selected.descriptor.id, input.durationMs)),
       })
     },
     /** 仅执行一次；owner 负责授权、operationId、任务账本、恢复和音频→墙钟映射。 */

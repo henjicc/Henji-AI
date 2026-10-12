@@ -3,7 +3,7 @@
   "formats": {
     "document.video_edit": {
       "version": 2,
-      "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
+      "fingerprint": "de24e35a2a880bea9ab037ce98c70a77f464122c7b65b657ccfcd3a9280588ea",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -118,7 +118,7 @@
     },
     "sqlite": {
       "version": 19,
-      "fingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
+      "fingerprint": "38953dfbc151d55fa5d4d752a73ccecde97948879a488ebd2048c8418084389d",
       "supportedFrom": 19
     },
     "preset-export": {
@@ -1267,6 +1267,24 @@
       "reason": "t180 统一 AI 付费授权设置、项目授权及操作账本费用预留；开发期不兼容旧自动额度与确认格式",
       "previousFingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
       "fingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T08:13:44.264Z",
+      "format": "document.video_edit",
+      "version": 2,
+      "reason": "t182：剪辑文档保存已完成导出回执；既有操作账本记录生成上限估值性质，开发期不兼容旧格式",
+      "previousFingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
+      "fingerprint": "de24e35a2a880bea9ab037ce98c70a77f464122c7b65b657ccfcd3a9280588ea",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-12T08:13:44.265Z",
+      "format": "sqlite",
+      "version": 19,
+      "reason": "t182：剪辑文档保存已完成导出回执；既有操作账本记录生成上限估值性质，开发期不兼容旧格式",
+      "previousFingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
+      "fingerprint": "38953dfbc151d55fa5d4d752a73ccecde97948879a488ebd2048c8418084389d",
       "waivedFixtureVersions": []
     }
   ]

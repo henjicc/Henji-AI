@@ -47,7 +47,7 @@ export async function identifyAudioEditSource(sourcePath: string): Promise<Audio
   if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) throw new Error('素材正在被修改，请稍后重新导入。')
   return { size: after.size, mtimeMs: after.mtimeMs, digest: digest.digest('hex') }
 }
-export async function verifyAudioEditSource(project: AudioEditProjectDocument, deep = true): Promise<void> {
+export async function verifyAudioEditSource(project: Pick<AudioEditProjectDocument, 'source'>, deep = true): Promise<void> {
   let stat
   try { stat = await fs.stat(project.source.sourcePath) }
   catch { throw new Error('找不到原素材，请重新定位文件。') }

@@ -32,6 +32,17 @@ beforeEach(() => {
 
 afterEach(async () => { await resetAudioEditProjectInstancesForTests(); uninstallHarnessNativeStorage() })
 
+it('未打开口播草稿可按document_id后台读取词块，返回采样率而不导航', async () => {
+  const app = createApplicationHarness()
+  try {
+    const result = await app.requireResult('list_application_entities', { entityType: 'audio_edit.transcript_block', where: { document_id: 'audio-result' }, propertyIds: ['text', 'start_frame', 'end_frame', 'sample_rate'] })
+    expect(result.items).toMatchObject([
+      { ref: { id: 'audio-result:first' }, properties: { 'audio_edit.transcript_block.start_frame': 0, 'audio_edit.transcript_block.end_frame': 48000, 'audio_edit.transcript_block.sample_rate': 48000 } },
+      { ref: { id: 'audio-result:second' } },
+    ])
+  } finally { app.dispose() }
+})
+
 it('口播识别预检失败经正式能力返回未执行事实', async () => {
   registerHarnessAudioEditProject({ ...fixture(), transcript: [] })
   const app = createApplicationHarness()

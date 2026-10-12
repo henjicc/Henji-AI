@@ -1,3 +1,4 @@
+import { videoEditExportSettingsSchema } from './exportPresets'
 import { videoEditAnnotationSchema, mapVideoEditAnnotationTime } from './annotations'
 export { videoEditAnnotationSchema } from './annotations'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
@@ -102,7 +103,15 @@ export const videoEditSequenceSchema = z.object({
   markers: z.array(videoEditMarkerSchema).optional(), captions: z.array(videoEditCaptionSchema).optional(),
   transitions: z.array(videoEditTransitionSchema).optional(),
 }).strict().refine(isVideoEditSequenceSize, '超过 8K 上限。')
+export const videoEditExportHistorySchema = z.array(z.object({
+  id: z.string().min(1), taskId: z.string().min(1), sequenceId: z.string().min(1), name: z.string(),
+  path: z.string().min(1), completedAt: z.number().finite().nonnegative(),
+  settings: videoEditExportSettingsSchema, range: z.object({ startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).strict(),
+  assetRef: z.object({ kind: z.literal('asset'), id: z.string().min(1) }).strict().optional(),
+}).strict())
+export type VideoEditExportHistoryEntry = z.infer<typeof videoEditExportHistorySchema>[number]
 export const videoEditDocumentSchema = z.object({
+  exportHistory: videoEditExportHistorySchema.optional(),
   creativeIntents: creativeIntentsSchema.optional(),
   styleKits: z.array(styleKitSchema).optional(),
   colorLuts: z.array(colorLutAssetSchema).optional(),
