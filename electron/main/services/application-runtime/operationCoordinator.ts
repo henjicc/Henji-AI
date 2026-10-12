@@ -241,6 +241,9 @@ export class ApplicationOperationCoordinator {
     if (baselines.some((baseline) => baseline.rendererEpoch !== rendererEpoch)) throw new Error('BASELINE_EXPIRED:应用宿主已重载，请重新读取目标。')
     const missing = deletionRefs.filter((ref) => !baselines.some((baseline) => baseline.refs.some((item) => item.kind === ref.kind && item.id === ref.id)))
     if (baselines.length && missing.length) throw new Error(`BASELINE_TARGET_MISMATCH:缺少 ${JSON.stringify(missing)} 的读取。普通操作可省略 baselineIds 由应用自动核对；删除操作请先用 read_application_entity 读取以上目标。`)
+    // 非删除目标可不带基线，但显式提交的基线必须对应本次某个目标：传错对象的基线是调用错误，不能被静默忽略
+    const unrelated = baselines.filter((baseline) => !baseline.refs.some((item) => refs.some((ref) => ref.kind === item.kind && ref.id === item.id)))
+    if (unrelated.length) throw new Error(`BASELINE_TARGET_MISMATCH:基线 ${unrelated.map((baseline) => baseline.id).join('、')} 不对应本次任何目标。请读取本次要修改或删除的目标后再提交，或省略 baselineIds。`)
     const expectedRevisions: Record<string, number> = {}
     for (const baseline of baselines) for (const [scope, revision] of Object.entries(baseline.revisions)) {
       if (scope in expectedRevisions && expectedRevisions[scope] !== revision) throw new Error(`BASELINE_CONFLICT:${scope} 的读取基线不一致。普通操作可省略 baselineIds 由应用自动核对；严格写入请重新读取相关目标。`)
