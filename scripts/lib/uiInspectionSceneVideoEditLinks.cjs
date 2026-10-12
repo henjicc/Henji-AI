@@ -58,7 +58,7 @@ function fixture() {
   }
   const base = { start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', itemId: 'links-item', linkId: 'links-take' }
   const project = {
-    format: 'henji-video-project', version: 3, id: 'reality-video-links', name: '链接剪辑验收', revision: 0,
+    format: 'henji-video-project', version: 4, id: 'reality-video-links', name: '链接剪辑验收', revision: 0,
     media: [{ id: 'links-media', name: '同期音画', path: source, kind: 'video', width: 1280, height: 720, durationSeconds: 6, hasAudio: true, frameRate: { numerator: FPS, denominator: 1 } }],
     bins: [], items: [{ id: 'links-item', name: '同期音画', kind: 'video', mediaId: 'links-media' }],
     sequences: [{ id: 'links-sequence', name: '序列 1', width: 1280, height: 720, frameRate: { numerator: FPS, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,

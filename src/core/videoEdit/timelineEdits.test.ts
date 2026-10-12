@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
 import { videoEditDocumentSchema, type VideoEditClip } from './document'
@@ -83,7 +84,7 @@ it('不允许来源轨折叠成新重叠，实际插入和删除轨始终纳入�
 })
 it('当前格式音画拆开不增加媒体或素材项，源时间与联动剪切保持精确', () => {
   const { document } = fixture(); delete document.media[0].hasAudio
-  expect(videoEditDocumentSchema.parse(document).version).toBe(3)
+  expect(videoEditDocumentSchema.parse(document).version).toBe(VIDEO_EDIT_DOCUMENT_VERSION)
   expect(() => videoEditDocumentSchema.parse({ ...document, version: 2 })).toThrow()
   expect(() => apply(document, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 })).toThrow('音轨')
   document.media[0].hasAudio = true

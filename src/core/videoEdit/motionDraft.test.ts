@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
 import { expect, it } from 'vitest'
 import { createVideoEditTestDocument } from './testFixtures'
 import { defaultVideoEditTextStyle } from './text'
@@ -11,7 +12,7 @@ it('只替换候选涉及的范围和属性，外部普通贝塞尔与原片段�
   const next = mergeMotionClipCurves(before, [{ takeId: 'take', range: [30, 60], keyCount: 2, maxErrors: {}, curves: { x: [{ time: 30, value: .5, interpolation: 'ease' }, { time: 60, value: .7, interpolation: 'linear' }] } }])
   for (let frame = 0; frame <= 99; frame += .25) if (frame <= 29 || frame >= 61) expect(videoEditClipValue(next, 'x', frame + before.start)).toBeCloseTo(videoEditClipValue(before, 'x', frame + before.start), 8)
   expect(next.curves?.y).toBeUndefined(); expect(next.scale).toBe(before.scale); expect(before).toEqual(copy)
-  const document = createVideoEditTestDocument('超级关键帧'); expect(document.version).toBe(3)
+  const document = createVideoEditTestDocument('超级关键帧'); expect(document.version).toBe(VIDEO_EDIT_DOCUMENT_VERSION)
 })
 it('源画幅改变使示范几何失效，文件重定位保持相同几何', () => {
   const document = createVideoEditTestDocument('几何')

@@ -448,7 +448,7 @@ function videoEditFixtureProject({ id, name, revision, width, height, fps, media
     if (!mediaId) items.push({ id: itemId, name: clip.name, kind: clip.kind })
     return { ...clip, itemId, sourceRemainder: { numerator: 0, denominator: 1 } }
   })
-  return { format: 'henji-video-project', version: 3, id, name, revision, media, bins: [], items,
+  return { format: 'henji-video-project', version: 4, id, name, revision, media, bins: [], items,
     sequences: [{ id: `sequence-${id}`, name: '序列 1', width, height, frameRate: { numerator: fps, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
       tracks: Array.from({ length: 8 }, (_, index) => ({ id: `${id}-track-${index}`, name: index ? `视频 ${index}` : '音频 1', index, kind: index ? 'video' : 'audio', locked: false, enabled: true, muted: false, solo: false })), clips: mappedClips, annotations }] }
 }
