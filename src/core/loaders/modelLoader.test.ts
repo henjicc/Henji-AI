@@ -54,13 +54,13 @@ describe('SDK catalog 应用侧加载入口', () => {
     registry.clear()
   })
 
-  it('注册 124 个可选模型与受控执行模型，同时保持普通目录不变', async () => {
+  it('注册 123 个可选模型与受控执行模型，同时保持普通目录不变', async () => {
     await expect(loadAllModels()).resolves.toMatchObject({
-      total: 124 + CONTROLLED_EXECUTION_MODELS.length,
-      success: 124 + CONTROLLED_EXECUTION_MODELS.length,
+      total: 123 + CONTROLLED_EXECUTION_MODELS.length,
+      success: 123 + CONTROLLED_EXECUTION_MODELS.length,
       failed: 0,
     })
-    expect(registry.listAllModels()).toHaveLength(124)
+    expect(registry.listAllModels()).toHaveLength(123)
     for (const model of CONTROLLED_EXECUTION_MODELS) {
       expect(registry.getModel(model.meta.id), model.meta.id).toBeTruthy()
       expect(registry.getDiscoverableModel(model.meta.id), model.meta.id).toBeUndefined()
@@ -85,7 +85,7 @@ describe('SDK catalog 应用侧加载入口', () => {
     expect(modelscopeCustom?.meta.name).toBeTruthy()
   })
 
-  it('ModelRegistry 的十类查询在 124 个合成模型上保持完整行为', () => {
+  it('ModelRegistry 的十类查询在 123 个合成模型上保持完整行为', () => {
     const allModels = registry.listAllModels()
     const firstModel = allModels[0]
     expect(firstModel).toBeTruthy()
@@ -145,9 +145,9 @@ describe('SDK catalog 应用侧加载入口', () => {
     })
 
     const stats = registry.getStats()
-    expect(stats.totalModels).toBe(124)
-    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(124)
-    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(124)
+    expect(stats.totalModels).toBe(123)
+    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(123)
+    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(123)
   })
 
   it('九个未改动的迁移代表模型与迁移前结构摘要逐项一致', () => {
