@@ -159,7 +159,8 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control', 'd
   if (file.endsWith('.test.ts')) continue
   const relative = path.relative(root, file).replaceAll('\\', '/')
   const source = fs.readFileSync(file, 'utf8')
-  if (/\b(?:source|script|executeScript)\s*:\s*z\./.test(source)) {
+  // 固定取值（z.enum / z.literal）不是可执行脚本，只拦截可承载任意内容的字段
+  if (/\b(?:source|script|executeScript)\s*:\s*z\.(?!enum\(|literal\()/.test(source)) {
     failures.push(`应用能力暴露任意脚本字段：${relative}`)
   }
 }
