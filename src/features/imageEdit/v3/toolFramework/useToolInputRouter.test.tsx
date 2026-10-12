@@ -1,3 +1,4 @@
+import { isImageEditorInputBlockedV3 } from '../editor/imageEditorInputScopeV3'
 /** @vitest-environment jsdom */
 import '@/tests/imageEditDocumentFixture'
 import { cleanup, fireEvent, render } from '@testing-library/react'
@@ -144,4 +145,24 @@ describe('实际宿主输入桥', () => {
     expect(keyboardCommand).toHaveBeenCalledTimes(1)
     fireEvent.compositionEnd(field)
   })
+})
+
+
+it('内容冻结时宿主按钮仍可聚焦，但不会触发编辑/视口快捷键，解除后恢复', () => {
+  const view = render(<Harness />), root = view.getByTestId('root')
+  root.setAttribute('data-editor-input-disabled', 'true')
+  root.focus()
+  expect(document.activeElement).toBe(root)
+  expect(isImageEditorInputBlockedV3(root)).toBe(true)
+  const undo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })
+  fireEvent(root, undo)
+  expect(undo.defaultPrevented).toBe(true)
+  fireEvent.keyDown(root, { key: 'Enter', code: 'Enter' })
+  fireEvent.keyDown(root, { key: '0', ctrlKey: true })
+  expect(keyboardCommand).not.toHaveBeenCalled()
+  expect(viewportCommand).not.toHaveBeenCalled()
+  root.removeAttribute('data-editor-input-disabled')
+  expect(isImageEditorInputBlockedV3(root)).toBe(false)
+  fireEvent.keyDown(root, { key: 'Enter', code: 'Enter' })
+  expect(keyboardCommand).toHaveBeenCalledOnce()
 })

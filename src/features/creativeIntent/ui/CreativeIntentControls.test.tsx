@@ -1,8 +1,10 @@
+import i18n from '@/i18n/config'
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CreativeIntentControls, type CreativeIntentControlsProps } from './CreativeIntentControls'
 
+beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
 afterEach(cleanup)
 function props(): CreativeIntentControlsProps {
   return { status: 'reviewing', candidates: [{ id: 'candidate', label: '保留节奏' }], selected: 'candidate', fidelity: .5, intent: 'path', mode: 'navigate', speed: 1, property: 'position', capture: 'place', pins: [], takes: [], canPin: true,
@@ -59,7 +61,7 @@ it('机位配置隐藏二维选项，候选预览与钉住走同源回调', () =
 })
 
 it('整理通过共享外发确认预检，取消不生成，发送后只生成一次', async () => {
-  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ costMessage: '费用暂无法预估，按模型实际计费', hasProject: true, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
+  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, hasProject: true, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
   render(<CreativeIntentControls {...p} contextKey="session" prepareGeneration={prepareGeneration} />)
   fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
   await screen.findByRole('dialog'); expect(p.onOptimize).not.toHaveBeenCalled()

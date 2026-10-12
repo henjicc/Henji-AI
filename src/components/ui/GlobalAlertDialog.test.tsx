@@ -95,3 +95,25 @@ describe('GlobalAlertDialog', () => {
     expect(screen.getByRole('alertdialog').querySelector('.lucide-circle-alert')).not.toBeNull()
   })
 })
+
+
+it('英文付费确认由结构化费用拼句，核对标题与三个动作均翻译', async () => {
+  await i18n.changeLanguage('en-US')
+  useAlertDialogStore.setState({ queue: [] })
+  const pending = requestAlertConfirmation({ title: 'Approval', message: 'Send the request?', confirmLabel: 'Allow', paidConfirmation: true,
+    paidDetails: { estimatedCny: 1.25, dailySpentCny: 3, category: 'generation', modelName: 'Example model' } })
+  const view = render(<GlobalAlertDialog />)
+  expect(screen.getByText(/Estimated cost: CNY 1.25/)).toBeTruthy()
+  expect(screen.getByText(/Generation · Example model/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+  await expect(pending).resolves.toBe(false)
+  view.unmount()
+  showAlertDialog({ title: '旧标题', message: 'Review the document.', review: { operationId: 'operation', callerId: 'caller', resolve: () => {} } })
+  render(<GlobalAlertDialog />)
+  expect(screen.getByText('Did this change take effect?')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'No change; allow a retry' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'The change took effect' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Review later' })).toBeTruthy()
+  useAlertDialogStore.setState({ queue: [] })
+  await i18n.changeLanguage('zh-CN')
+})

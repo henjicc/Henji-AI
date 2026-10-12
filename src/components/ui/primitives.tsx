@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useContext,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
 } from 'react';
@@ -32,6 +33,7 @@ import {
 } from './styleTokens';
 import { resolveFormRowLabelling, useUiFormRowLabelling } from './formRowLabel';
 import { useScopedTextHistoryProps } from './useScopedTextHistory';
+import { UiPrimaryActionContext } from './actionPriority';
 import {
   type UiButtonProps,
   type UiCheckboxProps,
@@ -68,15 +70,19 @@ const UI_ITEM_FOCUS_RING_CLASS = 'focus-visible:!ring-2 focus-visible:!ring-inse
  * 外观只由 variant/size 决定，className 只放布局类（check:surface 规则 E）。
  */
 export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
-  ({ className = '', variant = 'quiet', size = 'md', ...props }, ref) => (
+  ({ className = '', variant = 'quiet', size = 'md', ...props }, ref) => {
+    const primaryAllowed = useContext(UiPrimaryActionContext);
+    const resolvedVariant = !primaryAllowed && (variant === 'primary' || variant === 'secondary') ? 'quiet' : variant;
+    return (
     <button
       ref={ref}
-      data-variant={variant}
+      data-variant={resolvedVariant}
       data-size={size}
-      className={`ui-btn inline-flex select-none items-center justify-center font-medium ${resolveButtonVariant(variant)} ${resolveButtonSize(size, variant)} ${className}`}
+      className={`ui-btn inline-flex select-none items-center justify-center font-medium ${resolveButtonVariant(resolvedVariant)} ${resolveButtonSize(size, resolvedVariant)} ${className}`}
       {...props}
     />
-  )
+    );
+  }
 );
 
 UiButton.displayName = 'UiButton';

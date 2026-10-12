@@ -1,3 +1,4 @@
+import i18n from '@/i18n/config'
 import type { ApplicationHostPlatform } from '@/core/application-control/localHostContracts'
 import type { OperationReviewItem, OperationReviewSnapshot } from '@/core/application-control/operationReview'
 import { getApplicationHostService } from '@/commands/applicationControl'
@@ -27,7 +28,7 @@ function acceptSnapshot(next: OperationReviewSnapshot, platform: ApplicationHost
     }).catch(error => {
       logger.warn('保存核对结果失败', { event: 'application.review.resolve_failed', error })
       useAlertDialogStore.setState(state => ({ queue: state.queue.filter(value => value !== entry) }))
-      showAlertDialog({ title: '核对结果未保存', message: '这项修改仍在待处理列表中，请稍后再试。', type: 'error' })
+      showAlertDialog({ title: i18n.t('operationReview.saveFailedTitle', { ns: 'common' }), message: i18n.t('operationReview.saveFailedMessage', { ns: 'common' }), type: 'error' })
     }).finally(() => { responding = false })
   } } }
   showAlertDialog(entry)
@@ -46,6 +47,6 @@ export async function openOperationReview(item: OperationReviewItem): Promise<vo
   try { await getApplicationHostService().reviewOperations({ action: 'open', operationId: item.operationId, callerId: item.callerId }) }
   catch (error) {
     logger.warn('打开核对面板失败', { event: 'application.review.open_failed', error })
-    showAlertDialog({ title: '暂时无法核对', message: '应用正在连接，请稍后再试。待确认的修改会保留。', type: 'warning' })
+    showAlertDialog({ title: i18n.t('operationReview.openFailedTitle', { ns: 'common' }), message: i18n.t('operationReview.openFailedMessage', { ns: 'common' }), type: 'warning' })
   }
 }

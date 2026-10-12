@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { CheckCircle2, CircleHelp, ChevronDown, ChevronUp, RefreshCw, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
 
@@ -10,6 +10,7 @@ import {
   UI_TEXT_META_CLASS,
   UiButton,
   UiDisclosurePanel,
+  UiError,
   UiFormRow,
   UiGroup,
   UiPanel,
@@ -145,7 +146,7 @@ function capabilitySummary(model: LlmModelConfig | undefined, t: TFunction): str
   return [
     t('agentModels.summary.tools', { value: yesNo(capabilities.toolCall) }),
     t('agentModels.summary.parallel', { value: yesNo(capabilities.parallelTools) }),
-    t('agentModels.summary.structured', { value: capabilities.structuredOutputMode }),
+    t('agentModels.summary.structured', { value: yesNo(capabilities.structuredOutputMode !== 'none') }),
     t('agentModels.summary.input', { value: inputs || t('agentModels.textOnly') }),
     t('agentModels.summary.context', { value: capabilities.contextWindow ?? unknown }),
     t('agentModels.summary.output', { value: capabilities.maxOutputTokens ?? unknown }),
@@ -156,6 +157,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
   const { t } = useI18n('settings')
   const profile = config.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config.agentProfiles[0]
   const [verifyingKey, setVerifyingKey] = useState<string | null>(null)
+  const [verificationErrors, setVerificationErrors] = useState<Record<string, string>>({})
   const [expandedRoles, setExpandedRoles] = useState<Set<AgentModelRole>>(new Set())
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const enabledProviderIds = useMemo(
@@ -194,6 +196,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
     if (!model || !provider) return
     const key = modelKey(reference)
     setVerifyingKey(key)
+    setVerificationErrors(previous => ({ ...previous, [key]: '' }))
     const requestId = `capability-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const structuredOutputMode = model.capabilities.structuredOutputMode === 'schema' ? 'schema' : 'json'
     try {
@@ -228,6 +231,12 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
         agentProfiles: config.agentProfiles.map(item => item.id === nextProfile.id ? nextProfile : item),
       })
     } catch (error) {
+      const message = error instanceof Error && /timeout|timed out|超时/i.test(error.message)
+        ? t('agentModels.verifyTimeout')
+        : error instanceof Error && /network|fetch|connect|网络|连接/i.test(error.message)
+          ? t('agentModels.verifyConnectionFailed')
+          : t('agentModels.verifyFailedMessage')
+      setVerificationErrors(previous => ({ ...previous, [key]: message }))
       logger.error('智能助手模型能力验证失败', error, {
         event: 'agent_model_profile.verify.failed',
         requestId,
@@ -309,14 +318,19 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   <div className={UI_TEXT_META_CLASS}>{capabilitySummary(model, t)}</div>
                   {verification ? (
                     <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
+                      {verificationErrors[key] && <p className="text-xs text-text3">{t('agentModels.previousVerification')}</p>}
                       <div>{t('agentModels.verifiedAt', { time: new Date(verification.verifiedAt).toLocaleString(), latency: verification.totalLatencyMs, cost: verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : t('agentModels.unknown') })}</div>
-                      <div>{verification.checks.map(check => `${check.id}:${t(check.status === 'passed' ? 'agentModels.check.passed' : check.status === 'skipped' ? (check.errorCode === 'manual_declaration_only' ? 'agentModels.check.declaredOnly' : 'agentModels.check.undeclared') : 'agentModels.check.failed')}`).join(' · ')}</div>
-                      <div>{t('agentModels.declaredNote')}</div>
-                      {/*
-                        视频最容易出现"模型支持但这里判失败"：智能助手走 AI SDK 模型步骤，
-                        该协议目前只能表达图片和音频，而画布文本处理走的是另一条原生流式路径，能发视频。
-                      */}
-                      <div>{t('agentModels.failedNote')}</div>
+                      {verification.checks.map(check => {
+                        const Icon = check.status === 'passed' ? CheckCircle2 : check.status === 'failed' ? XCircle : CircleHelp
+                        const tone = check.status === 'passed' ? 'text-success-text' : check.status === 'failed' ? 'text-danger-text' : 'text-text3'
+                        return <div key={check.id} className="py-1">
+                          <div className="flex items-center justify-between gap-3 text-xs">
+                            <span>{t(`agentModels.checkNames.${check.id}`)}</span>
+                            <span className={`inline-flex shrink-0 items-center gap-1 ${tone}`}><Icon aria-hidden className="h-3.5 w-3.5" />{t(`agentModels.check.${check.status}`)}</span>
+                          </div>
+                          {check.status === 'failed' && <p className="mt-1 text-xs text-text2">{t(`agentModels.checkImpact.${check.id}`)}</p>}
+                        </div>
+                      })}
                       <div>{t('agentModels.usage', { input: verification.usage.inputTokens ?? t('agentModels.unknown'), output: verification.usage.outputTokens ?? t('agentModels.unknown'), reasoning: verification.usage.reasoningTokens ?? t('agentModels.unknown') })}</div>
                     </div>
                   ) : <div className={UI_TEXT_META_CLASS}>{t('agentModels.notVerified')}</div>}
@@ -329,6 +343,8 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                       <span className={UI_TEXT_META_CLASS}>{t('agentModels.verifyCost')}</span>
                     </div>
                   ) : null}
+                  {verificationErrors[key] && effectiveReference && <UiError size="xs" align="start" title={t('agentModels.verifyFailedTitle')} message={verificationErrors[key]}
+                    onRetry={verifyingKey === null ? () => void verify(effectiveReference) : undefined} retryLabel={t('agentModels.retry')} />}
                 </div>
               </UiDisclosurePanel>
             </UiPanel>

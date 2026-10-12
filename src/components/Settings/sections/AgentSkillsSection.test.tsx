@@ -189,3 +189,18 @@ describe('AgentSkillsSection', () => {
     }))
   })
 })
+
+
+it('首次加载不提前呈现空列表，读取失败可重试并恢复技能列表', async () => {
+  let reject: (error: Error) => void = () => {}
+  listSkills.mockReturnValueOnce(new Promise((_, fail) => { reject = fail }))
+  render(<AgentSkillsSection />)
+  expect(screen.getByRole('status')).toBeTruthy()
+  expect(screen.queryByText('我的技能')).toBeNull()
+  reject(new Error('技能目录暂时无法读取'))
+  await screen.findByRole('alert')
+  fireEvent.click(screen.getByRole('button', { name: '重试' }))
+  await screen.findByText('my-workflow')
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(listSkills).toHaveBeenCalledTimes(2)
+})

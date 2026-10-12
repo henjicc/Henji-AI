@@ -1345,6 +1345,19 @@
           "float16": "半浮点",
           "float32": "32 位浮点"
         }
+      },
+      "smartContentEditing": {
+        "discard": "放弃修改并返回",
+        "apply": "应用并返回",
+        "retrySave": "重试保存并返回",
+        "return": "返回原图片",
+        "saving": "正在保存内容",
+        "preparing": "正在准备内容",
+        "updating": "正在更新内容",
+        "cancel": "取消",
+        "failed": "内容更新失败，请重试",
+        "selectSmartObject": "请选择智能对象",
+        "selectManagedSource": "此对象为嵌入内容，请选择受管理来源"
       }
     }
   },

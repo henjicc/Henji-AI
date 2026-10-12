@@ -15,7 +15,8 @@
     "goToSettings": "去设置",
     "goToConfigure": "去配置",
     "copyDetail": "复制错误详情",
-    "detailCopied": "已复制"
+    "detailCopied": "已复制",
+    "askAssistant": "问助手"
   },
   "providerKeyRequired": {
     "title": "还没有配置密钥",
@@ -65,6 +66,40 @@
   "paidApproval": {
     "allowOnce": "允许本次",
     "alwaysAllowProject": "本项目始终允许",
-    "deny": "拒绝"
+    "deny": "拒绝",
+    "categories": {
+      "generation": "生成",
+      "recognition": "识别",
+      "translation": "翻译",
+      "title": "标题",
+      "explanation": "讲解外发"
+    },
+    "operation": "本次操作：{{category}}",
+    "operationWithModel": "本次操作：{{category}} · {{modelName}}",
+    "unknownCost": "费用暂无法预估，按模型实际计费",
+    "estimatedCost": "预计 ¥{{amount}}",
+    "dailySpent": "今日已用 ¥{{amount}}",
+    "sendExplanation": "发送讲解给 AI？",
+    "explanationContent": "将发送讲解文字和 {{count}} 张画面给 {{modelName}}。"
+  },
+  "operationReview": {
+    "title": "这次修改生效了吗？",
+    "notExecuted": "没有生效，可以重新做",
+    "completed": "已经生效",
+    "later": "稍后处理",
+    "locked": "有一项 AI 修改还没确认是否生效，暂时不能修改这份{{label}}。",
+    "document": "文档",
+    "open": "去确认",
+    "domains": {
+      "canvas": "画布",
+      "video_edit": "剪辑",
+      "image_edit": "图片",
+      "audio_edit": "口播",
+      "camera_stage": "镜头参考"
+    },
+    "saveFailedTitle": "核对结果未保存",
+    "saveFailedMessage": "这项修改仍在待处理列表中，请稍后再试。",
+    "openFailedTitle": "暂时无法核对",
+    "openFailedMessage": "应用正在连接，请稍后再试。待确认的修改会保留。"
   }
 }

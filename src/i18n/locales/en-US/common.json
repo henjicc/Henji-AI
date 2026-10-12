@@ -15,7 +15,8 @@
     "goToSettings": "Open Settings",
     "goToConfigure": "Configure",
     "copyDetail": "Copy error details",
-    "detailCopied": "Copied"
+    "detailCopied": "Copied",
+    "askAssistant": "Ask the assistant"
   },
   "providerKeyRequired": {
     "title": "Provider key not configured",
@@ -65,6 +66,40 @@
   "paidApproval": {
     "allowOnce": "Allow once",
     "alwaysAllowProject": "Always allow in this project",
-    "deny": "Deny"
+    "deny": "Deny",
+    "categories": {
+      "generation": "Generation",
+      "recognition": "Recognition",
+      "translation": "Translation",
+      "title": "Titles",
+      "explanation": "Send explanation"
+    },
+    "operation": "Operation: {{category}}",
+    "operationWithModel": "Operation: {{category}} · {{modelName}}",
+    "unknownCost": "Cost cannot be estimated yet; actual model charges apply.",
+    "estimatedCost": "Estimated cost: CNY {{amount}}",
+    "dailySpent": "Spent today: CNY {{amount}}",
+    "sendExplanation": "Send this explanation to AI?",
+    "explanationContent": "Send the explanation text and {{count}} images to {{modelName}}."
+  },
+  "operationReview": {
+    "title": "Did this change take effect?",
+    "notExecuted": "No change; allow a retry",
+    "completed": "The change took effect",
+    "later": "Review later",
+    "locked": "An AI change still needs your review. Editing this {{label}} is paused until you confirm the result.",
+    "document": "document",
+    "open": "Review now",
+    "domains": {
+      "canvas": "canvas",
+      "video_edit": "edit",
+      "image_edit": "image",
+      "audio_edit": "voice project",
+      "camera_stage": "camera reference"
+    },
+    "saveFailedTitle": "Review result could not be saved",
+    "saveFailedMessage": "This change is still pending review. Try again shortly.",
+    "openFailedTitle": "Review is temporarily unavailable",
+    "openFailedMessage": "The app is reconnecting. Try again shortly; the pending change will be kept."
   }
 }
