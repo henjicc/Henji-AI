@@ -229,11 +229,11 @@ describe('ApplicationReflectionRegistry', () => {
     registry.register(registration())
     expect(registry.normalizePropertyValue('sample.item', 'sample.level', 4, assistantContext)).toBe(4)
     expect(() => registry.normalizePropertyValue('sample.item', 'sample.level', 11, assistantContext))
-      .toThrow('ABOVE_MAXIMUM')
+      .toThrow('不能大于')
     expect(() => registry.normalizePropertyValue('sample.item', 'sample.level', 3, assistantContext))
-      .toThrow('INVALID_STEP')
+      .toThrow('递增')
     expect(() => registry.normalizePropertyValue('sample.item', 'sample.mode', 'unknown', assistantContext))
-      .toThrow('UNKNOWN_ENUM_VALUE')
+      .toThrow('只能取')
     expect(() => registry.normalizePropertyValue('sample.item', 'sample.created_at', 'later', assistantContext))
       .toThrow('PROPERTY_READ_ONLY')
     expect(() => registry.normalizePropertyValue('sample.item', 'store.internal', true, assistantContext))
@@ -367,7 +367,7 @@ describe('ApplicationReflectionRegistry', () => {
     } catch (error) {
       message = error instanceof Error ? error.message : String(error)
     }
-    expect(message).toContain('EXPECTED_REF')
+    expect(message).toContain('应为实体引用对象')
     expect(message).toContain('sample.owner')
     expect(message, '没告诉模型 ref 长什么样').toMatch(/kind.*id/)
     expect(message, '没回显实际收到的内容').toContain('owner-1')

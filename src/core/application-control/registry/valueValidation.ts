@@ -1,5 +1,7 @@
 import type { JsonValue } from '../identifiers'
 import type { ApplicationPropertyDescriptor, ApplicationPropertyValue } from '../reflection'
+import { receivedPropertyValue } from './propertyValidationErrors'
+import { HEX_COLOR_EXAMPLE } from '../../theme/colorTokens'
 
 /**
  * `hint` 不是可选的装饰，是这条错误有没有用的分界线。
@@ -162,6 +164,33 @@ function normalizeNonNullValue(
 }
 
 export function normalizeApplicationPropertyValue(
+  descriptor: Pick<ApplicationPropertyDescriptor, 'id' | 'nullable' | 'value'> & Partial<Pick<ApplicationPropertyDescriptor, 'title' | 'unit'>>,
+  input: JsonValue
+): JsonValue {
+  try {
+    return normalizeValue(descriptor, input)
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith(`INVALID_PROPERTY_VALUE:${descriptor.id}:`)) throw error
+    const detail = error.message.slice(`INVALID_PROPERTY_VALUE:${descriptor.id}:`.length)
+    const code = detail.split('（')[0]
+    const value = descriptor.value
+    const range = value.kind === 'number' || value.kind === 'integer' ? value.hardRange : value.kind === 'vector2' || value.kind === 'vector3' ? value.componentRange : undefined
+    const constraints: Record<string, string> = {
+      EXPECTED_BOOLEAN: '应为布尔值', EXPECTED_STRING: '应为字符串', EXPECTED_NUMBER: '应为有限数字', EXPECTED_INTEGER: '应为整数',
+      NULL_NOT_ALLOWED: '不能为 null', BELOW_MINIMUM: `不能小于 ${range?.min}`, ABOVE_MAXIMUM: `不能大于 ${range?.max}`,
+      INVALID_STEP: `应以 ${range?.min ?? 0} 为起点、按 ${range?.step} 递增`,
+      STRING_TOO_SHORT: `长度至少 ${value.kind === 'string' ? value.minLength : ''} 个字符`, STRING_TOO_LONG: `长度最多 ${value.kind === 'string' ? value.maxLength : ''} 个字符`,
+      UNKNOWN_ENUM_VALUE: `只能取 ${value.kind === 'enum' ? value.values.map(item => JSON.stringify(item.value)).join('、') : ''}`,
+      EXPECTED_COLOR: '应为颜色字符串', INVALID_HEX_COLOR: `应为 6 位十六进制颜色，例如 ${HEX_COLOR_EXAMPLE}`, INVALID_RGBA_COLOR: '应为 rgba(红,绿,蓝,透明度) 颜色',
+      EXPECTED_VECTOR: '应为坐标对象', INVALID_VECTOR_COMPONENTS: `应包含 ${value.kind === 'vector3' ? 'x、y、z' : 'x、y'} 分量`, INVALID_VECTOR_COMPONENT: '的坐标分量应为有限数字',
+      EXPECTED_REF: '应为实体引用对象', EXPECTED_REF_LIST: '应为实体引用数组', INVALID_REF: '应包含合法的实体类型与稳定标识', TOO_MANY_REFS: `最多包含 ${value.kind === 'ref_list' ? value.maxItems : ''} 个引用`,
+    }
+    const hint = detail.includes('（') ? detail.slice(detail.indexOf('（') + 1, -1) : ''
+    throw new Error(`INVALID_PROPERTY_VALUE:${descriptor.title ?? descriptor.id}${constraints[code] ?? '不符合取值约束'}，收到 ${receivedPropertyValue(input)}。${hint}`)
+  }
+}
+
+function normalizeValue(
   descriptor: Pick<ApplicationPropertyDescriptor, 'id' | 'nullable' | 'value'>,
   input: JsonValue
 ): JsonValue {

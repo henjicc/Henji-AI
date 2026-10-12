@@ -14,10 +14,10 @@ export function operationVerificationRecovery(record: OperationRecord): NonNulla
     const value = proof as NonNullable<OperationRecord['recoveryVerification']>
     if (value.conditions?.length && value.evidence?.length) return value
   }
-  if (record.state !== 'partial' || transaction.code !== 'VERIFICATION_FAILED' || transaction.persistence) return undefined
+  if (record.state !== 'partial' || transaction.code !== 'VERIFICATION_FAILED' || transaction.persistence || details.persistence) return undefined
   const changes = record.input.changes
   const partial = object(transaction.partial)
-  if (!Array.isArray(changes) || changes.length === 0 || changes.length > 32
+  if (!Array.isArray(changes) || changes.length === 0
     || !Array.isArray(partial.completedStepIndexes) || partial.completedStepIndexes.length !== changes.length
     || !changes.every((_, index) => (partial.completedStepIndexes as unknown[]).includes(index))
     || !Array.isArray(partial.compensatedStepIndexes) || partial.compensatedStepIndexes.length !== 0
@@ -29,16 +29,17 @@ export function operationVerificationRecovery(record: OperationRecord): NonNulla
     // 集合创建、算法及 append/remove 需要各自的恢复证明，不能从输入猜最终值。
     if (change.kind !== 'set_properties') return undefined
     const target = object(change.target)
-    if (target.kind !== change.entityType || typeof target.id !== 'string') return undefined
+    if (typeof change.entityType !== 'string' || target.kind !== undefined && target.kind !== change.entityType || typeof target.id !== 'string') return undefined
     const properties = Object.entries(object(change.properties))
     if (!properties.length) return undefined
     for (const [propertyId, value] of properties) {
       const expected = jsonValueSchema.safeParse(value)
-      const condition = applicationVerificationConditionSchema.safeParse({ kind: 'property_equals', target, propertyId, expected: expected.data })
+      const resolvedPropertyId = propertyId.includes('.') ? propertyId : `${change.entityType}.${propertyId}`
+      const condition = applicationVerificationConditionSchema.safeParse({ kind: 'property_equals', target: { ...target, kind: change.entityType }, propertyId: resolvedPropertyId, expected: expected.data })
       if (!expected.success || !condition.success) return undefined
-      conditions.set(JSON.stringify([target.kind, target.id, propertyId]), condition.data)
+      conditions.set(JSON.stringify([change.entityType, target.id, resolvedPropertyId]), condition.data)
     }
   }
-  if (!conditions.size || conditions.size > 256) return undefined
+  if (!conditions.size) return undefined
   return { conditions: [...conditions.values()], evidence: [] }
 }

@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import { BLACK_HEX, WHITE_HEX } from '../../theme/colorTokens'
+import { BLACK_HEX, WHITE_HEX, HEX_COLOR_EXAMPLE } from '../../theme/colorTokens'
 import { layoutRichText } from './richText'
 import { textWidth } from './metrics'
 export { textFont, textCharacters, textAdvances, textWidth } from './metrics'
 export interface TextFrame { width: number; height: number }
 
-const color = z.string().regex(/^#[\da-f]{6}$/i, '请选择有效的颜色。')
+const color = z.string().regex(/^#[\da-f]{6}$/i, `应为 6 位十六进制颜色，例如 ${HEX_COLOR_EXAMPLE}。`)
 /** Persist content colors, never theme colors: changing the application theme must not change the exported title. */
 export const textStyleSchema = z.object({
   fontFamily: z.string().trim().min(1).max(512).default('sans-serif'),
@@ -28,7 +28,7 @@ export const textStyleSchema = z.object({
   boxWidth: z.number().finite().min(0).max(1).default(0),
   boxHeight: z.number().finite().min(0).max(1).default(0).describe('文字框高度占画幅比例；0使用实际文字高度。'),
 }).strict()
-export const TEXT_STYLE_DESCRIPTION = '共享样式整体替换，先读后改。fontFamily家族/完整字形名（查询font）；fontWeight 1–1000；fontStyle normal/italic/oblique；fontSize为正的作品空间像素。布尔：fauxBold仿粗体、fauxItalic仿斜体、allCaps全部大写、smallCaps小型大写、superscript上标、subscript下标、underline下划线（上下标同时开则上标优先）。align左/中/右及justify系列两端对齐（末行左/中/右/全部，枚举见schema）；verticalAlign top/middle/bottom。tracking字距、kerning字偶距：千分之一em -1000–10000，kerning还可auto。leading行距为非负作品空间像素（0自动1.25倍字号）；baselineShift基线偏移为作品空间像素（正数上移）；tsume压缩百分比0–100。fill {enabled,color}；strokes [{enabled,color,width,position:outside|inside|center}]，width为非负作品空间像素；background {enabled,color,opacity,padding,radius}，opacity 0–1、padding/radius为非负作品空间像素；shadows [{enabled,color,opacity,angle,distance,size,blur}]，opacity 0–1、angle顺时针±360度（0向右）、distance/size/blur为非负作品空间像素。描边/阴影层数不限，颜色六位十六进制，enabled布尔。boxWidth/boxHeight文字框占画幅比例0–1（0自动）。完整字形名使用文件内字形，选择时400/normal避免重复合成。'
+export const TEXT_STYLE_DESCRIPTION = '共享样式整体替换，未提供的字段使用默认值；保留原样式时先读后改。fontFamily家族/完整字形名（查询font）；fontWeight 1–1000；fontStyle normal/italic/oblique；fontSize为正的作品空间像素。布尔：fauxBold仿粗体、fauxItalic仿斜体、allCaps全部大写、smallCaps小型大写、superscript上标、subscript下标、underline下划线（上下标同时开则上标优先）。align左/中/右及justify系列两端对齐（末行左/中/右/全部，枚举见schema）；verticalAlign top/middle/bottom。tracking字距、kerning字偶距：千分之一em -1000–10000，kerning还可auto。leading行距为非负作品空间像素（0自动1.25倍字号）；baselineShift基线偏移为作品空间像素（正数上移）；tsume压缩百分比0–100。fill {enabled,color}；strokes [{enabled,color,width,position:outside|inside|center}]，width为非负作品空间像素；background {enabled,color,opacity,padding,radius}，opacity 0–1、padding/radius为非负作品空间像素；shadows [{enabled,color,opacity,angle,distance,size,blur}]，opacity 0–1、angle顺时针±360度（0向右）、distance/size/blur为非负作品空间像素。描边/阴影层数不限，颜色六位十六进制，enabled布尔。boxWidth/boxHeight文字框占画幅比例0–1（0自动）。完整字形名使用文件内字形，选择时400/normal避免重复合成。'
 export type TextStyle = z.infer<typeof textStyleSchema>
 export function defaultTextStyle(height: number): TextStyle {
   return textStyleSchema.parse({ fontSize: Math.max(1, Math.round(height / 15)) })
