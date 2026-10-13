@@ -1,6 +1,7 @@
 const { diffColorBuffers } = require('./canvasVisualDiff.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
-const GALLERY_DIFF_RATIO = 0.001
+// 2026-10-14 实测同机两轮最大噪声 326 像素（约 0.011%，转圈等动画）；0.03% ≈ 880 像素，留约 2.7 倍余量，能拦下按钮大小的改动。
+const GALLERY_DIFF_RATIO = 0.0003
 // 深浅各一套：四预设共用同一套组件，结构回归在一套里就会暴露，其余预设的颜色差异由对比度审计覆盖。
 const GALLERY_PRESETS = ['graphite', 'paper']
 async function compareGalleryImages(a, b) {
@@ -17,7 +18,8 @@ function validateGalleryRun(audit, evidence, preset, suffixes) {
   for (const result of [...Object.values(audit.scenes || {}), audit.crossScene || {}]) {
     if (UI_AUDIT_RULES.some(rule => result[rule.key]?.length) || result.gallerySamples?.some(sample => !sample.passed)) throw new Error(`${preset}: 审计仍有问题，不能写成基线`)
   }
-  const windows = Object.values(evidence.scenes || {}).map(scene => scene.window).filter(window => window?.completed?.outer?.width === 1440 && window.completed.outer.height === 900)
+  // 按请求尺寸筛选：Windows 外框含不可见缩放边（实测 1442×902），实际外框、DPI、缩放写进 manifest 逐项比对。
+  const windows = Object.values(evidence.scenes || {}).map(scene => scene.window).filter(window => window?.completed && window.requestedOuter?.width === 1440 && window.requestedOuter.height === 900)
   if (windows.length !== 1 || !Number.isFinite(windows[0].completed.nativeScaleFactor) || !Number.isFinite(windows[0].completed.zoomFactor) || !Number.isFinite(windows[0].completed.renderer?.dpr)) throw new Error(`${preset}: 缺少唯一的 1440×900 窗口尺寸证据`)
   const window = windows[0]
   const captured = new Set(window.captures.map(capture => capture.suffix))

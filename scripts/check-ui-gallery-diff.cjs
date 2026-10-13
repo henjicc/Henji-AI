@@ -10,7 +10,7 @@ async function main(argv) {
   if (inputIndex < 0 || !argv[inputIndex + 1]) throw new Error('需要 --input <正式 ui:tour 石墨与纸白两预设输出目录>')
   if (update && (reasonIndex < 0 || (argv[reasonIndex + 1] || '').trim().length < 8)) throw new Error('更新基线需要 --reason <至少8字的有意改动原因>，并写入提交正文')
   const input = path.resolve(argv[inputIndex + 1])
-  // 基线只在本机比较（重要记录 012），放在已忽略的 .ui-tour 下：两预设约 75MB，入库会让每次有意改版都膨胀仓库。
+  // 基线只在本机比较（重要记录 012），放在已忽略的 .ui-tour 下：两预设约 61MB，入库会让每次有意改版都膨胀仓库。
   const baseline = path.resolve('.ui-tour/baselines/ui-gallery')
   const config = JSON.parse(fs.readFileSync('scripts/ui-review/ui-gallery.json', 'utf8'))
   const expected = expectedGalleryCaptures(config)

@@ -13,7 +13,7 @@ test('彩色逐像素检查拦尺寸与色差，不能用灰度掩盖换色', as
 })
 
 test('基线必须来自审计通过且有窗口尺寸证据的正式捕获', () => {
-  const window = { completed: { outer: {width:1440,height:900}, content: {width:1440,height:900}, nativeScaleFactor:1, zoomFactor:1, renderer:{width:1440,height:900,dpr:1} }, captures: [{suffix:'one'}] }
+  const window = { requestedOuter: {width:1440,height:900}, completed: { outer: {width:1442,height:902}, content: {width:1440,height:900}, nativeScaleFactor:1, zoomFactor:1, renderer:{width:1440,height:900,dpr:1} }, captures: [{suffix:'one'}] }
   const evidence = {metadata:{themePreset:'paper'}, scenes:{'1440x900 / gallery':{window}}}
   const audit = { metadata:{themePreset:'paper',failures:[]}, scenes:{one:{multiplePrimary:[]}}, crossScene:{} }
   assert.equal(validateGalleryRun(audit,evidence,'paper',['one']).nativeScaleFactor,1)
