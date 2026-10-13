@@ -78,6 +78,8 @@ export interface HenjiNativeFetchRequest {
   method?: string
   headers?: Record<string, string>
   body?: string | Uint8Array
+  /** 本次请求的总时限（毫秒，1–300000）；省略时主进程用默认时限。与 PAL 契约 `system.ts` 一致。 */
+  timeoutMs?: number
 }
 
 export interface HenjiNativeFetchResponse {
