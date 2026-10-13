@@ -392,7 +392,7 @@ describe('状态关键帧模式 store 分片', () => {
     useCameraStageStore.getState().selectStateKeyframe(secondId)
     const selected = useCameraStageStore.getState()
     expect(selected.objects[0].transform.position.x).toBe(3)
-    expect(selected.playback.currentTime).toBe(first.stateKeyframes[0].hold + first.stateKeyframes[0].transitionDuration)
+    expect(selected.playback.currentTime).toBe(2)
   })
 
   it('建卡默认沿用当前 activeCameraId 作为拍摄机位', () => {

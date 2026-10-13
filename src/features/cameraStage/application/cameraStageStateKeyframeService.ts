@@ -23,7 +23,6 @@ export interface CameraStageStateKeyframeCreateInput {
   name?: string
   cameraId?: string | null
   continuity?: StageStateKeyframe['continuity']
-  hold?: number
   transitionDuration?: number
 }
 
@@ -43,9 +42,6 @@ function assertStateKeyframeInputsValid(inputs: CameraStageStateKeyframeCreateIn
         `STATE_KEYFRAME_CAMERA_NOT_FOUND：第 ${index} 项的 camera_ref «${input.cameraId}» 不是本场景中的摄像机。`
         + `camera_ref 必须取自观察结果里 objects[].id 的原值。当前可用摄像机：${[...cameraIds].join('、') || '无'}。`
       )
-    }
-    if (input.hold !== undefined && (!Number.isFinite(input.hold) || input.hold < 0)) {
-      throw new Error(`STATE_KEYFRAME_HOLD_INVALID：第 ${index} 项的 hold 必须是不小于 0 的有限数。`)
     }
     if (input.transitionDuration !== undefined && (!Number.isFinite(input.transitionDuration) || input.transitionDuration < 0)) {
       throw new Error(`STATE_KEYFRAME_TRANSITION_DURATION_INVALID：第 ${index} 项的 transition_duration 必须是不小于 0 的有限数。`)
@@ -113,8 +109,8 @@ const implementation = {
         if (input.name !== undefined) after.updateStateKeyframeName(stateKeyframeId, resolveUniqueStateKeyframeName(after.stateKeyframes, input.name, stateKeyframeId))
         if (input.cameraId !== undefined) after.updateStateKeyframeCamera(stateKeyframeId, input.cameraId)
         if (input.continuity !== undefined) after.updateStateKeyframeContinuity(stateKeyframeId, input.continuity)
-        if (input.hold !== undefined || input.transitionDuration !== undefined) {
-          after.updateStateKeyframeTiming(stateKeyframeId, { hold: input.hold, transitionDuration: input.transitionDuration })
+        if (input.transitionDuration !== undefined) {
+          after.updateStateKeyframeTiming(stateKeyframeId, { transitionDuration: input.transitionDuration })
         }
         stateKeyframeIds.push(stateKeyframeId)
       }

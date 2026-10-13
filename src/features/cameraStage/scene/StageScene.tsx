@@ -7,7 +7,7 @@ import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { isStageStyleRenderStyle } from '../render/stageStyleRenderer'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { cameraStageStoreAttachment, useCameraStageStore, type CameraStageOwnedStore } from '../store/cameraStageStore'
 import { resolvePathStateKeyframeId, useCameraStageToolStore } from '../store/cameraStageToolStore'
 import DirectorViewTracker from './DirectorViewTracker'
 import StageDirectorViewRestorer from './StageDirectorViewRestorer'
@@ -38,7 +38,7 @@ import { cameraMotionPreview, subscribeCameraMotion, cameraMotionRevision, demon
 const RAD2DEG = 180 / Math.PI
 const logger = createLogger('cameraStage.environment')
 
-function StageEnvironment({ imageUrl, fallbackColor }: { imageUrl: string; fallbackColor: string }): null {
+function StageEnvironment({ imageUrl, fallbackColor, onAssetReady }: { imageUrl: string; fallbackColor: string; onAssetReady?: (id: string, error?: unknown) => void }): null {
   const scene = useThree((state) => state.scene)
 
   useEffect(() => {
@@ -62,6 +62,7 @@ function StageEnvironment({ imageUrl, fallbackColor }: { imageUrl: string; fallb
         texture.needsUpdate = true
         scene.background = texture
         scene.environment = texture
+        onAssetReady?.('environment')
         logger.info('3D 全景环境加载完成', {
           event: 'camera_stage.environment.load.completed',
           context: { enabled: true },
@@ -70,6 +71,7 @@ function StageEnvironment({ imageUrl, fallbackColor }: { imageUrl: string; fallb
       undefined,
       (error) => {
         if (disposed) return
+        onAssetReady?.('environment', error)
         logger.error('3D 全景环境加载失败', error, {
           event: 'camera_stage.environment.load.failed',
           context: { enabled: true },
@@ -84,12 +86,13 @@ function StageEnvironment({ imageUrl, fallbackColor }: { imageUrl: string; fallb
       if (scene.environment === appliedTexture) scene.environment = previousEnvironment
       appliedTexture?.dispose()
     }
-  }, [fallbackColor, imageUrl, scene])
+  }, [fallbackColor, imageUrl, onAssetReady, scene])
 
   return null
 }
 
 interface StageSceneProps {
+  onAssetReady?: (id: string, error?: unknown) => void
   /** 截图函数注册位：摄像机视角下读取当前帧为 PNG dataURL */
   captureRef?: React.MutableRefObject<StageCaptureFn | null>
   viewportSource?: StageViewportSource
@@ -98,6 +101,7 @@ interface StageSceneProps {
 }
 
 const StageScene: React.FC<StageSceneProps> = ({
+  onAssetReady,
   captureRef,
   viewportSource,
   interactive = true,
@@ -263,6 +267,7 @@ const StageScene: React.FC<StageSceneProps> = ({
         <StageEnvironment
           imageUrl={sceneSettings.sky.environmentImageUrl}
           fallbackColor={sceneSettings.sky.color}
+          onAssetReady={onAssetReady}
         />
       ) : (
         <color attach="background" args={[sceneSettings.sky.color]} />
@@ -275,7 +280,7 @@ const StageScene: React.FC<StageSceneProps> = ({
           args={[sceneSettings.sky.color, fogNear, fogFar]}
         />
       )}
-      {primary && captureRef && <StageCaptureBridge captureRef={captureRef} />}
+      {primary && captureRef && <StageCaptureBridge captureRef={captureRef} coverRefresh={(cameraStageStoreAttachment.getStore() as CameraStageOwnedStore).coverRefresh} />}
       {/*
         * 渲染方式只接管摄像机画面：导演视角要保留彩色渲染，否则手柄、路径、辅助线全被
         * 覆盖材质吃掉，摆场景就没法看了。成片（截图/导出/画布渲染）都走摄像机画面。
@@ -310,6 +315,7 @@ const StageScene: React.FC<StageSceneProps> = ({
       {objects.map((object) => (
         <StageObjectMesh
           key={object.id}
+          onAssetReady={onAssetReady}
           object={object}
           selected={object.id === selectedId}
           onSelect={(id) => interactive && setSelected(id)}

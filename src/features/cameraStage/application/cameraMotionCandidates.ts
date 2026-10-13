@@ -52,7 +52,7 @@ function validateRequest(state: CameraStageState, request: CameraMotionCandidate
   })
   const firstIndex = state.stateKeyframes.indexOf(selected[0])
   if (selected.some((frame, index) => state.stateKeyframes[firstIndex + index] !== frame)) throw new CreativeIntentError('camera-range', request.stateKeyframeIds, '请选择按时间排列的连续状态关键帧')
-  if (selected.some(frame => frame.hold !== 0 || frame.cameraId !== null && frame.cameraId !== request.cameraId)) throw new CreativeIntentError('camera-cut', request.stateKeyframeIds, '请先将选段设为同一拍摄机位且使用绝对时间')
+  if (selected.some(frame => frame.cameraId !== null && frame.cameraId !== request.cameraId)) throw new CreativeIntentError('camera-cut', request.stateKeyframeIds, '请先将选段设为同一拍摄机位且使用绝对时间')
   const camera = state.objects.find((object): object is StageCameraObject => object.id === request.cameraId && object.type === 'camera')
   if (!camera) throw new CreativeIntentError('camera-missing', [request.cameraId], '机位不在当前场景中')
   if (selected.some(frame => {

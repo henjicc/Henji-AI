@@ -18,7 +18,7 @@ import { applyWriterTable, directOnlyEffectContract, fieldEffectContract, proper
 import { cameraStageProjectStore, leaseCameraStageProjectRuntime, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime } from './cameraStageProjectRuntime'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion } from './cameraMotionService'
-import { restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
+import { forgetCameraStageUndo, restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
 import { CAMERA_FIELDS, OBJECT_FIELDS, CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { CAMERA_STAGE_SCENE_WRITERS } from './cameraStageSceneFields'
@@ -166,6 +166,10 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
   ): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) throw new Error('UNDO_NOT_SUPPORTED')
     return (await this.undo(result.undoToken)).evidence
+  }
+
+  forget(undoToken: string): void {
+    forgetCameraStageUndo(undoToken)
   }
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
@@ -375,6 +379,10 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
   async compensate(_input: JsonValue, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) throw new Error('UNDO_NOT_SUPPORTED')
     return (await this.undo(result.undoToken)).evidence
+  }
+
+  forget(undoToken: string): void {
+    forgetCameraStageUndo(undoToken)
   }
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {

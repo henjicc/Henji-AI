@@ -112,6 +112,8 @@ export interface ApplicationMutationExecutor {
     result: ApplicationCompletedStepResult,
     context: ApplicationExecutionContext
   ): Promise<ApplicationEvidence[]>
+  /** 回执被消费或淘汰时释放领域快照；同步、幂等且不得抛错，不执行业务写入。 */
+  forget?(undoToken: string): void
   undo?(
     undoToken: string,
     context: ApplicationExecutionContext
@@ -136,6 +138,8 @@ export interface ApplicationCollectionExecutor {
     result: ApplicationCompletedStepResult,
     context: ApplicationExecutionContext
   ): Promise<ApplicationEvidence[]>
+  /** 回执被消费或淘汰时释放领域快照；同步、幂等且不得抛错，不执行业务写入。 */
+  forget?(undoToken: string): void
   undo?(
     undoToken: string,
     context: ApplicationExecutionContext
@@ -157,6 +161,8 @@ export interface ApplicationSemanticOperationExecutor {
     result: ApplicationCompletedStepResult,
     context: ApplicationExecutionContext
   ): Promise<ApplicationEvidence[]>
+  /** 回执被消费或淘汰时释放领域快照；同步、幂等且不得抛错，不执行业务写入。 */
+  forget?(undoToken: string): void
   undo?(
     undoToken: string,
     context: ApplicationExecutionContext
