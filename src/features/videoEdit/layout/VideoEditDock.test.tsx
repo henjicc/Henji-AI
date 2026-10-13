@@ -296,17 +296,20 @@ it('新效果延迟出现时逐帧重查，找到或耗尽重试后停止，替�
   const dock = api as unknown as DockviewApi
   act(() => { dock.layout(1440, 860); dock.getPanel('effects_library')!.api.setActive() })
   const add = (): void => { fireEvent.doubleClick(view.container.querySelector('[data-video-edit-effects-entry="effect:gaussian_blur"]')!) }
-  const step = async (): Promise<void> => {
+  const runFrame = (): void => {
     const pending = [...frames.values()]; frames.clear()
-    await act(async () => pending.forEach(callback => callback(id * 16)))
+    pending.forEach(callback => callback(id * 16))
   }
+  const step = async (): Promise<void> => { await act(async () => runFrame()) }
+  // 连续帧放进同一次 act：逐帧重查只读 DOM，不依赖帧间渲染；避免 CI 上逐帧刷新超时。
+  const steps = async (count: number): Promise<void> => { await act(async () => { for (let index = 0; index < count; index++) runFrame() }) }
   // 清掉 Dock 自身的首次聚焦帧后，剩余队列只由本次定位申请。
   while (frames.size) await step()
   const root = view.container.firstElementChild as HTMLElement
   const queries = vi.spyOn(root, 'querySelector')
   const lookupCount = (): number => queries.mock.calls.filter(([selector]) => selector === '[data-video-edit-panel="effects"]').length
   add()
-  for (let index = 0; index < 4; index++) await step()
+  await steps(4)
   expect(lookupCount()).toBe(4)
   const target = view.container.querySelector<HTMLElement>('[data-video-edit-effect="added-effect"]')!
   target.dataset.videoEditEffect = 'late-effect'
@@ -316,7 +319,7 @@ it('新效果延迟出现时逐帧重查，找到或耗尽重试后停止，替�
   expect(lookupCount()).toBe(5)
   queries.mockClear()
   apply.mockReturnValue(['missing-effect']); add()
-  for (let index = 0; index < 60; index++) await step()
+  await steps(60)
   expect(lookupCount()).toBe(60)
   await step(); expect(frames.size).toBe(0)
   expect(lookupCount()).toBe(61)
@@ -327,7 +330,8 @@ it('新效果延迟出现时逐帧重查，找到或耗尽重试后停止，替�
   expect(frames.size).toBe(1)
   view.unmount(); expect(frames.size).toBe(0)
   await step(); expect(effectScroll).toHaveBeenCalledTimes(1)
-})
+  // 完整 Dockview 渲染加上百帧推进：本机约 3s，CI（Linux 共享机）约慢一倍，单独给出运行时预算；断言不变。
+}, 15_000)
 
 it('节目面板可浮出（重挂载一次、不并存两份）；浮窗记录随工作区卸载/主窗口退出保留并在 Dock 就绪后恢复，用户关闭即关闭面板并移除记录', () => {
   const { opened, open } = createPopoutTestHost()
