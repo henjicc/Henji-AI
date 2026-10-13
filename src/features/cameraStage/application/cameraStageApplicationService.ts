@@ -41,7 +41,6 @@ export interface CameraStageStateKeyframeUpdate {
   name?: string
   /** 状态关键帧在时间轴上的位置。落到 store 的 moveStateKeyframeTime，那里负责对帧量化并保持状态关键帧有序。 */
   time?: number
-  hold?: number
   transitionDuration?: number
   continuity?: StageStateKeyframe['continuity']
   cameraId?: string | null
@@ -70,7 +69,6 @@ export interface CameraStageSceneObservation {
     id: string
     name: string
     time: number
-    hold: number
     transitionDuration: number
     continuity: StageStateKeyframe['continuity']
     cameraId: string | null
@@ -229,7 +227,6 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageScen
       id: stateKeyframe.id,
       name: stateKeyframe.name,
       time: stateKeyframe.time,
-      hold: stateKeyframe.hold,
       transitionDuration: stateKeyframe.transitionDuration,
       continuity: stateKeyframe.continuity,
       cameraId: stateKeyframe.cameraId,
@@ -554,7 +551,6 @@ const implementation = {
     const state = cameraStageProjectStore(projectId).getState()
     if (!state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === stateKeyframeId)) throw new Error('NOT_FOUND')
     if (update.cameraId && !state.objects.some((object) => object.id === update.cameraId && object.type === 'camera')) throw new Error('INVALID_REFERENCE')
-    if (update.hold !== undefined && (!Number.isFinite(update.hold) || update.hold < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.transitionDuration !== undefined && (!Number.isFinite(update.transitionDuration) || update.transitionDuration < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.time !== undefined && (!Number.isFinite(update.time) || update.time < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.captureObjectIds !== undefined) {
@@ -568,9 +564,9 @@ const implementation = {
     }
     const undoToken = captureCameraStageUndo(projectId)
     if (update.name !== undefined) state.updateStateKeyframeName(stateKeyframeId, update.name)
-    // 时间点先落，后续的 hold / 过渡时长都是相对这个位置计算的。
+    // 时间点先落，后续的过渡时长都是相对这个位置计算的。
     if (update.time !== undefined) state.moveStateKeyframeTime(stateKeyframeId, update.time)
-    if (update.hold !== undefined || update.transitionDuration !== undefined) state.updateStateKeyframeTiming(stateKeyframeId, update)
+    if (update.transitionDuration !== undefined) state.updateStateKeyframeTiming(stateKeyframeId, update)
     if (update.continuity !== undefined) state.updateStateKeyframeContinuity(stateKeyframeId, update.continuity)
     if (update.cameraId !== undefined) state.updateStateKeyframeCamera(stateKeyframeId, update.cameraId)
     if (update.captureObjectIds !== undefined) {

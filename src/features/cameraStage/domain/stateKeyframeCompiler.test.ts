@@ -8,6 +8,14 @@ import { buildStateKeyframeTimeline, compileStateKeyframesToAnimation } from './
 import { createStateKeyframe, type StageSpatialPath } from './stateKeyframeTypes'
 
 describe('compileStateKeyframesToAnimation', () => {
+  it('只使用绝对时间点，创建结果不携带停留字段', () => {
+    const frame = createStateKeyframe([], '关键帧', null, 3)
+    expect(frame).not.toHaveProperty('hold')
+    expect(buildStateKeyframeTimeline([frame, { ...frame }])).toEqual([
+      { holdStart: 3, transitionStart: 3, transitionEnd: 3 },
+      { holdStart: 3, transitionStart: 3, transitionEnd: 3 },
+    ])
+  })
   it('空间贝塞尔路径同步编译 XYZ，且曲线形状独立于速度时间轴', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
     const stateKeyframeA = createStateKeyframe([box], '卡1', null, 0)
@@ -44,12 +52,13 @@ describe('compileStateKeyframesToAnimation', () => {
   it('角色位移生成转身轨道与可覆盖的动作时间表', () => {
     const character = createCharacterObject('Character', pickDefaultColor(1))
     const stateKeyframeA = createStateKeyframe([character], '卡1')
-    stateKeyframeA.hold = 1
+    stateKeyframeA.time = 1
     stateKeyframeA.transitionDuration = 1
     stateKeyframeA.transition.perObject[character.id] = {
       motionOverride: { mode: 'clip', clipName: 'Walk_Formal_Loop', speed: 0.8 },
     }
     const stateKeyframeB = createStateKeyframe([character], '卡2')
+    stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
     stateKeyframeB.objectStates[character.id] = {
       ...stateKeyframeB.objectStates[character.id],
       transform: {
@@ -73,13 +82,14 @@ describe('compileStateKeyframesToAnimation', () => {
     }])
   })
 
-  it('两卡仅一个对象位置变化时，只为变化分量建轨道，关键帧时间与 hold/过渡时长吻合', () => {
+  it('两卡仅一个对象位置变化时，只为变化分量建轨道，关键帧时间与绝对时间点吻合', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
     const stateKeyframeA = createStateKeyframe([box], '卡1')
-    stateKeyframeA.hold = 1
+    stateKeyframeA.time = 1
     stateKeyframeA.transitionDuration = 2
     const stateKeyframeB = createStateKeyframe([box], '卡2')
-    stateKeyframeB.hold = 1
+    stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
+
     stateKeyframeB.objectStates[box.id] = {
       ...stateKeyframeB.objectStates[box.id],
       transform: {
@@ -100,13 +110,14 @@ describe('compileStateKeyframesToAnimation', () => {
     expect(track.keyframes[0].value).toBeCloseTo(0, 5)
     expect(track.keyframes[1].time).toBeCloseTo(3, 5)
     expect(track.keyframes[1].value).toBeCloseTo(5, 5)
-    expect(animation.duration).toBeCloseTo(4, 5)
+    expect(animation.duration).toBeCloseTo(3, 5)
   })
 
   it('对象状态在两卡间完全未变化时不产生任何轨道', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
     const stateKeyframeA = createStateKeyframe([box], '卡1')
     const stateKeyframeB = createStateKeyframe([box], '卡2')
+    stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
 
     const animation = compileStateKeyframesToAnimation([stateKeyframeA, stateKeyframeB], [box])
 
@@ -164,15 +175,15 @@ describe('compileStateKeyframesToAnimation', () => {
     expect(sampleTrack(yawTrack!, 1, 'scalar')).toBeCloseTo(190, 5)
   })
 
-  it('中间卡停留时长>0时，停留段内采样值保持恒定，不被跨卡插值污染', () => {
+  it('连续两个状态相同的时间点之间保持恒定，不被跨卡插值污染', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
 
     const stateKeyframe1 = createStateKeyframe([box], '卡1')
-    stateKeyframe1.hold = 0.5
+    stateKeyframe1.time = 0.5
     stateKeyframe1.transitionDuration = 1
 
     const stateKeyframe2 = createStateKeyframe([box], '卡2')
-    stateKeyframe2.hold = 2
+    stateKeyframe2.time = 1.5
     stateKeyframe2.transitionDuration = 1
     stateKeyframe2.objectStates[box.id] = {
       ...stateKeyframe2.objectStates[box.id],
@@ -183,7 +194,7 @@ describe('compileStateKeyframesToAnimation', () => {
     }
 
     const stateKeyframe3 = createStateKeyframe([box], '卡3')
-    stateKeyframe3.hold = 0.5
+    stateKeyframe3.time = 4.5
     stateKeyframe3.objectStates[box.id] = {
       ...stateKeyframe3.objectStates[box.id],
       transform: {
@@ -192,12 +203,12 @@ describe('compileStateKeyframesToAnimation', () => {
       },
     }
 
-    const animation = compileStateKeyframesToAnimation([stateKeyframe1, stateKeyframe2, stateKeyframe3], [box])
+    const pauseEnd = { ...structuredClone(stateKeyframe2), id: 'pause-end', time: 3.5 }
+    const animation = compileStateKeyframesToAnimation([stateKeyframe1, stateKeyframe2, pauseEnd, stateKeyframe3], [box])
     const track = animation.tracks.find((item) => item.propertyPath === 'transform.position.x')
     expect(track).toBeDefined()
 
-    // 时间轴：卡1 hold[0,0.5] 过渡[0.5,1.5]；卡2 hold[1.5,3.5] 过渡[3.5,4.5]；卡3 hold[4.5,5]
-    // 停留段 = 卡2 的 hold 区间 [1.5, 3.5]
+    // 1.5s 与 3.5s 的快照相同，显式表示停顿。
     expect(sampleTrack(track as StageTrack, 1.5, 'scalar')).toBeCloseTo(10, 5)
     expect(sampleTrack(track as StageTrack, 2.5, 'scalar')).toBeCloseTo(10, 5)
     expect(sampleTrack(track as StageTrack, 3.5, 'scalar')).toBeCloseTo(10, 5)
@@ -213,6 +224,7 @@ describe('compileStateKeyframesToAnimation', () => {
     const stateKeyframeA = createStateKeyframe([box], '卡1')
     stateKeyframeA.transition.perObject[box.id] = { speedPreset: preset }
     const stateKeyframeB = createStateKeyframe([box], '卡2')
+    stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
     stateKeyframeB.objectStates[box.id] = {
       ...stateKeyframeB.objectStates[box.id],
       transform: {
@@ -231,10 +243,11 @@ describe('compileStateKeyframesToAnimation', () => {
     function buildDelayCase(delay: number): StageTrack {
       const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
       const stateKeyframeA = createStateKeyframe([box], '卡1')
-      stateKeyframeA.hold = 0.5
+      stateKeyframeA.time = 0.5
       stateKeyframeA.transitionDuration = 2
       stateKeyframeA.transition.perObject[box.id] = { delay }
       const stateKeyframeB = createStateKeyframe([box], '卡2')
+      stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
       stateKeyframeB.objectStates[box.id] = {
         ...stateKeyframeB.objectStates[box.id],
         transform: {
@@ -283,10 +296,10 @@ describe('compileStateKeyframesToAnimation', () => {
     expect(animation.duration).toBe(0)
   })
 
-  it('单卡返回空轨道，时长等于该卡的停留时长', () => {
+  it('单卡返回空轨道，时长等于该卡的绝对时间点', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
     const stateKeyframe = createStateKeyframe([box], '卡1')
-    stateKeyframe.hold = 1.25
+    stateKeyframe.time = 1.25
     const animation = compileStateKeyframesToAnimation([stateKeyframe], [box])
     expect(animation.tracks).toEqual([])
     expect(animation.duration).toBeCloseTo(1.25, 5)
@@ -299,9 +312,10 @@ describe('compileStateKeyframesToAnimation', () => {
       const camera = createCameraObject('Camera', pickDefaultColor(2), { position: startPosition, target })
 
       const stateKeyframeA = createStateKeyframe([camera], '卡1')
-      stateKeyframeA.hold = 0
+      stateKeyframeA.time = 0
       stateKeyframeA.transitionDuration = 4
       const stateKeyframeB = createStateKeyframe([camera], '卡2')
+      stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
       const generated = createCameraPresetPath(
         { kind: 'orbit', degrees: 180, direction: 'cw' },
         startPosition,
@@ -343,6 +357,7 @@ describe('compileStateKeyframesToAnimation', () => {
 
       const stateKeyframeA = createStateKeyframe([camera], '卡1')
       const stateKeyframeB = createStateKeyframe([camera], '卡2')
+      stateKeyframeB.time = stateKeyframeA.time + stateKeyframeA.transitionDuration
       const generated = createCameraPresetPath(
         { kind: 'dollyIn', distanceRatio: 0.5 },
         stateKeyframeA.objectStates[camera.id].transform.position,
@@ -366,10 +381,10 @@ describe('compileStateKeyframesToAnimation', () => {
     const camera = createCameraObject('Camera', pickDefaultColor(2))
 
     const stateKeyframe1 = createStateKeyframe([box, character, camera], '卡1')
-    stateKeyframe1.hold = 0.5
+    stateKeyframe1.time = 0.5
     stateKeyframe1.transitionDuration = 1
 
-    const stateKeyframe2 = createStateKeyframe([box, character, camera], '卡2')
+    const stateKeyframe2 = createStateKeyframe([box, character, camera], '卡2', null, 2)
     stateKeyframe2.objectStates[camera.id] = {
       ...stateKeyframe2.objectStates[camera.id],
       transform: {
@@ -402,44 +417,45 @@ describe('buildStateKeyframeTimeline 强制硬切（重要记录 005）', () => 
   it('相邻两卡机位不同时，布点保留真实区间时长（硬切改由编译产物的 hold 缓动在区间末端表达），原始 transitionDuration 不被改写', () => {
     const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
     const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-b')
-    stateKeyframeA.hold = 1
+    stateKeyframeB.time = 3
+    stateKeyframeA.time = 1
     stateKeyframeA.transitionDuration = 2
-    stateKeyframeB.hold = 1
 
     const timeline = buildStateKeyframeTimeline([stateKeyframeA, stateKeyframeB])
-    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 3 })
+    expect(timeline[0]).toEqual({ holdStart: 1, transitionStart: 1, transitionEnd: 3 })
     expect(stateKeyframeA.transitionDuration).toBe(2)
   })
 
   it('未指定机位的卡（cameraId 为 null）不触发强制硬切，行为与改动前一致', () => {
     const stateKeyframeA = createStateKeyframe([], '卡1')
     const stateKeyframeB = createStateKeyframe([], '卡2')
-    stateKeyframeA.hold = 1
+    stateKeyframeB.time = 3
+    stateKeyframeA.time = 1
     stateKeyframeA.transitionDuration = 2
-    stateKeyframeB.hold = 1
 
     const timeline = buildStateKeyframeTimeline([stateKeyframeA, stateKeyframeB])
-    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 3 })
+    expect(timeline[0]).toEqual({ holdStart: 1, transitionStart: 1, transitionEnd: 3 })
   })
 
   it('机位相同的相邻卡保留真实过渡时长', () => {
     const stateKeyframeA = createStateKeyframe([], '卡1', 'camera-a')
     const stateKeyframeB = createStateKeyframe([], '卡2', 'camera-a')
-    stateKeyframeA.hold = 1
+    stateKeyframeB.time = 3
+    stateKeyframeA.time = 1
     stateKeyframeA.transitionDuration = 2
-    stateKeyframeB.hold = 1
 
     const timeline = buildStateKeyframeTimeline([stateKeyframeA, stateKeyframeB])
-    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 3 })
+    expect(timeline[0]).toEqual({ holdStart: 1, transitionStart: 1, transitionEnd: 3 })
   })
 
   it('机位不同的强制硬切编译为 hold 缓动：区间内保持起点值，到区间末端直接跳变到目标值', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const stateKeyframeA = createStateKeyframe([camera], '卡1', 'camera-a')
     const stateKeyframeB = createStateKeyframe([camera], '卡2', 'camera-b')
-    stateKeyframeA.hold = 1
+    stateKeyframeB.time = 3
+    stateKeyframeA.time = 1
     stateKeyframeA.transitionDuration = 2
-    stateKeyframeB.hold = 1
+
     stateKeyframeB.objectStates[camera.id] = {
       ...stateKeyframeB.objectStates[camera.id],
       transform: {

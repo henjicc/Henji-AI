@@ -349,7 +349,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
               applied.push(await this.undoStep(record.steps[index], original.undoToken, batchContext))
             }
           } catch (error) {
-            if (applied.length > 0) this.undoRecords.delete(request.undoRef)
+            if (applied.length > 0) this.forgetUndoRecord(request.undoRef)
             throw new ApplicationExecutionProgressFailure(`撤销执行失败：${String(error)}`, applied, [], error,
               applied.map((_, index) => record.steps.length - 1 - index))
           }
@@ -359,7 +359,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         completedIndexes: (result) => result.map((_, index) => record.steps.length - 1 - index),
         onReceipt: (receipt) => persistenceReceipts.push(receipt),
       })
-      this.undoRecords.delete(request.undoRef)
+      this.forgetUndoRecord(request.undoRef)
       const evidence = results.flatMap((result) => result.evidence)
       const undoRevisions: Record<string, number> = {}
       results.forEach((result) => mergeRevisions(undoRevisions, result.resultingRevisions))
@@ -377,7 +377,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
       this.store.saveIdempotent(request.idempotencyKey, request.undoRef, result)
       return result
     } catch (error) {
-      if (error instanceof ApplicationPersistenceBoundaryFailure) this.undoRecords.delete(request.undoRef)
+      if (error instanceof ApplicationPersistenceBoundaryFailure) this.forgetUndoRecord(request.undoRef)
       const result = error instanceof ApplicationPersistenceBoundaryFailure
         ? await this.describePersistenceFailure(error, record.steps, context, undefined, 'undo')
         : error instanceof ApplicationExecutionProgressFailure
@@ -431,6 +431,22 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     return undefined
   }
 
+  private forgetUndoRecord(undoRef: string): void {
+    const record = this.undoRecords.get(undoRef)
+    if (!record) return
+    this.undoRecords.delete(undoRef)
+    record.results.forEach((result, index) => {
+      if (!result.undoToken) return
+      const step = record.steps[index]
+      const executor = step.kind === 'mutation'
+        ? this.mutationExecutors.get(step.entityType)
+        : step.kind === 'collection'
+          ? this.collectionExecutors.get(step.entityType)
+          : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
+      executor?.forget?.(result.undoToken)
+    })
+  }
+
   private createUndoRef(
     steps: ApplicationPlannedStep[],
     results: ApplicationCompletedStepResult[]
@@ -450,7 +466,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     while (this.undoRecords.size > 256) {
       const oldest = this.undoRecords.keys().next().value
       if (oldest === undefined) break
-      this.undoRecords.delete(oldest)
+      this.forgetUndoRecord(oldest)
     }
     return undoRef
   }

@@ -75,6 +75,8 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     removeStateKeyframes: { kind: 'collection', entityType: ENTITY.stateKeyframe, operation: 'remove' },
     // 定义收敛在 cameraStageTimelineFields.ts；time 被 moveStateKeyframeTime 与 updateStateKeyframeTiming 共用。
     ...fieldLedgerEntries(STATE_KEYFRAME_FIELDS),
+    // 过渡细节由运镜服务写入 speedPreset；过渡时长属于 updateStateKeyframeTiming。
+    updateStateKeyframeTransition: { kind: 'capability', capabilityId: 'apply_camera_stage_camera_move' },
     /*
      * 重排顺序完全由 time 决定：reorderStateKeyframe 内部把移动后各位置重新赋以排序后的 time 值，
      * 结果与"直接把目标状态关键帧的 time 改成目标位置对应的值"完全等价（验证见 2.1 执行记录）。

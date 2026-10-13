@@ -1,3 +1,6 @@
+import { CameraStageMutationExecutor, CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
+import { CameraStagePlacementOperationExecutor } from './cameraStagePlacementExecutor'
+import { CameraStageStateKeyframeCollectionExecutor } from './cameraStageStateKeyframeCollectionExecutor'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@/tests/cameraStageProjectFixture'
 import { cameraStageDocumentKind } from '@/core/documents/kinds/cameraStage'
@@ -48,6 +51,26 @@ function stored(id: string): CameraStageSceneContent {
 }
 
 describe('镜头参考文档唯一实例', () => {
+  it('所有快照执行器释放回执时同步释放快照，重复释放不影响其他回执', async () => {
+    seed('release-undo')
+    await ensureCameraStageProjectRuntime('release-undo')
+    const dependencies = { readRevision: () => 0, bumpRevision: () => {} }
+    const executors = [
+      new CameraStageMutationExecutor('camera_stage.state_keyframe', dependencies),
+      new CameraStageMotionOperationExecutor(dependencies),
+      new CameraStagePlacementOperationExecutor(dependencies),
+      new CameraStageStateKeyframeCollectionExecutor(dependencies),
+    ]
+    const retained = captureCameraStageUndo('release-undo')
+    for (const executor of executors) {
+      const token = captureCameraStageUndo('release-undo')
+      executor.forget(token)
+      executor.forget(token)
+      await expect(restoreCameraStageUndo(token)).rejects.toThrow('NOT_FOUND')
+    }
+    await expect(restoreCameraStageUndo(retained)).resolves.toEqual({ projectId: 'release-undo' })
+  })
+
   it('撤销快照有界，超限的最旧回执明确失效', async () => {
     seed('bounded-undo')
     await ensureCameraStageProjectRuntime('bounded-undo')

@@ -11,7 +11,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import type { CameraStageControlExecutorDependencies } from './cameraStageControlExecutors'
-import { restoreCameraStageUndo } from './cameraStageUndo'
+import { forgetCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 
 const vec3Schema = z.object({ x: z.number(), y: z.number(), z: z.number() }).strict()
@@ -121,6 +121,10 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
   async compensate(_input: JsonValue, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
     return (await this.undo(result.undoToken)).evidence
+  }
+
+  forget(undoToken: string): void {
+    forgetCameraStageUndo(undoToken)
   }
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {

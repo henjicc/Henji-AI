@@ -78,13 +78,9 @@ export const STATE_KEYFRAME_FIELDS = [
     read: ({ stateKeyframe }) => stateKeyframe.time, write: (draft, v) => { draft.time = v },
     storeActions: ['moveStateKeyframeTime', 'updateStateKeyframeTiming'] as const, unit: 'second',
   }),
-  stateKeyframeField('hold', '停留时长', numberCodec({ min: 0, max: 3600 }), {
-    read: ({ stateKeyframe }) => stateKeyframe.hold, write: (draft, v) => { draft.hold = v },
-    storeActions: ['updateStateKeyframeTiming'] as const, unit: 'second',
-  }),
   stateKeyframeField('transition_duration', '过渡时长', numberCodec({ min: 0, max: 3600 }), {
     read: ({ stateKeyframe }) => stateKeyframe.transitionDuration, write: (draft, v) => { draft.transitionDuration = v },
-    storeActions: ['updateStateKeyframeTransition'] as const, unit: 'second',
+    storeActions: ['updateStateKeyframeTiming'] as const, unit: 'second',
   }),
   stateKeyframeField('continuity', '连续性', enumCodec(['stop', 'smooth'] as const, { stop: '停靠', smooth: '连续' }), {
     read: ({ stateKeyframe }) => stateKeyframe.continuity, write: (draft, v) => { draft.continuity = v },
