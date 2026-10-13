@@ -69,10 +69,11 @@ export class VideoEditGpuCompositor {
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private blankTexture?: GpuTexture
-  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => PresentationCapture | undefined) {
+  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => PresentationCapture | undefined, readyTiming?: (durationMs: number) => void) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
-    this.ready = this.initialize()
+    const started = performance.now()
+    this.ready = this.initialize().then(() => { readyTiming?.(performance.now() - started) })
   }
   private async initialize(): Promise<void> {
     const managed = this.shared ? undefined : await this.manager.acquire()

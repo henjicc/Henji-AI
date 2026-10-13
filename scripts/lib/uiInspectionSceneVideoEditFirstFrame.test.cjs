@@ -1,0 +1,12 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const { summarize } = require('./uiInspectionSceneVideoEditFirstFrame.cjs')
+test('cold open is excluded from warm median; switching keeps all three samples', () => {
+  const run = (reason, elapsedMs) => ({ reason, first: { elapsedMs }, window: { longTaskMaxMs: 60 } })
+  const result = summarize([run('open', 2000), run('open', 200), run('open', 400), run('open', 300), run('switch', 50), run('switch', 20), run('switch', 80)])
+  assert.equal(result.open.cold.first.elapsedMs, 2000)
+  assert.equal(result.open.medianMs, 300)
+  assert.equal(result.open.samples, 3)
+  assert.equal(result.switch.medianMs, 50)
+  assert.equal(result.switch.samples, 3)
+})

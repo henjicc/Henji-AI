@@ -100,7 +100,7 @@ export class VideoEditRenderer {
   }
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id]) {
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void) {
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
@@ -392,7 +392,7 @@ export class VideoEditRenderer {
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor); this.warmShaderGraphs() }
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, durationMs => this.timing?.('compositor.ready', durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor); this.warmShaderGraphs() }
     const effectErrors: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`

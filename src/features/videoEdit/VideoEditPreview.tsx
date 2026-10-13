@@ -1,3 +1,4 @@
+import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -340,6 +341,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         explanationSurface.remove(); explanationSurface = undefined
       }
       retainExplanationPixels(surface, target, result.history)
+      if (result.presented === true) recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs })
       lastPresentation = requestedAt
       surface.dataset.requestedAt = String(requestedAt); surface.dataset.renderMs = String(performance.now() - requestedAt)
       surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)

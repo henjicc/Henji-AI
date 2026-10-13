@@ -1,0 +1,28 @@
+import { afterEach, expect, it, vi } from 'vitest'
+const logs = vi.hoisted(() => vi.fn())
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: logs }) }))
+import { beginVideoEditFirstFrame, endVideoEditTiming, recordVideoEditFirstFrame, videoEditTimingContext } from './videoEditFirstFrameTiming'
+afterEach(() => { endVideoEditTiming('project'); vi.useRealTimers(); logs.mockClear() })
+it('切换时拒绝旧序列回执，首帧只记录一次并在一秒后关闭窗口', () => {
+  vi.useFakeTimers()
+  beginVideoEditFirstFrame('project', 'old', 'open')
+  beginVideoEditFirstFrame('project', 'next', 'switch')
+  recordVideoEditFirstFrame('project', 'old', {})
+  expect(logs.mock.calls.filter(([, meta]) => meta.event === 'video_edit.program.first_frame')).toHaveLength(0)
+  recordVideoEditFirstFrame('project', 'next', { frame: 0 })
+  recordVideoEditFirstFrame('project', 'next', { frame: 1 })
+  expect(logs.mock.calls.filter(([, meta]) => meta.event === 'video_edit.program.first_frame')).toHaveLength(1)
+  vi.advanceTimersByTime(1000)
+  expect(videoEditTimingContext('project', 'next')).toBeUndefined()
+  expect(logs.mock.calls.at(-1)?.[1].context.reason).toBe('presented')
+})
+it('失败超时或关闭项目均清理观察窗口', () => {
+  vi.useFakeTimers()
+  beginVideoEditFirstFrame('project', 'sequence', 'open')
+  vi.advanceTimersByTime(30000)
+  expect(videoEditTimingContext('project', 'sequence')).toBeUndefined()
+  expect(logs.mock.calls.at(-1)?.[1].context.reason).toBe('timeout')
+  beginVideoEditFirstFrame('project', 'sequence', 'open')
+  endVideoEditTiming('project')
+  expect(vi.getTimerCount()).toBe(0)
+})

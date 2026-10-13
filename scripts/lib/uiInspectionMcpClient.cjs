@@ -27,7 +27,7 @@ async function authorizeMcpConnection(page, { name, allowWrites = false, allowDe
     const connection = await window.henjiNative.mcp.authorize(input)
     const raw = await window.henjiNative.mcp.connectionConfig({ id: connection.id })
     return { id: connection.id, allowWrites: connection.allowWrites === true, allowDestructive: connection.allowDestructive === true,
-      allowPaid: connection.allowPaid === true, config: JSON.parse(raw).mcpServers.henji }
+      allowPaid: connection.allowPaid === true, config: JSON.parse(raw.match(/```json\s*([\s\S]*?)```/)?.[1] ?? raw).mcpServers.henji }
   }, { name, allowWrites, allowDestructive, allowPaid })
   assert.equal(identity.allowWrites, allowWrites, `连接 ${name} 的修改授权与请求不一致`)
   assert.equal(identity.allowDestructive, allowDestructive, `连接 ${name} 的删除授权与请求不一致`)

@@ -1,3 +1,4 @@
+import type { VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { VideoEditProxyFrames } from './videoEditProxyFrames'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
@@ -24,7 +25,7 @@ import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
 export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
-  { kind: 'init'; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
+  { kind: 'init'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'parameters'; update: VideoEditParameterUpdate }
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
@@ -46,6 +47,16 @@ export type NativeFramesRequest =
   | { kind: 'nativeFrames.attach'; port: MessagePort }
   | { kind: 'nativeFrames.diagnose'; id: number; request: NativeFrameDiagnosticsRequest }
 export type NativeFramesResponse = { id: number; nativeFrames?: NativeFrameDiagnosticsResult; error?: string }
+let timing: VideoEditTimingContext | undefined
+const timedStages = new Set<string>()
+const timingEvent = (stage: string, durationMs?: number): void => {
+  if (!timing || timedStages.has(stage)) return
+  timedStages.add(stage)
+  const context = { ...timing, elapsedMs: performance.timeOrigin + performance.now() - timing.startedAt, durationMs }
+  const event = `video_edit.render.${stage}`
+  performance.mark(event, { detail: context }); performance.clearMarks(event)
+  log('info', '剪辑 Worker 阶段计时', event, context)
+}
 let renderer: VideoEditRenderer | undefined
 let fonts: LoadedFontFaces | undefined
 let direct = false
@@ -79,7 +90,7 @@ async function disposeRenderer(): Promise<void> {
   nativeBackend = undefined; router = undefined
 }
 function handleNativeFrames(request: NativeFramesRequest): void {
-  if (request.kind === 'nativeFrames.attach') { void nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port); nativeDiagnostics = undefined; return }
+  if (request.kind === 'nativeFrames.attach') { void nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port, undefined, (stage, durationMs) => timingEvent(`native.${stage}`, durationMs)); nativeDiagnostics = undefined; return }
   const receiver = nativeFrames
   if (!receiver) { self.postMessage({ id: request.id, error: '原生帧通道尚未接入。' } satisfies NativeFramesResponse); return }
   // 渲染 Worker 按 IIFE 打包，不能按需拆分加载；诊断模块很小且只在收到诊断消息时实例化。
@@ -95,7 +106,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
   if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
-  if (request.kind === 'init' || request.kind === 'update') receiveCodeSourceTexts(request.codeSources)
+  if (request.kind === 'init' || request.kind === 'update') { timing = request.timing; timedStages.clear(); timingEvent(`worker.${request.kind}`); receiveCodeSourceTexts(request.codeSources) }
   if (request.kind === 'init') revision = request.document.revision
   if (request.kind === 'update') revision = Math.max(revision, request.document.revision)
   if (request.kind === 'parameters') revision = Math.max(revision, request.update.revision)
@@ -117,7 +128,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
         if (request.reset) await renderer?.invalidateFontResources()
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await disposeRenderer(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode)); direct = !!request.surface
+        await disposeRenderer(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent); direct = !!request.surface
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'update') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')

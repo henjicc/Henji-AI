@@ -1,3 +1,4 @@
+import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { verifiedVideoEditProxySources } from '../application/videoEditProxy'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
@@ -25,6 +26,12 @@ export class VideoEditRenderSession {
   private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void }>()
   private nextId = 0
   private disposed = false
+  private timing?: VideoEditTimingContext
+  private async timed<T>(stage: string, operation: () => Promise<T>): Promise<T> {
+    const started = performance.now()
+    try { return await operation() }
+    finally { if (this.timing) videoEditTimingEvent(this.timing, `render.prepare.${stage}`, { durationMs: performance.now() - started }) }
+  }
   private readonly ready: Promise<RenderResponse>
   private readonly content = new VideoEditMediaContentVerifier()
   /** The frame channel handed to the worker for native decoding, disconnected after the worker is gone. */
@@ -86,10 +93,10 @@ export class VideoEditRenderSession {
     let forced: RenderDecodeOptions['forced']
     try {
       const platform = getPlatform()
-      const status = await platform.videoDecoder.status()
+      const status = await this.timed('native_status', () => platform.videoDecoder.status())
       forced = status.forcedBackend ?? undefined
       if (!status.available || forced === 'browser' || this.disposed) return { nativeAvailable: false, ...(forced ? { forced } : {}) }
-      const channel = await platform.videoFrames.connect()
+      const channel = await this.timed('native_connect', () => platform.videoFrames.connect())
       if (this.disposed) { platform.videoFrames.disconnect(channel.route); return { nativeAvailable: false } }
       this.route = channel.route
       this.worker.postMessage({ kind: 'nativeFrames.attach', port: channel.port } satisfies NativeFramesRequest, [channel.port])
@@ -100,6 +107,8 @@ export class VideoEditRenderSession {
     }
   }
   constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private readonly proxyProjectId?: string, private readonly exportProxies = false) {
+    this.timing = videoEditTimingContext(proxyProjectId, document.id)
+    if (this.timing) videoEditTimingEvent(this.timing, 'render.session.start')
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage>) => {
@@ -112,7 +121,7 @@ export class VideoEditRenderSession {
     }
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
     // Verify original media before dependent code/font preparation or opening a decoder channel.
-    this.ready = this.content.check(document).then(() => Promise.all([this.selectProxies(), this.connectNative(), this.authorizeLuts(document), this.syncFonts(document)])).then(async ([, decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), codeSources: await this.codeSources(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : []))
+    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('luts', () => this.authorizeLuts(document)), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     this.stopFonts = subscribeFontLibrary(() => {
       if (this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return
       this.fontRefresh = this.ready.then(async () => {
@@ -130,18 +139,19 @@ export class VideoEditRenderSession {
   private codeSources(document: VideoEditComposition): Promise<Record<string, string>> { return collectCodeSourceTexts((document.codeMaterials ?? []).flatMap(definition => definition.versions), this.sentCodeSources) }
   async updateDocument(document: VideoEditComposition, original = false): Promise<void> {
     await this.ready
+    this.timing = videoEditTimingContext(this.proxyProjectId, document.id)
     const update = !original && videoEditParameterUpdate(this.document, document)
     if (update) {
       if (videoEditParameterNeedsFonts(this.document, update)) await this.syncFonts(document)
       await this.request({ kind: 'parameters', update }); this.document = document; return
     }
     const started = performance.now(); const steps: Record<string, number> = {}
-    const step = async (name: string, work: Promise<unknown>): Promise<void> => { const at = performance.now(); await work; steps[name] = Math.round(performance.now() - at) }
+    const step = async (name: string, work: Promise<unknown>): Promise<void> => { const at = performance.now(); await work; steps[name] = Math.round(performance.now() - at); if (this.timing) videoEditTimingEvent(this.timing, `render.update.${name}`, { durationMs: steps[name] }) }
     await step('proxies', this.selectProxies(original)); await step('content', this.content.check(document)); await step('luts', this.authorizeLuts(document)); await step('fonts', this.syncFonts(document))
     let codeSources: Record<string, string> = {}
     await step('code', this.codeSources(document).then(value => { codeSources = value }))
-    await step('worker', this.request({ kind: 'update', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() })); this.document = document
-    logger.debug('剪辑渲染文档已更新', { event: 'video_edit.render.document.updated', context: { sequenceId: document.id, durationMs: Math.round(performance.now() - started), steps } })
+    await step('worker', this.request({ kind: 'update', timing: this.timing, document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() })); this.document = document
+    logger.info('剪辑渲染文档已更新', { event: 'video_edit.render.document.updated', context: { sequenceId: document.id, durationMs: Math.round(performance.now() - started), steps } })
   }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
