@@ -11,6 +11,8 @@ import {
   UiSearchInput,
   UiMarqueeText,
   UiOptionButton,
+  UiVirtualGrid,
+  UiEmpty,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
@@ -55,7 +57,7 @@ const GRID_COLUMNS = {
   sm: 3,
   lg: 4,
   xl: 5
-}
+} as const
 const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
 const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
 const MODEL_CARD_META_TEXT_CLASS = `${UI_TEXT_META_CLASS} leading-4`
@@ -97,17 +99,24 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   const [searchQuery, setSearchQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const gridContainerRef = useRef<HTMLDivElement>(null)
   const highlightedItemRef = useRef<HTMLButtonElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const getColumnsCount = useCallback(() => {
     if (typeof window === 'undefined') return GRID_COLUMNS.default
-    const width = window.innerWidth
+    const width = wrapperRef.current?.ownerDocument.defaultView?.innerWidth ?? window.innerWidth
     if (width >= 1280) return GRID_COLUMNS.xl
     if (width >= 1024) return GRID_COLUMNS.lg
     if (width >= 640) return GRID_COLUMNS.sm
     return GRID_COLUMNS.default
   }, [])
+  const [columns, setColumns] = useState<2 | 3 | 4 | 5>(getColumnsCount)
+  useEffect(() => {
+    const owner = wrapperRef.current?.ownerDocument.defaultView ?? window
+    const update = (): void => setColumns(getColumnsCount())
+    update()
+    owner.addEventListener('resize', update)
+    return () => owner.removeEventListener('resize', update)
+  }, [getColumnsCount])
   useEffect(() => {
     setHiddenProviders(getHiddenProviders())
     setHiddenTypes(getHiddenTypes())
@@ -164,30 +173,21 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     }
     return items.map(item => ({ ...item, score: 100 }))
   }, [visibleProviders, modelFilterProvider, modelFilterType, modelFilterFunction, favoriteModels, searchQuery])
-  useLayoutEffect(() => {
-    const index = filteredAndSortedModels.findIndex(
+  const selectedIndex = filteredAndSortedModels.findIndex(
       item => item.p.id === selectedProvider && item.m.id === selectedModel
     )
-    setHighlightedIndex(index >= 0 ? index : 0)
-  }, [searchQuery, modelFilterProvider, modelFilterType, modelFilterFunction, filteredAndSortedModels, selectedProvider, selectedModel])
+  useLayoutEffect(() => {
+    setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0)
+  }, [searchQuery, modelFilterProvider, modelFilterType, modelFilterFunction, selectedIndex, selectedProvider, selectedModel])
   useEffect(() => {
     if (highlightedIndex >= filteredAndSortedModels.length && filteredAndSortedModels.length > 0) {
       setHighlightedIndex(filteredAndSortedModels.length - 1)
     }
   }, [filteredAndSortedModels.length, highlightedIndex])
-  useEffect(() => {
-    if (highlightedItemRef.current && gridContainerRef.current) {
-      highlightedItemRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest'
-      })
-    }
-  }, [highlightedIndex])
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.defaultPrevented) return
     const totalItems = filteredAndSortedModels.length
     if (totalItems === 0) return
-    const columns = getColumnsCount()
     switch (e.key) {
       case 'ArrowUp': {
         e.preventDefault()
@@ -233,7 +233,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         break
       }
     }
-  }, [filteredAndSortedModels, highlightedIndex, getColumnsCount, onModelSelect])
+  }, [filteredAndSortedModels, highlightedIndex, columns, onModelSelect])
   return (
     <div
       data-model-selector-panel
@@ -281,9 +281,15 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         </UiGroup>
       </div>
       {/* 模型列表 - 可滚动区域 */}
-      <div ref={gridContainerRef} className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-          {filteredAndSortedModels.map(({ p, m }, index) => {
+      <div className="flex-1 min-h-0 overflow-hidden px-4 pb-4 pt-1">
+        <UiVirtualGrid
+          data={filteredAndSortedModels}
+          columns={columns}
+          getKey={({ p, m }) => `${p.id}-${m.id}`}
+          highlightedIndex={highlightedIndex}
+          resetKey={`${searchQuery}:${modelFilterProvider}:${modelFilterType}:${modelFilterFunction}`}
+          emptyState={<UiEmpty size="xs" title={t('ui:workspaceFilters.emptyFiltered')} />}
+          renderItem={({ p, m }, index) => {
             const isHighlighted = index === highlightedIndex
             const isSelected = p.id === selectedProvider && m.id === selectedModel
             return (
@@ -332,8 +338,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 </div>
               </UiOptionButton>
             )
-          })}
-        </div>
+          }}
+        />
       </div>
     </div>
   )

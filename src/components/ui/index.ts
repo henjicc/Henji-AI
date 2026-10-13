@@ -29,6 +29,7 @@ export * from './UiSegmented';
 export type { ParameterControlProps } from './parameterControl';
 export * from './UiFontPicker';
 export * from './UiToast';
+export * from './UiVirtualList';
 export { resolveOverflowHiddenIds, type OverflowLayoutItem } from './overflowLayout';
 export {
   UiOverlayLayerProvider,

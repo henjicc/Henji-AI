@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type RefObject, type SyntheticEvent } from 'react';
+import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler';
 
 export type ImageComparisonMode = 'single' | 'side-by-side' | 'overlay';
 
@@ -32,7 +33,7 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
   const imagePositionRef = useRef({ x: 0, y: 0 });
   const targetScaleRef = useRef(1);
   const targetPositionRef = useRef({ x: 0, y: 0 });
-  const animationFrameRef = useRef<number | null>(null);
+  const animationRef = useRef<RafScheduler<[]> | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
 
   const updateImageTransform = useCallback((): void => {
@@ -50,10 +51,7 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
   }, []);
 
   const resetView = useCallback((): void => {
-    if (animationFrameRef.current !== null) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
+    animationRef.current?.cancel();
     imageScaleRef.current = 1;
     imagePositionRef.current = { x: 0, y: 0 };
     targetScaleRef.current = 1;
@@ -106,18 +104,37 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
   useEffect(() => {
     if (!isOpen) return;
     setViewerOpacity(0);
-    requestAnimationFrame(() => {
+    const opacity = createRafScheduler(() => {
       setViewerOpacity(1);
-    });
+    }, containerRef.current?.ownerDocument.defaultView ?? window);
+    opacity.schedule();
     const timer = window.setTimeout(() => {
       updateImageTransform();
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => { opacity.cancel(); window.clearTimeout(timer); };
   }, [isOpen, updateImageTransform]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !isOpen) return;
+    const scheduler = createRafScheduler(() => {
+      const targetScale = targetScaleRef.current;
+      const targetPos = targetPositionRef.current;
+      const currentScale = imageScaleRef.current;
+      const currentPos = imagePositionRef.current;
+      const factor = 0.3;
+      const nextScale = currentScale + (targetScale - currentScale) * factor;
+      const nextPos = { x: currentPos.x + (targetPos.x - currentPos.x) * factor, y: currentPos.y + (targetPos.y - currentPos.y) * factor };
+      imageScaleRef.current = nextScale;
+      imagePositionRef.current = nextPos;
+      updateImageTransform();
+      if (Math.abs(nextScale - targetScale) < 0.001 && Math.abs(nextPos.x - targetPos.x) < 0.1 && Math.abs(nextPos.y - targetPos.y) < 0.1) {
+        imageScaleRef.current = targetScale;
+        imagePositionRef.current = targetPos;
+        updateImageTransform();
+      } else scheduler.schedule();
+    }, container.ownerDocument.defaultView ?? window);
+    animationRef.current = scheduler;
 
     const isMacOs =
       typeof navigator !== 'undefined' &&
@@ -135,7 +152,7 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
       if (!isPointOnImageContent(e.clientX, e.clientY)) return;
       e.preventDefault();
 
-      if (!animationFrameRef.current) {
+      if (!scheduler.pending) {
         targetScaleRef.current = imageScaleRef.current;
         targetPositionRef.current = imagePositionRef.current;
       }
@@ -162,47 +179,14 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
       targetScaleRef.current = newScale;
       targetPositionRef.current = newPos;
 
-      if (!animationFrameRef.current) {
-        const loop = () => {
-          const targetScale = targetScaleRef.current;
-          const targetPos = targetPositionRef.current;
-          const currentScale = imageScaleRef.current;
-          const currentPos = imagePositionRef.current;
-          const factor = 0.3;
-          const nextScale = currentScale + (targetScale - currentScale) * factor;
-          const nextPos = {
-            x: currentPos.x + (targetPos.x - currentPos.x) * factor,
-            y: currentPos.y + (targetPos.y - currentPos.y) * factor,
-          };
-
-          imageScaleRef.current = nextScale;
-          imagePositionRef.current = nextPos;
-          updateImageTransform();
-
-          if (
-            Math.abs(nextScale - targetScale) < 0.001 &&
-            Math.abs(nextPos.x - targetPos.x) < 0.1 &&
-            Math.abs(nextPos.y - targetPos.y) < 0.1
-          ) {
-            imageScaleRef.current = targetScale;
-            imagePositionRef.current = targetPos;
-            updateImageTransform();
-            animationFrameRef.current = null;
-          } else {
-            animationFrameRef.current = requestAnimationFrame(loop);
-          }
-        };
-        animationFrameRef.current = requestAnimationFrame(loop);
-      }
+      scheduler.schedule();
     };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       container.removeEventListener('wheel', handleWheel);
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
+      scheduler.cancel();
+      if (animationRef.current === scheduler) animationRef.current = null;
     };
   }, [isOpen, imageAtPoint, isPointOnImageContent, updateImageTransform]);
 
@@ -210,10 +194,7 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
     if (e.button !== 0) return;
     if (!isPointOnImageContent(e.clientX, e.clientY)) return;
     e.preventDefault();
-    if (animationFrameRef.current !== null) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
+    animationRef.current?.cancel();
     setIsDragging(true);
     dragStartRef.current = {
       x: e.clientX - imagePositionRef.current.x,

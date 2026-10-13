@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createRafScheduler } from '@/utils/createRafScheduler'
 
 /**
  * 分节标题停靠在内容区顶部时留出的距离。
@@ -93,9 +94,7 @@ export function useSettingsScrollSpy({
   useEffect(() => {
     if (!container) return
 
-    let frame = 0
     const evaluate = (): void => {
-      frame = 0
       if (isProgrammaticScrollRef.current) return
       const sections = readSections(container)
       if (sections.length === 0) return
@@ -119,17 +118,15 @@ export function useSettingsScrollSpy({
       }
     }
 
-    const handleScroll = (): void => {
-      if (frame !== 0) return
-      frame = requestAnimationFrame(evaluate)
-    }
+    const scheduler = createRafScheduler(evaluate, container.ownerDocument.defaultView ?? window)
+    const handleScroll = (): void => scheduler.schedule()
 
     container.addEventListener('scroll', handleScroll, { passive: true })
     container.addEventListener('scrollend', releaseProgrammaticScroll)
     return () => {
       container.removeEventListener('scroll', handleScroll)
       container.removeEventListener('scrollend', releaseProgrammaticScroll)
-      if (frame !== 0) cancelAnimationFrame(frame)
+      scheduler.cancel()
     }
   }, [container, releaseProgrammaticScroll, sectionKey])
 
@@ -146,14 +143,13 @@ export function useSettingsScrollSpy({
   useLayoutEffect(() => {
     if (!container) return
 
-    let frame = 0
     let styled: HTMLElement | undefined
     const measure = (): void => {
-      frame = 0
       const sections = readSections(container)
       const last = sections[sections.length - 1]
       // 铺满型大类（容器不滚动）由分节自己填满剩余高度，不需要也不能再撑最小高度
-      const scrollable = /auto|scroll/.test(getComputedStyle(container).overflowY)
+      const owner = container.ownerDocument.defaultView ?? window
+      const scrollable = /auto|scroll/.test(owner.getComputedStyle(container).overflowY)
       const next = scrollable ? Math.max(0, container.clientHeight - SECTION_ANCHOR_OFFSET - CONTENT_BOTTOM_PADDING) : 0
       if (styled && styled !== last) styled.style.minHeight = ''
       styled = last
@@ -161,10 +157,8 @@ export function useSettingsScrollSpy({
       setTailSpacerHeight((prev) => (Math.abs(prev - next) < 1 ? prev : next))
     }
 
-    const schedule = (): void => {
-      if (frame !== 0) return
-      frame = requestAnimationFrame(measure)
-    }
+    const scheduler = createRafScheduler(measure, container.ownerDocument.defaultView ?? window)
+    const schedule = (): void => scheduler.schedule()
 
     measure()
     const observer = new ResizeObserver(schedule)
@@ -172,7 +166,7 @@ export function useSettingsScrollSpy({
 
     return () => {
       observer.disconnect()
-      if (frame !== 0) cancelAnimationFrame(frame)
+      scheduler.cancel()
       if (styled) styled.style.minHeight = ''
     }
   }, [container, sectionKey])

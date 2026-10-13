@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { createTransientProgressStore } from './createTransientProgressStore';
 
 /**
  * 生成工作区任务进度的独立瞬态状态源（taskId -> 0~100）。
@@ -24,46 +24,12 @@ interface GenerationTaskProgressState {
   clearAllProgress: () => void;
 }
 
-export const useGenerationTaskProgressStore = create<GenerationTaskProgressState>((set) => ({
-  progress: {},
-
-  setProgress: (taskId, progress) => {
-    set((state) => {
-      const current = state.progress[taskId];
-      if (progress === null) {
-        if (current === undefined) {
-          return {};
-        }
-        const next = { ...state.progress };
-        delete next[taskId];
-        return { progress: next };
-      }
-
-      const clamped = Math.min(100, Math.max(0, progress));
-      if (current !== undefined && Math.abs(current - clamped) < 0.5) {
-        return {};
-      }
-      return {
-        progress: {
-          ...state.progress,
-          [taskId]: clamped,
-        },
-      };
-    });
-  },
-
-  clearProgress: (taskId) => {
-    set((state) => {
-      if (state.progress[taskId] === undefined) {
-        return {};
-      }
-      const next = { ...state.progress };
-      delete next[taskId];
-      return { progress: next };
-    });
-  },
-
-  clearAllProgress: () => {
-    set((state) => (Object.keys(state.progress).length === 0 ? {} : { progress: {} }));
-  },
-}));
+const progressStore = createTransientProgressStore<number, GenerationTaskProgressState>({
+  initialState: actions => ({ progress: {}, setProgress: actions.set, clearProgress: id => actions.clear([id]), clearAllProgress: actions.clearAll }),
+  getEntry: (state, id) => state.progress[id],
+  entries: state => Object.entries(state.progress),
+  patch: entries => ({ progress: Object.fromEntries(entries) }),
+  normalize: progress => Math.min(100, Math.max(0, progress)),
+  equals: (current, next) => Math.abs(current - next) < 0.5,
+});
+export const useGenerationTaskProgressStore = progressStore.store;

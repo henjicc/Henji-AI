@@ -1,12 +1,28 @@
 /** @vitest-environment jsdom */
 import { act, renderHook, cleanup } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes';
 import { canvasToDocumentContent } from './canvasDocumentContent';
-import { clearCameraStageRenderProgress, setCameraStageNodeRenderProgress, useCameraStageNodeRenderProgress } from './cameraStageRenderProgress';
+import { clearCameraStageRenderProgress, clearCameraStageNodeRenderProgress, setCameraStageNodeRenderProgress, useCameraStageNodeRenderProgress, useCameraStageRenderProgressStore } from './cameraStageRenderProgress';
 
 afterEach(() => { cleanup(); clearCameraStageRenderProgress(); });
+
+it('相等快照不通知，旧请求清理不会移除新请求', () => {
+  const snapshot = { outputKind: 'video' as const, progress: 0.3, phase: 'rendering' as const, requestId: 'new' };
+  setCameraStageNodeRenderProgress('project', 'node', snapshot);
+  const notify = vi.fn();
+  const unsubscribe = useCameraStageRenderProgressStore.subscribe(notify);
+  setCameraStageNodeRenderProgress('project', 'node', { ...snapshot });
+  setCameraStageNodeRenderProgress('project', 'missing', null);
+  clearCameraStageNodeRenderProgress('project', 'node', 'old');
+  expect(notify).not.toHaveBeenCalled();
+  clearCameraStageNodeRenderProgress('project', 'node', 'new');
+  expect(notify).toHaveBeenCalledTimes(1);
+  clearCameraStageRenderProgress();
+  expect(notify).toHaveBeenCalledTimes(1);
+  unsubscribe();
+});
 
 it('导出完成或取消后撤销仅恢复作品，进度不产生历史、不落盘、不恢复忙碌', () => {
   for (const completed of [true, false]) {

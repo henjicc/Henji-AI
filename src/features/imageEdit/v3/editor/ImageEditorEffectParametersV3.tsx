@@ -5,6 +5,7 @@ import type { ImageEditEffectLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { ImageEditorColorGradeParametersV3 } from './ImageEditorColorGradeParametersV3'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useRafCallback } from '@/hooks/useRafCallback'
 
 import {
   UiColorInput,
@@ -56,7 +57,9 @@ function ParameterSlider({
   const [draft, setDraft] = useState(value)
   const activeRef = useRef(false)
   const draftRef = useRef(value)
-  const previewFrameRef = useRef<number | null>(null)
+  const preview = useRafCallback((next: number) => {
+    controller.setParameterPreview(previewId, layer.id, paramsFor(next))
+  })
 
   useEffect(() => {
     if (!activeRef.current) {
@@ -66,18 +69,17 @@ function ParameterSlider({
   }, [value])
 
   useEffect(() => () => {
-    if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(previewFrameRef.current)
-    }
+    preview.cancel()
     controller.clearParameterPreview(previewId)
-  }, [controller, previewId])
+  }, [controller, previewId, preview])
   useEffect(() => {
     if (!disabled || !activeRef.current) return
     activeRef.current = false
+    preview.cancel()
     controller.clearParameterPreview(previewId)
     setDraft(value)
     draftRef.current = value
-  }, [controller, disabled, previewId, value])
+  }, [controller, disabled, previewId, value, preview])
 
   const paramsFor = (next: number): ImageEditJsonObjectV3 => {
     if (createParams) return createParams(next)
@@ -90,25 +92,13 @@ function ParameterSlider({
     activeRef.current = true
     draftRef.current = next
     setDraft(next)
-    const publish = (): void => {
-      previewFrameRef.current = null
-      controller.setParameterPreview(previewId, layer.id, paramsFor(draftRef.current))
-    }
-    if (previewFrameRef.current !== null) return
-    if (typeof requestAnimationFrame === 'function') {
-      previewFrameRef.current = requestAnimationFrame(publish)
-    } else {
-      publish()
-    }
+    preview.schedule(next)
   }
 
   const commit = (): void => {
     if (disabled || !activeRef.current) return
     activeRef.current = false
-    if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(previewFrameRef.current)
-      previewFrameRef.current = null
-    }
+    preview.cancel()
     controller.setParameterPreview(previewId, layer.id, paramsFor(draftRef.current))
     controller.commitLayerParamsPreview(previewId, layer.id, paramsFor(draftRef.current))
   }
@@ -127,10 +117,7 @@ function ParameterSlider({
           onPointerUp={commit}
           onPointerCancel={() => {
             activeRef.current = false
-            if (previewFrameRef.current !== null && typeof cancelAnimationFrame === 'function') {
-              cancelAnimationFrame(previewFrameRef.current)
-              previewFrameRef.current = null
-            }
+            preview.cancel()
             controller.clearParameterPreview(previewId)
             setDraft(value)
           }}
@@ -390,10 +377,10 @@ function SharedEffectParameters({ controller, layer, descriptor, disabled }: {
   const [draft, setDraft] = useState(layer.params)
   const latest = useRef(layer.params)
   const active = useRef(false)
-  const frame = useRef<number | null>(null)
-  const cancelFrame = (): void => { if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null }
+  const preview = useRafCallback((params: ImageEditJsonObjectV3) => controller.setParameterPreview(previewId, layer.id, params))
+  const cancelFrame = preview.cancel
   useEffect(() => { if (!active.current) { latest.current = layer.params; setDraft(layer.params) } }, [layer.params])
-  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); controller.clearParameterPreview(previewId) }, [controller, previewId])
+  useEffect(() => () => { preview.cancel(); controller.clearParameterPreview(previewId) }, [controller, previewId, preview])
   const fields = builtinParameterFields(descriptor.parameters).map(field => ({ ...field, animatable: false as const }))
   const cancel = (): void => { cancelFrame(); active.current = false; controller.clearParameterPreview(previewId); latest.current = layer.params; setDraft(layer.params) }
   useEffect(() => { if (disabled) cancel() }, [disabled]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -407,9 +394,7 @@ function SharedEffectParameters({ controller, layer, descriptor, disabled }: {
       if (disabled) return
       active.current = true
       latest.current = { ...latest.current, ...writeBuiltinField(field, value) }; setDraft(latest.current)
-      if (frame.current === null) frame.current = requestAnimationFrame(() => {
-        frame.current = null; controller.setParameterPreview(previewId, layer.id, latest.current)
-      })
+      preview.schedule(latest.current)
     }, finish, cancel,
     atomic: value => { if (disabled) return; active.current = true; latest.current = { ...latest.current, ...writeBuiltinField(field, value) }; setDraft(latest.current); finish() },
   })

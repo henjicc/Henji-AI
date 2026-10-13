@@ -1,5 +1,6 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, type RefObject } from 'react';
 import { create } from 'zustand';
+import { createRafScheduler } from '@/utils/createRafScheduler';
 
 /**
  * 节点内子元素（提示词、参数输入框等）获得焦点时，应视为该节点被激活——
@@ -37,19 +38,17 @@ function resolveFocusedNodeId(target: EventTarget | null): string | null {
 
 export function useCanvasNodeFocusTracking(wrapperRef: RefObject<HTMLElement>): void {
   const setFocusedNodeId = useCanvasNodeFocusStore((state) => state.setFocusedNodeId);
-  const pendingFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) {
       return;
     }
-    const cancelPendingCheck = (): void => {
-      if (pendingFrameRef.current !== null) {
-        cancelAnimationFrame(pendingFrameRef.current);
-        pendingFrameRef.current = null;
-      }
-    };
+    const scheduler = createRafScheduler(() => {
+      const active = wrapper.ownerDocument.activeElement;
+      setFocusedNodeId(wrapper.contains(active) ? resolveFocusedNodeId(active) : null);
+    }, wrapper.ownerDocument.defaultView ?? window);
+    const cancelPendingCheck = scheduler.cancel;
     const handleFocusIn = (event: FocusEvent): void => {
       cancelPendingCheck();
       setFocusedNodeId(resolveFocusedNodeId(event.target));
@@ -59,11 +58,7 @@ export function useCanvasNodeFocusTracking(wrapperRef: RefObject<HTMLElement>): 
       // （旧节点先失焦，新控件还没来得及自己 focus）。延后一帧用 activeElement 复核，
       // 给新控件一个自己拿到焦点的机会，避免把"仍在同一节点内切换焦点"误判为焦点已离开。
       cancelPendingCheck();
-      pendingFrameRef.current = requestAnimationFrame(() => {
-        pendingFrameRef.current = null;
-        const active = wrapper.ownerDocument.activeElement;
-        setFocusedNodeId(wrapper.contains(active) ? resolveFocusedNodeId(active) : null);
-      });
+      scheduler.schedule();
     };
     wrapper.addEventListener('focusin', handleFocusIn);
     wrapper.addEventListener('focusout', handleFocusOut);

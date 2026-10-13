@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useStore } from 'zustand'
+import { usePlaybackClock, type PlaybackClockStore } from '@/hooks/usePlaybackClock'
 import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
 import { UiIconButton, UiRangeInput, UI_PANEL_SURFACE_CLASS, UI_TEXT_TIMECODE_CLASS } from '@/components/ui'
@@ -7,6 +9,21 @@ import { TooltipContent } from './ui/Tooltip'
 import { useI18n } from '@/hooks/useI18n'
 import { useWaveformData } from '@/hooks/useWaveformData'
 import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+
+function formatPlaybackTime(seconds: number): string {
+  const time = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(time / 60)}:${(time % 60).toString().padStart(2, '0')}`
+}
+
+function AudioTimeReadout({ clock, controlledTime, duration, className }: { clock: PlaybackClockStore; controlledTime?: number; duration?: number; className?: string }): JSX.Element {
+  const time = useStore(clock, state => formatPlaybackTime(state.currentTime))
+  return <span className={className}>{controlledTime === undefined ? time : formatPlaybackTime(controlledTime)}{duration === undefined ? '' : ` / ${formatPlaybackTime(duration)}`}</span>
+}
+
+function AudioPlaybackWaveform({ clock, startSeconds, ...props }: Omit<React.ComponentProps<typeof WaveformView>, 'playedSeconds'> & { clock: PlaybackClockStore; startSeconds: number }): JSX.Element {
+  const time = useStore(clock, state => state.currentTime)
+  return <WaveformView {...props} playedSeconds={startSeconds + time} />
+}
 
 export interface AudioPlaybackState {
   currentTime: number
@@ -79,14 +96,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [isVisible, setIsVisible] = useState(true)
   const restoreRef = useRef({ src, state: initialPlaybackState })
   const [internalPlaying, setIsPlaying] = useState(false)
-  const [internalTime, setCurrentTime] = useState(initialPlaybackState?.currentTime ?? 0)
   const [internalDuration, setDuration] = useState(0)
   const [internalVolume, setVolume] = useState(initialPlaybackState?.volume ?? 1)
   const isPlaying = controlledPlayback?.playing ?? internalPlaying
-  const currentTime = controlledPlayback?.currentTime ?? internalTime
+  const currentTime = controlledPlayback?.currentTime ?? 0
   const duration = controlledPlayback?.duration ?? internalDuration
   const volume = controlledPlayback?.volume ?? internalVolume
   const controlled = controlledPlayback !== undefined
+  const { store: playbackClock, setTime: setCurrentTime } = usePlaybackClock(audioRef, isPlaying, src, isVisible && !controlled, initialPlaybackState?.currentTime ?? 0)
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const [isAdjustingVolume, setIsAdjustingVolume] = useState(false)
   const [showVolumeValueTip, setShowVolumeValueTip] = useState(false)
@@ -112,7 +129,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     })
     observer.observe(playerRef.current)
     return () => observer.disconnect()
-  }, [controlled])
+  }, [controlled, setCurrentTime])
 
   useEffect(() => {
     if (controlled) return
@@ -149,7 +166,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       a.removeEventListener('timeupdate', onTime)
       a.removeEventListener('ended', onEnd)
     }
-  }, [autoPlay, src, controlled])
+  }, [autoPlay, src, controlled, setCurrentTime])
 
   useEffect(() => {
     if (active || controlled) return
@@ -157,28 +174,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     audio?.pause()
     setIsPlaying(false)
   }, [active, controlled])
-
-  const rafRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (controlled) return
-    const a = audioRef.current
-    if (!a) return
-    if (isPlaying && isVisible) {
-      const tick = () => {
-        setCurrentTime(a.currentTime || 0)
-        rafRef.current = requestAnimationFrame(tick)
-      }
-      rafRef.current = requestAnimationFrame(tick)
-      return () => {
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
-        rafRef.current = null
-      }
-    }
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
-    }
-  }, [isPlaying, isVisible, src, controlled])
 
   useEffect(() => {
     if (controlled) return
@@ -255,13 +250,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         setIsPlaying(false)
       }
     }
-  }
-
-  const format = (s: number) => {
-    const t = Math.max(0, Math.floor(s))
-    const mm = Math.floor(t / 60)
-    const ss = t % 60
-    return `${mm}:${ss.toString().padStart(2, '0')}`
   }
 
   const applyVolume = (nextVolume: number): void => {
@@ -347,18 +335,20 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     </UiIconButton>
   )
   const waveformView = (height?: number, tier?: 'mini' | 'standard') => (
-    <WaveformView
+    <AudioPlaybackWaveform
+      clock={playbackClock}
       waveform={waveform}
       {...(height !== undefined ? { height } : {})}
       {...(tier ? { tier } : {})}
-      playedSeconds={(wavePyramid?.startSeconds ?? 0) + currentTime}
+      startSeconds={wavePyramid?.startSeconds ?? 0}
       durationSeconds={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
-      onSeekStart={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
-      onSeekMove={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
+      onSeekStart={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d; setCurrentTime(r * d) } }}
+      onSeekMove={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d; setCurrentTime(r * d) } }}
       onSeekEnd={(r, dragged) => {
         if (!audioRef.current || !duration) return
         const d = audioRef.current.duration || duration || 0
         audioRef.current.currentTime = r * d
+        setCurrentTime(r * d)
         if (dragged) {
           audioRef.current.play().catch(() => { })
           setIsPlaying(true)
@@ -420,9 +410,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} />
             : waveformView(28, 'mini')}
         </div>
-        <span className={`shrink-0 text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>
-          {format(currentTime)} / {format(waveDuration ?? duration)}
-        </span>
+        <AudioTimeReadout clock={playbackClock} controlledTime={controlledPlayback?.currentTime} duration={waveDuration ?? duration} className={`shrink-0 text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`} />
         {volumeControl}
         {rightActions}
         {audioElement}
@@ -439,8 +427,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       onKeyDown={keyboardToggle}
     >
       <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>
-        <span>{format(currentTime)}</span>
-        <span>{format(waveDuration ?? duration)}</span>
+        <AudioTimeReadout clock={playbackClock} controlledTime={controlledPlayback?.currentTime} />
+        <span>{formatPlaybackTime(waveDuration ?? duration)}</span>
       </div>
       <div className={controlled ? 'mb-2' : `${compact ? 'mb-2 h-12' : 'mb-3 h-[72px]'}`}>
         {controlledPlayback ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} /> : waveformView(waveformHeight)}

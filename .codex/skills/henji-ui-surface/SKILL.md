@@ -621,7 +621,10 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 音频播放 | `@/components/AudioPlayer` | 再写一个播放器 |
 | 全能调色曲线 / 色轮 | `UiCurveEditor` / `UiGradeWheel`（`@/components/ui`，受控值与开始/结束/取消手势；曲线可传领域采样器保留样条显示；色相区间用 `UiRangeSlider wrap`） | 自写曲线、色轮或区间控件 |
 | 参数面板（效果/调整/代码参数，按分组、更多折叠、条件显示渲染字段） | `ParamList` / `ParamField`（`@/components/ui/params`，中立字段描述 + 手势适配器；剪辑效果、代码参数与图片调整层共用） | 每个面板自写参数行、各自处理拖动撤销 |
-| 长列表 | `react-virtuoso`（已是依赖） | 全量 map 渲染上百项 |
+| 长列表 / 网格 | `UiVirtualList` / `UiVirtualGrid`（`@/components/ui`，基于 react-virtuoso；有限高度、单滚动容器、稳定键、空态和高亮 scrollIntoView；可变高度卡片按行测量） | 全量 map 渲染上百项；普通目录另用 tanstack，自写窗口计算 |
+| 指针事件合帧 / 延后一次测量 | `useRafCallback`（`@/hooks/useRafCallback`）/ `createRafScheduler`（`@/utils/createRafScheduler`；最新样本、cancel、flush，传 ownerWindow） | 各自管理 rAF id；结束/卸载后还有待执行帧 |
+| 音频播放位置 | `usePlaybackClock`（`@/hooks/usePlaybackClock`；单个播放循环，波形与秒读数叶子订阅，AudioPlayer / AudioNode 已接入） | 播放帧 setState 重渲染整个播放器或节点 |
+| 瞬态 keyed 进度 | `createTransientProgressStore`（`@/stores/createTransientProgressStore`；set / clear / clearAll / useEntry，自定义 normalize / equals；Record/Map 适配只保留字段与动作名） | 拷贝三套相等短路和清理逻辑；瞬态进度入文档或撤销 |
 | 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：

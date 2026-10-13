@@ -88,6 +88,25 @@ it('未提供恢复状态的现有消费者仍从零开始、默认音量不变'
   expect(audio.play).not.toHaveBeenCalled()
 })
 
+it('播放十帧只刷新显示叶子，不重跑播放器的波形数据订阅', async () => {
+  const frames = new Map<number, FrameRequestCallback>()
+  let next = 0
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++next, callback); return next })
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+  const view = render(<AudioPlayer src="media:clock" />)
+  const audio = view.container.querySelector('audio')!
+  await act(async () => fireEvent.click(view.getByTitle('ui:audioPlayer.playPause')))
+  const subscriptions = vi.mocked(useWaveformData).mock.calls.length
+  for (let time = 1; time <= 10; time++) {
+    audio.currentTime = time
+    act(() => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(time)) })
+  }
+  expect(view.getByText('0:10')).toBeTruthy()
+  expect(vi.mocked(useWaveformData).mock.calls.length).toBe(subscriptions)
+  view.unmount()
+  expect(frames.size).toBe(0)
+})
+
 it('宿主受控模式只发送播放、定位和音量命令，无第二媒体元素、全音频分析或乐观播放状态', async () => {
   const onTogglePlay = vi.fn(); const onSeek = vi.fn(); const onVolume = vi.fn()
   const controlled = { currentTime: 12, duration: 120, playing: false, volume: 0.4, onTogglePlay, onSeek, onVolume }

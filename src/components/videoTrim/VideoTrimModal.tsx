@@ -5,6 +5,7 @@ import { createLogger } from '@/core/logging';
 import { UiButton, UiError, UiIconButton, UiLoading, UiModal } from '@/components/ui';
 import { compressVideoToFit } from '@/commands/video';
 import { VideoTrimTimeline } from './VideoTrimTimeline';
+import { useRafCallback } from '@/hooks/useRafCallback';
 
 const logger = createLogger('components.videoTrim.VideoTrimModal');
 
@@ -56,7 +57,7 @@ export function VideoTrimModal({
   onConfirm,
   onVideoCompressed,
   onClose,
-}: VideoTrimModalProps) {
+}: VideoTrimModalProps): JSX.Element {
   const { t } = useTranslation();
   // 事件与回调里读 ref；需要绑定监听的 effect 依赖元素状态。UiModal 在确定宿主文档后才挂载内容，
   // 首次提交时 <video> 还不存在，关闭再打开时又换成新元素——只靠 ref 的 effect 会拿到 null 或旧元素。
@@ -145,23 +146,14 @@ export function VideoTrimModal({
 
   // 拖拽手柄/播放指针时把画面实时跳转到对应帧。
   // mousemove 触发频率可能远超 60Hz，用 rAF 合并到每帧最多 seek 一次，避免疯狂 seek 卡顿。
-  const pendingSeekRef = useRef<number | null>(null);
-  const seekRafIdRef = useRef<number | null>(null);
-  const seekVideoTo = useCallback((time: number) => {
-    pendingSeekRef.current = time;
-    if (seekRafIdRef.current !== null) return;
-    seekRafIdRef.current = requestAnimationFrame(() => {
-      seekRafIdRef.current = null;
-      const video = videoRef.current;
-      if (video && pendingSeekRef.current !== null) {
-        video.pause();
-        video.currentTime = pendingSeekRef.current;
-      }
-    });
-  }, []);
-  useEffect(() => () => {
-    if (seekRafIdRef.current !== null) cancelAnimationFrame(seekRafIdRef.current);
-  }, []);
+  const seekPreview = useRafCallback((time: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    video.currentTime = time;
+  }, videoElement?.ownerDocument.defaultView);
+  const seekVideoTo = seekPreview.schedule;
+  useEffect(() => () => seekPreview.cancel(), [open, previewUrl, seekPreview]);
 
   const togglePlay = () => {
     const video = videoRef.current;
