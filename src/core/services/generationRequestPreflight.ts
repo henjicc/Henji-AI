@@ -120,7 +120,9 @@ function replaceVideoSourceInParams(
 export async function compressFirstVideoIfNeeded(
   model: ModelDefinition,
   params: DynamicValueMap,
+  signal?: AbortSignal,
 ): Promise<DynamicValueMap> {
+  signal?.throwIfAborted()
   const firstVideoSource = getFirstVideoSource(params)
   if (!firstVideoSource) {
     return params
@@ -134,11 +136,14 @@ export async function compressFirstVideoIfNeeded(
 
   try {
     const compressed = await compressVideoToFit(firstVideoSource, maxSizeMB)
+    signal?.throwIfAborted()
     if (compressed.path === firstVideoSource) {
       return params
     }
     return replaceVideoSourceInParams(params, firstVideoSource, compressed.path)
   } catch (error) {
+    signal?.throwIfAborted()
+    if (error instanceof Error && error.name === 'AbortError') throw error
     logger.warn('[GenerationService] 视频压缩失败，使用原始文件继续生成', error)
     return params
   }
@@ -149,7 +154,9 @@ export async function compressFirstVideoIfNeeded(
  */
 export async function trimFirstVideoIfSelected(
   params: DynamicValueMap,
+  signal?: AbortSignal,
 ): Promise<DynamicValueMap> {
+  signal?.throwIfAborted()
   const start = params.uploadedVideoTrimStart
   const end = params.uploadedVideoTrimEnd
   if (typeof start !== 'number' || typeof end !== 'number' || !(end > start)) {
@@ -163,8 +170,11 @@ export async function trimFirstVideoIfSelected(
 
   try {
     const result = await trimVideoSource(source, start, end)
+    signal?.throwIfAborted()
     return replaceVideoSourceInParams(params, source, result.path)
   } catch (error) {
+    signal?.throwIfAborted()
+    if (error instanceof Error && error.name === 'AbortError') throw error
     logger.warn('[GenerationService] 视频裁剪失败，使用未裁剪版本继续生成', error)
     return params
   }

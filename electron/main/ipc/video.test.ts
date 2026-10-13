@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { IpcMainInvokeEvent } from 'electron'
 import { beforeEach, expect, it, vi } from 'vitest'
 type Handler = (input: unknown, event: IpcMainInvokeEvent) => unknown
-const mock = vi.hoisted(() => ({ handlers: new Map<string, Handler>(), bytes: vi.fn(), cache: vi.fn(), allowRoot: vi.fn(), stat: vi.fn(), realpath: vi.fn(), allowed: vi.fn(), frame: vi.fn() }))
+const mock = vi.hoisted(() => ({ handlers: new Map<string, Handler>(), bytes: vi.fn(), cache: vi.fn(), allowRoot: vi.fn(), stat: vi.fn(), realpath: vi.fn(), allowed: vi.fn(), frame: vi.fn(), compress: vi.fn(), trim: vi.fn() }))
 vi.mock('./registry', () => ({
   parseRecord: (value: unknown) => { if (!value || typeof value !== 'object') throw new Error('object'); return value },
   parseStringField: (value: Record<string, unknown>, field: string) => { if (typeof value[field] !== 'string' || !value[field]) throw new Error(field); return value[field] },
@@ -14,7 +14,7 @@ vi.mock('../services/asset-library/thumbnailService', () => ({ ensureAssetThumbn
 vi.mock('../protocol', () => ({ allowMediaRoot: mock.allowRoot, isPathWithinAllowedMediaRoots: mock.allowed }))
 vi.mock('../services/video/filmstrip', () => ({ filmstripService: () => ({ frame: mock.frame }) }))
 vi.mock('../services/image/source', () => ({ normalizeLocalSource: (source: string) => source }))
-vi.mock('../services/video/ops', () => ({ generateVideoThumbnailBytes: mock.bytes, compressVideoToFit: vi.fn(), generateVideoThumbnail: vi.fn(), readVideoInfo: vi.fn(), trimVideoSource: vi.fn() }))
+vi.mock('../services/video/ops', () => ({ generateVideoThumbnailBytes: mock.bytes, compressVideoToFit: mock.compress, generateVideoThumbnail: vi.fn(), readVideoInfo: vi.fn(), trimVideoSource: mock.trim }))
 vi.mock('../services/video/preview-cache', () => ({ clearLegacyVideoPreviewCache: vi.fn() }))
 vi.mock('../services/video/frame-export', () => ({ appendVideoFrameExport: vi.fn(), cancelVideoFrameExport: vi.fn(), finishVideoFrameExport: vi.fn(), startVideoFrameExport: vi.fn() }))
 import { registerVideoIpc } from './video'
@@ -24,6 +24,23 @@ function sender(id: number): { event: IpcMainInvokeEvent; destroy: () => void } 
 }
 function invoke(id: string, input: unknown, event: IpcMainInvokeEvent): Promise<unknown> { return Promise.resolve().then(() => mock.handlers.get(id)!(input, event)) }
 beforeEach(() => { vi.resetAllMocks(); mock.handlers.clear(); registerVideoIpc(); mock.stat.mockResolvedValue({ mtimeMs: 42 }) })
+
+it.each(['compress', 'trim'] as const)('%s 宿主销毁取消处理，只影响自身请求', async kind => {
+  const owner = sender(41); const other = sender(42)
+  const signals: AbortSignal[] = []
+  const operation = kind === 'compress' ? mock.compress : mock.trim
+  operation.mockImplementation((_payload, signal: AbortSignal) => {
+    signals.push(signal)
+    return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
+  })
+  const id = kind === 'compress' ? 'video:compressVideoToFit' : 'video:trimVideoSource'
+  const payload = kind === 'compress' ? { source: 'C:/video.mp4', maxSizeMB: 10 } : { source: 'C:/video.mp4', startSeconds: 0, endSeconds: 5 }
+  const first = invoke(id, payload, owner.event).catch(error => error)
+  const second = invoke(id, payload, other.event).catch(error => error)
+  await vi.waitFor(() => expect(signals).toHaveLength(2))
+  owner.destroy(); expect(await first).toBeInstanceOf(Error); expect(signals[1].aborted).toBe(false)
+  other.destroy(); expect(await second).toBeInstanceOf(Error)
+})
 
 it('视频缓存和原字节路径均可用；拒绝错类型或越界缩略图参数', async () => {
   const owner = sender(1)

@@ -29,19 +29,37 @@ import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
 import { filmstripService } from '../services/video/filmstrip'
 import { FILMSTRIP_MAX_TIME_US, isFilmstripHeight, type FilmstripHeight } from '../../../src/core/media/filmstripFrames'
+import type { IpcMainInvokeEvent } from 'electron'
 
 const thumbnailRequests = new Map<number, Map<string, AbortController>>()
+const processingRequests = new Map<number, Set<AbortController>>()
+
+async function withProcessingRequest<T>(event: IpcMainInvokeEvent, task: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  let requests = processingRequests.get(event.sender.id)
+  if (!requests) {
+    requests = new Set(); processingRequests.set(event.sender.id, requests)
+    const owned = requests
+    event.sender.once('destroyed', () => {
+      for (const controller of owned) controller.abort(new DOMException('视频处理宿主已关闭。', 'AbortError'))
+      processingRequests.delete(event.sender.id)
+    })
+  }
+  if (requests.size >= 128) throw new Error('视频处理请求过多，请稍后重试。')
+  const controller = new AbortController()
+  requests.add(controller)
+  try { return await task(controller.signal) } finally { requests.delete(controller) }
+}
 
 export function registerVideoIpc(): void {
   void clearLegacyVideoPreviewCache()
   registerIpcHandler<string, VideoInfoResultDto>('video:readVideoInfo', (input) => parseStringField(input, 'source'), (source) => {
     return readVideoInfo(source)
   })
-  registerIpcHandler<TrimVideoSourcePayloadDto, TrimVideoSourceResultDto>('video:trimVideoSource', parseTrimPayload, (payload) => {
-    return trimVideoSource(payload)
+  registerIpcHandler<TrimVideoSourcePayloadDto, TrimVideoSourceResultDto>('video:trimVideoSource', parseTrimPayload, (payload, event) => {
+    return withProcessingRequest(event, signal => trimVideoSource(payload, signal))
   })
-  registerIpcHandler<CompressVideoToFitPayloadDto, CompressVideoToFitResultDto>('video:compressVideoToFit', parseCompressPayload, (payload) => {
-    return compressVideoToFit(payload)
+  registerIpcHandler<CompressVideoToFitPayloadDto, CompressVideoToFitResultDto>('video:compressVideoToFit', parseCompressPayload, (payload, event) => {
+    return withProcessingRequest(event, signal => compressVideoToFit(payload, signal))
   })
   registerIpcHandler<GenerateVideoThumbnailPayloadDto, GenerateVideoThumbnailResultDto>(
     'video:generateThumbnail',
