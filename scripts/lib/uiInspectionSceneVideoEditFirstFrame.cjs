@@ -8,10 +8,11 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
 function summarize(runs) {
-  return Object.fromEntries(['open', 'switch', 'switch-many'].map(reason => {
+  return Object.fromEntries(['open', 'switch', 'switch-many'].flatMap(reason => {
     const samples = runs.filter(run => run.reason === reason)
+    if (!samples.length) return []
     const warm = reason === 'open' ? samples.slice(1) : samples
-    return [reason, { cold: reason === 'open' ? samples[0] : undefined, medianMs: median(warm.map(run => run.first.elapsedMs)), longTaskMaxMs: Math.max(...warm.map(run => run.window.longTaskMaxMs)), samples: warm.length }]
+    return [[reason, { cold: reason === 'open' ? samples[0] : undefined, medianMs: warm.length ? median(warm.map(run => run.first.elapsedMs)) : undefined, longTaskMaxMs: warm.length ? Math.max(...warm.map(run => run.window.longTaskMaxMs)) : undefined, samples: warm.length }]]
   }))
 }
 function createVideoEditFirstFrameScene() {
@@ -30,7 +31,8 @@ function createVideoEditFirstFrameScene() {
       const seeded = await seedVideoEditProject(page, fixture)
       const tracing = process.env.HENJI_FIRST_FRAME_TRACE === '1'
       if (tracing) await app.evaluate(({ contentTracing }) => contentTracing.startRecording({ included_categories: ['toplevel', 'v8', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-v8.cpu_profiler', 'blink.worker', 'gpu', 'gpu.dawn'] }))
-      const evidence = { mode: process.env.HENJI_BUNDLE_MODE || 'production', runs: [] }
+      const coldOnly = process.env.HENJI_FIRST_FRAME_COLD_ONLY === '1'
+      const evidence = { coldOnly, mode: process.env.HENJI_BUNDLE_MODE || 'production', runs: [] }
       const save = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const collect = async (after, reason) => {
         let events
@@ -48,10 +50,11 @@ function createVideoEditFirstFrameScene() {
         evidence.runs.push(run); save(); console.log('[first-frame]', JSON.stringify(run))
       }
       // 首次原生子进程冷启动单列；随后三次打开同一已存项目。
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < (coldOnly ? 1 : 4); i++) {
         const after = new Date().toISOString(); await openVideoEditProjectCard(page, seeded.projectId); await collect(after, 'open')
-        if (i < 3) { await leaveVideoEditProject(page); await page.waitForTimeout(1200) }
+        if (!coldOnly && i < 3) { await leaveVideoEditProject(page); await page.waitForTimeout(1200) }
       }
+      if (!coldOnly) {
       let client
       try {
         const auth = await authorizeMcpConnection(page, { name: '首帧巡检', allowWrites: true })
@@ -72,6 +75,7 @@ function createVideoEditFirstFrameScene() {
           await collect(after, many ? 'switch-many' : 'switch')
         }
       } finally { await client?.close(); await disableMcp(page) }
+      }
       if (tracing) evidence.trace = await app.evaluate(({ contentTracing }, file) => contentTracing.stopRecording(file), path.join(root, 'first-frame.trace.json'))
       evidence.summary = summarize(evidence.runs); save(); console.log('[first-frame-summary]', JSON.stringify(evidence.summary))
       await leaveVideoEditProject(page)

@@ -38,6 +38,8 @@ interface PlaybackStream {
   abort: AbortController
   entries: Array<{ frame: number; clipId: string }>
   cursor: number
+  /** Initial contiguous pictures already owned by the bounded seek cache. */
+  cachedUntilFrame: number
   samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
   /** The first pull is started at build time so every scheduled decoder is created before mid-playback cuts. */
   primed?: Promise<IteratorResult<VideoEditDecodedPicture | null, void>>
@@ -288,11 +290,22 @@ export class VideoEditRenderer {
       for (const clip of group.clips) for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) {
         entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
       }
+      // A scrub already decoded this prefix. Play those exact pictures while the existing decoder
+      // positions at the first uncached picture, instead of decoding the same GOP before moving at all.
+      // Borrow only from the existing budget: no pinned window, new textures or extra decoder.
+      let cachedFrames = 0
+      const limit = Math.min(Math.ceil(document.fps / 2), entries.length - 1)
+      while (cachedFrames < limit && entries[cachedFrames].frame === frame + cachedFrames
+        && entries[cachedFrames].clipId === entries[0].clipId
+        && this.frameCache.get(group.media.path, timestamps[cachedFrames]) instanceof VideoEditGpuFrame) cachedFrames++
+      if (cachedFrames < Math.ceil(document.fps / 4)) cachedFrames = 0
+      const cachedUntilFrame = frame + cachedFrames
+      if (cachedFrames) { entries.splice(0, cachedFrames); timestamps.splice(0, cachedFrames) }
       const demux = this.frames.open(group.media)
       const abort = new AbortController()
       const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps, abort.signal) })(demux.ready)
       const primed = samples.next(); primed.catch(() => undefined)
-      const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, samples, primed, tail: Promise.resolve() }
+      const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, cachedUntilFrame, samples, primed, tail: Promise.resolve() }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
     this.playback = { document, endFrame, streams, byClip }
@@ -375,7 +388,15 @@ export class VideoEditRenderer {
     const visible = videoEditVisibleTracks(document)
     if (this.previewWidth && sequential) {
       const forward = this.lastForwardFrame === frame - 1
-      if (this.playback && (this.playback.document !== document || frame >= this.playback.endFrame || !forward)) await this.disposePlayback()
+      // Resolution changes and cache pressure can remove a prefix after arming. Rebuild the
+      // same playback plan at this frame instead of opening a second reader for the missing prefix.
+      const missingPrefix = this.playback && document.clips.some(clip => {
+        const stream = this.playback?.byClip.get(clip.id)
+        if (!stream || frame >= stream.cachedUntilFrame || frame < clip.start || frame >= clip.start + clip.duration) return false
+        const media = videoEditClipMedia(document, clip)
+        return !media || !(this.frameCache.get(media.path, videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps))) instanceof VideoEditGpuFrame)
+      })
+      if (this.playback && (this.playback.document !== document || frame >= this.playback.endFrame || !forward || missingPrefix)) await this.disposePlayback()
       // A sequential preview render is always forward playback (reverse play, single steps and scrubbing render
       // non-sequentially), so its first frame already builds the schedules and takes its picture from them. Waiting for
       // a second consecutive frame made the first one open a sequential reader that decoded the GOP up to the start,
@@ -491,7 +512,12 @@ export class VideoEditRenderer {
       await source.prerolled
       if (!source.video) throw new Error(`素材 ${media.name} 没有可解码的视频轨。`)
       const scheduledStream = sequential && this.previewWidth ? this.playback?.byClip.get(clip.id) : undefined
-      const scheduled = scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id) : undefined
+      const cached = scheduledStream && frame < scheduledStream.cachedUntilFrame ? this.frameCache.get(media.path, time) : undefined
+      const cachedPicture = cached instanceof VideoEditGpuFrame ? cached.clone() : undefined
+      if (cachedPicture) cacheHits++
+      // If an intervening allocation evicted a prefix picture, takeScheduled returns undefined for
+      // this pre-schedule time and the ordinary exact-picture reader recovers it below.
+      const scheduled = cachedPicture ?? (scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id) : undefined)
       // A sequential reader started before the stream's first picture hands out that first picture early: it is kept
       // for its own time and nothing shows until then.
       let early = false

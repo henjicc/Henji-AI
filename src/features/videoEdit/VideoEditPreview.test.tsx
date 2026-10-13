@@ -554,3 +554,29 @@ it('首帧后留出操作窗口，持续交互推迟预热，停稳后预热且�
   await act(async () => { await vi.advanceTimersByTimeAsync(50) })
   expect(pixel.arm).toHaveBeenCalledOnce()
 })
+
+
+it('松开拖动在最终停帧回执前预热，回到曾预热的位置仍重新准备；首帧操作窗口不提前预热', async () => {
+  let now = 0
+  vi.spyOn(performance, 'now').mockImplementation(() => now)
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ presented: true, sourceTimestamps: [0] }) })
+  now = 500
+  await act(async () => { setVideoEditView(id, { frame: 10, scrubbing: true }); setVideoEditView(id, { scrubbing: false }) })
+  expect(pixel.arm).not.toHaveBeenCalled()
+  now = 1400
+  await act(async () => { setVideoEditView(id, { frame: 20, scrubbing: true }); await vi.advanceTimersByTimeAsync(5) })
+  const pending = pixel.requests.at(-1)!
+  await act(async () => { setVideoEditView(id, { scrubbing: false }) })
+  expect(pixel.arm).toHaveBeenLastCalledWith(20)
+  const count = pixel.arm.mock.calls.length
+  // Leaving and returning to the same position has invalidated the old Worker schedule, even before another picture arrives.
+  await act(async () => { setVideoEditView(id, { frame: 40, scrubbing: true }); setVideoEditView(id, { frame: 20, scrubbing: false }) })
+  expect(pixel.arm).toHaveBeenCalledTimes(count + 1)
+  expect(pixel.arm).toHaveBeenLastCalledWith(20)
+  view.unmount()
+  await act(async () => { pending.resolve({ presented: true, sourceTimestamps: [0] }); await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.arm).toHaveBeenCalledTimes(count + 1)
+})

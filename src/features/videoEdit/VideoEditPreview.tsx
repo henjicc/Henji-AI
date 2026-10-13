@@ -228,8 +228,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         renderer.invalidateDocument(next?.revision ?? instance.document.revision)
       }
     })
+    let observedScrubbing = !!instance.scrubbing
     const unsubscribeView = subscribeVideoEditView(() => {
       if (stopped) return
+      const releasedScrub = observedScrubbing && !instance.scrubbing
+      observedScrubbing = !!instance.scrubbing
+      // A different frame (including a played frame) invalidates the Worker playback plan.
+      // Returning to that old paused position must not reuse the main thread's stale armed marker.
+      if (instance.playing || instance.frame !== armedFrame) armedFrame = -1
+      if (releasedScrub && !instance.playing && performance.now() - firstPresentationAt >= 1100 && captureFull === 0) {
+        const document = videoMotionComposition(instance)
+        if (document === appliedDocument) void preparePlayback(document, instance.frame)
+      }
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
     })
     let audioRenderer: VideoEditRenderSession | undefined
@@ -257,6 +267,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let activeCommand: object | undefined
     let armedDocument: VideoEditComposition | undefined
     let armedFrame = -1
+    let armedAt = -Infinity
     /** 已提交给 GPU、结果还没回来的正向播放帧（两帧流水，见下方 present）。 */
     let submittedFrame = -1
     let playbackInFlight = 0
@@ -279,7 +290,25 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const interaction = (): void => { lastInteractionAt = performance.now() }
     const idleEvents = ['pointerdown', 'pointermove', 'wheel', 'keydown'] as const
     for (const event of idleEvents) window.addEventListener(event, interaction, { passive: true, capture: true })
-    // 智能区域（4.7d）：分析完成的段落交给渲染 Worker，并重画当前帧（之前跳过了未就绪区域的效果）。
+    // Scrub release starts preparation before the final paused-picture acknowledgement returns.
+    // The existing Worker queue keeps document/render ordering and owns all decoder resources.
+    const preparePlayback = async (document: VideoEditComposition, frame: number): Promise<void> => {
+      if (armedDocument === document && armedFrame === frame) return Promise.resolve()
+      armedDocument = document; armedFrame = frame; armedAt = performance.now()
+      firstBlock = undefined
+      try {
+        if (audibleVideoEditClips(document).length && (!audio || audio.sampleRate === document.sampleRate)) {
+          audio ??= new AudioContext({ sampleRate: document.sampleRate }); void audio.resume().catch(() => undefined)
+          const from = frame / document.fps; const duration = Math.min(VIDEO_EDIT_AUDIO_BLOCK_SECONDS, videoEditDuration(document) / document.fps - from)
+          if (duration > 0) { const block = { document, from, duration, buffer: (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration), ready: false }; firstBlock = block; block.buffer.then(() => { block.ready = true }, () => undefined) }
+        }
+        if (!stopped) await renderer.armPlayback(frame)
+      } catch (error) {
+        if (armedDocument === document && armedFrame === frame) armedFrame = -1
+        logger.debug('起播预热未完成', { event: 'video_edit.preview.arm_failed', error, context: { projectId: instance.document.id } })
+      }
+    }
+    // 智能区域（4.7d）：分析完成后重画当前帧。
     let appliedRegions = ''
     const pushRegions = (): void => {
       const regions = videoEditSmartRegionSegments(); const key = JSON.stringify(regions)
@@ -443,7 +472,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           clockStart = audioNow + (clockAt - clockNow) / 1000; startFrame = initialFrame; audioScheduler.start(initialFrame / document.fps)
           if (!current.playing || videoMotionComposition(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           clockPerformanceStart = clockAt
-          surface.dataset.playStartPhases = JSON.stringify({ at: phaseStart, yieldMs: phaseYield - phaseStart, firstFrameMs: phaseFirst - phaseYield, audioMs: clockNow - phaseFirst })
+          const phases = { at: phaseStart, yieldMs: phaseYield - phaseStart, firstFrameMs: phaseFirst - phaseYield, audioMs: clockNow - phaseFirst, armAheadMs: Number.isFinite(armedAt) ? phaseStart - armedAt : undefined, premixed: !!premixed, cacheHits: initialResult.cacheHits, leadMs: clockAt - clockNow }
+          surface.dataset.playStartPhases = JSON.stringify(phases)
+          logger.info('节目起播准备完成', { event: 'video_edit.program.play_start', context: { projectId: instance.document.id, sequenceId: document.id, frame: initialFrame, ...phases } })
           surface.dataset.playClockStartAt = String(clockPerformanceStart)
           surface.dataset.playStartFrame = String(startFrame)
         }
@@ -504,16 +535,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         }
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
         if (!playing && performance.now() - firstPresentationAt >= 1100 && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && (!current.scrubbing || performance.now() - lastPresentation > PLAY_ARM_SCRUB_REST_MS) && captureFull === 0) {
-          armedDocument = document; armedFrame = current.frame
-          // 声音设备一并提前打开（首次创建 AudioContext 在 Windows 上要几百毫秒）。
-          firstBlock = undefined
-          if (audibleVideoEditClips(document).length && (!audio || audio.sampleRate === document.sampleRate)) {
-            audio ??= new AudioContext({ sampleRate: document.sampleRate }); void audio.resume().catch(() => undefined)
-            const from = current.frame / document.fps; const duration = Math.min(VIDEO_EDIT_AUDIO_BLOCK_SECONDS, videoEditDuration(document) / document.fps - from)
-            if (duration > 0) { const block = { document, from, duration, buffer: (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration), ready: false }; firstBlock = block; block.buffer.then(() => { block.ready = true }, () => undefined) }
-          }
-          // 预热只是提速：失败不影响画面，起播时照常从头定位。
-          await Promise.resolve().then(() => renderer.armPlayback(current.frame)).catch(error => logger.debug('起播预热未完成', { event: 'video_edit.preview.arm_failed', error, context: { projectId: instance.document.id } }))
+          await preparePlayback(document, current.frame)
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。
           if (performance.now() - displayMeasuredAt > DISPLAY_PERIOD_REFRESH_MS) { displayMeasuredAt = performance.now(); void measureVideoEditDisplayPeriod().then(period => { if (period) displayPeriod = period }) }
