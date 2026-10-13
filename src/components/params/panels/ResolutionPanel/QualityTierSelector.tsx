@@ -52,7 +52,6 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
             : option.resolution
 
           return (
-            // ui-surface-allow: S4 质量档位是网格单选集合，复用 grid 选项边界而非记录列表；u6。
             <UiOptionButton
               type="button"
               active={value === option.value}
@@ -61,7 +60,7 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
               onClick={() => onChange(option.value)}
               size="lg"
               gridCell={description ? 'tier-detail' : 'tier'}
-              className="px-2 py-1.5 justify-center"
+              className="justify-center"
             >
               <span className="font-medium leading-none">{label}</span>
               {description && (

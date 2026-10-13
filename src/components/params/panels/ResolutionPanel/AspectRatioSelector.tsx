@@ -53,7 +53,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
             onClick={() => onChange('smart')}
             size="sm"
             gridCell="ratio"
-            className="px-2 py-2 flex-col justify-center gap-2"
+            className="flex-col justify-center gap-2"
           >
             <div className="h-8 flex items-center justify-center">
               <Zap className={`${UI_ICON_SIZE_CLASS.lg}`} />
@@ -82,7 +82,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
                 onClick={() => onChange(option.value)}
                 size="sm"
                 gridCell="ratio"
-                className="px-2 py-2 flex-col justify-center gap-2"
+                className="flex-col justify-center gap-2"
               >
                 {visualize && (
                   <div className="h-8 flex items-center justify-center">

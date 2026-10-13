@@ -9,6 +9,10 @@ const UI_AUDIT_RULES = Object.freeze([
   Object.freeze({ key: 'nestedScroll', label: '嵌套双滚动' }),
   Object.freeze({ key: 'hardTextClip', label: '文本硬裁切' }),
   Object.freeze({ key: 'smallTargets', label: '命中区小于 24px' }),
+  Object.freeze({ key: 'rowHeightMismatch', label: '同行外框高度或中心线不一致' }),
+  Object.freeze({ key: 'actionStartsAtLabelColumn', label: '面板动作从标签列起头' }),
+  Object.freeze({ key: 'formControlMisaligned', label: '面板控件列未对齐' }),
+  Object.freeze({ key: 'multiplePrimary', label: '同一表面多个主动作' }),
   Object.freeze({ key: 'pageTitleInconsistency', label: '页面标题字号不一致' }),
   // 4.3（重要记录 012）：悬停/选中的容器里，行内控件与容器底同色，控件边界消失
   Object.freeze({ key: 'nestedSameBackground', label: '悬停或选中的容器里控件与容器同色' }),
@@ -33,12 +37,17 @@ const UI_AUDIT_THRESHOLDS = Object.freeze({
   shortTextMaxLength: 16,
   /** 选中与静息的 OKLab 距离：底色、文字色、描边三者最大值低于它、且无勾/阴影/字重等其他差异即命中 */
   selectedMinDeltaE: 0.03,
+  rowTolerance: 1,
+  smallTargetMin: 24,
+  compactIconMin: 20,
 })
 
 /**
  * 该函数会被 Playwright 整体序列化到渲染进程，所有辅助函数必须保持在函数内部。
  */
 function auditUiDom(context = {}) {
+  // 序列化进渲染进程后拿不到模块级常量，阈值在函数内重复一份（与 UI_AUDIT_THRESHOLDS 一致，精确测试比对）
+  const T = { bandMinHeight: 24, bandMaxHeight: 64, bandMinWidthRatio: 0.9, bandMaxCount: 2, shortTextMaxLength: 16, selectedMinDeltaE: 0.03, rowTolerance: 1, smallTargetMin: 24, compactIconMin: 20 }
   const out = {
     surfaceStacks: [],
     lowContrast: [],
@@ -50,6 +59,11 @@ function auditUiDom(context = {}) {
     nestedScroll: [],
     hardTextClip: [],
     smallTargets: [],
+    rowHeightMismatch: [],
+    actionStartsAtLabelColumn: [],
+    formControlMisaligned: [],
+    multiplePrimary: [],
+    scrollRegions: [],
     pageTitleInconsistency: [],
     nestedSameBackground: [],
     menuOptionTruncated: [],
@@ -78,7 +92,8 @@ function auditUiDom(context = {}) {
     const classes = classText(element).trim().replace(/\s+/g, '.').slice(0, 110)
     const id = element.id ? `#${element.id}` : ''
     const accessibleName = element.getAttribute('aria-label') || element.getAttribute('title') || ''
-    return `${element.tagName.toLowerCase()}${id}${classes ? `.${classes}` : ''}${accessibleName ? `[${accessibleName.slice(0, 32)}]` : ''}`
+    const sample = element.closest('[data-gallery-rule-sample]')
+    return `${sample ? `#${sample.id} / ` : ''}${element.tagName.toLowerCase()}${id}${classes ? `.${classes}` : ''}${accessibleName ? `[${accessibleName.slice(0, 32)}]` : ''}`
   }
   const hasHiddenAncestor = (element) => {
     let node = element
@@ -296,7 +311,8 @@ function auditUiDom(context = {}) {
     if (element.closest('.react-flow__viewport')) continue
     const rect = element.getBoundingClientRect()
     // Chromium 在分数像素布局中会把 24px 报成 23.999…，留半像素只用于消除舍入误报。
-    if (rect.width < 23.5 || rect.height < 23.5) {
+    const minimum = element.matches('button.ui-btn[data-tone][data-size="2xs"]') ? T.compactIconMin : T.smallTargetMin
+    if (rect.width < minimum - 0.5 || rect.height < minimum - 0.5) {
       out.smallTargets.push({
         width: Math.round(rect.width * 10) / 10,
         height: Math.round(rect.height * 10) / 10,
@@ -402,13 +418,57 @@ function auditUiDom(context = {}) {
     }
   }
 
-  // 序列化进渲染进程后拿不到模块级常量，阈值在函数内重复一份（与 UI_AUDIT_THRESHOLDS 一致，精确测试比对）
-  const T = { bandMinHeight: 24, bandMaxHeight: 64, bandMinWidthRatio: 0.9, bandMaxCount: 2, shortTextMaxLength: 16, selectedMinDeltaE: 0.03 }
+
+
+  const surfaceSelector = '[role="dialog"], [data-ui-toolbar], [data-command-bar], [data-application-surface-id]'
+  for (const surface of all.filter(element => element.matches(surfaceSelector))) {
+    const primary = [...surface.querySelectorAll('[data-variant="primary"], [data-tone="accent"]')]
+      .filter(element => isVisible(element) && element.closest(surfaceSelector) === surface)
+    if (primary.length > 1) out.multiplePrimary.push({ element: label(surface), count: primary.length })
+  }
+  const rowSelector = '[role="toolbar"], [data-ui-toolbar], [data-command-bar], [data-ui-form-control], [data-ui-action-group]'
+  const frameSelector = '[data-ui-segmented], [data-ui-readout], [data-ui-field-control], [role="radiogroup"]'
+  for (const row of all.filter(element => element.matches(rowSelector))) {
+    if (row.getAttribute('aria-orientation') === 'vertical' || getComputedStyle(row).flexDirection === 'column') continue
+    const frames = [...new Set([...row.querySelectorAll(`${targetSelector}, ${frameSelector}`)].map(element => element.closest(frameSelector) || element))]
+      .filter(element => isVisible(element) && row.contains(element) && element.closest(rowSelector) === row
+        && !element.matches('[data-size="xl"], [data-ui-compact-stepper-button], [data-variant="link"]'))
+    if (frames.length < 2) continue
+    const rects = frames.map(element => element.getBoundingClientRect())
+    // 包含多排字段的容器由 toolbarWrap 处理；这里比较同一水平带的外框。
+    if (Math.max(...rects.map(rect => rect.top)) >= Math.min(...rects.map(rect => rect.bottom))) continue
+    const heights = rects.map(rect => rect.height)
+    const centers = rects.map(rect => rect.top + rect.height / 2)
+    if (Math.max(...heights) - Math.min(...heights) > T.rowTolerance || Math.max(...centers) - Math.min(...centers) > T.rowTolerance) {
+      out.rowHeightMismatch.push({ element: label(row), heights, centers })
+    }
+  }
+  for (const group of all.filter(element => element.matches('[data-ui-group]'))) {
+    const controls = [...group.querySelectorAll('[data-ui-form-row="panel"] [data-ui-form-control]')]
+      .filter(element => isVisible(element) && element.closest('[data-ui-group]') === group)
+    if (!controls.length) continue
+    const lefts = controls.map(element => element.getBoundingClientRect().left)
+    if (Math.max(...lefts) - Math.min(...lefts) > T.rowTolerance) out.formControlMisaligned.push({ element: label(group), lefts })
+    for (const button of group.querySelectorAll(targetSelector)) {
+      if (!isVisible(button) || button.closest('[data-ui-group]') !== group || button.closest('[data-ui-form-control]')) continue
+      if (button.getBoundingClientRect().left < Math.min(...lefts) - T.rowTolerance) out.actionStartsAtLabelColumn.push({ element: label(button), controlLeft: Math.min(...lefts) })
+    }
+  }
+  // 记录完整滚动尺寸，不以视口外子项是否可见推断内容高度；执行器按捕获区间检查漏截。
+  for (const region of all.filter(isScrollableY)) {
+    const rect = region.getBoundingClientRect()
+    out.scrollRegions.push({ element: label(region), id: region.getAttribute('data-ui-scroll-key') || region.querySelector('[data-gallery-section]')?.getAttribute('data-gallery-section') || region.id || '',
+      scrollTop: region.scrollTop, scrollHeight: region.scrollHeight, clientHeight: region.clientHeight,
+      visibleOffset: Math.max(0, -rect.top),
+      visibleHeight: Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0)) })
+  }
   const visibleBorder = (style, side) => (Number.parseFloat(style[`border${side}Width`]) || 0) > 0
     && (parseRgb(style[`border${side}Color`])?.a ?? 0) > 0.05
   const hasScrollAncestor = (element) => {
     let node = element.parentElement
     while (node && node !== document.body) {
+      // 开发规范样本各自模拟独立工作面，目录滚动不属于样本内部结构。
+      if (node.hasAttribute('data-gallery-rule-sample')) return false
       const style = getComputedStyle(node)
       if (['auto', 'scroll'].includes(style.overflowY) || ['auto', 'scroll'].includes(style.overflowX)) return true
       node = node.parentElement
@@ -652,6 +712,17 @@ function auditUiDom(context = {}) {
   out.selectedStateWeak = dedupe(out.selectedStateWeak, (item) => item.element)
   out.overlayClipped = dedupe(out.overlayClipped, (item) => item.element)
   out.notes.push(`扫描可见元素 ${all.length}`)
+  // 反例只属于开发样张；普通审计先对账再移除预期命中，规则失败不得被样张豁免吞掉。
+  out.gallerySamples = []
+  for (const sample of document.querySelectorAll('[data-gallery-rule-sample]')) {
+    if (!isVisible(sample)) continue
+    const rect = sample.getBoundingClientRect()
+    const rule = sample.getAttribute('data-gallery-rule-sample')
+    const issues = (out[rule] || []).filter(issue => JSON.stringify(issue).includes(`#${sample.id} / `))
+    const expectHit = sample.hasAttribute('data-gallery-expect-hit')
+    if (rect.top >= 0 && rect.bottom <= window.innerHeight) out.gallerySamples.push({ id: sample.id, rule, expectHit, passed: expectHit === (issues.length > 0), issues })
+    if (!context.includeGallerySamples && expectHit) out[rule] = (out[rule] || []).filter(issue => !JSON.stringify(issue).includes(`#${sample.id} / `))
+  }
   return out
 }
 

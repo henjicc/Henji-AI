@@ -4,6 +4,7 @@ import { useI18n } from '@/hooks/useI18n'
 import type { WorkspaceId } from '@/core/types/workspace'
 import { UiLoading } from '@/components/ui'
 import { UI_DURATION } from '@/components/ui/motion'
+import { useUiPrimaryBudget } from '@/components/ui/actionPriority'
 import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 import { listPrefetchOrder, workspaceLoaders } from '../workspaces/workspaceLoaders'
 
@@ -35,6 +36,7 @@ const LoadingPlaceholder: React.FC = () => {
 const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, insetLeft = 0, insetRight = 0 }) => {
     const [visitedTabs, setVisitedTabs] = useState<Set<WorkspaceId>>(() => new Set([activeTab]))
     const initialTabRef = useRef(activeTab)
+    useUiPrimaryBudget(containerRef)
 
     useEffect(() => {
         if (!visitedTabs.has(activeTab)) {

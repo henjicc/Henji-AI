@@ -24,7 +24,6 @@ export const UI_OUTPAINT_FEATHER_MASK = `linear-gradient(to right, transparent, 
 /** 纯色块强调填充（进度条、裁剪手柄等无文字场景）。承载文字的强调实底用 `bg-accent text-on-accent`。 */
 export const UI_COLOR_ACCENT_BG_CLASS = 'bg-accent';
 /** 强调实底 + 自动黑白文字（对比度由主题引擎保证 ≥ 4.5:1）。 */
-export const UI_COLOR_ACCENT_FILL_TEXT_CLASS = 'bg-accent text-on-accent';
 /** 强调文字（深浅主题都满足 4.5:1；不要用 `text-accent` 压文字）。 */
 export const UI_COLOR_ACCENT_TEXT_CLASS = 'text-accent-text';
 export const UI_WHITE_HEX = WHITE_HEX;
@@ -235,10 +234,16 @@ export const UI_META_BADGE_ACCENT_CLASS =
  */
 
 /**
+ * 中性实底控件在 `.ui-glass` 内随毛玻璃开关联动；类本身不添加 blur，
+ * 也不影响普通不透明面板中的现有外观。
+ */
+export const UI_GLASS_ADAPTIVE_CONTROL_CLASS = 'ui-glass-adaptive-control';
+
+/**
  * 字段表面（输入、文本域、原生选择、字段触发器、数值框）：设计稿“输入 / 浮层”档 `raised`，**无边框**——
  * 层次靠明暗，聚焦时一圈强调色焦点环（`UI_FIELD_FOCUS_CLASS`）。玻璃内由 `ui-glass-adaptive-control` 换成控件纱。
  */
-export const UI_FIELD_SURFACE_CLASS = 'bg-raised text-text1 ui-glass-adaptive-control';
+export const UI_FIELD_SURFACE_CLASS = `bg-raised text-text1 ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`;
 
 /**
  * 字段尺寸档位（重要记录 004）：高度 28/32/36，字号 12/13/13，圆角 sm 用控件档 6、md/lg 用输入档 8。
@@ -343,12 +348,6 @@ export const UI_MODAL_CONTENT_SCROLL_CLASS = { auto: 'overflow-y-auto', none: 'o
 export const UI_OPTION_ITEM_CLASS =
   'rounded-lg border border-line-strong text-text1 transition-colors';
 
-/**
- * 中性实底控件在 `.ui-glass` 内随毛玻璃开关联动；类本身不添加 blur，
- * 也不影响普通不透明面板中的现有外观。
- */
-export const UI_GLASS_ADAPTIVE_CONTROL_CLASS = 'ui-glass-adaptive-control';
-
 /** 一块玻璃内部的连续区域 tint；不新增 backdrop-filter，关闭毛玻璃时恢复实底。 */
 export const UI_GLASS_ADAPTIVE_REGION_CLASS = 'ui-glass-adaptive-region';
 
@@ -382,9 +381,6 @@ export const UI_GLASS_ADAPTIVE_SELECTED_CLASS = 'ui-glass-adaptive-selected';
 
 /** 选项格（`UiOptionButton variant="tile" | "grid"`）的静息底：普通面板上是 `raised`，玻璃里是控件纱。 */
 export const UI_GLASS_ADAPTIVE_TILE_CLASS = 'ui-glass-adaptive-tile';
-
-/** 分段选择的轨道（容器只是分组，不是按钮）：比所在表面更暗的一条底，段由 `variant="segment"` 填充。 */
-export const UI_SEGMENTED_TRACK_CLASS = 'inline-flex w-fit gap-0.5 rounded-lg bg-gap/60 p-0.5';
 
 /**
  * 封面内容卡（画布项目、3D 工程、资产卡；界面重设计 3.3，设计稿 CanvasProjects）：卡片本身不画底与框，

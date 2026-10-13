@@ -57,14 +57,14 @@ const AboutSection: React.FC = () => {
     <>
       {/* 当前版本由同一分节上方的「当前版本 / 检查更新」那一行展示，这里不再重复一行 */}
       <UiFormRow label={t('sections.about.authorLabel')} inline>
-        <UiButton type="button" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_AUTHOR_URL)}>
+        <UiButton type="button" className="-mr-3" onClick={() => void openExternal(ABOUT_AUTHOR_URL)}>
           {ABOUT_AUTHOR_NAME}
           <ExternalLink  />
         </UiButton>
       </UiFormRow>
 
       <UiFormRow label={t('sections.about.homepageLabel')} inline>
-        <UiButton type="button" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_PROJECT_URL)}>
+        <UiButton type="button" className="-mr-3" onClick={() => void openExternal(ABOUT_PROJECT_URL)}>
           {ABOUT_PROJECT_URL_LABEL}
           <ExternalLink  />
         </UiButton>

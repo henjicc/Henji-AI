@@ -213,7 +213,7 @@ export function CanvasImageCapabilityActions({
                         data-image-capability-placement="overflow"
                         tooltip={t(capability.descriptionKey)}
                         size="lg"
-                        className="min-h-12 w-full items-start gap-2 px-2 py-2 text-left"
+                        className="min-h-12 w-full items-start gap-2 text-left"
                         onClick={(event) => {
                           event.stopPropagation()
                           if (disabled) return
@@ -258,7 +258,7 @@ export function CanvasImageCapabilityActions({
               aria-haspopup="menu"
               aria-label={t('nodeToolbar.moreImageCapabilities')}
               tooltip={t('nodeToolbar.moreImageCapabilities')}
-              className="gap-1"
+
               onClick={(event) => {
                 event.stopPropagation()
                 if (!open) shouldFocusMenuRef.current = true

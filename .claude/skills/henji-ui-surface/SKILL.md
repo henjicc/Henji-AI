@@ -57,7 +57,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
 
-这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–D、同行静态 S6）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
+这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E 与 S1–S5/S7–S9，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–D、同行静态 S6）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、`check:ui-design`（间距/动效/死令牌）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
 
 ## 五级容器词汇表（先背这张表）
 
@@ -342,7 +342,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 状态块**不画卡片**——它已经在某个容器里了。失败必须一眼可辨：`UiError` 总有一行危险色标题（任务 5.8），
 标题已经是完整说法时传 `title={…} message=""`；不是失败的提示（“请先选择片段”）用 `UiEmpty`，不要借 `UiError`。
 
-按钮悬停说明统一传 `tooltip`，内部复用 `Tooltip` 的 300ms 延迟与主题皮肤，键盘聚焦立即显示。`UiIconButton` 可用 `label` / `aria-label` 命名；无显式名称时回退 tooltip。原生 `title` 不作悬停说明，只允许不可见的无障碍名称场景。`Tooltip asChild` 保留触发器 DOM、布局和 ref。状态新增组件的规则 E / S8 接入交任务 5.2，本任务不修改门禁脚本。
+按钮悬停说明统一传 `tooltip`，内部复用 `Tooltip` 的 300ms 延迟与主题皮肤，键盘聚焦立即显示。`UiIconButton` 可用 `label` / `aria-label` 命名；无显式名称时回退 tooltip。原生 `title` 不作悬停说明，只允许不可见的无障碍名称场景。`Tooltip asChild` 保留触发器 DOM、布局和 ref。状态组件已登记规则 E；S8 阻断手写 spin/pulse 与按钮原生 title，非纯 busy/loading 的禁用缺少 disabledReason 时告警。
 
 ## 信息准入：先判断用户价值，再决定是否显示
 
@@ -590,7 +590,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 封面内容卡（项目卡、工程卡、资产卡） | `UiOptionButton variant="cover"` + 封面框 `UI_COVER_FRAME_CLASS`；不是按钮的根元素（可拖拽的资产卡）加 `UI_COVER_GROUP_CLASS` 与 `data-selected` | 给整张卡铺底描边，或在调用点手写悬停描边/选中环 |
 | 工具页 / 全屏工作面的命令带 | `UiToolbar variant="command"`：左端 children（返回、文件上下文、主工具组）/ `center`（视图切换、随工具变化的参数）/ `trailing`（次要动作 + 唯一主动作）/ 可选 `subordinate` 从属带（共用底色与下边框）；状态写进 `barProps` 的 `data-*` | 每个工具自己画 `h-11 border-b bg-*` 头带；从属带另画底色或边框 |
 | 可点的文字记号（逐字稿词块、时间轴字幕块） | `UiTextToken`（`appearance` inline/chip；`current` 播放中、`selected` 已选、`excluded` 已删除、`flagged` 待留意） | 用 `UiButton` 加 className 覆盖底色、圆角、划线 |
-| 同质记录列表 | `UiRecordList` / `UiRecordItem`（density page/panel/compact；全局 index 决定分隔；支持测量 ref） | 手写 py-5 + border-t、divide-y 或 first: 边界；规则 E / S4 接入由任务 5.2 完成 |
+| 同组同档内容动作 | `UiActionGroup tier="secondary" / "quiet" size="sm" / "md" / "lg"`；组内 UiButton 继承档位和尺寸 | 子按钮逐个写 variant/size；S7 阻断，开发态冲突告警 |
+| 同质记录列表 | `UiRecordList` / `UiRecordItem`（density page/panel/compact；全局 index 决定分隔；支持测量 ref） | 手写 py-5 + border-t、divide-y 或 first: 边界；规则 E / S4 已接入 |
 | 全屏媒体查看器 | `useUiViewerShell(open, onClose, options)` + `UiViewerShell viewer={viewer}`；surface media/canvas、inset window/content、presentation fill/centered、controls 插槽 | 复制淡入淡出、inert、滚动锁、Escape 与 overlay ownership；业务不再加查看器壳豁免 |
 | 表单行 | `UiFormRow`（窄停靠面板 `density="compact"`，配 `UiGroup titleTone="compact"`）；行内的 `Ui*` 控件没有自己的名称时自动 `aria-labelledby` 行标签、`aria-describedby` 说明（下拉读作“标签 + 当前值”，任务 5.8） | 手写 label + 间距；调用点改标签字号；给行内控件再手写一遍同样的 `aria-label` |
 | 字段 | `UiInput` / `UiSelect` / `UiTextArea` / `NumberInput`（数值拖动：读数或标签上左右拖，Shift 精细、Alt 粗调，单击编辑）；高度只用 `size`；直接落在所在表面上编辑的多行文本用 `UiTextArea frame="none"`；复合字段（表面与焦点环画在外壳上）的内层输入用 `UiInput frame="inner"` | 手写数值拖动、自绘步进器；调用点改高度；调用点给文本框去边框去底（`!bg-transparent !ring-0`） |
@@ -694,7 +695,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - [ ] 有手写 `<svg>` 吗？路径写死的就是图标，改用 lucide；路径算出来的才是图形
 - [ ] 用到跨界面的业务概念图标了吗？走 `@/core/theme/icons` 的登记常量，别在调用点自己挑
 - [ ] 有没有固定调色板、黑白类、rgba、命名色或旧别名类（`bg-app`、`text-text-muted`…）？换主题预设时它们不会跟着动，一律改语义令牌
-- [ ] 用 `accent` 当文字色了吗？文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`，黑白由引擎按对比度决定）
+- [ ] 用 `accent` 当文字色了吗？文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（黑白由引擎按对比度决定）
 - [ ] 分段是否中性抬起底 + 强文字，其他选中/当前值是否淡强调底且与悬停可辨？强调色实底只属于唯一主动作；悬停/选中的容器里行内控件仍可辨
 - [ ] 至少在“石墨”“纸白”两个预设下看过吗？浅色模式下黑白类、媒体叠层令牌放错位置最容易露馅
 - [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该用 `danger`（静息中性、hover 才出危险色），确认弹窗里用 `dangerSolid`
@@ -799,3 +800,9 @@ npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 ### 间距与尺寸复用补充（4.3）
 
 纵横间距统一 `UI_SPACING_SCALE` 九档。工具条用 `UiToolbar.gap`，堆叠用 `UI_STACK_CLASS`；条带用 `UI_BAND_HEIGHT_CLASS`、`UI_BAND_MIN_HEIGHT_CLASS`、`UI_BAND_PADDING_CLASS`，表单行最小高度用 `UI_FORM_ROW_MIN_HEIGHT_CLASS`。PanelTrigger/Dropdown 用 `panelSize` 四档，正文高度用 `UI_PANEL_BODY_HEIGHT_CLASS`；可拖动侧栏共用 core/theme/panelSizes 的 `UI_PANEL_WIDTH`。UiTextArea/PromptEditor 用 `height` 三档。UiModal 用 `contentPadding` 与 `contentScroll`，不能靠 contentClassName 替换默认留白。完整像素、用途和迁移规则见 references/typography-and-tokens.md；新档必须同时补设计系统中心页真实样本与枚举覆盖。
+
+### 5.2 自动语法与预算
+
+S1–S5/S7–S9 的判据与正反例见 `references/review.md` 第 7 节；S6 仍由 `check:icons:strict` 负责。UiModal、UiToolbar 与工作区根在开发态按最近表面计算可见主动作，超过一个告警并标 `data-primary-overflow`，不静默改动业务动作。动态/互斥分支最终由 DOM 的 multiplePrimary 检查。
+
+`smallTargets` 保持普通命中区 24px；唯一新增紧凑例外为正式 `UiIconButton size="2xs"`（20px），用于密集附属操作，需有 tooltip/可访问名称。只认 button.ui-btn + data-tone + data-size=2xs，低于 20px 仍报错；xs 已为 24px，不豁免。原生步进箭头、行内文本及画布缩放的既有边界不变。

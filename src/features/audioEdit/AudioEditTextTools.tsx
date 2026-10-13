@@ -44,7 +44,7 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink }: {
       )}
     >
       {({ open, togglePanel }) => (
-        <UiButton size="sm" className="min-w-0 max-w-full gap-1" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
+        <UiButton size="sm" className="min-w-0 max-w-full" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           tooltip="口播菜单 · 双击重命名" onClick={togglePanel} onDoubleClick={startRename}>
           <span className="truncate">{name}</span>
           <ChevronDown  aria-hidden="true" className="shrink-0 text-text3" />

@@ -6,6 +6,14 @@ const test = require('node:test')
 const root = path.resolve(__dirname, '..', '..')
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 
+test('5.2 组件间距和内层编辑器属性不能绕开规则E', () => {
+  const { findButtonAppearanceOverridesInSource: scan } = require('./buttonAppearanceOverrides.cjs')
+  for (const source of ['<UiButton className="px-4 gap-2"/>', '<UiInput className="!px-3"/>', '<UiModal contentClassName="p-8 overflow-hidden"/>', '<PromptEditor editorClassName="min-h-20"/>', '<UiFormRow className="gap-4"/>']) {
+    assert.ok(scan(source, 'src/test.tsx').length, source)
+  }
+  for (const source of ['<UiButton className="w-full ml-2"/>', '<UiPanel className="p-4 h-full"/>', '<UiRecordItem className="translate-x-2"/>']) assert.equal(scan(source, 'src/test.tsx').length, 0)
+})
+
 test('5.1 收尾三处存量通过严格表面与豁免生命周期检查', () => {
   const files = ['src/components/dockviewDocking.ts', 'src/features/videoEdit/panels/VideoEditTextOverlay.tsx', 'src/features/canvas/ui/tool-editors/SplitStoryboardToolEditor.tsx']
   const result = require('node:child_process').spawnSync(process.execPath, ['scripts/check-surface-tokens.cjs', '--strict', '--files', files.join(',')], { cwd: root, encoding: 'utf8' })

@@ -191,7 +191,7 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 **三条规则：**
 
 1. **`accent` 不能作文字色**，文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）。`accent` 只用于填充与描边。
-2. **字压在强调实底上用 `bg-accent text-on-accent`**（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`），不要写死白字——深海、胶片等预设
+2. **字压在强调实底上用 `bg-accent text-on-accent`**，不要写死白字——深海、胶片等预设
    的强调色上应是深色字，由引擎按对比度决定。危险/成功/警示实底同理用 `text-on-danger` 等。
 3. **界面色不达标改令牌或改用法，不登记例外**；只有装饰、品牌或用户内容色（素材本身）才登记例外。
    改主题引擎推导规则后跑 `src/core/theme` 的测试（含主题组合属性测试）与组件样张页四预设截图 + `check:ui-visual`（见 `review.md` 第 8 节）。

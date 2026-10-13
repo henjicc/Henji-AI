@@ -8,7 +8,7 @@ const collapsedSections = new Set<string>()
 
 /** 固有分组和附加效果复用同一折叠标题，展开状态不作为选项选中态。 */
 export function VideoEditEffectSectionTitle({ title, open, onToggle, info, disabled, label, effectId, inactive = false }: { title: string; open: boolean; onToggle: () => void; info?: ReactNode; disabled?: boolean; label?: string; effectId?: string; inactive?: boolean }): React.ReactElement {
-  const button = <UiButton size="sm" className="min-w-0 gap-1" aria-expanded={open} aria-label={label ?? `${open ? '收起' : '展开'}${title}`} disabled={disabled} data-video-edit-effect={effectId} onClick={onToggle}>
+  const button = <UiButton size="sm" className="min-w-0" aria-expanded={open} aria-label={label ?? `${open ? '收起' : '展开'}${title}`} disabled={disabled} data-video-edit-effect={effectId} onClick={onToggle}>
     {open ? <ChevronDown  aria-hidden="true" /> : <ChevronRight  aria-hidden="true" />}<span className={`truncate ${inactive ? 'text-text3 line-through' : ''}`}>{title}</span>
   </UiButton>
   return info ? <Tooltip content={info} delay={200}>{button}</Tooltip> : button

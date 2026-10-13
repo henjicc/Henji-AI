@@ -22,7 +22,7 @@ export function EmbeddedUserMessage({ message }: { message: Pick<EmbeddedAgentMe
 
 /** 过程区的展开开关：静默文字按钮，左缘用负外边距对齐正文列（按钮内边距不改外观）。 */
 function ProcessToggle({ expanded, label, onClick }: { expanded: boolean; label: string; onClick(): void }): JSX.Element {
-  return <UiButton size="sm" className="-ml-2 gap-1" aria-expanded={expanded} onClick={onClick}>
+  return <UiButton size="sm" className="-ml-2" aria-expanded={expanded} onClick={onClick}>
     {expanded ? <ChevronDown aria-hidden="true"  /> : <ChevronRight aria-hidden="true"  />}{label}
   </UiButton>
 }

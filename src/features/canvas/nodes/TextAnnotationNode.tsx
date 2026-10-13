@@ -170,7 +170,7 @@ export const TextAnnotationNode = memo(({
           onBlur={() => setIsEditing(false)}
           placeholder={t('node.textAnnotation.placeholder')}
           frame="none"
-          className="nodrag nowheel h-full w-full px-1 py-0.5"
+          className="nodrag nowheel h-full w-full"
         />
       ) : (
         <div

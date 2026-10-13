@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { UiFormRow } from '@/components/ui'
+import { UiFormRow, UiActionGroup } from '@/components/ui'
 import { FileImage, RefreshCw, Layers, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { UiButton, UiGroup, UiError, Dropdown } from '@/components/ui';
@@ -23,8 +23,8 @@ export function SmartContentPropertiesV3({ layer, disabled }: { layer: ImageEdit
   return <UiGroup title="智能对象" titleTone="compact" gap="stack">
     {layer.type === 'raster' ? <UiButton variant="secondary" disabled={disabled || view.busy} onClick={() => { void view.convert(layer.id, 'smart'); }}><FileImage  />转换为智能对象</UiButton> : <>
       <p className="text-xs leading-relaxed text-text2">{layer.content.origin ? '受管理来源 · 更新时同步本图片中的关联实例' : '嵌入内容 · 保存时与原图片一起保存'}</p>
-      <UiButton variant="secondary" disabled={disabled || view.busy} onClick={() => view.open(layer.id)}><Layers  />打开内容</UiButton>
-      {layer.content.origin ? <UiButton disabled={disabled || view.busy} onClick={() => { void view.refresh(layer.id); }}><RefreshCw  />从来源刷新</UiButton> : null}
+      <UiActionGroup tier="secondary"><UiButton disabled={disabled || view.busy} onClick={() => view.open(layer.id)}><Layers  />打开内容</UiButton>
+      {layer.content.origin ? <UiButton disabled={disabled || view.busy} onClick={() => { void view.refresh(layer.id); }}><RefreshCw  />从来源刷新</UiButton> : null}</UiActionGroup>
       <UiFormRow label={surfaceText('surfaceGrammar.documentSource')} density="compact" labelColumn="panel"><Dropdown<string> ariaLabel="选择图片文档来源" value="" display="从图片文档替换来源" className="w-full" minWidthStrategy="none" disabled={disabled || view.busy}
         options={sources} onSelect={id => { void view.refresh(layer.id, { kind: 'image_edit.document', id: `v3:${encodeURIComponent(id)}` }); }} /></UiFormRow>
       {!sources.length && !sourceError ? <p className="text-xs text-text3">还没有可用的图片文档，可继续编辑嵌入内容。</p> : null}

@@ -20,8 +20,11 @@ import { UiFormRowLabelContext } from './formRowLabel';
 import { useUiFieldLayout } from './fieldLayout';
 import { UiFieldMessage } from './states';
 import { UiIconButton } from './primitives';
+import { actionGroupContext, useUiPrimaryBudget } from './actionPriority';
+import type { UiControlSize } from './primitiveInternals';
 import {
   UI_DIVIDER_CLASS,
+  UI_FORM_ROW_MIN_HEIGHT_CLASS,
   UI_GROUP_SIBLING_GAP_CLASS,
   UI_SECTION_STACK_CLASS,
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
@@ -344,7 +347,7 @@ export function UiFormRow({
   if (fixedColumn) {
     const width = labelWidth ?? panelLabelWidth ?? 72;
     return <div data-ui-form-row="panel" data-label-width={width} className={`flex items-start gap-3 ${className}`} {...props}>
-      <div className={`flex min-h-control-sm ${FORM_LABEL_WIDTH_CLASS[width]} shrink-0 items-center`}>
+      <div className={`flex ${UI_FORM_ROW_MIN_HEIGHT_CLASS.sm} ${FORM_LABEL_WIDTH_CLASS[width]} shrink-0 items-center`}>
         <div id={labelId} className={`min-w-0 break-words ${labelClass}`}>{labelNode}</div>
       </div>
       <div data-ui-form-control className="min-w-0 flex-1 text-left">
@@ -433,6 +436,12 @@ export function UiDisclosurePanel({ open, children, className = '' }: UiDisclosu
  * - `command`：工具页统一骨架的命令带（口播剪辑、图片编辑、3D 镜头参考共用，界面重设计 3.4）。
  *   左端 / 中间 / 右端三段 + 可选从属参数带；横向内边距与其下内容区对齐（12px）。
  */
+export function UiActionGroup({ tier = 'quiet', size = 'md', children }: {
+  tier?: 'secondary' | 'quiet'; size?: UiControlSize; children: ReactNode;
+}): JSX.Element {
+  return <actionGroupContext.Provider value={{ tier, size }}><div role="group" data-ui-action-group className={`flex items-center ${UI_INLINE_GAP_CLASS.control}`}>{children}</div></actionGroupContext.Provider>;
+}
+
 export function UiToolbar({
   className = '',
   variant = 'plain',
@@ -445,6 +454,8 @@ export function UiToolbar({
   barProps,
   ...props
 }: UiToolbarProps): JSX.Element {
+  const budgetRef = useRef<HTMLDivElement>(null);
+  useUiPrimaryBudget(budgetRef);
   const gapClass = UI_INLINE_GAP_CLASS[gap ?? (variant === 'command' ? 'control' : 'group')];
   if (variant === 'command') {
     const { className: barClassName = '', ...barRest } = barProps ?? {};
@@ -456,6 +467,7 @@ export function UiToolbar({
       >
         <div
           data-command-bar
+          ref={budgetRef}
           className={`flex ${UI_BAND_HEIGHT_CLASS.command} min-w-0 items-center ${gapClass} ${UI_BAND_PADDING_CLASS} ${barClassName}`}
           {...barRest}
         >
@@ -472,7 +484,7 @@ export function UiToolbar({
     );
   }
   return (
-    <div data-ui-toolbar className={`flex items-center justify-between gap-3 ${className}`} {...props}>
+    <div ref={budgetRef} data-ui-toolbar className={`flex items-center justify-between gap-3 ${className}`} {...props}>
       <div className={`flex min-w-0 items-center ${gapClass}`}>{children}</div>
       {trailing ? <div className={`flex shrink-0 items-center ${gapClass}`}>{trailing}</div> : null}
     </div>

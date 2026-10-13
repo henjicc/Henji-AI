@@ -282,7 +282,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   /** 图标视图：封面 + 名称（素材箱显示文件夹，双击进入）。 */
   const renderTile = (_index: number, entry: VideoEditProjectEntry): React.ReactElement => {
     const selected = isSelected(entry); const kind = kindOf(entry)
-    return <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="w-full min-w-0 flex-col items-stretch gap-1.5 !p-1.5" data-entry-kind={kind} {...entryHandlers(entry, selected)}>
+    return <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="w-full min-w-0 flex-col items-stretch gap-1.5 " data-entry-kind={kind} {...entryHandlers(entry, selected)}>
       <span className="block h-16 w-full shrink-0 overflow-hidden rounded-md bg-raised"><VideoEditProjectThumbnail media={entry.kind === 'item' ? media.get(entry.value.mediaId ?? '') : undefined} kind={kind} active={visible} /></span>
       <span className="flex w-full min-w-0 items-center gap-1.5"><LabelSwatch label={videoEditProjectColumns(instance.document, entry, fallbackFps).label} /><span className="block min-w-0 flex-1 truncate text-xs font-medium" data-observation-sensitive>{entry.value.name}</span></span>
       <span className="block truncate text-2xs text-text3">{detailOf(entry)}</span>
@@ -295,7 +295,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const cells: Record<(typeof LIST_COLUMNS)[number]['key'], string> = { frameRate: columns.frameRateText, mediaStart: columns.mediaStart, mediaEnd: columns.mediaEnd, duration: columns.durationText, proxy: entry.kind === 'item' && entry.value.kind === 'video' && entry.value.mediaId ? (() => { const state = readVideoEditProxyState(projectId, entry.value.mediaId!); return state.status === 'generating' ? `生成中 ${Math.round(state.progress * 100)}%` : state.status === 'ready' ? '已有' : state.error ? '无（创建失败）' : '无' })() : '' }
     return <div className="flex min-w-0 items-center" role="treeitem" aria-level={row.depth + 1} aria-expanded={row.expandable ? row.expanded : undefined} aria-selected={selected} style={{ paddingLeft: Math.min(row.depth, 8) * INDENT_PX }}>
       {row.expandable ? <UiIconButton size="2xs" className="shrink-0" aria-label={`${row.expanded ? '折叠' : '展开'}素材箱 ${entry.value.name}`} onClick={() => toggleBin(entry.value.id)}>{row.expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
-      <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="min-h-7 min-w-0 flex-1 gap-2 !px-1.5" data-entry-kind={kind} {...entryHandlers(entry, selected)}>
+      <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="min-h-7 min-w-0 flex-1 gap-2 " data-entry-kind={kind} {...entryHandlers(entry, selected)}>
         <LabelSwatch label={columns.label} />
         <Icon size={UI_ICON_SIZE.xs} className="shrink-0 text-text2" aria-hidden="true" />
         <span className="min-w-0 shrink-0 truncate text-left text-xs" style={{ width: Math.max(40, columnWidths.name - Math.min(row.depth, 8) * INDENT_PX - 44) }} data-observation-sensitive title={entry.kind === 'item' && entry.value.tags?.length ? `${entry.value.name}（${entry.value.tags.join(' · ')}）` : `${entry.value.name} · ${detailOf(entry)}`}>{entry.value.name}</span>
@@ -386,7 +386,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
           : <div className="flex h-full flex-col" style={{ minWidth: tableWidth }}>
             <div className="flex h-band-row shrink-0 items-center border-b border-gap pl-5 pr-1.5" role="row" aria-label="列表列">
               {([{ key: 'name' as const, label: '名称' }, ...LIST_COLUMNS]).map(column => <div key={column.key} className="relative flex shrink-0 items-center" style={{ width: columnWidths[column.key] }}>
-                <UiButton size="sm" className="min-w-0 flex-1 !justify-start !px-1.5" disabled={column.key === 'proxy'} aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => { if (column.key !== 'proxy') sortBy(column.key) }}>{column.label}{column.key !== 'proxy' && <SortMark sort={sort} column={column.key} />}</UiButton>
+                <UiButton size="sm" className="min-w-0 flex-1 !justify-start " disabled={column.key === 'proxy'} aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => { if (column.key !== 'proxy') sortBy(column.key) }}>{column.label}{column.key !== 'proxy' && <SortMark sort={sort} column={column.key} />}</UiButton>
                 {/* 列分隔线：按住左右拖动调整列宽 */}
                 <span role="separator" aria-orientation="vertical" aria-label={`调整“${column.label}”列宽`} title="拖动调整列宽" className="absolute -right-1 bottom-1 top-1 z-raised w-2 cursor-col-resize border-r border-line hover:border-accent-ring" onPointerDown={resizeColumn(column.key)} onClick={event => event.stopPropagation()} />
               </div>)}

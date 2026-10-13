@@ -280,7 +280,7 @@ const StagePathContextBar: React.FC = () => {
             {originPreset && (
               <UiButton
                 size="sm"
-                className="justify-start gap-1.5"
+                className="justify-start"
                 tooltip="丢弃手动修改并重新生成预设路径"
                 onClick={() => updatePreset(originPreset)}
               >

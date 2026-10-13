@@ -18,7 +18,7 @@ test('L0 拒绝运行时代码但接受规则文件', () => {
 })
 
 test('界面与令牌改动才追加四项严格门禁，同次计划只执行一次', () => {
-  const names = ['check:surface:strict', 'check:colors', 'check:icons:strict', 'check:ui-residue']
+  const names = ['check:surface:strict', 'check:colors', 'check:icons:strict', 'check:ui-residue', 'check:ui-design']
   for (const file of ['src/example.tsx', 'src/example.css', 'src/components/ui/styleTokens.ts', 'src/core/theme/colorTokens.ts', 'src/core/theme/icons.ts', 'tailwind.config.js']) {
     const options = { level: 'L1', files: [file], directTests: [] }
     const plan = buildChangedVerificationPlan(options, '/workspace', () => false, ['src/example.test.ts'], () => '')

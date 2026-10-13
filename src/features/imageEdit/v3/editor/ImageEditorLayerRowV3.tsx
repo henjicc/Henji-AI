@@ -222,7 +222,7 @@ export function ImageEditorLayerRowV3({
           data-layer-select
           variant="menu"
           active={selected}
-          className={`min-h-10 w-full min-w-0 gap-2 py-1 ${dragDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+          className={`min-h-10 w-full min-w-0 gap-2 ${dragDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
           onClick={(event) => onSelect(row, event)}
           onKeyDown={handleKeyDown}
         >
@@ -247,7 +247,7 @@ export function ImageEditorLayerRowV3({
             <UiInput
               ref={renameInputRef}
               data-layer-name-input
-              size="sm" className="px-2 py-0"
+              size="sm"
               aria-label={t('imageEditor.v3.properties.name')}
               value={draftName}
               onChange={(event) => setDraftName(event.currentTarget.value)}

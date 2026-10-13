@@ -72,7 +72,7 @@ export function CodeImageGenerationPanel({ target, parameterKey, title, onClose 
   </PanelTrigger>
   return <div className="flex flex-col gap-3" aria-label={`生成${title}图片`}>
     {!context && !error ? <UiLoading size="xs" message="正在准备图片生成" /> : <>
-      <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}生成提示词`} autoFocus height="short" editorClassName="max-h-60" />
+      <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}生成提示词`} autoFocus height="short" className="max-h-60" />
       <UiFieldLayoutContext.Provider value="toolbar">
         <ParameterPanel currentModel={model} selectedModel={modelId} uploadedImages={[]} uploadedVideos={[]} values={params as DynamicValueMap}
           onChange={(id, value) => setParams(current => ({ ...current, [id]: value }))} onChanges={changes => setParams(current => ({ ...current, ...changes }))} toolbarLeading={modelTrigger} />

@@ -6,6 +6,7 @@ import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motio
 import { UiIconButton, UiPanel } from './primitives';
 import { useDialogFocusTrap } from './useDialogFocusTrap';
 import { useDialogTransition } from './useDialogTransition';
+import { useUiPrimaryBudget } from './actionPriority';
 import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership';
 import { ownerDocumentOf } from '@/utils/crossRealmDom';
 import {
@@ -82,6 +83,7 @@ export function UiModal({
   // 再挂到该文档的 body。锚点只在弹窗渲染期间存在。
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [host, setHost] = useState<Document | null>(null);
+  useUiPrimaryBudget(dialogRef, shouldRender && (inContainer || host !== null));
   useLayoutEffect(() => {
     if (!shouldRender || !anchorRef.current) return;
     const next = ownerDocumentOf(anchorRef.current);

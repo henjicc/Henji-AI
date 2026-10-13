@@ -433,7 +433,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                         variant="grid"
                         size="sm"
                         gridCell="ratio"
-                        className="flex-col justify-center gap-2 px-2 py-2"
+                        className="flex-col justify-center gap-2"
                       >
                         <div className="h-8 flex items-center justify-center">
                           {option.smart ? (
@@ -498,7 +498,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                         variant="grid"
                         size="lg"
                         gridCell="tier"
-                        className="justify-center px-2 py-1.5"
+                        className="justify-center"
                       >
                         {option.label}
                       </UiOptionButton>

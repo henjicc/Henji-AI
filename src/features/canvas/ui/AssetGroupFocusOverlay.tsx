@@ -189,7 +189,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
         </div>
         <UiButton
           variant="secondary"
-          className="ml-auto gap-1.5 px-3"
+          className="ml-auto"
           disabled={isImporting}
           onClick={() => inputRef.current?.click()}
         >
@@ -287,7 +287,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
                 {status.excluded > 0 && (
                   <UiButton
                     size="sm"
-                    className="gap-1 px-2"
+
                     onClick={() => restoreAssetGroupBinding({ groupId: node.id, bindingId: binding.id }).catch(reportCanvasOperationFailure)}
                   >
                     <RotateCcw  />

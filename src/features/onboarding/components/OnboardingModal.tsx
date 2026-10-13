@@ -137,7 +137,7 @@ function ProviderStep({
             key={providerId}
             variant="card"
             active={primaryProvider === providerId}
-            className="min-h-24 items-start p-3"
+            className="min-h-24 items-start"
             onClick={() => onboardingManager.setPrimaryProvider(providerId)}
           >
             <div>

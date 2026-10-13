@@ -426,9 +426,9 @@ const InputArea: React.FC<InputAreaProps> = ({
                   ? t('inputArea.placeholder.englishOnly')
                   : t('inputArea.placeholder.default')
             }
-            className="relative isolate"
+            className={`relative isolate ${promptHeightClass}`}
             // 内容基础留白为 12px；输入卡片通过方向留白收紧，字号共用 text-sm。
-            editorClassName={`w-full pl-2 pr-2 pt-1 pb-1 text-sm ${promptHeightClass}`}
+            editorClassName={`w-full pl-2 pr-2 pt-1 pb-1 text-sm`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (

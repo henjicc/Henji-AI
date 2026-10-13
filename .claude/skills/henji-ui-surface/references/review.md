@@ -154,7 +154,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `surfaceStacks` | 自己画了边框 + 底色的表面嵌套 ≥ 3 层（输入控件不算一层） |
 | `lowContrast` | 渲染后像素对比度：正文 ≥ 4.5、大字与图标 ≥ 3（见 testing.md） |
 | `oversizedRadius` / `shadowOutsideOverlay` / `hiddenPositioning` | 内层圆角大于外层；非浮层用阴影；定位只写在 CSS 里 |
-| `insetEscape` / `horizontalOverflow` / `nestedScroll` / `hardTextClip` / `smallTargets` | 逃出助手插入量；横向溢出；双层竖向滚动；无省略号的硬裁切；命中区 < 24px |
+| `insetEscape` / `horizontalOverflow` / `nestedScroll` / `hardTextClip` / `smallTargets` | 逃出助手插入量；横向溢出；双层竖向滚动；无省略号的硬裁切；普通命中区 < 24px（0.5px 舍入容差），正式 2xs 图标按钮按 20px 检查 |
 | `pageTitleInconsistency` | 跨界面页面标题字号不一致 |
 | `nestedSameBackground` | 悬停或选中的容器里，行内控件与容器底 OKLab 距离 < 0.02（玻璃上不判） |
 | `menuOptionTruncated` | `role=option` 里的文字被截断（不留容差） |
@@ -164,7 +164,31 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `selectedStateWeak` | 同组兄弟选项（`aria-selected` / `aria-current` / `data-selected` / 单选 `aria-checked`；`aria-pressed` 只在 group / toolbar / radiogroup / tablist 里算多选一）里，选中项与静息项的底色、文字色、描边 OKLab 距离都 < 0.03，且勾、阴影、轮廓、字重、伪元素都相同、按结构序号比较的后代也没有差异（选中态画在行内按钮上的图层行不误报）；悬停中的项不参与比较 |
 | `overlayClipped` | 浮层（对话框、菜单、列表框、提示，或 z-index ≥ 30 的绝对/固定定位块，不含满屏层与画布视口内）框内 5 × 5 取点（内缩到圆角弧线以内）：点在窗口外，或该点的命中栈里没有这个浮层（被祖先 `overflow` 裁掉）。被别的浮层压住不算 |
 
-新规则的断牙证据：`npm run test:ui-visual-rules` 把 `scripts/lib/uiVisualRuleSamples.cjs` 的“未修复 / 已修复”样例注入真实 Electron 窗口，跑同一个 `auditUiDom` 逐条对账（未修复必须命中、已修复不得命中）；应用自己的界面不误报由 `check:ui-visual` 的场景全量跑证明。改规则判据先改样例再改规则。
+新规则的断牙证据：`npm run test:ui-dom-rules` 在 jsdom 执行序列化的正式 auditUiDom，给外框与滚动尺寸确定性夹具；低层 HTML 夹具仍在 uiVisualRuleSamples.cjs。`npm run test:ui-visual-rules` 在真实 Electron 打开中心页“规范”分区，核对正式组件 9 组 Do/Don't（18 项）。反例标 data-gallery-expect-hit；只扣对应规则的预期命中，正例回归、反例失效与其他规则问题仍失败。目录外壳不属于条带样本的独立工作面。规则自测不能证明真实应用全部无误报。
+
+| 新 DOM 规则 | 判据 |
+|---|---|
+| rowHeightMismatch | toolbar/命令带/表单控件列/动作组中，真实外框高度或中心线相差 >1px；分段、字段、读数按外壳，不重复计内部按钮；竖排、xl 查看器及步进附属按钮除外 |
+| actionStartsAtLabelColumn | 有 panel 行的同一 UiGroup 内，行外动作左缘比控件列左缘小 >1px |
+| formControlMisaligned | 同一 UiGroup 的 panel 行控件列左缘差 >1px；独立嵌套组和 auto 行不混算 |
+| multiplePrimary | 最近 dialog/toolbar/工作区表面拥有的可见 primary 按钮与 accent 图标按钮之和 >1；隐藏分支、嵌套表面不混算 |
+
+### 静态界面语法（严格 surface 与 icons）
+
+| 规则 | 判据与边界 |
+|---|---|
+| S1 | 手拼连续 segment、静态 UiSegmented 超过五项阻断；长标签由组件契约与 DOM 验证 |
+| S2 | 非工具条 UiGroup 直接放无 UiFormRow 的参数控件阻断 |
+| S3 | 同一 flex 行两个带内联 label 的 Dropdown 阻断 |
+| S4 | map 的标题+元信息记录无分隔阻断；认 UiRecordItem、border-t/b、divide-y、UI_DIVIDER_CLASS；间距不能代替分隔；grid/menu/cover 选项不当作记录。新代码复用 UiRecordList/UiRecordItem |
+| S5 | 同一拥有 labelWidth 的组中面板标签列档不一致阻断；独立组可不同，动态值交 DOM；auto、普通纵向表单不误拦 |
+| S6 | check:icons:strict 比较已知单行直接兄弟 size；包装和动态分支交 rowHeightMismatch |
+| S7 | UiActionGroup 后代 UiButton 不允许写 variant/size，统一继承组属性 |
+| S8 | 原生 title、业务手写 animate-spin/pulse 阻断；非纯 busy/loading/pending/saving 的禁用未提供 disabledReason 时告警；原生危险色 alert 引导共享反馈（AST 不猜业务可用性） |
+| S9 | 一个静态表面可共存的多个主动作阻断，三元分支取最大值、嵌套表面另计；动态与子组件最终由 DOM 计预算 |
+
+E 同时检查 UiModal.contentClassName 的 padding/overflow、PromptEditor.editorClassName 的高度、UiGroup/UiFormRow 私有列宽/间距。控件内部 padding/gap 走枚举；容器外部留白、选项内容排列、记录测量 transform 保留布局语义。高度约束移至 PromptEditor 外层布局，内层用 height。
+
 
 `check:colors` 另有**未定义颜色类**规则（不可登记）：`bg-overlay`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌不能再加 `/透明度`）、`border-current/15` 这类 Tailwind 按实际配置不生成样式的颜色类。用 Tailwind 自己的生成器判定，只看类名语境的字符串（`className=`、`*Class =` 常量、多数词是有效类的类名列表）；样式表里定义的同名类算已定义。
 
@@ -180,11 +204,11 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 - `UiModal scope="container"` 用于常驻缩略预览，不接管焦点/模态；正式业务默认 viewport 行为不变。TooltipContent 与 ContextMenu 常开，保证浮层进入截图。
 - 主题预览从现有引擎推导并写临时 CSS 变量、发布令牌；退出恢复原值，不调用会写首帧缓存的 `applyRuntimeTheme`。缩放仅改变样张展示；界面圆角与玻璃也是临时预览。
 
-尺寸阶梯读取真实枚举：通用 sm/md/lg 同行包含按钮、图标按钮、字段、导航、分段、开关和 `UiReadout`；图标按钮另展示 2xs/xs/xl。分段使用独立中性 `segmentSelected`，四预设三对比档测试校验静息/悬停差异与文字对比度。D/S6 的纯静态门禁不能代替任务 5.2 的实际外框与中心线审计。
+尺寸阶梯读取真实枚举：通用 sm/md/lg 同行包含按钮、图标按钮、字段、导航、分段、开关和 `UiReadout`；图标按钮另展示 2xs/xs/xl。分段使用独立中性 `segmentSelected`，四预设三对比档测试校验静息/悬停差异与文字对比度。D/S6 负责静态尺寸，rowHeightMismatch 审计动态和包装后的真实外框与中心线。
 
 ### 截图配置与目视范围
 
-`scripts/ui-review/ui-gallery.json` 按目录逐区进入，每区先截顶部，再以 360 DIP 滚动并截中段，最后截底部；不再把首屏当成整页。当前有 32 个分区、每个矩阵变体 210 次 capture（允许重叠，用于排除漏截）。新增栏目必须补对应 click/capture/scroll 步骤，覆盖测试会提醒；栏目增高后需核对中段预算，最后一张 bottom 不代表中间已完整覆盖。
+`scripts/ui-review/ui-gallery.json` 按目录逐区进入，每区先截顶部，再以 360 DIP 滚动并截中段，最后截底部；不再把首屏当成整页。当前有 32 个分区、每个矩阵变体 238 次 capture（允许重叠，用于排除漏截）。新增栏目必须补对应 click/capture/scroll 步骤，覆盖测试会提醒；栏目增高后需核对中段预算，最后一张 bottom 不代表中间已完整覆盖。
 
 `review` 矩阵是石墨/深海/胶片/纸白 1440×900 + 石墨 960×640，每种尺寸都有整套分区截图。一次 `ui:tour --audit` 同时生成截图、像素对比度、DOM 规则与运行时证据，不再叠加同矩阵的 `check:ui-visual`。
 
@@ -229,3 +253,9 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | UiRecordList / UiRecordItem / UiViewerShell | 界面模式栏目展示三档记录（含失败恢复）和两种查看器底色；查看器另有开关与 Escape 交互样本 |
 
 五个矩阵变体均包含完整分区组，不能按五张截图理解。旧 `Toggle` / `TextInput` 与 `UiTextAreaField` 已在任务 4.6 删除；跨场景的滚动漏截防线涉及巡检执行器与 DOM 审计，移交任务 5.2。
+
+### 完整滚动覆盖与 Windows 基线
+
+需要完整内容截图的任意步骤场景声明 `scrollCoverage: "<滚动容器 selector>"`，动态分区用 data-ui-scroll-key 或 data-gallery-section 作为身份。执行器记录真实 scrollHeight/clientHeight/scrollTop，按捕获区间并集检查顶部、中段、尾部；只截 top/bottom 不能通过。不要求局部交互场景遍历无关列表。中心页已经启用，分区增高时补中段步骤，禁止放宽 1px 容差。
+
+像素基线复用正式捕获与彩色 pixelmatch，固定 Windows 四预设 1440×900；`check:ui-gallery-diff` 不进 CI。基线目录、环境约束和更新命令见 docs/rules/testing.md 的“中心页像素基线”。未创建基线、缺图、尺寸/DPI/zoom 不符、DOM/对比度审计未通过一律失败。不能把 jsdom 通过写成像素或 Electron 通过。

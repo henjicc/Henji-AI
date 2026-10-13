@@ -417,7 +417,7 @@ export function ModelPickerList({
               key={model.key}
               active={active}
               variant="menu"
-              className="w-full items-start gap-3 px-3 py-1.5"
+              className="w-full items-start gap-3"
               onClick={(event) => {
                 event.stopPropagation();
                 onModelChange(model.key);

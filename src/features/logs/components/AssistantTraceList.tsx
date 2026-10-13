@@ -124,7 +124,7 @@ function TraceStepButton({
       type="button"
       active={selected}
       size="auto"
-      className="items-center justify-start !px-2 font-normal"
+      className="items-center justify-start  font-normal"
       onClick={onSelect}
     >
       <Icon className={`${UI_ICON_SIZE_CLASS.sm} mr-2 shrink-0 text-accent`} />

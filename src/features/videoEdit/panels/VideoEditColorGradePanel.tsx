@@ -57,7 +57,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
   const [channel, setChannel] = useState('master')
-  return <UiGroup labelWidth={96} className="flex flex-col gap-2" gap="row">
+  return <UiGroup labelWidth={96} className="flex flex-col" gap="row">
     <div className="flex flex-wrap items-center justify-end gap-1">
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} tooltip="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles  />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
       <UiIconButton size="xs" tooltip="重置全能调色" aria-label="重置全能调色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE) })}><RotateCcw  /></UiIconButton>

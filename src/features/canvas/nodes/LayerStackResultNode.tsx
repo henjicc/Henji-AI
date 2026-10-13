@@ -137,7 +137,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
           <UiButton
             type="button"
             variant="media"
-            className="nodrag absolute bottom-3 right-3 gap-1.5"
+            className="nodrag absolute bottom-3 right-3"
             onClick={(event) => { event.stopPropagation(); void openEditor(); }}
           >
             <Maximize2  />

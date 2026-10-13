@@ -1,6 +1,7 @@
 {
   "id": "review-ui-gallery",
   "surface": "开发",
+  "scrollCoverage": "[data-gallery-scroll]",
   "name": "核对-设计系统中心（目录分区与滚动覆盖）",
   "steps": [
     {
@@ -3002,6 +3003,398 @@
     },
     {
       "capture": "gallery-rules-2"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-3"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-4"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-5"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-6"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-7"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-8"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-9"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-10"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-11"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-12"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-13"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-14"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-15"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-16"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-17"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-18"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-19"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-20"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-21"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-22"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-23"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-24"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-25"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-26"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-27"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-28"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-29"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 360
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-rules-30"
     },
     {
       "scroll": {

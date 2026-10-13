@@ -11,6 +11,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { UI_AUDIT_RULES, auditUiDom } = require('./lib/uiAuditDom.cjs')
+const { missingScrollCoverage } = require('./lib/uiScrollCoverage.cjs')
 const { createPageTitleIssues, countIssues } = require('./lib/uiAuditReport.cjs')
 const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
 const { auditPageContrast, loadContrastExceptions } = require('./lib/uiContrastAudit.cjs')
@@ -200,7 +201,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
       })
       contrastResults[key] = { issues: result.issues, exempted: result.exempted, stats: result.stats }
       if (options.audit) {
-        const rules = final ? await targetPage.evaluate(auditUiDom, { scene: scene.name, surface: scene.surface })
+        const rules = final || scene.scrollCoverage ? await targetPage.evaluate(auditUiDom, { scene: scene.name, surface: scene.surface })
           : { ...Object.fromEntries(UI_AUDIT_RULES.map(rule => [rule.key, []])), pageTitles: [], notes: ['中途状态，只审对比度'] }
         ruleResults[key] = { ...rules, lowContrast: result.issues, contrastExempted: result.exempted, contrastStats: result.stats }
       }
@@ -216,6 +217,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
           let sceneFailed = false
           let sceneError = null
           const windowEvidence = { requestedOuter: size, baseline: null, completed: null, captures: [] }
+          const scrollCaptures = []
           try {
             // 启动位置必须在巡检主动居中/调整尺寸之前检查，而且每次进程只检查一次。
             if (!launchInspected && batch.length === 1 && scene.inspectLaunch) {
@@ -236,6 +238,21 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
               await assertInspectionWindowSize(app, size, windowEvidence.baseline)
               windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
               rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
+              if (scene.scrollCoverage) {
+                const measured = await targetPage.evaluate(auditUiDom)
+                const regions = await targetPage.locator(scene.scrollCoverage).evaluateAll(elements => elements.map((element, index) => ({
+                  element: element.tagName.toLowerCase() + (element.id ? `#${element.id}` : `:${index}`),
+                  id: element.getAttribute('data-ui-scroll-key') || element.querySelector('[data-gallery-section]')?.getAttribute('data-gallery-section') || '',
+                  scrollTop: element.scrollTop, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight,
+                  visibleOffset: Math.max(0, -element.getBoundingClientRect().top),
+                  visibleHeight: Math.max(0, Math.min(element.getBoundingClientRect().bottom, innerHeight) - Math.max(element.getBoundingClientRect().top, 0)),
+                })))
+                if (!regions.length) throw new Error(`完整截图的滚动区域不存在：${scene.scrollCoverage}`)
+                scrollCaptures.push(regions)
+                windowEvidence.captures.at(-1).scrollRegions = measured.scrollRegions
+                const failedSamples = measured.gallerySamples.filter(sample => !sample.passed)
+                if (failedSamples.length) throw new Error(`样张规则断牙失败：${failedSamples.map(sample => sample.id).join(', ')}`)
+              }
               await auditContrast(`${evidenceKey} / ${suffix}`, targetPage, scene)
             }
             // 步骤描述的自动指标（行数、溢出、截断）；普通场景不调用
@@ -246,6 +263,8 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             }
             await scene.setup(app.page, app.app, { capture, recordMetrics, electronApp: app.app,
               requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
+            const missing = missingScrollCoverage(scrollCaptures)
+            if (missing.length) throw new Error(`滚动内容漏截：${JSON.stringify(missing)}`)
             const fileName = `${sizeLabel}-${scene.id}.png`
             windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             let pixels

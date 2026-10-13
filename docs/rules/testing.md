@@ -214,6 +214,7 @@ npm run check:colors
 npm run check:surface
 npm run check:icons
 npm run check:ui-residue
+npm run check:ui-design
 ```
 
 `check:colors`、`check:surface:strict`、`check:icons:strict`、`check:ui-residue` 已接入 `build` / `electron:build` 与 CI 代码检查。`check:colors` 含未定义颜色类规则（按 Tailwind 实际配置判定 `bg-overlay`、`bg-selected-accent/50` 这类不生成样式的类，不可登记）。`check:ui-residue` 是代码残留门禁：任意值类、内联尺寸与颜色、调用点覆盖、豁免理由、私有样式、零引用与旧文案按 skill `henji-ui-surface` 的 `references/review.md` 第 3 节口径判为违规 / 待登记 / 合规，固定几何尺寸等例外登记在 `scripts/ui-residue.allowlist.json`（≥ 8 字理由，过期登记同样失败）。确需例外时加**行级** `ui-surface-allow` 注释并写明理由，文件级 `ui-surface-allow-file` 会被判违规；`check:colors` 的登记文件只能下调（已清零的规则不可再登记，其余总数受脚本上限约束）。改了 `.claude/skills` 或 `.codex/skills` 任一侧时跑 `npm run check:skill-sync`（CI 门禁，两份 skill 必须逐字一致）。
@@ -354,3 +355,23 @@ wc -l src/App.tsx
 - 需要真实容器的行为按第三节运行正式 Reality，并记录实际窗口/设备与截图。提交确认、GPU 完成和物理屏幕呈现是不同指标，不得混称。
 - 关键保护的红→绿证据按第四节断牙规则提供；同代码与环境的实际通过结果可复用，历史“已完成”标签不可替代证据。
 - 本地按 L0–L3 裁剪验证；提交推送后核对**当前提交**的必需远端质量门禁。尚在运行或失败时明确待验证/阻塞，不以旧提交绿灯、取消运行或后续无关通过项代替。
+
+## 中心页像素基线与规则 CI（5.2）
+
+静态 A–E、S1–S9（S6 在 icons）、spacingScale/unusedToken/动效规则、DOM 的 jsdom 断牙测试和像素比较器的纯函数测试进入 Linux 必跑代码检查。新增 Node 测试须登记 scripts/node-test-suites.json；该套件先检查归属。ui-rule-audit 仍是手动 workflow_dispatch 的 ubuntu+xvfb Electron 试运行，尚无稳定耗时证据，不作为必需聚合门禁。它使用 development 模式巡检产物打开真实中心页。Windows 像素基线不进入 CI。
+
+完整内容场景在步骤 JSON 声明 scrollCoverage 选择器，执行器记录真实 scrollHeight/clientHeight/scrollTop 并校验捕获区间并集，顶部+底部漏中段会失败；动态内容分区须提供稳定 data-ui-scroll-key 或 data-gallery-section。只核对局部交互的场景无需遍历无关长列表。中心页已启用，矩阵每变体238次捕获；新增内容导致漏截必须补步骤。
+
+本机像素流程固定：同一 Windows 机器、显示器及系统 DPI、字体安装/平滑配置、Electron版本、1440×900 外框、同一界面缩放与圆角/玻璃预览，四预设均使用默认预览。正式证据记录 content/renderer/DPR/nativeScaleFactor/zoomFactor，比对脚本检查窗口环境一致；操作系统字体与驱动变化仍由执行者核对，不自动当作样式变更接受。先按 skill review 第8节由总管理者在独占安全边界准备 development 巡检产物，随后：
+
+```powershell
+npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --theme-preset all --size 1440x900 --audit --out .ui-tour/review/ui-gallery-pixels
+# 退出码非0立即处理问题；不要接着更新基线。
+npm run check:ui-gallery-diff -- --input .ui-tour/review/ui-gallery-pixels
+# 首次或有意修改：必须逐张目视并在提交正文记录原因，才运行下一条。
+npm run check:ui-gallery-diff -- --input .ui-tour/review/ui-gallery-pixels --update-baseline --reason '填写至少八字的具体视觉变更原因'
+```
+
+基线位于 scripts/ui-review/baselines/ui-gallery/<preset>/*.png 与 manifest.json。彩色 pixelmatch 单像素阈值0.1、includeAA=true，总差异比例严格 ≤0.001；超限输出到输入目录 diff/<preset>，尺寸不一致直接失败。缺基线、缺图/正式审计证据、对比度或 DOM 问题、捕获配置变化均阻断，不自动生成“通过”基线。更新前先检查所有输入解码与完整清单，基线变更需独立审查，阈值不得上调。需要响应式验收时另选 review 矩阵，960图不混入固定1440像素基线。
+
+本轮执行者按用户禁令不运行排他窗口命令、不创建基线；这部分标待验证，由总管理者执行并补实际截图、差异图和审计证据。不要把上述步骤或规则自测的通过当成真实视觉通过。
