@@ -112,7 +112,7 @@ export function bindCameraStageSession(session: DocumentSession): CameraStagePro
   existing?.dispose()
   const id = session.id
   const { snapshot, filledDefaults } = initialSnapshot(session.getContent())
-  const store = createCameraStageStore()
+  const store = createCameraStageStore({ coverRefresh: true })
   store.getState().loadSnapshot(snapshot, { id, name: session.documentMeta.name })
   store.temporal.getState().clear()
 

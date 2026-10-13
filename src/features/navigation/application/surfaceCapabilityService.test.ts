@@ -23,7 +23,8 @@ vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({
 import { useNavigationStore } from '@/stores/navigationStore'
 import { applicationWriteChannel } from '@/core/application-control/execution/writeExecution'
 
-import { focusApplicationEntity, openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { closeApplicationSurface, focusApplicationEntity, openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 
 describe('application surface registry', () => {
   it('页面不存在的加载前拒绝通过统一包装报告零执行，导航保持原状', async () => {
@@ -34,11 +35,39 @@ describe('application surface registry', () => {
   })
   beforeEach(() => {
     vi.clearAllMocks()
+    useAssistantUiStore.getState().setOpen(false)
     useNavigationStore.setState({
       activeWorkspace: 'generation',
       activeToolId: null,
       revision: 0,
     })
+  })
+
+  it('从工具子页打开工具首页会清空当前工具', () => {
+    openApplicationSurface('tool.camera_stage')
+    openApplicationSurface('workspace.tools')
+    expect(useNavigationStore.getState().activeToolId).toBeNull()
+  })
+
+  it.each([false, true])('无参关闭优先退出工具而非助手（助手打开=%s）', (open) => {
+    openApplicationSurface('tool.camera_stage')
+    useAssistantUiStore.getState().setOpen(open)
+    expect(closeApplicationSurface()).toMatchObject({ status: 'closed', closedSurfaceId: 'tool.camera_stage' })
+    expect(useNavigationStore.getState().activeToolId).toBeNull()
+    expect(useAssistantUiStore.getState().open).toBe(open)
+  })
+
+  it.each(['workspace.generation', 'workspace.canvas', 'workspace.video_edit', 'workspace.tools'])('不可关闭的工作区明确拒绝：%s', (id) => {
+    openApplicationSurface(id)
+    const before = useNavigationStore.getState()
+    expect(() => closeApplicationSurface(id)).toThrow('UNSUPPORTED')
+    expect(useNavigationStore.getState()).toBe(before)
+  })
+
+  it('显式关闭未打开的工具不会误关当前工具', () => {
+    openApplicationSurface('tool.camera_stage')
+    expect(() => closeApplicationSurface('tool.image_edit')).toThrow('UNSUPPORTED')
+    expect(useNavigationStore.getState().activeToolId).toBe('cameraStage')
   })
 
   it('打开 3D Surface 时同步进入工具箱并选择 3D 编辑器', () => {

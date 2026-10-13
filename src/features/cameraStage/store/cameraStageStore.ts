@@ -190,7 +190,7 @@ function firstCameraId(objects: StageObject[]): string | null {
   return getCameraObjects(objects)[0]?.id ?? null
 }
 
-export const createCameraStageStore = () => {
+export const createCameraStageStore = (options: { coverRefresh?: boolean } = {}) => {
   const initialStateKeyframe = createStateKeyframe([], '关键帧 1')
   let historyRecord: StoreApi<CameraStageState>['setState'] | null = null
   let historySessionActive = false
@@ -799,6 +799,24 @@ export const createCameraStageStore = () => {
 )
 
   return Object.assign(store, {
+    // 仅正式文档宿主授权封面持久化；渲染投影不授予这个权限。
+    coverRefresh: options.coverRefresh === true,
+    undoIdentity: Symbol('camera-stage-store'),
+    /** 内部内容恢复，不改变用户视图、播放运行时或文档身份。 */
+    restoreSceneContent(snapshot: StageSceneRuntimeSnapshot) {
+      const restored = structuredClone(snapshot)
+      const animation = compileStateKeyframesToAnimation(restored.stateKeyframes, restored.objects)
+      store.setState(state => ({
+        objects: applyAnimationAtTime(restored.objects, animation, state.playback.currentTime),
+        animation,
+        sceneSettings: restored.sceneSettings ?? createDefaultSceneSettings(),
+        stateKeyframes: restored.stateKeyframes,
+        activeCameraId: isCameraId(restored.objects, restored.activeCameraId) ? restored.activeCameraId : firstCameraId(restored.objects),
+        selectedId: restored.objects.some(object => object.id === state.selectedId) ? state.selectedId : null,
+        selectedStateKeyframeId: restored.stateKeyframes.some(frame => frame.id === state.selectedStateKeyframeId) ? state.selectedStateKeyframeId : null,
+        selectedStateKeyframeIds: state.selectedStateKeyframeIds.filter(id => restored.stateKeyframes.some(frame => frame.id === id)),
+      }))
+    },
     beginHistorySession() { historySessionActive = true },
     endHistorySession() {
       if (historySessionActive && historySessionPast && historyRecord) historyRecord(historySessionPast)

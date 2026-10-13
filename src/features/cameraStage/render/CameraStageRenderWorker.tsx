@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { flushSync } from '@react-three/fiber'
 import {
   notifyCameraStageRenderWorkerReady,
@@ -36,16 +36,19 @@ async function waitForCaptureBridge(captureRef: MutableRefObject<StageCaptureFn 
   throw new Error('后台渲染场景初始化超时')
 }
 
-async function waitForSceneCommit(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 32))
-}
-
 export default function CameraStageRenderWorker(): JSX.Element {
   const captureRef = useRef<StageCaptureFn | null>(null)
   const cancelRef = useRef(false)
   const runningRequestIdRef = useRef<string | null>(null)
   const [request, setRequest] = useState<CameraStageRenderWorkerJob | null>(null)
   const [sceneRequestId, setSceneRequestId] = useState<string | null>(null)
+  const pendingAssets = useRef(new Set<string>())
+  const assetFailure = useRef<Error | null>(null)
+  const onAssetReady = useCallback((id: string, error?: unknown): void => {
+    if (!pendingAssets.current.has(id)) return
+    if (error !== undefined) assetFailure.current = new Error(`后台渲染资源加载失败：${error instanceof Error ? error.message : String(error)}`)
+    else pendingAssets.current.delete(id)
+  }, [])
 
   useEffect(() => {
     const unsubscribeJob = onCameraStageRenderWorkerJob((nextRequest) => {
@@ -122,9 +125,23 @@ export default function CameraStageRenderWorker(): JSX.Element {
           ? Math.min(Math.max(0, request.selectedTimeSec ?? 0), loadedState.animation.duration)
           : 0
         loadedState.seek(selectedTimeSec)
+        // 摄像机辅助 GLB 在取景模式不挂载、不参与导出；角色和环境必须真正提交。
+        pendingAssets.current = new Set(loadedState.objects.filter(object => object.type === 'character').map(object => object.id))
+        if (loadedState.sceneSettings.sky.environmentImageUrl) pendingAssets.current.add('environment')
+        assetFailure.current = null
         setSceneRequestId(request.requestId)
         await waitForCaptureBridge(captureRef)
-        await waitForSceneCommit()
+        const deadline = Date.now() + 30_000
+        while (pendingAssets.current.size > 0) {
+          if (disposed) return
+          if (cancelRef.current) throw new Error('后台渲染已取消')
+          if (assetFailure.current) throw assetFailure.current
+          if (Date.now() >= deadline) throw new Error('后台渲染资源加载超时')
+          await new Promise<void>(resolve => setTimeout(resolve, 16))
+        }
+        if (disposed) return
+        if (cancelRef.current) throw new Error('后台渲染已取消')
+        flushSync(() => useCameraStageStore.getState().seek(selectedTimeSec))
 
         const exportState = useCameraStageStore.getState()
         const renderSchedule = buildRenderCameraSchedule(exportState.stateKeyframes, exportState.activeCameraId)
@@ -260,7 +277,10 @@ export default function CameraStageRenderWorker(): JSX.Element {
           context: { nodeId: request.nodeId, projectId: request.cameraStageDocumentId, frameCount: result.frameCount },
         })
       } catch (error) {
-        if (!disposed) await reportFailure(error)
+        if (!disposed) {
+          if (cancelRef.current) await reportCameraStageRenderWorkerEvent({ type: 'cancelled', requestId: request.requestId, nodeId: request.nodeId })
+          else await reportFailure(error)
+        }
       } finally {
         if (!disposed) {
           captureRef.current?.disposeOffscreen()
@@ -284,6 +304,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         <StageScene
           key={sceneRequestId}
           captureRef={captureRef}
+          onAssetReady={onAssetReady}
           interactive={false}
           primary
         />

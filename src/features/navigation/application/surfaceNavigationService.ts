@@ -50,6 +50,7 @@ export function isApplicationSurfaceActive(surface: ApplicationSurfaceDefinition
   if (surface.toolId) {
     return navigation.activeWorkspace === surface.workspace && navigation.activeToolId === surface.toolId
   }
+  if (surface.workspace === 'tools') return navigation.activeWorkspace === 'tools' && navigation.activeToolId === null
   return navigation.activeWorkspace === surface.workspace
 }
 
@@ -87,6 +88,7 @@ export function openApplicationSurface(
     } else {
       if (surface.workspace) switchWorkspace(surface.workspace)
       if (surface.toolId) selectToolboxTool(surface.toolId)
+      else if (surface.workspace === 'tools') selectToolboxTool(null)
     }
     if (!isApplicationSurfaceActive(surface)) throw new Error('SURFACE_NOT_OPEN')
     const result = {
@@ -111,9 +113,20 @@ export function closeApplicationSurface(
   correlation: SurfaceNavigationCorrelation = {}
 ): SurfaceNavigationResult {
   const target = surfaceId ? getApplicationSurface(surfaceId) : listApplicationSurfaces()
+    .filter((surface) => surface.id !== 'overlay.assistant')
+    .sort((a, b) => Number(a.kind === 'workspace') - Number(b.kind === 'workspace'))
     .find((surface) => isApplicationSurfaceActive(surface))
   if (surfaceId && !target) throw new ApplicationPreflightFailure(new Error('NOT_FOUND:找不到目标页面，请从应用能力目录获取可用的页面后重试。'))
   const targetId = target?.id ?? surfaceId ?? 'none'
+  const closesToolHome = targetId === 'workspace.tools'
+    && useNavigationStore.getState().activeWorkspace === 'tools'
+    && useNavigationStore.getState().activeToolId !== null
+  if (!target || (target.kind === 'workspace' && targetId !== 'workspace.assets' && !closesToolHome)) {
+    throw new ApplicationPreflightFailure(new Error('UNSUPPORTED:工作区不能关闭；请打开其他工作区，或指定要关闭的工具、设置页面或浮层。'))
+  }
+  if (!closesToolHome && !isApplicationSurfaceActive(target)) {
+    throw new ApplicationPreflightFailure(new Error('UNSUPPORTED:目标页面当前未打开；请读取当前导航状态后指定正在打开的页面。'))
+  }
   logger.info('应用 Surface 关闭开始', {
     event: 'navigation.surface.close.start', ...correlation, surfaceId: targetId,
   })
@@ -124,7 +137,7 @@ export function closeApplicationSurface(
       useUiStore.getState().closeSettings()
     } else if (targetId === 'overlay.assets' || targetId === 'workspace.assets') {
       closeAssetLibrary()
-    } else if (targetId.startsWith('tool.')) {
+    } else if (targetId.startsWith('tool.') || closesToolHome) {
       selectToolboxTool(null)
     }
     const result = {

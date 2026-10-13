@@ -12,7 +12,7 @@ import type { Camera, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import { updateCameraStageProjectCover } from '../projects/cameraStageProjectCover'
 import { StageStyleRenderer, isStageStyleRenderStyle } from '../render/stageStyleRenderer'
 import type { StageStyleRenderStyle } from '../render/stageStyleRenderer'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { cameraStageStoreAttachment, useCameraStageStore } from '../store/cameraStageStore'
 import { resolveCenteredCaptureView } from './captureFraming'
 
 /**
@@ -38,6 +38,7 @@ export interface StageCaptureFn {
 
 interface StageCaptureBridgeProps {
   captureRef: React.MutableRefObject<StageCaptureFn | null>
+  coverRefresh?: boolean
 }
 
 interface ExportRendererResources {
@@ -49,10 +50,11 @@ interface ExportRendererResources {
   height: number
 }
 
-const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) => {
+const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef, coverRefresh = false }) => {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const camera = useThree((state) => state.camera)
+  const owner = cameraStageStoreAttachment.getStore()
 
   useEffect(() => {
     let resources: ExportRendererResources | null = null
@@ -100,27 +102,30 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
     }
     const refreshCover = (): void => {
       clearCoverTimer()
-      const projectId = useCameraStageStore.getState().currentProjectId
+      if (cameraStageStoreAttachment.getStore() !== owner) return
+      const projectId = owner.getState().currentProjectId
       if (projectId) void updateCameraStageProjectCover(projectId, () => captureFrame())
     }
     const scheduleCoverRefresh = (): void => {
       clearCoverTimer()
       coverTimer = window.setTimeout(refreshCover, 1_200)
     }
-    const unsubscribe = useCameraStageStore.subscribe((state, previous) => {
+    const unsubscribe = coverRefresh ? owner.subscribe((state, previous) => {
       const contentChanged = state.currentProjectId !== previous.currentProjectId
         || state.objects !== previous.objects
         || state.stateKeyframes !== previous.stateKeyframes
         || state.sceneSettings !== previous.sceneSettings
         || state.activeCameraId !== previous.activeCameraId
       if (state.currentProjectId && contentChanged) scheduleCoverRefresh()
-    })
-    if (useCameraStageStore.getState().currentProjectId) scheduleCoverRefresh()
+    }) : () => undefined
+    if (coverRefresh && owner.getState().currentProjectId) scheduleCoverRefresh()
     const flushWhenHidden = (): void => {
       if (document.visibilityState === 'hidden') refreshCover()
     }
-    document.addEventListener('visibilitychange', flushWhenHidden)
-    window.addEventListener('pagehide', refreshCover)
+    if (coverRefresh) {
+      document.addEventListener('visibilitychange', flushWhenHidden)
+      window.addEventListener('pagehide', refreshCover)
+    }
 
     // 这里只服务导出；助手的视口观察统一走 observe_application_surface 截取
     // StageViewportWorkspace 上标注的 camera_stage.viewport_observer 区域。
@@ -133,7 +138,7 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
       if (captureRef.current === captureFrame) captureRef.current = null
       disposeOffscreen()
     }
-  }, [camera, captureRef, gl, scene])
+  }, [camera, captureRef, coverRefresh, gl, owner, scene])
 
   return null
 }

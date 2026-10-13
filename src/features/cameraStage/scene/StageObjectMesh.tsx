@@ -28,6 +28,7 @@ import { useCameraModelUrl, useCharacterModelUrl } from './useCharacterModelUrl'
 const DEG2RAD = Math.PI / 180
 
 interface StageObjectMeshProps {
+  onAssetReady?: (id: string, error?: unknown) => void
   object: StageObject
   selected: boolean
   onSelect: (id: string) => void
@@ -84,7 +85,7 @@ const CharacterPlaceholder: React.FC<{ color: string; selected: boolean }> = ({ 
 
 /** 模型加载失败时回退占位渲染，避免单个角色资源问题拖垮整个三维视图 */
 class CharacterErrorBoundary extends React.Component<
-  { fallback: React.ReactNode; children: React.ReactNode },
+  { fallback: React.ReactNode; children: React.ReactNode; onError?: (error: Error) => void },
   { failed: boolean }
 > {
   state = { failed: false }
@@ -93,12 +94,20 @@ class CharacterErrorBoundary extends React.Component<
     return { failed: true }
   }
 
+  componentDidCatch(error: Error): void { this.props.onError?.(error) }
+
   render(): React.ReactNode {
     return this.state.failed ? this.props.fallback : this.props.children
   }
 }
 
-const CharacterMesh: React.FC<{ object: StageCharacterObject; selected: boolean }> = ({ object, selected }) => {
+// 与模型处在同一个 Suspense 边界；仅在真实模型及其姿态 effect 提交后报告就绪。
+function ModelCommitted({ id, onReady }: { id: string; onReady?: (id: string) => void }): null {
+  useEffect(() => { onReady?.(id) }, [id, onReady])
+  return null
+}
+
+const CharacterMesh: React.FC<{ object: StageCharacterObject; selected: boolean; onAssetReady?: StageObjectMeshProps['onAssetReady'] }> = ({ object, selected, onAssetReady }) => {
   const modelUrl = useCharacterModelUrl()
   const placeholder = <CharacterPlaceholder color={object.color} selected={selected} />
 
@@ -106,9 +115,10 @@ const CharacterMesh: React.FC<{ object: StageCharacterObject; selected: boolean 
     return placeholder
   }
   return (
-    <CharacterErrorBoundary fallback={placeholder}>
+    <CharacterErrorBoundary fallback={placeholder} onError={error => onAssetReady?.(object.id, error)}>
       <Suspense fallback={placeholder}>
         <CharacterModel object={object} selected={selected} url={modelUrl} />
+        <ModelCommitted id={object.id} onReady={onAssetReady} />
       </Suspense>
     </CharacterErrorBoundary>
   )
@@ -189,6 +199,7 @@ const CameraHelperMesh: React.FC<{
 }
 
 const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
+  onAssetReady,
   object,
   selected,
   onSelect,
@@ -296,7 +307,7 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
           )}
           {object.type === 'character' && (
             <group onClick={handleClick}>
-              <CharacterMesh object={object} selected={selected} />
+              <CharacterMesh object={object} selected={selected} onAssetReady={onAssetReady} />
             </group>
           )}
           {object.type === 'camera' && showCameraHelpers && cameraLookAtTarget && (
