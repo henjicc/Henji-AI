@@ -45,10 +45,58 @@ const CHECKED_ATTRIBUTES = {
   UiSearchInput: 'className',
   UiTextArea: 'className',
   UiTextAreaField: 'className',
+  UiSelect: 'className',
+  UiSwitch: 'className',
+  UiSeedInput: 'className',
+  UiDatePicker: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };
 const CHECKED_COMPONENTS = new Set(Object.keys(CHECKED_ATTRIBUTES));
+/**
+ * barrel 覆盖账本：每个导出必须受检或说明边界；validationScripts.test.cjs
+ * 递归核对 export *，新组件漏登记、理由缺失与删除后残留登记都会阻断 CI。
+ * 未接入的字段如实保留欠账，不能把既有业务覆盖偷换成合规；待 4.5/4.6 迁移后删除。
+ */
+const RULE_E_EXEMPT = {
+  UiPanel: '容器 className 承载宿主布局，允许高度、内边距与 gap；表面仍由 residue 检查。',
+  UiInput: '待任务4.5/5.2迁移 NumberInput 内部 !h-full，再接入字段高度检查。',
+  UiRangeInput: '待任务4.5/5.2迁移 CanvasVideoPlayer 的 h-2.5，再接入字段高度检查。',
+  UiColorInput: '待任务4.5/5.2增加尺寸枚举并迁移 ThemeSection 的 !h-8 !w-8。',
+  UiCheckbox: '待任务4.5/5.2增加尺寸枚举并迁移 ExportPanel 的 h-4 w-4。',
+  UiNumberStepper: '只供 NumberInput 内部组合，没有开放 className 属性。',
+  UiModal: '不开放 className，分别用 overlayClassName/panelClassName/contentClassName 传入宿主布局。',
+  UiTooltipText: '说明文字的排版由宿主标签决定，className 不对应控件档位。',
+  UiRegion: '区域容器接受宿主布局，高度、内边距与 gap 不是控件外观。',
+  UiGroup: '分组容器接受宿主布局，高度、内边距与 gap 不是控件外观。',
+  UiPageHeader: '页头组合容器接受宿主布局，没有控件高度档位。',
+  UiFormRow: '参数行接受宿主布局，行宽与高度不等同字段高度。',
+  UiDisclosurePanel: '折叠容器接受内容高度与宿主布局，没有控件高度档位。',
+  UiToolbar: '工具条外壳及 barProps 承载布局，不能套字段高度规则。',
+  UiEmpty: '状态容器的布局与排版由宿主内容区决定，没有控件高度档位。',
+  UiLoading: '状态容器的布局与排版由宿主内容区决定，没有控件高度档位。',
+  UiError: '状态容器的布局与排版由宿主内容区决定，没有控件高度档位。',
+  PromptDocumentStatic: '用户文档内容的展示布局，不是固定尺寸的界面控件。',
+  PromptEditor: '编辑器容器接受内容高度与宿主布局，不是固定高度字段。',
+  UiFieldLayoutContext: 'React 上下文对象，没有自身 DOM 与 className。',
+  UiMarqueeText: '文字溢出容器接受宿主排版，没有控件高度档位。',
+  StackedMediaUploader: '媒体缩略图布局随素材及宿主几何变化，不是固定高度字段。',
+  UiTaskHistoryFilterBar: '筛选条组合布局没有对外 className，内部控件由规则 E 检查。',
+  AlertDialog: '只开放语义参数，没有对外 className，内部控件由规则 E 检查。',
+  GlobalAlertDialog: '全局确认宿主，没有对外 className，复用 AlertDialog。',
+  UiErrorBoundary: '错误捕获边界，没有对外 className 与独立控件表面。',
+  UiAngleDial: '二维交互图形的几何布局，不能用单行字段高度规则替代。',
+  UiPointPad: '二维交互图形的几何布局，不能用单行字段高度规则替代。',
+  UiRangeSlider: '范围交互图形的几何布局，不能用单行字段高度规则替代。',
+  UiGradientEditor: '渐变交互图形的几何布局，不能用单行字段高度规则替代。',
+  UiGradeWheel: '色轮交互图形的几何布局，不能用单行字段高度规则替代。',
+  UiCurveEditor: '曲线交互图形的几何布局，不能用单行字段高度规则替代。',
+  UiEasingEditor: '缓动交互图形的几何布局，不能用单行字段高度规则替代。',
+  UiToast: '只开放语义参数，没有对外 className，内部按钮由规则 E 检查。',
+  UiOverlayLayerProvider: '浮层上下文 provider，没有自身控件外观。',
+  ParamList: '参数组合布局，不是固定高度字段；字段通过 ParamField 复用共享组件。',
+  ParamField: 'schema 字段组合入口，没有可覆盖共享控件的对外 className。',
+};
 /** 内容随网格拉伸或随内容撑高的条目类组件：只禁止固定高度。 */
 const ITEM_COMPONENTS = new Set(['UiOptionButton', 'UiChipButton', 'UiNavButton']);
 const ITEM_FLEXIBLE_HEIGHT = /^(?:h-full|h-auto|min-h-.+|max-h-.+)$/;
@@ -306,7 +354,11 @@ function findButtonAppearanceOverrides({ srcRoot, projectRoot, files }) {
 module.exports = {
   CHECKED_ATTRIBUTES,
   CHECKED_COMPONENTS,
+  RULE_E_EXEMPT,
   classifyToken,
+  collectConstants,
+  collectStrings,
+  collectImportedConstants,
   findButtonAppearanceOverrides,
   findButtonAppearanceOverridesInSource,
 };

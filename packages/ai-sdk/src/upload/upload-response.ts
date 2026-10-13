@@ -1,15 +1,19 @@
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
+import { readJsonResponse } from '../providers/helpers'
 import type { JsonValue } from '../types/runtime'
 
 export async function readUploadJson(response: Response, label: string): Promise<JsonValue> {
-  const payload = await response.json().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new AiRuntimeError('upload_failed', message)
-  }) as JsonValue
-  if (!response.ok) {
-    throw new AiRuntimeError('upload_failed', `${label} HTTP ${response.status}: ${JSON.stringify(payload)}`)
+  try {
+    return await readJsonResponse(response, label)
+  } catch (error) {
+    // 解析与 HTTP 诊断只走公共入口；上传层仅保留原有 upload_failed 契约。
+    if (error instanceof AiRuntimeError && ['provider_http_error', 'invalid_json'].includes(error.code)) {
+      const message = error.message.replace(`[${error.code}] `, '')
+      throw new AiRuntimeError('upload_failed', message, error.details)
+    }
+    // 正文读取取消/网络失败及明确的供应商准入错误保留原语义。
+    throw error
   }
-  return payload
 }
 
 export function readUploadString(value: JsonValue, pointer: string): string | undefined {

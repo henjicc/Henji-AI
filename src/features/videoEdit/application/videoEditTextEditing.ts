@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
 import { audibleVideoEditClips, videoEditComposition } from '@/core/videoEdit/document'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, resolveVideoEditTextRanges, type VideoEditTextSelector, type VideoEditTextRange } from '@/core/videoEdit/textTranscript'
@@ -14,7 +15,7 @@ const logger = createLogger('features.videoEdit.textEditing')
 export async function hasSavedVideoEditText(audioDocumentId: string): Promise<boolean> { return Boolean((await loadAudioEditProject(audioDocumentId)).document.transcript.length) }
 export interface VideoEditTextEditResult { ranges: VideoEditTextRange[]; sequenceId: string; changed: boolean }
 export function editVideoEditText(projectId: string, sequenceId: string, selector: VideoEditTextSelector, action: 'delete' | 'extract' | 'insert', frame?: number, name?: string, baseline?: object): VideoEditTextEditResult {
-  const owner = requireVideoEditInstance(projectId); const document = owner.document
+  const owner = requireVideoEditInstance(projectId); const document = owner.document; const contentVersion = owner.contentVersion
   if (baseline && baseline !== document.sequences.find(sequence => sequence.id === sequenceId)) throw new Error('时间线已有修改，请重新选中文字。')
   const ranges = resolveVideoEditTextRanges(videoEditComposition(document, sequenceId), selector)
   if (!ranges.length) return { ranges, sequenceId, changed: false }
@@ -32,13 +33,13 @@ export function editVideoEditText(projectId: string, sequenceId: string, selecto
       return { ...snapshot, sequences: [...snapshot.sequences, excerpt] }
     })
     logger.info('文本剪辑完成', { event: 'video_edit.text.edit.completed', context: { projectId, sequenceId, action, ranges } })
-    return { ranges, sequenceId: target, changed: owner.document !== document }
+    return { ranges, sequenceId: target, changed: owner.contentVersion !== contentVersion }
   } catch (error) { logger.error('文本剪辑失败', { event: 'video_edit.text.edit.failed', error, context: { projectId, sequenceId, action } }); throw error }
 }
 
 /** Recover paid ASR results without recognizing again. New manifests preserve the original mix clips. */
 export async function restoreVideoEditText(projectId: string, sequenceId: string, audioDocumentId: string, detectSilence = false, signal?: AbortSignal): Promise<void> {
-  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document; const composition = videoEditComposition(snapshot, sequenceId)
+  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion; const composition = videoEditComposition(snapshot, sequenceId)
   const release = holdVideoEditActivity(projectId, '整理转录稿')
   logger.info('整理转录稿开始', { event: 'video_edit.text.restore.start', context: { projectId, sequenceId, detectSilence } })
   let requestId = crypto.randomUUID()
@@ -67,7 +68,7 @@ export async function restoreVideoEditText(projectId: string, sequenceId: string
       textTranscription = mergeVideoEditTextTranscription(textTranscription, incoming)
     }
     signal?.throwIfAborted()
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== snapshot) throw new Error('整理期间剪辑已有修改，请重新整理。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('整理期间剪辑已有修改，请重新整理。')
     editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, textTranscription }))
     logger.info('整理转录稿完成', { event: 'video_edit.text.restore.completed', context: { projectId, sequenceId } })
   } catch (error) { logger.error('整理转录稿失败', { event: 'video_edit.text.restore.failed', error, context: { projectId, sequenceId } }); throw error }

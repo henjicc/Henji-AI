@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'
 import { componentFileReferences, documentCodeSourceResolver, loadCodeSourceReferences, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
@@ -13,7 +14,7 @@ import type { AssetFileContent, AssetRecord } from '@/platform/contracts/assetLi
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { sameVideoEditAssetContent, videoEditAssetContentSnapshot } from './videoEditAssetReferences'
 import { inspectVideoEditMedia, sameVideoEditMediaPath } from './videoEditMedia'
-import { requireVideoEditInstance, listVideoEditInstances, type VideoEditInstance } from './videoEditService'
+import { requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { collectVideoEditOutput, publishVideoEditOutput, verifyVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
@@ -24,9 +25,9 @@ export type VideoEditCodeAssetTarget = { kind: 'item'; itemId: string } | { kind
 const assetPins = (pins: readonly CodeComponentPin[] = []): CodeComponentPin[] => pins.map(pin => ({ ...pin, location: `asset:${pin.hash}`, imports: assetPins(pin.imports) }))
 const collecting = new WeakSet<VideoEditInstance>()
 const latest = new WeakMap<VideoEditInstance, { document: VideoEditDocument; target: string; receipt: VideoEditOutputReceipt }>()
-function assertOwner(owner: VideoEditInstance, baseline: VideoEditDocument, signal?: AbortSignal): void {
+function assertOwner(owner: VideoEditInstance, contentVersion: number, signal?: AbortSignal): void {
   signal?.throwIfAborted()
-  if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('原剪辑已关闭或检查期间已有修改，请重新引用代码素材。')
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或检查期间已有修改，请重新引用代码素材。')
 }
 function sameContent(left: AssetFileContent, right: AssetFileContent): boolean { return left.contentIdentity === right.contentIdentity && left.sizeBytes === right.sizeBytes && left.fileModifiedAt === right.fileModifiedAt }
 async function checkImage(image: CodeAsset['images'][number], signal?: AbortSignal): Promise<void> {
@@ -73,11 +74,11 @@ export async function readVideoEditCodeAsset(assetId: string, signal?: AbortSign
 
 /** Save the raw fixed instance, never the currently evaluated animation values. */
 export async function collectVideoEditCodeAsset(projectId: string, target: VideoEditCodeAssetTarget, options: { libraryId?: string; path?: string | (() => Promise<string>) } = {}, signal?: AbortSignal): Promise<AssetRecord | null> {
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const targetKey = JSON.stringify(target)
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion; const targetKey = JSON.stringify(target)
   if (collecting.has(owner)) throw new Error('原剪辑正在收录代码素材，请等待完成。')
   collecting.add(owner)
   try {
-    assertOwner(owner, baseline, signal)
+    assertOwner(owner, contentVersion, signal)
     const selected = binding(owner, target)
     const fixed = baseline.codeMaterials!.find(definition => definition.id === selected.code.definitionId)!.versions.find(version => version.id === selected.code.versionId)!
     await loadCodeSourceReferences(fixed)
@@ -85,7 +86,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
     const cached = latest.get(owner)
     if (typeof options.path !== 'string' && cached?.document === baseline && cached.target === targetKey) {
-      await verifyVideoEditOutput(cached.receipt); assertOwner(owner, baseline, signal)
+      await verifyVideoEditOutput(cached.receipt); assertOwner(owner, contentVersion, signal)
       return await collectVideoEditOutput(cached.receipt, options, signal)
     }
     if (options.libraryId) await assetApplicationService.inspectLibrary(options.libraryId)
@@ -95,35 +96,35 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
       if (!media) throw new Error('代码素材图片引用已失效，请恢复原图片。')
       await verifyVideoEditMediaContent(media, signal)
       const content = await getPlatform().assetLibrary.inspectFileContent(media.path, 'image')
-      assertOwner(owner, baseline, signal)
+      assertOwner(owner, contentVersion, signal)
       images.push({ id, path: media.path, content, ...(media.assetId ? { assetId: media.assetId } : {}) })
     }
     const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files.map(file => ({ ...file, location: `asset:${file.hash}` })), ...(source.imports ? { imports: assetPins(source.imports) } : {}) }, codeSources: [...new Map([...source.files, ...componentFileReferences(source.imports)].map(file => [file.hash, { hash: file.hash, source: documentCodeSourceResolver().read(file.hash, file.location, file.path) }])).values()], parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
     const path = typeof options.path === 'function' ? await options.path() : options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
-    assertOwner(owner, baseline, signal)
+    assertOwner(owner, contentVersion, signal)
     if (!path) return null
     if (await platform.system.fs.exists(path)) throw new Error('请选择新文件名保存代码素材，避免覆盖原文件。')
     for (const image of images) await checkImage(image, signal)
-    assertOwner(owner, baseline, signal)
+    assertOwner(owner, contentVersion, signal)
     await platform.system.fs.writeFile(path, bytes, { exclusive: true })
     const receipt = await publishVideoEditOutput({ owner, sequenceId: selected.sequenceId, revision: baseline.revision, path, name: manifest.name, kind: 'code' })
     latest.set(owner, { document: baseline, target: targetKey, receipt })
-    assertOwner(owner, baseline, signal)
+    assertOwner(owner, contentVersion, signal)
     return await collectVideoEditOutput(receipt, options, signal)
   } catch (error) { logger.warn('可编辑代码素材未完成收录', { event: 'video_edit.code_asset.collect.failed', error, context: { projectId } }); throw error }
   finally { collecting.delete(owner) }
 }
 
 export async function importVideoEditCodeAsset(projectId: string, assetId: string, options: { binId?: string; filterTarget?: { sequenceId: string; clipId: string }; afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument } = {}, signal?: AbortSignal): Promise<{ definitionId: string; itemId?: string }> {
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document
-  assertOwner(owner, baseline, signal)
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
+  assertOwner(owner, contentVersion, signal)
   const { asset, manifest } = await readVideoEditCodeAsset(assetId, signal)
-  assertOwner(owner, baseline, signal)
+  assertOwner(owner, contentVersion, signal)
   const media: VideoEditMedia[] = []; const mediaIds = new Map<string, string>()
   for (const image of manifest.images) {
     // This check must precede inspectVideoEditMedia, which may authorize a path.
-    await checkImage(image, signal); assertOwner(owner, baseline, signal)
+    await checkImage(image, signal); assertOwner(owner, contentVersion, signal)
     let inspected = baseline.media.find(media => sameVideoEditMediaPath(media.path, image.path)) ?? media.find(media => sameVideoEditMediaPath(media.path, image.path))
     if (inspected?.assetContent?.contentIdentity) await verifyVideoEditMediaContent(inspected, signal)
     else if (inspected) {
@@ -132,16 +133,16 @@ export async function importVideoEditCodeAsset(projectId: string, assetId: strin
       inspected = { ...current, id: inspected.id, name: inspected.name, ...(inspected.assetId ? { assetId: inspected.assetId } : {}), sourceRevision: crypto.randomUUID() }
     } else inspected = await inspectVideoEditMedia(image.path, signal)
     if (inspected.kind !== 'image') throw new Error('代码素材图片依赖必须是真实图片。')
-    await checkImage(image, signal); assertOwner(owner, baseline, signal)
+    await checkImage(image, signal); assertOwner(owner, contentVersion, signal)
     const fixed = { ...inspected, path: image.path, assetContent: { ...image.content }, sourceRevision: inspected.sourceRevision ?? crypto.randomUUID() }
     if (!media.some(media => media.id === fixed.id)) media.push(fixed)
     mediaIds.set(image.id, fixed.id)
   }
   const beforePublish = async (): Promise<void> => {
-    assertOwner(owner, baseline, signal)
+    assertOwner(owner, contentVersion, signal)
     for (const image of manifest.images) await checkImage(image, signal)
     if (!sameVideoEditAssetContent(asset, await assetApplicationService.inspect(assetId))) throw new Error('代码资产在导入检查期间已改变，请重新导入。')
-    assertOwner(owner, baseline, signal)
+    assertOwner(owner, contentVersion, signal)
   }
   const result = await createVideoEditCodeAssetInstance(projectId, { asset: manifest, media, mediaIds, origin: { assetId, contentIdentity: videoEditAssetContentSnapshot(asset).contentIdentity }, beforePublish, ...options }, options.binId, signal)
   logger.info('可编辑代码资产已导入原剪辑', { event: 'video_edit.code_asset.import.completed', context: { projectId, assetId, ...result } })

@@ -1,3 +1,6 @@
+import { CameraStageMutationExecutor, CameraStageMotionOperationExecutor } from './cameraStageControlExecutors'
+import { CameraStagePlacementOperationExecutor } from './cameraStagePlacementExecutor'
+import { CameraStageStateKeyframeCollectionExecutor } from './cameraStageStateKeyframeCollectionExecutor'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@/tests/cameraStageProjectFixture'
 import { cameraStageDocumentKind } from '@/core/documents/kinds/cameraStage'
@@ -48,6 +51,82 @@ function stored(id: string): CameraStageSceneContent {
 }
 
 describe('镜头参考文档唯一实例', () => {
+  it('所有快照执行器释放回执时同步释放快照，重复释放不影响其他回执', async () => {
+    seed('release-undo')
+    await ensureCameraStageProjectRuntime('release-undo')
+    const dependencies = { readRevision: () => 0, bumpRevision: () => {} }
+    const executors = [
+      new CameraStageMutationExecutor('camera_stage.state_keyframe', dependencies),
+      new CameraStageMotionOperationExecutor(dependencies),
+      new CameraStagePlacementOperationExecutor(dependencies),
+      new CameraStageStateKeyframeCollectionExecutor(dependencies),
+    ]
+    const retained = captureCameraStageUndo('release-undo')
+    for (const executor of executors) {
+      const token = captureCameraStageUndo('release-undo')
+      executor.forget(token)
+      executor.forget(token)
+      await expect(restoreCameraStageUndo(token)).rejects.toThrow('NOT_FOUND')
+    }
+    await expect(restoreCameraStageUndo(retained)).resolves.toEqual({ projectId: 'release-undo' })
+  })
+
+  it('撤销快照有界，超限的最旧回执明确失效', async () => {
+    seed('bounded-undo')
+    await ensureCameraStageProjectRuntime('bounded-undo')
+    const oldest = captureCameraStageUndo('bounded-undo')
+    let newest = oldest
+    for (let index = 0; index < 100; index += 1) newest = captureCameraStageUndo('bounded-undo')
+    await expect(restoreCameraStageUndo(oldest)).rejects.toThrow('NOT_FOUND')
+    await expect(restoreCameraStageUndo(newest)).resolves.toEqual({ projectId: 'bounded-undo' })
+  })
+
+  it('附着文档回滚保留视图、播放头和有效选择，用户撤销不复活失败对象', async () => {
+    const count = seed('attached-undo')
+    await loadProjectIntoScene('attached-undo')
+    const store = cameraStageProjectStore('attached-undo')
+    expect(store.coverRefresh).toBe(true)
+    store.getState().addPrimitive('sphere')
+    const selectedId = store.getState().selectedId
+    store.getState().setViewMode('camera')
+    store.getState().setGizmoMode('rotate')
+    store.getState().seek(2)
+    const playback = store.getState().playback
+    const runtime = readCameraStagePlaybackRuntime()
+    const token = captureCameraStageUndo('attached-undo')
+    store.getState().addPrimitive('box')
+    const failedId = store.getState().selectedId
+    store.getState().setSelected(selectedId)
+    await restoreCameraStageUndo(token)
+    expect(store.getState()).toMatchObject({ viewMode: 'camera', gizmoMode: 'rotate', selectedId, playback })
+    expect(readCameraStagePlaybackRuntime()).toEqual(runtime)
+    expect(store.temporal.getState().pastStates).toHaveLength(1)
+    store.temporal.getState().undo()
+    expect(store.getState().objects).toHaveLength(count)
+    expect(store.getState().objects.some(object => object.id === failedId)).toBe(false)
+    store.temporal.getState().redo()
+    expect(store.getState().objects.some(object => object.id === failedId)).toBe(false)
+  })
+
+  it('历史已满时补偿仍恢复捕获前历史，失效选择清空且文档改名保留', async () => {
+    seed('full-history-undo')
+    await loadProjectIntoScene('full-history-undo')
+    const store = cameraStageProjectStore('full-history-undo')
+    for (let index = 0; index < 105; index += 1) store.getState().addPrimitive('box')
+    const baseline = [...store.temporal.getState().pastStates]
+    const token = captureCameraStageUndo('full-history-undo')
+    store.getState().addPrimitive('sphere')
+    const failedId = store.getState().selectedId
+    await new DocumentOperations({ commands, registry, kinds: documentKindRegistry }).renameDocument({ id: 'full-history-undo' }, '新名称')
+    await restoreCameraStageUndo(token)
+    expect(store.getState().selectedId).toBeNull()
+    expect(store.getState().currentProjectName).toBe('新名称')
+    expect(store.temporal.getState().pastStates).toEqual(baseline)
+    store.temporal.getState().undo()
+    store.temporal.getState().redo()
+    expect(store.getState().objects.some(object => object.id === failedId)).toBe(false)
+  })
+
   it('并发取得 B 只读取一次，后台读改、保存和补偿不改变界面上的 A', async () => {
     seed('a'); const count = seed('b')
     await loadProjectIntoScene('a')

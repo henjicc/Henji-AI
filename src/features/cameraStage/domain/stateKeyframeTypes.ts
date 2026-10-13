@@ -99,8 +99,6 @@ export interface StageStateKeyframe {
   time: number
   /** 到达本关键帧时是否保持速度连续；stop = 在本点停靠，smooth = 无缝通过。 */
   continuity: 'stop' | 'smooth'
-  /** 停留时长（秒，≥0） */
-  hold: number
   /** 到下一状态关键帧的过渡时长（秒，末点忽略） */
   transitionDuration: number
   objectStates: Record<string, StageStateKeyframeObjectState>
@@ -122,8 +120,6 @@ export interface StageCameraEffector {
   frequency: number
 }
 
-/** 新建状态关键帧默认零停留时长；hold 仅保留用于兼容旧镜头参考数据。 */
-export const STAGE_STATE_KEYFRAME_DEFAULT_HOLD = 0
 export const STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION = 2
 const STAGE_STATE_KEYFRAME_DEFAULT_NAME = '关键帧'
 
@@ -186,7 +182,6 @@ export function createStateKeyframe(
     name,
     time: Math.max(0, time),
     continuity: 'stop',
-    hold: STAGE_STATE_KEYFRAME_DEFAULT_HOLD,
     transitionDuration: STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION,
     objectStates,
     transition: { perObject: {} },
@@ -312,10 +307,9 @@ function normalizeStateKeyframeTransition(raw: unknown): StageStateKeyframeTrans
 }
 
 /** 宽松解析单枚状态关键帧：objectStates 内部结构信任类型转换（与 sceneSerialization 对 objects 的处理一致） */
-function normalizeStateKeyframe(raw: unknown, fallbackTime: number): StageStateKeyframe | undefined {
+function normalizeStateKeyframe(raw: unknown): StageStateKeyframe | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const record = raw as Record<string, unknown>
-  const hold = Number(record.hold)
   const transitionDuration = Number(record.transitionDuration)
   const time = Number(record.time)
   const objectStates =
@@ -326,9 +320,8 @@ function normalizeStateKeyframe(raw: unknown, fallbackTime: number): StageStateK
   return {
     id: typeof record.id === 'string' && record.id ? record.id : uuidv4(),
     name: typeof record.name === 'string' && record.name ? record.name : STAGE_STATE_KEYFRAME_DEFAULT_NAME,
-    time: Number.isFinite(time) && time >= 0 ? time : fallbackTime,
+    time: Number.isFinite(time) && time >= 0 ? time : 0,
     continuity: record.continuity === 'smooth' ? 'smooth' : 'stop',
-    hold: Number.isFinite(hold) && hold >= 0 ? hold : STAGE_STATE_KEYFRAME_DEFAULT_HOLD,
     transitionDuration:
       Number.isFinite(transitionDuration) && transitionDuration >= 0
         ? transitionDuration
@@ -344,12 +337,10 @@ function normalizeStateKeyframe(raw: unknown, fallbackTime: number): StageStateK
 export function normalizeStateKeyframes(raw: unknown): StageStateKeyframe[] {
   if (!Array.isArray(raw)) return []
   const stateKeyframes: StageStateKeyframe[] = []
-  let legacyCursor = 0
   for (const item of raw) {
-    const stateKeyframe = normalizeStateKeyframe(item, legacyCursor)
+    const stateKeyframe = normalizeStateKeyframe(item)
     if (stateKeyframe) {
       stateKeyframes.push(stateKeyframe)
-      legacyCursor = stateKeyframe.time + Math.max(0, stateKeyframe.hold) + Math.max(0, stateKeyframe.transitionDuration)
     }
   }
   return stateKeyframes.sort((a, b) => a.time - b.time)

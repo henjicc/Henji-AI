@@ -11,7 +11,7 @@ import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { cameraStageStateKeyframeService, type CameraStageStateKeyframeCreateInput } from './cameraStageStateKeyframeService'
 import type { CameraStageControlExecutorDependencies } from './cameraStageControlExecutors'
-import { restoreCameraStageUndo } from './cameraStageUndo'
+import { forgetCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 
@@ -85,7 +85,6 @@ export class CameraStageStateKeyframeCollectionExecutor implements ApplicationCo
         name: optionalStringValue(property(item.properties, 'name')),
         cameraId: optionalCameraId(property(item.properties, 'camera_ref')),
         continuity: optionalContinuity(property(item.properties, 'continuity')),
-        hold: optionalNumberValue(property(item.properties, 'hold'), 'HOLD'),
         transitionDuration: optionalNumberValue(property(item.properties, 'transition_duration'), 'TRANSITION_DURATION'),
       }))
       const result = await cameraStageStateKeyframeService.createStateKeyframes(projectId, inputs)
@@ -99,6 +98,10 @@ export class CameraStageStateKeyframeCollectionExecutor implements ApplicationCo
   async compensate(_step: CollectionStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
     return (await this.undo(result.undoToken)).evidence
+  }
+
+  forget(undoToken: string): void {
+    forgetCameraStageUndo(undoToken)
   }
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {

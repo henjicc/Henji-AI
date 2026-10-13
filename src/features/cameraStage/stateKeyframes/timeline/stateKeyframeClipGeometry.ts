@@ -20,19 +20,14 @@ export function quantizeToFrame(seconds: number, fps: number): number {
   return Math.round(seconds * safeFps) / safeFps
 }
 
-/** hold 仅用于旧镜头参考兼容；关键帧模式允许为 0。 */
-export function clampHold(seconds: number, _fps: number): number {
-  return Math.max(0, seconds)
-}
-
-/** 过渡时长钳制：≥ 0（0 = 合法的硬切特殊形式）；fps 保留参数位与 clampHold 签名对齐，暂无需使用 */
+/** 过渡时长钳制：≥ 0（0 = 合法的硬切特殊形式） */
 export function clampTransition(seconds: number, _fps: number): number {
   return Math.max(0, seconds)
 }
 
 export type StateKeyframeClipBlockKind = 'static' | 'transition'
 
-/** 时间轴上的一个比例块：静止块来自某状态关键帧的 hold 段，过渡块来自该点到下一点的 transition 段 */
+/** 时间轴上的一个比例块：静止块标记状态关键帧的时间点，过渡块来自该点到下一点的 transition 段 */
 export interface StateKeyframeClipBlock {
   kind: StateKeyframeClipBlockKind
   /** 所属状态关键帧 id（过渡块归属前一个状态关键帧，语义对齐 StageStateKeyframe.transitionDuration） */
@@ -47,7 +42,7 @@ export interface StateKeyframeClipBlock {
 
 /**
  * 由状态关键帧序列 + 像素密度算出有序比例块数组：
- * 静止块（hold 段）与过渡块（transition 段）交替铺满，零真实间隙；末卡无过渡块。
+ * 关键帧标记（零宽静止块）与过渡块（transition 段）交替铺满，零真实间隙；末卡无过渡块。
  * 0 帧过渡输出 width 为 0 的过渡块，是否画成剪切线由 UI 层决定，本函数只负责几何。
  */
 export function buildClipLayout(stateKeyframes: StageStateKeyframe[], pxPerSecond: number): StateKeyframeClipBlock[] {

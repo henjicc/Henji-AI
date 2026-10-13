@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AiRuntimeError } from '../src/runtime/AiRuntimeError'
 import fixture from './fixtures/volcengine-speech/voice-clone.json'
 import { volcengineSeedIcl20Model as model } from '../src/catalog/volcengine-speech/seed-icl-2.0.model'
 import { execute, continuePolling } from '../src/providers/volcengine-speech'
@@ -13,6 +14,34 @@ function input(fetch: ReturnType<typeof vi.fn>, body = build()): ProviderExecuti
 afterEach(() => vi.useRealTimers())
 
 describe('Seed-ICL V3 voice training', () => {
+  // synthetic-negative：网关 HTML 不是官方音色响应 fixture。
+  it.each([false, true])('HTML 502 在新建/已有音色预检 existing=%s 归一为 SDK 错误', async existing => {
+    const fetch = vi.fn().mockResolvedValue(new Response('<html>502</html>', { status: 502 }))
+    const error = await execute(input(fetch, build(existing ? { volcCloneExistingSlot: 'S_fixture' } : {}))).catch((error: unknown) => error)
+    expect(error).toBeInstanceOf(AiRuntimeError)
+    expect(error).toMatchObject({ code: 'provider_http_error', details: { status: 502 }, message: expect.stringContaining('502') })
+    expect((error as Error).message).not.toContain('<html>')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('损坏 2xx JSON 和业务失败保留 SDK 错误与 HTTP 状态', async () => {
+    await expect(execute(input(vi.fn().mockResolvedValue(new Response('broken'))))).rejects.toMatchObject({ code: 'invalid_json', details: { status: 200 } })
+    await expect(execute(input(vi.fn().mockResolvedValue(response({ code: 45000001, message: 'bad audio' }))))).rejects.toMatchObject({ code: 'provider_task_failed', details: { status: 200 } })
+  })
+
+  it('轮询遇到 HTML 502 最终保留 HTTP 原因，且不重训', async () => {
+    vi.useFakeTimers()
+    const fetch = vi.fn().mockResolvedValueOnce(response({ speaker_id: 'custom_speaker_id', status: 1 }))
+      .mockImplementation(() => Promise.resolve(new Response('<html>502</html>', { status: 502 })))
+    const request = input(fetch)
+    const pending = await execute(request)
+    const error = continuePolling({ ...request, taskId: pending.taskId! }).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await error).toMatchObject({ code: 'provider_task_unreachable', message: expect.stringContaining('502') })
+    expect(fetch).toHaveBeenCalledTimes(21)
+    expect(fetch.mock.calls.slice(1).every(([url]) => String(url).endsWith('/get_voice'))).toBe(true)
+  })
+
   it.each(['zh_female_vv_uranus_bigtts', 'ICL_uranus_en_female_charlie_tob'])('routes official system voice %s to TTS without clone activation', speaker => {
     const params = { volcIclMode: 'speech', volcSeedIclSpeaker: speaker }
     expect(build(params)).toEqual({ resource_id: 'seed-tts-2.0', req_params: { text: '你好，欢迎试听。', speaker, audio_params: { format: 'mp3', sample_rate: 24000, enable_subtitle: true } } })

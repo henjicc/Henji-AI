@@ -95,6 +95,7 @@ function GalleryContent(): JSX.Element {
 
 export function UiGalleryPage(): JSX.Element | null {
   // App 的启动参数分支不在本任务所有权内；本页自身拒绝正式构建挂载内容。
-  if (!import.meta.env.DEV) return null
+  // 与 App.tsx 同口径：开发运行或 --mode development 的巡检产物才渲染。
+  if (!import.meta.env.DEV && import.meta.env.MODE !== 'development') return null
   return <GalleryContent />
 }

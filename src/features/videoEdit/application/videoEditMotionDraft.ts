@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
@@ -340,7 +341,12 @@ export async function reopenVideoMotion(id: string, draftId: string): Promise<vo
   const owner = requireVideoEditInstance(id); const draft = head(owner).drafts.find(d => d.id === draftId)
   if (!draft) throw new Error('原稿不存在。')
   if (['recording', 'paused', 'optimizing'].includes(states.get(owner)?.status ?? '')) throw new Error('请先结束当前示范或整理，再打开原稿。')
-  const expected = owner.document
+  const contentVersion = owner.contentVersion
+  const readInput = (): string => {
+    const current = head(owner); const original = current.drafts.find(value => value.id === draftId); const settings = current.motionOptions?.find(value => value.draftId === draftId)
+    return JSON.stringify([original, settings, creativeIntentLiveResources([{ ...current, drafts: original ? [original] : [], sessions: [], motionOptions: settings ? [settings] : [] }])])
+  }
+  const expectedInput = readInput()
   const options = head(owner).motionOptions?.find(o => o.draftId === draftId)
   const state: VideoMotionState = { owner, draft: structuredClone(draft), status: 'reviewing', mode: 'navigate', property: 'position', speed: 1, capture: 'place', pose: draft.targets[0].basePose, preview: 'original', candidates: [], recent: [], pending: [], inputLatencies: [], intent: options?.intent, selectedTakeIds: options?.selectedTakeIds, appliedBaseDigest: options?.appliedBaseDigest }
   state.pinnedSamples = []
@@ -356,7 +362,9 @@ export async function reopenVideoMotion(id: string, draftId: string): Promise<vo
   }
   for (const ref of draft.candidateRefs) { const resource = head(owner).resources.find(r => r.resourceId === ref.resourceId)!; const candidate = await readMotionCandidate(resource); state.candidates.push(candidate); if (ref.resourceId === draft.selectedCandidateRef) state.preview = candidate.id }
   if (options?.originalRef) { state.originalRef = head(owner).resources.find(r => r.resourceId === options.originalRef!.resourceId)!; state.original = await readMotionCandidate(state.originalRef) }
-  if (owner.document !== expected) throw new Error('原稿所在文档已改变，请重新打开原稿。')
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原稿所在文档已改变，请重新打开原稿。')
+  // 只核对本原稿的读取输入；其他任务的元数据更新不使其失效，移除原稿或资源则必须拒绝。
+  if (readInput() !== expectedInput) throw new Error('原稿数据已改变，请重新打开原稿。')
   const clip = targetClip(state); const sequence = owner.document.sequences.find(s => s.clips.some(c => c.id === clip.id))!
   switchVideoEditSequence(id, sequence.id); setVideoEditView(id, { selection: clip.id, frame: state.endpoints?.[0]?.timeline?.frame ?? clip.start, playing: false })
   try {
@@ -546,10 +554,10 @@ export async function applyVideoMotion(id: string): Promise<void> {
   const runtime = runtimes.get(state.owner)!; const inputRevision = runtime.inputRevision
   const input = await inputFor(state); assertCandidateCurrent(candidate, motionCandidateIdentity(state.draft, input))
   if (states.get(state.owner) !== state || runtime.inputRevision !== inputRevision) throw new Error('原稿已有后续修改，请重新预览。')
-  const expected = state.owner.document; const clip = targetClip(state); const seq = owningSequence(state)
+  const contentVersion = state.owner.contentVersion; const clip = targetClip(state); const seq = owningSequence(state)
   const transactionId = crypto.randomUUID()
   editVideoProject(id, document => {
-    if (state.owner.document !== expected) throw new Error('片段已有后续修改，请重新预览。')
+    if (!isVideoEditContentCurrent(state.owner, contentVersion)) throw new Error('片段已有后续修改，请重新预览。')
     const sequence = document.sequences.find(s => s.id === seq.id)!
     sequence.clips = sequence.clips.map(c => c.id === clip.id ? mergeMotionClipCurves(c, candidate.motions) : c)
     const ids = new Set(state.constraints?.annotations.filter(a => a.role !== 'text').map(a => a.id))

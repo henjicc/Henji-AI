@@ -1,15 +1,16 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance } from './videoEditService'
 import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMaterial/parameters'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import type { VideoEditCodeTarget } from './videoEditCodeParameters'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
-import { editVideoProject, requireVideoEditInstance } from './videoEditService'
 import { importVideoEditSources } from './videoEditMedia'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 
 export type VideoEditCodeImageBinding = { kind: 'media'; mediaId: string } | { kind: 'file'; path: string } | { kind: 'asset'; assetId: string } | null
 /** 现有图片选择与生成结果导入共用的候选文档检查；调用方负责一次提交。 */
-export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarget, key: string, document: VideoEditDocument, mediaId: string | null, baseline: VideoEditDocument, signal?: AbortSignal): Promise<VideoEditDocument> {
+export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarget, key: string, document: VideoEditDocument, mediaId: string | null, contentVersion: number, signal?: AbortSignal): Promise<VideoEditDocument> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId)
   const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
@@ -21,21 +22,21 @@ export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarg
   if (mediaId && !document.media.some(media => media.id === mediaId && media.kind === 'image')) throw new Error('请选择此剪辑中的图片。')
   code.parameters[key] = validateCodeMaterialParameterValue(declaration, mediaId ? { kind: 'image', mediaId } : null)
   const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? clip.start))
-  await trialVideoEditCodeDocument(owner, baseline, document, sequence.id, frame, signal, [{ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: [target.effectId] } : {}) }])
+  await trialVideoEditCodeDocument(owner, contentVersion, document, sequence.id, frame, signal, [{ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: [target.effectId] } : {}) }])
   return document
 }
 export async function bindVideoEditCodeImage(target: VideoEditCodeTarget, key: string, input: VideoEditCodeImageBinding, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
-  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
-  const bind = (document: VideoEditDocument, mediaId: string | null): Promise<VideoEditDocument> => prepareVideoEditCodeImageBinding(target, key, document, mediaId, baseline, signal)
+  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
+  const bind = (document: VideoEditDocument, mediaId: string | null): Promise<VideoEditDocument> => prepareVideoEditCodeImageBinding(target, key, document, mediaId, contentVersion, signal)
   if (!input || input.kind === 'media') {
     const document = await bind(structuredClone(baseline), input?.mediaId ?? null)
     signal?.throwIfAborted()
-    if (requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('原剪辑已关闭或内容已改变，请重新选择图片。')
-    editVideoProject(target.projectId, () => document); return
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或内容已改变，请重新选择图片。')
+    editVideoProject(target.projectId, current => withVideoEditCurrentMetadata(document, current)); return
   }
   signal?.throwIfAborted()
-  if (requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('原剪辑已关闭或内容已改变，请重新选择图片。')
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或内容已改变，请重新选择图片。')
   await importVideoEditSources(target.projectId, [input.kind === 'asset' ? { assetId: input.assetId } : { path: input.path }], undefined, signal, async (document, ids) => {
     const item = document.items.find(item => item.id === ids[0])
     if (!item?.mediaId || item.kind !== 'image') throw new Error('此参数只接受图片文件。')
@@ -44,9 +45,9 @@ export async function bindVideoEditCodeImage(target: VideoEditCodeTarget, key: s
 }
 export async function chooseVideoEditCodeImage(target: VideoEditCodeTarget, key: string, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(target.projectId)
-  const baseline = owner.document
+  const contentVersion = owner.contentVersion
   const path = await getPlatform().system.dialog.open({ filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'avif'] }] })
   if (!path || Array.isArray(path)) return
-  if (requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('原剪辑已关闭或内容已改变，请重新选择图片。')
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或内容已改变，请重新选择图片。')
   await bindVideoEditCodeImage(target, key, { kind: 'file', path }, signal)
 }

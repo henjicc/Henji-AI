@@ -16,7 +16,7 @@ import {
   resolveDevelopmentWindowPosition,
   type WindowPresentationMode,
 } from './window-presentation'
-import { isTrustedMainRendererUrl } from './security/main-renderer-url'
+import { installRendererNavigationGuards } from './security/main-renderer-url'
 import { resolveDevelopmentLaunchQuery } from './development-launch'
 
 const logger = createMainLogger('main.window')
@@ -67,15 +67,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   const openSession = bindWindowStateEvents(win, Boolean(options.beforeRendererLoad))
   // 只有剪辑系统浮窗的受控 about:blank 请求放行，其余开窗一律拒绝。
   const videoEditPopouts = createVideoEditPopoutHost(win)
-  win.webContents.setWindowOpenHandler(details => videoEditPopouts.handleWindowOpen(details) ?? { action: 'deny' })
-  win.webContents.on('will-navigate', (event, url) => {
-    if (isTrustedMainRendererUrl(url)) return
-    event.preventDefault()
-    logger.warn('已阻止主窗口导航到非应用来源', {
-      event: 'window.navigation.blocked',
-      context: { protocol: (() => { try { return new URL(url).protocol } catch { return 'invalid' } })() },
-    })
-  })
+  installRendererNavigationGuards(win.webContents, 'main', details => videoEditPopouts.handleWindowOpen(details))
   win.webContents.on('did-start-loading', () => {
     void cleanupAllVideoFrameExports('renderer_reloading')
   })

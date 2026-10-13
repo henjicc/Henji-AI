@@ -25,10 +25,10 @@ export interface VideoEditCreativeResult { asset: AssetRecord; origin?: VideoEdi
 export interface VideoEditResultReceipt { projectId: string; sequenceId: string; clipId: string; itemId?: string; assetId: string; verified: boolean }
 interface TargetState {
   owner: VideoEditInstance
-  baseline: VideoEditDocument
+  contentVersion: number
   placement: VideoEditResultPlacement
   busy: boolean
-  committed?: { document: VideoEditDocument; result: string; receipt: VideoEditResultReceipt }
+  committed?: { contentVersion: number; result: string; receipt: VideoEditResultReceipt }
 }
 const targets = new WeakMap<VideoEditResultTarget, TargetState>()
 
@@ -40,7 +40,7 @@ function stateOf(target: VideoEditResultTarget, signal?: AbortSignal): TargetSta
 }
 export function assertVideoEditResultTarget(target: VideoEditResultTarget, signal?: AbortSignal): void {
   const state = stateOf(target, signal)
-  if (state.owner.document !== (state.committed?.document ?? state.baseline)) throw new Error('原剪辑已有修改，请重新选择结果位置；已完成文件仍保留。')
+  if (state.owner.contentVersion !== (state.committed?.contentVersion ?? state.contentVersion)) throw new Error('原剪辑已有修改，请重新选择结果位置；已完成文件仍保留。')
 }
 export function readVideoEditResultPlacement(target: VideoEditResultTarget): VideoEditResultPlacement {
   assertVideoEditResultTarget(target)
@@ -61,7 +61,7 @@ export function captureVideoEditResultTarget(projectId: string, sequenceId: stri
   }
   if (placement.mode !== 'replace' && placement.mode !== 'library' && (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame >= Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) || placement.duration !== undefined && (!Number.isSafeInteger(placement.duration) || placement.duration < 1))) throw new Error('请选择序列范围内的落点与正整数帧时长。')
   const target = Object.freeze({ projectId, sequenceId, id: crypto.randomUUID() })
-  targets.set(target, { owner, baseline: owner.document, placement: { ...placement }, busy: false })
+  targets.set(target, { owner, contentVersion: owner.contentVersion, placement: { ...placement }, busy: false })
   return target
 }
 
@@ -99,7 +99,7 @@ export async function placeVideoEditFileInProject(owner: VideoEditInstance, file
 async function verifySaved(target: VideoEditResultTarget, state: TargetState): Promise<VideoEditResultReceipt> {
   await saveVideoEdit(target.projectId)
   assertVideoEditResultTarget(target)
-  const stored = await verifyVideoEditSaved(target.projectId, state.committed!.document)
+  const stored = await verifyVideoEditSaved(target.projectId, state.owner.document, { contentOnly: true })
   assertVideoEditResultTarget(target)
   if (!stored) throw new Error('结果已加入原剪辑，但保存回读不一致，请重试保存。')
   return { ...state.committed!.receipt, verified: true }
@@ -173,19 +173,19 @@ export async function commitVideoEditCreativeResult(target: VideoEditResultTarge
     stateOf(target)
     const committed = state.owner.document
     const published = clipId ? publishedClip(committed, target.sequenceId, clipId, expectedClip) : JSON.stringify(committed.items.find(value => value.id === itemId)) === expectedItem
-    if (committed.revision > state.baseline.revision + 1 || !published) throw new Error('结果发布后原剪辑已有后续修改，请回读原素材或片段；不会重复回填。')
+    if (state.owner.contentVersion > state.contentVersion + 1 || !published) throw new Error('结果发布后原剪辑已有后续修改，请回读原素材或片段；不会重复回填。')
     const receipt = { projectId: target.projectId, sequenceId: target.sequenceId, clipId: clipId ?? '', ...(!clipId ? { itemId } : {}), assetId: asset.id, verified: false }
     // 片段引用了来源文档：来源草稿哪怕只导入了素材，离开时也不能当空草稿删掉
     if (origin?.type === 'document') getDocumentSessionRegistry().get(origin.docRef.docId)?.markInUse()
-    state.committed = { document: committed, result: resultKey, receipt }
+    state.committed = { contentVersion: state.owner.contentVersion, result: resultKey, receipt }
     // After the atomic edit, late cancellation cannot turn a committed result into a retry.
     const saved = await verifySaved(target, state)
     logger.info('创作结果已回填原剪辑位置', { event: 'video_edit.result.commit.completed', context: { ...saved, origin, durationMs: Math.round(performance.now() - started) } })
     return saved
   } catch (error) {
     logger.warn('创作结果回填未完成，原结果保留', { event: 'video_edit.result.commit.failed', error, context: { projectId: target.projectId, sequenceId: target.sequenceId, committed: Boolean(state.committed) } })
-    // import 在独立副本上校验，发布前拒绝不会改原文档；只根据实际对象身份报告零提交。
-    if (!state.committed && state.owner.document === state.baseline) {
+    // import 在独立副本上校验，发布前拒绝不会改原内容。
+    if (!state.committed && state.owner.contentVersion === state.contentVersion) {
       throw new ApplicationTransactionFailure({ status: 'failed', code: 'EXECUTION_FAILED', message: error instanceof Error ? error.message : String(error), recoverable: true,
         partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] } })
     }

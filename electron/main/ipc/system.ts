@@ -7,6 +7,7 @@ import {
   joinPath,
   makeDir,
   nativeFetch,
+  NATIVE_FETCH_MAX_TIMEOUT_MS,
   openExternalUrl,
   pathExists,
   readDirectory,
@@ -203,6 +204,7 @@ function parseNativeFetchRequest(input: unknown): NativeFetchRequestDto {
   const url = record.url
   const method = record.method
   const body = record.body
+  const timeoutMs = record.timeoutMs
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error('Expected non-empty string field "url"')
   }
@@ -212,11 +214,15 @@ function parseNativeFetchRequest(input: unknown): NativeFetchRequestDto {
   if (body !== undefined && typeof body !== 'string' && !isUint8Array(body)) {
     throw new Error('Expected string or Uint8Array field "body"')
   }
+  if (timeoutMs !== undefined && (typeof timeoutMs !== 'number' || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > NATIVE_FETCH_MAX_TIMEOUT_MS)) {
+    throw new Error(`Expected timeoutMs to be an integer between 1 and ${NATIVE_FETCH_MAX_TIMEOUT_MS}`)
+  }
   return {
     url,
     method,
     headers: parseHeaders(record.headers),
     body,
+    timeoutMs,
   }
 }
 

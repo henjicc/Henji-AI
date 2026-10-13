@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { uploadToFal } from '../src/upload'
 import { uploadToFalWithTransport } from '../src/upload/fal-transport'
@@ -17,6 +17,56 @@ function transportFor(fetchMock: typeof fetch) {
 }
 
 describe('upload providers', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it.each([['KIE', uploadToKie], ['APIMart', uploadToApiMart]] as const)('%s 上传函数保留 HTML 503 状态且不重传', async (_name, upload) => {
+    // synthetic-negative：网关 HTML。
+    const fetchMock = vi.fn().mockResolvedValue(new Response('<html>upload gateway unavailable</html>', { status: 503 }))
+    await expect(upload('fixture-key', { bytes: new Uint8Array([1]), mimeType: 'image/png', filename: 'a.png' }, transportFor(fetchMock))).rejects.toMatchObject({
+      code: 'upload_failed', details: { status: 503 }, message: expect.stringContaining('HTTP 503'),
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([['KIE', uploadToKie], ['APIMart', uploadToApiMart]] as const)('%s 预先取消时不启动上传', async (_name, upload) => {
+    const controller = new AbortController()
+    controller.abort()
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { downloadUrl: 'https://media.invalid/a.png' }, url: 'https://media.invalid/a.png' }))
+    await expect(upload('fixture-key', { bytes: new Uint8Array([1]), mimeType: 'image/png', filename: 'a.png' }, transportFor(fetchMock), controller.signal)).rejects.toMatchObject({ code: 'cancelled' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([['KIE', uploadToKie], ['APIMart', uploadToApiMart]] as const)('%s 两分钟上传期限中止请求并释放资源', async (_name, upload) => {
+    vi.useFakeTimers()
+    let uploadSignal: AbortSignal | null | undefined
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      uploadSignal = init?.signal
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+    })
+    const controller = new AbortController()
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener')
+    const result = upload('fixture-key', { bytes: new Uint8Array([1]), mimeType: 'image/png', filename: 'a.png' }, transportFor(fetchMock), controller.signal).catch((error: unknown) => error)
+    expect(uploadSignal).toBeInstanceOf(AbortSignal)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(uploadSignal?.aborted).toBe(true)
+    expect(await result).toMatchObject({ code: 'upload_timeout' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it.each([['KIE', uploadToKie], ['APIMart', uploadToApiMart]] as const)('%s 成功上传也清理父信号监听和期限', async (_name, upload) => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener')
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { downloadUrl: 'https://media.invalid/a.png' }, url: 'https://media.invalid/a.png' }))
+    await expect(upload('fixture-key', { bytes: new Uint8Array([1]), mimeType: 'image/png', filename: 'a.png' }, transportFor(fetchMock), controller.signal)).resolves.toBe('https://media.invalid/a.png')
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('通过 Transport 完成 Fal initiate + signed PUT 并保持两参数兼容 wrapper', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({

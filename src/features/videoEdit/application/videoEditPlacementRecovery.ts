@@ -1,6 +1,7 @@
+import { isVideoEditContentCurrent, verifyVideoEditContentSaved } from './videoEditDocumentAlgorithm'
 import type { LocalHostRequest } from '@/core/application-control/localHostContracts'
 import type { ApplicationExecutionContext } from '@/core/application-control/execution/types'
-import { openVideoEditDocument, requireVideoEditInstance, verifyVideoEditSaved } from './videoEditService'
+import { openVideoEditDocument } from './videoEditService'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { getPlatform } from '@/platform/runtime'
 
@@ -11,7 +12,7 @@ export async function recoverVideoEditPlacement(request: NonNullable<LocalHostRe
   if (!context.permissions.has('video_edit:read')) throw new Error('PERMISSION_DENIED:核对原剪辑需要读取授权。')
   context.signal?.throwIfAborted()
   const owner = await openVideoEditDocument({ id: proof.documentId }, { focus: false })
-  const baseline = owner.document
+  const baseline = owner.document; const contentVersion = owner.contentVersion
   const placement = baseline.creativePlacements?.find(value => value.operationId === proof.operationId)
   context.signal?.throwIfAborted()
   if (!placement) return { ok: false, error: { code: 'PLACEMENT_NOT_RETAINED', message: '原宿主已结束，当前剪辑没有保留此次放入修改；原生成文件仍可复用。',
@@ -26,9 +27,9 @@ export async function recoverVideoEditPlacement(request: NonNullable<LocalHostRe
     // 项目内媒体重开会解除素材库绑定；实际文件内容仍须与原正式资产一致。
     retained = asset.mediaType === media.kind && Boolean(asset.contentIdentity) && content.contentIdentity === asset.contentIdentity && content.sizeBytes === asset.sizeBytes
   }
-  const saved = await verifyVideoEditSaved(proof.documentId, baseline)
+  const saved = await verifyVideoEditContentSaved(owner, baseline, contentVersion)
   context.signal?.throwIfAborted()
-  if (!saved || requireVideoEditInstance(proof.documentId) !== owner || owner.document !== baseline) return undefined
+  if (!saved || !isVideoEditContentCurrent(owner, contentVersion)) return undefined
   const resultRef = { kind: placement.clipId ? 'video_edit.clip' : 'video_edit.item', id: `${proof.documentId}:${placement.clipId || placement.itemId}` }
   return { ok: true, data: { resultRef, documentRef: { kind: 'video_edit.document', id: proof.documentId }, assetRef: { kind: 'asset', id: placement.assetId },
     message: retained ? '已从原剪辑核对并保存的放入结果，不会重复放入。' : '原操作已经执行，结果已被后续修改或移除。',

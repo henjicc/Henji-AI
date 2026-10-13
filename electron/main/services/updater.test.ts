@@ -29,7 +29,7 @@ vi.mock('electron', () => ({
 vi.mock('electron-updater', () => ({ autoUpdater: mocks.updater }))
 vi.mock('./logging', () => ({ createMainLogger: () => mocks.logger }))
 
-import { checkForElectronUpdates, isNoUpdateMetadataError } from './updater'
+import { checkForElectronUpdates, downloadElectronUpdate, getUpdaterStatus, isNoUpdateMetadataError } from './updater'
 
 function updaterError(message: string, code?: string): Error {
   return Object.assign(new Error(message), code ? { code } : {})
@@ -77,6 +77,31 @@ describe('自动更新：发布源没有更新元数据', () => {
     expect(mocks.logger.error.mock.calls[0][1]).toMatchObject({ event: 'updater.status.failed' })
     expect(mocks.logger.warn).not.toHaveBeenCalled()
     expect(mocks.sent.map((event) => (event as { type: string }).type)).toEqual(['checking', 'error'])
+  })
+
+  it('下载失败保留更新信息，第二次下载可成功；重试清理旧错误', async () => {
+    const info = { version: '2.0.0', releaseName: 'v2', releaseNotes: 'notes', releaseDate: '2026-10-01' }
+    mocks.updater.checkForUpdates.mockImplementation(async () => {
+      mocks.updater.emit('checking-for-update')
+      mocks.updater.emit('update-available', info)
+      return { updateInfo: info }
+    })
+    await checkForElectronUpdates()
+    mocks.updater.downloadUpdate.mockImplementationOnce(async () => {
+      mocks.updater.emit('download-progress', { percent: 42, transferred: 42, total: 100, bytesPerSecond: 1 })
+      const error = new Error('connection reset')
+      mocks.updater.emit('error', error)
+      throw error
+    }).mockImplementationOnce(async () => {
+      expect(getUpdaterStatus().errorMessage).toBeUndefined()
+      mocks.updater.emit('update-downloaded', info)
+    })
+    await expect(downloadElectronUpdate()).rejects.toThrow('connection reset')
+    expect(getUpdaterStatus()).toMatchObject({ status: 'error', hasUpdate: true, latestVersion: '2.0.0', releaseInfo: { body: 'notes' } })
+    expect(getUpdaterStatus().progress).toBeUndefined()
+    expect(mocks.sent.at(-1)).toMatchObject({ type: 'error', result: { hasUpdate: true, latestVersion: '2.0.0' } })
+    await expect(downloadElectronUpdate()).resolves.toMatchObject({ status: 'downloaded', hasUpdate: true })
+    expect(mocks.updater.downloadUpdate).toHaveBeenCalledTimes(2)
   })
 })
 

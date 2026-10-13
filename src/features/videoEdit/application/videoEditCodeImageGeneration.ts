@@ -101,7 +101,7 @@ async function land(job: CodeImageGenerationJob, signal: AbortSignal): Promise<v
     if (currentId !== job.bindingValue) throw new Error('生成期间此参数已选择其他图片。完成图片已保留，可点击“应用完成图片”确认替换。')
     const { projectId: _projectId, ...scope } = target
     media.codeImageGeneration = { ...scope, parameterKey, prompt, modelId: job.modelId, taskId: job.taskId, outputIndex: 0 }
-    return await prepareVideoEditCodeImageBinding(target, parameterKey, document, media.id, owner.document, signal)
+    return await prepareVideoEditCodeImageBinding(target, parameterKey, document, media.id, owner.contentVersion, signal)
   })
   const media = codeImageGenerationCandidates(target, parameterKey).find(media => media.codeImageGeneration?.taskId === job.taskId)
   // 编辑已提交：保存失败重试只保存，不再次生成、导入或绑定。

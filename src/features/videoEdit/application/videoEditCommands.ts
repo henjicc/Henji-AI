@@ -42,7 +42,7 @@ const NAVIGATIONS = new Set<VideoEditCommandId>(['go_prev_edit', 'go_next_edit',
 /** 素材面板自己的视图状态，只在素材面板里响应。 */
 const PROJECT_PANEL_COMMANDS = new Set<VideoEditCommandId>(['project_list_view', 'project_icon_view', 'project_toggle_view'])
 export interface VideoEditCommandContext { readonly projectId?: string; readonly sequenceId?: string; readonly scope: VideoEditCommandScope; readonly clipIds: readonly string[]; readonly itemIds: readonly string[]; readonly frame: number }
-interface ContextState { owner?: VideoEditInstance; document?: VideoEditInstance['document']; source?: VideoEditSourceState; sourceCommand?: VideoEditSourceCommandIdentity; targetTrackIds: string[]; clipboard?: VideoEditClipboard }
+interface ContextState { owner?: VideoEditInstance; contentVersion?: number; source?: VideoEditSourceState; sourceCommand?: VideoEditSourceCommandIdentity; targetTrackIds: string[]; clipboard?: VideoEditClipboard }
 const contexts = new WeakMap<VideoEditCommandContext, ContextState>()
 /**
  * The timeline selection is already the edit set: pickers expand linked partners per Linked
@@ -54,13 +54,13 @@ export function captureVideoEditCommandContext(projectId: string | undefined, sc
   let clipIds: string[] = []
   if (sequence && owner) clipIds = options.clipIds ? expandVideoEditSelection(sequence, options.clipIds, options.linked ?? false) : owner.selectedClipIds.slice()
   const context = Object.freeze({ projectId, sequenceId: owner?.activeSequenceId, scope, clipIds: Object.freeze(clipIds), itemIds: Object.freeze(options.itemIds?.slice() ?? owner?.selectedItemIds.slice() ?? []), frame: options.frame ?? owner?.frame ?? 0 })
-  contexts.set(context, { owner, document: owner?.document, source: owner ? readVideoEditSource(owner.document.id) : undefined, sourceCommand: owner && scope === 'source' ? videoEditSourceCommandIdentity(owner.document.id) : undefined, targetTrackIds: owner?.targetTrackIds.slice() ?? [], clipboard: owner && options.includeClipboard !== false ? readVideoEditClipboard(owner.document.id) : undefined })
+  contexts.set(context, { owner, contentVersion: owner?.contentVersion, source: owner ? readVideoEditSource(owner.document.id) : undefined, sourceCommand: owner && scope === 'source' ? videoEditSourceCommandIdentity(owner.document.id) : undefined, targetTrackIds: owner?.targetTrackIds.slice() ?? [], clipboard: owner && options.includeClipboard !== false ? readVideoEditClipboard(owner.document.id) : undefined })
   return context
 }
 function stateOf(context: VideoEditCommandContext): ContextState {
   const state = contexts.get(context)
   if (!state) throw new Error('剪辑命令上下文已失效。')
-  if (state.owner && (requireVideoEditInstance(context.projectId!) !== state.owner || state.owner.document !== state.document || state.owner.activeSequenceId !== context.sequenceId)) throw new Error('原剪辑或序列已改变，请重新选择操作。')
+  if (state.owner && (requireVideoEditInstance(context.projectId!) !== state.owner || state.owner.contentVersion !== state.contentVersion || state.owner.activeSequenceId !== context.sequenceId)) throw new Error('原剪辑或序列已改变，请重新选择操作。')
   if (state.sourceCommand && !matchesVideoEditSourceCommand(context.projectId!, state.sourceCommand)) throw new Error('源素材已有后续操作，请重新选择命令。')
   return state
 }

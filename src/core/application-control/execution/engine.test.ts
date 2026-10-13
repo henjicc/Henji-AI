@@ -55,7 +55,9 @@ describe('ApplicationControlExecutionEngine', () => {
 
   it('撤销记录只保留最近 256 次，旧回执失效而最新回执可用', async () => {
     const fixture = createFixture()
-    const { engine } = createEngine(fixture)
+    const { engine, executor } = createEngine(fixture)
+    const forget = vi.fn()
+    Object.assign(executor, { forget })
     const refs: string[] = []
     for (let i = 0; i < 257; i++) {
       const revision = fixture.revisions.value
@@ -64,10 +66,60 @@ describe('ApplicationControlExecutionEngine', () => {
       if (result.status !== 'completed' || !result.undoRef) throw new Error(JSON.stringify(result))
       refs.push(result.undoRef)
     }
+    expect(forget).toHaveBeenCalledTimes(1)
     const undo = (undoRef: string) => engine.undo({ undoRef, expectedRevisions: { 'sample.scope': fixture.revisions.value }, idempotencyKey: `undo-${undoRef}` }, context())
     expect(await undo(refs[0])).toMatchObject({ status: 'failed', code: 'NOT_FOUND' })
     expect(await undo(refs.at(-1)!)).toMatchObject({ status: 'completed' })
+    expect(forget).toHaveBeenCalledTimes(2)
   })
+  it.each(['collection', 'operation'] as const)('%s 回执淘汰和消费都释放对应 token', async (kind) => {
+    const fixture = createFixture()
+    const { engine } = createEngine(fixture)
+    const forget = vi.fn()
+    let serial = 0
+    const completed = () => ({ status: 'completed' as const, resultingRevisions: { 'sample.scope': 0 }, directRefs: [{ kind: 'sample.item', id: 'one' }], evidence: [{ kind: 'operation_result' as const, fact: '已完成测试操作', capturedAt: new Date().toISOString() }],
+      ...(kind === 'operation' ? { directEffects: [{ effect: 'execute' as const, entityType: 'sample.item', refs: [{ kind: 'sample.item', id: 'one' }], propertyIds: [], origin: { kind: 'direct' as const } }] } : {}),
+    })
+    const execute = async () => ({ ...completed(), undoToken: `snapshot-${++serial}` })
+    const undo = async () => completed()
+    engine.registerCollectionExecutor({ entityType: 'sample.item', effectContract: { direct: [], cascades: [] },
+      apply: async () => { fixture.values.delete('one'); return execute() }, undo, forget })
+    engine.registerOperationExecutor({ capabilityId: 'release_sample', capabilityVersion: 1, risk: 'R1', requiredPermissions: ['sample:write'], supportsAtomic: false,
+      effectContract: { direct: [], cascades: [] }, normalizeInput: input => input, getCurrentRevisions: async () => ({ 'sample.scope': 0 }), execute, undo, forget })
+    let latest = ''
+    for (let index = 0; index < 257; index++) {
+      fixture.values.set('one', 2)
+      const plan = await engine.plan({ summary: '释放回执', transactionMode: 'non_reversible', steps: [kind === 'collection' ? removalStep('one') :
+        { kind: 'operation', capabilityId: 'release_sample', capabilityVersion: 1, input: {}, expectedRevisions: { 'sample.scope': 0 } }] }, context())
+      const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: `snapshot-test-release-${index}` }, context())
+      if (result.status !== 'completed' || !result.undoRef) throw new Error(JSON.stringify(result))
+      latest = result.undoRef
+    }
+    expect(forget.mock.calls).toEqual([['snapshot-1']])
+    expect(await engine.undo({ undoRef: latest, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'snapshot-test-release-undo' }, context())).toMatchObject({ status: 'completed' })
+    expect(forget.mock.calls).toEqual([['snapshot-1'], ['snapshot-257']])
+  })
+
+  it('撤销零步失败保留快照，部分成功失败则释放整张回执且不重复执行', async () => {
+    const fixture = createFixture()
+    const { engine, executor } = createEngine(fixture)
+    const forget = vi.fn()
+    Object.assign(executor, { forget })
+    const plan = await engine.plan({ summary: '两个撤销步骤', transactionMode: 'compensatable', steps: [mutationStep('one', 6), mutationStep('two', 8)] }, context())
+    const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'snapshot-test-partial-release' }, context())
+    if (result.status !== 'completed' || !result.undoRef) throw new Error(JSON.stringify(result))
+    const original = executor.undo.bind(executor)
+    const undoSpy = vi.spyOn(executor, 'undo')
+    undoSpy.mockRejectedValueOnce(new Error('temporary'))
+    const request = { undoRef: result.undoRef, expectedRevisions: result.resultingRevisions }
+    expect(await engine.undo({ ...request, idempotencyKey: 'snapshot-test-zero-progress' }, context())).toMatchObject({ status: 'failed' })
+    expect(forget).not.toHaveBeenCalled()
+    undoSpy.mockImplementationOnce(original).mockRejectedValueOnce(new Error('partial'))
+    expect(await engine.undo({ ...request, idempotencyKey: 'snapshot-test-partial-progress' }, context())).toMatchObject({ status: 'failed' })
+    expect(forget).toHaveBeenCalledTimes(2)
+    expect(await engine.undo({ ...request, idempotencyKey: 'snapshot-test-after-partial' }, context())).toMatchObject({ status: 'failed', code: 'NOT_FOUND' })
+  })
+
   it('仅声明为无序集合的属性忽略顺序和重复，缺项与多项仍失败', async () => {
     const fixture = createFixture()
     const { engine } = createEngine(fixture)

@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from '../application/videoEditDocumentAlgorithm'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { selectVideoEditSubtitle } from '../application/videoEditSubtitleSelection'
 import { useLayoutEffect, useRef, useState } from 'react'
@@ -19,7 +20,7 @@ import { TIMELINE_HEADER_WIDTH, timelineArmedEdgeVelocity, timelineEdgeAxis, tim
 
 interface Point { x: number; y: number }
 export interface TimelineBox { from: Point; to: Point }
-interface BaseGesture { owner: VideoEditInstance; baseline: VideoEditInstance['document']; sequenceId: string; pointerId: number; origin: Point; client: Point; edge: { x: TimelineEdgeAxis; y: TimelineEdgeAxis }; tool: VideoEditInstance['tool']; zoom: number; pixels: number }
+interface BaseGesture { owner: VideoEditInstance; contentVersion: number; sequenceId: string; pointerId: number; origin: Point; client: Point; edge: { x: TimelineEdgeAxis; y: TimelineEdgeAxis }; tool: VideoEditInstance['tool']; zoom: number; pixels: number }
 type PointerGesture = BaseGesture & (
   /** `variant`: Premiere modifier drag of a clip body, read from the keys held on every move (Alt copy, Ctrl insert, both: copy and insert). */
   /** `newTracks`: tracks this drag creates above the top video track / below the bottom audio track, kept stable across moves. */
@@ -78,7 +79,7 @@ export function useTimelinePointer(options: Options) {
   const valid = (gesture: PointerGesture): boolean => {
     try {
       if (gesture.kind === 'transition' || gesture.kind === 'fade') return requireVideoEditInstance(gesture.owner.document.id) === gesture.owner && gesture.owner.activeSequenceId === gesture.sequenceId && current.current.pixels === gesture.pixels
-      return requireVideoEditInstance(gesture.owner.document.id) === gesture.owner && gesture.owner.document === gesture.baseline && gesture.owner.activeSequenceId === gesture.sequenceId && gesture.owner.tool === gesture.tool && gesture.owner.zoom === gesture.zoom && current.current.pixels === gesture.pixels && (gesture.kind !== 'clip' || JSON.stringify(gesture.owner.selectedClipIds) === JSON.stringify(gesture.ids))
+      return isVideoEditContentCurrent(gesture.owner, gesture.contentVersion) && gesture.owner.activeSequenceId === gesture.sequenceId && gesture.owner.tool === gesture.tool && gesture.owner.zoom === gesture.zoom && current.current.pixels === gesture.pixels && (gesture.kind !== 'clip' || JSON.stringify(gesture.owner.selectedClipIds) === JSON.stringify(gesture.ids))
     } catch { return false }
   }
   const detach = (): PointerGesture | undefined => {
@@ -230,7 +231,7 @@ export function useTimelinePointer(options: Options) {
   const base = (event: React.PointerEvent): BaseGesture => {
     const { instance, sequence } = current.current
     const client = { x: event.clientX, y: event.clientY }
-    return { owner: instance, baseline: instance.document, sequenceId: sequence.id, pointerId: event.pointerId, origin: point(client), client, edge: { x: timelineEdgeAxis(client.x), y: timelineEdgeAxis(client.y) }, tool: instance.tool, zoom: instance.zoom, pixels: current.current.pixels }
+    return { owner: instance, contentVersion: instance.contentVersion, sequenceId: sequence.id, pointerId: event.pointerId, origin: point(client), client, edge: { x: timelineEdgeAxis(client.x), y: timelineEdgeAxis(client.y) }, tool: instance.tool, zoom: instance.zoom, pixels: current.current.pixels }
   }
   /** `linked`: links follow Linked Selection, groups always; Alt inverts the former and singles out of groups (Premiere). */
   const select = (ids: string[], toggle: boolean, additive: boolean, linked: VideoEditRelations = videoEditPickRelations(current.current.instance.linkedSelection !== false)): void => {

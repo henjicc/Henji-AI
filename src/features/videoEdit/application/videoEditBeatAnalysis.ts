@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
 import { videoEditComposition, audibleVideoEditClips } from '@/core/videoEdit/document'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
@@ -20,7 +21,7 @@ export function cancelVideoEditBeatAnalysis(projectId: string): void { videoEdit
 
 /** UI and assistant share PCM rendering, cancellable Worker analysis and one marker transaction. */
 export async function analyzeVideoEditBeats(target: VideoEditBeatTarget, signal?: AbortSignal): Promise<VideoEditMarker[]> {
-  const owner = requireVideoEditInstance(target.projectId), baseline = owner.document
+  const owner = requireVideoEditInstance(target.projectId), baseline = owner.document; const contentVersion = owner.contentVersion
   if (tasks.has(owner)) throw new Error('正在分析节拍，请稍候或取消。')
   const composition = structuredClone(videoEditComposition(baseline, target.sequenceId))
   const clip = target.clipId ? composition.clips.find(c => c.id === target.clipId) : undefined
@@ -37,7 +38,7 @@ export async function analyzeVideoEditBeats(target: VideoEditBeatTarget, signal?
   signal?.addEventListener('abort', abort, { once: true })
   const assertCurrent = (): void => {
     task.controller.signal.throwIfAborted()
-    if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('剪辑已有修改或已关闭，请重新分析节拍。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('剪辑已有修改或已关闭，请重新分析节拍。')
   }
   const unsubscribe = subscribeVideoEdit(() => { if (!listVideoEditInstances().includes(owner)) task.controller.abort() })
   const release = holdVideoEditActivity(target.projectId, '分析节拍')

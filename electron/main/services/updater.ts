@@ -214,7 +214,9 @@ function configureUpdater(): void {
       return
     }
     setStatus('error', {
-      ...makeBaseStatus('error'),
+      ...(currentStatus.hasUpdate ? currentStatus : makeBaseStatus('error')),
+      status: 'error',
+      progress: undefined,
       errorMessage: error.message,
     })
   })
@@ -299,6 +301,8 @@ export async function downloadElectronUpdate(): Promise<UpdaterCheckResultDto> {
   setStatus('download-progress', {
     ...currentStatus,
     status: 'downloading',
+    progress: undefined,
+    errorMessage: undefined,
   })
   await autoUpdater.downloadUpdate()
   return currentStatus

@@ -1,10 +1,11 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { videoEditClipMedia, videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { videoEditGainVolumes, type VideoEditGainMode, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.loudness')
 export interface VideoEditGainTarget { projectId: string; sequenceId: string; clipIds: string[] }
@@ -41,8 +42,8 @@ function snapshot(target: VideoEditGainTarget): { owner: VideoEditInstance; comp
   if (!clips.length || clips.length !== ids.size || clips.some(clip => !videoEditClipHasSound(composition, clip))) throw new Error('请选择完整的声音片段或带声音的视频片段。')
   return { owner, composition, clips }
 }
-function unchanged(owner: VideoEditInstance, baseline: VideoEditInstance['document']): void {
-  if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('测量期间剪辑已有修改或已关闭，请重新测量。')
+function unchanged(owner: VideoEditInstance, contentVersion: number): void {
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('测量期间剪辑已有修改或已关闭，请重新测量。')
 }
 async function measureClip(composition: VideoEditComposition, clip: VideoEditClip, signal?: AbortSignal): Promise<VideoEditLoudnessMeasurement> {
   // Solo the explicit clip, preserve its mapping, speed, effects and fades; exclude neighbours' transitions.
@@ -56,17 +57,17 @@ async function measureClip(composition: VideoEditComposition, clip: VideoEditCli
   finally { signal?.removeEventListener('abort', abort); await api.close(id) }
 }
 export async function measureVideoEditClips(target: VideoEditGainTarget, signal?: AbortSignal): Promise<VideoEditLoudnessMeasurement[]> {
-  const { owner, composition, clips } = snapshot(target); const baseline = owner.document
+  const { owner, composition, clips } = snapshot(target); const contentVersion = owner.contentVersion
   logger.info('开始测量片段响度', { event: 'video_edit.loudness.measure.start', context: { projectId: target.projectId, clips: clips.length } })
   try {
     const results = []
-    for (const clip of clips) { results.push(await measureClip(composition, clip, signal)); unchanged(owner, baseline) }
+    for (const clip of clips) { results.push(await measureClip(composition, clip, signal)); unchanged(owner, contentVersion) }
     logger.info('片段响度测量完成', { event: 'video_edit.loudness.measure.completed', context: { projectId: target.projectId, clips: results.length } }); return results
   } catch (error) { logger.error('片段响度测量失败', error, { event: 'video_edit.loudness.measure.failed' }); throw error }
 }
 /** All selected clips commit ONCE after all analyses/checks. No partial writes, no silent clamping. */
 export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode: VideoEditGainMode, value: number, signal?: AbortSignal): Promise<{ clipId: string; volume: number; measurement?: VideoEditLoudnessMeasurement }[]> {
-  const { owner, composition, clips } = snapshot(target); const baseline = owner.document
+  const { owner, composition, clips } = snapshot(target); const contentVersion = owner.contentVersion
   assertVideoEditClipsEditable(composition, clips.map(clip => clip.id))
   signal?.throwIfAborted()
   logger.info('开始调整片段增益', { event: 'video_edit.loudness.gain.start', context: { projectId: target.projectId, mode, clips: clips.length } })
@@ -75,7 +76,7 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
     const bases = clips.map(clip => clip.volume || 1)
     const measurements: VideoEditLoudnessMeasurement[] = []
     if (mode !== 'set' && mode !== 'adjust') for (let index = 0; index < clips.length; index++) {
-      measurements.push(await measureClip(composition, { ...clips[index], volume: bases[index] }, signal)); unchanged(owner, baseline)
+      measurements.push(await measureClip(composition, { ...clips[index], volume: bases[index] }, signal)); unchanged(owner, contentVersion)
     }
     const volumes = videoEditGainVolumes(mode, value, mode === 'set' || mode === 'adjust' ? clips.map(clip => clip.volume) : bases, measurements)
     const results = clips.map((clip, index) => ({ clipId: clip.id, volume: volumes[index], measurement: measurements[index] }))
@@ -84,7 +85,7 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
       let verified = false
       for (let attempt = 0; attempt < 4; attempt++) {
         const measured = await measureClip(composition, { ...clips[index], volume: results[index].volume }, signal)
-        unchanged(owner, baseline); results[index].measurement = measured
+        unchanged(owner, contentVersion); results[index].measurement = measured
         const level = mode === 'loudness' ? measured.integratedLufs : measured.samplePeakDbfs
         if (level === null) throw new Error('声音低于测量门限，无法标准化。')
         if (Math.abs(level - value) <= (mode === 'loudness' ? .5 : .1)) { verified = true; break }
@@ -96,7 +97,7 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
       let verified = false
       for (let attempt = 0; attempt < 4; attempt++) {
         const measured = []
-        for (let index = 0; index < clips.length; index++) { measured.push(await measureClip(composition, { ...clips[index], volume: results[index].volume }, signal)); unchanged(owner, baseline); results[index].measurement = measured[index] }
+        for (let index = 0; index < clips.length; index++) { measured.push(await measureClip(composition, { ...clips[index], volume: results[index].volume }, signal)); unchanged(owner, contentVersion); results[index].measurement = measured[index] }
         const levels = measured.map(result => result.samplePeakDbfs)
         if (levels.some(level => level === null)) throw new Error('声音为静音，无法标准化峰值。')
         if (Math.abs(Math.max(...levels as number[]) - value) <= .1) { verified = true; break }
@@ -105,7 +106,7 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
       }
       if (!verified) throw new Error('片段效果限制了峰值，请调整效果后重试。')
     }
-    signal?.throwIfAborted(); unchanged(owner, baseline)
+    signal?.throwIfAborted(); unchanged(owner, contentVersion)
     editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id !== target.sequenceId ? sequence : { ...sequence, clips: sequence.clips.map(clip => { const result = results.find(result => result.clipId === clip.id); return result ? { ...clip, volume: result.volume } : clip }) }) }))
     logger.info('片段增益调整完成', { event: 'video_edit.loudness.gain.completed', context: { projectId: target.projectId, mode, clips: results.length } }); return results
   } catch (error) { logger.error('片段增益调整失败', error, { event: 'video_edit.loudness.gain.failed' }); throw error }

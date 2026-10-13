@@ -9,6 +9,7 @@ import { registerVideoEditTimelineViewport } from './videoEditTimelineViewport'
 import { registerVideoEditSourcePresenter, readVideoEditSource, updateVideoEditSource, observeVideoEditSource } from './videoEditSource'
 import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 import { selectVideoEditTransition } from './videoEditTransitions'
+import { updateVideoEditCreativeIntents } from './videoEditService'
 
 // 过渡命令的画面试渲染需要 GPU Worker；命令层只验证编辑与撤销，试渲染由 videoEditCodeService.test 覆盖。
 vi.mock('./videoEditCodeTrial', async () => ({ ...await vi.importActual<typeof import('./videoEditCodeTrial')>('./videoEditCodeTrial'), trialVideoEditCodeDocument: async () => undefined }))
@@ -30,6 +31,14 @@ async function fixture() {
   setVideoEditTimelineView(id, { selectedClipIds: [first] }, first)
   return { owner, id, first, second, sequence: getActiveVideoEditSequence(owner) }
 }
+it('元数据写入不使捕获的命令上下文失效，内容编辑仍使其失效', async () => {
+  const { id } = await fixture()
+  const context = captureVideoEditCommandContext(id, 'timeline', { frame: 20 })
+  updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+  expect(videoEditCommandState(context, 'split').enabled).toBe(true)
+  await executeVideoEditCommand(context, 'split')
+  expect(videoEditCommandState(context, 'split').enabled).toBe(false)
+})
 it('菜单与键位共用命令，捕获的选区和播放头不被延迟点击改写', async () => {
   const { owner, id, first, second } = await fixture(); const history = owner.past.length
   const context = captureVideoEditCommandContext(id, 'timeline', { frame: 20 })

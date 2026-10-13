@@ -77,27 +77,8 @@ export function hasForcedHardCut(current: StageStateKeyframe, next: StageStateKe
   return !!current.cameraId && !!next.cameraId && current.cameraId !== next.cameraId
 }
 
-/**
- * 顺序累加 hold + 过渡时长得到每枚状态关键帧的停留/过渡时间点；末点只算 hold。
- * 相邻两卡机位不同时，该段过渡的"有效时长"在这里被视为 0（强制硬切，重要记录 005）；
- * `stateKeyframe.transitionDuration` 本身不被改写，机位改回相同后布点自动恢复原时长。
- */
+/** 绝对时间点决定过渡区间；跨机位硬切在区间末端发生。 */
 export function buildStateKeyframeTimeline(stateKeyframes: StageStateKeyframe[]): StateKeyframeTimelineSegment[] {
-  // 旧镜头参考可能仍带有 hold；在保存迁移完成前继续按旧时长还原绝对点位，避免打开后节奏突变。
-  const needsLegacyTiming = stateKeyframes.some((stateKeyframe) => stateKeyframe.hold > 0)
-    || stateKeyframes.some((stateKeyframe, index) => index > 0 && stateKeyframe.time <= stateKeyframes[index - 1].time)
-  if (needsLegacyTiming) {
-    let cursor = 0
-    return stateKeyframes.map((stateKeyframe, index) => {
-      const holdStart = cursor
-      const transitionStart = holdStart + Math.max(0, stateKeyframe.hold)
-      const transitionEnd = index === stateKeyframes.length - 1
-        ? transitionStart
-        : transitionStart + Math.max(0, stateKeyframe.transitionDuration)
-      cursor = transitionEnd
-      return { holdStart, transitionStart, transitionEnd }
-    })
-  }
   return stateKeyframes.map((stateKeyframe, index) => {
     const time = Math.max(0, stateKeyframe.time)
     const nextTime = stateKeyframes[index + 1] ? Math.max(time, stateKeyframes[index + 1].time) : time

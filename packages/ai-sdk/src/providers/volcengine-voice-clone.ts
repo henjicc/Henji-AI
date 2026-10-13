@@ -36,10 +36,16 @@ async function request(input: ProviderExecutionInput | ProviderContinuePollingIn
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': input.apiKey, 'X-Api-Request-Id': volcengineRequestId(input.requestId, undefined) },
     body: JSON.stringify(body), signal: input.signal,
   }, { transport: input.runtime.transport, retryPreconnectOnce: false })
-  const payload = await response.json() as JsonValue
+  const text = await response.text()
+  let payload: JsonValue
+  try {
+    payload = JSON.parse(text) as JsonValue
+  } catch {
+    throw new AiRuntimeError(response.ok ? 'invalid_json' : 'provider_http_error', `Volcengine Speech HTTP ${response.status}: 音色训练返回了非 JSON 响应`, { status: response.status })
+  }
   if (!isJsonObject(payload)) throw new AiRuntimeError('invalid_response', '音色训练返回了无效响应')
   if (!response.ok || (payload.code !== undefined && payload.code !== 0)) {
-    throw new AiRuntimeError('provider_task_failed', typeof payload.message === 'string' ? payload.message : `音色训练请求失败（HTTP ${response.status}）`)
+    throw new AiRuntimeError('provider_task_failed', typeof payload.message === 'string' ? payload.message : `音色训练请求失败（HTTP ${response.status}）`, { status: response.status })
   }
   return payload
 }

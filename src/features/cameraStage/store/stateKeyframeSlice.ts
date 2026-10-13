@@ -13,7 +13,7 @@ import type { StageCameraLookAt, StageObject } from '../domain/sceneTypes'
 import { isCameraId } from '../domain/cameraUtils'
 import { createCameraPresetPath } from '../domain/spatialPath'
 import { markSpatialPathCustom } from '../domain/spatialPath'
-import { clampHold, clampTransition, isTimeInStateKeyframeStaticSegment, quantizeToFrame } from '../stateKeyframes/timeline/stateKeyframeClipGeometry'
+import { clampTransition, isTimeInStateKeyframeStaticSegment, quantizeToFrame } from '../stateKeyframes/timeline/stateKeyframeClipGeometry'
 import type { CameraStageState } from './cameraStageStore'
 import { applyAnimationAtTime } from './playbackSampling'
 
@@ -162,7 +162,6 @@ function stateKeyframeAtTime(stateKeyframes: StageStateKeyframe[], time: number,
 function syncTransitionDurations(stateKeyframes: StageStateKeyframe[]): StageStateKeyframe[] {
   return stateKeyframes.map((stateKeyframe, index) => ({
     ...stateKeyframe,
-    hold: 0,
     transitionDuration: Math.max(0, (stateKeyframes[index + 1]?.time ?? stateKeyframe.time) - stateKeyframe.time),
   }))
 }
@@ -353,7 +352,6 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
       const fps = state.animation.fps
       let stateKeyframes = state.stateKeyframes.map((stateKeyframe) => stateKeyframe.id === id ? {
         ...stateKeyframe,
-        ...(patch.hold === undefined ? {} : { hold: quantizeToFrame(clampHold(patch.hold, fps), fps) }),
         ...(patch.transitionDuration === undefined
           ? {}
           : { transitionDuration: quantizeToFrame(clampTransition(patch.transitionDuration, fps), fps) }),
@@ -487,7 +485,7 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
   }
 }
 
-export type StateKeyframeTimingPatch = Partial<Pick<StageStateKeyframe, 'hold' | 'transitionDuration'>>
+export type StateKeyframeTimingPatch = Partial<Pick<StageStateKeyframe, 'transitionDuration'>>
 export interface StateKeyframeTransitionPatch {
   perObject?: Record<string, StageStateKeyframeTransitionObjectDetail>
 }

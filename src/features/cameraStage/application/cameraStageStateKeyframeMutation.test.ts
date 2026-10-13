@@ -1,3 +1,4 @@
+import { CAMERA_STAGE_STORE_LEDGER } from './cameraStageStoreLedger'
 import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -56,6 +57,30 @@ describe('三维状态关键帧属性写入', () => {
     store.addStateKeyframe()
     useCameraStageStore.getState().seek(2)
     useCameraStageStore.getState().addStateKeyframe()
+  })
+
+  it('过渡时长写入移动相邻时间点，账本登记实际动作', async () => {
+    const first = useCameraStageStore.getState().stateKeyframes[0]
+    await executor.apply(stateKeyframeStep(first.id, [
+      { propertyId: 'camera_stage.state_keyframe.transition_duration', value: 1.5 },
+    ]))
+    const frames = useCameraStageStore.getState().stateKeyframes
+    expect(frames[0].transitionDuration).toBe(1.5)
+    expect(frames[1].time - frames[0].time).toBe(1.5)
+    expect(CAMERA_STAGE_STORE_LEDGER.entries.updateStateKeyframeTiming).toMatchObject({
+      kind: 'property', propertyIds: expect.arrayContaining(['camera_stage.state_keyframe.transition_duration']),
+    })
+    expect(CAMERA_STAGE_STORE_LEDGER.entries.updateStateKeyframeTransition).toEqual({
+      kind: 'capability', capabilityId: 'apply_camera_stage_camera_move',
+    })
+  })
+
+  it('不再声明或接受无效的停留时长属性', async () => {
+    expect(executor.writableProperties.has('camera_stage.state_keyframe.hold')).toBe(false)
+    const second = useCameraStageStore.getState().stateKeyframes[1]
+    await expect(executor.apply(stateKeyframeStep(second.id, [
+      { propertyId: 'camera_stage.state_keyframe.hold', value: 2 },
+    ]))).rejects.toThrow('PROPERTY_NOT_WRITABLE')
   })
 
   it('能把一张状态关键帧挪到新的时间点', async () => {

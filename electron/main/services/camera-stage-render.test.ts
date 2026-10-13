@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   readDocument: vi.fn(async (_target: { id: string }) => ({ meta: { kind: 'camera_stage' }, content: { objects: [] } as Record<string, unknown> })),
   currentWindow: null as {
     destroyed: boolean
-    webContents: { id: number }
+    webContents: { id: number; on: ReturnType<typeof vi.fn>; setWindowOpenHandler: ReturnType<typeof vi.fn> }
   } | null,
   nextWebContentsId: 100,
   persistedTasks: [] as Array<{ requestId: string }>,
@@ -21,6 +21,7 @@ vi.mock('electron', () => {
       id: ++mocks.nextWebContentsId,
       send: mocks.workerSend,
       setAudioMuted: vi.fn(),
+      setWindowOpenHandler: vi.fn(),
       on: vi.fn(),
     }
 
@@ -119,6 +120,21 @@ describe('camera stage background render recovery', () => {
     mocks.currentWindow = null
     mocks.persistedTasks.length = 0
     mocks.readDocument.mockReset().mockResolvedValue({ meta: { kind: 'camera_stage' }, content: { objects: [] } })
+  })
+
+  it('隐藏渲染窗口拒绝外部导航、开窗及 webview', async () => {
+    const service = await import('./camera-stage-render')
+    await service.startCameraStageRenderTask(imageRequest('navigation-guard'), 1)
+    const contents = mocks.currentWindow!.webContents
+    const listener = contents.on.mock.calls.find(([name]) => name === 'will-navigate')?.[1]
+    expect(listener).toBeTypeOf('function')
+    const preventDefault = vi.fn()
+    listener({ preventDefault }, 'https://evil.example/')
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(contents.setWindowOpenHandler.mock.calls[0][0]({ url: 'https://evil.example/' })).toEqual({ action: 'deny' })
+    contents.on.mock.calls.find(([name]) => name === 'will-attach-webview')![1]({ preventDefault })
+    expect(preventDefault).toHaveBeenCalledTimes(2)
+    service.closeCameraStageRenderWindow()
   })
 
   it('固定提交时的场景快照（读镜头参考文档），排队后修改原文档不改变输出，重复请求也不重取快照', async () => {

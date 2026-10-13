@@ -10,7 +10,7 @@ const HENJI_MEDIA_PREFIX = 'henji-media://local/'
 const IMAGE_EDITOR_V3_MEDIA_PREFIX = `henji-media://${IMAGE_EDITOR_V3_MEDIA_HOST}/`
 
 export function decodeFileUrlPath(value: string): string {
-  const raw = value.trim().replace(/^file:\/\//, '')
+  const raw = value.trim().replace(/^file:\/\/(?:localhost(?=\/))?/, '')
   const decoded = decodeURIComponent(raw)
   return process.platform === 'win32' && /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded
 }

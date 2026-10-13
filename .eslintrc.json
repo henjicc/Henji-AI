@@ -147,6 +147,109 @@
       "rules": {
         "react-refresh/only-export-components": "off"
       }
+    },
+    {
+      "files": [
+        "src/**/*.tsx"
+      ],
+      "excludedFiles": [
+        "src/components/ui/primitives.tsx",
+        "**/*.test.tsx",
+        "**/*.spec.tsx"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Literal[value=/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})/]",
+            "message": "禁止直接写十六进制颜色，请使用 @/core/theme/colorTokens 或语义化 Tailwind 类。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})/]",
+            "message": "禁止在模板字符串中直接写十六进制颜色，请使用 @/core/theme/colorTokens 或语义化 Tailwind 类。"
+          },
+          {
+            "selector": "Literal[value=/\\[#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\\]/]",
+            "message": "禁止使用 Tailwind 任意十六进制颜色类（如 bg-[#xxxxxx]），请改为语义化颜色类。"
+          },
+          {
+            "selector": "Literal[value=/(?:^|[\\s'\"`!:])(?:bg|text|border|from|to|via|ring|divide|fill|stroke|placeholder|outline|shadow|accent|caret)-(?:zinc|gray|neutral|slate|stone)-[0-9]/]",
+            "message": "禁止 zinc/gray/neutral/slate/stone 等中性色板：它们不会跟随主题。请用语义令牌类（类名颜色 = 主题 CSS 变量名去掉 --）：表面 bg-window/panel/raised/control/hover/selected、文字 text-text1/text2/text3、线 border-line/line-strong；压在媒体上用 text-on-media、bg-media-control、border-media-line。见 tailwind.config.js。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/(?:^|[\\s'\"`!:])(?:bg|text|border|from|to|via|ring|divide|fill|stroke|placeholder|outline|shadow|accent|caret)-(?:zinc|gray|neutral|slate|stone)-[0-9]/]",
+            "message": "禁止 zinc/gray/neutral/slate/stone 等中性色板：它们不会跟随主题。请用语义令牌类（类名颜色 = 主题 CSS 变量名去掉 --）：表面 bg-window/panel/raised/control/hover/selected、文字 text-text1/text2/text3、线 border-line/line-strong；压在媒体上用 text-on-media、bg-media-control、border-media-line。见 tailwind.config.js。"
+          },
+          {
+            "selector": "Literal[value=/backdrop-blur/]",
+            "message": "毛玻璃是一个材质而不是一个 blur 值：只写 blur 会得到「模糊+降不透明度」的廉价观感。请用 `ui-glass` 类（src/index.css，含 blur/saturate/受光边/噪点四层），遮罩用 `ui-glass-scrim`。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/backdrop-blur/]",
+            "message": "毛玻璃是一个材质而不是一个 blur 值：只写 blur 会得到「模糊+降不透明度」的廉价观感。请用 `ui-glass` 类（src/index.css，含 blur/saturate/受光边/噪点四层），遮罩用 `ui-glass-scrim`。"
+          },
+          {
+            "selector": "Literal[value=/text-\\[[0-9.]+(px|rem)\\]/]",
+            "message": "禁止内联像素字号。排版层级用 styleTokens.ts 的 UI_TEXT_* 令牌（20/16/14/13/12/11），其余用已登记档位 text-2xs/13/14/15 或 text-xs/sm/base/xl；界面文字最小 11px（text-3xs/4xs 只用于媒体叠层读数与标尺刻度）。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/text-\\[[0-9.]+(px|rem)\\]/]",
+            "message": "禁止内联像素字号。排版层级用 styleTokens.ts 的 UI_TEXT_* 令牌（20/16/14/13/12/11），其余用已登记档位 text-2xs/13/14/15 或 text-xs/sm/base/xl；界面文字最小 11px（text-3xs/4xs 只用于媒体叠层读数与标尺刻度）。"
+          },
+          {
+            "selector": "Literal[value=/shadow-\\[/]",
+            "message": "禁止内联阴影，请使用已登记档位（shadow-panel / node-selected / node-error / thumb / thumb-sm），新特效请先在 tailwind.config.js 登记。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/shadow-\\[/]",
+            "message": "禁止内联阴影，请使用已登记档位（shadow-panel / node-selected / node-error / thumb / thumb-sm），新特效请先在 tailwind.config.js 登记。"
+          },
+          {
+            "selector": "Literal[value=/z-\\[/]",
+            "message": "禁止内联 z-index，请使用语义层级：z-base/raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar；内联 style 用 Z_LAYERS（src/core/theme/zLayers.ts）。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/z-\\[/]",
+            "message": "禁止内联 z-index，请使用语义层级：z-base/raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar；内联 style 用 Z_LAYERS（src/core/theme/zLayers.ts）。"
+          },
+          {
+            "selector": "Literal[value=/(border|bg|from|to|via|ring|divide)-\\[rgba?\\(/]",
+            "message": "禁止 rgb/rgba 字面量，请使用语义令牌类（见 tailwind.config.js）；压在媒体上的边与底用 border-media-line / bg-media-control 等固定媒体叠层令牌。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/(border|bg|from|to|via|ring|divide)-\\[rgba?\\(/]",
+            "message": "禁止 rgb/rgba 字面量，请使用语义令牌类（见 tailwind.config.js）；压在媒体上的边与底用 border-media-line / bg-media-control 等固定媒体叠层令牌。"
+          },
+          {
+            "selector": "Literal[value=/rounded(-[a-z]+)?-\\[(?!var\\(|inherit)/]",
+            "message": "禁止内联圆角，请使用圆角令牌 rounded-control（6，控件）/ rounded-field（8，输入与菜单）/ rounded-overlay（12，浮层），或指向同一组变量的 rounded-md/lg/xl、rounded-full、rounded-hairline；画布节点用 rounded-[var(--node-radius)]。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/rounded(-[a-z]+)?-\\[(?!var\\(|inherit)/]",
+            "message": "禁止内联圆角，请使用圆角令牌 rounded-control（6，控件）/ rounded-field（8，输入与菜单）/ rounded-overlay（12，浮层），或指向同一组变量的 rounded-md/lg/xl、rounded-full、rounded-hairline；画布节点用 rounded-[var(--node-radius)]。"
+          },
+          {
+            "selector": "Literal[value=/(?:^|[\\s'\"`!:])-?z-(?:0|10|20|30|40|50)(?![\\w-])/]",
+            "message": "禁止数字 z-index 类（z-10/z-20…），请用语义层级 z-base/raised/sticky/dropdown/panel/modal（数值相同）及以上档位。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/(?:^|[\\s'\"`!:])-?z-(?:0|10|20|30|40|50)(?![\\w-])/]",
+            "message": "禁止数字 z-index 类（z-10/z-20…），请用语义层级 z-base/raised/sticky/dropdown/panel/modal（数值相同）及以上档位。"
+          },
+          {
+            "selector": "Literal[value=/(?:^|[\\s'\"`!:])duration-(?!(?:0|120|180|240|500)(?!\\d))[\\d\\[]/]",
+            "message": "动效时长只允许 duration-120/180/240/500（= UI_DURATION.fast/base/slow/viewer，src/components/ui/motion.ts）。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/(?:^|[\\s'\"`!:])duration-(?!(?:0|120|180|240|500)(?!\\d))[\\d\\[]/]",
+            "message": "动效时长只允许 duration-120/180/240/500（= UI_DURATION.fast/base/slow/viewer，src/components/ui/motion.ts）。"
+          },
+          {
+            "selector": "JSXOpeningElement[name.name=/^(button|input|select|textarea)$/]",
+            "message": "禁止业务与共享组件新增原生控件，请使用 @/components/ui；原生实现只允许在 primitives.tsx。"
+          }
+        ]
+      }
     }
   ]
 }

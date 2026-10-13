@@ -8,8 +8,9 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { createVideoEditTestProject, failVideoEditSaves, reopenVideoEdit } from './videoEditDocumentTestKit'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, updateVideoEditCreativeIntents } from './videoEditService'
 import { analyzeVideoEditBeats, cancelVideoEditBeatAnalysis, videoEditBeatTask } from './videoEditBeatAnalysis'
+import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 
 const boundary = vi.hoisted(() => ({ compositions: [] as VideoEditComposition[], dispose: vi.fn(), silence: false, block: undefined as (() => Promise<void>) | undefined }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -42,6 +43,35 @@ async function setup() {
   editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, markers: [{ id: 'normal', frame: 60, name: '保留' }, { id: 'other-beat', frame: 0, name: '另一来源', type: 'beat' }] }))
   return { owner, id, clipId, target }
 }
+it('混音期间仅写讲解元数据不使节拍分析失效，元数据保留且一次撤销', async () => {
+  const { owner, id, target } = await setup(); const history = owner.past.length
+  const head = { drafts: [], sessions: [], resources: [] }
+  boundary.block = async () => { updateVideoEditCreativeIntents(id, head) }
+  expect(await analyzeVideoEditBeats(target)).toHaveLength(8)
+  expect(owner.document.creativeIntents).toEqual(head)
+  expect(owner.past).toHaveLength(history + 1)
+})
+
+it('公共节拍能力回读较新的元数据仍验证内容，回读期间内容编辑仍使验证失败', async () => {
+  const { owner, id, target } = await setup(); const app = createApplicationHarness()
+  const store = harnessDocumentStore(); const read = store.readDocument.bind(store)
+  let changeContent = false
+  vi.spyOn(store, 'readDocument').mockImplementation(async (...args) => {
+    if (changeContent) editVideoSequence(id, target.sequenceId, sequence => ({ ...sequence, name: '回读期间编辑' }))
+    else {
+      updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+      const stored = store.stored(id)!
+      stored.content = { ...(stored.content as object), creativeIntents: owner.document.creativeIntents }
+    }
+    return read(...args)
+  })
+  const input = { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${target.sequenceId}` }, clipRef: { kind: 'video_edit.clip', id: `${id}:${target.clipId}` } }
+  try {
+    expect(await app.requireResult('analyze_video_edit_beats', input)).toMatchObject({ verified: true })
+    changeContent = true
+    expect(await app.requireResult('analyze_video_edit_beats', input)).toMatchObject({ verified: false })
+  } finally { app.dispose() }
+})
 it('片段分析写现有标记、保留普通/其他来源标记，重分析替换旧结果且各一步撤销', async () => {
   const { owner, id, target } = await setup(), before = owner.document, history = owner.past.length
   const markers = await analyzeVideoEditBeats(target)

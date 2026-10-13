@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { joinVideoEditOutputPath } from './videoEditExportQueue'
 import { createLogger } from '@/core/logging'
 import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions, exportVideoEditCaptions, type VideoEditCaption, type VideoEditMarker } from '@/core/videoEdit/timedContent'
@@ -55,7 +56,7 @@ export function appendVideoEditCaptionText(projectId: string, sequenceId: string
 }
 export async function importVideoEditCaptionFile(projectId: string, sequenceId: string, options: { offset?: number; clipId?: string } = {}, signal?: AbortSignal): Promise<string[]> {
   signal?.throwIfAborted()
-  const owner = requireVideoEditInstance(projectId); const before = owner.document
+  const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
   const chosen = await getPlatform().system.dialog.open({ multiple: false, filters: [{ name: '字幕', extensions: ['srt', 'vtt'] }] })
   signal?.throwIfAborted()
   const path = Array.isArray(chosen) ? chosen[0] : chosen
@@ -64,7 +65,7 @@ export async function importVideoEditCaptionFile(projectId: string, sequenceId: 
   try {
     const text = await getPlatform().system.fs.readTextFile(path)
     signal?.throwIfAborted()
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== before) throw new Error('原剪辑已有新修改，请重新导入字幕。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已有新修改，请重新导入字幕。')
     const ids = appendVideoEditCaptionText(projectId, sequenceId, text, options)
     logger.info('剪辑字幕导入完成', { event: 'video_edit.caption.import.complete', context: { projectId, sequenceId, count: ids.length } })
     return ids
