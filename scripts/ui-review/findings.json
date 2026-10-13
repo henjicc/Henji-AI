@@ -9,7 +9,7 @@
     ],
     "conclusion": "已写成规则；审查主图为 play-start，清理前捕获，默认终态仅辅助",
     "evidence": "uiInspectionSceneVideoEditPlayStart.cjs 在关闭工程前 capture(play-start)；review.md §6 明确主图契约",
-    "fixedIn": "bd94dc486"
+    "fixedIn": "8fcaa19f7"
   },
   {
     "id": "u7-K06",
