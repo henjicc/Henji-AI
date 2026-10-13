@@ -44,9 +44,9 @@
       "scene:generation-video-viewer-trim",
       "rule:lowContrast"
     ],
-    "conclusion": "确认旧读数是 text1/30 范围填充叠在 text1/15 轨道上；填充提高为 text1/65，并新增 text1 实色起止边界保证进度叠加后可辨，填充和边界分别要求 3:1；查看器没有裁剪手柄；同源修复剪辑序列与源入出点的低透明度范围填充",
-    "evidence": "Node 回归保留旧填充与同色反例；videoTrimContrast.test.ts 从实际组件类生成 CSS，核对四预设×三档对比度、玻璃明暗合成与边界压在播放进度上；SELECTION_MIN_CONTRAST=3 未降低；当前颜色是合成计算值，未运行 Electron",
-    "nextStep": "总管理者独占 Windows 在 graphite/ocean/film/paper 复验 generation-video-viewer-trim（含播放中范围与进度叠加）、video-edit-timeline 的序列入出点和 video-edit-monitor 的源入出点；分别检查范围填充与起止边界，透明端点命中区没有独立可见手柄；补当前截图像素后再关闭"
+    "conclusion": "K09b 修复 text1 单色边界在 film 已播放进度上的 2.99:1：保留 text1/65 填充，两端使用各 2 DIP 的 text1 与 on-accent 双色实线；四预设真实 Electron 填充与未播放/进度叠加后起止边界全部通过，边界最低 4.60、填充最低 3.74；阈值仍为 3。查看器没有裁剪手柄。核对源入出点位于滑杆下方独立条带，序列入出点只跨过 accent-ring 细线播放头，没有查看器这种强调色进度实底；本轮未改剪辑组件",
+    "evidence": "2026-10-14 Windows 隔离 temporary profile，development electron:bundle 后 ui:tour --only 生成-输入视频查看器裁剪选区 --theme-preset all --size 1440x900 --audit --no-screenshots，四预设通过、0 规则命中/对比度问题/运行时错误，退出后无本 worktree Electron 残留；.ui-tour/k09b/tour.log 与各预设 audit.json/contrast.json/evidence.json。按填充、未播放起/止、叠加后起/止顺序实测：graphite 5.96/11.56/13.28/4.60/14.16；ocean 5.98/9.96/11.48/5.31/12.14；film 6.00/10.09/11.62/5.50/12.21；paper 3.74/9.29/8.73/4.60/9.25。场景分别取双色实线中部，选与邻接背景可辨的一侧，不平均两色；Vitest 13 项覆盖实际 CSS 四预设×三档对比度、玻璃明暗合成与边界≥3.3；Node 5 项保留 film 2.99、旧填充、同色与双色均不足反例；渲染层 tsc、lint、check:colors、check:surface:strict 通过（0 错误、355 存量启发式告警）",
+    "nextStep": "查看器 K09b 已完成真实四预设验收；K09 台账仍待总管理者复验上一轮修改的 video-edit-timeline 序列入出点和 video-edit-monitor 源入出点，补剪辑真实像素证据后整体关闭；本轮仅对剪辑相关 DOM、层级和颜色进行代码核对及既有合成测试，未运行剪辑巡检"
   },
   {
     "id": "5.8-window-size",

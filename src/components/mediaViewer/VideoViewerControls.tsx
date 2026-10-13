@@ -128,13 +128,16 @@ export function VideoViewerControls({
             {trimRange && videoDuration > 0 && (
               <div
                 data-video-trim-range
-                // 填充与未播放轨道至少 3:1；实色起止边界在播放进度进入选区后仍可辨，不是可拖手柄。
-                className="pointer-events-none absolute inset-y-0 rounded-full border-x-2 border-text1 bg-text1/65"
+                // text1 对轨道、on-accent 对已播放进度：双色实线留出对比余量，不是可拖手柄。
+                className="pointer-events-none absolute inset-y-0 rounded-full bg-text1/65"
                 style={{
                   left: `${(trimRange.start / videoDuration) * 100}%`,
                   width: `${((trimRange.end - trimRange.start) / videoDuration) * 100}%`,
                 }}
- />
+              >
+                <span aria-hidden="true" data-video-trim-boundary="start" className="absolute inset-y-0 left-0 w-1 border-l-2 border-on-accent bg-text1" />
+                <span aria-hidden="true" data-video-trim-boundary="end" className="absolute inset-y-0 right-0 w-1 border-r-2 border-on-accent bg-text1" />
+              </div>
             )}
           </div>
         </div>

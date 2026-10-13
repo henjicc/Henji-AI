@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 const { WINDOWS_MAX_FRAME_INSET_DIP, maximizedFrameInsets } = require('./uiInspectionSceneWindowStartup.cjs')
-const { SELECTION_MIN_CONTRAST, averageColor, contrastRatio } = require('./uiInspectionSceneGenerationVideoViewer.cjs')
+const { SELECTION_MIN_CONTRAST, averageColor, contrastRatio, sampleTrimBoundary } = require('./uiInspectionSceneGenerationVideoViewer.cjs')
 const { chooseVideoEditImportFiles } = require('./uiInspectionVideoEditDocuments.cjs')
 
 test('剪辑文件导入要选择菜单动作，展开工具栏不会导入文件', async () => {
@@ -55,7 +55,7 @@ test('窗口最大化外框：Windows 不可见缩放边在上限内，macOS 必
 
 test('裁剪选区可见性：修复后的合成色达到 3:1，旧填充与同色不过', () => {
   assert.equal(SELECTION_MIN_CONTRAST, 3)
-  // 保留原实测轨道，按当前 text1 与 65% 填充合成；这是令牌计算值，Windows 新截图由总管理者复验。
+  // 保留原实测轨道，按当前 text1 与 65% 填充合成；真实像素由四预设 Electron 巡检另行验证。
   assert.ok(contrastRatio([168, 169, 170], [39, 41, 44]) >= SELECTION_MIN_CONTRAST)
   assert.ok(contrastRatio([89, 92, 96], [219, 221, 225]) >= SELECTION_MIN_CONTRAST)
   assert.ok(contrastRatio([98, 99, 101], [39, 41, 44]) < SELECTION_MIN_CONTRAST)
@@ -70,4 +70,29 @@ test('裁剪选区可见性：修复后的合成色达到 3:1，旧填充与同�
   const image = { data, info: { width, height: 3, channels: 3 } }
   assert.deepEqual(averageColor(image, 0, 0.5), [200, 200, 200])
   assert.deepEqual(averageColor(image, 0.5, 1), [20, 20, 20])
+})
+
+test('双色边界取实际可辨一侧：film 已播放进度选深色，暗轨道选 text1，两侧均不足时失败', () => {
+  const width = 20
+  const light = [242, 237, 232]
+  const dark = [0, 0, 0]
+  const played = [201, 117, 21]
+  assert.ok(contrastRatio(light, played) < SELECTION_MIN_CONTRAST, '保留 film 2.99 实测回归')
+  const data = Buffer.alloc(width * 6 * 3)
+  for (let y = 0; y < 6; y++) for (let x = 0; x < width; x++) {
+    const color = x === 5 || x === 6 || x === 13 || x === 14 ? dark : light
+    color.forEach((value, channel) => { data[(y * width + x) * 3 + channel] = value })
+  }
+  const image = { data, info: { width, height: 6, channels: 3 } }
+  for (const [edge, direction] of [[0.25, 1], [0.75, -1]]) {
+    const onProgress = sampleTrimBoundary(image, edge, direction, width, played)
+    assert.equal(onProgress.stripe, 'on-accent')
+    assert.deepEqual(onProgress.color, dark)
+    assert.ok(onProgress.ratio >= 3.3)
+    const onTrack = sampleTrimBoundary(image, edge, direction, width, [39, 41, 44])
+    assert.equal(onTrack.stripe, 'text1')
+    assert.ok(onTrack.ratio >= 3.3)
+  }
+  data.fill(120)
+  assert.ok(sampleTrimBoundary(image, 0.25, 1, width, [120, 120, 120]).ratio < SELECTION_MIN_CONTRAST)
 })

@@ -21,6 +21,7 @@ const rangeClasses = [
   classesAfter(timeline, 'return <div data-video-edit-in-out-range'),
   classesAfter(source, 'return <div data-video-edit-source-in-out'),
 ]
+const boundaryClasses = classesAfter(viewer, 'data-video-trim-boundary="start"')
 const trackClass = viewer.match(/className="[^"]*\b(bg-text1\/\d+)[^"]*"/)?.[1]
 const backgrounds = new Map<string, string>()
 const borders = new Map<string, string>()
@@ -54,7 +55,10 @@ describe('裁剪与入出点范围的实际 CSS 合成对比度', () => {
       const t = tokens.colors
       const viewerFill = cssColor(rangeClasses[0].find(name => name.startsWith('bg-')), vars)
       const viewerTrack = cssColor(trackClass, vars)
-      const boundary = cssColor(rangeClasses[0].find(name => /^border-(?!x-)/.test(name)), vars, borders)
+      const boundaries = [
+        cssColor(boundaryClasses.find(name => name.startsWith('bg-')), vars),
+        cssColor(boundaryClasses.find(name => name === 'border-on-accent'), vars, borders),
+      ]
       // 遍历从全黑到全白的媒体亮度；同时覆盖关闭玻璃时的 panel 实底。
       const viewerBeds = [t.panel, ...Array.from({ length: 256 }, (_, value) =>
         compositeOver(t.glassTint, `rgb(${value},${value},${value})`))]
@@ -65,7 +69,7 @@ describe('裁剪与入出点范围的实际 CSS 合成对比度', () => {
       expect(Math.min(...viewerRatios)).toBeGreaterThanOrEqual(3)
       // 起止边界压在未播放轨道和已播放进度上都要可辨；填充不能替代边界读数。
       for (const bed of [t.accent, ...viewerBeds.map(value => compositeOver(viewerTrack, value))]) {
-        expect(contrastRatio(boundary, bed)).toBeGreaterThanOrEqual(3)
+        expect(Math.max(...boundaries.map(boundary => contrastRatio(boundary, bed)))).toBeGreaterThanOrEqual(3.3)
       }
       // 时间线标尺与源监视器均依赖填充标出范围，透明端点只是命中区。
       for (const classes of rangeClasses.slice(1)) {
