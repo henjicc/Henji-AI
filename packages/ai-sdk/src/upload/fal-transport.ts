@@ -102,7 +102,8 @@ function isJsonObject(value: JsonValue): value is { [key: string]: JsonValue } {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function createDeadlineSignal(parent: AbortSignal | undefined, timeoutMs: number): {
+/** 上传共享期限：用户取消和超时联动到同一网络信号，调用方必须 finally dispose。 */
+export function createDeadlineSignal(parent: AbortSignal | undefined, timeoutMs: number): {
   signal: AbortSignal
   didTimeout(): boolean
   dispose(): void

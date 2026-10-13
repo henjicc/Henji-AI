@@ -46,8 +46,11 @@ async function uploadPublicUrl(input: ProviderMediaRewriteInput): Promise<string
     const apiKey = await input.runtime.credentials.get('generation', 'kie')
     if (apiKey) {
       try {
-        return await uploadToKie(apiKey, input.prepared, input.runtime.transport)
+        return await uploadToKie(apiKey, input.prepared, input.runtime.transport, input.signal)
       } catch (error) {
+        if (input.signal?.aborted || (error instanceof AiRuntimeError && error.code === 'cancelled') || (error instanceof Error && error.name === 'AbortError')) {
+          throw new AiRuntimeError('cancelled', 'PPIO media upload cancelled')
+        }
         const message = error instanceof Error ? error.message : String(error)
         failures.push(`KIE 上传失败: ${message}`)
       }

@@ -3,6 +3,32 @@ import { readJsonResponse } from '../../src/providers/helpers'
 import { shouldRetry } from '../../src/runtime/retry'
 
 describe('官方账户与模型准入错误', () => {
+  // synthetic-negative：模拟 CDN/WAF 正文，不冒充供应商官方 JSON 样本。
+  it.each([503, 429])('非 JSON HTTP %s 保留状态、原因与诊断上限', async status => {
+    const error = await readJsonResponse(new Response(`<html>gateway-${'x'.repeat(800)}</html>`, { status }), 'PPIO').catch((error: unknown) => error)
+    expect(error).toMatchObject({ code: 'provider_http_error', details: { status }, message: expect.stringContaining(`HTTP ${status}`) })
+    expect(error).toMatchObject({ message: expect.stringContaining('gateway-') })
+    expect((error as Error).message.length).toBeLessThan(550)
+    expect(shouldRetry(error, 'poll-query')).toBe(true)
+  })
+
+  it.each([
+    ['KIE', 402, 'provider_insufficient_balance'],
+    ['APIMart', 402, 'provider_insufficient_balance'],
+    ['APIMart', 403, 'provider_model_access_denied'],
+    ['SiliconFlow', 402, 'provider_insufficient_balance'],
+    ['SiliconFlow', 403, 'provider_model_access_denied'],
+  ])('%s 非 JSON HTTP %s 仍识别准入错误', async (provider, status, code) => {
+    const error = await readJsonResponse(new Response('Access denied', { status }), provider).catch((error: unknown) => error)
+    expect(error).toMatchObject({ code, details: { status, retryable: false }, message: expect.stringContaining('https://') })
+    expect(shouldRetry(error, 'poll-query')).toBe(false)
+  })
+
+  it('2xx 损坏 JSON 与合法 JSON HTTP 错误均保留状态', async () => {
+    await expect(readJsonResponse(new Response('<html>broken</html>', { status: 200 }), 'PPIO')).rejects.toMatchObject({ code: 'invalid_json', details: { status: 200 } })
+    await expect(readJsonResponse(new Response('{"message":"gateway"}', { status: 502 }), 'PPIO')).rejects.toMatchObject({ code: 'provider_http_error', details: { status: 502 } })
+  })
+
   it.each([
     ['Bailian', 400, { code: 'Arrearage', message: 'Access denied, please make sure your account is in good standing.' }, 'provider_insufficient_balance'],
     ['Bailian', 403, { code: 'AccessDenied.Unpurchased', message: 'Access denied' }, 'provider_product_not_activated'],

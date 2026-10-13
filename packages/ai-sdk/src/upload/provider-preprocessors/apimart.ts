@@ -3,7 +3,7 @@ import { uploadToApiMart } from '../apimart-upload'
 import { createGenerationPreprocessor } from './factory'
 
 export const strategy = {
-  async rewrite({ mediaKind, prepared, runtime, route, requestId }) {
+  async rewrite({ mediaKind, prepared, runtime, route, requestId, signal }) {
     if (mediaKind !== 'image') {
       throw new AiRuntimeError(
         'public_media_url_required',
@@ -25,7 +25,7 @@ export const strategy = {
       context,
     })
     try {
-      const url = await uploadToApiMart(apiKey, prepared, runtime.transport)
+      const url = await uploadToApiMart(apiKey, prepared, runtime.transport, signal)
       runtime.logger.info('APIMart 本地图片上传完成', {
         event: 'ai_runtime.upload.apimart_completed',
         requestId,
@@ -34,6 +34,12 @@ export const strategy = {
       })
       return url
     } catch (error) {
+      if (signal?.aborted || (error instanceof AiRuntimeError && error.code === 'cancelled') || (error instanceof Error && error.name === 'AbortError')) {
+        runtime.logger.info('APIMart 本地图片上传已取消', {
+          event: 'ai_runtime.upload.apimart_cancelled', requestId, providerId: 'apimart', context,
+        })
+        throw new AiRuntimeError('cancelled', 'APIMart upload cancelled')
+      }
       runtime.logger.error('APIMart 本地图片上传失败', {
         event: 'ai_runtime.upload.apimart_failed',
         requestId,
