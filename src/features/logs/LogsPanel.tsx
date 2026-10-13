@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useMemo, useState } from 'react'
@@ -135,7 +136,7 @@ export function LogsPanel(): JSX.Element {
 
   // 视图切换注入到各自命令带的最左端：窗口标题栏下只有一条命令带 + 一条过滤从属带（任务 5.7）
   const surfaceSwitch = (
-    <UiSegmented ariaLabel="日志视图" value={surface} onChange={setSurface} options={[{ value: 'events', label: '事件日志', icon: <ListTree className="mr-1.5 h-3.5 w-3.5" /> }, { value: 'assistant', label: '助手追踪', icon: <BrainCircuit className="mr-1.5 h-3.5 w-3.5" /> }]} />
+    <UiSegmented ariaLabel="日志视图" value={surface} onChange={setSurface} options={[{ value: 'events', label: '事件日志', icon: <ListTree className={`${UI_ICON_SIZE_CLASS.sm} mr-1.5`} /> }, { value: 'assistant', label: '助手追踪', icon: <BrainCircuit className={`${UI_ICON_SIZE_CLASS.sm} mr-1.5`} /> }]} />
   )
 
   return (

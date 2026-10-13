@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React, { useEffect, useState } from 'react'
 import { Menu, RotateCcw } from 'lucide-react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
@@ -42,7 +43,7 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
           className="w-full gap-2"
           onClick={() => resetCameraStageWorkspace(containerApi)}
         >
-          <RotateCcw size={14} />
+          <RotateCcw size={UI_ICON_SIZE.sm} />
           重置布局
         </UiOptionButton>
       </div>
@@ -51,7 +52,7 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
     {({ open, togglePanel }) => (
       <div className="flex h-full items-center pr-1">
         <UiIconButton
-          size="sm"
+          size="xs"
           on={open}
           title="面板菜单"
           aria-label="面板菜单"
@@ -60,7 +61,7 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
           data-panel-trigger-button
           onClick={togglePanel}
         >
-          <Menu size={14} />
+          <Menu  />
         </UiIconButton>
       </div>
     )}

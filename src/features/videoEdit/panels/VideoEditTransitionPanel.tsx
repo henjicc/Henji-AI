@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { memo, useSyncExternalStore } from 'react'
 import { Trash2 } from 'lucide-react'
@@ -46,7 +47,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
   const Icon = ICON_VIDEO_EDIT_TRANSITION
   return <UiGroup title="过渡" titleTone="compact" divided data-video-edit-transition-panel={transition.id}>
     <div className="flex min-w-0 items-center gap-2 px-1">
-      <Icon size={14} aria-hidden="true" className="shrink-0 text-text3" />
+      <Icon size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />
       <span className="min-w-0 flex-1 truncate text-xs text-text1">{preset.name}</span>
       {window && <span className="shrink-0 truncate text-2xs text-text3" data-user-content>{window.side ? `${window.left.name} ${window.side === 'in' ? '开头' : '结尾'}` : `${window.left.name} → ${window.right.name}`}</span>}
     </div>
@@ -73,7 +74,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
       <VideoEditBuiltinParamRows params={params} values={evaluateVideoEditTransitionParams(transition, instance.frame - (window?.start ?? 0))} gesture={gesture} animation={window ? { projectId, curves: transition.frameCurves, start: window.start, duration: transition.durationFrames, frame: instance.frame } : undefined} />
     </div>}
     <div className="flex items-center gap-2">
-      <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null), false) }}><Trash2 size={14} aria-hidden="true" />删除过渡</UiButton>
+      <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null), false) }}><Trash2  aria-hidden="true" />删除过渡</UiButton>
     </div>
   </UiGroup>
 })

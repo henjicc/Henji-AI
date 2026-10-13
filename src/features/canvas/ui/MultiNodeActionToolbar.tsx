@@ -65,12 +65,12 @@ export const MultiNodeActionToolbar = memo(({
           className={NODE_TOOLBAR_CLASS}
         >
           <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
-            {onTidy && <UiButton onClick={onTidy}><LayoutGrid className="h-3.5 w-3.5" />{t('ui:canvasTidy.title')}</UiButton>}
+            {onTidy && <UiButton onClick={onTidy}><LayoutGrid  />{t('ui:canvasTidy.title')}</UiButton>}
             {canCreateAssetGroup && (
               <UiButton
                 onClick={() => onCreateAssetGroup(mediaNodes.map((node) => node.id))}
               >
-                <ICON_NODE_ASSET_GROUP className="h-3.5 w-3.5" />
+                <ICON_NODE_ASSET_GROUP  />
                 {t('nodeToolbar.createAssetGroup')}
               </UiButton>
             )}
@@ -78,7 +78,7 @@ export const MultiNodeActionToolbar = memo(({
               <UiButton
                 onClick={() => onAddToAssetGroup(selectedGroup.id, mediaNodes.map((node) => node.id))}
               >
-                <ICON_NODE_ASSET_GROUP className="h-3.5 w-3.5" />
+                <ICON_NODE_ASSET_GROUP  />
                 {t('nodeToolbar.addToAssetGroup')}
               </UiButton>
             )}
@@ -86,7 +86,7 @@ export const MultiNodeActionToolbar = memo(({
             <UiButton
               onClick={handleDownloadClick}
             >
-              <Download className="h-3.5 w-3.5" />
+              <Download  />
               {t('nodeToolbar.batchDownload', { count: downloadCount })}
             </UiButton>
             )}

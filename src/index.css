@@ -29,6 +29,8 @@
   --panel-rgb: 33 33 33;
   --raised: #272727;
   --raised-rgb: 39 39 39;
+  --segment-selected: #393939;
+  --segment-selected-rgb: 57 57 57;
   --control: #2B2B2B;
   --control-rgb: 43 43 43;
   --control-hover: #313131;
@@ -228,6 +230,9 @@
   --radius-control: 6px;
   --radius-field: 8px;
   --radius-overlay: 12px;
+  --size-control-2xs: 20px;
+  --size-control-xs: 24px;
+  --size-control-xl: 40px;
   --size-control-sm: 28px;
   --size-control-md: 32px;
   --size-control-lg: 36px;

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { Lock, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
@@ -245,16 +246,16 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
     setSelectedId(group.id)
     // 内置供应商也弹菜单，只放一条灰掉的说明：右键没反应会让人以为功能坏了
     if (!provider || (!editable && !deletable)) {
-      providerMenu.showMenu(event, [{ id: 'builtin', label: t('providerCenter.builtinNoEdit'), icon: <Lock className="h-4 w-4" />, onClick: () => {}, disabled: true }])
+      providerMenu.showMenu(event, [{ id: 'builtin', label: t('providerCenter.builtinNoEdit'), icon: <Lock className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: () => {}, disabled: true }])
       return
     }
     providerMenu.showMenu(event, [
       ...(editable ? [{
-        id: 'edit', label: t('providerCenter.actions.editConnection'), icon: <Pencil className="h-4 w-4" />,
+        id: 'edit', label: t('providerCenter.actions.editConnection'), icon: <Pencil className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => { setProviderDialogCreate(false); setProviderDialogOpen(true) },
       }] : []),
       ...(deletable ? [{
-        id: 'delete', label: t('providerCenter.actions.deleteProvider'), icon: <Trash2 className="h-4 w-4" />,
+        id: 'delete', label: t('providerCenter.actions.deleteProvider'), icon: <Trash2 className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => setDeleting({ providerId: provider.providerId, name: group.displayName }),
       }] : []),
     ])
@@ -297,7 +298,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
           </div>
           <div className="border-t border-line pt-2">
             <UiButton type="button" variant="primary" className="w-full" onClick={() => { setProviderDialogCreate(true); setProviderDialogOpen(true) }}>
-              <Plus className="h-4 w-4" />
+              <Plus  />
               {t('providerCenter.actions.addProvider')}
             </UiButton>
           </div>
@@ -375,10 +376,10 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
                 {selected.llmProvider ? (
                   <>
                     <UiButton type="button" variant="secondary" disabled={fetchingModels} onClick={() => void fetchModels()}>
-                      <RefreshCw className={`h-4 w-4 ${fetchingModels ? 'motion-safe:animate-spin' : ''}`} />{fetchingModels ? t('providerCenter.actions.syncingModels') : t('providerCenter.actions.syncModels')}
+                      <RefreshCw className={`${fetchingModels ? 'motion-safe:animate-spin' : ''}`} />{fetchingModels ? t('providerCenter.actions.syncingModels') : t('providerCenter.actions.syncModels')}
                     </UiButton>
                     <UiButton type="button" variant="secondary" onClick={() => openModelDialog()}>
-                      <Plus className="h-4 w-4" />{t('providerCenter.actions.addModel')}
+                      <Plus  />{t('providerCenter.actions.addModel')}
                     </UiButton>
                   </>
                 ) : null}

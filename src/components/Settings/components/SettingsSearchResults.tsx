@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React from 'react'
 import { ChevronRight } from 'lucide-react'
 import { UI_TEXT_META_CLASS, UiEmpty, UiOptionButton } from '@/components/ui'
@@ -34,7 +35,7 @@ const SettingsSearchResults: React.FC<SettingsSearchResultsProps> = ({ results, 
               {t(`tabs.${result.tab}.label`) === t(`navSections.${result.entry.sectionId}`) ? '' : ` › ${t(`navSections.${result.entry.sectionId}`)}`}
             </span>
           </span>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text2" />
+          <ChevronRight className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text2`} />
         </UiOptionButton>
         </div>
       ))}

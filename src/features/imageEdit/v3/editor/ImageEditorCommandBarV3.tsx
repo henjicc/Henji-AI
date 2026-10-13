@@ -122,24 +122,24 @@ export function ImageEditorCommandBarV3({
       <span className="truncate text-13 font-medium text-text1">
         {t('imageEditor.v3.title')}
       </span>
-      <UiIconButton size="lg"
+      <UiIconButton size="md"
         className="ml-1 shrink-0"
         disabled={contentDisabled || !controller.canUndo}
         aria-label={t('imageEditor.actions.undo')}
         title={t('imageEditor.actions.undo')}
         onClick={controller.undo}
       >
-        <Undo2 className="h-4 w-4" />
+        <Undo2  />
       </UiIconButton>
       <div {...(contentDisabled ? { inert: '' } : {})}><ImageEditorClipboardV3 bus={bus} controller={controller} /></div>
-      <UiIconButton size="lg"
+      <UiIconButton size="md"
         className="shrink-0"
         disabled={contentDisabled || !controller.canRedo}
         aria-label={t('imageEditor.actions.redo')}
         title={t('imageEditor.actions.redo')}
         onClick={controller.redo}
       >
-        <Redo2 className="h-4 w-4" />
+        <Redo2  />
       </UiIconButton>
     </UiToolbar>
   )

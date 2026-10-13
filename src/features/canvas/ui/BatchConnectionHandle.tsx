@@ -76,13 +76,13 @@ export function BatchConnectionHandle({ nodes, onConnect }: BatchConnectionHandl
         className="pointer-events-auto"
       >
         <UiPanel variant="glass" className="p-1">
-          <UiIconButton shape="circle" size="lg"
+          <UiIconButton shape="circle" size="md"
             className="nodrag nopan"
             aria-label={t('nodeToolbar.batchConnect')}
             title={t('nodeToolbar.batchConnect')}
             onPointerDown={handlePointerDown}
           >
-            <Cable className="h-4 w-4" />
+            <Cable  />
           </UiIconButton>
         </UiPanel>
       </NodeToolbar>

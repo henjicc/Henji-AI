@@ -58,7 +58,7 @@ export function GenerationHistoryToolbar({
           onClick={onToggleSearch}
           title={t('ui:workspaceFilters.searchHistory')}
         >
-          <Search className="h-4 w-4" />
+          <Search  />
         </UiIconButton>
         <PanelTrigger
           panelWidth={168}
@@ -72,7 +72,7 @@ export function GenerationHistoryToolbar({
               className="w-full justify-start gap-2"
               onClick={onOpenClearHistory}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2  />
               {t('ui:actions.clearHistory')}
             </UiButton>
           )}
@@ -86,7 +86,7 @@ export function GenerationHistoryToolbar({
               title={t('ui:workspaceFilters.moreActions')}
               data-panel-trigger-button
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal  />
             </UiIconButton>
           )}
         </PanelTrigger>

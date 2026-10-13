@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -463,7 +464,7 @@ export const PanoramaViewerNode = memo(({
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<ICON_PANORAMA className="h-4 w-4" />}
+        icon={<ICON_PANORAMA className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={title}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}

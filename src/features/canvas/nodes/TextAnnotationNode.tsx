@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { LoaderCircle } from 'lucide-react';
@@ -146,7 +147,7 @@ export const TextAnnotationNode = memo(({
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<TextAnnotationIcon className="h-4 w-4" />}
+        icon={<TextAnnotationIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -179,7 +180,7 @@ export const TextAnnotationNode = memo(({
             <div className="space-y-3">
               <section aria-label={t('node.textAnnotation.reasoning')}>
                 <div className="sticky top-0 flex items-center gap-1.5 bg-panel py-0.5 text-xs text-text2">
-                  <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <LoaderCircle className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 animate-spin`} />
                   <span>{t('node.textAnnotation.reasoning')}</span>
                 </div>
                 <div className="mt-1 whitespace-pre-wrap break-words text-text2">

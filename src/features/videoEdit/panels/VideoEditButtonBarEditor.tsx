@@ -1,3 +1,5 @@
+import type { UiControlSize } from '@/components/ui/primitiveInternals'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { UiButton, UiIconButton } from '@/components/ui'
@@ -11,7 +13,7 @@ export interface VideoEditBarButtonSpec<Id extends string = string> {
   /** 悬停说明（含快捷键或不可用原因）；不传用 title */
   tooltip?: string
   Icon: LucideIcon
-  size?: 'md' | 'lg'
+  size?: UiControlSize
   enabled?: boolean
   /** 开关按钮（节目工具模式）的开启态 */
   on?: boolean
@@ -82,7 +84,7 @@ export function VideoEditButtonBarEditorPanel<Id extends string>({ specs, saved,
     <div className="grid grid-cols-8 gap-1" role="group" aria-label="可用按钮">
       {specs.map(spec => <UiIconButton key={spec.id} aria-label={spec.title} title={`${spec.title}：拖到下方按钮栏，或点击加入／移出`} on={draft.includes(spec.id)} aria-pressed={draft.includes(spec.id)} draggable
         onDragStart={event => { event.dataTransfer.setData(BUTTON_MIME, spec.id); event.dataTransfer.effectAllowed = 'copy' }}
-        onDragEnd={() => setDropIndex(null)} onClick={() => toggle(spec.id)}><spec.Icon size={15} /></UiIconButton>)}
+        onDragEnd={() => setDropIndex(null)} onClick={() => toggle(spec.id)}><spec.Icon /></UiIconButton>)}
     </div>
     <p className="text-xs text-text3">把按钮拖进按钮栏；在栏内拖动调整顺序，拖出栏外即移除。</p>
     <div ref={barRef} className="relative flex min-h-control-md flex-wrap items-center justify-center gap-0.5 rounded-field bg-window px-1 py-0.5" role="list" aria-label="按钮栏"
@@ -101,10 +103,10 @@ export function VideoEditButtonBarEditorPanel<Id extends string>({ specs, saved,
         const dragging = dragState.isDragging && dragState.fromIndex === index
         const offset = dragging ? `translate(${dragState.currentX - dragState.startX}px, ${dragState.currentY - dragState.startY}px)` : `translateX(${shift(index)}px)`
         return <div key={id} ref={element => { itemRefs.current[index] = element }} role="listitem" aria-label={spec.title} title={spec.title}
-          className={`relative flex h-7 w-7 cursor-grab items-center justify-center rounded-control text-text2 hover:bg-hover ${dragging ? 'z-raised bg-hover' : 'transition-transform duration-120'} ${dragging && draggingOut ? 'opacity-40' : ''}`}
+          className={`relative flex h-control-sm w-control-sm cursor-grab items-center justify-center rounded-control text-text2 hover:bg-hover ${dragging ? 'z-raised bg-hover' : 'transition-transform duration-120'} ${dragging && draggingOut ? 'opacity-40' : ''}`}
           style={{ transform: offset }} onMouseDown={event => handleMouseDown(index, event)}>
           {dropIndex === index && <span className="pointer-events-none absolute -left-0.5 bottom-1 top-1 w-0.5 rounded-full bg-accent" />}
-          <spec.Icon size={15} />
+          <spec.Icon size={UI_ICON_SIZE.sm} />
         </div>
       })}
       {dropIndex !== null && dropIndex >= draft.length && <span className="pointer-events-none h-5 w-0.5 rounded-full bg-accent" />}

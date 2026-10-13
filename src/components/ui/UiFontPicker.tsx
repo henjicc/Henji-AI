@@ -1,3 +1,4 @@
+import type { UiControlSize } from './primitiveInternals'
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Star, Trash2, Upload } from 'lucide-react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
@@ -12,7 +13,7 @@ import { loadDocumentFont, retainDocumentFonts, pinDocumentFonts, releaseDocumen
 export interface UiFontPickerProps {
   value: string
   ariaLabel?: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: UiControlSize
   disabled?: boolean
   projectFonts?: readonly string[]
   onSelect: (name: string, face: FontFaceInfo) => void
@@ -40,7 +41,7 @@ function FontRow({ face, active, selected, favorite, onPreview, onSelect, onErro
       <span className="min-w-0 truncate" style={{ fontFamily: ready ? cssFontFamily(face.fullName) : undefined }}>{face.localizedFamily}</span>
       <span className="shrink-0 text-sm text-text2" style={{ fontFamily: ready ? cssFontFamily(face.fullName) : undefined }}>{face.supportsCjk ? '痕迹 永 Aa' : 'Aa Bb 123'}</span>
     </UiOptionButton>
-    <UiIconButton size="sm" on={favorite} aria-label={`${favorite ? '取消收藏' : '收藏'}${face.localizedFamily}`} onClick={() => favoriteFont(face.family)}><Star className="h-3.5 w-3.5" /></UiIconButton>
+    <UiIconButton size="xs" on={favorite} aria-label={`${favorite ? '取消收藏' : '收藏'}${face.localizedFamily}`} onClick={() => favoriteFont(face.family)}><Star  /></UiIconButton>
   </div>
 }
 
@@ -112,14 +113,14 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
       }
       if (event.key === 'Enter' && familyRows[active]) { event.preventDefault(); event.stopPropagation(); choose(familyRows[active]) }
     }}>
-      <div className="flex items-center gap-2"><UiSearchInput ref={search} aria-label="搜索字体" placeholder="搜索中文名或英文名" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除字体搜索" /><UiIconButton aria-label="导入字体" disabled={busy} onClick={() => { void perform(importFonts) }}><Upload className="h-4 w-4" /></UiIconButton></div>
+      <div className="flex items-center gap-2"><UiSearchInput ref={search} aria-label="搜索字体" placeholder="搜索中文名或英文名" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除字体搜索" /><UiIconButton aria-label="导入字体" disabled={busy} onClick={() => { void perform(importFonts) }}><Upload  /></UiIconButton></div>
       <Dropdown<FontFilter> ariaLabel="字体分类" size="sm" value={filter} options={FILTERS} onSelect={setFilter} />
       {(error || library.error) && <UiError size="xs" message={error || library.error} onRetry={() => { setError(''); void loadFontLibrary(true).catch(report) }} />}
       {library.loading && <UiLoading size="xs" message="正在读取本机字体…" />}
       {familyRows.length ? <div role="listbox" aria-label="字体列表" aria-activedescendant={active >= 0 ? `${optionPrefix}-${active}` : undefined} onPointerLeave={restore}>
         <Virtuoso ref={list} style={FONT_LIST_STYLE} data={familyRows} computeItemKey={(_index, face) => face.id} initialItemCount={Math.min(8, familyRows.length)} itemContent={(index, face) => <FontRow face={face} optionId={`${optionPrefix}-${index}`} active={active === index} selected={current?.family === face.family} favorite={library.preferences.favorites.includes(face.family)} onPreview={() => { setActive(index); showPreview(face) }} onSelect={() => choose(face)} onError={report} /> } />
       </div> : !library.loading && <UiEmpty size="xs" title="没有匹配的字体" action={<UiButton size="sm" disabled={busy} onClick={() => { void perform(importFonts) }}>导入字体</UiButton>} />}
-      {current?.imported && <UiButton variant="danger" size="sm" disabled={busy} onClick={() => { void perform(() => removeFont(current.id)) }}><Trash2 className="h-3.5 w-3.5" />删除此导入字体</UiButton>}
+      {current?.imported && <UiButton variant="danger" size="sm" disabled={busy} onClick={() => { void perform(() => removeFont(current.id)) }}><Trash2  />删除此导入字体</UiButton>}
     </div>}>
       {({ open: expanded }) => <UiFieldTrigger size={size} className="w-full" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={expanded} open={expanded} data-panel-trigger-button onClick={() => { if (open) { restore(); setOpen(false) } else { void loadFontLibrary(true).catch(report); setOpen(true) } }}><span style={{ fontFamily: cssFontFamily(value) }}>{current?.localizedFamily ?? value}</span></UiFieldTrigger>}
     </PanelTrigger>

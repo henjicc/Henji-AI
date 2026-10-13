@@ -33,7 +33,7 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
             {tools.map(tool => <UiOptionButton key={tool.id} variant="menu" role="menuitem" active={tool.id === session?.activeTool} disabled={!available(tool.id)} onClick={() => setActiveTool(controller.sessionId, tool.id)}>{t(tool.labelKey)}</UiOptionButton>)}
           </div>}>
           {({ togglePanel, open }) => <Tooltip content={t(group.labelKey ?? current.labelKey)} delay={180} anchor="pointer-start">
-            <UiIconButton size="lg" data-panel-trigger-button data-tool-id={group.triggerId ?? current.id} on={tools.some(tool => tool.id === session?.activeTool)} aria-label={t(group.labelKey ?? current.labelKey)} aria-expanded={open} aria-pressed={tools.some(tool => tool.id === session?.activeTool)} onClick={() => { if (available(current.id)) setActiveTool(controller.sessionId, current.id); togglePanel() }}><CurrentIcon className="h-4 w-4" /></UiIconButton>
+            <UiIconButton size="md" data-panel-trigger-button data-tool-id={group.triggerId ?? current.id} on={tools.some(tool => tool.id === session?.activeTool)} aria-label={t(group.labelKey ?? current.labelKey)} aria-expanded={open} aria-pressed={tools.some(tool => tool.id === session?.activeTool)} onClick={() => { if (available(current.id)) setActiveTool(controller.sessionId, current.id); togglePanel() }}><CurrentIcon className="h-4 w-4" /></UiIconButton>
           </Tooltip>}
         </PanelTrigger> : tools.map(tool => {
           const Icon = tool.icon
@@ -43,7 +43,7 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
           const reason = resolveImageEditorReadinessReasonV3(readiness, t)
           const text = disabled ? (reason ? t('imageEditor.v3.readiness.unavailableWithReason', { label, reason }) : t('imageEditor.v3.readiness.unavailable', { label })) : label
           return <Tooltip key={tool.id} content={tool.shortcut && !disabled ? `${text} (${tool.shortcut.replace('Key', '')})` : text} delay={180} anchor="pointer-start">
-            <UiIconButton size="lg" data-tool-id={tool.id} data-tool-readiness={disabled ? 'disabled' : readiness.state} on={session?.activeTool === tool.id} disabled={disabled} aria-label={text} aria-pressed={session?.activeTool === tool.id} onClick={() => setActiveTool(controller.sessionId, tool.id)}><Icon className="h-4 w-4" /></UiIconButton>
+            <UiIconButton size="md" data-tool-id={tool.id} data-tool-readiness={disabled ? 'disabled' : readiness.state} on={session?.activeTool === tool.id} disabled={disabled} aria-label={text} aria-pressed={session?.activeTool === tool.id} onClick={() => setActiveTool(controller.sessionId, tool.id)}><Icon className="h-4 w-4" /></UiIconButton>
           </Tooltip>
         })}
       </div>

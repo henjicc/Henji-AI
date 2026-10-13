@@ -276,7 +276,7 @@ export function UiPageHeader({
           aria-label={backLabel}
           onClick={onBack}
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft  />
         </UiIconButton>
       ) : null}
       <div className="min-w-0 flex-1">

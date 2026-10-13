@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock3, FilePen, Folder, Layers, LayoutGrid, List, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -421,7 +422,7 @@ export function ProjectLibraryPage({
         aria-keyshortcuts="Control+N"
         onClick={(event) => (primarySource ? primarySource.onSelect() : startCreate(event.currentTarget))}
       >
-        <CreateIcon className="h-4 w-4" />
+        <CreateIcon  />
         {primarySource ? primarySource.label : labels.createAction}
       </UiButton>
       {railActions.length ? (
@@ -440,17 +441,17 @@ export function ProjectLibraryPage({
       {settled && !empty ? (
         <nav className="mt-4 flex flex-col gap-0.5 border-t border-line pt-4">
           <UiNavButton size="md" active={activeCategory === 'all' && !filtering} onClick={() => chooseCategory('all')}>
-            <Layers className="h-4 w-4 shrink-0" />
+            <Layers className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />
             <span className="truncate">{labels.nav.all}</span>
             {navCount(allCount)}
           </UiNavButton>
           <UiNavButton size="md" active={activeCategory === 'recent'} onClick={() => chooseCategory('recent')}>
-            <Clock3 className="h-4 w-4 shrink-0" />
+            <Clock3 className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />
             <span className="truncate">{labels.nav.recent}</span>
           </UiNavButton>
           {drafts.length ? (
             <UiNavButton size="md" active={activeCategory === 'drafts'} onClick={() => chooseCategory('drafts')}>
-              <FilePen className="h-4 w-4 shrink-0 text-warning-text" />
+              <FilePen className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-warning-text`} />
               <span className="truncate">{labels.nav.drafts}</span>
               {navCount(drafts.length, true)}
             </UiNavButton>
@@ -507,11 +508,11 @@ export function ProjectLibraryPage({
         />
       ) : null}
       <div role="group" aria-label={`${labels.view.grid} / ${labels.view.list}`} className="flex items-center">
-        <UiIconButton size="lg" on={view === 'grid'} title={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
-          <LayoutGrid className="h-4 w-4" />
+        <UiIconButton size="md" on={view === 'grid'} title={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
+          <LayoutGrid  />
         </UiIconButton>
-        <UiIconButton size="lg" on={view === 'list'} title={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
-          <List className="h-4 w-4" />
+        <UiIconButton size="md" on={view === 'list'} title={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
+          <List  />
         </UiIconButton>
       </div>
     </>

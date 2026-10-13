@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useState, type ReactNode } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -72,7 +73,7 @@ function useModelChipMinWidth(): [number, (contentWidth: number) => void] {
 function ExpandToggleButton({ isExpanded, onToggle }: { isExpanded: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
   return (
-    <UiIconButton size="sm"
+    <UiIconButton size="xs"
       type="button"
       onClick={(event) => {
         event.stopPropagation();
@@ -81,7 +82,7 @@ function ExpandToggleButton({ isExpanded, onToggle }: { isExpanded: boolean; onT
       className="nodrag"
       title={isExpanded ? t('modelParams.collapse', { defaultValue: '收起' }) : t('modelParams.expand', { defaultValue: '展开' })}
     >
-      {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+      {isExpanded ? <Minimize2  /> : <Maximize2  />}
     </UiIconButton>
   );
 }
@@ -212,7 +213,7 @@ export const ImageModelSelectorNode = memo((props: ModelSelectorNodeProps) => (
     {...props}
     nodeType={CANVAS_NODE_TYPES.imageModelSelector}
     mediaType="image"
-    icon={<ImageModelIcon className="h-4 w-4" />}
+    icon={<ImageModelIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
   />
 ));
 ImageModelSelectorNode.displayName = 'ImageModelSelectorNode';
@@ -222,7 +223,7 @@ export const VideoModelSelectorNode = memo((props: ModelSelectorNodeProps) => (
     {...props}
     nodeType={CANVAS_NODE_TYPES.videoModelSelector}
     mediaType="video"
-    icon={<VideoModelIcon className="h-4 w-4" />}
+    icon={<VideoModelIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
   />
 ));
 VideoModelSelectorNode.displayName = 'VideoModelSelectorNode';
@@ -232,7 +233,7 @@ export const AudioModelSelectorNode = memo((props: ModelSelectorNodeProps) => (
     {...props}
     nodeType={CANVAS_NODE_TYPES.audioModelSelector}
     mediaType="audio"
-    icon={<AudioModelIcon className="h-4 w-4" />}
+    icon={<AudioModelIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
   />
 ));
 AudioModelSelectorNode.displayName = 'AudioModelSelectorNode';

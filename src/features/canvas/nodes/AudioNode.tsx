@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type DragEvent } from 'react';
 import { useStore } from 'zustand';
 import { usePlaybackClock, type PlaybackClockStore } from '@/hooks/usePlaybackClock';
@@ -257,8 +258,8 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={isUploadVariant
-          ? <AudioUploadIcon className="h-4 w-4" />
-          : <AudioGenerationIcon className="h-4 w-4" />}
+          ? <AudioUploadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />
+          : <AudioGenerationIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -288,7 +289,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
                 }}
                 className="nodrag"
               >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
+                {isPlaying ? <Pause  /> : <Play className={`ml-0.5`} />}
               </UiIconButton>
               <AudioPlaybackReadout clock={playbackClock} durationLabel={durationLabel ?? formatDuration(effectiveDuration)} />
               <span className="min-w-0 flex-1" />
@@ -303,7 +304,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
                 }}
                 className="nodrag"
               >
-                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                {muted ? <VolumeX  /> : <Volume2  />}
               </UiIconButton>
               <UiIconButton
                 aria-label={t('node.audioNode.openViewer')}
@@ -315,17 +316,17 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
                 }}
                 className="nodrag"
               >
-                <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <Maximize2   />
               </UiIconButton>
             </div>
           </div>
         ) : isUploadVariant ? (
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1.5 text-text2">
-            <AudioUploadIcon className="h-6 w-6 text-text3" />
+            <AudioUploadIcon className={`${UI_ICON_SIZE_CLASS.xl} text-text3`} />
             <span className="text-2xs">{t('node.audioNode.uploadHint')}</span>
           </div>
         ) : (
-          <UiEmpty size="node" icon={<AudioGenerationIcon className="h-6 w-6" />} title={t('node.audioNode.waitingResult')} />
+          <UiEmpty size="node" icon={<AudioGenerationIcon className={`${UI_ICON_SIZE_CLASS.xl}`} />} title={t('node.audioNode.waitingResult')} />
         )}
 
         {isGenerating && (

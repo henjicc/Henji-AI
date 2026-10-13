@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { useEffect, useState, type ReactNode } from 'react'
 import {
@@ -83,9 +84,9 @@ export function AssistantTraceDetail({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <UiSegmented ariaLabel="追踪详情视图" value={mode} onChange={setMode} options={[{ value: 'visual', label: '可视化', icon: <PanelsTopLeft className="mr-1 h-3.5 w-3.5" /> }, { value: 'json', label: '原始 JSON', icon: <Braces className="mr-1 h-3.5 w-3.5" /> }]} />
+            <UiSegmented ariaLabel="追踪详情视图" value={mode} onChange={setMode} options={[{ value: 'visual', label: '可视化', icon: <PanelsTopLeft className={`${UI_ICON_SIZE_CLASS.sm} mr-1`} /> }, { value: 'json', label: '原始 JSON', icon: <Braces className={`${UI_ICON_SIZE_CLASS.sm} mr-1`} /> }]} />
             <UiButton type="button" variant="secondary" disabled={!canCompare} onClick={onCompare}>
-              <GitCompare className="mr-1 h-3.5 w-3.5" />对比上轮
+              <GitCompare className={`mr-1`} />对比上轮
             </UiButton>
           </div>
         </div>
@@ -212,7 +213,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
     <section className={`overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
       <UiButton type="button" size="lg" className="w-full justify-between" onClick={() => setOpen(!open)}>
         <span className="flex items-center gap-2 text-xs font-medium text-text1">
-          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          {open ? <ChevronDown  /> : <ChevronRight  />}
           {title}
         </span>
         {badge && <span className="rounded bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">{badge}</span>}
@@ -242,7 +243,7 @@ function Metric({ label, value }: { label: string; value: string }): JSX.Element
 
 function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label: string; copied: boolean; disabled?: boolean; onClick: () => void; icon?: 'copy' | 'terminal' }): JSX.Element {
   const Icon = icon === 'terminal' ? TerminalSquare : Copy
-  return <UiButton type="button" variant="secondary" disabled={disabled} onClick={onClick}><Icon className="mr-1 h-3.5 w-3.5" />{copied ? '已复制' : label}</UiButton>
+  return <UiButton type="button" variant="secondary" disabled={disabled} onClick={onClick}><Icon className={`mr-1`} />{copied ? '已复制' : label}</UiButton>
 }
 
 function LabeledBlock({ label, children }: { label: string; children: ReactNode }): JSX.Element {

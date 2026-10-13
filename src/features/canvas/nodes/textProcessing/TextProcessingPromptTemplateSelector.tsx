@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useRef, useState } from 'react'
 import { Check, ChevronDown, Settings2 } from 'lucide-react'
 
@@ -69,7 +70,7 @@ export function TextProcessingPromptTemplateSelector({
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className={UI_TEXT_PANEL_TITLE_CLASS}>{label}</div>
                   <UiButton type="button" onClick={openManager}>
-                    <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+                    <Settings2 className={`mr-1.5`} />
                     {editLabel}
                   </UiButton>
                 </div>
@@ -83,7 +84,7 @@ export function TextProcessingPromptTemplateSelector({
                   >
                     <span className="truncate">{customLabel}</span>
                     {selectedTemplateId === TEXT_PROCESSING_CUSTOM_TEMPLATE_ID
-                      ? <Check className="h-4 w-4 shrink-0" />
+                      ? <Check className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />
                       : null}
                   </UiOptionButton>
                   {templates.map((template) => (
@@ -97,7 +98,7 @@ export function TextProcessingPromptTemplateSelector({
                     >
                       <span className="truncate">{template.name}</span>
                       {template.id === selectedTemplateId
-                        ? <Check className="h-4 w-4 shrink-0" />
+                        ? <Check className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />
                         : null}
                     </UiOptionButton>
                   ))}
@@ -122,7 +123,7 @@ export function TextProcessingPromptTemplateSelector({
                   className={`nodrag nowheel font-normal ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-left">{display}</span>
-                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
                 </UiButton>
               )
             }}

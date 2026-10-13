@@ -397,7 +397,7 @@ export function NodeParamControl({ param, value, onChange, allValues, onParamCha
           onCheckedChange={onChange}
           offLabel={t('common:off', '关')}
           onLabel={t('common:on', '开')}
-          size="compact"
+          size="sm"
           disabled={disabled}
         />
       );

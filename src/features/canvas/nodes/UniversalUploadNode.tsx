@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useNodeFileDragOver } from './shared/useNodeFileDragOver'
@@ -165,13 +166,13 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
       {isDragOver ? <div aria-hidden="true" className={NODE_DROP_TARGET_OVERLAY_CLASS} /> : null}
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<UniversalUploadIcon className="h-4 w-4" />}
+        icon={<UniversalUploadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolveNodeDisplayName(CANVAS_NODE_TYPES.universalUpload, data)}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
       <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--node-radius)] bg-gap px-5 text-center">
-        <BodyIcon className="h-7 w-7 text-text2" />
+        <BodyIcon className={`${UI_ICON_SIZE_CLASS.xl} text-text2`} />
         <span className="text-sm font-medium text-text1">
           {showPreparing
             ? t('node.universalUpload.preparing')

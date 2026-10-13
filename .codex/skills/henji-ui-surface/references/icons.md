@@ -53,3 +53,11 @@ npm run check:icons:strict   # 门禁式，已接入 build / electron:build 与 
 
 确需例外时在该行或上一行加注释 `icon-token-allow` 并写明理由；规则 C 的整文件豁免只给“只产出开发者控制台内容”的文件，
 登记在 `check-icon-tokens.cjs` 的 `GLYPH_FILE_EXEMPTIONS` 并写明理由。
+
+## 尺寸与描边
+
+`UI_ICON_SIZE`（`@/core/theme/icons`）与 `UI_ICON_SIZE_CLASS`（`styleTokens`）共用 xs/sm/md/lg/xl/display/hero = 12/14/16/20/24/32/40。数字属性优先 `size={UI_ICON_SIZE.md}`，类名用相应 class 令牌。
+
+`UiButton` / `UiIconButton` 自动限定 lucide 子图标尺寸，调用点不再指定子图标 size 或宽高类；2xs/xs/sm/md/lg/xl 分别配 12/14/14/16/16/20 图标。普通描边使用 lucide 默认 2（登记 `UI_ICON_STROKE_WIDTH`），仅窗口控件使用 `UI_WINDOW_ICON_STROKE_WIDTH` 1.5 与交通灯 `UI_WINDOW_ICON_SIZE` 8。
+
+门禁 D 检查导入别名、条件尺寸、按钮后代尺寸覆盖和描边；不接受行注释豁免。S6 检查静态可确定的横向直接兄弟控件是否使用相同 size；嵌套、动态布局与实际 DOM 高度审计归任务 5.2。

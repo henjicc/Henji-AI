@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { ChevronDown, Crop, FlipHorizontal, RotateCcw, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -183,23 +184,23 @@ export function ImageEditorCropParametersV3({
 
   return (
     <div data-crop-parameters className="flex h-full min-w-max items-center gap-1.5">
-      <UiIconButton size="lg"
+      <UiIconButton size="md"
         className="shrink-0"
         aria-label={t('imageEditor.v3.crop.rotateLeft')}
         title={t('imageEditor.v3.crop.rotateLeft')}
         onClick={() => rotate(-90)}
       >
-        <RotateCcw className="h-4 w-4" />
+        <RotateCcw  />
       </UiIconButton>
-      <UiIconButton size="lg"
+      <UiIconButton size="md"
         className="shrink-0"
         aria-label={t('imageEditor.v3.crop.rotateRight')}
         title={t('imageEditor.v3.crop.rotateRight')}
         onClick={() => rotate(90)}
       >
-        <RotateCw className="h-4 w-4" />
+        <RotateCw  />
       </UiIconButton>
-      <UiIconButton size="lg"
+      <UiIconButton size="md"
         className="shrink-0"
         on={orientation.mirrored}
         aria-label={t('imageEditor.v3.crop.mirror')}
@@ -213,7 +214,7 @@ export function ImageEditorCropParametersV3({
           preview(next, null)
         }}
       >
-        <FlipHorizontal className="h-4 w-4" />
+        <FlipHorizontal  />
       </UiIconButton>
       <div className="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true" />
       <PanelTrigger
@@ -243,7 +244,7 @@ export function ImageEditorCropParametersV3({
                 >
                   <span className="flex h-6 items-center justify-center" aria-hidden="true">
                     {ratio === 'free' ? (
-                      <Crop className="h-4 w-4" />
+                      <Crop className={`${UI_ICON_SIZE_CLASS.md}`} />
                     ) : (
                       <span
                         className="block border-2 border-current"
@@ -272,7 +273,7 @@ export function ImageEditorCropParametersV3({
           >
             <span className="truncate">{cropAspectRatioLabel}</span>
             <ChevronDown
-              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`}
+              className={`shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`}
               aria-hidden="true"
             />
           </UiButton>

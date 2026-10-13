@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import {
   ArrowDown,
   ArrowUp,
@@ -346,7 +347,7 @@ export function ImageEditorLayersPanelV3({
               aria-expanded={open}
               onClick={togglePanel}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus  />
             </UiIconButton>
           )}
         </PanelTrigger>
@@ -364,7 +365,7 @@ export function ImageEditorLayersPanelV3({
             ))
           }}
         >
-          <ArrowUp className="h-3.5 w-3.5" />
+          <ArrowUp  />
         </UiIconButton>
         <UiIconButton
           disabled={!primaryEditable || !primaryLocation || primaryLocation.index <= 0}
@@ -379,7 +380,7 @@ export function ImageEditorLayersPanelV3({
             ))
           }}
         >
-          <ArrowDown className="h-3.5 w-3.5" />
+          <ArrowDown  />
         </UiIconButton>
         <UiIconButton
           disabled={!primaryEditable || !primaryLocation}
@@ -395,7 +396,7 @@ export function ImageEditorLayersPanelV3({
             if (duplicateId) setSelectedLayerIds(controller.sessionId, [duplicateId])
           }}
         >
-          <Copy className="h-3.5 w-3.5" />
+          <Copy  />
         </UiIconButton>
         <UiIconButton tone="danger"
           disabled={!canDelete}
@@ -406,7 +407,7 @@ export function ImageEditorLayersPanelV3({
             effectiveSelectedIds.forEach(controller.deleteLayer)
           }}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2  />
         </UiIconButton>
       {controller.profile.layerKinds.includes('group') ? <PanelTrigger panelWidth={200} panelPadding="menu" closeOnPanelClick
         renderPanel={() => <div role="menu" className="flex flex-col gap-1">
@@ -415,13 +416,13 @@ export function ImageEditorLayersPanelV3({
           onClick={() => {
             try { const id = controller.groupLayers(effectiveSelectedIds, t('imageEditor.v3.workflow.groupName')); setSelectedLayerIds(controller.sessionId, [id]); toggleGroupExpanded(controller.sessionId, id); setCreationError(null) }
             catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><FolderPlus className="h-4 w-4" />{t('imageEditor.v3.workflow.group')}</UiOptionButton>
+          }}><FolderPlus className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.group')}</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.ungroup')} disabled={!canUngroupImageEditLayerV3(primaryLocation)}
           onClick={() => {
             if (!primaryLocation || primaryLocation.layer.type !== 'group') return
             try { const ids = primaryLocation.layer.children.map(layer => layer.id); controller.ungroupLayer(primaryLocation.layer.id); setSelectedLayerIds(controller.sessionId, ids); setCreationError(null) }
             catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><Ungroup className="h-4 w-4" />{t('imageEditor.v3.workflow.ungroup')}</UiOptionButton>
+          }}><Ungroup className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.ungroup')}</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.outGroup')} disabled={!primaryEditable || !primaryLocation?.parentId}
           onClick={() => {
             if (!primaryLocation?.parentId) return
@@ -429,10 +430,10 @@ export function ImageEditorLayersPanelV3({
             if (!parent) return
             try { controller.moveLayer(primaryLocation.layer.id, parent.parentId, parent.index + 1); setCreationError(null) }
             catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><CornerUpLeft className="h-4 w-4" />{t('imageEditor.v3.workflow.outGroup')}</UiOptionButton>
+          }}><CornerUpLeft className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.outGroup')}</UiOptionButton>
         </div>}>
         {({ open, togglePanel }) => <UiIconButton on={open} aria-haspopup="menu" aria-expanded={open}
-          aria-label={t('imageEditor.v3.filterWorkspace.moreLayerActions', { defaultValue: '更多图层操作' })} onClick={togglePanel}><MoreHorizontal className="h-4 w-4" /></UiIconButton>}
+          aria-label={t('imageEditor.v3.filterWorkspace.moreLayerActions', { defaultValue: '更多图层操作' })} onClick={togglePanel}><MoreHorizontal  /></UiIconButton>}
       </PanelTrigger> : null}
       </div>
 

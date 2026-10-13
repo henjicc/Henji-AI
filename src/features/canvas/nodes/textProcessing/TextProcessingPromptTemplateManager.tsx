@@ -133,7 +133,7 @@ export function TextProcessingPromptTemplateManager({
             ))}
           </div>
           <UiButton type="button" variant="secondary" size="lg" onClick={addTemplate}>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className={`mr-2`} />
             {t('node.templateManager.add')}
           </UiButton>
         </div>
@@ -159,7 +159,7 @@ export function TextProcessingPromptTemplateManager({
             <div className="flex items-center justify-between gap-3">
               <span className={UI_TEXT_META_CLASS}>{t('node.templateManager.plainTextOnly')}</span>
               <UiButton type="button" variant="danger" onClick={deleteSelected}>
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className={`mr-2`} />
                 {t('node.templateManager.delete')}
               </UiButton>
             </div>

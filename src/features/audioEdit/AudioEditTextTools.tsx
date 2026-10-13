@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FolderSearch, PencilLine, Regex, X } from 'lucide-react'
 import { PanelTrigger, UiButton, UiIconButton, UiInput, UiModal, UiOptionButton, UiTextArea } from '@/components/ui'
@@ -34,10 +35,10 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink }: {
       renderPanel={() => (
         <div role="menu" aria-label="口播" className="flex flex-col gap-0.5">
           <UiOptionButton role="menuitem" variant="menu" size="md" className="w-full gap-2" onClick={startRename}>
-            <PencilLine size={14} />重命名
+            <PencilLine size={UI_ICON_SIZE.sm} />重命名
           </UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="md" className="w-full gap-2" onClick={onRelink}>
-            <FolderSearch size={14} />重新定位原素材
+            <FolderSearch size={UI_ICON_SIZE.sm} />重新定位原素材
           </UiOptionButton>
         </div>
       )}
@@ -46,7 +47,7 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink }: {
         <UiButton size="sm" className="min-w-0 max-w-full gap-1" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           title="口播菜单 · 双击重命名" onClick={togglePanel} onDoubleClick={startRename}>
           <span className="truncate">{name}</span>
-          <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text3" />
+          <ChevronDown  aria-hidden="true" className="shrink-0 text-text3" />
         </UiButton>
       )}
     </PanelTrigger>
@@ -70,15 +71,15 @@ export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTe
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); search.close() }
   }}>
     <div className="flex flex-wrap items-center gap-1.5">
-      <UiIconButton title={search.showReplace ? '收起替换' : '展开替换'} aria-expanded={search.showReplace} onClick={search.toggleReplace}>{search.showReplace ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</UiIconButton>
+      <UiIconButton title={search.showReplace ? '收起替换' : '展开替换'} aria-expanded={search.showReplace} onClick={search.toggleReplace}>{search.showReplace ? <ChevronDown  /> : <ChevronRight  />}</UiIconButton>
       <UiInput ref={inputRef} autoFocus size="sm" aria-label="查找文字" aria-invalid={Boolean(search.error)} className="min-w-32 max-w-sm flex-1" placeholder={search.regex ? '正则表达式' : '查找文字'} value={search.query} onChange={(event) => search.setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search.navigate(event.shiftKey ? -1 : 1) } }} />
-      <UiIconButton title="使用正则表达式" aria-label="使用正则表达式" on={search.regex} onClick={search.toggleRegex}><Regex size={16} /></UiIconButton>
-      <UiIconButton title="上一处 · Shift+Enter" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp size={16} /></UiIconButton>
-      <UiIconButton title="下一处 · Enter" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown size={16} /></UiIconButton>
+      <UiIconButton title="使用正则表达式" aria-label="使用正则表达式" on={search.regex} onClick={search.toggleRegex}><Regex  /></UiIconButton>
+      <UiIconButton title="上一处 · Shift+Enter" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp  /></UiIconButton>
+      <UiIconButton title="下一处 · Enter" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown  /></UiIconButton>
       <span className="text-xs tabular-nums text-text3" aria-live="polite">{search.matches.length ? `${search.currentIndex + 1} / ${search.matches.length} 处` : search.query ? '无匹配' : ''}</span>
       {search.error && <span role="alert" className="text-xs text-warning-text">{search.error}</span>}
       {!search.showReplace && search.message && <span className="text-xs text-text3" aria-live="polite">{search.message}</span>}
-      <UiIconButton aria-label="关闭查找替换" title="关闭查找替换 · Esc" className="ml-auto" onClick={search.close}><X size={16} /></UiIconButton>
+      <UiIconButton aria-label="关闭查找替换" title="关闭查找替换 · Esc" className="ml-auto" onClick={search.close}><X  /></UiIconButton>
     </div>
     {search.showReplace && <div className="flex flex-wrap items-center gap-1.5">
       {/* 与上一行展开按钮同宽的占位，让两行输入框左缘对齐 */}

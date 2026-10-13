@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Brush, Eraser } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -51,8 +52,8 @@ export function MaskEditorInspector({
         <UiFormRow label={t('maskInspector.mode')} density="compact">
           <UiSegmented ariaLabel={t('maskInspector.mode')} value={mode} onChange={onModeChange} size="sm"
             options={[
-              { value: 'paint', label: t('maskInspector.paint'), icon: <Brush className="h-4 w-4" />, title: t('maskInspector.paintShortcut') },
-              { value: 'erase', label: t('maskInspector.erase'), icon: <Eraser className="h-4 w-4" />, title: t('maskInspector.eraseShortcut') },
+              { value: 'paint', label: t('maskInspector.paint'), icon: <Brush className={`${UI_ICON_SIZE_CLASS.md}`} />, title: t('maskInspector.paintShortcut') },
+              { value: 'erase', label: t('maskInspector.erase'), icon: <Eraser className={`${UI_ICON_SIZE_CLASS.md}`} />, title: t('maskInspector.eraseShortcut') },
             ]} />
         </UiFormRow>
       </UiGroup>

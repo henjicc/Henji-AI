@@ -200,7 +200,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               title={t('windowControls.assistant')}
               aria-label={t('windowControls.assistant')}
             >
-              <Sparkles className="h-4 w-4" />
+              <Sparkles  />
             </UiIconButton>
           )}
           <UiIconButton
@@ -210,7 +210,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             title={t('actions.settings')}
             aria-label={t('actions.settings')}
           >
-            <ICON_SETTINGS className="h-4 w-4" />
+            <ICON_SETTINGS  />
           </UiIconButton>
           {!isMacOS && (
             <>

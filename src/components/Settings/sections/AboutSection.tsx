@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useEffect, useState } from 'react'
 import { ChevronRight, ExternalLink } from 'lucide-react'
 import {
@@ -58,14 +59,14 @@ const AboutSection: React.FC = () => {
       <UiFormRow label={t('sections.about.authorLabel')} inline>
         <UiButton type="button" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_AUTHOR_URL)}>
           {ABOUT_AUTHOR_NAME}
-          <ExternalLink className="h-3.5 w-3.5" />
+          <ExternalLink  />
         </UiButton>
       </UiFormRow>
 
       <UiFormRow label={t('sections.about.homepageLabel')} inline>
         <UiButton type="button" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_PROJECT_URL)}>
           {ABOUT_PROJECT_URL_LABEL}
-          <ExternalLink className="h-3.5 w-3.5" />
+          <ExternalLink  />
         </UiButton>
       </UiFormRow>
 
@@ -102,7 +103,7 @@ const AboutSection: React.FC = () => {
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <span className={UI_TEXT_META_CLASS}>{component.license}</span>
-                  <ChevronRight className="h-3.5 w-3.5 text-text2" />
+                  <ChevronRight className={`${UI_ICON_SIZE_CLASS.sm} text-text2`} />
                 </span>
               </UiOptionButton>
               </div>

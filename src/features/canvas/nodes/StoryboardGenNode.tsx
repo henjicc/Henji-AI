@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
@@ -249,7 +250,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     >
       <NodeHeader
         className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
-        icon={<StoryboardIcon className="h-4 w-4" />}
+        icon={<StoryboardIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         iconAdjust={STORYBOARD_GEN_ICON_ADJUST}
         editable
@@ -264,7 +265,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         )}
       />
 
-      <NodeLodPlaceholder title={resolvedTitle} icon={<StoryboardIcon className="h-6 w-6" />} />
+      <NodeLodPlaceholder title={resolvedTitle} icon={<StoryboardIcon className={`${UI_ICON_SIZE_CLASS.xl}`} />} />
 
       <StoryboardGridEditor
         nodeId={id}

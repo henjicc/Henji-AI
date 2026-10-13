@@ -209,14 +209,14 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           onClick={() => setIsAddingNew(true)}
           className="mb-3 gap-2"
         >
-          <Plus className="w-4 h-4" />
+          <Plus  />
           {t('modelscopeCustomModel.addNew')}
         </UiButton>
       ) : (
         <UiPanel variant="inset" className="mb-3 p-3">
           <div className="flex items-center justify-between mb-2">
             <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.addNew')}</div>
-            <UiIconButton size="lg"
+            <UiIconButton size="md"
               type="button"
               onClick={() => {
                 setIsAddingNew(false)
@@ -225,7 +225,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               }}
               aria-label={t('common:close')}
             >
-              <X className="w-4 h-4" />
+              <X  />
             </UiIconButton>
           </div>
           <div className="flex flex-col gap-2">

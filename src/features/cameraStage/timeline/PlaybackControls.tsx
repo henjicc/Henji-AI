@@ -17,15 +17,15 @@ export const PlaybackButtons: React.FC<{ canPlay?: boolean }> = ({ canPlay }) =>
   return (
     <div className="flex items-center gap-1">
       <UiIconButton title="回到起点" onClick={stop}>
-        <SkipBack size={14} />
+        <SkipBack  />
       </UiIconButton>
       <UiIconButton disabled={!playbackEnabled}
         title={playing ? '暂停' : '播放'} onClick={() => (playing ? pause() : play())}>
-        {playing ? <Pause size={15} /> : <Play size={15} />}
+        {playing ? <Pause  /> : <Play  />}
       </UiIconButton>
       <UiIconButton on={loop}
         title="循环播放" onClick={toggleLoop}>
-        <Repeat size={14} />
+        <Repeat  />
       </UiIconButton>
     </div>
   )

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { EyeOff, FileCode, MessageSquare, RotateCcw, RotateCw, CornerUpLeft } from 'lucide-react'
 import { UiIconButton, UiTextAreaField, UiSwitch } from '@/components/ui'
@@ -118,17 +119,17 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     {/* icon-token-allow: 选框与吸附线由当前作者几何计算，不是图标。 */}
     <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className="absolute inset-0 h-full w-full" aria-hidden>
       <polygon data-code-element-edit-body data-code-element-selected points={points.map(point => `${point.x * 1000},${point.y * 1000}`).join(' ')} className="pointer-events-auto cursor-move fill-transparent stroke-accent" strokeWidth={2} vectorEffect="non-scaling-stroke" onPointerDown={event => start(event, 'move')} onDoubleClick={event => { event.stopPropagation(); run(editText) }} onContextMenu={event => menu.showMenu(event, [
-        { id: 'ask', label: '让助手改这里', icon: <MessageSquare size={14} />, onClick: () => run(() => askAssistantForVideoEditCodeElement(target)) },
-        { id: 'hide', label: '隐藏元素', icon: <EyeOff size={14} />, onClick: () => run(() => updateVideoEditCodeElement(target, { hidden: true })) },
-        { id: 'reset', label: '重置该元素的覆盖', icon: <RotateCcw size={14} />, onClick: () => run(() => resetVideoEditCodeElement(target)) },
-        { id: 'bake', label: busy ? '正在写回源码' : '写回源码', icon: <CornerUpLeft size={14} />, disabled: busy || !readCodeElementOverride(selected.entry.clip.elementOverrides, target.elementId), onClick: () => run(bake) },
-        { id: 'source', label: '在源码中查看', icon: <FileCode size={14} />, onClick: () => run(() => showVideoEditCodeElementSource(target)) },
+        { id: 'ask', label: '让助手改这里', icon: <MessageSquare size={UI_ICON_SIZE.sm} />, onClick: () => run(() => askAssistantForVideoEditCodeElement(target)) },
+        { id: 'hide', label: '隐藏元素', icon: <EyeOff size={UI_ICON_SIZE.sm} />, onClick: () => run(() => updateVideoEditCodeElement(target, { hidden: true })) },
+        { id: 'reset', label: '重置该元素的覆盖', icon: <RotateCcw size={UI_ICON_SIZE.sm} />, onClick: () => run(() => resetVideoEditCodeElement(target)) },
+        { id: 'bake', label: busy ? '正在写回源码' : '写回源码', icon: <CornerUpLeft size={UI_ICON_SIZE.sm} />, disabled: busy || !readCodeElementOverride(selected.entry.clip.elementOverrides, target.elementId), onClick: () => run(bake) },
+        { id: 'source', label: '在源码中查看', icon: <FileCode size={UI_ICON_SIZE.sm} />, onClick: () => run(() => showVideoEditCodeElementSource(target)) },
       ])} />
       {guides.x !== undefined && <line data-code-element-guide="x" x1={guides.x * 1000} x2={guides.x * 1000} y1={0} y2={1000} className="stroke-accent" vectorEffect="non-scaling-stroke" />}
       {guides.y !== undefined && <line data-code-element-guide="y" y1={guides.y * 1000} y2={guides.y * 1000} x1={0} x2={1000} className="stroke-accent" vectorEffect="non-scaling-stroke" />}
     </svg>
-    {!text && <>{points.map((point, corner) => <UiIconButton key={corner} size="xs" aria-label={`缩放元素角${corner + 1}`} className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2" style={cornerStyle(point)} onPointerDown={event => start(event, 'resize', corner)}><span className="h-1 w-1 bg-current" /></UiIconButton>)}
-      <UiIconButton size="sm" aria-label="旋转元素" className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full" style={cornerStyle(rotationPoint)} onPointerDown={event => start(event, 'rotate')}><RotateCw size={14} /></UiIconButton></>}
+    {!text && <>{points.map((point, corner) => <UiIconButton key={corner} size="2xs" aria-label={`缩放元素角${corner + 1}`} className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2" style={cornerStyle(point)} onPointerDown={event => start(event, 'resize', corner)}><span className="h-1 w-1 bg-current" /></UiIconButton>)}
+      <UiIconButton size="xs" aria-label="旋转元素" className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full" style={cornerStyle(rotationPoint)} onPointerDown={event => start(event, 'rotate')}><RotateCw  /></UiIconButton></>}
     {text && <div className="pointer-events-auto absolute min-w-40" style={cornerStyle(points[0])}><UiTextAreaField autoFocus rows={Math.max(1, text.value.split('\n').length)} aria-label="原地编辑代码文字" value={text.value} onChange={event => setText({ ...text, value: event.target.value })} onBlur={() => setText(undefined)} onKeyDown={event => {
       event.stopPropagation()
       if (event.nativeEvent.isComposing) return

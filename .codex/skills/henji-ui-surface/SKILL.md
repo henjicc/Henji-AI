@@ -57,7 +57,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
 
-这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–C）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
+这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–D、同行静态 S6）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
 
 ## 五级容器词汇表（先背这张表）
 
@@ -228,7 +228,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（�
 | 画面上 | `media` | `tone="media"` | 压在图片/视频/画布上的控件（固定媒体叠层令牌） |
 | 窗口控件 | —— | `UiWindowControl action platform` | 只用于无边框窗口标题栏的最小化/最大化/还原/关闭（Windows 36×28 静默、关闭悬停危险实底；macOS 交通灯取状态实底令牌） |
 
-尺寸：`UiButton size` sm/md/lg = 28/32/36（默认 md）；`UiIconButton size` xs/sm/md/lg = 20/24/28/32（默认 md），
+尺寸：`UiButton size` sm/md/lg = 28/32/36（默认 md）；`UiIconButton size` 2xs/xs/sm/md/lg = 20/24/28/32/36（默认 md），
 xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconButton on`（淡强调底 + 强调色图标）。
 **外观只由 variant / size / tone / on / shape 决定**，className 只放布局；调用点改底色、边框、文字色、圆角、
 阴影、高度或字号会被 `check:surface` 规则 E 拦截（确属非按钮外观的命中区，如拖动柄、时间轴记号，行级
@@ -598,8 +598,9 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
-| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底与强文字选中态由 primitive 维护；最多五项，超过五项转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
+| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；最多五项，超过五项转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
+| 工具栏只读数值 | `UiReadout size="sm" / "md" / "lg" tone="default" / "media"`；外框与同行控件等高，等宽数字 | 自写 h-7/h-8 读数仿控件 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
 | 存量标签包装（待任务 4.6 迁移） | 旧 `Toggle` / `TextInput` 只供既有调用；新代码用 `UiFormRow` + `UiSwitch` / `UiInput` | 新增旧包装调用；在中心页任务中删除或迁移业务调用方 |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
@@ -628,7 +629,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 指针事件合帧 / 延后一次测量 | `useRafCallback`（`@/hooks/useRafCallback`）/ `createRafScheduler`（`@/utils/createRafScheduler`；最新样本、cancel、flush，传 ownerWindow） | 各自管理 rAF id；结束/卸载后还有待执行帧 |
 | 音频播放位置 | `usePlaybackClock`（`@/hooks/usePlaybackClock`；单个播放循环，波形与秒读数叶子订阅，AudioPlayer / AudioNode 已接入） | 播放帧 setState 重渲染整个播放器或节点 |
 | 瞬态 keyed 进度 | `createTransientProgressStore`（`@/stores/createTransientProgressStore`；set / clear / clearAll / useEntry，自定义 normalize / equals；Record/Map 适配只保留字段与动作名） | 拷贝三套相等短路和清理逻辑；瞬态进度入文档或撤销 |
-| 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
+| 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md/lg；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：
 1. 在 `@/components/ui` 与本表中确认没有可复用或可扩展的组件

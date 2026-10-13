@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationMessage } from '@/i18n/notifications'
 import React, { Suspense, useEffect, useMemo, useState } from 'react'
 import { ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
@@ -99,7 +100,7 @@ const ToolboxHome: React.FC = () => {
                     title={`在${tool ? t(tool.descriptor.titleKey) : '工具'}中打开`}
                     onClick={() => openRecent(file)}
                   >
-                    <Icon size={16} aria-hidden="true" className="text-text3" />
+                    <Icon size={UI_ICON_SIZE.md} aria-hidden="true" className="text-text3" />
                     <span className="truncate">{file.name}</span>
                     <span className={UI_TEXT_SECONDARY_CLASS}>{tool ? t(tool.descriptor.titleKey) : null}</span>
                     <span className={`text-right tabular-nums ${UI_TEXT_META_CLASS}`}>{formatTaskCreatedAt(new Date(file.updatedAt), locale)}</span>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -122,8 +123,8 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={isExportResultNode
-          ? <ImageIcon className="h-4 w-4" />
-          : <Sparkles className="h-4 w-4" />}
+          ? <ImageIcon className={`${UI_ICON_SIZE_CLASS.md}`} />
+          : <Sparkles className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         titleClassName="inline-block max-w-[220px] truncate whitespace-nowrap align-bottom"
         editable
@@ -145,7 +146,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
         ) : (
           <UiEmpty
             size="node"
-            icon={isExportResultNode ? <ImageIcon className="h-7 w-7" /> : <Sparkles className="h-7 w-7" />}
+            icon={isExportResultNode ? <ImageIcon className={`${UI_ICON_SIZE_CLASS.xl}`} /> : <Sparkles className={`${UI_ICON_SIZE_CLASS.xl}`} />}
             title={isExportResultNode ? t('node.imageNode.waitingResult') : t('node.imageNode.selectToEdit')}
           />
         )}

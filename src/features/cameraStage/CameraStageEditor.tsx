@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Camera, Clipboard, Film, LayoutDashboard, Save, Undo2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
@@ -380,7 +381,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     <>
       {embeddedOutput && outputKind === 'image' ? (
         <UiButton variant="primary" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!stateKeyframeAction}>
-          <Camera size={14} className="mr-1.5" />{stateKeyframeAction ? '处理中…' : '更新图片'}
+          <Camera  className="mr-1.5" />{stateKeyframeAction ? '处理中…' : '更新图片'}
         </UiButton>
       ) : !embeddedOutput ? <PanelTrigger
         disabled={!canScreenshot || !!stateKeyframeAction}
@@ -397,7 +398,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               onClick={() => void handleSaveScreenshot()}
               className="w-full gap-2"
             >
-              <Save size={14} />
+              <Save size={UI_ICON_SIZE.sm} />
               保存到本地
             </UiOptionButton>
             <UiOptionButton
@@ -408,7 +409,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               onClick={() => void handleCopyScreenshot()}
               className="w-full gap-2"
             >
-              <Clipboard size={14} />
+              <Clipboard size={UI_ICON_SIZE.sm} />
               复制到剪贴板
             </UiOptionButton>
           </div>
@@ -424,19 +425,19 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             aria-expanded={open}
             data-panel-trigger-button
           >
-            <Camera size={14} className="mr-1.5" />
+            <Camera  className="mr-1.5" />
             {stateKeyframeAction ? '处理中…' : '截图'}
           </UiButton>
         )}
       </PanelTrigger> : null}
       {videoProgress ? (
         <UiButton variant="secondary" onClick={handleCancelVideoExport}>
-          <X size={14} className="mr-1.5" />
+          <X  className="mr-1.5" />
           取消导出
         </UiButton>
       ) : embeddedOutput && outputKind === 'video' ? (
         <UiButton variant="primary" onClick={() => void handleExportVideo()} disabled={!canExportVideo}>
-          <Film size={14} className="mr-1.5" />渲染视频
+          <Film  className="mr-1.5" />渲染视频
         </UiButton>
       ) : !embeddedOutput ? (
         <PanelTrigger
@@ -460,7 +461,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                 onClick={() => void handleExportVideo()}
                 className="w-full gap-1.5"
               >
-                <Film size={14} />
+                <Film  />
                 导出 MP4
               </UiButton>
             </div>
@@ -475,7 +476,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               aria-expanded={open}
               data-panel-trigger-button
             >
-              <Film size={14} className="mr-1.5" />
+              <Film  className="mr-1.5" />
               导出视频
             </UiButton>
           )}
@@ -535,7 +536,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             >
               {({ open, togglePanel }) => (
                 <UiIconButton
-                  size="lg"
+                  size="md"
                   on={assetTarget.enabled}
                   onClick={togglePanel}
                   aria-expanded={open}
@@ -543,17 +544,17 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                   title={assetTargetLabel}
                   data-panel-trigger-button
                 >
-                  <AssetLibraryIcon size={16} />
+                  <AssetLibraryIcon  />
                 </UiIconButton>
               )}
             </PanelTrigger>
             <UiIconButton
-              size="lg"
+              size="md"
               onClick={() => dockRef.current?.resetLayout()}
               aria-label="重置布局"
               title="恢复默认面板布局"
             >
-              <LayoutDashboard size={16} />
+              <LayoutDashboard  />
             </UiIconButton>
             <span className="ml-1 flex items-center gap-1.5">{outputActions}</span>
           </>
@@ -561,31 +562,31 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       >
         {onBackToList && embeddedHost && (
           <UiButton onClick={() => void handleBackToList()}>
-            <ArrowLeft size={16} />
+            <ArrowLeft  />
             {t('documentLibrary.embedded.returnTo', { name: embeddedHost.label })}
           </UiButton>
         )}
         {onBackToList && !embeddedHost && (
           <UiIconButton
-            size="lg"
+            size="md"
             aria-label={backLabel}
             title={backLabel}
             onClick={() => void handleBackToList()}
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft  />
           </UiIconButton>
         )}
         <span className="min-w-0 max-w-40 truncate text-13 font-medium text-text1" title={projectName}>
           {projectName}
         </span>
         <UiIconButton
-          size="lg"
+          size="md"
           disabled={!canUndo}
           aria-label="撤销"
           title="撤销 (Ctrl+Z)"
           onClick={() => undo()}
         >
-          <Undo2 size={16} />
+          <Undo2  />
         </UiIconButton>
         <QuickAddGroup />
         {/* 一条带只有这一条分隔线：左侧是“立刻添加”的动作，右侧是“接下来怎么操作”的变换模式 */}

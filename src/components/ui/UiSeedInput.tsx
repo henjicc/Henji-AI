@@ -22,6 +22,6 @@ export function UiSeedInput(props: UiSeedInputProps) {
   }
   return <div className="flex w-full items-end gap-2">
     <ParameterNumber {...props} label={label} value={value} size={size} defaultValue={props.defaultValue === undefined ? undefined : normalize(props.defaultValue)} min={lower} max={upper} step={1} onChange={next => onChange(normalize(next))} />
-    <UiIconButton aria-label={`${label}随机生成`} size={size === 'sm' ? 'md' : 'lg'} disabled={disabled} onClick={randomize}><Dices className="h-4 w-4" /></UiIconButton>
+    <UiIconButton aria-label={`${label}随机生成`} size={size} disabled={disabled} onClick={randomize}><Dices  /></UiIconButton>
   </div>
 }

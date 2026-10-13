@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -239,7 +240,7 @@ export function ModelPickerList({
                     {getModelDetail(model)}
                   </span>
                 </div>
-                <Check className="h-3.5 w-3.5 shrink-0" />
+                <Check className={`${UI_ICON_SIZE_CLASS.sm} shrink-0`} />
               </div>
             ))}
           </div>
@@ -432,7 +433,7 @@ export function ModelPickerList({
                   {getModelDetail(model)}
                 </div>
               </div>
-              {active && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-text" />}
+              {active && <Check className={`${UI_ICON_SIZE_CLASS.sm} mt-0.5 shrink-0 text-accent-text`} />}
             </UiOptionButton>
           );
         })}

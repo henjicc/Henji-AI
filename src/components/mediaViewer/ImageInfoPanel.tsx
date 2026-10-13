@@ -120,13 +120,13 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
 
   return (
     <div className="absolute left-5 top-5 z-sticky flex max-w-[min(420px,calc(100vw-40px))] items-start gap-2">
-      <UiIconButton shape="circle" size="lg" tone="media"
+      <UiIconButton shape="circle" size="md" tone="media"
         type="button"
         onClick={() => setCollapsed(!collapsed)}
         className="shrink-0"
         title={t('viewer.toggleInfo', '显示/隐藏图片信息（I）')}
       >
-        <Info className="h-4 w-4" />
+        <Info  />
       </UiIconButton>
 
       <div

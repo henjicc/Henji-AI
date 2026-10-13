@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { UiSegmented } from '@/components/ui'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Expand, Keyboard, Minus, MoreHorizontal, Pause, Play, Plus, RotateCcw, Trash2, Volume2, VolumeX } from 'lucide-react'
@@ -189,23 +190,23 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
     ...(error ? [{ id: 'error', priority: 100, pinned: true, node: <span role="alert" className="min-w-0 truncate text-xs text-danger-text" title={error}>{error}</span> }] : []),
     ...(selection ? [{ id: 'selection', priority: 90, node: <div className="flex items-center gap-1" aria-label="波形选区操作">
       <span className="mr-1 whitespace-nowrap font-mono text-xs tabular-nums text-text2">选区 {time(selection.startFrame, rate)} – {time(selection.endFrame, rate)}</span>
-      <UiButton size="sm" variant="danger" disabled={disabled} title="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2 size={14} className="mr-1" />删除</UiButton>
-      <UiButton size="sm" disabled={disabled} title="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX size={14} className="mr-1" />静音</UiButton>
-      <UiButton size="sm" disabled={disabled} onClick={() => onEditSelection('restore')}><RotateCcw size={14} className="mr-1" />恢复选区</UiButton>
+      <UiButton size="sm" variant="danger" disabled={disabled} title="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2  className="mr-1" />删除</UiButton>
+      <UiButton size="sm" disabled={disabled} title="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX  className="mr-1" />静音</UiButton>
+      <UiButton size="sm" disabled={disabled} onClick={() => onEditSelection('restore')}><RotateCcw  className="mr-1" />恢复选区</UiButton>
       <UiButton size="sm" onClick={() => onSelection(null)}>取消选区</UiButton>
     </div> }] : []),
     { id: 'gain', priority: 40, node: <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-text2" title="自动放大小声录音，仅影响试听，不改变导出音量">
       <UiSwitch checked={mode !== 'delivery' && autoGain} disabled={mode === 'delivery'} onCheckedChange={setAutoGain} aria-label="试听自动增益" />自动增益
     </label> },
     { id: 'volume', priority: 50, node: <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2" title={`试听音量 ${Math.round(volume * 100)}%`}>
-      <Volume2 size={14} aria-hidden="true" className="text-text3" />
+      <Volume2 size={UI_ICON_SIZE.sm} aria-hidden="true" className="text-text3" />
       <UiRangeInput className="!w-20 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
     </label> },
     { id: 'zoom', priority: 60, node: <div className="flex items-center gap-1.5" role="group" aria-label="波形缩放控制">
-      <UiIconButton aria-label="显示全部" title="显示全部" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}><Expand size={16} /></UiIconButton>
-      <UiIconButton aria-label="缩小波形" title="缩小波形" disabled={zoomLevel <= 0} onClick={() => zoomTo(zoomLevel - 10)}><Minus size={16} /></UiIconButton>
+      <UiIconButton aria-label="显示全部" title="显示全部" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}><Expand  /></UiIconButton>
+      <UiIconButton aria-label="缩小波形" title="缩小波形" disabled={zoomLevel <= 0} onClick={() => zoomTo(zoomLevel - 10)}><Minus  /></UiIconButton>
       <UiRangeInput className="!w-24 shrink-0" aria-label="波形缩放" min={0} max={ZOOM_STEPS} step={1} value={Math.max(0, Math.min(ZOOM_STEPS, zoomLevel))} onChange={(event) => zoomTo(Number(event.target.value))} />
-      <UiIconButton aria-label="放大波形" title="放大波形" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus size={16} /></UiIconButton>
+      <UiIconButton aria-label="放大波形" title="放大波形" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus  /></UiIconButton>
     </div> },
     { id: 'help', priority: 30, node: <PanelTrigger
       panelWidth={248}
@@ -221,16 +222,16 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
         </div>
       )}
     >
-      {({ open, togglePanel }) => <UiIconButton aria-label="快捷键与图例" title="快捷键与图例" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Keyboard size={16} /></UiIconButton>}
+      {({ open, togglePanel }) => <UiIconButton aria-label="快捷键与图例" title="快捷键与图例" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Keyboard  /></UiIconButton>}
     </PanelTrigger> },
-    { id: 'settings', priority: 70, node: <UiIconButton title="界面设置" aria-label="界面设置" onClick={onSettings}><SettingsIcon size={16} /></UiIconButton> },
+    { id: 'settings', priority: 70, node: <UiIconButton title="界面设置" aria-label="界面设置" onClick={onSettings}><SettingsIcon  /></UiIconButton> },
   ]
 
   return (
     <section ref={wheelRegion} aria-label="波形" data-audio-timeline className="shrink-0 border-t border-gap bg-panel">
       {/* 播放条：放不下时按优先级把右侧控件收进“更多”（UiOverflowRow），任何宽度下都不折行 */}
       <div className="flex min-h-10 items-center gap-1.5 px-2.5 py-1">
-        <UiIconButton size="lg" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'} aria-label={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
+        <UiIconButton size="md" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'} aria-label={playing ? '暂停' : '播放'}>{playing ? <Pause  /> : <Play  />}</UiIconButton>
         <span className="shrink-0 whitespace-nowrap font-mono text-13 tabular-nums" data-audio-edit-time>
           <span className="text-text1">{preciseTime(outputFrame, rate)}</span><span className="text-text3"> / {preciseTime(playDuration, rate)}</span>
         </span>
@@ -247,7 +248,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
                 </div>
               )}
             >
-              {({ open, togglePanel }) => <UiIconButton aria-label="更多播放控制" title="更多播放控制" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><MoreHorizontal size={16} /></UiIconButton>}
+              {({ open, togglePanel }) => <UiIconButton aria-label="更多播放控制" title="更多播放控制" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><MoreHorizontal  /></UiIconButton>}
             </PanelTrigger>
           )}
         />
@@ -293,9 +294,9 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
             }
           }}
           onContextMenu={(event) => menu.showMenu(event, [
-            { id: 'delete', label: '删除选区 · Delete', icon: <Trash2 size={16} />, disabled: !selection || disabled, onClick: () => onEditSelection('delete') },
-            { id: 'mute', label: '静音选区 · M', icon: <VolumeX size={16} />, disabled: !selection || disabled, onClick: () => onEditSelection('mute') },
-            { id: 'restore', label: '恢复选区', icon: <RotateCcw size={16} />, disabled: !selection || disabled, onClick: () => onEditSelection('restore') },
+            { id: 'delete', label: '删除选区 · Delete', icon: <Trash2 size={UI_ICON_SIZE.md} />, disabled: !selection || disabled, onClick: () => onEditSelection('delete') },
+            { id: 'mute', label: '静音选区 · M', icon: <VolumeX size={UI_ICON_SIZE.md} />, disabled: !selection || disabled, onClick: () => onEditSelection('mute') },
+            { id: 'restore', label: '恢复选区', icon: <RotateCcw size={UI_ICON_SIZE.md} />, disabled: !selection || disabled, onClick: () => onEditSelection('restore') },
           ])}>
           <div className="pointer-events-none absolute inset-x-0 top-0 flex h-5 items-center justify-between px-1.5 font-mono text-2xs tabular-nums text-text3">
             {Array.from({ length: 6 }, (_, index) => <span key={index}>{time(view.start + length * index / 5, rate)}</span>)}

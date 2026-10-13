@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React from 'react'
 import { FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { openDialog } from '@/platform/desktopApi'
@@ -100,7 +101,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
           <div>
           {presetPaths.map((path) => (
             <div key={path} className="flex items-center gap-2 border-b border-line/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text2" />
+              <FolderOpen className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text2`} />
               {/* 明文本地路径，观察截图时需要遮罩 */}
               <span data-observation-sensitive className="min-w-0 flex-1 truncate text-sm" title={path}>
                 {path}
@@ -112,7 +113,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
                 aria-label={t('sections.download.presetPathsRemove', { path })}
                 onClick={() => handleRemovePresetPath(path)}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2  />
               </UiIconButton>
             </div>
           ))}
@@ -124,7 +125,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               variant="secondary"
               className="shrink-0"
             >
-              <Plus className="h-4 w-4" />
+              <Plus  />
               {t('sections.download.presetPathsAdd')}
             </UiButton>
             <span className={UI_TEXT_META_CLASS}>

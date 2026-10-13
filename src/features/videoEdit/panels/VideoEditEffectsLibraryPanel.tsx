@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationMessage } from '@/i18n/notifications'
 import { Fragment, useState } from 'react'
 import { ChevronDown, ChevronRight, Folder, Pencil, ScanFace, Sparkles, Star, Trash2 } from 'lucide-react'
@@ -80,8 +81,8 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
         const open = Boolean(keyword) || !collapsed.has(folder.id)
         return <div key={folder.id} role="treeitem" aria-expanded={open} aria-selected={false} data-video-edit-effects-folder={folder.id}>
           <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 justify-start gap-1.5" onClick={() => toggle(folder.id)}>
-            {open ? <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text3" /> : <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-text3" />}
-            <Folder size={14} aria-hidden="true" className="shrink-0 text-text3" />
+            {open ? <ChevronDown size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" /> : <ChevronRight size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />}
+            <Folder size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />
             <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
           </UiOptionButton>
           {open && <div role="group" className="flex flex-col pl-5">
@@ -99,21 +100,21 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
                   const kind = entry.transitionKind
                   const preset = presets.find(preset => `preset:${preset.id}` === entry.id)
                   menu.showMenu(event, [
-                    { id: 'favorite', label: favorites.includes(entry.id) ? '取消收藏' : '收藏', icon: <Star size={14} />, onClick: () => favorite(entry.id) },
-                    ...(kind ? [{ id: 'default', label: '设为默认过渡', icon: <Star size={14} />, disabled: isDefault(entry), onClick: () => setDefault(videoEditTransitionMedium(kind), kind) }] : []),
+                    { id: 'favorite', label: favorites.includes(entry.id) ? '取消收藏' : '收藏', icon: <Star size={UI_ICON_SIZE.sm} />, onClick: () => favorite(entry.id) },
+                    ...(kind ? [{ id: 'default', label: '设为默认过渡', icon: <Star size={UI_ICON_SIZE.sm} />, disabled: isDefault(entry), onClick: () => setDefault(videoEditTransitionMedium(kind), kind) }] : []),
                     ...(preset ? [
-                      { id: 'rename', label: '重命名…', icon: <Pencil size={14} />, onClick: () => setRenaming({ id: preset.id, name: preset.name }) },
-                      { id: 'delete', label: '删除预设', icon: <Trash2 size={14} />, onClick: () => { try { useVideoEditEffectLibraryStore.getState().deletePreset(preset.id) } catch (error) { onError(error) } } },
+                      { id: 'rename', label: '重命名…', icon: <Pencil size={UI_ICON_SIZE.sm} />, onClick: () => setRenaming({ id: preset.id, name: preset.name }) },
+                      { id: 'delete', label: '删除预设', icon: <Trash2 size={UI_ICON_SIZE.sm} />, onClick: () => { try { useVideoEditEffectLibraryStore.getState().deletePreset(preset.id) } catch (error) { onError(error) } } },
                     ] : []),
                   ])
                 }}>
-                {entry.kind === 'transition' ? <TransitionIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : entry.media === 'audio' ? <AudioIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : entry.category === 'smart' ? <ScanFace size={14} aria-hidden="true" className="shrink-0 text-text3" /> : <Sparkles size={14} aria-hidden="true" className="shrink-0 text-text3" />}
+                {entry.kind === 'transition' ? <TransitionIcon size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" /> : entry.media === 'audio' ? <AudioIcon size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" /> : entry.category === 'smart' ? <ScanFace size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" /> : <Sparkles size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />}
                 <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>
                 {isDefault(entry) && <span className="shrink-0 text-2xs text-text3">默认</span>}
               </UiOptionButton>
             </Tooltip>
               </div>
-              <UiIconButton size="xs" on={favorites.includes(entry.id)} aria-pressed={favorites.includes(entry.id)} aria-label={`${favorites.includes(entry.id) ? '取消收藏' : '收藏'}${entry.name}`} title={favorites.includes(entry.id) ? '取消收藏' : '收藏'} onClick={() => favorite(entry.id)}><Star size={13} /></UiIconButton>
+              <UiIconButton size="2xs" on={favorites.includes(entry.id)} aria-pressed={favorites.includes(entry.id)} aria-label={`${favorites.includes(entry.id) ? '取消收藏' : '收藏'}${entry.name}`} title={favorites.includes(entry.id) ? '取消收藏' : '收藏'} onClick={() => favorite(entry.id)}><Star  /></UiIconButton>
               </div>
             </Fragment>) : <UiEmpty size="xs" title={folder.id === 'favorites' ? '尚未收藏效果' : folder.id === 'presets' ? '在效果控件中保存预设' : '暂无可用项'} />}
           </div>}

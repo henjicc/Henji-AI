@@ -50,7 +50,7 @@ function VideoEditTrackingPanelContent({ instance, onError }: { instance: VideoE
   return <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-y-auto overflow-x-hidden p-3" data-video-edit-tracking-panel>
     <div className="flex flex-wrap items-center gap-1">
       <Dropdown ariaLabel="新建跟踪方式" size="sm" value={creation} options={[{ value: 'shape-point', label: '形状 · 点选' }, { value: 'shape-box', label: '形状 · 框选' }, { value: 'box', label: '物体框 · 框选' }, {value:'point',label:'点 · 特征跟踪'}, {value:'planar',label:'平面 · 四角'}]} onSelect={setCreation} />
-      <UiButton size="sm" variant="secondary" disabled={locked || (clip.trackers?.length ?? 0) >= VIDEO_EDIT_MAX_TRACKERS} onClick={() => setVideoEditTrackingEditing({ ...target, method: creation === 'point' ? 'point' : creation === 'planar' ? 'planar' : creation === 'box' ? 'box' : 'shape', mode: creation === 'planar' ? 'quad' : creation === 'point' || creation === 'shape-point' ? 'point' : 'box', pointCount:Number(pointCount) })}><Plus size={14} />新建</UiButton>
+      <UiButton size="sm" variant="secondary" disabled={locked || (clip.trackers?.length ?? 0) >= VIDEO_EDIT_MAX_TRACKERS} onClick={() => setVideoEditTrackingEditing({ ...target, method: creation === 'point' ? 'point' : creation === 'planar' ? 'planar' : creation === 'box' ? 'box' : 'shape', mode: creation === 'planar' ? 'quad' : creation === 'point' || creation === 'shape-point' ? 'point' : 'box', pointCount:Number(pointCount) })}><Plus  />新建</UiButton>
     </div>
     {creation === 'point' && <Dropdown ariaLabel="跟踪点数量" size="sm" value={pointCount} options={[1,2,3,4].map(n=>({value:String(n),label:`${n} 个点`}))} onSelect={setPointCount} />}
     {selectedEditing && selectedEditing.mode !== 'show' && <p className="text-xs text-text2" role="status">{selectedEditing.method === 'point' ? '依次点击要跟踪的特征点。' : selectedEditing.mode === 'quad' ? '沿屏幕或平面的边缘依次点击四角。' : selectedEditing.mode === 'point' ? '在节目画面上点击物体，选择合适的候选。' : '在节目画面上拖框选中物体。'}<UiButton size="sm" onClick={() => setVideoEditTrackingEditing(null)}>取消</UiButton></p>}
@@ -58,7 +58,7 @@ function VideoEditTrackingPanelContent({ instance, onError }: { instance: VideoE
     <div className="flex flex-col gap-1" role="list" aria-label="片段跟踪器">
       {(clip.trackers ?? []).map(entry => <div key={entry.id} className="flex items-center gap-1" role="listitem">
         <UiOptionButton variant="menu" size="sm" className="min-w-0 flex-1" active={tracker?.id === entry.id} onClick={() => setVideoEditTrackingEditing({ ...target, trackerId: entry.id, method: entry.method, mode: 'show' })}><span className="truncate" title={entry.name}>{entry.name}</span></UiOptionButton>
-        <UiIconButton size="xs" tone="danger" aria-label={`删除${entry.name}`} disabled={locked} onClick={() => { try { editVideoEditTracker(projectId, sequenceId, clip.id, { remove: entry.id }); setVideoEditTrackingEditing(null) } catch (error) { onError(error) } }}><Trash2 size={12} /></UiIconButton>
+        <UiIconButton size="2xs" tone="danger" aria-label={`删除${entry.name}`} disabled={locked} onClick={() => { try { editVideoEditTracker(projectId, sequenceId, clip.id, { remove: entry.id }); setVideoEditTrackingEditing(null) } catch (error) { onError(error) } }}><Trash2  /></UiIconButton>
       </div>)}
     </div>
     {tracker && <>
@@ -66,13 +66,13 @@ function VideoEditTrackingPanelContent({ instance, onError }: { instance: VideoE
       <p className="text-xs text-text3">{VIDEO_EDIT_TRACK_METHOD_LABELS[tracker.method]}</p>
       {status?.state === 'failed' ? <UiError size="xs" title="跟踪失败" message={videoEditTrackingFailureText(status.reason)} /> : status?.state === 'tracking' ? <UiLoading size="xs" message={`正在跟踪 ${Math.round(status.progress * 100)}%`} /> : <p role="status" className="text-xs text-text2">{status?.state === 'ready' ? `${status.stopped ? '已停止，' : ''}已覆盖 ${videoEditTrackingStatusText(status, request?.range).split(':')[1]}` : '等待跟踪'}</p>}
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="执行跟踪">
-        <UiIconButton size="sm" aria-label="向后一帧" disabled={locked || status?.state === 'tracking'} onClick={() => run('backward', 1)}><ChevronLeft size={14} /></UiIconButton>
-        <UiIconButton size="sm" aria-label="向后跟踪" disabled={locked || status?.state === 'tracking'} onClick={() => run('backward')}><ChevronsLeft size={14} /></UiIconButton>
-        <UiIconButton size="sm" aria-label="停止跟踪" disabled={status?.state !== 'tracking'} onClick={() => { if (request) stopVideoEditTracking(request.definition) }}><Square size={14} /></UiIconButton>
-        <UiIconButton size="sm" aria-label="向前跟踪" disabled={locked || status?.state === 'tracking'} onClick={() => run('forward')}><ChevronsRight size={14} /></UiIconButton>
-        <UiIconButton size="sm" aria-label="向前一帧" disabled={locked || status?.state === 'tracking'} onClick={() => run('forward', 1)}><ChevronRight size={14} /></UiIconButton>
-        <UiIconButton size="sm" aria-label="显示跟踪框" aria-pressed={selectedEditing?.mode === 'show'} on={selectedEditing?.mode === 'show'} onClick={() => selectedEditing?.mode === 'show' ? setVideoEditTrackingEditing(null) : show()}><Eye size={14} /></UiIconButton>
-        {tracker.method === 'shape' && <UiIconButton size="sm" aria-label="补点纠错" disabled={locked} onClick={() => setVideoEditTrackingEditing({ ...target, trackerId: tracker.id, method: tracker.method, mode: 'point' })}><MousePointer2 size={14} /></UiIconButton>}
+        <UiIconButton size="xs" aria-label="向后一帧" disabled={locked || status?.state === 'tracking'} onClick={() => run('backward', 1)}><ChevronLeft  /></UiIconButton>
+        <UiIconButton size="xs" aria-label="向后跟踪" disabled={locked || status?.state === 'tracking'} onClick={() => run('backward')}><ChevronsLeft  /></UiIconButton>
+        <UiIconButton size="xs" aria-label="停止跟踪" disabled={status?.state !== 'tracking'} onClick={() => { if (request) stopVideoEditTracking(request.definition) }}><Square  /></UiIconButton>
+        <UiIconButton size="xs" aria-label="向前跟踪" disabled={locked || status?.state === 'tracking'} onClick={() => run('forward')}><ChevronsRight  /></UiIconButton>
+        <UiIconButton size="xs" aria-label="向前一帧" disabled={locked || status?.state === 'tracking'} onClick={() => run('forward', 1)}><ChevronRight  /></UiIconButton>
+        <UiIconButton size="xs" aria-label="显示跟踪框" aria-pressed={selectedEditing?.mode === 'show'} on={selectedEditing?.mode === 'show'} onClick={() => selectedEditing?.mode === 'show' ? setVideoEditTrackingEditing(null) : show()}><Eye  /></UiIconButton>
+        {tracker.method === 'shape' && <UiIconButton size="xs" aria-label="补点纠错" disabled={locked} onClick={() => setVideoEditTrackingEditing({ ...target, trackerId: tracker.id, method: tracker.method, mode: 'point' })}><MousePointer2  /></UiIconButton>}
       </div>
       <UiGroup labelWidth={96} title="应用到" titleTone="compact">
         <UiFormRow label={surfaceText('surfaceGrammar.trackingTarget')} density="compact" labelColumn="panel"><Dropdown ariaLabel="跟踪应用目标" size="sm" value={destination} options={[{ value: '', label: '选择效果、遮罩或片段' }, ...destinations]} onSelect={setDestination} /></UiFormRow>

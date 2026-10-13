@@ -1,3 +1,5 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -200,36 +202,36 @@ export function DocumentLibraryPage({
       return [{
         id: 'forget',
         label: t('documentLibrary.actions.forget'),
-        icon: <ListX className="h-4 w-4" />,
+        icon: <ListX className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => { void run('forget', () => operations.forgetDocument(document.id)) },
       }]
     }
     const inProject = document.container.kind === 'project'
     return [
-      { id: 'move-to-project', label: t('documentLibrary.actions.moveToProject'), icon: <FolderInput className="h-4 w-4" />, onClick: () => setMoving(document) },
+      { id: 'move-to-project', label: t('documentLibrary.actions.moveToProject'), icon: <FolderInput className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: () => setMoving(document) },
       ...(inProject && canStandalone ? [{
         id: 'remove-from-project',
         label: t('documentLibrary.actions.removeFromProject'),
-        icon: <FolderOutput className="h-4 w-4" />,
+        icon: <FolderOutput className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => { void run('move', () => moveWithConflictPrompt(document, { kind: 'user' })) },
       }] : []),
       {
         id: 'duplicate',
         label: t('documentLibrary.actions.duplicate'),
-        icon: <Copy className="h-4 w-4" />,
+        icon: <Copy className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => { void run('duplicate', async () => { await operations.duplicateDocument({ id: document.id, path: document.path }, 'keepBoth') }) },
       },
       {
         id: 'reveal',
         label: t('documentLibrary.actions.reveal'),
-        icon: <FolderOpen className="h-4 w-4" />,
+        icon: <FolderOpen className={`${UI_ICON_SIZE_CLASS.md}`} />,
         quick: true,
         onClick: () => { void run('reveal', () => operations.revealDocument({ id: document.id, path: document.path })) },
       },
       {
         id: 'export-package',
         label: t('documentLibrary.actions.exportPackage'),
-        icon: <PackageCheck className="h-4 w-4" />,
+        icon: <PackageCheck className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => {
           void run('exportPackage', async () => {
             setPackageStatus(t('documentLibrary.package.exporting'))
@@ -243,7 +245,7 @@ export function DocumentLibraryPage({
       ...(inProject ? [{
         id: 'collect-media',
         label: t('documentLibrary.actions.collect'),
-        icon: <PackagePlus className="h-4 w-4" />,
+        icon: <PackagePlus className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => {
           void run('collect', async () => {
             const result = await operations.collectDocumentMedia({ id: document.id, path: document.path })
@@ -374,7 +376,7 @@ export function DocumentLibraryPage({
           }
         }}
         icon={PageIcon}
-        emptyIcon={<PageIcon size={40} strokeWidth={1.5} aria-hidden="true" />}
+        emptyIcon={<PageIcon size={UI_ICON_SIZE.hero}  aria-hidden="true" />}
         loading={library.loading}
         total={library.total}
         loadingMore={library.loadingMore}

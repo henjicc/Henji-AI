@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { ClipboardPaste, FilePlus2, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,7 +33,7 @@ export function ImageMarkSourceMenu({
             size="md" className="gap-2"
             onClick={onOpenFile}
           >
-            <FolderOpen size={15} />
+            <FolderOpen size={UI_ICON_SIZE.sm} />
             {t('imageEditor.v3.host.sourceMenu.openFile')}
           </UiOptionButton>
           <UiOptionButton
@@ -41,7 +42,7 @@ export function ImageMarkSourceMenu({
             size="md" className="gap-2"
             onClick={onPasteFromClipboard}
           >
-            <ClipboardPaste size={15} />
+            <ClipboardPaste size={UI_ICON_SIZE.sm} />
             {t('imageEditor.v3.host.sourceMenu.paste')}
           </UiOptionButton>
           <UiOptionButton
@@ -50,7 +51,7 @@ export function ImageMarkSourceMenu({
             size="md" className="gap-2"
             onClick={onCreateBlank}
           >
-            <FilePlus2 size={15} />
+            <FilePlus2 size={UI_ICON_SIZE.sm} />
             {t('imageEditor.v3.host.sourceMenu.createBlank')}
           </UiOptionButton>
         </div>
@@ -63,7 +64,7 @@ export function ImageMarkSourceMenu({
           onClick={togglePanel}
           title={t('imageEditor.v3.host.sourceMenu.title')}
         >
-          <FolderOpen size={15} className="mr-1.5" />
+          <FolderOpen  className="mr-1.5" />
           {t('imageEditor.v3.host.sourceMenu.trigger')}
         </UiButton>
       )}

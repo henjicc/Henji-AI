@@ -173,7 +173,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
                 onClick={() => setOpenGroupId(open ? null : group.id)}
               >
                 <span>{group.name}</span>
-                {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {open ? <ChevronDown  /> : <ChevronRight  />}
               </UiButton>
               {open && (
                 <div className="flex flex-col gap-2.5 px-1 pb-2 pt-1">

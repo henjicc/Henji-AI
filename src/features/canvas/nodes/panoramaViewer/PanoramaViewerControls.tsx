@@ -82,7 +82,7 @@ export function PanoramaViewerControls({
         aria-label={captureTitle}
         onClick={onCapture}
       >
-        <Camera className="h-3.5 w-3.5" />
+        <Camera  />
         {t(isCapturing ? 'viewer.panorama.capturing' : 'viewer.panorama.captureView')}
       </UiButton>
     </div>

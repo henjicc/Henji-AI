@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 
@@ -33,7 +34,7 @@ export const LayerSeparationGenerationNode = memo(({
       selected={selected}
       width={width}
       height={height}
-      icon={<ICON_NODE_ASSET_GROUP className="h-4 w-4" />}
+      icon={<ICON_NODE_ASSET_GROUP className={`${UI_ICON_SIZE_CLASS.md}`} />}
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation}
       promptPlaceholderKey="node.layerSeparationGeneration.promptPlaceholder"
       promptRequiredKey="node.layerSeparationGeneration.promptRequired"

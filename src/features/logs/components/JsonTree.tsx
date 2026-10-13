@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
@@ -68,7 +69,7 @@ function JsonContainerNode({ label, value, depth, expandDepth }: JsonNodeProps):
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
-        {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+        {expanded ? <ChevronDown className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} /> : <ChevronRight className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} />}
         {label !== undefined && <span className="text-accent-text">{label}:</span>}
         <span className="text-text2">{isArray ? `Array(${entries.length})` : `Object{${entries.length}}`}</span>
       </UiOptionButton>

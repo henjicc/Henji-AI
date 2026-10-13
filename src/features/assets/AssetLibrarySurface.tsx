@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { VirtuosoGrid } from 'react-virtuoso'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -208,7 +209,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     showBlankMenu(event, [{
       id: 'batch-manage',
       label: t('assetLibrary.batchEmptyMenu'),
-      icon: <ICON_MULTI_SELECT className="h-4 w-4" />,
+      icon: <ICON_MULTI_SELECT className={`${UI_ICON_SIZE_CLASS.md}`} />,
       onClick: () => startBatchManagement(),
     }])
   }
@@ -267,7 +268,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             data-panel-trigger-button
             onClick={togglePanel}
           >
-            <Settings2 className="h-4 w-4" />
+            <Settings2  />
           </UiIconButton>
         )}
       </PanelTrigger>
@@ -283,7 +284,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   ) : (
     <>
       {viewControls}
-      <UiButton onClick={() => startBatchManagement()}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
+      <UiButton onClick={() => startBatchManagement()}><ICON_MULTI_SELECT  />{t('assetLibrary.batchManage')}</UiButton>
     </>
   )
 
@@ -332,7 +333,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             style={{ touchAction: 'none' }}
           >
             <span className="h-full w-0.5 bg-transparent transition-colors duration-120 group-hover:bg-accent group-focus-visible:bg-accent" />
-            <GripVertical className="absolute h-4 w-4 text-text3 opacity-0 transition-opacity duration-120 group-hover:opacity-100 group-focus-visible:opacity-100" />
+            <GripVertical className={`${UI_ICON_SIZE_CLASS.md} absolute text-text3 opacity-0 transition-opacity duration-120 group-hover:opacity-100 group-focus-visible:opacity-100`} />
           </div>
         )}
         <main className="flex min-w-0 flex-1 flex-col">
@@ -340,7 +341,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             <header className="flex h-12 shrink-0 items-center gap-2 px-3">
               {viewControls}
               <UiButton className="shrink-0" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>
-              {onClose && <UiIconButton className="shrink-0" title={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
+              {onClose && <UiIconButton className="shrink-0" title={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X  /></UiIconButton>}
             </header>
           )}
           <div ref={attachScroll} onContextMenu={handleBlankContextMenu} className={`relative isolate min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
@@ -359,7 +360,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             ) : page.items.length === 0 ? (
               <UiEmpty
                 className="h-full"
-                icon={<FolderPlus className="h-10 w-10" />}
+                icon={<FolderPlus className={`${UI_ICON_SIZE_CLASS.hero}`} />}
                 title={keyword || mediaType || libraryId || selectedTag ? t('assetLibrary.noResults') : t('assetLibrary.empty')}
                 description={keyword || mediaType || libraryId || selectedTag ? undefined : t('assetLibrary.emptyHint')}
               />
@@ -394,7 +395,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
                     )}
                   />
                 </div>
-                <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 motion-safe:animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
+                <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className={`${UI_ICON_SIZE_CLASS.md} mr-2 motion-safe:animate-spin`} />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
               </>
             )}
           </div>

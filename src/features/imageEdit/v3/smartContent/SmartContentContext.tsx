@@ -89,8 +89,8 @@ export function SmartContentProviderV3({ bus, children, renderEditor, profileId,
     <div className="min-h-0 flex-1">{renderEditor({ document: editing.draft, profileId, sourceImageUrl, resourceByteSizes: editing.bytes,
       resourceDescriptors: smartContentDescriptorsV3(editing.draft, editing.bytes), onDocumentChange: updateDraft,
       contentDisabled: busy || editing.applied,
-      toolbarLeading: <UiButton disabled={busy} onClick={() => { setEditing(null); setError(null); }}><ArrowLeft className="h-4 w-4" />{label(editing.applied ? 'return' : 'discard')}</UiButton>,
-      toolbarActions: <UiButton variant="primary" disabled={busy} onClick={apply}><Save className="h-4 w-4" />{label(editing.applied ? 'retrySave' : 'apply')}</UiButton>,
+      toolbarLeading: <UiButton disabled={busy} onClick={() => { setEditing(null); setError(null); }}><ArrowLeft  />{label(editing.applied ? 'return' : 'discard')}</UiButton>,
+      toolbarActions: <UiButton variant="primary" disabled={busy} onClick={apply}><Save  />{label(editing.applied ? 'retrySave' : 'apply')}</UiButton>,
     })}</div>
   </div> : children}</Context.Provider>;
 }

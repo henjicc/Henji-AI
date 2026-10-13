@@ -64,7 +64,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
                 onClick={() => onOpenUrl(websiteUrl)}
               >
                 {websiteLabel}
-                <ExternalLink className="h-3.5 w-3.5" />
+                <ExternalLink  />
               </UiButton>
             ) : null}
             {managementUrl && managementLabel && onOpenUrl ? (
@@ -75,7 +75,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
                 onClick={() => onOpenUrl(managementUrl)}
               >
                 {managementLabel}
-                <ExternalLink className="h-3.5 w-3.5" />
+                <ExternalLink  />
               </UiButton>
             ) : null}
           </div>
@@ -95,7 +95,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           size="lg"
           className="pr-12"
         />
-        <UiIconButton size="lg"
+        <UiIconButton size="md"
           type="button"
           onClick={onToggleVisibility}
           disabled={disabled}
@@ -104,7 +104,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           aria-label={toggleLabel}
           aria-pressed={visible}
         >
-          {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+          {visible ? <EyeOff  /> : <Eye  />}
         </UiIconButton>
       </div>
       {hint ? <div id={hintId} className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}

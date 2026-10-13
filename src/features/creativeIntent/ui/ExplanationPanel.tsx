@@ -109,7 +109,7 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
   return <section ref={section} style={{ maxHeight: availableHeight }} className="flex max-h-[80vh] min-h-0 min-w-0 flex-col gap-4 overflow-hidden" aria-label="讲解词稿审阅" data-observation-sensitive>
     <div className="flex shrink-0 items-center justify-between gap-2">
       <span className={UI_TEXT_BODY_CLASS}>讲解 · {explanationDuration(elapsedUs)}</span>
-      {onDelete && <UiIconButton size="sm" tone="danger" aria-label="删除讲解" disabled={busy} onClick={onDelete}><Trash2 size={14} /></UiIconButton>}
+      {onDelete && <UiIconButton size="xs" tone="danger" aria-label="删除讲解" disabled={busy} onClick={onDelete}><Trash2  /></UiIconButton>}
     </div>
     <div ref={setScrollParent} className="min-h-0 space-y-4 overflow-y-auto">
       {failed ? <UiError size="xs" align="start" title={failureTitle ?? (stage === 'recoverable' ? '转写失败' : '讲解未完成')} message="" retryLabel="重试" onRetry={onRetry} /> : transcribing ? <div className="flex items-center gap-2" role="status"><span className={UI_TEXT_META_CLASS}>正在转写…</span><progress className="min-w-0 flex-1 accent-accent" aria-label="转写进度" /><UiButton size="sm" variant="link" onClick={onCancel}>取消</UiButton></div> : !stage ? <>

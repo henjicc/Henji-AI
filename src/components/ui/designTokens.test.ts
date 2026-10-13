@@ -1,5 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import postcss from 'postcss'
+import tailwindcss from 'tailwindcss'
+import type { Config } from 'tailwindcss'
+// @ts-expect-error 正式 Tailwind 配置是 JS，测试实际 CSS 生成链。
+import config from '../../../tailwind.config.js'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { describe, expect, it } from 'vitest'
 
 import { THEME_COLOR_TOKEN_NAMES } from '@/core/theme/themeEngine'
@@ -9,6 +15,7 @@ import { UI_DURATION, UI_DURATION_CLASS } from './motion'
 import { resolveIconButtonClass } from './primitiveInternals'
 import {
   UI_CONTROL_HEIGHT_CLASS,
+  UI_ICON_SIZE_CLASS,
   UI_RADIUS_CLASS,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
@@ -92,18 +99,37 @@ describe('设计令牌：Tailwind ↔ CSS 变量', () => {
 })
 
 describe('设计令牌：尺寸、圆角、动效、层级', () => {
-  it.each(['md', 'lg'] as const)('图标按钮 %s 的宽高引用相同控件变量，调整高度不会变成长方形', (size) => {
+  it('六档方形按钮实际生成的宽高使用同一变量，图标类与数值登记一致', async () => {
+    const sizes = { '2xs': 20, xs: 24, sm: 28, md: 32, lg: 36, xl: 40 } as const
+    const classes = Object.keys(sizes).flatMap(size => [`h-control-${size}`, `w-control-${size}`, `size-control-${size}`]).join(' ')
+    const result = await postcss([tailwindcss({ ...(config as Config), content: [{ raw: classes }] })]).process('@tailwind utilities;', { from: undefined })
+    const rules = new Map<string, Map<string, string>>()
+    result.root.walkRules(rule => { const declarations = new Map<string, string>(); rule.walkDecls(decl => { declarations.set(decl.prop, decl.value) }); rules.set(rule.selector, declarations) })
+    for (const [size, height] of Object.entries(sizes)) {
+      expect(rootVars.get(`--size-control-${size}`)).toBe(`${height}px`)
+      const square = rules.get(`.size-control-${size}`)
+      expect(square?.get('height')).toBe(`var(--size-control-${size})`)
+      expect(square?.get('width')).toBe(square?.get('height'))
+      if (size === 'sm' || size === 'md' || size === 'lg') {
+        expect(rules.get(`.h-control-${size}`)?.get('height')).toBe(square?.get('height'))
+        expect(rules.get(`.w-control-${size}`)?.get('width')).toBe(square?.get('width'))
+      }
+    }
+    for (const key of Object.keys(UI_ICON_SIZE) as Array<keyof typeof UI_ICON_SIZE>) expect(Number(UI_ICON_SIZE_CLASS[key].slice(5)) * 4).toBe(UI_ICON_SIZE[key])
+  })
+
+  it.each(['sm', 'md', 'lg'] as const)('图标按钮 %s 的宽高引用相同控件变量，调整高度不会变成长方形', (size) => {
     const tokens = resolveIconButtonClass({ size, tone: 'default', shape: 'square', on: false }).split(/\s+/)
     const height = tokens.find((token) => token.startsWith('h-control-'))
     expect(height).toBeDefined()
     const variable = `--size-${height!.slice(2)}`
     expect(rootVars.has(variable)).toBe(true)
-    expect(tokens).toContain(`w-[var(${variable})]`)
+    expect(tokens).toContain(`w-control-${size}`)
     expect(tokens.some((token) => /^w-\d/.test(token))).toBe(false)
   })
 
   it('最小图标按钮也随界面圆角预设变化', () => {
-    const tokens = resolveIconButtonClass({ size: 'xs', tone: 'default', shape: 'square', on: false }).split(/\s+/)
+    const tokens = resolveIconButtonClass({ size: '2xs', tone: 'default', shape: 'square', on: false }).split(/\s+/)
     expect(tokens).toContain(UI_RADIUS_CLASS.control)
     expect(tokens).not.toContain('rounded')
   })

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React from 'react'
 import { UiPanel } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
@@ -84,7 +85,7 @@ export function FloatingInputPanel({
                 {hintText}
               </span>
             </div>
-            <ChevronUp aria-hidden="true" className="h-4 w-4 text-text3" />
+            <ChevronUp aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text3`} />
           </div>
         </div>
 

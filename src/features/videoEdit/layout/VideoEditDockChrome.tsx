@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Check, LayoutGrid, Maximize2, Menu, Minimize2, RotateCcw } from 'lucide-react'
 import type { DockviewApi, DockviewGroupPanel, IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
@@ -34,7 +35,7 @@ export function VideoEditDockTab({ api, containerApi }: IDockviewPanelHeaderProp
   // 非当前标签也占住菜单的位置（不可见），切换叠放面板时各标签文字位置不动。
   return <span className="flex h-full items-center gap-1.5 text-xs" data-dock-tab={api.id} data-dock-tab-title={title}>
     <span>{title}</span>
-    {active ? <VideoEditPanelMenu containerApi={containerApi} group={group} /> : <span aria-hidden="true" className="invisible flex"><UiIconButton size="xs" tabIndex={-1}><Menu size={12} /></UiIconButton></span>}
+    {active ? <VideoEditPanelMenu containerApi={containerApi} group={group} /> : <span aria-hidden="true" className="invisible flex"><UiIconButton size="2xs" tabIndex={-1}><Menu  /></UiIconButton></span>}
   </span>
 }
 
@@ -60,8 +61,8 @@ function VideoEditPanelMenu({ containerApi, group }: { containerApi: DockviewApi
         <UiOptionButton role="menuitem" variant="menu" size="sm" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiOptionButton>
       </div>
     }}>
-    {({ open, togglePanel }) => <UiIconButton size="xs" title="面板菜单" aria-label="面板菜单" aria-haspopup="menu" aria-expanded={open} on={open} data-panel-trigger-button
-      onPointerDown={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); togglePanel() }}><Menu size={12} /></UiIconButton>}
+    {({ open, togglePanel }) => <UiIconButton size="2xs" title="面板菜单" aria-label="面板菜单" aria-haspopup="menu" aria-expanded={open} on={open} data-panel-trigger-button
+      onPointerDown={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); togglePanel() }}><Menu  /></UiIconButton>}
   </PanelTrigger>
 }
 
@@ -70,7 +71,7 @@ export function VideoEditDockHeaderActions({ api, containerApi, group }: IDockvi
   const maximized = useDockGroupMaximized(containerApi, group)
   const label = maximizeLabelOf(maximized)
   return <div className="flex h-full items-center gap-1 pr-1" data-video-edit-dock-actions>
-    {api.location.type === 'grid' && <UiIconButton size="sm" title={label} aria-label={label} onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>{maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</UiIconButton>}
+    {api.location.type === 'grid' && <UiIconButton size="xs" title={label} aria-label={label} onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>{maximized ? <Minimize2  /> : <Maximize2  />}</UiIconButton>}
   </div>
 }
 
@@ -91,9 +92,9 @@ export function VideoEditLayoutMenu({ api }: { api: DockviewApi | null }): React
         if (isVideoEditPanelPoppedOut(panel.id)) { dockVideoEditPopout(panel.id); return }
         const existing = api.getPanel(panel.id)
         if (existing) existing.api.close(); else showVideoEditPanel(api, panel.id)
-      }}><span>{panel.title}</span>{(api?.getPanel(panel.id) || isVideoEditPanelPoppedOut(panel.id)) && <Check size={13} />}</UiOptionButton>)}
-      <UiOptionButton variant="menu" size="sm" className="flex items-center gap-2" disabled={!api} onClick={() => { if (api) resetVideoEditWorkspaceLayout(api) }}><RotateCcw size={13} />重置布局</UiOptionButton>
+      }}><span>{panel.title}</span>{(api?.getPanel(panel.id) || isVideoEditPanelPoppedOut(panel.id)) && <Check size={UI_ICON_SIZE.xs} />}</UiOptionButton>)}
+      <UiOptionButton variant="menu" size="sm" className="flex items-center gap-2" disabled={!api} onClick={() => { if (api) resetVideoEditWorkspaceLayout(api) }}><RotateCcw size={UI_ICON_SIZE.xs} />重置布局</UiOptionButton>
     </div>}>
-    {({ open, togglePanel }) => <UiIconButton disabled={!api} aria-label="面板" title="面板与布局" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid size={16} /></UiIconButton>}
+    {({ open, togglePanel }) => <UiIconButton disabled={!api} aria-label="面板" title="面板与布局" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid  /></UiIconButton>}
   </PanelTrigger>
 }

@@ -172,7 +172,7 @@ export function CanvasVideoPlayer({
             onClick={(event) => event.stopPropagation()}
           />
           <div className="flex h-6 min-w-0 items-center gap-1">
-            <UiIconButton size="sm" tone="media"
+            <UiIconButton size="xs" tone="media"
               aria-label={playing ? t('node.videoPlayer.pause') : t('node.videoPlayer.play')}
               onClick={(event) => {
                 event.stopPropagation();
@@ -186,7 +186,7 @@ export function CanvasVideoPlayer({
             </span>
             <span className="min-w-0 flex-1" />
             {!compactControls && hasAudio !== false && (
-              <UiIconButton size="sm" tone="media"
+              <UiIconButton size="xs" tone="media"
                 aria-label={muted ? t('node.videoPlayer.unmute') : t('node.videoPlayer.mute')}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -199,7 +199,7 @@ export function CanvasVideoPlayer({
                 {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
               </UiIconButton>
             )}
-            <UiIconButton size="sm" tone="media"
+            <UiIconButton size="xs" tone="media"
               aria-label={t('node.videoPlayer.openViewer')}
               onClick={(event) => {
                 event.stopPropagation();

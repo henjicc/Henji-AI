@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useMemo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
@@ -63,7 +64,7 @@ export const ElementEditGenerationNode = memo(({
         <ToolWorkbenchSourcePreview
           source={sourceImage ?? null}
           alt={t('node.mediaRow.image')}
-          icon={<ElementEditIcon className="h-8 w-8" />}
+          icon={<ElementEditIcon className={`${UI_ICON_SIZE_CLASS.display}`} />}
           emptyText={t('node.elementEditGeneration.missingInput')}
         />
       )
@@ -86,7 +87,7 @@ export const ElementEditGenerationNode = memo(({
       selected={selected}
       width={width}
       height={height}
-      icon={<ElementEditIcon className="h-4 w-4" />}
+      icon={<ElementEditIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.elementEdit}
       promptPlaceholderKey="node.elementEditGeneration.promptPlaceholder"
       promptRequiredKey="node.elementEditGeneration.promptRequired"

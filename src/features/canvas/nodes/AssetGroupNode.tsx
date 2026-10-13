@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Maximize2 } from 'lucide-react';
@@ -75,7 +76,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
       >
         <div className="shrink-0 border-b border-line px-2.5 py-1">
           <NodeHeader
-            icon={<ICON_NODE_ASSET_GROUP className="h-3.5 w-3.5" />}
+            icon={<ICON_NODE_ASSET_GROUP className={`${UI_ICON_SIZE_CLASS.sm}`} />}
             titleText={title}
             headerAdjust={{ x: 0, y: 0, scale: 1 }}
             rightSlotAdjust={{ x: 0, y: 0, scale: 1 }}
@@ -86,7 +87,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
             editable
             onTitleChange={(displayName) => updateNodeData(id, { displayName })}
             rightSlot={(
-              <UiIconButton size="sm"
+              <UiIconButton size="xs"
                 className="nodrag nopan"
                 aria-label={t('canvas.assetGroup.manager.open')}
                 title={t('canvas.assetGroup.manager.open')}
@@ -95,7 +96,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
                   canvasEventBus.publish('asset-group/open', { groupId: id });
                 }}
               >
-                <Maximize2 className="h-3 w-3" />
+                <Maximize2  />
               </UiIconButton>
             )}
           />
@@ -103,9 +104,9 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
         <div className="relative min-h-0 flex-1 overflow-hidden bg-window">
           <AssetGroupPreview items={previewItems} />
           <div className="ui-glass absolute bottom-2 left-2 flex items-center gap-2 rounded-lg px-2 py-1 text-2xs text-text1">
-            <span className="flex items-center gap-1"><ICON_MEDIA_IMAGE className="h-3 w-3" />{mediaSummary.image}</span>
-            <span className="flex items-center gap-1"><ICON_MEDIA_VIDEO className="h-3 w-3" />{mediaSummary.video}</span>
-            <span className="flex items-center gap-1"><ICON_MEDIA_AUDIO className="h-3 w-3" />{mediaSummary.audio}</span>
+            <span className="flex items-center gap-1"><ICON_MEDIA_IMAGE className={`${UI_ICON_SIZE_CLASS.xs}`} />{mediaSummary.image}</span>
+            <span className="flex items-center gap-1"><ICON_MEDIA_VIDEO className={`${UI_ICON_SIZE_CLASS.xs}`} />{mediaSummary.video}</span>
+            <span className="flex items-center gap-1"><ICON_MEDIA_AUDIO className={`${UI_ICON_SIZE_CLASS.xs}`} />{mediaSummary.audio}</span>
           </div>
         </div>
       </div>

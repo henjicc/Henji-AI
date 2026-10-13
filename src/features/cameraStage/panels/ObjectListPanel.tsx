@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React, { useEffect, useRef, useState } from 'react'
 import { Box, Camera, Copy, Eye, EyeOff, Trash2, User } from 'lucide-react'
 import { UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
@@ -7,9 +8,9 @@ import { useCameraStageStore } from '../store/cameraStageStore'
 /** 场景对象列表：列表选中/显隐/复制/删除；双击对象名称可直接行内改名 */
 
 const TypeIcon: React.FC<{ object: StageObject }> = ({ object }) => {
-  if (object.type === 'character') return <User size={14} />
-  if (object.type === 'camera') return <Camera size={14} />
-  return <Box size={14} />
+  if (object.type === 'character') return <User size={UI_ICON_SIZE.sm} />
+  if (object.type === 'camera') return <Camera size={UI_ICON_SIZE.sm} />
+  return <Box size={UI_ICON_SIZE.sm} />
 }
 
 const ObjectListPanel: React.FC = () => {
@@ -120,29 +121,29 @@ const ObjectListPanel: React.FC = () => {
               </UiOptionButton>
             )}
             <UiIconButton
-              size="sm"
+              size="xs"
               title={object.visible ? '隐藏' : '显示'}
               aria-label={object.visible ? `隐藏${object.name}` : `显示${object.name}`}
               onClick={() => updateObject(object.id, { visible: !object.visible })}
             >
-              {object.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+              {object.visible ? <Eye  /> : <EyeOff  />}
             </UiIconButton>
             <UiIconButton
-              size="sm"
+              size="xs"
               title="复制 (Ctrl+D)"
               aria-label={`复制${object.name}`}
               onClick={() => duplicateObject(object.id)}
             >
-              <Copy size={14} />
+              <Copy  />
             </UiIconButton>
             <UiIconButton
-              size="sm"
+              size="xs"
               tone="danger"
               title="删除"
               aria-label={`删除${object.name}`}
               onClick={() => removeObject(object.id)}
             >
-              <Trash2 size={14} />
+              <Trash2  />
             </UiIconButton>
           </div>
         )

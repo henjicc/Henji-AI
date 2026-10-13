@@ -134,11 +134,11 @@ export function UiModal({
               <h2 id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</h2>
               {headerActions}
             </div>
-            <UiIconButton size="lg"
+            <UiIconButton size="md"
               aria-label={`${title} - 关闭`}
               onClick={onClose}
             >
-              <X className="h-4 w-4" />
+              <X  />
             </UiIconButton>
           </div>
         )}

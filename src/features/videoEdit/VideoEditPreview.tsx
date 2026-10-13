@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { VideoEditAnnotationQueueButton } from './panels/VideoEditAnnotationsPanel'
@@ -606,7 +607,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     { id: 'toggle_proxies', title: '切换代理', Icon: ICON_VIDEO_EDIT_PROXY, on: getVideoEditProxyPreference(instance.document.id).enabled, tooltip: '切换代理：看片使用已有代理；导出默认用原片（可在导出设置中选代理）；分析使用原片', onClick: () => { try { setVideoEditProxyPreference(instance.document.id, { enabled: !getVideoEditProxyPreference(instance.document.id).enabled }) } catch (error) { onError(error) } } },
     ...PROGRAM_COMMAND_BUTTONS.map((id): VideoEditMonitorButtonSpec => {
       const command = id === 'lift' || id === 'extract' ? rangeEdits[id] : timelineCommandPresentation(commandContext, id, shortcuts)
-      if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, size: 'lg', enabled: command.enabled, onClick: () => runCommand(id) }
+      if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, size: 'md', enabled: command.enabled, onClick: () => runCommand(id) }
       return { id, title: command.title, tooltip: command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, onClick: () => runCommand(id) }
     }),
     { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
@@ -652,7 +653,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       <div className={`relative ${zoom.boxClass} ${multicamView ? 'min-w-0 flex-1' : ''}`} style={zoom.boxStyle} data-monitor-zoom-box data-video-edit-program-display={display === 'fit' ? 'fit' : 'zoom'}>
         <div ref={host} className="relative h-full w-full" onContextMenu={event => {
           const rect = event.currentTarget.getBoundingClientRect(); const point = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height))) }
-          annotationMenu.showMenu(event, [{ id: 'ask', label: '让助手改这里', icon: <PenLine size={14} />, disabled: instance.playing, onClick: () => { void askAssistantAtVideoEditFrame(instance.document.id, point).catch(onError) } }])
+          annotationMenu.showMenu(event, [{ id: 'ask', label: '让助手改这里', icon: <PenLine size={UI_ICON_SIZE.sm} />, disabled: instance.playing, onClick: () => { void askAssistantAtVideoEditFrame(instance.document.id, point).catch(onError) } }])
         }}
           onPointerDown={event => { if (videoMotionState(instance)?.status === 'recording') motionGesture.down(event); else if (mode === 'move') picture.down(event) }} onPointerMove={event => { motionGesture.move(event); picture.move(event) }}
           onPointerCancel={() => { motionGesture.cancel(); picture.cancel() }} onLostPointerCapture={() => { motionGesture.cancel(); picture.cancel() }} onPointerUp={event => { motionGesture.up(event); if (mode === 'move') picture.up(event) }} />
@@ -692,7 +693,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       <VideoEditMotionControls owner={instance} onError={onError} />
       <VideoEditExplanationControls owner={instance} onError={onError} />
       <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />
-      <PanelTrigger display={PROGRAM_MODES.find(item => item.id === mode)?.title ?? '选择'} size="sm" buttonClassName="w-auto" appearance="quiet" panelWidth="content" closeOnPanelClick renderPanel={() => <div role="group" aria-label="标注工具">{PROGRAM_MODES.map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" active={mode === id} onClick={() => changeMode(id)}><Icon size={14} />{title}</UiOptionButton>)}<UiOptionButton variant="menu" onClick={() => { void askAssistantAtVideoEditFrame(instance.document.id).catch(onError) }}>让助手改这里</UiOptionButton></div>} />
+      <PanelTrigger display={PROGRAM_MODES.find(item => item.id === mode)?.title ?? '选择'} size="sm" buttonClassName="w-auto" appearance="quiet" panelWidth="content" closeOnPanelClick renderPanel={() => <div role="group" aria-label="标注工具">{PROGRAM_MODES.map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" active={mode === id} onClick={() => changeMode(id)}><Icon size={UI_ICON_SIZE.sm} />{title}</UiOptionButton>)}<UiOptionButton variant="menu" onClick={() => { void askAssistantAtVideoEditFrame(instance.document.id).catch(onError) }}>让助手改这里</UiOptionButton></div>} />
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}
       {compactProgramToolbar ? null : <VideoEditInOutDuration instance={instance} className="px-1.5 text-xs" />}
       <UiOverflowRow
@@ -706,10 +707,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         ]}
         renderOverflow={hiddenIds => <PanelTrigger panelWidth={200} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         {menuButtons(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="收起的按钮">
-          {menuButtons(hiddenIds).map(spec => <UiOptionButton key={spec.id} variant="menu" size="sm" className="gap-2" disabled={spec.enabled === false} title={spec.tooltip} onClick={spec.onClick}><spec.Icon size={14} />{spec.title}</UiOptionButton>)}
+          {menuButtons(hiddenIds).map(spec => <UiOptionButton key={spec.id} variant="menu" size="sm" className="gap-2" disabled={spec.enabled === false} title={spec.tooltip} onClick={spec.onClick}><spec.Icon size={UI_ICON_SIZE.sm} />{spec.title}</UiOptionButton>)}
         </div>}
         {menuModes(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="节目工具">
-          {menuModes(hiddenIds).map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => changeMode(id)}><Icon size={14} />{title}</UiOptionButton>)}
+          {menuModes(hiddenIds).map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => changeMode(id)}><Icon size={UI_ICON_SIZE.sm} />{title}</UiOptionButton>)}
         </div>}
         {hiddenIds.includes('display') && <div className="flex flex-col gap-1" role="group" aria-label="节目显示比例">
           {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={option.value === 'fit' ? display === 'fit' : display === 1} onClick={() => zoom.setDisplay(option.value === 'fit' ? 'fit' : 1)}>显示 {option.label}</UiOptionButton>)}
@@ -719,17 +720,17 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         </div>}
         <UiOptionButton variant="menu" size="sm" active={multicamView} onClick={() => setMulticamView(value => !value)}>多机位视图（1–9 切换）</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" disabled={!multicam || instance.playing} onClick={() => { if (multicam) void autoSwitchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: multicam.clip.id }).catch(onError) }}>建议机位切换</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" active={!playbackResolution.fullWhenPaused} disabled={playbackResolution.resolution === 'full'} title="默认暂停时回到完整分辨率以便看清细节；打开后暂停时也保持所选回放分辨率" onClick={() => changePlaybackResolution({ fullWhenPaused: !playbackResolution.fullWhenPaused })}><Gauge size={14} />暂停时也用此分辨率</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={14} />重新加载预览</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={14} />选帧加入资产库</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={() => setCanvasSend({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, source: { kind: 'frame', frame: instance.frame } })}><ICON_WORKSPACE_CANVAS size={14} />发送当前帧到画布</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="把当前画面作为项目列表里的封面" onClick={setPosterFrame}><ImageUp size={14} />设为项目封面</UiOptionButton>
-        {instance.document.posterFrame && <UiOptionButton variant="menu" size="sm" className="gap-2" title="不再固定封面，保存时按剪辑内容自动更新" onClick={() => { try { clearVideoEditPosterFrame(instance.document.id) } catch (error) { onError(error) } }}><RotateCcw size={14} />恢复自动封面</UiOptionButton>}
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="在图片编辑中修改当前帧，完成后可替换回原时刻的一帧" onClick={editFrame}><PenLine size={14} />编辑当前帧</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" active={!playbackResolution.fullWhenPaused} disabled={playbackResolution.resolution === 'full'} title="默认暂停时回到完整分辨率以便看清细节；打开后暂停时也保持所选回放分辨率" onClick={() => changePlaybackResolution({ fullWhenPaused: !playbackResolution.fullWhenPaused })}><Gauge size={UI_ICON_SIZE.sm} />暂停时也用此分辨率</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={UI_ICON_SIZE.sm} />重新加载预览</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={UI_ICON_SIZE.sm} />选帧加入资产库</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={() => setCanvasSend({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, source: { kind: 'frame', frame: instance.frame } })}><ICON_WORKSPACE_CANVAS size={UI_ICON_SIZE.sm} />发送当前帧到画布</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="把当前画面作为项目列表里的封面" onClick={setPosterFrame}><ImageUp size={UI_ICON_SIZE.sm} />设为项目封面</UiOptionButton>
+        {instance.document.posterFrame && <UiOptionButton variant="menu" size="sm" className="gap-2" title="不再固定封面，保存时按剪辑内容自动更新" onClick={() => { try { clearVideoEditPosterFrame(instance.document.id) } catch (error) { onError(error) } }}><RotateCcw size={UI_ICON_SIZE.sm} />恢复自动封面</UiOptionButton>}
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="在图片编辑中修改当前帧，完成后可替换回原时刻的一帧" onClick={editFrame}><PenLine size={UI_ICON_SIZE.sm} />编辑当前帧</UiOptionButton>
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="更多节目操作" title="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="更多节目操作" title="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
       </PanelTrigger>}
-      />
+ />
     </div>
     {canvasSend && <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} />}
   </div>

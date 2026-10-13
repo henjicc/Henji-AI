@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VideoEditMulticamDialog } from './VideoEditMulticamDialog'
 import { cancelVideoEditProxy, getVideoEditProxyPreference, readVideoEditProxyState, refreshVideoEditProxies, setVideoEditProxyPreference } from '../application/videoEditProxy'
 import { VideoEditProxyDialog } from './VideoEditProxyDialog'
@@ -163,11 +164,11 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const createGraphic = (kind: VideoEditGraphicItemInput['kind']): void => run(() => selectCreatedItem(createVideoEditGraphicItem(projectId, { kind, binId: binId || undefined })))
   const createAdjustment = (): void => run(() => selectCreatedItem(createVideoEditAdjustmentItem(projectId, { binId: binId || undefined })))
   const graphicMenu = (): MenuItem[] => [
-    { id: 'solid', label: '新建纯色', icon: <Plus size={16} />, onClick: () => createGraphic('solid') },
-    { id: 'rect', label: '新建矩形', icon: <Plus size={16} />, onClick: () => createGraphic('rect') },
-    { id: 'ellipse', label: '新建椭圆', icon: <Plus size={16} />, onClick: () => createGraphic('ellipse') },
-    { id: 'text', label: '新建原生文字', icon: <Plus size={16} />, onClick: () => createGraphic('text') },
-    { id: 'adjustment', label: '新建调整图层', icon: <Plus size={16} />, onClick: createAdjustment },
+    { id: 'solid', label: '新建纯色', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('solid') },
+    { id: 'rect', label: '新建矩形', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('rect') },
+    { id: 'ellipse', label: '新建椭圆', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('ellipse') },
+    { id: 'text', label: '新建原生文字', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => createGraphic('text') },
+    { id: 'adjustment', label: '新建调整图层', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: createAdjustment },
   ]
   const createFromItem = (id: string): void => {
     try {
@@ -179,23 +180,23 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     } catch (error) { onError(error) }
   }
   const blankMenu = (): MenuItem[] => [
-    { id: 'import', label: '导入文件', icon: <Import size={16} />, onClick: choose },
-    { id: 'import_folder', label: '导入文件夹', icon: <FolderInput size={16} />, onClick: chooseFolders },
-    { id: 'assets', label: '从资产库拖入', icon: <AssetLibraryIcon size={16} />, onClick: () => openAssetLibrary('floating') },
-    { id: 'bin', label: '新建素材箱', icon: <FolderPlus size={16} />, onClick: () => setEdit({ kind: 'createBin', parentId: binId }) },
-    { id: 'sequence', label: '新建序列…', icon: <SequenceIcon size={16} />, onClick: newSequence },
-    { id: 'code', label: '新建代码素材', icon: <Code2 size={16} />, onClick: () => setCreatingCode(true) },
+    { id: 'import', label: '导入文件', icon: <Import size={UI_ICON_SIZE.md} />, onClick: choose },
+    { id: 'import_folder', label: '导入文件夹', icon: <FolderInput size={UI_ICON_SIZE.md} />, onClick: chooseFolders },
+    { id: 'assets', label: '从资产库拖入', icon: <AssetLibraryIcon size={UI_ICON_SIZE.md} />, onClick: () => openAssetLibrary('floating') },
+    { id: 'bin', label: '新建素材箱', icon: <FolderPlus size={UI_ICON_SIZE.md} />, onClick: () => setEdit({ kind: 'createBin', parentId: binId }) },
+    { id: 'sequence', label: '新建序列…', icon: <SequenceIcon size={UI_ICON_SIZE.md} />, onClick: newSequence },
+    { id: 'code', label: '新建代码素材', icon: <Code2 size={UI_ICON_SIZE.md} />, onClick: () => setCreatingCode(true) },
     ...graphicMenu(),
   ]
   const toggleBin = (id: string): void => setExpanded(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next })
   /** PR“标签”：右键菜单打开色板，设给右键的这一项或当前选区。 */
-  const labelItem = (targets: LabelTargets, current?: VideoEditLabel): MenuItem => ({ id: 'label', label: '标签…', icon: <Tag size={16} />, onClick: () => setLabelPicker({ anchor: { ...pointerAt.current }, targets, ...(current ? { current } : {}) }) })
+  const labelItem = (targets: LabelTargets, current?: VideoEditLabel): MenuItem => ({ id: 'label', label: '标签…', icon: <Tag size={UI_ICON_SIZE.md} />, onClick: () => setLabelPicker({ anchor: { ...pointerAt.current }, targets, ...(current ? { current } : {}) }) })
   const itemMenu = (entry: VideoEditProjectEntry): MenuItem[] => {
     if (entry.kind === 'bin') return [...binMenu(entry.value), labelItem({ itemIds: [], binIds: [entry.value.id], sequenceIds: [] }, entry.value.label)]
     if (entry.kind === 'sequence') return [
-      { id: 'open', label: '打开序列', icon: <Play size={16} />, onClick: () => run(() => switchVideoEditSequence(projectId, entry.value.id)) },
-      { id: 'settings', label: '序列设置与重命名', icon: <Settings2 size={16} />, onClick: () => setSequenceDialog({ kind: 'edit', id: entry.value.id, settings: entry.value }) },
-      { id: 'delete', label: '移除空序列', icon: <Trash2 size={16} />, disabled: !!entry.value.clips.length || !!entry.value.annotations.length, onClick: () => run(() => deleteVideoEditSequence(projectId, entry.value.id)) },
+      { id: 'open', label: '打开序列', icon: <Play size={UI_ICON_SIZE.md} />, onClick: () => run(() => switchVideoEditSequence(projectId, entry.value.id)) },
+      { id: 'settings', label: '序列设置与重命名', icon: <Settings2 size={UI_ICON_SIZE.md} />, onClick: () => setSequenceDialog({ kind: 'edit', id: entry.value.id, settings: entry.value }) },
+      { id: 'delete', label: '移除空序列', icon: <Trash2 size={UI_ICON_SIZE.md} />, disabled: !!entry.value.clips.length || !!entry.value.annotations.length, onClick: () => run(() => deleteVideoEditSequence(projectId, entry.value.id)) },
       labelItem({ itemIds: [], binIds: [], sequenceIds: [entry.value.id] }, entry.value.label),
     ]
     const item = entry.value
@@ -206,17 +207,17 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const sounding = items.map(value => media.get(value.mediaId ?? '')).filter(value => value && (value.kind === 'audio' || value.kind === 'video' && value.hasAudio !== false))
     const audioTarget: VideoEditAudioChannelsTarget | undefined = sounding.length === items.length && sounding[0] && (items.length === 1 || sounding.every(value => value!.audioStreams && JSON.stringify(value!.audioStreams) === JSON.stringify(sounding[0]!.audioStreams))) ? { kind: 'items', itemIds: items.map(value => value.id), mediaId: sounding[0].id, ...(items[0].audioChannels ? { layout: items[0].audioChannels } : {}) } : undefined
     return [
-      { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={16} />, disabled: items.length < 2 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
-      { id: 'create_proxy', label: '创建代理…', icon: <ProxyIcon size={16} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
-      { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={16} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
-      { id: 'preview', label: '打开源素材', icon: <Play size={16} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
-      { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, disabled: !activeSequence, icon: <Plus size={16} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
-      { id: 'sequence', label: item.kind === 'adjustment' ? '调整图层请添加到现有序列' : '按此素材新建序列', icon: <SequenceIcon size={16} />, disabled: ids.length !== 1 || item.kind === 'adjustment', onClick: () => createFromItem(item.id) },
-      { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'items', items }) },
+      { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={UI_ICON_SIZE.md} />, disabled: items.length < 2 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
+      { id: 'create_proxy', label: '创建代理…', icon: <ProxyIcon size={UI_ICON_SIZE.md} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
+      { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={UI_ICON_SIZE.md} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
+      { id: 'preview', label: '打开源素材', icon: <Play size={UI_ICON_SIZE.md} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
+      { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, disabled: !activeSequence, icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
+      { id: 'sequence', label: item.kind === 'adjustment' ? '调整图层请添加到现有序列' : '按此素材新建序列', icon: <SequenceIcon size={UI_ICON_SIZE.md} />, disabled: ids.length !== 1 || item.kind === 'adjustment', onClick: () => createFromItem(item.id) },
+      { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={UI_ICON_SIZE.md} />, onClick: () => setEdit({ kind: 'items', items }) },
       labelItem({ itemIds: items.map(value => value.id), binIds: [], sequenceIds: [] }, items.length === 1 ? item.label : undefined),
-      { id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: !audioTarget, onClick: () => { if (audioTarget) setAudioChannels(audioTarget) } },
-      { id: 'relink', label: '重新定位源文件', icon: <RefreshCw size={16} />, disabled: !item.mediaId || ids.length !== 1, onClick: () => run(() => relinkVideoEditMedia(projectId, item.mediaId!)) },
-      { id: 'remove', label: `从素材移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
+      { id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={UI_ICON_SIZE.md} />, disabled: !audioTarget, onClick: () => { if (audioTarget) setAudioChannels(audioTarget) } },
+      { id: 'relink', label: '重新定位源文件', icon: <RefreshCw size={UI_ICON_SIZE.md} />, disabled: !item.mediaId || ids.length !== 1, onClick: () => run(() => relinkVideoEditMedia(projectId, item.mediaId!)) },
+      { id: 'remove', label: `从素材移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={UI_ICON_SIZE.md} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
     ]
   }
   /** 进入素材箱（双击素材箱或“上一级”）：面板显示这个素材箱的内容。 */
@@ -293,10 +294,10 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const columns = videoEditProjectColumns(instance.document, entry, fallbackFps)
     const cells: Record<(typeof LIST_COLUMNS)[number]['key'], string> = { frameRate: columns.frameRateText, mediaStart: columns.mediaStart, mediaEnd: columns.mediaEnd, duration: columns.durationText, proxy: entry.kind === 'item' && entry.value.kind === 'video' && entry.value.mediaId ? (() => { const state = readVideoEditProxyState(projectId, entry.value.mediaId!); return state.status === 'generating' ? `生成中 ${Math.round(state.progress * 100)}%` : state.status === 'ready' ? '已有' : state.error ? '无（创建失败）' : '无' })() : '' }
     return <div className="flex min-w-0 items-center" role="treeitem" aria-level={row.depth + 1} aria-expanded={row.expandable ? row.expanded : undefined} aria-selected={selected} style={{ paddingLeft: Math.min(row.depth, 8) * INDENT_PX }}>
-      {row.expandable ? <UiIconButton size="xs" className="shrink-0" aria-label={`${row.expanded ? '折叠' : '展开'}素材箱 ${entry.value.name}`} onClick={() => toggleBin(entry.value.id)}>{row.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
+      {row.expandable ? <UiIconButton size="2xs" className="shrink-0" aria-label={`${row.expanded ? '折叠' : '展开'}素材箱 ${entry.value.name}`} onClick={() => toggleBin(entry.value.id)}>{row.expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
       <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="min-h-7 min-w-0 flex-1 gap-2 !px-1.5" data-entry-kind={kind} {...entryHandlers(entry, selected)}>
         <LabelSwatch label={columns.label} />
-        <Icon size={13} className="shrink-0 text-text2" aria-hidden="true" />
+        <Icon size={UI_ICON_SIZE.xs} className="shrink-0 text-text2" aria-hidden="true" />
         <span className="min-w-0 shrink-0 truncate text-left text-xs" style={{ width: Math.max(40, columnWidths.name - Math.min(row.depth, 8) * INDENT_PX - 44) }} data-observation-sensitive title={entry.kind === 'item' && entry.value.tags?.length ? `${entry.value.name}（${entry.value.tags.join(' · ')}）` : `${entry.value.name} · ${detailOf(entry)}`}>{entry.value.name}</span>
         {LIST_COLUMNS.map(column => <span key={column.key} className="shrink-0 truncate pl-2 text-left font-mono text-2xs tabular-nums text-text3" style={{ width: columnWidths[column.key] }} data-video-edit-project-column={column.key}>{cells[column.key]}</span>)}
       </UiOptionButton>
@@ -304,10 +305,10 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   }
   const sortBy = (key: VideoEditProjectSortKey): void => setSort(previous => ({ key, direction: previous.key === key && previous.direction === 'asc' ? 'desc' : 'asc' }))
   const binMenu = (bin: VideoEditBin): MenuItem[] => [
-    { id: 'new', label: '新建子素材箱', icon: <FolderPlus size={16} />, onClick: () => setEdit({ kind: 'createBin', parentId: bin.id }) },
-    { id: 'edit', label: '重命名与移动素材箱', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'bin', bin }) },
-    { id: 'open', label: '打开素材箱', icon: <FolderOpen size={16} />, onClick: () => selectBin(bin.id) },
-    { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
+    { id: 'new', label: '新建子素材箱', icon: <FolderPlus size={UI_ICON_SIZE.md} />, onClick: () => setEdit({ kind: 'createBin', parentId: bin.id }) },
+    { id: 'edit', label: '重命名与移动素材箱', icon: <Pencil size={UI_ICON_SIZE.md} />, onClick: () => setEdit({ kind: 'bin', bin }) },
+    { id: 'open', label: '打开素材箱', icon: <FolderOpen size={UI_ICON_SIZE.md} />, onClick: () => selectBin(bin.id) },
+    { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={UI_ICON_SIZE.md} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
   ]
   const followLabel = dragFollow && !dragFollow.hidden ? createPortal(<div aria-hidden="true" data-video-edit-drag-follow className="pointer-events-none fixed z-drag rounded-full bg-raised px-2.5 py-1 text-xs text-text1 shadow-panel" style={{ left: dragFollow.x + 14, top: dragFollow.y + 14 }}>{dragFollow.count > 1 ? `${dragFollow.count} 个素材` : '1 个素材'}</div>, document.body) : null
   return <div className="relative flex h-full min-h-0 flex-col" aria-label="素材面板" tabIndex={0}
@@ -345,36 +346,36 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-0.5 px-2 py-1">
       {/* 当前所在素材箱（双击素材箱进入）：上一级 + 名称，悬停看完整位置 */}
       {binId && <div className="mr-1 flex min-w-0 max-w-[40%] shrink items-center gap-0.5" title={['素材', ...binPath.map(bin => bin.name)].join(' / ')}>
-        <UiIconButton size="sm" aria-label="返回上一级素材箱" title="返回上一级素材箱" onClick={() => selectBin(binPath.at(-2)?.id ?? '')} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) event.preventDefault() }} onDrop={event => drop(event, binPath.at(-2)?.id ?? '')}><ArrowUp size={14} /></UiIconButton>
+        <UiIconButton size="xs" aria-label="返回上一级素材箱" title="返回上一级素材箱" onClick={() => selectBin(binPath.at(-2)?.id ?? '')} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) event.preventDefault() }} onDrop={event => drop(event, binPath.at(-2)?.id ?? '')}><ArrowUp /></UiIconButton>
         <span className="min-w-0 truncate text-xs text-text2" data-user-content data-video-edit-current-bin>{binPath.at(-1)?.name}</span>
       </div>}
       <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
       <PanelTrigger panelWidth={168} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={14} />列表视图</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={14} />缩略图视图</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={UI_ICON_SIZE.sm} />列表视图</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={UI_ICON_SIZE.sm} />缩略图视图</UiOptionButton>
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
         {SORT_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={sort.key === option.value} onClick={() => setSort({ key: option.value, direction: 'asc' })}>按{option.label}排序</UiOptionButton>)}
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="视图与排序" title="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 size={15} /> : <List size={15} />}</UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="视图与排序" title="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 /> : <List />}</UiIconButton>}
       </PanelTrigger>
-      <UiIconButton aria-label="资产库" title="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon size={15} /></UiIconButton>
+      <UiIconButton aria-label="资产库" title="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon /></UiIconButton>
       <VideoEditProjectDocumentsButton instance={instance} onError={onError} />
       <PanelTrigger panelWidth={184} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={14} />新建素材箱</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={newSequence}><SequenceIcon size={14} />新建序列</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setCreatingCode(true)}><Code2 size={14} />新建代码素材</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={UI_ICON_SIZE.sm} />新建素材箱</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={newSequence}><SequenceIcon size={UI_ICON_SIZE.sm} />新建序列</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setCreatingCode(true)}><Code2 size={UI_ICON_SIZE.sm} />新建代码素材</UiOptionButton>
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
-        {graphicMenu().map(item => <UiOptionButton key={item.id} variant="menu" size="sm" className="gap-2" onClick={item.onClick}><GraphicIcon size={14} />{item.label}</UiOptionButton>)}
+        {graphicMenu().map(item => <UiOptionButton key={item.id} variant="menu" size="sm" className="gap-2" onClick={item.onClick}><GraphicIcon size={UI_ICON_SIZE.sm} />{item.label}</UiOptionButton>)}
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus size={16} /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
       </PanelTrigger>
       <PanelTrigger panelWidth={240} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={14} />导入文件</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={14} />导入文件夹</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={UI_ICON_SIZE.sm} />导入文件</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={UI_ICON_SIZE.sm} />导入文件夹</UiOptionButton>
         <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="导入" title="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import size={15} /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="导入" title="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import /></UiIconButton>}
       </PanelTrigger>
       </div>
     </div>
@@ -421,7 +422,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
 /** 表头当前排序列的方向（升序向上、降序向下）。 */
 function SortMark({ sort, column }: { sort: VideoEditProjectSort; column: VideoEditProjectSortKey }): React.ReactElement | null {
   if (sort.key !== column) return null
-  return sort.direction === 'asc' ? <ChevronUp size={11} className="shrink-0" aria-hidden="true" /> : <ChevronDown size={11} className="shrink-0" aria-hidden="true" />
+  return sort.direction === 'asc' ? <ChevronUp size={UI_ICON_SIZE.xs} className="shrink-0" aria-hidden="true" /> : <ChevronDown size={UI_ICON_SIZE.xs} className="shrink-0" aria-hidden="true" />
 }
 /** 颜色标签小方块（PR 素材面板的标签列）：颜色是用户内容色，名称进悬停说明。 */
 function LabelSwatch({ label }: { label: VideoEditLabel }): React.ReactElement {

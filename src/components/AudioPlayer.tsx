@@ -327,11 +327,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       togglePlay()
     }
   }
-  const iconSize = compact || layout === 'inline' ? 'h-4 w-4' : 'h-5 w-5'
-  const buttonSize = compact || layout === 'inline' ? 'md' : 'lg'
+  const buttonSize = compact || layout === 'inline' ? 'sm' : 'md'
   const playButton = (
     <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} size={buttonSize} title={t('ui:audioPlayer.playPause')}>
-      {isPlaying ? <Pause className={iconSize} /> : <Play className={iconSize} />}
+      {isPlaying ? <Pause /> : <Play />}
     </UiIconButton>
   )
   const waveformView = (height?: number, tier?: 'mini' | 'standard') => (
@@ -354,7 +353,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           setIsPlaying(true)
         }
       }}
-    />
+ />
   )
   const volumeControl = (
     <div ref={volumeContainerRef} className="relative flex items-center">
@@ -363,14 +362,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         title={t('ui:audioPlayer.volume')}
         disabled={!active || controlledPlayback?.disabled}
         onClick={() => setShowVolumeSlider((value) => !value)}
-      >
-        {volume <= 0 ? <VolumeX className={iconSize} /> : <Volume2 className={iconSize} />}
+ >
+        {volume <= 0 ? <VolumeX /> : <Volume2 />}
       </UiIconButton>
       {showVolumeSlider && (
         <div
           className={`absolute ${layout === 'inline' ? 'right-[calc(100%+0.5rem)]' : 'left-[calc(100%+0.5rem)]'} top-1/2 z-sticky -translate-y-1/2 ${volumeSliderWidthClass}`}
           ref={volumeSliderRef}
-        >
+ >
           {showVolumeValueTip && <TooltipContent anchorRef={volumeSliderRef} content={`${volumePercent}%`} interactive={false} />}
           <UiRangeInput
             disabled={!active || controlledPlayback?.disabled}
@@ -388,7 +387,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
               }
             }}
             className="w-full"
-          />
+ />
         </div>
       )}
     </div>
@@ -403,7 +402,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         onContextMenu={onContextMenu}
         tabIndex={0}
         onKeyDown={keyboardToggle}
-      >
+ >
         {playButton}
         <div className="h-7 min-w-0 flex-1">
           {controlledPlayback
@@ -425,7 +424,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       onContextMenu={onContextMenu}
       tabIndex={0}
       onKeyDown={keyboardToggle}
-    >
+ >
       <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>
         <AudioTimeReadout clock={playbackClock} controlledTime={controlledPlayback?.currentTime} />
         <span>{formatPlaybackTime(waveDuration ?? duration)}</span>
@@ -445,8 +444,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             disabled={isDownloading}
             size={buttonSize}
             title={t('common:actions.download')}
-          >
-            <Download className={iconSize} />
+ >
+            <Download />
           </UiIconButton>}
         </div>
       </div>

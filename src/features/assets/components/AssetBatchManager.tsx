@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiFormRow } from '@/components/ui'
 import React, { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Tags, Trash2 } from 'lucide-react'
@@ -57,7 +58,7 @@ export const AssetBatchManager: React.FC<Props> = ({
     // 标题、已选数量与“完成”都在页头命令带里，这里不再重复一条头带。
     <aside aria-label={t('assetLibrary.batchManage')} aria-busy={busy} className={`flex w-80 shrink-0 flex-col border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <LoaderCircle className="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" /> : null}{t('assetLibrary.batchHint')}</p>
+        <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <LoaderCircle className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 motion-safe:animate-spin`} /> : null}{t('assetLibrary.batchHint')}</p>
         <div className="mb-5 flex gap-2">
           <UiButton className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>
           <UiButton className="flex-1" disabled={busy || selectedCount === 0} onClick={onClear}>{t('assetLibrary.batchClear')}</UiButton>
@@ -65,7 +66,7 @@ export const AssetBatchManager: React.FC<Props> = ({
 
         <UiGroup title={t('assetLibrary.batchTags')}>
           <div className="relative">
-            <Tags aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
+            <Tags aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text3`} />
             <UiInput disabled={busy} className="pl-8" aria-label={t('assetLibrary.batchTags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addDraftTags() }} placeholder={t('assetLibrary.tagPlaceholder')} />
           </div>
           {(tags.length > 0 || suggestions.length > 0) && (
@@ -100,7 +101,7 @@ export const AssetBatchManager: React.FC<Props> = ({
               void onDelete()
             }}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2  />
             {deleteArmed ? t('assetLibrary.batchConfirmDelete') : t('assetLibrary.batchDelete')}
           </UiButton>
         </UiGroup>

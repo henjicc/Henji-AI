@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useState } from 'react'
 import { ListMinus, ListPlus, Minus, PencilLine, Plus, Settings2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
@@ -36,13 +37,13 @@ export function useTrackHeaderMenu(instance: VideoEditInstance, sequence: VideoE
     const rank = lanes.findIndex(value => value.id === trackId)
     const full = sequence.tracks.length >= VIDEO_EDIT_TRACK_LIMIT
     menu.showMenu(event, [
-      { id: 'rename', label: '重命名', icon: <PencilLine size={16} />, onClick: () => setRenaming(trackId) },
+      { id: 'rename', label: '重命名', icon: <PencilLine size={UI_ICON_SIZE.md} />, onClick: () => setRenaming(trackId) },
       // 视频轨加在所点轨道之上，音频轨加在之下（同类自然顺序的下一个位置）。
-      { id: 'add_one', label: '添加单个轨道', icon: <Plus size={16} />, disabled: full, onClick: () => run(() => addVideoEditTracks(projectId, sequence.id, [{ kind: track.kind, count: 1, slot: rank + 1 }])) },
-      { id: 'delete_one', label: '删除单个轨道', icon: <Minus size={16} />, disabled: lanes.length <= 1 || track.locked, divider: true, onClick: () => run(() => deleteVideoEditTracks(projectId, sequence.id, [trackId])) },
-      { id: 'add', label: '添加轨道…', icon: <ListPlus size={16} />, disabled: full, onClick: () => setDialog({ kind: 'add', trackKind: track.kind }) },
-      { id: 'delete', label: '删除轨道…', icon: <ListMinus size={16} />, divider: true, onClick: () => setDialog({ kind: 'delete', trackKind: track.kind }) },
-      { id: 'customize', label: '自定义…', icon: <Settings2 size={16} />, onClick: () => setDialog({ kind: 'buttons', trackKind: track.kind, trackId, anchor }) },
+      { id: 'add_one', label: '添加单个轨道', icon: <Plus size={UI_ICON_SIZE.md} />, disabled: full, onClick: () => run(() => addVideoEditTracks(projectId, sequence.id, [{ kind: track.kind, count: 1, slot: rank + 1 }])) },
+      { id: 'delete_one', label: '删除单个轨道', icon: <Minus size={UI_ICON_SIZE.md} />, disabled: lanes.length <= 1 || track.locked, divider: true, onClick: () => run(() => deleteVideoEditTracks(projectId, sequence.id, [trackId])) },
+      { id: 'add', label: '添加轨道…', icon: <ListPlus size={UI_ICON_SIZE.md} />, disabled: full, onClick: () => setDialog({ kind: 'add', trackKind: track.kind }) },
+      { id: 'delete', label: '删除轨道…', icon: <ListMinus size={UI_ICON_SIZE.md} />, divider: true, onClick: () => setDialog({ kind: 'delete', trackKind: track.kind }) },
+      { id: 'customize', label: '自定义…', icon: <Settings2 size={UI_ICON_SIZE.md} />, onClick: () => setDialog({ kind: 'buttons', trackKind: track.kind, trackId, anchor }) },
     ])
   }
   const rename = (trackId: string, name: string | null): void => {

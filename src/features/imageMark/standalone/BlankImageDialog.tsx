@@ -118,7 +118,7 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
                 onChange={(event) => setWidth(parseInteger(event.target.value))}
               />
             </label>
-            <UiIconButton size="lg"
+            <UiIconButton size="md"
               type="button"
               aria-label="互换宽度和高度"
               title="互换宽度和高度"
@@ -127,7 +127,7 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
                 setHeight(width);
               }}
             >
-              <ArrowLeftRight size={16} />
+              <ArrowLeftRight  />
             </UiIconButton>
             <label>
               <span className={UI_FIELD_LABEL_CLASS}>高度（px）</span>

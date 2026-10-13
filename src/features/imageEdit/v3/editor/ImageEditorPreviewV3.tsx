@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { AlertTriangle, LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -510,7 +511,7 @@ export function ImageEditorPreviewV3({
         && !viewportResult
         && !managedPreview.result ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <LoaderCircle className="h-6 w-6 animate-spin text-text3" />
+          <LoaderCircle className={`${UI_ICON_SIZE_CLASS.xl} animate-spin text-text3`} />
         </div>
       ) : null}
       {previewDiagnostic ? (
@@ -518,7 +519,7 @@ export function ImageEditorPreviewV3({
           role="status"
           className="ui-glass absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text1"
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
+          <AlertTriangle className={`${UI_ICON_SIZE_CLASS.md} mt-0.5 shrink-0 text-warning-text`} aria-hidden="true" />
           {/* 原始渲染错误只进日志（见上方 effect），界面只说用户能据此行动的后果 */}
           <span>{t('imageEditor.v3.previewRenderFailed')}</span>
         </div>
@@ -529,7 +530,7 @@ export function ImageEditorPreviewV3({
           role="status"
           className="ui-glass pointer-events-none absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text1"
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
+          <AlertTriangle className={`${UI_ICON_SIZE_CLASS.md} mt-0.5 shrink-0 text-warning-text`} aria-hidden="true" />
           <span>{t(`imageEditor.v3.moveTool.${layerMoveHandlers.unavailableReason}`)}</span>
         </div>
       ) : null}

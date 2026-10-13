@@ -115,6 +115,7 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'canvas',
   'panel',
   'raised',
+  'segmentSelected',
   'control',
   'controlHover',
   'controlPressed',
@@ -547,6 +548,9 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   const L0 = s.base;
   const N = (L: number, c: number = s.tint) => oklchToHex(L, c, s.hue);
   const t = {} as ThemeColorTokens;
+
+  // 分段专用中性抬起底：拉开与轨道、未选项悬停底的差异，不改变字段 raised。
+  t.segmentSelected = N(dark ? L0 + Math.max(5 * st, 0.12) : Math.min(1, L0 + 0.04));
 
   // ── 表面（与参考实现一致） ──
   if (dark) {

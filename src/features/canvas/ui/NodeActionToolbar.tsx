@@ -293,7 +293,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               void runCanvasNode(node.id).catch(() => undefined);
             }}
           >
-            <Sparkles className="h-3.5 w-3.5" />
+            <Sparkles  />
             {t('canvas.generate')}
           </UiButton>
         )}
@@ -306,7 +306,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
                 canvasEventBus.publish('camera-stage/render-image', { nodeId: node.id });
               }}
             >
-              <Image className="h-3.5 w-3.5" />
+              <Image  />
               {t('nodeToolbar.outputImage')}
             </UiButton>
         )}
@@ -319,7 +319,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
                 canvasEventBus.publish('camera-stage/render-video', { nodeId: node.id });
               }}
             >
-              <Video className="h-3.5 w-3.5" />
+              <Video  />
               {t('nodeToolbar.outputVideo')}
             </UiButton>
         )}
@@ -350,7 +350,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
                 })
               }
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon  />
               {tool.label}
             </UiButton>
           );
@@ -364,7 +364,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               })
             }
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw  />
             {t('nodeToolbar.reupload')}
           </UiButton>
         )}
@@ -376,7 +376,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               void handleCopyImage();
             }}
           >
-            {isCopySuccess ? <Check className="h-3.5 w-3.5 text-success-text" /> : <Copy className="h-3.5 w-3.5" />}
+            {isCopySuccess ? <Check className={`text-success-text`} /> : <Copy  />}
             {t('nodeToolbar.copy')}
           </UiButton>
         )}
@@ -389,7 +389,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               void handleCollectAsset();
             }}
           >
-            {assetCollected ? <FolderCheck className="h-3.5 w-3.5 text-success-text" /> : <FolderPlus className="h-3.5 w-3.5" />}
+            {assetCollected ? <FolderCheck className={`text-success-text`} /> : <FolderPlus  />}
             {t('ui:assetLibrary.assetShort')}
           </UiButton>
         )}
@@ -406,7 +406,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               void handleCopyStoryboardText();
             }}
           >
-            {isCopyTextSuccess ? <Check className="h-3.5 w-3.5 text-success-text" /> : <Copy className="h-3.5 w-3.5" />}
+            {isCopyTextSuccess ? <Check className={`text-success-text`} /> : <Copy  />}
             {t('nodeToolbar.copyText')}
           </UiButton>
         )}
@@ -415,7 +415,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             key="media-download"
             onClick={handleDownloadClick}
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download  />
             {t('nodeToolbar.download')}
           </UiButton>
         )}
@@ -429,7 +429,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               else ungroupNode(node.id);
             }}
           >
-            <Unlink2 className="h-3.5 w-3.5" />
+            <Unlink2  />
             {t('nodeToolbar.ungroup')}
           </UiButton>
         )}
@@ -442,7 +442,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             if (projectId) void deleteCanvasNodes(projectId, [node.id]).catch(reportCanvasOperationFailure);
           }}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2  />
           {t('common.delete')}
         </UiButton>
       </UiPanel>

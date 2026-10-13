@@ -1,3 +1,4 @@
+import type { UiControlSize } from './primitiveInternals'
 import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import type { GestureProps } from './UiColorGrading'
 
@@ -7,7 +8,7 @@ export interface ParameterControlProps<T> extends GestureProps {
   defaultValue?: T
   label?: string
   'aria-label'?: string
-  size?: 'sm' | 'md'
+  size?: UiControlSize
 }
 
 export const clampParameter = (value: number, min = 0, max = 1): number => Math.max(min, Math.min(max, value))

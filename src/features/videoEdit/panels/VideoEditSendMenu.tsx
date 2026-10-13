@@ -28,7 +28,7 @@ export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, 
     </VideoEditSendOptions>
   )}>
     {({ open, togglePanel }) => <UiButton type="button" variant="secondary" disabled={disabled} aria-expanded={open} aria-haspopup="menu" onClick={event => { event.stopPropagation(); togglePanel() }}>
-      <ICON_WORKSPACE_VIDEO_EDIT size={15} className="mr-1.5" />加入剪辑<ChevronDown size={14} className="ml-1.5" />
+      <ICON_WORKSPACE_VIDEO_EDIT  className="mr-1.5" />加入剪辑<ChevronDown  className="ml-1.5" />
     </UiButton>}
   </PanelTrigger>
 }

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useState } from 'react'
 import { useStore } from 'zustand'
 import { createStore, type StoreApi } from 'zustand/vanilla'
@@ -10,7 +11,7 @@ import { GALLERY_SKILL_SOURCE } from './galleryIndex'
 const noop = (): void => undefined
 
 function Antipattern({ children }: { children: string }): JSX.Element {
-  return <p data-gallery-antipattern className="flex items-center gap-2 text-xs text-warning-text"><TriangleAlert className="h-4 w-4 shrink-0" />禁止写法：{children}</p>
+  return <p data-gallery-antipattern className="flex items-center gap-2 text-xs text-warning-text"><TriangleAlert className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />禁止写法：{children}</p>
 }
 
 export function PatternSection(): JSX.Element {

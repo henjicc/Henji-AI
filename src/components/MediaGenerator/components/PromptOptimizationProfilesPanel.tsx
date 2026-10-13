@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useTranslation } from 'react-i18next'
 import React, { useMemo } from 'react'
 import { Plus, Save, Star, Trash2 } from 'lucide-react'
@@ -253,11 +254,11 @@ export function PromptOptimizationProfilesPanel({
                   {profile.modelId ? describeProfileModel(activeConfig, profile) : '未选择模型'}
                 </span>
               </span>
-              {profile.isDefault ? <Star size={14} className="text-text2" /> : null}
+              {profile.isDefault ? <Star size={UI_ICON_SIZE.sm} className="text-text2" /> : null}
             </UiOptionButton>
           ))}
           <UiButton type="button" variant="secondary" className="w-full" onClick={addProfile}>
-            <Plus size={15} />
+            <Plus  />
             新增配置
           </UiButton>
         </div>
@@ -358,7 +359,7 @@ export function PromptOptimizationProfilesPanel({
               onClick={() => setDefaultProfile(selectedProfile.id)}
               disabled={selectedProfile.isDefault}
             >
-              <Save size={15} className="mr-2" />
+              <Save  className="mr-2" />
               设为默认
             </UiButton>
             <UiButton
@@ -367,7 +368,7 @@ export function PromptOptimizationProfilesPanel({
               onClick={deleteSelected}
               disabled={profiles.length <= 1}
             >
-              <Trash2 size={15} className="mr-2" />
+              <Trash2  className="mr-2" />
               删除配置
             </UiButton>
           </div>

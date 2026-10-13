@@ -23,7 +23,7 @@ function Row({ label, tooltip, children, reset }: { label: string; tooltip: stri
   return <div className="flex min-h-8 items-center gap-1.5 pl-3" data-video-edit-mask-row={label}>
     <span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
-    {reset ? <UiIconButton size="xs" aria-label={reset.label} title={reset.label} disabled={reset.disabled} onClick={reset.onReset}><RotateCcw size={12} /></UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
+    {reset ? <UiIconButton size="2xs" aria-label={reset.label} title={reset.label} disabled={reset.disabled} onClick={reset.onReset}><RotateCcw  /></UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
   </div>
 }
 
@@ -39,10 +39,10 @@ export function VideoEditMaskCreateButtons({ target, effect, gesture }: { target
     setVideoEditMaskEditing({ ...target, effectId: effect.id, shapeId: shape.id })
   }
   return <span className="flex shrink-0 items-center gap-0.5" role="group" aria-label="创建遮罩">
-    <UiIconButton size="sm" aria-label="创建椭圆遮罩" title="创建椭圆遮罩" onClick={() => create('ellipse')}><Circle size={14} /></UiIconButton>
-    <UiIconButton size="sm" aria-label="创建矩形遮罩" title="创建矩形遮罩" onClick={() => create('rect')}><Square size={14} /></UiIconButton>
-    <UiIconButton size="sm" aria-label="钢笔遮罩" title="钢笔遮罩：在节目画面上逐点绘制，按住拖出曲线，点回起点或按 Enter 闭合" on={penOn} aria-pressed={penOn}
-      onClick={() => setVideoEditMaskEditing(penOn ? { ...target, effectId: effect.id, pen: false } : { ...target, effectId: effect.id, pen: true })}><PenTool size={14} /></UiIconButton>
+    <UiIconButton size="xs" aria-label="创建椭圆遮罩" title="创建椭圆遮罩" onClick={() => create('ellipse')}><Circle  /></UiIconButton>
+    <UiIconButton size="xs" aria-label="创建矩形遮罩" title="创建矩形遮罩" onClick={() => create('rect')}><Square  /></UiIconButton>
+    <UiIconButton size="xs" aria-label="钢笔遮罩" title="钢笔遮罩：在节目画面上逐点绘制，按住拖出曲线，点回起点或按 Enter 闭合" on={penOn} aria-pressed={penOn}
+      onClick={() => setVideoEditMaskEditing(penOn ? { ...target, effectId: effect.id, pen: false } : { ...target, effectId: effect.id, pen: true })}><PenTool  /></UiIconButton>
   </span>
 }
 
@@ -80,7 +80,7 @@ export function VideoEditMaskShapeControls({ target, effect, gesture, trackActio
             options={VIDEO_EDIT_MASK_MODES.map(mode => ({ value: mode, label: VIDEO_EDIT_MASK_MODE_LABELS[mode] }))}
             onSelect={mode => update(shape, mode === 'add' ? without(shape, 'mode') : { ...shape, mode })} /></span>
           {trackAction?.(shape)}
-          <UiIconButton size="xs" tone="danger" aria-label={`删除${name}`} title={`删除${name}`} onClick={() => remove(shape)}><Trash2 size={12} /></UiIconButton>
+          <UiIconButton size="2xs" tone="danger" aria-label={`删除${name}`} title={`删除${name}`} onClick={() => remove(shape)}><Trash2  /></UiIconButton>
         </div>
         <Row label="羽化" tooltip="遮罩边缘的柔和过渡，100 约为画面高度的 10%" reset={{ label: `重置${name}羽化`, disabled: shape.feather === undefined, onReset: () => update(shape, without(shape, 'feather')) }}>
           {scrub(`${name}羽化`, shape.feather ?? VIDEO_EDIT_MASK_DEFAULTS.feather, SMART_REGION_FEATHER_RANGE, next => update(shape, { ...shape, feather: next }))}

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { withPaidOperation } from '@/services/paidApproval'
 import { assistantErrorMessage } from '@/core/assistant/assistantErrorPresentation'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -105,17 +106,17 @@ export function EmbeddedConversation(): JSX.Element {
     <div ref={scroll.viewportRef} onScroll={scroll.onScroll} onWheel={scroll.onWheel} onKeyDown={scroll.onKeyDown} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4" role="log" aria-label="助手对话">
       <div ref={scroll.contentRef} className="space-y-5">
       {isEmpty ? (needsModel
-        ? <UiEmpty size="sm" icon={<Sparkles aria-hidden="true" className="h-5 w-5" />} title="先设置助手模型"
+        ? <UiEmpty size="sm" icon={<Sparkles aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg}`} />} title="先设置助手模型"
           description="助手需要一个支持工具调用的模型，才能查看项目、调整参数和安排任务。"
           action={<UiButton variant="secondary" onClick={openModelSettings}>设置可调用工具的模型</UiButton>} />
-        : <UiEmpty size="sm" icon={<Sparkles aria-hidden="true" className="h-5 w-5" />} title="从当前工作开始"
+        : <UiEmpty size="sm" icon={<Sparkles aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg}`} />} title="从当前工作开始"
           description="可以让我查看项目、调整参数，或帮你安排创作任务。" />)
         : <EmbeddedTranscript messages={state.messages} busy={state.busy} onToggle={scroll.suspendFollowing} />}
       {state.sendingMessage ? <EmbeddedUserMessage message={state.sendingMessage} /> : null}
       {optimistic && state.sendingMessage?.id !== optimistic.id && !state.pendingMessages?.some(message => message.id === optimistic.id)
         ? <EmbeddedUserMessage message={optimistic} /> : null}
       {busy ? <div role="status" aria-label={switching ? "正在切换对话" : "助手正在回复"} className="flex h-6 items-center">
-        <LoaderCircle aria-hidden="true" className="h-4 w-4 text-accent-text motion-safe:animate-spin" />
+        <LoaderCircle aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-accent-text motion-safe:animate-spin`} />
       </div> : null}
       {state.pendingMessages?.map(message => <div key={message.id} className="space-y-1"><EmbeddedUserMessage message={message} />
         <p className={`text-right text-xs ${message.error ? 'text-danger-text' : 'text-text3'}`}>{message.error ? `发送未完成：${assistantErrorMessage(message.error)}` : '等待发送'}</p></div>)}
@@ -125,7 +126,7 @@ export function EmbeddedConversation(): JSX.Element {
     {state.error || (needsModel && !isEmpty) ? <div className="px-4">
       {state.error ? <UiError message={assistantErrorMessage(state.error)} title="操作未完成" size="xs" align="start"
         actions={canRetry ? <UiButton size="sm" onClick={retry} title="重新发送上一条消息">
-          <RotateCcw aria-hidden="true" className="mr-1 h-3.5 w-3.5" />重试</UiButton> : undefined} /> : null}
+          <RotateCcw aria-hidden="true" className={`mr-1`} />重试</UiButton> : undefined} /> : null}
       {needsModel && !isEmpty ? <UiButton variant="secondary" onClick={openModelSettings}>设置可调用工具的模型</UiButton> : null}
     </div> : null}
     <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}

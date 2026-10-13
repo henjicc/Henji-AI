@@ -138,17 +138,17 @@ export function UiDatePicker({
           <div className="mb-2 flex items-center justify-between">
             <span className={UI_TEXT_PANEL_TITLE_CLASS}>{monthLabel}</span>
             <div className="flex items-center gap-1">
-              <UiIconButton size="sm"
+              <UiIconButton size="xs"
                 type="button"
                 onClick={() => setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
               >
-                <ChevronLeft className="h-3.5 w-3.5" />
+                <ChevronLeft  />
               </UiIconButton>
-              <UiIconButton size="sm"
+              <UiIconButton size="xs"
                 type="button"
                 onClick={() => setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
               >
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRight  />
               </UiIconButton>
             </div>
           </div>

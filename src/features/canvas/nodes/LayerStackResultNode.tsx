@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Maximize2 } from 'lucide-react';
@@ -105,7 +106,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<ICON_NODE_ASSET_GROUP className="h-4 w-4" />}
+        icon={<ICON_NODE_ASSET_GROUP className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={data.displayName ?? t('node.layerStackView.title')}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
@@ -139,7 +140,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
             className="nodrag absolute bottom-3 right-3 gap-1.5"
             onClick={(event) => { event.stopPropagation(); void openEditor(); }}
           >
-            <Maximize2 className="h-3.5 w-3.5" />
+            <Maximize2  />
             编辑
           </UiButton>
         )}

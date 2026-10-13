@@ -242,13 +242,13 @@ export function VideoTrimModal({
               onClick={togglePlay}
               title={t('ui:audioPlayer.playPause')}
             >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {isPlaying ? <Pause  /> : <Play  />}
             </UiIconButton>
             <UiIconButton
               onClick={() => setMuted((value) => !value)}
               title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
             >
-              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              {muted ? <VolumeX  /> : <Volume2  />}
             </UiIconButton>
           </div>
         </div>

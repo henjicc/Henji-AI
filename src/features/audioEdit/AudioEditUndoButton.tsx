@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { RotateCcw, Undo2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
@@ -23,7 +24,7 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
   useEffect(() => () => clearTimeout(timer.current), [])
   useEffect(() => { setConfirmation(null); hideMenu(); clearTimeout(timer.current) }, [project.id, hideMenu])
   const showMenu = (event: React.MouseEvent) => menu.showMenu(event, [{
-    id: 'reset', label: '撤销所有修改', icon: <RotateCcw size={16} />, disabled: disabled || !canReset,
+    id: 'reset', label: '撤销所有修改', icon: <RotateCcw size={UI_ICON_SIZE.md} />, disabled: disabled || !canReset,
     onClick: () => {
       menu.hideMenu()
       const instance = getAudioEditProjectInstance(project.id)
@@ -39,7 +40,7 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
     finally { restoring.current = false }
   }
   return <>
-    <UiIconButton size="lg" disabled={disabled || (!canUndo && !canReset)}
+    <UiIconButton size="md" disabled={disabled || (!canUndo && !canReset)}
       aria-label="撤销；长按撤销所有修改" title="撤销 · 长按可撤销所有修改" aria-haspopup="menu" aria-expanded={menu.menuVisible}
       onPointerDown={(event) => {
         if (event.button !== 0) return
@@ -48,7 +49,7 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
       }} onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
       onClick={() => { if (longPressed.current) { longPressed.current = false; return } if (canUndo) onUndo() }}
       onContextMenu={showMenu}>
-      <Undo2 size={16} />
+      <Undo2  />
     </UiIconButton>
     <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />
     <AlertDialog isOpen={Boolean(confirmation)} title="撤销所有修改？" type="warning" closeLabel="取消"

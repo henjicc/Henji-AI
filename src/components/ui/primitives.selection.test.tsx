@@ -160,7 +160,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(compact.dataset.size).toBe('sm');
   });
 
-  it('分段、选项格与色样的选中是淡强调底 + 强调文字，不用强调色实底（重要记录 012）', () => {
+  it('分段中性抬起底、选项格淡强调底、色样强描边（重要记录 014）', () => {
     const view = render(
       <>
         <UiOptionButton variant="segment" active>选中段</UiOptionButton>
@@ -180,7 +180,8 @@ describe('Ui primitives 选中态词汇表', () => {
 
     // 重要记录 012（任务 4.3）：选中 = 淡强调底（ui-glass-adaptive-selected → --selected-accent）+ 强调文字，
     // 不用强调色实底，也不描强调边
-    for (const active of [activeSegment, activeTile]) {
+    expectClasses(activeSegment, 'bg-segment-selected text-text1 border-transparent');
+    for (const active of [activeTile]) {
       expectClasses(active, `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text border-transparent`);
       expect(active.className).not.toMatch(/(^| )(bg-accent|border-accent|bg-brand)/);
     }
@@ -240,15 +241,15 @@ describe('Ui primitives 选中态词汇表', () => {
           onLabel="开"
           aria-label="关闭的双段开关"
           onCheckedChange={onCheckedChange}
-        />
+ />
         <UiSwitch
           appearance="segmented"
           checked
           offLabel="关"
           onLabel="开"
-          size="compact"
+          size="sm"
           aria-label="开启的双段开关"
-        />
+ />
       </>,
     );
 
@@ -262,10 +263,10 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
     expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);
     expect(segmentedOff.textContent).toBe('关开');
-    expect(segmentedOff.firstElementChild?.classList.contains('bg-raised')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('bg-segment-selected')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('translate-x-0')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('duration-180')).toBe(true);
-    expect(segmentedOn.firstElementChild?.classList.contains('bg-raised')).toBe(true);
+    expect(segmentedOn.firstElementChild?.classList.contains('bg-segment-selected')).toBe(true);
     expect(segmentedOn.firstElementChild?.className).not.toMatch(/(^| )bg-accent/);
     expect(segmentedOn.lastElementChild?.classList.contains('text-text1')).toBe(true);
     expect(segmentedOff.children[1]?.classList.contains('text-text1')).toBe(true);

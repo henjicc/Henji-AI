@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Virtuoso, VirtuosoGrid, type VirtuosoHandle, type VirtuosoGridHandle } from 'react-virtuoso';
 import React from 'react';
 import { ArrowDown, CheckSquare, FolderOpen, MoreHorizontal, Pencil, Square, Trash2 } from 'lucide-react';
@@ -206,11 +207,11 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   const buildMenuItems = (item: ProjectCardGridItem): MenuItem[] => {
     if (item.draft) {
       return [
-        { id: 'open', label: labels.draft?.open ?? labels.open, icon: <FolderOpen className="h-4 w-4" />, onClick: () => onOpen(item) },
+        { id: 'open', label: labels.draft?.open ?? labels.open, icon: <FolderOpen className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: () => onOpen(item) },
         ...(onDiscardDraftRequest ? [{
           id: 'discard-draft',
           label: labels.draft?.discard ?? '',
-          icon: <Trash2 className="h-4 w-4" />,
+          icon: <Trash2 className={`${UI_ICON_SIZE_CLASS.md}`} />,
           onClick: () => onDiscardDraftRequest(item),
           divider: true,
         }] : []),
@@ -222,18 +223,18 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
         {
           id: 'toggle-select',
           label: (selected ? labels.deselectItem : labels.selectItem) ?? '',
-          icon: selected ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />,
+          icon: selected ? <Square className={`${UI_ICON_SIZE_CLASS.md}`} /> : <CheckSquare className={`${UI_ICON_SIZE_CLASS.md}`} />,
           onClick: () => selection.toggle(item.id),
         },
       ];
     }
     const actions = extraActions?.(item) ?? [];
     const menu: MenuItem[] = [
-      { id: 'open', label: labels.open, icon: <FolderOpen className="h-4 w-4" />, onClick: () => onOpen(item) },
+      { id: 'open', label: labels.open, icon: <FolderOpen className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: () => onOpen(item) },
     ];
     const manage = manageable(item);
     if (onRename && manage) {
-      menu.push({ id: 'rename', label: labels.rename ?? '', icon: <Pencil className="h-4 w-4" />, onClick: () => onRename(item) });
+      menu.push({ id: 'rename', label: labels.rename ?? '', icon: <Pencil className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: () => onRename(item) });
     }
     menu.push(...actions.map((action) => ({
       id: action.id,
@@ -247,14 +248,14 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
         {
           id: 'delete',
           label: labels.delete ?? '',
-          icon: <Trash2 className="h-4 w-4" />,
+          icon: <Trash2 className={`${UI_ICON_SIZE_CLASS.md}`} />,
           onClick: () => onDeleteRequest([item]),
           divider: true,
         },
         {
           id: 'select-multiple',
           label: labels.selectMultiple ?? '',
-          icon: <CheckSquare className="h-4 w-4" />,
+          icon: <CheckSquare className={`${UI_ICON_SIZE_CLASS.md}`} />,
           onClick: () => selection.enter(item.id),
         },
       );
@@ -287,7 +288,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
     }
     const quick: { id: string; label: string; icon: React.ReactNode; onClick: () => void; disabled?: boolean }[] = [];
     if (!item.draft && onRename && manageable(item)) {
-      quick.push({ id: 'rename', label: labels.rename ?? '', icon: <Pencil className="h-4 w-4" />, onClick: () => onRename(item) });
+      quick.push({ id: 'rename', label: labels.rename ?? '', icon: <Pencil className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: () => onRename(item) });
     }
     if (!item.draft) {
       for (const action of extraActions?.(item) ?? []) {
@@ -324,7 +325,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               showMenuAt(event.currentTarget, buildMenuItems(item));
             }}
           >
-            <MoreHorizontal className="h-4 w-4" />
+            <MoreHorizontal  />
           </UiIconButton>
         ) : null}
       </div>
@@ -360,7 +361,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
       key && onSortChange ? (
         <UiButton size="sm" className="-ml-2 justify-self-start" aria-pressed={sort === key} onClick={() => onSortChange(key)}>
           {label}
-          {sort === key ? <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+          {sort === key ? <ArrowDown  aria-hidden="true" /> : null}
         </UiButton>
       ) : (
         <span className={`truncate ${UI_TEXT_META_CLASS}`}>{label}</span>

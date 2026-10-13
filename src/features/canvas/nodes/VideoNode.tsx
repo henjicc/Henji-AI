@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -195,8 +196,8 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={isUploadVariant
-          ? <VideoUploadIcon className="h-4 w-4" />
-          : <VideoGenerationIcon className="h-4 w-4" />}
+          ? <VideoUploadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />
+          : <VideoGenerationIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -236,7 +237,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
                   setIsPlayerActive(true);
                 }}
               >
-                <Play className="ml-0.5 h-5 w-5" />
+                <Play className={`ml-0.5`} />
               </UiIconButton>
             </div>
           </div>
@@ -246,11 +247,11 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
             onDrop={handleDrop}
             onDragOver={(event) => event.preventDefault()}
           >
-            <VideoUploadIcon className="h-7 w-7 text-text3" />
+            <VideoUploadIcon className={`${UI_ICON_SIZE_CLASS.xl} text-text3`} />
             <span className="px-3 text-center text-xs leading-6">{t('node.videoNode.uploadHint')}</span>
           </label>
         ) : (
-          <UiEmpty size="node" icon={<VideoGenerationIcon className="h-7 w-7" />} title={t('node.videoNode.waitingResult')} />
+          <UiEmpty size="node" icon={<VideoGenerationIcon className={`${UI_ICON_SIZE_CLASS.xl}`} />} title={t('node.videoNode.waitingResult')} />
         )}
 
         {isGenerating && (

@@ -97,7 +97,7 @@ describe('设计系统中心覆盖 ui/** 全部导出组件', () => {
   const source = gallerySource()
 
   it('深路径和 default export 同样进入门禁（防止空跑）', () => {
-    expect(exported).toEqual(expect.arrayContaining(['UiButton', 'UiModal', 'Dropdown', 'PanelTrigger', 'UiToast', 'PromptEditor']))
+    expect(exported).toEqual(expect.arrayContaining(['UiButton', 'UiReadout', 'UiModal', 'Dropdown', 'PanelTrigger', 'UiToast', 'PromptEditor']))
     expect(exported.length).toBeGreaterThan(30)
     expect(exported).toEqual(expect.arrayContaining(['NumberInput', 'ProgressBar', 'Tooltip', 'TooltipContent', 'PriceEstimate', 'Toggle', 'TextInput', 'FileUploader']))
   })

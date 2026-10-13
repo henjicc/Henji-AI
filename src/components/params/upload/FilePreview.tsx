@@ -42,18 +42,18 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
 
       <div className="preview-actions">
         {onEdit && (
-          <UiIconButton size="lg"
+          <UiIconButton size="md"
             onClick={onEdit}
             title={t('common:edit')}
           >
-            <Pencil className="h-4 w-4" />
+            <Pencil  />
           </UiIconButton>
         )}
-        <UiIconButton size="lg" tone="danger"
+        <UiIconButton size="md" tone="danger"
           onClick={onDelete}
           title={t('common:delete')}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2  />
         </UiIconButton>
       </div>
 

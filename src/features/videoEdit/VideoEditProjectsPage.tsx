@@ -1,3 +1,5 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, ListX, PackageCheck, PackageOpen } from 'lucide-react'
@@ -131,20 +133,20 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       return project.external ? [{
         id: 'forget',
         label: t('documentLibrary.actions.forget'),
-        icon: <ListX className="h-4 w-4" />,
+        icon: <ListX className={`${UI_ICON_SIZE_CLASS.md}`} />,
         onClick: () => { void run('forget', () => operations.forgetExternalProject(project)) },
       }] : []
     }
     return [{
       id: 'reveal',
       label: t('documentLibrary.actions.reveal'),
-      icon: <FolderOpen className="h-4 w-4" />,
+      icon: <FolderOpen className={`${UI_ICON_SIZE_CLASS.md}`} />,
       quick: true,
       onClick: () => { void run('reveal', () => operations.revealProject(project.id)) },
     }, {
       id: 'export-package',
       label: t('documentLibrary.actions.exportPackage'),
-      icon: <PackageCheck className="h-4 w-4" />,
+      icon: <PackageCheck className={`${UI_ICON_SIZE_CLASS.md}`} />,
       onClick: () => {
         void run('exportPackage', async () => {
           setPackageStatus(t('documentLibrary.package.exporting'))
@@ -245,7 +247,7 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
         }
       }}
       icon={ICON_WORKSPACE_VIDEO_EDIT}
-      emptyIcon={<ICON_WORKSPACE_VIDEO_EDIT size={40} strokeWidth={1.5} aria-hidden="true" />}
+      emptyIcon={<ICON_WORKSPACE_VIDEO_EDIT size={UI_ICON_SIZE.hero}  aria-hidden="true" />}
       loading={library.loading}
         total={library.total}
         loadingMore={library.loadingMore}

@@ -43,7 +43,7 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
             close()
           }}
         >
-          <TriangleAlert className="h-4 w-4" />
+          <TriangleAlert  />
           {t('ui:workspace.clearDialog.failedOnly')}
         </UiButton>
 
@@ -57,7 +57,7 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
             setNeedsConfirm(true)
           }}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2  />
           {needsConfirm ? t('ui:workspace.clearDialog.confirmDelete') : t('ui:workspace.clearDialog.deleteAll')}
         </UiButton>
 

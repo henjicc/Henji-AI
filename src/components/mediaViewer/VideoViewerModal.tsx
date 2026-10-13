@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { createPortal } from 'react-dom'
@@ -424,9 +425,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               style={{ opacity: showVolumeIndicator ? 1 : 0, transition: uiTransition(['opacity'], UI_DURATION.base), pointerEvents: 'none' }}
             >
               {muted || volume === 0 ? (
-                <VolumeX className="w-5 h-5" />
+                <VolumeX className={`${UI_ICON_SIZE_CLASS.lg}`} />
               ) : (
-                <Volume2 className="w-5 h-5" />
+                <Volume2 className={`${UI_ICON_SIZE_CLASS.lg}`} />
               )}
               <span className="text-base font-medium">{Math.round((muted ? 0 : volume) * 100)}%</span>
             </div>
@@ -497,12 +498,12 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               transition: uiTransition(['opacity'], UI_DURATION.viewer),
             }}
           >
-            <UiIconButton shape="circle" size="lg" tone="media"
+            <UiIconButton shape="circle" size="md" tone="media"
               onClick={onClose}
               className="absolute top-2 right-2 pointer-events-auto"
               title={t('common:close')}
             >
-              <X className="h-5 w-5" />
+              <X  />
             </UiIconButton>
           </div>
         </div>

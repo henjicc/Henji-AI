@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React, { useMemo } from 'react'
 import { Camera, Cuboid, PenTool, UserRound } from 'lucide-react'
 import NumberInput from '@/components/ui/NumberInput'
@@ -128,7 +129,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
             const Icon = object.type === 'camera' ? Camera : object.type === 'character' ? UserRound : Cuboid
             return (
               <div key={object.id} className="flex items-center gap-2 py-1.5">
-                <Icon aria-hidden="true" size={14} className="shrink-0 text-text2" />
+                <Icon aria-hidden="true" size={UI_ICON_SIZE.sm} className="shrink-0 text-text2" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs text-text1">{object.name}</div>
                   <div className="truncate text-2xs text-text2">
@@ -141,7 +142,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
                   className="shrink-0 gap-1"
                   onClick={() => editObjectPath(object.id)}
                 >
-                  <PenTool size={14} />在视口编辑
+                  <PenTool  />在视口编辑
                 </UiButton>
               </div>
             )

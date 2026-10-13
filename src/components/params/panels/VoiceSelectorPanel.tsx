@@ -556,7 +556,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                 placeholder="输入列表中没有的音色 ID"
                 className={`min-w-0 flex-1`}
               />
-              <UiButton type="button" variant="primary" size="lg" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
+              <UiButton type="button" variant="primary" size="md" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
                 使用 ID
               </UiButton>
             </div>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { resolveImageDisplayUrl } from '@/services/imageSource';
@@ -31,7 +32,7 @@ export const ProjectCardCover: React.FC<ProjectCardCoverProps> = ({ coverPath, i
 
   return (
     <div className="project-cover-placeholder flex h-full w-full items-center justify-center">
-      {Icon ? <Icon className="h-6 w-6 text-text3" aria-hidden="true" /> : null}
+      {Icon ? <Icon className={`${UI_ICON_SIZE_CLASS.xl} text-text3`} aria-hidden="true" /> : null}
     </div>
   );
 };

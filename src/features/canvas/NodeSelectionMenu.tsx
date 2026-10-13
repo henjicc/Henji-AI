@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import {
   Fragment,
   useCallback,
@@ -196,7 +197,7 @@ function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMen
                   onChoose(item)
                 }}
               >
-                <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-text2" />
+                <Icon aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text2`} />
                 <span className="min-w-0 flex-1 truncate">{t(item.menuLabelKey)}</span>
               </UiOptionButton>
             )

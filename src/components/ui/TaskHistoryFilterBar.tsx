@@ -202,7 +202,7 @@ export function UiTaskHistoryFilterBar({
     <div className={`relative flex items-start ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
       {!isAlwaysVisible && (
         <div ref={triggerRef}>
-          <UiIconButton size="lg"
+          <UiIconButton size="md"
             type="button"
             on={hasActiveFilters}
             className={`transition-[transform,opacity] duration-240 ease-out ${
@@ -216,7 +216,7 @@ export function UiTaskHistoryFilterBar({
             onClick={() => setIsExpanded(true)}
             title={t('workspaceFilters.expandSearch')}
           >
-            <Search className="h-3.5 w-3.5" />
+            <Search  />
           </UiIconButton>
         </div>
       )}
@@ -299,12 +299,12 @@ export function UiTaskHistoryFilterBar({
             />
 
             {showCloseButton && onClose && (
-              <UiIconButton size="lg"
+              <UiIconButton size="md"
                 type="button"
                 onClick={onClose}
                 title={t('workspaceFilters.close')}
               >
-                <X className="h-3.5 w-3.5" />
+                <X  />
               </UiIconButton>
             )}
           </div>

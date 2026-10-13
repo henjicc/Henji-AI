@@ -86,11 +86,11 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
         <UiGroup title="固定位置" titleTone="compact">
           <UiButton size="sm" aria-label="钉住所选图层的原稿位置"
             disabled={busy || state.needsSave || !selected.some(id => state.entries.some(entry => entry.layerId === id))}
-            onClick={() => run(() => adapter.configure({ pinIds: selected }))}><Pin size={14} />钉住所选图层</UiButton>
+            onClick={() => run(() => adapter.configure({ pinIds: selected }))}><Pin  />钉住所选图层</UiButton>
           {pins.length > 0 && <div className="min-w-0" style={{ height: `calc(var(--size-control-sm) * ${Math.min(pins.length, 3)})` }}><Virtuoso data={pins} itemContent={(_, pin) =>
             <UiButton size="sm" className="w-full min-w-0 justify-start" disabled={busy || state.needsSave}
               aria-label={`解钉 · ${pin.label}`} title={`解钉 · ${pin.label}`} onClick={() => run(() => adapter.configure({ unpin: pin.id }))}>
-              <PinOff size={14} className="shrink-0" /><span className="truncate">解钉 · {pin.label}</span>
+              <PinOff  className="shrink-0" /><span className="truncate">解钉 · {pin.label}</span>
             </UiButton>} /></div>}
         </UiGroup>
       </>}
@@ -105,6 +105,6 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
           onClick={() => run(() => adapter.apply())}>{state.needsSave ? '重试保存' : '应用'}</UiButton>
       </div>}
     </UiGroup>}>
-    {controls => <UiButton size="sm" onClick={controls.togglePanel} aria-expanded={controls.open}><LayoutGrid size={14} />随手摆</UiButton>}
+    {controls => <UiButton size="sm" onClick={controls.togglePanel} aria-expanded={controls.open}><LayoutGrid  />随手摆</UiButton>}
   </PanelTrigger>
 }

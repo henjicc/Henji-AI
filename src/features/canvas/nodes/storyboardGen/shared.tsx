@@ -32,7 +32,6 @@ export const STORYBOARD_GEN_ICON_ADJUST = { x: 0, y: 0, scale: 0.95 }
 // 步进用 20px 静默图标按钮；标签与汇总是元信息档（11px 辅助文字）。
 const GRID_CONTROL_CONTAINER_CLASS = 'flex h-5 items-center gap-0.5'
 const GRID_CONTROL_LABEL_CLASS = 'pr-0.5 text-2xs text-text3'
-const GRID_CONTROL_ICON_CLASS = 'h-3 w-3'
 const GRID_CONTROL_VALUE_CLASS = 'min-w-3.5 text-center text-2xs font-medium tabular-nums text-text1'
 export const GRID_SUMMARY_CLASS = 'flex h-5 items-center text-2xs text-text3'
 export const FRAME_GRID_GAP_PX = 2
@@ -97,28 +96,28 @@ export function GridStepperControl({
       <span className={GRID_CONTROL_LABEL_CLASS}>{label}</span>
       <UiIconButton
         type="button"
-        size="xs"
+        size="2xs"
         disabled={disabled}
         aria-label={t('canvas.storyboardGrid.decrease', { label })}
         onClick={(event) => {
           event.stopPropagation()
           onDecrease()
         }}
-      >
-        <Minus className={GRID_CONTROL_ICON_CLASS} />
+ >
+        <Minus />
       </UiIconButton>
       <span className={GRID_CONTROL_VALUE_CLASS}>{value}</span>
       <UiIconButton
         type="button"
-        size="xs"
+        size="2xs"
         disabled={disabled}
         aria-label={t('canvas.storyboardGrid.increase', { label })}
         onClick={(event) => {
           event.stopPropagation()
           onIncrease()
         }}
-      >
-        <Plus className={GRID_CONTROL_ICON_CLASS} />
+ >
+        <Plus />
       </UiIconButton>
     </div>
   )

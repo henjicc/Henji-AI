@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React from 'react'
 import { RotateCcw, SlidersHorizontal, Spline } from 'lucide-react'
 import NumberInput from '@/components/ui/NumberInput'
@@ -148,7 +149,7 @@ const StagePathContextBar: React.FC = () => {
           className="mr-1.5 flex min-w-0 items-center gap-1.5 text-xs text-text1"
           title={`${object.name}，关键帧 ${stateKeyframeIndex + 1} 到 ${stateKeyframeIndex + 2}`}
         >
-          <Spline aria-hidden="true" size={16} className="text-accent-text" />
+          <Spline aria-hidden="true" size={UI_ICON_SIZE.md} className="text-accent-text" />
           <span className="max-w-24 truncate font-medium">{object.name}</span>
           <span className="text-text3">{stateKeyframeIndex + 1} → {stateKeyframeIndex + 2}</span>
         </div>
@@ -187,12 +188,12 @@ const StagePathContextBar: React.FC = () => {
       id: 'reset',
       priority: 20,
       node: (
-        <UiIconButton size="lg"
+        <UiIconButton size="md"
           title="重置为直线"
           aria-label="重置为直线"
           onClick={() => setStateKeyframeSpatialPath(stateKeyframe.id, object.id, undefined)}
         >
-          <RotateCcw size={16} />
+          <RotateCcw  />
         </UiIconButton>
       ),
     }] : []),
@@ -283,21 +284,21 @@ const StagePathContextBar: React.FC = () => {
                 title="丢弃手动修改并重新生成预设路径"
                 onClick={() => updatePreset(originPreset)}
               >
-                <RotateCcw size={14} />重新应用原预设
+                <RotateCcw  />重新应用原预设
               </UiButton>
             )}
           </div>
         )}
       >
         {({ togglePanel, open }) => (
-          <UiIconButton size="lg"
+          <UiIconButton size="md"
             on={open}
             title="更多路径参数"
             aria-label="更多路径参数"
             onClick={togglePanel}
             data-panel-trigger-button
           >
-            <SlidersHorizontal size={16} />
+            <SlidersHorizontal  />
           </UiIconButton>
         )}
       </PanelTrigger>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
@@ -65,7 +66,7 @@ function ProviderConnectionResult({
   return (
     <UiPanel variant="inset" className="mt-4 p-4" role="status" aria-live="polite">
       <div className={`flex items-center gap-2 ${positive ? 'text-success-text' : value.status === 'saved_unverified' ? 'text-warning-text' : 'text-danger-text'}`}>
-        {positive ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <CircleAlert className="h-4 w-4 shrink-0" />}
+        {positive ? <CheckCircle2 className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} /> : <CircleAlert className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />}
         <span className="text-sm font-medium">{t(`apiKey.results.${value.status}`)}</span>
       </div>
       <div className={`mt-3 grid gap-1 sm:grid-cols-2 ${UI_TEXT_META_CLASS}`}>
@@ -111,7 +112,7 @@ function WelcomeStep(): JSX.Element {
       <div className="mt-7 space-y-3">
         {features.map(({ icon: Icon, text }) => (
           <div key={text} className="flex items-center gap-3">
-            <Icon className={`h-4 w-4 shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
+            <Icon className={`${UI_ICON_SIZE_CLASS.md} shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
             <span className={UI_TEXT_BODY_CLASS}>{text}</span>
           </div>
         ))}
@@ -206,7 +207,7 @@ function ApiKeyStep({
             onClick={() => void openExternal(provider.websiteUrl)}
           >
             {t('actions.visitWebsite')}
-            <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+            <ExternalLink className={`ml-1.5`} />
           </UiButton>
         ) : null}
       </div>
@@ -233,7 +234,7 @@ function FirstTaskStep({
         <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('firstTask.prompt')}</p>
       </UiPanel>
       <div className={`mt-5 flex items-center gap-2 ${configured ? 'text-success-text' : 'text-warning-text'}`}>
-        {configured ? <CheckCircle2 className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
+        {configured ? <CheckCircle2 className={`${UI_ICON_SIZE_CLASS.md}`} /> : <KeyRound className={`${UI_ICON_SIZE_CLASS.md}`} />}
         <span className="text-sm">{t(configured ? 'firstTask.ready' : 'firstTask.notReady', { provider: providerName })}</span>
       </div>
     </div>

@@ -168,20 +168,20 @@ export default function AgentUserInstructionsSection(): JSX.Element {
 
       <div className="flex flex-wrap items-center gap-2">
         <UiButton type="button" variant="primary" disabled={busy || !loaded} onClick={() => void save()}>
-          <Save className="h-4 w-4" />
+          <Save  />
           {t('agentInstructions.save')}
         </UiButton>
         <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void load()}>
-          <RefreshCw className="h-4 w-4" />
+          <RefreshCw  />
           {t('agentInstructions.reload')}
         </UiButton>
         <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void openFile()}>
-          <ExternalLink className="h-4 w-4" />
+          <ExternalLink  />
           {t('agentInstructions.openFile')}
         </UiButton>
         {/* 清空会丢掉已写的全部指令：危险档（静息静默、悬停显红），点后二次确认 */}
         <UiButton type="button" variant="danger" disabled={busy || !loaded} onClick={() => setConfirmReset(true)}>
-          <RotateCcw className="h-4 w-4" />
+          <RotateCcw  />
           {t('agentInstructions.clear')}
         </UiButton>
       </div>

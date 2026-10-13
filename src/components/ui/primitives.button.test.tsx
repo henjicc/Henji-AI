@@ -81,12 +81,12 @@ describe('UiIconButton 默认静默、on 与 tone', () => {
     fireEvent.click(button); expect(click).toHaveBeenCalledOnce();
     expect(view.getByRole('button', { name: '未锁定' })).toHaveProperty('disabled', true);
   });
-  it('默认静默（quiet 皮肤）、md 28、圆角控件档', () => {
+  it('默认静默（quiet 皮肤）、md 32、圆角控件档', () => {
     const view = render(<UiIconButton aria-label="撤销" />);
     const button = view.getByRole('button', { name: '撤销' });
     expect(button.classList.contains('ui-btn-quiet')).toBe(true);
-    expect(button.classList.contains('h-control-sm')).toBe(true);
-    expect(button.classList.contains('w-[var(--size-control-sm)]')).toBe(true);
+    expect(button.classList.contains('h-control-md')).toBe(true);
+    expect(button.classList.contains('w-control-md')).toBe(true);
     expect(button.dataset.tone).toBe('default');
     expect(button.hasAttribute('aria-pressed')).toBe(false);
   });
@@ -111,7 +111,7 @@ describe('UiIconButton 默认静默、on 与 tone', () => {
       <>
         <UiIconButton tone="media" aria-label="画面" />
         <UiIconButton tone="media" on aria-label="画面开" />
-        <UiIconButton tone="accent" size="lg" aria-label="生成" />
+        <UiIconButton tone="accent" size="md" aria-label="生成" />
         <UiIconButton tone="danger" aria-label="删除" />
         <UiIconButton tone="media" shape="circle" size="xl" aria-label="上一张" />
       </>,
@@ -125,19 +125,19 @@ describe('UiIconButton 默认静默、on 与 tone', () => {
     expect(view.getByRole('button', { name: '删除' }).classList.contains('ui-btn-danger')).toBe(true);
     const prev = view.getByRole('button', { name: '上一张' });
     expect(prev.classList.contains('rounded-full')).toBe(true);
-    expect(prev.classList.contains('h-10')).toBe(true);
+    expect(prev.classList.contains('size-control-xl')).toBe(true);
   });
 
-  it('尺寸 xs/sm/md/lg = 20/24/28/32', () => {
+  it('尺寸 2xs/xs/md = 20/24/32', () => {
     const view = render(
       <>
-        <UiIconButton size="xs" aria-label="xs" />
-        <UiIconButton size="sm" aria-label="sm" />
-        <UiIconButton size="lg" aria-label="lg" />
+        <UiIconButton size="2xs" aria-label="xs" />
+        <UiIconButton size="xs" aria-label="sm" />
+        <UiIconButton size="md" aria-label="lg" />
       </>,
     );
-    expect(view.getByRole('button', { name: 'xs' }).classList.contains('h-5')).toBe(true);
-    expect(view.getByRole('button', { name: 'sm' }).classList.contains('h-6')).toBe(true);
+    expect(view.getByRole('button', { name: 'xs' }).classList.contains('size-control-2xs')).toBe(true);
+    expect(view.getByRole('button', { name: 'sm' }).classList.contains('size-control-xs')).toBe(true);
     expect(view.getByRole('button', { name: 'lg' }).classList.contains('h-control-md')).toBe(true);
   });
 

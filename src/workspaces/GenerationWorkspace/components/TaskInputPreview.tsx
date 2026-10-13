@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { Play } from 'lucide-react'
@@ -178,7 +179,7 @@ function StackPreview({
           <>
             <video src={item} className="w-full h-full object-cover" muted draggable={false} />
             <div className="absolute inset-0 flex items-center justify-center bg-media-scrim pointer-events-none">
-              <Play className="w-5 h-5 text-on-media" />
+              <Play className={`${UI_ICON_SIZE_CLASS.lg} text-on-media`} />
             </div>
           </>
         )}

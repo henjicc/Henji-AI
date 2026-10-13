@@ -41,7 +41,7 @@
 
 - **间距档位 4/8/12/16/24/32**（`gap-1/2/3/4/6/8`、`p-2/3/4`）；不要出现 `p-[13px]` 这类随手值。分区之间用 `UI_SECTION_STACK_CLASS`（32）。
 - **同级元素间距统一**：一个分区内所有行用同一个 `space-y-*`，不要一行 `mt-2` 一行 `mt-3`。
-- **控件高度统一**：28 / 32 / 36 三档（`UI_CONTROL_HEIGHT_CLASS`，CSS 变量 `--size-control-*`）；图标按钮另有 20/24/28/32/40（`size` xs–xl，xl 只给全屏查看器与画面中央播放键）。按钮、字段、选项、标签、字段触发器、数值框都用组件的 `size` 枚举，不要在调用点写 `h-8` / `h-[38px]`（`check:surface` 规则 E 拦截）。
+- **控件高度统一**：28 / 32 / 36 三档（`UI_CONTROL_HEIGHT_CLASS`，CSS 变量 `--size-control-*`）；所有行控件共用 `UiControlSize`；图标按钮为 20/24/28/32/36/40（`size` 2xs/xs/sm/md/lg/xl，xl 只给全屏查看器与画面中央播放键）。按钮、字段、选项、标签、字段触发器、数值框都用组件的 `size` 枚举，只读数值用 `UiReadout`；不要在调用点写 `h-8` / `h-[38px]`（`check:surface` 规则 E 拦截）。
 - **文字层级只用三档灰**：主要 `text-text1`、次要 `text-text2`、辅助 `text-text3`（禁用另有 `text-text-disabled`）；强调文字 `text-accent-text`。不要引入第四种灰，也不要用透明度调出新的灰（`text-text1/60` 对比度不受引擎保证）。
 - **圆角跟随层级**：L1 用 `rounded-xl`，L2/L3 用 `rounded-lg`。内层圆角不得大于外层。
 - **颜色只用语义类**：`bg-window` / `bg-panel` / `bg-raised` / `bg-hover` / `text-text2` / `border-line`。禁止十六进制与旧别名类（`npm run check:colors` 会拦）。

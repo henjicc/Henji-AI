@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { isImageEditorInputBlockedV3 } from './imageEditorInputScopeV3'
 import { Clipboard, Copy, Layers } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -47,11 +48,11 @@ export function ImageEditorClipboardV3({ bus, controller }: { bus: ImageEditComm
   }, [bus, controller.sessionId])
   return <div ref={anchor} className="flex min-w-0 items-center gap-1">
     <PanelTrigger panelPadding="menu" panelWidth={220} closeOnPanelClick renderPanel={() => <div role="menu" aria-label="图片剪贴板" className="flex flex-col gap-1">
-      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('copy') }}><Copy className="h-4 w-4" />复制图层或选区 Ctrl+C</UiOptionButton>
-      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('merged') }}><Layers className="h-4 w-4" />复制合成结果 Ctrl+Shift+C</UiOptionButton>
-      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('paste') }}><Clipboard className="h-4 w-4" />粘贴图片 Ctrl+V</UiOptionButton>
+      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('copy') }}><Copy className={`${UI_ICON_SIZE_CLASS.md}`} />复制图层或选区 Ctrl+C</UiOptionButton>
+      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('merged') }}><Layers className={`${UI_ICON_SIZE_CLASS.md}`} />复制合成结果 Ctrl+Shift+C</UiOptionButton>
+      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('paste') }}><Clipboard className={`${UI_ICON_SIZE_CLASS.md}`} />粘贴图片 Ctrl+V</UiOptionButton>
     </div>}>
-      {({ togglePanel, open }) => <UiIconButton onClick={togglePanel} aria-haspopup="menu" aria-expanded={open} aria-label="图片剪贴板" title="图片剪贴板" size="lg"><Clipboard className="h-4 w-4" /></UiIconButton>}
+      {({ togglePanel, open }) => <UiIconButton onClick={togglePanel} aria-haspopup="menu" aria-expanded={open} aria-label="图片剪贴板" title="图片剪贴板" size="md"><Clipboard  /></UiIconButton>}
     </PanelTrigger>
     {busy && <UiButton size="sm" onClick={() => operation.current?.abort()}>取消</UiButton>}
       {error && <span data-image-edit-clipboard-error role="alert" className="max-w-48 truncate text-xs text-text2" title={error}>{error}</span>}

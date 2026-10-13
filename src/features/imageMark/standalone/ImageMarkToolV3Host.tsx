@@ -66,18 +66,18 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
 
   const backButton = onBack && embeddedHost ? (
     <UiButton disabled={host.isHostBusy} onClick={onBack}>
-      <ArrowLeft size={16} />
+      <ArrowLeft  />
       {t('documentLibrary.embedded.returnTo', { name: embeddedHost.label })}
     </UiButton>
   ) : onBack ? (
     <UiIconButton
-      size="lg"
+      size="md"
       title={t('imageEditor.v3.host.backToList')}
       aria-label={t('imageEditor.v3.host.backToList')}
       disabled={host.isHostBusy}
       onClick={onBack}
     >
-      <ArrowLeft size={16} />
+      <ArrowLeft  />
     </UiIconButton>
   ) : null
 

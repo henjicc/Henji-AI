@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React from "react"
 import { toDisplaySrc } from '@/platform/desktopApi'
 import { useI18n } from "@/hooks/useI18n"
@@ -102,7 +103,7 @@ const TaskCard = React.memo(function TaskCard({
   // Only saved local outputs can enter an edit; each output keeps its own index.
   const [videoEditSend, setVideoEditSend] = React.useState<{ mediaKind: 'image' | 'video' | 'audio'; outputIndex: number } | null>(null)
   const videoEditItems = (mediaKind: 'image' | 'video' | 'audio', outputIndex: number, filePath: string | undefined): MenuItem[] => filePath
-    ? videoEditSendMenuItems(mediaKind, () => ({ type: 'generation', recordId: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className="w-4 h-4" />, () => setVideoEditSend({ mediaKind, outputIndex }))
+    ? videoEditSendMenuItems(mediaKind, () => ({ type: 'generation', recordId: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className={`${UI_ICON_SIZE_CLASS.md}`} />, () => setVideoEditSend({ mediaKind, outputIndex }))
     : []
   const {
     startImageDrag,
@@ -209,7 +210,7 @@ const TaskCard = React.memo(function TaskCard({
                   occurredAt: task.createdAt.toISOString(),
                 })}
               >
-                <MessageCircleQuestion className="h-3.5 w-3.5" />{t('history:askAssistant')}
+                <MessageCircleQuestion  />{t('history:askAssistant')}
               </UiButton>
               {resolveResumableServerTaskId(task) && (
                 <UiButton variant="quiet" size="sm" onClick={() => void onRetryPolling(task)}>
@@ -265,7 +266,7 @@ const TaskCard = React.memo(function TaskCard({
                     {
                       id: "copy-image",
                       label: t("common:actions.copy"),
-                      icon: <CopyIcon className="w-4 h-4" />,
+                      icon: <CopyIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
                       onClick: async () => onCopyImage(filePath),
                       disabled: !filePath,
                     },
@@ -279,7 +280,7 @@ const TaskCard = React.memo(function TaskCard({
                     {
                       id: "download-image",
                       label: t("common:actions.download"),
-                      icon: <DownloadIcon className="w-4 h-4" />,
+                      icon: <DownloadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
                       onClick: async () => { if (filePath) await onDownload(filePath, false) },
                       disabled: !filePath,
                     },
@@ -344,7 +345,7 @@ const TaskCard = React.memo(function TaskCard({
               {
                 id: "download-video",
                 label: t("common:actions.download"),
-                icon: <DownloadIcon className="w-4 h-4" />,
+                icon: <DownloadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
                 onClick: async () => { if (filePath) await onDownload(filePath, false) },
                 disabled: !filePath,
               },
@@ -376,7 +377,7 @@ const TaskCard = React.memo(function TaskCard({
           {/* 画面中央的播放提示与右下角时长：媒体叠层固定令牌，不随主题 */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-media-control text-on-media">
-              <Play className="h-4 w-4" />
+              <Play className={`${UI_ICON_SIZE_CLASS.md}`} />
             </span>
           </div>
           {durationBadge && (
@@ -411,7 +412,7 @@ const TaskCard = React.memo(function TaskCard({
               {
                 id: "download-audio",
                 label: t("common:actions.download"),
-                icon: <DownloadIcon className="w-4 h-4" />,
+                icon: <DownloadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />,
                 onClick: async () => { if (filePath) await onDownload(filePath, false) },
                 disabled: !filePath,
               },

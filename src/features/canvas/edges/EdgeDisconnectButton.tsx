@@ -17,7 +17,7 @@ export function EdgeDisconnectButton({ label, onDisconnect }: EdgeDisconnectButt
     <span className="ui-glass inline-flex rounded-full p-0.5">
       <UiIconButton
         shape="circle"
-        size="sm"
+        size="xs"
         tone="danger"
         type="button"
         aria-label={label}
@@ -27,7 +27,7 @@ export function EdgeDisconnectButton({ label, onDisconnect }: EdgeDisconnectButt
           onDisconnect()
         }}
       >
-        <Unlink className="h-3.5 w-3.5" />
+        <Unlink  />
       </UiIconButton>
     </span>
   )

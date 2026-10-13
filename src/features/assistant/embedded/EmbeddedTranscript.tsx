@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, LoaderCircle, CircleAlert } from 'lucide-react'
 import { UI_TEXT_SECONDARY_CLASS, UiButton } from '@/components/ui'
@@ -21,14 +22,14 @@ export function EmbeddedUserMessage({ message }: { message: Pick<EmbeddedAgentMe
 /** 过程区的展开开关：静默文字按钮，左缘用负外边距对齐正文列（按钮内边距不改外观）。 */
 function ProcessToggle({ expanded, label, onClick }: { expanded: boolean; label: string; onClick(): void }): JSX.Element {
   return <UiButton size="sm" className="-ml-2 gap-1" aria-expanded={expanded} onClick={onClick}>
-    {expanded ? <ChevronDown aria-hidden="true" size={14} /> : <ChevronRight aria-hidden="true" size={14} />}{label}
+    {expanded ? <ChevronDown aria-hidden="true"  /> : <ChevronRight aria-hidden="true"  />}{label}
   </UiButton>
 }
 
 function ToolStatusIcon({ status }: { status: EmbeddedAgentMessage['status'] }): JSX.Element {
-  if (status === 'failed') return <CircleAlert aria-hidden="true" size={14} className="shrink-0 text-danger-text" />
-  if (status === 'completed') return <Check aria-hidden="true" size={14} className="shrink-0 text-text3" />
-  return <LoaderCircle aria-hidden="true" size={14} className="shrink-0 text-accent-text motion-safe:animate-spin" />
+  if (status === 'failed') return <CircleAlert aria-hidden="true" size={UI_ICON_SIZE.sm} className="shrink-0 text-danger-text" />
+  if (status === 'completed') return <Check aria-hidden="true" size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" />
+  return <LoaderCircle aria-hidden="true" size={UI_ICON_SIZE.sm} className="shrink-0 text-accent-text motion-safe:animate-spin" />
 }
 
 function AssistantTurn({ messages, busy, onToggle }: { messages: EmbeddedAgentMessage[]; busy: boolean; onToggle(): void }): JSX.Element {

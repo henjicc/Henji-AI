@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo } from 'react';
 import { ArrowLeft, ArrowRight, GripVertical, LogOut, Star } from 'lucide-react';
 
@@ -73,7 +74,7 @@ export const AssetGroupMemberSection = memo(({
   return (
     <section data-asset-group-kind={kind}>
       <div className="mb-2 flex items-center gap-2">
-        <KindIcon className="h-4 w-4 text-text2" />
+        <KindIcon className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
         <h3 className={UI_TEXT_LABEL_CLASS}>{title}</h3>
         <span className={UI_TEXT_META_CLASS}>{members.length}</span>
       </div>
@@ -112,7 +113,7 @@ export const AssetGroupMemberSection = memo(({
                   <AssetGroupPreview items={[preview]} showKindBadge={false} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-text3">
-                    <KindIcon className="h-10 w-10" />
+                    <KindIcon className={`${UI_ICON_SIZE_CLASS.hero}`} />
                   </div>
                 )}
                 {/* 压在素材预览上的读数与徽标用固定媒体叠层令牌（4.1：主题色徽标压在图片上对比不足） */}
@@ -121,52 +122,52 @@ export const AssetGroupMemberSection = memo(({
                 </span>
                 {isCover && (
                   <span className="absolute right-2 top-2 flex items-center gap-1 rounded bg-media-control px-2 py-0.5 text-2xs text-on-media">
-                    <Star className="h-3 w-3" fill="currentColor" strokeWidth={0} />
+                    <Star className={`${UI_ICON_SIZE_CLASS.xs}`} fill="currentColor"  />
                     {labels.cover}
                   </span>
                 )}
               </div>
               <div className="flex min-w-0 items-center gap-2 p-3">
-                <GripVertical className="h-4 w-4 shrink-0 text-text3" aria-hidden="true" />
-                <KindIcon className="h-4 w-4 shrink-0 text-text2" />
+                <GripVertical className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text3`} aria-hidden="true" />
+                <KindIcon className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text2`} />
                 <span className="min-w-0 flex-1 truncate text-sm text-text1">
                   {resolveNodeDisplayName(member.type, member.data)}
                 </span>
                 <div className="flex shrink-0 items-center gap-1">
-                  <UiIconButton size="lg"
+                  <UiIconButton size="md"
                     aria-label={labels.moveEarlier}
                     title={labels.moveEarlier}
                     disabled={index === 0}
                     onClick={() => onReorder(index, index - 1)}
                   >
-                    <ArrowLeft className="h-4 w-4" />
+                    <ArrowLeft  />
                   </UiIconButton>
-                  <UiIconButton size="lg"
+                  <UiIconButton size="md"
                     aria-label={labels.moveLater}
                     title={labels.moveLater}
                     disabled={index === members.length - 1}
                     onClick={() => onReorder(index, index + 1)}
                   >
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight  />
                   </UiIconButton>
-                  <UiIconButton size="lg"
+                  <UiIconButton size="md"
                     on={isCover}
                     aria-label={labels.setCover}
                     title={labels.setCover}
                     onClick={() => onSetCover(member.id)}
                   >
                     <Star
-                      className="h-4 w-4"
+
                       fill={isCover ? 'currentColor' : 'none'}
-                      strokeWidth={isCover ? 0 : 2}
+
                     />
                   </UiIconButton>
-                  <UiIconButton size="lg" tone="danger"
+                  <UiIconButton size="md" tone="danger"
                     aria-label={labels.remove}
                     title={labels.remove}
                     onClick={() => onRemoveRequest(member.id)}
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut  />
                   </UiIconButton>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 /**
  * AspectRatioSelector - 比例选择器组件
  */
@@ -55,7 +56,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
             className="px-2 py-2 flex-col justify-center gap-2"
           >
             <div className="h-8 flex items-center justify-center">
-              <Zap className="h-5 w-5" />
+              <Zap className={`${UI_ICON_SIZE_CLASS.lg}`} />
             </div>
             <span className="font-medium leading-none">
               {t('resolutionPanel.smart', { defaultValue: '智能' })}

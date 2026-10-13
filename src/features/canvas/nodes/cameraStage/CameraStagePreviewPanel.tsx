@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { AlertCircle, LoaderCircle } from 'lucide-react';
 import { UiEmpty } from '@/components/ui';
 import { useTranslation } from 'react-i18next';
@@ -40,14 +41,14 @@ export function CameraStagePreviewPanel({
           disableViewer
         />
       ) : (
-        <UiEmpty size="node" icon={<ICON_TOOL_CAMERA_STAGE className="h-7 w-7" />} title={t('node.cameraStage.empty')} />
+        <UiEmpty size="node" icon={<ICON_TOOL_CAMERA_STAGE className={`${UI_ICON_SIZE_CLASS.xl}`} />} title={t('node.cameraStage.empty')} />
       )}
 
       {rendering && (
         <>
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gap/65">
             <div className="ui-glass flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-text1">
-              <LoaderCircle className="h-4 w-4 animate-spin text-accent-text" />
+              <LoaderCircle className={`${UI_ICON_SIZE_CLASS.md} animate-spin text-accent-text`} />
               {t(progressKey, { progress: Math.round((renderProgress ?? 0) * 100) })}
             </div>
           </div>
@@ -63,7 +64,7 @@ export function CameraStagePreviewPanel({
           title={renderError}
         >
           <div className="ui-glass flex max-w-[80%] items-center gap-2 rounded-lg px-3 py-2 text-xs text-text1">
-            <AlertCircle className="h-4 w-4 shrink-0 text-danger-text" />
+            <AlertCircle className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-danger-text`} />
             <span className="truncate">{t('node.cameraStage.renderFailed')}</span>
           </div>
         </div>

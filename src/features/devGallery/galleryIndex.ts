@@ -53,12 +53,12 @@ export function readSizeUnion(source: string): string[] {
   if (!values.length) throw new Error(`组件 size 枚举无法读取：${declaration}`)
   return values
 }
-export const GALLERY_SEGMENTED_SIZES = readSizeUnion(segmentedSource) as Array<'sm' | 'md'>
-export const GALLERY_PARAMETER_SIZES = readSizeUnion(parameterSource) as Array<'sm' | 'md'>
+export const GALLERY_SEGMENTED_SIZES = readSizeUnion(segmentedSource) as UiControlSize[]
+export const GALLERY_PARAMETER_SIZES = readSizeUnion(parameterSource) as UiControlSize[]
 export const GALLERY_STYLE_TOKENS = Object.entries(styleTokens).filter(([name]) => name.startsWith('UI_'))
 export const GALLERY_TEXT_TOKENS = GALLERY_STYLE_TOKENS.filter(([name, value]) => name.startsWith('UI_TEXT_') && name.endsWith('_CLASS') && typeof value === 'string')
 export const GALLERY_SPACING_KEYS = ['1', '2', '3', '4', '6', '8'] as const
-export const GALLERY_ICON_TOKENS = Object.entries(icons)
+export const GALLERY_ICON_TOKENS = Object.entries(icons).filter(([name]) => name.startsWith('ICON_')) as Array<[string, typeof icons.ICON_ASSET_LIBRARY]>
 export const GALLERY_MOTION_TOKENS = Object.entries(motion).filter(([name]) => name.startsWith('UI_'))
 export const GALLERY_SKILL_SOURCE = 'https://github.com/henjicc/Henji-AI/blob/main/.codex/skills/henji-ui-surface/SKILL.md'
 export const GALLERY_TAILWIND_CONFIG = tailwindConfig as Config

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, BetweenVerticalStart, ChevronsLeftRight, Columns2, Gauge, Hand, MousePointer2, MoveHorizontal, PenTool, Scissors, Type, ZoomIn, type LucideIcon } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
@@ -27,7 +28,7 @@ export function VideoEditTimelineTools({ presentation, execute }: { presentation
   const held = useRef(false)
   const choose = (group: number, id: VideoEditToolCommandId): void => { setRecent(value => ({ ...value, [group]: id })); execute(id) }
   const openGroup = (group: number, anchor: Element): void => {
-    menu.showMenuAt(anchor, TOOL_GROUPS[group].map(id => { const Icon = TOOL_ICONS[id]; const command = presentation(id); return { id, label: command.tooltip, icon: <Icon size={16} />, disabled: !command.enabled, onClick: () => choose(group, id) } }))
+    menu.showMenuAt(anchor, TOOL_GROUPS[group].map(id => { const Icon = TOOL_ICONS[id]; const command = presentation(id); return { id, label: command.tooltip, icon: <Icon size={UI_ICON_SIZE.md} />, disabled: !command.enabled, onClick: () => choose(group, id) } }))
   }
   return <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="时间线工具">
     {TOOL_GROUPS.map((members, group) => {
@@ -44,7 +45,7 @@ export function VideoEditTimelineTools({ presentation, execute }: { presentation
         }}
         onPointerUp={() => clearTimeout(hold.current)} onPointerLeave={() => clearTimeout(hold.current)}
         onContextMenu={event => { if (!grouped) return; event.preventDefault(); openGroup(group, event.currentTarget) }}
-        onClick={() => { if (held.current) { held.current = false; return } choose(group, id) }}><Icon size={15} /></UiIconButton>
+        onClick={() => { if (held.current) { held.current = false; return } choose(group, id) }}><Icon  /></UiIconButton>
     })}
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
   </div>

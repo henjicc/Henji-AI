@@ -1,11 +1,15 @@
+import { UI_ICON_SIZE, UI_WINDOW_ICON_SIZE, UI_WINDOW_ICON_STROKE_WIDTH } from '@/core/theme/icons'
 import {
   forwardRef,
   useContext,
+  type ReactNode,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
 } from 'react';
 import { Check, ChevronDown, Copy, Minus, Search, Square, X } from 'lucide-react';
 import {
+  UI_ICON_SIZE_CLASS,
+  UI_SEGMENT_SELECTED_CLASS,
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
   UI_BUTTON_RESET_CLASS,
   UI_FIELD_DISABLED_CLASS,
@@ -80,15 +84,25 @@ export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
       data-size={size}
       className={`ui-btn inline-flex select-none items-center justify-center font-medium ${resolveButtonVariant(resolvedVariant)} ${resolveButtonSize(size, resolvedVariant)} ${className}`}
       {...props}
-    />
+ />
     );
   }
 );
 
 UiButton.displayName = 'UiButton';
 
+/** 与同行控件等高的只读读数；不承担点击或编辑行为。 */
+export function UiReadout({ size = 'md', tone = 'default', children }: {
+  size?: UiControlSize;
+  tone?: 'default' | 'media';
+  children: ReactNode;
+}): JSX.Element {
+  return <span data-size={size} className={`inline-flex min-w-14 items-center justify-center px-2 text-xs tabular-nums ${UI_CONTROL_HEIGHT_CLASS[size]} ${UI_RADIUS_CLASS.control} ${tone === 'media' ? 'bg-media-control text-on-media' : 'bg-control text-text1'}`}>{children}</span>;
+}
+
 /** 纵向导航与列表导航的高度档：md 32 / lg 36（默认）/ auto（两行内容，高度随内容）。 */
 const UI_NAV_SIZE_CLASS = {
+  sm: `${UI_CONTROL_HEIGHT_CLASS.sm} gap-1.5 px-2`,
   md: `${UI_CONTROL_HEIGHT_CLASS.md} gap-2 px-2.5`,
   lg: `${UI_CONTROL_HEIGHT_CLASS.lg} gap-2 px-3`,
   auto: 'min-h-control-lg gap-0.5 px-3 py-2',
@@ -109,14 +123,14 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
           : `${UI_GLASS_ADAPTIVE_NAV_CLASS} text-text2 hover:text-text1`
       } ${className}`}
       {...props}
-    />
+ />
   )
 );
 
 UiNavButton.displayName = 'UiNavButton';
 
 /**
- * 图标按钮。默认静默（静息无底、悬停出底），尺寸默认 md 28；`on` 表示开关开启，
+ * 图标按钮。默认静默（静息无底、悬停出底），尺寸默认 md 32；`on` 表示开关开启，
  * `tone` 见 `IconButtonTone`。名称放 `title`/`aria-label`。外观不得在 className 覆盖（check:surface 规则 E）。
  */
 export const UiIconButton = forwardRef<HTMLButtonElement, UiIconButtonProps>(
@@ -135,7 +149,7 @@ export const UiIconButton = forwardRef<HTMLButtonElement, UiIconButtonProps>(
       data-size={size}
       aria-pressed={props['aria-pressed'] ?? on}
       className={`ui-btn inline-flex shrink-0 select-none items-center justify-center ${resolveIconButtonClass({ tone, size, shape, on: on === true })} ${className}`}
-    />
+ />
   )
 );
 
@@ -197,7 +211,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
         className={`relative inline-flex select-none items-center gap-1.5 border transition-colors ${layoutClass} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${stateClass} ${className}`}
         aria-pressed={toggle ? on : undefined}
         {...props}
-      />
+ />
     );
   }
 );
@@ -248,18 +262,18 @@ export const UiTextToken = forwardRef<HTMLButtonElement, UiTextTokenProps>(
         data-text-token={appearance}
         className={`select-none border-0 outline-none transition-colors duration-120 focus-visible:ring-2 focus-visible:ring-accent-ring disabled:cursor-not-allowed ${UI_TEXT_TOKEN_LAYOUT_CLASS[appearance]} ${fillClass} ${flagClass} ${ringClass} ${className}`}
         {...props}
-      />
+ />
     );
   }
 );
 
 UiTextToken.displayName = 'UiTextToken';
 
-const UI_WINDOW_CONTROL_ICON: Record<UiWindowControlAction, { Icon: typeof Minus; size: number; strokeWidth: number }> = {
-  minimize: { Icon: Minus, size: 14, strokeWidth: 1.5 },
-  maximize: { Icon: Square, size: 12, strokeWidth: 1.75 },
-  restore: { Icon: Copy, size: 12, strokeWidth: 1.75 },
-  close: { Icon: X, size: 14, strokeWidth: 1.5 },
+const UI_WINDOW_CONTROL_ICON: Record<UiWindowControlAction, { Icon: typeof Minus; size: number }> = {
+  minimize: { Icon: Minus, size: UI_ICON_SIZE.sm },
+  maximize: { Icon: Square, size: UI_ICON_SIZE.xs },
+  restore: { Icon: Copy, size: UI_ICON_SIZE.xs },
+  close: { Icon: X, size: UI_ICON_SIZE.sm },
 };
 
 /**
@@ -282,7 +296,7 @@ const UI_WINDOW_CONTROL_WINDOWS_CLOSE_CLASS = `${UI_CONTROL_HEIGHT_CLASS.sm} w-9
  */
 export const UiWindowControl = forwardRef<HTMLButtonElement, UiWindowControlProps>(
   ({ className = '', action, platform = 'windows', type = 'button', ...props }, ref) => {
-    const { Icon, size, strokeWidth } = UI_WINDOW_CONTROL_ICON[action];
+    const { Icon, size } = UI_WINDOW_CONTROL_ICON[action];
     if (platform === 'mac') {
       // 命中区 24×24（WCAG 2.5.8 下限）：原 20 宽相邻排列时中心距 20，样张页 check:ui-visual 的 smallTargets 命中（任务 5.11）
       return (
@@ -292,9 +306,9 @@ export const UiWindowControl = forwardRef<HTMLButtonElement, UiWindowControlProp
           data-window-control={action}
           className={`group/window-control inline-flex h-6 w-6 shrink-0 items-center justify-center border-0 bg-transparent p-0 ${UI_BUTTON_RESET_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
           {...props}
-        >
+ >
           <span className={`flex h-3 w-3 items-center justify-center rounded-full ${UI_WINDOW_CONTROL_MAC_DOT_CLASS[action]}`}>
-            <Icon className="h-2 w-2 opacity-0 transition-opacity duration-120 group-hover/window-control:opacity-70 group-hover/window-controls:opacity-70 group-focus-visible/window-control:opacity-70" strokeWidth={3} aria-hidden="true" />
+            <Icon size={UI_WINDOW_ICON_SIZE} strokeWidth={UI_WINDOW_ICON_STROKE_WIDTH} className={`opacity-0 transition-opacity duration-120 group-hover/window-control:opacity-70 group-hover/window-controls:opacity-70 group-focus-visible/window-control:opacity-70`}  aria-hidden="true" />
           </span>
         </button>
       );
@@ -306,8 +320,8 @@ export const UiWindowControl = forwardRef<HTMLButtonElement, UiWindowControlProp
         data-window-control={action}
         className={`ui-btn inline-flex shrink-0 select-none items-center justify-center ${action === 'close' ? UI_WINDOW_CONTROL_WINDOWS_CLOSE_CLASS : UI_WINDOW_CONTROL_WINDOWS_CLASS} ${className}`}
         {...props}
-      >
-        <Icon size={size} strokeWidth={strokeWidth} aria-hidden="true" />
+ >
+        <Icon size={size} strokeWidth={UI_WINDOW_ICON_STROKE_WIDTH} aria-hidden="true" />
       </button>
     );
   }
@@ -321,7 +335,7 @@ export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
       ref={ref}
       className={`${resolveUiPanelSurface(variant)} ${className}`}
       {...props}
-    />
+ />
   )
 );
 
@@ -334,9 +348,9 @@ UiPanel.displayName = 'UiPanel';
  */
 const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
   segment: {
-    layout: `${UI_CONTROL_HEIGHT_CLASS.sm} justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium`,
+    layout: `justify-center whitespace-nowrap rounded-md px-3 font-medium`,
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
-    active: `border-transparent text-accent-text ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
+    active: `border-transparent ${UI_SEGMENT_SELECTED_CLASS}`,
   },
   tile: {
     layout: 'h-11 gap-2.5 rounded-lg px-2.5 text-13',
@@ -382,7 +396,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
           data-selected={active ? 'true' : 'false'}
           className={`${UI_COVER_GROUP_CLASS} relative flex min-w-0 flex-col items-stretch gap-2.5 border-0 bg-transparent p-0 text-left text-text1 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
           {...props}
-        />
+ />
       );
     }
     if (variant === 'segment' || variant === 'tile' || variant === 'swatch') {
@@ -391,9 +405,9 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       return (
         <button
           ref={ref}
-          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'md' ? 'text-13' : 'text-xs'}` : neutral.layout} ${active ? inset ? 'border-transparent bg-raised text-text1' : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
+          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'sm' ? 'text-xs' : 'text-13'}` : variant === 'segment' ? `${neutral.layout} ${UI_CONTROL_HEIGHT_CLASS[size ?? 'md']} ${size === 'sm' ? 'text-xs' : 'text-13'}` : neutral.layout} ${active ? inset ? `border-transparent ${UI_SEGMENT_SELECTED_CLASS}` : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
           {...props}
-        />
+ />
       );
     }
 
@@ -422,7 +436,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
         data-size={size ?? 'auto'}
         className={`inline-flex items-center rounded-lg border text-left transition-colors ${UI_OPTION_SIZE_CLASS[size ?? 'auto']} ${gridCell ? UI_OPTION_GRID_CELL_CLASS[gridCell] : ''} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${active ? activeClass : restClass} ${className}`}
         {...props}
-      />
+ />
     );
   }
 );
@@ -448,7 +462,7 @@ export function UiTextArea({ className = '', textHistory, value, frame = 'field'
       {...rowLabelling}
       {...props}
       {...historyProps}
-    />
+ />
   );
 }
 
@@ -468,7 +482,7 @@ export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
         {...rowLabelling}
         {...props}
         {...historyProps}
-      />
+ />
     );
   }
 );
@@ -496,7 +510,7 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
         className={`w-full py-0 leading-5 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_PLACEHOLDER_CLASS} ${frameClass} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
         {...historyProps}
-      />
+ />
     );
   }
 );
@@ -516,8 +530,8 @@ export const UiSearchInput = forwardRef<HTMLInputElement, UiSearchInputProps>(
         <Search
           ref={iconRef}
           aria-hidden="true"
-          className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-text3 ${small ? 'left-2 h-3.5 w-3.5' : 'left-2.5 h-4 w-4'}`}
-        />
+          className={`${small ? UI_ICON_SIZE_CLASS.sm : UI_ICON_SIZE_CLASS.md} pointer-events-none absolute top-1/2 -translate-y-1/2 text-text3 ${small ? 'left-2' : 'left-2.5'}`}
+ />
         <UiInput
           ref={ref}
           type="text"
@@ -525,10 +539,10 @@ export const UiSearchInput = forwardRef<HTMLInputElement, UiSearchInputProps>(
           value={value}
           className={`${small ? 'pl-7' : 'pl-8'} ${onClear ? (small ? 'pr-7' : 'pr-8') : ''}`}
           {...props}
-        />
+ />
         {onClear && hasValue ? (
           <UiIconButton
-            size="sm"
+            size="xs"
             className="absolute right-0.5 top-1/2 -translate-y-1/2"
             aria-label={clearLabel}
             title={clearLabel}
@@ -536,8 +550,8 @@ export const UiSearchInput = forwardRef<HTMLInputElement, UiSearchInputProps>(
               event.stopPropagation();
               onClear();
             }}
-          >
-            <X className="h-3 w-3" />
+ >
+            <X />
           </UiIconButton>
         ) : null}
       </div>
@@ -564,7 +578,7 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
       ${UI_RANGE_TRACK_TONE_CLASS[trackTone]}
       ${className}`}
       {...props}
-    />
+ />
     );
   }
 );
@@ -578,7 +592,7 @@ export const UiColorInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribute
       type="color"
       className={`ui-color-input-spectrum h-9 w-9 cursor-pointer appearance-none rounded-full border-0 p-0 ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
-    />
+ />
   )
 );
 
@@ -607,8 +621,8 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
         }
       }}
       {...props}
-    >
-      <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+ >
+      <Check className={`${UI_ICON_SIZE_CLASS.sm}`} />
     </button>
     );
   }
@@ -621,7 +635,7 @@ UiCheckbox.displayName = 'UiCheckbox';
  * 与 `UiOptionButton variant="segment"` 同一套中性抬升（重要记录 003），仍是 role=switch。
  */
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
-  ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'field', ...props }, ref) => {
+  ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'md', ...props }, ref) => {
     const formRow = useUiFormRowLabelling();
     const rowLabelling = resolveFormRowLabelling(formRow, props);
     const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
@@ -632,9 +646,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
     };
 
     if (appearance === 'segmented') {
-      const sizeClass = size === 'compact'
-        ? `${UI_CONTROL_HEIGHT_CLASS.sm} ${formRow?.fillControl ? 'w-full' : 'w-20'} text-xs`
-        : `${UI_CONTROL_HEIGHT_CLASS.md} ${formRow?.fillControl ? 'w-full' : 'w-28'} text-13`;
+      const sizeClass = `${UI_CONTROL_HEIGHT_CLASS[size]} ${formRow?.fillControl ? 'w-full' : size === 'sm' ? 'w-20' : 'w-28'} ${size === 'sm' ? 'text-xs' : 'text-13'}`;
 
       return (
         <button
@@ -646,25 +658,25 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
           className={`relative inline-grid grid-cols-2 items-stretch rounded-lg bg-gap/60 p-0.5 font-medium transition-colors duration-120 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${sizeClass} ${className}`}
           onClick={handleClick}
           {...props}
-        >
+ >
           <span
             aria-hidden="true"
-            className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%_-_0.125rem)] rounded-md transition-transform duration-180 bg-raised ${
+            className={`pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%_-_0.125rem)] rounded-md transition-transform duration-180 ${UI_SEGMENT_SELECTED_CLASS} ${
               checked ? 'translate-x-full' : 'translate-x-0'
             }`}
-          />
+ />
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
               checked ? 'text-text2' : 'text-text1'
             }`}
-          >
+ >
             {offLabel}
           </span>
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
               checked ? 'text-text1' : 'text-text2'
             }`}
-          >
+ >
             {onLabel}
           </span>
         </button>
@@ -682,7 +694,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
         className={`group/switch relative inline-flex h-6 w-9 shrink-0 items-center rounded-full border-0 bg-transparent ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
         onClick={handleClick}
         {...props}
-      >
+ >
         <span
           aria-hidden="true"
           className={`pointer-events-none absolute inset-x-0 top-0.5 h-5 rounded-full border-0 transition-colors duration-120 ${
@@ -690,13 +702,13 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
               ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
               : 'bg-control-pressed group-hover/switch:bg-line-strong'
           }`}
-        />
+ />
         {/* 开态滑块取 on-accent（与强调色对比 ≥ 4.5 的黑或白），关态取主要文字色：深浅主题都清楚 */}
         <span
           className={`pointer-events-none relative ml-0.5 h-4 w-4 rounded-full shadow-thumb-sm transition-transform duration-120 ${
             checked ? 'translate-x-4 bg-on-accent' : 'translate-x-0 bg-text1'
           }`}
-        />
+ />
       </button>
     );
   }
@@ -719,10 +731,10 @@ export function UiSelect({ className = '', children, size = 'md', ...props }: Ui
         {...rowLabelling}
         className={`w-full appearance-none truncate py-0 pr-8 [color-scheme:inherit] [&_option]:bg-raised [&_option]:text-text1 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`}
         {...props}
-      >
+ >
         {children}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text3" />
+      <ChevronDown className={`${UI_ICON_SIZE_CLASS.sm} pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text3`} />
     </div>
   );
 }
@@ -749,9 +761,9 @@ export const UiFieldTrigger = forwardRef<HTMLButtonElement, UiFieldTriggerProps>
       data-appearance={appearance}
       className={`inline-flex min-w-0 select-none items-center justify-between gap-1.5 whitespace-nowrap font-normal transition-colors duration-120 ${resolveFieldTriggerClass(size, appearance)} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
-    >
+ >
       <span className="min-w-0 truncate">{children}</span>
-      <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-text3 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
+      <ChevronDown aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text3 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
     </button>
   )
 );
@@ -781,7 +793,7 @@ export function UiNumberStepper({
   canDecrease,
   onStep,
 }: UiNumberStepperProps): JSX.Element {
-  const iconClass = size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3';
+  const iconClass = UI_ICON_SIZE_CLASS.xs;
   const buttonClass = 'flex h-1/2 w-full items-center justify-center text-text3 transition-colors duration-120 hover:bg-control-hover hover:text-text1 disabled:cursor-not-allowed disabled:text-text-disabled disabled:hover:bg-transparent';
   const renderButton = (direction: 1 | -1) => (
     <button
@@ -800,14 +812,14 @@ export function UiNumberStepper({
         event.stopPropagation();
         onStep(direction);
       }}
-    >
+ >
       {direction === 1
-        ? <ChevronDown className={`${iconClass} rotate-180`} strokeWidth={2.4} />
-        : <ChevronDown className={iconClass} strokeWidth={2.4} />}
+        ? <ChevronDown className={`${iconClass} rotate-180`} />
+        : <ChevronDown className={iconClass} />}
     </button>
   );
   return (
-    <div className="flex w-4 shrink-0 flex-col">
+    <div data-size={size} className={`flex max-h-full w-4 shrink-0 flex-col ${UI_CONTROL_HEIGHT_CLASS[size]}`}>
       {renderButton(1)}
       {renderButton(-1)}
     </div>

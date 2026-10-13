@@ -37,20 +37,20 @@ export function TaskCardToolbar({
         onClick={() => void onRegenerate()}
         title={t('ui:workspace.actions.regenerate')}
       >
-        <RefreshCw className="h-4 w-4" />
+        <RefreshCw  />
       </UiIconButton>
       <UiIconButton
         onClick={onReedit}
         title={t('ui:workspace.actions.reedit')}
       >
-        <SquarePen className="h-4 w-4" />
+        <SquarePen  />
       </UiIconButton>
       {task.result && task.result.filePaths.length > 0 && (
         <UiIconButton
           onClick={() => void onDownloadAll()}
           title={t('common:actions.download')}
         >
-          <DownloadIcon className="h-4 w-4" />
+          <DownloadIcon  />
         </UiIconButton>
       )}
       {task.result && task.result.filePaths.length > 0 && (
@@ -61,21 +61,21 @@ export function TaskCardToolbar({
           title={t('ui:assetLibrary.collect')}
         >
           {allResultsCollected
-            ? <FolderCheck className="h-4 w-4" />
-            : <FolderPlus className="h-4 w-4" />}
+            ? <FolderCheck  />
+            : <FolderPlus  />}
         </UiIconButton>
       )}
       <UiIconButton
         onClick={onUsePrompt}
         title={t('ui:workspace.actions.usePrompt')}
       >
-        <UsePromptIcon className="h-4 w-4" />
+        <UsePromptIcon  />
       </UiIconButton>
       <UiIconButton tone="danger"
         onClick={() => void onDelete()}
         title={t('common:delete')}
       >
-        <Trash2 className="h-4 w-4" />
+        <Trash2  />
       </UiIconButton>
     </div>
   )

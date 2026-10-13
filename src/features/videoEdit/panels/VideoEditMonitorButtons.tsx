@@ -21,11 +21,11 @@ export function useVideoEditMonitorButtonIds(kind: VideoEditMonitorKind): readon
 }
 
 export function VideoEditMonitorButton({ spec }: { spec: VideoEditMonitorButtonSpec }): React.ReactElement {
-  const { Icon, size = 'md' } = spec
+  const { Icon, size = 'sm' } = spec
   return <UiIconButton size={size} aria-label={spec.title} title={spec.tooltip ?? spec.title} disabled={spec.enabled === false}
     {...(spec.on !== undefined ? { on: spec.on, 'aria-pressed': spec.on } : {})}
     {...(spec.onDragStart ? { draggable: spec.enabled !== false, onDragStart: spec.onDragStart } : { onClick: spec.onClick })}>
-    <Icon size={size === 'lg' ? 18 : 15} />
+    <Icon />
   </UiIconButton>
 }
 
@@ -37,6 +37,6 @@ export function VideoEditMonitorButtonEditor({ kind, specs }: { kind: VideoEditM
   const [session, setSession] = useState(0)
   return <PanelTrigger controlsRef={controls} panelWidth={300} zIndex={Z_LAYERS.dropdown} panelPadding="content" alignment="bottomRight"
     renderPanel={() => <VideoEditButtonBarEditorPanel key={session} specs={specs} saved={saved} defaults={VIDEO_EDIT_MONITOR_BUTTON_DEFAULTS[kind]} onSave={ids => useSettingsStore.getState().setVideoEditMonitorButtons(kind, ids)} onClose={() => controls.current?.closePanel()} />}>
-    {({ open, togglePanel }) => <UiIconButton aria-label="按钮编辑器" title="按钮编辑器：自定义这一栏的按钮" aria-expanded={open} on={open} data-panel-trigger-button onClick={() => { if (!open) setSession(value => value + 1); togglePanel() }}><Plus size={15} /></UiIconButton>}
+    {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="按钮编辑器" title="按钮编辑器：自定义这一栏的按钮" aria-expanded={open} on={open} data-panel-trigger-button onClick={() => { if (!open) setSession(value => value + 1); togglePanel() }}><Plus /></UiIconButton>}
   </PanelTrigger>
 }

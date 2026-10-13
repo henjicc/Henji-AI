@@ -185,11 +185,11 @@ export function ImageMarkToolV3ToolbarActions({
                   : t('imageEditor.v3.host.toolbar.exportMenuAria')}
                 onClick={togglePanel}
               >
-                <Download size={15} className="mr-1.5" />
+                <Download  className="mr-1.5" />
                 {exportUnavailable
                   ? t('imageEditor.v3.host.toolbar.exportUnavailable')
                   : t('imageEditor.v3.host.toolbar.export')}
-                <ChevronDown size={14} className="ml-1.5" />
+                <ChevronDown  className="ml-1.5" />
               </UiButton>
             )}
           </PanelTrigger>

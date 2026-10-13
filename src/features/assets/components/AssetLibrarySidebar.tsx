@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState } from 'react'
 import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { ICON_ASSET_CODE, ICON_ASSET_LIBRARY } from '@/core/theme/icons'
@@ -79,10 +80,10 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
     <aside className={`flex shrink-0 flex-col border-r ${width === undefined ? 'w-52' : ''} ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`} style={width === undefined ? undefined : { width }}>
       <nav className="space-y-0.5 p-2">
         <UiNavButton active={activeId === null && activeMediaType === null && activeSort === 'created'} onClick={onShowAll} size="md">
-          <ICON_ASSET_LIBRARY className="h-4 w-4" />{labels.all}
+          <ICON_ASSET_LIBRARY className={`${UI_ICON_SIZE_CLASS.md}`} />{labels.all}
         </UiNavButton>
         <UiNavButton active={activeId === null && activeSort === 'recent'} onClick={onShowRecent} size="md">
-          <Clock3 className="h-4 w-4" />{labels.recent}
+          <Clock3 className={`${UI_ICON_SIZE_CLASS.md}`} />{labels.recent}
         </UiNavButton>
         {([
           ['image', ImageIcon, labels.image],
@@ -91,7 +92,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
           ['code', ICON_ASSET_CODE, labels.code],
         ] as const).map(([type, Icon, label]) => (
           <UiNavButton key={type} active={activeId === null && activeMediaType === type && activeSort === 'created'} onClick={() => onShowMediaType(type)} size="md">
-            <Icon className="h-4 w-4" />{label}
+            <Icon className={`${UI_ICON_SIZE_CLASS.md}`} />{label}
           </UiNavButton>
         ))}
       </nav>
@@ -99,13 +100,13 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
       {/* 分组标签：元信息档，与上方系统视图之间只靠间距分开，不画线 */}
       <div className={`flex items-center justify-between pb-1 pl-4 pr-2 pt-3 ${UI_TEXT_META_CLASS}`}>
         <span>{labels.categories}</span>
-        <UiIconButton size="sm" onClick={() => setCreating(true)} title={labels.create} aria-label={labels.create}><Plus className="h-3.5 w-3.5" /></UiIconButton>
+        <UiIconButton size="xs" onClick={() => setCreating(true)} title={labels.create} aria-label={labels.create}><Plus  /></UiIconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
         {creating && (
           <div className="mb-1 flex items-center gap-1">
             <UiInput autoFocus className="min-w-0" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitCreate(); if (event.key === 'Escape') setCreating(false) }} placeholder={labels.placeholder} aria-label={labels.placeholder} />
-            <UiIconButton onClick={() => void submitCreate()} title={labels.confirm} aria-label={labels.confirm}><Check className="h-3.5 w-3.5" /></UiIconButton>
+            <UiIconButton onClick={() => void submitCreate()} title={labels.confirm} aria-label={labels.confirm}><Check  /></UiIconButton>
           </div>
         )}
         {libraries.map((library) => (
@@ -113,7 +114,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
             {editingId === library.id ? (
               <div className="flex w-full items-center gap-1">
                 <UiInput autoFocus className="min-w-0 flex-1" value={editingName} aria-label={labels.rename} onChange={(event) => setEditingName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(library); if (event.key === 'Escape') setEditingId(null) }} />
-                <UiIconButton onClick={() => void submitRename(library)} title={labels.confirm} aria-label={labels.confirm}><Check className="h-3.5 w-3.5" /></UiIconButton>
+                <UiIconButton onClick={() => void submitRename(library)} title={labels.confirm} aria-label={labels.confirm}><Check  /></UiIconButton>
               </div>
             ) : (
               <>
@@ -121,18 +122,18 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
                     悬停 / 聚焦时名称让出右侧位置（截断提前），操作按钮直接落在行自己的底色上：
                     原来用中性悬停色的渐隐遮罩垫底，压在当前分类的淡强调底上是一块灰色色差（5.6 第二批 B-37）。 */}
                 <UiNavButton active={activeId === library.id} onClick={() => onSelect(library.id)} size="md" className={`w-full ${deletingId === library.id ? 'pr-16' : 'group-hover:pr-16 group-focus-within:pr-16'}`}>
-                  <Folder className="h-4 w-4 shrink-0" /><span className="truncate" title={library.name}>{library.name}</span>
+                  <Folder className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} /><span className="truncate" title={library.name}>{library.name}</span>
                 </UiNavButton>
                 <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 ${deletingId === library.id ? 'pointer-events-auto opacity-100' : 'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'}`}>
                   {deletingId === library.id ? (
                     <>
-                      <UiIconButton size="sm" tone="danger" title={labels.confirmDelete} aria-label={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check className="h-3.5 w-3.5" /></UiIconButton>
-                      <UiIconButton size="sm" title={labels.cancel} aria-label={labels.cancel} onClick={() => setDeletingId(null)}><X className="h-3.5 w-3.5" /></UiIconButton>
+                      <UiIconButton size="xs" tone="danger" title={labels.confirmDelete} aria-label={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check  /></UiIconButton>
+                      <UiIconButton size="xs" title={labels.cancel} aria-label={labels.cancel} onClick={() => setDeletingId(null)}><X  /></UiIconButton>
                     </>
                   ) : (
                     <>
-                      <UiIconButton size="sm" title={labels.rename} aria-label={labels.rename} onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil className="h-3.5 w-3.5" /></UiIconButton>
-                      <UiIconButton size="sm" tone="danger" title={labels.delete} aria-label={labels.delete} onClick={() => setDeletingId(library.id)}><Trash2 className="h-3.5 w-3.5" /></UiIconButton>
+                      <UiIconButton size="xs" title={labels.rename} aria-label={labels.rename} onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil  /></UiIconButton>
+                      <UiIconButton size="xs" tone="danger" title={labels.delete} aria-label={labels.delete} onClick={() => setDeletingId(library.id)}><Trash2  /></UiIconButton>
                     </>
                   )}
                 </div>

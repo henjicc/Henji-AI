@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import {
   ChevronDown,
   MoreHorizontal,
@@ -162,7 +163,7 @@ export function CanvasImageCapabilityActions({
           onExecute(capability.id)
         }}
       >
-        <Icon className="h-3.5 w-3.5" />
+        <Icon  />
         {t(capability.titleKey)}
       </UiButton>
     )
@@ -219,7 +220,7 @@ export function CanvasImageCapabilityActions({
                           onExecute(capability.id)
                         }}
                       >
-                        <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                        <Icon className={`${UI_ICON_SIZE_CLASS.md} mt-0.5 shrink-0`} />
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate">{t(capability.titleKey)}</span>
@@ -264,9 +265,9 @@ export function CanvasImageCapabilityActions({
                 togglePanel()
               }}
             >
-              <MoreHorizontal className="h-3.5 w-3.5" />
+              <MoreHorizontal  />
               {t('nodeToolbar.more')}
-              <ChevronDown className={`h-3 w-3 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
             </UiButton>
             )
           }}

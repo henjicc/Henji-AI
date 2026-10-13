@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, RotateCcw, X } from 'lucide-react';
@@ -177,7 +178,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
       }}
     >
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-4">
-        <ICON_NODE_ASSET_GROUP className="h-5 w-5 shrink-0 text-text2" />
+        <ICON_NODE_ASSET_GROUP className={`${UI_ICON_SIZE_CLASS.lg} shrink-0 text-text2`} />
         <div className="min-w-0">
           <h2 className={`truncate ${UI_TEXT_TITLE_CLASS}`}>
             {resolveNodeDisplayName(node.type, node.data)}
@@ -192,7 +193,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
           disabled={isImporting}
           onClick={() => inputRef.current?.click()}
         >
-          <Plus className="h-4 w-4" />
+          <Plus  />
           {isImporting ? t('canvas.assetGroup.manager.adding') : t('canvas.assetGroup.manager.addMedia')}
         </UiButton>
         <UiInput
@@ -207,12 +208,12 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
             void importFiles(files);
           }}
         />
-        <UiIconButton size="lg"
+        <UiIconButton size="md"
           aria-label={t('canvas.assetGroup.manager.close')}
           title={t('canvas.assetGroup.manager.close')}
           onClick={onClose}
         >
-          <X className="h-4 w-4" />
+          <X  />
         </UiIconButton>
       </header>
 
@@ -289,7 +290,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
                     className="gap-1 px-2"
                     onClick={() => restoreAssetGroupBinding({ groupId: node.id, bindingId: binding.id }).catch(reportCanvasOperationFailure)}
                   >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw  />
                     {t('canvas.assetGroup.manager.restore')}
                   </UiButton>
                 )}

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Brush, Circle, Lasso, Redo2, Square, Trash2, Undo2 } from 'lucide-react';
 import {
   UI_TEXT_PANEL_TITLE_CLASS,
@@ -100,7 +101,7 @@ function QuickMaskEditorModal({
         onClick={() => setTool('brush')}
         title="画笔(B)"
       >
-        <Brush className="h-4 w-4" />
+        <Brush className={`${UI_ICON_SIZE_CLASS.md}`} />
         画笔
       </UiChipButton>
       <UiChipButton
@@ -110,7 +111,7 @@ function QuickMaskEditorModal({
         onClick={() => setTool('rectangle')}
         title="矩形框选(R)"
       >
-        <Square className="h-4 w-4" />
+        <Square className={`${UI_ICON_SIZE_CLASS.md}`} />
         矩形
       </UiChipButton>
       <UiChipButton
@@ -120,7 +121,7 @@ function QuickMaskEditorModal({
         onClick={() => setTool('circle')}
         title="圆形框选(O)"
       >
-        <Circle className="h-4 w-4" />
+        <Circle className={`${UI_ICON_SIZE_CLASS.md}`} />
         圆形
       </UiChipButton>
       <UiChipButton
@@ -130,36 +131,36 @@ function QuickMaskEditorModal({
         onClick={() => setTool('lasso')}
         title="自由框选(L)"
       >
-        <Lasso className="h-4 w-4" />
+        <Lasso className={`${UI_ICON_SIZE_CLASS.md}`} />
         自由框选
       </UiChipButton>
       <div className="ml-1 flex items-center gap-1 border-l border-line pl-2">
-        <UiIconButton size="lg"
+        <UiIconButton size="md"
           type="button"
           disabled={history.undoStack.length === 0}
           onClick={() => dispatchHistory({ type: 'undo' })}
           title="撤销(Ctrl+Z)"
           aria-label="撤销"
         >
-          <Undo2 className="h-4 w-4" />
+          <Undo2  />
         </UiIconButton>
-        <UiIconButton size="lg"
+        <UiIconButton size="md"
           type="button"
           disabled={history.redoStack.length === 0}
           onClick={() => dispatchHistory({ type: 'redo' })}
           title="重做(Ctrl+Y)"
           aria-label="重做"
         >
-          <Redo2 className="h-4 w-4" />
+          <Redo2  />
         </UiIconButton>
-        <UiIconButton size="lg" tone="danger"
+        <UiIconButton size="md" tone="danger"
           type="button"
           disabled={history.document.strokes.length === 0}
           onClick={clearDocument}
           title="清空遮罩"
           aria-label="清空遮罩"
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2  />
         </UiIconButton>
       </div>
       <div className="ml-auto flex items-center gap-2">

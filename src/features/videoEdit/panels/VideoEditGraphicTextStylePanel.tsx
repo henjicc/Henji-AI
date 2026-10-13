@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { ReactNode } from 'react'
 import { AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, Link } from 'lucide-react'
 import { UiFormRow, UiIconButton, UI_TEXT_META_CLASS } from '@/components/ui'
@@ -31,6 +32,6 @@ export function VideoEditGraphicTextStylePanel({ target, style, transform, onErr
       setVideoEditCodeParameter(target, axis, (axis === 'x' ? px : py) + (axis === 'x' ? graphic.width : graphic.height) * position - edge, { time: editor.sourceTime })
     } catch (error) { onError(error) }
   }
-  const controls = <><UiFormRow label="对齐到画面" density="compact"><div className="flex gap-1">{([['x', 0, '画面左对齐', AlignHorizontalJustifyStart], ['x', .5, '画面水平居中', AlignHorizontalJustifyCenter], ['x', 1, '画面右对齐', AlignHorizontalJustifyEnd], ['y', 0, '画面顶部对齐', AlignVerticalJustifyStart], ['y', .5, '画面垂直居中', AlignVerticalJustifyCenter], ['y', 1, '画面底部对齐', AlignVerticalJustifyEnd]] as const).map(([axis, value, label, Icon]) => <UiIconButton key={label} size="sm" aria-label={label} title={label} onClick={() => align(axis, value)}><Icon size={14} /></UiIconButton>)}</div></UiFormRow><span className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}><Link size={12} />等比缩放</span>{transform}</>
+  const controls = <><UiFormRow label="对齐到画面" density="compact"><div className="flex gap-1">{([['x', 0, '画面左对齐', AlignHorizontalJustifyStart], ['x', .5, '画面水平居中', AlignHorizontalJustifyCenter], ['x', 1, '画面右对齐', AlignHorizontalJustifyEnd], ['y', 0, '画面顶部对齐', AlignVerticalJustifyStart], ['y', .5, '画面垂直居中', AlignVerticalJustifyCenter], ['y', 1, '画面底部对齐', AlignVerticalJustifyEnd]] as const).map(([axis, value, label, Icon]) => <UiIconButton key={label} size="xs" aria-label={label} title={label} onClick={() => align(axis, value)}><Icon  /></UiIconButton>)}</div></UiFormRow><span className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}><Link size={UI_ICON_SIZE.xs} />等比缩放</span>{transform}</>
   return <VideoEditTypographyPanel style={style} onError={onError} onChange={textStyle => updateVideoEditGraphicObject(target, { textStyle }, gesture.handle.current)} onBegin={gesture.begin} onEnd={gesture.end} onFontPreview={preview} projectFonts={collectVideoEditFonts(owner.document).map(use => use.font)} transform={controls} />
 }

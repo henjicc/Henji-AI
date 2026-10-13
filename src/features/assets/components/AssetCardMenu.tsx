@@ -140,7 +140,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
         ) : (
           <div className={`min-w-0 flex-1 truncate ${UI_TEXT_PANEL_TITLE_CLASS}`} title={name} onDoubleClick={() => setEditingName(true)}>{name}</div>
         )}
-        {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')} aria-label={t('assetLibrary.renameAsset')}><Pencil className="h-3.5 w-3.5" /></UiIconButton>}
+        {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')} aria-label={t('assetLibrary.renameAsset')}><Pencil  /></UiIconButton>}
       </div>
       <div className={UI_FIELD_LABEL_CLASS}>{t('assetLibrary.tags')}</div>
       <UiInput disabled={pendingAction !== null} aria-label={t('assetLibrary.tags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addDraftTag() }} placeholder={t('assetLibrary.tagPlaceholder')} />
@@ -152,10 +152,10 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       {actionError ? <UiError size="xs" align="start" className="pb-0" title={actionError} message="" /> : null}
       {/* 菜单里的动作同为辅助档：批量管理是进入一种模式，删除是危险档（静息中性、悬停显红） */}
       <div className="mt-4 flex flex-wrap justify-between gap-2">
-        <UiButton disabled={pendingAction !== null} onClick={() => void relocateCurrentAsset()}><FolderOpen className="h-4 w-4" />{t('assetLibrary.relocate')}</UiButton>
+        <UiButton disabled={pendingAction !== null} onClick={() => void relocateCurrentAsset()}><FolderOpen  />{t('assetLibrary.relocate')}</UiButton>
         {asset.mediaType !== 'code' && <VideoEditSendMenu mediaKind={asset.mediaType} disabled={pendingAction !== null || asset.inspectionStatus !== 'ready'} resolveSource={() => ({ type: 'asset', assetId: asset.id })} notify={(message, type) => { if (type === 'error') setActionError(message); else setSendMessage(message) }} />}
-        <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
-        <UiButton variant="danger" disabled={pendingAction !== null} onClick={() => void deleteCurrentAsset()}><Trash2 className="h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>
+        <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT  />{t('assetLibrary.batchManage')}</UiButton>
+        <UiButton variant="danger" disabled={pendingAction !== null} onClick={() => void deleteCurrentAsset()}><Trash2  />{t('assetLibrary.deleteAsset')}</UiButton>
       </div>
       {sendMessage && <p role="status" className={UI_TEXT_META_CLASS}>{sendMessage}</p>}
     </div>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 
@@ -24,7 +25,7 @@ export const VideoGenNode = memo(({ id, data, selected, width, height }: VideoGe
     selected={selected}
     width={width}
     height={height}
-    icon={<VideoGenerationIcon className="h-4 w-4" />}
+    icon={<VideoGenerationIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
     promptPlaceholderKey="node.videoGen.promptPlaceholder"
     promptRequiredKey="node.videoGen.promptRequired"
 

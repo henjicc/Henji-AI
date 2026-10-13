@@ -133,3 +133,10 @@ export const ICON_NODE_ASSET_GROUP: LucideIcon = Layers3
 export const ICON_PANORAMA: LucideIcon = Orbit
 /** 忠实高清放大（能力工具条与节点共用） */
 export const ICON_UPSCALE: LucideIcon = ScanSearch
+
+/** 界面图标：普通尺寸 12/14/16/20/24，状态插图 32/40；描边沿用 lucide 默认 2。 */
+export const UI_ICON_SIZE = { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, display: 32, hero: 40 } as const
+export const UI_ICON_STROKE_WIDTH = 2
+/** 标题栏交通灯：系统窗口惯例的唯一紧凑图标例外。 */
+export const UI_WINDOW_ICON_SIZE = 8
+export const UI_WINDOW_ICON_STROKE_WIDTH = 1.5

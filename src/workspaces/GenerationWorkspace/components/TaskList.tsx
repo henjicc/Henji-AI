@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useRef } from 'react'
 import { History } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
@@ -66,7 +67,7 @@ export function TaskList({
     <UiRegion maxWidthClassName={GENERATION_COLUMN_MAX_WIDTH_CLASS} className="mx-auto px-6">
       {totalCount === 0 && (
         <UiEmpty
-          icon={<History className="h-8 w-8" />}
+          icon={<History className={`${UI_ICON_SIZE_CLASS.display}`} />}
           title={t('history:empty')}
           description={t('history:emptyHint')}
         />

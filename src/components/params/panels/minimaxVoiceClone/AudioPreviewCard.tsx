@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState } from 'react'
 import { UI_TEXT_META_CLASS, UiOptionButton } from '@/components/ui'
 import AudioPlayer from '@/components/AudioPlayer'
@@ -116,7 +117,7 @@ export function AudioPreviewCard({
                     size="sm"
                     onClick={() => onUploadClick()}
                   >
-                    <Upload className="mr-1 h-3.5 w-3.5" />
+                    <Upload className={`${UI_ICON_SIZE_CLASS.sm} mr-1`} />
                     {uploadButtonText || '上传音频'}
                   </UiOptionButton>
                 )}

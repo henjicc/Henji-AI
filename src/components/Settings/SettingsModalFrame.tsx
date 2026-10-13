@@ -41,7 +41,7 @@ export function SettingsModalFrame({ isOpen, onClose, appear, children, surfaceI
         <div className={`flex h-14 shrink-0 items-center justify-between border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
           <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>
           <UiIconButton onClick={onClose} aria-label={t('actions.close')} title={t('actions.close')}>
-            <X className="h-4 w-4" />
+            <X  />
           </UiIconButton>
         </div>
         {children}

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { ChevronRight, Minus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
@@ -146,13 +147,13 @@ export function ModelSyncDialog({
                         onClick={() => toggleGroup(row.group)}
                       >
                         <ChevronRight
-                          size={14}
+                          size={UI_ICON_SIZE.sm}
                           className={`shrink-0 text-text2 transition-transform ${row.collapsed ? '' : 'rotate-90'}`}
                         />
                         <span className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{row.group}</span>
                         <span className={UI_TEXT_META_CLASS}>{row.models.length}</span>
                       </UiOptionButton>
-                      <UiIconButton size="lg"
+                      <UiIconButton size="md"
                         type="button"
                         title={t(allAdded ? 'modelSync.removeGroup' : 'modelSync.addGroup', { group: row.group })}
                         aria-label={t(allAdded ? 'modelSync.removeGroup' : 'modelSync.addGroup', { group: row.group })}
@@ -162,7 +163,7 @@ export function ModelSyncDialog({
                           else void onAdd(ids.filter(id => !addedModelIds.has(id)))
                         }}
                       >
-                        {allAdded ? <Minus size={15} /> : <Plus size={15} />}
+                        {allAdded ? <Minus  /> : <Plus  />}
                       </UiIconButton>
                     </div>
                   )
@@ -177,7 +178,7 @@ export function ModelSyncDialog({
                         <div className={`truncate ${UI_TEXT_META_CLASS}`}>{row.model.modelId}</div>
                       )}
                     </div>
-                    <UiIconButton size="lg"
+                    <UiIconButton size="md"
                       type="button"
                       title={t(added ? 'modelSync.removeModel' : 'modelSync.addModel', { model: row.model.modelId })}
                       aria-label={t(added ? 'modelSync.removeModel' : 'modelSync.addModel', { model: row.model.modelId })}
@@ -186,7 +187,7 @@ export function ModelSyncDialog({
                         else void onAdd([row.model.modelId])
                       }}
                     >
-                      {added ? <Minus size={15} /> : <Plus size={15} />}
+                      {added ? <Minus  /> : <Plus  />}
                     </UiIconButton>
                   </div>
                 )

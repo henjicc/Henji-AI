@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { LoaderCircle, Play, Square } from 'lucide-react'
 import '@/features/canvas/storyboard.css'
@@ -87,7 +88,7 @@ export function HeightTokensSection(): JSX.Element {
 export function IconTokensSection(): JSX.Element {
   const groups = new Map<unknown, string[]>()
   GALLERY_ICON_TOKENS.forEach(([name, Icon]) => groups.set(Icon, [...(groups.get(Icon) ?? []), name]))
-  return <UiGroup title="登记图标：同形多义标黄，仅作为设计审查提示" titleTone="compact"><div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{GALLERY_ICON_TOKENS.map(([name, Icon]) => <div key={name} data-gallery-token={name} className="flex items-center gap-3 py-3"><Icon className="h-4 w-4 shrink-0 text-text1" /><span className={`break-all text-xs ${(groups.get(Icon)?.length ?? 0) > 1 ? 'text-warning-text' : 'text-text2'}`}>{name}<br />{(groups.get(Icon)?.length ?? 0) > 1 ? `共用图形：${groups.get(Icon)?.join('、')}` : '独立图形'}</span></div>)}</div><p className="text-xs text-text2">图标尺寸令牌尚未落地，由任务 4.2 接入；当前按钮尺寸见“尺寸阶梯”。</p></UiGroup>
+  return <UiGroup title="登记图标：同形多义标黄，仅作为设计审查提示" titleTone="compact"><div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{GALLERY_ICON_TOKENS.map(([name, Icon]) => <div key={name} data-gallery-token={name} className="flex items-center gap-3 py-3"><Icon className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text1`} /><span className={`break-all text-xs ${(groups.get(Icon)?.length ?? 0) > 1 ? 'text-warning-text' : 'text-text2'}`}>{name}<br />{(groups.get(Icon)?.length ?? 0) > 1 ? `共用图形：${groups.get(Icon)?.join('、')}` : '独立图形'}</span></div>)}</div><div className="flex flex-wrap items-end gap-4">{Object.entries(styleTokens.UI_ICON_SIZE_CLASS).map(([name, className]) => <div key={name} data-gallery-token={`UI_ICON_SIZE_CLASS.${name}`} className="flex flex-col items-center gap-2"><Play className={className} /><code className="text-xs text-text2">{name}</code></div>)}</div><p className="text-xs text-text2">按钮自动提供子图标尺寸，描边沿用 lucide 默认 2；窗口控件仅使用登记的 1.5 描边例外。</p></UiGroup>
 }
 
 function MotionSample({ name, duration, reduced }: { name: string; duration: number; reduced: boolean }): JSX.Element {
@@ -104,7 +105,7 @@ function MotionSample({ name, duration, reduced }: { name: string; duration: num
       const animation = ref.current?.animate([{ opacity: 0, transform: 'translateX(-100%)' }, { opacity: 1, transform: 'translateX(0)' }], { duration: reduced ? 0 : duration, easing: motion.UI_EASE })
       animationRef.current = animation ?? null
       if (animation) animation.onfinish = () => setElapsed(Math.round(performance.now() - start))
-    }}><Play className="h-4 w-4" />重放</UiButton>
+    }}><Play />重放</UiButton>
   </div>
 }
 
@@ -129,11 +130,11 @@ function LoopSample({ name, reduced }: { name: keyof typeof motion.UI_LOOP_MS; r
     <code className="w-56 text-xs text-text2">UI_LOOP_MS.{name} · {motion.UI_LOOP_MS[name]}ms</code>
     <div key={replay} className={`relative h-8 w-8 ${name === 'executing' && active ? 'canvas-node-paint-frame--executing' : ''}`}
       style={{ '--canvas-node-paint-top': '0px', '--canvas-node-paint-right': '0px', '--canvas-node-paint-bottom': '0px', '--canvas-node-paint-left': '0px' } as CSSProperties}>
-      {name === 'spin' ? <LoaderCircle className={`h-8 w-8 text-accent-text ${active ? 'animate-spin' : ''}`} />
+      {name === 'spin' ? <LoaderCircle className={`${UI_ICON_SIZE_CLASS.display} text-accent-text ${active ? 'animate-spin' : ''}`} />
         : <span className={`block h-8 w-8 rounded-control bg-control ${name === 'pulse' && active ? 'animate-pulse' : ''}`} />}
     </div>
-    <UiButton size="sm" onClick={() => { setRunning(true); setReplay(value => value + 1) }}><Play className="h-4 w-4" />重放循环</UiButton>
-    <UiButton size="sm" disabled={!running} onClick={() => setRunning(false)}><Square className="h-4 w-4" />停止</UiButton>
+    <UiButton size="sm" onClick={() => { setRunning(true); setReplay(value => value + 1) }}><Play />重放循环</UiButton>
+    <UiButton size="sm" disabled={!running} onClick={() => setRunning(false)}><Square />停止</UiButton>
   </div>
 }
 

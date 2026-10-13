@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { FileText, Upload, X } from 'lucide-react'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -69,16 +70,16 @@ export function FileUpload({
       <div className="flex flex-wrap items-center gap-2">
         {safeValue.map((source, index) => (
           <div key={`${source}-${index}`} className={`flex ${toolbar ? 'h-8' : 'h-9'} min-w-0 items-center gap-1.5 rounded-lg bg-window/40 px-2`}>
-            <FileText className="h-4 w-4 shrink-0 text-text2" />
+            <FileText className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text2`} />
             <span className="max-w-32 truncate text-xs text-text2">{displayFilename(source, index)}</span>
-            <UiIconButton size="sm"
+            <UiIconButton size="xs"
               type="button"
               className="shrink-0"
               onClick={() => onChange(safeValue.filter((_, candidate) => candidate !== index))}
               disabled={disabled}
               aria-label={t('common:delete', '删除')}
             >
-              <X className="h-3.5 w-3.5" />
+              <X  />
             </UiIconButton>
           </div>
         ))}
@@ -89,7 +90,7 @@ export function FileUpload({
             onClick={() => inputRef.current?.click()}
             disabled={disabled}
           >
-            <Upload className="h-4 w-4" />
+            <Upload  />
             {buttonText}
           </UiButton>
         )}

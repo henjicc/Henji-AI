@@ -136,7 +136,7 @@ export const FrameCard = memo(({
         )}
 
         <div className="storyboard-frame-actions absolute right-1 top-1 flex items-center gap-1 opacity-0 transition-opacity duration-120 group-hover/frame:opacity-100 group-focus-within/frame:opacity-100">
-          <UiIconButton size="sm" tone="media"
+          <UiIconButton size="xs" tone="media"
             type="button"
             className="p-1"
             onPointerDown={(event) => event.stopPropagation()}
@@ -147,10 +147,10 @@ export const FrameCard = memo(({
             title={t('canvas.storyboardFrame.replaceFromInput')}
             aria-label={t('canvas.storyboardFrame.replaceFromInput')}
           >
-            <ImagePlus className="h-3 w-3" />
+            <ImagePlus  />
           </UiIconButton>
 
-          <UiIconButton size="sm" tone="media"
+          <UiIconButton size="xs" tone="media"
             type="button"
             className="p-1"
             onPointerDown={(event) => event.stopPropagation()}
@@ -161,7 +161,7 @@ export const FrameCard = memo(({
             title={t('canvas.storyboardFrame.editFrame')}
             aria-label={t('canvas.storyboardFrame.editFrame')}
           >
-            <SquareArrowOutUpRight className="h-3 w-3" />
+            <SquareArrowOutUpRight  />
           </UiIconButton>
         </div>
 

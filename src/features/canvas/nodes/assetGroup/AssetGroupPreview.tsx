@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useState } from 'react';
 
 import {
@@ -48,12 +49,12 @@ const AssetGroupPreviewTile = memo(({
         />
       ) : (
         <div className="flex h-full items-center justify-center text-text3" aria-hidden="true">
-          <FallbackIcon className="h-6 w-6" />
+          <FallbackIcon className={`${UI_ICON_SIZE_CLASS.xl}`} />
         </div>
       )}
       {showKindBadge && item.kind === 'video' && (
         <span className="ui-glass pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-lg text-text1">
-          <ICON_MEDIA_VIDEO className="h-3 w-3" />
+          <ICON_MEDIA_VIDEO className={`${UI_ICON_SIZE_CLASS.xs}`} />
         </span>
       )}
       {overflowCount > 0 && (
@@ -80,7 +81,7 @@ export const AssetGroupPreview = memo(({
   if (visibleItems.length === 0) {
     return (
       <div className="flex h-full items-center justify-center bg-window text-text3">
-        <ICON_NODE_ASSET_GROUP className="h-8 w-8" />
+        <ICON_NODE_ASSET_GROUP className={`${UI_ICON_SIZE_CLASS.display}`} />
       </div>
     );
   }

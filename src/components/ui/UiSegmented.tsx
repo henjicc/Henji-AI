@@ -1,3 +1,4 @@
+import type { UiControlSize } from './primitiveInternals'
 import { useRef, type ReactNode } from 'react'
 import { UiOptionButton } from './primitives'
 import { UI_CONTROL_HEIGHT_CLASS } from './styleTokens'
@@ -18,7 +19,7 @@ export interface UiSegmentedProps<T extends string | number> {
   options: readonly UiSegmentedOption<T>[]
   value: T
   onChange: (value: T) => void
-  size?: 'sm' | 'md'
+  size?: UiControlSize
   fullWidth?: boolean
   disabled?: boolean
   /** 悬停/聚焦候选项时预览，离开时清除；不改变当前选择。 */

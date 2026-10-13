@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import {
   ChevronDown,
   ChevronRight,
@@ -211,7 +212,7 @@ export function ImageEditorLayerRowV3({
             : t('imageEditor.v3.layers.expandGroup')}
           onClick={() => onToggleExpanded(row.layer.id)}
         >
-          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          {expanded ? <ChevronDown  /> : <ChevronRight  />}
         </UiIconButton>
       ) : null}
 
@@ -225,8 +226,8 @@ export function ImageEditorLayerRowV3({
           onClick={(event) => onSelect(row, event)}
           onKeyDown={handleKeyDown}
         >
-          <LayerThumbnailV3 document={controller.document} layer={row.layer} thumbnails={thumbnails} fallback={<LayerIcon className="h-3.5 w-3.5" />} />
-          {row.layer.clipping ? <CornerDownRight className="h-3 w-3 shrink-0 text-text2" aria-label={t('imageEditor.v3.workflow.clippedLayer')} /> : null}
+          <LayerThumbnailV3 document={controller.document} layer={row.layer} thumbnails={thumbnails} fallback={<LayerIcon className={`${UI_ICON_SIZE_CLASS.sm}`} />} />
+          {row.layer.clipping ? <CornerDownRight className={`${UI_ICON_SIZE_CLASS.xs} shrink-0 text-text2`} aria-label={t('imageEditor.v3.workflow.clippedLayer')} /> : null}
           <span
             data-layer-name
             title={row.layer.name}
@@ -268,16 +269,16 @@ export function ImageEditorLayerRowV3({
       </div>
 
       {row.layer.mask && controller.profile.layerControls.includes('mask') ? <>
-        <UiIconButton size="xs" on={row.layer.maskAttachment.linked} disabled={!editable}
+        <UiIconButton size="2xs" on={row.layer.maskAttachment.linked} disabled={!editable}
           aria-label={row.layer.maskAttachment.linked ? t('imageEditor.v3.workflow.unlink') : t('imageEditor.v3.workflow.link')}
           title={row.layer.maskAttachment.linked ? t('imageEditor.v3.workflow.unlink') : t('imageEditor.v3.workflow.link')}
           onClick={() => controller.updateLayerCommon(row.layer.id, { maskAttachment: { ...row.layer.maskAttachment, linked: !row.layer.maskAttachment.linked } })}>
-          {row.layer.maskAttachment.linked ? <Link className="h-3 w-3" /> : <Unlink className="h-3 w-3" />}
+          {row.layer.maskAttachment.linked ? <Link  /> : <Unlink  />}
         </UiIconButton>
-        <UiIconButton data-layer-mask-target size="sm" on={selected && target === 'mask'}
+        <UiIconButton data-layer-mask-target size="xs" on={selected && target === 'mask'}
           aria-label={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })} title={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })}
           onClick={() => selectImageEditTargetV3(controller, row.layer.id, 'mask')}>
-          <CircleDashed className="h-4 w-4" />
+          <CircleDashed  />
         </UiIconButton>
       </> : null}
 
@@ -292,7 +293,7 @@ export function ImageEditorLayerRowV3({
           if (editable) controller.updateLayerCommon(row.layer.id, { visible: !row.layer.visible })
         }}
       >
-        {row.layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        {row.layer.visible ? <Eye  /> : <EyeOff  />}
       </UiIconButton>
 
       <UiIconButton
@@ -306,7 +307,7 @@ export function ImageEditorLayerRowV3({
           if (!ancestorLocked) controller.updateLayerCommon(row.layer.id, { locked: !row.layer.locked })
         }}
       >
-        {row.layer.locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+        {row.layer.locked ? <Lock  /> : <Unlock  />}
       </UiIconButton>
     </div>
   )

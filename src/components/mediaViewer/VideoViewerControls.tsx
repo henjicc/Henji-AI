@@ -98,7 +98,7 @@ export function VideoViewerControls({
         transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: visible ? 'auto' : 'none',
       }}
-    >
+ >
       {/* 控件条直接压在用户的视频画面上，走玻璃材质；毛玻璃开关关掉时自动退化成面板实底。 */}
       <UiPanel variant="glass" className="flex flex-col gap-3 px-4 py-3">
         {/* 命中区比可见轨道高，便于点按与拖动；轨道几何（播放进度、裁剪区间）是随时间变化的动态值 */}
@@ -117,13 +117,13 @@ export function VideoViewerControls({
           }}
           onMouseUp={() => setIsDraggingProgress(false)}
           onMouseLeave={() => setIsDraggingProgress(false)}
-        >
+ >
           <div className="relative h-1.5 rounded-full bg-text1/15">
             <div ref={progressFillRef} className="relative h-full w-0 rounded-full bg-accent">
               <span
                 aria-hidden="true"
                 className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full bg-accent opacity-0 transition-opacity duration-180 group-hover/progress:opacity-100"
-              />
+ />
             </div>
             {trimRange && videoDuration > 0 && (
               <div
@@ -133,14 +133,14 @@ export function VideoViewerControls({
                   left: `${(trimRange.start / videoDuration) * 100}%`,
                   width: `${((trimRange.end - trimRange.start) / videoDuration) * 100}%`,
                 }}
-              />
+ />
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <UiIconButton size="xl" shape="circle" onClick={togglePlay} title={t('ui:audioPlayer.playPause')}>
-            {isVideoPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+            {isVideoPlaying ? <Pause /> : <Play />}
           </UiIconButton>
           <div className={`text-13 text-text1 ${UI_TEXT_TIMECODE_CLASS}`}>
             {formatTime(currentTime)} / {formatTime(videoDuration)}
@@ -153,13 +153,13 @@ export function VideoViewerControls({
               <div
                 ref={volumeRef}
                 className="flex items-center gap-1"
-              >
+ >
                 <UiIconButton
-                  size="lg"
+                  size="md"
                   onClick={() => setMuted((value) => !value)}
                   title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
-                >
-                  {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+ >
+                  {muted || volume === 0 ? <VolumeX /> : <Volume2 />}
                 </UiIconButton>
                 <UiRangeInput
                   aria-label={t('ui:viewer.volume')}
@@ -169,7 +169,7 @@ export function VideoViewerControls({
                   step={0.01}
                   value={effectiveVolume}
                   onChange={(event) => updateVolume(Number(event.target.value))}
-                />
+ />
               </div>
             )}
 
@@ -185,22 +185,22 @@ export function VideoViewerControls({
               minWidthStrategy="display"
               panelWidthStrategy="options"
               buttonClassName="w-auto"
-            />
+ />
 
-            <UiIconButton size="lg"
+            <UiIconButton size="sm"
               on={loop}
               aria-pressed={loop}
               onClick={() => setLoop((value) => !value)}
               title={t('ui:viewer.loop')}
-            >
-              <Repeat className="h-5 w-5" />
+ >
+              <Repeat />
             </UiIconButton>
             {onDownload && filePath && (
-              <UiIconButton size="lg"
+              <UiIconButton size="md"
                 onClick={() => onDownload(filePath)}
                 title={t('common:actions.download')}
-              >
-                <Download className="h-5 w-5" />
+ >
+                <Download />
               </UiIconButton>
             )}
           </div>

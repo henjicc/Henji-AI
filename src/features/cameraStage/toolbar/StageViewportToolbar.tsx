@@ -62,7 +62,7 @@ const StageViewportToolbar: React.FC = () => {
         const disabled = definition.id === 'path' && pathDisabled
         // 路径编辑与三个变换同属“模式”，用间距隔开即可（一条命令带只留一条分隔线）
         return (
-            <UiIconButton key={definition.id} size="lg"
+            <UiIconButton key={definition.id} size="md"
               on={activeTool === definition.id}
               disabled={disabled}
               className={index === 3 ? 'ml-1.5' : undefined}
@@ -70,7 +70,7 @@ const StageViewportToolbar: React.FC = () => {
               aria-label={`${definition.label}，快捷键 ${definition.shortcut}`}
               onClick={() => activateTool(definition)}
             >
-              <Icon size={16} strokeWidth={1.8} />
+              <Icon   />
             </UiIconButton>
         )
       })}

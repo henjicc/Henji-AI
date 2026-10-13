@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowDown, ArrowUp, CheckCircle2, Sparkles } from 'lucide-react'
@@ -168,7 +169,7 @@ export function OnboardingHints(): JSX.Element | null {
         role="status"
         aria-live="polite"
       >
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-text" />
+        <CheckCircle2 className={`${UI_ICON_SIZE_CLASS.lg} mt-0.5 shrink-0 text-success-text`} />
         <div className="min-w-0 flex-1">
           <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t('coach.successTitle')}</div>
           <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('coach.successDescription')}</p>
@@ -220,7 +221,7 @@ export function OnboardingHints(): JSX.Element | null {
           style={{ left: geometry.arrowLeft }}
         />
         <div className="flex items-start gap-3">
-          <Sparkles className={`mt-0.5 h-5 w-5 shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
+          <Sparkles className={`${UI_ICON_SIZE_CLASS.lg} mt-0.5 shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-3">
               <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t(stage.titleKey)}</div>

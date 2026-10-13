@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Brush, Circle, Eraser, Lasso, Redo2, Square, Trash2, Undo2 } from 'lucide-react';
 import { memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -91,7 +92,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
               size="md" className="px-2"
               onClick={() => editor.setTool(value)}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className={`${UI_ICON_SIZE_CLASS.sm}`} />
             </UiChipButton>
           );
         })}
@@ -104,32 +105,32 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
           size="md" className="px-2"
           onClick={() => editor.setMode(editor.mode === 'erase' ? 'paint' : 'erase')}
         >
-          <Eraser className="h-3.5 w-3.5" />
+          <Eraser className={`${UI_ICON_SIZE_CLASS.sm}`} />
         </UiChipButton>
         <div className={`ml-1 flex items-center gap-1 border-l pl-1.5 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
-          <UiIconButton size="lg"
+          <UiIconButton size="md"
             type="button"
             aria-label={t('node.elementEditGeneration.undoMask')}
             disabled={editor.history.undoStack.length === 0}
             onClick={() => editor.dispatchHistory({ type: 'undo' })}
           >
-            <Undo2 className="h-3.5 w-3.5" />
+            <Undo2  />
           </UiIconButton>
-          <UiIconButton size="lg"
+          <UiIconButton size="md"
             type="button"
             aria-label={t('node.elementEditGeneration.redoMask')}
             disabled={editor.history.redoStack.length === 0}
             onClick={() => editor.dispatchHistory({ type: 'redo' })}
           >
-            <Redo2 className="h-3.5 w-3.5" />
+            <Redo2  />
           </UiIconButton>
-          <UiIconButton size="lg" tone="danger"
+          <UiIconButton size="md" tone="danger"
             type="button"
             aria-label={t('node.elementEditGeneration.clearMask')}
             disabled={!painted}
             onClick={editor.clearDocument}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2  />
           </UiIconButton>
         </div>
       </div>

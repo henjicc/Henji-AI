@@ -152,25 +152,25 @@ const ProviderCenterModelList = ({
                 <div className="flex items-center justify-end gap-1">
                   {model.source === 'llm' ? (
                     <>
-                      <UiIconButton size="lg"
+                      <UiIconButton size="md"
                         type="button"
                         aria-label={t('providerCenter.actions.editModel')}
                         title={t('providerCenter.actions.editModel')}
                         onClick={() => onEditModel(model)}
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil  />
                       </UiIconButton>
-                      <UiIconButton size="lg" tone="danger"
+                      <UiIconButton size="md" tone="danger"
                         type="button"
                         aria-label={t('providerCenter.actions.deleteModel')}
                         title={t('providerCenter.actions.deleteModel')}
                         onClick={() => void onDeleteModel(model)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2  />
                       </UiIconButton>
                     </>
                   ) : (
-                    <UiIconButton size="lg"
+                    <UiIconButton size="md"
                       type="button"
                       aria-label={t('providerCenter.actions.renameModel')}
                       title={t('providerCenter.renameHint')}
@@ -179,7 +179,7 @@ const ProviderCenterModelList = ({
                         draft: model.name === model.generationModel?.originalName ? '' : model.name,
                       }) }}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil  />
                     </UiIconButton>
                   )}
                   <span className="ml-1">

@@ -32,7 +32,6 @@ interface Props {
 const CHANNEL_LABELS = { mono: '单声道', stereo: '立体声', mixed: '混合' } as const
 /** 轨道头按钮的无障碍短名（拼在轨道名后，如“视频 1锁定”）。 */
 const SHORT_LABELS: Record<VideoEditTrackHeaderButtonId, string> = { locked: '锁定', sync: '同步锁定', enabled: '输出', muted: '静音', solo: '独奏', target: '设为目标' }
-const ICON = 'h-3 w-3'
 
 /**
  * 轨道头每个可选按钮的名称、图标与当前状态（按钮编辑器网格与轨道头共用）。点轨道编号与名称就是设为目标（PR 轨道定位），
@@ -77,7 +76,7 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
     {ids.map(id => {
       if (caption && id !== 'locked' && id !== 'enabled') return <span key={id} aria-hidden="true" className="h-6 w-6 shrink-0" />
       const spec = specs.get(id)!; const label = caption ? t(`captionTrack.${id === 'enabled' ? track.enabled ? 'hide' : 'show' : track.locked ? 'unlock' : 'lock'}`) : `${name}${SHORT_LABELS[id]}`
-      return <UiIconButton key={id} size="sm" on={spec.on} aria-label={label} aria-pressed={spec.on} title={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon className={ICON} /></UiIconButton>
+      return <UiIconButton key={id} size="xs" on={spec.on} aria-label={label} aria-pressed={spec.on} title={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon /></UiIconButton>
     })}
     {!caption && <div role="separator" tabIndex={0} aria-label={`调整${name}高度`} aria-orientation="horizontal" aria-valuemin={24} aria-valuemax={160} aria-valuenow={row.height} className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize focus-visible:bg-accent" onPointerDown={onResize}
       onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); event.stopPropagation(); onPatch({ height: Math.max(24, Math.min(160, row.height + (event.key === 'ArrowUp' ? -4 : 4))) }) } }} />}

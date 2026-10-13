@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, FolderPlus } from 'lucide-react'
@@ -114,7 +115,7 @@ export function MoveToProjectDialog({ documentName, projects, checkProjectName, 
               onClick={() => setSelected(project.id)}
             >
               <span className="min-w-0 truncate">{project.name}</span>
-              {selected === project.id ? <Check className="h-4 w-4 shrink-0 text-accent-text" aria-hidden="true" /> : null}
+              {selected === project.id ? <Check className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-accent-text`} aria-hidden="true" /> : null}
             </UiOptionButton>
           ))}
           <UiOptionButton
@@ -127,7 +128,7 @@ export function MoveToProjectDialog({ documentName, projects, checkProjectName, 
             className="w-full gap-2"
             onClick={() => setSelected('new')}
           >
-            <FolderPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <FolderPlus className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} aria-hidden="true" />
             <span className="min-w-0 truncate">{t('documentLibrary.move.newProject')}</span>
           </UiOptionButton>
         </div>

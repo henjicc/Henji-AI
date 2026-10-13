@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { History, Image, Redo2, Undo2 } from 'lucide-react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
@@ -29,7 +30,7 @@ const HistoryThumbnail = memo(function HistoryThumbnail({ thumbnails, row, gener
     return () => abort.abort()
   }, [generation, row.key, row.position, thumbnails])
   return <span className="flex h-8 w-10 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-raised">
-    {url ? <img className="h-full w-full object-contain" src={resolveImageDisplayUrl(url)} alt="" /> : <Image className="h-4 w-4 text-text3" aria-hidden="true" />}
+    {url ? <img className="h-full w-full object-contain" src={resolveImageDisplayUrl(url)} alt="" /> : <Image className={`${UI_ICON_SIZE_CLASS.md} text-text3`} aria-hidden="true" />}
   </span>
 })
 
@@ -66,7 +67,7 @@ const HistoryList = memo(function HistoryList({ port, thumbnails, disabled, onJu
     }
     return page
   }, [port, view.generation])
-  if (view.total === 0) return <UiEmpty size="sm" icon={<History className="h-5 w-5" />} title={t('imageEditor.v3.history.empty', { defaultValue: '还没有编辑记录' })} />
+  if (view.total === 0) return <UiEmpty size="sm" icon={<History className={`${UI_ICON_SIZE_CLASS.lg}`} />} title={t('imageEditor.v3.history.empty', { defaultValue: '还没有编辑记录' })} />
   return <Virtuoso ref={list} className="min-h-0 flex-1" totalCount={view.total + 1} initialTopMostItemIndex={view.position}
     computeItemKey={index => `${view.generation}:${index}`}
     itemContent={index => <HistoryRow index={index} pageAt={pageAt} thumbnails={thumbnails} view={view} disabled={disabled} onJump={onJump} />} />
@@ -136,10 +137,10 @@ export function ImageEditorHistoryPanelV3({ controller }: ImageEditorPanelContex
   if (!port) return <UiEmpty size="sm" title={t('imageEditor.v3.history.unavailable', { defaultValue: '当前内容没有可恢复的历史' })} />
   return <div data-image-history-panel className="flex h-full min-h-0 flex-col">
     <div className="flex shrink-0 items-center gap-1 px-2 py-1">
-      <UiIconButton size="md" aria-label={t('imageEditor.v3.history.undo', { defaultValue: '撤销' })} disabled={!controller.canUndo || Boolean(progress)}
-        onClick={() => { void jump(port.getHistoryView().position - 1) }}><Undo2 className="h-4 w-4" /></UiIconButton>
-      <UiIconButton size="md" aria-label={t('imageEditor.v3.history.redo', { defaultValue: '重做' })} disabled={!controller.canRedo || Boolean(progress)}
-        onClick={() => { void jump(port.getHistoryView().position + 1) }}><Redo2 className="h-4 w-4" /></UiIconButton>
+      <UiIconButton size="sm" aria-label={t('imageEditor.v3.history.undo', { defaultValue: '撤销' })} disabled={!controller.canUndo || Boolean(progress)}
+        onClick={() => { void jump(port.getHistoryView().position - 1) }}><Undo2  /></UiIconButton>
+      <UiIconButton size="sm" aria-label={t('imageEditor.v3.history.redo', { defaultValue: '重做' })} disabled={!controller.canRedo || Boolean(progress)}
+        onClick={() => { void jump(port.getHistoryView().position + 1) }}><Redo2  /></UiIconButton>
       <UiButton size="sm" className="ml-auto" disabled={Boolean(progress)} onClick={() => { const view = port.getHistoryView(); void jump(view.total) }}>
         {t('imageEditor.v3.history.latest', { defaultValue: '回到最新' })}
       </UiButton>

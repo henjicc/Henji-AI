@@ -180,6 +180,8 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 - `UiModal scope="container"` 用于常驻缩略预览，不接管焦点/模态；正式业务默认 viewport 行为不变。TooltipContent 与 ContextMenu 常开，保证浮层进入截图。
 - 主题预览从现有引擎推导并写临时 CSS 变量、发布令牌；退出恢复原值，不调用会写首帧缓存的 `applyRuntimeTheme`。缩放仅改变样张展示；界面圆角与玻璃也是临时预览。
 
+尺寸阶梯读取真实枚举：通用 sm/md/lg 同行包含按钮、图标按钮、字段、导航、分段、开关和 `UiReadout`；图标按钮另展示 2xs/xs/xl。分段使用独立中性 `segmentSelected`，四预设三对比档测试校验静息/悬停差异与文字对比度。D/S6 的纯静态门禁不能代替任务 5.2 的实际外框与中心线审计。
+
 ### 截图配置与目视范围
 
 `scripts/ui-review/ui-gallery.json` 按目录逐区进入，每区先截顶部，再以 360 DIP 滚动并截中段，最后截底部；不再把首屏当成整页。当前有 32 个分区、每个矩阵变体 210 次 capture（允许重叠，用于排除漏截）。新增栏目必须补对应 click/capture/scroll 步骤，覆盖测试会提醒；栏目增高后需核对中段预算，最后一张 bottom 不代表中间已完整覆盖。

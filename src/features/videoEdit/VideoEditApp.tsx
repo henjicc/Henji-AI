@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationText } from '@/i18n/notifications'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
@@ -71,8 +72,8 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
   return <UiToolbar variant="command" trailing={<>
     {beatTask && <UiButton disabled={beatTask.controller.signal.aborted} onClick={() => cancelVideoEditBeatAnalysis(projectId)}>取消分析 {Math.round(beatTask.progress * 100)}%</UiButton>}
     {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence!.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence!.fps)}</span>}
-    <UiIconButton aria-label="撤销" title={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2 size={16} /></UiIconButton>
-    <UiIconButton aria-label="重做" title={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2 size={16} /></UiIconButton>
+    <UiIconButton aria-label="撤销" title={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2  /></UiIconButton>
+    <UiIconButton aria-label="重做" title={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2  /></UiIconButton>
     <VideoEditLayoutMenu api={api} />
     <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
     {task?.state === 'completed' && task.output && <UiButton disabled={collecting} onClick={() => run(async () => {
@@ -83,21 +84,21 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
       } finally { setCollecting(false) }
     })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
     {task?.state === 'running' && <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton>}
-    <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download size={15} />导出</UiButton>
+    <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download  />导出</UiButton>
   </>}>
-    <UiIconButton size="lg" aria-label={t('videoEditProject.back')} title={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft size={18} /></UiIconButton>
+    <UiIconButton size="md" aria-label={t('videoEditProject.back')} title={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft  /></UiIconButton>
     <PanelTrigger panelWidth={220} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(async () => {
         const result = await collectVideoEditMedia(projectId)
         const files = result.missing ? t('videoEditProject.collectMissing', { count: result.missing }) : result.copiedFiles ? t('videoEditProject.collectDone', { count: result.copiedFiles }) : result.copiedDocuments ? '' : t('videoEditProject.collectNone')
         onNotice([files, result.copiedDocuments ? t('videoEditProject.collectDocuments', { count: result.copiedDocuments }) : ''].filter(Boolean).join(' '))
-      })}><FolderInput size={14} />{t('videoEditProject.collect')}</UiOptionButton>
-      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(() => getDocumentOperations().revealDocument(instance.session.target))}><FolderOpen size={14} />{t('videoEditProject.revealProject')}</UiOptionButton>
-      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={14} />{t('videoEditProject.shortcuts')}</UiOptionButton>
+      })}><FolderInput size={UI_ICON_SIZE.sm} />{t('videoEditProject.collect')}</UiOptionButton>
+      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(() => getDocumentOperations().revealDocument(instance.session.target))}><FolderOpen size={UI_ICON_SIZE.sm} />{t('videoEditProject.revealProject')}</UiOptionButton>
+      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={UI_ICON_SIZE.sm} />{t('videoEditProject.shortcuts')}</UiOptionButton>
       {others.map(item => <UiOptionButton key={item.document.id} variant="menu" size="sm" className="min-w-0" onClick={() => focusVideoEdit(item.document.id)}><span className="truncate" data-observation-sensitive>{t('videoEditProject.switchTo', { name: item.document.name })}</span></UiOptionButton>)}
     </div>}>
       {({ open, togglePanel }) => <UiButton size="sm" className="min-w-0 max-w-56" aria-label={t('videoEditProject.menu', { name: instance.document.name })} aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
-        <span className="truncate" data-observation-sensitive>{instance.document.name}</span><ChevronDown size={14} className="shrink-0 text-text3" />
+        <span className="truncate" data-observation-sensitive>{instance.document.name}</span><ChevronDown  className="shrink-0 text-text3" />
       </UiButton>}
     </PanelTrigger>
     {sequence && <span className="shrink-0 truncate text-xs tabular-nums text-text3">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))} fps</span>}

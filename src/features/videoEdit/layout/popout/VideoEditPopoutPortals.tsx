@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { SquareArrowDownLeft, X } from 'lucide-react'
@@ -33,7 +34,7 @@ function PopoutTitleBar({ entry, onCollapsedChange }: { entry: VideoEditPopoutEn
     }}
     onDoubleClick={() => entry.popout.toggleMaximized()}
     actions={<>
-      <UiIconButton size="sm" title={multiple ? '全部贴回主窗口' : '贴回主窗口'} aria-label="贴回主窗口" onClick={() => dockVideoEditPopoutWindow(entry.key)}><SquareArrowDownLeft size={14} /></UiIconButton>
+      <UiIconButton size="xs" title={multiple ? '全部贴回主窗口' : '贴回主窗口'} aria-label="贴回主窗口" onClick={() => dockVideoEditPopoutWindow(entry.key)}><SquareArrowDownLeft  /></UiIconButton>
       <UiWindowControl platform={MAC ? 'mac' : 'windows'} action="close" title={`关闭${label}`} aria-label={`关闭${label}`} onClick={() => closeVideoEditPopoutWindow(entry.key)} />
     </>}>
     <div className="flex h-full min-w-0 items-center gap-0.5 overflow-hidden" role="tablist" aria-label="浮动窗口中的面板">
@@ -44,8 +45,8 @@ function PopoutTitleBar({ entry, onCollapsedChange }: { entry: VideoEditPopoutEn
           if (!multiple) return
           event.preventDefault()
           menu.showMenu(event, [
-            { id: 'dock', label: '贴回主窗口', icon: <SquareArrowDownLeft size={16} />, onClick: () => dockVideoEditPopout(id) },
-            { id: 'close', label: '关闭面板', icon: <X size={16} />, onClick: () => closeVideoEditPopout(id) },
+            { id: 'dock', label: '贴回主窗口', icon: <SquareArrowDownLeft size={UI_ICON_SIZE.md} />, onClick: () => dockVideoEditPopout(id) },
+            { id: 'close', label: '关闭面板', icon: <X size={UI_ICON_SIZE.md} />, onClick: () => closeVideoEditPopout(id) },
           ])
         }}>{titleOf(id)}</UiChipButton>)}
     </div>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useGenerationLifecycleContext } from '@/features/generation/application/generationLifecycle'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toDisplaySrc } from '@/platform/desktopApi'
@@ -147,7 +148,7 @@ const GenerationWorkspace: React.FC = () => {
         id: 'copy-image',
         label: t('common:actions.copy'),
         icon: (
-          <Copy className="w-4 h-4" />
+          <Copy className={`${UI_ICON_SIZE_CLASS.md}`} />
         ),
         onClick: async () => copyImageToClipboard(filePath),
         disabled: !filePath,
@@ -156,7 +157,7 @@ const GenerationWorkspace: React.FC = () => {
         id: 'download-image',
         label: t('common:actions.download'),
         icon: (
-          <Download className="w-4 h-4" />
+          <Download className={`${UI_ICON_SIZE_CLASS.md}`} />
         ),
         onClick: async () => {
           if (filePath) await download(filePath, false)

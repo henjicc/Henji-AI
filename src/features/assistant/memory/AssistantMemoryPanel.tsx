@@ -104,7 +104,7 @@ export function AssistantMemoryPanel(): JSX.Element {
       onClick={() => void refresh()}
       disabled={loading}
     >
-      <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'motion-safe:animate-spin' : ''}`} />
+      <RefreshCw className={`${loading ? 'motion-safe:animate-spin' : ''}`} />
     </UiIconButton>
   )
 
@@ -167,7 +167,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                         })}
                         disabled={busyId !== null}
                       >
-                        <X className="mr-1 h-3.5 w-3.5" />拒绝
+                        <X className={`mr-1`} />拒绝
                       </UiButton>
                       <UiButton
                         type="button"
@@ -178,7 +178,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                         })}
                         disabled={busyId !== null}
                       >
-                        <Check className="mr-1 h-3.5 w-3.5" />保存
+                        <Check className={`mr-1`} />保存
                       </UiButton>
                     </div>
                   </article>
@@ -227,7 +227,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                             })}
                             disabled={!draft.trim() || busyId !== null}
                           >
-                            <Save className="h-3.5 w-3.5" />
+                            <Save  />
                           </UiIconButton>
                         ) : (
                           <UiIconButton
@@ -236,7 +236,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                             aria-label="编辑记忆"
                             onClick={() => beginEdit(memory)}
                           >
-                            <Edit3 className="h-3.5 w-3.5" />
+                            <Edit3  />
                           </UiIconButton>
                         )}
                         <UiIconButton tone="danger"
@@ -248,7 +248,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                           })}
                           disabled={busyId !== null}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2  />
                         </UiIconButton>
                       </div>
                     </div>
@@ -269,7 +269,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                   className="w-full"
                   disabled={busyId !== null}
                 >
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  <Trash2 className={`mr-1.5`} />
                   {clearArmed ? '再次点击确认清空全部记忆' : '清空全部记忆'}
                 </UiButton>
               </div>

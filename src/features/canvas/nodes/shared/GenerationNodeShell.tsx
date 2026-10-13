@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Sparkles } from 'lucide-react';
@@ -401,7 +402,7 @@ export const GenerationNodeShell = memo(({
     >
       <NodeHeader
         className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
-        icon={icon ?? <Sparkles className="h-4 w-4" />}
+        icon={icon ?? <Sparkles className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -415,7 +416,7 @@ export const GenerationNodeShell = memo(({
         )}
       />
 
-      <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
+      <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className={`${UI_ICON_SIZE_CLASS.xl}`} />} />
 
       {resolvedLayoutMode === 'workbench' ? (
         <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-gap/45"

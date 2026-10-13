@@ -53,7 +53,7 @@ function CollectCodeAsset({ editor, onError }: { editor: VideoEditCodeEditorStat
     finally { if (pending.current === controller) { pending.current = undefined; setBusy(false) } }
   }
   const AssetIcon = ICON_ASSET_LIBRARY
-  return <UiButton variant="secondary" disabled={busy} onClick={() => { void collect() }}><AssetIcon className="h-3.5 w-3.5" />{busy ? '正在加入资产库' : '代码素材加入资产库'}</UiButton>
+  return <UiButton variant="secondary" disabled={busy} onClick={() => { void collect() }}><AssetIcon  />{busy ? '正在加入资产库' : '代码素材加入资产库'}</UiButton>
 }
 
 export function CodeParameterPanel({ projectId, sequenceId, clipId, effectId, onError }: { projectId: string; sequenceId: string; clipId: string; effectId?: string; onError: (reason: unknown) => void }): React.ReactElement {

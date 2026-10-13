@@ -86,21 +86,21 @@ const LocalModelActions: React.FC<{ model: LocalModelInfo; view: LocalModelsView
         <>
           <span className={UI_TEXT_META_CLASS}>{t('sections.localModels.status.ready')}</span>
           <UiIconButton
-            size="sm"
+            size="xs"
             title={t('sections.localModels.openFolder')}
             aria-label={t('sections.localModels.openFolder')}
             onClick={() => view.openFolder(model.id)}
           >
-            <FolderOpen className="h-4 w-4" />
+            <FolderOpen  />
           </UiIconButton>
           <UiIconButton
-            size="sm"
+            size="xs"
             tone="danger"
             title={t('sections.localModels.remove', { name: title })}
             aria-label={t('sections.localModels.remove', { name: title })}
             onClick={() => view.remove(model.id)}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2  />
           </UiIconButton>
         </>
       )

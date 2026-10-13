@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 
@@ -37,7 +38,7 @@ export const UpscaleGenerationNode = memo(({
       selected={selected}
       width={width}
       height={height}
-      icon={<UpscaleIcon className="h-4 w-4" />}
+      icon={<UpscaleIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
       capabilityId={CANVAS_IMAGE_CAPABILITY_IDS.upscale}
       promptPlaceholderKey="node.upscaleGeneration.promptPlaceholder"
       promptRequiredKey="node.upscaleGeneration.promptRequired"

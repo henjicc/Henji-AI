@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { createLogger } from '@/core/logging'
 import { resolveMediaFileKind } from '@/features/canvas/canvasUtils'
@@ -349,7 +350,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       {isDragOver ? <div aria-hidden="true" className={`${NODE_DROP_TARGET_OVERLAY_CLASS} z-raised`} /> : null}
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<ImageUploadIcon className="h-4 w-4" />}
+        icon={<ImageUploadIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -372,7 +373,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
           className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap"
         >
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text2">
-            <ImageUploadIcon className="h-7 w-7 text-text3" />
+            <ImageUploadIcon className={`${UI_ICON_SIZE_CLASS.xl} text-text3`} />
             <span className="px-3 text-center text-xs leading-6">{t('node.upload.hint')}</span>
           </div>
         </label>

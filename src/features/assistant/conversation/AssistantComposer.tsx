@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import { ArrowUp, AudioLines, LoaderCircle, Paperclip, Square, X } from 'lucide-react'
 
@@ -180,18 +181,18 @@ export function AssistantComposer({
                   <video src={item.previewSrc} aria-label={item.attachment.displayName} className="h-14 w-full rounded-md bg-media object-cover" muted />
                 ) : (
                   <div className="flex h-14 w-full items-center justify-center rounded-md bg-window text-text2" aria-label={item.attachment.displayName}>
-                    <AudioLines aria-hidden="true" className="h-5 w-5" />
+                    <AudioLines aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg}`} />
                   </div>
                 )}
                 <div className={`truncate pt-1 ${UI_TEXT_META_CLASS}`} title={item.attachment.displayName}>{item.attachment.displayName}</div>
-                <UiIconButton tone="media" size="sm"
+                <UiIconButton tone="media" size="xs"
                   type="button"
                   aria-label={`移除 ${item.attachment.displayName}`}
                   title={`移除 ${item.attachment.displayName}`}
                   className="absolute right-1 top-1"
                   disabled={attachmentsDisabled || importing}
                   onClick={() => onAttachmentsChange(attachments.filter(entry => entry.attachment.mediaRef !== item.attachment.mediaRef))}
-                ><X className="h-3.5 w-3.5" /></UiIconButton>
+                ><X  /></UiIconButton>
               </div>
             ))}
           </div>
@@ -228,12 +229,12 @@ export function AssistantComposer({
               title={attachmentLabel}
               disabled={attachmentsDisabled || importing || submitting}
               onClick={() => inputRef.current?.click()}
-            ><Paperclip className="h-4 w-4" /></UiIconButton> : null}
+            ><Paperclip  /></UiIconButton> : null}
             {controls}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {busy && onCancel ? <UiButton size="sm" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}>
-              <Square aria-hidden="true" className="mr-1 h-3 w-3" />停止
+              <Square aria-hidden="true" className={`mr-1`} />停止
             </UiButton> : null}
             {(!busy || !onCancel || sendLabel) ? <UiIconButton
               type="button"
@@ -243,7 +244,7 @@ export function AssistantComposer({
               aria-label={sendTitle}
               title={sendTitle}
             >
-              {importing || submitting ? <LoaderCircle aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" /> : <ArrowUp aria-hidden="true" className="h-4 w-4" />}
+              {importing || submitting ? <LoaderCircle aria-hidden="true" className={`motion-safe:animate-spin`} /> : <ArrowUp aria-hidden="true"  />}
             </UiIconButton> : null}
           </div>
         </div>

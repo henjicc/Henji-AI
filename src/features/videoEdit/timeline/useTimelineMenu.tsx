@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { videoEditMulticamSource } from '@/core/videoEdit/multicam'
 import { switchVideoEditMulticam, autoSwitchVideoEditMulticam } from '../application/videoEditMulticam'
 import { Crop, Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2, Gauge } from 'lucide-react'
@@ -47,29 +48,29 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       const dividers = new Set<VideoEditCommandId>(['locate_effects', 'paste', 'split_tracks', 'ripple_delete', 'ungroup', 'separate_audio'])
       const items: MenuItem[] = commands.map(id => {
         const presentation = timelineCommandPresentation(context, id, shortcuts); const Icon = actionIcons[id]
-        return { id, label: presentation.label, icon: <Icon size={16} />, disabled: !presentation.enabled, divider: dividers.has(id), onClick: () => executeVideoEditCommand(context, id).catch(onError) }
+        return { id, label: presentation.label, icon: <Icon size={UI_ICON_SIZE.md} />, disabled: !presentation.enabled, divider: dividers.has(id), onClick: () => executeVideoEditCommand(context, id).catch(onError) }
       })
       // Premiere's "Audio Channels" on a sequence clip: reassign the source channels of the clicked clip (task 2.6).
       const clip = clipId ? sequence.clips.find(value => value.id === clipId) : undefined
-      if (clip && onNest) items.push({ id: 'nest_sequence', label: '嵌套…', icon: <Group size={16} />, disabled: sequence.clips.some(clip => ids.includes(clip.id) && sequence.tracks.find(track => track.index === clip.track)?.locked), onClick: () => onNest({ projectId: instance.document.id, sequenceId: sequence.id, clipIds: ids }) })
+      if (clip && onNest) items.push({ id: 'nest_sequence', label: '嵌套…', icon: <Group size={UI_ICON_SIZE.md} />, disabled: sequence.clips.some(clip => ids.includes(clip.id) && sequence.tracks.find(track => track.index === clip.track)?.locked), onClick: () => onNest({ projectId: instance.document.id, sequenceId: sequence.id, clipIds: ids }) })
       const multicam = clip && videoEditMulticamSource(instance.document, clip)
       if (clip && multicam?.multicam) {
         const target = { projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }
-        for (const [index, camera] of multicam.multicam.cameras.entries()) items.push({ id: `camera_${camera.id}`, label: `机位 ${index + 1} · ${camera.name}`, icon: <Play size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { try { switchVideoEditMulticam(target, camera.id) } catch (error) { onError(error) } } })
-        items.push({ id: 'auto_multicam', label: '建议机位切换', icon: <Play size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void autoSwitchVideoEditMulticam(target).catch(onError) } })
+        for (const [index, camera] of multicam.multicam.cameras.entries()) items.push({ id: `camera_${camera.id}`, label: `机位 ${index + 1} · ${camera.name}`, icon: <Play size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { try { switchVideoEditMulticam(target, camera.id) } catch (error) { onError(error) } } })
+        items.push({ id: 'auto_multicam', label: '建议机位切换', icon: <Play size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void autoSwitchVideoEditMulticam(target).catch(onError) } })
       }
       const media = clip && videoEditClipMedia(instance.document, clip)
-      if (clip?.kind === 'audio' && media) items.push({ id: 'analyze_beats', label: '分析节拍', icon: <AudioLines size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void analyzeVideoEditBeats({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }).catch(error => { if (!(error instanceof DOMException && error.name === 'AbortError')) onError(error) }) } })
-      if (clip && clip.kind !== 'adjustment' && clip.kind !== 'sequence') items.push({ id: 'send_canvas', label: '发送片段到画布…', icon: <ICON_WORKSPACE_CANVAS size={16} />, onClick: () => setCanvasSend({ projectId: instance.document.id, sequenceId: sequence.id, source: { kind: 'clip', clipId: clip.id } }) })
-      if (clip?.kind === 'video' && clip.sourceComponent !== 'audio' && media?.kind === 'video' && onReframe) items.push({ id: 'auto_reframe', label: '自动重构…', icon: <Crop size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onReframe({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
-      if (clip?.kind === 'video' && media?.kind === 'video' && onScenes) items.push({ id: 'scene_detection', label: '场景编辑检测…', icon: <Scissors size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onScenes({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
+      if (clip?.kind === 'audio' && media) items.push({ id: 'analyze_beats', label: '分析节拍', icon: <AudioLines size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void analyzeVideoEditBeats({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }).catch(error => { if (!(error instanceof DOMException && error.name === 'AbortError')) onError(error) }) } })
+      if (clip && clip.kind !== 'adjustment' && clip.kind !== 'sequence') items.push({ id: 'send_canvas', label: '发送片段到画布…', icon: <ICON_WORKSPACE_CANVAS size={UI_ICON_SIZE.md} />, onClick: () => setCanvasSend({ projectId: instance.document.id, sequenceId: sequence.id, source: { kind: 'clip', clipId: clip.id } }) })
+      if (clip?.kind === 'video' && clip.sourceComponent !== 'audio' && media?.kind === 'video' && onReframe) items.push({ id: 'auto_reframe', label: '自动重构…', icon: <Crop size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onReframe({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
+      if (clip?.kind === 'video' && media?.kind === 'video' && onScenes) items.push({ id: 'scene_detection', label: '场景编辑检测…', icon: <Scissors size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onScenes({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
       if (clip && media && onAudioChannels && (clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) {
         const locked = sequence.tracks.find(track => track.index === clip.track)?.locked === true
-        items.push({ id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: locked, onClick: () => onAudioChannels({ kind: 'clip', sequenceId: sequence.id, clipIds: [clip.id], mediaId: media.id, ...(clip.audioMapping ? { mapping: clip.audioMapping } : {}) }) })
+        items.push({ id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={UI_ICON_SIZE.md} />, disabled: locked, onClick: () => onAudioChannels({ kind: 'clip', sequenceId: sequence.id, clipIds: [clip.id], mediaId: media.id, ...(clip.audioMapping ? { mapping: clip.audioMapping } : {}) }) })
       }
       // 回到来源继续编辑（4.1）：片段记着来源时打开来源文档并定位，或打开生成记录
       if (inPlace) items.unshift(...inPlace.items({ ...(clipId ? { clipId } : {}), ...(trackId ? { trackId } : {}), frame: inPlace.frameAt(event.clientX) }))
-      if (clip?.creativeSource && onOpenSource) items.unshift({ id: 'open_source', label: '回到来源继续编辑', icon: <Undo2 size={16} />, divider: true, onClick: () => onOpenSource(clip.id) })
+      if (clip?.creativeSource && onOpenSource) items.unshift({ id: 'open_source', label: '回到来源继续编辑', icon: <Undo2 size={UI_ICON_SIZE.md} />, divider: true, onClick: () => onOpenSource(clip.id) })
       menu.showMenu(event, items)
     } catch (error) { onError(error) }
   }

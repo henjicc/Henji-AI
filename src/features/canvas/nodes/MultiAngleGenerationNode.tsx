@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useMemo } from 'react';
 import { type NodeProps } from '@xyflow/react';
 import { Camera } from 'lucide-react';
@@ -92,7 +93,7 @@ export const MultiAngleGenerationNode = memo(({
     <ToolWorkbenchNodeFrame
       nodeId={id}
       title={data.displayName ?? t('node.multiAngleGeneration.title')}
-      icon={<Camera className="h-4 w-4" />}
+      icon={<Camera className={`${UI_ICON_SIZE_CLASS.md}`} />}
       selected={selected}
       width={width}
       height={height}

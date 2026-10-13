@@ -466,7 +466,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-3">
             {/* 添加素材始终占住行首：不用参考素材的模型（语音、部分文生模型）显示为禁用，
                 模型选择与参数不随模型左右跳动（任务 5.3） */}
-            <UiIconButton size="lg"
+            <UiIconButton size="md"
               type="button"
               disabled={!shouldShowUpload || !canAddReference}
               onClick={() => uploaderRef.current?.openFilePicker()}
@@ -475,14 +475,14 @@ const InputArea: React.FC<InputAreaProps> = ({
                 : (needsVideoUpload ? uploadHint : t('inputArea.button.addReference'))}
               aria-label={t('inputArea.button.addReference')}
             >
-              <Plus className="h-[18px] w-[18px]" />
+              <Plus  />
             </UiIconButton>
             {footerStart}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {footerEnd}
             {/* 生成按钮：这块输入卡片唯一的主动作 */}
-            <UiIconButton tone="accent" size="lg"
+            <UiIconButton tone="accent" size="md"
               type="button"
               data-onboarding-target="generate"
               onClick={onGenerate}
@@ -490,11 +490,11 @@ const InputArea: React.FC<InputAreaProps> = ({
               title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
             >
               {isLoading ? (
-                <LoaderCircle className="h-[18px] w-[18px] animate-spin" />
+                <LoaderCircle className={`animate-spin`} />
               ) : isGenerating ? (
-                <Plus className="h-[18px] w-[18px]" />
+                <Plus  />
               ) : (
-                <ArrowUp className="h-[18px] w-[18px]" />
+                <ArrowUp  />
               )}
             </UiIconButton>
           </div>

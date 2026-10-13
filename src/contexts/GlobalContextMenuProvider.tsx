@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 /* eslint-disable react-refresh/only-export-components */
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useState, useCallback } from 'react'
@@ -206,7 +207,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         visible={menuVisible}
         position={menuPosition}
         onClose={hideMenu}
-        items={[{ id: 'paste', label: t('actions.paste'), icon: <Clipboard className="h-4 w-4" />, onClick: handlePaste }]}
+        items={[{ id: 'paste', label: t('actions.paste'), icon: <Clipboard className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: handlePaste }]}
       />
     </>
   )

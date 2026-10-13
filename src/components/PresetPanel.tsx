@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect, useCallback } from 'react'
 import { Preset, PresetSaveMode } from '../types/preset'
@@ -207,7 +208,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.prompt.title')}
                                 >
-                                    <Type aria-hidden="true" className="h-4 w-4 text-text2" />
+                                    <Type aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
                                     <span>{t('ui:presets.saveMode.prompt.label')}</span>
                                 </UiOptionButton>
                                 <UiOptionButton
@@ -219,7 +220,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.promptImage.title')}
                                 >
-                                    <Images aria-hidden="true" className="h-4 w-4 text-text2" />
+                                    <Images aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
                                     <span>{t('ui:presets.saveMode.promptImage.label')}</span>
                                 </UiOptionButton>
                                 <UiOptionButton
@@ -231,7 +232,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.full.title')}
                                 >
-                                    <SlidersHorizontal aria-hidden="true" className="h-4 w-4 text-text2" />
+                                    <SlidersHorizontal aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
                                     <span>{t('ui:presets.saveMode.full.label')}</span>
                                 </UiOptionButton>
                             </div>
@@ -260,9 +261,9 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2 flex-1 min-w-0">
                                                 {/* 模式图标 */}
-                                                {preset.saveMode === 'prompt' && <Type aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-text3" />}
-                                                {preset.saveMode === 'prompt-image' && <Images aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-text3" />}
-                                                {preset.saveMode === 'full' && <SlidersHorizontal aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-text3" />}
+                                                {preset.saveMode === 'prompt' && <Type aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text3`} />}
+                                                {preset.saveMode === 'prompt-image' && <Images aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text3`} />}
+                                                {preset.saveMode === 'full' && <SlidersHorizontal aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text3`} />}
                                                 <span className="text-sm font-medium truncate">{preset.name}</span>
                                             </div>
                                             <div className="flex items-center gap-2 flex-shrink-0">
@@ -320,7 +321,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                             className={`transition-opacity duration-180 group-hover:opacity-100 focus-visible:opacity-100 ${open ? 'opacity-100' : 'opacity-0'}`}
                                                             title={t('ui:presets.deleteTitle')}
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <Trash2  />
                                                         </UiIconButton>
                                                     )}
                                                 </PanelTrigger>

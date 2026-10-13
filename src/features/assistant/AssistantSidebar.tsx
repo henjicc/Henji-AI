@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { AssistantMemoryPanel } from './memory/AssistantMemoryPanel'
 import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
@@ -143,7 +144,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 title="新建对话"
                 aria-label="新建对话"
               >
-                <MessageSquarePlus className="h-4 w-4" />
+                <MessageSquarePlus  />
               </UiIconButton>
               <UiIconButton
                 type="button"
@@ -154,7 +155,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 title={contentView === 'history' ? '返回当前对话' : '对话历史'}
                 aria-label={contentView === 'history' ? '返回当前对话' : '对话历史'}
               >
-                <History className="h-4 w-4" />
+                <History  />
               </UiIconButton>
               <UiIconButton
                 type="button"
@@ -163,7 +164,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 title={contentView === 'memory' ? '返回当前对话' : '助手记忆'}
                 aria-label="助手记忆"
               >
-                <BrainCircuit className="h-4 w-4" />
+                <BrainCircuit  />
               </UiIconButton>
               {/* 停靠态不放关闭：它正好落在窗口关闭按钮的正下方，两个 X 叠在一条竖线上很容易误点。
                   停靠时改用标题栏的助手按钮或 Ctrl+Shift+A 收起；悬浮窗没有可依的边，仍需自带关闭。
@@ -176,7 +177,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                   aria-label="收起智能助手"
                   className="ml-1"
                 >
-                  <X className="h-4 w-4" />
+                  <X  />
                 </UiIconButton>
               ) : null}
             </div>
@@ -189,16 +190,16 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             className="flex min-w-0 items-center gap-1.5 rounded-control px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
             onKeyDown={handleHeaderKeyDown}
           >
-            <Sparkles aria-hidden="true" className="h-4 w-4 shrink-0 text-text2" />
+            <Sparkles aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text2`} />
             <div className={`min-w-0 truncate ${UI_TEXT_PANEL_TITLE_CLASS}`}>{contentViewTitles[contentView]}</div>
           </div>
           <GripHorizontal
             aria-hidden="true"
-            className={`h-4 w-4 shrink-0 transition-opacity duration-120 ${
-              interaction.dragging
-                ? `${UI_COLOR_ACCENT_TEXT_CLASS} opacity-100`
-                : 'text-text3 opacity-0 group-hover:opacity-100'
-            }`}
+            className={`${UI_ICON_SIZE_CLASS.md} shrink-0 transition-opacity duration-120 ${
+ interaction.dragging
+ ? `${UI_COLOR_ACCENT_TEXT_CLASS} opacity-100`
+ : 'text-text3 opacity-0 group-hover:opacity-100'
+ }`}
           />
         </UiToolbar>
         {contentView === 'memory' ? <AssistantMemoryPanel /> : null}

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 
@@ -16,7 +17,7 @@ export function AudioEditDisclosure({ title, value, children }: {
         <span>{title}</span>
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-text3">
           {value !== undefined ? <span className="truncate">{value}</span> : null}
-          <ChevronRight size={14} aria-hidden="true" className="shrink-0 transition-transform duration-120 group-open/disclosure:rotate-90" />
+          <ChevronRight size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 transition-transform duration-120 group-open/disclosure:rotate-90" />
         </span>
       </summary>
       <div className="flex flex-col gap-3 pb-3 pt-1.5">{children}</div>

@@ -67,7 +67,7 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
       extras={Object.fromEntries(fields.map(field => [field.key, [disabled, field.key === 'hsl_invert' ? showMask : null, field.type === 'lut' ? [importing, names] : null]]))}
       resetDisabled={() => disabled} onReset={field => gesture(field).atomic(field.default)}
       renderControl={(field, value) => <UiGroup gap="row"><ParamField field={field} value={value} gesture={gesture(field)} disabled={disabled} resource={field.type === 'lut' ? <div className="flex flex-wrap items-center gap-1">
-        <UiButton size="sm" disabled={disabled || importing} onClick={() => { void upload(field) }}><Upload size={14} />{typeof value === 'string' && value ? names[value] ?? '更换查找表' : '导入 .cube'}</UiButton>
+        <UiButton size="sm" disabled={disabled || importing} onClick={() => { void upload(field) }}><Upload  />{typeof value === 'string' && value ? names[value] ?? '更换查找表' : '导入 .cube'}</UiButton>
         {value && <UiButton size="sm" disabled={disabled} onClick={() => gesture(field).atomic('')}>移除</UiButton>}
       </div> : undefined} />{field.key === 'hsl_invert' && <UiCheckbox checked={showMask} disabled={disabled} aria-label="查看 HSL 选区" onCheckedChange={value => {
       observing.current = value; setShowMask(value)

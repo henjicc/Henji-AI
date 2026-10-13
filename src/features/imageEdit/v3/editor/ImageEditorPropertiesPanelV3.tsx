@@ -310,7 +310,7 @@ export function ImageEditorPropertiesPanelV3({
                   if (!contentLocked) { controller.setLayerMask(selected.id, null); selectImageEditTargetV3(controller, selected.id, 'pixels') }
                 }}
               >
-                <X className="h-4 w-4" />
+                <X  />
                 {t('imageEditor.v3.properties.removeMask')}
               </UiButton>
             </>
@@ -321,7 +321,7 @@ export function ImageEditorPropertiesPanelV3({
               disabled={contentLocked}
               onClick={addMask}
             >
-              <Plus className="h-4 w-4" />
+              <Plus  />
               {t('imageEditor.v3.properties.addMask')}
             </UiButton>
           )}

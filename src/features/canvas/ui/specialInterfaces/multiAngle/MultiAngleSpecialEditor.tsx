@@ -255,11 +255,11 @@ export function MultiAngleWorkbench({
             <div className="flex items-center justify-between gap-3">
               <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.outputViews', { count: config.views.length, max: MULTI_ANGLE_MAX_VIEW_COUNT })}</h3>
               <div className="flex items-center gap-1">
-                <UiIconButton size="lg" type="button" aria-label={t('node.multiAngleEditor.removeView')} disabled={config.views.length <= 1} onClick={removeSelected}>
-                  <Trash2 className="h-4 w-4" />
+                <UiIconButton size="md" type="button" aria-label={t('node.multiAngleEditor.removeView')} disabled={config.views.length <= 1} onClick={removeSelected}>
+                  <Trash2  />
                 </UiIconButton>
-                <UiIconButton size="lg" type="button" aria-label={t('node.multiAngleEditor.addView')} disabled={config.views.length >= MULTI_ANGLE_MAX_VIEW_COUNT || !nextUnusedView(config)} onClick={addView}>
-                  <Plus className="h-4 w-4" />
+                <UiIconButton size="md" type="button" aria-label={t('node.multiAngleEditor.addView')} disabled={config.views.length >= MULTI_ANGLE_MAX_VIEW_COUNT || !nextUnusedView(config)} onClick={addView}>
+                  <Plus  />
                 </UiIconButton>
               </div>
             </div>

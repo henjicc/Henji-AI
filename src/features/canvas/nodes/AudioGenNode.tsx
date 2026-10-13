@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 
@@ -24,7 +25,7 @@ export const AudioGenNode = memo(({ id, data, selected, width, height }: AudioGe
     selected={selected}
     width={width}
     height={height}
-    icon={<AudioGenerationIcon className="h-4 w-4" />}
+    icon={<AudioGenerationIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
     promptPlaceholderKey="node.audioGen.promptPlaceholder"
     promptRequiredKey="node.audioGen.promptRequired"
 

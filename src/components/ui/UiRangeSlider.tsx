@@ -1,3 +1,4 @@
+import { UI_CONTROL_HEIGHT_CLASS } from './styleTokens'
 import { useRef } from 'react'
 import { ParameterNumber } from './ParameterNumber'
 import { clampParameter, parameterKeyStep, parameterPosition, useParameterGesture, type ParameterControlProps } from './parameterControl'
@@ -16,7 +17,7 @@ export function UiRangeSlider(props: UiRangeSliderProps) {
   const at = (event: React.PointerEvent<HTMLDivElement>) => min + parameterPosition(event).x * (max - min)
   const fraction = (next: number) => (max > min ? clampParameter((next - min) / (max - min)) : 0) * 100
   return <div className="w-full space-y-2">
-    <div className={`${UI_PARAMETER_SURFACE_CLASS} ${size === 'sm' ? 'h-control-sm' : 'h-control-md'}`} style={{ background: UI_PARAMETER_TRACK_BACKGROUND[track] }}
+    <div className={`${UI_PARAMETER_SURFACE_CLASS} ${UI_CONTROL_HEIGHT_CLASS[size]}`} style={{ background: UI_PARAMETER_TRACK_BACKGROUND[track] }}
       {...gesture.handlers} onPointerDown={event => {
         if (disabled || event.button !== 0) return
         const target = event.target as HTMLElement

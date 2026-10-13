@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -234,29 +235,29 @@ export function PanoramaViewerModal({
 
       <header className="ui-glass absolute inset-x-0 top-0 z-sticky flex h-12 items-center gap-3 border-b px-3">
         <div className="flex min-w-0 items-center gap-2 text-text1">
-          <ICON_PANORAMA className="h-4 w-4 shrink-0" />
+          <ICON_PANORAMA className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />
           <span className="truncate text-sm font-medium">{t('viewer.panorama.title')}</span>
           {dimensions ? <span className="hidden text-xs text-text2 sm:inline">{dimensions}</span> : null}
         </div>
 
         {imageList.length > 1 ? (
           <div className="flex items-center gap-1">
-            <UiIconButton size="lg" tone="media" shape="circle"
+            <UiIconButton size="md" tone="media" shape="circle"
               onClick={() => onNavigate('prev')}
               disabled={currentIndex <= 0}
               title={t('viewer.prev')}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft  />
             </UiIconButton>
             <span className="min-w-11 text-center text-xs text-text2">
               {currentIndex + 1} / {imageList.length}
             </span>
-            <UiIconButton size="lg" tone="media" shape="circle"
+            <UiIconButton size="md" tone="media" shape="circle"
               onClick={() => onNavigate('next')}
               disabled={currentIndex >= imageList.length - 1}
               title={t('viewer.next')}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight  />
             </UiIconButton>
           </div>
         ) : null}
@@ -264,31 +265,31 @@ export function PanoramaViewerModal({
         <div className="ml-auto flex items-center gap-1.5">
           {/* 球面 / 平面是单选视图模式：玻璃里的分段选择（压在画面上） */}
           <UiSegmented ariaLabel={t('viewer.panorama.spherical')} value={showFlat ? 'flat' : viewMode} onChange={setViewMode} options={[{ value: 'sphere', label: t('viewer.panorama.spherical'), disabled: isReady && !resource.isEquirectangular }, { value: 'flat', label: t('viewer.panorama.flat') }]} />
-          <UiIconButton size="lg" tone="media" shape="circle"
+          <UiIconButton size="md" tone="media" shape="circle"
             onClick={() => setResetRevision((revision) => revision + 1)}
             disabled={!renderSphere}
             title={t('viewer.reset')}
           >
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw  />
           </UiIconButton>
-          <UiIconButton size="lg" tone="media" shape="circle"
+          <UiIconButton size="md" tone="media" shape="circle"
             onClick={() => void handleDownload()}
             disabled={isDownloading}
             title={t('viewer.panorama.download')}
           >
-            <Download className="h-4 w-4" />
+            <Download  />
           </UiIconButton>
-          <UiIconButton size="lg" tone="media" shape="circle"
+          <UiIconButton size="md" tone="media" shape="circle"
             onClick={() => void handleFullscreen()}
             title={t(isFullscreen ? 'viewer.panorama.exitFullscreen' : 'viewer.panorama.fullscreen')}
           >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            {isFullscreen ? <Minimize2  /> : <Maximize2  />}
           </UiIconButton>
-          <UiIconButton size="lg" tone="media" shape="circle"
+          <UiIconButton size="md" tone="media" shape="circle"
             onClick={onClose}
             title={t('common.close')}
           >
-            <X className="h-4 w-4" />
+            <X  />
           </UiIconButton>
         </div>
       </header>

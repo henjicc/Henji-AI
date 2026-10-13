@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VideoEditAnnotationMarks } from './VideoEditAnnotationMarks'
 import { useVideoEditAnnotationRange } from './useVideoEditAnnotationRange'
 import { VideoEditReframeDialog } from '../panels/VideoEditReframeDialog'
@@ -324,7 +325,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       style={{ top: row.top - region.top + 2, height: Math.max(12, Math.min(row.height - 4, 28)), left: TIMELINE_HEADER_WIDTH + window.start * pixels, width }}>
       <div data-video-edit-transition-edge={fixed === 'in' ? undefined : 'in'} aria-hidden="true" className={`h-full w-1.5 shrink-0 ${fixed === 'in' ? '' : 'cursor-ew-resize'}`} />
       <div className={`flex min-w-0 flex-1 items-center gap-1 overflow-hidden ${fixed ? '' : 'cursor-grab'}`}>
-        {width > 28 && <Icon size={12} aria-hidden="true" className="shrink-0 text-text3" />}
+        {width > 28 && <Icon size={UI_ICON_SIZE.xs} aria-hidden="true" className="shrink-0 text-text3" />}
         {width > 56 && <span className="truncate text-2xs leading-4">{preset.name}</span>}
       </div>
       <div data-video-edit-transition-edge={fixed === 'out' ? undefined : 'out'} aria-hidden="true" className={`h-full w-1.5 shrink-0 ${fixed === 'out' ? '' : 'cursor-ew-resize'}`} />
@@ -500,7 +501,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
             <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />
             {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 菱形图形），不是按钮档位（3.5 确认保留） */}
-            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond size={10} fill="currentColor" strokeWidth={1.5} aria-hidden="true" /></UiButton>)}
+            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond  fill="currentColor"  aria-hidden="true" /></UiButton>)}
             <VideoEditTimelineInOut instance={instance} sequence={sequence} fps={fps} duration={duration} pixels={pixels} onError={onError} />
           </VideoEditTimelinePosition>
         </div>

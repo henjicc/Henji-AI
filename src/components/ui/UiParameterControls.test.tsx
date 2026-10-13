@@ -270,3 +270,10 @@ describe('随机种子', () => {
     fireEvent.click(screen.getByRole('button', { name: '种子随机生成' })); fireEvent.keyDown(screen.getByRole('spinbutton'), { key: 'Home' }); expect(props.onChange).not.toHaveBeenCalled()
   })
 })
+
+it('lg 参数控件沿用登记手柄，种子与数值输入同行等高', () => {
+  const view = render(<><UiPointPad {...callbacks()} size="lg" label="大点位" value={{ x: .5, y: .5 }} /><UiSeedInput {...callbacks()} size="lg" label="大种子" value={12} /></>)
+  expect(view.container.querySelector('circle')?.getAttribute('r')).toBe('4')
+  expect(view.getByRole('spinbutton', { name: '大种子' }).classList.contains('h-control-lg')).toBe(true)
+  expect(view.getByRole('button', { name: '大种子随机生成' }).classList.contains('h-control-lg')).toBe(true)
+})

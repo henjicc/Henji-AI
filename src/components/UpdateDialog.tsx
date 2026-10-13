@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 /**
  * 更新提示对话框：检测到新版本时显示，提供跳过此版本、稍后提醒、立即更新。
  *
@@ -150,7 +151,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           </div>
           <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${UI_TEXT_META_CLASS}`}>
             <span className={UI_TEXT_TIMECODE_CLASS}>{currentVersion}</span>
-            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 text-text3" />
+            <ArrowRight aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} text-text3`} />
             <span className={`${UI_TEXT_TIMECODE_CLASS} text-accent-text`}>{releaseInfo.version}</span>
             <span>{formatReleaseDate(releaseInfo.publishedAt, i18n.language)}</span>
           </div>

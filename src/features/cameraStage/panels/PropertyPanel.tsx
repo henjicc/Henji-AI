@@ -104,13 +104,13 @@ const PropertyPanel: React.FC = () => {
             min={row.key === 'scale' ? 0.01 : undefined}
             actions={row.key === 'scale' ? (
               <UiIconButton
-                size="sm"
+                size="xs"
                 on={scaleLocked}
                 title={scaleLocked ? '已锁定等比缩放' : '独立缩放'}
                 aria-label={scaleLocked ? '关闭等比缩放' : '开启等比缩放'}
                 onClick={() => handleScaleLockedChange(!scaleLocked)}
               >
-                {scaleLocked ? <Lock size={13} /> : <Unlock size={13} />}
+                {scaleLocked ? <Lock  /> : <Unlock  />}
               </UiIconButton>
             ) : undefined}
             onAxisChange={(axis, next) => {

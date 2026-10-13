@@ -26,7 +26,7 @@ function ClipNameHeader({ clip, onRename }: { clip: VideoEditClip; onRename: (na
     onBlur={() => { const next = draft.trim(); setDraft(null); if (cancelled.current) { cancelled.current = false; return } if (next && next !== clip.name) onRename(next) }} />
   return <div className="flex min-h-7 items-center gap-1">
     <span className="min-w-0 flex-1 truncate text-xs font-semibold text-text1" title={clip.name} data-video-edit-effects-clip-name>{clip.name}</span>
-    <UiIconButton size="xs" aria-label="重命名片段" title="重命名片段" onClick={() => setDraft(clip.name)}><Pencil size={12} /></UiIconButton>
+    <UiIconButton size="2xs" aria-label="重命名片段" title="重命名片段" onClick={() => setDraft(clip.name)}><Pencil /></UiIconButton>
   </div>
 }
 
@@ -60,7 +60,7 @@ function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { i
     {visible && <VideoEditTransitionPanel key={JSON.stringify(['transition', projectId, sequence.id])} instance={instance} sequence={sequence} clip={selected} onError={reportError} />}
     {sequence.annotations.length > 0 && <UiGroup title="标注" titleTone="compact" divided>
       {sequence.annotations.map(mark => <div key={mark.id} className="flex items-center gap-1 py-0.5"><UiInput aria-label="编辑标注文字" size="sm" className="min-w-0 flex-1" value={mark.text} onChange={event => run(() => editVideoSequence(projectId, sequence.id, draft => ({ ...draft, annotations: draft.annotations.map(item => item.id === mark.id ? { ...item, text: event.target.value } : item) })))} />
-        <UiIconButton tone="danger" aria-label="删除标注" title="删除标注" onClick={() => run(() => editVideoSequence(projectId, sequence.id, draft => ({ ...draft, annotations: draft.annotations.filter(item => item.id !== mark.id) })))}><Trash2 size={14} /></UiIconButton></div>)}
+        <UiIconButton size="sm" tone="danger" aria-label="删除标注" title="删除标注" onClick={() => run(() => editVideoSequence(projectId, sequence.id, draft => ({ ...draft, annotations: draft.annotations.filter(item => item.id !== mark.id) })))}><Trash2 /></UiIconButton></div>)}
     </UiGroup>}
   </div>
 }

@@ -383,7 +383,7 @@ export function ImageViewerModal({
               >
                 <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-on-media" />
                 <span className="pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel text-text1 shadow-panel">
-                  <GripVertical className="h-5 w-5" />
+                  <GripVertical  />
                 </span>
               </UiButton>
             )}
@@ -396,7 +396,7 @@ export function ImageViewerModal({
             title={t('common.close', '关闭')}
             aria-label={t('common.close', '关闭')}
           >
-            <X className="h-5 w-5" />
+            <X  />
           </UiIconButton>
 
           <ImageInfoPanel open={open} imageSource={resolvedInfoSource} />
@@ -428,14 +428,14 @@ export function ImageViewerModal({
                   disabled={currentIndex <= 0}
                   title={t('viewer.prev', '上一张')}
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft  />
                 </UiIconButton>
                 <UiIconButton size="xl" tone="media" shape="circle"
                   onClick={() => onNavigate('next')}
                   disabled={currentIndex >= imageList.length - 1}
                   title={t('viewer.next', '下一张')}
                 >
-                  <ChevronRight className="h-5 w-5" />
+                  <ChevronRight  />
                 </UiIconButton>
               </div>
             )}
@@ -457,7 +457,7 @@ export function ImageViewerModal({
                 title={t('viewer.reset', '重置视图')}
                 aria-label={t('viewer.reset', '重置视图')}
               >
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw  />
               </UiIconButton>
             </div>
           </div>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { GripVertical, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide-react';
 import { UiIconButton } from '@/components/ui';
@@ -101,7 +102,7 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
           style={{ touchAction: 'none' }}
         >
           <span className="h-full w-px bg-line transition-colors group-hover:bg-accent group-focus-visible:bg-accent" />
-          <GripVertical className="absolute h-4 w-4 text-text2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+          <GripVertical className={`${UI_ICON_SIZE_CLASS.md} absolute text-text2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100`} />
         </div>
         <aside
           className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-gap bg-panel"
@@ -112,22 +113,22 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
           }}
         >
           <div className="flex h-10 shrink-0 items-center justify-end gap-1 px-1">
-            <UiIconButton size="lg"
+            <UiIconButton size="md"
               type="button"
               title={collapsed ? '展开参数面板' : '折叠参数面板'}
               aria-label={collapsed ? '展开参数面板' : '折叠参数面板'}
               onClick={() => setInspectorCollapsed(!collapsed)}
             >
-              {collapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+              {collapsed ? <PanelRightOpen  /> : <PanelRightClose  />}
             </UiIconButton>
             {!collapsed && (
-              <UiIconButton size="lg"
+              <UiIconButton size="md"
                 type="button"
                 title="恢复面板默认值"
                 aria-label="恢复面板默认值"
                 onClick={resetInspector}
               >
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw  />
               </UiIconButton>
             )}
           </div>

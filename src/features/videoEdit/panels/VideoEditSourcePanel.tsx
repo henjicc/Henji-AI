@@ -103,7 +103,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       const presentation = timelineCommandPresentation(availability, id, shortcuts)
       return { id, title: title ?? presentation.title, tooltip: presentation.tooltip, Icon, enabled: presentation.enabled, hidden: media?.kind === 'image' && SOURCE_PLAYBACK_BUTTONS.has(id), onClick: () => command(id) }
     }),
-    { id: 'play_pause', title: state.playing ? '暂停源素材' : '播放源素材', tooltip: timelineCommandPresentation(availability, 'play_pause', shortcuts).tooltip, Icon: state.playing ? Pause : Play, size: 'lg', enabled: enabled('play_pause'), hidden: media?.kind !== 'video', onClick: () => command('play_pause') },
+    { id: 'play_pause', title: state.playing ? '暂停源素材' : '播放源素材', tooltip: timelineCommandPresentation(availability, 'play_pause', shortcuts).tooltip, Icon: state.playing ? Pause : Play, size: 'md', enabled: enabled('play_pause'), hidden: media?.kind !== 'video', onClick: () => command('play_pause') },
     ...(['video', 'audio', 'linked'] as const).map((component): VideoEditMonitorButtonSpec => {
       const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
       return {
@@ -150,7 +150,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
         <VideoEditMonitorButtonEditor kind="source" specs={sourceButtons} />
       </div>
       {pictured && zoom.dropdown}
-      <UiIconButton aria-label="关闭源素材" title="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X size={15} /></UiIconButton>
+      <UiIconButton aria-label="关闭源素材" title="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X /></UiIconButton>
     </div>}
     {state.error && <UiError size="sm" title={state.error} message="" />}
   </div>

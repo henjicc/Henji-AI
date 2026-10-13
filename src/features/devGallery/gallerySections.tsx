@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { notificationMessage } from '@/i18n/notifications'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { useI18n } from '@/hooks/useI18n'
@@ -35,6 +36,7 @@ import {
   UiModal,
   UiMarqueeText,
   UiNavButton,
+  UiReadout,
   UiNumberStepper,
   UiOptionButton,
   UiOverflowRow,
@@ -125,21 +127,21 @@ export function ButtonSection(): JSX.Element {
           states: ['rest', 'hover', 'active', 'focus', 'disabled', 'loading'],
           render: (state) => (
             <UiButton variant={variant} size="sm" disabled={disabledAt(state) || state === 'loading'} aria-busy={state === 'loading'}>
-              {state === 'loading' && <Loader2 className="h-4 w-4 animate-spin" />}
+              {state === 'loading' && <Loader2 className={`animate-spin`} />}
               {variant === 'link' ? '说明' : '保存'}
             </UiButton>
           ),
         }))}
-      />
+ />
       <GalleryMatrix
         rows={[
-          { label: '图标', render: (state) => <UiIconButton aria-label="加粗" disabled={disabledAt(state)}><Bold className="h-4 w-4" /></UiIconButton> },
-          { label: '开启', render: (state) => <UiIconButton aria-label="斜体" on disabled={disabledAt(state)}><Italic className="h-4 w-4" /></UiIconButton> },
-          { label: '无底', render: (state) => <UiIconButton aria-label="锁定比例" tone="bare" on disabled={disabledAt(state)}><Link className="h-4 w-4" /></UiIconButton> },
-          { label: '强调', render: (state) => <UiIconButton aria-label="生成" tone="accent" disabled={disabledAt(state)}><Sparkles className="h-4 w-4" /></UiIconButton> },
-          { label: '危险', render: (state) => <UiIconButton aria-label="删除" tone="danger" disabled={disabledAt(state)}><Trash2 className="h-4 w-4" /></UiIconButton> },
+          { label: '图标', render: (state) => <UiIconButton aria-label="加粗" disabled={disabledAt(state)}><Bold /></UiIconButton> },
+          { label: '开启', render: (state) => <UiIconButton aria-label="斜体" on disabled={disabledAt(state)}><Italic /></UiIconButton> },
+          { label: '无底', render: (state) => <UiIconButton aria-label="锁定比例" tone="bare" on disabled={disabledAt(state)}><Link /></UiIconButton> },
+          { label: '强调', render: (state) => <UiIconButton aria-label="生成" tone="accent" disabled={disabledAt(state)}><Sparkles /></UiIconButton> },
+          { label: '危险', render: (state) => <UiIconButton aria-label="删除" tone="danger" disabled={disabledAt(state)}><Trash2 /></UiIconButton> },
         ]}
-      />
+ />
       <GalleryRow label="窗口">
         <UiWindowControl action="minimize" aria-label="最小化" />
         <UiWindowControl action="maximize" aria-label="最大化" />
@@ -165,7 +167,7 @@ export function FieldSection(): JSX.Element {
           { label: '触发器', render: (state) => <UiFieldTrigger size="sm" disabled={disabledAt(state)}>16:9</UiFieldTrigger> },
           { label: '字体', render: (state) => <UiFontPicker value={font} onSelect={setFont} size="sm" disabled={disabledAt(state)} /> },
         ]}
-      />
+ />
       <GalleryRow label="数值">
         <NumberInput ariaLabel="时长" value={5} onChange={noop} min={1} max={10} size="sm" widthClassName="w-20" />
         <GalleryForce state="focus"><NumberInput ariaLabel="时长（聚焦）" value={8} onChange={noop} size="sm" widthClassName="w-20" /></GalleryForce>
@@ -226,14 +228,14 @@ export function MenuSection(): JSX.Element {
           renderPanel={() => (
             <div role="listbox" aria-label="菜单样本" className="flex flex-col">
               <UiOptionButton role="option" aria-selected variant="menu" size="sm" active className="w-full justify-between gap-6">
-                <span>16:9</span><Check aria-hidden="true" className="h-3.5 w-3.5 text-accent-text" />
+                <span>16:9</span><Check aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} text-accent-text`} />
               </UiOptionButton>
               <GalleryForce state="hover"><UiOptionButton role="option" aria-selected={false} variant="menu" size="sm" className="w-full">9:16（悬停）</UiOptionButton></GalleryForce>
               <UiOptionButton role="option" aria-selected={false} variant="menu" size="sm" className="w-full">4:3</UiOptionButton>
               <UiOptionButton role="option" aria-selected={false} variant="menu" size="sm" disabled className="w-full">1:1（禁用）</UiOptionButton>
             </div>
           )}
-        >
+ >
           {() => null}
         </PanelTrigger>
       </GalleryRow>
@@ -256,8 +258,8 @@ export function OptionSection(): JSX.Element {
         <UiOptionButton variant="grid" gridCell="tier" aria-pressed={false} disabled className="justify-center">4K</UiOptionButton>
       </GalleryRow>
       <GalleryRow label="小样">
-        <UiOptionButton variant="tile" active aria-pressed><ImageIcon className="h-4 w-4" />石墨</UiOptionButton>
-        <GalleryForce state="hover"><UiOptionButton variant="tile" aria-pressed={false}><ImageIcon className="h-4 w-4" />纸白</UiOptionButton></GalleryForce>
+        <UiOptionButton variant="tile" active aria-pressed><ImageIcon className={`${UI_ICON_SIZE_CLASS.md}`} />石墨</UiOptionButton>
+        <GalleryForce state="hover"><UiOptionButton variant="tile" aria-pressed={false}><ImageIcon className={`${UI_ICON_SIZE_CLASS.md}`} />纸白</UiOptionButton></GalleryForce>
       </GalleryRow>
       <GalleryRow label="色样">
         <UiOptionButton variant="swatch" active aria-label="蓝" aria-pressed><span className="block h-full w-full rounded-full bg-accent" /></UiOptionButton>
@@ -275,7 +277,7 @@ export function OptionSection(): JSX.Element {
             <UiOptionButton variant="cover" active={Boolean(active)} aria-pressed={Boolean(active)} className="w-16">
               <span className={`${UI_COVER_FRAME_CLASS} aspect-[16/10] w-full`}>
                 <span className="flex h-full w-full items-center justify-center">
-                  <ImageIcon className="h-4 w-4 text-text3" aria-hidden="true" />
+                  <ImageIcon className={`${UI_ICON_SIZE_CLASS.md} text-text3`} aria-hidden="true" />
                 </span>
               </span>
               <span className="truncate px-0.5 text-xs text-text1">{String(name)}</span>
@@ -297,9 +299,9 @@ export function ToggleSection(): JSX.Element {
         <GalleryForce state="focus"><UiSwitch aria-label="开（聚焦）" checked /></GalleryForce>
         <UiSwitch aria-label="禁用" checked disabled />
       </GalleryRow>
-      <GalleryRow label="双段">
-        <UiSwitch aria-label="模式" appearance="segmented" size="compact" offLabel="单张" onLabel="批量" checked={false} />
-        <UiSwitch aria-label="模式（开）" appearance="segmented" size="compact" offLabel="单张" onLabel="批量" checked />
+      <GalleryRow label="双段"><UiSwitch appearance="segmented" size="lg" checked onLabel="打开" offLabel="关闭" />
+        <UiSwitch aria-label="模式" appearance="segmented" size="sm" offLabel="单张" onLabel="批量" checked={false} />
+        <UiSwitch aria-label="模式（开）" appearance="segmented" size="sm" offLabel="单张" onLabel="批量" checked />
       </GalleryRow>
       <GalleryRow label="复选">
         <UiCheckbox aria-label="未选" checked={false} />
@@ -321,7 +323,8 @@ export function NavigationSection(): JSX.Element {
         <UiChipButton size="sm" aria-pressed={false}>静息</UiChipButton>
         <UiChipButton size="sm" aria-pressed={false} disabled>禁用</UiChipButton>
       </GalleryRow>
-      <GalleryRow label="导航">
+      <GalleryRow label="读数"><UiReadout size="sm">100%</UiReadout><UiReadout size="md">100%</UiReadout><UiReadout size="lg" tone="media">100%</UiReadout></GalleryRow>
+    <GalleryRow label="导航">
         <UiChipButton size="sm" selectionRole="navigation" active aria-current="page">生成</UiChipButton>
         <GalleryForce state="hover"><UiChipButton size="sm" selectionRole="navigation">画布</UiChipButton></GalleryForce>
         <UiChipButton size="sm" selectionRole="navigation">工具</UiChipButton>
@@ -431,8 +434,8 @@ export function ToolbarSection(): JSX.Element {
           trailing={<UiButton variant="primary" size="sm">导出</UiButton>}
           center={<UiSegmented ariaLabel="编辑模式" value={mode} onChange={setMode} options={[{ value: 'edit', label: '编辑' }, { value: 'preview', label: '预览' }]} />}
           subordinate={<span className="text-xs text-text2">从属参数带</span>}
-        >
-          <UiIconButton aria-label="添加"><Plus className="h-4 w-4" /></UiIconButton>
+ >
+          <UiIconButton aria-label="添加"><Plus /></UiIconButton>
           <span data-user-content className="w-24 text-13 text-text1"><UiMarqueeText text="很长的文件名会滚动显示.mp4" className="w-full" /></span>
         </UiToolbar>
       </UiPanel>
@@ -440,7 +443,7 @@ export function ToolbarSection(): JSX.Element {
         items={OVERFLOW_ITEMS}
         renderOverflow={(hidden) => <UiFieldTrigger size="sm" appearance="quiet">更多 {hidden.length}</UiFieldTrigger>}
         className="w-64"
-      />
+ />
       <UiRegion maxWidthClassName="max-w-full">
         <UiPageHeader title="生成记录" meta="128" description="页头：标题、数量与说明" onBack={noop} backLabel="返回" actions={<UiButton size="sm">清空</UiButton>} />
       </UiRegion>
@@ -455,7 +458,7 @@ export function StateSection(): JSX.Element {
         <UiEmpty size="xs" title="还没有供应商" description="先添加一个吧" />
         <UiLoading size="xs" message="生成中…"><ProgressBar progress={42} className="w-32" /></UiLoading>
         <UiError size="xs" message="网络连接超时" onRetry={noop} retryLabel="重试" />
-        <UiEmpty size="node" icon={<ImageIcon className="h-6 w-6" />} title="等待结果" />
+        <UiEmpty size="node" icon={<ImageIcon className={`${UI_ICON_SIZE_CLASS.xl}`} />} title="等待结果" />
       </div>
       <ProgressBar progress={64} appearance="hairline" />
     </GallerySection>
@@ -477,7 +480,7 @@ export function DialogSection(): JSX.Element {
           onClose={noop}
           closeLabel="取消"
           actions={[{ label: '删除', onClick: noop, tone: 'danger' }]}
-        />
+ />
       </div>
       <div className="relative h-12">
         <UiToast placement="container" surface="solid" tone="success" message={notificationMessage('saved')} />
@@ -510,8 +513,8 @@ export function MediaSection(): JSX.Element {
             <span className="text-xs text-text3">辅助文字</span>
           </UiPanel>
           <div className="flex items-center gap-1.5">
-            <UiIconButton tone="media" aria-label="播放"><Play className="h-4 w-4" /></UiIconButton>
-            <GalleryForce state="hover"><UiIconButton tone="media" aria-label="暂停（悬停）"><Pause className="h-4 w-4" /></UiIconButton></GalleryForce>
+            <UiIconButton tone="media" aria-label="播放"><Play /></UiIconButton>
+            <GalleryForce state="hover"><UiIconButton tone="media" aria-label="暂停（悬停）"><Pause /></UiIconButton></GalleryForce>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -569,7 +572,7 @@ export function FilterSection(): JSX.Element {
           onTimePresetChange={noop}
           onStartDateChange={noop}
           onEndDateChange={noop}
-        />
+ />
       </UiOverlayLayerProvider>
       <GalleryRow label="弹窗">
         <UiButton variant="secondary" size="sm" onClick={() => setModalOpen(true)}>打开弹窗</UiButton>
@@ -579,7 +582,7 @@ export function FilterSection(): JSX.Element {
         title="弹窗样本"
         onClose={() => setModalOpen(false)}
         footer={<><UiButton variant="secondary" onClick={() => setModalOpen(false)}>取消</UiButton><UiButton variant="primary" onClick={() => setModalOpen(false)}>确定</UiButton></>}
-      >
+ >
         <span className="text-13 text-text2">弹窗正文：标题栏、内容区与底部动作。</span>
       </UiModal>
     </GallerySection>
@@ -592,6 +595,11 @@ export function SizeLadderSection(): JSX.Element {
     {GALLERY_CONTROL_SIZES.map(size => <div key={size} data-gallery-size={size} className="flex flex-wrap items-center gap-3 border-b border-line py-4">
       <code className="w-12 text-xs text-text2">{size}</code>
       <UiButton size={size as ButtonSize} variant="secondary">按钮</UiButton>
+      <UiIconButton size={size} aria-label={`图标 ${size}`}><Plus /></UiIconButton>
+      <UiReadout size={size}>100%</UiReadout>
+      <UiNavButton size={size}>导航</UiNavButton>
+      <UiSwitch size={size} appearance="segmented" checked offLabel="关" onLabel="开" />
+      <UiSegmented size={size} ariaLabel={`同行分段 ${size}`} value="a" options={[{ value: 'a', label: '图片' }, { value: 'b', label: '视频' }]} onChange={noop} />
       <UiFieldTrigger size={size}>触发器</UiFieldTrigger>
       <Dropdown size={size} ariaLabel={`下拉 ${size}`} value="a" options={[{ value: 'a', label: '下拉' }]} onSelect={noop} />
       <UiInput size={size} aria-label={`输入 ${size}`} defaultValue="输入" className="w-24" />
@@ -604,7 +612,7 @@ export function SizeLadderSection(): JSX.Element {
       <PanelTrigger size={size} appearance="field" surface="solid" display={`面板 ${size}`} renderPanel={() => <span>面板内容</span>} />
       <UiNumberStepper size={size} increaseLabel="增加" decreaseLabel="减少" canIncrease canDecrease onStep={noop} />
     </div>)}
-    <GalleryMatrix rows={GALLERY_ICON_SIZES.map(size => ({ label: `图标 ${size}`, states: ['rest', 'hover', 'active', 'focus', 'selected', 'disabled', 'loading'], render: state => <UiIconButton size={size} on={state === 'selected'} disabled={state === 'disabled' || state === 'loading'} aria-label={`添加 ${size} ${state}`} aria-busy={state === 'loading'}>{state === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</UiIconButton> }))} />
+    <GalleryMatrix rows={GALLERY_ICON_SIZES.map(size => ({ label: `图标 ${size}`, states: ['rest', 'hover', 'active', 'focus', 'selected', 'disabled', 'loading'], render: state => <UiIconButton size={size} on={state === 'selected'} disabled={state === 'disabled' || state === 'loading'} aria-label={`添加 ${size} ${state}`} aria-busy={state === 'loading'}>{state === 'loading' ? <Loader2 className={`animate-spin`} /> : <Plus />}</UiIconButton> }))} />
     {GALLERY_SEGMENTED_SIZES.map(size => <GalleryRow key={size} label={size}><UiSegmented size={size} fullWidth ariaLabel={`分段 ${size}`} value="a" options={[{ value: 'a', label: '图片' }, { value: 'b', label: '视频' }]} onChange={noop} /></GalleryRow>)}
   </GallerySection>
 }
@@ -612,7 +620,7 @@ export function SizeLadderSection(): JSX.Element {
 export function VariantSection(): JSX.Element {
   return <GallerySection title="补充变体（正式枚举）">
     <GalleryRow label="面板"><UiPanel variant="panel" className="p-3">浮层面板</UiPanel><UiPanel variant="inset" className="p-3">内嵌预览</UiPanel><UiPanel variant="bare">纯容器</UiPanel></GalleryRow>
-    <GalleryRow label="选项"><UiOptionButton variant="default" selection="single">默认</UiOptionButton><UiOptionButton variant="card">内容卡</UiOptionButton><UiIconButton shape="square" tone="default" aria-label="方形"><Plus className="h-4 w-4" /></UiIconButton><UiIconButton shape="circle" aria-label="圆形"><Plus className="h-4 w-4" /></UiIconButton></GalleryRow>
+    <GalleryRow label="选项"><UiOptionButton variant="default" selection="single">默认</UiOptionButton><UiOptionButton variant="card">内容卡</UiOptionButton><UiIconButton shape="square" tone="default" aria-label="方形"><Plus /></UiIconButton><UiIconButton shape="circle" aria-label="圆形"><Plus /></UiIconButton></GalleryRow>
     <GalleryRow label="格子"><UiOptionButton variant="grid" gridCell="ratio">16:9</UiOptionButton><UiOptionButton variant="grid" gridCell="tier-detail">2K · 精细</UiOptionButton><UiOptionButton variant="grid" gridCell="preset">预设 16:9</UiOptionButton></GalleryRow>
     <GalleryRow label="表面"><Dropdown appearance="text" surface="solid" ariaLabel="静默下拉" value="a" options={[{ value: 'a', label: '静默' }]} onSelect={noop} /><Dropdown appearance="field" surface="glass" ariaLabel="玻璃下拉" value="a" options={[{ value: 'a', label: '玻璃' }]} onSelect={noop} /></GalleryRow>
     <GalleryRow label="字段"><UiInput frame="field" aria-label="外框输入" defaultValue="外框" /><UiInput frame="inner" aria-label="复合字段内层" defaultValue="内层" /><UiTextArea frame="field" aria-label="有框文本" defaultValue="文本" /><UiTextArea frame="none" aria-label="无框文本" defaultValue="原位编辑" /><UiFieldTrigger appearance="field">字段表面</UiFieldTrigger></GalleryRow>
@@ -621,8 +629,8 @@ export function VariantSection(): JSX.Element {
     <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="field" ariaLabel="有框提示词" />
     <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="none" ariaLabel="原位提示词" />
     <GalleryRow label="轨道"><UiRangeInput trackTone="neutral" aria-label="中性轨道" /><UiRangeInput trackTone="hue" aria-label="色相轨道" /><UiRangeInput trackTone="lighting" aria-label="打光轨道" /></GalleryRow>
-    <GalleryRow label="导航"><UiNavButton size="lg">较大</UiNavButton><UiNavButton size="auto">两行内容<br />自动高度</UiNavButton><UiChipButton selectionAppearance="default">默认多选</UiChipButton><UiTextToken appearance="inline">行内</UiTextToken></GalleryRow>
-    <GalleryRow label="双段"><UiSwitch appearance="pill" checked /><UiSwitch appearance="segmented" size="field" checked onLabel="打开" offLabel="关闭" /></GalleryRow>
+    <GalleryRow label="导航"><UiNavButton size="sm">紧凑</UiNavButton><UiNavButton size="lg">较大</UiNavButton><UiNavButton size="auto">两行内容<br />自动高度</UiNavButton><UiChipButton selectionAppearance="default">默认多选</UiChipButton><UiTextToken appearance="inline">行内</UiTextToken></GalleryRow>
+    <GalleryRow label="双段"><UiSwitch appearance="pill" checked /><UiSwitch appearance="segmented" size="md" checked onLabel="打开" offLabel="关闭" /></GalleryRow>
     <UiToolbar variant="plain"><UiButton>普通动作组</UiButton></UiToolbar><UiPageHeader title="带分隔页头" divider />
     {([72, 96, 120] as const).map(labelWidth => <UiGroup key={labelWidth} labelWidth={labelWidth} title={`标签列 ${labelWidth}`} titleTone="overline" gap="row"><UiFormRow label="名称" labelWidth={labelWidth} density="default" labelColumn="panel"><UiInput defaultValue="镜头 01" /></UiFormRow><UiFormRow label="成对网格" labelColumn="auto"><div className="grid grid-cols-2 gap-3"><NumberInput value={1} onChange={noop} /><NumberInput value={2} onChange={noop} /></div></UiFormRow></UiGroup>)}
     <UiGroup titleTone="section" title="分区间距" gap="section"><span className="text-xs text-text2">分区</span><span className="text-xs text-text2">分区</span></UiGroup><UiGroup gap="stack"><span className="text-xs text-text2">堆叠间距</span></UiGroup><UiGroup gap="none"><span className="text-xs text-text2">无间距</span></UiGroup>
@@ -673,7 +681,7 @@ export function StaticOverlaySection(): JSX.Element {
     window.addEventListener('resize', update); window.addEventListener('scroll', update, true)
     return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true) }
   }, [])
-  const items = [{ id: 'edit', label: '继续编辑', icon: <Plus className="h-4 w-4" />, onClick: noop }, { id: 'copy', label: '复制', icon: <Plus className="h-4 w-4" />, onClick: noop }, { id: 'remove', label: '删除（禁用）', icon: <Trash2 className="h-4 w-4" />, disabled: true, onClick: noop }]
+  const items = [{ id: 'edit', label: '继续编辑', icon: <Plus className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: noop }, { id: 'copy', label: '复制', icon: <Plus className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: noop }, { id: 'remove', label: '删除（禁用）', icon: <Trash2 className={`${UI_ICON_SIZE_CLASS.md}`} />, disabled: true, onClick: noop }]
   return <GallerySection title="静态浮层：无需鼠标或计时器">
     <div className="flex h-32 items-center justify-around gap-6"><span ref={top} className="text-xs text-text2">上方锚点</span><span ref={left} className="text-xs text-text2">左侧锚点</span><Tooltip placement="top" content="正式悬停说明"><UiButton>上方说明</UiButton></Tooltip><Tooltip placement="left" content="正式悬停说明"><UiButton>左侧说明</UiButton></Tooltip></div>
     <GalleryRow label="标签"><UiTooltipText placement="top" tooltip="上方说明">参数名称</UiTooltipText><UiTooltipText placement="left" tooltip="左侧说明">参数名称</UiTooltipText></GalleryRow>

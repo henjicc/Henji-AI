@@ -1,3 +1,5 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationMessage } from '@/i18n/notifications'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { useShallow } from 'zustand/react/shallow'
@@ -147,7 +149,7 @@ function Transcript({
       {project.transcript.length === 0 ? (
         <UiEmpty
           className="h-full"
-          icon={<FileAudio size={40} strokeWidth={1.5} aria-hidden="true" />}
+          icon={<FileAudio size={UI_ICON_SIZE.hero}  aria-hidden="true" />}
           title="等待转写"
           description="在右栏开始转写，得到可逐词剪辑的时间戳文本。"
         />
@@ -194,7 +196,7 @@ function Transcript({
                         }}
                         title="单击选中，双击编辑，右键删除声音"
                       >
-                        {block.locked ? <Lock role="img" aria-label="已锁定" className="mr-0.5 inline h-[0.75em] w-[0.75em] align-baseline text-text3" /> : null}
+                        {block.locked ? <Lock role="img" aria-label="已锁定" className={`${UI_ICON_SIZE_CLASS.xs} mr-0.5 inline align-baseline text-text3}`} /> : null}
                         <AudioEditMatchedText block={block} search={search} />
                       </UiTextToken>
                     </Fragment>
@@ -442,18 +444,18 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           <span role="alert" className="max-w-48 truncate text-xs text-danger-text" title={sourceError}>{sourceError}</span>
           <UiButton size="sm" disabled={disabled} onClick={() => void relinkSource()}>重新定位</UiButton>
         </span>}
-        <UiIconButton size="lg" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} title={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search size={16} /></UiIconButton>
+        <UiIconButton size="md" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} title={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search  /></UiIconButton>
         <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification(notificationMessage('audioUndoAll')) }} />
-        <UiIconButton size="lg" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" title="重做"><Redo2 size={16} /></UiIconButton>
+        <UiIconButton size="md" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" title="重做"><Redo2  /></UiIconButton>
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
         <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id), includeProcessing: withRx })} />
-        <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download size={15} className="mr-1.5" />导出</UiButton>
+        <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download  className="mr-1.5" />导出</UiButton>
       </>}
     >
       {embeddedHost
-        ? <UiButton onClick={() => void leave()}><ArrowLeft size={16} />{`返回剪辑 · ${embeddedHost.label}`}</UiButton>
-        : <UiIconButton size="lg" onClick={() => void leave()} aria-label="返回口播列表" title="返回口播列表"><ArrowLeft size={16} /></UiIconButton>}
+        ? <UiButton onClick={() => void leave()}><ArrowLeft  />{`返回剪辑 · ${embeddedHost.label}`}</UiButton>
+        : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回口播列表" title="返回口播列表"><ArrowLeft  /></UiIconButton>}
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">
@@ -470,7 +472,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           <section className="flex flex-col gap-2.5">
             <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>一键处理</h2>
             <p className={`leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>压缩停顿、清理语气词。黄色区域预览将要删除的声音，处理后仍可逐词调整。</p>
-            <UiButton variant="secondary" className="w-full gap-1.5" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles size={15} />快速处理</UiButton>
+            <UiButton variant="secondary" className="w-full gap-1.5" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles  />快速处理</UiButton>
           </section>
           <UiGroup divided titleTone="compact" gap="none">
             <AudioEditDisclosure title="自定义处理参数" value={`停顿 ≥ ${settings.silenceThresholdMs} 毫秒`}>
@@ -518,9 +520,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           {selectedBlocks.length > 0 && <UiGroup divided titleTone="compact">
             <div className="text-xs tabular-nums text-text3">已选 {selectedBlocks.length} 个词 · {selectedSeconds.toFixed(1)} 秒</div>
             <div className="-mx-2 flex flex-wrap gap-0.5">
-              <UiButton size="sm" variant="danger" onClick={() => state.setBlocksIncluded(selectedBlockIds, false)}><Trash2 size={14} className="mr-1" />删除声音</UiButton>
-              <UiButton size="sm" onClick={() => state.setBlocksIncluded(selectedBlockIds, true)}><RotateCcw size={14} className="mr-1" />恢复</UiButton>
-              <UiButton size="sm" onClick={() => update({ transcript: project.transcript.map((block) => selectedBlockIds.includes(block.id) ? { ...block, locked: !allLocked } : block) })}>{allLocked ? <LockOpen size={14} className="mr-1" /> : <Lock size={14} className="mr-1" />}{allLocked ? '解锁' : '锁定'}</UiButton>
+              <UiButton size="sm" variant="danger" onClick={() => state.setBlocksIncluded(selectedBlockIds, false)}><Trash2  className="mr-1" />删除声音</UiButton>
+              <UiButton size="sm" onClick={() => state.setBlocksIncluded(selectedBlockIds, true)}><RotateCcw  className="mr-1" />恢复</UiButton>
+              <UiButton size="sm" onClick={() => update({ transcript: project.transcript.map((block) => selectedBlockIds.includes(block.id) ? { ...block, locked: !allLocked } : block) })}>{allLocked ? <LockOpen  className="mr-1" /> : <Lock  className="mr-1" />}{allLocked ? '解锁' : '锁定'}</UiButton>
             </div>
           </UiGroup>}
         </fieldset>

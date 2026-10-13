@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCameraStageNodeRenderProgress } from '@/features/canvas/application/cameraStageRenderProgress';
 import { useProjectStore } from '@/stores/projectStore';
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
@@ -133,7 +134,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<ICON_TOOL_CAMERA_STAGE className="h-4 w-4" />}
+        icon={<ICON_TOOL_CAMERA_STAGE className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolveNodeDisplayName(CANVAS_NODE_TYPES.cameraStage, data)}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}

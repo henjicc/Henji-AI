@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback } from 'react';
 import type { NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
@@ -48,7 +49,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       selected={selected}
       width={width}
       height={height}
-      icon={<ImageGenerationIcon className="h-4 w-4" />}
+      icon={<ImageGenerationIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
       promptPlaceholderKey={isOutpaint ? "node.outpaint.promptPlaceholder" : "node.imageEdit.promptPlaceholder"}
       promptRequiredKey="node.imageEdit.promptRequired"
       capabilityId={isOutpaint ? CANVAS_IMAGE_CAPABILITY_IDS.outpaint : undefined}

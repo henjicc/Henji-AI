@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { createLogger } from '@/core/logging'
 import React, { useRef, useState } from 'react'
 import { useNativeDragDrop } from '../../hooks/useNativeDragDrop'
@@ -336,7 +337,7 @@ export default function FileUploader({
                                             />
                                             {/* 播放图标覆盖层 */}
                                             <div className="absolute inset-0 flex items-center justify-center bg-media-scrim rounded-lg pointer-events-none">
-                                                <Play className="h-6 w-6 text-on-media opacity-90" />
+                                                <Play className={`${UI_ICON_SIZE_CLASS.xl} text-on-media opacity-90`} />
                                             </div>
                                         </div>
                                     )
@@ -353,7 +354,7 @@ export default function FileUploader({
                                 }
                             })()}
 
-                            <UiIconButton size="xs" tone="media" shape="circle"
+                            <UiIconButton size="2xs" tone="media" shape="circle"
                                 onClick={(e) => {
                                     e.stopPropagation()  // 阻止事件冒泡
                                     e.preventDefault()    // 防止默认行为
@@ -362,7 +363,7 @@ export default function FileUploader({
                                 className="absolute -top-2 -right-2 opacity-0 transition-opacity duration-180 group-hover:opacity-100 z-sticky pointer-events-auto"
                                 type="button"
                             >
-                                <X className="h-3 w-3" />
+                                <X  />
                             </UiIconButton>
                         </div>
                     </div>
@@ -379,7 +380,7 @@ export default function FileUploader({
                     className={`${itemFrameClass} border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-hover/90' : 'border-line/50 bg-hover/80 hover:border-line/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
-                    <Plus className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text2'}`} />
+                    <Plus className={`${isDragging ? 'text-accent' : 'text-text2'}`} />
                 </UiButton>
             )}
 

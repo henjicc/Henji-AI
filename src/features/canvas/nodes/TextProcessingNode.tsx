@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
@@ -259,12 +260,12 @@ export const TextProcessingNode = memo(({
     >
       <NodeHeader
         className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
-        icon={<TextProcessingIcon className="h-4 w-4" />}
+        icon={<TextProcessingIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
-      <NodeLodPlaceholder title={resolvedTitle} icon={<TextProcessingIcon className="h-6 w-6" />} />
+      <NodeLodPlaceholder title={resolvedTitle} icon={<TextProcessingIcon className={`${UI_ICON_SIZE_CLASS.xl}`} />} />
 
       <div className="canvas-node-lod-detail relative flex min-h-0 flex-1 flex-col gap-1.5">
         <GenerationPromptEditor
@@ -337,7 +338,7 @@ export const TextProcessingNode = memo(({
                   onCheckedChange={(fixedResult) => updateNodeData(id, { fixedResult })}
                   offLabel={t('common:off', '关')}
                   onLabel={t('common:on', '开')}
-                  size="compact"
+                  size="sm"
                   aria-label={t('node.textProcessing.fixedResultLabel')}
                 />
               </div>

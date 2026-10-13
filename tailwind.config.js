@@ -129,6 +129,19 @@ export default {
       },
       // 控件高度令牌（重要记录 004）：28 紧凑 / 32 默认 / 36 醒目，由 CSS 变量驱动。
       // 新控件用 h-control-sm/md/lg（或 styleTokens 的 UI_CONTROL_HEIGHT_CLASS），不写 h-7/h-8/h-9。
+      width: {
+        'control-sm': 'var(--size-control-sm)',
+        'control-md': 'var(--size-control-md)',
+        'control-lg': 'var(--size-control-lg)',
+      },
+      size: {
+        'control-2xs': 'var(--size-control-2xs)',
+        'control-xs': 'var(--size-control-xs)',
+        'control-sm': 'var(--size-control-sm)',
+        'control-md': 'var(--size-control-md)',
+        'control-lg': 'var(--size-control-lg)',
+        'control-xl': 'var(--size-control-xl)',
+      },
       height: {
         'control-sm': 'var(--size-control-sm)',
         'control-md': 'var(--size-control-md)',
@@ -180,6 +193,7 @@ export default {
         canvas: withOpacity('--canvas-rgb'),
         panel: withOpacity('--panel-rgb'),
         raised: withOpacity('--raised-rgb'),
+        'segment-selected': withOpacity('--segment-selected-rgb'),
         control: {
           DEFAULT: withOpacity('--control-rgb'),
           hover: withOpacity('--control-hover-rgb'),

@@ -2,6 +2,22 @@ import {
   APP_ACCENT_HEX, TEXT_LIGHT_HEX, WHITE_HEX, BLACK_HEX, CAMERA_STAGE_COLOR_HEX,
   IMAGE_EDITOR_GLOW_TINT_HEX, SOCKET_TYPE_COLOR_HEX, CANVAS_GRID_ALT_HEX,
 } from '@/core/theme/colorTokens';
+import type { UiControlSize, IconButtonSize } from './primitiveInternals';
+
+/** 图标尺寸数值唯一登记在 core/theme/icons；DOM 使用此类表。 */
+export const UI_ICON_SIZE_CLASS = {
+  xs: 'size-3', sm: 'size-3.5', md: 'size-4', lg: 'size-5', xl: 'size-6', display: 'size-8', hero: 'size-10',
+} as const;
+
+/** 仅约束 lucide 图标，波形、曲线等数据 SVG 不参与。 */
+export const UI_CONTROL_ICON_CLASS: Record<IconButtonSize, string> = {
+  '2xs': '[&_svg.lucide]:size-3',
+  xs: '[&_svg.lucide]:size-3.5',
+  sm: '[&_svg.lucide]:size-3.5',
+  md: '[&_svg.lucide]:size-4',
+  lg: '[&_svg.lucide]:size-4',
+  xl: '[&_svg.lucide]:size-5',
+};
 
 /** Alpha masks only: soften the source edge over an already blurred outpaint preview. */
 export const UI_OUTPAINT_FEATHER_MASK = `linear-gradient(to right, transparent, ${WHITE_HEX} 12%, ${WHITE_HEX} 88%, transparent), linear-gradient(to bottom, transparent, ${WHITE_HEX} 12%, ${WHITE_HEX} 88%, transparent)`;
@@ -202,7 +218,7 @@ export const UI_FIELD_SIZE_CLASS = {
   lg: `${UI_CONTROL_HEIGHT_CLASS.lg} text-13 ${UI_RADIUS_CLASS.field}`,
 } as const;
 
-export type UiFieldSize = keyof typeof UI_FIELD_SIZE_CLASS;
+export type UiFieldSize = UiControlSize;
 
 /** 字段内边距（左右），与尺寸档对应；带图标/附件的字段由调用点用 pl-/pr- 预留位置。 */
 export const UI_FIELD_PADDING_CLASS: Record<UiFieldSize, string> = {
@@ -392,7 +408,7 @@ export const UI_COLOR_WHEEL_BACKGROUND = 'radial-gradient(circle, rgb(var(--medi
 /** Parameter editing graphics: semantic chrome, registered content-color spectra. */
 export const UI_PARAMETER_SURFACE_CLASS = 'relative w-full touch-none select-none rounded-control bg-control outline-none focus-visible:ring-2 focus-visible:ring-accent-ring aria-disabled:opacity-50'
 export const UI_PARAMETER_HANDLE_CLASS = 'fill-text1 stroke-control focus-visible:stroke-accent'
-export const UI_PARAMETER_HANDLE_RADIUS = { sm: 3, md: 4 } as const
+export const UI_PARAMETER_HANDLE_RADIUS: Record<UiControlSize, number> = { sm: 3, md: 4, lg: 4 }
 export const UI_PARAMETER_TRACK_BACKGROUND = {
   none: 'var(--control)',
   hue: 'linear-gradient(90deg, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))',
@@ -409,3 +425,6 @@ export function uiParameterRgba(color: readonly number[]): string {
 export function uiParameterHex(color: readonly number[]): string {
   return `#${color.slice(0, 3).map(channel => Math.round(Math.max(0, Math.min(1, channel)) * 255).toString(16).padStart(2, '0')).join('')}`
 }
+
+/** 分段选中：中性抬起底 + 强文字，与其他单选的淡强调底区分。 */
+export const UI_SEGMENT_SELECTED_CLASS = 'bg-segment-selected text-text1';

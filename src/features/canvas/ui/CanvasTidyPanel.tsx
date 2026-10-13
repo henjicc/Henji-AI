@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect } from 'react'
 import { Pin, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
@@ -26,7 +27,7 @@ export function CanvasTidyPanel({ tidy, nodes }: Props) {
   return <UiPanel variant="glass" className="absolute right-4 top-4 z-popover flex w-80 max-w-full flex-col gap-3 p-3" data-canvas-tidy-panel>
     <div className="flex items-center justify-between gap-2">
       <span className={UI_TEXT_BODY_CLASS}>{t('canvasTidy.title')}</span>
-      <UiIconButton aria-label={t('canvasTidy.cancel')} onClick={cancel}><X className="h-4 w-4" /></UiIconButton>
+      <UiIconButton aria-label={t('canvasTidy.cancel')} onClick={cancel}><X  /></UiIconButton>
     </div>
     <div className="flex flex-col gap-1">
       {draft.candidates.map(candidate => <UiOptionButton key={candidate.mode} variant="menu"
@@ -42,7 +43,7 @@ export function CanvasTidyPanel({ tidy, nodes }: Props) {
         <Virtuoso data={[null, ...choices]} itemContent={(_index, node) => <UiOptionButton variant="menu"
           active={draft.pin === (node?.id ?? null)} disabled={tidy.busy}
           onClick={() => { void tidy.start(node?.id ?? null) }}>
-          <Pin className="h-3.5 w-3.5" />{node ? name(node) : t('canvasTidy.noPin')}
+          <Pin className={`${UI_ICON_SIZE_CLASS.sm}`} />{node ? name(node) : t('canvasTidy.noPin')}
         </UiOptionButton>} />
       </div>} />
     </UiFormRow>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -64,7 +65,7 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
     <UiGroup labelWidth={96} titleTone="compact" title={title(filter.effectId, filter.operationType)} divided>
       <FilterBlendControlsV3 key={filter.id} preview={imageEditFilterMixPreviewV3(controller, layer, filter.id, `filter-mix:${layer.id}:${filter.id}`)} filter={filter} disabled={locked} onChange={patch => change(filter.id, { kind: 'update', patch })} />
       {filter.mask && <UiFormRow density="compact" label={t('imageEditor.v3.filterWorkspace.mask', { defaultValue: '局部蒙版' })}>
-        <UiIconButton size="sm" disabled={locked} aria-label={t('imageEditor.v3.filterWorkspace.removeMask', { defaultValue: '移除滤镜蒙版' })} onClick={() => change(filter.id, { kind: 'update', patch: { mask: null } })}><X className="h-3.5 w-3.5" /></UiIconButton>
+        <UiIconButton size="xs" disabled={locked} aria-label={t('imageEditor.v3.filterWorkspace.removeMask', { defaultValue: '移除滤镜蒙版' })} onClick={() => change(filter.id, { kind: 'update', patch: { mask: null } })}><X  /></UiIconButton>
       </UiFormRow>}
       <ImageEditorEffectParametersV3 key={`${layer.id}:${filter.id}`} controller={adapter.controller} layer={adapter.layer} disabled={locked} />
     </UiGroup>
@@ -96,7 +97,7 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
           </div>
         </UiGroup>)}
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton size="md" aria-label={t('imageEditor.v3.filterWorkspace.add', { defaultValue: '添加滤镜或调整' })} disabled={locked || progress !== null || !choices.length} aria-expanded={open} aria-haspopup="menu" onClick={togglePanel}><Plus className="h-4 w-4" /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton size="sm" aria-label={t('imageEditor.v3.filterWorkspace.add', { defaultValue: '添加滤镜或调整' })} disabled={locked || progress !== null || !choices.length} aria-expanded={open} aria-haspopup="menu" onClick={togglePanel}><Plus  /></UiIconButton>}
       </PanelTrigger>
     </div>
     <UiModal isOpen={Boolean(conversion)} title={t('imageEditor.v3.filterWorkspace.convertTitle')} onClose={() => setConversion(null)} footer={<>
@@ -135,12 +136,12 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
                 <UiSwitch aria-label={t('imageEditor.v3.filterWorkspace.enabled', { defaultValue: '启用{{title}}', title: title(item.effectId, item.operationType) })} checked={item.enabled} disabled={locked} onCheckedChange={enabled => change(item.id, { kind: 'update', patch: { enabled } })} />
                 <UiOptionButton variant="menu" size="sm" className="min-w-0 flex-1" title={title(item.effectId, item.operationType)} active={filter?.id === item.id} onClick={() => setSelectedFilter(item.id)}><span className="truncate">{title(item.effectId, item.operationType)}</span></UiOptionButton>
                 <PanelTrigger panelPadding="menu" panelWidth={180} closeOnPanelClick renderPanel={() => <div role="menu" className="flex flex-col gap-1">
-                  <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked || index === 0} onClick={() => change(item.id, { kind: 'move', index: index - 1 })}><ArrowUp className="h-3.5 w-3.5" />{t('imageEditor.v3.filterWorkspace.earlier', { defaultValue: '提前执行' })}</UiOptionButton>
-                  <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked || index === layer.filters.length - 1} onClick={() => change(item.id, { kind: 'move', index: index + 1 })}><ArrowDown className="h-3.5 w-3.5" />{t('imageEditor.v3.filterWorkspace.later', { defaultValue: '延后执行' })}</UiOptionButton>
+                  <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked || index === 0} onClick={() => change(item.id, { kind: 'move', index: index - 1 })}><ArrowUp className={`${UI_ICON_SIZE_CLASS.sm}`} />{t('imageEditor.v3.filterWorkspace.earlier', { defaultValue: '提前执行' })}</UiOptionButton>
+                  <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked || index === layer.filters.length - 1} onClick={() => change(item.id, { kind: 'move', index: index + 1 })}><ArrowDown className={`${UI_ICON_SIZE_CLASS.sm}`} />{t('imageEditor.v3.filterWorkspace.later', { defaultValue: '延后执行' })}</UiOptionButton>
                   <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked} onClick={() => prepareConversion(item.id)}>{t('imageEditor.v3.filterWorkspace.convertComposite')}</UiOptionButton>
-                  <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked} onClick={() => change(item.id, { kind: 'remove' })}><Trash2 className="h-3.5 w-3.5" />{t('imageEditor.v3.filterWorkspace.remove', { defaultValue: '删除滤镜' })}</UiOptionButton>
+                  <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked} onClick={() => change(item.id, { kind: 'remove' })}><Trash2 className={`${UI_ICON_SIZE_CLASS.sm}`} />{t('imageEditor.v3.filterWorkspace.remove', { defaultValue: '删除滤镜' })}</UiOptionButton>
                 </div>}>
-                  {({ open, togglePanel }) => <UiIconButton size="sm" on={open} aria-haspopup="menu" aria-expanded={open} aria-label={t('imageEditor.v3.filterWorkspace.actions', { defaultValue: '滤镜操作' })} onClick={togglePanel}><MoreHorizontal className="h-3.5 w-3.5" /></UiIconButton>}
+                  {({ open, togglePanel }) => <UiIconButton size="xs" on={open} aria-haspopup="menu" aria-expanded={open} aria-label={t('imageEditor.v3.filterWorkspace.actions', { defaultValue: '滤镜操作' })} onClick={togglePanel}><MoreHorizontal  /></UiIconButton>}
                 </PanelTrigger>
               </div>} />}
         </>}

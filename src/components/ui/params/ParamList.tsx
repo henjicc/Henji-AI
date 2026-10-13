@@ -60,10 +60,10 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
   const props = store.props
   const wheel = (field.type === 'grade' && field.layout === 'wheel') || (field.type === 'curve' && field.source === 'builtin')
   return <div className={highlighted ? 'flex flex-col gap-1 bg-selected-accent' : 'flex flex-col gap-1'} data-video-edit-code-parameter={field.source === 'code' ? field.key : undefined} data-video-edit-builtin-param={field.source === 'builtin' ? field.key : undefined} data-code-element-parameter={highlighted || undefined}>
-    {wheel ? <div className="flex min-h-8 items-start gap-1.5"><span className="min-w-0 flex-1 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>{props.onReset && <UiIconButton size="xs" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw size={12} /></UiIconButton>}</div> : <UiFormRow label={field.title} info={field.tooltip} density="compact">
+    {wheel ? <div className="flex min-h-8 items-start gap-1.5"><span className="min-w-0 flex-1 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>{props.onReset && <UiIconButton size="2xs" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}</div> : <UiFormRow label={field.title} info={field.tooltip} density="compact">
       <div className="flex min-w-0 items-center gap-1.5">
         <div className="min-w-0 flex-1">{props.renderControl(field, value)}</div>
-        {props.onReset && <UiIconButton size="xs" className="shrink-0" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw size={12} /></UiIconButton>}
+        {props.onReset && <UiIconButton size="2xs" className="shrink-0" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}
       </div>
     </UiFormRow>}
     {wheel && <div className="min-w-0">{props.renderControl(field, value)}</div>}
@@ -76,8 +76,8 @@ function FieldGroup({ title, fields, store }: { title: string; fields: readonly 
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const basic = fields.filter(field => !field.advanced)
   const advanced = fields.filter(field => field.advanced)
-  return <UiGroup titleTone="compact" gap="row" title={title ? <UiButton size="sm" className="-ml-2 gap-1" aria-expanded={open} aria-label={`${open ? '收起' : '展开'}${title}`} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{title}</UiButton> : undefined}>
-    {open && <>{basic.map(field => <FieldRow key={field.key} field={field} store={store} />)}{advanced.length > 0 && <UiGroup gap="row" titleTone="compact" title={<UiButton size="sm" className="-ml-2 gap-1" aria-label={title ? `${title}更多` : '更多'} aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(value => !value)}>{advancedOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}更多</UiButton>}>{advancedOpen && advanced.map(field => <FieldRow key={field.key} field={field} store={store} />)}</UiGroup>}</>}
+  return <UiGroup titleTone="compact" gap="row" title={title ? <UiButton size="sm" className="-ml-2 gap-1" aria-expanded={open} aria-label={`${open ? '收起' : '展开'}${title}`} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown  /> : <ChevronRight  />}{title}</UiButton> : undefined}>
+    {open && <>{basic.map(field => <FieldRow key={field.key} field={field} store={store} />)}{advanced.length > 0 && <UiGroup gap="row" titleTone="compact" title={<UiButton size="sm" className="-ml-2 gap-1" aria-label={title ? `${title}更多` : '更多'} aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(value => !value)}>{advancedOpen ? <ChevronDown  /> : <ChevronRight  />}更多</UiButton>}>{advancedOpen && advanced.map(field => <FieldRow key={field.key} field={field} store={store} />)}</UiGroup>}</>}
   </UiGroup>
 }
 

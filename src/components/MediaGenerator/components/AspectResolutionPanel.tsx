@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import PanelTrigger from '@/components/ui/PanelTrigger'
@@ -436,7 +437,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                       >
                         <div className="h-8 flex items-center justify-center">
                           {option.smart ? (
-                            <Zap className="h-5 w-5" />
+                            <Zap className={`${UI_ICON_SIZE_CLASS.lg}`} />
                           ) : option.ratio ? (
                             <div
                               className="border-2 border-current"

@@ -142,7 +142,7 @@ export function DerivedMediaParamControl({
         onClick={() => setInternalEditorOpen(true)}
         data-derived-media-action={hasMask ? 'edit' : 'create'}
       >
-        <Paintbrush className="h-3.5 w-3.5" />
+        <Paintbrush  />
         {actionText}
       </UiButton>
     </div>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
@@ -323,7 +324,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                     >
                       <ICON_PRESET
-                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-warning-text text-warning-text' : 'fill-none text-text2'}`}
+                        className={`${UI_ICON_SIZE_CLASS.sm} transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-warning-text text-warning-text' : 'fill-none text-text2'}`}
                       />
                     </span>
                   </div>

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { createLogger } from '@/core/logging'
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
@@ -97,7 +98,7 @@ async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<
 
 function AudioPreviewIcon(): JSX.Element {
   return (
-    <AudioLines className="h-8 w-8 text-on-media/90" />
+    <AudioLines className={`${UI_ICON_SIZE_CLASS.display} text-on-media/90`} />
   )
 }
 
@@ -381,11 +382,11 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                   )}
                   {isVideo && (
                     <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-media-scrim text-on-media">
-                      <Play aria-hidden="true" className="h-3 w-3 fill-current" />
+                      <Play aria-hidden="true" className={`fill-current`} />
                     </span>
                   )}
                 </UiButton>
-                <UiIconButton size="xs" tone="media" shape="circle"
+                <UiIconButton size="2xs" tone="media" shape="circle"
                   type="button"
                   className={`absolute -right-1 -top-1 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                   onClick={(event) => {
@@ -396,7 +397,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                   ×
                 </UiIconButton>
                 {onReplace && (
-                  <UiIconButton size="xs" tone="media"
+                  <UiIconButton size="2xs" tone="media"
                     type="button"
                     className={`absolute -bottom-1 -right-1 z-sticky transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
@@ -407,11 +408,11 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                     }}
                     title="替换"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
+                    <RefreshCw   />
                   </UiIconButton>
                 )}
                 {onTrim && isVideo && (
-                  <UiIconButton size="xs" tone="media"
+                  <UiIconButton size="2xs" tone="media"
                     type="button"
                     className={`absolute -bottom-1 -left-1 z-sticky transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
@@ -420,7 +421,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                     }}
                     title="裁剪"
                   >
-                    <Scissors className="h-3.5 w-3.5" strokeWidth={2.3} />
+                    <Scissors   />
                   </UiIconButton>
                 )}
               </div>

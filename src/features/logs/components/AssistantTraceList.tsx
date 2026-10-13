@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Virtuoso } from 'react-virtuoso'
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Route, Sparkles } from 'lucide-react'
 
@@ -125,7 +126,7 @@ function TraceStepButton({
       className="items-center justify-start !px-2 font-normal"
       onClick={onSelect}
     >
-      <Icon className="mr-2 h-3.5 w-3.5 shrink-0 text-accent" />
+      <Icon className={`${UI_ICON_SIZE_CLASS.sm} mr-2 shrink-0 text-accent`} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-2xs font-medium text-text1">{getTraceStepLabel(step)}</span>
@@ -144,9 +145,9 @@ function TraceStepButton({
 }
 
 function StatusMark({ status }: { status: AgentTraceStatus }): JSX.Element {
-  if (status === 'completed') return <CheckCircle2 className="h-4 w-4 shrink-0 text-success-text" />
-  if (status === 'running') return <Clock3 className="h-4 w-4 shrink-0 animate-pulse text-accent-text" />
-  return <AlertTriangle className="h-4 w-4 shrink-0 text-warning-text" />
+  if (status === 'completed') return <CheckCircle2 className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-success-text`} />
+  if (status === 'running') return <Clock3 className={`${UI_ICON_SIZE_CLASS.md} shrink-0 animate-pulse text-accent-text`} />
+  return <AlertTriangle className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-warning-text`} />
 }
 
 function statusDot(status: AgentTraceStatus): string {

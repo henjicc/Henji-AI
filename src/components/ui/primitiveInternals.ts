@@ -11,6 +11,7 @@ import type {
 import type { ScopedTextHistoryBinding } from './useScopedTextHistory'
 import {
   UI_CONTROL_HEIGHT_CLASS,
+  UI_CONTROL_ICON_CLASS,
   UI_INSET_SURFACE_CLASS,
   UI_LIGHTING_RANGE_CLASS,
   UI_PANEL_SURFACE_CLASS,
@@ -30,7 +31,7 @@ import {
 export type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'danger' | 'dangerSolid' | 'link' | 'media'
 
 /** 控件高度 sm 28 / md 32（默认）/ lg 36（重要记录 004）。`link` 跟随行内文字，不受尺寸影响。 */
-export type ButtonSize = 'sm' | 'md' | 'lg'
+export type ButtonSize = UiControlSize
 
 /**
  * 外观只由 `variant` / `size` 决定。`className` 只用于布局（宽度、弹性、对齐、定位、间距、显隐），
@@ -41,8 +42,8 @@ export interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize
 }
 
-/** 图标按钮尺寸：xs 20 / sm 24 / md 28（默认）/ lg 32 / xl 40（仅全屏查看器、画面中央播放键等大目标）。 */
-export type IconButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+/** 同名档同高；两档紧凑按钮与查看器大目标扩展在统一阶梯两端。 */
+export type IconButtonSize = '2xs' | 'xs' | UiControlSize | 'xl'
 
 /**
  * - `default`：静默，静息无底、悬停出底（工具栏、行内）；
@@ -122,7 +123,7 @@ export interface UiWindowControlProps extends Omit<ButtonHTMLAttributes<HTMLButt
 export interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
   /** 高度档：md 32 / lg 36（默认）；`auto` 用于两行内容的导航行（高度随内容）。 */
-  size?: 'md' | 'lg' | 'auto'
+  size?: UiControlSize | 'auto'
 }
 
 /** 字段触发器（下拉、面板触发器的按钮）。`field` 是 raised 字段表面；`quiet` 是标题栏/工具栏里的弱化入口。 */
@@ -154,7 +155,7 @@ export type UiSwitchProps = UiSwitchBaseProps & (
       appearance: 'segmented'
       offLabel: ReactNode
       onLabel: ReactNode
-      size?: 'field' | 'compact'
+      size?: UiControlSize
     }
 )
 
@@ -281,19 +282,20 @@ export function resolveButtonVariant(variant: ButtonVariant): string {
 export function resolveButtonSize(size: ButtonSize, variant: ButtonVariant = 'quiet'): string {
   if (variant === 'link') {
     // 行内链接：跟随所在文字的字号与行高，只保留一点圆角给键盘焦点环。
-    return 'gap-1 rounded-sm'
+    return 'gap-1 rounded-sm [&_svg.lucide]:size-[1em]'
   }
   const entry = UI_BUTTON_SIZE_CLASS[size]
   const padding = variant === 'quiet' || variant === 'danger' ? entry.quietPadding : entry.padding
-  return `${entry.box} ${padding}`
+  return `${entry.box} ${padding} ${UI_CONTROL_ICON_CLASS[size]}`
 }
 
 const UI_ICON_BUTTON_SIZE_CLASS: Record<IconButtonSize, { box: string; radius: string }> = {
-  xs: { box: 'h-5 w-5', radius: UI_RADIUS_CLASS.control },
-  sm: { box: 'h-6 w-6', radius: UI_RADIUS_CLASS.control },
-  md: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} w-[var(--size-control-sm)]`, radius: UI_RADIUS_CLASS.control },
-  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.md} w-[var(--size-control-md)]`, radius: UI_RADIUS_CLASS.field },
-  xl: { box: 'h-10 w-10', radius: UI_RADIUS_CLASS.field },
+  '2xs': { box: 'size-control-2xs', radius: UI_RADIUS_CLASS.control },
+  xs: { box: 'size-control-xs', radius: UI_RADIUS_CLASS.control },
+  sm: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} w-control-sm`, radius: UI_RADIUS_CLASS.control },
+  md: { box: `${UI_CONTROL_HEIGHT_CLASS.md} w-control-md`, radius: UI_RADIUS_CLASS.control },
+  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.lg} w-control-lg`, radius: UI_RADIUS_CLASS.field },
+  xl: { box: 'size-control-xl', radius: UI_RADIUS_CLASS.field },
 }
 
 export function resolveIconButtonClass({
@@ -320,7 +322,7 @@ export function resolveIconButtonClass({
         : tone === 'danger'
           ? UI_BUTTON_VARIANT_CLASS.danger
           : UI_BUTTON_VARIANT_CLASS.quiet
-  return `${entry.box} ${radius} ${skin}`
+  return `${entry.box} ${radius} ${skin} ${UI_CONTROL_ICON_CLASS[size]}`
 }
 
 export function resolveUiPanelSurface(variant: UiPanelVariant): string {

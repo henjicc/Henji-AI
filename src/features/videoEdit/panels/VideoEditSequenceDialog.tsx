@@ -131,7 +131,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
           <UiFormRow label="尺寸" inline><div className="w-full">
             <div className="flex items-center gap-1">
               <UiInput ref={widthRef} type="number" aria-label="宽度" className="min-w-0 w-full" disabled={busy} min={VIDEO_EDIT_SEQUENCE_LIMITS.minDimension} max={VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} step={2} value={values.width} aria-invalid={Boolean(sizeError)} aria-describedby={sizeError ? sizeErrorId : undefined} onChange={event => editSize('width', event.target.value)} onBlur={event => editSize('width', event.target.value, true)} />
-              <UiIconButton tone="bare" on={locked} size="sm" aria-label="锁定比例" disabled={busy} onClick={() => { if (!locked) lockedAspect.current = currentAspect; setLocked(value => !value) }}>{locked ? <Link className="h-4 w-4" /> : <Unlink className="h-4 w-4" />}</UiIconButton>
+              <UiIconButton tone="bare" on={locked} size="md" aria-label="锁定比例" disabled={busy} onClick={() => { if (!locked) lockedAspect.current = currentAspect; setLocked(value => !value) }}>{locked ? <Link /> : <Unlink />}</UiIconButton>
               <UiInput type="number" aria-label="高度" className="min-w-0 w-full" disabled={busy} min={VIDEO_EDIT_SEQUENCE_LIMITS.minDimension} max={VIDEO_EDIT_SEQUENCE_LIMITS.maxDimension} step={2} value={values.height} aria-invalid={Boolean(sizeError)} aria-describedby={sizeError ? sizeErrorId : undefined} onChange={event => editSize('height', event.target.value)} onBlur={event => editSize('height', event.target.value, true)} />
             </div>
             {sizeError && <div id={sizeErrorId} className="mt-1"><UiError size="xs" align="start" title={sizeError} message="" /></div>}
@@ -142,7 +142,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
           })} onSelect={value => { const [numerator, denominator] = value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) }} /></UiFormRow>
         </UiGroup>
       <div>
-        <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}更多设置</UiButton>
+        <UiButton aria-expanded={advanced} disabled={busy} onClick={() => setAdvanced(value => !value)}>{advanced ? <ChevronDown /> : <ChevronRight />}更多设置</UiButton>
         {advanced && <UiGroup className="mt-3">
           <UiFormRow label="像素长宽比" inline><UiSelect aria-label="像素长宽比" className="w-full" disabled={busy} value={par ? `${par.numerator}/${par.denominator}` : parKey} onChange={event => { const [numerator, denominator] = event.target.value.split('/').map(Number); setValues({ ...values, pixelAspectRatio: { numerator, denominator } }) }}>
             {PIXEL_ASPECT_RATIOS.map(value => <option key={value.label} value={`${value.numerator}/${value.denominator}`}>{value.label}</option>)}

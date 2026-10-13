@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useSyncExternalStore } from 'react'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
@@ -28,7 +29,7 @@ export function VideoEditTransitionDropBlock({ hint, row, region, pixels }: { hi
   const Icon = ICON_VIDEO_EDIT_TRANSITION
   return <div aria-hidden="true" data-video-edit-transition-drop={hint.alignment} className="pointer-events-none absolute z-raised flex items-center gap-1 overflow-hidden rounded-md border-2 border-dashed border-accent-ring bg-accent-tint px-1 text-text1"
     style={{ top: row.top - region.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + hint.start * pixels, width }}>
-    {width > 28 && <Icon size={12} className="shrink-0 text-accent-text" />}
+    {width > 28 && <Icon size={UI_ICON_SIZE.xs} className="shrink-0 text-accent-text" />}
     {width > 56 && <span className="truncate text-2xs leading-4">{videoEditTransitionPreset(hint.kind).name}</span>}
   </div>
 }

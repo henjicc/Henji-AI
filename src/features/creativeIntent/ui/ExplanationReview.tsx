@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useRef, useState } from 'react'
 import { LockKeyhole, MapPin } from 'lucide-react'
 import { UiButton, UiError, UiSegmented, UiTextToken } from '@/components/ui'
@@ -96,14 +97,14 @@ export function ExplanationReview({ entry, onRead, onBind, onError, onPick, onRe
   let offset = 0
   const parts = result?.resolution.mentions.map(mention => {
     const at = text.indexOf(mention.text, offset), before = text.slice(offset, at); offset = at + mention.text.length
-    return <span key={mention.id}>{before}<UiTextToken aria-label={`查看「${mention.text}」的指向`} aria-expanded={activeId === mention.id} onClick={() => inspect(mention)}><span className={`underline decoration-2 underline-offset-[3px] ${needsConfirmation(mention) ? 'decoration-warning-text' : 'decoration-accent-text'}`}>{mention.text}</span>{needsConfirmation(mention) && <span aria-label="待确认" className="ml-0.5 inline-block h-1 w-1 rounded-full bg-warning-solid align-middle" />}</UiTextToken>{mention.negated && mention.selected && <LockKeyhole aria-label="保护" size={12} className="inline text-text2" />}</span>
+    return <span key={mention.id}>{before}<UiTextToken aria-label={`查看「${mention.text}」的指向`} aria-expanded={activeId === mention.id} onClick={() => inspect(mention)}><span className={`underline decoration-2 underline-offset-[3px] ${needsConfirmation(mention) ? 'decoration-warning-text' : 'decoration-accent-text'}`}>{mention.text}</span>{needsConfirmation(mention) && <span aria-label="待确认" className="ml-0.5 inline-block h-1 w-1 rounded-full bg-warning-solid align-middle" />}</UiTextToken>{mention.negated && mention.selected && <LockKeyhole aria-label="保护" size={UI_ICON_SIZE.xs} className="inline text-text2" />}</span>
   })
   return <div className="space-y-3" data-observation-sensitive data-explanation-paragraph={entry.utteranceId}>
     {!open ? showTrigger && <UiTextToken aria-label={`查看「${entry.text}」的指向`} aria-expanded={false} onClick={() => setOpen(true)}>{entry.text}</UiTextToken> : <>
       <p className={`whitespace-pre-wrap break-words leading-7 ${UI_TEXT_BODY_CLASS}`}>{parts}{text.slice(offset)}</p>
       {failed && <UiError size="xs" align="start" title="讲解读取失败" message="" retryLabel="重试" onRetry={() => setRetry(value => value + 1)} />}
       {active && <div className="space-y-2" data-explanation-evidence>
-        {readingEvidence ? <p role="status" className={UI_TEXT_META_CLASS}>正在读取画面…</p> : url ? <div className="relative overflow-hidden rounded-lg"><img src={url} className="block h-auto w-full" alt="指向时保存的作品画面" />{result?.objects?.filter(object => object.ref.kind === highlight?.kind && object.ref.id === highlight?.id && object.corners).map(object => <ObjectOutline key={object.ref.id} corners={object.corners!} />)}{result?.imagePoint && <MapPin aria-label="录制时的指向位置" size={18} fill="var(--accent-text)" stroke="var(--media)" strokeWidth={1} className="absolute" style={{ left: `${result.imagePoint[0] * 100}%`, top: `${result.imagePoint[1] * 100}%`, transform: 'translate(-50%, -100%)' }} />}</div> : !failed && <p className={UI_TEXT_META_CLASS}>这处没有保存当时的画面</p>}
+        {readingEvidence ? <p role="status" className={UI_TEXT_META_CLASS}>正在读取画面…</p> : url ? <div className="relative overflow-hidden rounded-lg"><img src={url} className="block h-auto w-full" alt="指向时保存的作品画面" />{result?.objects?.filter(object => object.ref.kind === highlight?.kind && object.ref.id === highlight?.id && object.corners).map(object => <ObjectOutline key={object.ref.id} corners={object.corners!} />)}{result?.imagePoint && <MapPin aria-label="录制时的指向位置" size={UI_ICON_SIZE.md} fill="var(--accent-text)" stroke="var(--media)"  className="absolute" style={{ left: `${result.imagePoint[0] * 100}%`, top: `${result.imagePoint[1] * 100}%`, transform: 'translate(-50%, -100%)' }} />}</div> : !failed && <p className={UI_TEXT_META_CLASS}>这处没有保存当时的画面</p>}
         <p className={UI_TEXT_META_CLASS}>说“{active.text}”时指向：{(active.selected?.targetRefs ?? active.candidates[0]?.targetRefs ?? []).map(objectLabel).join('、') || '画面位置'}</p>
         {needsConfirmation(active) && <>
           {explanationIssue(active.issues) && <p className={UI_TEXT_META_CLASS}>{explanationIssue(active.issues)}</p>}

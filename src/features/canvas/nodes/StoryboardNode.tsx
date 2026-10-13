@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Download, SlidersHorizontal } from 'lucide-react';
@@ -242,7 +243,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<ICON_STORYBOARD className="h-3.5 w-3.5" />}
+        icon={<ICON_STORYBOARD className={`${UI_ICON_SIZE_CLASS.sm}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}

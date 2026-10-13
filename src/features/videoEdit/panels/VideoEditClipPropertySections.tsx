@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { ReactNode } from 'react'
 import { RotateCcw, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, Link } from 'lucide-react'
 import { UiIconButton, UiInput, UiTooltipText } from '@/components/ui'
@@ -35,7 +36,7 @@ function PropertyRow({ label, tooltip, children, resetLabel, resetDisabled, onRe
   return <div className="flex min-h-8 min-w-0 items-center gap-0.5" data-video-edit-property-row={label}>
     {animation}<span className="min-w-0 flex-1 truncate text-xs text-text2" title={label}><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
-    <UiIconButton size="xs" aria-label={resetLabel} title={resetLabel} disabled={resetDisabled} onClick={onReset}><RotateCcw size={12} /></UiIconButton>
+    <UiIconButton size="2xs" aria-label={resetLabel} title={resetLabel} disabled={resetDisabled} onClick={onReset}><RotateCcw  /></UiIconButton>
   </div>
 }
 
@@ -80,9 +81,9 @@ export function VideoEditTextTransformControls({ clip, frame, gesture }: { clip:
   const switchProps = (section: VideoEditIntrinsicSection) => ({ enabled: !clip.disabledIntrinsicSections?.includes(section), onEnabledChange: (enabled: boolean): void => { gesture.finish(); gesture.commit({ disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== section) : [...(clip.disabledIntrinsicSections ?? []), section] }) } })
   return <>
     <VideoEditEffectSection id="motion" title="运动" {...switchProps('motion')}>
-    <div className="flex flex-wrap gap-1">{([['x', 0, '对齐画面左边', AlignHorizontalJustifyStart], ['x', .5, '对齐画面水平中心', AlignHorizontalJustifyCenter], ['x', 1, '对齐画面右边', AlignHorizontalJustifyEnd], ['y', 0, '对齐画面顶部', AlignVerticalJustifyStart], ['y', .5, '对齐画面垂直中心', AlignVerticalJustifyCenter], ['y', 1, '对齐画面底部', AlignVerticalJustifyEnd]] as const).map(([axis, value, label, Icon]) => <UiIconButton key={label} size="sm" aria-label={label} title={label} onClick={() => align(axis, value)}><Icon size={14} /></UiIconButton>)}</div>
+    <div className="flex flex-wrap gap-1">{([['x', 0, '对齐画面左边', AlignHorizontalJustifyStart], ['x', .5, '对齐画面水平中心', AlignHorizontalJustifyCenter], ['x', 1, '对齐画面右边', AlignHorizontalJustifyEnd], ['y', 0, '对齐画面顶部', AlignVerticalJustifyStart], ['y', .5, '对齐画面垂直中心', AlignVerticalJustifyCenter], ['y', 1, '对齐画面底部', AlignVerticalJustifyEnd]] as const).map(([axis, value, label, Icon]) => <UiIconButton key={label} size="xs" aria-label={label} title={label} onClick={() => align(axis, value)}><Icon  /></UiIconButton>)}</div>
     {MOTION.map(key => <SingleProperty key={key} property={key} clip={clip} frame={frame} gesture={gesture} />)}
-    <span className="flex items-center gap-1 text-xs text-text2"><Link size={14} />等比缩放</span>
+    <span className="flex items-center gap-1 text-xs text-text2"><Link size={UI_ICON_SIZE.sm} />等比缩放</span>
     </VideoEditEffectSection>
     <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps('opacity')}>
     <SingleProperty property="opacity" clip={clip} frame={frame} gesture={gesture} />
@@ -106,7 +107,7 @@ export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: 
       </div>
     </VideoEditEffectSection>}
     {motion && <VideoEditEffectSection id="motion" title="运动" {...switchProps('motion')} info="画面的位置、大小与旋转。也可以在节目监视器里直接拖动画面。"
-      actions={<UiIconButton size="xs" aria-label="重置运动" title="重置运动" disabled={isDefault(clip, MOTION)} onClick={() => gesture.commit(resetPatch(clip, MOTION))}><RotateCcw size={12} /></UiIconButton>}>
+      actions={<UiIconButton size="2xs" aria-label="重置运动" title="重置运动" disabled={isDefault(clip, MOTION)} onClick={() => gesture.commit(resetPatch(clip, MOTION))}><RotateCcw  /></UiIconButton>}>
       {MOTION.map(key => <SingleProperty key={key} property={key} clip={clip} frame={frame} gesture={gesture} />)}
     </VideoEditEffectSection>}
     {picture && clip.kind !== 'text' && <VideoEditEffectSection id="opacity" title="不透明度" {...switchProps('opacity')} info="片段与下方画面叠加时的透明程度。">

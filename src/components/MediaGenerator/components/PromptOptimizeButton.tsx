@@ -484,8 +484,8 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
               data-panel-trigger-button
             >
               {streaming
-                ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
-                : <WandSparkles aria-hidden="true" className="h-4 w-4" />}
+                ? <LoaderCircle aria-hidden="true" className={`animate-spin`} />
+                : <WandSparkles aria-hidden="true"  />}
               <span>{streaming ? '优化中' : '优化'}</span>
             </UiButton>
           )

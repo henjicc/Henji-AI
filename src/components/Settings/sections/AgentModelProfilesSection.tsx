@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { CheckCircle2, CircleHelp, ChevronDown, ChevronUp, RefreshCw, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
@@ -267,7 +268,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
             <UiGroup key={role} gap="none">
               <UiFormRow label={roleLabel}>
               <div className="flex items-center gap-2">
-              <Dropdown<string>
+              <Dropdown<string> size="sm"
                 value={value}
                 display={display}
                 ariaLabel={roleLabel}
@@ -275,7 +276,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                 className="w-full"
                 buttonClassName="w-full"
                 onSelect={selected => void updateRole(role, selected)}
-              />
+ />
                 {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
                 <UiButton
                   type="button"
@@ -283,9 +284,9 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   aria-expanded={detailsOpen}
                   onClick={() => toggleRoleDetails(role)}
                   className="shrink-0"
-                >
+ >
                   {t('agentModels.details')}
-                  {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {detailsOpen ? <ChevronUp /> : <ChevronDown />}
                 </UiButton>
               </div>
               <UiDisclosurePanel open={detailsOpen}>
@@ -300,7 +301,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                         return <div key={check.id} className="py-1">
                           <div className="flex items-center justify-between gap-3 text-xs">
                             <span>{t(`agentModels.checkNames.${check.id}`)}</span>
-                            <span className={`inline-flex shrink-0 items-center gap-1 ${tone}`}><Icon aria-hidden className="h-3.5 w-3.5" />{t(`agentModels.check.${check.status}`)}</span>
+                            <span className={`inline-flex shrink-0 items-center gap-1 ${tone}`}><Icon aria-hidden className={`${UI_ICON_SIZE_CLASS.sm}`} />{t(`agentModels.check.${check.status}`)}</span>
                           </div>
                           {check.status === 'failed' && <p className="mt-1 text-xs text-text2">{t(`agentModels.checkImpact.${check.id}`)}</p>}
                         </div>
@@ -311,7 +312,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   {effectiveReference ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <UiButton type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
-                        <RefreshCw className={`h-4 w-4 ${verifyingKey === key ? 'motion-safe:animate-spin' : ''}`} />
+                        <RefreshCw className={`${verifyingKey === key ? 'motion-safe:animate-spin' : ''}`} />
                         {verifyingKey === key ? t('agentModels.verifying') : t('agentModels.verify')}
                       </UiButton>
                       <span className="text-xs text-text3">{t('agentModels.verifyCost')}</span>
@@ -335,9 +336,9 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           aria-expanded={advancedOpen}
           onClick={() => setAdvancedOpen(prev => !prev)}
           className="-ml-2"
-        >
+ >
           {t('agentModels.advanced')}
-          {advancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {advancedOpen ? <ChevronUp /> : <ChevronDown />}
         </UiButton>
         <UiDisclosurePanel open={advancedOpen}>
           <div className={`pt-4 ${UI_FORM_ROW_GAP_CLASS}`}>
@@ -352,7 +353,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   ariaLabel={t(`agentModels.settings.${field.key}.label`)}
                   onChange={value => void updateSetting(field.key, value)}
                   widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
-                />
+ />
               </UiFormRow>
             ))}
           </div>

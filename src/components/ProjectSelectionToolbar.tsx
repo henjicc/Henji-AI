@@ -38,7 +38,7 @@ export function ProjectSelectionToolbar({
         disabled={selection.count === 0}
         onClick={onDeleteSelected}
       >
-        <Trash2 className="h-4 w-4" />
+        <Trash2  />
         {labels.deleteSelected}
       </UiButton>
       <UiButton onClick={selection.exit}>

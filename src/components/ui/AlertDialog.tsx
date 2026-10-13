@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useId, useRef, useState } from 'react'
 import { UiButton, UiPanel } from './primitives'
 import { useI18n } from '@/hooks/useI18n'
@@ -109,14 +110,14 @@ export default function AlertDialog({
       case 'error':
         return {
           icon: (
-            <CircleAlert className="h-5 w-5" />
+            <CircleAlert className={`${UI_ICON_SIZE_CLASS.lg}`} />
           ),
           color: 'text-danger-text'
         }
       case 'info':
         return {
           icon: (
-            <Info className="h-5 w-5" />
+            <Info className={`${UI_ICON_SIZE_CLASS.lg}`} />
           ),
           color: 'text-accent-text'
         }
@@ -124,7 +125,7 @@ export default function AlertDialog({
       default:
         return {
           icon: (
-            <TriangleAlert className="h-5 w-5" />
+            <TriangleAlert className={`${UI_ICON_SIZE_CLASS.lg}`} />
           ),
           color: 'text-warning-text'
         }

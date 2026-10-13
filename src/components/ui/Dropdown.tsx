@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, {
   useCallback,
   useEffect,
@@ -401,7 +402,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           >
             <span className="block min-w-0 truncate whitespace-nowrap">{option.label}</span>
             {/* 当前值：淡强调底 + 强调色勾（重要记录 012），标签保持主要文字 */}
-            {selected ? <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent-text" /> : null}
+            {selected ? <Check aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} /> : null}
           </UiOptionButton>
         )
         return option.tooltip

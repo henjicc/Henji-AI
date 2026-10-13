@@ -43,7 +43,7 @@ const ExternalLinkButton: React.FC<{ url: string; label?: string }> = ({ url, la
       onClick={() => void openExternal(url)}
     >
       <span className="truncate">{label ?? url}</span>
-      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+      <ExternalLink className={`shrink-0`} />
     </UiButton>
   )
 }

@@ -18,6 +18,8 @@ export interface ToolboxRuntimeTool<T extends ToolDescriptor = ToolDescriptor> {
 }
 
 /** Vite 只收集轻量入口；入口里的编辑器和文档打开器仍按需 import。 */
+const registeredIcons = Object.fromEntries(Object.entries(icons).filter(([name]) => name.startsWith('ICON_'))) as Readonly<Record<string, LucideIcon>>
+
 const entries = import.meta.glob<{ default: ToolboxToolEntry }>('./toolboxTools/*/entry.ts', { eager: true })
 
 export function createToolboxRuntime<const T extends readonly ToolDescriptor[]>(
@@ -28,7 +30,7 @@ export function createToolboxRuntime<const T extends readonly ToolDescriptor[]>(
     const entry = modules[`./toolboxTools/${descriptor.entryId}/entry.ts`]?.default
     if (!entry) throw new Error(`工具 ${descriptor.id} 缺少渲染入口 ${descriptor.entryId}`)
     if (descriptor.recentFiles && !entry.openRecentFile) throw new Error(`工具 ${descriptor.id} 缺少最近文件打开器`)
-    const icon = (icons as Readonly<Record<string, LucideIcon>>)[descriptor.icon]
+    const icon = registeredIcons[descriptor.icon]
     if (!icon) throw new Error(`工具 ${descriptor.id} 缺少图标登记 ${descriptor.icon}`)
     return { descriptor, icon, component: lazy(entry.loadComponent), openRecentFile: entry.openRecentFile, currentDocumentName: entry.currentDocumentName }
   })

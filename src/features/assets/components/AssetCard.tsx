@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useEffect, useState } from 'react'
 import { AlertTriangle, FileAudio, Film, Image as ImageIcon, MoreHorizontal, Play } from 'lucide-react'
 import { ICON_ASSET_CODE } from '@/core/theme/icons'
@@ -89,10 +90,10 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
         ) : previewUrl ? (
           <img src={previewUrl} alt={asset.displayName} loading={eager ? 'eager' : 'lazy'} draggable={false} className={`h-full w-full ${thumbnailFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : (
-          <div className="flex h-full items-center justify-center text-text3"><MediaIcon className="h-8 w-8" /></div>
+          <div className="flex h-full items-center justify-center text-text3"><MediaIcon className={`${UI_ICON_SIZE_CLASS.display}`} /></div>
         )}
         {asset.inspectionStatus === 'missing' && (
-          <div className="ui-glass-scrim absolute inset-0 flex items-center justify-center text-warning-text"><AlertTriangle className="h-7 w-7" /></div>
+          <div className="ui-glass-scrim absolute inset-0 flex items-center justify-center text-warning-text"><AlertTriangle className={`${UI_ICON_SIZE_CLASS.xl}`} /></div>
         )}
         {batchMode && (
           <UiCheckbox
@@ -109,8 +110,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
           aria-label={t('workspaceFilters.moreActions')}
           className={`absolute right-2 top-2 transition-opacity duration-120 group-hover:opacity-100 focus-visible:opacity-100 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
           onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget, true) }}
-        ><MoreHorizontal className="h-4 w-4" /></UiIconButton>
-        {(asset.mediaType === 'video' || asset.mediaType === 'audio') && <UiIconButton shape="circle" size="xl" tone="media" aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
+        ><MoreHorizontal  /></UiIconButton>
+        {(asset.mediaType === 'video' || asset.mediaType === 'audio') && <UiIconButton shape="circle" size="xl" tone="media" aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play  /></UiIconButton>}
       </div>
       <div className="flex min-w-0 flex-col gap-0.5 px-0.5">
         {editing ? <UiInput autoFocus size="sm" value={draft} aria-label={t('assetLibrary.renameAsset')} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-13 font-medium text-text1" title={asset.displayName} onDoubleClick={(event) => { if (batchMode) return; event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}

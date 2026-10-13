@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
@@ -353,17 +354,17 @@ export function MediaInputRow({
                   setViewerVideoUrl(resolveImageDisplayUrl(url));
                 }}
               >
-                <Icon className="h-3 w-3 shrink-0" />
+                <Icon className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} />
                 {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
               </span>
             ) : (
               <span className="flex h-7 items-center gap-1 rounded-md border border-line bg-gap/60 px-1.5 text-2xs text-text2">
-                <Icon className="h-3 w-3 shrink-0" />
+                <Icon className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} />
                 {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
               </span>
             )}
             {!isConnected && mediaKind === 'video' && videoTrimMaxClipSeconds && (
-              <UiIconButton size="xs" tone="media" shape="circle"
+              <UiIconButton size="2xs" tone="media" shape="circle"
                 onClick={(event) => {
                   event.stopPropagation();
                   setTrimTargetIndex(index);
@@ -372,11 +373,11 @@ export function MediaInputRow({
                 className="absolute -left-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                 type="button"
               >
-                <Scissors className="h-2.5 w-2.5" />
+                <Scissors  />
               </UiIconButton>
             )}
             {!isConnected && (
-              <UiIconButton size="xs" tone="media" shape="circle"
+              <UiIconButton size="2xs" tone="media" shape="circle"
                 onClick={(event) => {
                   event.stopPropagation();
                   handleRemove(index);
@@ -386,7 +387,7 @@ export function MediaInputRow({
                 className="absolute -right-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                 type="button"
               >
-                <X className="h-2.5 w-2.5" />
+                <X  />
               </UiIconButton>
             )}
           </div>
@@ -403,7 +404,7 @@ export function MediaInputRow({
             title={constraintError ?? t('node.mediaRow.upload')}
             className="border border-dashed border-line hover:border-accent hover:text-accent-text"
           >
-            <Icon className="h-3.5 w-3.5" />
+            <Icon  />
           </UiIconButton>
         )}
       </div>

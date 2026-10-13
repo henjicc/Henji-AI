@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useMemo } from 'react';
 import { LayoutGrid } from 'lucide-react';
 
@@ -32,7 +33,7 @@ export const GroupNode = memo(({ id, data, selected }: GroupNodeProps) => {
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<LayoutGrid className="h-4 w-4" />}
+        icon={<LayoutGrid className={`${UI_ICON_SIZE_CLASS.md}`} />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, {

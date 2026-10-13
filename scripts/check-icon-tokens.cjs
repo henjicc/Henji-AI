@@ -6,7 +6,8 @@
  * 结果同一个「资产库」概念在顶部导航、工具栏、侧栏长成三个样，
  * 「工具箱」和「设置」还共用了同一个齿轮。
  *
- * 三条规则：
+ * 规则：
+ *   D. lucide 尺寸与描边登记，禁止按钮子图标覆盖；S6. 静态同行控件同档。
  *   A. 业务组件禁止手写 <svg>——图标一律走 lucide-react（与「原生 <button> 只能落在
  *      primitives.tsx」同构）。真正的图形（波形、缓动曲线、连线预览）在豁免名单里。
  *   B. 跨界面复用的业务概念图标必须走 `src/core/theme/icons.ts` 的登记常量，
@@ -22,6 +23,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const ts = require('typescript')
 const { findSymbolGlyphs } = require('./lib/symbolGlyphs.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -103,6 +105,119 @@ function lineAllowed(lines, index) {
   return current.includes(ALLOW_COMMENT) || previous.includes(ALLOW_COMMENT)
 }
 
+// 从正式登记表读取档位，门禁不维护第二套尺寸值。
+const ICON_SIZE_VALUES = new Set([...fs.readFileSync(REGISTRY, 'utf8')
+  .match(/export const UI_ICON_SIZE = \{([^}]+)\}/)[1].matchAll(/:\s*(\d+)/g)].map(match => Number(match[1])))
+
+function findIconSizingViolations(source, fileName) {
+  const ast = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const icons = new Set()
+  const buttons = new Set(['UiButton', 'UiIconButton'])
+  let hasIcons = false
+  for (const statement of ast.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
+    const module = statement.moduleSpecifier.text
+    const imported = statement.importClause?.namedBindings
+    if (imported && ts.isNamedImports(imported)) for (const entry of imported.elements) {
+      if (/^(UiButton|UiIconButton)$/.test(entry.propertyName?.text ?? entry.name.text)) buttons.add(entry.name.text)
+    }
+    if (module !== 'lucide-react' && !/theme\/icons$/.test(module)) continue
+    hasIcons = true
+    const bindings = statement.importClause?.namedBindings
+    if (bindings && ts.isNamedImports(bindings)) for (const entry of bindings.elements) {
+      if (!entry.isTypeOnly && !(entry.propertyName?.text ?? entry.name.text).startsWith('UI_')) icons.add(entry.name.text)
+    }
+  }
+  const findings = []
+  const variables = new Map()
+  function collect(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) variables.set(node.name.text, node.initializer)
+    ts.forEachChild(node, collect)
+  }
+  collect(ast)
+  function literals(node, seen = new Set()) {
+    if (!node) return []
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) return [node.text]
+    if (ts.isIdentifier(node) && variables.has(node.text) && !seen.has(node.text)) return literals(variables.get(node.text), new Set([...seen, node.text]))
+    const result = []
+    ts.forEachChild(node, child => { result.push(...literals(child, seen)) })
+    return result
+  }
+  function numericValues(node, seen = new Set()) {
+    if (!node) return []
+    if (ts.isIdentifier(node) && variables.has(node.text) && !seen.has(node.text)) return numericValues(variables.get(node.text), new Set([...seen, node.text]))
+    if (ts.isNumericLiteral(node)) return [Number(node.text)]
+    if (ts.isConditionalExpression(node)) return [...numericValues(node.whenTrue, seen), ...numericValues(node.whenFalse, seen)]
+    if (ts.isJsxExpression(node) || ts.isParenthesizedExpression(node)) return numericValues(node.expression, seen)
+    if (ts.isStringLiteral(node) && /^\d+(\.\d+)?$/.test(node.text)) return [Number(node.text)]
+    return []
+  }
+  function visit(node, inButton = false) {
+    if (ts.isJsxElement(node)) {
+      visit(node.openingElement, inButton)
+      const nested = inButton || buttons.has(node.openingElement.tagName.getText(ast))
+      node.children.forEach(child => visit(child, nested))
+      return
+    }
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tag = node.tagName.getText(ast)
+      if (icons.has(tag) || hasIcons && /(?:^Icon$|Icon$)/.test(tag)) {
+        for (const attr of node.attributes.properties) {
+          if (!ts.isJsxAttribute(attr)) continue
+          const name = attr.name.text
+          const text = attr.initializer?.getText(ast) ?? ''
+          const sizes = literals(attr.initializer).flatMap(value => [...value.matchAll(/(?:^|[\s:!])(?:h|w|size)-(\d+(?:\.\d+)?|\[[^\]]+\])/g)].map(match => match[1]))
+          let message
+          if (inButton && (name === 'size' || name === 'className' && (sizes.length || /\bUI_ICON_SIZE_CLASS\b/.test(text)))) message = '按钮子图标不得覆盖尺寸；由控件 size 自动提供'
+          else if (name === 'size' && numericValues(attr.initializer).some(value => !ICON_SIZE_VALUES.has(value))) message = '图标尺寸必须来自 UI_ICON_SIZE 登记档位'
+          else if (name === 'className' && sizes.some(value => !ICON_SIZE_VALUES.has(Number(value) * 4))) message = '图标尺寸类必须来自 UI_ICON_SIZE_CLASS 登记档位'
+          else if (name === 'strokeWidth' && !/^\{(?:UI_ICON_STROKE_WIDTH|UI_WINDOW_ICON_STROKE_WIDTH)\}$/.test(text)) message = '图标描边沿用 lucide 默认值；仅允许登记的窗口控件例外'
+          if (message) findings.push({ rule: 'D', line: ast.getLineAndCharacterOfPosition(attr.getStart(ast)).line + 1, message })
+        }
+      }
+    }
+    ts.forEachChild(node, child => visit(child, inButton))
+  }
+  visit(ast)
+  return findings
+}
+
+/** S6 的静态子集：只比较已知共享控件的直接兄弟，不猜条件分支、包装器和弹性布局。 */
+function findControlRowViolations(source, fileName) {
+  const ast = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const findings = []
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const tag = node.openingElement.tagName.getText(ast)
+      const cls = node.openingElement.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.text === 'className')?.initializer
+      const classes = cls && ts.isStringLiteral(cls) ? cls.text : ''
+      if (tag === 'UiToolbar' || /\bflex\b/.test(classes) && !/flex-col|flex-wrap/.test(classes)) {
+        const peers = node.children.flatMap(child => {
+          const opening = ts.isJsxElement(child) ? child.openingElement : ts.isJsxSelfClosingElement(child) ? child : null
+          if (!opening) return []
+          const name = opening.tagName.getText(ast)
+          if (!/^(UiButton|UiIconButton|UiInput|UiSelect|UiSegmented|UiReadout|UiFieldTrigger|NumberInput|Dropdown|UiChipButton)$/.test(name)) return []
+          // 展开 props 可能改变 size，交给实际 DOM 检查。
+          if (opening.attributes.properties.some(ts.isJsxSpreadAttribute)) return []
+          const attr = key => opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.text === key)?.initializer
+          const variant = attr('variant')
+          if (variant && ts.isStringLiteral(variant) && variant.text === 'link') return []
+          const size = attr('size')
+          const resolved = size ? ts.isStringLiteral(size) ? size.text : null : 'md'
+          return resolved ? [{ name, size: resolved }] : []
+        })
+        if (new Set(peers.map(peer => peer.size)).size > 1) findings.push({
+          rule: 'S6', line: ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1,
+          message: `同行控件尺寸不一致：${peers.map(peer => `${peer.name}=${peer.size}`).join('、')}`,
+        })
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(ast)
+  return findings
+}
+
 function main() {
   const strict = process.argv.includes('--strict')
   const findings = []
@@ -112,6 +227,10 @@ function main() {
     if (rel === 'src/core/theme/icons.ts') continue
     const source = fs.readFileSync(file, 'utf8')
     const lines = source.split(/\r?\n/)
+    if (!/\.(test|spec)\.tsx?$/.test(rel)) {
+      findings.push(...findIconSizingViolations(source, file).map(hit => ({ ...hit, rel })))
+      findings.push(...findControlRowViolations(source, file).map(hit => ({ ...hit, rel })))
+    }
 
     // 规则 A：手写 <svg>
     if (!GRAPHIC_EXEMPTIONS.has(rel)) {
@@ -164,7 +283,7 @@ function main() {
   }
 
   if (findings.length === 0) {
-    console.log('[check-icon-tokens] 通过：未检测到手写 svg、绕过登记表的概念图标或 emoji/符号图标。')
+    console.log('[check-icon-tokens] 通过：图标规则 A–D 与同行尺寸静态规则 S6 无违规。')
     return
   }
 
@@ -172,13 +291,15 @@ function main() {
     console.log(`[${item.rule}] ${item.rel}:${item.line} ${item.message}`)
   }
   console.log(`\n[check-icon-tokens] 命中 ${findings.length} 处。`)
-  console.log(`豁免写法：在该行或上一行加注释 ${ALLOW_COMMENT} 并说明理由。`)
+  console.log(`仅 A–C 支持豁免；D/S6 不支持注释绕过。在该行或上一行加注释 ${ALLOW_COMMENT} 并说明理由。`)
   if (strict) process.exitCode = 1
 }
 
-if (!fs.existsSync(REGISTRY)) {
+module.exports = { findIconSizingViolations, findControlRowViolations }
+
+if (require.main === module && !fs.existsSync(REGISTRY)) {
   console.error('[check-icon-tokens] 缺少图标登记表 src/core/theme/icons.ts')
   process.exitCode = 1
-} else {
+} else if (require.main === module) {
   main()
 }

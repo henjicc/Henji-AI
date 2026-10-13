@@ -71,6 +71,8 @@
 
 ## 同一工具栏的尺寸一致性
 
+行控件共用 `UiControlSize`：sm 28、md 32、lg 36；`UiIconButton` 扩展 2xs 20、xs 24、xl 40，默认 md。读数复用 `UiReadout`，不另画固定高度芯片。静态直接兄弟由 `check:icons:strict` S6 检查，动态/嵌套实际 DOM 等高审计由任务 5.2 接入。
+
 - 同一行、同一层级的按钮、图标按钮、分段选择器和读数芯片，使用同一个外框高度；宽度可随内容变化。优先复用该工具栏已有的高度令牌或唯一尺寸常量，不由各控件的默认 padding 推算。
 - 分段选择器比较的是**包括边框和内边距的整个外壳**。选中项在壳内填满可用高度，不得以“内部按钮等高”为由让外壳比旁边的控件更高。
 - 静息、选中、悬浮和加载状态不改变外框尺寸。确有主次尺寸差异时须有明确操作层级依据。
@@ -85,6 +87,9 @@
 缓动已由 `tailwind.config.js` 的 `transitionTimingFunction.DEFAULT` 全局设为 ease-out，不用每处写；唯一登记的例外是 `UI_EASE_STACK`。内联 `style={{ transition }}` 走 `uiTransition()`。用 `setTimeout` 卸载动画组件时，那个 ms 必须与 className 里的 `duration-*` 同档，否则过渡收尾被硬切。过渡布局属性前先确认无法用 transform 替代。
 
 ## 图标是视觉令牌
+
+- 图标尺寸使用 `UI_ICON_SIZE` / `UI_ICON_SIZE_CLASS` 七档 12/14/16/20/24/32/40；按钮子图标尺寸由按钮决定，禁止调用点覆盖。普通描边默认 2，窗口控件的 1.5/8px 例外在 `core/theme/icons.ts` 登记。`check:icons:strict` D 直接报错。
+- 分段选中使用 `bg-segment-selected text-text1` 的中性抬起底；其余单选继续淡强调底。不得为增强纸白辨识度把分段改成强调底。
 
 - 业务组件禁止手写 inline `<svg>`，图标一律走 `lucide-react`
 - 跨界面复用的业务概念图标（资产库、工作区、工具、媒体类型）必须引用 `src/core/theme/icons.ts` 的登记常量

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback } from 'react';
 import type { NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
@@ -97,7 +98,7 @@ export const IntSourceNode = memo(({ id, data, selected, width, height }: ValueN
       height={height}
       minWidth={128}
       minHeight={56}
-      icon={<IntegerIcon className="h-4 w-4" />}
+      icon={<IntegerIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
     >
       <NumberValueField value={Number(data.value)} integer onCommit={setValue} historyGroup={historyGroup} />
     </ValueSourceShell>
@@ -119,7 +120,7 @@ export const FloatSourceNode = memo(({ id, data, selected, width, height }: Valu
       height={height}
       minWidth={128}
       minHeight={56}
-      icon={<FloatIcon className="h-4 w-4" />}
+      icon={<FloatIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
     >
       <NumberValueField value={Number(data.value)} integer={false} onCommit={setValue} historyGroup={historyGroup} />
     </ValueSourceShell>
@@ -143,7 +144,7 @@ export const StringSourceNode = memo(({ id, data, selected, width, height }: Val
       height={height ?? 132}
       minWidth={240}
       minHeight={116}
-      icon={<TextIcon className="h-4 w-4" />}
+      icon={<TextIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
     >
       <UiTextArea
         value={typeof data.value === 'string' ? data.value : ''}
@@ -174,7 +175,7 @@ export const BooleanSourceNode = memo(({ id, data, selected, width, height }: Va
       width={width}
       height={height}
       minHeight={56}
-      icon={<BooleanIcon className="h-4 w-4" />}
+      icon={<BooleanIcon className={`${UI_ICON_SIZE_CLASS.md}`} />}
     >
       <div className="flex items-center justify-between">
         <span className="text-xs text-text2">{checked ? onLabel : offLabel}</span>
@@ -184,7 +185,7 @@ export const BooleanSourceNode = memo(({ id, data, selected, width, height }: Va
           onCheckedChange={setValue}
           offLabel={offLabel}
           onLabel={onLabel}
-          size="compact"
+          size="sm"
         />
       </div>
     </ValueSourceShell>

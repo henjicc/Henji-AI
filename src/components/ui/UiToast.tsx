@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useTranslation } from 'react-i18next';
 import type { NotificationMessage } from '@/i18n/notifications';
 import { Check, CircleAlert } from 'lucide-react';
@@ -51,7 +52,7 @@ export function UiToast({ message, tone, visible = true, surface = 'solid', plac
       >
         <Icon
           aria-hidden="true"
-          className={`mt-0.5 h-4 w-4 shrink-0 ${tone === 'success' ? 'text-success-text' : tone === 'warning' ? 'text-warning-text' : 'text-danger-text'}`}
+          className={`${UI_ICON_SIZE_CLASS.md} mt-0.5 shrink-0 ${tone === 'success' ? 'text-success-text' : tone === 'warning' ? 'text-warning-text' : 'text-danger-text'}`}
         />
         <span className={`${UI_TEXT_BODY_CLASS} min-w-0 break-words`}>{text}</span>
         {action && <UiButton size="sm" variant="quiet" className="shrink-0" disabled={!visible} onClick={action.onClick}>{action.label}</UiButton>}

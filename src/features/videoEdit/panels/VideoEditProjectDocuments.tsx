@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Files, FolderSearch, PackageOpen, Plus } from 'lucide-react'
@@ -38,7 +39,7 @@ function DocumentRow({ document, meta, onOpen }: { document: DocumentSummary; me
   const presentation = documentKindPresentation(document.kind)
   const Icon = presentation.icon
   return <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 gap-2" disabled={document.missing} onClick={onOpen} data-video-edit-project-document={document.id}>
-    <Icon size={14} className="shrink-0 text-text3" aria-hidden="true" />
+    <Icon size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" aria-hidden="true" />
     <span className="min-w-0 flex-1 truncate text-left" data-observation-sensitive>{document.name}</span>
     <span className="shrink-0 text-2xs text-text3">{meta}</span>
   </UiOptionButton>
@@ -88,11 +89,11 @@ function ProjectDocumentsPanel({ instance, onError, onOpenElsewhere, onImport }:
     <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
     {VIDEO_EDIT_COMPOSABLE_KINDS.map(kind => (
       <UiOptionButton key={kind} variant="menu" size="sm" className="w-full gap-2" data-video-edit-create-document={kind} onClick={() => run(() => createDocumentInVideoEdit(selfId, kind))}>
-        <Plus size={14} className="shrink-0" aria-hidden="true" />{t('documentLibrary.create', { kind: t(documentKindPresentation(kind).nameKey) })}
+        <Plus size={UI_ICON_SIZE.sm} className="shrink-0" aria-hidden="true" />{t('documentLibrary.create', { kind: t(documentKindPresentation(kind).nameKey) })}
       </UiOptionButton>
     ))}
-    <UiOptionButton variant="menu" size="sm" className="w-full gap-2" onClick={onOpenElsewhere}><FolderSearch size={14} className="shrink-0" aria-hidden="true" />{t('videoEditProject.documents.openElsewhere')}</UiOptionButton>
-    <UiOptionButton variant="menu" size="sm" className="w-full gap-2" onClick={onImport}><PackageOpen size={14} className="shrink-0" aria-hidden="true" />{t('documentLibrary.importPackage')}</UiOptionButton>
+    <UiOptionButton variant="menu" size="sm" className="w-full gap-2" onClick={onOpenElsewhere}><FolderSearch size={UI_ICON_SIZE.sm} className="shrink-0" aria-hidden="true" />{t('videoEditProject.documents.openElsewhere')}</UiOptionButton>
+    <UiOptionButton variant="menu" size="sm" className="w-full gap-2" onClick={onImport}><PackageOpen size={UI_ICON_SIZE.sm} className="shrink-0" aria-hidden="true" />{t('documentLibrary.importPackage')}</UiOptionButton>
   </div>
 }
 
@@ -148,7 +149,7 @@ function OtherLocationDocumentsDialog({ instance, onClose, onError, onNotice }: 
           {documents.map(document => {
             const Icon = documentKindPresentation(document.kind).icon
             return <UiOptionButton key={document.id} role="option" variant="menu" aria-selected={selected === document.id} active={selected === document.id} disabled={working} className="w-full min-w-0 gap-2" onClick={() => setSelected(document.id)} onDoubleClick={() => { setSelected(document.id); void act('open') }}>
-              <Icon size={14} className="shrink-0 text-text3" aria-hidden="true" />
+              <Icon size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate text-left" data-observation-sensitive>{document.name}</span>
               <span className="shrink-0 text-2xs text-text3" data-observation-sensitive>{t(documentKindPresentation(document.kind).nameKey)} · {location(document)}</span>
             </UiOptionButton>
@@ -173,7 +174,7 @@ export function VideoEditProjectDocumentsButton({ instance, onError, onNotice }:
   }
   return <>
     <PanelTrigger panelWidth={260} zIndex={Z_LAYERS.dropdown} panelPadding="menu" closeOnPanelClick renderPanel={() => <ProjectDocumentsPanel instance={instance} onError={onError} onOpenElsewhere={() => setElsewhereOpen(true)} onImport={importIntoProject} />}>
-      {({ open, togglePanel }) => <UiIconButton aria-label={t('videoEditProject.documents.title')} title={t('videoEditProject.documents.title')} aria-expanded={open} data-panel-trigger-button data-video-edit-project-documents onClick={togglePanel}><Files size={15} /></UiIconButton>}
+      {({ open, togglePanel }) => <UiIconButton aria-label={t('videoEditProject.documents.title')} title={t('videoEditProject.documents.title')} aria-expanded={open} data-panel-trigger-button data-video-edit-project-documents onClick={togglePanel}><Files  /></UiIconButton>}
     </PanelTrigger>
     {elsewhereOpen ? <OtherLocationDocumentsDialog instance={instance} onClose={() => setElsewhereOpen(false)} onError={onError} onNotice={notice} /> : null}
   </>

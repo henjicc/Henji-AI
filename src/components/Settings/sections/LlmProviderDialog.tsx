@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useState } from 'react'
 import { Info, RefreshCw, Trash2 } from 'lucide-react'
 
@@ -374,7 +375,7 @@ const LlmProviderDialog = ({
               disabled={saving}
               onClick={() => void handleReset()}
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw  />
               {t('llmProvider.actions.reset')}
             </UiButton>
           ) : (
@@ -384,7 +385,7 @@ const LlmProviderDialog = ({
               disabled={saving}
               onClick={() => void handleDelete()}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2  />
               {t('llmProvider.actions.delete')}
             </UiButton>
           )}
@@ -427,7 +428,7 @@ const LlmProviderDialog = ({
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         {startInCreateMode ? (
           <div className={`flex items-start gap-2 ${UI_TEXT_META_CLASS}`}>
-            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <Info className={`${UI_ICON_SIZE_CLASS.md} mt-0.5 shrink-0`} />
             <span>{t('llmProvider.addHint')}</span>
           </div>
         ) : null}

@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React from 'react'
 import { Settings2, Sparkles } from 'lucide-react'
 import { UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiEmpty, UiOptionButton } from '@/components/ui'
@@ -28,7 +29,7 @@ export function PromptOptimizationSelectorPanel({
           onClick={onOpenEditor}
           className="shrink-0"
         >
-          <Settings2 size={14} className="mr-2" />
+          <Settings2  className="mr-2" />
           编辑配置
         </UiButton>
       </div>
@@ -45,7 +46,7 @@ export function PromptOptimizationSelectorPanel({
               className="w-full justify-start gap-2 px-3 py-3 text-left"
               disabled={optimizing}
             >
-              <Sparkles size={14} className="shrink-0" />
+              <Sparkles size={UI_ICON_SIZE.sm} className="shrink-0" />
               <span className="truncate text-sm">{profile.name}</span>
             </UiOptionButton>
           ))}

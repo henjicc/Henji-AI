@@ -177,7 +177,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
           aria-label="添加关键帧"
           onClick={addStateKeyframe}
         >
-          <Plus size={16} />
+          <Plus  />
         </UiIconButton>
       </div>
 

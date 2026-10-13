@@ -1,3 +1,4 @@
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { FolderOpen, Package, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TFunction } from 'i18next'
@@ -263,7 +264,7 @@ export default function AgentSkillsSection(): JSX.Element {
             aria-label={t('agentSkills.removeSkill', { name: skill.name })}
             onClick={() => removeSkill(skill)}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2  />
           </UiIconButton>
         ) : null}
       </div>
@@ -317,21 +318,21 @@ export default function AgentSkillsSection(): JSX.Element {
             dragging ? 'bg-hover' : 'bg-window/40'
           }`}
         >
-          <Package size={18} className="mx-auto mb-2 text-text2" />
+          <Package size={UI_ICON_SIZE.md} className="mx-auto mb-2 text-text2" />
           <p className={UI_TEXT_META_CLASS}>{t('agentSkills.dropHint')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* 助手大类整页只留一个实底主动作（“保存指令”），安装技能用次级档 */}
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void pickAndInstall()}>
-            <Upload className="h-4 w-4" />
+            <Upload  />
             {t('agentSkills.pickFile')}
           </UiButton>
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void load()}>
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw  />
             {t('agentSkills.reload')}
           </UiButton>
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void openDirectory()}>
-            <FolderOpen className="h-4 w-4" />
+            <FolderOpen  />
             {t('agentSkills.openDirectory')}
           </UiButton>
         </div>

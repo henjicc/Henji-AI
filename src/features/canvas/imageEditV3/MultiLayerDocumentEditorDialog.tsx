@@ -174,7 +174,7 @@ export function MultiLayerDocumentEditorDialog({
       title={exportUnavailableReason ?? t('toolDialog.imageEditorV3.exportToCanvas')}
       onClick={exportToCanvas}
     >
-      <Download className="h-4 w-4" />
+      <Download  />
       {exporting
         ? t('toolDialog.imageEditorV3.exportingToCanvas')
         : exportFailed
@@ -213,14 +213,14 @@ export function MultiLayerDocumentEditorDialog({
         onEditorContextChange={setEditorContext}
         interactionDisabled={closing}
         toolbarLeading={(
-          <UiIconButton size="lg"
+          <UiIconButton size="md"
             className="shrink-0"
             aria-label={t('toolDialog.imageEditorV3.close')}
             title={t('toolDialog.imageEditorV3.close')}
             disabled={closing}
             onClick={requestCloseFromUi}
           >
-            <X className="h-4 w-4" />
+            <X  />
           </UiIconButton>
         )}
         toolbarActions={closing ? (
