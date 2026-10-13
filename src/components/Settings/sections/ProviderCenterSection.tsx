@@ -339,7 +339,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
                   return <div key={id} className="space-y-2">
                     <div className={UI_TEXT_LABEL_CLASS}>{service}</div>
                     <ApiKeyInput value={generationKeys.keys[id]} visible={generationKeys.visibility[id]}
-                      error={generationKeys.errors[id] ? t(generationKeys.errors[id]!, { defaultValue: t('llmProvider.errors.saveFailed') }) : undefined}
+                      error={generationKeys.errors[id] ? t(generationKeys.errors[id]!) : undefined}
                       onChange={value => generationKeys.updateKey(id, value)}
                       onToggleVisibility={() => generationKeys.toggleVisibility(id)}
                       placeholder={t('providerCenter.apiKeyPlaceholder', { provider: service })}
@@ -351,8 +351,8 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
             ) : generationCredential || credentialProvider ? (
               <ApiKeyInput
                 error={generationCredential
-                  ? (generationKeys.errors[generationCredential] ? t(generationKeys.errors[generationCredential]!, { defaultValue: t('llmProvider.errors.saveFailed') }) : undefined)
-                  : (credentialProvider && llm.keyErrors[credentialProvider.providerId] ? t(llm.keyErrors[credentialProvider.providerId], { defaultValue: t('llmProvider.errors.saveFailed') }) : undefined)}
+                  ? (generationKeys.errors[generationCredential] ? t(generationKeys.errors[generationCredential]!) : undefined)
+                  : (credentialProvider && llm.keyErrors[credentialProvider.providerId] ? t(llm.keyErrors[credentialProvider.providerId]) : undefined)}
                 value={credentialValue}
                 visible={credentialVisible}
                 onChange={value => generationCredential

@@ -14,6 +14,9 @@ describe('生成密钥写入', () => {
   it.each([
     ['set', 'key', 'Electron safeStorage encryption is not available on this device', 'apiKeys.errors.encryptionUnavailable'],
     ['remove', '', 'Invalid keystore file format', 'apiKeys.errors.unreadable'],
+    ['set', 'key', "ENOSPC: no space left on device, open 'provider-keys.enc.json'", 'apiKeys.errors.saveFailed'],
+    ['remove', '', "EACCES: permission denied, open 'provider-keys.enc.json'", 'apiKeys.errors.saveFailed'],
+    ['set', 'key', 'Unexpected end of JSON input', 'apiKeys.errors.unreadable'],
   ] as const)('暴露 %s 失败并在重新输入和成功后清除', async (operation, value, message, errorKey) => {
     mocks[operation].mockRejectedValueOnce(new Error(message))
     const { result } = renderHook(useApiKeys)

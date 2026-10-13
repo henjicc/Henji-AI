@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { UseLlmSettingsResult } from '../hooks/useLlmSettings'
 import type { Provider } from '@/config/providers'
+import i18n from '@/i18n/config'
 
-const mocks = vi.hoisted(() => ({ fetchModels: vi.fn(), providers: [] as Provider[], errors: {} as Record<string, string> }))
+const mocks = vi.hoisted(() => ({ fetchModels: vi.fn(), providers: [] as Provider[], errors: {} as Record<string, string>, language: '' }))
 
-vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key, currentLanguage: 'zh-CN' }) }))
+vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: mocks.language ? i18n.getFixedT(mocks.language, 'settings') : (key: string) => key, currentLanguage: mocks.language || 'zh-CN' }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/config/providers', () => ({ getProviders: () => mocks.providers }))
 vi.mock('../hooks/useApiKeys', () => ({ useApiKeys: () => ({ keys: {}, visibility: {}, errors: mocks.errors, updateKey: vi.fn(), toggleVisibility: vi.fn() }) }))
@@ -43,10 +44,25 @@ const llm = {
   saveConfig: vi.fn(), commitProviderSettings: vi.fn(), deleteProviderSettings: vi.fn(),
 } as unknown as UseLlmSettingsResult
 
-beforeEach(() => { vi.clearAllMocks(); mocks.providers = []; mocks.errors = {} })
+beforeEach(() => { vi.clearAllMocks(); mocks.providers = []; mocks.errors = {}; mocks.language = '' })
 afterEach(cleanup)
 
 describe('供应商中心密钥错误', () => {
+  it.each([
+    ['zh-CN', 'encryptionUnavailable', '系统加密'],
+    ['en-US', 'encryptionUnavailable', 'secure key storage'],
+    ['zh-CN', 'unreadable', '无法读取'],
+    ['en-US', 'unreadable', 'could not be read'],
+    ['zh-CN', 'saveFailed', '可用空间'],
+    ['en-US', 'saveFailed', 'free space'],
+  ])('%s 密钥失败显示分类原因和恢复提示：%s', async (language, category, reason) => {
+    mocks.language = language
+    render(<ProviderCenterSection llm={{ ...llm, keyErrors: { 'custom-relay': `apiKeys.errors.${category}` } }} />)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(reason)
+    expect(alert.textContent).not.toContain('apiKeys.errors.')
+    expect(alert.textContent).not.toContain('safeStorage')
+  })
   it('LLM 凭据错误通过现有 alert 显示', async () => {
     render(<ProviderCenterSection llm={{ ...llm, keyErrors: { 'custom-relay': 'apiKeys.errors.saveFailed' } }} />)
     expect((await screen.findByRole('alert')).textContent).toBe('apiKeys.errors.saveFailed')

@@ -2,10 +2,19 @@
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useSettingsStore } from '@/stores/settingsStore'
+import i18n from '@/i18n/config'
 vi.mock('@/commands/image', () => ({ readImageInfo: async () => ({ width: 100, height: 100, fileSizeBytes: 10, createdAt: null }) }))
 import { ImageInfoPanel } from './ImageInfoPanel'
 beforeEach(() => { useSettingsStore.setState({ enableImageViewerInfoPanel: true, imageViewerInfoPanelCollapsed: false }) })
 afterEach(cleanup)
+it.each(['zh-CN', 'en-US'])('%s 信息按钮及设置提示使用 I 快捷键', async language => {
+  await i18n.changeLanguage(language)
+  const { container } = render(<ImageInfoPanel open imageSource="image.png" />)
+  await act(async () => {})
+  expect(container.querySelector('button')?.title).toMatch(/[(（]I[)）]/)
+  expect(i18n.t('sections.canvas.imageViewerInfoHint', { ns: 'settings' })).toContain('I')
+  expect(i18n.t('sections.canvas.imageViewerInfoHint', { ns: 'settings' })).not.toContain('Tab')
+})
 it.each([false, true])('Tab 保留焦点导航，shift=%s', async shiftKey => {
   const { container } = render(<ImageInfoPanel open imageSource="image.png" />)
   await act(async () => {})

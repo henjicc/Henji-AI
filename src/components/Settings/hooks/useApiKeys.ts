@@ -28,7 +28,11 @@ const WRITE_DEBOUNCE_MS = 450
 export function apiKeySaveErrorKey(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   if (/safeStorage.*(?:not available|unavailable)/i.test(message)) return 'apiKeys.errors.encryptionUnavailable'
-  if (/keystore|JSON|decrypt/i.test(message)) return 'apiKeys.errors.unreadable'
+  // 文件路径里的 .json 不代表解析失败，写入失败应提示检查权限和空间。
+  if (error instanceof SyntaxError
+    || /Invalid keystore file format|decrypt|(?:unexpected|expected|unterminated|bad|not valid)[^\n]*\bJSON\b|\bJSON[ .](?:parse|syntax)/i.test(message)) {
+    return 'apiKeys.errors.unreadable'
+  }
   return 'apiKeys.errors.saveFailed'
 }
 

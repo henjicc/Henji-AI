@@ -33,6 +33,11 @@
     "title": "API 密钥设置",
     "description": "配置各个服务提供商的 API 密钥。密钥将安全地存储在本地。",
     "migrationHint": "Electron 版本会使用新的安全密钥存储；如果从旧 Tauri 版本切换后密钥显示为空，请重新填写一次。",
+    "errors": {
+      "encryptionUnavailable": "密钥更改未保存：此设备的系统加密不可用。请检查系统的密码与密钥存储服务，恢复后重启应用重试。",
+      "unreadable": "密钥更改未保存：无法读取已保存的密钥。请检查数据目录的访问权限；有备份时可恢复密钥文件后重试。原文件未被覆盖。",
+      "saveFailed": "密钥更改未保存。请检查数据目录的访问权限和可用空间后重试。"
+    },
     "visibility": {
       "show": "显示",
       "hide": "隐藏"
@@ -334,7 +339,7 @@
       "autoInsertTextDisplayLabel": "自动插入文本展示",
       "autoInsertTextDisplayHint": "连接文本处理节点到生成节点时，通过一个共享、可编辑的文本展示节点中转。已有连线不会被改写。",
       "imageViewerInfoLabel": "图片查看器显示图片信息",
-      "imageViewerInfoHint": "放大查看图片时显示分辨率、文件大小等信息，可用 Tab 键快速折叠",
+      "imageViewerInfoHint": "放大查看图片时显示分辨率、文件大小等信息，可用 I 键快速折叠",
       "uploadFilenameTitleLabel": "上传节点使用文件名作为标题",
       "storyboardKeepStyleLabel": "分镜生成保持与参考图风格一致",
       "storyboardNoTextLabel": "分镜生成禁止生成描述文字",
