@@ -12,10 +12,17 @@ export async function captureMicrophone(originMs: number, onBlock: (block: Captu
     context = new AudioContext({ latencyHint: 'interactive' })
     await context.audioWorklet.addModule(new URL('./captureWorklet.js', import.meta.url).href)
     await context.resume(); signal.throwIfAborted()
-    const before = performance.now(); const timestamp = context.getOutputTimestamp(); const after = performance.now()
     const settings = stream.getAudioTracks()[0]?.getSettings()
     const inputLatency = settings && 'latency' in settings && typeof settings.latency === 'number' ? settings.latency : undefined
-    const { offsetUs, uncertaintyUs } = correlateRecordingClock({ originMs, beforeMs: before, afterMs: after, currentSeconds: context.currentTime, timestamp, sampleRate: context.sampleRate, baseLatency: context.baseLatency, inputLatency })
+    const calibrate = () => {
+      const before = performance.now(); const timestamp = context!.getOutputTimestamp(); const after = performance.now()
+      return correlateRecordingClock({ originMs, beforeMs: before, afterMs: after, currentSeconds: context!.currentTime, timestamp, sampleRate: context!.sampleRate, baseLatency: context!.baseLatency, outputLatency: context!.outputLatency, inputLatency })
+    }
+    let correlation = calibrate()
+    let calibratedSeconds = context.currentTime
+    let appliedOffsetUs = correlation.offsetUs
+    let previousStartUs = 0
+    let previousFrame: number | undefined
     source = context.createMediaStreamSource(stream)
     node = new AudioWorkletNode(context, 'henji-explanation-capture', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
     let acknowledge: (() => void) | undefined
@@ -23,7 +30,21 @@ export async function captureMicrophone(originMs: number, onBlock: (block: Captu
       if (event.data.stopped) { acknowledge?.(); return }
       const { firstFrame, samples } = event.data
       if (firstFrame === undefined || !samples || !context || signal.aborted) return
-      onBlock({ firstFrame, samples, sampleRate: context.sampleRate, monoStartUs: Math.max(0, offsetUs + Math.round(firstFrame * 1_000_000 / context.sampleRate)), uncertaintyUs })
+      if (!stopped && context.currentTime - calibratedSeconds >= RECORDING_CLOCK_RECALIBRATION_SECONDS) {
+        correlation = calibrate()
+        calibratedSeconds = context.currentTime
+      }
+      const quantumUs = Math.ceil(128 * 1_000_000 / context.sampleRate)
+      // 校准逐量子靠近新相关点，避免设备变化造成突跳或相邻块倒退。
+      appliedOffsetUs += Math.max(-quantumUs, Math.min(quantumUs, correlation.offsetUs - appliedOffsetUs))
+      const mappedStartUs = Math.max(0, appliedOffsetUs + Math.round(firstFrame * 1_000_000 / context.sampleRate))
+      const monoStartUs = previousFrame !== undefined && firstFrame > previousFrame ? Math.max(previousStartUs + 1, mappedStartUs) : mappedStartUs
+      // 排队投递的旧块也按采样帧到校准点的距离估计漂移，不能把“刚收到”当作刚采集。
+      const ageSeconds = Math.max(Math.abs(firstFrame / context.sampleRate - calibratedSeconds), Math.abs((firstFrame + samples.length) / context.sampleRate - calibratedSeconds))
+      const uncertaintyUs = correlation.uncertaintyUs + recordingClockDriftUncertainty(ageSeconds)
+        + Math.abs(correlation.offsetUs - appliedOffsetUs) + Math.abs(monoStartUs - mappedStartUs)
+      previousFrame = firstFrame; previousStartUs = monoStartUs
+      onBlock({ firstFrame, samples, sampleRate: context.sampleRate, monoStartUs, uncertaintyUs })
     }
     source.connect(node); node.connect(context.destination) // Worklet output is silence; input is never monitored.
     stream.getAudioTracks().forEach(track => track.addEventListener('ended', () => { if (!stopped) onInterrupt('麦克风已断开，录制已暂停。') }, { once: true }))
@@ -44,4 +65,4 @@ export async function captureMicrophone(originMs: number, onBlock: (block: Captu
     return { stop }
   } catch (error) { await release(); throw error }
 }
-import { correlateRecordingClock } from '@/core/audioEdit/recordingClock'
+import { correlateRecordingClock, RECORDING_CLOCK_RECALIBRATION_SECONDS, recordingClockDriftUncertainty } from '@/core/audioEdit/recordingClock'

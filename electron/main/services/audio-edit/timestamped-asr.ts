@@ -1,4 +1,5 @@
 import {
+  AiRuntimeError,
   bailianNonRealtimeAsrPresets,
   createBailianAsrModule, createCapabilityClient, createGroqAsrModule,
   createSiliconFlowAsrModule, createVolcengineAsrModule,
@@ -13,7 +14,7 @@ import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
 import { createMainLogger } from '../logging'
 import { scopedUploadFile } from '../ai-runtime/native-file-upload'
 import { assertElectronHostCapabilities } from '../ai-runtime/host-capabilities'
-import type { TranscriptionPreflight } from '../../../../src/core/audioEdit/transcriptionFailure'
+import type { TranscriptionFacts, TranscriptionPreflight } from '../../../../src/core/audioEdit/transcriptionFailure'
 
 const logger = createMainLogger('main.audio_edit.asr')
 
@@ -41,7 +42,79 @@ export interface TimestampedAsrService {
   listModels(): TimestampedAsrModel[]
   preflight(input: TranscriptionPreflight): Promise<{ modelId: string; cost: AsrCostEstimate }>
   prepare(input: { modelId?: string; providerId?: string; audioPath: string; durationMs: number; language?: string }): TimestampedTranscriptionPlan
-  execute(plan: TimestampedTranscriptionPlan, context: { requestId: string; signal: AbortSignal; resumeTaskId?: string; onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void> }): Promise<TimestampedTranscript>
+  execute(plan: TimestampedTranscriptionPlan, context: TimestampedAsrExecutionContext): Promise<TimestampedTranscript>
+}
+
+export interface TimestampedAsrExecutionContext {
+  requestId: string
+  signal: AbortSignal
+  resumeTaskId?: string
+  onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void>
+  /** 供应商完成后、取消与本地规范化前，由 owner 持久化已付费原始 DTO。 */
+  onOutput?: (output: SpeechRecognitionOutput) => void | Promise<void>
+}
+
+/** 两种 owner 共用的付费事实；最终结果和任务状态仍由各自 owner 保存。 */
+export interface TimestampedAsrReceipt {
+  modelId?: string
+  sourceDigest?: string
+  language?: string
+  billing?: TranscriptionFacts['billing']
+  rawOutput?: SpeechRecognitionOutput
+}
+
+export function prepareTimestampedAsrWithReceipt(
+  service: Pick<TimestampedAsrService, 'prepare'>,
+  input: Parameters<TimestampedAsrService['prepare']>[0],
+  receipt: TimestampedAsrReceipt | undefined,
+  sourceDigest: string,
+): TimestampedTranscriptionPlan {
+  if (!receipt?.rawOutput) return service.prepare(input)
+  if (receipt.sourceDigest !== sourceDigest) throw new Error('素材已变化，不能复用旧识别任务。')
+  const entry = ASR_CATALOG.find(entry => entry.descriptor.id === receipt.modelId)
+  if (!entry) throw new Error('原转写模型不在目录中，请保留已付费结果。')
+  // 本地恢复不依赖凭据，也不预检上传或访问供应商。
+  return Object.freeze({ modelId: entry.descriptor.id, providerId: asrProviderId(entry),
+    audioPath: input.audioPath, durationMs: input.durationMs, language: receipt.language ?? 'zh',
+    cost: estimateAsrCost(entry.descriptor.id, input.durationMs) })
+}
+
+export async function executeTimestampedAsrWithReceipt(
+  service: Pick<TimestampedAsrService, 'execute'>,
+  plan: TimestampedTranscriptionPlan,
+  context: TimestampedAsrExecutionContext,
+  receipt: TimestampedAsrReceipt,
+  persist: (receipt: TimestampedAsrReceipt) => void,
+): Promise<TimestampedTranscript> {
+  context.signal.throwIfAborted()
+  try {
+    if (receipt.rawOutput) {
+      receipt.billing = 'completed'
+      const entry = ASR_CATALOG.find(entry => entry.descriptor.id === receipt.modelId)
+      if (!entry) throw new Error('原转写模型不在目录中，请保留已付费结果。')
+      return normalizeTimestampedTranscript(receipt.rawOutput, plan.durationMs, entry.wordGranularity)
+    }
+    receipt.billing = context.resumeTaskId ? 'submitted' : 'unknown'
+    persist({ ...receipt })
+    const output = await service.execute(plan, { ...context,
+      onOutput: async output => {
+        receipt.rawOutput = output
+        receipt.billing = 'completed'
+        persist({ ...receipt })
+        await context.onOutput?.(output)
+      },
+      onEvent: async event => {
+        if (event.type === 'processing') receipt.billing = 'submitted'
+        await context.onEvent?.(event)
+      },
+    })
+    receipt.billing = 'completed'
+    return output
+  } catch (error) {
+    if (!receipt.rawOutput && ((error instanceof AiRuntimeError && error.details?.billing === 'not_charged')
+      || (error instanceof Error && error.message.startsWith('[native_upload_unsupported]')))) receipt.billing = 'not_charged'
+    throw error
+  }
 }
 
 export function createTimestampedAsrService(runtime: RuntimeContext, isConfigured: (providerId: string) => boolean, checkMedia: (ref: string) => Promise<unknown> = scopedUploadFile): TimestampedAsrService {
@@ -82,7 +155,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
     /** 仅执行一次；owner 负责授权、operationId、任务账本、恢复和音频→墙钟映射。 */
     execute: async (
       plan: TimestampedTranscriptionPlan,
-      context: { requestId: string; signal: AbortSignal; resumeTaskId?: string; onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void> },
+      context: TimestampedAsrExecutionContext,
     ): Promise<TimestampedTranscript> => {
       context.signal.throwIfAborted()
       const entry = ASR_CATALOG.find((entry) => entry.descriptor.id === plan.modelId)
@@ -96,6 +169,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
           audio: { kind: 'media-ref', ref: plan.audioPath }, language: plan.language, punctuation: true, timestamps: true,
           options: { ...entry.timestampOptions, ...(context.resumeTaskId ? { resumeTaskId: context.resumeTaskId } : {}) },
         }, context)
+        await context.onOutput?.(output)
         context.signal.throwIfAborted()
         const result = normalizeTimestampedTranscript(output, plan.durationMs, entry.wordGranularity)
         logger.info('带时间转写完成', { event: 'audio_edit.timestamped_asr.completed', requestId: context.requestId, modelId: plan.modelId, context: { granularity: result.granularity } })

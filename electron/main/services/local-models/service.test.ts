@@ -79,9 +79,67 @@ beforeEach(() => {
   responses = {}
   vi.clearAllMocks()
 })
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }))
+afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }) })
 
 describe('本地模型服务', () => {
+  it('ensure 正在校验磁盘时插入删除，也不会越过删除屏障开始下载', async () => {
+    responses['https://ms/own/yunet.onnx'] = ok
+    const models = service()
+    let releaseStat!: () => void
+    let releaseRemoval!: () => void
+    const statGate = new Promise<void>(resolve => { releaseStat = resolve })
+    const removalGate = new Promise<void>(resolve => { releaseRemoval = resolve })
+    const originalStat = fs.promises.stat.bind(fs.promises)
+    const originalRm = fs.promises.rm.bind(fs.promises)
+    const stat = vi.spyOn(fs.promises, 'stat').mockImplementationOnce(async target => { await statGate; return originalStat(target) })
+    const rm = vi.spyOn(fs.promises, 'rm').mockImplementation(async (target, options) => { await removalGate; return originalRm(target, options) })
+    const ensuring = models.ensure('face_detection_yunet')
+    await vi.waitFor(() => expect(stat).toHaveBeenCalled())
+    const deleting = models.remove('face_detection_yunet')
+    try {
+      await vi.waitFor(() => expect(rm).toHaveBeenCalled())
+      releaseStat()
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(requested).toEqual([])
+    } finally { releaseStat(); releaseRemoval(); await Promise.allSettled([deleting, ensuring]) }
+    await ensuring
+    expect(fs.readFileSync(modelPath())).toEqual(bytes)
+  })
+
+  it('删除失败明确返回 disk；屏障释放后能再次 ensure，不吞掉删除错误', async () => {
+    responses['https://ms/own/yunet.onnx'] = ok
+    const models = service()
+    const rm = vi.spyOn(fs.promises, 'rm').mockRejectedValueOnce(new Error('disk denied'))
+    const deleting = models.remove('face_detection_yunet')
+    const ensuring = models.ensure('face_detection_yunet')
+    await expect(deleting).rejects.toThrow('disk: disk denied')
+    await expect(ensuring).rejects.toThrow('disk: disk denied')
+    expect(requested).toEqual([])
+    rm.mockRestore()
+    await models.ensure('face_detection_yunet')
+    expect((await models.info('face_detection_yunet')).status).toBe('ready')
+  })
+  it('删除期间 ensure 等待删除屏障；重复删除复用一次删除，随后下载成功', async () => {
+    responses['https://ms/own/yunet.onnx'] = ok
+    const models = service()
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const original = fs.promises.rm.bind(fs.promises)
+    const rm = vi.spyOn(fs.promises, 'rm').mockImplementation(async (target, options) => { await gate; return original(target, options) })
+    const deleting = models.remove('face_detection_yunet')
+    const deletingAgain = models.remove('face_detection_yunet')
+    const ensuring = models.ensure('face_detection_yunet')
+    try {
+      await vi.waitFor(() => expect(rm).toHaveBeenCalled())
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(requested).toEqual([])
+    } finally { release(); await Promise.allSettled([deleting, deletingAgain, ensuring]) }
+    await ensuring
+    expect(rm).toHaveBeenCalledTimes(1)
+    expect(fs.readFileSync(modelPath())).toEqual(bytes)
+    expect(events.map(event => event.status).indexOf('not_downloaded')).toBeLessThan(events.map(event => event.status).indexOf('downloading'))
+    expect((await models.info('face_detection_yunet')).status).toBe('ready')
+  })
   it('我们的仓库还不存在（404）时自动换到镜像，下载后就绪并写说明文件', async () => {
     responses['https://ms/own/yunet.onnx'] = () => new Response('not found', { status: 404 })
     responses['https://ms/mirror/yunet.onnx'] = ok

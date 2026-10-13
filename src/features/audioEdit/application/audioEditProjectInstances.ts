@@ -64,6 +64,11 @@ const records = new Map<string, InstanceRecord>()
 const loads = new Map<string, Promise<AudioEditProjectInstance>>()
 const leaving = new Map<string, Promise<DocumentLeaveOutcome>>()
 const listeners = new Set<(instance: AudioEditProjectInstance) => void>()
+const disposalListeners = new Set<(id: string) => void>()
+export function subscribeAudioEditProjectDisposal(listener: (id: string) => void): () => void {
+  disposalListeners.add(listener)
+  return () => { disposalListeners.delete(listener) }
+}
 let shownDocumentId: string | null = null
 let registryOverride: DocumentSessionRegistry | null = null
 
@@ -163,6 +168,7 @@ export function bindAudioEditSession(session: DocumentSession): AudioEditProject
     detach()
     if (records.get(session.id) === record) records.delete(session.id)
     participants.delete(session.id)
+    for (const listener of disposalListeners) listener(session.id)
     catalogRevision += 1
     publish(instance)
   }
@@ -255,6 +261,22 @@ function requireRecord(id: string): InstanceRecord {
 }
 
 export function editAudioEditProject(id: string, update: (document: AudioEditProjectDocument) => AudioEditProjectDocument): AudioEditProjectDocument {
+  return updateAudioEditProject(id, update, false)
+}
+
+/** 撤销/补偿恢复内容和锁；其余写屏障、来源不变、schema、批次和历史语义与编辑一致。 */
+export function restoreAudioEditProjectSnapshot(id: string, snapshot: AudioEditProjectDocument, expectedContent: string): AudioEditProjectDocument {
+  return updateAudioEditProject(id, current => {
+    if (audioEditProjectContent(current) !== expectedContent) throw new Error('口播已有后续修改，请使用口播撤销逐步恢复。')
+    return { ...snapshot, source: current.source }
+  }, true)
+}
+
+export function audioEditProjectContent(document: AudioEditProjectDocument): string {
+  return JSON.stringify({ ...document, revision: 0, updatedAt: 0 })
+}
+
+function updateAudioEditProject(id: string, update: (document: AudioEditProjectDocument) => AudioEditProjectDocument, restoring: boolean): AudioEditProjectDocument {
   assertApplicationWritesAllowed()
   const record = requireRecord(id)
   const { instance } = record
@@ -265,7 +287,7 @@ export function editAudioEditProject(id: string, update: (document: AudioEditPro
   // 名称就是文件名，改名走通用文档改名（documents.document.name）
   const normalized = { ...next, id: instance.document.id, name: instance.document.name, editBaseline: instance.document.editBaseline }
   audioEditProjectSchema.parse(normalized)
-  assertAudioEditLocks(instance.document, normalized)
+  if (!restoring) assertAudioEditLocks(instance.document, normalized)
   return commitEdit(record, normalized)
 }
 

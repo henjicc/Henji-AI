@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { documentKindRegistry } from '@/core/documents/kinds'
 import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
 import type { AudioEditProjectDocument, AudioEditSourceMetadata } from '@/core/audioEdit/types'
+import type { ApplicationPlannedStep, ApplicationPropertyMutation } from '@/core/application-control'
+import { AudioEditMutationExecutor } from './audioEditMutationExecutor'
+import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditFields'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
 import {
@@ -34,6 +37,56 @@ afterEach(async () => { await resetAudioEditProjectInstancesForTests(); setAudio
 function stored(id = 'instance-test'): Record<string, unknown> {
   return commands.stored(id)!.content as Record<string, unknown>
 }
+
+function mutationStep(entityType: typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_EDIT_ENTITY_TYPES.transcriptBlock, mutations: ApplicationPropertyMutation[]): Extract<ApplicationPlannedStep, { kind: 'mutation' }> {
+  return { kind: 'mutation', entityType, target: { kind: entityType, id: entityType === AUDIO_EDIT_ENTITY_TYPES.project ? 'instance-test' : 'instance-test:word' }, expectedRevisions: {}, mutations }
+}
+
+it('助手撤销回执最多保留 50 项，仍保留最新回执且释放文档清除全部快照', async () => {
+  const executor = new AudioEditMutationExecutor(AUDIO_EDIT_ENTITY_TYPES.project)
+  const tokens: string[] = []
+  for (let index = 0; index < 51; index++) {
+    const result = await executor.apply(mutationStep(AUDIO_EDIT_ENTITY_TYPES.project, [{ propertyId: 'audio_edit.document.reference_script', operation: 'set', value: `${index}` }]))
+    tokens.push(result.undoToken!)
+  }
+  await expect(executor.undo(tokens[0])).rejects.toThrow('AUDIO_EDIT_UNDO_NOT_FOUND')
+  await executor.undo(tokens[50])
+  expect(getAudioEditProjectInstance('instance-test')!.document.referenceScript).toBe('49')
+  await releaseAudioEditProject('instance-test')
+  await expect(executor.undo(tokens[49])).rejects.toThrow('AUDIO_EDIT_UNDO_NOT_FOUND')
+})
+
+it.each(['undo', 'compensate'] as const)('助手同一步删除再锁定后 %s 恢复内容和锁，普通编辑仍受锁保护', async (mode) => {
+  const instance = await loadAudioEditProject('instance-test')
+  editAudioEditProject('instance-test', document => ({ ...document, transcript: document.transcript.map(block => ({ ...block, locked: false })) }))
+  const executor = new AudioEditMutationExecutor(AUDIO_EDIT_ENTITY_TYPES.transcriptBlock)
+  const step = mutationStep(AUDIO_EDIT_ENTITY_TYPES.transcriptBlock, [
+    { propertyId: 'audio_edit.transcript_block.included', operation: 'set', value: false },
+    { propertyId: 'audio_edit.transcript_block.locked', operation: 'set', value: true },
+  ])
+  const result = await executor.apply(step)
+  expect(instance.document.transcript[0]).toMatchObject({ included: false, locked: true })
+  expect(() => editAudioEditProject('instance-test', document => ({ ...document, transcript: document.transcript.map(block => ({ ...block, included: true })) }))).toThrow('锁定')
+  if (mode === 'undo') await executor.undo(result.undoToken!)
+  else await executor.compensate(step, result)
+  expect(instance.document.transcript[0]).toMatchObject({ included: true, locked: false })
+  expect((stored().transcript as AudioEditProjectDocument['transcript'])[0]).toMatchObject({ included: true, locked: false })
+})
+
+it.each(['release', 'leave'] as const)('%s 清除拒绝撤销后残留的回执，关闭一份文档不影响另一份', async mode => {
+  commands.seed({ kind: 'audio_edit', id: 'other', name: '另一份', content: audioEditProjectToDocumentContent({ ...fixture(), id: 'other' }) })
+  const executor = new AudioEditMutationExecutor(AUDIO_EDIT_ENTITY_TYPES.project)
+  const step = mutationStep(AUDIO_EDIT_ENTITY_TYPES.project, [{ propertyId: 'audio_edit.document.reference_script', operation: 'set', value: '助手修改' }])
+  const result = await executor.apply(step)
+  const other = await executor.apply({ ...step, target: { ...step.target, id: 'other' } })
+  editAudioEditProject('instance-test', document => ({ ...document, referenceScript: '后续修改' }))
+  await expect(executor.undo(result.undoToken!)).rejects.toThrow('后续修改')
+  if (mode === 'release') await releaseAudioEditProject('instance-test')
+  else await leaveAudioEditProject('instance-test')
+  await expect(executor.undo(result.undoToken!)).rejects.toThrow('AUDIO_EDIT_UNDO_NOT_FOUND')
+  await executor.undo(other.undoToken!)
+  expect(getAudioEditProjectInstance('other')!.document.referenceScript).toBe('')
+})
 
 describe('口播文档实例', () => {
   it('保存失败保留修改与撤销；处理前先写完，处理期间拒绝修改', async () => {

@@ -63,6 +63,7 @@ const ATTEMPTS_PER_SOURCE = 2
 
 export class LocalModelService {
   private readonly active = new Map<LocalModelId, ActiveDownload>()
+  private readonly removing = new Map<LocalModelId, Promise<void>>()
   private readonly failures = new Map<LocalModelId, LocalModelFailureCode>()
   /** 已校验通过的文件：路径 → `大小:修改时间`。 */
   private readonly verified = new Map<string, string>()
@@ -165,35 +166,40 @@ export class LocalModelService {
 
   /** 已就绪直接返回位置；否则下载并校验。同一模型的并发调用共用一次下载。 */
   async ensure(id: LocalModelId): Promise<LocalModelEnsureResult> {
-    const running = this.active.get(id)
-    if (running) return running.promise
     const spec = this.spec(id)
     if (spec.availability === 'pending' || spec.files.length === 0) {
       throw new LocalModelError('unavailable', `${spec.title.zh} 暂时没有可下载的文件`)
     }
-    if (await this.diskStatus(spec) === 'ready') return this.location(spec)
-    // 校验期间可能已有另一调用开始下载。
-    const raced = this.active.get(id)
-    if (raced) return raced.promise
+    for (;;) {
+      const pendingRemoval = this.removing.get(id)
+      if (pendingRemoval) await pendingRemoval
+      const running = this.active.get(id)
+      if (running) return running.promise
+      const status = await this.diskStatus(spec)
+      // 校验期间可能插入删除或另一 ensure，必须重新检查两道屏障。
+      if (this.removing.has(id)) continue
+      const raced = this.active.get(id)
+      if (raced) return raced.promise
+      if (status === 'ready') return this.location(spec)
 
-    const controller = new AbortController()
-    const progress: LocalModelProgress = { receivedBytes: 0, totalBytes: localModelSizeBytes(spec) }
-    const promise = this.runDownload(spec, controller, progress).finally(() => {
-      if (this.active.get(id) === download) this.active.delete(id)
-    })
-    const download: ActiveDownload = { controller, progress, promise }
-    this.active.set(id, download)
-    this.failures.delete(id)
-    this.emit(id, 'downloading', { ...progress })
-    try {
-      const result = await download.promise
-      this.emit(id, 'ready', null)
-      return result
-    } catch (error) {
-      const code = error instanceof LocalModelError ? error.code : 'network'
-      this.failures.set(id, code)
-      this.emit(id, await this.diskStatus(spec), null)
-      throw error instanceof LocalModelError ? error : new LocalModelError(code, (error as Error).message)
+      const controller = new AbortController()
+      const progress: LocalModelProgress = { receivedBytes: 0, totalBytes: localModelSizeBytes(spec) }
+      const promise = this.runDownload(spec, controller, progress).then(result => {
+        this.emit(id, 'ready', null)
+        return result
+      }, async (error: unknown) => {
+        const code = error instanceof LocalModelError ? error.code : 'network'
+        this.failures.set(id, code)
+        this.emit(id, await this.diskStatus(spec), null)
+        throw error instanceof LocalModelError ? error : new LocalModelError(code, (error as Error).message)
+      }).finally(() => {
+        if (this.active.get(id) === download) this.active.delete(id)
+      })
+      const download: ActiveDownload = { controller, progress, promise }
+      this.active.set(id, download)
+      this.failures.delete(id)
+      this.emit(id, 'downloading', { ...progress })
+      return promise
     }
   }
 
@@ -347,23 +353,32 @@ export class LocalModelService {
 
   /** 删除本地文件；正在下载时先取消并等它结束。 */
   async remove(id: LocalModelId): Promise<void> {
+    const pending = this.removing.get(id)
+    if (pending) return pending
     const spec = this.spec(id)
-    const active = this.active.get(id)
-    if (active) {
-      active.controller.abort()
-      await active.promise.catch(() => undefined)
-    }
-    const { dir } = this.modelDir(spec)
-    try {
-      await fs.promises.rm(dir, { recursive: true, force: true })
-    } catch (error) {
-      this.deps.logger.error('删除本地模型失败', { event: 'local_models.remove.failed', modelId: id, error })
-      throw new LocalModelError('disk', (error as Error).message)
-    }
-    for (const file of spec.files) this.verified.delete(path.join(dir, file.name))
-    this.failures.delete(id)
-    this.deps.logger.info('已删除本地模型', { event: 'local_models.remove.completed', modelId: id })
-    this.emit(id, await this.diskStatus(spec), null)
+    // 先登记整段删除（含取消、最终状态发布），再开始异步操作。
+    const removal = Promise.resolve().then(async () => {
+      const active = this.active.get(id)
+      if (active) {
+        active.controller.abort()
+        await active.promise.catch(() => undefined)
+      }
+      const { dir } = this.modelDir(spec)
+      try {
+        await fs.promises.rm(dir, { recursive: true, force: true })
+      } catch (error) {
+        this.deps.logger.error('删除本地模型失败', { event: 'local_models.remove.failed', modelId: id, error })
+        throw new LocalModelError('disk', (error as Error).message)
+      }
+      for (const file of spec.files) this.verified.delete(path.join(dir, file.name))
+      this.failures.delete(id)
+      this.deps.logger.info('已删除本地模型', { event: 'local_models.remove.completed', modelId: id })
+      this.emit(id, await this.diskStatus(spec), null)
+    }).finally(() => {
+      if (this.removing.get(id) === removal) this.removing.delete(id)
+    })
+    this.removing.set(id, removal)
+    return removal
   }
 
   /** 打开模型文件夹；模型还没下载时打开“模型”总文件夹。 */

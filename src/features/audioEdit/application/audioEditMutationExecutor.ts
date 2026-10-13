@@ -9,13 +9,20 @@ import type {
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { applyWriterTable, writableProperties, propertyOperations } from '@/core/application-control/execution/writerTable'
 import { audioEditWriterTable } from './audioEditFields'
-import { loadAudioEditProject, editAudioEditProject, flushAudioEditProject, getAudioEditRevision } from './audioEditProjectInstances'
+import { loadAudioEditProject, editAudioEditProject, flushAudioEditProject, getAudioEditRevision, restoreAudioEditProjectSnapshot, audioEditProjectContent, subscribeAudioEditProjectDisposal } from './audioEditProjectInstances'
 import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditReflection'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 type MutableEntityType = typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_EDIT_ENTITY_TYPES.transcriptBlock | typeof AUDIO_EDIT_ENTITY_TYPES.suggestion | typeof AUDIO_EDIT_ENTITY_TYPES.processorChain
 
-const undoRecords = new Map<string, { previous: AudioEditProjectDocument; after: AudioEditProjectDocument }>()
+const MAX_UNDO_RECORDS = 50
+const undoRecords = new Map<string, { previous: AudioEditProjectDocument; afterContent: string; target: { kind: MutableEntityType; id: string } }>()
+export function clearAudioEditUndoRecords(projectId?: string): void {
+  for (const [token, record] of undoRecords) {
+    if (projectId === undefined || record.previous.id === projectId) undoRecords.delete(token)
+  }
+}
+subscribeAudioEditProjectDisposal(clearAudioEditUndoRecords)
 
 function splitTarget(entityType: MutableEntityType, id: string): { projectId: string; childId: string } {
   if (entityType === AUDIO_EDIT_ENTITY_TYPES.project || entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain) return { projectId: id, childId: '' }
@@ -43,7 +50,8 @@ export class AudioEditMutationExecutor implements ApplicationMutationExecutor {
     const saved = editAudioEditProject(ids.projectId, () => draft.document)
     if (!context?.persistenceScopes?.has(`audio_edit:${ids.projectId}`)) await flushAudioEditProject(ids.projectId)
     const undoToken = `audio-edit:${crypto.randomUUID()}`
-    undoRecords.set(undoToken, { previous: current, after: saved })
+    undoRecords.set(undoToken, { previous: current, afterContent: audioEditProjectContent(saved), target: { kind: this.entityType, id: step.target.id } })
+    while (undoRecords.size > MAX_UNDO_RECORDS) undoRecords.delete(undoRecords.keys().next().value!)
     return {
       status: 'completed', resultingRevisions: { audio_edit: getAudioEditRevision() },
       directRefs: [{ kind: this.entityType, id: step.target.id, revision: saved.revision }],
@@ -60,13 +68,11 @@ export class AudioEditMutationExecutor implements ApplicationMutationExecutor {
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
     const record = undoRecords.get(undoToken)
     if (!record) throw new Error('AUDIO_EDIT_UNDO_NOT_FOUND')
-    const { previous, after } = record
-    const instance = await loadAudioEditProject(previous.id)
-    const content = (document: AudioEditProjectDocument) => JSON.stringify({ ...document, revision: 0, updatedAt: 0 })
-    if (content(instance.document) !== content(after)) throw new Error('口播已有后续修改，请使用口播撤销逐步恢复。')
-    const saved = editAudioEditProject(previous.id, (current) => ({ ...previous, source: current.source }))
+    const { previous, afterContent, target } = record
+    await loadAudioEditProject(previous.id)
+    const saved = restoreAudioEditProjectSnapshot(previous.id, previous, afterContent)
     await flushAudioEditProject(previous.id)
     undoRecords.delete(undoToken)
-    return { status: 'completed', resultingRevisions: { audio_edit: getAudioEditRevision() }, directRefs: [{ kind: this.entityType, id: previous.id, revision: saved.revision }], evidence: [{ kind: 'entity_state', target: { kind: this.entityType, id: previous.id, revision: saved.revision }, fact: '口播剪辑属性修改已撤销。', capturedAt: new Date().toISOString() }] }
+    return { status: 'completed', resultingRevisions: { audio_edit: getAudioEditRevision() }, directRefs: [{ ...target, revision: saved.revision }], evidence: [{ kind: 'entity_state', target: { ...target, revision: saved.revision }, fact: '口播剪辑属性修改已撤销。', capturedAt: new Date().toISOString() }] }
   }
 }
