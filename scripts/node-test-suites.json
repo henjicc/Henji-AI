@@ -59,7 +59,10 @@
     "scripts/lib/videoEditLayoutRestart.test.cjs",
     "scripts/lib/withUnthrottledBenchmark.test.cjs",
     "scripts/lib/xyflowStoreSubscriptions.test.cjs",
-    "scripts/mcp-paid-generation-check.test.cjs"
+    "scripts/mcp-paid-generation-check.test.cjs",
+    "scripts/lib/uiDocumentation.test.cjs",
+    "scripts/lib/uiDocumentationChecks.test.cjs",
+    "scripts/lib/uiFindings.test.cjs"
   ],
   "native": [
     "scripts/lib/nativePersistenceRunner.test.cjs"

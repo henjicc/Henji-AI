@@ -42,7 +42,7 @@
 - **同级元素间距统一**：一个分区内所有行用同一个 `space-y-*`，不要一行 `mt-2` 一行 `mt-3`。
 - **控件高度统一**：28 / 32 / 36 三档（`UI_CONTROL_HEIGHT_CLASS`，CSS 变量 `--size-control-*`）；所有行控件共用 `UiControlSize`；图标按钮为 20/24/28/32/36/40（`size` 2xs/xs/sm/md/lg/xl，xl 只给全屏查看器与画面中央播放键）。按钮、字段、选项、标签、字段触发器、数值框都用组件的 `size` 枚举，只读数值用 `UiReadout`；不要在调用点写 `h-8` / `h-[38px]`（`check:surface` 规则 E 拦截）。
 - **文字层级只用三档灰**：主要 `text-text1`、次要 `text-text2`、辅助 `text-text3`（禁用另有 `text-text-disabled`）；强调文字 `text-accent-text`。不要引入第四种灰，也不要用透明度调出新的灰（`text-text1/60` 对比度不受引擎保证）。
-- **圆角跟随层级**：L1 用 `rounded-xl`，L2/L3 用 `rounded-lg`。内层圆角不得大于外层。
+- **圆角跟随层级**：控件用 `rounded-control`（6），输入与菜单用 `rounded-field`（8），浮层用 `rounded-overlay`（12）。内层圆角不得大于外层。
 - **颜色只用语义类**：`bg-window` / `bg-panel` / `bg-raised` / `bg-hover` / `text-text2` / `border-line`。禁止十六进制与旧别名类（`npm run check:colors` 会拦）。
 
 ## 行高、条带与面板
@@ -73,3 +73,20 @@
 unusedToken 检查 styleTokens 导出的真实 AST 消费、CSS --ui 变量和 Tailwind 映射；仅导入、转导、注释、测试与样张自动枚举都不算生产消费。UI_SPACING_SCALE 是样张与门禁的公开刻度契约，唯一明确保留的静态数据例外；UI_FORM_ROW_MIN_HEIGHT_CLASS 已由 UiFormRow 实际消费。废弃轨道与强调填充组合令牌已删除，新增令牌必须同时落真实消费者与中心页。
 
 任意值扫描补 grid-cols/grid-rows/col-span/aspect/scale/rotate/transition：fr/auto/百分比网格及无单位比例属相对几何，纯固定网格与旋转须登记；数字列跨度用标准类；显式过渡属性再由动效门禁核对。不允许用相对网格绕过规则 E 的面板私有列宽限制。
+
+
+<!-- generated:token-values -->
+<!-- 自动生成；修改源配置后运行 npm run gen:token-docs。门禁只说明可自动证明的范围。 -->
+| 维度 | 实际配置值域 | 自动门禁 |
+|---|---|---|
+| 颜色令牌 | gap / window / canvas / panel / raised / segment-selected / control / hover / selected / selected-accent / line / edge / media / scrim / text1 / text2 / text3 / text / accent / danger / success / warning / on / clip / wave | ESLint 固定灰色板/字面量；check:colors（旧别名与未定义类） |
+| 字号/行高 | 13: 13px/20px；15: 15px/22px；3xs: 10px/14px；2xs: 11px/16px；xs: 12px/16px；sm: 14px/20px；base: 16px/24px；xl: 20px/28px | ESLint 字号任意值；check:ui-residue |
+| 圆角 | none: 0；full: 9999px；control: var(--radius-control)；field: var(--radius-field)；overlay: var(--radius-overlay)；md: var(--radius-control)；lg: var(--radius-field)；xl: var(--radius-overlay)；hairline: 1px | ESLint rounded 任意值；check:ui-residue（嵌套层级只由 DOM oversizedRadius） |
+| 阴影 | none / panel / node-selected / node-error / thumb / thumb-ring / thumb-sm | ESLint shadow 任意值；check:ui-residue（使用位置只由 DOM shadowOutsideOverlay） |
+| 层级 | base: 0；raised: 10；sticky: 20；dropdown: 30；panel: 40；modal: 50；viewer: 60；toast: 70；popover: 75；tooltip: 80；drag: 90；titlebar: 100 | ESLint z 任意值/数字类；check:ui-residue |
+| 动效时长 | 120: 120ms；180: 180ms；240: 240ms；500: 500ms；DEFAULT: 180ms | ESLint duration；check:ui-design motionScale |
+| 缓动 | DEFAULT: cubic-bezier(0, 0, 0.2, 1) | check:ui-design motionEase（循环 linear 与具名 stack 例外） |
+| 过渡属性 | 显式列举；opacity / transform / colors；布局例外见 motion.md | ESLint transition-all；check:ui-design layoutTransition |
+| 间距 | 0, 2, 4, 6, 8, 12, 16, 20, 24, 32 | check:ui-design spacingScale；check:ui-residue（动态 var/calc 不按固定刻度判） |
+| 残留类别 | legacyAlias: 旧 Tailwind 别名类；legacyCssVar: 旧 CSS 变量；arbitraryValue: 任意值类；arbitraryPx: 任意值类（写死 px）；inlineStyleColor: 内联 style 含颜色；inlineStyleSize: 内联 style 含尺寸；appearanceOverride: 调用点覆盖组件外观；surfaceAllow: ui-surface-allow 行级豁免；colorAllowlist: check:colors 登记项；privateCssVar: 组件私有 CSS 变量；privateCssLiteral: 组件私有 CSS 写死尺寸；privateCssClass: 使用私有 CSS 类；unusedCssClass: 零引用 CSS 类；deadCode: 零引用源文件；testOnlyCode: 仅测试引用的源文件；legacyCopy: 旧文案 | check:ui-residue（类别与判定来源于正式规则模块） |
+<!-- /generated:token-values -->

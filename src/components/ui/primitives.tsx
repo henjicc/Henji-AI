@@ -386,15 +386,10 @@ UiPanel.displayName = 'UiPanel';
 
 /**
  * 分段 / 小样 / 色样三档（segment / tile / swatch）各自的尺寸与状态；颜色在玻璃内外由 `ui-glass-adaptive-*` 统一切换。
- * 来源：1.4 外观设置为主题预设与强调色新增，2.2 接管为全局分段选择；4.3 按重要记录 012 改为淡强调底 + 强调文字
+ * 来源：1.4 外观设置为主题预设与强调色新增，2.2 接管为全局分段选择；tile 按重要记录 012 使用淡强调底 + 强调文字，分段按记录 017 使用中性抬起底
  * （色样仍用主要文字色外圈：强调色外圈压在强调色样上看不清）。
  */
 const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
-  segment: {
-    layout: `justify-center whitespace-nowrap rounded-md px-3 font-medium`,
-    rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
-    active: `border-transparent ${UI_SEGMENT_SELECTED_CLASS}`,
-  },
   tile: {
     layout: 'h-11 gap-3 rounded-lg px-3 text-13',
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
@@ -425,11 +420,11 @@ const UI_OPTION_SIZE_CLASS: Record<UiControlSize | 'auto', string> = {
 };
 
 /**
- * 选项按钮。选中语义见 `selection`：单选中性抬升（重要记录 003），多选强调描边 + 强调文字。
+ * 选项按钮。选中语义见 `selection`：单选淡强调底，统一分段例外为中性抬起底（重要记录 017），多选强调描边 + 强调文字。
  * 外观只由 variant / size / active / selection 决定，className 只放布局（check:surface 规则 E）。
  */
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
-  ({ className = '', active = false, variant = 'default', size, gridCell, selection = 'single', segmentFrame = 'standalone', highlighted = false, ...props }, ref) => {
+  ({ className = '', active = false, variant = 'default', size, gridCell, selection = 'single', highlighted = false, ...props }, ref) => {
     if (variant === 'cover') {
       // 封面内容卡：状态全部由子元素封面框（UI_COVER_FRAME_CLASS）经 `ui-cover-group` + data-selected 表达，
       // 按钮本身不画底、框与焦点环（焦点环画在封面框上，避免被封面盖住）。
@@ -442,13 +437,17 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
  />
       );
     }
-    if (variant === 'segment' || variant === 'tile' || variant === 'swatch') {
+    if (variant === 'segment') {
+      return <FeedbackButton ref={ref}
+        className={`inline-flex h-full min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border border-transparent px-1 font-medium transition-colors ${size === 'sm' ? 'text-xs' : 'text-13'} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${active ? UI_SEGMENT_SELECTED_CLASS : 'bg-transparent text-text2 hover:bg-hover hover:text-text1'} ${className}`}
+        {...props} />;
+    }
+    if (variant === 'tile' || variant === 'swatch') {
       const neutral = UI_OPTION_NEUTRAL_VARIANT_CLASS[variant];
-      const inset = variant === 'segment' && segmentFrame === 'inset';
       return (
         <FeedbackButton
           ref={ref}
-          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${inset ? `h-full min-w-0 justify-center gap-1 whitespace-nowrap rounded-md px-1 font-medium ${size === 'sm' ? 'text-xs' : 'text-13'}` : variant === 'segment' ? `${neutral.layout} ${UI_CONTROL_HEIGHT_CLASS[size ?? 'md']} ${size === 'sm' ? 'text-xs' : 'text-13'}` : neutral.layout} ${active ? inset ? `border-transparent ${UI_SEGMENT_SELECTED_CLASS}` : neutral.active : inset ? 'border-transparent bg-transparent text-text2 hover:bg-hover hover:text-text1' : neutral.rest} ${className}`}
+          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${neutral.layout} ${active ? neutral.active : neutral.rest} ${className}`}
           {...props}
  />
       );
@@ -658,7 +657,7 @@ UiCheckbox.displayName = 'UiCheckbox';
 
 /**
  * 开关。`pill`：强调色只进入开态轨道（滑块取 on-accent）；`segmented`：两段文字的分段外观，
- * 与 `UiOptionButton variant="segment"` 同一套中性抬升（重要记录 003），仍是 role=switch。
+ * 与 `UiOptionButton variant="segment"` 同一套中性抬起底（重要记录 017），仍是 role=switch。
  */
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
   ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'md', ...props }, ref) => {

@@ -7,13 +7,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 ## 为什么需要这份规范
 
-项目的 `Ui*` primitives 已经组件化，但**组件化 ≠ 界面好看**。实测本仓库最常见的三类问题：
-
-1. **卡片套卡片**：`AssistantSidebar`（`bg-panel` + border）里放 `AssistantConversation` 的消息块（又是 `bg-panel` + border）；`Settings/index.tsx`（`bg-panel` 弹窗）→ `SectionCard`（又一层 `bg-panel`）→ 内部行（第三层 `bg-surface-dark`）。三层边框叠在一起，视觉上就是"一张卡里弹一张卡又套一张"。
-2. **条带叠条带**：工具箱 → 图片编辑，从窗口顶到画布之间横着切了 4 刀（标题带 / "打开图片"带 / 工具带 / 样式带），分别来自 3 个文件，其中两条同底色的带中间还夹了一条透明带。
-3. **该扁平的地方带了壳**：`UiPanel`/`UiIconButton`/`UiOptionButton` 的**默认值自带 border + bg**，每个组件都假设自己是最外层独立卡片。在容器内部使用时，就会多出一层不该有的边框背景。
-
-前两类是**同一个根因在两个方向上的表现**：每一层壳都以为自己是最外层，于是纵向各画一圈边框、横向各加一条头带。第 3 类则是表面 token 把 `border` 和 `bg` 打包绑死（见 `styleTokens.ts` 的 `UI_PANEL_SURFACE_CLASS` / `UI_FIELD_SURFACE_CLASS`），且没有"只分组、不画框"的官方写法。本 skill 提供这几条缺失的规则。
+项目已将控件与表面收口到共享组件。过去出现过卡片套卡片、条带叠条带和默认控件过重；当前默认按钮静默，`UiGroup` 提供只分组不画框的入口。本规范约束骨架、语义与复用，防止这些问题再次出现。
 
 ## 参考文档（按需读，不要一次全读）
 
@@ -27,7 +21,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 定字号/圆角/阴影/层级/间距 | `references/typography-and-tokens.md` |
 | 界面卡顿、拖动掉帧、长列表 | `references/performance.md` |
 | "我改了但没生效" | `references/pitfalls.md` |
-| 改完界面做视觉验收、按区域核对全界面、判断旧界面残留、写操作步骤截图；改公共组件或令牌后的默认验收（组件样张页 + 主题组合测试） | `references/review.md` |
+| 改完界面做视觉验收、按区域核对全界面、判断旧界面残留、写操作步骤截图；改公共组件或令牌后的风险分级验收 | `references/review.md` |
 
 ## 三条铁律（先记住这三句）
 
@@ -51,7 +45,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 |---|---|---|
 | 颜色 | 三层：**种子**（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的**语义令牌**（CSS 变量 + Tailwind 类）→ 组件内部令牌。**界面只引用语义令牌**；预设石墨/深海/胶片/纸白只是种子组合，文字三档按对比度 ≥ 4.5:1 求解 | `references/color-and-material.md` |
 | 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
-| 选中 | 分段例外：**中性抬起底 + 强文字**（`UiSegmented` / 双段开关）；其余一眼可辨：**淡强调底**（`selected-accent`，强调色低透明度）+ 强调文字 / 勾 / 指示条（重要记录 012，修订 003 的中性抬升）；强调色**实底**只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
+| 选中 | 分段例外：**中性抬起底 + 强文字**（`UiSegmented` / 双段开关）；其余一眼可辨：**淡强调底**（`selected-accent`，强调色低透明度）+ 强调文字 / 勾 / 指示条（重要记录 012；分段例外按 017 与缺陷修复记录 014）；强调色**实底**只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
 | 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 2/4/6/8/12/16/20/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
 | 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`），纯色界面上的浮层一律实底 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
@@ -226,6 +220,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（�
 | 危险 | `danger`（静息同 quiet，悬停显红）/ `dangerSolid`（只用于确认弹窗） | `tone="danger"` | 删除、清空、移除 |
 | 链接 | `link`（强调文字、悬停下划线、行内高度） | —— | 行内跳转/说明链接，不计入动作层级 |
 | 画面上 | `media` | `tone="media"` | 压在图片/视频/画布上的控件（固定媒体叠层令牌） |
+| 行内无底 | —— | `tone="bare"` | 压在已有底色的行内，不增加悬停底；仍保留焦点与可访问名称 |
 | 窗口控件 | —— | `UiWindowControl action platform` | 只用于无边框窗口标题栏的最小化/最大化/还原/关闭（Windows 36×28 静默、关闭悬停危险实底；macOS 交通灯取状态实底令牌） |
 
 尺寸：`UiButton size` sm/md/lg = 28/32/36（默认 md）；`UiIconButton size` 2xs/xs/sm/md/lg = 20/24/28/32/36（默认 md），
@@ -295,7 +290,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 ### 判据（两条都要满足才用 `menu`）
 
-1. **是同质选项的集合**：≥3 个由 `map` 渲染的并列 peer，或语义上明确的二选一分段。孤立的单个按钮不算 —— 那种情况下框才真的在划定边界。
+1. **是同质选项的集合**：≥3 个由 `map` 渲染的并列 peer，（二选一分段走 `UiSegmented`，不按 menu 判）。孤立的单个按钮不算 —— 那种情况下框才真的在划定边界。
 2. **去掉框之后形状还在**。满足任一即可：
    - 已被可见容器圈住（浮层面板、弹窗左栏、下拉列表）——容器已经画过一次边界了
    - 每项自带足以撑出形状的内容（缩略图、图标块、多行文本、比例示意图）
@@ -424,7 +419,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 页内写法统一：
 
-- 单选：选项不超过 5 个且每项只有两三个字 → `UiSegmented`（`SettingsSegmented` 只是它的重导出）；否则下拉。不要同一页两种写法表达同类选择。
+- 单选：≤5 项且每项 ≤4 个汉字（英文 ≤12 字符） → `UiSegmented`（`SettingsSegmented` 只是它的重导出）；否则下拉。不要同一页两种写法表达同类选择。
 - 从属项：用 `SettingsDependentRows`，主开关关闭时收起、打开时缩进；不要只加 `opacity-50` 变灰占位。
 - 时长不让用户填毫秒：用带"秒"单位的滑块或"快 / 中 / 慢"。
 - 行布局默认 `UiFormRow inline`（标签左、控件右）；只有路径、长输入框、列表才占整行。
@@ -495,9 +490,9 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 ### 2. 分段选择（2~5 个短选项的单选）
 
 - 一律 `UiSegmented`（一个整体容器、选项等宽）。**选中项用中性抬起底 + 强文字，不用强调色实底**：
-  分段是“当前值”，一页常有多个，强调色实底只留给唯一主动作（2026-10-13 修订，原“单选强实底”与主动作冲突）。禁止把几个
+  分段是“当前值”，一页常有多个，强调色实底只留给唯一主动作（记录 017，依据缺陷修复记录 014 修订 012）。禁止把几个
   `UiOptionButton variant="segment"` 并排放在 `flex` 里冒充分段控件。
-- 选项超过 5 个或单项文字超过 4 个字 → 用 `Dropdown`（全应用统一口径，设置页不例外）。
+- 超过 5 项，或单项超过 4 个汉字（英文超过 12 字符） → 用 `Dropdown`（全应用统一口径，设置页不例外）。
 - 设置页的 `SettingsSegmented` 是同一语义，必须合并为同一个实现，不得两套并存。
 
 ### 3. 记录列表（历史、任务、批注、版本等同质记录）
@@ -530,12 +525,12 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - 暂时不可用但用户会找的唯一入口可以禁用，同时用 `disabledReason` 写清前置条件（“先示范一次运动”）。
 - 一个区块里全部控件都不可用时，整块不显示。
 
-### 6. 交付证据：截图，不是“我检查过了”
+### 6. 交付证据：按风险选择
 
-- 改了界面的任务，交付时必须附**受影响场景**在真实 Electron 中的截图（深浅主题各一张，
-  `npm run ui:tour -- --only <场景>`；场景不存在就补最小场景），并逐张写出目视结论。
-- 审查者合并前**必须打开截图逐张看**，对照本节六条与“页面完成自检清单”。只看 diff 不算审查。
-- 执行者照规范做了仍出问题 → 说明规范有缺口：先补规范（本节加一行返工现场与语法），再返工。
+- 以 `docs/rules/testing.md` 的 L0–L3 为准。局部样式、文案、事件或无视觉影响的属性，跑专项静态检查与精确测试。
+- 共享布局、浮层、滚动、溢出或跨主题外观无法由精确测试证明时，才升级真实 Electron 样张页或受影响宿主；矩阵随实际风险选择。
+- 本次运行过截图时，必须逐张目视，记录受影响状态与实际证据。一次 `ui:tour --audit` 已产出截图、DOM、像素对比度，不叠加同矩阵 `check:ui-visual`。
+- 独占窗口验证受限时写明步骤并标待验证，禁止借用旧图或 DOM 测试冒充视觉通过。
 
 ## 硬性禁止清单
 
@@ -580,10 +575,10 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 **先查表，再动手。已有实现的一律复用，不要另写一份：**
 
 | 需求 | 必须用 | 不要做 |
+|---|---|---|
 | 按钮加载与不可用原因 | `UiButton` / `UiIconButton` 的 `loading` 保留静息内容占位、名称和尺寸并阻止重复操作；按钮类的 `disabledReason` 在禁用时通过统一 Tooltip 解释前置条件，保留键盘焦点并阻断操作 | 用进行中文案替换静息文案；手写转圈；包 span + title |
 | 行内加载与骨架 | `UiSpinner`（size 沿用图标按钮阶梯，tone default/accent，继承色默认）/ `UiSkeleton`（shape line/block/square）；active 仅供样张重放，减少动效走共享底座 | 业务手写 animate-spin/animate-pulse；把 StateSize 留白密度当控件高度 |
 | 字段与行内反馈 | `UiFormRow error` 自动关联行内控件 aria-invalid/aria-describedby；独立字段用 `UiFieldMessage`（tone error/hint，调用方关联 id）；操作状态用 `UiInlineStatus`（tone error/warning/success，可 truncate + tooltip） | 内联手写危险色错误文字与零散 alert |
-|---|---|---|
 | 弹窗 | `UiModal`（正式业务默认 `scope="viewport"`，接管焦点与模态；设计系统常驻缩略样本用 `scope="container"`，不接管焦点） | 手写 `fixed inset-0` + `bg-black/…` + 卡片（存量已全部清零，`check:surface` 规则 C 会拦，别再加）；用容器预览替代正式模态 |
 | 分组 | `UiGroup`（相邻组统一 32px 留白；面板内跨包装层分组用 `gap="section"`，复用 `UI_SECTION_STACK_CLASS`） | 手写 `border + bg` 的 div |
 | 页面标题区 | `UiPageHeader`（标题旁的数量等用 `meta`，与标题基线对齐；页头兼作页面顶带时用 `divider` 画自适应下分隔线） | 手写 h2 + p；把数量塞进标题文字；调用点给页头写 `border-b` |
@@ -605,7 +600,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
-| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；最多五项且每项不超过四个 Unicode 字符，否则转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
+| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用唯一内嵌 `UiOptionButton variant="segment"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；≤5 项且每项 ≤4 个汉字（英文 ≤12 字符）；含汉字的混合标签按四个 Unicode 字符计，否则转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
+| 内容格适配 | `UiOptionButton variant="card"`（现有内容选项格，静息 raised、选中淡强调底）；新二维选项优先 `grid` | 把 card 当成面板外壳或新增卡片套卡片 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 工具栏只读数值 | `UiReadout size="sm" / "md" / "lg" tone="default" / "media"`；外框与同行控件等高，等宽数字 | 自写 h-7/h-8 读数仿控件 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
@@ -636,10 +632,12 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 指针事件合帧 / 延后一次测量 | `useRafCallback`（`@/hooks/useRafCallback`）/ `createRafScheduler`（`@/utils/createRafScheduler`；最新样本、cancel、flush，传 ownerWindow） | 各自管理 rAF id；结束/卸载后还有待执行帧 |
 | 音频播放位置 | `usePlaybackClock`（`@/hooks/usePlaybackClock`；单个播放循环，波形与秒读数叶子订阅，AudioPlayer / AudioNode 已接入） | 播放帧 setState 重渲染整个播放器或节点 |
 | 瞬态 keyed 进度 | `createTransientProgressStore`（`@/stores/createTransientProgressStore`；set / clear / clearAll / useEntry，自定义 normalize / equals；Record/Map 适配只保留字段与动作名） | 拷贝三套相等短路和清理逻辑；瞬态进度入文档或撤销 |
-| 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md/lg；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
-
+| 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md/lg；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；`UiToneCurve` / `UiColorWheel` 仍在 index.ts 导出、中心页展示（原调色原件）；新调用使用 UiCurveEditor / UiGradeWheel，后续删除必须同步移除导出与样本 |
 | 间距、条带与面板尺寸 | `UI_SPACING_SCALE`、`UI_INLINE_GAP_CLASS` / `UiToolbar.gap`、`UI_STACK_CLASS`；条带 `UI_BAND_HEIGHT_CLASS` / `UI_BAND_MIN_HEIGHT_CLASS`；面板 `UI_PANEL_WIDTH` / `UI_PANEL_BODY_HEIGHT_CLASS` | 越档 padding/gap；业务数值 panelWidth/panelHeight |
 | 多行与弹窗正文尺寸 | `UiTextArea` / `PromptEditor` 的 `height` short/medium/tall；`UiModal.contentPadding` default/none/spacious 与 `contentScroll` auto/none | 用 className 取消默认留白；给文本自造最小高度 |
+| 表面与区域 | `UiPanel variant` / `UiRegion` | 重写卡片外壳、给内部分组套面板 |
+| 原生范围字段 | `UiRangeInput`（共享范围输入原语） | 业务手写 range input |
+| 确认弹窗 | `AlertDialog`（全局入口由 `GlobalAlertDialog` 承载） | 手写确认遮罩与生命周期 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：
 1. 在 `@/components/ui` 与本表中确认没有可复用或可扩展的组件
@@ -665,7 +663,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 6. 只在四条准入条件全中时才用 Card
 7. 写代码：颜色用语义类，字号/圆角/阴影/层级用登记令牌
 8. 跑自检清单；高影响 UI 再运行真实 Electron 视觉场景并由 Agent 逐张目视截图（判据与操作规范见 `references/review.md`；悬停、菜单打开、逐个模型等交互态与数据变体用 `ui:tour --steps` 截）
-9. 完成前按项目规则检查开发环境：未运行就启动，需要重启就只重启当前仓库进程树
+9. 仅命中 AGENTS.md 完成标准的环境维护条件时，检查并维护当前仓库开发实例
 ```
 
 **第 2 步不能跳。** 审查界面时只做组件级检查（每个按钮用没用对 primitive）会漏掉所有骨架问题——
@@ -674,7 +672,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 ## 页面完成自检清单
 
-- [ ] 交互态（悬停、选中、菜单打开）与数据变体（如逐个模型）截过图，并按 `references/review.md` 第 2 节逐项看过吗？
+- [ ] 按 testing.md 确定证据级别；若本次截了交互态或数据变体，是否按 `references/review.md` 第 2 节逐项看过吗？
 - [ ] **从窗口顶到内容区横着切了几刀？** > 2 条（命令带 + 从属带）就是骨架错了
 - [ ] 每一条新增文字、数字、徽标和状态是否至少服务于行动、决策、理解结果或恢复失败？否则删除
 - [ ] 系统通知、成功提示与失败兜底是否进入 i18n，并在英文界面检查过？统一 Toast 保留消息键直到显示，不能把固定中文传到通知入口
@@ -697,7 +695,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - [ ] 有没有固定调色板、黑白类、rgba、命名色或旧别名类（`bg-app`、`text-text-muted`…）？换主题预设时它们不会跟着动，一律改语义令牌
 - [ ] 用 `accent` 当文字色了吗？文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（黑白由引擎按对比度决定）
 - [ ] 分段是否中性抬起底 + 强文字，其他选中/当前值是否淡强调底且与悬停可辨？强调色实底只属于唯一主动作；悬停/选中的容器里行内控件仍可辨
-- [ ] 至少在“石墨”“纸白”两个预设下看过吗？浅色模式下黑白类、媒体叠层令牌放错位置最容易露馅
+- [ ] 本次涉及跨主题外观且升级截图时，至少看过“石墨”“纸白”吗？浅色模式下黑白类、媒体叠层令牌放错位置最容易露馅
 - [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该用 `danger`（静息中性、hover 才出危险色），确认弹窗里用 `dangerSolid`
 - [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`
 - [ ] 新加的全局样式/变量放对文件了吗？懒加载的样式表里不能放全局主题变量
@@ -737,32 +735,13 @@ npm run check:icons
 npx vitest run src/components/ui/motion.test.ts
 ```
 
-**改公共组件（`@/components/ui`、`styleTokens.ts`、`index.css` 组件皮肤）或令牌 / 主题引擎时，默认验收 = 组件样张页 + 主题组合测试**（`references/review.md` 第 8 节）：
-跑 `npx vitest run src/core/theme`（含 `themeCombination.test.ts` 属性测试），再按 `references/review.md` 第 8 节准备 DEV=true 巡检产物，用 `ui:tour --steps scripts/ui-review/ui-gallery.json --matrix review --audit` 捕获目录分区的顶部、中段与底部，逐张目视。四预设 1440 + 石墨 960 是五个矩阵变体，每个变体都包含完整分区组；同次 `--audit` 已做像素与 DOM 审计，不再叠加同矩阵的 `check:ui-visual`。
-设计系统中心复用 `dev.ui_gallery`，开发构建可用启动参数或 `Ctrl+Shift+F8` 切换，正式构建裁掉入口与页面 chunk 引用，助手/MCP 不暴露。令牌、组件、界面模式与规范速查通过目录和搜索进入；样本及变体清单见 `galleryIndex.ts` 与组件栏目源码，不以首屏代表整页。
-不再为公共组件或令牌改动按界面大范围截图；新增共享组件要同时补中心页样本与本复用表（`uiGalleryCoverage.test.ts` 扫描 `src/components/ui/**` 的导出与视觉枚举）。
+公共组件先跑精确测试；主题求解变化才选相关主题测试（包括 `themeCombination.test.ts`）。只有公共布局、滚动、溢出或跨主题外观风险无法由精确测试证明时，升级 `references/review.md` 第 8 节的真实样张页或受影响宿主。升级后只运行一次 `ui:tour --steps scripts/ui-review/ui-gallery.json --matrix review --audit`；矩阵仅在令牌/主题或明确布局矩阵风险时使用，其他情况选一个故障尺寸与受影响预设。
 
-只有共享页面骨架、浮层/滚动/溢出机制等高影响界面改动，才先构建并按场景缩小范围运行截图巡检与规则审计：
+设计系统中心复用开发页 `dev.ui_gallery`，令牌、组件、模式与规范通过目录与搜索进入；正式构建裁掉入口，助手/MCP 不暴露。新增共享组件同时补真实样本与本复用表，覆盖由 `uiGalleryCoverage.test.ts` 保护。Windows 像素基线只在本机按 testing.md 的固定流程运行，不作为 CI 门禁。
 
-```bash
-npm run ui:tour -- --only <受影响场景> --size <受影响尺寸>
-npm run check:ui-visual -- --only <受影响场景>
-# 改了令牌、主题引擎或跨主题外观时按预设运行（可重复或逗号分隔，all = 石墨/深海/胶片/纸白）
-npm run ui:tour -- --theme-preset graphite,paper --only <受影响场景>
-npm run check:ui-visual -- --theme-preset all --only <受影响场景>
-```
+真实 Electron 验证使用正式场景；本次产生的截图必须逐张目视。`check:ui-visual` 与 `ui:tour --audit` 共用审计循环并产出截图；同矩阵二选一。禁用控件、aria-hidden 和不可见区域不判；正文 ≥4.5:1，大字、图标与交互图形 ≥3:1。范围填充、边界、手柄分开测量各自邻接背景，现有通用候选收集仅覆盖文字/图标，图形须由对应场景像素断言。合理内容色例外按 review 第7节登记，界面色不达标修令牌。
 
-多个预设时每个预设单独启动一次应用，结果分到 `<输出目录>/<预设>/`。`check:ui-visual` 的对比度规则按**渲染后像素**判定
-（隐藏文字与图标截一张只有背景的图，在每个文字/图标区域取样合成前景，取最差 10% 分位）：正文与辅助文字 ≥ 4.5:1，
-大字与图标 ≥ 3:1；禁用控件、`aria-hidden`、被遮挡的部分不判；场景中途 `capture()` 的菜单、悬停、浮窗状态也审对比度。
-确属装饰、品牌或用户内容色的例外登记在 `scripts/ui-visual-contrast-exceptions.json`（必须写理由，可限定场景/预设/下限）；
-**界面色不达标改令牌，不登记例外。**
-
-用户要求“真实运行环境”的视觉审查时，使用 `npm run test:reality -- --suite ui|ui-audit --profile real --only ...` 的正式 Electron 场景；默认只读，不传 `--allow-writes`。禁止用浏览器、ego-browser、Chrome、裸 Vite 或 temporary profile 代替。场景断言通过后，Agent 仍必须打开实际截图，检查对齐、裁切、层级、颜色、文案和面板开合状态；DOM 通过不等于视觉通过。巡检结束后退出巡检实例，并恢复或重启当前仓库的 `electron:dev`。
-
-局部样式、文案或叶子组件改动只运行直接相关的静态检查和精确测试，不追加完整 `ui:tour`。`ui:tour` 产出 `.ui-tour/index.md` 与截图，专门让人检查对齐、留白、视觉权重、hover /
-聚焦 / 下拉 / 右键状态；`check:ui-visual` 只输出规则结论与 `.ui-audit/audit.json`，
-不做像素差异。两者共用场景配置但职责分离，截图差异不作为 CI 门禁。
+开发实例维护只在 AGENTS.md 完成标准的触发条件成立时执行；规则、文档与无需真实窗口的局部逻辑任务不启动或重启环境。
 
 ### 条带数量已进自动检查（5.8）
 
@@ -775,7 +754,9 @@ npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 代码残留同样进了门禁：`npm run check:ui-residue`（任意值类、内联尺寸与颜色、调用点覆盖、豁免理由、私有样式、零引用、旧文案），
 口径与登记方式见 references/review.md 第 3 节。
 
-`check:surface` 报五类问题：
+`check:surface` 默认严格，检查 A–E 与以下 S 规则；仅 S8 的禁用原因与手写 alert 建议为 warning。`--report` 只用于查看诊断，不冒充门禁通过。
+
+A–E：
 
 - `[A]` 手写面板表面 → 改用 `<UiPanel>`
 - `[B]` 同文件多处卡片表面 → 疑似卡片套卡片，内层降级
@@ -785,11 +766,27 @@ npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 
 存量已全部清零，`check:surface:strict` 已接入 `build` / `electron:build` 与 CI，**违规会直接让构建失败**。改完必须跑一次确认通过。
 
+### 静态语法 S 规则表
+
+| 编号 | 判据 | 对应语法 | 级别 / 门禁 / 豁免 |
+|---|---|---|---|
+| S1 | 独立/手拼 segment；静态超过五项或字面量标签超四个汉字（英文十二字符） | G2 | error / surface；动态标签走组件回落与溢出告警 |
+| S2 | 非工具条 UiGroup 直接放无 UiFormRow 的参数控件 | G1 | error / surface |
+| S3 | 同一 flex 行两个带内联 label 的 Dropdown | G1 | error / surface |
+| S4 | map 标题+元信息记录缺分隔；认 UiRecordItem、border-t/b、divide-y、UI_DIVIDER_CLASS；选项不混算 | G3 | error / surface |
+| S5 | 同一拥有 labelWidth 的组内列档不一致；auto/独立组不混算 | G1 | error / surface；动态值交 DOM |
+| S6 | 可确定的单行直接兄弟 size 不一致 | G4 / 尺寸 | error / icons；包装/动态交 DOM |
+| S7 | UiActionGroup 子按钮逐项覆盖 variant/size | 动作层级 | error / surface |
+| S8 | 原生 title、手写 animate-spin/pulse；禁用缺原因、手写 alert | G5 / 状态 | 前两项 error，后两项 warning / surface |
+| S9 | 同一静态表面可共存主动作 >1，互斥分支取最大，嵌套表面另计 | 动作层级 | error / surface；动态值交 DOM |
+
+surface 规则行内或上一行真实注释可写 `ui-surface-allow: S1 具体理由与接手任务`（替换为对应编号）；不得文件级放行。S6 只按 icons 的已登记边界判，尺寸 D 不接受注释豁免。G6 是证据选择，没有静态规则能证明目视完成；实际覆盖见 frontend-ui.md 表。
+
 确需例外时在该行上方加注释 `ui-surface-allow` 并写明理由与接手任务；只允许行级豁免，文件级 `ui-surface-allow-file` 出现即报违规（否则该文件将来真正的套娃也会被放行）。
 
 全屏沉浸式媒体查看器统一用 `UiViewerShell`，不套用居中卡片语义的 `UiModal`。生命周期 hook 在宿主同层调用，淡出后只卸载壳内容，保留视频音量等宿主会话偏好；减少动效沿 useDialogTransition。scope="container" 只用于中心页静态预览，不接管模态、键盘与滚动。
 
-`npm run check:surface`（告警式）可用于本地快速查看，构建链路走的是 `--strict`。
+`npm run check:surface:report` 是告警视图；`check:surface` 与 `check:surface:strict` 都是严格门禁，已接入 CI。
 
 ## 相关规范
 

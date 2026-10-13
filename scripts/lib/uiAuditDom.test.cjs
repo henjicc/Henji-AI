@@ -18,6 +18,10 @@ async function audit(html, context = {}) {
     const [clientHeight, scrollHeight] = e.dataset.scroll.split(',').map(Number)
     Object.defineProperties(e, { clientHeight: { value: clientHeight }, scrollHeight: { value: scrollHeight } })
   }
+  for (const e of w.document.querySelectorAll('[data-text-width]')) {
+    const [clientWidth, scrollWidth] = e.dataset.textWidth.split(',').map(Number)
+    Object.defineProperties(e, { clientWidth: { value: clientWidth }, scrollWidth: { value: scrollWidth } })
+  }
   try { return w.eval(`(${auditUiDom.toString()})(${JSON.stringify(context)})`) } finally { w.close() }
 }
 
@@ -26,6 +30,14 @@ test('5.2 DOM 断牙夹具同时具备反例命中和正例放行', async () => 
     const result = await audit(sample.html)
     assert.equal(reconcileSampleIssues(result, [sample])[0].passed, true, sample.id)
   }
+})
+
+test('shortTextTruncated 已覆盖 radio 内短标签，菜单和用户内容继续豁免', async () => {
+  const label = '<span style="overflow-x:hidden;text-overflow:ellipsis" data-text-width="20,80">浏览历史</span>'
+  assert.equal((await audit(`<div role="radiogroup"><button role="radio">${label}</button></div>`)).shortTextTruncated.length, 1)
+  assert.equal((await audit(`<button role="radio">${label.replace('20,80', '80,80')}</button>`)).shortTextTruncated.length, 0)
+  assert.equal((await audit(`<div data-user-content>${label}</div>`)).shortTextTruncated.length, 0)
+  assert.equal((await audit(`<div role="option">${label}</div>`)).shortTextTruncated.length, 0)
 })
 
 test('同行检查真实外框（含分段壳、读数），排除内部按钮、xl与竖向工具条', async () => {

@@ -75,8 +75,16 @@ for (const name of shared) {
   }
 }
 
+// 两份文档相同仍可能同时过期；核对真实导出、声明、配置及巡检去向。
+for (const check of [
+  require('./check-ui-catalog.cjs').checkUiCatalog,
+  require('./check-skill-symbols.cjs').checkSkillSymbols,
+  require('./gen-token-docs.cjs').checkTokenDocs,
+  require('./check-ui-findings.cjs').checkUiFindings,
+]) problems.push(...check(ROOT))
+
 if (problems.length > 0) {
-  console.error('\n[check-skill-sync] Codex / Claude 两份 skill 不一致（修改任一侧后必须同步另一侧）：\n')
+  console.error('\n[check-skill-sync] skill 同步或源码/巡检一致性检查失败：\n')
   for (const problem of problems) console.error(`  ${problem}`)
   console.error('')
   process.exit(1)

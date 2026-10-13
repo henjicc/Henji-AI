@@ -30,6 +30,7 @@ const {
   themePresetLaunchArgs,
   setInspectionWindowSize,
   assertInspectionWindowSize,
+  assertReviewCapture,
 } = require('./lib/uiInspection.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -249,7 +250,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
               const clip = scene.captureRegion ? await targetPage.locator(scene.captureRegion).boundingBox() : undefined
               if (scene.captureRegion && !clip) throw new Error(`截图区域不可见：${scene.captureRegion}`)
               const bytes = await captureInspectionPage(app.app, targetPage, { clip, onEvidence: (value) => { pixels = value } })
-              const shot = { key: `${evidenceKey} / ${suffix}`, bytes, row: { ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName } }
+              const shot = { key: `${evidenceKey} / ${suffix}`, bytes, row: { ...scene, name: `${scene.name}-${suffix}${scene.reviewCapture === suffix ? '（审查主图）' : ''}`, size: sizeLabel, file: fileName } }
               if (options.screenshots !== false) persist(shot)
               await assertInspectionWindowSize(app, size, windowEvidence.baseline)
               windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
@@ -279,6 +280,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             }
             await scene.setup(app.page, app.app, { capture, recordMetrics, electronApp: app.app,
               requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
+            assertReviewCapture(scene, windowEvidence.captures)
             const missing = missingScrollCoverage(scrollCaptures)
             if (missing.length) throw new Error(`滚动内容漏截：${JSON.stringify(missing)}`)
             const fileName = `${sizeLabel}-${scene.id}.png`
@@ -287,7 +289,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             const clip = scene.captureRegion ? await app.page.locator(scene.captureRegion).boundingBox() : undefined
             if (scene.captureRegion && !clip) throw new Error(`截图区域不可见：${scene.captureRegion}`)
             const bytes = await captureInspectionPage(app.app, app.page, { clip, onEvidence: (value) => { pixels = value } })
-            const finalShot = { key: evidenceKey, bytes, row: { ...scene, size: sizeLabel, file: fileName } }
+            const finalShot = { key: evidenceKey, bytes, row: { ...scene, name: `${scene.name}${scene.reviewCapture ? '（辅助终态）' : ''}`, size: sizeLabel, file: fileName } }
             if (options.screenshots !== false) persist(finalShot)
             await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,

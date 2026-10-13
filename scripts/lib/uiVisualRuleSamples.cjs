@@ -81,6 +81,14 @@ const UI_VISUAL_RULE_SAMPLES = Object.freeze([
     html: `<div style="width:60px"><span id="trunc-user" data-observation-sensitive style="${ELLIPSIS}">我的项目</span></div>`,
   },
   {
+    id: 'trunc-radio-bad', rule: 'shortTextTruncated', expect: 'hit', note: 'radio 中的短分段标签被省略号截断',
+    html: `<div role="radiogroup"><button role="radio" aria-checked="true" style="${BUTTON};width:44px"><span id="trunc-radio-bad" style="${ELLIPSIS}">浏览历史</span></button></div>`,
+  },
+  {
+    id: 'trunc-radio-fit', rule: 'shortTextTruncated', expect: 'clean', note: 'radio 中短标签有足够宽度',
+    html: `<div role="radiogroup"><button role="radio" aria-checked="true" style="${BUTTON};width:96px"><span id="trunc-radio-fit" style="${ELLIPSIS}">浏览历史</span></button></div>`,
+  },
+  {
     id: 'sel-bad', rule: 'selectedStateWeak', expect: 'hit', note: '选中与未选中长得一样',
     html: tabs('sel-bad', 'background:#e5e7eb;color:#111827', 'background:#e5e7eb;color:#111827'),
   },

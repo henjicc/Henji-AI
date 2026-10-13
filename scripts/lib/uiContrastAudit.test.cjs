@@ -52,6 +52,18 @@ test('WCAG 对比度与门槛：正文 4.5、大字与图标 3', () => {
   assert.equal(requiredContrast({ kind: 'icon', fontSize: 13, fontWeight: 400 }), 3)
 })
 
+test('交互图形按3:1检测，2.66的历史范围填充不能再通过', () => {
+  const background = bitmap(100, 50, () => [255, 255, 255])
+  const result = evaluateContrast({ candidates: [
+    candidate({ kind: 'graphic', color: 'rgb(158, 158, 158)', text: '范围填充' }),
+    candidate({ kind: 'graphic', color: 'rgb(0, 0, 0)', text: '边界', element: 'div.border' }),
+  ], viewport }, background)
+  assert.equal(result.stats.checked, 2)
+  assert.equal(result.issues.length, 1)
+  assert.equal(result.issues[0].required, 3)
+  assert.ok(result.issues[0].ratio > 2.6 && result.issues[0].ratio < 2.7)
+})
+
 test('前景按 alpha 与祖先 opacity 合成到真实背景像素后判定', () => {
   const dark = bitmap(100, 50, () => [20, 21, 23])
   const result = evaluateContrast({ candidates: [

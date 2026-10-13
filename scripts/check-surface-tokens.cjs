@@ -5,13 +5,13 @@
  * 规则来源：CLAUDE.md「UI Primitive 单点落地」+ skill `henji-ui-surface`。
  * 核心铁律：同一层视觉深度只画一次边框/背景。
  *
- * 五条规则：
+ * 表面规则 A–E，加静态语法 S1–S5/S7–S9（S6 属于 check:icons）：
  *   A. 手写面板表面（border + bg-panel + rounded）—— 那是 <UiPanel> 的活，任意数量即告警
  *   B. 同一文件出现 >= 2 处卡片表面 —— 高度疑似"卡片套卡片"
  *   C. 手写弹窗（同一元素 fixed inset-0 + 遮罩或模态语义，未由 UiModal/AlertDialog 承载）
  *   D. `.css` 里手写毛玻璃（backdrop-filter），绕开 `.ui-glass`
  *   E. 按钮、选项、标签、导航与字段触发器的调用点覆盖外观（底色/边框/文字色/圆角/阴影/高度/字号），见 lib/buttonAppearanceOverrides.cjs
- * 单个卡片表面不报（组件自己的根表面是合理的，比如画布节点外壳）。
+ * A 对手写面板任意数量报错；B 只对同文件多处通用卡片报错。S8 的禁用原因与手写 alert 建议只告警。
  *
  * 规则 D 的由来：ESLint 只拦得住 `backdrop-blur-*` 工具类，拦不住 CSS 文件里直接写
  * `backdrop-filter`。实测 `.context-menu` 与 `.speed-menu` 就是这么各抄了一份玻璃，

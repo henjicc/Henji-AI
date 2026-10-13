@@ -34,7 +34,7 @@ export const UI_WHITE_HEX = WHITE_HEX;
  * 选中必须一眼可辨：淡强调底（`selected-accent`，强调色低透明度）+ 强调文字/勾/指示条；
  * 强调色实底只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色（012 修订 003 的中性抬升）。
  * 1. 导航“正在看哪里”：淡强调底 + 主要文字（图标强调色）+ 强调色方向指示条（面板标签：主要文字 + 强调色底部细线）
- * 2. 单选“值是什么”：淡强调底；分段/格子用强调文字，菜单项保持主要文字 + 强调色勾
+ * 2. 单选“值是什么”：淡强调底；格子用强调文字，分段用中性抬起底 + 强文字（记录 017），菜单项保持主要文字 + 强调色勾
  * 3. 多选“集合里哪些已选”：强调描边 + 淡强调底 + 强调文字
  * 4. 布尔“是否开启”：强调色只进入开关轨道或复选框本体，整行保持静息
  *
@@ -374,7 +374,7 @@ export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav'
 export const UI_GLASS_ADAPTIVE_OPTION_CLASS = 'ui-glass-adaptive-option';
 
 /**
- * 单选选中底（菜单、网格、分段选择、主题预设格、下拉当前项、双段开关滑块）：淡强调底 `--selected-accent`
+ * 单选选中底（菜单、网格、主题预设格、下拉当前项；分段与双段开关用 UI_SEGMENT_SELECTED_CLASS）：淡强调底 `--selected-accent`
  * （选中项悬停再加一档），玻璃里换成 `--ui-glass-selected-accent`。重要记录 012：选中用强调色指示，不用实底。
  */
 export const UI_GLASS_ADAPTIVE_SELECTED_CLASS = 'ui-glass-adaptive-selected';

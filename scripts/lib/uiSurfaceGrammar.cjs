@@ -2,7 +2,7 @@
 const ts = require('typescript')
 
 const MESSAGES = {
-  S1: '分段请选择 UiSegmented（最多 5 个短选项，中性抬起选中）；更多或长选项用 Dropdown。',
+  S1: '分段请选择 UiSegmented（最多 5 项，中文 ≤4 字、英文 ≤12 字符，中性抬起选中）；更多或长选项用 Dropdown。',
   S2: '面板控件无标签：请放进 UiFormRow。',
   S3: '行内标签挤行：每个 Dropdown 请放进独立的 UiFormRow。',
   S4: '标题/元信息记录缺少边界：复用 UiRecordList / UiRecordItem。',
@@ -124,6 +124,7 @@ function findUiSurfaceGrammar(raw, fileName = 'surface.tsx') {
     return count
   }
   function visit(node) {
+    if (segment(node)) report('S1', node)
     if (surface(node) && primaryCount(node, node) > 1) report('S9', node)
     if (name(node) === 'UiButton') {
       for (let parent = node.parent; parent; parent = parent.parent) {
@@ -145,7 +146,16 @@ function findUiSurfaceGrammar(raw, fileName = 'surface.tsx') {
       const options = attribute(node, 'options')?.initializer
       const expression = options && ts.isJsxExpression(options) ? options.expression : undefined
       const array = expression && ts.isIdentifier(expression) ? constants.get(expression.text) : expression
-      if (array && ts.isArrayLiteralExpression(array) && !array.elements.some(ts.isSpreadElement) && array.elements.length > 5) report('S1', node)
+      if (array && ts.isArrayLiteralExpression(array)) {
+        if (!array.elements.some(ts.isSpreadElement) && array.elements.length > 5) report('S1', node)
+        for (const option of array.elements) {
+          if (!ts.isObjectLiteralExpression(option)) continue
+          const label = option.properties.find(prop => ts.isPropertyAssignment(prop) && prop.name.getText(source).replace(/['"]/g, '') === 'label')
+          if (!label || !ts.isStringLiteralLike(label.initializer)) continue
+          const text = label.initializer.text
+          if ([...text].length > (/\p{Script=Han}/u.test(text) ? 4 : 12)) report('S1', node)
+        }
+      }
     }
     if (name(node) === 'UiFormRow' && !toolbar(node)) {
       const width = formWidth(node)
@@ -196,4 +206,4 @@ function findUiSurfaceGrammar(raw, fileName = 'surface.tsx') {
   return findings
 }
 
-module.exports = { findUiSurfaceGrammar }
+module.exports = { findUiSurfaceGrammar, MESSAGES }
