@@ -189,7 +189,7 @@ describe('稳定业务字段的持久契约', () => {
     invalid.agentProfiles[0].settings.maxOutputTokens = '4096'
     expect(llmStoredConfigSchema.safeParse(invalid).success).toBe(false)
     expect(llmStoredConfigSchema.parse({ ...raw, extension: { keep: true } })).toHaveProperty('extension.keep', true)
-    const sample = JSON.parse(fs.readFileSync('tests/fixtures/persistence/mcp-connections/v1.json', 'utf8')) as { connections: { allowPaid: unknown }[] }
+    const sample = JSON.parse(fs.readFileSync('tests/fixtures/persistence/mcp-connections/v2.json', 'utf8')) as { connections: { allowPaid: unknown }[] }
     expect(mcpConnectionStorageSchema.parse(sample).connections[0]).toMatchObject({ allowWrites: true, allowPaid: false, allowDestructive: false })
     sample.connections[0].allowPaid = 'yes'
     expect(mcpConnectionStorageSchema.safeParse(sample).success).toBe(false)

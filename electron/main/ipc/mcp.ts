@@ -68,24 +68,29 @@ export function registerMcpIpc(): void {
     return connection
   }, trusted)
   const identity = (value: unknown): { id: string } => z.object({ id: z.string().uuid() }).strict().parse(value)
-  registerIpcHandler('mcp:renew', identity, ({ id }) => {
-    logger.info('开始续期外部连接', { event: 'mcp.renew.start', context: { connectionId: id } })
-    try {
-      const connection = connections.renew(id)
-      logger.info('外部连接已续期', { event: 'mcp.renew.completed', context: { connectionId: id, expiresAt: connection.expiresAt } })
-      return connection
-    } catch (error) {
-      logger.error('外部连接续期失败', { event: 'mcp.renew.failed', context: { connectionId: id }, error })
-      throw error
-    }
+  registerIpcHandler('mcp:update', value => z.object({ id: z.string().uuid(), access: mcpDefaultAccessSchema }).strict().parse(value), ({ id, access }) => {
+    const connection = connections.update(id, access)
+    logger.info('已修改外部连接权限', { event: 'mcp.update.completed', context: { callerId: id, ...access } })
+    return connection
   }, trusted)
-  registerIpcHandler('mcp:reminder:acknowledge', value => z.object({ id: z.string().uuid(), expiresAt: z.number().finite(), state: z.enum(['expiring', 'expired']) }).strict().parse(value),
-    ({ id, expiresAt, state }) => connections.acknowledgeReminder(id, expiresAt, state), trusted)
   registerIpcHandler('mcp:revoke', identity, async ({ id }) => {
     connections.revoke(id)
     await server.revoke(id)
     logger.info('已撤销外部连接', { event: 'mcp.revoke.completed', context: { callerId: id } })
   }, trusted)
-  registerIpcHandler('mcp:config', identity, ({ id }) => JSON.stringify({ mcpServers: { henji: { type: 'http', url: `http://127.0.0.1:${configuredPort}/mcp`, headers: { Authorization: `Bearer ${connections.token(id)}` } } } }, null, 2), trusted)
+  registerIpcHandler('mcp:config', identity, ({ id }) => {
+    const url = `http://127.0.0.1:${configuredPort}/mcp`
+    const config = JSON.stringify({ mcpServers: { henji: { type: 'http', url, headers: { Authorization: `Bearer ${connections.token(id)}` } } } }, null, 2)
+    // 复制出的是一段可以直接发给外部智能体的提示词：由它自己把痕迹AI 加进 MCP 配置。
+    return [
+      '请帮我连接痕迹AI 的 MCP 服务：把下面的配置加入你的 MCP 服务器配置（服务名 henji，HTTP 传输），然后重新连接，并确认能列出痕迹AI 的工具。',
+      '',
+      `- 地址：${url}`,
+      '- 请求头：Authorization 使用配置里的 Bearer 令牌（令牌仅用于本机连接，不要外传）',
+      '- 前提：痕迹AI 需要保持运行',
+      '',
+      '```json', config, '```',
+    ].join('\n')
+  }, trusted)
 }
 export async function disposeMcp(): Promise<void> { await server?.stop() }

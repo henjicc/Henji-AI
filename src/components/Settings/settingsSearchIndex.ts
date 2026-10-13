@@ -120,7 +120,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'mcp.allowDelete',
     ['mcp.allowPaid', ['付费']],
     ['mcp.connectionsTitle', ['授权', 'authorization']],
-    ['mcp.renew', ['到期', '续期', 'expire', 'renew']],
+    ['mcp.edit', ['修改权限', '修改配置', 'permission']],
   ]),
   ...rows('assistant-skills', [
     ['agentSkills.userGroup', ['技能', 'skill']],

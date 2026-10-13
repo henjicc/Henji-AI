@@ -4,13 +4,31 @@ import { Virtuoso } from 'react-virtuoso'
 import NumberInput from '@/components/ui/NumberInput'
 import { getMcpConnectionService } from '@/commands/mcp'
 import { writeClipboardText } from '@/commands/clipboard'
-import { DEFAULT_MCP_PREFERENCES, type McpConnectionInfo, type McpStatus, type McpPreferences } from '@/core/application-control/localHostContracts'
-import { MCP_CONNECTION_DAY_MS, mcpConnectionExpiryState, mcpConnectionLocalDate } from '@/core/application-control/mcpConnectionExpiry'
+import { DEFAULT_MCP_PREFERENCES, type McpConnectionAccess, type McpConnectionInfo, type McpStatus } from '@/core/application-control/localHostContracts'
 import { useI18n } from '@/hooks/useI18n'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import SettingsDependentRows from '../components/SettingsDependentRows'
 
 const describeMcpError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause)
+
+/** 新建连接与修改已有连接共用同一组权限开关：删除与付费都从属于“允许修改内容”。 */
+function McpAccessSwitches({ access, disabled, onChange }: { access: McpConnectionAccess; disabled: boolean; onChange: (access: McpConnectionAccess) => void }): React.JSX.Element {
+  const { t } = useI18n('settings')
+  const { allowWrites, allowDestructive, allowPaid } = access
+  return <>
+    <UiFormRow label={t('mcp.allowWrites')} inline info={t('mcp.writeScope')}>
+      <UiSwitch checked={allowWrites} disabled={disabled} onCheckedChange={(value) => onChange({ allowWrites: value, allowDestructive, allowPaid })} />
+    </UiFormRow>
+    <SettingsDependentRows open={allowWrites}>
+      <UiFormRow label={t('mcp.allowDelete')} inline>
+        <UiSwitch checked={allowDestructive} disabled={disabled} onCheckedChange={(value) => onChange({ allowWrites, allowDestructive: value, allowPaid })} />
+      </UiFormRow>
+      <UiFormRow label={t('mcp.allowPaid')} inline info={t('mcp.paidScope')}>
+        <UiSwitch checked={allowPaid} disabled={disabled} onCheckedChange={(value) => onChange({ allowWrites, allowDestructive, allowPaid: value })} />
+      </UiFormRow>
+    </SettingsDependentRows>
+  </>
+}
 
 /**
  * 外部智能体连接。
@@ -27,16 +45,14 @@ export default function McpSection(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [config, setConfig] = useState('')
   const [port, setPort] = useState(43821)
-  const [now, setNow] = useState(Date.now)
-  const { allowWrites, allowPaid, allowDestructive } = status?.defaultAccess ?? DEFAULT_MCP_PREFERENCES.defaultAccess
-  const saveAccess = (defaultAccess: McpPreferences['defaultAccess']): void => { void act(() => getMcpConnectionService().configure({ enabled: status!.enabled, port, defaultAccess })) }
+  const [editingId, setEditingId] = useState<string>()
+  const defaultAccess = status?.defaultAccess ?? DEFAULT_MCP_PREFERENCES.defaultAccess
   const refresh = async (): Promise<void> => { const next = await getMcpConnectionService().status(); setStatus(next); setPort(next.port) }
   useEffect(() => {
-    const update = (): void => { setNow(Date.now()); void refresh().catch((cause) => setError(describeMcpError(cause))) }
+    const update = (): void => { void refresh().catch((cause) => setError(describeMcpError(cause))) }
     update()
-    const timer = setInterval(update, 60_000)
     window.addEventListener('focus', update)
-    return () => { clearInterval(timer); window.removeEventListener('focus', update) }
+    return () => window.removeEventListener('focus', update)
   }, [])
   const act = async (action: () => Promise<unknown>): Promise<void> => {
     setBusy(true); setError('')
@@ -44,26 +60,22 @@ export default function McpSection(): React.JSX.Element {
     finally { setBusy(false) }
   }
   const connectionRow = (index: number, connection: McpConnectionInfo): React.JSX.Element => {
-    const state = mcpConnectionExpiryState(connection.expiresAt, now)
-    const date = mcpConnectionLocalDate(connection.expiresAt)
-    const expiryText = state === 'expired' ? t('mcp.expiredOn', { date: date.slice(5) })
-      : state === 'expiring' ? t('mcp.expiresInDays', { count: Math.ceil((connection.expiresAt - now) / MCP_CONNECTION_DAY_MS) })
-      : t('mcp.expiresOn', { date })
+    const editing = editingId === connection.id
     return <div key={connection.id} className={`flex flex-col gap-2 py-5 ${index ? 'border-t border-line' : ''}`}>
       <UiFormRow label={<span className="break-words">{connection.name}</span>} inline>
-        <span className={`text-xs ${state === 'expired' ? 'text-danger-text' : state === 'expiring' ? 'text-warning-text' : 'text-text3'}`}>{expiryText}</span>
-      </UiFormRow>
-      <UiFormRow label={<span className={UI_TEXT_SECONDARY_CLASS}>{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</span>} inline>
         <div className="flex items-center gap-2">
-          {state !== 'active' && <UiButton variant="quiet" disabled={busy} onClick={() => void act(() => getMcpConnectionService().renew({ id: connection.id }))}>{t('mcp.renew')}</UiButton>}
-          {state !== 'expired' && <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => {
+          <UiButton variant="quiet" disabled={busy} onClick={() => setEditingId(editing ? undefined : connection.id)}>{t(editing ? 'mcp.editDone' : 'mcp.edit')}</UiButton>
+          <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => {
             const value = await getMcpConnectionService().connectionConfig({ id: connection.id })
             setConfig(value)
             await writeClipboardText(value)
-          })}>{t('mcp.copy')}</UiButton>}
-          <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
+          })}>{t('mcp.copy')}</UiButton>
+          <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig(''); setEditingId(undefined) })}>{t('mcp.revoke')}</UiButton>
         </div>
       </UiFormRow>
+      {editing
+        ? <div className="pl-6"><McpAccessSwitches access={connection} disabled={busy} onChange={(access) => void act(() => getMcpConnectionService().update({ id: connection.id, access }))} /></div>
+        : <p className={UI_TEXT_SECONDARY_CLASS}>{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</p>}
     </div>
   }
   return <>
@@ -77,21 +89,11 @@ export default function McpSection(): React.JSX.Element {
       </UiFormRow>
 
       <UiGroup title={t('mcp.newConnectionTitle')} titleTone="overline">
-        <UiFormRow label={t('mcp.allowWrites')} inline info={t('mcp.writeScope')}>
-          <UiSwitch checked={allowWrites} disabled={busy} onCheckedChange={(value) => saveAccess({ allowWrites: value, allowDestructive, allowPaid })} />
-        </UiFormRow>
-        <SettingsDependentRows open={allowWrites}>
-          <UiFormRow label={t('mcp.allowDelete')} inline>
-            <UiSwitch checked={allowDestructive} disabled={busy} onCheckedChange={(value) => saveAccess({ allowWrites, allowDestructive: value, allowPaid })} />
-          </UiFormRow>
-          <UiFormRow label={t('mcp.allowPaid')} inline info={t('mcp.paidScope')}>
-            <UiSwitch checked={allowPaid} disabled={busy} onCheckedChange={(value) => saveAccess({ allowWrites, allowDestructive, allowPaid: value })} />
-          </UiFormRow>
-        </SettingsDependentRows>
+        <McpAccessSwitches access={defaultAccess} disabled={busy} onChange={(access) => void act(() => getMcpConnectionService().configure({ enabled: status.enabled, port, defaultAccess: access }))} />
         <UiFormRow label={t('mcp.name')}>
           <div className="flex items-center gap-2">
             <UiInput className="min-w-0 flex-1" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder={t('mcp.namePlaceholder')} />
-            <UiButton className="shrink-0" variant="secondary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, allowWrites, allowDestructive, allowPaid }); setName('') })}>{t('mcp.authorize')}</UiButton>
+            <UiButton className="shrink-0" variant="secondary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, ...defaultAccess }); setName('') })}>{t('mcp.authorize')}</UiButton>
           </div>
         </UiFormRow>
       </UiGroup>

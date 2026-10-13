@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { McpConnections } from './connections'
-import { MCP_CONNECTION_DAY_MS as DAY, MCP_CONNECTION_LIFETIME_MS } from '../../../../src/core/application-control/mcpConnectionExpiry'
 
 describe('连接授权持久化', () => {
   it('重新加载保留独立凭据，撤销不会撤销其他客户端', () => {
@@ -25,53 +24,24 @@ describe('连接授权持久化', () => {
     expect(failing.list()).toEqual([])
     expect(() => new McpConnections({ read: () => '{"connections":[]}', write: () => {} }).list()).toThrow()
   })
-  it('过期保留 30 天可续期；新建不提前删除，满 30 天清理且撤销立即删除', () => {
-    let now = Date.now()
-    let saved: string | null = null
-    const storage = { read: () => saved, write: (value: string) => { saved = value } }
-    const connections = new McpConnections(storage, () => now)
-    const connection = connections.create('保留期限')
-    const token = connections.token(connection.id)
-    now = connection.expiresAt
-    connections.create('新建')
-    expect(new McpConnections(storage, () => now).authenticate(token)).toMatchObject({ status: 'expired', connectionId: connection.id })
-    now += 30 * DAY - 1
-    expect(connections.list().some(item => item.id === connection.id)).toBe(true)
-    now += 1
-    expect(connections.list().some(item => item.id === connection.id)).toBe(false)
-    expect(new McpConnections(storage, () => now).authenticate(token)).toEqual({ status: 'unknown' })
-    expect(() => connections.renew(connection.id)).toThrow('超过续期期限')
-    const revoked = connections.create('撤销')
-    const revokedToken = connections.token(revoked.id)
-    connections.revoke(revoked.id)
-    expect(new McpConnections(storage, () => now).authenticate(revokedToken)).toEqual({ status: 'unknown' })
+  it('旧版带到期时间的授权迁移为永久有效，令牌和权限不变', () => {
+    const token = 'a'.repeat(64)
+    let saved: string | null = JSON.stringify({ version: 1, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '旧连接', expiresAt: 1, token, allowWrites: true, allowDestructive: true, allowPaid: false, reminders: { expiresAt: 1, states: ['expired'] } }] })
+    const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } })
+    expect(connections.authenticate(token)).toEqual({ status: 'valid', connectionId: '00000000-0000-4000-8000-000000000001' })
+    expect(JSON.parse(saved!)).toEqual({ version: 2, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '旧连接', token, allowWrites: true, allowDestructive: true, allowPaid: false }] })
   })
-  it('到期两种提醒按连接和本次期限持久去重，续期只改期限且重新提醒', () => {
-    let now = Date.now()
+  it('修改已有连接权限保留令牌，关闭修改时一并收回删除与付费', () => {
     let saved: string | null = null
     const storage = { read: () => saved, write: (value: string) => { saved = value } }
-    const connections = new McpConnections(storage, () => now)
-    const original = connections.create('续期与提醒', { allowWrites: true, allowPaid: true, allowDestructive: true })
-    const token = connections.token(original.id)
-    const other = connections.create('独立连接')
-    now = original.expiresAt - 3 * DAY
-    expect(connections.list()[0].reminder).toBe('expiring')
-    expect(connections.acknowledgeReminder(original.id, original.expiresAt, 'expiring')).toBe(true)
-    expect(connections.acknowledgeReminder(original.id, original.expiresAt, 'expiring')).toBe(false)
-    expect(new McpConnections(storage, () => now).list()[0].reminder).toBeUndefined()
-    expect(connections.list().find(item => item.id === other.id)?.reminder).toBe('expiring')
-    now = original.expiresAt
-    expect(connections.list()[0].reminder).toBe('expired')
-    expect(connections.acknowledgeReminder(original.id, original.expiresAt, 'expired')).toBe(true)
-    expect(new McpConnections(storage, () => now).list()[0].reminder).toBeUndefined()
-    const before = JSON.parse(saved!).connections[0]
-    const renewed = connections.renew(original.id)
-    const after = JSON.parse(saved!).connections[0]
-    expect(after).toEqual({ ...before, expiresAt: now + MCP_CONNECTION_LIFETIME_MS })
-    expect(renewed.reminder).toBeUndefined()
-    expect(connections.token(original.id)).toBe(token)
-    expect(connections.acknowledgeReminder(original.id, original.expiresAt, 'expired')).toBe(false)
-    now = renewed.expiresAt - 3 * DAY
-    expect(new McpConnections(storage, () => now).list()[0].reminder).toBe('expiring')
+    const connections = new McpConnections(storage)
+    const connection = connections.create('权限', { allowWrites: true, allowDestructive: true, allowPaid: true })
+    const token = connections.token(connection.id)
+    expect(connections.update(connection.id, { allowWrites: true, allowDestructive: false, allowPaid: true })).toMatchObject({ allowDestructive: false, allowPaid: true })
+    expect(new McpConnections(storage).access(connection.id)).toEqual({ allowWrites: true, allowDestructive: false, allowPaid: true })
+    expect(connections.update(connection.id, { allowWrites: false, allowDestructive: true, allowPaid: true })).toMatchObject({ allowWrites: false, allowDestructive: false, allowPaid: false })
+    expect(connections.token(connection.id)).toBe(token)
+    connections.revoke(connection.id)
+    expect(() => connections.update(connection.id, { allowWrites: true, allowDestructive: false, allowPaid: false })).toThrow('已撤销')
   })
 })

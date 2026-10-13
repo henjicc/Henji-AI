@@ -5,7 +5,6 @@ import { EXTERNAL_APPLICATION_CAPABILITIES } from './externalCapabilityPolicy'
 import { applicationUserConfirmationSchema, paidApprovalProgressSchema } from './userConfirmation'
 import { uiPaidApprovalSchema, type PaidApprovalDecision } from './paidApproval'
 import type { OperationReviewCommand, OperationReviewSnapshot } from './operationReview'
-import type { McpConnectionReminderState } from './mcpConnectionExpiry'
 
 export const APPLICATION_READ_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.read.map(definition => definition.id)
 export const APPLICATION_WRITE_CAPABILITY_IDS = EXTERNAL_APPLICATION_CAPABILITIES.write.map(definition => definition.id)
@@ -96,7 +95,8 @@ export const EXTERNAL_LIMITS = {
 } as const
 export const EXTERNAL_DEPRECATION_POLICY = '当前仅支持 application contract 2 与 MCP 2026-07-28；旧工具接口和旧协议不兼容，客户端需按当前声明调用。'
 
-export interface McpConnectionInfo { id: string; name: string; expiresAt: number; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean; reminder?: McpConnectionReminderState }
+export interface McpConnectionAccess { allowWrites: boolean; allowDestructive: boolean; allowPaid: boolean }
+export interface McpConnectionInfo extends McpConnectionAccess { id: string; name: string }
 export const mcpDefaultAccessSchema = z.object({ allowWrites: z.boolean(), allowDestructive: z.boolean(), allowPaid: z.boolean() }).strict()
 export const mcpPreferencesSchema = z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535), defaultAccess: mcpDefaultAccessSchema }).strict()
 export type McpPreferences = z.infer<typeof mcpPreferencesSchema>
@@ -107,9 +107,8 @@ export interface McpPlatform {
   configure(input: { enabled: boolean; port: number; defaultAccess?: McpPreferences['defaultAccess'] }): Promise<McpStatus>
   authorize(input: { name: string; allowWrites?: boolean; allowDestructive?: boolean; allowPaid?: boolean }): Promise<McpConnectionInfo>
   revoke(input: { id: string }): Promise<void>
-  /** 用户在可信设置页延长授权；外部智能体不能自行延长自己的授权。 */
-  renew(input: { id: string }): Promise<McpConnectionInfo>
-  acknowledgeReminder(input: { id: string; expiresAt: number; state: McpConnectionReminderState }): Promise<boolean>
+  /** 用户在可信设置页修改已有连接的权限；外部智能体不能修改自己的授权。 */
+  update(input: { id: string; access: McpConnectionAccess }): Promise<McpConnectionInfo>
   connectionConfig(input: { id: string }): Promise<string>
 }
 export interface ApplicationHostPlatform {

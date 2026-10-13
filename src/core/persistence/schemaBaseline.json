@@ -217,8 +217,8 @@
       "supportedFrom": 1
     },
     "mcp-connections": {
-      "version": 1,
-      "fingerprint": "26c6e8059ae5fe0e696c978a7d3e9a977822380eaacf96b184e02c2269d78687",
+      "version": 2,
+      "fingerprint": "f6e809a60ecfcb39ddd70f0d4f3d6529f7d0834ba79bc5c24e6f8fb2b79bc9ee",
       "supportedFrom": 1
     }
   },

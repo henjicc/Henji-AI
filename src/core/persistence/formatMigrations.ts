@@ -1,5 +1,6 @@
 import type { PersistenceMigrations } from './migrations'
 import { migrateThemePayloadV1 } from '../theme/themeMigration'
+import { migrateMcpConnectionStorageV1 } from './mcpConnectionSchema'
 
 /** Add N → N+1 here for non-document formats. Document kinds own their own chain. */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
@@ -9,5 +10,7 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   'subtitle-manifest': { 1: content => content && typeof content === 'object' && !Array.isArray(content) ? { ...content, version: 2 } : content },
   // 1 → 2（f6）：文字样式说明补充“未提供字段使用默认值”，存储内容不变，原样升级。
   'title-templates': { 1: content => content },
+  // 1 → 2：外部连接改为永久有效，去掉到期时间与提醒记录。
+  'mcp-connections': { 1: migrateMcpConnectionStorageV1 },
 }
 export function formatMigrations(id: string): PersistenceMigrations { return FORMAT_MIGRATIONS[id] ?? {} }

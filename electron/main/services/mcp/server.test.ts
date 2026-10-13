@@ -25,7 +25,7 @@ afterEach(async () => { for (const close of closers.reverse()) await close(); cl
 async function fixture(options: { ready?: boolean; pending?: boolean; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
   let saved: string | null = null
   let now = Date.now()
-  const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } }, () => now)
+  const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } })
   const first = connections.create('客户端甲')
   const second = connections.create('客户端乙')
   const host = new ApplicationHostBridge((id) => connections.assertActive(id))
@@ -342,12 +342,7 @@ describe('本地 MCP 协议与边界', () => {
     expect(f.rejected).toHaveBeenLastCalledWith({ reason: 'invalid_token' })
     const tokenB = f.connections.token(f.second.id)
     f.advance()
-    const expired = await fetch(f.url(), { headers: { Authorization: `Bearer ${tokenB}` } })
-    expect(expired.status).toBe(401)
-    expect(expired.headers.get('www-authenticate')).toBe('Bearer error="invalid_token", error_description="connection expired"')
-    expect(await expired.json()).toMatchObject({ error: 'token_expired', message: expect.stringContaining('续期后令牌不变') })
-    expect(f.rejected).toHaveBeenLastCalledWith({ reason: 'token_expired', connectionId: f.second.id, expiresAt: f.second.expiresAt })
-    f.connections.renew(f.second.id)
+    // 连接长期有效：一个月后同一令牌仍可直接使用。
     expect(f.connections.token(f.second.id)).toBe(tokenB)
     // 正式客户端沿同一传输配置继续调用；不重新创建授权或换令牌。
     const b = await f.connect(f.second.id)

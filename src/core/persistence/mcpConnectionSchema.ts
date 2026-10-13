@@ -1,11 +1,21 @@
 import { z } from 'zod'
 
-/** keystore 中的解密后契约；登记和样本只使用合成值，绝不读取真实凭据。 */
-export const MCP_CONNECTION_STORAGE_VERSION = 1
+/** keystore 中的解密后契约；登记和样本只使用合成值，绝不读取真实凭据。v2 起连接永久有效，直到用户撤销。 */
+export const MCP_CONNECTION_STORAGE_VERSION = 2
 export const mcpConnectionRecordSchema = z.object({
-  id: z.string().uuid(), name: z.string().min(1).max(80), expiresAt: z.number().finite(),
+  id: z.string().uuid(), name: z.string().min(1).max(80),
   token: z.string().regex(/^[a-f0-9]{64}$/),
   allowWrites: z.boolean().default(false), allowDestructive: z.boolean().default(false), allowPaid: z.boolean().default(false),
-  reminders: z.object({ expiresAt: z.number().finite(), states: z.array(z.enum(['expiring', 'expired'])) }).strict().optional(),
 }).strict()
 export const mcpConnectionStorageSchema = z.object({ version: z.literal(MCP_CONNECTION_STORAGE_VERSION), connections: z.array(mcpConnectionRecordSchema) }).strict()
+
+/** 1 → 2：去掉到期时间与到期提醒，已有连接保留令牌与权限，变为永久有效。 */
+export function migrateMcpConnectionStorageV1(content: unknown): unknown {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
+  const connections = (content as { connections?: unknown }).connections
+  return { ...content, version: 2, connections: Array.isArray(connections) ? connections.map((record: unknown) => {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) return record
+    const { expiresAt: _expiresAt, reminders: _reminders, ...rest } = record as Record<string, unknown>
+    return rest
+  }) : connections }
+}
