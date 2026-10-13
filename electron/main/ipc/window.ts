@@ -1,4 +1,4 @@
-import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { isUiScaleFactor, type UiScaleFactor } from '../../../src/core/theme/uiScale'
 import { parseWindowAppearance, windowAppearance } from '../services/window-appearance'
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
@@ -20,6 +20,7 @@ const WINDOW_CONFIRM_CLOSE = 'window:confirmClose'
 const WINDOW_CONTROL_POPOUT = 'window:controlPopout'
 
 const approvedCloseWindows = new WeakSet<BrowserWindow>()
+const requestedZoomFactors = new WeakMap<WebContents, UiScaleFactor>()
 
 /** 不经渲染层保存屏障直接批准全部窗口关闭；只给已完成保存的流程用（如更换作品目录后重启）。 */
 export function approveAllWindowsClose(): void {
@@ -120,7 +121,22 @@ export function registerWindowIpc(): void {
   })
 
   registerIpcHandler(WINDOW_SET_ZOOM_FACTOR, parseZoomFactor, (factor, event) => {
-    getEventWindow(event).webContents.setZoomFactor(factor)
+    const contents = getEventWindow(event).webContents
+    if (!requestedZoomFactors.has(contents)) {
+      // Chromium 按完整 file URL 记录缩放。replaceState 改 query 后原生读数可能回到
+      // 默认值，而渲染帧仍用旧比例；同步当前窗口的比例，防止后续 resize 真正跳回默认值。
+      const syncNavigationZoom = (_event: unknown, _url: string, isMainFrame: boolean): void => {
+        const requestedFactor = requestedZoomFactors.get(contents)
+        if (isMainFrame && requestedFactor !== undefined) contents.setZoomFactor(requestedFactor)
+      }
+      contents.on('did-navigate-in-page', syncNavigationZoom)
+      contents.once('destroyed', () => {
+        contents.removeListener('did-navigate-in-page', syncNavigationZoom)
+        requestedZoomFactors.delete(contents)
+      })
+    }
+    requestedZoomFactors.set(contents, factor)
+    contents.setZoomFactor(factor)
   })
 
   // 渲染层应用主题后同步窗口底色与 color-scheme：更新已开窗口并持久化，供下次创建窗口使用
