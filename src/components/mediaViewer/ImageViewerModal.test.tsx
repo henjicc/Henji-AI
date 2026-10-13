@@ -9,15 +9,14 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }));
 vi.mock('@/components/ui', async () => {
   const React = await import('react');
   return {
+    UiViewerShell: (await import('@/components/ui/UiViewerShell')).UiViewerShell,
+    useUiViewerShell: (await import('@/components/ui/useUiViewerShell')).useUiViewerShell,
     UiSegmented: (await import('@/components/ui/UiSegmented')).UiSegmented,
     UiButton: React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }>(
       ({ variant: _variant, size: _size, ...props }, ref) => <button {...props} ref={ref} />),
     UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => <button {...props} />,
     UiOptionButton: ({ variant: _variant, active: _active, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; active?: boolean }) => <button {...props} />,
     UiError: ({ message }: { message: string }) => <div role="alert">{message}</div>,
-    useUiOverlayLayer: () => ({ id: 'viewer', parentId: null, layerProps: {} }),
-    UiOverlayLayerProvider: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-    isTopmostUiOverlay: () => true,
   };
 });
 import { ImageViewerModal } from './ImageViewerModal';

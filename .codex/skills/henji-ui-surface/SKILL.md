@@ -479,10 +479,10 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - 一个面板里可以有“成对数值网格”（X/Y、宽/高，标签在上），但它和单控件行的**标签左缘必须对齐**、
   控件右缘必须对齐；同一面板不允许出现第三种排法。
   返工现场：图片编辑属性面板“变换”是网格、“路径与组合”是 72px 行，“路径组合方式”溢出、下拉不占满、左缘不齐。
-- `UiGroup labelWidth={72 | 96 | 120}` 统一提供面板列宽；内部 `UiFormRow` 继承，成对网格显式 `labelColumn="auto"`。面板行内的下拉、数值和分段由共享上下文填满控件列。
+- `UiGroup labelWidth={72 | 96 | 120}` 统一提供面板列宽；内部与嵌套分组中的 `UiFormRow` 默认标签在左，普通表单上下文保持标签在上（记录 010）。成对网格或多行正文显式 `labelColumn="auto"`。面板行内的下拉、数值和分段由共享上下文填满控件列。尾部锁定等动作走 `trailing`；同组无动作的行传 `null` 保留 28px 尾槽，不手写栅格和 !important。
 
 ```tsx
-<UiGroup title="示范" titleTone="compact" divided>
+<UiGroup title="示范" titleTone="compact" labelWidth={96} divided>
   <UiFormRow label="方式" density="compact"><UiSegmented … /></UiFormRow>
   <UiFormRow label="属性" density="compact"><Dropdown … /></UiFormRow>
 </UiGroup>
@@ -500,11 +500,10 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 ### 3. 记录列表（历史、任务、批注、版本等同质记录）
 
-- 每条记录之间必须有可见边界：页面区域上用**全宽分隔线 + 上下 20px 留白**；
-  已在卡片/面板内则用分隔线；只有满足卡片准入四条时才用卡片。
-- 记录内部固定层级：标题（14/500）→ 元信息（12 次要文字，`·` 分隔）→ 结果区 → 状态/错误 → 恢复动作；
-  块内统一 `gap-2`，不同记录之间的间距必须明显大于块内间距（至少 2.5 倍）。
-- 分隔线由列表项自己画（虚拟列表也不错位），首条上方、末条下方不画。
+- 一律复用 `UiRecordList` / `UiRecordItem`；虚拟列表的 itemContent 可以直接返回 `UiRecordItem`，不另画列表边界。
+- `density="page"` 每侧 20px、`panel` 每侧 12px、`compact` 每侧 4px；compact 只用于图片历史等高密度单行记录。不是“上下合计 20px”。块内统一 8px，页面相邻记录累计 40px。
+- 插槽顺序为 `title`（14/500）→ `meta`（UI_TEXT_META_CLASS，数组自动以 ` · ` 分隔）→ children → status → actions。已存在完整领域记录组件或表格列的，放入 children，不拆业务状态。
+- 分隔线统一 UI_DIVIDER_CLASS，由 item 根据完整列表 `index > 0` 画上边线，首条上方、末条下方不画；禁止 first: 判断虚拟窗口首项。测量 ref 指向含留白与边界的根节点。
 
 ### 4. 新元素先找同类结构，复用它
 
@@ -586,9 +585,11 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 封面内容卡（项目卡、工程卡、资产卡） | `UiOptionButton variant="cover"` + 封面框 `UI_COVER_FRAME_CLASS`；不是按钮的根元素（可拖拽的资产卡）加 `UI_COVER_GROUP_CLASS` 与 `data-selected` | 给整张卡铺底描边，或在调用点手写悬停描边/选中环 |
 | 工具页 / 全屏工作面的命令带 | `UiToolbar variant="command"`：左端 children（返回、文件上下文、主工具组）/ `center`（视图切换、随工具变化的参数）/ `trailing`（次要动作 + 唯一主动作）/ 可选 `subordinate` 从属带（共用底色与下边框）；状态写进 `barProps` 的 `data-*` | 每个工具自己画 `h-11 border-b bg-*` 头带；从属带另画底色或边框 |
 | 可点的文字记号（逐字稿词块、时间轴字幕块） | `UiTextToken`（`appearance` inline/chip；`current` 播放中、`selected` 已选、`excluded` 已删除、`flagged` 待留意） | 用 `UiButton` 加 className 覆盖底色、圆角、划线 |
+| 同质记录列表 | `UiRecordList` / `UiRecordItem`（density page/panel/compact；全局 index 决定分隔；支持测量 ref） | 手写 py-5 + border-t、divide-y 或 first: 边界；规则 E / S4 接入由任务 5.2 完成 |
+| 全屏媒体查看器 | `useUiViewerShell(open, onClose, options)` + `UiViewerShell viewer={viewer}`；surface media/canvas、inset window/content、presentation fill/centered、controls 插槽 | 复制淡入淡出、inert、滚动锁、Escape 与 overlay ownership；业务不再加查看器壳豁免 |
 | 表单行 | `UiFormRow`（窄停靠面板 `density="compact"`，配 `UiGroup titleTone="compact"`）；行内的 `Ui*` 控件没有自己的名称时自动 `aria-labelledby` 行标签、`aria-describedby` 说明（下拉读作“标签 + 当前值”，任务 5.8） | 手写 label + 间距；调用点改标签字号；给行内控件再手写一遍同样的 `aria-label` |
 | 字段 | `UiInput` / `UiSelect` / `UiTextArea` / `NumberInput`（数值拖动：读数或标签上左右拖，Shift 精细、Alt 粗调，单击编辑）；高度只用 `size`；直接落在所在表面上编辑的多行文本用 `UiTextArea frame="none"`；复合字段（表面与焦点环画在外壳上）的内层输入用 `UiInput frame="inner"` | 手写数值拖动、自绘步进器；调用点改高度；调用点给文本框去边框去底（`!bg-transparent !ring-0`） |
-| 颜色输入、多行字段外壳、数值步进列 | `UiColorInput` / `UiTextAreaField` / `UiNumberStepper`（步进列组合到数值字段中） | 重写颜色输入、叠第二层字段框、把步进列当独立数值框 |
+| 颜色输入、多行字段外壳、数值步进列 | `UiColorInput` / `UiTextArea` / `UiNumberStepper`（步进列组合到数值字段中） | 重写颜色输入、叠第二层字段框、把步进列当独立数值框 |
 | 日期选择 | `UiDatePicker` | 裸输入重做日期字段与选择面板 |
 | 折叠内容与长用户文本 | `UiDisclosurePanel`（正式开合过渡）/ `UiMarqueeText`（受控长文本） | 自写折叠时长；用跑马灯隐藏短操作标签 |
 | 任务历史筛选 | `UiTaskHistoryFilterBar` | 另造同义字段与标签组合 |
@@ -602,7 +603,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 工具栏只读数值 | `UiReadout size="sm" / "md" / "lg" tone="default" / "media"`；外框与同行控件等高，等宽数字 | 自写 h-7/h-8 读数仿控件 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
-| 存量标签包装（待任务 4.6 迁移） | 旧 `Toggle` / `TextInput` 只供既有调用；新代码用 `UiFormRow` + `UiSwitch` / `UiInput` | 新增旧包装调用；在中心页任务中删除或迁移业务调用方 |
+| 带标签字段 | `UiFormRow inline` + `UiSwitch` / `UiInput`；多行表单不传 inline | 重新创建 Toggle / TextInput 平行包装 |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |
 | 通知提示（操作反馈的短暂提示） | `UiToast`（`tone` success/error/warning，状态只进图标颜色；可选 `action` 复用 quiet 按钮提供可访问恢复动作；`surface` solid 默认 / 压在画布与媒体上用 `glass`；`placement` window 标题栏下居中 / container 画布内）；全局用 `useNotification().showNotification`，停留与淡出时长用 `motion.ts` 的 `UI_TOAST_DISPLAY_MS` / `UI_TOAST_EXIT_MS`（任务 5.7 把三套实现收敛到这里） | 自己画 `fixed top-*` 浮条、用危险实底或成功实底铺满通知、各写一份显示时长 |
@@ -632,7 +633,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md/lg；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
 
 | 间距、条带与面板尺寸 | `UI_SPACING_SCALE`、`UI_INLINE_GAP_CLASS` / `UiToolbar.gap`、`UI_STACK_CLASS`；条带 `UI_BAND_HEIGHT_CLASS` / `UI_BAND_MIN_HEIGHT_CLASS`；面板 `UI_PANEL_WIDTH` / `UI_PANEL_BODY_HEIGHT_CLASS` | 越档 padding/gap；业务数值 panelWidth/panelHeight |
-| 多行与弹窗正文尺寸 | `UiTextArea` / `UiTextAreaField` / `PromptEditor` 的 `height` short/medium/tall；`UiModal.contentPadding` default/none/spacious 与 `contentScroll` auto/none | 用 className 取消默认留白；给文本自造最小高度 |
+| 多行与弹窗正文尺寸 | `UiTextArea` / `PromptEditor` 的 `height` short/medium/tall；`UiModal.contentPadding` default/none/spacious 与 `contentScroll` auto/none | 用 className 取消默认留白；给文本自造最小高度 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：
 1. 在 `@/components/ui` 与本表中确认没有可复用或可扩展的组件
@@ -780,7 +781,7 @@ npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 
 确需例外时在该行上方加注释 `ui-surface-allow` 并写明理由与接手任务；只允许行级豁免，文件级 `ui-surface-allow-file` 出现即报违规（否则该文件将来真正的套娃也会被放行）。
 
-已确认的例外类别：全屏沉浸式媒体查看器（`mediaViewer/` 三个 Modal）不套用 `UiModal`——`UiModal` 是居中卡片语义，与铺满视口的查看器不匹配。
+全屏沉浸式媒体查看器统一用 `UiViewerShell`，不套用居中卡片语义的 `UiModal`。生命周期 hook 在宿主同层调用，淡出后只卸载壳内容，保留视频音量等宿主会话偏好；减少动效沿 useDialogTransition。scope="container" 只用于中心页静态预览，不接管模态、键盘与滚动。
 
 `npm run check:surface`（告警式）可用于本地快速查看，构建链路走的是 `--strict`。
 
@@ -792,4 +793,4 @@ npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 
 ### 间距与尺寸复用补充（4.3）
 
-纵横间距统一 `UI_SPACING_SCALE` 九档。工具条用 `UiToolbar.gap`，堆叠用 `UI_STACK_CLASS`；条带用 `UI_BAND_HEIGHT_CLASS`、`UI_BAND_MIN_HEIGHT_CLASS`、`UI_BAND_PADDING_CLASS`，表单行最小高度用 `UI_FORM_ROW_MIN_HEIGHT_CLASS`。PanelTrigger/Dropdown 用 `panelSize` 四档，正文高度用 `UI_PANEL_BODY_HEIGHT_CLASS`；可拖动侧栏共用 core/theme/panelSizes 的 `UI_PANEL_WIDTH`。UiTextArea/UiTextAreaField/PromptEditor 用 `height` 三档。UiModal 用 `contentPadding` 与 `contentScroll`，不能靠 contentClassName 替换默认留白。完整像素、用途和迁移规则见 references/typography-and-tokens.md；新档必须同时补设计系统中心页真实样本与枚举覆盖。
+纵横间距统一 `UI_SPACING_SCALE` 九档。工具条用 `UiToolbar.gap`，堆叠用 `UI_STACK_CLASS`；条带用 `UI_BAND_HEIGHT_CLASS`、`UI_BAND_MIN_HEIGHT_CLASS`、`UI_BAND_PADDING_CLASS`，表单行最小高度用 `UI_FORM_ROW_MIN_HEIGHT_CLASS`。PanelTrigger/Dropdown 用 `panelSize` 四档，正文高度用 `UI_PANEL_BODY_HEIGHT_CLASS`；可拖动侧栏共用 core/theme/panelSizes 的 `UI_PANEL_WIDTH`。UiTextArea/PromptEditor 用 `height` 三档。UiModal 用 `contentPadding` 与 `contentScroll`，不能靠 contentClassName 替换默认留白。完整像素、用途和迁移规则见 references/typography-and-tokens.md；新档必须同时补设计系统中心页真实样本与枚举覆盖。

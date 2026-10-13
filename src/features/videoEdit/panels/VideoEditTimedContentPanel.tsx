@@ -1,3 +1,4 @@
+import { UiRecordItem } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
@@ -6,7 +7,7 @@ import { VideoEditTextPanel } from './VideoEditTextPanel'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles } from '../application/videoEditAutoSubtitles'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOverflowRow, UiSearchInput, UiOptionButton, UiTextAreaField, type UiOverflowRowItem } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOverflowRow, UiSearchInput, UiOptionButton, UiTextArea, type UiOverflowRowItem } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui/styleTokens'
@@ -158,12 +159,12 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     <div className="shrink-0 px-2 py-1.5">
       <UiSearchInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
     </div>
-    <div className="min-h-0 flex-1 px-2" aria-label={kind === 'caption' ? '字幕列表' : '标记列表'}>
-      {entries.length ? <Virtuoso ref={list} className="h-full" data={entries}  increaseViewportBy={96} initialTopMostItemIndex={Math.max(0, entries.findIndex(entry => entry.value.id === selectedCaptionId))} computeItemKey={(_index, entry) => entry.value.id} itemContent={(index, entry) => <div className={index ? 'border-t border-line py-3' : 'py-3'}><UiOptionButton variant="menu" active={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} aria-pressed={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
+    <div role="list" className="min-h-0 flex-1 px-2" aria-label={kind === 'caption' ? '字幕列表' : '标记列表'}>
+      {entries.length ? <Virtuoso ref={list} className="h-full" data={entries}  increaseViewportBy={96} initialTopMostItemIndex={Math.max(0, entries.findIndex(entry => entry.value.id === selectedCaptionId))} computeItemKey={(_index, entry) => entry.value.id} itemContent={(index, entry) => <UiRecordItem index={index} density="panel"><UiOptionButton variant="menu" active={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} aria-pressed={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
         onClick={() => { openEntry(entry); locate(entry) }} onDoubleClick={() => locate(entry)}>
         <span className={`${UI_TEXT_PANEL_TITLE_CLASS} block w-full truncate`} data-observation-sensitive>{entryText(entry)}</span>
         <span className={`${UI_TEXT_SECONDARY_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时间'}</span>
-      </UiOptionButton></div>} /> : <UiEmpty title={keyword ? '没有匹配内容' : kind === 'caption' ? '尚无字幕' : '尚无时间标记'} description={keyword ? undefined : kind === 'caption' ? '新增文字，或导入 SRT / WebVTT 字幕。' : '在需要定位的时刻新增标记。'} size="sm" />}
+      </UiOptionButton></UiRecordItem>} /> : <UiEmpty title={keyword ? '没有匹配内容' : kind === 'caption' ? '尚无字幕' : '尚无时间标记'} description={keyword ? undefined : kind === 'caption' ? '新增文字，或导入 SRT / WebVTT 字幕。' : '在需要定位的时刻新增标记。'} size="sm" />}
     </div>
     {error && <UiError size="xs" align="start" className="px-2" title={error} message="" />}
     {draft && <UiGroup divided titleTone="compact" className="max-h-[65%] shrink-0 overflow-auto px-2 pb-2" title={draft.kind === 'import' ? '导入字幕' : `${draft.id ? '编辑' : '新增'}${draft.kind === 'caption' ? '字幕' : '标记'}`}>
@@ -172,8 +173,8 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
         {draft.kind === 'import' ? <>
           <UiFormRow label="节目偏移（帧）" info="字幕时间加上此偏移；跟随片段时，字幕须落在该片段范围内。" density="compact"><NumberInput ariaLabel="节目偏移（帧）" size="sm" value={draft.start} step={1} precision={0} min={-maxFrame} max={maxFrame - 1} widthClassName="w-full" disabled={editingLocked || busy} commitOnChange onChange={start => setDraft({ ...draft, start: Math.round(start) })} /></UiFormRow>
         </> : <>
-          <UiFormRow label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} density="compact"><UiTextAreaField aria-label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} value={draft.text} rows={draft.kind === 'caption' ? 3 : 1} maxLength={draft.kind === 'caption' ? 2000 : 200} disabled={editingLocked || busy} onChange={event => setDraft({ ...draft, text: event.target.value })} /></UiFormRow>
-          {draft.kind === 'caption' && <UiFormRow label="第二语言" density="compact"><UiTextAreaField aria-label="第二语言字幕" value={draft.translation ?? ''} rows={1} maxLength={2000} disabled={editingLocked || busy} onChange={event => setDraft({ ...draft, translation: event.target.value })} /></UiFormRow>}
+          <UiFormRow label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} density="compact"><UiTextArea aria-label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} value={draft.text} rows={draft.kind === 'caption' ? 3 : 1} maxLength={draft.kind === 'caption' ? 2000 : 200} disabled={editingLocked || busy} onChange={event => setDraft({ ...draft, text: event.target.value })} /></UiFormRow>
+          {draft.kind === 'caption' && <UiFormRow label="第二语言" density="compact"><UiTextArea aria-label="第二语言字幕" value={draft.translation ?? ''} rows={1} maxLength={2000} disabled={editingLocked || busy} onChange={event => setDraft({ ...draft, translation: event.target.value })} /></UiFormRow>}
           <div className="grid grid-cols-2 gap-2">
             <UiFormRow label={draft.kind === 'caption' ? '开始帧' : '标记帧'} density="compact"><NumberInput ariaLabel={draft.kind === 'caption' ? '开始帧' : '标记帧'} size="sm" value={draft.start} min={0} max={maxFrame - 1} step={1} precision={0} widthClassName="w-full" disabled={editingLocked || busy} commitOnChange onChange={start => setDraft({ ...draft, start: Math.round(start) })} /></UiFormRow>
             {draft.kind === 'caption' && <UiFormRow label="时长（帧）" density="compact"><NumberInput ariaLabel="时长（帧）" size="sm" value={draft.duration} min={1} max={maxFrame} step={1} precision={0} widthClassName="w-full" disabled={editingLocked || busy} commitOnChange onChange={duration => setDraft({ ...draft, duration: Math.round(duration) })} /></UiFormRow>}

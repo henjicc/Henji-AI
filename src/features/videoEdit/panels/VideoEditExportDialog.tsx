@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { MoreHorizontal } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton, UiRangeInput } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiGroup, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton, UiRangeInput } from '@/components/ui'
 import { videoEditComposition, videoEditDuration } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID, patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEditExportEstimatedBytes, videoEditSequenceExportSettings, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { createLogger } from '@/core/logging'
@@ -155,7 +155,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
     <UiModal isOpen title="导出" size="editor" contentPadding="none" contentScroll="none" onClose={onClose} footer={<>{(settingsError || encoderError) && <p role="alert" className="mr-auto self-center text-xs text-text2">{settingsError || encoderError}</p>}<UiButton variant="secondary" disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy || !canExport} onClick={() => void submit(true)}>{busy ? '正在导出…' : '导出'}</UiButton></>}>
       <div className="flex min-h-0 flex-1">
         <div className="w-80 shrink-0 overflow-y-auto border-r border-line">
-          <div className="space-y-2 px-3 py-3">
+          <UiGroup labelWidth={72} gap="row" className="px-3 py-3">
             <VideoEditExportField label="文件名"><UiInput size="sm" className="w-full" aria-label="导出文件名" value={fileName} disabled={busy} onChange={event => setFileName(event.target.value)} /></VideoEditExportField>
             <VideoEditExportField label="位置"><UiButton variant="link" disabled={busy} aria-label="选择导出目录" className="max-w-full" onClick={() => void chooseDirectory()}><span className="truncate" data-observation-sensitive={directory ? 'true' : undefined} title={directory}>{directory || '选择目录…'}</span></UiButton></VideoEditExportField>
             <VideoEditExportField label="预设" lock={<PanelTrigger size="sm" panelWidth="content" closeOnPanelClick panelPadding="menu" renderPanel={() => <>
@@ -167,7 +167,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
               ...(['avc', 'hevc'] as const).map(codec => ({ value: codec, label: codec === 'avc' ? 'MP4 · H.264' : 'MP4 · HEVC (H.265)', disabled: probing || !codecChoice(codec), tooltip: !codecChoice(codec) ? codec === 'avc' ? '当前规格不支持 H.264；8K 请尝试 HEVC，或降低规格。' : '当前规格不支持 HEVC；请降低规格。' : !support(codec, settings.encoderPreference, settings.bitrateMode) ? '选择后使用本机可用的性能与码率模式，请检查编码分区。' : undefined })),
               { value: 'aac', label: '音频 · AAC' }, { value: 'wav', label: '音频 · WAV' },
             ]} onSelect={value => value === 'avc' || value === 'hevc' ? patch({ format: 'mp4', ...codecChoice(value) }) : patch({ format: value as 'aac' | 'wav' })} /></VideoEditExportField>
-          </div>
+          </UiGroup>
           <VideoEditExportFields viewer={owner} settings={settings} busy={busy} hasProxies={hasProxies} patch={patch} probing={probing} support={support} keyframeSupport={keyframeSupport} audioProbing={audioProbing} audioSupport={audioSupport} matchSequence={() => patch({ followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } })} />
           <div className="space-y-2 px-3 pb-3">
             {notice && <p role="status" className="text-xs text-text2">{notice}</p>}

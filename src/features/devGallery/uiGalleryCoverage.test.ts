@@ -99,7 +99,7 @@ describe('设计系统中心覆盖 ui/** 全部导出组件', () => {
   it('深路径和 default export 同样进入门禁（防止空跑）', () => {
     expect(exported).toEqual(expect.arrayContaining(['UiButton', 'UiReadout', 'UiModal', 'Dropdown', 'PanelTrigger', 'UiToast', 'PromptEditor']))
     expect(exported.length).toBeGreaterThan(30)
-    expect(exported).toEqual(expect.arrayContaining(['NumberInput', 'ProgressBar', 'Tooltip', 'TooltipContent', 'PriceEstimate', 'Toggle', 'TextInput', 'FileUploader']))
+    expect(exported).toEqual(expect.arrayContaining(['NumberInput', 'ProgressBar', 'Tooltip', 'TooltipContent', 'PriceEstimate', 'UiRecordList', 'UiRecordItem', 'UiViewerShell', 'FileUploader']))
   })
 
   it('每个导出组件都在样张页出现，或登记为非可见并写明理由', () => {

@@ -1,3 +1,4 @@
+import { UiRecordItem } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useRef } from 'react'
 import { History } from 'lucide-react'
@@ -64,7 +65,7 @@ export function TaskList({
   return (
     // 记录列：与命令带同宽同边距（generationColumn + px-6）。页面不再单独画“历史记录”标题，
     // 命中数在筛选生效时显示在命令带右侧。
-    <UiRegion maxWidthClassName={GENERATION_COLUMN_MAX_WIDTH_CLASS} className="mx-auto px-6">
+    <UiRegion role="list" maxWidthClassName={GENERATION_COLUMN_MAX_WIDTH_CLASS} className="mx-auto px-6">
       {totalCount === 0 && (
         <UiEmpty
           icon={<History className={`${UI_ICON_SIZE_CLASS.display}`} />}
@@ -143,7 +144,7 @@ function TaskListRow({ index, top, measure, retention, ...props }: TaskCardProps
     measure(element)
   }, [id, measure, retention])
   // 用完整列表索引决定分隔线，不依赖虚拟窗口内的 DOM 首项。留白和线一起计入测量高度。
-  return <div ref={ref} data-index={index} className={`absolute left-0 top-0 w-full py-5 ${index > 0 ? 'border-t border-line' : ''}`} style={{ transform: `translateY(${top}px)` }}>
+  return <UiRecordItem ref={ref} index={index} density="page" data-index={index} className="absolute left-0 top-0 w-full" style={{ transform: `translateY(${top}px)` }}>
     <TaskCard {...props} />
-  </div>
+  </UiRecordItem>
 }

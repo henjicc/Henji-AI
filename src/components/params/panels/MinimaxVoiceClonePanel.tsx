@@ -1,7 +1,7 @@
 import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
-import Toggle from '@/components/ui/Toggle'
+import { UiSwitch, UiFormRow } from '@/components/ui'
 import { UI_TEXT_LABEL_CLASS, UiButton, UiError, UiInput } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
@@ -350,26 +350,8 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
                 maxLength={40}
               />
             </div>
-            <div className="space-y-2">
-              <label className={UI_TEXT_LABEL_CLASS}>降噪</label>
-              <Toggle
-                checked={panelValue.needNoiseReduction}
-                onChange={(next) => patchValue({ needNoiseReduction: next })}
-                onText="开启"
-                offText="关闭"
-                className="w-auto"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className={UI_TEXT_LABEL_CLASS}>音量归一化</label>
-              <Toggle
-                checked={panelValue.needVolumeNormalization}
-                onChange={(next) => patchValue({ needVolumeNormalization: next })}
-                onText="开启"
-                offText="关闭"
-                className="w-auto"
-              />
-            </div>
+            <UiFormRow inline label="降噪"><UiSwitch checked={panelValue.needNoiseReduction} onCheckedChange={next => patchValue({ needNoiseReduction: next })} /></UiFormRow>
+            <UiFormRow inline label="音量归一化"><UiSwitch checked={panelValue.needVolumeNormalization} onCheckedChange={next => patchValue({ needVolumeNormalization: next })} /></UiFormRow>
             <div className="space-y-2">
               <label className={UI_TEXT_LABEL_CLASS}>校验阈值</label>
               <NumberInput

@@ -6,7 +6,7 @@ import { CodeMaterialError, type CodeSourceSpan } from '@/core/videoEdit/codeMat
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { codeElementAtSource } from '@/core/videoEdit/codeElementSelection'
 import { selectedVideoEditCodeElement, selectVideoEditCodeElement, videoEditCodeElementFrames } from '../application/videoEditCodeElements'
-import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiTextAreaField, UiInput, UiOptionButton } from '@/components/ui'
+import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading, UiTextArea, UiInput, UiOptionButton } from '@/components/ui'
 import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVideoEditCodeCandidate, type VideoEditCodeApplyScope, type VideoEditCodeCandidate } from '../application/videoEditCodeCandidates'
 import type { VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
 import { requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
@@ -142,7 +142,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
       <UiButton variant="danger" disabled={activeFile === draft.entry} onClick={() => { const files = { ...draft.files }; delete files[activeFile]; changeFiles({ ...draft, files }); setActiveFile(draft.entry) }}>删除文件</UiButton>
     </div>
     {fileAction && <UiFormRow density="compact" label={fileAction === 'create' ? '新文件路径' : '新路径'}><div className="flex items-center gap-2"><UiInput aria-label="源码文件路径" value={fileName} onChange={event => setFileName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitFile(); if (event.key === 'Escape') setFileAction(undefined) }} /><UiButton onClick={submitFile}>确定</UiButton><UiButton onClick={() => setFileAction(undefined)}>取消</UiButton></div></UiFormRow>}
-    <UiFormRow density="compact" label="源码"><UiTextAreaField ref={sourceInput} aria-label="代码素材源码" className="font-mono" rows={12} wrap="off" value={draft.files[activeFile] ?? ''} spellCheck={false} onClick={locateCursor} onKeyUp={locateCursor} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
+    <UiFormRow density="compact" label="源码"><UiTextArea ref={sourceInput} aria-label="代码素材源码" className="font-mono" rows={12} wrap="off" value={draft.files[activeFile] ?? ''} spellCheck={false} onClick={locateCursor} onKeyUp={locateCursor} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
     <UiFormRow density="compact" label="应用范围"><Dropdown<VideoEditCodeApplyScope> ariaLabel="源码应用范围" value={scope} options={[{ value: 'single', label: '此片段' }, { value: 'matching', label: '相同原版本的所有片段' }]} onSelect={value => { if (value !== scope) { invalidate(); setScope(value); setError(null) } }} /></UiFormRow>
     <div className="flex flex-wrap items-center gap-2">
       <UiButton variant="secondary" disabled={busy} onClick={() => { void check() }}>检查并预览</UiButton>

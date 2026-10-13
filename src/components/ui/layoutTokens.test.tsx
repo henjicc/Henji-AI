@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { UiGroup, UiPageHeader, UiToolbar } from './layout'
-import { UiInput, UiTextArea, UiTextAreaField } from './primitives'
+import { UiInput, UiTextArea } from './primitives'
 import { UiModal } from './UiModal'
 import Dropdown from './Dropdown'
 import PanelTrigger from './PanelTrigger'
@@ -18,7 +18,7 @@ it('横向工具栏通过有限枚举统一各动作组间距', () => {
 })
 
 it('两个多行原语共享高度枚举，rows 保持 DOM 属性且高度枚举不泄漏到 DOM', () => {
-  const { getByLabelText } = render(<><UiTextArea aria-label="短" rows={9} /><UiTextAreaField aria-label="中" height="medium" /><UiTextArea aria-label="长" height="tall" /></>)
+  const { getByLabelText } = render(<><UiTextArea aria-label="短" rows={9} /><UiTextArea aria-label="中" height="medium" /><UiTextArea aria-label="长" height="tall" /></>)
   for (const [label, height] of [['短', 'short'], ['中', 'medium'], ['长', 'tall']]) {
     expect(getByLabelText(label).className).toContain(`min-h-textarea-${height}`)
     expect(getByLabelText(label).hasAttribute('height')).toBe(false)

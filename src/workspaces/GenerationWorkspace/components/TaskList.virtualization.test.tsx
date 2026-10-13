@@ -9,7 +9,8 @@ import { revealGenerationTask } from '../application/generationTaskNavigation'
 import { useGenerationAutoScroll } from '../hooks/useGenerationAutoScroll'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('@/components/ui', () => ({
+vi.mock('@/components/ui', async () => ({
+  ...await import('@/components/ui/UiRecordList'),
   UiRegion: ({ children }: React.PropsWithChildren) => <section>{children}</section>,
   UiEmpty: () => <div>空</div>,
 }))

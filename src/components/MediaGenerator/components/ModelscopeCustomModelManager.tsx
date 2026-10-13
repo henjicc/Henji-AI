@@ -1,7 +1,7 @@
 import { UiSegmented } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
-import TextInput from '@/components/ui/TextInput'
+import { UiFormRow, UiInput } from '@/components/ui'
 import { requestAlertConfirmation, showAlertDialog } from '@/stores/alertDialogStore'
 import { UI_TEXT_BODY_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiIconButton, UiPanel } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
@@ -229,22 +229,8 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
             </UiIconButton>
           </div>
           <div className="flex flex-col gap-2">
-            <TextInput
-              label={t('modelscopeCustomModel.form.modelId')}
-              value={newModelId}
-              onChange={setNewModelId}
-              placeholder={t('modelscopeCustomModel.form.placeholders.modelId')}
-              className="w-full"
-              inputClassName="w-full"
-            />
-            <TextInput
-              label={t('modelscopeCustomModel.form.displayName')}
-              value={newModelName}
-              onChange={setNewModelName}
-              placeholder={t('modelscopeCustomModel.form.placeholders.displayName')}
-              className="w-full"
-              inputClassName="w-full"
-            />
+            <UiFormRow inline label={t('modelscopeCustomModel.form.modelId')}><UiInput value={newModelId} onChange={event => setNewModelId(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.modelId')} className="w-full" /></UiFormRow>
+            <UiFormRow inline label={t('modelscopeCustomModel.form.displayName')}><UiInput value={newModelName} onChange={event => setNewModelName(event.target.value)} placeholder={t('modelscopeCustomModel.form.placeholders.displayName')} className="w-full" /></UiFormRow>
             <div className="flex flex-col gap-2">
               <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
               <UiSegmented ariaLabel={t('modelscopeCustomModel.form.modelType')} fullWidth value={newModelType} onChange={setNewModelType} options={(['imageGeneration', 'imageEditing'] as const).map(value => ({ value, label: t(`modelscopeCustomModel.types.${value}`) }))} />
@@ -293,13 +279,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                   <div className={`break-all ${UI_TEXT_META_CLASS}`}>
                       {t('modelscopeCustomModel.form.modelId')}: {model.id}
                     </div>
-                    <TextInput
-                      label={t('modelscopeCustomModel.form.displayName')}
-                      value={editName}
-                      onChange={setEditName}
-                      className="w-full"
-                      inputClassName="w-full"
-                    />
+                    <UiFormRow inline label={t('modelscopeCustomModel.form.displayName')}><UiInput value={editName} onChange={event => setEditName(event.target.value)} className="w-full" /></UiFormRow>
                     <div className="flex flex-col gap-2">
                       <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
                       <UiSegmented ariaLabel={t('modelscopeCustomModel.form.modelType')} fullWidth value={editModelType} onChange={setEditModelType} options={(['imageGeneration', 'imageEditing'] as const).map(value => ({ value, label: t(`modelscopeCustomModel.types.${value}`) }))} />

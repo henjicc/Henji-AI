@@ -10,7 +10,7 @@ import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TextParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { PromptEditor, UiInput, UiTextAreaField } from '@/components/ui'
+import { PromptEditor, UiInput, UiTextArea } from '@/components/ui'
 import { ParamLabel } from '../ParamLabel'
 import { ParamField } from '../ParamField'
 import {
@@ -77,7 +77,7 @@ export const TextInput: React.FC<TextInputProps> = ({
     return (
       <ParamField inline={false}>
         <ParamLabel param={param} language={i18n.language} />
-        <UiTextAreaField
+        <UiTextArea
           value={value || ''}
           onChange={handleChange}
           disabled={disabled}

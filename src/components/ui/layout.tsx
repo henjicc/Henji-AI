@@ -103,7 +103,7 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   hint?: ReactNode;
   /** 背景知识型说明：标签文字本身在悬停或聚焦时显示（不加 ⓘ 图标） */
   info?: ReactNode;
-  /** 横向排列（标签左、控件右），默认纵向 */
+  /** 横向排列（标签左、控件右）；未指定时继承面板列宽，普通表单保持纵向 */
   inline?: boolean;
   /**
    * 标签档位：`default` 面板标题档 14/500；`compact` 给窄停靠面板（剪辑效果控件等），12 次要文字，
@@ -114,6 +114,8 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   labelColumn?: 'auto' | 'panel';
   /** 优先由面板 UiGroup 统一指定，不在各行单独取不同档。 */
   labelWidth?: 72 | 96 | 120;
+  /** 面板控件列后的动作槽；传 null 仍保留一个 sm 控件宽度以对齐同组各行。 */
+  trailing?: ReactNode;
   children: ReactNode;
 }
 
@@ -308,7 +310,7 @@ export function UiPageHeader({
  * 行与行之间只靠间距，线只出现在分区之间。
  *
  * 排列规则：开关 / 下拉 / 滑块这类"值很短"的控件走 `inline`（标签左、控件右）；
- * 输入框、路径、多行文本走默认的纵向。不要按"这块看着挤"临时改。
+ * UiGroup 提供列宽时默认面板排布；普通表单保持纵向，多行正文可显式 labelColumn="auto"。
  */
 export function UiFormRow({
   className = '',
@@ -320,6 +322,7 @@ export function UiFormRow({
   labelColumn,
   labelWidth,
   children,
+  trailing,
   ...props
 }: UiFormRowProps): JSX.Element {
   const panelLabelWidth = useContext(FormLabelWidthContext);
@@ -343,6 +346,7 @@ export function UiFormRow({
         <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
         {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
       </div>
+      {trailing !== undefined ? <div data-ui-form-trailing className="flex min-h-control-sm w-control-sm shrink-0 items-center justify-center">{trailing}</div> : null}
     </div>;
   }
 

@@ -1,7 +1,7 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { EyeOff, FileCode, MessageSquare, RotateCcw, RotateCw, CornerUpLeft } from 'lucide-react'
-import { UiIconButton, UiTextAreaField, UiSwitch } from '@/components/ui'
+import { UiIconButton, UiTextArea, UiSwitch } from '@/components/ui'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { codeElementAuthorPoint } from '@/core/videoEdit/codeElementSelection'
@@ -130,7 +130,7 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     </svg>
     {!text && <>{points.map((point, corner) => <UiIconButton key={corner} size="2xs" aria-label={`缩放元素角${corner + 1}`} className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2" style={cornerStyle(point)} onPointerDown={event => start(event, 'resize', corner)}><span className="h-1 w-1 bg-current" /></UiIconButton>)}
       <UiIconButton size="xs" aria-label="旋转元素" className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full" style={cornerStyle(rotationPoint)} onPointerDown={event => start(event, 'rotate')}><RotateCw  /></UiIconButton></>}
-    {text && <div className="pointer-events-auto absolute min-w-40" style={cornerStyle(points[0])}><UiTextAreaField autoFocus rows={Math.max(1, text.value.split('\n').length)} aria-label="原地编辑代码文字" value={text.value} onChange={event => setText({ ...text, value: event.target.value })} onBlur={() => setText(undefined)} onKeyDown={event => {
+    {text && <div className="pointer-events-auto absolute min-w-40" style={cornerStyle(points[0])}><UiTextArea autoFocus rows={Math.max(1, text.value.split('\n').length)} aria-label="原地编辑代码文字" value={text.value} onChange={event => setText({ ...text, value: event.target.value })} onBlur={() => setText(undefined)} onKeyDown={event => {
       event.stopPropagation()
       if (event.nativeEvent.isComposing) return
       if (event.key === 'Escape') { event.preventDefault(); setText(undefined) }

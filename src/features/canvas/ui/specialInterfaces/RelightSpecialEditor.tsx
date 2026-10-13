@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import Dropdown from '@/components/ui/Dropdown'
 import FileUploader from '@/components/ui/FileUploader'
 import { UiTooltipText } from '@/components/ui/layout'
-import { UiButton, UiSwitch, UiTextAreaField } from '@/components/ui/primitives'
+import { UiButton, UiSwitch, UiTextArea } from '@/components/ui/primitives'
 import { UiModal } from '@/components/ui/UiModal'
 import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
@@ -148,7 +148,7 @@ export function RelightWorkbench({
               </div>
               <section className="flex min-h-24 flex-1 flex-col gap-2">
                 <FieldTitle tooltip={t('node.relightGeneration.editor.extraManualTip')}>{t('node.relightGeneration.editor.extra')}</FieldTitle>
-                <UiTextAreaField
+                <UiTextArea
                   value={settings.manual.extraPrompt}
                   rows={3}
                   className="min-h-16 flex-1"
@@ -186,7 +186,7 @@ export function RelightWorkbench({
 
               <section className="flex min-h-24 flex-1 flex-col gap-2">
                 <FieldTitle tooltip={t('node.relightGeneration.editor.extraSmartTip')}>{t('node.relightGeneration.editor.extra')}</FieldTitle>
-                <UiTextAreaField
+                <UiTextArea
                   value={settings.smart.prompt}
                   rows={2}
                   className="min-h-16 flex-1"

@@ -450,25 +450,7 @@ const UI_TEXT_AREA_FRAME_CLASS: Record<NonNullable<UiTextAreaProps['frame']>, st
   none: `w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-text1 outline-none ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_DISABLED_CLASS}`,
 };
 
-export function UiTextArea({ className = '', textHistory, value, frame = 'field', height = 'short', ...props }: UiTextAreaProps): JSX.Element {
-  const historyProps = useScopedTextHistoryProps(
-    resolveTextHistoryValue(value),
-    textHistory,
-    props
-  );
-  const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
-  return (
-    <textarea
-      value={value}
-      className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${UI_TEXT_AREA_HEIGHT_CLASS[height]} ${className}`}
-      {...rowLabelling}
-      {...props}
-      {...historyProps}
- />
-  );
-}
-
-export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
+export const UiTextArea = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
   ({ className = '', textHistory, value, frame = 'field', height = 'short', ...props }, ref) => {
     const historyProps = useScopedTextHistoryProps(
       resolveTextHistoryValue(value),
@@ -489,7 +471,7 @@ export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
   }
 );
 
-UiTextAreaField.displayName = 'UiTextAreaField';
+UiTextArea.displayName = 'UiTextArea';
 
 /**
  * 单行输入。raised 字段表面、无边框，聚焦一圈强调色焦点环；高度与字号只由 `size` 决定（sm 28 / md 32 / lg 36）。
@@ -722,13 +704,14 @@ UiSwitch.displayName = 'UiSwitch';
  * 原生选择。弹出列表由系统绘制：根节点的 `color-scheme`（主题引擎写入）决定深浅，
  * 选项的底与字再显式取 raised / text1，纸白等浅色主题下弹出列表不再是深色。
  */
-export function UiSelect({ className = '', children, size = 'md', ...props }: UiSelectProps) {
+export const UiSelect = forwardRef<HTMLSelectElement, UiSelectProps>(({ className = '', children, size = 'md', ...props }, ref) => {
   const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
   // className 只放布局（宽度、伸缩），落在外层：原来与内层的 w-full 叠在同一元素上，
   // 宽度类被 w-full 覆盖，选择框按最长选项撑开（日志窗口历史模式“全部域”撑满整行，任务 5.7）
   return (
     <div className={`relative min-w-0 ${className}`}>
       <select
+        ref={ref}
         data-size={size}
         {...rowLabelling}
         className={`w-full appearance-none truncate py-0 pr-8 [color-scheme:inherit] [&_option]:bg-raised [&_option]:text-text1 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`}
@@ -739,7 +722,8 @@ export function UiSelect({ className = '', children, size = 'md', ...props }: Ui
       <ChevronDown className={`${UI_ICON_SIZE_CLASS.sm} pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text3`} />
     </div>
   );
-}
+});
+UiSelect.displayName = 'UiSelect';
 
 /** 字段触发器的外观：`field` = raised 字段表面；`quiet` = 静默按钮皮肤（标题栏、工具栏里的弱化入口）。 */
 function resolveFieldTriggerClass(size: UiControlSize, appearance: 'field' | 'quiet'): string {

@@ -1,3 +1,4 @@
+import { UiRecordItem, UiRecordList } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { FolderOpen, Package, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -234,20 +235,13 @@ export default function AgentSkillsSection(): JSX.Element {
     }
   }, [t])
 
-  const renderSkillRow = (skill: AssistantSkillMetadata): JSX.Element => (
-    <div key={`${skill.source}:${skill.name}`} className="flex items-start gap-3 border-t border-line/60 py-5 first:border-t-0 first:pt-0 last:pb-0">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={UI_TEXT_BODY_CLASS}>{skill.name}</span>
-          {skill.overridesBuiltin ? (
-            <span className={UI_TEXT_META_CLASS}>{t('agentSkills.overridesBuiltin')}</span>
-          ) : null}
-          {skill.referencePaths.length > 0 ? (
-            <span className={UI_TEXT_META_CLASS}>{t('agentSkills.referenceCount', { count: skill.referencePaths.length })}</span>
-          ) : null}
-        </div>
-        <p className={`mt-0.5 leading-5 ${UI_TEXT_META_CLASS}`}>{skill.source === 'builtin' && BUILTIN_DESCRIPTION_KEYS[skill.name] ? t(BUILTIN_DESCRIPTION_KEYS[skill.name]) : skill.description}</p>
-      </div>
+  const renderSkillRow = (skill: AssistantSkillMetadata, index: number): JSX.Element => (
+    <UiRecordItem key={`${skill.source}:${skill.name}`} index={index} density="page" title={skill.name}
+      meta={[
+        ...(skill.overridesBuiltin ? [t('agentSkills.overridesBuiltin')] : []),
+        ...(skill.referencePaths.length > 0 ? [t('agentSkills.referenceCount', { count: skill.referencePaths.length })] : []),
+      ]}
+      actions={(
       <div className="flex shrink-0 items-center gap-1.5">
         <UiSwitch
           checked={skill.enabled}
@@ -268,7 +262,9 @@ export default function AgentSkillsSection(): JSX.Element {
           </UiIconButton>
         ) : null}
       </div>
-    </div>
+      )}>
+      <p className={UI_TEXT_META_CLASS}>{skill.source === 'builtin' && BUILTIN_DESCRIPTION_KEYS[skill.name] ? t(BUILTIN_DESCRIPTION_KEYS[skill.name]) : skill.description}</p>
+    </UiRecordItem>
   )
 
   return (
@@ -277,7 +273,7 @@ export default function AgentSkillsSection(): JSX.Element {
         : !loaded ? <UiLoading size="sm" message={t('agentSkills.reading')} /> : <>
       <UiGroup title={t('agentSkills.userGroup')} gap="none">
         {userSkills.length > 0
-          ? userSkills.map(renderSkillRow)
+          ? <UiRecordList>{userSkills.map(renderSkillRow)}</UiRecordList>
           : (
             <UiEmpty
               size="sm"
@@ -289,7 +285,7 @@ export default function AgentSkillsSection(): JSX.Element {
 
       <UiGroup title={t('agentSkills.builtinGroup')} divided gap="none">
         {builtinSkills.length > 0
-          ? builtinSkills.map(renderSkillRow)
+          ? <UiRecordList>{builtinSkills.map(renderSkillRow)}</UiRecordList>
           : <p className={UI_TEXT_META_CLASS}>{t('agentSkills.builtinEmpty')}</p>}
       </UiGroup>
 

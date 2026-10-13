@@ -1,3 +1,4 @@
+export * from './useUiViewerShell';
 export * from './primitives';
 export * from './UiModal';
 export * from './layout';
@@ -43,3 +44,5 @@ export { ParamList } from './params/ParamList'
 export { ParamField } from './params/ParamField'
 export type { ParamFieldSpec } from './params/fieldSpec'
 export type { ParamGesture } from './params/ParamField'
+export * from './UiRecordList';
+export * from './UiViewerShell';

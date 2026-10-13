@@ -1,3 +1,4 @@
+import { UiRecordItem } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { History, Image, Redo2, Undo2 } from 'lucide-react'
@@ -68,9 +69,9 @@ const HistoryList = memo(function HistoryList({ port, thumbnails, disabled, onJu
     return page
   }, [port, view.generation])
   if (view.total === 0) return <UiEmpty size="sm" icon={<History className={`${UI_ICON_SIZE_CLASS.lg}`} />} title={t('imageEditor.v3.history.empty', { defaultValue: '还没有编辑记录' })} />
-  return <Virtuoso ref={list} className="min-h-0 flex-1" totalCount={view.total + 1} initialTopMostItemIndex={view.position}
+  return <Virtuoso role="list" ref={list} className="min-h-0 flex-1" totalCount={view.total + 1} initialTopMostItemIndex={view.position}
     computeItemKey={index => `${view.generation}:${index}`}
-    itemContent={index => <HistoryRow index={index} pageAt={pageAt} thumbnails={thumbnails} view={view} disabled={disabled} onJump={onJump} />} />
+    itemContent={index => <UiRecordItem index={index} density="compact" className="px-2"><HistoryRow index={index} pageAt={pageAt} thumbnails={thumbnails} view={view} disabled={disabled} onJump={onJump} /></UiRecordItem>} />
 })
 
 const HistoryRow = memo(function HistoryRow({ index, pageAt, thumbnails, view, disabled, onJump }: {
@@ -95,10 +96,10 @@ const HistoryRow = memo(function HistoryRow({ index, pageAt, thumbnails, view, d
     message={t('imageEditor.v3.history.pageFailedMessage', { defaultValue: '编辑内容已保留，请重试读取。' })}
     actions={<UiButton size="sm" onClick={() => setRetry(value => value + 1)}>{t('common.retry', { defaultValue: '重试' })}</UiButton>} />
   // 占位与含缩略图的正常行等高，冷页到达不改变 Virtuoso 的滚动锚点。
-  if (!row) return <div className="h-11 px-2 py-0.5"><UiLoading size="xs"
+  if (!row) return <div className="h-10"><UiLoading size="xs"
     className="h-full !flex-row gap-2 !py-0 [&>p]:!mt-0"
     message={t('imageEditor.v3.history.loading', { defaultValue: '正在读取历史…' })} /></div>
-  return <div className={index > 0 ? 'border-t border-line px-2 py-1' : 'px-2 py-1'} data-image-history-row={index}>
+  return <div data-image-history-row={index}>
         <UiOptionButton variant="menu" size="sm" className="w-full" active={index === view.position}
           aria-current={index === view.position ? 'step' : undefined} disabled={disabled}
           onClick={() => onJump(index)}>

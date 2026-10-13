@@ -83,7 +83,7 @@ export const StoryboardGridEditor = memo(({
   onFrameDescriptionChange,
 }: StoryboardGridEditorProps): JSX.Element => {
   const { t } = useTranslation()
-  // 字号/行高直接走 inline style：Tailwind 任意值 class 与 UiTextAreaField 自带的
+  // 字号/行高直接走 inline style：Tailwind 任意值 class 与 UiTextArea 自带的
   // text-sm/px-3 等基础样式同优先级，谁生效取决于编译后样式表顺序，不可控；
   // inline style 的优先级始终高于普通 class，可以彻底绕开这个问题。
   // 小格子不常驻预留滚动条宽度，避免高 DPI 下挤占文字区域。
