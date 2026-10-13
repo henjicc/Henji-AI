@@ -17,13 +17,18 @@ const consumers = [
   'src/contexts/NotificationContext.tsx',
   'src/workspaces/GenerationWorkspace/hooks/useToast.ts',
   'src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx',
+  // 任务 4.6：四种媒体查看器统一委托查看器外壳，外壳内部使用公共进出场生命周期。
+  'src/components/ui/useUiViewerShell.ts',
 ];
 
 describe('进出场单一实现契约', () => {
   it.each(consumers)('%s 委托公共生命周期，不再维护自己的卸载计时器', file => {
     const source = readFileSync(path.join(root, file), 'utf8');
-    expect(source).toMatch(/useDialogTransition|useTimedToast/);
+    expect(source).toMatch(/useDialogTransition|useTimedToast|useUiViewerShell|UiViewerShell/);
     expect(source).not.toMatch(/closeTimerRef|hideTimerRef|exitTimerRef|setTimeout\(finishClose/);
+  });
+  it('查看器外壳本身用公共进出场生命周期', () => {
+    expect(readFileSync(path.join(root, 'src/components/ui/useUiViewerShell.ts'), 'utf8')).toContain('useDialogTransition(');
   });
   it('浮层使用具名常量，执行脉冲使用注册循环档与统一缓动', () => {
     for (const file of ['src/components/ui/Dropdown.tsx', 'src/components/ui/PanelTrigger.tsx']) {
