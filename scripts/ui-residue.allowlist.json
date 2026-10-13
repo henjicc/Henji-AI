@@ -25,8 +25,8 @@
     {
       "file": "src/components/MediaGenerator/components/InputArea.tsx",
       "category": "arbitraryValue",
-      "values": ["min-h-[72px]", "max-h-[260px]", "h-[18px]", "w-[18px]"],
-      "reason": "生成输入卡片：提示词区展开后 72–260 高（再高滚动）；卡片动作按钮（添加、发送、处理中）的图标 18，Tailwind 无 4.5 档"
+      "values": ["min-h-[72px]", "max-h-[260px]"],
+      "reason": "生成输入卡片：提示词区展开后高度限制为 72–260，再高滚动"
     },
     {
       "file": "src/components/MediaGenerator/components/PromptOptimizationProfilesPanel.tsx",

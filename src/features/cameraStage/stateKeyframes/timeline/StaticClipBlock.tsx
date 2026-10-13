@@ -96,7 +96,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
                 aria-label="删除关键帧"
                 onClick={onRemove}
               >
-                <Trash2 size={14} />
+                <Trash2 />
               </UiIconButton>
             </div>
             <UiFormRow label="名称" density="compact">
@@ -170,7 +170,6 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
           >
             {/* 选中 = 强调色实心；只是播放头停在这里 = 强调色描边空心；其余中性。三者一眼可辨。 */}
             <Diamond
-              size={selected || isPlayhead ? 16 : 14}
               className={selected ? 'fill-accent text-accent' : isPlayhead ? 'fill-raised text-accent' : 'fill-raised text-text2'}
             />
           </UiIconButton>

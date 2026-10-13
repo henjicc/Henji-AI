@@ -99,7 +99,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               onKeyDown={handleKeyDown}
             >
               {camerasDiffer ? (
-                <Camera size={11} className="text-accent" />
+                <Camera className="text-accent" />
               ) : (
                 <span className="h-full w-0.5 rounded-full bg-text2 transition-colors hover:bg-accent" />
               )}
@@ -116,7 +116,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               onKeyDown={handleKeyDown}
             >
               <span className="flex h-full w-full items-center justify-center gap-1 overflow-hidden border-y border-dashed border-line bg-hover/40 px-1 text-2xs text-text2 hover:bg-hover/70">
-                <Camera size={11} className="text-accent" />
+                <Camera className="text-accent" />
                 <span className="truncate">末端硬切</span>
               </span>
             </UiIconButton>
@@ -132,7 +132,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               onKeyDown={handleKeyDown}
             >
               <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden border-y border-line bg-hover/50 px-1 text-2xs text-text2 transition-colors hover:bg-hover/80">
-                <Spline size={11} />
+                <Spline />
                 <span className="truncate">{stateKeyframe.transitionDuration.toFixed(2)}s</span>
               </span>
             </UiIconButton>

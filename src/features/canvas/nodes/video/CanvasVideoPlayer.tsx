@@ -147,7 +147,7 @@ export function CanvasVideoPlayer({
               togglePlayback();
             }}
           >
-            <Play className="ml-0.5 h-5 w-5" />
+            <Play className="ml-0.5" />
           </UiIconButton>
         </div>
       )}
@@ -179,7 +179,7 @@ export function CanvasVideoPlayer({
                 togglePlayback();
               }}
             >
-              {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              {playing ? <Pause /> : <Play />}
             </UiIconButton>
             <span className="shrink-0 whitespace-nowrap text-3xs leading-none tabular-nums text-on-media/90">
               {formatTime(currentTime)} / {formatTime(duration)}
@@ -196,7 +196,7 @@ export function CanvasVideoPlayer({
                   setMuted(video.muted);
                 }}
               >
-                {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                {muted ? <VolumeX /> : <Volume2 />}
               </UiIconButton>
             )}
             <UiIconButton size="xs" tone="media"
@@ -207,7 +207,7 @@ export function CanvasVideoPlayer({
                 onOpenViewer();
               }}
             >
-              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <Maximize2 />
             </UiIconButton>
           </div>
         </div>
