@@ -280,23 +280,25 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
           </div>
         </UiFormRow>
 
-        <UiPanel variant="inset" className={`space-y-1 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
-          <div className="flex items-center justify-between">
-            <span>{t('toolDialog.split.cellCount')}</span>
-            <span className={`font-medium text-text1 ${UI_TEXT_NUMERIC_CLASS}`}>{rows * cols}</span>
+        <UiPanel variant="inset" className="px-3 py-2">
+          <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
+            <div className="flex items-center justify-between">
+              <span>{t('toolDialog.split.cellCount')}</span>
+              <span className={`font-medium text-text1 ${UI_TEXT_NUMERIC_CLASS}`}>{rows * cols}</span>
+            </div>
+            {layout && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span>{t('toolDialog.split.cellWidth')}</span>
+                  <span className={UI_TEXT_NUMERIC_CLASS}>{splitSizeLabel(layout.minCellWidth, layout.maxCellWidth)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>{t('toolDialog.split.cellHeight')}</span>
+                  <span className={UI_TEXT_NUMERIC_CLASS}>{splitSizeLabel(layout.minCellHeight, layout.maxCellHeight)}</span>
+                </div>
+              </>
+            )}
           </div>
-          {layout && (
-            <>
-              <div className="flex items-center justify-between">
-                <span>{t('toolDialog.split.cellWidth')}</span>
-                <span className={UI_TEXT_NUMERIC_CLASS}>{splitSizeLabel(layout.minCellWidth, layout.maxCellWidth)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>{t('toolDialog.split.cellHeight')}</span>
-                <span className={UI_TEXT_NUMERIC_CLASS}>{splitSizeLabel(layout.minCellHeight, layout.maxCellHeight)}</span>
-              </div>
-            </>
-          )}
         </UiPanel>
 
         {hasLayoutError && (

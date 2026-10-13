@@ -463,6 +463,9 @@ jobs:
 
       # electron:build 内部已串联 gen:seeds / gen:manifest / build:audio-worker / build:video-decoder /
       # gen:licenses --strict / check:* / tsc / electron-vite build。
+      - name: 构建前 ESLint（渲染层）
+        run: npm run lint
+
       - name: 构建应用
         env:
           CARGO_NET_RETRY: '10'

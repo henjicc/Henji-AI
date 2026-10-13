@@ -135,6 +135,7 @@ export function toggleDockGroupMaximized(api: DockviewApi, point?: { clientX: nu
 
 /** 拖放指示：画在停靠宿主内，半透明强调色着色（与 index.css 里 dockview 自带指示同一外观）。 */
 const INDICATOR_CLASS = 'bg-accent/35'
+// ui-surface-allow: 接手任务5.2复核；原生拖放预览须随指针跨停靠组移动并避开宿主裁切，故挂在body固定叠层，仅拖动时显示且不吃事件。
 const PREVIEW_CLASS = 'flex flex-col overflow-hidden rounded-control border border-accent/60 bg-panel/50'
 const PREVIEW_TITLE_CLASS = 'h-6 shrink-0 truncate bg-raised/90 px-2 text-xs leading-6 text-text1'
 export interface DockDropIndicator { show(zone: DockDropZone): void; hide(): void; dispose(): void }

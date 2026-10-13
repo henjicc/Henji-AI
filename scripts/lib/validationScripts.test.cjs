@@ -6,6 +6,20 @@ const test = require('node:test')
 const root = path.resolve(__dirname, '..', '..')
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 
+test('5.1 收尾三处存量通过严格表面与豁免生命周期检查', () => {
+  const files = ['src/components/dockviewDocking.ts', 'src/features/videoEdit/panels/VideoEditTextOverlay.tsx', 'src/features/canvas/ui/tool-editors/SplitStoryboardToolEditor.tsx']
+  const result = require('node:child_process').spawnSync(process.execPath, ['scripts/check-surface-tokens.cjs', '--strict', '--files', files.join(',')], { cwd: root, encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+})
+
+test('CI 安装包构建在 electron:build 前显式运行渲染层 lint', () => {
+  const workflow = require('yaml').parse(fs.readFileSync(path.join(root, '.github/workflows/build.yml'), 'utf8'))
+  const steps = workflow.jobs.build.steps
+  const lint = steps.findIndex(step => step.run === 'npm run lint')
+  assert.ok(lint >= 0 && lint < steps.findIndex(step => step.run === 'npm run electron:build'), 'lint 必须独立成步，避免 Windows 多命令脚本只保留最后退出码')
+  assert.ok(workflow.jobs.checks.steps.some(step => step.run === 'npm run lint'))
+})
+
 test('report npm 别名明确选择告警入口', () => {
   assert.equal(packageJson.scripts['check:surface:report'], 'node scripts/check-surface-tokens.cjs --report')
 })
