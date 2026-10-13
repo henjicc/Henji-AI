@@ -207,7 +207,10 @@ app.whenReady().then(async () => {
     presentation: resolveWindowPresentationMode(),
     beforeRendererLoad: async () => {
       try {
-        await mediaRecycleLifecycle.startup(runMediaRecycle)
+        // 回收失败时什么都没删，跳过本次即可；不能因此让应用打不开。
+        await mediaRecycleLifecycle.startup(runMediaRecycle).catch(error => {
+          createMainLogger('main.media_recycle').error('启动媒体回收失败，本次跳过', { event: 'media_recycle.startup.failed', error })
+        })
         // External clients and document indexing share the renderer admission gate.
         registerMcpIpc()
         scheduleStartupDocumentIndexScan()
