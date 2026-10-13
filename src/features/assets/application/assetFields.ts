@@ -9,11 +9,10 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 import { assetApplicationService } from './assetApplicationService'
 
 /*
- * 素材（asset 3 + library 1）共 4 条可写属性的统一定义——1.3 迁移。
+ * 素材与集合可写属性的统一定义。
  *
  * 这个领域的账本（assetStoreLedger.ts）只覆盖 assetLibraryStore 的面板与筛选状态，
- * 素材改名/打标签/进出集合/集合改名走的是反射层直连领域服务，不经过任何 zustand store
- * 动作，因此这 4 条字段的 `storeActions` 全部是空——不像三维/画布那样需要跟账本对齐。
+ * 素材持久属性通过领域服务写入，`storeActions` 为空；重新定位后同步当前选择只是界面投影。
  */
 
 const ASSET_ENTITY_TYPE = 'asset' as const
@@ -92,12 +91,31 @@ function asJson(value: unknown): JsonValue {
 }
 
 /**
- * 素材 3 条：`display_name` / `tags` 走 set，`library_refs` 是全项目唯一不吃 set 的属性
+ * `display_name` / `tags` / `location` 走 set，`library_refs` 是全项目唯一不吃 set 的属性
  * （只吃 append/remove，对应 assetApplicationService 的 addToLibrary/removeFromLibrary）。
  * 读取源是反射层已有的 `assetApplicationService.read()` 结果（`Record<string, unknown>`），
  * 与 assetReflection.ts 的 `readAsset()` 保持一致。
  */
 export const ASSET_FIELDS: ApplicationFieldDefinition<Record<string, unknown>, AssetWriteDraft>[] = [
+  {
+    propertyId: `${ASSET_ENTITY_TYPE}.location`,
+    descriptor: {
+      ...assetDescriptor(ASSET_ENTITY_TYPE, 'location', '文件位置', { kind: 'string', minLength: 1, maxLength: 4096 }),
+      description: '重新定位素材原文件，保留素材、标签与集合。填写应用返回的本地媒体引用（henji-media://local/…）或作品位置（henji://…）；不接受网络地址。修改后读取检查状态确认文件可用。',
+    },
+    read: (asset) => String(asset.location),
+    writer: {
+      async write(draft, mutation) {
+        const location = mutation.value
+        if (typeof location !== 'string' || !/^(henji-media:\/\/local\/|henji:\/\/)/.test(location)) {
+          throw new Error('ASSET_LOCATION_INVALID：location 需要应用返回的本地媒体引用或作品位置。')
+        }
+        await assetApplicationService.relocate(draft.assetId, location)
+        draft.applied.add(mutation.propertyId)
+      },
+    },
+    storeActions: [],
+  },
   {
     propertyId: `${ASSET_ENTITY_TYPE}.display_name`,
     descriptor: assetDescriptor(ASSET_ENTITY_TYPE, 'display_name', '显示名称', { kind: 'string', minLength: 1, maxLength: 200 }),

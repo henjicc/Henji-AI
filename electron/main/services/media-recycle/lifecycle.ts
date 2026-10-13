@@ -20,8 +20,14 @@ export class MediaRecycleLifecycle {
   async startup(sweep: (signal: AbortSignal) => Promise<void>): Promise<void> {
     if (this.phase !== 'initial') throw new Error('Startup reclamation requires unopened sessions')
     this.phase = 'starting'
-    try { await sweep(new AbortController().signal) }
-    finally { this.phase = 'active' }
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        sweep(controller.signal),
+        new Promise<void>(resolve => { timer = setTimeout(() => { controller.abort(new Error('Startup media reclamation timed out')); resolve() }, 3_000) }),
+      ])
+    } finally { clearTimeout(timer); controller.abort(); this.phase = 'active' }
   }
 
   async exit(sweep: (signal: AbortSignal) => Promise<void>, timeoutMs = 3_000): Promise<'completed' | 'skipped' | 'timeout'> {

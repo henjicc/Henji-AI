@@ -63,9 +63,15 @@ function toggleMaximizeWindow(win: BrowserWindow): void {
   }
 }
 
-export function bindWindowStateEvents(win: BrowserWindow): void {
-  mediaRecycleLifecycle.opened(win.id)
-  win.once('closed', () => mediaRecycleLifecycle.closed(win.id))
+export function bindWindowStateEvents(win: BrowserWindow, deferSession = false): () => void {
+  let sessionOpened = false
+  const openSession = (): void => {
+    if (sessionOpened || win.isDestroyed()) return
+    mediaRecycleLifecycle.opened(win.id)
+    sessionOpened = true
+  }
+  if (!deferSession) openSession()
+  win.once('closed', () => { if (sessionOpened) mediaRecycleLifecycle.closed(win.id) })
   const emit = (): void => {
     sendWindowState(win)
   }
@@ -76,6 +82,8 @@ export function bindWindowStateEvents(win: BrowserWindow): void {
   win.on('enter-full-screen', emit)
   win.on('leave-full-screen', emit)
   win.on('close', (event) => {
+    // The startup shell has no renderer or document state to save yet.
+    if (!sessionOpened) return
     if (approvedCloseWindows.has(win)) {
       approvedCloseWindows.delete(win)
       mediaRecycleLifecycle.saved(win.id)
@@ -84,6 +92,7 @@ export function bindWindowStateEvents(win: BrowserWindow): void {
     event.preventDefault()
     if (!win.webContents.isDestroyed()) win.webContents.send(WINDOW_CLOSE_REQUESTED)
   })
+  return openSession
 }
 
 export function registerWindowIpc(): void {

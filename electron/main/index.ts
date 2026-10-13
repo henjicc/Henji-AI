@@ -118,8 +118,6 @@ app.whenReady().then(async () => {
     app.exit(1)
     return
   }
-  // Await the complete census before any renderer or external application server can open documents.
-  if (!isAssistantCliMode() && !process.argv.includes('--verify-model')) await mediaRecycleLifecycle.startup(runMediaRecycle)
   configureMacDockIcon()
   registerMediaProtocolHandler()
   restoreAllowedMediaRoots()
@@ -158,7 +156,7 @@ app.whenReady().then(async () => {
   registerVideoFramesIpc()
   registerWindowIpc()
   registerApplicationControlIpc()
-  registerMcpIpc()
+  if (isAssistantCliMode() || process.argv.includes('--verify-model')) registerMcpIpc()
   registerEmbeddedAgentIpc()
   initializeUpdater()
   void runLogRetention()
@@ -203,11 +201,22 @@ app.whenReady().then(async () => {
     return
   }
 
-  createWindow({ presentation: resolveWindowPresentationMode() })
-  // 作品索引在后台扫描，不阻塞启动（文件才是唯一真相，索引随时可以重建）。
-  scheduleStartupDocumentIndexScan()
+  let releaseStartup!: () => void
+  const startupReady = new Promise<void>(resolve => { releaseStartup = resolve })
+  createWindow({
+    presentation: resolveWindowPresentationMode(),
+    beforeRendererLoad: async () => {
+      try {
+        await mediaRecycleLifecycle.startup(runMediaRecycle)
+        // External clients and document indexing share the renderer admission gate.
+        registerMcpIpc()
+        scheduleStartupDocumentIndexScan()
+      } finally { releaseStartup() }
+    },
+  })
 
-  app.on('activate', () => {
+  app.on('activate', async () => {
+    await startupReady
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     }

@@ -9,6 +9,30 @@ import type { AssetMediaType } from './types'
 
 interface ThumbnailJob { promise: Promise<string>; controller: AbortController; users: number }
 const thumbnailJobs = new Map<string, ThumbnailJob>()
+const previewJobs = new Map<string, Promise<boolean>>()
+
+/** Publish only complete derived previews; the same target has a single writer. */
+export async function writeOwnedMediaPreview(target: string, sourcePath: string, write: (pending: string) => Promise<void>): Promise<boolean> {
+  const existing = previewJobs.get(target)
+  if (existing) return await existing
+  const job = (async () => {
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    let cacheHit = false
+    try { await fs.access(target); cacheHit = true }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+    if (!cacheHit) {
+      const pending = `${target}.${crypto.randomUUID()}.tmp`
+      try { await write(pending); await fs.rename(pending, target) }
+      // media-recycle-allow: unpublished unique preview staging file only.
+      finally { await fs.rm(pending, { force: true }) }
+    }
+    await registerOwnedMedia(target, sourcePath)
+    return cacheHit
+  })()
+  previewJobs.set(target, job)
+  try { return await job }
+  finally { if (previewJobs.get(target) === job) previewJobs.delete(target) }
+}
 type ThumbnailIdentity = readonly [size: number, modifiedAt: number, changedAt: number, device: number, inode: number]
 async function thumbnailIdentity(filePath: string): Promise<ThumbnailIdentity> {
   const stat = await fs.stat(filePath)

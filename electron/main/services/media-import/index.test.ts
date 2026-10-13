@@ -34,8 +34,29 @@ vi.mock('./probe', () => ({
 
 import { importMediaFromBytes, importMediaFromPath, warmupMediaImportPipeline } from './index'
 import { removeTemporaryDirectory } from '../../../../src/tests/removeTemporaryDirectory'
+import { registerOwnedMedia } from '../media-recycle/queue'
+
+vi.mock('../appPaths', () => ({ getProgramStoreDir: () => path.join(mocks.root, 'Thumbnails') }))
 
 describe('main media import service', () => {
+  it('大图预览写一半失败后不缓存残片，下次重新生成并登记来源', async () => {
+    const toFile = vi.fn(async (target: string) => { await fsp.writeFile(target, 'partial'); throw new Error('disk full') })
+    const pipeline = { metadata: async () => ({ width: 2048, height: 1024 }), resize: () => pipeline, jpeg: () => pipeline, toFile }
+    mocks.loadSharp.mockResolvedValue(() => pipeline)
+    const input = { importId: 'preview-failure', bytes: Uint8Array.from([0xff, 0xd8, 0xff, 1]), fileName: 'large.jpg', expectedKind: 'image' as const }
+    await expect(importMediaFromBytes(input)).rejects.toThrow('disk full')
+    expect(await fsp.readdir(path.join(mocks.root, 'Thumbnails'))).toEqual([])
+    toFile.mockImplementation(async target => { await fsp.writeFile(target, 'complete'); return undefined as never })
+    const result = await importMediaFromBytes(input)
+    if (result.kind !== 'image') throw new Error('image expected')
+    expect(await fsp.readFile(result.previewPath, 'utf8')).toBe('complete')
+    expect(toFile).toHaveBeenCalledTimes(2)
+    expect(registerOwnedMedia).toHaveBeenCalledWith(result.previewPath, result.fullPath)
+  })
+  it('PCM 探测失败按格式契约导入为未知时长', async () => {
+    mocks.probeLocalMedia.mockRejectedValue(new Error('no container'))
+    await expect(importMediaFromBytes({ importId: 'pcm-import', bytes: Uint8Array.from([1, 2, 3]), fileName: 'voice.pcm', expectedKind: 'audio' })).resolves.toMatchObject({ kind: 'audio', mimeType: 'audio/pcm', durationSeconds: 0 })
+  })
   beforeEach(async () => {
     mocks.root = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-media-import-test-'))
     await fsp.mkdir(path.join(mocks.root, 'Uploads'), { recursive: true })

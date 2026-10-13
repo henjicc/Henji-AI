@@ -8,6 +8,10 @@ const { parentPort, workerData } = require('node:worker_threads');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const yauzl = require(workerData.yauzl);
+const visited = new Set();
+const files = new Set();
+function key(value) { const resolved = path.resolve(value); return process.platform === 'win32' ? resolved.toLowerCase() : resolved; }
+function excluded(target, exclusions) { const value = key(target); return exclusions.some(root => value === key(root) || value.startsWith(key(root) + path.sep)); }
 function refs(value) {
   const found = new Set(), stack = [value];
   while (stack.length) {
@@ -51,14 +55,23 @@ async function zip(file, bytes) {
     });
   } finally { archive.close(); }
 }
-async function scan(target, optional, extensions) {
+async function scan(target, optional, extensions, exclusions) {
+  if (excluded(target, exclusions)) return;
   let stat;
   try { stat = await fs.lstat(target); } catch (error) { if (optional && error.code === 'ENOENT') return; throw error; }
-  if (stat.isSymbolicLink()) throw new Error('Cannot prove references through symbolic link: ' + target);
+  // Resolve links locally. Broken links remain unprovable; unrelated links do not
+  // poison the whole census. Read linked documents too: they may protect media.
+  if (stat.isSymbolicLink()) stat = await fs.stat(target);
   if (stat.isDirectory()) {
+    const identity = key(await fs.realpath(target)) + ':' + extensions.join(',');
+    if (visited.has(identity)) return;
+    visited.add(identity);
     const dir = await fs.opendir(target);
-    for await (const entry of dir) await scan(path.join(target, entry.name), false, extensions);
+    for await (const entry of dir) await scan(path.join(target, entry.name), false, extensions, exclusions);
   } else if (extensions.includes(path.extname(target).toLowerCase())) {
+    const identity = key(await fs.realpath(target));
+    if (files.has(identity)) return;
+    files.add(identity);
     const handle = await fs.open(target, 'r');
     const signature = Buffer.alloc(4);
     try { await handle.read(signature, 0, 4, 0); } finally { await handle.close(); }
@@ -66,11 +79,11 @@ async function scan(target, optional, extensions) {
     else await send(target, JSON.parse(await fs.readFile(target, 'utf8')));
   }
 }
-(async () => { for (const root of workerData.roots) await scan(root.path, root.optional, root.extensions || workerData.extensions); parentPort.postMessage({ done: true }); })()
+(async () => { for (const root of workerData.roots) await scan(root.path, root.optional, root.extensions || workerData.extensions, root.exclude || []); parentPort.postMessage({ done: true }); })()
   .catch(error => { parentPort.postMessage({ error: String(error.stack || error) }); });
 `
 
-export interface ReferenceScanRoot { path: string; optional?: boolean; extensions?: readonly string[] }
+export interface ReferenceScanRoot { path: string; optional?: boolean; extensions?: readonly string[]; exclude?: readonly string[] }
 export async function scanReferenceFiles(
   roots: readonly ReferenceScanRoot[], extensions: readonly string[], signal: AbortSignal,
   accept: (file: string, paths: string[]) => Promise<void>,
