@@ -48,7 +48,7 @@ export function VideoEditSourceInOut({ inUs, outUs, durationUs, playheadUs, onCh
   }
   const handlers = { onPointerMove: move, onPointerUp: end, onPointerCancel: end, onLostPointerCapture: end }
   return <div data-video-edit-source-in-out={`${from}-${to}`} title="源入点到出点：拖两端调整，拖中间整体移动"
-    className="absolute bottom-0 z-raised h-1.5 cursor-grab bg-text1/15 hover:bg-text1/25" style={{ left: `${from / durationUs * 100}%`, width: `max(2px, ${(to - from) / durationUs * 100}%)` }}
+    className="absolute bottom-0 z-raised h-1.5 cursor-grab bg-text1/65 hover:bg-text1/75" style={{ left: `${from / durationUs * 100}%`, width: `max(2px, ${(to - from) / durationUs * 100}%)` }}
     onPointerDown={event => start(event, 'move')} {...handlers}>
     <div aria-label="拖动调整源入点" className="absolute -left-1 bottom-0 top-0 w-2 cursor-ew-resize" onPointerDown={event => start(event, 'in')} {...handlers} />
     <div aria-label="拖动调整源出点" className="absolute -right-1 bottom-0 top-0 w-2 cursor-ew-resize" onPointerDown={event => start(event, 'out')} {...handlers} />

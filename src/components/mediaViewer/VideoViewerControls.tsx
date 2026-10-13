@@ -128,7 +128,8 @@ export function VideoViewerControls({
             {trimRange && videoDuration > 0 && (
               <div
                 data-video-trim-range
-                className="pointer-events-none absolute inset-y-0 rounded-full bg-text1/30"
+                // 填充与未播放轨道至少 3:1；实色起止边界在播放进度进入选区后仍可辨，不是可拖手柄。
+                className="pointer-events-none absolute inset-y-0 rounded-full border-x-2 border-text1 bg-text1/65"
                 style={{
                   left: `${(trimRange.start / videoDuration) * 100}%`,
                   width: `${((trimRange.end - trimRange.start) / videoDuration) * 100}%`,

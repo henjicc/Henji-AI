@@ -49,7 +49,7 @@ export function VideoEditTimelineInOut({ instance, sequence, fps, duration, pixe
   }
   const handlers = { onPointerMove: move, onPointerUp: end, onPointerCancel: end, onLostPointerCapture: end }
   return <div data-video-edit-in-out-range={`${from}-${to}`} title="序列入点到出点：拖两端调整，拖中间整体移动"
-    className="absolute bottom-0 z-raised h-2 cursor-grab bg-text1/15 hover:bg-text1/25" style={{ left: from * pixels, width: Math.max(2, (to - from) * pixels) }}
+    className="absolute bottom-0 z-raised h-2 cursor-grab bg-text1/65 hover:bg-text1/75" style={{ left: from * pixels, width: Math.max(2, (to - from) * pixels) }}
     onPointerDown={event => start(event, 'move')} {...handlers}>
     <div data-video-edit-in-out-handle="in" aria-label="拖动调整序列入点" className="absolute -left-1 bottom-0 top-0 w-2 cursor-ew-resize" onPointerDown={event => start(event, 'in')} {...handlers} />
     <div data-video-edit-in-out-handle="out" aria-label="拖动调整序列出点" className="absolute -right-1 bottom-0 top-0 w-2 cursor-ew-resize" onPointerDown={event => start(event, 'out')} {...handlers} />

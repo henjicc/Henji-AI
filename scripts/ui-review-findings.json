@@ -44,9 +44,9 @@
       "scene:generation-video-viewer-trim",
       "rule:lowContrast"
     ],
-    "conclusion": "已把填充阈值 1.5 改为 3，图形/边界/手柄分别测邻接背景，不放宽阈值",
-    "evidence": "SELECTION_MIN_CONTRAST 复用 CONTRAST_GRAPHIC_MIN=3；未运行 Electron",
-    "nextStep": "独占 Windows 下 graphite/paper 运行 generation-video-viewer-trim；失败先确认取样对象，再修界面令牌或测量；边界/手柄另取像素证据"
+    "conclusion": "确认旧读数是 text1/30 范围填充叠在 text1/15 轨道上；填充提高为 text1/65，并新增 text1 实色起止边界保证进度叠加后可辨，填充和边界分别要求 3:1；查看器没有裁剪手柄；同源修复剪辑序列与源入出点的低透明度范围填充",
+    "evidence": "Node 回归保留旧填充与同色反例；videoTrimContrast.test.ts 从实际组件类生成 CSS，核对四预设×三档对比度、玻璃明暗合成与边界压在播放进度上；SELECTION_MIN_CONTRAST=3 未降低；当前颜色是合成计算值，未运行 Electron",
+    "nextStep": "总管理者独占 Windows 在 graphite/ocean/film/paper 复验 generation-video-viewer-trim（含播放中范围与进度叠加）、video-edit-timeline 的序列入出点和 video-edit-monitor 的源入出点；分别检查范围填充与起止边界，透明端点命中区没有独立可见手柄；补当前截图像素后再关闭"
   },
   {
     "id": "5.8-window-size",
