@@ -1,6 +1,6 @@
 export interface ClipboardFileEntry {
   path: string
-  data: string
+  size: number
   mimeType: string
 }
 

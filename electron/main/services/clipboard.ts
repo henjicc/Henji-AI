@@ -4,12 +4,14 @@ import path from 'node:path'
 import { resolveSourceBytes } from './image/source'
 import { loadSharp } from './image/sharp-loader'
 import { createMainLogger } from './logging/main-logger'
+import { readFileBytes } from './system'
 
 const logger = createMainLogger('main.clipboard')
+const MAX_CLIPBOARD_FILE_BYTES = 16 * 1024 * 1024
 
 export interface ClipboardFileEntryDto {
   path: string
-  data: string
+  size: number
   mimeType: string
 }
 
@@ -95,18 +97,18 @@ function readClipboardFilePaths(): string[] {
 
 export async function readClipboardFiles(): Promise<ClipboardFileEntryDto[]> {
   const entries: ClipboardFileEntryDto[] = []
-  for (const filePath of readClipboardFilePaths()) {
+  const filePaths = readClipboardFilePaths()
+  for (const filePath of filePaths) {
     try {
       const stat = await fs.stat(filePath)
       if (!stat.isFile()) continue
-      const bytes = await fs.readFile(filePath)
       entries.push({
         path: filePath,
-        data: bytes.toString('base64'),
+        size: stat.size,
         mimeType: inferMimeFromPath(filePath),
       })
-    } catch {
-      // Clipboard file lists may contain transient shell items; skip unreadable entries.
+    } catch (error) {
+      logger.warn('剪贴板文件读取失败', { event: 'clipboard.files_read.failed', error, context: { pathCount: filePaths.length } })
     }
   }
   return entries
@@ -150,12 +152,21 @@ export async function readClipboardImage(): Promise<ClipboardImageDto | null> {
     }
   }
 
-  for (const entry of await readClipboardFiles()) {
-    if (!entry.mimeType.startsWith('image/')) continue
-    return {
-      dataUrl: `data:${entry.mimeType};base64,${entry.data}`,
-      name: path.basename(entry.path),
-      origin: 'file',
+  const filePaths = readClipboardFilePaths()
+  for (const filePath of filePaths) {
+    const mimeType = inferMimeFromPath(filePath)
+    if (!mimeType.startsWith('image/')) continue
+    try {
+      const stat = await fs.stat(filePath)
+      if (!stat.isFile()) continue
+      if (stat.size > MAX_CLIPBOARD_FILE_BYTES) {
+        logger.warn('剪贴板图片超过读取预算，请通过文件导入入口添加', { event: 'clipboard.image_read.limit', context: { sizeBytes: stat.size } })
+        continue
+      }
+      const bytes = Buffer.from(await readFileBytes(filePath, { maxBytes: MAX_CLIPBOARD_FILE_BYTES }))
+      return { dataUrl: `data:${mimeType};base64,${bytes.toString('base64')}`, name: path.basename(filePath), origin: 'file' }
+    } catch (error) {
+      logger.warn('剪贴板图片读取失败', { event: 'clipboard.image_read.failed', error, context: { pathCount: filePaths.length } })
     }
   }
 

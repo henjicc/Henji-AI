@@ -21,6 +21,7 @@ import { createMainLogger } from '../logging'
 import { withMediaHeavyTask } from './concurrency'
 import { detectMediaFormat, type DetectedMediaFormat } from './format'
 import { probeLocalMedia, warmNativeMediaTools, writeVideoPoster } from './probe'
+import { writeOwnedMediaPreview } from '../asset-library/thumbnailService'
 
 const logger = createMainLogger('main.media_import')
 const IMPORT_TEMP_PREFIX = '.media-import-'
@@ -214,19 +215,14 @@ async function prepareImage(
       return { previewPath: stored.fullPath, aspectRatio: aspectRatio(width, height), cacheHit: true }
     }
     const thumbnailsDir = getProgramStoreDir('thumbnails')
-    await fsp.mkdir(thumbnailsDir, { recursive: true })
     const previewPath = path.join(thumbnailsDir, `image-${stored.cacheKey}.jpg`)
-    try {
-      await fsp.access(previewPath)
-      return { previewPath, aspectRatio: aspectRatio(width, height), cacheHit: true }
-    } catch {
-      // Create the preview once below.
-    }
-    await sharp(stored.fullPath)
-      .resize(IMAGE_PREVIEW_MAX_SIZE, IMAGE_PREVIEW_MAX_SIZE, { fit: 'inside' })
-      .jpeg({ quality: 86 })
-      .toFile(previewPath)
-    return { previewPath, aspectRatio: aspectRatio(width, height), cacheHit: false }
+    const cacheHit = await writeOwnedMediaPreview(previewPath, stored.fullPath, async pending => {
+      await sharp(stored.fullPath)
+        .resize(IMAGE_PREVIEW_MAX_SIZE, IMAGE_PREVIEW_MAX_SIZE, { fit: 'inside' })
+        .jpeg({ quality: 86 })
+        .toFile(pending)
+    })
+    return { previewPath, aspectRatio: aspectRatio(width, height), cacheHit }
   })
 }
 
@@ -260,7 +256,7 @@ async function enrichResult(
     try {
       durationSeconds = (await probeLocalMedia(stored.fullPath)).durationSeconds
     } catch (error) {
-      if (format.extension !== 'pcm') throw error
+      if (format.durationProbe !== 'optional') throw error
     }
     timings.probeMs = roundMs(performance.now() - probeStarted)
     return {

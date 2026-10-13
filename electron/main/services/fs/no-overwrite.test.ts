@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 import { withFileLock } from './file-lock'
 import {
@@ -25,6 +26,24 @@ beforeEach(() => { logWarn.mockClear(); root = fs.mkdtempSync(path.join(os.tmpdi
 afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }) })
 
 describe('不覆盖的文件操作', () => {
+  it('非硬链接独占创建的占位句柄关闭失败也清理占位，可再次创建', async () => {
+    const target = path.join(root, 'a.json')
+    vi.spyOn(fsp, 'link').mockRejectedValue(Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }))
+    const open = fsp.open.bind(fsp)
+    vi.spyOn(fsp, 'open').mockImplementation(async (file, flags, mode) => {
+      const handle = await open(file, flags, mode)
+      if (file === target) {
+        const close = handle.close.bind(handle)
+        vi.spyOn(handle, 'close').mockImplementationOnce(async () => { await close(); throw new Error('close failed') })
+      }
+      return handle
+    })
+    await expect(createFileExclusively(target, Buffer.from('new'))).rejects.toThrow('close failed')
+    expect(fs.readdirSync(root)).toEqual([])
+    vi.restoreAllMocks()
+    await createFileExclusively(target, Buffer.from('retry'))
+    expect(fs.readFileSync(target, 'utf8')).toBe('retry')
+  })
   it('独占创建：目标已存在时报 EntryExistsError 且原内容不变；成功时不留暂存文件', async () => {
     const target = path.join(root, '子目录', 'a.json')
     await createFileExclusively(target, Buffer.from('first'))
@@ -122,7 +141,8 @@ describe('跨进程文件锁', () => {
       peak = Math.max(peak, ++active)
       await new Promise(resolve => setTimeout(resolve, 20))
       active--
-    }, { staleMs: 60 })))
+      // 残留锁已 60 秒未更新；staleMs 取 1 秒，避免机器繁忙时持有者心跳被拖过 3×staleMs 而被误判残留。
+    }, { staleMs: 1_000 })))
     expect(peak).toBe(1)
     expect(await fsp.readdir(root)).toEqual([])
   })

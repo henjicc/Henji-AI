@@ -71,8 +71,10 @@ const AssetLibraryFloatingPanel = lazy(() =>
  * 所以在启动之后的空闲时间把这两块 chunk 先取回来，用户真正点击时 import() 直接命中缓存。
  * 顺序按点击概率排：设置 > 资产面板；助手入口当前隐藏，不预取。
  */
-// 组件样张页（任务 5.11）：只经 `--dev-surface=dev.ui_gallery` 进入，正式界面没有入口；单独 chunk，不进启动图
-const UiGalleryPage = lazy(() => import('@/features/devGallery/UiGalleryPage').then((m) => ({ default: m.UiGalleryPage })))
+// 编译期守卫：正式构建裁掉开发中心页及其 chunk 引用。
+const UiGalleryPage = import.meta.env.DEV
+  ? lazy(() => import('@/features/devGallery/UiGalleryPage').then((m) => ({ default: m.UiGalleryPage })))
+  : null
 
 const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel]
 
@@ -83,6 +85,9 @@ const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel]
  */
 const OVERLAY_PREFETCH_DEV_DELAY_MS = 20000
 const developmentLaunch = readDevelopmentLaunchOptions()
+// 只忽略正式构建中的开发中心页参数；其他正式 Surface 的巡检定位沿用原契约。
+const startupSurfaceId = !import.meta.env.DEV && developmentLaunch.surfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery
+  ? null : developmentLaunch.surfaceId
 
 /**
  * 悬停即预取。空闲预取解决不了「刚启动就点」这一下（dev 下预取要让开转译队列，
@@ -106,6 +111,18 @@ const App: React.FC = () => {
   useDevToolsShortcut()
   useLogWindowShortcut()
   const [isReady, setIsReady] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(import.meta.env.DEV && startupSurfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery)
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    // 复用全局开发快捷键监听方式；只影响本次视图，不写用户设置或正式导航。
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.isComposing || !event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey || event.repeat || event.key !== 'F8') return
+      event.preventDefault()
+      setGalleryOpen(open => !open)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   useApplicationHost(isReady)
   const activeWorkspace = useNavigationStore((state) => state.activeWorkspace)
   // 设置面板开关提到 uiStore：错误弹窗的「去设置」可能从任意深度的组件触发
@@ -141,20 +158,20 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // dev.* 是开发页面，不是应用 Surface：由下方直接渲染，不走正式导航
-    if (!developmentLaunch.surfaceId || isDevelopmentSurfaceId(developmentLaunch.surfaceId)) return
+    if (!startupSurfaceId || isDevelopmentSurfaceId(startupSurfaceId)) return
     try {
-      openApplicationSurface(developmentLaunch.surfaceId, { requestId: 'development-launch' })
+      openApplicationSurface(startupSurfaceId, { requestId: 'development-launch' })
     } catch (error) {
       logger.warn('开发启动自动定位失败', error, {
         event: 'app.development_launch.surface.failed',
-        context: { surfaceId: developmentLaunch.surfaceId },
+        context: { surfaceId: startupSurfaceId },
       })
     }
   }, [])
 
   // 启动默认页选了“资产”：打开完整资产工作区（开发启动指定了页面时以开发参数为准）
   useEffect(() => {
-    if (developmentLaunch.surfaceId) return
+    if (startupSurfaceId) return
     if (useSettingsStore.getState().startupWorkspace === 'assets') openAssetLibrary('workspace')
   }, [])
 
@@ -288,7 +305,7 @@ const App: React.FC = () => {
         />
 
         {/* 工作区容器；开发样张页启动时占用这块区域 */}
-        {developmentLaunch.surfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery ? (
+        {import.meta.env.DEV && galleryOpen && UiGalleryPage ? (
           <Suspense fallback={null}>
             <UiGalleryPage />
           </Suspense>

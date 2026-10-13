@@ -5,7 +5,6 @@ import {
   deleteAssetLibrary,
   inspectAssetLibrary,
   inspectAsset,
-  inspectAssets,
   listAssetLibraries,
   listAssetTags,
   queryAssets,
@@ -14,6 +13,7 @@ import {
   updateAsset,
   renameAssetLibrary,
   restoreAssetLibrary,
+  relocateAsset,
 } from '@/commands/assetLibrary'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import type { AssetQueryInput, AssetRecord } from '@/platform/contracts/assetLibrary'
@@ -21,10 +21,11 @@ import type { AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 
 function publicAsset(asset: AssetRecord): Record<string, unknown> {
   const { filePath: _filePath, thumbnailPath: _thumbnailPath, contentIdentity: _contentIdentity, ...safe } = asset
-  return safe
+  return { ...safe, location: asset.filePath.startsWith('henji:') ? asset.filePath : asset.displayUrl }
 }
 
 export interface AssetMutationSnapshot {
+  filePath: string
   displayName: string
   tags: string[]
   libraryIds: string[]
@@ -43,6 +44,7 @@ export const assetApplicationService = {
   async readMutationSnapshot(assetId: string): Promise<AssetMutationSnapshot> {
     const asset = await inspectAsset(assetId)
     return {
+      filePath: asset.filePath,
       displayName: asset.displayName,
       tags: [...asset.tags],
       libraryIds: [...asset.libraryIds],
@@ -96,6 +98,14 @@ export const assetApplicationService = {
     return { assetId: asset.id, displayName: asset.displayName, revision: asset.updatedAt }
   },
 
+  async relocate(assetId: string, location: string): Promise<AssetRecord> {
+    const asset = await relocateAsset(assetId, location)
+    if (useAssetLibraryStore.getState().selectedAsset?.id === assetId) {
+      useAssetLibraryStore.getState().setSelectedAsset(asset)
+    }
+    return asset
+  },
+
   async addToLibrary(libraryId: string, assetId: string): Promise<Record<string, unknown>> {
     await addAssetToLibrary(libraryId, assetId)
     return { libraryId, assetId, status: 'added' }
@@ -111,7 +121,6 @@ export const assetApplicationService = {
     if (useAssetLibraryStore.getState().selectedAsset?.id === assetId) {
       useAssetLibraryStore.getState().setSelectedAsset(null)
     }
-    const remaining = await inspectAssets([assetId])
-    return { assetId, status: 'deleted', verification: { verified: remaining.length === 0, condition: '从正式素材索引回读确认目标已不存在。', target: { kind: 'asset', id: assetId } } }
+    return { assetId, status: 'deleted', verification: { verified: true, condition: '主进程从正式素材索引回读确认目标已不存在。', target: { kind: 'asset', id: assetId } } }
   },
 }

@@ -6,9 +6,10 @@ export interface DetectedMediaFormat {
   kind: LocalMediaKind
   mimeType: string
   extension: string
+  durationProbe?: 'optional'
 }
 
-const EXTENSION_FORMATS: Record<string, DetectedMediaFormat> = {
+export const EXTENSION_FORMATS: Readonly<Record<string, DetectedMediaFormat>> = {
   '.png': { kind: 'image', mimeType: 'image/png', extension: 'png' },
   '.jpg': { kind: 'image', mimeType: 'image/jpeg', extension: 'jpg' },
   '.jpeg': { kind: 'image', mimeType: 'image/jpeg', extension: 'jpg' },
@@ -36,7 +37,7 @@ const EXTENSION_FORMATS: Record<string, DetectedMediaFormat> = {
   '.m4a': { kind: 'audio', mimeType: 'audio/mp4', extension: 'm4a' },
   '.aac': { kind: 'audio', mimeType: 'audio/aac', extension: 'aac' },
   '.opus': { kind: 'audio', mimeType: 'audio/opus', extension: 'opus' },
-  '.pcm': { kind: 'audio', mimeType: 'audio/pcm', extension: 'pcm' },
+  '.pcm': { kind: 'audio', mimeType: 'audio/pcm', extension: 'pcm', durationProbe: 'optional' },
 }
 
 function startsWith(bytes: Uint8Array, signature: number[], offset = 0): boolean {

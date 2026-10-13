@@ -37,23 +37,14 @@ export function isSameLocation(left: string, right: string, style: PathStyle = H
 }
 
 /**
- * 以不覆盖的方式创建文件：先独占创建占位（已存在则失败），再原子替换成完整内容；
- * 写入失败时删除占位。不依赖硬链接，外部盘（exFAT、网络位置）同样可用。
+ * 以不覆盖的方式创建文件：暂存完整内容后排他发布，已有目标则失败；
+ * 发布和回退共用原子落盘实现，外部盘（exFAT、网络位置）同样可用。
  */
 export async function createFileExclusively(target: string, content: Uint8Array): Promise<void> {
-  await fsp.mkdir(path.dirname(target), { recursive: true })
-  let handle: fsp.FileHandle
   try {
-    handle = await fsp.open(target, 'wx')
+    await writeBufferAtomically(target, content, undefined, { exclusive: true })
   } catch (error) {
     if (errorCode(error) === 'EEXIST') throw new EntryExistsError(target)
-    throw error
-  }
-  await handle.close()
-  try {
-    await writeBufferAtomically(target, content)
-  } catch (error) {
-    await fsp.rm(target, { force: true }).catch(() => undefined)
     throw error
   }
 }

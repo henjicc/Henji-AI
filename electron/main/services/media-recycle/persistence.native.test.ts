@@ -10,6 +10,7 @@ vi.mock('../appPaths', () => ({
   getProgramDataDir: () => state.program,
   getProgramStoreDir: (key: string) => path.join(state.program, key),
   getUserFolderDir: (key: string) => path.join(state.user, key),
+  getUserModelsLocation: () => ({ dir: path.join(state.user, 'models'), locale: 'en' }),
 }))
 vi.mock('../db-locations', () => ({ databaseLocationContext: () => ({ style: process.platform === 'win32' ? 'win32' : 'posix', userRoot: state.user, projects: [], programRoots: [state.program] }) }))
 vi.mock('../logging/main-logger', () => ({ createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
@@ -22,8 +23,36 @@ import { registerOwnedMedia } from './queue'
 import { runMediaRecycle } from './runtime'
 import { MediaRecycleLifecycle } from './lifecycle'
 import { recordDocumentMediaPublished } from './providers'
+import { DocumentIndexStore } from '../documents/index-store'
 
 describe.skipIf(!process.versions.electron)('SQLite 21 media retirement', () => {
+  it('项目移除保留素材原串，残留引用和候选不阻断其他回收，恢复后重新检查', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-recycle-project-'))
+    state.user = path.join(root, 'user'); state.program = path.join(root, 'program')
+    state.db = new Database(':memory:')
+    try {
+      const db = state.db; runSchemaMigrations(db)
+      const catalog = new DocumentIndexStore(db, process.platform === 'win32' ? 'win32' : 'posix')
+      const project = { id: 'removed', path: path.join(state.user, 'project'), name: '项目', locale: 'zh' as const, folders: { generated: 'generated', materials: 'materials' }, draft: false, mainVideoEditId: null, createdAt: 1, external: false, missing: false, manifestModifiedAt: 1, manifestSize: 1, folderCreatedAt: 1, lastOpenedAt: null }
+      catalog.upsertProject(project)
+      const insert = db.prepare("INSERT INTO assets(id,media_type,display_name,file_path,source,inspection_status,created_at,updated_at) VALUES (?,'image',?,?,'imported','ready',1,1)")
+      insert.run('lost', '失联', 'henji://project/removed/a.png')
+      insert.run('deleted', '删除候选', 'henji://project/removed/b.png')
+      catalog.removeProject(project.id)
+      expect(db.prepare("SELECT file_path, inspection_status FROM assets WHERE id='lost'").get()).toEqual({ file_path: 'henji://project/removed/a.png', inspection_status: 'missing' })
+      db.prepare("DELETE FROM assets WHERE id='deleted'").run()
+      await fs.mkdir(path.join(state.user, 'generated'), { recursive: true })
+      const unused = path.join(state.user, 'generated', 'unused.png'); const held = path.join(state.user, 'generated', 'held.png')
+      for (const file of [unused, held]) { await fs.writeFile(file, 'owned'); await registerOwnedMedia(file) }
+      insert.run('held', '引用', held)
+      db.prepare("INSERT INTO media_recycle_candidates(source,payload) VALUES ('paths',?)").run(JSON.stringify({ paths: [unused, held], protectedBy: [] }))
+      await runMediaRecycle(new AbortController().signal)
+      await expect(fs.stat(unused)).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(await fs.readFile(held, 'utf8')).toBe('owned')
+      catalog.upsertProject(project)
+      expect(db.prepare("SELECT file_path, inspection_status FROM assets WHERE id='lost'").get()).toEqual({ file_path: 'henji://project/removed/a.png', inspection_status: 'pending' })
+    } finally { state.db.close(); state.db = undefined; await fs.rm(root, { recursive: true, force: true }) }
+  })
   it('atomically transfers receipts to history; across restarts retains saved canvas/undo references, then reclaims after release', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-recycle-db-'))
     state.user = path.join(root, 'user'); state.program = path.join(root, 'program')

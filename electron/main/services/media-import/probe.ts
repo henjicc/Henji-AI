@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { getProgramStoreDir } from '../appPaths'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { withMediaHeavyTask } from './concurrency'
+import { writeOwnedMediaPreview } from '../asset-library/thumbnailService'
 
 interface ProbeStream {
   codec_type?: string
@@ -67,15 +67,8 @@ export async function writeVideoPoster(
   durationSeconds: number,
 ): Promise<{ posterPath: string; cacheHit: boolean }> {
   const thumbnailsDir = getProgramStoreDir('thumbnails')
-  await fs.mkdir(thumbnailsDir, { recursive: true })
   const posterPath = path.join(thumbnailsDir, `video-${cacheKey}.jpg`)
-  try {
-    await fs.access(posterPath)
-    return { posterPath, cacheHit: true }
-  } catch {
-    // Generate once below.
-  }
-  await withMediaHeavyTask(async () => {
+  const cacheHit = await writeOwnedMediaPreview(posterPath, sourcePath, async pending => await withMediaHeavyTask(async () => {
     const ffmpegPath = await loadFfmpegPath()
     const seekTime = Math.min(0.1, Math.max(0, durationSeconds - 0.05))
     await execText(ffmpegPath, [
@@ -85,10 +78,11 @@ export async function writeVideoPoster(
       '-frames:v', '1',
       '-vf', 'scale=480:-1',
       '-q:v', '3',
-      posterPath,
+      '-f', 'image2',
+      pending,
     ])
-  })
-  return { posterPath, cacheHit: false }
+  }))
+  return { posterPath, cacheHit }
 }
 
 export async function warmNativeMediaTools(): Promise<void> {

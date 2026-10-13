@@ -175,8 +175,8 @@ export class GenerationService {
       progressTracker?.start()
 
       const normalized = await normalizeSmartAspectParams(model, sourceParams, requestId)
-      const paramsWithCompressedVideo = await compressFirstVideoIfNeeded(model, normalized.params)
-      const paramsWithTrimmedVideo = await trimFirstVideoIfSelected(paramsWithCompressedVideo)
+      const paramsWithCompressedVideo = await compressFirstVideoIfNeeded(model, normalized.params, options.signal)
+      const paramsWithTrimmedVideo = await trimFirstVideoIfSelected(paramsWithCompressedVideo, options.signal)
       const paramsWithVideoDuration = await attachVideoDurations(paramsWithTrimmedVideo)
       const runtimeParams = attachUploadRuntimeParams(paramsWithVideoDuration)
       const preflightSummary = buildGeneratePreflightSummary(sourceParams, runtimeParams, normalized.report)

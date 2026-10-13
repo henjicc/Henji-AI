@@ -15,6 +15,11 @@ const WIN_PROJECT = 'D:\\文档\\痕迹AI\\项目\\我的 项目'
 const WIN_OTHER = 'E:\\外部位置\\另一个项目'
 const WIN_PROGRAM = 'C:\\Users\\me\\AppData\\Local\\com.henji.ai\\Henji-AI'
 
+it('未知项目的越界路径仍分类为 invalid，不能作为外部引用跳过', () => {
+  const codec = createLocationCodec({ style: 'win32', userRoot: WIN_USER, projects: [] })
+  expect(codec.decode('henji://project/gone/../secret.png').unresolved?.reason).toBe('invalid')
+})
+
 function winContext(container: LocationContext['container']): LocationContext {
   return {
     style: 'win32',

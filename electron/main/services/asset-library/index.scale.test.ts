@@ -9,9 +9,16 @@ vi.mock('../appPaths', () => ({ getProgramStoreDir: () => '/program/thumbnails' 
 vi.mock('../../protocol', () => ({ allowMediaRoot: vi.fn() }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 import { createAssetLibraryTablesV1 } from './schema'
-import { queryAssets, setAssetTags } from './index'
+import { deleteAsset, queryAssets, setAssetTags } from './index'
 
 describe('素材列表规模与标签完整性', () => {
+  it('删除确认读取权威索引，触发器阻止删除时不得报告成功', () => {
+    fixture.db.exec("CREATE TRIGGER refuse_delete BEFORE DELETE ON assets BEGIN SELECT RAISE(IGNORE); END")
+    expect(() => deleteAsset('a0000')).toThrow('删除后素材仍存在')
+    fixture.db.exec('DROP TRIGGER refuse_delete')
+    deleteAsset('a0000')
+    expect(fixture.db.prepare('SELECT * FROM assets WHERE id=?').get('a0000')).toBeUndefined()
+  })
   let fixture: ReturnType<typeof createCountedSqlite>
   beforeEach(() => {
     fixture = createCountedSqlite()

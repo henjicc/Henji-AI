@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pencil, Trash2 } from 'lucide-react'
+import { FolderOpen, Pencil, Trash2 } from 'lucide-react'
 import { PanelTrigger, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput, UiSearchInput } from '@/components/ui'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
@@ -8,6 +8,7 @@ import { createLogger } from '@/core/logging'
 import { isElementNode } from '@/utils/crossRealmDom'
 import type { AssetMenuAnchor } from './AssetCard'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
+import { openDialog } from '@/platform/desktopApi'
 
 const logger = createLogger('features.assets')
 
@@ -20,12 +21,13 @@ interface Props {
   onToggleLibrary: (libraryId: string, included: boolean) => Promise<void>
   onSetTags: (tags: string[]) => Promise<void>
   onRename: (name: string) => Promise<void>
+  onRelocate: (filePath: string) => Promise<void>
   onDelete: () => Promise<void>
   onOpenBatchManagement: () => void
   onClose: () => void
 }
 
-export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, availableTags, onToggleLibrary, onSetTags, onRename, onDelete, onOpenBatchManagement, onClose }) => {
+export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, availableTags, onToggleLibrary, onSetTags, onRename, onRelocate, onDelete, onOpenBatchManagement, onClose }) => {
   const { t } = useI18n('ui')
   const [sendMessage, setSendMessage] = useState('')
   const pendingActionRef = useRef(false)
@@ -102,6 +104,15 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
   const deleteCurrentAsset = async (): Promise<void> => {
     if (await runAction('delete', onDelete)) requestClose()
   }
+  const relocateCurrentAsset = async (): Promise<void> => {
+    await runAction('relocate', async () => {
+      const selected = await openDialog({ multiple: false })
+      const filePath = Array.isArray(selected) ? selected[0] : selected
+      if (!filePath) return
+      await onRelocate(filePath)
+      requestClose()
+    })
+  }
   const applyName = async (): Promise<void> => {
     const nextName = nameDraft.trim()
     if (!nextName || nextName === name) { setEditingName(false); setNameDraft(name); return }
@@ -141,6 +152,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       {actionError ? <UiError size="xs" align="start" className="pb-0" title={actionError} message="" /> : null}
       {/* 菜单里的动作同为辅助档：批量管理是进入一种模式，删除是危险档（静息中性、悬停显红） */}
       <div className="mt-4 flex flex-wrap justify-between gap-2">
+        <UiButton disabled={pendingAction !== null} onClick={() => void relocateCurrentAsset()}><FolderOpen className="h-4 w-4" />{t('assetLibrary.relocate')}</UiButton>
         {asset.mediaType !== 'code' && <VideoEditSendMenu mediaKind={asset.mediaType} disabled={pendingAction !== null || asset.inspectionStatus !== 'ready'} resolveSource={() => ({ type: 'asset', assetId: asset.id })} notify={(message, type) => { if (type === 'error') setActionError(message); else setSendMessage(message) }} />}
         <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
         <UiButton variant="danger" disabled={pendingAction !== null} onClick={() => void deleteCurrentAsset()}><Trash2 className="h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>

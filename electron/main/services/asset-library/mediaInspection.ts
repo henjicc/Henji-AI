@@ -8,6 +8,7 @@ import { readVideoInfo } from '../video/ops'
 import type { AssetMediaType } from './types'
 import { CODE_ASSET_LIMITS, CODE_ASSET_MIME, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset } from '../../../../src/core/videoEdit/codeAsset'
 import { readFileBytes } from '../system'
+import { EXTENSION_FORMATS } from '../media-import/format'
 
 export interface MediaInspectionResult {
   mimeType: string
@@ -16,12 +17,6 @@ export interface MediaInspectionResult {
   height: number | null
   durationSeconds: number | null
   fileModifiedAt: number
-}
-
-const MIME_BY_EXTENSION: Record<string, string> = {
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif',
-  '.bmp': 'image/bmp', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
-  '.avi': 'video/x-msvideo', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4',
 }
 
 function readAudioDuration(filePath: string): Promise<number> {
@@ -43,6 +38,7 @@ export function normalizeAssetPath(filePath: string): string {
 }
 
 export async function inspectMedia(filePath: string, mediaType: AssetMediaType): Promise<MediaInspectionResult> {
+  const format = EXTENSION_FORMATS[path.extname(filePath).toLowerCase()]
   const stat = await fs.stat(filePath)
   if (!stat.isFile()) throw new Error('Asset path is not a file')
   let width: number | null = null
@@ -64,7 +60,8 @@ export async function inspectMedia(filePath: string, mediaType: AssetMediaType):
     height = info.height || null
     durationSeconds = info.durationSeconds
   } else {
-    durationSeconds = await readAudioDuration(filePath)
+    try { durationSeconds = await readAudioDuration(filePath) }
+    catch (error) { if (format?.durationProbe !== 'optional') throw error }
   }
-  return { mimeType: mediaType === 'code' ? CODE_ASSET_MIME : MIME_BY_EXTENSION[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream', sizeBytes: stat.size, width, height, durationSeconds, fileModifiedAt: stat.mtimeMs }
+  return { mimeType: mediaType === 'code' ? CODE_ASSET_MIME : format?.mimeType ?? 'application/octet-stream', sizeBytes: stat.size, width, height, durationSeconds, fileModifiedAt: stat.mtimeMs }
 }

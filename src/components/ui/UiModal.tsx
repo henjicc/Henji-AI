@@ -16,6 +16,8 @@ import {
 
 interface UiModalProps {
   isOpen: boolean;
+  /** 容器内的常驻预览不参与视口模态、焦点陷阱或滚动锁。 */
+  scope?: 'viewport' | 'container';
   title: string;
   ariaLabel?: string;
   onClose: () => void;
@@ -51,6 +53,7 @@ interface UiModalProps {
 
 export function UiModal({
   isOpen,
+  scope = 'viewport',
   title,
   ariaLabel,
   onClose,
@@ -66,6 +69,7 @@ export function UiModal({
   appear = true,
 }: UiModalProps): JSX.Element | null {
   const isGlass = surface === 'glass';
+  const inContainer = scope === 'container';
   const { shouldRender, isVisible, closing, onTransitionEnd } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS, appear);
   const dialogRef = useRef<HTMLDivElement>(null);
   // 弹窗没有触发元素：用原位的隐藏锚点得知自己处在哪个文档（主窗口或剪辑系统浮窗），
@@ -76,13 +80,13 @@ export function UiModal({
     if (!shouldRender || !anchorRef.current) return;
     const next = ownerDocumentOf(anchorRef.current);
     setHost(previous => previous === next ? previous : next);
-  }, [shouldRender]);
+  }, [shouldRender, inContainer]);
   const titleId = useId();
   // 模态层（任务 4.3 浮层归属）：从浮层里打开的弹窗内点击不关闭那个浮层，打开期间父浮层不响应点外与 Escape
-  const overlay = useUiOverlayLayer(isOpen && shouldRender, { modal: true });
+  const overlay = useUiOverlayLayer(!inContainer && isOpen && shouldRender, { modal: true });
   const resolvedAriaLabel = hideHeader || ariaLabel ? ariaLabel ?? title : undefined;
   useDialogFocusTrap({
-    active: isOpen && shouldRender && host !== null,
+    active: !inContainer && isOpen && shouldRender && host !== null,
     dialogRef,
     onClose,
   });
@@ -93,9 +97,7 @@ export function UiModal({
 
   // 挂到所在文档的 body：祖先链上任何一个带 transform/filter 的面板都会给 fixed 定位
   // 重新建立包含块，导致弹窗被错误地约束在那个祖先容器内而不是真正居中于整个窗口。
-  return <>
-    <span ref={anchorRef} hidden />
-    {host && createPortal(
+  const dialog = (
     // data-dialog：资产库边缘触发器靠它判断"当前有弹窗打开，别弹出侧栏"。
     // 放在 UiModal 上，所有走 UiModal 的弹窗自动获得该行为，
     // 不必再指望每个业务弹窗自己记得加这个属性。
@@ -103,13 +105,14 @@ export function UiModal({
     // 关闭动画的 180ms 里仍挂着这两个标记会把紧接着的 Delete / 撤销吞掉（5.8，多图层编辑器关闭后删除节点失效）
     <div
       ref={dialogRef}
-      data-dialog={closing ? undefined : 'true'}
+      data-dialog={closing || inContainer ? undefined : 'true'}
+      data-gallery-static={inContainer ? 'UiModal' : undefined}
       role="dialog"
-      aria-modal={closing ? undefined : 'true'}
+      aria-modal={closing || inContainer ? undefined : 'true'}
       aria-label={resolvedAriaLabel}
       aria-labelledby={resolvedAriaLabel ? undefined : titleId}
       tabIndex={-1}
-      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center outline-none ${overlayClassName}`}
+      className={`${inContainer ? 'absolute inset-0' : `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS}`} z-modal flex items-center justify-center outline-none ${overlayClassName}`}
       // 收起中的弹窗已经关闭：不再接收指针与键盘、对读屏隐藏（同 PanelTrigger / Dropdown，任务 5.8）
       aria-hidden={closing || undefined}
       {...(closing ? { inert: '' } : {})}
@@ -122,7 +125,7 @@ export function UiModal({
       />
       <UiPanel
         variant={isGlass ? 'glass' : 'panel'}
-        className={`relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
+        className={`relative flex ${inContainer ? 'max-h-full' : 'max-h-[calc(100vh-2rem)]'} flex-col overflow-hidden transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
         onTransitionEnd={onTransitionEnd}
       >
         {!hideHeader && (
@@ -149,8 +152,8 @@ export function UiModal({
         )}
       </UiPanel>
       </UiOverlayLayerProvider>
-    </div>,
-    host.body
-  )}
-  </>;
+    </div>
+  );
+  if (inContainer) return dialog;
+  return <><span ref={anchorRef} hidden />{host && createPortal(dialog, host.body)}</>;
 }

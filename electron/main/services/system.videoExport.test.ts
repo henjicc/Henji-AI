@@ -57,11 +57,23 @@ it('完成发布后暂存清理失败保留完整目标并返回成功', async (
   expect([...await fs.readFile(target)]).toEqual([1, 2, 3])
 })
 
-it('文件系统不支持排他发布时明确失败，只清理暂存且不降级覆盖目标', async () => {
+it.each(['ENOTSUP', 'EPERM', 'EOPNOTSUPP', 'ENOSYS', 'EINVAL', 'EISDIR'])('文件系统硬链接返回 %s 时仍可排他发布完整文件', async code => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-output-unsupported-')); directories.push(directory)
   const target = path.join(directory, 'frame.png')
-  vi.spyOn(fs, 'link').mockRejectedValueOnce(Object.assign(new Error('hard links unsupported'), { code: 'ENOTSUP' }))
-  await expect(writeFileBytes(target, new Uint8Array([1]), { exclusive: true })).rejects.toThrow('hard links unsupported')
+  vi.spyOn(fs, 'link').mockRejectedValue(Object.assign(new Error('hard links unsupported'), { code }))
+  await writeFileBytes(target, new Uint8Array([1, 2]), { exclusive: true })
+  expect([...await fs.readFile(target)]).toEqual([1, 2])
+  await expect(writeFileBytes(target, new Uint8Array([9]), { exclusive: true })).rejects.toMatchObject({ code: 'EEXIST' })
+  expect([...await fs.readFile(target)]).toEqual([1, 2])
+  expect(await fs.readdir(directory)).toEqual(['frame.png'])
+})
+
+it('非硬链接回退替换失败时清理自建占位和暂存，保留原始错误', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-output-fallback-')); directories.push(directory)
+  const target = path.join(directory, 'frame.png')
+  vi.spyOn(fs, 'link').mockRejectedValue(Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }))
+  vi.spyOn(fs, 'rename').mockRejectedValue(new Error('disk full'))
+  await expect(writeFileBytes(target, new Uint8Array([1]), { exclusive: true })).rejects.toThrow('disk full')
   expect(await fs.readdir(directory)).toEqual([])
 })
 

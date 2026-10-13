@@ -112,6 +112,8 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`)
 }
 
+export const PROJECT_ASSET_MISSING = '素材所在项目不可用，可恢复项目或重新定位素材。'
+
 export class DocumentIndexStore implements DocumentCatalog {
   constructor(
     private readonly db: Database.Database,
@@ -292,6 +294,8 @@ export class DocumentIndexStore implements DocumentCatalog {
   upsertProject(row: IndexedProject): void {
     const key = this.key(row.path)
     this.db.transaction(() => {
+      const displaced = this.db.prepare(`SELECT id FROM ${T.projects} WHERE path_key = ? AND id <> ?`).all(key, row.id) as Array<{ id: string }>
+      for (const previous of displaced) this.updateProjectAssets(previous.id, true)
       this.db.prepare(`DELETE FROM ${T.projects} WHERE path_key = ? AND id <> ?`).run(key, row.id)
       this.db.prepare(`
         INSERT INTO ${T.projects} (
@@ -310,11 +314,24 @@ export class DocumentIndexStore implements DocumentCatalog {
         row.draft ? 1 : 0, row.mainVideoEditId, row.createdAt, row.external ? 1 : 0, row.missing ? 1 : 0,
         row.manifestModifiedAt, row.manifestSize, row.folderCreatedAt, Date.now(),
       )
+      this.updateProjectAssets(row.id, row.missing)
     })()
+  }
+
+  private updateProjectAssets(id: string, missing: boolean): void {
+    // Index-only fixtures and the initial schema migration may precede asset storage.
+    if (!this.db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='assets'").get()) return
+    const prefix = `${escapeLike(`henji://project/${id}/`)}%`
+    if (missing) {
+      this.db.prepare("UPDATE assets SET inspection_status='missing', inspection_error=?, updated_at=? WHERE file_path LIKE ? ESCAPE '\\' AND (inspection_status<>'missing' OR inspection_error IS NOT ?)").run(PROJECT_ASSET_MISSING, Date.now(), prefix, PROJECT_ASSET_MISSING)
+    } else {
+      this.db.prepare("UPDATE assets SET inspection_status='pending', inspection_error=NULL, updated_at=? WHERE file_path LIKE ? ESCAPE '\\' AND inspection_status='missing' AND inspection_error=?").run(Date.now(), prefix, PROJECT_ASSET_MISSING)
+    }
   }
 
   removeProject(id: string): void {
     this.db.transaction(() => {
+      this.updateProjectAssets(id, true)
       this.db.prepare(`DELETE FROM ${T.documents} WHERE project_id = ?`).run(id)
       this.db.prepare(`DELETE FROM ${T.projects} WHERE id = ?`).run(id)
     })()
@@ -339,6 +356,8 @@ export class DocumentIndexStore implements DocumentCatalog {
 
   clearRebuildableIndex(): void {
     this.db.transaction(() => {
+      const projects = this.db.prepare(`SELECT id FROM ${T.projects}`).all() as Array<{ id: string }>
+      for (const project of projects) this.updateProjectAssets(project.id, true)
       this.db.prepare(`DELETE FROM ${T.documents}`).run()
       this.db.prepare(`DELETE FROM ${T.projects}`).run()
     })()

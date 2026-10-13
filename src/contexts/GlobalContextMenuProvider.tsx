@@ -5,6 +5,7 @@ import ContextMenu from '@/components/ContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { Clipboard } from 'lucide-react'
+import { readClipboardImage } from '@/commands/clipboard'
 
 const logger = createLogger('contexts.GlobalContextMenuProvider')
 
@@ -14,7 +15,7 @@ interface MenuPosition {
 }
 
 // 自定义事件名称，用于通知图片粘贴
-export const PASTE_IMAGE_EVENT = 'global-paste-image'
+export const PASTE_IMAGE_EVENT = 'globalPasteImage'
 
 /**
  * 全局右键菜单 Provider
@@ -82,28 +83,19 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       targetElement.focus()
 
       try {
-        // 首先尝试使用 Rust 命令读取文件管理器复制的文件
-        const clipboardFiles = isDesktopRuntime()
-          ? await getPlatform().clipboard.readClipboardFiles()
-          : []
-
-        if (clipboardFiles && clipboardFiles.length > 0) {
-          // 有文件管理器复制的图片文件，通过事件传递 base64 数据
-          const customEvent = new CustomEvent(PASTE_IMAGE_EVENT, {
-            detail: {
-              clipboardFiles: clipboardFiles.map(f => ({
-                data: f.data,
-                mimeType: f.mimeType,
-                name: f.path.split(/[/\\]/).pop() || 'clipboard-image'
-              }))
-            }
-          })
-          document.dispatchEvent(customEvent)
-          return
+        // 桌面位图和文件图片共用有界读取入口，不读取剪贴板里的视频或其他大文件。
+        if (isDesktopRuntime()) {
+          const image = await readClipboardImage()
+          if (image) {
+            window.dispatchEvent(new CustomEvent(PASTE_IMAGE_EVENT, {
+              detail: { clipboardFiles: [{ data: image.dataUrl, name: image.name }] },
+            }))
+            return
+          }
         }
 
-        // 没有文件，尝试读取剪贴板中的图片（截图等）
-        const clipboardItems = await navigator.clipboard.read()
+        // 浏览器宿主使用浏览器剪贴板；桌面已经检查过图片，直接回退文本。
+        const clipboardItems = isDesktopRuntime() ? [] : await navigator.clipboard.read()
         for (const item of clipboardItems) {
           const imageType = item.types.find(type => type.startsWith('image/'))
           if (imageType) {
@@ -112,7 +104,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               const customEvent = new CustomEvent(PASTE_IMAGE_EVENT, {
                 detail: { imageBlob: blob, imageType }
               })
-              document.dispatchEvent(customEvent)
+              window.dispatchEvent(customEvent)
               return
             }
           }

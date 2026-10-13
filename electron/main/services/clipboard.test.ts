@@ -1,16 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import path from 'node:path'
 
 const mocks = vi.hoisted(() => ({
-  writeImage: vi.fn(), readImage: vi.fn(), availableFormats: vi.fn(), readBuffer: vi.fn(), createFromBuffer: vi.fn(), readFile: vi.fn(), resolveSourceBytes: vi.fn(),
-  info: vi.fn(), error: vi.fn(),
+  writeImage: vi.fn(), readImage: vi.fn(), availableFormats: vi.fn(), readBuffer: vi.fn(), read: vi.fn(), createFromBuffer: vi.fn(), readFile: vi.fn(), resolveSourceBytes: vi.fn(),
+  info: vi.fn(), error: vi.fn(), warn: vi.fn(), stat: vi.fn(), boundedRead: vi.fn(),
 }))
-vi.mock('electron', () => ({ clipboard: { writeImage: mocks.writeImage, readImage: mocks.readImage, availableFormats: mocks.availableFormats, readBuffer: mocks.readBuffer }, nativeImage: { createFromBuffer: mocks.createFromBuffer } }))
-vi.mock('node:fs/promises', () => ({ default: { readFile: mocks.readFile } }))
+vi.mock('electron', () => ({ clipboard: { writeImage: mocks.writeImage, readImage: mocks.readImage, availableFormats: mocks.availableFormats, readBuffer: mocks.readBuffer, read: mocks.read }, nativeImage: { createFromBuffer: mocks.createFromBuffer } }))
+vi.mock('node:fs/promises', () => ({ default: { readFile: mocks.readFile, stat: mocks.stat } }))
+vi.mock('./system', () => ({ readFileBytes: mocks.boundedRead }))
 vi.mock('./image/source', () => ({ resolveSourceBytes: mocks.resolveSourceBytes }))
 vi.mock('./logging/main-logger', () => ({ createMainLogger: () => mocks }))
 
-import { readClipboardImage, writeImageFromPath, writeImageFromSource } from './clipboard'
+import { readClipboardFiles, readClipboardImage, writeImageFromPath, writeImageFromSource } from './clipboard'
 import { loadSharp } from './image/sharp-loader'
+
+function setFilePaths(paths: string[]): void {
+  mocks.readBuffer.mockImplementation(format => format === 'FileNameW' ? Buffer.from(`${paths.join('\0')}\0`, 'utf16le') : Buffer.alloc(0))
+  mocks.read.mockReturnValue(paths.map(file => `"${file}"`).join('\n'))
+}
 
 describe('共享图片剪贴板写入', () => {
   beforeEach(() => { vi.resetAllMocks(); mocks.availableFormats.mockReturnValue([]); mocks.readBuffer.mockReturnValue(Buffer.alloc(0)); mocks.readImage.mockReturnValue({ isEmpty: () => false }) })
@@ -33,6 +40,42 @@ describe('共享图片剪贴板写入', () => {
     mocks.readImage.mockReturnValue({ isEmpty: () => true })
     expect(await readClipboardImage()).toBeNull()
     expect(mocks.readImage.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('文件图片回退先筛选类型，视频不读取，只读第一张有界图片', async () => {
+    mocks.readImage.mockReturnValue({ isEmpty: () => true })
+    const imagePath = path.resolve('image.png')
+    setFilePaths([path.resolve('huge.mp4'), imagePath, path.resolve('second.jpg')])
+    mocks.stat.mockResolvedValue({ isFile: () => true, size: 3 })
+    mocks.boundedRead.mockResolvedValue(new Uint8Array([1, 2, 3]))
+    expect(await readClipboardImage()).toMatchObject({ origin: 'file', name: 'image.png', dataUrl: 'data:image/png;base64,AQID' })
+    expect(mocks.boundedRead).toHaveBeenCalledOnce()
+    expect(mocks.boundedRead).toHaveBeenCalledWith(imagePath, { maxBytes: 16 * 1024 * 1024 })
+    expect(mocks.readFile).not.toHaveBeenCalled()
+  })
+
+  it('超大图片不读；文件列表返回路径，读取失败记录警告', async () => {
+    mocks.readImage.mockReturnValue({ isEmpty: () => true })
+    setFilePaths([path.resolve('huge.png')])
+    mocks.stat.mockResolvedValue({ isFile: () => true, size: 100 * 1024 * 1024 })
+    expect(await readClipboardImage()).toBeNull()
+    expect(await readClipboardFiles()).toEqual([{ path: path.resolve('huge.png'), size: 100 * 1024 * 1024, mimeType: 'image/png' }])
+    expect(mocks.readFile).not.toHaveBeenCalled(); expect(mocks.boundedRead).not.toHaveBeenCalled()
+    expect(mocks.warn).toHaveBeenCalled()
+    mocks.stat.mockRejectedValue(new Error('文件已移除'))
+    expect(await readClipboardFiles()).toEqual([])
+    expect(mocks.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ error: expect.any(Error) }))
+  })
+
+  it('剪贴板大小不影响路径 DTO：大视频和图片只返回元数据，完全不读取字节', async () => {
+    setFilePaths([path.resolve('large.mp4'), path.resolve('image.png')])
+    mocks.stat.mockResolvedValue({ isFile: () => true, size: 2 * 1024 * 1024 * 1024 })
+    const files = await readClipboardFiles()
+    expect(files).toEqual([
+      { path: path.resolve('large.mp4'), mimeType: 'video/mp4', size: 2 * 1024 * 1024 * 1024 },
+      { path: path.resolve('image.png'), mimeType: 'image/png', size: 2 * 1024 * 1024 * 1024 },
+    ])
+    expect(mocks.boundedRead).not.toHaveBeenCalled(); expect(mocks.readFile).not.toHaveBeenCalled()
   })
 
   it('公布的图片始终不可读时有界结束，保留实际失败事实', async () => {

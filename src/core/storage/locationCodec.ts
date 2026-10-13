@@ -327,9 +327,12 @@ export function createLocationCodec(context: LocationContext): LocationCodec {
         const slash = rest.indexOf('/')
         const projectId = slash < 0 ? rest : rest.slice(0, slash)
         if (!PROJECT_ID_PATTERN.test(projectId)) return { value, unresolved: { value, reason: 'invalid' } }
+        const relative = slash < 0 ? '' : rest.slice(slash + 1)
+        const parts = relative === '' ? [] : relative.split(style === 'win32' ? /[\\/]/ : '/')
+        if (!parts.every(part => isSafeRelativeSegment(style, part))) return { value, unresolved: { value, reason: 'invalid' } }
         const project = projectsById.get(projectId)
         if (!project) return { value, unresolved: { value, reason: 'unknown_project', projectId } }
-        return resolveRelative(project, slash < 0 ? '' : rest.slice(slash + 1), value)
+        return resolveRelative(project, relative, value)
       }
       return { value, unresolved: { value, reason: 'invalid' } }
     }

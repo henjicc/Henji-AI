@@ -101,7 +101,22 @@ export async function writeBufferAtomically(
     if (options.exclusive) {
       // A same-directory hard link publishes the complete closed file without
       // overwriting a racing target. Failed writes only ever touch our staging.
-      await fs.link(stagedPath, targetPath)
+      try { await fs.link(stagedPath, targetPath) } catch (error) {
+        const code = error instanceof Error && 'code' in error ? String(error.code) : ''
+        if (!['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EINVAL', 'EISDIR'].includes(code)) throw error
+        // exFAT/FAT32 和部分网络卷不支持硬链接；wx 仍保证竞速目标不被覆盖。
+        const reservation = await fs.open(targetPath, 'wx', 0o600)
+        try {
+          await reservation.close()
+          options.signal?.throwIfAborted()
+          await replaceFileAtomically(stagedPath, targetPath, operations)
+        } catch (publishError) {
+          await reservation.close().catch(() => undefined)
+          await operations.remove(targetPath).catch(cleanupError => logger.warn('排他发布失败，占位清理失败', { event: 'fs.atomic_file.reservation_cleanup_failed', error: cleanupError, context: { targetPath } }))
+          throw publishError
+        }
+        return
+      }
       await operations.remove(stagedPath).catch(error => logger.warn('文件已发布，暂存文件清理失败', { event: 'fs.atomic_file.staging_cleanup_failed', error, context: { targetPath } }))
       await syncPublishedDirectory(targetPath, operations)
     } else await replaceFileAtomically(stagedPath, targetPath, operations)
