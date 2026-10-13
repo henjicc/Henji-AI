@@ -130,7 +130,14 @@ function VideoEditProgramPrewarm({ instance }: { instance: VideoEditInstance }):
     const sequence = createVideoEditSequence('预热')
     const document = videoEditComposition({ ...instance.document, sequences: [...instance.document.sequences, sequence] }, sequence.id)
     const surface = createProgramSurface(document.width, document.height)
-    const entry: PrewarmedProgram = { surface, document, renderer: new VideoEditRenderSession(document, document.width, undefined, surface.transferControlToOffscreen(), undefined, instance.document.id) }
+    let entry: PrewarmedProgram
+    try {
+      entry = { surface, document, renderer: new VideoEditRenderSession(document, document.width, undefined, surface.transferControlToOffscreen(), undefined, instance.document.id) }
+    } catch (error) {
+      // 预热只是提速：失败时节目面板出现后照常新建渲染器，那条路径会把错误呈现给用户。
+      logger.warn('节目渲染器预热失败，改为首个序列出现时再创建', { event: 'video_edit.program.prewarm.failed', error, context: { projectId: instance.document.id } })
+      return
+    }
     prewarmedPrograms.set(instance, entry)
     logger.debug('节目渲染器预热', { event: 'video_edit.program.prewarm.start', context: { projectId: instance.document.id } })
     // 序列出现时本组件先卸载、节目面板随后接管：释放推迟一拍，被接管的不释放。
