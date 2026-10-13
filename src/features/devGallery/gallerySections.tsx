@@ -359,8 +359,8 @@ export function NavigationSection(): JSX.Element {
 
 export function FormSection(): JSX.Element {
   const [open, setOpen] = useState(true)
-  const [curve, setCurve] = useState<number[]>([0, 0.25, 0.5, 0.75, 1])
-  const [wheel, setWheel] = useState({ hue: 30, strength: 0.4 })
+  const [curve, setCurve] = useState<number[]>([0, 25, 50, 75, 100])
+  const [wheel, setWheel] = useState({ hue: 30, strength: 40 })
   const idle = (): void => undefined
   const gesture = { onBegin: idle, onFinish: idle, onCancel: idle }
   const [angle, setAngle] = useState(30)
@@ -373,15 +373,16 @@ export function FormSection(): JSX.Element {
   const [seed, setSeed] = useState(42)
   return (
     <GallerySection title="表单与分组">
-      <UiGroup title="基础设置">
+      {/* 每个分组是独立样本，组间距交给 GallerySection，避免叠加 UiGroup 的相邻分区留白。 */}
+      <div><UiGroup title="基础设置">
         <UiFormRow label={<UiTooltipText tooltip="影响界面与模型提示词">语言</UiTooltipText>} hint="不看会选错的常驻说明">
           <UiInput size="sm" defaultValue="简体中文" />
         </UiFormRow>
         <UiFormRow label="快速下载" inline>
           <UiSwitch checked />
         </UiFormRow>
-      </UiGroup>
-      <UiGroup divided titleTone="compact" title="紧凑分组" labelWidth={96}>
+      </UiGroup></div>
+      <div><UiGroup divided titleTone="compact" title="紧凑分组" labelWidth={96}>
         <UiFormRow label="不透明度" density="compact">
           <UiRangeInput defaultValue={40} />
         </UiFormRow>
@@ -391,14 +392,14 @@ export function FormSection(): JSX.Element {
             <span className="text-xs text-text2">展开区内容</span>
           </UiDisclosurePanel>
         </div>
-      </UiGroup>
-      <UiGroup divided titleTone="compact" title="调色控件">
+      </UiGroup></div>
+      <div><UiGroup divided titleTone="compact" title="调色控件">
         <div className="flex items-center gap-4">
           <div className="w-40"><UiToneCurve label="RGB 曲线" values={curve} onChange={(point, value) => setCurve(current => current.map((item, index) => index === point ? value : item))} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
           <div className="w-24"><UiColorWheel label="中间调" hue={wheel.hue} strength={wheel.strength} onChange={(hue, strength) => setWheel({ hue, strength })} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
         </div>
-      </UiGroup>
-      <UiGroup divided titleTone="compact" title="参数控件">
+      </UiGroup></div>
+      <div><UiGroup divided titleTone="compact" title="参数控件">
         <div className="grid grid-cols-2 gap-4">
           <UiAngleDial label="方向" value={angle} onChange={setAngle} defaultValue={0} {...gesture} />
           <UiPointPad label="中心" value={point} onChange={setPoint} aspect={16 / 9} {...gesture} />
@@ -409,7 +410,7 @@ export function FormSection(): JSX.Element {
           <UiEasingEditor label="缓动" value={easing} onChange={setEasing} presets={[{ value: 'ease', label: '缓入缓出', curve: [0.42, 0, 0.58, 1] }, { value: 'linear', label: '线性', curve: [0, 0, 1, 1] }]} {...gesture} />
           <UiSeedInput label="种子" value={seed} onChange={setSeed} {...gesture} />
         </div>
-      </UiGroup>
+      </UiGroup></div>
     </GallerySection>
   )
 }
