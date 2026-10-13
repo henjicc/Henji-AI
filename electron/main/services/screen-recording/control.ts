@@ -6,7 +6,7 @@ export interface RecordingControlBackend {
   start(signal: AbortSignal): Promise<void>
   pause(signal: AbortSignal): Promise<void>
   resume(signal: AbortSignal): Promise<void>
-  mark(signal: AbortSignal): Promise<void>
+  mark(signal: AbortSignal, note?: string): Promise<void>
   stop(signal: AbortSignal): Promise<void>
   /** 取消是资源释放屏障；完成后任何旧的异步启动都不得重新开启采集。 */
   cancel(): Promise<void>
@@ -77,7 +77,8 @@ export class RecordingControlService {
     return conflicts
   }
 
-  async command(action: RecordingAction): Promise<void> {
+  async command(action: RecordingAction, note?: string): Promise<void> {
+    if (note !== undefined && (action !== 'mark' || note.length > 4000)) throw new Error('备注只能用于录制标记，且不能超过4000字')
     const active = this.active
     if (!active) throw new Error('没有录制会话，请先准备录制')
     if (this.pending) {
@@ -103,10 +104,10 @@ export class RecordingControlService {
     if (action === 'stop' && active.snapshot.phase === 'stopped') return
     if (action === 'mark' && active.snapshot.phase !== 'recording') throw new Error('标记只能在录制过程中添加')
     if (action === 'toggle' && !['recording', 'paused'].includes(active.snapshot.phase)) throw new Error('当前不能开始或暂停，请停止当前会话后重新准备')
-    return this.execute(action === 'toggle' ? active.snapshot.phase === 'paused' ? 'resume' : 'pause' : action, active)
+    return this.execute(action === 'toggle' ? active.snapshot.phase === 'paused' ? 'resume' : 'pause' : action, active, note)
   }
 
-  private execute(operation: 'start' | 'pause' | 'resume' | 'mark' | 'stop', active: ActiveRecording): Promise<void> {
+  private execute(operation: 'start' | 'pause' | 'resume' | 'mark' | 'stop', active: ActiveRecording, note?: string): Promise<void> {
     const wasRecording = active.snapshot.phase === 'recording'
     active.snapshot.busy = true; active.snapshot.error = null
     if (operation === 'stop') {
@@ -115,8 +116,8 @@ export class RecordingControlService {
     }
     this.deps.log(`recording.control.${operation}.start`)
     this.publish()
-    const task = Promise.resolve().then(() => active.backend[operation](active.abort.signal)).then(() => {
-      if (this.active !== active) return
+    const task = Promise.resolve().then(() => operation === 'mark' ? active.backend.mark(active.abort.signal, note) : active.backend[operation](active.abort.signal)).then(() => {
+      if (this.active !== active || active.abort.signal.aborted) return
       if (operation === 'pause') { active.elapsed += Math.max(0, this.deps.now() - active.startedAt); active.snapshot.phase = 'paused'; active.snapshot.microphoneLevel = null }
       if (operation === 'start' || operation === 'resume') { active.startedAt = this.deps.now(); active.snapshot.phase = 'recording' }
       if (operation === 'stop') { active.snapshot.phase = 'stopped'; active.snapshot.microphoneLevel = null; this.releaseResources() }
@@ -142,6 +143,17 @@ export class RecordingControlService {
   setMicrophoneLevel(sessionId: string, level: number | null): void {
     if (!this.active || this.active.snapshot.sessionId !== sessionId) return
     this.active.snapshot.microphoneLevel = this.active.snapshot.phase === 'recording' && level !== null && Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : null
+  }
+
+  /** Capture/storage failures terminate native resources immediately, including an in-flight start. */
+  async captureFailed(sessionId: string, error: unknown): Promise<void> {
+    const active = this.active
+    if (!active || active.snapshot.sessionId !== sessionId || active.snapshot.phase === 'stopped') return
+    if (active.snapshot.phase === 'recording') active.elapsed += Math.max(0, this.deps.now() - active.startedAt)
+    active.abort.abort(); active.snapshot.phase = 'failed'; active.snapshot.microphoneLevel = null
+    active.snapshot.error = '录制操作未完成，请停止录制后重新准备。'
+    this.releaseResources(); this.deps.log('recording.control.capture.failed', error); this.publish()
+    await active.backend.cancel()
   }
 
   /** 失去宿主时立即释放权限/快捷键，并通知后端取消；旧 Promise 不得污染新会话。 */

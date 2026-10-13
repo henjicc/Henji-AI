@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { captureLogPageSchema } from '../captureLog/events'
 import { creativeIntentPageSchema } from '../creativeIntent/pageSchema'
 import { storedMotionCandidateSchema } from '../creativeIntent/persistence'
 import { imageLayoutPageSchema, imageLayoutCandidateSchema } from '../imageEdit/v3/layoutDraft'
@@ -7,6 +8,7 @@ import { upgradePersistenceContent } from './migrations'
 import type { PersistenceFormat } from './formats'
 
 const resourceSchemas = {
+  'capture-log-page': captureLogPageSchema,
   'creative-intent-page': creativeIntentPageSchema,
   'creative-intent-candidate': storedMotionCandidateSchema,
   'image-layout-page': imageLayoutPageSchema,
@@ -14,6 +16,7 @@ const resourceSchemas = {
 }
 export type PersistenceResourceId = keyof typeof resourceSchemas
 const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
+  'capture-log-page': 1,
   'creative-intent-page': 1,
   'creative-intent-candidate': 1,
   'image-layout-page': 1,

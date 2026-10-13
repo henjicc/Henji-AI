@@ -3,12 +3,12 @@ import type { IpcMainInvokeEvent } from 'electron'
 import type { ScreenRecordingRequest } from '../../../src/core/screenRecording/contracts'
 import { registerScreenRecordingIpc } from './screen-recording'
 
-const hooks = vi.hoisted(() => ({ handler: undefined as ((request: ScreenRecordingRequest, event: IpcMainInvokeEvent) => Promise<unknown>) | undefined, guard: undefined as ((event: IpcMainInvokeEvent) => void) | undefined, trusted: vi.fn(), sender: vi.fn(), snapshot: vi.fn(), command: vi.fn(), access: vi.fn(), grant: vi.fn(), revoke: vi.fn() }))
+const hooks = vi.hoisted(() => ({ handler: undefined as ((request: ScreenRecordingRequest, event: IpcMainInvokeEvent) => Promise<unknown>) | undefined, guard: undefined as ((event: IpcMainInvokeEvent) => void) | undefined, trusted: vi.fn(), sender: vi.fn(), snapshot: vi.fn(), command: vi.fn(), access: vi.fn(), grant: vi.fn(), revoke: vi.fn(), capture: vi.fn() }))
 vi.mock('./registry', () => ({ registerIpcHandler: (_channel: string, _parse: unknown, handler: typeof hooks.handler, guard: typeof hooks.guard) => { hooks.handler = handler; hooks.guard = guard } }))
 vi.mock('./application-control', () => ({ assertTrustedApplicationSender: hooks.trusted }))
 vi.mock('../security/main-renderer-url', () => ({ isTrustedMainRendererUrl: (url: string) => url === 'app://henji' }))
 vi.mock('../services/media-permissions', () => ({ mediaPermissions: { requestAccess: hooks.access, grant: hooks.grant, revoke: hooks.revoke } }))
-vi.mock('../services/screen-recording/runtime', () => ({ isRecordingControlSender: hooks.sender, recordingControl: { snapshot: hooks.snapshot, command: hooks.command } }))
+vi.mock('../services/screen-recording/runtime', () => ({ isRecordingControlSender: hooks.sender, recordingControl: { snapshot: hooks.snapshot, command: hooks.command }, recordRecordingCapability: hooks.capture }))
 vi.mock('../services/logging', () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
 beforeEach(() => { vi.resetAllMocks(); registerScreenRecordingIpc() })
 function event(url = 'app://henji', main = true): IpcMainInvokeEvent {
@@ -34,4 +34,16 @@ it('OS授权等待后重新核对宿主；导航后的迟到授权不能落地',
   hooks.trusted.mockImplementation(() => { throw new Error('宿主已改变') }); finish()
   await expect(pending).rejects.toThrow('宿主已改变')
   expect(hooks.grant).not.toHaveBeenCalled()
+})
+it('能力事实复用原请求通道且只能由可信主宿主提交；备注经统一控制层处理', async () => {
+  const source = event()
+  const fact = { callId: 'call', capability: 'read_application_entity', targets: [], phase: 'started' as const }
+  await hooks.handler!({ action: 'capability', sessionId: 'live', fact }, source)
+  expect(hooks.capture).toHaveBeenCalledWith(source.sender, 'live', fact)
+  hooks.snapshot.mockReturnValue({ sessionId: 'live' })
+  await hooks.handler!({ action: 'control', sessionId: 'live', command: 'mark', note: '重点' }, source)
+  expect(hooks.command).toHaveBeenCalledWith('mark', '重点')
+  hooks.trusted.mockImplementation(() => { throw new Error('不是主窗口') })
+  await expect(hooks.handler!({ action: 'capability', sessionId: 'live', fact }, source)).rejects.toThrow('不是主窗口')
+  expect(hooks.capture).toHaveBeenCalledTimes(1)
 })

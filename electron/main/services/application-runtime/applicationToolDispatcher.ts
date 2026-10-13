@@ -14,6 +14,8 @@ import { isAssistantSkillError } from '../../../../src/core/assistant/skills'
 import { agentSkillIndex, loadAgentSkill } from '../assistant/skills/agentSkills'
 import { projectApplicationToolResult, type ResultDetailOptions } from './resultProjection'
 import { validateApplicationToolOutput } from './outputContract'
+import { beginHostCapabilityCapture } from '../../../../src/core/captureLog/capability'
+import { randomUUID } from 'node:crypto'
 const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 const logger = createMainLogger('main.application_runtime')
 
@@ -70,7 +72,13 @@ export class ApplicationToolDispatcher {
       return applicationFailure(this.inputError(callerId, name, parsedOptions.error, args ?? {}, schema)!)
     }
     const options: ResultDetailOptions = parsedOptions.data
-    let raw = await this.callRaw(callerId, name, input, signal)
+    // Frontend operations are captured in the common renderer registry. Backend-only capabilities use the same sink contract.
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)
+    const validCaptureInput = definition?.side === 'backend' ? definition.inputSchema.safeParse(input) : undefined
+    const captured = definition && validCaptureInput?.success ? beginHostCapabilityCapture(definition, validCaptureInput.data, randomUUID) : undefined
+    let raw: ApplicationResult
+    try { raw = await this.callRaw(callerId, name, input, signal); captured?.(signal.aborted ? 'cancelled' : raw.ok ? 'completed' : 'failed') }
+    catch (error) { captured?.(signal.aborted ? 'cancelled' : 'failed'); throw error }
     const catalog = this.catalog(callerId)
     if (name === 'get_current_application_context' && raw.ok && raw.data) {
       raw = { ...raw, data: { ...raw.data, externalContractVersion: EXTERNAL_CONTRACT_VERSION, catalogSchemaHash: applicationCatalogSchemaHash(catalog) } }

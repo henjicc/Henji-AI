@@ -28,6 +28,9 @@ extraResources:
 # 不符即中止打包；见 scripts/lib/packagedResources.cjs。
 afterPack: scripts/electron-builder-after-pack.cjs
 asarUnpack:
+  - node_modules/uiohook-napi/**
+  - node_modules/koffi/**
+  - node_modules/@koromix/koffi-*/**
   - node_modules/better-sqlite3/**
   - node_modules/sharp/**
   - node_modules/@img/**
@@ -57,6 +60,8 @@ win:
     # pi-coding-agent → chord 的构建期打包入口（chord/node、chord/bundler）引用，运行时不调用，保留本平台一份以防万一。
     - "!**/node_modules/@esbuild/!(win32-x64){,/**/*}"
     - "!**/node_modules/@mariozechner/clipboard-!(win32-x64-msvc){,/**/*}"
+    - "!**/node_modules/@koromix/koffi-!(win32-x64){,/**/*}"
+    - "!**/node_modules/uiohook-napi/prebuilds/!(win32-x64){,/**/*}"
     # onnxruntime-node 一个包里带全部平台的原生库（约 290MB），Windows 只留 win32/x64（含 DirectML）。
     - "!**/node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}{,/**/*}"
     - "!**/node_modules/onnxruntime-node/bin/napi-v6/win32/!(x64){,/**/*}"

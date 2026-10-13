@@ -10,6 +10,8 @@ import {
   resetHarnessNativeStorage,
   uninstallHarnessNativeStorage,
   seedHarnessFonts,
+  publishHarnessRecordingControl,
+  readHarnessRecordedCapabilities,
 } from './harnessNativeStorage'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 import type { GenerationHistoryInsertDto } from '@/platform/contracts/localRecords'
@@ -31,6 +33,17 @@ function historyRecord(id: string, patch: Partial<GenerationHistoryInsertDto> = 
 describe('harness 内存 native 替身', () => {
   beforeEach(() => { installHarnessNativeStorage() })
   afterEach(() => { uninstallHarnessNativeStorage() })
+  it('录制状态与能力事实只存不推断；重置广播空状态，未实现设备控制仍拒绝', async () => {
+    const api = getPlatform().screenRecording
+    expect(await api.snapshot()).toBeNull()
+    const states: unknown[] = []; const unsubscribe = api.onChanged(value => states.push(value))
+    await api.recordCapability('session', { callId: 'call', capability: 'read_application_entity', targets: [], phase: 'completed' })
+    const read = readHarnessRecordedCapabilities(); read[0].fact.phase = 'failed'
+    expect(readHarnessRecordedCapabilities()[0].fact.phase).toBe('completed')
+    publishHarnessRecordingControl(null); expect(states).toEqual([null])
+    resetHarnessNativeStorage(); expect(await api.snapshot()).toBeNull(); expect(readHarnessRecordedCapabilities()).toHaveLength(0)
+    expect(() => api.control('session', 'stop')).toThrow('没有实现'); unsubscribe()
+  })
 
   it('装上之后 shell 认得出来，真实电子适配器照常组装', () => {
     expect(isDesktopRuntime()).toBe(true)

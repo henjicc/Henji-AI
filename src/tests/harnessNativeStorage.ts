@@ -37,6 +37,8 @@ import type { GenerationHistoryRecordDto } from '@/core/localRecords/types'
 import type { AssetLibraryRecord, AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import type { RecordingControlSnapshot } from '@/core/screenRecording/contracts'
+import type { CapabilityCapture } from '@/core/captureLog/events'
 import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
 
 const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/harnessNativeStorage.ts 里补一段'
@@ -218,11 +220,25 @@ const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
 let fontCatalog: FontCatalog = { faces: [], revision: 0 }
 const settings = new Map<string, SettingEntryDto>()
+let recordingSnapshot: RecordingControlSnapshot | null = null
+const recordingListeners = new Set<(snapshot: RecordingControlSnapshot | null) => void>()
+const recordedCapabilities: { sessionId: string; fact: CapabilityCapture }[] = []
+/** IPC storage only: injected facts do not simulate recording transitions or device permission. */
+export function publishHarnessRecordingControl(snapshot: RecordingControlSnapshot | null): void {
+  recordingSnapshot = wire(snapshot)
+  for (const listener of recordingListeners) listener(wire(recordingSnapshot))
+}
+export function readHarnessRecordedCapabilities(): typeof recordedCapabilities { return wire(recordedCapabilities) }
 /** Font metadata at the IPC boundary only; parsing and filesystem discovery remain real service tests. */
 export function seedHarnessFonts(value: FontCatalog): void { fontCatalog = wire(value) }
 
 const NAMESPACES: Record<string, object> = {
   runtimeInfo: { uiInspectionReadOnly: false },
+  screenRecording: {
+    async snapshot() { return wire(recordingSnapshot) },
+    onChanged(listener: (snapshot: RecordingControlSnapshot | null) => void) { recordingListeners.add(listener); return () => { recordingListeners.delete(listener) } },
+    async recordCapability(sessionId: string, fact: CapabilityCapture) { recordedCapabilities.push(wire({ sessionId, fact })) },
+  },
   fonts: { async list() { return wire(fontCatalog) }, onChanged() { return () => undefined } },
   settings: {
     async get(key: string) { return settings.has(key) ? wire(settings.get(key)!) : null },
@@ -339,6 +355,7 @@ export function installHarnessNativeStorage(): void {
 
 /** 清空全部存储。用例之间必须调，否则上一条用例造的素材集合会漏进下一条。 */
 export function resetHarnessNativeStorage(): void {
+  publishHarnessRecordingControl(null); recordedCapabilities.splice(0)
   fontCatalog = { faces: [], revision: 0 }
   settings.clear()
   imageDocuments.clear()
