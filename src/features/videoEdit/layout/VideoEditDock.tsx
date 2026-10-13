@@ -84,10 +84,13 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
       const section = panel?.querySelector('[data-video-edit-effect-section="effects"]')
       const collapsedSection = Array.from(section?.querySelectorAll<HTMLElement>('button[aria-expanded="false"]') ?? []).find(item => !item.closest('[data-video-edit-effect-chain]'))
       collapsedSection?.click()
-      frame = requestAnimationFrame(() => {
+      // 新效果的 DOM 可能晚于两帧才提交（展开分组、机器繁忙时）；逐帧重试到出现为止，最多约 1 秒。
+      const scrollToAdded = (remaining: number): void => {
         const effect = Array.from(panel?.querySelectorAll<HTMLElement>('[data-video-edit-effect]') ?? []).find(item => addedEffects.includes(item.dataset.videoEditEffect ?? ''))
-        effect?.scrollIntoView({ block: 'nearest' })
-      })
+        if (effect) effect.scrollIntoView({ block: 'nearest' })
+        else if (remaining > 0) frame = requestAnimationFrame(() => scrollToAdded(remaining - 1))
+      }
+      frame = requestAnimationFrame(() => scrollToAdded(60))
     })
     return () => cancelAnimationFrame(frame)
   }, [addedEffects])

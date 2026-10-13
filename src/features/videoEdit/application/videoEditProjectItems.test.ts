@@ -15,6 +15,13 @@ import type { ApplicationPlannedStep } from '@/core/application-control'
 import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter } from './videoEditSource'
 import { editVideoSequence, editVideoProject } from './videoEditService'
 import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
+
+// 失败回滚恢复同一内容并推进修订号（任务 2.2：修订号只增不减），因此按内容比较而非对象身份。
+function expectVideoEditContentUnchanged(actual: { revision: number }, expected: { revision: number }): void {
+  expect({ ...actual, revision: 0 }).toEqual({ ...expected, revision: 0 })
+  expect(actual.revision).toBeGreaterThanOrEqual(expected.revision)
+}
+
 const files = new Map<string, string>()
 it('原生素材项使用真实图形、素材箱与历史，调整层默认选择有下方画面的轨道', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
@@ -32,7 +39,7 @@ it('原生素材项使用真实图形、素材箱与历史，调整层默认选�
   expect(() => appendVideoEditItems(id, [adjustmentId], sequenceId)).toThrow('上方')
   expect(() => createVideoEditGraphicItem(id, { kind: 'rect', width: 0 })).toThrow()
   expect(() => createVideoEditGraphicItem(id, { kind: 'rect', binId: 'missing' })).toThrow()
-  expect(owner.document).toBe(stable); expect(owner.past).toHaveLength(past)
+  expectVideoEditContentUnchanged(owner.document, stable); expect(owner.past).toHaveLength(past)
   editVideoSequence(id, sequenceId, sequence => ({ ...sequence, tracks: [...sequence.tracks, { ...sequence.tracks.find(track => track.kind === 'video')!, id: 'upper', index: 2, name: '上方画面' }] }))
   appendVideoEditItems(id, [adjustmentId], sequenceId, { frame: 0 })
   expect(getActiveVideoEditSequence(owner).clips.at(-1)).toMatchObject({ kind: 'adjustment', track: 2, adjustment: { fromTrack: 1 }, volume: 0 })
@@ -186,7 +193,7 @@ it('拖进空序列：不新建序列，按素材改这条序列的规格并落�
     const options = { sequenceId: first, createSequenceWhenEmpty: true }
     const batch = { ...input, sources: [...input.sources, { path: `D:/media/new-${frameRateMode}.png` }] }
     await expect(dropVideoEditInput(id, batch, { frame: 0, track: 1 }, undefined, options)).rejects.toBeInstanceOf(VideoEditSequenceFrameRateRequired)
-    expect(instance.document).toBe(before); expect(instance.past).toHaveLength(past)
+    expectVideoEditContentUnchanged(instance.document, before); expect(instance.past).toHaveLength(past)
     await dropVideoEditInput(id, input, { frame: 0, track: 1 }, undefined, { ...options, sequenceSettings: { frameRate: { numerator: 60, denominator: 1 } } })
     expect(getActiveVideoEditSequence(instance).frameRate).toEqual({ numerator: 60, denominator: 1 })
     expect(instance.document.sequences).toHaveLength(sequences); expect(instance.past).toHaveLength(past + 1)

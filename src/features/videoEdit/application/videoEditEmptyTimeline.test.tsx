@@ -24,6 +24,13 @@ import { closeAllVideoEdits, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { dropVideoEditInput, VIDEO_EDIT_ITEM_DRAG_MIME } from './videoEditDrop'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './videoEditCommands'
 
+// 失败回滚恢复同一内容并推进修订号（任务 2.2：修订号只增不减），因此按内容比较而非对象身份。
+function expectVideoEditContentUnchanged(actual: { revision: number }, expected: { revision: number }): void {
+  expect({ ...actual, revision: 0 }).toEqual({ ...expected, revision: 0 })
+  expect(actual.revision).toBeGreaterThanOrEqual(expected.revision)
+}
+
+
 beforeEach(() => {
   installHarnessNativeStorage()
   useSettingsStore.getState().setVideoEditSequenceDefaults(structuredClone(VIDEO_EDIT_SEQUENCE_DEFAULTS))
@@ -149,10 +156,10 @@ it.each(['items', 'files'] as const)('不可靠视频从%s拖入通过现有规�
   const dataTransfer = source === 'files' ? { types: ['Files'], files: [new File([], 'video.mp4'), new File([], 'fresh.png')], getData: () => '' } : { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: id, itemIds }) }
   fireEvent.drop(view.getByRole('region'), { dataTransfer })
   await waitFor(() => { expect(onError.mock.calls).toEqual([]); expect(view.getByRole('dialog')).toBeTruthy() })
-  expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
+  expectVideoEditContentUnchanged(owner.document, before); expect(owner.past).toHaveLength(history)
   expect(view.getByRole('button', { name: '帧率' }).textContent).toBe('60 帧')
   fireEvent.click(view.getByRole('button', { name: '取消' }))
-  expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
+  expectVideoEditContentUnchanged(owner.document, before); expect(owner.past).toHaveLength(history)
   fireEvent.drop(view.getByRole('region'), { dataTransfer })
   await waitFor(() => { expect(onError.mock.calls).toEqual([]); expect(view.getByRole('dialog')).toBeTruthy() })
   fireEvent.click(view.getByRole('button', { name: '新建' }))
