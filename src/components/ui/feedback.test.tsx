@@ -10,12 +10,14 @@ import * as states from './states'
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('状态与反馈契约', () => {
-  it('保留调用方显式的未禁用声明，忙碌期间覆盖为禁用，恢复后仍保留', () => {
+  it('加载中只标记忙碌、保留原外观（不进入禁用态），调用方显式的未禁用声明始终保留', () => {
     const view = render(<UiButton aria-disabled={false}>复制片段</UiButton>)
     const button = screen.getByRole('button', { name: '复制片段' })
     expect(button.getAttribute('aria-disabled')).toBe('false')
     view.rerender(<UiButton aria-disabled={false} loading>复制片段</UiButton>)
-    expect(button.getAttribute('aria-disabled')).toBe('true')
+    expect(button.getAttribute('aria-disabled')).toBe('false')
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(button.matches(':disabled')).toBe(false)
     view.rerender(<UiButton aria-disabled={false}>复制片段</UiButton>)
     expect(button.getAttribute('aria-disabled')).toBe('false')
   })
@@ -62,6 +64,36 @@ describe('状态与反馈契约', () => {
     expect(screen.getByRole('tooltip').textContent).toBe('添加素材')
     view.unmount()
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('带说明的提交按钮阻断表单和冒泡，反馈状态切换保留 DOM、ref 与焦点', () => {
+    const submit = vi.fn(event => event.preventDefault()), click = vi.fn(), parentClick = vi.fn()
+    const keyDown = vi.fn(), keyUp = vi.fn(), ref = createRef<HTMLButtonElement>()
+    const form = (blocked: boolean, loading = false) => <form onSubmit={submit} onClick={parentClick}>
+      <UiButton ref={ref} type="submit" disabled={blocked} loading={loading} tooltip="导出文件"
+        disabledReason="先选择素材" onClick={click} onKeyDown={keyDown} onKeyUp={keyUp}>导出</UiButton>
+    </form>
+    const view = render(form(false)), button = screen.getByRole('button', { name: '导出' })
+    act(() => button.focus())
+    expect(document.activeElement).toBe(button)
+    for (const [blocked, loading] of [[true, false], [false, true], [true, true]]) {
+      view.rerender(form(blocked, loading))
+      expect(ref.current).toBe(button)
+      expect(document.activeElement).toBe(button)
+      expect(button.getAttribute('aria-disabled')).toBe(blocked ? 'true' : null)
+      expect(button.getAttribute('aria-busy')).toBe(loading ? 'true' : null)
+      expect(fireEvent.click(button)).toBe(false)
+      for (const key of ['Enter', ' ']) {
+        expect(fireEvent.keyDown(button, { key })).toBe(false)
+        expect(fireEvent.keyUp(button, { key })).toBe(false)
+      }
+    }
+    expect(click).not.toHaveBeenCalled(); expect(parentClick).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled(); expect(keyDown).not.toHaveBeenCalled(); expect(keyUp).not.toHaveBeenCalled()
+    view.rerender(form(false))
+    expect(ref.current).toBe(button)
+    fireEvent.click(button)
+    expect(click).toHaveBeenCalledOnce(); expect(parentClick).toHaveBeenCalledOnce(); expect(submit).toHaveBeenCalledOnce()
   })
 
   it('字段错误保留自定义名称和已有描述，错误清除后关联恢复', () => {

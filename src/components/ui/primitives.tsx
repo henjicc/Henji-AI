@@ -76,12 +76,14 @@ export type { UiControlSize, UiRangeTrackTone, UiTextTokenAppearance, UiWindowCo
 const FeedbackButton = forwardRef<HTMLButtonElement, UiButtonFeedbackProps>(
   ({ tooltip, disabledReason, loading = false, disabled, children, className = '', onClick, onDoubleClick, onPointerDown, onMouseDown, onKeyDown, onKeyUp, ...props }, ref) => {
     const tooltipId = useId();
-    const blocked = Boolean(disabled || loading || props['aria-disabled'] === true || props['aria-disabled'] === 'true');
-    const content = blocked && disabledReason ? disabledReason : tooltip;
+    const unavailable = Boolean(disabled || props['aria-disabled'] === true || props['aria-disabled'] === 'true');
+    // 加载中只阻断操作、保留原外观；不可用才进入禁用外观（原生 disabled 或 aria-disabled）。
+    const blocked = unavailable || loading;
+    const content = unavailable && disabledReason ? disabledReason : tooltip;
     const prevent = (event: SyntheticEvent) => { event.preventDefault(); event.stopPropagation(); };
     const button = <button {...props} ref={ref}
-      disabled={blocked && !content}
-      aria-disabled={blocked ? true : props['aria-disabled']}
+      disabled={unavailable && !content}
+      aria-disabled={unavailable ? true : props['aria-disabled']}
       aria-busy={loading || props['aria-busy'] || undefined}
       aria-describedby={[props['aria-describedby'], content ? tooltipId : undefined].filter(Boolean).join(' ') || undefined}
       className={`${className} ${loading ? 'relative' : ''}`}

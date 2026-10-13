@@ -10,7 +10,8 @@ import type { ClockSegment, Timeline } from '@/core/creativeIntent/contracts'
 import type { TranscriptEntry } from '@/core/creativeIntent/schema'
 import { ExplanationReview, type ExplanationReviewResult } from './ExplanationReview'
 import { explanationChanges } from './explanationPresentation'
-import { fireEvent } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, value: unknown) => ReactNode }) => <div>{data.map((value, index) => <div key={index}>{itemContent(index, value)}</div>)}</div> }))
 let root: Root | undefined; let element: HTMLElement | undefined
@@ -62,11 +63,16 @@ it('另一处指代在首处提交期间仍能独立确认，同名对象用宿�
   element = document.createElement('div'); document.body.append(element); root = createRoot(element)
   await act(async () => root!.render(<ExplanationReview entry={sentence} onRead={async()=>result} onBind={bind} onError={vi.fn()} initiallyOpen />))
   const named = (text:string):HTMLButtonElement => Array.from(element!.querySelectorAll('button')).find(button=>button.textContent===text)!
-  await act(async()=>named('这里').click());expect(named('同名 · V1')).toBeTruthy();expect(named('同名 · V2')).toBeTruthy()
-  await act(async()=>named('同名 · V1').click());expect(named('同名 · V1').disabled).toBe(true)
-  await act(async()=>named('那边').click());expect(named('中央').disabled).toBe(false)
+  await act(async()=>named('这里').click())
+  await act(async()=>fireEvent.click(screen.getByRole('button', { name: '指的是' })))
+  expect(screen.getByRole('option', { name: '同名 · V1' })).toBeTruthy();expect(screen.getByRole('option', { name: '同名 · V2' })).toBeTruthy()
+  await act(async()=>fireEvent.click(screen.getByRole('option', { name: '同名 · V1' })))
+  expectButtonDisabled(screen.getByRole('button', { name: '指的是' }))
+  await act(async()=>fireEvent.click(screen.getByRole('button', { name: '指的是' })))
+  expect(bind).toHaveBeenCalledTimes(1)
+  await act(async()=>named('那边').click());expectButtonEnabled(named('中央'))
   await act(async()=>fireEvent.click(named('中央')));expect(bind).toHaveBeenCalledTimes(2)
-  await act(async()=>finish());expect(named('中央').disabled).toBe(false)
+  await act(async()=>finish());expectButtonEnabled(named('中央'))
 })
 it('当前作品状态变化重读差异，旧基线的迟到结果不能覆盖新计划', async () => {
   let finish!: (value: ExplanationReviewResult) => void

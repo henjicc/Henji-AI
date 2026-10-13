@@ -13,7 +13,8 @@ describe('轮廓光灯位交互', () => {
     const onRim = vi.fn()
     render(<RelightDirectionVisualizer direction="right" rimDirection="top-left" sourceImage={null}
       sourceAlt="源图" onDirectionChange={onMain} onRimDirectionChange={onRim} />)
-    fireEvent.click(screen.getByRole('radio', { name: /^(正面|Front)$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^(视角|View)$/ }))
+    fireEvent.click(screen.getByRole('option', { name: /^(正面|Front)$/ }))
     const main = screen.getByRole('slider', { name: /^(主光方向|Key light direction)$/ })
     const rim = screen.getByRole('slider', { name: /^(轮廓光方向|Rim light direction)$/ })
     main.parentElement!.getBoundingClientRect = () => ({

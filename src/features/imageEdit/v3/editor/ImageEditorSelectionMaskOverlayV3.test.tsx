@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 import '@/tests/imageEditDocumentFixture'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
@@ -105,7 +106,7 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
       <ControlledSelectionEditor onDocumentChange={(document) => changes.push(document)} />,
     )
     fireEvent.click(await screen.findByRole('button', { name: '矩形选择' }))
-    expect((screen.getByRole('radio', { name: '添加' }) as HTMLButtonElement).disabled).toBe(true)
+    expectButtonDisabled(screen.getByRole('radio', { name: '添加' }))
     const overlay = await waitFor(() => (
       rendered.container.querySelector('[data-selection-mask-overlay]') as SVGSVGElement
     ))
@@ -129,9 +130,7 @@ describe('ImageEditorSelectionMaskOverlayV3', () => {
       defaultValue: 0,
       tiles: { '0/0/0': `sha256:${'f'.repeat(64)}` },
     })
-    await waitFor(() => expect(
-      (screen.getByRole('radio', { name: '添加' }) as HTMLButtonElement).disabled,
-    ).toBe(false))
+    await waitFor(() => expectButtonEnabled(screen.getByRole('radio', { name: '添加' })))
   })
 
   it('quick 与 full 开放独立选择，mask 仍使用蒙版工具', async () => {
