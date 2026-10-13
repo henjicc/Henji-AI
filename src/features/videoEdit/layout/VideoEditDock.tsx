@@ -78,20 +78,22 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
   useEffect(() => {
     if (!addedEffects.length) return
     // 等面板激活与领域更新提交到 DOM；只滚动内容，不改变已可见面板的焦点或停靠位置。
-    let frame = requestAnimationFrame(() => {
+    // 面板（含浮窗）、效果分组与新效果都可能晚于前几帧才提交到 DOM（机器繁忙、浮窗刚打开）；
+    // 逐帧重新查找：分组出现时展开一次，新效果出现时滚动，最多约 1 秒。
+    let expanded = false
+    const scrollToAdded = (remaining: number): void => {
       const root = listVideoEditPopouts().find(entry => entry.panels.includes('effects'))?.popout.container ?? hostRef.current
       const panel = root?.querySelector('[data-video-edit-panel="effects"]')
-      const section = panel?.querySelector('[data-video-edit-effect-section="effects"]')
-      const collapsedSection = Array.from(section?.querySelectorAll<HTMLElement>('button[aria-expanded="false"]') ?? []).find(item => !item.closest('[data-video-edit-effect-chain]'))
-      collapsedSection?.click()
-      // 新效果的 DOM 可能晚于两帧才提交（展开分组、机器繁忙时）；逐帧重试到出现为止，最多约 1 秒。
-      const scrollToAdded = (remaining: number): void => {
-        const effect = Array.from(panel?.querySelectorAll<HTMLElement>('[data-video-edit-effect]') ?? []).find(item => addedEffects.includes(item.dataset.videoEditEffect ?? ''))
-        if (effect) effect.scrollIntoView({ block: 'nearest' })
-        else if (remaining > 0) frame = requestAnimationFrame(() => scrollToAdded(remaining - 1))
+      if (!expanded) {
+        const section = panel?.querySelector('[data-video-edit-effect-section="effects"]')
+        const collapsedSection = Array.from(section?.querySelectorAll<HTMLElement>('button[aria-expanded="false"]') ?? []).find(item => !item.closest('[data-video-edit-effect-chain]'))
+        if (section) { collapsedSection?.click(); expanded = true }
       }
-      frame = requestAnimationFrame(() => scrollToAdded(60))
-    })
+      const effect = expanded ? Array.from(panel?.querySelectorAll<HTMLElement>('[data-video-edit-effect]') ?? []).find(item => addedEffects.includes(item.dataset.videoEditEffect ?? '')) : undefined
+      if (effect) effect.scrollIntoView({ block: 'nearest' })
+      else if (remaining > 0) frame = requestAnimationFrame(() => scrollToAdded(remaining - 1))
+    }
+    let frame = requestAnimationFrame(() => scrollToAdded(60))
     return () => cancelAnimationFrame(frame)
   }, [addedEffects])
   useEffect(() => {
