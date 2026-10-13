@@ -182,12 +182,12 @@ export interface UiOptionButtonProps extends UiButtonFeedbackProps {
    *
    * 用于同质选项的集合；孤立按钮不适用。
    *
-   * 以下三档选中都是中性抬升（重要记录 003：单选不用强调色实底），尺寸由变体决定：
-   * - `segment`：分段选择的一段（28 高、居中）；由 `UiSegmented` 提供共享轨道；
+   * 分段中性抬起底，小样淡强调底，色样主要文字色外圈；尺寸由变体决定：
+   * - `segment`：分段选择的一段（仅 UiSegmented 内部使用，填满共享轨道、居中）；由 `UiSegmented` 提供共享轨道；
    * - `tile`：带小样的选项格（44 高，静息有底），如主题预设；
    * - `swatch`：圆形色样（32 外框），颜色由调用点经 `style.backgroundColor`/`backgroundImage` 传入（不要用 `background` 简写，
    *   它会重置 `background-clip`），选中为外圈一环。
-   * - `grid`：二维选项网格的格子（比例、分辨率、音色、模型卡）：静息铺一层 raised 撑出格子、不描边，选中中性抬升。
+   * - `grid`：二维选项网格的格子（比例、分辨率、音色、模型卡）：静息铺一层 raised 撑出格子、不描边，选中淡强调底。
    * - `cover`：封面内容卡（画布项目、3D 工程）：按钮本身无底无框，纵向排列“封面 + 文字”；悬停、键盘焦点与
    *   选中（`active`）只画在子元素 `UI_COVER_FRAME_CLASS` 封面框上（悬停发丝线、焦点环、选中强调描边，界面重设计 3.3）。
    */
@@ -204,10 +204,8 @@ export interface UiOptionButtonProps extends UiButtonFeedbackProps {
    * - `preset`：预设分辨率格 120 宽、至少 52 高（名称 + 比例）。
    */
   gridCell?: 'ratio' | 'tier' | 'tier-detail' | 'preset'
-  /** 选中语义：默认 `single`（单选，中性抬升）；`multiple` 表示多选集合中已选（强调描边 + 强调文字）。 */
+  /** 选中语义：默认 `single`（单选，淡强调底（分段例外））；`multiple` 表示多选集合中已选（强调描边 + 强调文字）。 */
   selection?: 'single' | 'multiple'
-  /** 统一分段控件的内嵌项：填满轨道高度，单选使用强实底状态令牌。 */
-  segmentFrame?: 'standalone' | 'inset'
   /** 键盘导航当前项（下拉 aria-activedescendant、模型网格方向键指向的项），未选中时显示悬停底。 */
   highlighted?: boolean
 }

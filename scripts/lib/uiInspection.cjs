@@ -442,7 +442,15 @@ function resolveOutputDir(root, outDir) {
   return path.isAbsolute(outDir) ? outDir : path.resolve(root, outDir)
 }
 
+/** 审查主图必须来自场景内的显式 capture，清理后的默认终态不代替工作面。 */
+function assertReviewCapture(scene, captures) {
+  if (scene.reviewCapture && !captures.some(capture => capture.suffix === scene.reviewCapture)) {
+    throw new Error(`${scene.id} 缺少审查主图 ${scene.reviewCapture}`)
+  }
+}
+
 module.exports = {
+  assertReviewCapture,
   DEFAULT_UI_INSPECTION_DISPLAY_POINT,
   DEFAULT_WINDOW_SIZES,
   UI_REVIEW_MATRICES,

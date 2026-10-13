@@ -5,6 +5,35 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { UiSegmented } from './UiSegmented'
 
 afterEach(cleanup)
+it('英文十二字符以内保持分段，中文超过四字或英文超过十二字符回落下拉', () => {
+  const props = { ariaLabel: '语言', value: 'a', onChange: () => undefined }
+  const view = render(<UiSegmented {...props} options={[{ value: 'a', label: 'abcdefghijkl' }]} />)
+  expect(screen.getByRole('radio', { name: 'abcdefghijkl' })).toBeDefined()
+  view.rerender(<UiSegmented {...props} options={[{ value: 'a', label: 'abcdefghijklm' }]} />)
+  expect(screen.queryByRole('radiogroup')).toBeNull()
+  view.rerender(<UiSegmented {...props} options={[{ value: 'a', label: '浏览或移出时' }]} />)
+  expect(screen.queryByRole('radiogroup')).toBeNull()
+})
+
+it('开发态测到选项实际溢出时告警，卸载清理观察器', () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  const disconnect = vi.fn()
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(element: HTMLElement): void {
+      Object.defineProperties(element, { scrollWidth: { value: 120, configurable: true }, clientWidth: { value: 40, configurable: true } })
+      this.callback([], this as unknown as ResizeObserver)
+    }
+    disconnect = disconnect
+    unobserve(): void {}
+  })
+  try {
+    const view = render(<UiSegmented ariaLabel="方式" options={[{ value: 'a', label: '方式' }]} value="a" onChange={() => undefined} />)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('UiSegmented'), expect.objectContaining({ ariaLabel: '方式' }))
+    view.unmount()
+    expect(disconnect).toHaveBeenCalled()
+  } finally { warn.mockRestore(); vi.unstubAllGlobals() }
+})
 it('分段单选方向键跳过禁用项并循环，选择与焦点同步，整体禁用后不可操作', () => {
   const preview = vi.fn()
   function Example({ disabled = false }: { disabled?: boolean }): JSX.Element {

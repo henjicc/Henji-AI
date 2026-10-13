@@ -1,3 +1,4 @@
+import { UiSegmented } from './UiSegmented';
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render } from '@testing-library/react';
@@ -163,16 +164,15 @@ describe('Ui primitives 选中态词汇表', () => {
   it('分段中性抬起底、选项格淡强调底、色样强描边（重要记录 014）', () => {
     const view = render(
       <>
-        <UiOptionButton variant="segment" active>选中段</UiOptionButton>
-        <UiOptionButton variant="segment">静息段</UiOptionButton>
+        <UiSegmented ariaLabel="分段" options={[{value: "a", label: "选中段"}, {value: "b", label: "静息段"}]} value="a" onChange={() => undefined} />
         <UiOptionButton variant="tile" active>选中格</UiOptionButton>
         <UiOptionButton variant="tile">静息格</UiOptionButton>
         <UiOptionButton variant="swatch" active aria-label="选中色样" />
         <UiOptionButton variant="swatch" aria-label="静息色样" />
       </>,
     );
-    const activeSegment = view.getByRole('button', { name: '选中段' });
-    const restSegment = view.getByRole('button', { name: '静息段' });
+    const activeSegment = view.getByRole('radio', { name: '选中段' });
+    const restSegment = view.getByRole('radio', { name: '静息段' });
     const activeTile = view.getByRole('button', { name: '选中格' });
     const restTile = view.getByRole('button', { name: '静息格' });
     const activeSwatch = view.getByRole('button', { name: '选中色样' });
@@ -185,7 +185,7 @@ describe('Ui primitives 选中态词汇表', () => {
       expectClasses(active, `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text border-transparent`);
       expect(active.className).not.toMatch(/(^| )(bg-accent|border-accent|bg-brand)/);
     }
-    expectClasses(restSegment, `${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);
+    expectClasses(restSegment, 'bg-transparent text-text2 hover:bg-hover');
     expect(restSegment.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(false);
     expectClasses(restTile, `${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);
     expectClasses(activeSwatch, 'rounded-full bg-clip-content border-text1');

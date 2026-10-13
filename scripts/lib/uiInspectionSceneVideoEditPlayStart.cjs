@@ -14,6 +14,7 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 function createVideoEditPlayStartScene() {
   return {
     id: 'video-edit-play-start', surface: '剪辑', name: '剪辑-节目起播延迟与起播帧率', writesUserData: true,
+    reviewCapture: 'play-start', // 审查主图在关闭工程之前捕获；默认终态只是辅助证据。
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-play-start'); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath } = require('./mediaBinaries.cjs')

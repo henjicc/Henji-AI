@@ -21,6 +21,8 @@ const path = require('node:path')
 const CONTRAST_TEXT_MIN = 4.5
 const CONTRAST_LARGE_MIN = 3
 const CONTRAST_ICON_MIN = 3
+/** 范围填充、边界与手柄分别与各自邻接背景比较，不用文字或图标阈值代替对象测量。 */
+const CONTRAST_GRAPHIC_MIN = 3
 /**
  * 截图测量容差：截图是 8 位、经色彩管理的合成结果，深色表面 ±1 级量化就能让 4.53 的令牌对比读成 4.49
  * （4.1 深海 text3 压 selected 实测）。只吸收这一级误差，不用于放宽设计门槛。
@@ -91,6 +93,7 @@ function contrastRatio(first, second) {
 
 /** WCAG 2.x：≥ 24px（18pt），或 ≥ 18.66px（14pt）且粗体，为大字。 */
 function requiredContrast({ kind, fontSize, fontWeight }) {
+  if (kind === 'graphic') return CONTRAST_GRAPHIC_MIN
   if (kind === 'icon') return CONTRAST_ICON_MIN
   const size = Number(fontSize) || 0
   const weight = Number(fontWeight) || 400
@@ -452,6 +455,7 @@ async function auditPageContrast(page, capture, options = {}) {
 }
 
 module.exports = {
+  CONTRAST_GRAPHIC_MIN,
   CONTRAST_ICON_MIN,
   CONTRAST_MEASUREMENT_TOLERANCE,
   CONTRAST_LARGE_MIN,

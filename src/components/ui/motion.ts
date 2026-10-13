@@ -36,8 +36,8 @@ export const UI_DURATION_CLASS = {
 
 /**
  * 缓动统一用 `ease-out`：元素进场/退场应该减速落位。
- * Tailwind 不写 `ease-*` 时默认是 `ease-in-out`，起步和收尾都慢，
- * 在小尺度 UI 上显得拖沓——所以要显式写。
+ * tailwind.config.js 已将 DEFAULT 设为 ease-out，无需每处显式添加。
+ * 此类常量仅供需要显式类组合的现有消费者使用。
  */
 export const UI_EASE_CLASS = 'ease-out';
 

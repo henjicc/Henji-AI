@@ -217,7 +217,7 @@ npm run check:ui-residue
 npm run check:ui-design
 ```
 
-`check:colors`、`check:surface:strict`、`check:icons:strict`、`check:ui-residue` 已接入 `build` / `electron:build` 与 CI 代码检查。`check:colors` 含未定义颜色类规则（按 Tailwind 实际配置判定 `bg-overlay`、`bg-selected-accent/50` 这类不生成样式的类，不可登记）。`check:ui-residue` 是代码残留门禁：任意值类、内联尺寸与颜色、调用点覆盖、豁免理由、私有样式、零引用与旧文案按 skill `henji-ui-surface` 的 `references/review.md` 第 3 节口径判为违规 / 待登记 / 合规，固定几何尺寸等例外登记在 `scripts/ui-residue.allowlist.json`（≥ 8 字理由，过期登记同样失败）。确需例外时加**行级** `ui-surface-allow` 注释并写明理由，文件级 `ui-surface-allow-file` 会被判违规；`check:colors` 的登记文件只能下调（已清零的规则不可再登记，其余总数受脚本上限约束）。改了 `.claude/skills` 或 `.codex/skills` 任一侧时跑 `npm run check:skill-sync`（CI 门禁，两份 skill 必须逐字一致）。
+`check:colors`、`check:surface:strict`、`check:icons:strict`、`check:ui-residue` 已接入 `build` / `electron:build` 与 CI 代码检查。`check:colors` 含未定义颜色类规则（按 Tailwind 实际配置判定 `bg-overlay`、`bg-selected-accent/50` 这类不生成样式的类，不可登记）。`check:ui-residue` 是代码残留门禁：任意值类、内联尺寸与颜色、调用点覆盖、豁免理由、私有样式、零引用与旧文案按 skill `henji-ui-surface` 的 `references/review.md` 第 3 节口径判为违规 / 待登记 / 合规，固定几何尺寸等例外登记在 `scripts/ui-residue.allowlist.json`（≥ 8 字理由，过期登记同样失败）。确需例外时加**行级** `ui-surface-allow` 注释并写明理由，文件级 `ui-surface-allow-file` 会被判违规；`check:colors` 的登记文件只能下调（已清零的规则不可再登记，其余总数受脚本上限约束）。改了 `.claude/skills` 或 `.codex/skills` 任一侧时跑 `npm run check:skill-sync`（CI 门禁，两份 skill 必须逐字一致；同一步聚合核对 UI 导出复用表、文档精确符号、生成令牌表与 findings 台账）。
 
 - 局部样式/文案：专项静态检查 + 用户人工验证即可，不要求 `electron:build`、`ui:tour` 或全量 Vitest
 - **公共组件改动先判断风险**：只改业务逻辑、事件或无视觉影响的属性时，跑对应组件精确测试，不因目录是 `@/components/ui` 扩大为主题矩阵。颜色/主题令牌变化才选相关主题引擎精确测试（求解变化包含 `themeCombination.test.ts`，原阈值保留）；公共布局、滚动、溢出或跨主题外观风险无法由精确测试证明时，才升级真实样张页或受影响宿主场景。升级后一次运行 `npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --audit` 同时产出截图、`audit.json`、对比度和运行时证据，不再叠加同矩阵的 `check:ui-visual`。只在令牌/主题或明确布局矩阵风险时使用四预设 1440 + 石墨 960；其他情况选一个故障尺寸与受影响预设。需新产物时 `electron:bundle`，Agent 目视实际截图。样张页经 `--dev-surface=dev.ui_gallery` 进入，新增导出组件的登记由 `uiGalleryCoverage.test.ts` 保护。细则见 skill `henji-ui-surface` 的 `references/review.md` 第 8 节
@@ -234,7 +234,7 @@ npm run ui:tour -- --steps scripts/ui-review/generation-seedance-kie.json --matr
 npm run ui:residue
 ```
 
-`check:ui-visual` 的对比度规则（`lowContrast`）按**渲染后像素**判定：隐藏文字与 lucide 图标截一张只有背景的图，在每个候选区域取样并合成前景，取最差 10% 分位；正文与辅助文字 ≥ 4.5:1，大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；禁用控件、`aria-hidden`、被遮挡或不可见部分不判。场景终态审全部规则，中途 `capture()` 的状态只审对比度。合理例外登记在 `scripts/ui-visual-contrast-exceptions.json`（唯一 `id`、≥ 8 字理由、`text`/`element` 正则，可限定 `scene`/`presets`/`minRatio`），只给装饰、品牌或用户内容色；界面色不达标改令牌，不登记。审计逻辑改动跑对应精确测试（如 `uiContrastAudit.test.cjs`）。`check:ui-visual` 与 `ui:tour --audit` 共用唯一循环，也同时产出截图；同一场景矩阵二选一。
+`check:ui-visual` 的对比度规则（`lowContrast`）按**渲染后像素**判定：隐藏文字与 lucide 图标截一张只有背景的图，在每个候选区域取样并合成前景，取最差 10% 分位；正文与辅助文字 ≥ 4.5:1，大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；交互图形（范围填充、边界、手柄）分别与各自邻接背景比较，最低 3:1，由对应场景像素断言，不把通用文字/图标候选收集宣称为全图形覆盖；禁用控件、`aria-hidden`、被遮挡或不可见部分不判。场景终态审全部规则，中途 `capture()` 的状态只审对比度。合理例外登记在 `scripts/ui-visual-contrast-exceptions.json`（唯一 `id`、≥ 8 字理由、`text`/`element` 正则，可限定 `scene`/`presets`/`minRatio`），只给装饰、品牌或用户内容色；界面色不达标改令牌，不登记。审计逻辑改动跑对应精确测试（如 `uiContrastAudit.test.cjs`）。`check:ui-visual` 与 `ui:tour --audit` 共用唯一循环，也同时产出截图；同一场景矩阵二选一。
 
 `check:ui-visual` 另有 5.8 起的五条结构规则：`stackedBands`（横向条带连续 > 2）、`toolbarWrap`（工具条或底栏折行）、`shortTextTruncated`（≤ 16 字的界面文案被省略号截断）、`selectedStateWeak`（选中与静息的底色、文字色、描边 OKLab 距离都 < 0.03 且无其他差异）、`overlayClipped`（浮层伸出窗口或被祖先裁切），判据见 `references/review.md` 第 7 节。改这些规则的判据时跑 `npm run test:ui-visual-rules`（需要最新 `electron:bundle` 产物）：把“未修复 / 已修复”样例注入真实 Electron 窗口逐条对账，未修复必须命中、已修复不得命中；应用界面不误报再用 `check:ui-visual` 的相关场景确认。
 
@@ -334,6 +334,7 @@ wc -l src/App.tsx
 4. 需要用户手动验证的部分，已写出可照做的步骤和验证点
 5. 是否维护开发环境及启动、重启、页面定位方式，统一按 [AGENTS.md 完成标准](../../AGENTS.md#完成标准) 执行；本文件不另设触发条件
 6. 新增/改造的关键业务链路已按 [logging.md](logging.md) 补齐结构化日志
+7. 界面巡检遗留登记到 `scripts/ui-review/findings.json`，写责任人、状态、证据、下一步与真实场景/规则 guard；已关闭须记录修复提交，历史截图失效不得作为当前复验通过
 
 完成报告只列实际执行的检查及结果，不需要为未运行且不相关的全量命令道歉。
 

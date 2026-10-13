@@ -1,13 +1,10 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { UiSegmented } from '@/components/ui'
+import { Dropdown } from '@/components/ui'
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  Braces,
   ChevronDown,
   ChevronRight,
   Copy,
   GitCompare,
-  PanelsTopLeft,
   TerminalSquare,
 } from 'lucide-react'
 
@@ -84,7 +81,7 @@ export function AssistantTraceDetail({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <UiSegmented ariaLabel="追踪详情视图" value={mode} onChange={setMode} options={[{ value: 'visual', label: '可视化', icon: <PanelsTopLeft className={`${UI_ICON_SIZE_CLASS.sm} mr-1`} /> }, { value: 'json', label: '原始 JSON', icon: <Braces className={`${UI_ICON_SIZE_CLASS.sm} mr-1`} /> }]} />
+            <Dropdown ariaLabel="追踪详情视图" value={mode} onSelect={setMode} options={[{ value: 'visual', label: '可视化' }, { value: 'json', label: '原始 JSON' }]} />
             <UiButton type="button" variant="secondary" disabled={!canCompare} onClick={onCompare}>
               <GitCompare className={`mr-1`} />对比上轮
             </UiButton>

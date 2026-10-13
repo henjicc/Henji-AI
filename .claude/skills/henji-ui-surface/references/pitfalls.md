@@ -24,7 +24,7 @@
 
 1. **写成互斥三元**：`dragging ? 'bg-raised/55' : 'bg-panel/30'` —— 任何时刻只有一个类，根本不存在打架。
 2. **变体里不写"默认值等于浏览器默认"的类**（如 button 的 `bg-transparent`，preflight 已经保证），给调用方留出覆盖空间。
-3. **确实要叠**：先用 `npx tailwindcss -i src/index.css -o /tmp/x.css` 生成 CSS，`grep -n` 两个类看谁在后面；或者直接上 `!` 强制。
+3. **确实要叠**：先用 `npx tailwindcss -i src/index.css -o /tmp/x.css` 生成 CSS，`grep -n` 两个类看谁在后面；需要改外观时扩展组件有限枚举；调用点不得用 `!` 覆盖皮肤。
 
 排查命令：
 
@@ -58,8 +58,7 @@ npx tailwindcss -i src/index.css -o /tmp/x.css && grep -n "^\.bg-panel {\|^\.bg-
 1. 首选：把密度做成 primitive 上的**有限枚举**（像 `UiButton` 的 `size`），由 primitive 内部
    写成互斥分支，根本不产生叠类；
 2. 其次：调整外层容器的间距/负边距，不碰 primitive 自身的 padding；
-3. 实在要覆盖：加 `!`（`!py-1.5`），但这会让下一个人以为 className 覆盖普遍可行，
-   属于最后手段。
+3. 外观/控件内部留白不得在调用点用 `!` 覆盖；这是规则 E 明确阻断的路径，需补有限密度枚举或修共享实现。
 
 验证某个覆盖到底生不生效，看构建产物里两个类谁靠后：
 

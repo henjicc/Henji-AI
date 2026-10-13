@@ -1,0 +1,141 @@
+[
+  {
+    "id": "u7-K03",
+    "source": "u7",
+    "status": "closed",
+    "owner": "5.3 规范与门禁",
+    "guard": [
+      "scene:video-edit-play-start"
+    ],
+    "conclusion": "已写成规则；审查主图为 play-start，清理前捕获，默认终态仅辅助",
+    "evidence": "uiInspectionSceneVideoEditPlayStart.cjs 在关闭工程前 capture(play-start)；review.md §6 明确主图契约",
+    "fixedIn": "bd94dc486"
+  },
+  {
+    "id": "u7-K06",
+    "source": "u7",
+    "status": "closed",
+    "owner": "5.3 规范与门禁",
+    "guard": [
+      "scene:generation-empty"
+    ],
+    "conclusion": "已有实例修复；已补空态场景清夹具与断言规则",
+    "evidence": "uiInspectionSceneCatalogGeneration.cjs：先断言隔离资料目录，clear/count=0，再断言无记录与空态文本",
+    "fixedIn": "b2db5fba0"
+  },
+  {
+    "id": "u7-K08",
+    "source": "u7",
+    "status": "closed",
+    "owner": "5.3 规范与门禁",
+    "guard": [
+      "scene:image-edit-filter-failure"
+    ],
+    "conclusion": "已有转换确认场景；已补转换前后语义与可见后果规则",
+    "evidence": "uiInspectionSceneImageEditFilterScopes.cjs：转换前后确认内容；review.md §6 新增通用文案判据",
+    "fixedIn": "670cedfb3"
+  },
+  {
+    "id": "u7-K09",
+    "source": "u7",
+    "status": "pending-verification",
+    "owner": "总管理者（Windows 定向复验）",
+    "guard": [
+      "scene:generation-video-viewer-trim",
+      "rule:lowContrast"
+    ],
+    "conclusion": "已把填充阈值 1.5 改为 3，图形/边界/手柄分别测邻接背景，不放宽阈值",
+    "evidence": "SELECTION_MIN_CONTRAST 复用 CONTRAST_GRAPHIC_MIN=3；未运行 Electron",
+    "nextStep": "独占 Windows 下 graphite/paper 运行 generation-video-viewer-trim；失败先确认取样对象，再修界面令牌或测量；边界/手柄另取像素证据"
+  },
+  {
+    "id": "5.8-window-size",
+    "source": "5.8",
+    "status": "pending-verification",
+    "owner": "总管理者（Windows 定向复验）",
+    "guard": [
+      "scene:window-startup"
+    ],
+    "conclusion": "旧窗口实际 1203×803 失败已登记，不能归为已通过",
+    "evidence": "5.8 遗留1，2026-10-04/05 历史结论；本轮未重跑",
+    "nextStep": "核对 Windows 显示器工作区/DPI，在 1440×900 跑 window-startup 并记录 outer/content/DPR/zoom"
+  },
+  {
+    "id": "5.8-video-edit-960",
+    "source": "5.8",
+    "status": "pending-verification",
+    "owner": "总管理者（Windows 定向复验）",
+    "guard": [
+      "scene:video-edit-composite-edit",
+      "scene:video-edit-code-project",
+      "scene:video-edit-code-controls",
+      "scene:video-edit-links"
+    ],
+    "conclusion": "960 四个场景与 1440 原生图形滤镜转场失败有定向复验去向",
+    "evidence": "5.8 遗留2；1440 节目浮窗贴回曾修复，不代表 960 已通过",
+    "nextStep": "独占 Windows 960×640 分别运行四场景；1440 仅 composite-edit；失败定位后交对应剪辑任务，不要求全量重跑"
+  },
+  {
+    "id": "5.8-heavy-scenes",
+    "source": "5.8",
+    "status": "deferred",
+    "owner": "总管理者（Windows 定向复验）",
+    "guard": [
+      "scene:video-edit-native-faults",
+      "scene:video-edit-native-soak",
+      "scene:video-edit-format-matrix"
+    ],
+    "conclusion": "不强行纳入日常视觉巡检；按 testing.md 原生故障、长时/性能或格式风险触发专项",
+    "evidence": "5.8 遗留3，曾卡17分钟与960偶发失败；当前无真实专项证据",
+    "nextStep": "实际改到原生恢复/资源生命周期/格式支持时由对应任务运行这些场景，明确设备与输入规模；素材内容色不能冒充界面令牌失败"
+  },
+  {
+    "id": "5.8-ruler-corner",
+    "source": "5.8",
+    "status": "pending-verification",
+    "owner": "总管理者（Windows 定向复验）",
+    "guard": [
+      "scene:video-edit-timeline",
+      "rule:overlayClipped"
+    ],
+    "conclusion": "轨道头覆盖标尺左角需剪辑界面任务复现修复，不在5.3改功能",
+    "evidence": "5.8 遗留4；当前未运行窗口",
+    "nextStep": "Windows 960 时间线纵向滚动至中段，检查左侧轨道头与标尺交界；截图后由总管理者指派剪辑界面修复"
+  },
+  {
+    "id": "5.8-llm-eperm",
+    "source": "5.8",
+    "status": "pending-verification",
+    "owner": "总管理者（Windows 定向复验）",
+    "guard": [
+      "scene:embedded-agent-conversation"
+    ],
+    "conclusion": "原子替换 EPERM 根因未确认，不能用旧复检通过关闭",
+    "evidence": "5.8 遗留5；该行为涉及主进程写入，不在本任务所有权",
+    "nextStep": "在隔离资料目录运行 embedded-agent-conversation；复现时保留日志链与占用进程证据，转主进程配置写入任务，禁止写真实资料"
+  },
+  {
+    "id": "5.8-provider-empty",
+    "source": "5.8",
+    "status": "closed",
+    "fixedIn": "4ac478d22",
+    "owner": "已有源码修复",
+    "guard": [
+      "scene:settings-provider-center"
+    ],
+    "conclusion": "供应商模型列表无匹配时已有 UiEmpty",
+    "evidence": "ProviderCenterModelList.tsx 当前显式渲染空态；不借用旧截图"
+  },
+  {
+    "id": "5.8-mask-error",
+    "source": "5.8",
+    "status": "closed",
+    "fixedIn": "4ac478d22",
+    "owner": "已有源码修复",
+    "guard": [
+      "scene:canvas-gpt-mask-editor"
+    ],
+    "conclusion": "遮罩打开失败已有用户任务文案，内部原因进入日志",
+    "evidence": "MaskEditorV3Host.tsx 对 MaskSessionOpenError 使用用户文案；未作窗口复验；此场景仅覆盖打开入口，失效会话分支由已有 MaskEditorV3Host.test.tsx 覆盖，真实失败图未重验"
+  }
+]

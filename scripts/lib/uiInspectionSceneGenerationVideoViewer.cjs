@@ -4,6 +4,7 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const sharp = require('sharp')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
+const { CONTRAST_GRAPHIC_MIN } = require('./uiContrastAudit.cjs')
 
 const VIDEO_FIXTURE = path.resolve('scripts/fixtures/plain_video.mp4')
 const HISTORY_ID = '__ui_video_viewer_trim'
@@ -14,7 +15,7 @@ const HISTORY_ID = '__ui_video_viewer_trim'
  * 5.9 起选区改用主题令牌（`bg-text1/30`，跟随预设明暗），判据改为按正式截屏像素判定“选区与轨道一眼可分”：
  * 选区中部与选区外轨道的亮度对比度 ≥ SELECTION_MIN_CONTRAST，石墨与纸白都要成立（`--theme-preset graphite,paper`）。
  */
-const SELECTION_MIN_CONTRAST = 1.5
+const SELECTION_MIN_CONTRAST = CONTRAST_GRAPHIC_MIN
 
 function relativeLuminance([r, g, b]) {
   const channel = (value) => {

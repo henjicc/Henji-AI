@@ -117,6 +117,14 @@
       {
         "selector": "TemplateElement[value.raw=/(?:^|[\\s'\"`!:])duration-(?!(?:0|120|180|240|500)(?!\\d))[\\d\\[]/]",
         "message": "动效时长只允许 duration-120/180/240/500（= UI_DURATION.fast/base/slow/viewer，src/components/ui/motion.ts）。"
+      },
+      {
+        "selector": "Literal[value=/(?:^|[\\s!:])transition-all(?:\\s|$)/]",
+        "message": "禁止 transition-all，请显式列出过渡属性或使用 uiTransition。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/(?:^|[\\s!:])transition-all(?:\\s|$)/]",
+        "message": "禁止 transition-all，请显式列出过渡属性或使用 uiTransition。"
       }
     ]
   },
@@ -255,6 +263,14 @@
           {
             "selector": "JSXAttribute[name.name='role'] > JSXExpressionContainer > Literal[value='button']",
             "message": "禁止用 role=\"button\" 自制按钮，请使用 primitives.tsx 导出的正式控件。"
+          },
+          {
+            "selector": "Literal[value=/(?:^|[\\s!:])transition-all(?:\\s|$)/]",
+            "message": "禁止 transition-all，请显式列出过渡属性或使用 uiTransition。"
+          },
+          {
+            "selector": "TemplateElement[value.raw=/(?:^|[\\s!:])transition-all(?:\\s|$)/]",
+            "message": "禁止 transition-all，请显式列出过渡属性或使用 uiTransition。"
           }
         ]
       }

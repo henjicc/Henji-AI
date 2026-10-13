@@ -4,6 +4,14 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+test('声明审查主图的场景必须捕获它，默认终态不算主图', () => {
+  const { assertReviewCapture } = require('./uiInspection.cjs')
+  const scene = { id: 'play', reviewCapture: 'play-start' }
+  assert.throws(() => assertReviewCapture(scene, [{ suffix: 'final' }]), /审查主图/)
+  assert.doesNotThrow(() => assertReviewCapture(scene, [{ suffix: 'play-start' }]))
+  assert.doesNotThrow(() => assertReviewCapture({ id: 'default' }, []))
+})
+
 test('巡检按等号前缀精确选择场景，不带出同名前缀的性能变体', () => {
   const scenes = [{ id: 'image-edit-layout-draft', surface: '图片编辑', name: '布局' }, { id: 'image-edit-layout-draft-100', surface: '图片编辑', name: '100层布局' }]
   assert.deepEqual(filterScenes(scenes, ['=image-edit-layout-draft']).map(scene => scene.id), ['image-edit-layout-draft'])

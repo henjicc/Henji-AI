@@ -30,6 +30,7 @@ const {
   themePresetLaunchArgs,
   setInspectionWindowSize,
   assertInspectionWindowSize,
+  assertReviewCapture,
 } = require('./lib/uiInspection.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -237,7 +238,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
               fs.writeFileSync(path.join(outDir, fileName), bytes)
               await assertInspectionWindowSize(app, size, windowEvidence.baseline)
               windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
-              rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
+              rows.push({ ...scene, name: `${scene.name}-${suffix}${scene.reviewCapture === suffix ? '（审查主图）' : ''}`, size: sizeLabel, file: fileName })
               if (scene.scrollCoverage) {
                 const measured = await targetPage.evaluate(auditUiDom)
                 const regions = await targetPage.locator(scene.scrollCoverage).evaluateAll(elements => elements.map((element, index) => ({
@@ -263,6 +264,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             }
             await scene.setup(app.page, app.app, { capture, recordMetrics, electronApp: app.app,
               requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
+            assertReviewCapture(scene, windowEvidence.captures)
             const missing = missingScrollCoverage(scrollCaptures)
             if (missing.length) throw new Error(`滚动内容漏截：${JSON.stringify(missing)}`)
             const fileName = `${sizeLabel}-${scene.id}.png`
@@ -275,7 +277,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,
               pixels })
-            rows.push({ ...scene, size: sizeLabel, file: fileName })
+            rows.push({ ...scene, name: `${scene.name}${scene.reviewCapture ? '（辅助终态）' : ''}`, size: sizeLabel, file: fileName })
             await auditContrast(evidenceKey, app.page, scene, true)
             console.log(`✓ ${sizeLabel} / ${scene.name}`)
           } catch (error) {

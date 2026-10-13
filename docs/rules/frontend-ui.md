@@ -1,108 +1,50 @@
 # 前端 UI 令牌与硬约束
 
-> 读取时机：写任何 `.tsx` 界面代码、调颜色/圆角/阴影/层级/动效、排查"改了样式却没生效"时。
->
-> 与 skill `henji-ui-surface` 的分工：**本文件是写代码时随时对照的令牌清单与已知坑**（大多由 ESLint 硬拦）；**skill 是动手前的设计决策流程**（用什么容器、几条横向条带、卡片准入、按钮层级、分隔线准入）。新建或改造界面/面板/弹窗/设置分区前先读 skill，写具体样式时查本文件。
+> 读取时机：写 TSX、调整样式或排查样式未生效时。详细设计规则只维护在 [henji-ui-surface](../../.codex/skills/henji-ui-surface/SKILL.md)；两侧 skill 由 check:skill-sync 保证一致。
 
-## 统一入口
+## 规则覆盖：规则 → 门禁 → CI
 
-- 业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
-- 原生 `<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现；禁止在业务组件重新引入原生控件并单独写样式
-- 能复用现有 `Ui*`、`Dropdown`、`PanelTrigger` 时优先复用
-- `PanelTrigger` 的 `closeOnPanelClick`：面板内只承载**单一类型**可选项（如纯比例选择、纯预设列表）时传 `closeOnPanelClick`，选完即收起；面板内并列**多种类型**独立选项（如比例+分辨率+自定义尺寸的复合面板）时保持默认 `false`，选完不收起，让用户接着调下一组
-- **新增通用组件的门槛**（与 `AGENTS.md` 一致，Agent 自行判断）：先确认没有可复用或可扩展的组件，优先给现有 `Ui*` 加**有限枚举**变体；只有加变体会让参数语义变乱时才新建职责单一的组件，放在 `@/components/ui`、登记进 skill `henji-ui-surface` 的「必须复用」表并纳入 `check:surface` 规则 E，选型依据写进任务记录或提交正文
-- 组件外观只由枚举决定（`variant`/`size`/`tone`/`on`/`shape`/`active`/`appearance` 等），调用点 `className` 只放布局；按钮、选项、标签、导航、字段触发器的调用点外观覆盖由 `check:surface` 规则 E 拦截
-- 尺寸与样式写法受 `check:ui-residue` 约束（进 build / CI）：任意值类只允许引用变量、CSS 关键字与相对值；字号、行高、圆角、间距等视觉档位不许写死，与 Tailwind 标准档等值的几何值写标准类；固定几何尺寸与字面量内联尺寸先改组件枚举或类名，确属组件几何再登记 `scripts/ui-residue.allowlist.json`（写理由）。口径见 skill `henji-ui-surface` 的 `references/review.md` 第 3 节
-- 按钮五档 + `link` + `media`，**默认静默**（`quiet`）；选中态用淡强调底（`selected-accent`，重要记录 012），悬停只用中性抬升且不得与选中同色；完整词汇表、必须复用的组件与新枚举（`UiToolbar variant="command"`、`UiTextToken`、`UiWindowControl`、`UiFieldTrigger`、`UiOptionButton` 的 `segment/grid/tile/swatch/cover`、`UiGroup titleTone="compact"`、`UiFormRow density="compact"`、`WaveformView` 等）见 skill `henji-ui-surface`
-- 块级状态统一用 `UiEmpty`/`UiLoading`/`UiError`；行内加载与骨架用 `UiSpinner`/`UiSkeleton`，字段错误用 `UiFormRow error` 或独立 `UiFieldMessage`，行内反馈用 `UiInlineStatus`。禁止页面手写同义状态。
-- 按钮加载传 `loading` 并保留静息文案；不可用的唯一入口传 `disabledReason`。悬停说明传 `tooltip`，不使用原生 `title`；图标按钮仍须有 label/aria-label 或非空 tooltip 作为可访问名称。
-- 弹窗统一走 `UiModal` 或 `AlertDialog`，禁止手写 `fixed inset-0` + 遮罩 + 卡片外壳；全屏媒体查看器统一用 `UiViewerShell` + `useUiViewerShell`
+新增规则必须填写门禁与覆盖边界，不能把人工判断写成已自动拦截。
 
-## 用户界面信息准入（硬规则）
-
-> **界面不是运行状态转储，也不是开发文档。** 每一个用户可见的文字、数字、徽标、提示和状态，都必须服务于用户当前的任务。
-
-新增任何可见信息前，必须先回答：它是否帮助用户完成以下至少一件事？
-
-1. **行动**：知道下一步能做什么、该点哪里
-2. **决策**：知道不同选择会怎样影响结果、成本、时间或数据
-3. **理解结果**：知道任务正在进行、已经完成，或产物具有什么用户可感知的属性
-4. **恢复失败**：知道发生了什么，以及如何继续、重试或避免损失
-
-四类均不命中时，**不得展示**。如果删除一条信息不会让用户更难完成任务，就应删除，而不是换个更“友好”的名称继续保留。
-
-以下内容禁止进入正式界面：
-
-- 内部修订号与技术版本：`revision`、schema/协议版本、迁移版本、渲染代次；应用版本只允许出现在“关于/更新”等用户确实需要的位置
-- 内部标识与实现状态：请求/任务/资源 ID、哈希、缓存命中、Worker/GPU/渲染管线、队列、重试代次、调试计数、风险分级
-- 为解释实现而写的常驻说明：架构机制、降级路径、数据流、技术限制原文、开发者缩写和专业术语
-- 没有用户动作、没有决策价值、也不能帮助恢复的只读数字、状态徽标或“看起来专业”的元信息
-- 把模型/schema 的 `description`、代码注释、日志字段或诊断摘要直接映射为界面文案
-
-正确落点：
-
-- 仅供开发与排查的信息进入结构化日志、诊断页、开发模式或测试断言
-- 确实影响用户的限制必须改写为**影响与后果**，例如“导出后将失去透明背景”，不得写成内部原因
-- 帮助文案只解释不明显的操作、约束或后果；能从控件本身理解的内容不额外写说明
-- 涉及费用、数据丢失、权限、安全、长等待或不可逆操作时可以常驻提示；其余说明优先按既有 tooltip 规则呈现
-
-已知反例：图片编辑器曾把单调递增的 `document.revision` 显示成“版本 X”。它只用于撤销、自动保存和淘汰过期渲染，用户既不能选择也不能管理；即使改名为“编辑次数”仍然没有用户价值，正确处理是从正式界面移除。
-
-## 令牌硬约束（ESLint 拦截）
-
-| 类别 | 只允许 | 禁止 |
+| 规则 | 门禁与边界 | CI |
 |---|---|---|
-| 颜色 | 语义令牌类（类名颜色 = 主题 CSS 变量名去掉 `--`）：`bg-gap/window/canvas/panel/raised/control/hover/selected/media`、`text-text1/text2/text3`、`border-line/line-strong`、`text-accent-text`/`text-on-accent`、`bg-danger-solid`/`text-danger-text`/`bg-*-tint`、媒体叠层 `text-on-media`/`bg-media-control`/`border-media-line` | 一切 `*-zinc-*`、`#hex`、`rgba(数字…)`、调色板类、`text-white`/`bg-black` 等黑白类、命名色；旧别名类（`bg-app`/`bg-surface-dark`/`bg-layer`/`bg-bg-dark`、`text-text-dark/muted/soft/faint`、`border-border-dark`、`brand-*`、不带后缀的 `text-danger`）与旧 CSS 变量（`--app-rgb`、`--text-muted-rgb`、`--ui-surface-panel` …）。由 ESLint 与 `check:colors` 拦截，登记只能下调；`bg-overlay`、`bg-selected-accent/50` 这类 Tailwind 不生成样式的颜色类也由 `check:colors` 拦截 |
-| 字号 | 排版令牌 `UI_TEXT_*`（20/16/14/13/12/11）；`text-2xs/13/14/15`、`text-xs/sm/base+`；界面文字最小 11，`text-3xs/4xs` 只用于媒体叠层读数与标尺刻度 | `text-[Npx]` |
-| 圆角 | `rounded-control/field/overlay`（6/8/12，CSS 变量，随「界面圆角」缩放；`rounded-md/lg/xl` 指向同一组变量）、`rounded-2xl/3xl/full/hairline`（画布节点用 `rounded-[var(--node-radius)]`） | 其它 `rounded-[..]` |
-| 阴影 | `shadow-panel`（仅浮层）、`shadow-node-selected/node-error/thumb/thumb-sm/thumb-ring` | `shadow-[..]` |
-| 层级 | `z-base/raised/sticky/dropdown/panel/modal/viewer/toast/popover/tooltip/drag/titlebar`；内联用 `Z_LAYERS`（`src/core/theme/zLayers.ts`） | `z-[..]`、`z-10/20/…` 数字类 |
-| 毛玻璃 | `ui-glass` 类、遮罩 `ui-glass-scrim` | 一切 `backdrop-blur-*` |
-| 动效时长 | `duration-120/180/240/500`（= `UI_DURATION.fast/base/slow/viewer`） | 其它时长、`transition: all` |
-| 控件高度 | `UI_CONTROL_HEIGHT_CLASS.sm/md/lg`（`h-control-sm/md/lg` = 28/32/36，CSS 变量）；字段、选项、标签、触发器、数值框用组件的 `size` 档（旧 42/38 字段令牌已删除） | 手写 `h-[38px]`、调用点改高度 |
+| 原生 button/input/select/textarea、role=button | ESLint JSX；仅 primitives.tsx 与测试替身豁免原生控件，颜色等其他规则仍生效 | 必跑 lint |
+| 颜色、旧别名、未定义颜色类 | check:colors；ESLint 拦其中的字面量与灰色板 | 必跑 |
+| 手写表面/弹窗/玻璃、调用点外观 | check:surface A–E；默认严格，--report 仅诊断 | 必跑严格 |
+| 分段、面板行、记录、列宽、动作组、状态反馈、主动作预算 | check:surface S1–S5/S7–S9；S8 部分仅告警；动态结构交 DOM | 必跑严格 |
+| 图标与同行静态 size | check:icons A–D/S6 | 必跑严格 |
+| 任意值、私有样式、过期登记与旧文案 | check:ui-residue | 必跑 |
+| 间距/时长/缓动/布局动效/死令牌 | check:ui-design；transition-all 另由 ESLint 拦字面量与模板 | 必跑；不宣称 build 已接入 design |
+| skill 同步、目录、源码符号、令牌表 | check:skill-sync 聚合 check:ui-catalog、check:skill-symbols、gen:token-docs --check | 必跑 |
+| 巡检遗留有去向、关闭项有真实 guard | check:ui-findings 与 Node 回归测试 | 随 skill-sync / Node 必跑 |
+| DOM 结构、选中差异、真实对比度 | ui:tour --audit 或 check:ui-visual 共用循环；图形单独由场景像素断言 | jsdom/纯函数测试必跑；真实 Electron ui-rule-audit 仅手动试运行 |
+| Windows 像素基线 | check:ui-gallery-diff；固定本机环境 | 不进 CI |
+| 信息准入、材质使用语义、转换确认、截图目视 | skill/review 人工核对；已有场景只证明被覆盖状态 | 不宣称自动覆盖 |
 
-补充：
+## 详细规则唯一入口
 
-- 颜色三层：种子（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的语义令牌（`src/core/theme/themeEngine.ts` → `themeCssVars.ts` → `runtimeTheme.ts` 写到根节点）→ 组件内部令牌。界面只引用语义令牌；文字三档按对比度 ≥ 4.5:1 求解，实底上的字按对比度自动黑白（`text-on-accent` 等，不写死白字）
-- 非 DOM 渲染面（Canvas、WebGL/WebGPU、波形）用 `useThemeTokens()` 取令牌；内容色（标注、导出、端口类型色等）登记在 `src/core/theme/colorTokens.ts`，需要随模式变化时用 `light-dark()` 派生
-- 字体：拉丁与数字 Geist、等宽 Geist Mono（`@fontsource-variable`，随包离线），中文回落系统字体；正文基准 13px 设在 body
-- 压在图片/视频/深色画布上的固定颜色只用 `media-*`/`on-media` 令牌（不随主题）；旧 `veil` 白纱令牌已在任务 4.3 删除
-- 排版层级先用 `styleTokens.ts` 的 `UI_TEXT_TITLE/SECTION/BODY/LABEL/META_CLASS` 建立，再考虑容器装饰
-- 通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
+- 容器、按钮、选中态、信息准入与组件枚举：[skill 主文件](../../.codex/skills/henji-ui-surface/SKILL.md)。分段例外由重设计记录 017 / 缺陷修复记录 014 定稿，其他单选遵循同一词汇表。
+- 令牌值域与硬约束：[typography-and-tokens.md](../../.codex/skills/henji-ui-surface/references/typography-and-tokens.md)。生成块读取真实 Tailwind 配置，手写部分只解释语义；`npm run gen:token-docs` 同步两侧。
+- 动效：[motion.md](../../.codex/skills/henji-ui-surface/references/motion.md)；图标：[icons.md](../../.codex/skills/henji-ui-surface/references/icons.md)；核对与遗留闭环：[review.md](../../.codex/skills/henji-ui-surface/references/review.md)。
+- 验收先按 [testing.md](testing.md) 判级；只在精确测试不能证明公共布局、滚动、溢出或跨主题风险时升级真实截图，同一矩阵只跑一次 --audit。
 
-## 同一工具栏的尺寸一致性
+## 令牌速查入口
 
-行控件共用 `UiControlSize`：sm 28、md 32、lg 36；`UiIconButton` 扩展 2xs 20、xs 24、xl 40，默认 md。读数复用 `UiReadout`，不另画固定高度芯片。静态直接兄弟由 `check:icons:strict` S6 检查，动态/嵌套由 rowHeightMismatch 比较实际外框高度与中心线（1px 容差）。2xs 图标按钮按20px紧凑例外检查，xs24不豁免。
-
-- 同一行、同一层级的按钮、图标按钮、分段选择器和读数芯片，使用同一个外框高度；宽度可随内容变化。优先复用该工具栏已有的高度令牌或唯一尺寸常量，不由各控件的默认 padding 推算。
-- 分段选择器比较的是**包括边框和内边距的整个外壳**。选中项在壳内填满可用高度，不得以“内部按钮等高”为由让外壳比旁边的控件更高。
-- 静息、选中、悬浮和加载状态不改变外框尺寸。确有主次尺寸差异时须有明确操作层级依据。
-- 混用不同控件或带外壳的控件时，界面验收应比较实际外框高度与中心线；只确认它们在同一行不算尺寸一致。
-
-## 毛玻璃是材质不是 blur 值
-
-`ui-glass`（定义在 `src/index.css`）含 blur + saturate + 受光边 + 噪点四层；只写 blur 会得到"模糊+降不透明度"的廉价观感。只用于压在图片/视频/画布上的浮层（`ui-glass`、`UiPanel variant="glass"`、`Dropdown`/`PanelTrigger` 的 `surface="glass"`），压在纯色 UI 上一律用不透明底色（浮层默认 `surface="solid"`）。质感调整只改 `--ui-glass-*` 组件层变量（静态写在 index.css、引用语义令牌，运行时不写）。「设置→界面→毛玻璃效果」关掉时整套材质退化成不透明底色。
-
-## 动效
-
-缓动已由 `tailwind.config.js` 的 `transitionTimingFunction.DEFAULT` 全局设为 ease-out，不用每处写；唯一登记的例外是 `UI_EASE_STACK`。内联 `style={{ transition }}` 走 `uiTransition()`。用 `setTimeout` 卸载动画组件时，那个 ms 必须与 className 里的 `duration-*` 同档，否则过渡收尾被硬切。过渡布局属性前先确认无法用 transform 替代。
-
-## 图标是视觉令牌
-
-- 图标尺寸使用 `UI_ICON_SIZE` / `UI_ICON_SIZE_CLASS` 七档 12/14/16/20/24/32/40；按钮子图标尺寸由按钮决定，禁止调用点覆盖。普通描边默认 2，窗口控件的 1.5/8px 例外在 `core/theme/icons.ts` 登记。`check:icons:strict` D 直接报错。
-- 分段选中使用 `bg-segment-selected text-text1` 的中性抬起底；其余单选继续淡强调底。不得为增强纸白辨识度把分段改成强调底。
-
-- 业务组件禁止手写 inline `<svg>`，图标一律走 `lucide-react`
-- 跨界面复用的业务概念图标（资产库、工作区、工具、媒体类型）必须引用 `src/core/theme/icons.ts` 的登记常量
-- 通用动作图标（`X`/`Plus`/`Check`/`Trash2`）直接从 lucide 引入即可
-- 禁止建"本目录自己的图标模块"
-- 波形、缓动曲线、连线预览这类**路径由数据算出**的 `<svg>` 不是图标，在 `scripts/check-icon-tokens.cjs` 豁免名单里
+| 类别 | 写法 / 唯一来源 |
+|---|---|
+| 颜色 | 语义类；Tailwind 类名映射主题变量；媒体用 media/on-media |
+| 字号 | UI_TEXT_*_CLASS；正文 13；详细值域由生成表列出 |
+| 圆角 | control/field/overlay；嵌套内层不得大于外层 |
+| 阴影 / 层级 | 具名 shadow；语义 z 类或 Z_LAYERS |
+| 间距 | 2/4/6/8/12/16/20/24/32；UI_INLINE_GAP_CLASS / UI_STACK_CLASS |
+| 控件高 | UiControlSize sm28/md32/lg36；图标按钮附属 2xs20/xs24/xl40 |
+| 动效 | UI_DURATION 与 UI_LOOP_MS；内联过渡用 uiTransition |
 
 ## 已知静默失效坑
 
 这些不会报错、不会被类型系统发现，只会"看起来没生效"：
 
-1. **透明度修饰符只能用 Tailwind 刻度值（步进 5）**：`bg-black/72`、`border-white/42` 这类非刻度值**不生成任何 CSS**。需要精确值用 `bg-black/[0.72]` 或登记具名色。
+1. **透明度修饰符只能用 Tailwind 刻度值（步进 5）**：`bg-black/72`、`border-white/42` 这类非刻度值**不生成任何 CSS**。需要精确比例时在令牌定义处登记，业务不可写黑白或任意颜色。
 2. **同属性叠类胜负看 Tailwind 产物顺序**，不是 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。
 3. **不要写 `dark:` 变体**：深浅色由主题引擎改变量完成，`darkMode: 'class'` 只为让误写的 `dark:` 永不生效。
 4. **全局主题变量只能放 `src/index.css`**：放在 `storyboard.css` 这类被工作区懒加载的样式表里，会导致设置项在用户打开对应工作区之前完全不生效。
@@ -115,15 +57,3 @@
 主题色的推导规则只改 `src/core/theme/themeEngine.ts`（改后同步 `index.css` 的 `theme-tokens` 静态默认值，`themeStaticDefaults.test.ts` 会校验）；Tailwind 映射改 `tailwind.config.js`；组件皮肤改 `src/index.css` 与 `src/components/ui/styleTokens.ts`；内容色登记 `src/core/theme/colorTokens.ts`。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)` 或 `var(--token)`。图像处理/画布像素算法可例外，但优先复用 token。
 
 `Z_LAYERS` 与 `tailwind.config.js` 互为镜像，需同步修改。
-
-## 界面改动后的检查
-
-见 [docs/rules/testing.md](../../docs/rules/testing.md) 的「界面改动」一节。改公共组件、主题引擎推导规则或令牌后，默认验收是 `src/core/theme` 的测试（含主题组合属性测试）+ 组件样张页四预设截图与 `check:ui-visual`（testing.md「界面改动」、skill `henji-ui-surface` 的 `references/review.md` 第 8 节）；改动涉及具体页面骨架时再按四个预设复跑相关场景的 `npm run check:ui-visual -- --theme-preset all --only <场景>`（对比度按渲染后像素审计，例外登记见 testing.md）。
-
-## 界面语法自动门禁（5.2）
-
-check:surface:strict 内的 S1 检查分段组合；S2 检查面板无标签控件；S3 检查内联标签挤行；S4 阻断无分隔记录（推荐 UiRecordItem，保留 border-t/b、divide-y 与 UI_DIVIDER_CLASS 识别）；S5 检查同一面板组列宽；S7 禁止 UiActionGroup 子按钮覆盖 variant/size；S8 阻断手写状态动画和按钮 title，非纯忙碌禁用无原因告警；S9 检查同一表面可共存主动作。S6 位于 check:icons:strict。完整边界与正反样例见 skill references/review.md 第7节。
-
-同组内容动作复用 UiActionGroup tier=secondary|quiet、size=sm|md|lg。弹窗、工具条与工作区开发态主动作预算为1，超额告警而不改业务逻辑。实际 DOM 还检查 multiplePrimary、rowHeightMismatch、actionStartsAtLabelColumn 和 formControlMisaligned；隐藏分支和独立嵌套表面分开计数。
-
-check:ui-design 接入日常局部验证与 CI，检查九档间距、CSS/内联布局动效、可确定的手写退出模式和 unusedToken。控件内部 padding/gap、Modal正文留白/滚动和 PromptEditor 内层高度不能用 className 覆盖；容器和选项内容的布局按组件职责判定。例外精确到文件/值/原因，存量登记只降不升。

@@ -74,8 +74,9 @@ test('结构边界：map、别名、工具栏与 JSX 注释', () => {
   assert.equal(findUiSurfaceGrammar('<UiToolbar><UiGroup><Dropdown /></UiGroup></UiToolbar>').length, 0)
   assert.equal(findUiSurfaceGrammar('<UiFieldLayoutContext.Provider value="toolbar"><UiGroup><Dropdown /></UiGroup></UiFieldLayoutContext.Provider>').length, 0)
   assert.equal(findUiSurfaceGrammar('<UiGroup>{/* ui-surface-allow: S2 已由宿主提供标签 */}\n<Dropdown /></UiGroup>').length, 0)
-  assert.equal(findUiSurfaceGrammar('<div><UiOptionButton variant="segment"/><span>分开</span><UiOptionButton variant="segment"/></div>').length, 0)
-  assert.equal(findUiSurfaceGrammar('<div>{flag ? <UiOptionButton variant="segment"/> : <UiOptionButton variant="segment"/>}</div>').length, 0)
+  // 独立 segment 已删除；隔开或互斥也必须迁到唯一 UiSegmented，不再放行。
+  assert.equal(findUiSurfaceGrammar('<div><UiOptionButton variant="segment"/><span>分开</span><UiOptionButton variant="segment"/></div>').length, 1)
+  assert.equal(findUiSurfaceGrammar('<div>{flag ? <UiOptionButton variant="segment"/> : <UiOptionButton variant="segment"/>}</div>').length, 1)
   assert.equal(findUiSurfaceGrammar('<UiGroup title="// ui-surface-allow: S2 不是注释"><Dropdown /></UiGroup>').length, 1)
   assert.equal(findUiSurfaceGrammar('<UiGroup className={`flex ${value}`} >{/* ui-surface-allow: S2 已由宿主提供标签 */}\n<Dropdown /></UiGroup>').length, 0)
   assert.equal(findUiSurfaceGrammar('<UiGroup>// ui-surface-allow: S2 只是文本\n<Dropdown /></UiGroup>').length, 1)

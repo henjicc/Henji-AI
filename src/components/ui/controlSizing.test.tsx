@@ -2,18 +2,18 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Plus } from 'lucide-react'
-import { UiButton, UiIconButton, UiInput, UiSelect, UiFieldTrigger, UiChipButton, UiNavButton, UiSwitch, UiReadout, UiOptionButton, UiNumberStepper } from './primitives'
+import { UiButton, UiIconButton, UiInput, UiSelect, UiFieldTrigger, UiChipButton, UiNavButton, UiSwitch, UiReadout, UiNumberStepper } from './primitives'
 import { UiSegmented } from './UiSegmented'
 import type { UiControlSize } from './primitiveInternals'
 
 afterEach(cleanup)
 
 describe('共享控件同名档同高', () => {
-  it('独立分段也遵循中性选中与显式尺寸', () => {
-    const view = render(<UiOptionButton variant="segment" size="lg" active>选中</UiOptionButton>)
-    const button = view.getByRole('button')
+  it('统一分段遵循中性选中与显式外壳尺寸', () => {
+    const view = render(<UiSegmented ariaLabel="分段" size="lg" options={[{ value: "a", label: "选中" }]} value="a" onChange={() => undefined} />)
+    const button = view.getByRole('radio')
     expect(button.classList.contains('bg-segment-selected')).toBe(true)
-    expect(button.classList.contains('h-control-lg')).toBe(true)
+    expect(view.getByRole('radiogroup').classList.contains('h-control-lg')).toBe(true)
   })
   it.each(['sm', 'md', 'lg'] as UiControlSize[])('%s 包含分段外壳，与按钮和字段等高', size => {
     const view = render(<>
