@@ -19,6 +19,15 @@ function transportFor(fetchMock: typeof fetch) {
 describe('upload providers', () => {
   afterEach(() => vi.useRealTimers())
 
+  it.each([['KIE', uploadToKie], ['APIMart', uploadToApiMart]] as const)('%s 上传函数保留 HTML 503 状态且不重传', async (_name, upload) => {
+    // synthetic-negative：网关 HTML。
+    const fetchMock = vi.fn().mockResolvedValue(new Response('<html>upload gateway unavailable</html>', { status: 503 }))
+    await expect(upload('fixture-key', { bytes: new Uint8Array([1]), mimeType: 'image/png', filename: 'a.png' }, transportFor(fetchMock))).rejects.toMatchObject({
+      code: 'upload_failed', details: { status: 503 }, message: expect.stringContaining('HTTP 503'),
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it.each([['KIE', uploadToKie], ['APIMart', uploadToApiMart]] as const)('%s 预先取消时不启动上传', async (_name, upload) => {
     const controller = new AbortController()
     controller.abort()
