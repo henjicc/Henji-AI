@@ -14,5 +14,7 @@ export interface OperationReviewItem {
   message: string
   targets: Array<{ kind: string; id: string }>
   preferred?: 'completed' | 'not_executed'
+  /** 原回执已确认执行，只允许核对解除保护或稍后处理。 */
+  executed?: boolean
 }
 export interface OperationReviewSnapshot { items: OperationReviewItem[]; open?: { operationId: string; callerId: string } }

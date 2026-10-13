@@ -86,6 +86,9 @@ export class ApplicationOperationStore {
       result: { ok: false, error: { code: 'PREPARATION_INTERRUPTED', message: '应用在提交前退出；本操作没有派发。', details: { execution: { notExecuted: true } } } } })
     const rows = this.db.prepare("SELECT record_json FROM application_invocations WHERE state = 'executing'").all() as Array<{ record_json: string }>
     for (const row of rows) this.save({ ...JSON.parse(row.record_json) as OperationRecord, state: 'unknown' })
+    // 新宿主代次不会接受旧基线；分批删除以限制媒体回收触发器每批处理量。
+    const prune = this.db.prepare('DELETE FROM application_observations WHERE rowid IN (SELECT rowid FROM application_observations LIMIT 256)')
+    while (prune.run().changes > 0) { /* 只清理可重建的读取基线，不删除操作事实。 */ }
   }
   get(operationId: string, callerId: string): OperationRecord | undefined {
     const row = this.db.prepare('SELECT caller_id, record_json FROM application_invocations WHERE operation_id = ? AND caller_id = ?').get(operationId, callerId) as { caller_id: string; record_json: string } | undefined
@@ -142,6 +145,7 @@ export class ApplicationOperationStore {
   baseline(callerId: string, refs: ReadBaseline['refs'], revisions: Record<string, number>, rendererEpoch: string): ReadBaseline {
     const baseline = { id: randomUUID(), callerId, refs, revisions, rendererEpoch, capturedAt: Date.now() }
     this.db.prepare('INSERT INTO application_observations(baseline_id,caller_id,record_json,created_at) VALUES(?,?,?,?)').run(baseline.id, callerId, JSON.stringify(baseline), baseline.capturedAt)
+    this.db.prepare('DELETE FROM application_observations WHERE rowid IN (SELECT rowid FROM application_observations ORDER BY rowid DESC LIMIT -1 OFFSET 1024)').run()
     return baseline
   }
   readBaseline(id: string, callerId: string): ReadBaseline {

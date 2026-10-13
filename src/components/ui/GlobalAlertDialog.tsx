@@ -7,6 +7,7 @@ import { createLogger } from '@/core/logging'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import { useUiStore } from '@/stores/uiStore'
 import type { AlertDialogRequest } from '@/stores/alertDialogStore'
+import type { OperationReviewItem } from '@/core/application-control/operationReview'
 
 const logger = createLogger('components.ui.globalAlertDialog')
 
@@ -23,6 +24,7 @@ interface GlobalAlertDialogProps {
 export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssistant }) => {
   const { t } = useI18n('common')
   const current = useAlertDialogStore((state) => state.queue[0] ?? null)
+  const review: Partial<OperationReviewItem> | undefined = current?.review
   const dialogKey = useMemo(() => current ? crypto.randomUUID() : undefined, [current])
   const dismissCurrent = useAlertDialogStore((state) => state.dismissCurrent)
   const confirmCurrent = useAlertDialogStore((state) => state.confirmCurrent)
@@ -50,7 +52,9 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     }
     const result: AlertDialogAction[] = []
 
-    if (current.review) return ([['not_executed', t('operationReview.notExecuted')], ['completed', t('operationReview.completed')]] as const).map(([decision, label]) => ({
+    if (current.review) return (review?.executed
+      ? [['completed', t('operationReview.acknowledge')]] as const
+      : [['not_executed', t('operationReview.notExecuted')], ['completed', t('operationReview.completed')]] as const).map(([decision, label]) => ({
       label, variant: current.review?.preferred === decision ? 'primary' : 'quiet', onClick: () => {
         if (useAlertDialogStore.getState().queue[0] === current) current.review?.resolve(decision)
       },
@@ -102,7 +106,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     }
 
     return result
-  }, [copied, current, confirmCurrent, handleClose, handleCopyDetail, onAskAssistant, openSettings, t])
+  }, [copied, current, review, confirmCurrent, handleClose, handleCopyDetail, onAskAssistant, openSettings, t])
 
   if (!current) {
     return null
@@ -112,7 +116,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     <AlertDialog
       key={dialogKey}
       isOpen
-      title={current.review ? t('operationReview.title') : current.title}
+      title={current.review ? t(review?.executed ? 'operationReview.executedTitle' : 'operationReview.title') : current.title}
       message={current.paidDetails ? `${current.message}\n\n${formatPaidApprovalMessage(current.paidDetails)}` : current.message}
       type={current.type ?? 'error'}
       actions={actions}

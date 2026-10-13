@@ -35,6 +35,48 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it.each(['mutate_properties', 'create_items'])('%s 的验证失败人工核对后释放写锁，重启不丢已执行事实', async kind => {
+    const f = fixture(), show = vi.fn()
+    const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['asset', 'canvas.node', 'canvas.document']), show)
+    const target = kind === 'mutate_properties' ? { kind: 'asset', id: 'asset' } : { kind: 'canvas.document', id: 'canvas' }
+    const changes = kind === 'mutate_properties'
+      ? [{ kind, entityType: 'asset', target, mutations: [{ propertyId: 'asset.library_refs', operation: 'append', value: [{ kind: 'asset.library', id: 'library' }] }] }]
+      : [{ kind, entityType: 'canvas.node', parent: target, items: [{ type: 'text', text: '新文字' }] }]
+    const original = coordinator.prepare(f.callerId, { operationId: randomUUID(), changes }, f.rendererEpoch, access)
+    const requestId = randomUUID()
+    coordinator.dispatched(original, requestId, f.rendererEpoch)
+    const result = { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', effects: [{ kind: 'entity_updated', target }], partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } }
+    coordinator.complete({ requestId, rendererEpoch: f.rendererEpoch, result })
+    expect(f.store.get(original.operationId, f.callerId)?.state).toBe('partial')
+    const next = { operationId: randomUUID(), changes: [{ kind: 'set_properties', entityType: target.kind, target, properties: { name: '下次修改' } }] }
+    expect(() => coordinator.prepare(f.callerId, next, f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+    expect(coordinator.pendingReviews()).toEqual([expect.objectContaining({ operationId: original.operationId, executed: true })])
+    const verify = vi.fn()
+    await coordinator.reconcileVerification(f.store.get(original.operationId, f.callerId)!, verify)
+    expect(verify).not.toHaveBeenCalled()
+    await coordinator.review(f.store.get(original.operationId, f.callerId)!, f.rendererEpoch, async () => ({ ok: true, data: { name: '原文档' } }), () => {})
+    f.store.recoverInterrupted()
+    expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'awaiting_user_confirmation', result })
+    expect(() => coordinator.resolveReview(original.operationId, f.callerId, 'not_executed')).toThrow('RECOVERY_ALREADY_EXECUTED')
+    coordinator.resolveReview(original.operationId, f.callerId, 'later')
+    expect(() => coordinator.prepare(f.callerId, next, f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+    coordinator.resolveReview(original.operationId, f.callerId, 'completed')
+    expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: 'completed', verificationState: 'verified', result })
+    expect(coordinator.prepare(f.callerId, next, f.rendererEpoch, access)).toMatchObject({ state: 'prepared' })
+  })
+  it('读取基线全表限量，当前基线可读，重启清理全部旧代次', () => {
+    const f = fixture()
+    const old = f.baseline
+    let newest = old
+    for (let i = 0; i < 1025; i++) newest = f.store.baseline(f.callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: i }, f.rendererEpoch).id
+    expect(f.db.prepare('SELECT count(*) AS count FROM application_observations').get()).toEqual({ count: 1024 })
+    expect(() => f.store.readBaseline(old, f.callerId)).toThrow('BASELINE_REQUIRED')
+    expect(f.store.readBaseline(newest, f.callerId).revisions).toEqual({ settings: 1024 })
+    f.store.recoverInterrupted()
+    expect(f.db.prepare('SELECT count(*) AS count FROM application_observations').get()).toEqual({ count: 0 })
+    const current = f.store.baseline(f.callerId, [], {}, randomUUID())
+    expect(f.store.readBaseline(current.id, f.callerId)).toEqual(current)
+  })
   it('open_document 加载前被拒，统一写回执落原生账本为 not_executed / verified', async () => {
     const f = fixture()
     const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), documentId: 'rejected-document' }, f.rendererEpoch, access, 'open_document')
@@ -140,7 +182,8 @@ describe('应用原生操作记录与恢复', () => {
   it('原领域读回证明自动结案；条件不符不猜未执行，结案后不请求人工核对', async () => {
     const f = fixture(), show = vi.fn()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), show)
-    const original = coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)
+    const baseline = f.store.baseline(f.callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, f.rendererEpoch).id
+    const original = coordinator.prepare(f.callerId, input(baseline), f.rendererEpoch, access)
     const record = { ...original, state: 'unknown' as const, rendererEpoch: f.rendererEpoch,
       recoveryVerification: { conditions: [{ kind: 'entity_exists' as const, target: { kind: 'settings.registry', id: 'singleton' } }],
         evidence: [{ kind: 'entity_state' as const, fact: '原执行器记录的事实', capturedAt: new Date().toISOString() }] } }
@@ -174,7 +217,8 @@ describe('应用原生操作记录与恢复', () => {
     const show = vi.fn()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['settings.registry']), show)
     for (const decision of ['later', 'completed', 'not_executed'] as const) {
-      const original = { ...coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access), rendererEpoch: f.rendererEpoch, state: 'unknown' as const }
+      const baseline = f.store.baseline(f.callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, f.rendererEpoch).id
+      const original = { ...coordinator.prepare(f.callerId, input(baseline), f.rendererEpoch, access), rendererEpoch: f.rendererEpoch, state: 'unknown' as const }
       f.store.save(original)
       await coordinator.review(original, randomUUID(), async () => ({ ok: false }), () => undefined)
       expect(show).toHaveBeenLastCalledWith(expect.objectContaining({ title: '这次修改生效了吗？', message: expect.stringContaining('没能读取目标的当前情况。') }))
@@ -184,7 +228,8 @@ describe('应用原生操作记录与恢复', () => {
         f.store.recoverInterrupted()
         expect(coordinator.pendingReviews()).toHaveLength(1)
         expect(coordinator.result(f.store.get(original.operationId, f.callerId)!)).toMatchObject({ executionState: 'awaiting_user_confirmation', confirmation: { continuation: expect.stringContaining('用户已收到提示，可在应用中处理') } })
-        expect(() => coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
+        const refreshed = f.store.baseline(f.callerId, [{ kind: 'settings.registry', id: 'singleton' }], { settings: 1 }, f.rendererEpoch).id
+        expect(() => coordinator.prepare(f.callerId, input(refreshed), f.rendererEpoch, access)).toThrow('RECOVERY_REQUIRED')
         coordinator.resolveReview(original.operationId, f.callerId, 'not_executed')
       } else expect(f.store.get(original.operationId, f.callerId)).toMatchObject({ state: decision, verificationState: 'verified' })
     }

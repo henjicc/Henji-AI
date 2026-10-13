@@ -98,6 +98,8 @@
     "explanationContent": "将发送讲解文字和 {{count}} 张画面给 {{modelName}}。"
   },
   "operationReview": {
+    "executedTitle": "请核对已执行的修改",
+    "acknowledge": "已核对，继续编辑",
     "title": "这次修改生效了吗？",
     "notExecuted": "没有生效，可以重新做",
     "completed": "已经生效",

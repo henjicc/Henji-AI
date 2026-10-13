@@ -36,7 +36,15 @@ export class ApplicationExecutionPlanStore {
   getIdempotent(key: string, operationRef: string): ApplicationTransactionResult | undefined {
     const stored = this.idempotencyResults.get(key)
     if (!stored) return undefined
-    if (stored.operationRef !== operationRef) throw new Error('IDEMPOTENCY_KEY_REUSED')
+    if (stored.operationRef !== operationRef) {
+      const result = stored.result
+      if (result.status === 'failed' && !result.persistence && result.partial
+        && result.partial.completedStepIndexes.length === 0
+        && result.partial.compensatedStepIndexes.length === 0
+        && result.partial.uncompensatedStepIndexes.length === 0
+        && !result.effects?.length && !result.undoRef) return undefined
+      throw new Error('IDEMPOTENCY_KEY_REUSED')
+    }
     return stored.result
   }
 

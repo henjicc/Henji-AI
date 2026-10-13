@@ -1,6 +1,7 @@
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import type { OperationReviewItem } from '../../../../src/core/application-control/operationReview'
 import type { OperationRecord } from './operationStore'
+import { isExecutedVerificationFailure } from './operationVerificationRecovery'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 export function reviewPresentation(record: OperationRecord, observations: Record<string, unknown>[] = []): OperationReviewItem {
@@ -20,8 +21,9 @@ export function reviewPresentation(record: OperationRecord, observations: Record
   const reason = error.code === 'DEADLINE_EXCEEDED' ? '执行超时' : error.code === 'CONNECTION_INTERRUPTED' ? '连接中断' : '应用重新加载'
   // 状态摘要只使用已读回的人可感知字段，不把属性表、ID 或 revision 展示给用户。
   const situation = typeof summary?.situation === 'string' ? summary.situation : snapshots.length ? '已读取目标的当前内容，请查看原文档核对。' : '没能读取目标的当前情况。'
-  return { operationId: record.operationId, callerId: record.callerId, title: '这次修改生效了吗？',
-    message: `${actor}${time ? ` 在 ${time}` : ''} 请求「${description}」，\n执行到一半时${reason}，没能确认结果。\n\n现在的情况：${situation}`,
+  const executed = isExecutedVerificationFailure(record)
+  return { operationId: record.operationId, callerId: record.callerId, executed, title: executed ? '请核对已执行的修改' : '这次修改生效了吗？',
+    message: `${actor}${time ? ` 在 ${time}` : ''} 请求「${description}」，\n${executed ? '修改已执行，但没能自动核实结果。请查看原文档，确认后可继续编辑；这不会重复执行修改。' : `执行到一半时${reason}，没能确认结果。`}\n\n现在的情况：${situation}`,
     targets: record.targetRefs ?? [],
   }
 }
