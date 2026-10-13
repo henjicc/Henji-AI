@@ -6,6 +6,7 @@ import { THEME_COLOR_TOKEN_NAMES } from '@/core/theme/themeEngine'
 import { themeTokenCssVar } from '@/core/theme/themeCssVars'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { UI_DURATION, UI_DURATION_CLASS } from './motion'
+import { resolveIconButtonClass } from './primitiveInternals'
 import {
   UI_CONTROL_HEIGHT_CLASS,
   UI_RADIUS_CLASS,
@@ -91,6 +92,22 @@ describe('设计令牌：Tailwind ↔ CSS 变量', () => {
 })
 
 describe('设计令牌：尺寸、圆角、动效、层级', () => {
+  it.each(['md', 'lg'] as const)('图标按钮 %s 的宽高引用相同控件变量，调整高度不会变成长方形', (size) => {
+    const tokens = resolveIconButtonClass({ size, tone: 'default', shape: 'square', on: false }).split(/\s+/)
+    const height = tokens.find((token) => token.startsWith('h-control-'))
+    expect(height).toBeDefined()
+    const variable = `--size-${height!.slice(2)}`
+    expect(rootVars.has(variable)).toBe(true)
+    expect(tokens).toContain(`w-[var(${variable})]`)
+    expect(tokens.some((token) => /^w-\d/.test(token))).toBe(false)
+  })
+
+  it('最小图标按钮也随界面圆角预设变化', () => {
+    const tokens = resolveIconButtonClass({ size: 'xs', tone: 'default', shape: 'square', on: false }).split(/\s+/)
+    expect(tokens).toContain(UI_RADIUS_CLASS.control)
+    expect(tokens).not.toContain('rounded')
+  })
+
   it('控件高度 28/32/36 与圆角 6/8/12 是 CSS 变量，Tailwind 类指向它们', () => {
     expect(rootVars.get('--size-control-sm')).toBe('28px')
     expect(rootVars.get('--size-control-md')).toBe('32px')

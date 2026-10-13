@@ -289,10 +289,10 @@ export function resolveButtonSize(size: ButtonSize, variant: ButtonVariant = 'qu
 }
 
 const UI_ICON_BUTTON_SIZE_CLASS: Record<IconButtonSize, { box: string; radius: string }> = {
-  xs: { box: 'h-5 w-5', radius: 'rounded' },
+  xs: { box: 'h-5 w-5', radius: UI_RADIUS_CLASS.control },
   sm: { box: 'h-6 w-6', radius: UI_RADIUS_CLASS.control },
-  md: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} w-7`, radius: UI_RADIUS_CLASS.control },
-  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.md} w-8`, radius: UI_RADIUS_CLASS.field },
+  md: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} w-[var(--size-control-sm)]`, radius: UI_RADIUS_CLASS.control },
+  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.md} w-[var(--size-control-md)]`, radius: UI_RADIUS_CLASS.field },
   xl: { box: 'h-10 w-10', radius: UI_RADIUS_CLASS.field },
 }
 

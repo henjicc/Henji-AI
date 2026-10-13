@@ -86,7 +86,7 @@ describe('UiIconButton 默认静默、on 与 tone', () => {
     const button = view.getByRole('button', { name: '撤销' });
     expect(button.classList.contains('ui-btn-quiet')).toBe(true);
     expect(button.classList.contains('h-control-sm')).toBe(true);
-    expect(button.classList.contains('w-7')).toBe(true);
+    expect(button.classList.contains('w-[var(--size-control-sm)]')).toBe(true);
     expect(button.dataset.tone).toBe('default');
     expect(button.hasAttribute('aria-pressed')).toBe(false);
   });
