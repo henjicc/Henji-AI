@@ -12,8 +12,9 @@ const HISTORY_ID = '__ui_video_viewer_trim'
 /**
  * 生成记录里“输入视频”带裁剪选区时，视频查看器进度条上要画出选区高亮（界面重设计 4.2）。
  * 修复前背景写成 `rgba(var(--text-rgb),0.25)`（变量是空格分隔三元组，整条声明无效），高亮从未显示。
- * 5.9 起选区改用主题令牌（`bg-text1/30`，跟随预设明暗），判据改为按正式截屏像素判定“选区与轨道一眼可分”：
- * 选区中部与选区外轨道的亮度对比度 ≥ SELECTION_MIN_CONTRAST，石墨与纸白都要成立（`--theme-preset graphite,paper`）。
+ * K09 将范围填充提高为 `bg-text1/65`，并用 `border-text1` 实色起止边界保证进度叠加后仍可辨。
+ * 查看器只显示已保存的范围，没有可拖裁剪手柄；悬停圆点是播放头，不是裁剪手柄。
+ * 未播放轨道上的填充与两端边界分别要求 ≥ SELECTION_MIN_CONTRAST，四预设都要成立（`--theme-preset all`）。
  */
 const SELECTION_MIN_CONTRAST = CONTRAST_GRAPHIC_MIN
 
@@ -93,8 +94,7 @@ function createGenerationVideoViewerTrimScene({ openWorkspace, settlePage }) {
       await inputVideo.click()
       const progress = page.locator('[data-video-progress]')
       await progress.waitFor({ state: 'visible', timeout: 8000 })
-      // 选区元素还没有专用 data-* 钩子（已登记交 5.9 补 data-video-trim-range），暂按其唯一的绝对定位层定位
-      const highlight = progress.locator('.pointer-events-none.absolute.inset-y-0')
+      const highlight = progress.locator('[data-video-trim-range]')
       await highlight.waitFor({ state: 'attached', timeout: 5000 })
       const track = highlight.locator('xpath=..')
       const [bar, box] = await Promise.all([track.boundingBox(), highlight.boundingBox()])
@@ -112,6 +112,29 @@ function createGenerationVideoViewerTrimScene({ openWorkspace, settlePage }) {
       console.log(`  裁剪选区对比度 ${ratio.toFixed(2)}：选区 rgb(${inside})，轨道 rgb(${outside})`)
       assert.ok(ratio >= SELECTION_MIN_CONTRAST,
         `裁剪选区与轨道不可分：对比度 ${ratio.toFixed(2)}（需 ≥ ${SELECTION_MIN_CONTRAST}），选区 rgb(${inside})，轨道 rgb(${outside})`)
+      // 起止边界是 2 DIP 实色描边，取描边与轨道各自中段避免圆角和混色，不能借用填充的读数。
+      const checkBoundaries = (pixels, state) => {
+        for (const [name, from, to, adjacentFrom, adjacentTo] of [
+          ['起点', start + 0.75 / bar.width, start + 1.25 / bar.width, start * 0.3, start * 0.7],
+          ['终点', end - 1.25 / bar.width, end - 0.75 / bar.width, end + (1 - end) * 0.3, end + (1 - end) * 0.7],
+        ]) {
+          const boundary = averageColor(pixels, from, to)
+          const adjacent = averageColor(pixels, adjacentFrom, adjacentTo)
+          const boundaryRatio = contrastRatio(boundary, adjacent)
+          console.log(`  ${state}裁剪${name}边界对比度 ${boundaryRatio.toFixed(2)}：边界 rgb(${boundary})，邻接轨道 rgb(${adjacent})`)
+          assert.ok(boundaryRatio >= SELECTION_MIN_CONTRAST,
+            `${state}裁剪${name}边界对比度 ${boundaryRatio.toFixed(2)}（需 ≥ ${SELECTION_MIN_CONTRAST}）`)
+        }
+      }
+      checkBoundaries(image, '未播放')
+      // 移到范围中部：左边界邻接已播放强调色，右边界仍邻接未播放轨道。
+      await page.evaluate(() => document.querySelectorAll('video').forEach((video) => { video.currentTime = 1 }))
+      await settlePage(page, 300)
+      const playedPercent = await track.locator(':scope > div').first().evaluate((element) => parseFloat(element.style.width))
+      assert.ok(Math.abs(playedPercent - 50) < 1, `边界复验前播放进度须进入范围中部：${playedPercent}%`)
+      const playedImage = await sharp(await captureInspectionPage(app, page, { clip: bar })).removeAlpha().raw()
+        .toBuffer({ resolveWithObject: true })
+      checkBoundaries(playedImage, '进度叠加后')
       await progress.hover()
       await settlePage(page, 400)
     },

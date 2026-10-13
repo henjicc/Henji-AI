@@ -53,9 +53,14 @@ test('窗口最大化外框：Windows 不可见缩放边在上限内，macOS 必
   assert.equal(intruding.top, 25)
 })
 
-test('裁剪选区可见性：按亮度对比度判定，石墨与纸白实测值都过线，同色不过', () => {
-  assert.ok(contrastRatio([98, 99, 101], [39, 41, 44]) >= SELECTION_MIN_CONTRAST)
-  assert.ok(contrastRatio([162, 166, 169], [219, 221, 225]) >= SELECTION_MIN_CONTRAST)
+test('裁剪选区可见性：修复后的合成色达到 3:1，旧填充与同色不过', () => {
+  assert.equal(SELECTION_MIN_CONTRAST, 3)
+  // 保留原实测轨道，按当前 text1 与 65% 填充合成；这是令牌计算值，Windows 新截图由总管理者复验。
+  assert.ok(contrastRatio([168, 169, 170], [39, 41, 44]) >= SELECTION_MIN_CONTRAST)
+  assert.ok(contrastRatio([89, 92, 96], [219, 221, 225]) >= SELECTION_MIN_CONTRAST)
+  assert.ok(contrastRatio([98, 99, 101], [39, 41, 44]) < SELECTION_MIN_CONTRAST)
+  assert.ok(contrastRatio([162, 166, 169], [219, 221, 225]) < SELECTION_MIN_CONTRAST)
+  assert.equal(contrastRatio([39, 41, 44], [39, 41, 44]), 1)
   assert.ok(contrastRatio([60, 60, 60], [56, 56, 56]) < SELECTION_MIN_CONTRAST)
   const width = 10
   const data = Buffer.alloc(width * 3 * 3)
