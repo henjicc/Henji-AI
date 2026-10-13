@@ -9,10 +9,42 @@
  * 视觉约定：状态块**不画卡片**。居中 + 留白 + 弱化文字即可，
  * 它已经处在某个容器内部，再套一层边框背景就是卡片套卡片。
  */
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { UiSpinner } from './UiSpinner';
+export { UiSpinner } from './UiSpinner';
+import Tooltip from './Tooltip';
 import { UiButton } from './primitives';
 import { UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens';
+
+
+/** 骨架只承载占位；外部 className 只用于宽度、定位等布局。 */
+export function UiSkeleton({ shape = 'line', active = true, className = '' }: {
+  shape?: 'line' | 'block' | 'square';
+  active?: boolean;
+  className?: string;
+}): JSX.Element {
+  const geometry = shape === 'line' ? 'h-4 w-full' : shape === 'square' ? 'aspect-square w-full' : 'h-24 w-full';
+  return <span data-ui-skeleton aria-hidden="true" className={`block rounded-control bg-control ${geometry} ${active ? 'motion-safe:animate-pulse' : ''} ${className}`} />;
+}
+
+export function UiFieldMessage({ tone = 'error', className = '', children, ...props }: Omit<HTMLAttributes<HTMLSpanElement>, 'color'> & {
+  tone?: 'error' | 'hint';
+}): JSX.Element {
+  return <span {...props} role={tone === 'error' ? 'alert' : undefined} className={`block text-xs ${tone === 'error' ? 'text-danger-text' : 'text-text3'} ${className}`}>{children}</span>;
+}
+
+/** 行内操作反馈；长文本可截断并通过同一 Tooltip 读全文。 */
+export function UiInlineStatus({ tone = 'error', truncate = false, tooltip, children, className = '', ...props }: Omit<HTMLAttributes<HTMLSpanElement>, 'color'> & {
+  tone?: 'error' | 'warning' | 'success';
+  truncate?: boolean;
+  tooltip?: string;
+}): JSX.Element {
+  const color = { error: 'text-danger-text', warning: 'text-warning-text', success: 'text-success-text' }[tone];
+  const content = <span {...props} role={tone === 'error' ? 'alert' : 'status'} className={`text-xs ${color} ${truncate ? 'block min-w-0 truncate' : ''} ${className}`}>{children}</span>;
+  const description = tooltip ?? (truncate && typeof children === 'string' ? children : undefined);
+  return description ? <Tooltip asChild content={description}>{content}</Tooltip> : content;
+}
 
 type StateSize = 'xs' | 'sm' | 'md';
 /**
@@ -101,7 +133,6 @@ export function UiLoading({
   className = '',
   children,
 }: UiLoadingProps): JSX.Element {
-  const spinnerSize = size === 'xs' ? 'h-4 w-4' : size === 'sm' ? 'h-5 w-5' : 'h-8 w-8';
 
   return (
     <div
@@ -109,10 +140,7 @@ export function UiLoading({
       role="status"
       aria-live="polite"
     >
-      <div
-        className={`animate-spin rounded-full border-2 border-line-strong border-t-accent ${spinnerSize}`}
-        aria-hidden="true"
-      />
+      <UiSpinner size={size === 'xs' ? 'sm' : size === 'sm' ? 'md' : 'xl'} tone="accent" />
       {message ? <p className={`mt-3 ${UI_TEXT_META_CLASS}`}>{message}</p> : null}
       {children ? <div className="mt-3 w-full max-w-sm">{children}</div> : null}
     </div>

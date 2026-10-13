@@ -1,5 +1,6 @@
+import { UiFieldMessage } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { useEffect, useRef, useState } from 'react'
+import { useId, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, FolderPlus } from 'lucide-react'
 
@@ -33,6 +34,7 @@ type NewProjectCheck = { status: 'idle' } | { status: 'checking' } | { status: '
 
 export function MoveToProjectDialog({ documentName, projects, checkProjectName, onConfirm, onClose }: MoveToProjectDialogProps): JSX.Element {
   const { t } = useTranslation('ui')
+  const errorId = useId();
   const [selected, setSelected] = useState<string | 'new' | null>(projects[0]?.id ?? (projects.length ? null : 'new'))
   const [newName, setNewName] = useState('')
   const [check, setCheck] = useState<NewProjectCheck>({ status: 'idle' })
@@ -142,11 +144,12 @@ export function MoveToProjectDialog({ documentName, projects, checkProjectName, 
             placeholder={t('documentLibrary.move.newProjectName')}
             aria-label={t('documentLibrary.move.newProjectName')}
             aria-invalid={message ? true : undefined}
+        aria-describedby={message ? errorId : undefined}
             onChange={(event) => setNewName(event.target.value)}
             onKeyDown={(event) => { if (event.key === 'Enter') void confirm() }}
           />
         ) : null}
-        {message ? <p role="alert" className="mt-1.5 text-xs text-danger-text">{message}</p> : null}
+        {message ? <UiFieldMessage id={errorId} className="mt-1">{message}</UiFieldMessage> : null}
       </div>
     </UiModal>
   )

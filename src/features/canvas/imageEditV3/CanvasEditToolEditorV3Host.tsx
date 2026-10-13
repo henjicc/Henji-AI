@@ -364,7 +364,7 @@ export function CanvasEditToolEditorV3Host({
     saveFailed || projectionFailure ? (
       <UiButton
         disabled={saving || interactionDisabled}
-        title={t(`toolDialog.imageEditorV3.${saveFailed ? 'saveFailedDescription'
+        tooltip={t(`toolDialog.imageEditorV3.${saveFailed ? 'saveFailedDescription'
           : projectionFailure === 'target-changed' ? 'targetChangedDescription' : 'syncFailedDescription'}`)}
         onClick={() => { void flushPending().catch(() => undefined) }}
       >

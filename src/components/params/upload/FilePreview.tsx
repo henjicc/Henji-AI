@@ -44,14 +44,14 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
         {onEdit && (
           <UiIconButton size="md"
             onClick={onEdit}
-            title={t('common:edit')}
+            tooltip={t('common:edit')}
           >
             <Pencil  />
           </UiIconButton>
         )}
         <UiIconButton size="md" tone="danger"
           onClick={onDelete}
-          title={t('common:delete')}
+          tooltip={t('common:delete')}
         >
           <Trash2  />
         </UiIconButton>

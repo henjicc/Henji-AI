@@ -35,20 +35,20 @@ export function TaskCardToolbar({
     <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-120 focus-within:opacity-100 group-hover/task:opacity-100 group-focus-within/task:opacity-100 [@media(hover:none)]:opacity-100">
       <UiIconButton
         onClick={() => void onRegenerate()}
-        title={t('ui:workspace.actions.regenerate')}
+        tooltip={t('ui:workspace.actions.regenerate')}
       >
         <RefreshCw  />
       </UiIconButton>
       <UiIconButton
         onClick={onReedit}
-        title={t('ui:workspace.actions.reedit')}
+        tooltip={t('ui:workspace.actions.reedit')}
       >
         <SquarePen  />
       </UiIconButton>
       {task.result && task.result.filePaths.length > 0 && (
         <UiIconButton
           onClick={() => void onDownloadAll()}
-          title={t('common:actions.download')}
+          tooltip={t('common:actions.download')}
         >
           <DownloadIcon  />
         </UiIconButton>
@@ -58,7 +58,7 @@ export function TaskCardToolbar({
           onClick={() => void onCollectAll()}
           disabled={collecting}
           on={allResultsCollected}
-          title={t('ui:assetLibrary.collect')}
+          tooltip={t('ui:assetLibrary.collect')}
         >
           {allResultsCollected
             ? <FolderCheck  />
@@ -67,13 +67,13 @@ export function TaskCardToolbar({
       )}
       <UiIconButton
         onClick={onUsePrompt}
-        title={t('ui:workspace.actions.usePrompt')}
+        tooltip={t('ui:workspace.actions.usePrompt')}
       >
         <UsePromptIcon  />
       </UiIconButton>
       <UiIconButton tone="danger"
         onClick={() => void onDelete()}
-        title={t('common:delete')}
+        tooltip={t('common:delete')}
       >
         <Trash2  />
       </UiIconButton>

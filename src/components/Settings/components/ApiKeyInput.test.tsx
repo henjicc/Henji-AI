@@ -60,7 +60,7 @@ describe('ApiKeyInput', () => {
 
     expect(input.getAttribute('data-observation-sensitive')).toBeNull()
     expect(input.disabled).toBe(true)
-    expect(toggle.disabled).toBe(true)
+    expect(toggle.getAttribute('aria-disabled')).toBe('true')
     expect(input.getAttribute('aria-describedby')?.split(' ')).toHaveLength(2)
   })
 })

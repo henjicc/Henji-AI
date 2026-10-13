@@ -40,7 +40,7 @@ export function SettingsModalFrame({ isOpen, onClose, appear, children, surfaceI
       <div data-application-surface-id={surfaceId} className={`relative flex h-full w-full flex-col ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>
         <div className={`flex h-14 shrink-0 items-center justify-between border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
           <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>
-          <UiIconButton onClick={onClose} aria-label={t('actions.close')} title={t('actions.close')}>
+          <UiIconButton onClick={onClose} aria-label={t('actions.close')} tooltip={t('actions.close')}>
             <X  />
           </UiIconButton>
         </div>

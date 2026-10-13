@@ -72,21 +72,21 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
   return <UiToolbar variant="command" trailing={<>
     {beatTask && <UiButton disabled={beatTask.controller.signal.aborted} onClick={() => cancelVideoEditBeatAnalysis(projectId)}>取消分析 {Math.round(beatTask.progress * 100)}%</UiButton>}
     {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence!.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence!.fps)}</span>}
-    <UiIconButton aria-label="撤销" title={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2  /></UiIconButton>
-    <UiIconButton aria-label="重做" title={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2  /></UiIconButton>
+    <UiIconButton aria-label="撤销" tooltip={undo.tooltip} disabledReason={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2  /></UiIconButton>
+    <UiIconButton aria-label="重做" tooltip={redo.tooltip} disabledReason={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2  /></UiIconButton>
     <VideoEditLayoutMenu api={api} />
     <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
-    {task?.state === 'completed' && task.output && <UiButton disabled={collecting} onClick={() => run(async () => {
+    {task?.state === 'completed' && task.output && <UiButton loading={collecting} disabled={collecting} onClick={() => run(async () => {
       setCollecting(true)
       try {
         const asset = await collectVideoEditOutput(task.output!, libraryId ? { libraryId } : {})
         if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
       } finally { setCollecting(false) }
-    })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
+    })}>{'成片加入资产库'}</UiButton>}
     {task?.state === 'running' && <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton>}
-    <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download  />导出</UiButton>
+    <UiButton variant="primary" aria-label="导出视频" tooltip={exporting.tooltip} disabledReason={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download  />导出</UiButton>
   </>}>
-    <UiIconButton size="md" aria-label={t('videoEditProject.back')} title={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft  /></UiIconButton>
+    <UiIconButton size="md" aria-label={t('videoEditProject.back')} tooltip={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft  /></UiIconButton>
     <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(async () => {
         const result = await collectVideoEditMedia(projectId)

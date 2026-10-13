@@ -109,7 +109,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               <UiIconButton
                 type="button"
                 tone="danger"
-                title={t('sections.download.presetPathsRemove', { path })}
+                tooltip={t('sections.download.presetPathsRemove', { path })}
                 aria-label={t('sections.download.presetPathsRemove', { path })}
                 onClick={() => handleRemovePresetPath(path)}
               >

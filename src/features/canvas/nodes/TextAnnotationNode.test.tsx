@@ -31,7 +31,8 @@ vi.mock('react-markdown', () => ({
 
 vi.mock('remark-gfm', () => ({ default: vi.fn() }))
 
-vi.mock('@/components/ui', () => ({
+vi.mock('@/components/ui', async () => ({
+  UiSpinner: (await import('@/components/ui/states')).UiSpinner,
   UiTextArea: ({ textHistory: _textHistory, ...props }: { textHistory?: unknown }) => (
     <textarea aria-label="text-editor" {...props} />
   ),

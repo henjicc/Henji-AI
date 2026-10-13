@@ -100,13 +100,13 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
       {/* 分组标签：元信息档，与上方系统视图之间只靠间距分开，不画线 */}
       <div className={`flex items-center justify-between pb-1 pl-4 pr-2 pt-3 ${UI_TEXT_META_CLASS}`}>
         <span>{labels.categories}</span>
-        <UiIconButton size="xs" onClick={() => setCreating(true)} title={labels.create} aria-label={labels.create}><Plus  /></UiIconButton>
+        <UiIconButton size="xs" onClick={() => setCreating(true)} tooltip={labels.create} aria-label={labels.create}><Plus  /></UiIconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
         {creating && (
           <div className="mb-1 flex items-center gap-1">
             <UiInput autoFocus className="min-w-0" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitCreate(); if (event.key === 'Escape') setCreating(false) }} placeholder={labels.placeholder} aria-label={labels.placeholder} />
-            <UiIconButton onClick={() => void submitCreate()} title={labels.confirm} aria-label={labels.confirm}><Check  /></UiIconButton>
+            <UiIconButton onClick={() => void submitCreate()} tooltip={labels.confirm} aria-label={labels.confirm}><Check  /></UiIconButton>
           </div>
         )}
         {libraries.map((library) => (
@@ -114,7 +114,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
             {editingId === library.id ? (
               <div className="flex w-full items-center gap-1">
                 <UiInput autoFocus className="min-w-0 flex-1" value={editingName} aria-label={labels.rename} onChange={(event) => setEditingName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(library); if (event.key === 'Escape') setEditingId(null) }} />
-                <UiIconButton onClick={() => void submitRename(library)} title={labels.confirm} aria-label={labels.confirm}><Check  /></UiIconButton>
+                <UiIconButton onClick={() => void submitRename(library)} tooltip={labels.confirm} aria-label={labels.confirm}><Check  /></UiIconButton>
               </div>
             ) : (
               <>
@@ -127,13 +127,13 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
                 <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 ${deletingId === library.id ? 'pointer-events-auto opacity-100' : 'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'}`}>
                   {deletingId === library.id ? (
                     <>
-                      <UiIconButton size="xs" tone="danger" title={labels.confirmDelete} aria-label={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check  /></UiIconButton>
-                      <UiIconButton size="xs" title={labels.cancel} aria-label={labels.cancel} onClick={() => setDeletingId(null)}><X  /></UiIconButton>
+                      <UiIconButton size="xs" tone="danger" tooltip={labels.confirmDelete} aria-label={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check  /></UiIconButton>
+                      <UiIconButton size="xs" tooltip={labels.cancel} aria-label={labels.cancel} onClick={() => setDeletingId(null)}><X  /></UiIconButton>
                     </>
                   ) : (
                     <>
-                      <UiIconButton size="xs" title={labels.rename} aria-label={labels.rename} onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil  /></UiIconButton>
-                      <UiIconButton size="xs" tone="danger" title={labels.delete} aria-label={labels.delete} onClick={() => setDeletingId(library.id)}><Trash2  /></UiIconButton>
+                      <UiIconButton size="xs" tooltip={labels.rename} aria-label={labels.rename} onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil  /></UiIconButton>
+                      <UiIconButton size="xs" tone="danger" tooltip={labels.delete} aria-label={labels.delete} onClick={() => setDeletingId(library.id)}><Trash2  /></UiIconButton>
                     </>
                   )}
                 </div>

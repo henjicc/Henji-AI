@@ -189,7 +189,7 @@ const StagePathContextBar: React.FC = () => {
       priority: 20,
       node: (
         <UiIconButton size="md"
-          title="重置为直线"
+          tooltip="重置为直线"
           aria-label="重置为直线"
           onClick={() => setStateKeyframeSpatialPath(stateKeyframe.id, object.id, undefined)}
         >
@@ -281,7 +281,7 @@ const StagePathContextBar: React.FC = () => {
               <UiButton
                 size="sm"
                 className="justify-start gap-1.5"
-                title="丢弃手动修改并重新生成预设路径"
+                tooltip="丢弃手动修改并重新生成预设路径"
                 onClick={() => updatePreset(originPreset)}
               >
                 <RotateCcw  />重新应用原预设
@@ -293,7 +293,7 @@ const StagePathContextBar: React.FC = () => {
         {({ togglePanel, open }) => (
           <UiIconButton size="md"
             on={open}
-            title="更多路径参数"
+            tooltip="更多路径参数"
             aria-label="更多路径参数"
             onClick={togglePanel}
             data-panel-trigger-button

@@ -471,7 +471,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             <UiIconButton shape="circle" size="md" tone="media"
               onClick={onClose}
               className="absolute top-2 right-2 pointer-events-auto"
-              title={t('common:close')}
+              tooltip={t('common:close')}
             >
               <X  />
             </UiIconButton>

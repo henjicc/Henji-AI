@@ -156,7 +156,7 @@ describe('UiIconButton 默认静默、on 与 tone', () => {
 
 describe('按钮皮肤只用主题令牌（index.css .ui-btn-*）', () => {
   const css = readFileSync(path.join(process.cwd(), 'src/index.css'), 'utf8');
-  const block = css.slice(css.indexOf('.ui-btn {'), css.indexOf('.ui-btn-media:disabled'));
+  const block = css.slice(css.indexOf('.ui-btn {'), css.indexOf('.ui-btn-media:is(:disabled,'));
 
   it('皮肤块不写死颜色；按钮扁平：不用渐变、高光投影与按下位移（重要记录 016）', () => {
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

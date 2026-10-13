@@ -38,7 +38,7 @@ describe('通道与属性的共同文档工作流', () => {
   it('空态禁用保存；保存、改名、载入、删除及撤销使用同一文档和选区', async () => {
     render(<Host />)
     expect(screen.getByText('还没有选区通道')).toBeTruthy()
-    expect((screen.getByRole('button', { name: '保存选区为通道' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: '保存选区为通道' }).getAttribute('aria-disabled')).toBe('true')
     const bus = requireImageEditDocumentInstanceV3(document.id).bus
     const selection = appendImageEditSelectionV3(null, { type: 'ellipse', x: .2, y: .2, width: .4, height: .6 }, 'replace')
     act(() => bus.setSelection(selection))

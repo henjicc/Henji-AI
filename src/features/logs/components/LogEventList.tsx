@@ -81,16 +81,14 @@ export function LogEventList({
             ))}
             {hasMore && (
               <div className="p-2">
-                <UiButton
+                <UiButton loading={remoteLoading && !hasMoreLocal}
                   type="button"
                   variant="secondary"
                   className="w-full"
                   disabled={remoteLoading && !hasMoreLocal}
                   onClick={handleLoadMore}
                 >
-                  {remoteLoading && !hasMoreLocal
-                    ? t('logsWindow.list.loading')
-                    : hasMoreLocal
+                  {hasMoreLocal
                       ? `${t('logsWindow.list.loadMore')} (${events.length - visibleCount})`
                       : t('logsWindow.list.loadMore')}
                 </UiButton>

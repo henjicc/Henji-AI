@@ -21,7 +21,7 @@ export function EdgeDisconnectButton({ label, onDisconnect }: EdgeDisconnectButt
         tone="danger"
         type="button"
         aria-label={label}
-        title={label}
+        tooltip={label}
         onClick={(event: MouseEvent) => {
           event.stopPropagation()
           onDisconnect()

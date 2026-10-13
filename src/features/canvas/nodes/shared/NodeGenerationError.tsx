@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { UiIconButton } from '@/components/ui';
@@ -46,7 +47,7 @@ export function NodeGenerationError({ message }: NodeGenerationErrorProps) {
       <span className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 bg-gap px-4 text-center">
         <span className="pointer-events-none absolute inset-0 bg-danger-tint" />
         <AlertTriangle className="relative shrink-0 text-danger-text" />
-        <span className="relative line-clamp-3 text-xs leading-5 text-danger-text">{message}</span>
+        <UiInlineStatus className="relative line-clamp-3 leading-5">{message}</UiInlineStatus>
         <span className="relative text-2xs text-text2">{t('node.generationError.viewDetail')}</span>
       </span>
     </UiIconButton>

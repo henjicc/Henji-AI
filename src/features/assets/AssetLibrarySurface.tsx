@@ -1,8 +1,10 @@
+import { UiSkeleton } from '@/components/ui'
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { VirtuosoGrid } from 'react-virtuoso'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { FolderPlus, GripVertical, LoaderCircle, Settings2, X } from 'lucide-react'
+import { FolderPlus, GripVertical, Settings2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiPageHeader, UiRangeInput } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
@@ -263,7 +265,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             aria-haspopup="dialog"
             aria-expanded={open}
             on={open}
-            title={t('assetLibrary.viewSettings')}
+            tooltip={t('assetLibrary.viewSettings')}
             aria-label={t('assetLibrary.viewSettings')}
             data-panel-trigger-button
             onClick={togglePanel}
@@ -341,13 +343,13 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             <header className="flex h-12 shrink-0 items-center gap-2 px-3">
               {viewControls}
               <UiButton className="shrink-0" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>
-              {onClose && <UiIconButton className="shrink-0" title={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X  /></UiIconButton>}
+              {onClose && <UiIconButton className="shrink-0" tooltip={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X  /></UiIconButton>}
             </header>
           )}
           <div ref={attachScroll} onContextMenu={handleBlankContextMenu} className={`relative isolate min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
             {loading && page.items.length === 0 ? (
               <div className={`absolute overflow-hidden ${mode === 'workspace' ? 'inset-4' : 'inset-3'}`} aria-busy="true">
-                <div className="grid gap-x-3 gap-y-4" style={{ '--asset-grid-columns': `repeat(auto-fill,minmax(min(${cardSize}px,100%),1fr))` } as React.CSSProperties}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square rounded-lg bg-panel motion-safe:animate-pulse" />)}</div>
+                <div className="grid gap-x-3 gap-y-4" style={{ '--asset-grid-columns': `repeat(auto-fill,minmax(min(${cardSize}px,100%),1fr))` } as React.CSSProperties}>{Array.from({ length: 12 }).map((_, index) => <UiSkeleton key={index} shape="square" />)}</div>
               </div>
             ) : error ? (
               <UiError
@@ -395,7 +397,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
                     )}
                   />
                 </div>
-                <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className={`${UI_ICON_SIZE_CLASS.md} mr-2 motion-safe:animate-spin`} />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
+                <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><UiSpinner />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
               </>
             )}
           </div>

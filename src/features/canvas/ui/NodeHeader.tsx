@@ -260,7 +260,7 @@ export function NodeHeader({
           titleClassName
         )}
         style={NODE_HEADER_TITLE_FADE_STYLE}
-        title={titleText}
+        tooltip={titleText}
         onClick={(event) => event.stopPropagation()}
         onDoubleClick={(event) => {
           event.stopPropagation();

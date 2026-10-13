@@ -240,13 +240,13 @@ export function VideoTrimModal({
           <div className="flex items-center gap-1">
             <UiIconButton
               onClick={togglePlay}
-              title={t('ui:audioPlayer.playPause')}
+              tooltip={t('ui:audioPlayer.playPause')}
             >
               {isPlaying ? <Pause  /> : <Play  />}
             </UiIconButton>
             <UiIconButton
               onClick={() => setMuted((value) => !value)}
-              title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
+              tooltip={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
             >
               {muted ? <VolumeX  /> : <Volume2  />}
             </UiIconButton>

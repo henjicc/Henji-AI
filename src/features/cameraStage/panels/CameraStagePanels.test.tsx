@@ -49,7 +49,7 @@ describe('3D 镜头参考停靠面板', () => {
     act(() => useCameraStageStore.getState().addPrimitive('box'))
     const name = useCameraStageStore.getState().objects[0].name
     render(<ObjectListPanel />)
-    fireEvent.doubleClick(screen.getByTitle(/双击可改名/))
+    fireEvent.doubleClick(screen.getByRole('button', { name }))
     const input = screen.getByRole('textbox', { name: '对象名称' }) as HTMLInputElement
     expect(input.value).toBe(name)
     expect(input.closest('.border-accent')).toBeNull()

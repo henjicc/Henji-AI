@@ -1,3 +1,4 @@
+import { UiFieldMessage } from '@/components/ui'
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import {
@@ -121,7 +122,7 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
             <UiIconButton size="md"
               type="button"
               aria-label="互换宽度和高度"
-              title="互换宽度和高度"
+              tooltip="互换宽度和高度"
               onClick={() => {
                 setWidth(height);
                 setHeight(width);
@@ -185,9 +186,9 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
           </div>
         </section>
 
-        <div className={`min-h-5 ${validationError ? 'text-danger-text' : UI_TEXT_META_CLASS}`}>
+        <UiFieldMessage tone={validationError ? 'error' : 'hint'} className="min-h-5">
           {validationError ?? `将创建 ${width} × ${height} 像素的空白 PNG`}
-        </div>
+        </UiFieldMessage>
       </div>
     </UiModal>
   );

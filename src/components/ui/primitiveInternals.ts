@@ -38,7 +38,16 @@ export type ButtonSize = UiControlSize
  * 外观只由 `variant` / `size` 决定。`className` 只用于布局（宽度、弹性、对齐、定位、间距、显隐），
  * 不得改底色、边框、文字色、圆角、阴影、高度或字号——check:surface 规则 E 会拦截。
  */
-export interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface UiButtonFeedbackProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** 悬停说明，统一主题与 300ms 延迟。 */
+  tooltip?: string
+  /** 禁用时解释前置条件；保留焦点并阻断操作。 */
+  disabledReason?: string
+  /** 保留原内容占位与名称，显示统一转圈并阻止重复操作。 */
+  loading?: boolean
+}
+
+export interface UiButtonProps extends UiButtonFeedbackProps {
   variant?: ButtonVariant
   size?: ButtonSize
 }
@@ -55,8 +64,9 @@ export type IconButtonSize = '2xs' | 'xs' | UiControlSize | 'xl'
  */
 export type IconButtonTone = 'default' | 'media' | 'accent' | 'danger' | 'bare'
 
-export interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface UiIconButtonProps extends UiButtonFeedbackProps {
   /** 开关开启（选中底 + 强调色图标），同时写出 `aria-pressed`。只表达“功能是否开启”，不是动作层级。 */
+  label?: string
   on?: boolean
   tone?: IconButtonTone
   size?: IconButtonSize
@@ -67,7 +77,7 @@ export interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
 /** 选项、标签、导航、字段共用的高度档：sm 28 / md 32 / lg 36（重要记录 004）。 */
 export type UiControlSize = 'sm' | 'md' | 'lg'
 
-export interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface UiChipButtonProps extends UiButtonFeedbackProps {
   active?: boolean
   /** `navigation` 表示“正在看哪里”；默认 `toggle` 表示多选/标签开态。 */
   selectionRole?: 'toggle' | 'navigation'
@@ -112,23 +122,23 @@ export interface UiTextTokenProps extends ButtonHTMLAttributes<HTMLButtonElement
 export type UiWindowControlAction = 'minimize' | 'maximize' | 'restore' | 'close'
 
 /**
- * 无边框窗口的窗口控件（应用标题栏、日志窗口标题栏共用）。图标由组件按 `action` 决定，名称放 `title`/`aria-label`。
+ * 无边框窗口的窗口控件（应用标题栏、日志窗口标题栏共用）。图标由组件按 `action` 决定，名称放 `aria-label`，悬停说明放 `tooltip`。
  * - `windows`：36×28 静默按钮，静息辅助文字、悬停出底；关闭悬停为危险实底（系统惯例）；
  * - `mac`：12px 交通灯圆点（危险/警示/成功实底令牌），悬停整组时显出符号，命中区 24px。
  */
-export interface UiWindowControlProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+export interface UiWindowControlProps extends Omit<UiButtonFeedbackProps, 'children'> {
   action: UiWindowControlAction
   platform?: 'windows' | 'mac'
 }
 
-export interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface UiNavButtonProps extends UiButtonFeedbackProps {
   active?: boolean
   /** 高度档：md 32 / lg 36（默认）；`auto` 用于两行内容的导航行（高度随内容）。 */
   size?: UiControlSize | 'auto'
 }
 
 /** 字段触发器（下拉、面板触发器的按钮）。`field` 是 raised 字段表面；`quiet` 是标题栏/工具栏里的弱化入口。 */
-export interface UiFieldTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface UiFieldTriggerProps extends UiButtonFeedbackProps {
   size?: UiControlSize
   appearance?: 'field' | 'quiet'
   /** 浮层是否展开（箭头翻转）。 */
@@ -165,7 +175,7 @@ export interface UiSelectProps extends Omit<SelectHTMLAttributes<HTMLSelectEleme
   size?: UiControlSize
 }
 
-export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface UiOptionButtonProps extends UiButtonFeedbackProps {
   active?: boolean
   /**
    * `menu`：静息态完全透明，只靠 hover 与选中态表达状态。

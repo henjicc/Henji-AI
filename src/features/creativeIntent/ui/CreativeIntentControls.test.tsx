@@ -34,7 +34,7 @@ it('无可钉姿态时隐藏整个区块，已有钉点仍保留；idle 主动�
   const p = props(), view = render(<CreativeIntentControls {...p} status="idle" canPin={false} candidates={[]} />)
   expect(screen.queryByText('钉住姿态')).toBeNull()
   const organize = screen.getByRole('button', { name: '整理' }) as HTMLButtonElement
-  expect(organize.disabled).toBe(true); expect(organize.title).toBe('先示范一次运动')
+  expect(organize.getAttribute('aria-disabled')).toBe('true'); fireEvent.focus(organize); expect(screen.getByRole('tooltip').textContent).toBe('先示范一次运动')
   view.rerender(<CreativeIntentControls {...p} canPin={false} pins={[{ id: 'pin', label: '姿态' }]} />)
   expect(screen.getByText('钉住姿态')).toBeDefined()
 })

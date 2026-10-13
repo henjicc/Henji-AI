@@ -214,7 +214,7 @@ export function UiTaskHistoryFilterBar({
               transform: isExpanded ? `translate3d(${triggerShiftX}px,0,0)` : 'translate3d(0,0,0)',
             }}
             onClick={() => setIsExpanded(true)}
-            title={t('workspaceFilters.expandSearch')}
+            tooltip={t('workspaceFilters.expandSearch')}
           >
             <Search  />
           </UiIconButton>
@@ -302,7 +302,7 @@ export function UiTaskHistoryFilterBar({
               <UiIconButton size="md"
                 type="button"
                 onClick={onClose}
-                title={t('workspaceFilters.close')}
+                tooltip={t('workspaceFilters.close')}
               >
                 <X  />
               </UiIconButton>

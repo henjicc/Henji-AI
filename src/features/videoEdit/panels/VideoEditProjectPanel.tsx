@@ -346,7 +346,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-0.5 px-2 py-1">
       {/* 当前所在素材箱（双击素材箱进入）：上一级 + 名称，悬停看完整位置 */}
       {binId && <div className="mr-1 flex min-w-0 max-w-[40%] shrink items-center gap-0.5" title={['素材', ...binPath.map(bin => bin.name)].join(' / ')}>
-        <UiIconButton size="xs" aria-label="返回上一级素材箱" title="返回上一级素材箱" onClick={() => selectBin(binPath.at(-2)?.id ?? '')} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) event.preventDefault() }} onDrop={event => drop(event, binPath.at(-2)?.id ?? '')}><ArrowUp /></UiIconButton>
+        <UiIconButton size="xs" aria-label="返回上一级素材箱" tooltip="返回上一级素材箱" onClick={() => selectBin(binPath.at(-2)?.id ?? '')} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) event.preventDefault() }} onDrop={event => drop(event, binPath.at(-2)?.id ?? '')}><ArrowUp /></UiIconButton>
         <span className="min-w-0 truncate text-xs text-text2" data-user-content data-video-edit-current-bin>{binPath.at(-1)?.name}</span>
       </div>}
       <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
@@ -357,9 +357,9 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
         {SORT_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={sort.key === option.value} onClick={() => setSort({ key: option.value, direction: 'asc' })}>按{option.label}排序</UiOptionButton>)}
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="视图与排序" title="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 /> : <List />}</UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="视图与排序" tooltip="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 /> : <List />}</UiIconButton>}
       </PanelTrigger>
-      <UiIconButton aria-label="资产库" title="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon /></UiIconButton>
+      <UiIconButton aria-label="资产库" tooltip="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon /></UiIconButton>
       <VideoEditProjectDocumentsButton instance={instance} onError={onError} />
       <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={UI_ICON_SIZE.sm} />新建素材箱</UiOptionButton>
@@ -368,14 +368,14 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
         {graphicMenu().map(item => <UiOptionButton key={item.id} variant="menu" size="sm" className="gap-2" onClick={item.onClick}><GraphicIcon size={UI_ICON_SIZE.sm} />{item.label}</UiOptionButton>)}
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" tooltip="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
       </PanelTrigger>
       <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={UI_ICON_SIZE.sm} />导入文件</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={UI_ICON_SIZE.sm} />导入文件夹</UiOptionButton>
         <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
       </div>}>
-        {({ open, togglePanel }) => <UiIconButton aria-label="导入" title="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import /></UiIconButton>}
+        {({ open, togglePanel }) => <UiIconButton aria-label="导入" tooltip="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import /></UiIconButton>}
       </PanelTrigger>
       </div>
     </div>
@@ -398,7 +398,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     {labelPicker && <PanelTrigger anchor={labelPicker.anchor} open onOpenChange={open => { if (!open) setLabelPicker(null) }} panelSize="menu" zIndex={Z_LAYERS.dropdown} panelPadding="content" closeOnPanelClick
       renderPanel={() => <div className="flex flex-col gap-2" aria-label="颜色标签">
         <div className="grid grid-cols-6 gap-1">
-          {VIDEO_EDIT_LABELS.map(label => <UiOptionButton key={label} variant="swatch" active={labelPicker.current === label} aria-label={VIDEO_EDIT_LABEL_NAMES[label]} title={VIDEO_EDIT_LABEL_NAMES[label]} style={{ backgroundColor: VIDEO_EDIT_LABEL_COLOR_HEX[label] }} onClick={() => run(() => setVideoEditLabels(projectId, labelPicker.targets, label))} />)}
+          {VIDEO_EDIT_LABELS.map(label => <UiOptionButton key={label} variant="swatch" active={labelPicker.current === label} aria-label={VIDEO_EDIT_LABEL_NAMES[label]} tooltip={VIDEO_EDIT_LABEL_NAMES[label]} style={{ backgroundColor: VIDEO_EDIT_LABEL_COLOR_HEX[label] }} onClick={() => run(() => setVideoEditLabels(projectId, labelPicker.targets, label))} />)}
         </div>
         <UiButton size="sm" onClick={() => run(() => setVideoEditLabels(projectId, labelPicker.targets, null))}>按类型默认</UiButton>
       </div>} />}

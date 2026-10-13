@@ -552,7 +552,8 @@ it('时间线工具按钮共用命令与自定义键位', () => {
   const previous = useSettingsStore.getState().videoEditShortcuts
   try {
     act(() => useSettingsStore.getState().setVideoEditShortcuts({ ...previous, select_tool: { code: 'F9', ctrl: false, alt: false, shift: false, meta: false } }))
-    expect(view.getByRole('button', { name: '选择工具' }).getAttribute('title')).toBe('选择工具（F9）')
+    fireEvent.focus(view.getByRole('button', { name: '选择工具' }))
+    expect(view.getByRole('tooltip').textContent).toBe('选择工具（F9）')
     fireEvent.click(view.getByRole('button', { name: '吸附' })); expect(owner.snapping).toBe(true)
   } finally { act(() => useSettingsStore.getState().setVideoEditShortcuts(previous)) }
   expect(onError).not.toHaveBeenCalled()
@@ -732,7 +733,8 @@ it('声道映射片段按每个片段声道各画一条波形并按声音流与�
   const view = render(<View />)
   await waitFor(() => expect(view.container.querySelector(`[data-video-edit-waveform="${sound}"]`)?.getAttribute('data-waveform-lanes')).toBe('2'))
   expect(requests).toEqual(expect.arrayContaining([{ audioStream: 0, audioChannel: 0, channels: 1 }, { audioStream: 1, audioChannel: 0, channels: 1 }]))
-  expect(clipButton(view, sound).getAttribute('title')).toBe('视频 · 立体声')
+  fireEvent.focus(clipButton(view, sound))
+  expect(view.getByRole('tooltip').textContent).toBe('视频 · 立体声')
   expect([...view.container.querySelectorAll('[data-video-edit-track-channels]')].map(node => [node.closest('[data-track-index]')!.getAttribute('data-track-index'), node.textContent])).toEqual([['0', '立体声']])
   expect(view.container.querySelector(`[data-video-edit-clip="${sound}"] [data-video-edit-audio-format]`)?.getAttribute('data-video-edit-audio-format')).toBe('stereo')
   fireEvent.contextMenu(clipButton(view, sound), { clientX: 300, clientY: 80 })

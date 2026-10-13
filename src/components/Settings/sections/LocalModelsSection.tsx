@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import React from 'react'
 import { FolderOpen, Trash2 } from 'lucide-react'
 
@@ -61,7 +62,7 @@ const LocalModelRow: React.FC<{ model: LocalModelInfo; view: LocalModelsView }> 
         <div className={UI_TEXT_META_CLASS}>{meta}</div>
         {model.status === 'downloading' ? <ProgressBar appearance="hairline" progress={percent} className="mt-1.5" /> : null}
         {model.lastFailure && model.status !== 'downloading' && model.lastFailure !== 'cancelled' ? (
-          <div className="mt-0.5 text-xs text-danger-text">{t(`sections.localModels.failure.${model.lastFailure}`)}</div>
+          <UiInlineStatus className="mt-0.5">{t(`sections.localModels.failure.${model.lastFailure}`)}</UiInlineStatus>
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -87,7 +88,7 @@ const LocalModelActions: React.FC<{ model: LocalModelInfo; view: LocalModelsView
           <span className={UI_TEXT_META_CLASS}>{t('sections.localModels.status.ready')}</span>
           <UiIconButton
             size="xs"
-            title={t('sections.localModels.openFolder')}
+            tooltip={t('sections.localModels.openFolder')}
             aria-label={t('sections.localModels.openFolder')}
             onClick={() => view.openFolder(model.id)}
           >
@@ -96,7 +97,7 @@ const LocalModelActions: React.FC<{ model: LocalModelInfo; view: LocalModelsView
           <UiIconButton
             size="xs"
             tone="danger"
-            title={t('sections.localModels.remove', { name: title })}
+            tooltip={t('sections.localModels.remove', { name: title })}
             aria-label={t('sections.localModels.remove', { name: title })}
             onClick={() => view.remove(model.id)}
           >
@@ -109,7 +110,7 @@ const LocalModelActions: React.FC<{ model: LocalModelInfo; view: LocalModelsView
     case 'corrupt':
       return (
         <>
-          <span className="text-xs text-danger-text">{t('sections.localModels.status.corrupt')}</span>
+          <UiInlineStatus className="">{t('sections.localModels.status.corrupt')}</UiInlineStatus>
           <UiButton size="sm" variant="secondary" onClick={() => view.download(model.id)}>{t('sections.localModels.redownload')}</UiButton>
         </>
       )

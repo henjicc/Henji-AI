@@ -187,7 +187,7 @@ export function ImageViewerModal({
             variant="media"
             size="lg"
             onClick={onEnterEditor}
-            title={t('common.edit', '编辑')}
+            tooltip={t('common.edit', '编辑')}
           >
             {t('common.edit', '编辑')}
           </UiButton>
@@ -357,7 +357,7 @@ export function ImageViewerModal({
           <UiIconButton size="xl" tone="media" shape="circle"
             onClick={onClose}
             className="absolute right-4 top-4 z-sticky"
-            title={t('common.close', '关闭')}
+            tooltip={t('common.close', '关闭')}
             aria-label={t('common.close', '关闭')}
           >
             <X  />
@@ -388,14 +388,14 @@ export function ImageViewerModal({
                 <UiIconButton size="xl" tone="media" shape="circle"
                   onClick={() => onNavigate('prev')}
                   disabled={currentIndex <= 0}
-                  title={t('viewer.prev', '上一张')}
+                  tooltip={t('viewer.prev', '上一张')}
                 >
                   <ChevronLeft  />
                 </UiIconButton>
                 <UiIconButton size="xl" tone="media" shape="circle"
                   onClick={() => onNavigate('next')}
                   disabled={currentIndex >= imageList.length - 1}
-                  title={t('viewer.next', '下一张')}
+                  tooltip={t('viewer.next', '下一张')}
                 >
                   <ChevronRight  />
                 </UiIconButton>
@@ -416,7 +416,7 @@ export function ImageViewerModal({
                 tone="media"
                 size="xl"
                 shape="circle"
-                title={t('viewer.reset', '重置视图')}
+                tooltip={t('viewer.reset', '重置视图')}
                 aria-label={t('viewer.reset', '重置视图')}
               >
                 <RotateCcw  />

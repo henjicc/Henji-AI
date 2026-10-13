@@ -21,7 +21,7 @@ export function VideoEditAnnotationThumbnail({ document, sequenceId, frame, onJu
     void render().catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '取帧失败，请重试。') })
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url) }
   }, [key, frame, retry])
-  return <UiButton aria-label={error ? '重新获取标注画面' : label} title={error || undefined} onClick={() => { if (error) setRetry(value => value + 1); else onJump?.() }}>
+  return <UiButton aria-label={error ? '重新获取标注画面' : label} tooltip={error || undefined} onClick={() => { if (error) setRetry(value => value + 1); else onJump?.() }}>
     <div className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-control bg-media">
       {src ? <img src={src} alt="标注画面" className="h-full w-full object-contain" /> : <UiEmpty size="xs" title={error ? '取帧失败，点此重试' : '取帧中'} />}
     </div>

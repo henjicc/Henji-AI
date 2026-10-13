@@ -25,7 +25,7 @@ it('查找阶段显示已发现数量和不定进度，探测阶段显示整队�
   await act(async () => { finish(); await importing })
   expect(view.queryByRole('progressbar')).toBeNull(); expect(events).toEqual([2]); unsubscribe()
 })
-it('取消按钮取消整个队列，并在等待结束前显示正在取消', async () => {
+it('取消按钮取消整个队列，并在等待结束前保持名称与加载状态', async () => {
   const owner = (await createVideoEditTestProject())!; const id = owner.document.id
   let finish!: () => void; let task!: VideoEditImportTask
   const gate = new Promise<void>(resolve => { finish = resolve })
@@ -33,7 +33,7 @@ it('取消按钮取消整个队列，并在等待结束前显示正在取消', a
   let importing!: Promise<void | unknown>
   await act(async () => { importing = withVideoEditImportTask(id, undefined, async value => { task = value; await gate; task.controller.signal.throwIfAborted() }, { total: 1 }).catch(error => error) })
   fireEvent.click(view.getByRole('button', { name: '取消整个导入队列' }))
-  expect(task.controller.signal.aborted).toBe(true); expect(view.getByRole('button').textContent).toBe('正在取消')
+  expect(task.controller.signal.aborted).toBe(true); expect(view.getByRole('button').textContent).toBe('取消'); expect(view.getByRole('button').getAttribute('aria-busy')).toBe('true')
   await act(async () => { finish(); await importing })
   expect(view.queryByRole('progressbar')).toBeNull()
 })

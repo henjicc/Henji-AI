@@ -98,7 +98,7 @@ describe('剪辑项目页', () => {
     fireEvent.click(await screen.findByText('重命名'))
     const input = await screen.findByDisplayValue('宣传片')
     fireEvent.change(input, { target: { value: '花絮' } })
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', '这个位置已有同名文件夹，请换一个名称。')
+    await waitFor(() => expect(document.getElementById(input.getAttribute('aria-describedby') ?? '')).toHaveProperty('textContent', '这个位置已有同名文件夹，请换一个名称。'))
     const confirm = screen.getByRole('button', { name: '确认' }) as HTMLButtonElement
     expect(confirm.disabled).toBe(true)
     fireEvent.change(input, { target: { value: '正片' } })

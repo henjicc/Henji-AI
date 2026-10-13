@@ -311,9 +311,9 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   ) : <div className={UI_TEXT_META_CLASS}>{t('agentModels.notVerified')}</div>}
                   {effectiveReference ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <UiButton type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
-                        <RefreshCw className={`${verifyingKey === key ? 'motion-safe:animate-spin' : ''}`} />
-                        {verifyingKey === key ? t('agentModels.verifying') : t('agentModels.verify')}
+                      <UiButton loading={verifyingKey === key} type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
+                        <RefreshCw />
+                        {t('agentModels.verify')}
                       </UiButton>
                       <span className="text-xs text-text3">{t('agentModels.verifyCost')}</span>
                     </div>

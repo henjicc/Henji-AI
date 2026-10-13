@@ -126,7 +126,7 @@ export function ImageEditorCommandBarV3({
         className="ml-1 shrink-0"
         disabled={contentDisabled || !controller.canUndo}
         aria-label={t('imageEditor.actions.undo')}
-        title={t('imageEditor.actions.undo')}
+        tooltip={t('imageEditor.actions.undo')}
         onClick={controller.undo}
       >
         <Undo2  />
@@ -136,7 +136,7 @@ export function ImageEditorCommandBarV3({
         className="shrink-0"
         disabled={contentDisabled || !controller.canRedo}
         aria-label={t('imageEditor.actions.redo')}
-        title={t('imageEditor.actions.redo')}
+        tooltip={t('imageEditor.actions.redo')}
         onClick={controller.redo}
       >
         <Redo2  />

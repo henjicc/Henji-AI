@@ -501,7 +501,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     active={active}
                     disabled={training || failed || expired}
                     onClick={() => onChange(voice.id)}
-                    title={voice.description || voice.name}
+                    tooltip={voice.description || voice.name}
                     className={`w-full flex-col items-start justify-center px-3 py-2 ${
                       hasDescription ? 'min-h-[58px] gap-1' : 'min-h-[52px]'
                     }`}
@@ -518,7 +518,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                       variant="secondary"
                       size="sm"
                       disabled={deletingVoiceId === voice.id}
-                      title="仅从本地列表移除，不删除供应商音色或取消计费"
+                      tooltip="仅从本地列表移除，不删除供应商音色或取消计费"
                       className="absolute right-1 top-1 !px-2"
                       onClick={(event) => {
                         event.preventDefault()
@@ -531,8 +531,8 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                   )}
                   {record && <div className="flex flex-wrap gap-1">
                     {record.previewPath && !training && <UiButton type="button" variant="secondary" onClick={() => setPreviewVoiceId(previewVoiceId === voice.id ? null : voice.id)}>试听</UiButton>}
-                    {record.taskId && <UiButton type="button" variant="secondary" disabled={refreshingVoiceId !== null} onClick={() => void refreshVoice(record)}>
-                      {refreshingVoiceId === voice.id ? '正在查询…' : training ? '查看训练结果' : '刷新状态'}
+                    {record.taskId && <UiButton loading={refreshingVoiceId === voice.id} type="button" variant="secondary" disabled={refreshingVoiceId !== null} onClick={() => void refreshVoice(record)}>
+                      {training ? '查看训练结果' : '刷新状态'}
                     </UiButton>}
                     {refreshingVoiceId === voice.id && <UiButton type="button" variant="secondary" onClick={() => refreshController.current?.abort()}>停止等待</UiButton>}
                   </div>}

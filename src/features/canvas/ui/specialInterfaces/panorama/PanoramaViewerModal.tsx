@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -219,7 +220,7 @@ export function PanoramaViewerModal({
             <UiIconButton size="md" tone="media" shape="circle"
               onClick={() => onNavigate('prev')}
               disabled={currentIndex <= 0}
-              title={t('viewer.prev')}
+              tooltip={t('viewer.prev')}
             >
               <ChevronLeft  />
             </UiIconButton>
@@ -229,7 +230,7 @@ export function PanoramaViewerModal({
             <UiIconButton size="md" tone="media" shape="circle"
               onClick={() => onNavigate('next')}
               disabled={currentIndex >= imageList.length - 1}
-              title={t('viewer.next')}
+              tooltip={t('viewer.next')}
             >
               <ChevronRight  />
             </UiIconButton>
@@ -242,26 +243,26 @@ export function PanoramaViewerModal({
           <UiIconButton size="md" tone="media" shape="circle"
             onClick={() => setResetRevision((revision) => revision + 1)}
             disabled={!renderSphere}
-            title={t('viewer.reset')}
+            tooltip={t('viewer.reset')}
           >
             <RotateCcw  />
           </UiIconButton>
           <UiIconButton size="md" tone="media" shape="circle"
             onClick={() => void handleDownload()}
             disabled={isDownloading}
-            title={t('viewer.panorama.download')}
+            tooltip={t('viewer.panorama.download')}
           >
             <Download  />
           </UiIconButton>
           <UiIconButton size="md" tone="media" shape="circle"
             onClick={() => void handleFullscreen()}
-            title={t(isFullscreen ? 'viewer.panorama.exitFullscreen' : 'viewer.panorama.fullscreen')}
+            tooltip={t(isFullscreen ? 'viewer.panorama.exitFullscreen' : 'viewer.panorama.fullscreen')}
           >
             {isFullscreen ? <Minimize2  /> : <Maximize2  />}
           </UiIconButton>
           <UiIconButton size="md" tone="media" shape="circle"
             onClick={onClose}
-            title={t('common.close')}
+            tooltip={t('common.close')}
           >
             <X  />
           </UiIconButton>
@@ -281,9 +282,9 @@ export function PanoramaViewerModal({
       ) : null}
 
       {downloadFailed ? (
-        <div className="ui-glass pointer-events-none absolute bottom-5 right-5 z-sticky rounded-full px-4 py-2 text-xs text-danger-text">
+        <div className="ui-glass pointer-events-none absolute bottom-5 right-5 z-sticky rounded-full px-4 py-2"><UiInlineStatus>
           {t('viewer.panorama.downloadFailed')}
-        </div>
+        </UiInlineStatus></div>
       ) : null}
     </UiViewerShell>
   );

@@ -1,6 +1,6 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
-import { ArrowUp, AudioLines, LoaderCircle, Paperclip, Square, X } from 'lucide-react'
+import { ArrowUp, AudioLines, Paperclip, Square, X } from 'lucide-react'
 
 import { PromptEditor, UI_FIELD_FOCUS_WITHIN_CLASS, UI_FIELD_SURFACE_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInput } from '@/components/ui'
 import { AGENT_ATTACHMENT_MAX_COUNT, AGENT_ATTACHMENT_FORMATS, type AgentAttachment } from '@/core/assistant/attachments'
@@ -188,7 +188,7 @@ export function AssistantComposer({
                 <UiIconButton tone="media" size="xs"
                   type="button"
                   aria-label={`移除 ${item.attachment.displayName}`}
-                  title={`移除 ${item.attachment.displayName}`}
+                  tooltip={`移除 ${item.attachment.displayName}`}
                   className="absolute right-1 top-1"
                   disabled={attachmentsDisabled || importing}
                   onClick={() => onAttachmentsChange(attachments.filter(entry => entry.attachment.mediaRef !== item.attachment.mediaRef))}
@@ -226,14 +226,14 @@ export function AssistantComposer({
             {inputModalities.length > 0 ? <UiIconButton
               type="button"
               aria-label={attachmentLabel}
-              title={attachmentLabel}
+              tooltip={attachmentLabel}
               disabled={attachmentsDisabled || importing || submitting}
               onClick={() => inputRef.current?.click()}
             ><Paperclip  /></UiIconButton> : null}
             {controls}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {busy && onCancel ? <UiButton size="sm" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}>
+            {busy && onCancel ? <UiButton size="sm" onClick={onCancel} tooltip={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}>
               <Square aria-hidden="true" className={`mr-1`} />停止
             </UiButton> : null}
             {(!busy || !onCancel || sendLabel) ? <UiIconButton
@@ -242,9 +242,9 @@ export function AssistantComposer({
               disabled={sendDisabled}
               onClick={submit}
               aria-label={sendTitle}
-              title={sendTitle}
+              tooltip={sendTitle} loading={importing || submitting}
             >
-              {importing || submitting ? <LoaderCircle aria-hidden="true" className={`motion-safe:animate-spin`} /> : <ArrowUp aria-hidden="true"  />}
+              <ArrowUp aria-hidden="true" />
             </UiIconButton> : null}
           </div>
         </div>

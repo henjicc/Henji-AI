@@ -1,3 +1,4 @@
+import { UiFieldMessage } from '@/components/ui'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import Dropdown from '@/components/ui/Dropdown'
@@ -245,6 +246,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
   const { i18n } = useTranslation()
   const inputRef = React.useRef<HTMLInputElement | null>(null)
   const [errorText, setErrorText] = React.useState('')
+  const errorId = React.useId()
   const selectedFileName = resolveFileName(value)
   const acceptList = Array.isArray(config.accept) ? config.accept : []
   const buttonText = config.buttonText
@@ -295,6 +297,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
           type="button"
           variant="secondary"
           disabled={disabled}
+          aria-describedby={errorText ? errorId : undefined}
           onClick={() => inputRef.current?.click()}
         >
           {buttonText}
@@ -320,7 +323,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
         </div>
       )}
       {hintText && <div className={UI_TEXT_META_CLASS}>{hintText}</div>}
-      {errorText && <div className="text-xs text-danger-text">{errorText}</div>}
+      {errorText && <UiFieldMessage id={errorId}>{errorText}</UiFieldMessage>}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoaderCircle, WandSparkles } from 'lucide-react'
+import { WandSparkles } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UI_DURATION } from '@/components/ui/motion'
 import { AlertDialog, UI_TEXT_META_CLASS, UiButton, UiPanel } from '@/components/ui'
@@ -455,7 +455,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           openPanelRef.current = openPanel
           return (
             // 与底栏其它动作同档（静默）：生成按钮才是这块输入区唯一的主动作，优化不再带光晕特效
-            <UiButton
+            <UiButton loading={streaming}
               type="button"
               variant="quiet"
               onClick={() => {
@@ -478,15 +478,13 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
               }}
               disabled={disabled}
               aria-disabled={disabled || streaming}
-              title={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
+              tooltip={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
               aria-busy={streaming || undefined}
               className={`gap-1.5 ${streaming ? 'cursor-progress' : ''}`}
               data-panel-trigger-button
             >
-              {streaming
-                ? <LoaderCircle aria-hidden="true" className={`animate-spin`} />
-                : <WandSparkles aria-hidden="true"  />}
-              <span>{streaming ? '优化中' : '优化'}</span>
+              <WandSparkles aria-hidden="true" />
+              <span>{'优化'}</span>
             </UiButton>
           )
         }}

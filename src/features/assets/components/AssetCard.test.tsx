@@ -41,7 +41,8 @@ describe('AssetCard', () => {
   it('“更多”按钮有可读名称，截断的名称悬停可看全名', () => {
     renderCard()
 
-    expect(screen.getByRole('button', { name: 'workspaceFilters.moreActions' }).getAttribute('title')).toBe('workspaceFilters.moreActions')
+    fireEvent.focus(screen.getByRole('button', { name: 'workspaceFilters.moreActions' }))
+    expect(screen.getByRole('tooltip').textContent).toBe('workspaceFilters.moreActions')
     expect(screen.getByText('测试资产').getAttribute('title')).toBe('测试资产')
   })
 

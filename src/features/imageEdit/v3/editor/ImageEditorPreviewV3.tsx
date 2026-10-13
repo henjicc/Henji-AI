@@ -1,5 +1,6 @@
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { AlertTriangle, LoaderCircle } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createLogger } from '@/core/logging'
@@ -511,7 +512,7 @@ export function ImageEditorPreviewV3({
         && !viewportResult
         && !managedPreview.result ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <LoaderCircle className={`${UI_ICON_SIZE_CLASS.xl} animate-spin text-text3`} />
+          <UiSpinner />
         </div>
       ) : null}
       {previewDiagnostic ? (

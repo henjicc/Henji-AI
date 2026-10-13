@@ -66,19 +66,19 @@ export default function LogsShell(): JSX.Element {
           <UiWindowControl
             action="minimize"
             onClick={handleMinimize}
-            title={t('windowControls.minimize')}
+            tooltip={t('windowControls.minimize')}
             aria-label={t('windowControls.minimize')}
           />
           <UiWindowControl
             action={isMaximized ? 'restore' : 'maximize'}
             onClick={handleToggleMaximize}
-            title={maximizeLabel}
+            tooltip={maximizeLabel}
             aria-label={maximizeLabel}
           />
           <UiWindowControl
             action="close"
             onClick={handleClose}
-            title={t('windowControls.close')}
+            tooltip={t('windowControls.close')}
             aria-label={t('windowControls.close')}
           />
         </>}

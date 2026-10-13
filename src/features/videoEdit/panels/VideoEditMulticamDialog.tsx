@@ -25,7 +25,7 @@ export function VideoEditMulticamDialog({ projectId, sequenceId, itemIds, onClos
     } catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
-  return <UiModal isOpen title="创建多机位源序列" onClose={cancel} footer={<><UiButton onClick={cancel}>取消</UiButton><UiButton variant="primary" disabled={busy || !name.trim()} onClick={() => void submit()}>{busy ? '正在同步…' : '创建'}</UiButton></>}>
+  return <UiModal isOpen title="创建多机位源序列" onClose={cancel} footer={<><UiButton onClick={cancel}>取消</UiButton><UiButton loading={busy} variant="primary" disabled={busy || !name.trim()} onClick={() => void submit()}>{'创建'}</UiButton></>}>
     <div className="flex flex-col gap-3">
       <UiFormRow label="序列名称"><UiInput aria-label="多机位序列名称" value={name} maxLength={200} disabled={busy} onChange={event => setName(event.target.value)} /></UiFormRow>
       <UiFormRow label="同步方式"><Dropdown value={sync} disabled={busy} options={[{ value: 'audio', label: '声音自动同步' }, { value: 'in_points', label: '入点' }, { value: 'timecode', label: '时间码' }]} onSelect={setSync} /></UiFormRow>

@@ -125,7 +125,7 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
       </>}
     </div>
     {!failed && !transcribing && !recording && !!stage && <div className="flex shrink-0 justify-end">
-      {entries.length ? <span title={reason}><UiButton variant="primary" disabled={busy || generating || !!reason || !onGenerate} onClick={() => generate()}>生成候选</UiButton></span> : <UiButton variant="primary" disabled={busy || loading} onClick={onTranscribe}>转写并审阅</UiButton>}
+      {entries.length ? <UiButton variant="primary" loading={generating} disabledReason={reason || (!onGenerate ? '当前内容暂不支持生成候选' : undefined)} disabled={busy || generating || !!reason || !onGenerate} onClick={() => generate()}>生成候选</UiButton> : <UiButton variant="primary" disabled={busy || loading} onClick={onTranscribe}>转写并审阅</UiButton>}
     </div>}
     <ExplanationSendConfirmation request={sendRequest?.scope === generationScope ? sendRequest.request : undefined} generating={generating}
       onCancel={() => { if (!generatingRef.current) { void sendRequest?.request.cancel().catch(review.onError); setSendRequest(undefined) } }} onSend={project => { if (sendRequest?.scope === generationScope) generate(sendRequest.request, project) }} />

@@ -13,7 +13,7 @@ import { hasTag } from '@/core/tags'
 import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 import { usePromptOptimizationPreviewPlayback } from '../hooks/usePromptOptimizationPreviewPlayback'
-import { ArrowUp, LoaderCircle, Plus } from 'lucide-react'
+import { ArrowUp, Plus } from 'lucide-react'
 import { readVideoInfo } from '@/commands/video'
 import { getPathForFile } from '@/platform/desktopApi'
 import { getPlatform } from '@/platform/runtime'
@@ -470,7 +470,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               type="button"
               disabled={!shouldShowUpload || !canAddReference}
               onClick={() => uploaderRef.current?.openFilePicker()}
-              title={!shouldShowUpload
+              tooltip={!shouldShowUpload
                 ? t('inputArea.button.referenceUnsupported')
                 : (needsVideoUpload ? uploadHint : t('inputArea.button.addReference'))}
               aria-label={t('inputArea.button.addReference')}
@@ -486,12 +486,10 @@ const InputArea: React.FC<InputAreaProps> = ({
               type="button"
               data-onboarding-target="generate"
               onClick={onGenerate}
-              disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
-              title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
+              loading={isLoading} disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
+              tooltip={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
             >
-              {isLoading ? (
-                <LoaderCircle className={`animate-spin`} />
-              ) : isGenerating ? (
+              {isGenerating ? (
                 <Plus  />
               ) : (
                 <ArrowUp  />

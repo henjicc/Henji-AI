@@ -141,7 +141,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                   setContentView('conversation')
                 }}
                 disabled={embedded.busy}
-                title="新建对话"
+                tooltip="新建对话"
                 aria-label="新建对话"
               >
                 <MessageSquarePlus  />
@@ -152,7 +152,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 onClick={() => setContentView((view) => (
                   view === 'history' ? 'conversation' : 'history'
                 ))}
-                title={contentView === 'history' ? '返回当前对话' : '对话历史'}
+                tooltip={contentView === 'history' ? '返回当前对话' : '对话历史'}
                 aria-label={contentView === 'history' ? '返回当前对话' : '对话历史'}
               >
                 <History  />
@@ -161,7 +161,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 type="button"
                 on={contentView === 'memory'}
                 onClick={() => setContentView(view => view === 'memory' ? 'conversation' : 'memory')}
-                title={contentView === 'memory' ? '返回当前对话' : '助手记忆'}
+                tooltip={contentView === 'memory' ? '返回当前对话' : '助手记忆'}
                 aria-label="助手记忆"
               >
                 <BrainCircuit  />
@@ -173,7 +173,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 <UiIconButton
                   type="button"
                   onClick={() => setOpen(false)}
-                  title="收起智能助手"
+                  tooltip="收起智能助手"
                   aria-label="收起智能助手"
                   className="ml-1"
                 >

@@ -33,14 +33,14 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
   const fillControl = fullWidth || formRow?.fillControl === true
   const enabled = options.filter(option => !option.disabled)
   const tabValue = enabled.some(option => option.value === value) ? value : enabled[0]?.value
-  if (options.length > 5) return <Dropdown ariaLabel={ariaLabel} options={[...options]} value={value} onSelect={onChange} size={size} disabled={disabled} />
+  if (options.length > 5 || options.some(option => [...option.label].length > 4)) return <Dropdown ariaLabel={ariaLabel} options={options.map(option => ({ ...option, tooltip: option.title }))} value={value} onSelect={onChange} onPreview={onPreview} size={size} className={fillControl ? 'w-full' : undefined} disabled={disabled} />
   return <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined}
     className={`inline-grid auto-cols-fr grid-flow-col gap-0.5 rounded-lg bg-gap p-0.5 ${UI_CONTROL_HEIGHT_CLASS[size]} ${fillControl ? 'w-full' : 'w-fit'}`}>
     {/* ui-surface-allow: S1 u5 统一分段组件内部使用原语渲染选项，调用方必须用 UiSegmented。 */}
     {options.map(option => <UiOptionButton key={option.value} type="button" variant="segment" segmentFrame="inset" size={size}
       ref={button => { if (button) buttons.current.set(option.value, button); else buttons.current.delete(option.value) }}
       role="radio" aria-checked={value === option.value} tabIndex={!disabled && option.value === tabValue ? 0 : -1}
-      active={value === option.value} disabled={disabled || option.disabled} title={option.title} aria-label={option.ariaLabel}
+      active={value === option.value} disabled={disabled || option.disabled} tooltip={option.title} aria-label={option.ariaLabel}
       onMouseEnter={() => { if (!disabled && !option.disabled) onPreview?.(option.value) }} onMouseLeave={() => onPreview?.(undefined)}
       onFocus={() => { if (!disabled && !option.disabled) onPreview?.(option.value) }} onBlur={() => onPreview?.(undefined)}
       onClick={() => onChange(option.value)} onKeyDown={event => {

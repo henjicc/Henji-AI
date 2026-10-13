@@ -14,7 +14,8 @@
 - 组件外观只由枚举决定（`variant`/`size`/`tone`/`on`/`shape`/`active`/`appearance` 等），调用点 `className` 只放布局；按钮、选项、标签、导航、字段触发器的调用点外观覆盖由 `check:surface` 规则 E 拦截
 - 尺寸与样式写法受 `check:ui-residue` 约束（进 build / CI）：任意值类只允许引用变量、CSS 关键字与相对值；字号、行高、圆角、间距等视觉档位不许写死，与 Tailwind 标准档等值的几何值写标准类；固定几何尺寸与字面量内联尺寸先改组件枚举或类名，确属组件几何再登记 `scripts/ui-residue.allowlist.json`（写理由）。口径见 skill `henji-ui-surface` 的 `references/review.md` 第 3 节
 - 按钮五档 + `link` + `media`，**默认静默**（`quiet`）；选中态用淡强调底（`selected-accent`，重要记录 012），悬停只用中性抬升且不得与选中同色；完整词汇表、必须复用的组件与新枚举（`UiToolbar variant="command"`、`UiTextToken`、`UiWindowControl`、`UiFieldTrigger`、`UiOptionButton` 的 `segment/grid/tile/swatch/cover`、`UiGroup titleTone="compact"`、`UiFormRow density="compact"`、`WaveformView` 等）见 skill `henji-ui-surface`
-- 状态展示统一用 `UiEmpty`/`UiLoading`/`UiError`，禁止页面内联手写状态块
+- 块级状态统一用 `UiEmpty`/`UiLoading`/`UiError`；行内加载与骨架用 `UiSpinner`/`UiSkeleton`，字段错误用 `UiFormRow error` 或独立 `UiFieldMessage`，行内反馈用 `UiInlineStatus`。禁止页面手写同义状态。
+- 按钮加载传 `loading` 并保留静息文案；不可用的唯一入口传 `disabledReason`。悬停说明传 `tooltip`，不使用原生 `title`；图标按钮仍须有 label/aria-label 或非空 tooltip 作为可访问名称。
 - 弹窗统一走 `UiModal` 或 `AlertDialog`，禁止手写 `fixed inset-0` + 遮罩 + 卡片外壳；全屏媒体查看器统一用 `UiViewerShell` + `useUiViewerShell`
 
 ## 用户界面信息准入（硬规则）

@@ -60,10 +60,10 @@ const FieldRow = memo(function FieldRow({ field, store }: { field: ParamFieldSpe
   const props = store.props
   const wheel = (field.type === 'grade' && field.layout === 'wheel') || (field.type === 'curve' && field.source === 'builtin')
   return <div className={highlighted ? 'flex flex-col gap-1 bg-selected-accent' : 'flex flex-col gap-1'} data-video-edit-code-parameter={field.source === 'code' ? field.key : undefined} data-video-edit-builtin-param={field.source === 'builtin' ? field.key : undefined} data-code-element-parameter={highlighted || undefined}>
-    {wheel ? <div className="flex min-h-8 items-start gap-1.5"><span className="min-w-0 flex-1 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>{props.onReset && <UiIconButton size="2xs" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}</div> : <UiFormRow label={field.title} info={field.tooltip} density="compact">
+    {wheel ? <div className="flex min-h-8 items-start gap-1.5"><span className="min-w-0 flex-1 pt-1 text-xs text-text2"><UiTooltipText tooltip={field.tooltip}>{field.title}</UiTooltipText></span>{props.onReset && <UiIconButton size="2xs" aria-label={`重置${field.title}`} tooltip={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}</div> : <UiFormRow label={field.title} info={field.tooltip} density="compact">
       <div className="flex min-w-0 items-center gap-1.5">
         <div className="min-w-0 flex-1">{props.renderControl(field, value)}</div>
-        {props.onReset && <UiIconButton size="2xs" className="shrink-0" aria-label={`重置${field.title}`} title={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}
+        {props.onReset && <UiIconButton size="2xs" className="shrink-0" aria-label={`重置${field.title}`} tooltip={`重置${field.title}`} disabled={props.resetDisabled?.(field, value)} onClick={() => store.props.onReset?.(field)}><RotateCcw  /></UiIconButton>}
       </div>
     </UiFormRow>}
     {wheel && <div className="min-w-0">{props.renderControl(field, value)}</div>}

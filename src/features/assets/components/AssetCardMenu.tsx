@@ -140,7 +140,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
         ) : (
           <div className={`min-w-0 flex-1 truncate ${UI_TEXT_PANEL_TITLE_CLASS}`} title={name} onDoubleClick={() => setEditingName(true)}>{name}</div>
         )}
-        {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')} aria-label={t('assetLibrary.renameAsset')}><Pencil  /></UiIconButton>}
+        {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} tooltip={t('assetLibrary.renameAsset')} aria-label={t('assetLibrary.renameAsset')}><Pencil  /></UiIconButton>}
       </div>
       <div className={UI_FIELD_LABEL_CLASS}>{t('assetLibrary.tags')}</div>
       <UiInput disabled={pendingAction !== null} aria-label={t('assetLibrary.tags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addDraftTag() }} placeholder={t('assetLibrary.tagPlaceholder')} />

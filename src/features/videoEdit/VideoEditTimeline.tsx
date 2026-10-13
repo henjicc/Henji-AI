@@ -29,7 +29,7 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
   const linkedSelection = presentation('toggle_linked_selection')
   const action = (id: 'split' | 'delete', Icon: typeof Scissors, tone?: 'danger'): React.ReactElement => {
     const command = presentation(id)
-    return <UiIconButton tone={tone} aria-label={id === 'split' ? '拆分' : '删除'} title={command.tooltip} disabled={!command.enabled} onClick={() => execute(id)}><Icon  /></UiIconButton>
+    return <UiIconButton tone={tone} aria-label={id === 'split' ? '拆分' : '删除'} tooltip={command.tooltip} disabled={!command.enabled} onClick={() => execute(id)}><Icon  /></UiIconButton>
   }
   return <div className="flex h-full min-h-0 select-none flex-col bg-panel" aria-label="剪辑时间线" data-video-edit-timeline>
     <div className="flex h-band-header shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-gap px-2" role="toolbar" aria-label="时间线工具栏">
@@ -38,16 +38,16 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
       <VideoEditSequenceTabs instance={instance} onError={onError} />
       <VideoEditTimelineTools presentation={presentation} execute={execute} />
       <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" />
-      <UiIconButton on={linkedSelection.checked} disabled={!linkedSelection.enabled} aria-label={linkedSelection.title} title={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => execute('toggle_linked_selection')}><Link  /></UiIconButton>
-      <UiIconButton on={snapping.checked} disabled={!snapping.enabled} aria-label={snapping.title} title={snapping.tooltip} onClick={() => execute('toggle_snapping')}><Magnet  /></UiIconButton>
+      <UiIconButton on={linkedSelection.checked} disabled={!linkedSelection.enabled} aria-label={linkedSelection.title} tooltip={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => execute('toggle_linked_selection')}><Link  /></UiIconButton>
+      <UiIconButton on={snapping.checked} disabled={!snapping.enabled} aria-label={snapping.title} tooltip={snapping.tooltip} onClick={() => execute('toggle_snapping')}><Magnet  /></UiIconButton>
       <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="片段编辑">
         {action('split', SquareSplitHorizontal)}
         {action('delete', Trash2, 'danger')}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1 pl-3">
-        <UiIconButton size="xs" aria-label="缩小时间线" title={presentation('zoom_out').tooltip} disabled={!presentation('zoom_out').enabled} onClick={() => execute('zoom_out')}><Minus  /></UiIconButton>
+        <UiIconButton size="xs" aria-label="缩小时间线" tooltip={presentation('zoom_out').tooltip} disabled={!presentation('zoom_out').enabled} onClick={() => execute('zoom_out')}><Minus  /></UiIconButton>
         <div className="flex w-24 items-center"><UiRangeInput aria-label="时间线缩放" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} /></div>
-        <UiIconButton size="xs" aria-label="放大时间线" title={presentation('zoom_in').tooltip} disabled={!presentation('zoom_in').enabled} onClick={() => execute('zoom_in')}><Plus  /></UiIconButton>
+        <UiIconButton size="xs" aria-label="放大时间线" tooltip={presentation('zoom_in').tooltip} disabled={!presentation('zoom_in').enabled} onClick={() => execute('zoom_in')}><Plus  /></UiIconButton>
       </div>
     </div>
     <VideoEditTimelineCanvas key={JSON.stringify([instance.document.id, sequence.id])} instance={instance} sequence={sequence} pixels={60 * instance.zoom / sequence.fps} onError={onError} visible={visible} />

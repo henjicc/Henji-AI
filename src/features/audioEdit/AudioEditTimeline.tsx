@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { UiSegmented } from '@/components/ui'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
@@ -187,11 +188,11 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
   // 播放条右侧控件：priority 越小越早收进“更多”；试听错误常驻（pinned，放不下时自身截断）
   const transportItems: UiOverflowRowItem[] = [
     ...(readouts.length ? [{ id: 'readouts', priority: 10, node: <span className="max-w-56 truncate whitespace-nowrap text-xs text-text3" aria-live="polite" title={readouts.join(' · ')}>{readouts.join(' · ')}</span> }] : []),
-    ...(error ? [{ id: 'error', priority: 100, pinned: true, node: <span role="alert" className="min-w-0 truncate text-xs text-danger-text" title={error}>{error}</span> }] : []),
+    ...(error ? [{ id: 'error', priority: 100, pinned: true, node: <UiInlineStatus role="alert" className="min-w-0 truncate" tooltip={error}>{error}</UiInlineStatus> }] : []),
     ...(selection ? [{ id: 'selection', priority: 90, node: <div className="flex items-center gap-1" aria-label="波形选区操作">
       <span className="mr-1 whitespace-nowrap font-mono text-xs tabular-nums text-text2">选区 {time(selection.startFrame, rate)} – {time(selection.endFrame, rate)}</span>
-      <UiButton size="sm" variant="danger" disabled={disabled} title="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2  className="mr-1" />删除</UiButton>
-      <UiButton size="sm" disabled={disabled} title="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX  className="mr-1" />静音</UiButton>
+      <UiButton size="sm" variant="danger" disabled={disabled} tooltip="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2  className="mr-1" />删除</UiButton>
+      <UiButton size="sm" disabled={disabled} tooltip="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX  className="mr-1" />静音</UiButton>
       <UiButton size="sm" disabled={disabled} onClick={() => onEditSelection('restore')}><RotateCcw  className="mr-1" />恢复选区</UiButton>
       <UiButton size="sm" onClick={() => onSelection(null)}>取消选区</UiButton>
     </div> }] : []),
@@ -203,10 +204,10 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
       <UiRangeInput className="!w-20 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
     </label> },
     { id: 'zoom', priority: 60, node: <div className="flex items-center gap-1.5" role="group" aria-label="波形缩放控制">
-      <UiIconButton aria-label="显示全部" title="显示全部" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}><Expand  /></UiIconButton>
-      <UiIconButton aria-label="缩小波形" title="缩小波形" disabled={zoomLevel <= 0} onClick={() => zoomTo(zoomLevel - 10)}><Minus  /></UiIconButton>
+      <UiIconButton aria-label="显示全部" tooltip="显示全部" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}><Expand  /></UiIconButton>
+      <UiIconButton aria-label="缩小波形" tooltip="缩小波形" disabledReason="已缩小到全部内容" disabled={zoomLevel <= 0} onClick={() => zoomTo(zoomLevel - 10)}><Minus  /></UiIconButton>
       <UiRangeInput className="!w-24 shrink-0" aria-label="波形缩放" min={0} max={ZOOM_STEPS} step={1} value={Math.max(0, Math.min(ZOOM_STEPS, zoomLevel))} onChange={(event) => zoomTo(Number(event.target.value))} />
-      <UiIconButton aria-label="放大波形" title="放大波形" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus  /></UiIconButton>
+      <UiIconButton aria-label="放大波形" tooltip="放大波形" disabledReason="已达到最大缩放" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus  /></UiIconButton>
     </div> },
     { id: 'help', priority: 30, node: <PanelTrigger
       panelSize="menu"
@@ -222,16 +223,16 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
         </div>
       )}
     >
-      {({ open, togglePanel }) => <UiIconButton aria-label="快捷键与图例" title="快捷键与图例" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Keyboard  /></UiIconButton>}
+      {({ open, togglePanel }) => <UiIconButton aria-label="快捷键与图例" tooltip="快捷键与图例" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Keyboard  /></UiIconButton>}
     </PanelTrigger> },
-    { id: 'settings', priority: 70, node: <UiIconButton title="界面设置" aria-label="界面设置" onClick={onSettings}><SettingsIcon  /></UiIconButton> },
+    { id: 'settings', priority: 70, node: <UiIconButton tooltip="界面设置" aria-label="界面设置" onClick={onSettings}><SettingsIcon  /></UiIconButton> },
   ]
 
   return (
     <section ref={wheelRegion} aria-label="波形" data-audio-timeline className="shrink-0 border-t border-gap bg-panel">
       {/* 播放条：放不下时按优先级把右侧控件收进“更多”（UiOverflowRow），任何宽度下都不折行 */}
       <div className="flex min-h-10 items-center gap-1.5 px-3 py-1">
-        <UiIconButton size="md" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'} aria-label={playing ? '暂停' : '播放'}>{playing ? <Pause  /> : <Play  />}</UiIconButton>
+        <UiIconButton size="md" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} tooltip={playing ? '暂停' : '播放'} aria-label={playing ? '暂停' : '播放'}>{playing ? <Pause  /> : <Play  />}</UiIconButton>
         <span className="shrink-0 whitespace-nowrap font-mono text-13 tabular-nums" data-audio-edit-time>
           <span className="text-text1">{preciseTime(outputFrame, rate)}</span><span className="text-text3"> / {preciseTime(playDuration, rate)}</span>
         </span>
@@ -248,7 +249,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
                 </div>
               )}
             >
-              {({ open, togglePanel }) => <UiIconButton aria-label="更多播放控制" title="更多播放控制" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><MoreHorizontal  /></UiIconButton>}
+              {({ open, togglePanel }) => <UiIconButton aria-label="更多播放控制" tooltip="更多播放控制" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><MoreHorizontal  /></UiIconButton>}
             </PanelTrigger>
           )}
         />
@@ -316,7 +317,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
           {[...spans.filter((span) => span.muted).map((span) => ({ startFrame: span.sourceStartFrame, endFrame: span.sourceEndFrame, kind: 'mute' })), ...previewRanges.map((range) => ({ ...range, kind: 'preview' })), ...(selection ? [{ ...selection, kind: 'selection' }] : [])].filter((range) => range.endFrame > view.start && range.startFrame < view.end).map((range, index) => <div key={`${range.kind}:${index}`} data-audio-overlay={range.kind} className={`pointer-events-none absolute inset-y-5 border-x ${range.kind === 'preview' ? 'border-warning-text bg-warning-tint' : range.kind === 'mute' ? 'border-text3 bg-text3/20' : 'border-accent-ring bg-accent-tint'}`} style={{ left: `${position(Math.max(view.start, range.startFrame))}%`, width: `${(Math.min(view.end, range.endFrame) - Math.max(view.start, range.startFrame)) / length * 100}%` }} />)}
           {sourceFrame >= view.start && sourceFrame <= view.end && <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-accent-ring" style={{ left: `${Math.min(99.95, position(sourceFrame))}%` }}><span className="absolute -left-[5px] -top-0.5 h-2.5 w-[11px] rounded-b-md bg-accent-ring" /></div>}
           {!waveform.data && (waveform.status === 'error'
-            ? <div role="alert" className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-danger-text">{waveform.error}</div>
+            ? <UiInlineStatus role="alert" className="pointer-events-none absolute inset-0 flex items-center justify-center">{waveform.error}</UiInlineStatus>
             : <UiLoading size="xs" message="正在准备波形…" className="pointer-events-none absolute inset-0" />)}
         </div>
         <AudioEditOverview duration={duration} sampleRate={rate} sourceFrame={sourceFrame} waveform={waveform} view={view} onChange={(next) => { pauseFollow(); setView(next) }} />

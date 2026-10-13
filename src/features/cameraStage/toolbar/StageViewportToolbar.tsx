@@ -66,7 +66,7 @@ const StageViewportToolbar: React.FC = () => {
               on={activeTool === definition.id}
               disabled={disabled}
               className={index === 3 ? 'ml-1.5' : undefined}
-              title={`${definition.label}（${definition.shortcut}）`}
+              tooltip={`${definition.label}（${definition.shortcut}）`}
               aria-label={`${definition.label}，快捷键 ${definition.shortcut}`}
               onClick={() => activateTool(definition)}
             >

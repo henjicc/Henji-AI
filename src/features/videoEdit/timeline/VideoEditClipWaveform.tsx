@@ -32,7 +32,7 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
       {states.map((state, index) => <WaveformView key={index} waveform={state} startSeconds={startSeconds} endSeconds={endSeconds} tone="clip" className={`min-h-0 flex-1 ${reverse ? '-scale-x-100' : ''}`} />)}
     </div>}
     {error && <div className="absolute bottom-0 z-raised max-w-full" onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
-      <UiButton variant="link" size="sm" title={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}>{t('errorState.retry')}</UiButton>
+      <UiButton variant="link" size="sm" tooltip={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}>{t('errorState.retry')}</UiButton>
     </div>}
   </>
 })

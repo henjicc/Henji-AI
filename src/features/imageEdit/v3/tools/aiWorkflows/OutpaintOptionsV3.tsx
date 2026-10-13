@@ -74,7 +74,7 @@ export function OutpaintOptionsV3({ bus }: ToolOptionsProps): JSX.Element {
         <UiFormRow label={text('top')}><NumberInput ariaLabel={text('top')} value={top} min={0} onChange={setTop} disabled={busy} /></UiFormRow>
         <UiFormRow label={text('right')}><NumberInput ariaLabel={text('right')} value={right} min={0} onChange={setRight} disabled={busy} /></UiFormRow>
         <UiFormRow label={text('bottom')}><NumberInput ariaLabel={text('bottom')} value={bottom} min={0} onChange={setBottom} disabled={busy} /></UiFormRow>
-        <UiButton disabled={busy} title={text('changeModel')} onClick={() => setPicking(true)}>{modelId ? getI18nText(registry.getModel(modelId)?.meta.name ?? modelId, i18n.language) : text('defaultModel')}</UiButton>
+        <UiButton disabled={busy} tooltip={text('changeModel')} onClick={() => setPicking(true)}>{modelId ? getI18nText(registry.getModel(modelId)?.meta.name ?? modelId, i18n.language) : text('defaultModel')}</UiButton>
         <PromptEditor preset="plain" value={prompt} onChange={setPrompt} ariaLabel={text('prompt')} placeholder={text('defaultPrompt')} disabled={busy} />
         <p className="text-xs text-text3">{text('cost')}</p>
         {busy ? <UiLoading size="xs" message={text('preparing')} /> : error ? <UiError size="xs" message={error} /> : <UiEmpty size="xs" title={text('empty')} />}

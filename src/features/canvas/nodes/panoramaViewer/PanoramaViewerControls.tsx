@@ -78,7 +78,7 @@ export function PanoramaViewerControls({
         variant="secondary"
         className="ml-auto gap-1.5"
         disabled={!canCapture || isCapturing}
-        title={captureTitle}
+        tooltip={captureTitle}
         aria-label={captureTitle}
         onClick={onCapture}
       >

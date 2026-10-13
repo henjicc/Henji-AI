@@ -1,7 +1,8 @@
+import { UiSpinner, UiSkeleton } from '@/components/ui'
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
-import { LoaderCircle, Play, Square } from 'lucide-react'
+import { Play, Square } from 'lucide-react'
 import '@/features/canvas/storyboard.css'
 import resolveConfig from 'tailwindcss/resolveConfig'
 import * as styleTokens from '@/components/ui/styleTokens'
@@ -137,8 +138,8 @@ function LoopSample({ name, reduced }: { name: keyof typeof motion.UI_LOOP_MS; r
     <code className="w-56 text-xs text-text2">UI_LOOP_MS.{name} · {motion.UI_LOOP_MS[name]}ms</code>
     <div key={replay} className={`relative h-8 w-8 ${name === 'executing' && active ? 'canvas-node-paint-frame--executing' : ''}`}
       style={{ '--canvas-node-paint-top': '0px', '--canvas-node-paint-right': '0px', '--canvas-node-paint-bottom': '0px', '--canvas-node-paint-left': '0px' } as CSSProperties}>
-      {name === 'spin' ? <LoaderCircle className={`${UI_ICON_SIZE_CLASS.display} text-accent-text ${active ? 'animate-spin' : ''}`} />
-        : <span className={`block h-8 w-8 rounded-control bg-control ${name === 'pulse' && active ? 'animate-pulse' : ''}`} />}
+      {name === 'spin' ? <UiSpinner size="xl" tone="accent" active={active} />
+        : <UiSkeleton shape="square" active={name === 'pulse' && active} />}
     </div>
     <UiButton size="sm" onClick={() => { setRunning(true); setReplay(value => value + 1) }}><Play />重放循环</UiButton>
     <UiButton size="sm" disabled={!running} onClick={() => setRunning(false)}><Square />停止</UiButton>

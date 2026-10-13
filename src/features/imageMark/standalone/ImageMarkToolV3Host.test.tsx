@@ -405,8 +405,9 @@ describe('ImageMarkToolV3Host', () => {
     const exportButton = await screen.findByRole('button', {
       name: /导出暂不可用：当前版本还不能可靠保留 HDR 元数据/,
     }) as HTMLButtonElement
-    expect(exportButton.disabled).toBe(true)
-    expect(exportButton.title).toBe(
+    expect(exportButton.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.focus(exportButton)
+    expect(screen.getByRole('tooltip').textContent).toBe(
       '当前版本还不能可靠保留 HDR 元数据，已阻止降级导出为 SDR 图片。',
     )
     fireEvent.click(exportButton)
@@ -426,7 +427,7 @@ describe('ImageMarkToolV3Host', () => {
     const exportButton = screen.getByRole('button', {
       name: /Export unavailable: This version cannot preserve HDR metadata reliably/,
     }) as HTMLButtonElement
-    expect(exportButton.disabled).toBe(true)
+    expect(exportButton.getAttribute('aria-disabled')).toBe('true')
     const handButton = screen.getByRole('button', { name: 'Pan canvas (Hand)' }) as HTMLButtonElement
     expect(handButton.disabled).toBe(false)
 

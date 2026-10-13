@@ -24,7 +24,7 @@ const StateKeyframeTimecodeText: React.FC<StateKeyframeTimecodeTextProps> = ({ c
   return (
     <UiButton variant="quiet" size="sm"
       type="button"
-      title="按住 Ctrl 点击切换时间码格式（秒 / 帧 / 秒:帧）"
+      tooltip="按住 Ctrl 点击切换时间码格式（秒 / 帧 / 秒:帧）"
       className="select-none font-mono font-normal tabular-nums"
       onClick={handleClick}
     >

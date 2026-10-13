@@ -41,6 +41,8 @@ describe('进出场单一实现契约', () => {
   it('中心页循环档有真实动画样本，并可停止/重放', () => {
     const gallery = readFileSync(path.join(root, 'src/features/devGallery/tokenSections.tsx'), 'utf8');
     expect(gallery).toContain('Object.entries(motion.UI_LOOP_MS)');
-    for (const name of ['animate-spin', 'animate-pulse', 'canvas-node-paint-frame--executing']) expect(gallery).toContain(name);
+    expect(readFileSync(path.join(root, 'src/components/ui/UiSpinner.tsx'), 'utf8')).toContain('motion-safe:animate-spin');
+    expect(readFileSync(path.join(root, 'src/components/ui/states.tsx'), 'utf8')).toContain('motion-safe:animate-pulse');
+    for (const name of ['<UiSpinner', '<UiSkeleton', 'canvas-node-paint-frame--executing']) expect(gallery).toContain(name);
   });
 });

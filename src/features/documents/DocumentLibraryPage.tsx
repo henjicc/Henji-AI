@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -394,7 +395,7 @@ export function DocumentLibraryPage({
         backLabel={backLabel}
         banner={(
           <>
-            {actionError ? <p role="alert" className="mb-4 text-xs text-danger-text">{actionError}</p> : null}
+            {actionError ? <UiInlineStatus role="alert" className="mb-4">{actionError}</UiInlineStatus> : null}
             {packageStatus && !actionError ? <p role="status" className={`mb-4 ${UI_TEXT_META_CLASS}`} data-observation-sensitive>{packageStatus}</p> : null}
             {banner}
           </>

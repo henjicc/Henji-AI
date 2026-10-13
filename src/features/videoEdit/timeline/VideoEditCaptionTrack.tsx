@@ -84,7 +84,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     <VideoEditTrackHeader caption row={row} code="C1" targeted={false} onTarget={() => focusVideoEditPanel(projectId, 'content')} onResize={() => {}} onPatch={patch => run(() => updateVideoEditCaptionTrack(projectId, sequence.id, { ...(patch.enabled === undefined ? {} : { captionTrackEnabled: patch.enabled }), ...(patch.locked === undefined ? {} : { captionTrackLocked: patch.locked }) }))} />
     {(sequence.captions ?? []).filter(caption => caption.id === preview?.id || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
       const caption = preview?.id === original.id ? preview : original
-      return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={sequence.captionTrackLocked || undefined} title={caption.text}
+      return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={sequence.captionTrackLocked || undefined} tooltip={caption.text}
         data-video-edit-caption-range={caption.id} data-caption-start={caption.start} data-caption-duration={caption.duration}
         className={`absolute top-0.5 ${sequence.captionTrackLocked ? 'cursor-default' : 'cursor-grab'}`}
         style={{ height: row.height - 4, left: TIMELINE_HEADER_WIDTH + caption.start * pixels, width: Math.max(3, caption.duration * pixels) }}

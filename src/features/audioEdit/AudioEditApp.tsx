@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationMessage } from '@/i18n/notifications'
@@ -437,16 +438,16 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           <UiButton size="sm" onClick={() => void run(() => getPlatform().audioEdit.cancelTask(task.requestId))}>取消</UiButton>
         </span>)}
         {state.saveError && <span className="flex items-center gap-1">
-          <span role="alert" className="max-w-48 truncate text-xs text-danger-text" title={state.saveError}>保存失败，修改仍保留</span>
+          <UiInlineStatus role="alert" className="max-w-48 truncate" tooltip={state.saveError}>保存失败，修改仍保留</UiInlineStatus>
           <UiButton size="sm" onClick={() => void run(() => flushAudioEditProject(project.id))}>重试保存</UiButton>
         </span>}
         {!state.saveError && sourceError && <span className="flex items-center gap-1">
-          <span role="alert" className="max-w-48 truncate text-xs text-danger-text" title={sourceError}>{sourceError}</span>
+          <UiInlineStatus role="alert" className="max-w-48 truncate" tooltip={sourceError}>{sourceError}</UiInlineStatus>
           <UiButton size="sm" disabled={disabled} onClick={() => void relinkSource()}>重新定位</UiButton>
         </span>}
-        <UiIconButton size="md" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} title={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search  /></UiIconButton>
+        <UiIconButton size="md" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} tooltip={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search  /></UiIconButton>
         <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification(notificationMessage('audioUndoAll')) }} />
-        <UiIconButton size="md" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" title="重做"><Redo2  /></UiIconButton>
+        <UiIconButton size="md" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" tooltip="重做"><Redo2  /></UiIconButton>
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
         <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id), includeProcessing: withRx })} />
@@ -455,7 +456,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     >
       {embeddedHost
         ? <UiButton onClick={() => void leave()}><ArrowLeft  />{`返回剪辑 · ${embeddedHost.label}`}</UiButton>
-        : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回口播列表" title="返回口播列表"><ArrowLeft  /></UiIconButton>}
+        : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回口播列表" tooltip="返回口播列表"><ArrowLeft  /></UiIconButton>}
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">

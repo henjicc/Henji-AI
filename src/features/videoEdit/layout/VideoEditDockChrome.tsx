@@ -61,7 +61,7 @@ function VideoEditPanelMenu({ containerApi, group }: { containerApi: DockviewApi
         <UiOptionButton role="menuitem" variant="menu" size="sm" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiOptionButton>
       </div>
     }}>
-    {({ open, togglePanel }) => <UiIconButton size="2xs" title="面板菜单" aria-label="面板菜单" aria-haspopup="menu" aria-expanded={open} on={open} data-panel-trigger-button
+    {({ open, togglePanel }) => <UiIconButton size="2xs" tooltip="面板菜单" aria-label="面板菜单" aria-haspopup="menu" aria-expanded={open} on={open} data-panel-trigger-button
       onPointerDown={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); togglePanel() }}><Menu  /></UiIconButton>}
   </PanelTrigger>
 }
@@ -71,7 +71,7 @@ export function VideoEditDockHeaderActions({ api, containerApi, group }: IDockvi
   const maximized = useDockGroupMaximized(containerApi, group)
   const label = maximizeLabelOf(maximized)
   return <div className="flex h-full items-center gap-1 pr-1" data-video-edit-dock-actions>
-    {api.location.type === 'grid' && <UiIconButton size="xs" title={label} aria-label={label} onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>{maximized ? <Minimize2  /> : <Maximize2  />}</UiIconButton>}
+    {api.location.type === 'grid' && <UiIconButton size="xs" tooltip={label} aria-label={label} onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>{maximized ? <Minimize2  /> : <Maximize2  />}</UiIconButton>}
   </div>
 }
 
@@ -95,6 +95,6 @@ export function VideoEditLayoutMenu({ api }: { api: DockviewApi | null }): React
       }}><span>{panel.title}</span>{(api?.getPanel(panel.id) || isVideoEditPanelPoppedOut(panel.id)) && <Check size={UI_ICON_SIZE.xs} />}</UiOptionButton>)}
       <UiOptionButton variant="menu" size="sm" className="flex items-center gap-2" disabled={!api} onClick={() => { if (api) resetVideoEditWorkspaceLayout(api) }}><RotateCcw size={UI_ICON_SIZE.xs} />重置布局</UiOptionButton>
     </div>}>
-    {({ open, togglePanel }) => <UiIconButton disabled={!api} aria-label="面板" title="面板与布局" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid  /></UiIconButton>}
+    {({ open, togglePanel }) => <UiIconButton disabled={!api} aria-label="面板" tooltip="面板与布局" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid  /></UiIconButton>}
   </PanelTrigger>
 }

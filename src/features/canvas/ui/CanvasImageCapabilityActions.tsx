@@ -157,7 +157,7 @@ export function CanvasImageCapabilityActions({
         data-image-capability-placement="inline"
         disabled={pendingCapabilityId !== null}
         aria-label={t(capability.titleKey)}
-        title={t(capability.descriptionKey)}
+        tooltip={t(capability.descriptionKey)}
         onClick={(event) => {
           event.stopPropagation()
           onExecute(capability.id)
@@ -211,7 +211,7 @@ export function CanvasImageCapabilityActions({
                         data-capability-enabled={disabled ? 'false' : 'true'}
                         data-image-capability-id={capability.id}
                         data-image-capability-placement="overflow"
-                        title={t(capability.descriptionKey)}
+                        tooltip={t(capability.descriptionKey)}
                         size="lg"
                         className="min-h-12 w-full items-start gap-2 px-2 py-2 text-left"
                         onClick={(event) => {
@@ -257,7 +257,7 @@ export function CanvasImageCapabilityActions({
               aria-expanded={open}
               aria-haspopup="menu"
               aria-label={t('nodeToolbar.moreImageCapabilities')}
-              title={t('nodeToolbar.moreImageCapabilities')}
+              tooltip={t('nodeToolbar.moreImageCapabilities')}
               className="gap-1"
               onClick={(event) => {
                 event.stopPropagation()

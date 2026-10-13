@@ -12,6 +12,7 @@ import { createContext, useContext } from 'react'
 export interface UiFormRowLabelling {
   labelId: string
   hintId?: string
+  errorId?: string
   /** 固定列面板内，字段及分段填满控件列；胶囊开关等固有几何不变。 */
   fillControl?: boolean
 }
@@ -23,6 +24,7 @@ export function useUiFormRowLabelling(): UiFormRowLabelling | null {
 }
 
 interface LabellingProps {
+  'aria-invalid'?: boolean | 'false' | 'true' | 'grammar' | 'spelling'
   'aria-label'?: string
   'aria-labelledby'?: string
   'aria-describedby'?: string
@@ -30,17 +32,19 @@ interface LabellingProps {
 }
 
 /**
- * 控件自身没有可访问名称时，返回指向所在表单行标签的 aria 属性；已有名称时返回空对象（调用方的名称优先）。
+ * 控件自身没有可访问名称时，返回指向所在表单行标签的 aria 属性；已有名称时保留调用方名称，仍合并说明与错误关联。
  * `selfId` 用于“标签 + 自身内容”组合命名（下拉触发器：读作“时长 5s”而不是只读“5s”或只读“时长”）。
  */
 export function resolveFormRowLabelling(
   row: UiFormRowLabelling | null,
   props: LabellingProps,
   selfId?: string,
-): { 'aria-labelledby'?: string; 'aria-describedby'?: string } {
-  if (!row || props['aria-label'] || props['aria-labelledby']) return {}
+): { 'aria-labelledby'?: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean | 'false' | 'true' | 'grammar' | 'spelling' } {
+  if (!row) return {}
+  const description = [...new Set([props['aria-describedby'], row.hintId, row.errorId].filter(Boolean).join(' ').split(' ').filter(Boolean))].join(' ')
   return {
-    'aria-labelledby': selfId ? `${row.labelId} ${selfId}` : row.labelId,
-    ...(row.hintId && !props['aria-describedby'] ? { 'aria-describedby': row.hintId } : {}),
+    ...(!props['aria-label'] && !props['aria-labelledby'] ? { 'aria-labelledby': selfId ? `${row.labelId} ${selfId}` : row.labelId } : {}),
+    ...(description ? { 'aria-describedby': description } : {}),
+    ...(row.errorId ? { 'aria-invalid': true } : {}),
   }
 }

@@ -156,7 +156,7 @@ export function ModelSyncDialog({
                       </UiOptionButton>
                       <UiIconButton size="md"
                         type="button"
-                        title={t(allAdded ? 'modelSync.removeGroup' : 'modelSync.addGroup', { group: row.group })}
+                        tooltip={t(allAdded ? 'modelSync.removeGroup' : 'modelSync.addGroup', { group: row.group })}
                         aria-label={t(allAdded ? 'modelSync.removeGroup' : 'modelSync.addGroup', { group: row.group })}
                         onClick={() => {
                           const ids = row.models.map(item => item.modelId)
@@ -181,7 +181,7 @@ export function ModelSyncDialog({
                     </div>
                     <UiIconButton size="md"
                       type="button"
-                      title={t(added ? 'modelSync.removeModel' : 'modelSync.addModel', { model: row.model.modelId })}
+                      tooltip={t(added ? 'modelSync.removeModel' : 'modelSync.addModel', { model: row.model.modelId })}
                       aria-label={t(added ? 'modelSync.removeModel' : 'modelSync.addModel', { model: row.model.modelId })}
                       onClick={() => {
                         if (added) void onRemove([row.model.modelId])

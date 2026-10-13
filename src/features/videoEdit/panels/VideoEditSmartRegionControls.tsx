@@ -26,7 +26,7 @@ function Row({ label, tooltip, children, reset }: { label: string; tooltip: stri
   return <div className="flex min-h-8 items-center gap-1.5" data-video-edit-smart-region-row={label}>
     <span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
-    {reset ? <UiIconButton size="2xs" aria-label={reset.label} title={reset.label} disabled={reset.disabled} onClick={reset.onReset}><RotateCcw  /></UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
+    {reset ? <UiIconButton size="2xs" aria-label={reset.label} tooltip={reset.label} disabled={reset.disabled} onClick={reset.onReset}><RotateCcw  /></UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
   </div>
 }
 
@@ -78,7 +78,7 @@ export function VideoEditSmartRegionControls({ target, effect, gesture }: { targ
     <Row label="遮罩" tooltip="在节目画面上画遮罩，效果只作用在遮罩里（可以有多个，按模式相加、相减、交叉）">
       <VideoEditMaskCreateButtons target={target} effect={effect} gesture={gesture} />
     </Row>
-    <VideoEditMaskShapeControls target={target} effect={effect} gesture={gesture} trackAction={analyzable ? shape => <UiIconButton size="2xs" aria-label={shape.follow ? '取消遮罩跟踪' : '跟踪遮罩'} title={shape.follow ? '取消遮罩跟踪' : '跟踪遮罩'} on={Boolean(shape.follow)} onClick={() => { try { trackVideoEditMask(target, effect.id, shape.id); setTrackingError(null) } catch (error) { logger.warn('遮罩跟踪绑定失败', { event: 'video_edit.tracking.bind_failed', error }); setTrackingError(error instanceof Error ? error.message : '遮罩跟踪失败，请重试。') } }}><Scan  /></UiIconButton> : undefined} />
+    <VideoEditMaskShapeControls target={target} effect={effect} gesture={gesture} trackAction={analyzable ? shape => <UiIconButton size="2xs" aria-label={shape.follow ? '取消遮罩跟踪' : '跟踪遮罩'} tooltip={shape.follow ? '取消遮罩跟踪' : '跟踪遮罩'} on={Boolean(shape.follow)} onClick={() => { try { trackVideoEditMask(target, effect.id, shape.id); setTrackingError(null) } catch (error) { logger.warn('遮罩跟踪绑定失败', { event: 'video_edit.tracking.bind_failed', error }); setTrackingError(error instanceof Error ? error.message : '遮罩跟踪失败，请重试。') } }}><Scan  /></UiIconButton> : undefined} />
     {trackingError && <UiError size="sm" title="遮罩跟踪失败" message={trackingError} />}
     {trackingStatus?.state === 'tracking' && <p className="text-xs text-text2" role="status">正在跟踪 {Math.round(trackingStatus.progress * 100)}%</p>}
     {trackingStatus?.state === 'failed' && <UiError size="sm" title="跟踪失败" message={videoEditTrackingFailureText(trackingStatus.reason)} actions={<UiButton size="sm" onClick={() => { if (trackingRequest) runVideoEditTracking(trackingRequest.definition, trackingRequest.range, { direction: 'both' }) }}>重试</UiButton>} />}

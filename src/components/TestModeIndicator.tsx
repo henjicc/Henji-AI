@@ -37,7 +37,7 @@ const TestModeIndicator: React.FC<TestModeIndicatorProps> = ({ onOpenPanel }) =>
 
   // 开发用徽标（任务 5.7）：放进生成页命令带右端（搜索之前），是可聚焦的按钮；警示色只进图标，不画实底抢主动作
   return (
-    <UiButton variant="secondary" size="sm" onClick={onOpenPanel} title={t('testMode.indicatorTitle')}>
+    <UiButton variant="secondary" size="sm" onClick={onOpenPanel} tooltip={t('testMode.indicatorTitle')}>
       <FlaskConical aria-hidden="true" className={`mr-1.5 text-warning-text`} />
       {t('testMode.indicatorLabel')}
     </UiButton>

@@ -1,7 +1,8 @@
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiFormRow } from '@/components/ui'
 import React, { useEffect, useMemo, useState } from 'react'
-import { LoaderCircle, Tags, Trash2 } from 'lucide-react'
+import { Tags, Trash2 } from 'lucide-react'
 import { Dropdown, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiError, UiGroup, UiInput } from '@/components/ui'
 import type { AssetLibraryRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
@@ -58,7 +59,7 @@ export const AssetBatchManager: React.FC<Props> = ({
     // 标题、已选数量与“完成”都在页头命令带里，这里不再重复一条头带。
     <aside aria-label={t('assetLibrary.batchManage')} aria-busy={busy} className={`flex w-80 shrink-0 flex-col border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <LoaderCircle className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 motion-safe:animate-spin`} /> : null}{t('assetLibrary.batchHint')}</p>
+        <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <UiSpinner /> : null}{t('assetLibrary.batchHint')}</p>
         <div className="mb-5 flex gap-2">
           <UiButton className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>
           <UiButton className="flex-1" disabled={busy || selectedCount === 0} onClick={onClear}>{t('assetLibrary.batchClear')}</UiButton>

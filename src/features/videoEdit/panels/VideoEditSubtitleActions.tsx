@@ -110,7 +110,7 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
     </UiGroup>
     <UiGroup title="双语字幕" titleTone="compact" divided>
       <UiFormRow label="第二语言" density="compact"><Dropdown ariaLabel="字幕第二语言" size="sm" value={targetLanguage} onSelect={setTargetLanguage} disabled={sequence.captionTrackLocked || busy} options={[{ value: 'en', label: '英语' }, { value: 'zh', label: '中文' }, { value: 'ja', label: '日语' }, { value: 'ko', label: '韩语' }, { value: 'fr', label: '法语' }, { value: 'es', label: '西班牙语' }, { value: 'de', label: '德语' }]} /></UiFormRow>
-      <UiButton size="sm" disabled={sequence.captionTrackLocked || busy || !sequence.captions?.length} onClick={translate}>{translating ? '正在翻译…' : '生成第二语言'}</UiButton>
+      <UiButton loading={translating} size="sm" disabled={sequence.captionTrackLocked || busy || !sequence.captions?.length} onClick={translate}>{'生成第二语言'}</UiButton>
       {translating && <UiLoading size="xs" message="正在翻译字幕…" />}
       {translating && <UiButton size="sm" onClick={() => translation.current?.abort(new Error('双语字幕已取消。'))}>取消翻译</UiButton>}
     </UiGroup>

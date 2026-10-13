@@ -400,7 +400,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
                 type="button"
                 variant="link"
                 onClick={() => cloneAudioInputRef.current?.click()}
-                title="重新上传音频"
+                tooltip="重新上传音频"
               >
                 重新上传音频
               </UiButton>
@@ -442,7 +442,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
                 type="button"
                 variant="link"
                 onClick={() => promptAudioInputRef.current?.click()}
-                title="重新上传示例音频"
+                tooltip="重新上传示例音频"
               >
                 重新上传示例音频
               </UiButton>
@@ -479,7 +479,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
                 variant="link"
                 onClick={() => { void runClone() }}
                 disabled={isSubmitting}
-                title="重新克隆"
+                tooltip="重新克隆"
               >
                 重新克隆
               </UiButton>

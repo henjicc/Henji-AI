@@ -67,6 +67,8 @@ export function TooltipContent({ anchorRef, content, visible = true, closing = f
 }
 
 type TooltipProps = {
+    /** 直接使用子元素作触发器，保持按钮的 flex/grid 布局与 ref。 */
+    asChild?: boolean
     children: React.ReactElement
     content: React.ReactNode
     /** 悬停多久出现（ms），默认 300；键盘聚焦立即出现。 */
@@ -77,10 +79,16 @@ type TooltipProps = {
     placement?: TooltipPlacement
 }
 
-export default function Tooltip({ children, content, delay = 300, className, contentId, anchor = 'trigger-center', placement = 'top' }: TooltipProps): JSX.Element {
+export default function Tooltip({ children, content, delay = 300, className, contentId, anchor = 'trigger-center', placement = 'top', asChild = false }: TooltipProps): JSX.Element {
     const [open, setOpen] = useState(false)
     const { shouldRender: visible, closing, onAnimationEnd } = useDialogTransition(open, UI_DURATION.slow)
-    const triggerRef = useRef<HTMLElement>(null)
+    const triggerRef = useRef<HTMLElement | null>(null)
+    const childRef = (children as React.ReactElement & { ref?: React.Ref<HTMLElement> }).ref
+    const setTriggerRef = useCallback((node: HTMLElement | null) => {
+        triggerRef.current = node
+        if (typeof childRef === 'function') childRef(node)
+        else if (childRef) (childRef as React.MutableRefObject<HTMLElement | null>).current = node
+    }, [childRef])
     const showTimerRef = useRef<number | null>(null)
     // 卸载时 DOM ref 已可能清空，仍需在创建计时器的窗口取消计时。
     const timerWindowRef = useRef<Window | null>(null)
@@ -94,9 +102,11 @@ export default function Tooltip({ children, content, delay = 300, className, con
 
     const show = () => {
         clearTimers()
+        if (!content) return
         setOpen(true)
     }
     const handleMouseEnter = (event: React.MouseEvent) => {
+        if (!content) return
         setPointer({ clientX: event.clientX, clientY: event.clientY })
         clearTimers()
         if (visible) { show(); return }
@@ -115,19 +125,35 @@ export default function Tooltip({ children, content, delay = 300, className, con
     const childClassName = children.props.className || ''
     const shouldFlex = childClassName.includes('flex-1') || childClassName.includes('flex-grow')
 
+    const triggerEvents: React.HTMLAttributes<HTMLElement> = {
+        onMouseEnter: handleMouseEnter,
+        onMouseMove: event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) },
+        onMouseLeave: handleMouseLeave, onFocus: show, onBlur: handleMouseLeave,
+        onKeyDown: event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } },
+    }
+    const childEvents = children.props as React.HTMLAttributes<HTMLElement>
+    const composedEvents: React.HTMLAttributes<HTMLElement> = {
+        onMouseEnter: event => { childEvents.onMouseEnter?.(event); triggerEvents.onMouseEnter?.(event) },
+        onMouseMove: event => { childEvents.onMouseMove?.(event); triggerEvents.onMouseMove?.(event) },
+        onMouseLeave: event => { childEvents.onMouseLeave?.(event); triggerEvents.onMouseLeave?.(event) },
+        onFocus: event => { childEvents.onFocus?.(event); triggerEvents.onFocus?.(event) },
+        onBlur: event => { childEvents.onBlur?.(event); triggerEvents.onBlur?.(event) },
+        onKeyDown: event => { childEvents.onKeyDown?.(event); triggerEvents.onKeyDown?.(event) },
+    }
+
     return <>
-        <span ref={triggerRef}
+        {asChild ? React.cloneElement(children, { ...composedEvents, ref: setTriggerRef }) : <span ref={triggerRef}
             className={`relative ${shouldFlex ? 'flex' : 'inline-block'} ${shouldFlex ? childClassName.match(/flex-\d+|flex-grow/)?.[0] || '' : ''}`}
             onMouseEnter={handleMouseEnter}
             onMouseMove={event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) }}
             onMouseLeave={handleMouseLeave} onFocus={show} onBlur={handleMouseLeave}
             onKeyDown={event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } }}>
             {children}
-        </span>
-        <TooltipContent anchorRef={triggerRef} content={content} id={contentId} className={className}
+        </span>}
+        {visible && content ? <TooltipContent anchorRef={triggerRef} content={content} id={contentId} className={className}
             visible={visible} closing={closing} onAnimationEnd={onAnimationEnd} placement={anchor === 'pointer-start' && pointer ? 'bottom' : placement}
             getAnchorRect={anchor === 'pointer-start' ? getPointerRect : undefined}
             alignment={anchor === 'pointer-start' && pointer ? 'start' : 'center'}
-/>
+/> : null}
     </>
 }

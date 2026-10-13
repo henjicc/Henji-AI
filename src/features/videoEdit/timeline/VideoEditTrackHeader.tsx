@@ -65,7 +65,7 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
   const specs = new Map(videoEditTrackHeaderButtonSpecs(track, targeted, onPatch, onTarget).map(spec => [spec.id, spec]))
   return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
     {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span><span className="truncate text-2xs">{name}</span></div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
-      : <UiButton size="sm" className="min-w-0 flex-1 !justify-start !gap-1.5 !px-1" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} onDoubleClick={onStartRename} title={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
+      : <UiButton size="sm" className="min-w-0 flex-1 !justify-start !gap-1.5 !px-1" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} onDoubleClick={onStartRename} tooltip={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
         <span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span>
         {/* 声道类型在名称下方，名称保留整行宽度。 */}
         <span className="flex min-w-0 flex-col items-start leading-none">
@@ -76,7 +76,7 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
     {ids.map(id => {
       if (caption && id !== 'locked' && id !== 'enabled') return <span key={id} aria-hidden="true" className="h-6 w-6 shrink-0" />
       const spec = specs.get(id)!; const label = caption ? t(`captionTrack.${id === 'enabled' ? track.enabled ? 'hide' : 'show' : track.locked ? 'unlock' : 'lock'}`) : `${name}${SHORT_LABELS[id]}`
-      return <UiIconButton key={id} size="xs" on={spec.on} aria-label={label} aria-pressed={spec.on} title={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon /></UiIconButton>
+      return <UiIconButton key={id} size="xs" on={spec.on} aria-label={label} aria-pressed={spec.on} tooltip={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon /></UiIconButton>
     })}
     {!caption && <div role="separator" tabIndex={0} aria-label={`调整${name}高度`} aria-orientation="horizontal" aria-valuemin={24} aria-valuemax={160} aria-valuenow={row.height} className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize focus-visible:bg-accent" onPointerDown={onResize}
       onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); event.stopPropagation(); onPatch({ height: Math.max(24, Math.min(160, row.height + (event.key === 'ArrowUp' ? -4 : 4))) }) } }} />}

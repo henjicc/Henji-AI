@@ -110,8 +110,8 @@ export function TextProcessingPromptTemplateManager({
           <UiButton type="button" variant="secondary" onClick={onClose} disabled={saving}>
             {t('common.cancel')}
           </UiButton>
-          <UiButton type="button" variant="primary" onClick={() => void save()} disabled={!canSave || saving}>
-            {saving ? t('node.templateManager.saving') : t('node.templateManager.save')}
+          <UiButton loading={saving} type="button" variant="primary" onClick={() => void save()} disabled={!canSave || saving}>
+            {t('node.templateManager.save')}
           </UiButton>
         </>
       )}

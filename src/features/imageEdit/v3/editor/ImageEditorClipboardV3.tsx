@@ -52,7 +52,7 @@ export function ImageEditorClipboardV3({ bus, controller }: { bus: ImageEditComm
       <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('merged') }}><Layers className={`${UI_ICON_SIZE_CLASS.md}`} />复制合成结果 Ctrl+Shift+C</UiOptionButton>
       <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('paste') }}><Clipboard className={`${UI_ICON_SIZE_CLASS.md}`} />粘贴图片 Ctrl+V</UiOptionButton>
     </div>}>
-      {({ togglePanel, open }) => <UiIconButton onClick={togglePanel} aria-haspopup="menu" aria-expanded={open} aria-label="图片剪贴板" title="图片剪贴板" size="md"><Clipboard  /></UiIconButton>}
+      {({ togglePanel, open }) => <UiIconButton onClick={togglePanel} aria-haspopup="menu" aria-expanded={open} aria-label="图片剪贴板" tooltip="图片剪贴板" size="md"><Clipboard  /></UiIconButton>}
     </PanelTrigger>
     {busy && <UiButton size="sm" onClick={() => operation.current?.abort()}>取消</UiButton>}
       {error && <span data-image-edit-clipboard-error role="alert" className="max-w-48 truncate text-xs text-text2" title={error}>{error}</span>}

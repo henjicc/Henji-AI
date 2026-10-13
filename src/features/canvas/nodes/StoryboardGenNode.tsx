@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
@@ -282,7 +283,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         onFrameDescriptionChange={handleFrameDescriptionChange}
       />
 
-      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-2xs text-danger-text">{error}</div>}
+      {error && <UiInlineStatus className="canvas-node-lod-detail mb-1.5 shrink-0">{error}</UiInlineStatus>}
 
       <div className={`canvas-node-lod-detail flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
         <ModelInputRow

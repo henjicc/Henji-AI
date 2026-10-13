@@ -45,7 +45,7 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink }: {
     >
       {({ open, togglePanel }) => (
         <UiButton size="sm" className="min-w-0 max-w-full gap-1" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
-          title="口播菜单 · 双击重命名" onClick={togglePanel} onDoubleClick={startRename}>
+          tooltip="口播菜单 · 双击重命名" onClick={togglePanel} onDoubleClick={startRename}>
           <span className="truncate">{name}</span>
           <ChevronDown  aria-hidden="true" className="shrink-0 text-text3" />
         </UiButton>
@@ -71,15 +71,15 @@ export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTe
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); search.close() }
   }}>
     <div className="flex flex-wrap items-center gap-1.5">
-      <UiIconButton title={search.showReplace ? '收起替换' : '展开替换'} aria-expanded={search.showReplace} onClick={search.toggleReplace}>{search.showReplace ? <ChevronDown  /> : <ChevronRight  />}</UiIconButton>
+      <UiIconButton tooltip={search.showReplace ? '收起替换' : '展开替换'} aria-expanded={search.showReplace} onClick={search.toggleReplace}>{search.showReplace ? <ChevronDown  /> : <ChevronRight  />}</UiIconButton>
       <UiInput ref={inputRef} autoFocus size="sm" aria-label="查找文字" aria-invalid={Boolean(search.error)} className="min-w-32 max-w-sm flex-1" placeholder={search.regex ? '正则表达式' : '查找文字'} value={search.query} onChange={(event) => search.setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search.navigate(event.shiftKey ? -1 : 1) } }} />
-      <UiIconButton title="使用正则表达式" aria-label="使用正则表达式" on={search.regex} onClick={search.toggleRegex}><Regex  /></UiIconButton>
-      <UiIconButton title="上一处 · Shift+Enter" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp  /></UiIconButton>
-      <UiIconButton title="下一处 · Enter" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown  /></UiIconButton>
+      <UiIconButton tooltip="使用正则表达式" aria-label="使用正则表达式" on={search.regex} onClick={search.toggleRegex}><Regex  /></UiIconButton>
+      <UiIconButton tooltip="上一处 · Shift+Enter" disabledReason="没有匹配的文字" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp  /></UiIconButton>
+      <UiIconButton tooltip="下一处 · Enter" disabledReason="没有匹配的文字" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown  /></UiIconButton>
       <span className="text-xs tabular-nums text-text3" aria-live="polite">{search.matches.length ? `${search.currentIndex + 1} / ${search.matches.length} 处` : search.query ? '无匹配' : ''}</span>
       {search.error && <span role="alert" className="text-xs text-warning-text">{search.error}</span>}
       {!search.showReplace && search.message && <span className="text-xs text-text3" aria-live="polite">{search.message}</span>}
-      <UiIconButton aria-label="关闭查找替换" title="关闭查找替换 · Esc" className="ml-auto" onClick={search.close}><X  /></UiIconButton>
+      <UiIconButton aria-label="关闭查找替换" tooltip="关闭查找替换 · Esc" className="ml-auto" onClick={search.close}><X  /></UiIconButton>
     </div>
     {search.showReplace && <div className="flex flex-wrap items-center gap-1.5">
       {/* 与上一行展开按钮同宽的占位，让两行输入框左缘对齐 */}

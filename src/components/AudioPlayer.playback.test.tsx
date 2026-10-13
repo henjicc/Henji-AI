@@ -9,12 +9,11 @@ vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key })
 vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: vi.fn(() => ({ status: 'idle' })) }))
 vi.mock('@/components/waveform/WaveformView', () => ({ WaveformView: () => null }))
 vi.mock('@/utils/save', () => ({ downloadAudioFile: vi.fn(), saveAudioFromUrl: vi.fn() }))
-vi.mock('@/components/ui', () => ({
-  UI_PANEL_SURFACE_CLASS: '',
-  UI_TEXT_TIMECODE_CLASS: '',
-  UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => React.createElement('button', props),
-  UiRangeInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => React.createElement('input', props),
-}))
+vi.mock('@/components/ui', async () => {
+  const { UiIconButton, UiRangeInput } = await import('./ui/primitives')
+  return { UI_PANEL_SURFACE_CLASS: '', UI_TEXT_TIMECODE_CLASS: '', UiIconButton, UiRangeInput }
+})
+
 beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
@@ -25,7 +24,7 @@ it('调整音量时百分比读数复用提示框，并按视口限制位置', (
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(60)
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(30)
   const view = render(<AudioPlayer src="media:a" />)
-  fireEvent.click(view.getByTitle('ui:audioPlayer.volume'))
+  fireEvent.click(view.getByRole('button', { name: 'ui:audioPlayer.volume' }))
   const slider = view.container.querySelector('input')!
   vi.spyOn(slider.parentElement!, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 2, right: 100, bottom: 22, width: 100, height: 20, x: 0, y: 2, toJSON: () => ({}) })
   fireEvent.pointerDown(slider)
@@ -65,7 +64,7 @@ it('离开视口后继续播放但停止逐帧绘制，返回后恢复最新播�
   const activity = vi.fn()
   const view = render(<AudioPlayer src="media:a" onActivityChange={activity} />)
   const audio = view.container.querySelector('audio')!
-  await act(async () => fireEvent.click(view.getByTitle('ui:audioPlayer.playPause')))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: 'ui:audioPlayer.playPause' })))
   expect(activity).toHaveBeenLastCalledWith(true)
   expect(frames.size).toBe(1)
   vi.mocked(audio.pause).mockClear()
@@ -95,7 +94,7 @@ it('播放十帧只刷新显示叶子，不重跑播放器的波形数据订阅'
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
   const view = render(<AudioPlayer src="media:clock" />)
   const audio = view.container.querySelector('audio')!
-  await act(async () => fireEvent.click(view.getByTitle('ui:audioPlayer.playPause')))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: 'ui:audioPlayer.playPause' })))
   const subscriptions = vi.mocked(useWaveformData).mock.calls.length
   for (let time = 1; time <= 10; time++) {
     audio.currentTime = time
@@ -114,12 +113,12 @@ it('宿主受控模式只发送播放、定位和音量命令，无第二媒体�
   expect(view.container.querySelector('audio')).toBeNull()
   expect(useWaveformData).toHaveBeenLastCalledWith(null)
   expect(view.getByText('0:12')).toBeTruthy(); expect(view.getByText('2:00')).toBeTruthy()
-  await act(async () => fireEvent.click(view.getByTitle('ui:audioPlayer.playPause')))
+  await act(async () => fireEvent.click(view.getByRole('button', { name: 'ui:audioPlayer.playPause' })))
   expect(onTogglePlay).toHaveBeenCalledTimes(1); expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled()
   fireEvent.change(view.getByLabelText('音频播放位置'), { target: { value: '31.5' } })
   expect(onSeek).toHaveBeenLastCalledWith(31.5)
   expect(view.getByText('0:12')).toBeTruthy()
-  fireEvent.click(view.getByTitle('ui:audioPlayer.volume'))
+  fireEvent.click(view.getByRole('button', { name: 'ui:audioPlayer.volume' }))
   const volume = view.container.querySelector('input[max="1"]')!
   fireEvent.change(volume, { target: { value: '0.65' } })
   expect(onVolume).toHaveBeenLastCalledWith(0.65)
@@ -133,7 +132,7 @@ it('宿主尚未确认或面板隐藏时，受控控件不发出新播放命令'
   const controlled = { currentTime: 0, duration: 3, playing: false, volume: 1, disabled: true, onTogglePlay, onSeek: vi.fn(), onVolume: vi.fn() }
   const view = render(<AudioPlayer src="media:source" controlledPlayback={controlled} />)
   fireEvent.keyDown(view.container.firstChild!, { key: ' ' })
-  fireEvent.click(view.getByTitle('ui:audioPlayer.playPause'))
+  fireEvent.click(view.getByRole('button', { name: 'ui:audioPlayer.playPause' }))
   expect(onTogglePlay).not.toHaveBeenCalled()
   view.rerender(<AudioPlayer src="media:source" active={false} controlledPlayback={{ ...controlled, disabled: false }} />)
   fireEvent.keyDown(view.container.firstChild!, { key: ' ' })
@@ -147,7 +146,7 @@ it('列表行内排布：一行内播放、时间读数与音量，复用同一�
   fireEvent.loadedMetadata(audio)
   expect(audio.currentTime).toBe(12)
   expect(view.getByText('0:12 / 0:30')).toBeTruthy()
-  expect(view.getByTitle('ui:audioPlayer.playPause')).toBeTruthy()
-  expect(view.getByTitle('ui:audioPlayer.volume')).toBeTruthy()
-  expect(view.queryByTitle('common:actions.download')).toBeNull()
+  expect(view.getByRole('button', { name: 'ui:audioPlayer.playPause' })).toBeTruthy()
+  expect(view.getByRole('button', { name: 'ui:audioPlayer.volume' })).toBeTruthy()
+  expect(view.queryByRole('button', { name: 'common:actions.download' })).toBeNull()
 })

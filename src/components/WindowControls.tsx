@@ -117,7 +117,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
       platform={windowControlsPlatform}
       action="minimize"
       onClick={handleMinimize}
-      title={t('windowControls.minimize')}
+      tooltip={t('windowControls.minimize')}
       aria-label={t('windowControls.minimize')}
     />
   )
@@ -126,7 +126,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
       platform={windowControlsPlatform}
       action={isMaximized ? 'restore' : 'maximize'}
       onClick={handleToggleMaximize}
-      title={isMaximized ? t('windowControls.restore') : t('windowControls.maximize')}
+      tooltip={isMaximized ? t('windowControls.restore') : t('windowControls.maximize')}
       aria-label={isMaximized ? t('windowControls.restore') : t('windowControls.maximize')}
     />
   )
@@ -135,7 +135,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
       platform={windowControlsPlatform}
       action="close"
       onClick={handleClose}
-      title={t('windowControls.close')}
+      tooltip={t('windowControls.close')}
       aria-label={t('windowControls.close')}
     />
   )
@@ -197,7 +197,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               type="button"
               on={assistantOpen}
               onClick={onAssistantClick}
-              title={t('windowControls.assistant')}
+              tooltip={t('windowControls.assistant')}
               aria-label={t('windowControls.assistant')}
             >
               <Sparkles  />
@@ -207,7 +207,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             type="button"
             onClick={handleOpenSettings}
             onPointerEnter={handlePrefetchSettings}
-            title={t('actions.settings')}
+            tooltip={t('actions.settings')}
             aria-label={t('actions.settings')}
           >
             <ICON_SETTINGS  />

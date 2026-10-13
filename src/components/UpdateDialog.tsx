@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 /**
  * 更新提示对话框：检测到新版本时显示，提供跳过此版本、稍后提醒、立即更新。
@@ -166,9 +167,9 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
         ) : null}
 
         {failure ? (
-          <p role="alert" className="text-13 text-danger-text">
+          <UiInlineStatus role="alert" className="">
             {t('updateDialog.failed', { reason: failure })}
-          </p>
+          </UiInlineStatus>
         ) : null}
 
         <section className="space-y-2">

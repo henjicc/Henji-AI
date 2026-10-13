@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
@@ -182,9 +183,9 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
           {t(`node.universalUpload.hint.${lockedKind ?? 'any'}`)}
         </span>
         {data.uploadError ? (
-          <span className="text-xs text-danger-text">
+          <UiInlineStatus className="">
             {t(`node.universalUpload.errors.${data.uploadError}`)}
-          </span>
+          </UiInlineStatus>
         ) : null}
       </div>
       <UiInput
