@@ -12,7 +12,7 @@ const HISTORY_ID = '__ui_video_viewer_trim'
 /**
  * 生成记录里“输入视频”带裁剪选区时，视频查看器进度条上要画出选区高亮（界面重设计 4.2）。
  * 修复前背景写成 `rgba(var(--text-rgb),0.25)`（变量是空格分隔三元组，整条声明无效），高亮从未显示。
- * K09 将范围填充提高为 `bg-text1/65`，并用 `border-text1` 实色起止边界保证进度叠加后仍可辨。
+ * K09b 保留 `bg-text1/65` 填充，两端改用 text1 + on-accent 双色实线，保证进度叠加后仍可辨。
  * 查看器只显示已保存的范围，没有可拖裁剪手柄；悬停圆点是播放头，不是裁剪手柄。
  * 未播放轨道上的填充与两端边界分别要求 ≥ SELECTION_MIN_CONTRAST，四预设都要成立（`--theme-preset all`）。
  */
@@ -48,6 +48,20 @@ function averageColor(image, fromRatio, toRatio) {
     }
   }
   return sum.map((value) => Math.round(value / count))
+}
+
+/**
+ * 每端有两条 2 DIP 实线：外侧 on-accent、内侧 text1。
+ * 双色标记只需其中一条与邻接背景可辨；分别取实线中部，不把两色平均成不存在的颜色。
+ * 即使外侧与背景接近，内侧仍由外侧包围而形成清晰边界。返回实际可辨一侧的颜色与对比度。
+ */
+function sampleTrimBoundary(image, edge, direction, barWidth, adjacent) {
+  const stripes = [1, 3].map(offset => {
+    const center = edge + direction * offset / barWidth
+    const color = averageColor(image, center - 0.25 / barWidth, center + 0.25 / barWidth)
+    return { color, ratio: contrastRatio(color, adjacent), stripe: offset === 1 ? 'on-accent' : 'text1' }
+  })
+  return stripes.reduce((best, stripe) => stripe.ratio > best.ratio ? stripe : best)
 }
 function createGenerationVideoViewerTrimScene({ openWorkspace, settlePage }) {
   let fixture = null
@@ -112,16 +126,15 @@ function createGenerationVideoViewerTrimScene({ openWorkspace, settlePage }) {
       console.log(`  裁剪选区对比度 ${ratio.toFixed(2)}：选区 rgb(${inside})，轨道 rgb(${outside})`)
       assert.ok(ratio >= SELECTION_MIN_CONTRAST,
         `裁剪选区与轨道不可分：对比度 ${ratio.toFixed(2)}（需 ≥ ${SELECTION_MIN_CONTRAST}），选区 rgb(${inside})，轨道 rgb(${outside})`)
-      // 起止边界是 2 DIP 实色描边，取描边与轨道各自中段避免圆角和混色，不能借用填充的读数。
+      // 起止边界独立取双色实线像素，不能借用范围填充读数。
       const checkBoundaries = (pixels, state) => {
-        for (const [name, from, to, adjacentFrom, adjacentTo] of [
-          ['起点', start + 0.75 / bar.width, start + 1.25 / bar.width, start * 0.3, start * 0.7],
-          ['终点', end - 1.25 / bar.width, end - 0.75 / bar.width, end + (1 - end) * 0.3, end + (1 - end) * 0.7],
+        for (const [name, edge, direction, adjacentFrom, adjacentTo] of [
+          ['起点', start, 1, start * 0.3, start * 0.7],
+          ['终点', end, -1, end + (1 - end) * 0.3, end + (1 - end) * 0.7],
         ]) {
-          const boundary = averageColor(pixels, from, to)
           const adjacent = averageColor(pixels, adjacentFrom, adjacentTo)
-          const boundaryRatio = contrastRatio(boundary, adjacent)
-          console.log(`  ${state}裁剪${name}边界对比度 ${boundaryRatio.toFixed(2)}：边界 rgb(${boundary})，邻接轨道 rgb(${adjacent})`)
+          const { color: boundary, ratio: boundaryRatio, stripe } = sampleTrimBoundary(pixels, edge, direction, bar.width, adjacent)
+          console.log(`  ${state}裁剪${name}边界对比度 ${boundaryRatio.toFixed(2)}：${stripe} 边界 rgb(${boundary})，邻接轨道 rgb(${adjacent})`)
           assert.ok(boundaryRatio >= SELECTION_MIN_CONTRAST,
             `${state}裁剪${name}边界对比度 ${boundaryRatio.toFixed(2)}（需 ≥ ${SELECTION_MIN_CONTRAST}）`)
         }
@@ -141,4 +154,4 @@ function createGenerationVideoViewerTrimScene({ openWorkspace, settlePage }) {
   }
 }
 
-module.exports = { SELECTION_MIN_CONTRAST, averageColor, contrastRatio, createGenerationVideoViewerTrimScene }
+module.exports = { SELECTION_MIN_CONTRAST, averageColor, contrastRatio, sampleTrimBoundary, createGenerationVideoViewerTrimScene }
