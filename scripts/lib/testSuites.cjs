@@ -36,6 +36,7 @@ const NATIVE_TEST_FILES = [
   'electron/main/services/ai-runtime/generation-submissions.test.ts',
   'src/features/application-control/mcpWriteIntegration.test.ts',
   'electron/main/services/assistant/memory-store.test.ts',
+  'src/features/assistant/application/sharedMemorySubscriptions.native.test.ts',
   'electron/main/services/logging/agent-trace-store.test.ts',
   'electron/main/services/documents/index.native.test.ts',
   'electron/main/services/db-migrations.native.test.ts',

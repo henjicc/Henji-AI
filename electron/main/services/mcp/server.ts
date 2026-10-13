@@ -11,6 +11,7 @@ import type { ApplicationOperationCoordinator } from '../application-runtime/ope
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
 import { buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
 import { EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
+import type { AgentMemoryStore } from '../assistant/memory-store'
 
 /** 无协议会话；授权、任务与持久操作均由应用运行时持有。 */
 export class LocalMcpServer {
@@ -19,12 +20,14 @@ export class LocalMcpServer {
   private active = new Map<ServerResponse, string>()
   private port = 0
   private detach?: () => void
+  private detachMemory?: () => void
   private authorizationTimer?: ReturnType<typeof setInterval>
   private subscriptions?: ApplicationResourceSubscriptions
   constructor(private readonly connections: McpConnections, private readonly host: ApplicationHostBridge,
     private readonly onError: (error: unknown) => void = () => {}, private readonly operations?: ApplicationOperationCoordinator,
     private readonly onRequest: (info: { callerId: string }) => void = () => {},
-    private readonly onRejected: (info: { reason: 'invalid_token' }) => void = () => {}) {}
+    private readonly onRejected: (info: { reason: 'invalid_token' }) => void = () => {},
+    private readonly memory?: Pick<AgentMemoryStore, 'onSharedMemoryChange'>) {}
   get listening(): boolean { return this.http?.listening === true }
   get listeningPort(): number { return this.port }
   accessChanged(callerId: string): void {
@@ -37,8 +40,16 @@ export class LocalMcpServer {
     const subscriptions = new ApplicationResourceSubscriptions(id => this.connections.assertActive(id),
       (id, uri, signal) => readApplicationResource(new ApplicationToolDispatcher(this.connections, this.host, this.operations), id, uri, signal))
     this.subscriptions = subscriptions
-    const initialContext = this.host.getContext()
-    subscriptions.contextChanged(initialContext?.scopeRevisions ?? {}, initialContext?.resourceRevisions)
+    let domainRevisions: Record<string, number> = {}
+    const contextChanged = () => {
+      const context = this.host.getContext()
+      subscriptions.contextChanged({ ...context?.scopeRevisions, ...domainRevisions }, context?.resourceRevisions)
+    }
+    contextChanged()
+    this.detachMemory = this.memory?.onSharedMemoryChange(change => {
+      domainRevisions = { ...domainRevisions, ...change.revisions }
+      contextChanged()
+    })
     const handler = createMcpHandler(context => {
       const callerId = context.authInfo?.clientId
       if (!callerId) throw new Error('调用者未获授权。')
@@ -72,8 +83,7 @@ export class LocalMcpServer {
         handler.notify.resourcesChanged()
         subscriptions.refresh()
       } else {
-        const context = this.host.getContext()
-        subscriptions.contextChanged(context?.scopeRevisions ?? {}, context?.resourceRevisions)
+        contextChanged()
       }
     })
     this.authorizationTimer = setInterval(() => {
@@ -117,6 +127,8 @@ export class LocalMcpServer {
     this.http = undefined
     this.detach?.()
     this.detach = undefined
+    this.detachMemory?.()
+    this.detachMemory = undefined
     clearInterval(this.authorizationTimer)
     // HTTP 关闭只结束这些请求的等待，不能撤销持久业务操作或内置 Pi。
     await this.handler?.close()
