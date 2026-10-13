@@ -140,9 +140,11 @@ function validateChangedVerificationOptions(options) {
 
 function buildChangedVerificationPlan(options, root, exists = fs.existsSync, resolvedTests, readChanges = changedContent) {
   validateChangedVerificationOptions(options)
-  if (options.level === 'L0') return []
-
   const plans = []
+  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+  const gate = (label, name) => plans.push(step(label, npmCommand, ['run', name]))
+  if (options.files.some(file => /^\.(?:claude|codex)\/skills\//.test(file))) gate('项目 skill 同步', 'check:skill-sync')
+  if (options.level === 'L0') return plans
   const suppliedTests = options.files.filter((file) => TEST_PATTERN.test(file))
   const sources = options.files.filter((file) => CODE_PATTERN.test(file) && !TEST_PATTERN.test(file))
   const discoveredTests = sources.flatMap((file) => siblingTests(root, file, exists))
@@ -199,8 +201,20 @@ function buildChangedVerificationPlan(options, root, exists = fs.existsSync, res
     }
   }
 
-  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  const gate = (label, name) => plans.push(step(label, npmCommand, ['run', name]))
+  // 现有颜色/图标/residue CLI 只支持全仓严格模式；界面改动时复用正式门禁，
+  // 不给纯逻辑及测试替身增加扫描成本。4.3 定稿后的间距门禁在这里接入。
+  const uiChanged = options.files.some(file => !TEST_PATTERN.test(file) && (
+    /^src\/.*\.(?:tsx|css)$/.test(file)
+    || /^src\/components\/ui\/styleTokens\.ts$/.test(file)
+    || /^src\/core\/theme\/(?:colorTokens|icons|themeEngine|themeCssVars|runtimeTheme)\.ts$/.test(file)
+    || file === 'tailwind.config.js'
+  ))
+  if (uiChanged) {
+    gate('界面表面（严格）', 'check:surface:strict')
+    gate('界面颜色令牌', 'check:colors')
+    gate('界面图标（严格）', 'check:icons:strict')
+    gate('界面残留（严格）', 'check:ui-residue')
+  }
   const applicationSources = sources.filter(file => /^(src|electron|packages)\//.test(file))
   const importsChanged = applicationSources.some((file) => /\b(?:import|export)\b[^\n]*(?:from\s|import\s*\(|['"]\.)|\b(?:import\s*['"]|require\s*\()/.test(changes.get(file)))
   const assemblyChanged = applicationSources.some(file => changes.get(file) && /(?:registry|registration|bootstrap|composition|applicationModelProfile)\.[jt]sx?$/.test(file))

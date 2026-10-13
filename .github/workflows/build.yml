@@ -1,15 +1,18 @@
 name: Build Henji-AI
 
-# 推送 main 自动运行；只改文档（docs/、*.md）的推送跳过，避免计划与记录类提交也跑全量。
+# 推送 main 自动运行；普通文档跳过，两侧 skill 文档重新纳入同步门禁。
 on:
   push:
     branches:
       - main
     tags:
       - 'v*'
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - '.claude/skills/**'
+      - '.codex/skills/**'
   pull_request:
     branches:
       - main
@@ -17,6 +20,10 @@ on:
     inputs:
       build_installer:
         description: '同时构建安装包（默认只跑检查）'
+        type: boolean
+        default: false
+      audit_ui_rules:
+        description: '试运行 Electron DOM 与对比度审计（不比较像素基线）'
         type: boolean
         default: false
 
@@ -235,6 +242,42 @@ jobs:
         run: npx --no-install vgpu doctor --pretty
       - name: 顺序执行 WebGPU 像素与 HDR probe
         run: npm run test:gpu
+
+  # 记录012：先在 Linux CI 试运行规则审计；成功取证后由总管理者决定日常门禁范围。
+  # 不使用 Windows 像素基线，也不把未执行过的试运行声明为必跑质量门禁。
+  ui-rule-audit:
+    name: Electron 界面规则审计试运行
+    if: github.event_name == 'workflow_dispatch' && inputs.audit_ui_rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - name: 安装 Electron 与虚拟显示依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3 make g++ libgtk-3-0t64 libnss3 libgbm1 libasound2t64
+      - run: npm ci
+      - name: 重建隔离 job 的 SQLite 驱动
+        run: npm run electron:rebuild
+      - name: 生成正式 Electron 巡检产物
+        run: npm run electron:bundle
+      - name: DOM 规则正反样例
+        run: xvfb-run -a npm run test:ui-visual-rules
+      - name: 设置场景 DOM 与对比度（隔离资料，两个主题）
+        run: xvfb-run -a npm run check:ui-visual -- --only 设置 --theme-preset graphite,paper --size 1440x900
+      - name: 保留实际审计与运行时证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-rule-audit
+          path: .ui-audit/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
 
   image-export-tests:
     name: 大图导出正确性

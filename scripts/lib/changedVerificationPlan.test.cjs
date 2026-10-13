@@ -17,6 +17,29 @@ test('L0 拒绝运行时代码但接受规则文件', () => {
   assert.throws(() => buildChangedVerificationPlan(source, '/workspace'), /L0 不能包含/)
 })
 
+test('界面与令牌改动才追加四项严格门禁，同次计划只执行一次', () => {
+  const names = ['check:surface:strict', 'check:colors', 'check:icons:strict', 'check:ui-residue']
+  for (const file of ['src/example.tsx', 'src/example.css', 'src/components/ui/styleTokens.ts', 'src/core/theme/colorTokens.ts', 'src/core/theme/icons.ts', 'tailwind.config.js']) {
+    const options = { level: 'L1', files: [file], directTests: [] }
+    const plan = buildChangedVerificationPlan(options, '/workspace', () => false, ['src/example.test.ts'], () => '')
+    for (const name of names) assert.equal(plan.filter(item => item.args.includes(name)).length, 1, name)
+  }
+  const combined = buildChangedVerificationPlan({ level: 'L1', files: ['src/example.tsx', 'src/example.css', 'src/other.tsx'] }, '/workspace', () => false, ['src/example.test.ts'], () => '')
+  for (const name of names) assert.equal(combined.filter(item => item.args.includes(name)).length, 1)
+  for (const file of ['src/logic.ts', 'electron/main/logic.ts', 'src/example.test.tsx']) {
+    const plan = buildChangedVerificationPlan({ level: 'L2', files: [file] }, '/workspace', () => false, ['src/example.test.ts'], () => '')
+    assert.ok(plan.every(item => !names.some(name => item.args.includes(name))), file)
+  }
+})
+
+test('只改 skill 文档在 L0 与 L1 均执行同步门禁', () => {
+  for (const level of ['L0', 'L1']) {
+    const options = { level, files: ['.claude/skills/henji-ui-surface/SKILL.md', '.codex/skills/henji-ui-surface/references/review.md'] }
+    const plan = buildChangedVerificationPlan(options, '/workspace', () => false, [], () => '')
+    assert.deepEqual(plan.map(item => item.args), [['run', 'check:skill-sync']])
+  }
+})
+
 test('构建与 CI 基础设施不能伪装成 L1/L2 局部验证', () => {
   const options = parseChangedVerificationArgs(['--level', 'L2', 'package.json'], '/workspace')
   assert.throws(() => buildChangedVerificationPlan(options, '/workspace'), /不支持降级为局部验证/)
