@@ -10,12 +10,14 @@ import * as states from './states'
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('状态与反馈契约', () => {
-  it('保留调用方显式的未禁用声明，忙碌期间覆盖为禁用，恢复后仍保留', () => {
+  it('加载中只标记忙碌、保留原外观（不进入禁用态），调用方显式的未禁用声明始终保留', () => {
     const view = render(<UiButton aria-disabled={false}>复制片段</UiButton>)
     const button = screen.getByRole('button', { name: '复制片段' })
     expect(button.getAttribute('aria-disabled')).toBe('false')
     view.rerender(<UiButton aria-disabled={false} loading>复制片段</UiButton>)
-    expect(button.getAttribute('aria-disabled')).toBe('true')
+    expect(button.getAttribute('aria-disabled')).toBe('false')
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(button.matches(':disabled')).toBe(false)
     view.rerender(<UiButton aria-disabled={false}>复制片段</UiButton>)
     expect(button.getAttribute('aria-disabled')).toBe('false')
   })
@@ -78,7 +80,8 @@ describe('状态与反馈契约', () => {
       view.rerender(form(blocked, loading))
       expect(ref.current).toBe(button)
       expect(document.activeElement).toBe(button)
-      expect(button.getAttribute('aria-disabled')).toBe('true')
+      expect(button.getAttribute('aria-disabled')).toBe(blocked ? 'true' : null)
+      expect(button.getAttribute('aria-busy')).toBe(loading ? 'true' : null)
       expect(fireEvent.click(button)).toBe(false)
       for (const key of ['Enter', ' ']) {
         expect(fireEvent.keyDown(button, { key })).toBe(false)

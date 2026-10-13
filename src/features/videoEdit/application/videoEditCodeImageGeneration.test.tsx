@@ -1,5 +1,5 @@
-import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 // @vitest-environment jsdom
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'

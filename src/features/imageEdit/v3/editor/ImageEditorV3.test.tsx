@@ -1,6 +1,6 @@
-import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 /** @vitest-environment jsdom */
 
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 import '@/tests/imageEditDocumentFixture'
 import { useState } from 'react'
 import { VirtuosoMockContext } from 'react-virtuoso'
