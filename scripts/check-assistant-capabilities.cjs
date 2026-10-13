@@ -243,7 +243,11 @@ for (const feature of fs.readdirSync(path.join(root, 'src', 'features'), { withF
 function isZustandStoreFile(source) {
   return /from\s+['"]zustand['"]/.test(source) && /=\s*create[<(]/.test(source)
 }
-const ASSISTANT_BLIND_STORES = {}
+const ASSISTANT_BLIND_STORES = {
+  // 任务 4.7 的共享工厂：自身不持有状态，由它创建的 canvasGenerationProgressStore、
+  // generationTaskProgressStore、cameraStageRenderProgress 等具体进度 store 仍按各自 storeId 建账。
+  'src/stores/createTransientProgressStore.ts': '高频进度 store 的共享工厂函数，本身不保存任何业务状态；具体 store 各自建账。',
+}
 const ledgerStoreIds = new Set()
 for (const file of walk(path.join(root, 'src'))) {
   if (!path.basename(file).endsWith('StoreLedger.ts')) continue
