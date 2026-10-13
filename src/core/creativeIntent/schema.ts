@@ -1,3 +1,4 @@
+import { pointerEventSchema } from '../captureLog/pointer'
 import { z } from 'zod'
 import { applicationRefSchema } from '../application-control/identifiers'
 import { affineSchema, clockEventIssue, clockSegmentsSchema, digestSchema, dualClockShape, finiteSchema, idSchema, monoSpanSchema, pageRefSchema, pointSchema, poseSchema, resourceRefSchema, safeClockSchema, timelineSchema, timelineSpanSchema } from './contracts'
@@ -5,7 +6,7 @@ import { affineSchema, clockEventIssue, clockSegmentsSchema, digestSchema, dualC
 const eventBase = { ...dualClockShape, eventId: idSchema }
 export const timelineEventSchema = z.object({ ...eventBase, kind: z.literal('timeline'), intent: z.enum(['navigate', 'demonstrate']), requestedFrame: safeClockSchema.nullable(), action: z.enum(['play', 'pause', 'scrub', 'seek', 'rate', 'present']), playbackRate: finiteSchema.positive() }).strict()
 export const controlEventSchema = z.object({ ...eventBase, kind: z.literal('control'), action: z.enum(['start-recording', 'pause-recording', 'resume-recording', 'stop-recording', 'demonstration-mode', 'property-mode', 'focus-lost', 'focus-restored']), intent: z.enum(['navigate', 'demonstrate']).optional(), property: z.enum(['position', 'rotationTurns', 'scaleXY']).optional() }).strict()
-export const pointerEventSchema = z.object({ ...eventBase, kind: z.literal('pointer'), surfaceRef: applicationRefSchema, geometrySnapshotRef: idSchema, viewPoint: pointSchema, documentPoint: pointSchema.nullable(), compositionPoint: pointSchema.nullable(), hoverRefs: z.array(applicationRefSchema), pointedRefs: z.array(applicationRefSchema), selectedRefs: z.array(applicationRefSchema), intent: z.enum(['navigate', 'demonstrate']), phase: z.enum(['down', 'move', 'up', 'cancel']), uncertaintyUs: safeClockSchema }).strict()
+export { pointerEventSchema } from '../captureLog/pointer'
 export const commandEventSchema = z.object({ ...eventBase, kind: z.literal('command'), operationRef: applicationRefSchema, phase: z.enum(['started', 'committed', 'undo', 'redo', 'failed', 'cancelled', 'draft-retract']), relatedOperationRef: applicationRefSchema.optional(), targets: z.array(applicationRefSchema), beforeDigest: digestSchema, afterDigest: digestSchema }).strict().superRefine((v, ctx) => {
   if ((v.phase === 'undo' || v.phase === 'redo') && !v.relatedOperationRef) ctx.addIssue({ code: 'custom', message: '撤销/重做须关联原操作' })
   if ((v.phase === 'failed' || v.phase === 'cancelled' || v.phase === 'started') && v.beforeDigest !== v.afterDigest) ctx.addIssue({ code: 'custom', message: '未提交命令不能伪称已改变状态' })

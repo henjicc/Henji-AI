@@ -12,6 +12,18 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(0) })
 afterEach(() => { vi.useRealTimers() })
 
 describe('录制控制权威状态', () => {
+  it('采集失败终止钩子/媒体资源；启动迟到完成不覆盖失败状态；标记备注走同一后端', async () => {
+    const { service, backend } = fixture(); let finish!: () => void
+    backend.start.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    service.create('session', backend); await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    await service.captureFailed('session', new Error('disk full')); finish(); await Promise.resolve(); await Promise.resolve()
+    expect(service.snapshot()?.phase).toBe('failed'); expect(backend.cancel).toHaveBeenCalledTimes(1)
+    await service.dispose()
+    service.create('next', backend); await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    await service.command('mark', '重点'); expect(backend.mark).toHaveBeenCalledWith(expect.any(AbortSignal), '重点')
+    await expect(service.command('toggle', '错误备注')).rejects.toThrow('备注只能')
+    await service.dispose()
+  })
   it('无会话不注册；倒计时后才实际启动、暂停不累计时长，标记与停止走同一后端', async () => {
     const { service, backend, register, unregister, released } = fixture()
     service.configureShortcuts(DEFAULT_RECORDING_SHORTCUTS); expect(register).not.toHaveBeenCalled()

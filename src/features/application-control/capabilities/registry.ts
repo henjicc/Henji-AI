@@ -17,6 +17,7 @@ import { transactionFailureFacts } from '@/core/application-control/applicationT
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { applicationCallerAccess, assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
 import { getApplicationReflectionRegistry, getApplicationControlExecutionEngine } from './applicationControlRegistry'
+import { beginCapabilityCapture } from './recordingCapture'
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/shared/applicationReflectionApplicationCapabilities'
 
@@ -141,12 +142,16 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
       }
     }
     handlerStarted = true
+    const captured = await beginCapabilityCapture(definition, input)
+    try {
     const result = await handler(input, {
       ...context,
       getExecutionEngine: getApplicationControlExecutionEngine,
       expectedRevisions: invocation.expectedRevisions,
     })
+    await captured('completed')
     return result
+    } catch (error) { await captured(context.signal.aborted ? 'cancelled' : 'failed'); throw error }
     } catch (error) {
       if (!handlerStarted) throw new ApplicationPreflightFailure(error)
       throw error

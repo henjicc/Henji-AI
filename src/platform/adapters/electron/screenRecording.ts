@@ -6,10 +6,11 @@ function native(): ScreenRecordingPlatform {
 }
 export function createElectronScreenRecording(): ScreenRecordingPlatform {
   return {
+    recordCapability: (id, fact) => native().recordCapability(id, fact),
     sources: ids => native().sources(ids), permissions: () => native().permissions(),
     grant: input => native().grant(input), revoke: id => native().revoke(id),
     openPermissionSettings: kind => native().openPermissionSettings(kind),
-    snapshot: () => native().snapshot(), control: (id, action) => native().control(id, action),
+    snapshot: () => native().snapshot(), control: (id, action, note) => native().control(id, action, note),
     shortcuts: keys => native().shortcuts(keys), onChanged: listener => native().onChanged(listener),
   }
 }

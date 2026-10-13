@@ -267,6 +267,14 @@ function generate(options) {
   if (libvips) runtime.push(libvips)
   const sqlite = sqliteRuntime(textTable)
   if (sqlite) runtime.push(sqlite)
+  // uiohook-napi statically includes libuiohook; npm's MIT metadata does not cover this LGPL library.
+  const hookSource = readTextIfExists(path.join(root, 'node_modules/uiohook-napi/libuiohook/src/windows/input_hook.c'))
+  const hookLicense = readTextIfExists(path.join(REFERENCE_DIR, 'LGPL-3.0.txt'))
+  if (!hookSource?.includes('GNU Lesser General Public License') || !hookLicense) missing.push('libuiohook：缺少源码许可声明或 LGPL-3.0 全文')
+  else runtime.push({ id: 'runtime:libuiohook', name: 'libuiohook (uiohook-napi)', version: 'uiohook-napi-1.5.5', license: 'LGPL-3.0-or-later', ecosystem: 'runtime',
+    homepage: 'https://github.com/SnosMe/uiohook-napi', sources: ['https://registry.npmjs.org/uiohook-napi/-/uiohook-napi-1.5.5.tgz (binding.gyp + src/lib + libuiohook/src)',
+      'Rebuild with node-gyp from the source tarball; replace the unpacked uiohook-napi.node binding. LGPL permits modification and reverse engineering for debugging those modifications.'],
+    textIds: [textTable.add(hookLicense)], textOrigin: 'package' })
 
   const notices = buildNotices({
     project: {
