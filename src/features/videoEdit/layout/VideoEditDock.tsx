@@ -2,6 +2,8 @@ import { focusVideoEditPanelElement } from './videoEditPanelFocus'
 import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
 import { VideoEditStyleKitsPanel } from '../panels/VideoEditStyleKitsPanel'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
+import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWatermarkPanelProps, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { UiButton, UiEmpty } from '@/components/ui'
@@ -81,8 +83,20 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     // 面板（含浮窗）、效果分组与新效果都可能晚于前几帧才提交到 DOM（机器繁忙、浮窗刚打开）；
     // 逐帧重新查找：分组出现时展开一次，新效果出现时滚动，最多约 1 秒。
     let expanded = false
+    const effectRoot = (): HTMLElement | null => listVideoEditPopouts().find(entry => entry.panels.includes('effects'))?.popout.container ?? hostRef.current
+    let ownerWindow = ownerWindowOf(effectRoot())
+    let animation: RafScheduler<[number]>
+    const schedule = (remaining: number): void => {
+      const nextWindow = ownerWindowOf(effectRoot())
+      if (nextWindow !== ownerWindow) {
+        animation.cancel()
+        ownerWindow = nextWindow
+        animation = createRafScheduler(scrollToAdded, ownerWindow)
+      }
+      animation.schedule(remaining)
+    }
     const scrollToAdded = (remaining: number): void => {
-      const root = listVideoEditPopouts().find(entry => entry.panels.includes('effects'))?.popout.container ?? hostRef.current
+      const root = effectRoot()
       const panel = root?.querySelector('[data-video-edit-panel="effects"]')
       if (!expanded) {
         const section = panel?.querySelector('[data-video-edit-effect-section="effects"]')
@@ -91,10 +105,11 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
       }
       const effect = expanded ? Array.from(panel?.querySelectorAll<HTMLElement>('[data-video-edit-effect]') ?? []).find(item => addedEffects.includes(item.dataset.videoEditEffect ?? '')) : undefined
       if (effect) effect.scrollIntoView({ block: 'nearest' })
-      else if (remaining > 0) frame = requestAnimationFrame(() => scrollToAdded(remaining - 1))
+      else if (remaining > 0) schedule(remaining - 1)
     }
-    let frame = requestAnimationFrame(() => scrollToAdded(60))
-    return () => cancelAnimationFrame(frame)
+    animation = createRafScheduler(scrollToAdded, ownerWindow)
+    schedule(60)
+    return () => animation.cancel()
   }, [addedEffects])
   useEffect(() => {
     let previous = instance.panelFocusVersion ?? 0

@@ -391,6 +391,9 @@ it('时间线浮出到系统窗口（另一 realm 文档）后仍可点选、拖
     releasePointerCapture: { configurable: true, value(this: HTMLElement) { captures.delete(this) } },
   })
   Object.assign(popout, { PointerEvent: class extends popout.MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1 } } })
+  const frames = new Map<number, FrameRequestCallback>(); let id = 0
+  vi.spyOn(popout, 'requestAnimationFrame').mockImplementation(callback => { frames.set(++id, callback); return id })
+  vi.spyOn(popout, 'cancelAnimationFrame').mockImplementation(handle => { frames.delete(handle) })
   const view = render(<>{createPortal(<View />, popout.document.body)}</>)
   const within = (selector: string): HTMLElement => popout.document.querySelector<HTMLElement>(selector)!
   const host = within('[data-video-edit-timeline-viewport]'); const video = within('[aria-label="选择片段 视频"]')
@@ -409,7 +412,16 @@ it('时间线浮出到系统窗口（另一 realm 文档）后仍可点选、拖
   fireEvent(popout, new popout.Event('blur'))
   fireEvent.pointerUp(host, event(header + 60))
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
-  view.unmount(); frame.remove()
+  // 持续边缘滚动属于浮窗，指针回到内部时停止，卸载丢弃下一帧。
+  fireEvent.pointerDown(within('[aria-label="选择片段 视频"]'), event(header + 40)); fireEvent.pointerMove(host, event(895))
+  expect(frames.size).toBe(1)
+  const step = (): void => { const pending = [...frames.values()]; frames.clear(); act(() => pending.forEach(callback => callback(16))) }
+  step(); expect(host.scrollLeft).toBeGreaterThan(0); expect(frames.size).toBe(1)
+  fireEvent.pointerMove(host, event(500)); step(); expect(frames.size).toBe(0)
+  fireEvent.pointerMove(host, event(895)); expect(frames.size).toBe(1)
+  const before = host.scrollLeft
+  view.unmount(); expect(frames.size).toBe(0); step(); expect(host.scrollLeft).toBe(before)
+  frame.remove()
   expect(onError).not.toHaveBeenCalled()
 })
 
@@ -498,6 +510,44 @@ it('边缘持续滚动使用同一命中坐标，取消释放动画资源且无�
   expect(owner.document).toBe(baseline)
   fireEvent.pointerCancel(host, event(895)); expect(callbacks.size).toBe(0)
   fireEvent.pointerUp(host, event(895)); expect(owner.document).toBe(baseline); expect(onError).not.toHaveBeenCalled()
+})
+
+it('字幕拖动持续循环使用浮窗调度，释放、取消、换序列与卸载停止回调', () => {
+  createVideoEditCaption(owner.document.id, current().id, { start: 40, duration: 40, text: '循环字幕' })
+  const iframe = document.createElement('iframe'); document.body.append(iframe)
+  const popout = iframe.contentWindow as Window & typeof globalThis
+  Object.assign(popout, { PointerEvent: class extends popout.MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1 } } })
+  vi.spyOn(popout.HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 900, 300))
+  vi.spyOn(popout.HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900)
+  vi.spyOn(popout.HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300)
+  const frames = new Map<number, FrameRequestCallback>(); let id = 0
+  vi.spyOn(popout, 'requestAnimationFrame').mockImplementation(callback => { frames.set(++id, callback); return id })
+  vi.spyOn(popout, 'cancelAnimationFrame').mockImplementation(handle => { frames.delete(handle) })
+  const view = render(createPortal(<View />, popout.document.body))
+  const caption = (): HTMLElement => popout.document.querySelector<HTMLElement>('[data-video-edit-caption-range]')!
+  const step = (): void => { const pending = [...frames.values()]; frames.clear(); act(() => pending.forEach(callback => callback(16))) }
+  for (const end of ['release', 'cancel', 'sequence', 'unmount'] as const) {
+    const host = popout.document.querySelector<HTMLElement>('[data-video-edit-timeline-viewport]')!
+    fireEvent.pointerDown(caption(), event(header + 80, 40))
+    fireEvent.pointerMove(popout, event(895, 40))
+    expect(frames.size).toBe(1)
+    const before = host.scrollLeft
+    step(); expect(host.scrollLeft, end).toBeGreaterThan(before); expect(frames.size).toBe(1)
+    if (end === 'release') fireEvent.pointerUp(popout, event(895, 40))
+    if (end === 'cancel') fireEvent.pointerCancel(popout, event(895, 40))
+    if (end === 'sequence') {
+      const original = current().id
+      act(() => { const second = appendVideoEditSequence(owner.document.id); switchVideoEditSequence(owner.document.id, second) })
+      expect(frames.size).toBe(0)
+      act(() => switchVideoEditSequence(owner.document.id, original))
+    }
+    if (end === 'unmount') view.unmount()
+    expect(frames.size).toBe(0)
+    const stopped = host.scrollLeft; step(); expect(host.scrollLeft).toBe(stopped)
+    host.scrollLeft = 0
+  }
+  iframe.remove()
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('矮时间线：片段拖向所在区的边缘才滚动这一区，按住不动不滚；框选与标尺横向一致', () => {

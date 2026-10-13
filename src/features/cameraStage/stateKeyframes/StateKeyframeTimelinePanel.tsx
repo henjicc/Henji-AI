@@ -3,6 +3,8 @@ import { Plus } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
+import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
+import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { PlaybackButtons } from '../timeline/PlaybackControls'
 import TimeRuler from '../timeline/TimeRuler'
@@ -72,6 +74,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
   }, [])
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const zoomScrollRef = useRef<RafScheduler<[number]> | null>(null)
   const [pxPerSecond, setPxPerSecond] = useState(clampPxPerSecond(120))
   const [viewportWidth, setViewportWidth] = useState(MIN_CONTENT_WIDTH)
   const [timecodeMode, setTimecodeMode] = useState<StateKeyframeTimecodeMode>('secondsFrames')
@@ -80,6 +83,8 @@ const StateKeyframeTimelinePanel: React.FC = () => {
   useLayoutEffect(() => {
     const container = scrollRef.current
     if (!container) return undefined
+    const zoomScroll = createRafScheduler((left: number) => { container.scrollLeft = left }, ownerWindowOf(container))
+    zoomScrollRef.current = zoomScroll
     const updateViewportWidth = (): void => {
       const visibleWidth = container.clientWidth
       if (visibleWidth <= 0) return
@@ -88,7 +93,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
     updateViewportWidth()
     const observer = new ResizeObserver(updateViewportWidth)
     observer.observe(container)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); zoomScroll.cancel(); zoomScrollRef.current = null }
   }, [])
 
   // 轨道在最后一个关键帧之后始终保留至少一屏空白，允许播放头进入未来时间。
@@ -111,9 +116,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
     const nextPxPerSecond = clampPxPerSecond(pxPerSecond * factor)
     if (Math.abs(nextPxPerSecond - pxPerSecond) < 0.01) return
     setPxPerSecond(nextPxPerSecond)
-    requestAnimationFrame(() => {
-      scroller.scrollLeft = Math.max(0, timeToX(anchorTime, nextPxPerSecond) - viewportContentX)
-    })
+    zoomScrollRef.current?.schedule(Math.max(0, timeToX(anchorTime, nextPxPerSecond) - viewportContentX))
   }, [pxPerSecond])
   // Alt+滚轮缩放要拦住横向滚动：React onWheel 是被动的，走非被动原生监听
   useNonPassiveWheel(scrollRef, handleWheel)

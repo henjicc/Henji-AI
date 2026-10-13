@@ -4,6 +4,8 @@ import { Box, Camera, Copy, Eye, EyeOff, Trash2, User } from 'lucide-react'
 import { UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 import type { StageObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { createRafScheduler } from '@/utils/createRafScheduler'
+import { ownerWindowOf } from '@/utils/crossRealmDom'
 
 /** 场景对象列表：列表选中/显隐/复制/删除；双击对象名称可直接行内改名 */
 
@@ -34,12 +36,13 @@ const ObjectListPanel: React.FC = () => {
       return
     }
 
-    const focusTimer = window.requestAnimationFrame(() => {
+    const focus = createRafScheduler(() => {
       inputRef.current?.focus()
       inputRef.current?.select()
-    })
+    }, ownerWindowOf(inputRef.current))
+    focus.schedule()
 
-    return () => window.cancelAnimationFrame(focusTimer)
+    return () => focus.cancel()
   }, [editingId, objects])
 
   const beginRename = (object: StageObject): void => {

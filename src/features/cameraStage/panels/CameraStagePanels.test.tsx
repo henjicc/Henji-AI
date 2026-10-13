@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { createPortal } from 'react-dom'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DockviewApi } from 'dockview-react'
 
@@ -35,9 +36,37 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   localStorage.clear()
+  vi.restoreAllMocks()
 })
 
 describe('3D 镜头参考停靠面板', () => {
+  it('浮窗改名按所属窗口聚焦，取消编辑和卸载都取消待执行帧', () => {
+    act(() => useCameraStageStore.getState().addPrimitive('box'))
+    const name = useCameraStageStore.getState().objects[0].name
+    const iframe = document.createElement('iframe'); document.body.append(iframe)
+    const popout = iframe.contentWindow!
+    const frames = new Map<number, FrameRequestCallback>(); let id = 0
+    vi.spyOn(popout, 'requestAnimationFrame').mockImplementation(callback => { frames.set(++id, callback); return id })
+    vi.spyOn(popout, 'cancelAnimationFrame').mockImplementation(handle => { frames.delete(handle) })
+    const view = render(createPortal(<ObjectListPanel />, popout.document.body))
+    const panel = within(popout.document.body)
+    const rename = (): HTMLInputElement => {
+      fireEvent.doubleClick(panel.getByRole('button', { name }))
+      return panel.getByRole('textbox', { name: '对象名称' }) as HTMLInputElement
+    }
+    const input = rename()
+    expect(frames.size).toBe(1)
+    act(() => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(16)) })
+    expect(popout.document.activeElement).toBe(input)
+    expect(input.selectionEnd).toBe(name.length)
+    expect(frames.size).toBe(0)
+    fireEvent.keyDown(input, { key: 'Escape' })
+    fireEvent.keyDown(rename(), { key: 'Escape' })
+    expect(frames.size).toBe(0)
+    rename(); view.unmount()
+    expect(frames.size).toBe(0)
+    iframe.remove()
+  })
   it('场景为空时对象列表显示统一空状态，且面板内没有重复标题', () => {
     const { container } = render(<ObjectListPanel />)
     expect(screen.getByText('场景为空')).toBeTruthy()

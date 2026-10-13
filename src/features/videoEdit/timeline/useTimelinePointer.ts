@@ -2,6 +2,7 @@ import { isVideoEditContentCurrent } from '../application/videoEditDocumentAlgor
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { selectVideoEditSubtitle } from '../application/videoEditSubtitleSelection'
 import { useLayoutEffect, useRef, useState } from 'react'
+import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { expandVideoEditSelection, selectVideoEditRegion, selectVideoEditTrackFrom, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
@@ -66,7 +67,7 @@ export function useTimelinePointer(options: Options) {
   const current = useRef(options); current.current = options
   const viewport = useRef<HTMLDivElement>(null)
   const pointer = useRef<PointerGesture>()
-  const animation = useRef<number>()
+  const animation = useRef<RafScheduler<[]>>()
   const [preview, setPreview] = useState<VideoEditSequence | null>(null)
   const [box, setBox] = useState<TimelineBox | null>(null)
   const [resized, setResized] = useState<{ trackId: string; height: number } | null>(null)
@@ -84,8 +85,7 @@ export function useTimelinePointer(options: Options) {
   }
   const detach = (): PointerGesture | undefined => {
     const previous = pointer.current; pointer.current = undefined
-    if (animation.current !== undefined) ownerWindowOf(viewport.current).cancelAnimationFrame(animation.current)
-    animation.current = undefined
+    animation.current?.cancel()
     if (previous && viewport.current?.hasPointerCapture?.(previous.pointerId)) viewport.current.releasePointerCapture(previous.pointerId)
     return previous
   }
@@ -205,7 +205,6 @@ export function useTimelinePointer(options: Options) {
     return { x, y: timelineArmedEdgeVelocity(gesture.edge.y, gesture.client.y, rect.top + bounds.top, rect.top + bounds.top + bounds.height), region }
   }
   const tick = (): void => {
-    animation.current = undefined
     const gesture = pointer.current; const host = viewport.current
     if (!gesture || !host) return
     const velocity = edgeVelocity(gesture, host); const beforeX = host.scrollLeft
@@ -213,14 +212,14 @@ export function useTimelinePointer(options: Options) {
     const scrolledY = velocity.y && velocity.region ? current.current.scrollRegion(velocity.region, velocity.y) : false
     if (host.scrollLeft !== beforeX || scrolledY) {
       applyPointer(gesture)
-      if (pointer.current) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
+      if (pointer.current) animation.current?.schedule()
     }
   }
   const animateEdge = (): void => {
     const gesture = pointer.current; const host = viewport.current
-    if (animation.current !== undefined || !gesture || !host) return
+    if (animation.current?.pending || !gesture || !host) return
     const velocity = edgeVelocity(gesture, host)
-    if (velocity.x || velocity.y) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
+    if (velocity.x || velocity.y) animation.current?.schedule()
   }
   const capture = (gesture: PointerGesture): void => {
     cancel(); pointer.current = gesture
@@ -374,6 +373,7 @@ export function useTimelinePointer(options: Options) {
   useLayoutEffect(() => {
     // 时间线可能挂在系统浮窗里：失焦与隐藏按它实际所在的窗口判断。
     const ownerDocument = ownerDocumentOf(viewport.current); const ownerWindow = ownerWindowOf(viewport.current)
+    animation.current = createRafScheduler(tick, ownerWindow)
     const blur = (): void => cancel()
     const hidden = (): void => { if (ownerDocument.hidden) cancel() }
     ownerWindow.addEventListener('blur', blur); ownerDocument.addEventListener('visibilitychange', hidden)

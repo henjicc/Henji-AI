@@ -7,6 +7,7 @@ import type { VideoEditSequence } from '@/core/videoEdit/document'
 import type { VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { retimeVideoEditCaption, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
+import { createRafScheduler } from '@/utils/createRafScheduler'
 import { focusVideoEditPanel, type VideoEditInstance } from '../application/videoEditService'
 import { moveVideoEditCaption, updateVideoEditCaptionTrack } from '../application/videoEditTimedContent'
 import { selectVideoEditSubtitle, selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision } from '../application/videoEditSubtitleSelection'
@@ -42,7 +43,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     const origin = event.clientX; const scroll = host.scrollLeft
     const points = timelineSnapPoints(sequence, { playhead: instance.frame, extra: (sequence.captions ?? []).filter(value => value.id !== caption.id).flatMap(value => [value.start, value.start + value.duration]) })
     const axis = timelineEdgeAxis(origin)
-    let x = origin; let delta = 0; let moved = false; let animation = 0
+    let x = origin; let delta = 0; let moved = false
     const update = (): void => {
       if (!isVideoEditContentCurrent(instance, contentVersion) || instance.activeSequenceId !== sequence.id) { finish(false); return }
       moved ||= Math.abs(x - origin) >= 3
@@ -63,21 +64,22 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
         const velocity = timelineArmedEdgeVelocity(axis, x, rect.left + TIMELINE_HEADER_WIDTH, rect.right)
         if (velocity) { host.scrollLeft += velocity; update() }
       }
-      if (cancel.current) animation = win.requestAnimationFrame(tick)
+      if (cancel.current) animation.schedule()
     }
+    const animation = createRafScheduler(tick, win)
     const move = (next: PointerEvent): void => { if (next.pointerId === event.pointerId) { x = next.clientX; update() } }
     const up = (next: PointerEvent): void => { if (next.pointerId === event.pointerId) { x = next.clientX; update(); if (cancel.current) finish(true) } }
     const abort = (): void => finish(false)
     const key = (next: KeyboardEvent): void => { if (next.key === 'Escape') { next.preventDefault(); next.stopPropagation(); finish(false) } }
     const finish = (commit: boolean): void => {
-      cancel.current = null; win.cancelAnimationFrame(animation)
+      cancel.current = null; animation.cancel()
       win.removeEventListener('pointermove', move); win.removeEventListener('pointerup', up); win.removeEventListener('pointercancel', abort); win.removeEventListener('blur', abort); win.removeEventListener('keydown', key, true)
       setPreview(null); clearTimelineSnap()
       if (commit && moved && isVideoEditContentCurrent(instance, contentVersion) && instance.activeSequenceId === sequence.id) run(() => moveVideoEditCaption(projectId, sequence.id, caption.id, mode, delta))
     }
     cancel.current = abort
     win.addEventListener('pointermove', move); win.addEventListener('pointerup', up); win.addEventListener('pointercancel', abort); win.addEventListener('blur', abort); win.addEventListener('keydown', key, true)
-    animation = win.requestAnimationFrame(tick)
+    animation.schedule()
   }
   const row = { track: { id: `${sequence.id}:captions`, name: t('captionTrack.name'), index: -1, kind: 'video' as const, enabled: sequence.captionTrackEnabled !== false, locked: sequence.captionTrackLocked === true, muted: false, solo: false }, ...geometry, region: 'video' as const }
   return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" onPointerDown={event => event.stopPropagation()}>
