@@ -72,11 +72,13 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     })
     const payload = await readJsonResponse(response, 'KIE')
     const code = getPointer(payload, '/code')
-    if (typeof code === 'number' && code !== 200) {
-      // 查询本身没成功（含 taskId 已被清理的情况），不是"任务还在跑"
-      return POLL_QUERY_FAILED
+    if ((typeof code === 'number' && code !== 200) || getPointer(payload, '/success') === false) {
+      // 查询失败保留供应商事实；鉴权/余额错误已由 readJsonResponse 立即终止。
+      const message = stringAt(payload, '/msg') ?? stringAt(payload, '/message') ?? 'provider reported a non-success status'
+      throw new AiRuntimeError('provider_http_error', `KIE recordInfo code=${code ?? 'unknown'}: ${message}`, {
+        status: response.status, providerCode: code, providerMessage: message,
+      })
     }
-    if (getPointer(payload, '/success') === false) return POLL_QUERY_FAILED
     const state = (stringAt(payload, '/data/state') ?? '').trim().toLowerCase()
     if (state === 'success') return payload
     if (state === 'fail') {

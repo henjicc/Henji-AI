@@ -49,7 +49,7 @@ const LOCAL_SOURCE_PREFIXES = [
   'http://asset.localhost/', 'https://asset.localhost/',
   'http://tauri.localhost/', 'https://tauri.localhost/',
   'asset://localhost/', 'tauri://localhost/',
-  'file://localhost/', 'file:///', 'file://',
+  'file://localhost', 'file://',
 ]
 
 /**
@@ -119,7 +119,11 @@ export function classifyMediaKey(key: string): MediaKind {
 export function normalizeLocalSource(source: string): string | undefined {
   for (const prefix of LOCAL_SOURCE_PREFIXES) {
     if (source.startsWith(prefix)) {
-      return stripWindowsDrivePrefix(safeDecodeURIComponent(source.slice(prefix.length)))
+      const decoded = safeDecodeURIComponent(source.slice(prefix.length))
+      // 受管引用是宿主标识，不是文件路径；其余协议只剥 scheme/host，保留 POSIX 根目录。
+      if (prefix === 'uxp://' || prefix === 'managed://') return decoded
+      const absolute = isLocalPath(decoded) ? decoded : `/${decoded}`
+      return stripWindowsDrivePrefix(absolute)
     }
   }
   return isLocalPath(source) ? source : undefined

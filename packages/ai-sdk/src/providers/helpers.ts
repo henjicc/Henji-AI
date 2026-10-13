@@ -13,15 +13,23 @@ export function normalizeEndpoint(base: string, route: string): string {
 }
 
 export async function readJsonResponse(response: Response, provider: string, inspect?: (payload: JsonValue) => void): Promise<JsonValue> {
-  const payload = await response.json().catch((error: unknown) => {
+  const text = await response.text()
+  let payload: JsonValue
+  try {
+    payload = JSON.parse(text) as JsonValue
+  } catch (error) {
+    if (!response.ok) {
+      assertProviderAccess(provider, {}, response.status)
+      throw new AiRuntimeError('provider_http_error', `${provider} HTTP ${response.status}: ${text.slice(0, 500)}`, { status: response.status })
+    }
     const message = error instanceof Error ? error.message : String(error)
-    throw new AiRuntimeError('invalid_json', message)
-  }) as JsonValue
+    throw new AiRuntimeError('invalid_json', message, { status: response.status })
+  }
 
   inspect?.(payload)
   assertProviderAccess(provider, payload, response.status)
   if (!response.ok) {
-    throw new AiRuntimeError('provider_http_error', `${provider} HTTP ${response.status}: ${JSON.stringify(payload)}`)
+    throw new AiRuntimeError('provider_http_error', `${provider} HTTP ${response.status}: ${JSON.stringify(payload)}`, { status: response.status })
   }
 
   return payload

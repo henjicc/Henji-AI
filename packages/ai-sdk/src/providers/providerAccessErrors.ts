@@ -7,6 +7,12 @@ const object = (value: JsonValue | undefined): Record<string, JsonValue> => valu
 export function assertProviderAccess(provider: string, payload: JsonValue, status: number): void {
   const body = object(payload); const error = object(body.error)
   const code = String(error.code ?? body.code ?? '')
+  if (provider === 'KIE' && (['401', '403'].includes(code) || status === 401 || status === 403)) {
+    throw new AiRuntimeError('provider_authentication_failed', 'KIE 鉴权失败，请检查 API Key 与账号权限。控制台：https://kie.ai/api-key', {
+      retryable: false, category: 'authentication', providerCode: code || String(status), status,
+      providerMessage: String(error.message ?? body.message ?? body.msg ?? ''),
+    })
+  }
   let kind: 'product_not_activated' | 'model_access_denied' | 'insufficient_balance' | undefined
   if (provider === 'Bailian') {
     if (code === 'Arrearage') kind = 'insufficient_balance'

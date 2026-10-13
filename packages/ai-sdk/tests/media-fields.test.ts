@@ -109,6 +109,22 @@ describe('inheritMediaKind', () => {
 })
 
 describe('本地源判定', () => {
+  it.each([
+    'file:///', 'file://localhost/', 'asset://localhost/', 'tauri://localhost/',
+    'http://asset.localhost/', 'https://asset.localhost/',
+    'http://tauri.localhost/', 'https://tauri.localhost/',
+  ])('保留 %s 的 POSIX 根目录并解码空格', (prefix) => {
+    expect(normalizeLocalSource(`${prefix}Users/demo/a%20b.png`)).toBe('/Users/demo/a b.png')
+    expect(normalizeLocalSource(`${prefix}C:/demo/a%20b.png`)).toBe('C:/demo/a b.png')
+  })
+
+  it('保留受管引用与已编码的绝对路径', () => {
+    expect(normalizeLocalSource('managed://asset-token')).toBe('asset-token')
+    expect(normalizeLocalSource('uxp://asset-token')).toBe('asset-token')
+    expect(normalizeLocalSource('henji-media://local/%2FUsers%2Fdemo%2Fa.png')).toBe('/Users/demo/a.png')
+    expect(normalizeLocalSource('asset://localhost/%2FUsers%2Fdemo%2Fa.png')).toBe('/Users/demo/a.png')
+  })
+
   it('识别 Windows / POSIX / UNC 路径', () => {
     expect(isLocalMediaSource(IMAGE_A)).toBe(true)
     expect(isLocalMediaSource(AUDIO_A)).toBe(true)
