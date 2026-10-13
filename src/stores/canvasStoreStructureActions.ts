@@ -18,6 +18,8 @@ import {
   collectNodeIdsWithDescendants,
   createClosedCanvasImageViewerState,
   createSnapshot,
+  reconcileCancelledCanvasGenerations,
+  withCanvasHistoryBoundary,
   getNodeSize,
   pushSnapshot,
   resolveAbsolutePosition,
@@ -29,6 +31,7 @@ export function createCanvasStructureActions(
   set: CanvasStoreSet,
   get: CanvasStoreGet,
 ): CanvasStructureActions {
+  set = withCanvasHistoryBoundary(set);
   return {
   deleteNode: (nodeId) => {
     get().deleteNodes([nodeId]);
@@ -337,7 +340,7 @@ export function createCanvasStructureActions(
 
     const currentSnapshot = createSnapshot(state.nodes, state.edges);
     const nextPast = state.history.past.slice(0, -1);
-    const reconciled = reconcileAssetGroupGraph(target.nodes, target.edges);
+    const reconciled = reconcileAssetGroupGraph(reconcileCancelledCanvasGenerations(target.nodes), target.edges);
 
     set({
       nodes: reconciled.nodes,
@@ -363,7 +366,7 @@ export function createCanvasStructureActions(
 
     const currentSnapshot = createSnapshot(state.nodes, state.edges);
     const nextFuture = state.history.future.slice(0, -1);
-    const reconciled = reconcileAssetGroupGraph(target.nodes, target.edges);
+    const reconciled = reconcileAssetGroupGraph(reconcileCancelledCanvasGenerations(target.nodes), target.edges);
 
     set({
       nodes: reconciled.nodes,
@@ -381,6 +384,7 @@ export function createCanvasStructureActions(
   },
 
   clearCanvas: () => {
+    const removedIds = new Set(get().nodes.map(node => node.id));
     set((state) => {
       if (state.nodes.length === 0 && state.edges.length === 0 && !state.imageViewer.isOpen) {
         return {};
@@ -401,8 +405,8 @@ export function createCanvasStructureActions(
         dragHistorySnapshot: null,
       };
     });
-    useCanvasGenerationProgressStore.getState().clearAllProgress();
-    useCanvasTextStreamStore.getState().clearAllPreviews();
+    useCanvasGenerationProgressStore.getState().clearProgress(removedIds);
+    useCanvasTextStreamStore.getState().clearPreviews(removedIds);
   },
   };
 }

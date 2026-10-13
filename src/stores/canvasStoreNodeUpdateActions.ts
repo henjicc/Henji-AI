@@ -27,6 +27,7 @@ import type {
 } from './canvasStore';
 import {
   createSnapshot,
+  withCanvasHistoryBoundary,
   isModelSelectorNodeType,
   maybeApplyMediaAutoResize,
   pushSnapshot,
@@ -36,6 +37,7 @@ export function createCanvasNodeUpdateActions(
   set: CanvasStoreSet,
   _get: CanvasStoreGet,
 ): CanvasNodeUpdateActions {
+  set = withCanvasHistoryBoundary(set);
   return {
   updateNodeData: (nodeId, data, options) => {
     set((state) => {

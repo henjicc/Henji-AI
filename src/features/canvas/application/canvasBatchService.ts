@@ -1,4 +1,4 @@
-import { createSnapshot } from '@/stores/canvasStoreHelpers';
+import { createSnapshot, hasCanvasContentChanged, MAX_HISTORY_STEPS, restoreCanvasSnapshot } from '@/stores/canvasStoreHelpers';
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
 import { v4 as uuidv4 } from 'uuid';
 import { ZodError } from 'zod';
@@ -211,7 +211,7 @@ export async function runCanvasTransaction(
       ? view.selectedNodeId : beforeSelectedNodeId
     const activeToolDialog = beforeNodes.some((node) => node.id === view.activeToolDialog?.nodeId)
       ? view.activeToolDialog : null
-    store.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
+    restoreCanvasSnapshot(store.setState, beforeNodes, beforeEdges, beforeHistory)
     store.setState({ selectedNodeId, activeToolDialog })
     const recovery = persist()
     releasePersistence()
@@ -248,12 +248,10 @@ export async function runCanvasTransaction(
     afterEdges: after.edges,
   })
   // 整批只留一条撤销记录：步骤内部各自记录的历史在这里合并。
-  const groupedPast = [...beforeHistory.past, createSnapshot(beforeNodes, beforeEdges)]
-    .slice(-Math.max(after.history.past.length, 1))
-  const groupedHistory: CanvasHistoryState = {
-    past: groupedPast,
+  const groupedHistory: CanvasHistoryState = hasCanvasContentChanged(canvas, after) ? {
+    past: [...beforeHistory.past, createSnapshot(beforeNodes, beforeEdges)].slice(-MAX_HISTORY_STEPS),
     future: [],
-  }
+  } : beforeHistory
   // 当前 nodes/edges 已由受控 store 写入生成，无需借用 setCanvasData 再迁移整张画布及全部历史。
   store.setState({
     history: groupedHistory,

@@ -16,6 +16,7 @@ import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { attachCanvasGenerationFeedback, getCanvasDomainExecutor } from './canvasDomainExecutors'
 import { findCanvasProjectInstance, leaveCanvasProject } from './canvasProjectInstances'
 import { createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture'
+import { deleteCanvasNodes } from './canvasMutationService'
 
 // 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及画布保存走正式服务。
 vi.mock('./imageData', async (original) => ({
@@ -53,6 +54,49 @@ afterEach(() => {
   registry.unregister('executor-fixture')
   vi.restoreAllMocks()
   uninstallHarnessNativeStorage()
+})
+
+it('生成中只删除结果仍在来源旁重建，并保持任务归属与成功终态', async () => {
+  let finish!: () => void
+  vi.spyOn(GenerationService.getInstance(), 'generate').mockImplementation(async () => {
+    await new Promise<void>(resolve => { finish = resolve })
+    return { status: 'completed', urls: ['C:/generated.png'], filePaths: ['C:/generated.png'] }
+  })
+  const running = runCanvasNode(nodeId)
+  const completed = running.then(value => ({ value }), error => ({ error }))
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  const placeholder = useCanvasStore.getState().nodes.find(node => node.data.isGenerating === true)!
+  await deleteCanvasNodes(projectId, [placeholder.id])
+  finish()
+  const outcome = await completed
+  if ('error' in outcome) throw outcome.error
+  expect(outcome).toHaveProperty('value')
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  const result = saved.nodes.find(node => node.data.imageUrl === 'C:/generated.png')!
+  expect(result.data).toMatchObject({ generationTaskId: placeholder.data.generationTaskId, generationSourceNodeId: nodeId, isGenerating: false })
+  expect((await databaseService.getHistoryById(String(placeholder.data.generationTaskId)))?.status).toBe('success')
+})
+
+it('删除已进入轮询的来源和结果会终止正式执行器，并将原任务记为取消', async () => {
+  const service = GenerationService.getInstance()
+  vi.spyOn(service, 'generate').mockResolvedValue({ status: 'pending', taskId: 'server-delete', urls: [], filePaths: [] })
+  const cancel = vi.spyOn(service, 'cancelTask').mockResolvedValue()
+  let signal: AbortSignal | undefined
+  vi.spyOn(service, 'continuePolling').mockImplementation(async (_model, _task, _params, _progress, request) => {
+    signal = request?.signal
+    return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal?.reason), { once: true }))
+  })
+  const completed = runCanvasNode(nodeId).then(value => ({ value }), error => ({ error }))
+  await vi.waitFor(() => expect(signal).toBeDefined())
+  const result = useCanvasStore.getState().nodes.find(node => node.data.serverTaskId === 'server-delete')!
+  await deleteCanvasNodes(projectId, [nodeId, result.id])
+  await vi.waitFor(() => expect(signal?.aborted).toBe(true))
+  expect(await completed).toHaveProperty('error')
+  expect(cancel).toHaveBeenCalledWith('server-delete')
+  expect((await databaseService.getHistoryById(String(result.data.generationTaskId)))?.status).toBe('cancelled')
+  expect(useCanvasStore.getState().nodes.some(node => node.data.imageUrl === 'C:/generated.png')).toBe(false)
+  useCanvasStore.getState().undo()
+  expect(useCanvasStore.getState().nodes.find(node => node.id === result.id)?.data).toMatchObject({ isGenerating: false, generationCancelled: true })
 })
 
 it('不挂载 React 节点也能经同一执行器准备参考图、生成、连线并保存结果', async () => {

@@ -34,6 +34,7 @@ import type {
 import {
   createDefaultStoryboardExportOptions,
   createSnapshot,
+  withCanvasHistoryBoundary,
   getDerivedNodePosition,
   getNodeSize,
   pushSnapshot,
@@ -46,6 +47,7 @@ export function createCanvasNodeCreationActions(
   set: CanvasStoreSet,
   get: CanvasStoreGet,
 ): CanvasNodeCreationActions {
+  set = withCanvasHistoryBoundary(set);
   return {
   addNode: (type, position, data = {}) => {
     const state = get();

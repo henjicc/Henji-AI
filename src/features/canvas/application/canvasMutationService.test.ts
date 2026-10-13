@@ -2,7 +2,9 @@ import { setCanvasTestProjectState, canvasSaveSpy, canvasTestRegistry } from '@/
 // @vitest-environment jsdom
 
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GenerationService } from '@/core/services/GenerationService';
+import { canvasGenerationTaskControls, canvasGenerationNodeTasks } from './canvasGenerationTaskRecord';
 
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -20,6 +22,7 @@ const projectId = 'project-3-1'
 
 beforeAll(async () => {
   await loadRealModelsIntoRegistry()
+  await import('./generationNodeExecutor')
 })
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
@@ -47,6 +50,64 @@ function emptyProject(): Project {
  * （解散后子节点必须保留，清空后必须可撤销）。
  */
 describe('画布清空与解散分组', () => {
+  describe('删除普通生成任务', () => {
+    afterEach(() => {
+      canvasGenerationTaskControls.clear();
+      canvasGenerationNodeTasks.clear();
+      vi.restoreAllMocks();
+    });
+
+    function runningNodes() {
+      const source = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+      const result = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.exportImage, { x: 400, y: 0 }, {
+        isGenerating: true, generationTaskId: 'deletion-task', serverTaskId: 'server-task', generationSourceNodeId: source,
+      });
+      const controller = new AbortController();
+      canvasGenerationTaskControls.set('deletion-task', { controller, start: async () => undefined });
+      canvasGenerationNodeTasks.set(`${projectId}:${source}`, 'deletion-task');
+      return { source, result, controller };
+    }
+
+    it.each(['both', 'source', 'clear', 'serverOnly'] as const)('%s 持久化后停止控制器与供应商任务', async (kind) => {
+      const { source, result, controller } = runningNodes();
+      if (kind === 'serverOnly') useCanvasStore.getState().updateNodeData(result, { generationTaskId: null }, { skipHistory: true });
+      const cancel = vi.spyOn(GenerationService.getInstance(), 'cancelTask').mockResolvedValue();
+      if (kind === 'clear') await clearCanvasProject(projectId);
+      else await deleteCanvasNodes(projectId, kind === 'source' ? [source] : [source, result]);
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith('server-task'));
+      expect(controller.signal.aborted).toBe(true);
+    });
+
+    it('只删除结果保留任务，撤销恢复占位后仍可接收结果', async () => {
+      const { result, controller } = runningNodes();
+      const cancel = vi.spyOn(GenerationService.getInstance(), 'cancelTask').mockResolvedValue();
+      const deleted = await deleteCanvasNodes(projectId, [result]);
+      await undoCanvasChange(projectId, String(deleted.undoRef));
+      expect(controller.signal.aborted).toBe(false);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(useCanvasStore.getState().nodes.find(node => node.id === result)?.data.isGenerating).toBe(true);
+    });
+
+    it('事务回滚不取消；成功提交前也不取消', async () => {
+      const { source, result, controller } = runningNodes();
+      const cancel = vi.spyOn(GenerationService.getInstance(), 'cancelTask').mockResolvedValue();
+      await expect(runCanvasTransaction(projectId, 1, async options => {
+        await deleteCanvasNodes(projectId, [source, result], options);
+        expect(controller.signal.aborted).toBe(false);
+        throw new Error('后续失败');
+      })).rejects.toThrow('后续失败');
+      expect(controller.signal.aborted).toBe(false);
+      expect(cancel).not.toHaveBeenCalled();
+      await runCanvasTransaction(projectId, 1, async options => {
+        const deleted = await deleteCanvasNodes(projectId, [source, result], options);
+        expect(controller.signal.aborted).toBe(false);
+        return [deleted];
+      });
+      await vi.waitFor(() => expect(controller.signal.aborted).toBe(true));
+      expect(cancel).toHaveBeenCalledWith('server-task');
+    });
+  });
+
   beforeEach(() => {
     cancelCameraStageNodeTasks.mockClear()
     resetCanvasApplicationStateForTests()
@@ -206,6 +267,36 @@ describe('画布清空与解散分组', () => {
    * 未发生可保存的变化"，于是原样又试了一次。
    */
   describe('updateCanvasNode 的拒绝信息', () => {
+    it.each([false, true])('历史满 50 步仍能更新并返回撤销引用（批事务=%s）', async (batch) => {
+      const id = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+      for (let i = 0; i < 55; i++) useCanvasStore.getState().updateNodeData(id, { content: String(i) });
+      expect(useCanvasStore.getState().history.past).toHaveLength(50);
+      const input = { projectId, nodeId: id, data: { content: '满栈更新' } };
+      const result = batch
+        ? await runCanvasTransaction(projectId, 1, async options => [await updateCanvasNode(input, options)])
+        : await updateCanvasNode(input);
+      expect(result.undoRef).toEqual(expect.any(String));
+      expect(useCanvasStore.getState().nodes.find(node => node.id === id)?.data.content).toBe('满栈更新');
+    });
+
+    it.each([false, true])('满栈后新编辑拒绝旧撤销回执（先撤销=%s）', async (undoFirst) => {
+      const id = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+      for (let i = 0; i < 55; i++) useCanvasStore.getState().updateNodeData(id, { content: String(i) });
+      const receipt = await addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.textAnnotation, placement: { mode: 'viewport_center' } });
+      if (undoFirst) useCanvasStore.getState().undo();
+      useCanvasStore.getState().updateNodeData(id, { content: '用户的新编辑' });
+      await expect(undoCanvasChange(projectId, String(receipt.undoRef))).rejects.toMatchObject({ code: 'STALE_CONTEXT' });
+      expect(useCanvasStore.getState().nodes.find(node => node.id === id)?.data.content).toBe('用户的新编辑');
+    });
+
+    it('选区与纯测量不使撤销回执过期', async () => {
+      const receipt = await addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.textAnnotation, placement: { mode: 'viewport_center' } });
+      const id = String(receipt.nodeId);
+      useCanvasStore.getState().onNodesChange([{ id, type: 'select', selected: true }, { id, type: 'dimensions', dimensions: { width: 300, height: 200 } }]);
+      await expect(undoCanvasChange(projectId, String(receipt.undoRef))).resolves.toMatchObject({ status: 'undone' });
+      expect(useCanvasStore.getState().nodes).toHaveLength(0);
+    });
+
     it('把丢掉的键、可写字段和位置的正确通道一起说出来', async () => {
       const created = await addCanvasNode({
         projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' },

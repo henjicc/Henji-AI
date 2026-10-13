@@ -22,6 +22,28 @@ beforeEach(() => {
 });
 
 describe('画布工具节点尺寸跟踪', () => {
+  it('纯测量不制造撤销步骤、不清空重做，也不中断拖动快照', () => {
+    useCanvasStore.getState().setCanvasData([], []);
+    const base = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+    const added = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 20, y: 20 });
+    const measure = (id: string) => useCanvasStore.getState().onNodesChange([
+      { id, type: 'dimensions', dimensions: { width: 400, height: 200 } },
+    ]);
+    const history = useCanvasStore.getState().history;
+    measure(added);
+    expect(useCanvasStore.getState().history).toBe(history);
+    expect(useCanvasStore.getState().nodes.find(node => node.id === added)?.measured?.width).toBe(400);
+    useCanvasStore.getState().undo();
+    expect(useCanvasStore.getState().nodes.map(node => node.id)).toEqual([base]);
+    measure(base);
+    expect(useCanvasStore.getState().history.future).toHaveLength(1);
+    useCanvasStore.getState().redo();
+    useCanvasStore.getState().onNodesChange([{ id: base, type: 'position', position: { x: 50, y: 0 }, dragging: true }]);
+    const drag = useCanvasStore.getState().dragHistorySnapshot;
+    measure(base);
+    expect(useCanvasStore.getState().dragHistorySnapshot).toBe(drag);
+  });
+
   it.each(Object.values(canvasNodeDefinitions)
     .filter((definition) => definition.executionKind === 'standard-generation')
     .map((definition) => definition.type))('%s 第一次拖动中立即采用手动尺寸，撤销恢复自动尺寸', (type) => {

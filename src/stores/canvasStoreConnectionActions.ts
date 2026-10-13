@@ -44,6 +44,8 @@ import type {
 import {
   createClosedCanvasImageViewerState,
   createSnapshot,
+  isCanvasNodeEdit,
+  withCanvasHistoryBoundary,
   isManualSizeTrackingNodeType,
   pushSnapshot,
   resolveActiveToolDialog,
@@ -61,6 +63,7 @@ export function createCanvasConnectionActions(
   set: CanvasStoreSet,
   get: CanvasStoreGet,
 ): CanvasConnectionActions {
+  set = withCanvasHistoryBoundary(set);
   return {
   onNodesChange: (changes) => {
     set((state) => {
@@ -99,7 +102,7 @@ export function createCanvasConnectionActions(
             ? withManualSizeLock(next) : next;
         });
       }
-      const hasMeaningfulChange = changes.some((change) => change.type !== 'select');
+      const hasMeaningfulChange = changes.some(isCanvasNodeEdit);
       const hasDragMove = changes.some(
         (change) =>
           change.type === 'position' &&
@@ -367,6 +370,8 @@ export function createCanvasConnectionActions(
   },
 
   setCanvasData: (nodes, edges, history) => {
+    const nextIds = new Set(nodes.map(node => node.id));
+    const removedIds = new Set(get().nodes.filter(node => !nextIds.has(node.id)).map(node => node.id));
     const normalizedNodes = normalizeNodes(nodes);
     const normalizedEdges = normalizeEdgesWithNodes(edges, normalizedNodes);
     const reconciled = reconcileAssetGroupGraph(normalizedNodes, normalizedEdges);
@@ -381,8 +386,8 @@ export function createCanvasConnectionActions(
       activeHistoryGroup: null,
       imageViewer: createClosedCanvasImageViewerState(),
     });
-    useCanvasGenerationProgressStore.getState().clearAllProgress();
-    useCanvasTextStreamStore.getState().clearAllPreviews();
+    useCanvasGenerationProgressStore.getState().clearProgress(removedIds);
+    useCanvasTextStreamStore.getState().clearPreviews(removedIds);
   },
 
   commitAssetGroupGraph: (graph, selectedNodeId) => {

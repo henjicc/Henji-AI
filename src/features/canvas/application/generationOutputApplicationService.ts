@@ -191,7 +191,8 @@ export async function commitCanvasGenerationOutputs(
     : null;
   if (
     (input.sourceNodeId && !sourceNode)
-    || (input.placeholderNodeId && (!storedPlaceholder || storedPlaceholder.type !== input.resultNodeType))
+    || (storedPlaceholder && storedPlaceholder.type !== input.resultNodeType)
+    || (input.placeholderNodeId && !storedPlaceholder && !sourceNode)
   ) {
     throw new GenerationOutputApplicationError('NOT_FOUND', '生成来源或结果占位节点已不存在');
   }
@@ -257,7 +258,7 @@ export async function commitCanvasGenerationOutputs(
     const latest = store.getState();
     if (
       (input.sourceNodeId && !latest.nodes.some((node) => node.id === input.sourceNodeId))
-      || (input.placeholderNodeId && !latest.nodes.some((node) => node.id === input.placeholderNodeId))
+      || (input.placeholderNodeId && !sourceNode && !latest.nodes.some((node) => node.id === input.placeholderNodeId))
     ) {
       throw new GenerationOutputApplicationError('CONFLICT', '生成期间画布已变化，结果未落图');
     }
@@ -275,13 +276,18 @@ export async function commitCanvasGenerationOutputs(
           completionId,
           appendLabel,
         );
-        const firstNodeId = input.placeholderNodeId ?? store.getState().addNode(
+        const livePlaceholder = input.placeholderNodeId
+          ? store.getState().nodes.find(node => node.id === input.placeholderNodeId) : undefined;
+        if (livePlaceholder && livePlaceholder.type !== input.resultNodeType) {
+          throw new GenerationOutputApplicationError('CONFLICT', '生成结果占位节点类型已改变');
+        }
+        const firstNodeId = livePlaceholder?.id ?? store.getState().addNode(
           input.resultNodeType,
           placeholder.position,
           firstData,
         );
-        if (input.placeholderNodeId) {
-          store.getState().updateNodeData(input.placeholderNodeId, firstData);
+        if (livePlaceholder) {
+          store.getState().updateNodeData(livePlaceholder.id, firstData);
         }
         if (input.sourceNodeId) {
           store.getState().addEdge(input.sourceNodeId, firstNodeId);

@@ -11,6 +11,25 @@ function getContent(nodeId: string): string {
 }
 
 describe('画布文本编辑历史分组', () => {
+  it.each(['addNode', 'onConnect', 'deleteNodes'] as const)('连续文本编辑期间 %s 单独分隔历史', (operation) => {
+    const store = useCanvasStore;
+    store.getState().setCanvasData([], []);
+    const id = store.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+    const other = store.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 100, y: 0 });
+    const historyGroup = `canvas-text:${id}:content`;
+    store.getState().updateNodeData(id, { content: '插入前' }, { historyGroup });
+    if (operation === 'addNode') store.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 200, y: 0 });
+    if (operation === 'onConnect') store.getState().onConnect({ source: id, target: other, sourceHandle: 'source', targetHandle: 'target' });
+    if (operation === 'deleteNodes') store.getState().deleteNodes([other]);
+    const nodeIds = store.getState().nodes.map(node => node.id);
+    const edges = store.getState().edges;
+    store.getState().updateNodeData(id, { content: '继续输入' }, { historyGroup });
+    store.getState().undo();
+    expect(getContent(id)).toBe('插入前');
+    expect(store.getState().nodes.map(node => node.id)).toEqual(nodeIds);
+    expect(store.getState().edges).toEqual(edges);
+  });
+
   beforeEach(() => {
     useCanvasStore.getState().setCanvasData([], [])
   })

@@ -1,4 +1,4 @@
-import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance, leaseCanvasProject } from './canvasProjectInstances'
+import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance, leaseCanvasProject, notifyCanvasGenerationNodesDeleted } from './canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { verifyCanvasWrite } from './canvasQueryService'
 import { createLogger } from '@/core/logging'
@@ -47,6 +47,14 @@ import {
   validateCanvasNodeDataPatch, validateCanvasNodeGenerationConfig, type CanvasNodeGenerationConfig,
 } from './canvasNodeGenerationConfig'
 const logger = createLogger('features.canvas.canvas_mutation')
+
+function cancelDeletedGenerationAfterPersistence(projectId: string, beforeNodes: CanvasNode[], options: CanvasCommitOptions): void {
+  runAfterCanvasPersistence(options, () => {
+    void notifyCanvasGenerationNodesDeleted(projectId, beforeNodes).catch(error => logger.error('删除节点后的生成任务取消失败', error, {
+      event: 'canvas.generationTask.delete_cancel.failed', projectId,
+    }))
+  })
+}
 
 interface CanvasNodePatch {
   nodeId: string
@@ -250,7 +258,7 @@ export function commitCanvasNodesDuplication<T>(input: CanvasNodesDuplicationInp
       const result = input.createNodes(data)
       const after = instance.store.getState()
       if (after.nodes !== before.nodes || after.edges !== before.edges) {
-        instance.store.setState({ history: {
+        instance.store.setState({ activeHistoryGroup: null, history: {
           past: pushSnapshot(before.history.past, createSnapshot(before.nodes, before.edges)), future: [],
         } })
       }
@@ -354,9 +362,8 @@ export async function updateCanvasNode(input: {
   const node = requireNode(input.projectId, input.nodeId)
   const safeData = validateCanvasNodeDataPatch(node, input.data)
   const canvas = requireCanvasProjectInstance(input.projectId).store.getState()
-  const beforeDepth = canvas.history.past.length
   await applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }], options)
-  if (requireCanvasProjectInstance(input.projectId).store.getState().history.past.length === beforeDepth) {
+  if (requireCanvasProjectInstance(input.projectId).store.getState().nodes === canvas.nodes) {
     /*
      * 不能只说"没有变化"——调用方无从知道是**值本来就一样**还是**键被悄悄丢掉了**。
      *
@@ -409,7 +416,7 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
   const removedCameraTasks = beforeNodes
     .filter((node) => unique.includes(node.id) && isCameraStageNode(node))
     .flatMap((node) => node.data.renderTask ? [node.data.renderTask] : [])
-  if (removedCameraTasks.length > 0) assertCanvasPersistenceEffectRegistration(options)
+  assertCanvasPersistenceEffectRegistration(options)
   requireCanvasProjectInstance(projectId).store.getState().deleteNodes(unique)
   const remainingIds = new Set(requireCanvasProjectInstance(projectId).store.getState().nodes.map((node) => node.id))
   const removedDocumentNodes = beforeNodes
@@ -417,6 +424,7 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
     .filter((node) => !remainingIds.has(node.id))
   const undoRef = rememberCanvasUndo(projectId, 'delete_nodes')
   await confirmCanvasPersistence(projectId, options)
+  cancelDeletedGenerationAfterPersistence(projectId, beforeNodes, options)
   if (removedCameraTasks.length > 0) {
     runAfterCanvasPersistence(options, () => {
       void import('./cameraStageRenderApplicationService').then(({ cancelCameraStageNodeTasks }) => (
@@ -462,10 +470,11 @@ export async function clearCanvasProject(projectId: string, options: CanvasCommi
   const removedCameraTasks = before.nodes
     .filter(isCameraStageNode)
     .flatMap((node) => node.data.renderTask ? [node.data.renderTask] : [])
-  if (removedCameraTasks.length > 0) assertCanvasPersistenceEffectRegistration(options)
+  assertCanvasPersistenceEffectRegistration(options)
   requireCanvasProjectInstance(projectId).store.getState().clearCanvas()
   const undoRef = rememberCanvasUndo(projectId, 'clear_canvas')
   await confirmCanvasPersistence(projectId, options)
+  cancelDeletedGenerationAfterPersistence(projectId, before.nodes, options)
   if (removedCameraTasks.length > 0) {
     runAfterCanvasPersistence(options, () => {
       void import('./cameraStageRenderApplicationService').then(({ cancelCameraStageNodeTasks }) => (

@@ -24,11 +24,73 @@ import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import type {
   CanvasHistorySnapshot,
+  CanvasHistoryState,
   CanvasImageViewerState,
+  CanvasStoreSet,
+  CanvasState,
 } from './canvasStore';
+import type { NodeChange } from '@xyflow/react';
+import { readGenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry';
+import { createCanvasGenerationCancelledPatch } from '@/features/canvas/domain/generationFailure';
 
 export const MAX_HISTORY_STEPS = 50;
 const IMAGE_NODE_VISUAL_MIN_EDGE = 96;
+
+export function isCanvasNodeEdit(change: NodeChange<CanvasNode>): boolean {
+  return change.type !== 'select'
+    && !(change.type === 'dimensions' && !('resizing' in change) && !change.setAttributes);
+}
+
+/** 测量、选区和手势标记属于视图状态，不推进文档或撤销身份。 */
+export function hasCanvasContentChanged(
+  before: CanvasHistorySnapshot,
+  after: CanvasHistorySnapshot,
+): boolean {
+  const sameItems = <T extends object>(left: T[], right: T[], transient: ReadonlySet<string>): boolean =>
+    left === right || (left.length === right.length && left.every((item, index) => {
+      const next = right[index];
+      if (item === next) return true;
+      const keys = new Set([...Object.keys(item), ...Object.keys(next)]);
+      return [...keys].every(key => transient.has(key) || item[key as keyof T] === next[key as keyof T]);
+    }));
+  return !sameItems(before.nodes, after.nodes, transientNodeKeys)
+    || !sameItems(before.edges, after.edges, transientEdgeKeys);
+}
+const transientNodeKeys = new Set(['measured', 'selected', 'dragging', 'resizing']);
+const transientEdgeKeys = new Set(['selected']);
+
+/** 非文本动作推进历史时，结束正在聚焦的文本分组；显式分组补丁仍由文本动作负责。 */
+export function withCanvasHistoryBoundary(set: CanvasStoreSet): CanvasStoreSet {
+  return (partial, replace) => {
+    const update = (state: CanvasState) => {
+      const patch = typeof partial === 'function' ? partial(state) : partial;
+      return patch.history && patch.history.past !== state.history.past && !('activeHistoryGroup' in patch)
+        ? { ...patch, activeHistoryGroup: null }
+        : patch;
+    };
+    // setState 的 replace 重载要求完整状态；调用者通过原签名保证这一点。
+    if (replace) set(state => update(state) as CanvasState, true);
+    else set(update, replace);
+  };
+}
+
+/** 恢复活的内存快照，不执行外部文档加载时的运行态规范化。 */
+export function restoreCanvasSnapshot(set: CanvasStoreSet, nodes: CanvasNode[], edges: CanvasEdge[], history: CanvasHistoryState): void {
+  set({ nodes: reconcileCancelledCanvasGenerations(nodes), edges, history, selectedNodeId: null, activeToolDialog: null,
+    dragHistorySnapshot: null, activeHistoryGroup: null, imageViewer: createClosedCanvasImageViewerState() });
+}
+
+/** 撤销恢复作品，不复活已经确认取消的任务；活动任务仍保留原快照引用。 */
+export function reconcileCancelledCanvasGenerations(nodes: CanvasNode[]): CanvasNode[] {
+  let changed = false;
+  const restored = nodes.map(node => {
+    if (node.data.isGenerating !== true || typeof node.data.generationTaskId !== 'string'
+      || readGenerationTaskStatusSnapshot(node.data.generationTaskId)?.status !== 'cancelled') return node;
+    changed = true;
+    return { ...node, data: { ...node.data, ...createCanvasGenerationCancelledPatch() } };
+  });
+  return changed ? restored : nodes;
+}
 
 export function createClosedCanvasImageViewerState(): CanvasImageViewerState {
   return {

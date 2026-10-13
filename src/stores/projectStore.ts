@@ -174,7 +174,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (seq === openRequestSeq) set({ isOpeningProject: false })
       return false
     }
-    if (seq !== openRequestSeq) return true
+    if (seq !== openRequestSeq) {
+      if (get().currentProjectId !== target.id) void releaseCanvasProjectInstance(target.id).catch(error => {
+        logger.warn('抢占打开后释放画布失败', { event: 'project.open.release.failed', error, context: { projectId: target.id } })
+      })
+      return false
+    }
     show(instance)
     logger.debug('完成打开画布', { event: 'project.open.completed', context: { projectId: target.id } })
     return true
@@ -188,8 +193,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         if (seq === openRequestSeq) set({ isOpeningProject: false })
         return null
       }
+      if (seq !== openRequestSeq) return null
       const instance = await createCanvasDraftInstance(container)
-      if (seq === openRequestSeq) show(instance)
+      if (seq !== openRequestSeq) {
+        await leaveCanvasProject(instance.id)
+        return null
+      }
+      show(instance)
       return instance.id
     } catch (error) {
       if (seq === openRequestSeq) {
@@ -207,7 +217,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ isOpeningProject: false, openError: null })
       return 'closed'
     }
-    return await leaveCurrent(false)
+    const seq = openRequestSeq
+    const outcome = await leaveCurrent(false)
+    if (seq === openRequestSeq) set({ isOpeningProject: false })
+    return outcome
   },
 
   clearPersistenceError: () => set({ persistenceError: null }),

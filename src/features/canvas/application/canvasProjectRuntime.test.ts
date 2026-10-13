@@ -2,12 +2,14 @@
 import { canvasTestRegistry, createCanvasTestProject, readCanvasTestProject, seedCanvasTestProject, setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 import { describe, expect, it, vi } from 'vitest'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
+import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
 import { canvasNodeFactory } from './canvasServices'
 import { withCanvasProjectRuntime } from './canvasProjectRuntime'
-import { findCanvasProjectInstance, getCanvasProjectInstance, leaveCanvasProject, releaseCanvasProjectInstance } from './canvasProjectInstances'
+import { findCanvasProjectInstance, getCanvasProjectInstance, leaveCanvasProject, releaseCanvasProjectInstance, leaseCanvasProject } from './canvasProjectInstances'
 import { commitCanvasGenerationOutputs, commitCanvasGenerationOutputsInProject } from './generationOutputApplicationService'
 
 /*
@@ -32,6 +34,117 @@ async function output(id: string, completionId: string) {
 }
 
 describe('画布文档实例', () => {
+  it('后台打开、替换与清空 B 只清理 B 已移除节点的瞬态状态', async () => {
+    const a = await createCanvasTestProject('正在生成');
+    const id = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+    useCanvasGenerationProgressStore.getState().setProgress(id, 0.4);
+    useCanvasTextStreamStore.getState().setPreview(id, { content: '输出中', reasoning: '' }, 'run-a');
+    const b = project('background-load');
+    seedCanvasTestProject(b);
+    const instance = await getCanvasProjectInstance(b.id);
+    for (const clear of [false, true]) {
+      instance.store.getState().setCanvasData(b.nodes, []);
+      useCanvasGenerationProgressStore.getState().setProgress(b.nodes[0].id, 0.6);
+      useCanvasTextStreamStore.getState().setPreview(b.nodes[0].id, { content: 'B', reasoning: '' }, 'run-b');
+      if (clear) instance.store.getState().clearCanvas();
+      else instance.store.getState().setCanvasData([], []);
+      expect(useCanvasGenerationProgressStore.getState().progress[id]).toBe(0.4);
+      expect(useCanvasTextStreamStore.getState().previews[id]?.content).toBe('输出中');
+      expect(useCanvasTextStreamStore.getState().runIds[id]).toBe('run-a');
+      expect(useCanvasGenerationProgressStore.getState().progress[b.nodes[0].id]).toBeUndefined();
+      expect(useCanvasTextStreamStore.getState().previews[b.nodes[0].id]).toBeUndefined();
+    }
+    expect(useProjectStore.getState().currentProjectId).toBe(a);
+  });
+
+  it('纯测量不推进文档版本或标脏', async () => {
+    const id = await createCanvasTestProject('测量');
+    const nodeId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+    const instance = findCanvasProjectInstance(id)!;
+    await instance.session.flush();
+    const revision = instance.revision;
+    useCanvasStore.getState().onNodesChange([{ id: nodeId, type: 'dimensions', dimensions: { width: 300, height: 200 } }]);
+    expect(instance.revision).toBe(revision);
+    expect(instance.session.dirty).toBe(false);
+  });
+
+  it('租约在离开等待期间归零仍关闭并释放实例', async () => {
+    const id = await createCanvasTestProject('离开竞态');
+    const instance = findCanvasProjectInstance(id)!;
+    const release = leaseCanvasProject(instance);
+    const registry = canvasTestRegistry().registry;
+    const leave = registry.leave.bind(registry);
+    let proceed!: () => void;
+    const gate = new Promise<void>(resolve => { proceed = resolve });
+    const spy = vi.spyOn(registry, 'leave').mockImplementation(async (...args) => { await gate; return leave(...args) });
+    const pending = useProjectStore.getState().closeProject();
+    release();
+    proceed();
+    await pending;
+    await vi.waitFor(() => expect(instance.session.isEnded).toBe(true));
+    expect(findCanvasProjectInstance(id)).toBeUndefined();
+    spy.mockRestore();
+  });
+
+  it.each(['close', 'open'] as const)('离开对话框期间 %s 抢占打开 B 时释放 B 并返回 false', async (action) => {
+    await useProjectStore.getState().createCanvasDraft();
+    useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 }, { content: '草稿' });
+    const b = project('superseded-b');
+    const c = project('superseding-c');
+    seedCanvasTestProject(b); seedCanvasTestProject(c);
+    let decide!: () => void;
+    vi.spyOn(canvasTestRegistry().prompter, 'chooseLeaveAction').mockImplementation(() => new Promise(resolve => { decide = () => resolve('discard') }));
+    const opening = useProjectStore.getState().openCanvasDocument({ id: b.id });
+    await vi.waitFor(() => expect(decide).toBeTypeOf('function'));
+    const next = action === 'close' ? useProjectStore.getState().closeProject() : useProjectStore.getState().openCanvasDocument({ id: c.id });
+    if (action === 'open') await vi.waitFor(() => expect(findCanvasProjectInstance(c.id)).toBeDefined());
+    decide();
+    expect(await opening).toBe(false);
+    await next;
+    await vi.waitFor(() => expect(findCanvasProjectInstance(b.id)).toBeUndefined());
+    expect(useProjectStore.getState().isOpeningProject).toBe(false);
+    expect(useProjectStore.getState().currentProjectId).toBe(action === 'close' ? null : c.id);
+  });
+
+  it('同一目标的新打开请求接管实例，旧请求不能释放它', async () => {
+    await useProjectStore.getState().createCanvasDraft();
+    useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 }, { content: '草稿' });
+    const b = project('same-target-b');
+    seedCanvasTestProject(b);
+    let decide!: () => void;
+    vi.spyOn(canvasTestRegistry().prompter, 'chooseLeaveAction').mockImplementation(() => new Promise(resolve => { decide = () => resolve('discard') }));
+    const first = useProjectStore.getState().openCanvasDocument({ id: b.id });
+    await vi.waitFor(() => expect(decide).toBeTypeOf('function'));
+    const second = useProjectStore.getState().openCanvasDocument({ id: b.id });
+    decide();
+    expect(await first).toBe(false);
+    expect(await second).toBe(true);
+    expect(findCanvasProjectInstance(b.id)?.session.isEnded).toBe(false);
+    expect(useProjectStore.getState().currentProjectId).toBe(b.id);
+  });
+
+  it('创建草稿期间返回会清理未展示草稿并返回 null', async () => {
+    const { registry } = canvasTestRegistry();
+    const create = registry.create.bind(registry);
+    let resume!: () => void;
+    const gate = new Promise<void>(resolve => { resume = resolve });
+    let createdId = '';
+    const spy = vi.spyOn(registry, 'create').mockImplementation(async (...args) => {
+      await gate;
+      const session = await create(...args);
+      createdId = session.id;
+      return session;
+    });
+    const creating = useProjectStore.getState().createCanvasDraft();
+    await vi.waitFor(() => expect(spy).toHaveBeenCalled());
+    await useProjectStore.getState().closeProject();
+    resume();
+    expect(await creating).toBeNull();
+    expect(findCanvasProjectInstance(createdId)).toBeUndefined();
+    expect(useProjectStore.getState().isOpeningProject).toBe(false);
+    spy.mockRestore();
+  });
+
   it('内容变化自动保存进文档；拖动期间不标脏，松手后只写一次', async () => {
     const id = await createCanvasTestProject('自动保存')
     const { commands } = canvasTestRegistry()

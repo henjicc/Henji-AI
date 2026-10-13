@@ -42,6 +42,44 @@ function createProject(node: CanvasNode): Project {
 }
 
 describe('canvas batch service', () => {
+  it.each(['select', 'noop', 'position'] as const)('已有历史的 %s 事务保留真实历史与重做', async (kind) => {
+    for (let i = 0; i < 4; i++) useCanvasStore.getState().updateNodeData(nodeId, { content: String(i) });
+    useCanvasStore.getState().undo();
+    const before = useCanvasStore.getState();
+    await runCanvasTransaction(projectId, 1, options => runCanvasMutationStage(options, () => {
+      if (kind === 'select') useCanvasStore.getState().setSelectedNode(nodeId);
+      if (kind === 'noop') useCanvasStore.getState().updateNodeData(nodeId, { content: before.nodes[0].data.content });
+      if (kind === 'position') useCanvasStore.getState().updateNodePosition(nodeId, { x: 500, y: 600 });
+      return [];
+    }));
+    const after = useCanvasStore.getState();
+    expect(after.history.past[0]).toBe(before.history.past[0]);
+    if (kind === 'position') {
+      expect(after.history.past).toHaveLength(before.history.past.length + 1);
+      after.undo();
+      expect(useCanvasStore.getState().nodes[0].position).toEqual(before.nodes[0].position);
+    } else expect(after.history).toBe(before.history);
+  });
+
+  it.each(['rollback', 'undo'] as const)('%s 恢复内存快照时保留在途生成', async (kind) => {
+    useCanvasStore.getState().updateNodeData(nodeId, { isGenerating: true, generationTaskId: 'active-task' }, { skipHistory: true });
+    const before = useCanvasStore.getState();
+    const execute = (options: Parameters<typeof runCanvasMutationStage>[0]) => runCanvasMutationStage(options, () => {
+      useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 500, y: 0 });
+      if (kind === 'rollback') throw new Error('写入后失败');
+      return [];
+    });
+    if (kind === 'rollback') await expect(runCanvasTransaction(projectId, 1, execute)).rejects.toThrow('写入后失败');
+    else {
+      const result = await runCanvasTransaction(projectId, 1, execute);
+      await undoCanvasBatch(projectId, result.undoRef);
+    }
+    expect(useCanvasStore.getState().nodes).toBe(before.nodes);
+    expect(useCanvasStore.getState().history).toBe(before.history);
+    expect(useCanvasStore.getState().nodes[0].data.isGenerating).toBe(true);
+    expect(useCanvasStore.getState().nodes[0].data.generationError).toBe(before.nodes[0].data.generationError);
+  });
+
   it('可信素材的前置字段错误明确未执行，修正后同一画布可继续追加', async () => {
     const before = useCanvasStore.getState().nodes
     await expect(runCanvasTransaction(projectId, 1, async options => [await addTrustedMediaCanvasNode({
