@@ -224,8 +224,10 @@ it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'con
 })
 
 it.each(['closed', 'stacked', 'visible', 'collapsed', 'popout_stacked', 'popout_visible'] as const)('双击添加后恢复效果控件（%s），已可见时保留原焦点与布局，滚动到新效果', async state => {
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0))
-  vi.stubGlobal('cancelAnimationFrame', (handle: number) => window.clearTimeout(handle))
+  // 不依赖 0ms 定时器与 React 提交的竞争；逐帧 act 让折叠展开/浮窗 portal 在帧间提交。
+  const frames = new Map<number, FrameRequestCallback>(); let frameId = 0
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++frameId, callback); return frameId })
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => frames.delete(handle))
   vi.spyOn(compositing, 'applyVideoEditBuiltinEffect').mockReturnValue(['added-effect'])
   const instance = makeInstance('效果库应用')
   const clip = videoEditClipSchema.parse({ id: 'clip', itemId: 'item', name: '画面', kind: 'text', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '画面' })
@@ -265,7 +267,12 @@ it.each(['closed', 'stacked', 'visible', 'collapsed', 'popout_stacked', 'popout_
   }
   if (state !== 'closed') expect(dock.groups.map(group => group.id)).toEqual(groups)
   if (state === 'visible' || state === 'collapsed') expect(dock.activePanel?.id).toBe('program')
-  await waitFor(() => expect(effectScroll).toHaveBeenCalledWith({ block: 'nearest' }))
+  for (let frame = 0; frame <= 60 && !effectScroll.mock.calls.length; frame++) {
+    const pending = [...frames.values()]; frames.clear()
+    await act(async () => pending.forEach(callback => callback(frame * 16)))
+  }
+  expect(effectScroll).toHaveBeenCalledWith({ block: 'nearest' })
+  expect(effectScroll).toHaveBeenCalledTimes(1)
   expect(onError).not.toHaveBeenCalled()
 })
 
