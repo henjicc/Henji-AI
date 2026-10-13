@@ -85,7 +85,7 @@ export class DocumentSession {
   private autosaveTimer: Timer | null = null
   private idleTimer: Timer | null = null
   private retryDelay = 0
-  private suspended = false
+  private suspended = 0
   private queue: Promise<void> = Promise.resolve()
   private conflictPrompt: Promise<void> | null = null
   private closing: Promise<void> | null = null
@@ -197,13 +197,16 @@ export class DocumentSession {
   }
 
   /** 保存屏障：取消防抖，等正在写的那次完成，再把剩余修改写完。冲突时先请用户选择。 */
-  async flush(): Promise<void> {
+  async flush(options: { promptOnConflict?: boolean } = {}): Promise<void> {
     if (this.ended) return
     this.clearAutosave()
     for (let round = 0; round < MAX_FLUSH_ROUNDS; round += 1) {
-      if (this.status === 'conflict') await this.promptConflict()
+      if (this.status === 'conflict') {
+        if (options.promptOnConflict === false) throw new DocumentSessionConflictError(this.meta.name)
+        await this.promptConflict()
+      }
       try {
-        await this.enqueueSave(false)
+        await this.enqueueSave(false, options.promptOnConflict !== false)
       } catch (error) {
         // 写入时才发现冲突：下一轮等用户选择后再继续。
         if (this.status === 'conflict') continue
@@ -229,8 +232,8 @@ export class DocumentSession {
    * 换位置（移动、转正、创建副本）前的屏障：写完最后一次，再让保存策略把文档引用的内部资源写到位。
    * 没有这一步的类型等同 flush。失败时抛错，修改保留。
    */
-  async prepareTransfer(): Promise<void> {
-    await this.flush()
+  async prepareTransfer(options: { promptOnConflict?: boolean } = {}): Promise<void> {
+    await this.flush(options)
     const hook = this.persistence.beforeTransfer
     if (!hook || this.ended) return
     await this.enqueue(async () => {
@@ -238,6 +241,15 @@ export class DocumentSession {
       if (meta) this.meta = meta
       this.emit()
     })
+  }
+
+  /** 传输前排空保存，直到套用新位置为止均不启动后台写入。 */
+  async withTransfer<T>(operation: () => Promise<T>): Promise<T> {
+    await this.suspend()
+    try {
+      await this.prepareTransfer()
+      return await operation()
+    } finally { this.resume() }
   }
 
   /** 失败后手动重试。 */
@@ -295,12 +307,27 @@ export class DocumentSession {
    * 按新位置重新读取内容交给工具实例。
    */
   async applyTransfer(result: DocumentTransferResult): Promise<void> {
-    const previousRevision = this.meta.revision
     await this.enqueue(async () => {
+      const previousRevision = this.meta.revision
       this.meta = result.meta
+      if (result.meta.revision !== previousRevision) {
+        const read = await this.readFor('relocate', this.target)
+        this.applyRead(read)
+        // IPC 和读回期间仍可编辑；没有路径映射就不能安全合并，更不能丢弃修改。
+        if (this.dirty || this.status === 'conflict') {
+          this.status = 'conflict'
+          this.error = new DocumentSessionConflictError(this.meta.name)
+          this.clearAutosave()
+          this.logger.warn('传输期间有新修改，保留内存内容等待冲突处理', { event: 'documents.session.transfer.conflict' })
+        } else {
+          this.receiveContent(read.content)
+          this.savedSeq = this.changeSeq
+          this.status = 'saved'
+          this.error = null
+        }
+      }
       this.emit()
     })
-    if (result.meta.revision !== previousRevision) await this.reload()
   }
 
   /** 所在项目被移动或改名后按 ID 重新定位；磁盘版本没变时只更新位置，不动内容。 */
@@ -316,7 +343,7 @@ export class DocumentSession {
 
   /** 暂停自动保存并等正在写的那次完成（丢弃前用）。 */
   async suspend(): Promise<void> {
-    this.suspended = true
+    this.suspended += 1
     this.clearAutosave()
     this.clearIdleCommit()
     await this.queue
@@ -324,7 +351,8 @@ export class DocumentSession {
 
   resume(): void {
     if (this.ended || !this.suspended) return
-    this.suspended = false
+    this.suspended -= 1
+    if (this.suspended) return
     if (this.dirty && this.status !== 'conflict') this.scheduleAutosave(this.timing.autosaveDelayMs)
   }
 
@@ -360,11 +388,11 @@ export class DocumentSession {
     return task
   }
 
-  private enqueueSave(force: boolean): Promise<void> {
-    return this.enqueue(() => this.saveOnce(force))
+  private enqueueSave(force: boolean, promptOnConflict = true): Promise<void> {
+    return this.enqueue(() => this.saveOnce(force, promptOnConflict))
   }
 
-  private async saveOnce(force: boolean): Promise<void> {
+  private async saveOnce(force: boolean, promptOnConflict: boolean): Promise<void> {
     if (this.ended) return
     if (!force && !this.dirty) return
     if (!force && this.status === 'conflict') throw new DocumentSessionConflictError(this.meta.name)
@@ -401,7 +429,7 @@ export class DocumentSession {
         this.logger.warn('文档已在别处被修改', { event: 'documents.session.save.conflict', error })
         this.emit()
         // 自动保存撞上冲突时直接请用户选择；flush 路径会等同一个提示。
-        void this.promptConflict().catch(() => undefined)
+        if (promptOnConflict) void this.promptConflict().catch(() => undefined)
       } else {
         this.status = 'failed'
         this.retryDelay = this.retryDelay

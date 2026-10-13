@@ -175,7 +175,7 @@ export class DocumentPackageService {
         try {
           file = await loadDocumentFile(absolute, this.fileDependencies())
         } catch (error) {
-          // 读不懂的文档文件（损坏、版本过新）原样放进包里，导入后由扫描如实报告
+          // 读不懂的文档原样保留；导入后扫描只记 invalid 并跳过该文件，不阻断整个项目。
           this.options.logger.warn('导出项目时有文档文件读不懂，原样放进包里', { event: 'documents.package.export.unreadable_document', context: { relative }, error })
           entries.push({ name: relative, source: absolute })
           continue
@@ -482,7 +482,11 @@ export class DocumentPackageService {
         this.options.logger.warn('内部文件夹未能设为隐藏', { event: 'documents.package.hide_failed', context: { published }, error })
       })
       this.workspace.catalog.upsertProject(await this.workspace.describeProject(published, projectManifest))
-      await this.options.scanner.refresh()
+      await this.options.scanner.refresh().catch((error: unknown) => {
+        this.options.logger.warn('项目已导入，作品索引稍后刷新', {
+          event: 'documents.package.import.index_refresh_failed', context: { projectId: projectManifest.id, published }, error,
+        })
+      })
       const project = this.options.projects.list().find((item) => item.id === projectManifest.id)
       if (!project) throw new ProjectNotFoundError(projectManifest.id)
       this.options.logger.info('项目包已导入', {

@@ -20,6 +20,24 @@ async function openWithTool(content: TestContent = { items: ['a'] }) {
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { vi.useRealTimers() })
 
+it('传输的读回尚未完成时继续编辑，读回不能覆盖新修改或宣称已保存', async () => {
+  const { commands, session, tool, meta } = await openWithTool()
+  commands.modifyExternally(meta.id, { items: ['磁盘传输结果'] })
+  const read = await commands.readDocument(meta)
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const spy = vi.spyOn(commands, 'readDocument').mockImplementationOnce(async () => { await gate; return read })
+  const pending = session.applyTransfer({ meta: read.meta, copiedFiles: 1, missingPaths: [] })
+  await vi.advanceTimersByTimeAsync(0)
+  tool.edit('读回期间')
+  release()
+  await pending
+  expect(tool.content).toEqual({ items: ['a', '读回期间'] })
+  expect(session.getState()).toMatchObject({ dirty: true, status: 'conflict' })
+  spy.mockRestore()
+  await session.discard()
+})
+
 describe('自动保存', () => {
   it('防抖期间的多次修改合并成一次写入，写入的是最后的内容', async () => {
     const { commands, session, tool, meta } = await openWithTool()

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { withFileLock } from './file-lock'
 import {
@@ -15,9 +15,14 @@ import {
 } from './no-overwrite'
 
 let root: string
+const logWarn = vi.hoisted(() => vi.fn())
 
-beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-no-overwrite-')) })
-afterEach(() => { fs.rmSync(root, { recursive: true, force: true }) })
+vi.mock('../logging/main-logger', () => ({
+  createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: logWarn, error: vi.fn() }),
+}))
+
+beforeEach(() => { logWarn.mockClear(); root = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-no-overwrite-')) })
+afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }) })
 
 describe('不覆盖的文件操作', () => {
   it('独占创建：目标已存在时报 EntryExistsError 且原内容不变；成功时不留暂存文件', async () => {
@@ -63,6 +68,94 @@ describe('不覆盖的文件操作', () => {
 })
 
 describe('跨进程文件锁', () => {
+  it('PID 仍存活但心跳停止远超 staleMs 时回收残留，不因 PID 复用永久锁死', async () => {
+    const lock = path.join(root, 'reused-pid.lock')
+    await fsp.writeFile(lock, `${process.pid} previous-owner\n`)
+    const old = new Date(Date.now() - 4_000)
+    await fsp.utimes(lock, old, old)
+    await expect(withFileLock(lock, async () => 'recovered', { staleMs: 1_000, timeoutMs: 100 })).resolves.toBe('recovered')
+    expect(fs.existsSync(lock)).toBe(false)
+  })
+
+  it('存活 PID 的心跳只超过 staleMs、尚在宽限期内时不接管', async () => {
+    const lock = path.join(root, 'delayed-heartbeat.lock')
+    const owner = `${process.pid} delayed-owner\n`
+    await fsp.writeFile(lock, owner)
+    const old = new Date(Date.now() - 1_500)
+    await fsp.utimes(lock, old, old)
+    await expect(withFileLock(lock, async () => 'never', { staleMs: 1_000, timeoutMs: 50 })).rejects.toThrow('Timed out')
+    expect(await fsp.readFile(lock, 'utf8')).toBe(owner)
+  })
+
+  it.each([false, true])('关闭句柄失败仍释放锁并保留操作结果（操作失败：%s）', async fails => {
+    const lock = path.join(root, 'close-error.lock')
+    const closeError = new Error('close failed')
+    const operationError = new Error('operation failed')
+    const open = fsp.open.bind(fsp)
+    vi.spyOn(fsp, 'open').mockImplementationOnce(async (...args) => {
+      const handle = await open(...args)
+      const close = handle.close.bind(handle)
+      vi.spyOn(handle, 'close').mockImplementationOnce(async () => {
+        await close()
+        throw closeError
+      })
+      return handle
+    })
+    const result = withFileLock(lock, async () => {
+      if (fails) throw operationError
+      return 'operation result'
+    })
+    if (fails) await expect(result).rejects.toBe(operationError)
+    else await expect(result).resolves.toBe('operation result')
+    expect(fs.existsSync(lock)).toBe(false)
+    expect(logWarn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'fs.file_lock.close_failed', error: closeError }))
+  })
+
+  it('多个等待者同时回收同一残留锁时，只有一个进入操作', async () => {
+    const lock = path.join(root, 'stale.lock')
+    await fsp.writeFile(lock, 'abandoned')
+    const old = new Date(Date.now() - 60_000)
+    await fsp.utimes(lock, old, old)
+    let active = 0
+    let peak = 0
+    await Promise.all(Array.from({ length: 8 }, () => withFileLock(lock, async () => {
+      peak = Math.max(peak, ++active)
+      await new Promise(resolve => setTimeout(resolve, 20))
+      active--
+    }, { staleMs: 60 })))
+    expect(peak).toBe(1)
+    expect(await fsp.readdir(root)).toEqual([])
+  })
+  it('持锁超过 staleMs 时多个等待者仍串行，心跳持续更新', async () => {
+    const lock = path.join(root, 'long.lock')
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    let active = 0
+    let peak = 0
+    const operation = async () => {
+      peak = Math.max(peak, ++active)
+      entered()
+      await new Promise(resolve => setTimeout(resolve, 240))
+      active--
+    }
+    const first = withFileLock(lock, operation, { staleMs: 60 })
+    await started
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const age = Date.now() - (await fsp.stat(lock)).mtimeMs
+    await Promise.all([first, ...Array.from({ length: 3 }, () => withFileLock(lock, operation, { staleMs: 60 }))])
+    expect(peak).toBe(1)
+    expect(age).toBeLessThan(60)
+  })
+
+  it('释放时不删除替换后的其他持有者锁', async () => {
+    const lock = path.join(root, 'ownership.lock')
+    await withFileLock(lock, async () => {
+      await fsp.rm(lock)
+      await fsp.writeFile(lock, 'replacement-owner')
+    })
+    expect(await fsp.readFile(lock, 'utf8')).toBe('replacement-owner')
+  })
+
   it('同一把锁串行执行，结束后释放；操作抛错也释放', async () => {
     const lock = path.join(root, 'locks', 'doc.lock')
     const order: string[] = []

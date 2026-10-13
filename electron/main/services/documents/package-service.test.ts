@@ -2,7 +2,7 @@ import { ZipArchive } from 'archiver'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTestEnvironment, listFiles, type TestEnvironment } from './documents.test-support'
 import { remapDocumentLinks } from './package-service'
@@ -35,6 +35,20 @@ async function writeZip(target: string, entries: Record<string, string>): Promis
 describe('通用单文件包（4.1）', () => {
   beforeEach(() => { env = createTestEnvironment() })
   afterEach(async () => { await env.cleanup() })
+
+  it('项目已经发布后索引刷新失败仍返回成功，保留已导入项目', async () => {
+    const { service, scanner } = env.services
+    const project = await service.createProject({ name: '已发布' })
+    const exported = await service.exportProjectPackage({ projectId: project.id })
+    const refresh = vi.spyOn(scanner, 'refresh').mockRejectedValueOnce(new Error('EIO'))
+    try {
+      const imported = await service.importPackage({ source: exported.path })
+      expect(imported.type).toBe('project')
+      if (imported.type !== 'project') throw new Error('应为项目')
+      expect(fs.existsSync(imported.project.path)).toBe(true)
+      expect(imported.project.name).toBe('已发布 (2)')
+    } finally { refresh.mockRestore() }
+  })
 
   it('清单中文档缺失或无法解析时报告全部失败文件，保留原包且不发布项目', async () => {
     const source = path.join(env.outside, '不完整.henjipack')

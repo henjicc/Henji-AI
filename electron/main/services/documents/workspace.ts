@@ -17,6 +17,8 @@ import type { DocumentContainerRef, FolderLocale } from '../../../../src/core/do
 import type { LocationContext } from '../../../../src/core/storage/locationCodec'
 import { isPathInside, samePath, type PathStyle } from '../../../../src/core/storage/pathSyntax'
 import { writeBufferAtomically } from '../fs/atomic-file'
+import { withFileLock } from '../fs/file-lock'
+import { KeyedSerialExecutor } from '../image-editor-v3/serial-executor'
 import type { MainLogger } from '../logging/main-logger'
 import type { DocumentCatalog, IndexedProject } from './catalog'
 import { DocumentLocationError, errorCode, ProjectNotFoundError } from './errors'
@@ -80,6 +82,30 @@ const MAX_PARENT_LEVELS = 64
 
 export class DocumentWorkspace {
   readonly style: PathStyle
+  private readonly projectMutations = new KeyedSerialExecutor()
+  private documentLockDirectory: string | null = null
+
+  /** 文档仓库装配时提供其正式锁目录；锁属于程序状态，不写入可搬走的作品目录。 */
+  registerDocumentLockDirectory(directory: string): void {
+    if (this.documentLockDirectory && this.documentLockDirectory !== directory) throw new Error('文档锁目录不能重复配置为不同位置。')
+    this.documentLockDirectory = directory
+  }
+
+  /**
+   * 项目路径变更与项目内文档写入共用互斥，锁不能随项目目录移动。
+   * 取锁顺序为文档锁 → 项目锁；operation 不得调用仓库写操作或重入同一项目锁。
+   * 项目 rename/finalize 只持项目锁，直接操作目录、清单与索引。
+   */
+  withProjectMutation<T>(projectId: string | null | undefined, operation: () => Promise<T>): Promise<T> {
+    if (!projectId) return operation()
+    if (!this.documentLockDirectory) throw new Error('文档锁目录尚未配置。')
+    const lockPath = path.join(this.documentLockDirectory, `project-${projectId}.lock`)
+    return this.projectMutations.run(projectId, () => withFileLock(
+      lockPath,
+      operation,
+      { timeoutMessage: '项目正被另一个窗口或助手修改，请稍后重试。' },
+    ))
+  }
 
   constructor(private readonly options: DocumentWorkspaceOptions) {
     this.style = options.style

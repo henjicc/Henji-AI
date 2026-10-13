@@ -33,6 +33,42 @@ async function openEdited(kit: ReturnType<typeof setup>, name = '海报') {
 }
 
 describe('与打开的文档会话配合', () => {
+  it.each([['collect', 0], ['collect', 900], ['move', 0], ['move', 900]] as const)('%s 传输期间编辑并等待 %i ms，保留修改且不发自动保存', async (action, delay) => {
+    vi.useFakeTimers()
+    const kit = setup()
+    const { meta, session, tool } = await openEdited(kit)
+    const project = kit.commands.seedProject({ name: '目标项目' })
+    kit.commands.collectMapping.set('a', '收集后的素材')
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    const method = action === 'collect' ? 'collectDocumentMedia' : 'moveDocument'
+    const originalCollect = kit.commands.collectDocumentMedia.bind(kit.commands)
+    const originalMove = kit.commands.moveDocument.bind(kit.commands)
+    if (method === 'collectDocumentMedia') vi.spyOn(kit.commands, method).mockImplementation(async target => { entered(); await gate; return originalCollect(target) })
+    else vi.spyOn(kit.commands, method).mockImplementation(async request => { entered(); await gate; return originalMove(request) })
+    const pending = action === 'collect' ? kit.operations.collectDocumentMedia(meta) : kit.operations.moveDocument(meta, { kind: 'project', projectId: project.id })
+    await started
+    kit.commands.saveGate = gate
+    const writes = kit.commands.writes
+    tool.edit('传输中的编辑')
+    await vi.advanceTimersByTimeAsync(delay)
+    const savesDuringTransfer = kit.commands.activeSaves
+    release()
+    try {
+      await pending
+      expect(savesDuringTransfer).toBe(0)
+      expect(kit.commands.writes).toBe(writes)
+      expect(tool.content.items).toContain('传输中的编辑')
+      expect(session.dirty).toBe(true)
+      expect(kit.prompter.log).toEqual([])
+      // 未提供路径映射时显式保留冲突，用户可覆盖保存，不能谎报已保存。
+      expect(session.getState().status).toBe('conflict')
+      await session.resolveConflict('overwrite')
+      expect(kit.commands.stored(meta.id)?.content).toEqual(tool.content)
+    } finally { await session.discard(); vi.restoreAllMocks(); vi.useRealTimers() }
+  })
   it('改名前写完最后一次，改名后会话按新位置继续保存', async () => {
     const kit = setup()
     const { meta, session, tool } = await openEdited(kit)

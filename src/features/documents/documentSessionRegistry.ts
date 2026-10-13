@@ -207,22 +207,26 @@ export class DocumentSessionRegistry {
   /** 起名并转正（离开时“保存”与编辑器里保存草稿共用）；用户取消返回 false。 */
   private async promptFinalize(session: DocumentSession): Promise<boolean> {
     const id = session.id
-    return await this.prompter.askSaveName({
-      subject: { type: 'document', kind: session.kind.id },
-      initialName: session.documentMeta.name,
-      defaultFolder: parentFolderOf(session.documentMeta.path),
-      check: (name, folder) => this.checkDocumentSaveName(session, name, folder),
-      submit: async (name, folder) => {
-        await session.prepareTransfer()
-        const result = await this.commands.finalizeDocument({
-          target: session.target,
-          name,
-          ...(folder ? { folder } : {}),
-        })
-        await session.applyTransfer(result)
-        this.logger.info('草稿已保存', { event: 'documents.session.finalize.completed', context: { docId: id, movedFolder: Boolean(folder), copiedFiles: result.copiedFiles } })
-      },
-    })
+    await session.suspend()
+    try {
+      await session.flush()
+      return await this.prompter.askSaveName({
+        subject: { type: 'document', kind: session.kind.id },
+        initialName: session.documentMeta.name,
+        defaultFolder: parentFolderOf(session.documentMeta.path),
+        check: (name, folder) => this.checkDocumentSaveName(session, name, folder),
+        submit: async (name, folder) => {
+          await session.prepareTransfer({ promptOnConflict: false })
+          const result = await this.commands.finalizeDocument({
+            target: session.target,
+            name,
+            ...(folder ? { folder } : {}),
+          })
+          await session.applyTransfer(result)
+          this.logger.info('草稿已保存', { event: 'documents.session.finalize.completed', context: { docId: id, movedFolder: Boolean(folder), copiedFiles: result.copiedFiles } })
+        },
+      })
+    } finally { session.resume() }
   }
 
   /**
@@ -250,22 +254,27 @@ export class DocumentSessionRegistry {
       await this.trashProject(project, sessions)
       return 'discarded'
     }
-    const saved = await this.prompter.askSaveName({
-      subject: { type: 'project' },
-      initialName: project.name,
-      defaultFolder: parentFolderOf(project.path),
-      check: (name, folder) => this.commands.checkName({
+    for (const session of sessions) await session.suspend()
+    let saved: boolean
+    try {
+      for (const session of sessions) await session.flush()
+      saved = await this.prompter.askSaveName({
         subject: { type: 'project' },
-        name,
-        location: folder ? { folder } : { renaming: project.path },
-      }),
-      submit: async (name, folder) => {
-        for (const session of sessions) await session.prepareTransfer()
-        await this.commands.finalizeProject({ projectId: project.id, name, ...(folder ? { parentFolder: folder } : {}) })
-        for (const session of sessions) await session.relocate()
-        this.logger.info('草稿项目已保存', { event: 'documents.session.finalize_project.completed', context: { projectId: project.id, movedFolder: Boolean(folder) } })
-      },
-    })
+        initialName: project.name,
+        defaultFolder: parentFolderOf(project.path),
+        check: (name, folder) => this.commands.checkName({
+          subject: { type: 'project' },
+          name,
+          location: folder ? { folder } : { renaming: project.path },
+        }),
+        submit: async (name, folder) => {
+          for (const session of sessions) await session.prepareTransfer({ promptOnConflict: false })
+          await this.commands.finalizeProject({ projectId: project.id, name, ...(folder ? { parentFolder: folder } : {}) })
+          for (const session of sessions) await session.relocate()
+          this.logger.info('草稿项目已保存', { event: 'documents.session.finalize_project.completed', context: { projectId: project.id, movedFolder: Boolean(folder) } })
+        },
+      })
+    } finally { for (const session of sessions) session.resume() }
     if (!saved) return 'cancelled'
     for (const session of sessions) await session.close()
     return 'saved'

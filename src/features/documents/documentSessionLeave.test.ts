@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTestRegistry, TEST_DOCUMENT_ROOT, TestToolInstance, type TestContent } from './documentSessionTestKit'
+import { DocumentSessionRegistry } from './documentSessionRegistry'
+import { dialogDocumentSessionPrompter, useDocumentPromptStore } from './documentPromptStore'
+import { testDocumentKind } from './documentSessionTestKit'
+import type { DocumentKindDescriptor } from '@/core/documents/kinds'
 
 /*
  * 草稿与离开（重要记录 007、012、015）：空草稿删除、保存 / 不保存 / 取消、
@@ -9,6 +13,71 @@ import { createTestRegistry, TEST_DOCUMENT_ROOT, TestToolInstance, type TestCont
 
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { vi.useRealTimers() })
+
+describe('真实提示队列的冲突屏障', () => {
+  it.each(['save', 'leave', 'project'] as const)('%s 在起名前解决已存在的冲突', async action => {
+    const { commands } = createTestRegistry()
+    const registry = new DocumentSessionRegistry({ commands, prompter: dialogDocumentSessionPrompter, kinds: { require: () => testDocumentKind as unknown as DocumentKindDescriptor } })
+    const project = commands.seedProject({ name: '草稿项目', draft: true })
+    const meta = commands.seed({ name: '草稿', draft: true, content: { items: ['初始'] }, projectId: project.id, folder: project.path })
+    const session = await registry.open({ id: meta.id })
+    session.update({ items: ['本地'] })
+    commands.modifyExternally(meta.id, { items: ['外部'] })
+    await vi.advanceTimersByTimeAsync(800)
+    const initial = useDocumentPromptStore.getState().queue[0]
+    if (initial.type !== 'conflict') throw new Error('缺少冲突提示')
+    initial.resolve('later')
+    await vi.advanceTimersByTimeAsync(0)
+    const pending = (action === 'save' ? registry.save(meta.id) : action === 'leave' ? registry.leave(meta.id) : registry.leaveProject({ project, isEmpty: false })).catch(error => error as Error)
+    if (action !== 'save') {
+      const leave = useDocumentPromptStore.getState().queue[0]
+      if (leave.type !== 'leave') throw new Error('缺少离开提示')
+      leave.resolve('save')
+    }
+    await vi.advanceTimersByTimeAsync(0)
+    try {
+      const front = useDocumentPromptStore.getState().queue[0]
+      expect(front.type).toBe('conflict')
+      if (front.type === 'conflict') front.resolve('later')
+      expect(await pending).toMatchObject({ name: 'DocumentSessionConflictError' })
+      expect(session.getContent()).toEqual({ items: ['本地'] })
+    } finally {
+      for (const prompt of useDocumentPromptStore.getState().queue) {
+        if (prompt.type === 'saveName') prompt.resolve(false)
+        else if (prompt.type === 'conflict') prompt.resolve('later')
+      }
+      await pending
+      await session.discard()
+    }
+  })
+
+  it('起名 submit 才撞冲突时直接结束提交，不把冲突排在起名后面', async () => {
+    const { commands } = createTestRegistry()
+    const registry = new DocumentSessionRegistry({ commands, prompter: dialogDocumentSessionPrompter, kinds: { require: () => testDocumentKind as unknown as DocumentKindDescriptor } })
+    const meta = commands.seed({ name: '草稿', draft: true, content: { items: ['初始'] } })
+    const session = await registry.open({ id: meta.id })
+    const saving = registry.save(meta.id)
+    await vi.advanceTimersByTimeAsync(0)
+    const prompt = useDocumentPromptStore.getState().queue[0]
+    if (prompt.type !== 'saveName') throw new Error('缺少起名提示')
+    session.update({ items: ['本地'] })
+    commands.modifyExternally(meta.id, { items: ['外部'] })
+    let settled = false
+    const submit = prompt.info.submit('正式', null).catch(error => error as Error).finally(() => { settled = true })
+    await vi.advanceTimersByTimeAsync(0)
+    try {
+      expect(settled).toBe(true)
+      expect(await submit).toMatchObject({ name: 'DocumentSessionConflictError' })
+      expect(useDocumentPromptStore.getState().queue.map(item => item.type)).toEqual(['saveName'])
+    } finally {
+      for (const item of useDocumentPromptStore.getState().queue) if (item.type === 'conflict') item.resolve('later')
+      await submit
+      prompt.resolve(false)
+      await saving
+      await session.discard()
+    }
+  })
+})
 
 async function draftWithContent() {
   const kit = createTestRegistry()

@@ -124,18 +124,18 @@ export class ProjectService {
 
   /** 改名就是改文件夹名；项目里的位置都是相对写法，不需要改写任何记录。 */
   async rename(request: RenameProjectRequest): Promise<ProjectSummary> {
-    return await this.executor.run(request.projectId, async () => await this.logged('rename', { projectId: request.projectId }, async () => {
+    return await this.executor.run(request.projectId, () => this.workspace.withProjectMutation(request.projectId, async () => await this.logged('rename', { projectId: request.projectId }, async () => {
       const project = await this.requireProject(request.projectId)
       const name = requireEntryName(request.name)
       const target = path.join(path.dirname(project.path), name)
       if (target === project.path) return this.summary(project, this.countDocuments(project.id))
       return await this.relocate(project, target, { draft: project.draft })
-    }))
+    })))
   }
 
   /** 第一次保存：起名并去掉草稿标记；给了父文件夹时把整个项目移过去并登记为外部位置。 */
   async finalize(request: FinalizeProjectRequest): Promise<ProjectSummary> {
-    return await this.executor.run(request.projectId, async () => await this.logged('finalize', { projectId: request.projectId, relocated: request.parentFolder !== undefined }, async () => {
+    return await this.executor.run(request.projectId, () => this.workspace.withProjectMutation(request.projectId, async () => await this.logged('finalize', { projectId: request.projectId, relocated: request.parentFolder !== undefined }, async () => {
       const project = await this.requireProject(request.projectId)
       const name = requireEntryName(request.name)
       let parent = path.dirname(project.path)
@@ -146,7 +146,7 @@ export class ProjectService {
         if (await this.workspace.findProjectRoot(parent)) throw new DocumentLocationError('不能把项目放在另一个项目里。')
       }
       return await this.relocate(project, path.join(parent, name), { draft: false })
-    }))
+    })))
   }
 
   /** 设置项目说明里的主剪辑（打开项目时打开它）；只能是这个项目里的剪辑，null 表示清除。 */
