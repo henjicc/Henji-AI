@@ -17,7 +17,7 @@ import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { planVideoEditAudioEffectBlock, VideoEditAudioEffectChain } from './videoEditAudioEffects'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
-import { VideoEditCodeSources } from './videoEditCodeSources'
+import type { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
@@ -38,6 +38,8 @@ interface PlaybackStream {
   abort: AbortController
   entries: Array<{ frame: number; clipId: string }>
   cursor: number
+  /** Initial contiguous pictures already owned by the bounded seek cache. */
+  cachedUntilFrame: number
   samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
   /** The first pull is started at build time so every scheduled decoder is created before mid-playback cuts. */
   primed?: Promise<IteratorResult<VideoEditDecodedPicture | null, void>>
@@ -92,6 +94,13 @@ export class VideoEditRenderer {
   private capturePresentation?: (pixels: Promise<ImageBitmap>) => void
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
+  private ensureCompositor(): VideoEditGpuCompositor {
+    if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    return this.compositor!
+  }
+  /** Only devices/pipelines: no project media, render targets or sound are opened during workspace warmup. */
+  async prepareGpu(): Promise<void> { await this.ensureCompositor().prepare() }
   /** Preview only (task 4.9): the canvas, composition targets and owned pictures are 1/divisor of the sequence size. */
   private renderDivisor: VideoEditRenderDivisor = 1
   /** High-precision composition counters and, with `row`, that row of the last high-precision frame before 8-bit quantization (task 2.7 acceptance). */
@@ -100,7 +109,7 @@ export class VideoEditRenderer {
   }
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id]) {
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void) {
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
@@ -226,7 +235,6 @@ export class VideoEditRenderer {
     }
     this.document = document
     this.resizeCanvas()
-    this.warmShaderGraphs()
   }
   /** Preserve decoder, uploaded source pictures, nested sessions and playback schedules during parameter gestures. */
   updateParameters(update: VideoEditParameterUpdate): void {
@@ -240,7 +248,7 @@ export class VideoEditRenderer {
   private warmShaderGraphs(): void {
     const compositor = this.compositor
     if (!compositor) return
-    const specs = videoEditShaderGraphWarmSpecs(this.document.sequences ?? [this.document], kind => isShaderGraphTransition(kind) ? shaderGraphTransitionSpec(kind) : undefined)
+    const specs = videoEditShaderGraphWarmSpecs([this.document], kind => isShaderGraphTransition(kind) ? shaderGraphTransitionSpec(kind) : undefined)
     if (specs.length) void compositor.code().then(code => code.shaderGraphs().warm(specs)).catch(() => undefined)
   }
   /** Newly imported/replaced fonts must rebuild cached glyphs and nested text surfaces. */
@@ -282,11 +290,22 @@ export class VideoEditRenderer {
       for (const clip of group.clips) for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) {
         entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
       }
+      // A scrub already decoded this prefix. Play those exact pictures while the existing decoder
+      // positions at the first uncached picture, instead of decoding the same GOP before moving at all.
+      // Borrow only from the existing budget: no pinned window, new textures or extra decoder.
+      let cachedFrames = 0
+      const limit = Math.min(Math.ceil(document.fps / 2), entries.length - 1)
+      while (cachedFrames < limit && entries[cachedFrames].frame === frame + cachedFrames
+        && entries[cachedFrames].clipId === entries[0].clipId
+        && this.frameCache.get(group.media.path, timestamps[cachedFrames]) instanceof VideoEditGpuFrame) cachedFrames++
+      if (cachedFrames < Math.ceil(document.fps / 4)) cachedFrames = 0
+      const cachedUntilFrame = frame + cachedFrames
+      if (cachedFrames) { entries.splice(0, cachedFrames); timestamps.splice(0, cachedFrames) }
       const demux = this.frames.open(group.media)
       const abort = new AbortController()
       const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps, abort.signal) })(demux.ready)
       const primed = samples.next(); primed.catch(() => undefined)
-      const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, samples, primed, tail: Promise.resolve() }
+      const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, cachedUntilFrame, samples, primed, tail: Promise.resolve() }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
     this.playback = { document, endFrame, streams, byClip }
@@ -302,6 +321,7 @@ export class VideoEditRenderer {
     if (this.playback) await this.disposePlayback()
     this.buildPlayback(this.document, frame, videoEditVisibleTracks(this.document))
     this.armedFrame = frame; this.lastForwardFrame = frame - 1
+    this.warmShaderGraphs()
   }
   private async disposePlayback(): Promise<void> {
     this.armedFrame = undefined
@@ -368,7 +388,15 @@ export class VideoEditRenderer {
     const visible = videoEditVisibleTracks(document)
     if (this.previewWidth && sequential) {
       const forward = this.lastForwardFrame === frame - 1
-      if (this.playback && (this.playback.document !== document || frame >= this.playback.endFrame || !forward)) await this.disposePlayback()
+      // Resolution changes and cache pressure can remove a prefix after arming. Rebuild the
+      // same playback plan at this frame instead of opening a second reader for the missing prefix.
+      const missingPrefix = this.playback && document.clips.some(clip => {
+        const stream = this.playback?.byClip.get(clip.id)
+        if (!stream || frame >= stream.cachedUntilFrame || frame < clip.start || frame >= clip.start + clip.duration) return false
+        const media = videoEditClipMedia(document, clip)
+        return !media || !(this.frameCache.get(media.path, videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps))) instanceof VideoEditGpuFrame)
+      })
+      if (this.playback && (this.playback.document !== document || frame >= this.playback.endFrame || !forward || missingPrefix)) await this.disposePlayback()
       // A sequential preview render is always forward playback (reverse play, single steps and scrubbing render
       // non-sequentially), so its first frame already builds the schedules and takes its picture from them. Waiting for
       // a second consecutive frame made the first one open a sequential reader that decoded the GOP up to the start,
@@ -392,7 +420,7 @@ export class VideoEditRenderer {
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor); this.warmShaderGraphs() }
+    const gpu = this.ensureCompositor()
     const effectErrors: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`
@@ -400,7 +428,11 @@ export class VideoEditRenderer {
       logger.warn(message, { event: 'video_edit.effect.render_failed', error, context: { sequenceId: document.id, effectId: effect.id, frame } })
     }
     const decodeStart = performance.now()
-    if (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length)) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
+    if (!this.codeSources && (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length))) {
+      const { VideoEditCodeSources } = await import('./videoEditCodeSources')
+      if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
+      this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
+    }
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {
       const media = document.media.find(media => media.id === id && media.kind === 'image')
@@ -480,7 +512,12 @@ export class VideoEditRenderer {
       await source.prerolled
       if (!source.video) throw new Error(`素材 ${media.name} 没有可解码的视频轨。`)
       const scheduledStream = sequential && this.previewWidth ? this.playback?.byClip.get(clip.id) : undefined
-      const scheduled = scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id) : undefined
+      const cached = scheduledStream && frame < scheduledStream.cachedUntilFrame ? this.frameCache.get(media.path, time) : undefined
+      const cachedPicture = cached instanceof VideoEditGpuFrame ? cached.clone() : undefined
+      if (cachedPicture) cacheHits++
+      // If an intervening allocation evicted a prefix picture, takeScheduled returns undefined for
+      // this pre-schedule time and the ordinary exact-picture reader recovers it below.
+      const scheduled = cachedPicture ?? (scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id) : undefined)
       // A sequential reader started before the stream's first picture hands out that first picture early: it is kept
       // for its own time and nothing shows until then.
       let early = false
@@ -497,7 +534,7 @@ export class VideoEditRenderer {
         let seeker = this.seekers.get(media.path)
         if (!seeker) { seeker = this.frames.seeker(media, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
         const direction = source.previousTime < 0 || Math.abs(time - source.previousTime) > 1 ? 0 : Math.sign(time - source.previousTime)
-        const result = await seeker.sample(time, direction)
+        const result = await seeker.sample(time, direction, source.previousTime < 0 && !_scrubbing && !sequential)
         if (result.hit) cacheHits++
         source.current?.close(); source.current = result.sample
       } else if (sequential && !this.previewWidth) {
@@ -552,10 +589,10 @@ export class VideoEditRenderer {
     const decodeMs = performance.now() - decodeStart
     const gpuStart = performance.now()
     let result: { presented: boolean; completion: Promise<void> }
-    const nestedPicture = nestedRender ? await (await this.compositor.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
+    const nestedPicture = nestedRender ? await (await gpu.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
     try {
       const drawn = this.drawDocument(document)
-      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality) : await this.compositor.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
+      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), gpu, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality) : await gpu.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }

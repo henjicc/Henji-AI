@@ -1,3 +1,4 @@
+import { beginVideoEditFirstFrame, countVideoEditTiming, endVideoEditTiming } from '../engine/videoEditFirstFrameTiming'
 import { videoEditExportHistorySchema, type VideoEditExportHistoryEntry } from '@/core/videoEdit/document'
 import { persistenceMessage } from '@/core/persistence/messages'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
@@ -350,7 +351,7 @@ export function listVideoEditInstances(): VideoEditInstance[] { return [...insta
 export function activeVideoEditInstance(): VideoEditInstance | undefined { return activeId ? instances.get(activeId) : undefined }
 export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先打开目标剪辑：在剪辑页打开所在项目，或用 open_document 打开这份剪辑（文档 ID 取自 list_documents）。'); return instance }
 function publishVideoEditDomain(): void { domainRevision++; for (const listener of domainListeners) listener() }
-export function publishVideoEdit(changed = false): void { revision++; if (changed) publishVideoEditDomain(); for (const listener of listeners) listener(); publishView() }
+export function publishVideoEdit(changed = false): void { countVideoEditTiming('publications'); revision++; if (changed) publishVideoEditDomain(); for (const listener of listeners) listener(); publishView() }
 export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); if (activeId && activeId !== id) { const previous = instances.get(activeId); if (previous) cancelVideoEditGesture(previous) } activeId = id; publishVideoEdit() }
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
 /** Metadata-only heads preserve the acknowledged render snapshot; they must not reset playback/GPU pixels. */
@@ -411,6 +412,7 @@ export function switchVideoEditSequence(projectId: string, sequenceId: string, o
     if (options.fromStart && instance.frame !== 0) { instance.playing = false; instance.scrubbing = false; instance.frame = 0; publishVideoEdit(true) }
     return
   }
+  beginVideoEditFirstFrame(projectId, sequenceId, 'switch')
   cancelVideoEditGesture(instance)
   instance.sequenceViews.set(instance.activeSequenceId, { ...getVideoEditTimelineView(projectId), selection: instance.selection, frame: instance.frame })
   instance.activeSequenceId = sequenceId
@@ -843,6 +845,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const dispose = (): void => {
     if (disposed) return
     disposed = true
+    endVideoEditTiming(session.id)
     unsubscribe(); detach(); cancelVideoEditGesture(instance); instance.playing = false
     if (instances.get(session.id) === instance) instances.delete(session.id)
     if (activeId === session.id) activeId = instances.keys().next().value ?? null
@@ -859,6 +862,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   // 去掉了项目内素材的素材库关联：写回剪辑文件
   if (detached) session.markChanged()
   if (focus) activeId = session.id
+  beginVideoEditFirstFrame(session.id, instance.activeSequenceId, 'open')
   publishVideoEdit(true)
   logger.info('剪辑已打开', { event: 'video_edit.document.open.completed', context: { docId: session.id, missing: session.getState().missingPaths.length } })
   // 打开即恢复（含后台打开），无需挂载时间线；只续查原任务，不重新生成。

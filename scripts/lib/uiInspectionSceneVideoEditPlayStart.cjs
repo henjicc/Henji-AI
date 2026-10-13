@@ -2,10 +2,20 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
-const { observeWorkers, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { observeWorkers, waitReleased, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { openVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
+const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+function summarizePlayStart(evidence) {
+  return {
+    settled: median(evidence.runs.map(run => run.pressToMoveMs)),
+    ...Object.fromEntries([[0, 0], [0, 150], [200, 0]].map(([rest, delay]) => [
+      `drag-${rest}-${delay}`, median(evidence.afterDrag.filter(run => run.afterDrag.rest === rest && run.afterDrag.delay === delay).map(run => run.pressToMoveMs)),
+    ])),
+  }
+}
+
 
 /**
  * 节目起播延迟：从按下播放到画面开始走、以及起播后第一秒是否跑满帧。
@@ -34,8 +44,8 @@ function createVideoEditPlayStartScene() {
       await presented(0)
       const ruler = page.getByRole('slider', { name: '剪辑时间定位' }); const box = await ruler.boundingBox()
       const evidence = { runs: [] }
-      // 两次：首次起播（含首次建 AudioContext）与暂停后换位置再起播。播放头都落在 GOP 中段（240 帧一个关键帧，标尺约每像素一帧）。
-      for (const offset of [370, 130]) {
+      // 三次：首次起播（含首次建 AudioContext）与暂停后换位置再起播。播放头都落在 GOP 中段（240 帧一个关键帧，标尺约每像素一帧）。
+      for (const offset of [370, 130, 370]) {
         await page.mouse.click(box.x + offset + .1, box.y + 12)
         const start = Number(await ruler.getAttribute('aria-valuenow')); await presented(start); await page.waitForTimeout(1500)
         await canvas.evaluate(canvas => {
@@ -57,7 +67,7 @@ function createVideoEditPlayStartScene() {
         console.log('[play-start]', JSON.stringify(run))
       }
       // 刚拖完标尺就按播放：拖动中途停住、松手后立刻按、松手后隔一个人手反应时间再按。
-      for (const [index, [rest, delay]] of [[0, 0], [0, 150], [200, 0]].entries()) {
+      for (let repetition = 0; repetition < 3; repetition++) for (const [index, [rest, delay]] of [[0, 0], [0, 150], [200, 0]].entries()) {
         const from = index % 2 ? 140 : 380; const to = index % 2 ? 420 : 160
         await page.mouse.move(box.x + from + .1, box.y + 12); await page.mouse.down()
         for (let step = 1; step <= 20; step++) { await page.mouse.move(box.x + from + (to - from) * step / 20 + .1, box.y + 12); await page.waitForTimeout(16) }
@@ -72,25 +82,43 @@ function createVideoEditPlayStartScene() {
         })
         if (delay) await page.waitForTimeout(delay)
         await button(page, '播放／暂停').click()
-        await page.waitForFunction(frame => Number(document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame) >= frame, start + 60, { timeout: 30000 })
-        const data = await canvas.evaluate(() => { window.__playStartObserver.disconnect(); return window.__playStart })
+        await page.waitForFunction(frame => Number(document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame) >= frame, start + 120, { timeout: 30000 })
+        const data = await canvas.evaluate(canvas => { window.__playStartObserver.disconnect(); return { ...window.__playStart, phases: JSON.parse(canvas.dataset.playStartPhases || 'null'), clockStartAt: Number(canvas.dataset.playClockStartAt) } })
         await button(page, '播放／暂停').click()
-        const firstMove = data.frames.find(sample => sample.frame > start)
-        const run = { afterDrag: { rest, delay }, start, pressToMoveMs: firstMove.at - data.pressedAt }
+        const moving = data.frames.filter(sample => sample.frame > start)
+        const firstMove = moving[0]
+        const firstSecond = moving.filter(sample => sample.at - firstMove.at <= 1000)
+        const gaps = firstSecond.slice(1).map((sample, index) => sample.at - firstSecond[index].at)
+        const run = { firstSecondUpdates: firstSecond.length, gapMaxMs: Math.max(...gaps), repetition, afterDrag: { rest, delay }, start, pressToMoveMs: firstMove.at - data.pressedAt, pressToClockMs: data.clockStartAt - data.pressedAt, phases: data.phases, leadMs: data.clockStartAt - (data.phases.at + data.phases.yieldMs + data.phases.firstFrameMs + data.phases.audioMs) }
         evidence.afterDrag = [...(evidence.afterDrag ?? []), run]; fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         console.log('[play-start]', JSON.stringify(run))
       }
       await capture('play-start')
-      await button(page, '关闭项目').click(); await waitReleased(page)
+      await button(page, '关闭项目').click()
+      // Workspace owns one idle program session; leaving the workspace must retire it too.
+      await button(page, '生成').click(); await waitReleased(page)
+      evidence.summary = summarizePlayStart(evidence)
+      evidence.resources = await workerSnapshot(page)
+      evidence.finalNative = await page.evaluate(() => window.henjiNative.videoFrames.stats())
+      assert.equal(evidence.resources.live, 0)
+      assert.equal(evidence.finalNative.streams.length, 0)
+      assert.equal(evidence.finalNative.unreleasedImports, 0)
+      assert.equal(evidence.finalNative.orphanHandles, 0)
+      fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
+      assert.ok(evidence.summary['drag-0-0'] <= 249.7 * 1.05, `拖完立即播放中位数 ${evidence.summary['drag-0-0'].toFixed(1)}ms 超过基线 +5%`)
       for (const run of evidence.runs) {
         assert.ok(run.firstSecondUpdates >= 58, `起播第一秒只有 ${run.firstSecondUpdates} 次画面更新`)
         // 暂停停稳后起播已预热（解码定位、声音设备与第一块混音），按下到画面开始走不再等解码。
         assert.ok(run.pressToMoveMs < 150, `按下播放 ${run.pressToMoveMs.toFixed(0)}ms 后画面才开始走`)
       }
       // 刚松手就按：预热已在松手（或拖动停住）时开始解码，只等从关键帧解到播放头剩下的部分。改前三种情况都要 380–450ms。
-      for (const run of evidence.afterDrag) assert.ok(run.pressToMoveMs < (run.afterDrag.delay || run.afterDrag.rest ? 250 : 350), `拖完按播放 ${run.pressToMoveMs.toFixed(0)}ms 后画面才开始走`)
+      for (const run of evidence.afterDrag) {
+        assert.ok(run.firstSecondUpdates >= 58, `拖后起播第一秒只有 ${run.firstSecondUpdates} 次画面更新`)
+        assert.ok(run.gapMaxMs < 100, `拖后起播在缓存交接处停顿 ${run.gapMaxMs}ms`)
+        assert.ok(run.pressToMoveMs < (run.afterDrag.delay || run.afterDrag.rest ? 250 : 350), `拖完按播放 ${run.pressToMoveMs.toFixed(0)}ms 后画面才开始走`)
+      }
     },
   }
 }
 
-module.exports = { createVideoEditPlayStartScene }
+module.exports = { createVideoEditPlayStartScene, summarizePlayStart }

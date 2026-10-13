@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { VideoEditRenderer } from './videoEditRenderer'
+import { VideoEditGpuFrame } from './videoEditGpuFrame'
+import type { VideoEditFrameCache } from './videoEditFrameCache'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import type { VideoSample } from 'mediabunny'
@@ -14,7 +16,7 @@ import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 
-const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
+const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -43,7 +45,7 @@ vi.mock('mediabunny', async () => {
       // Like a decoder: the last 60fps picture starting at or before the time (lookups carry the container timestamp tolerance).
       async getSample(time: number) { return { timestamp: gridPicture(time) || (this.track.path.includes('B') ? 2 : 1), duration: 1 / 60, format: 'NV12', close: vi.fn() } }
       async *samples(start: number) { for (let frame = 0; frame < 4; frame++) yield { timestamp: gridPicture(start) + frame / 60, duration: 1 / 60, format: 'NV12', close: vi.fn() } }
-      async *samplesAtTimestamps(timestamps: number[]) { boundary.scheduled.push({ path: this.track.path, timestamps: [...timestamps] }); for (const timestamp of timestamps) yield { timestamp: gridPicture(timestamp), duration: 1 / 60, format: 'NV12', close: vi.fn() } }
+      async *samplesAtTimestamps(timestamps: number[]) { boundary.scheduled.push({ path: this.track.path, timestamps: [...timestamps] }); await boundary.pendingSchedule; for (const timestamp of timestamps) yield { timestamp: gridPicture(timestamp), duration: 1 / 60, format: 'NV12', close: vi.fn() } }
     },
     AudioSampleSink: class {
       constructor(readonly track: { path: string }) {}
@@ -93,7 +95,7 @@ vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {
   async dispose() { this.cache.deleteMedia(this.path) }
 } }))
 beforeEach(() => {
-  boundary.disposed = []; boundary.pictures = []
+  boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
   boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []
@@ -933,4 +935,56 @@ it('片内运动、不透明度、ColorGrade 关键帧在预览与导出同一�
     expect(shown).toEqual({ x: .2, y: -.1, scale: 1.5, rotation: 45, anchorX: .375, opacity: .6, exposure: 1 })
     await exported.render(15); expect(read()).toEqual(shown)
   } finally { await preview.dispose(); await exported.dispose() }
+})
+
+
+function cachePlaybackPrefix(renderer: VideoEditRenderer, path: string, count = 30): { cache: VideoEditFrameCache; released: () => number } {
+  const cache = (renderer as unknown as { frameCache: VideoEditFrameCache }).frameCache
+  let releases = 0
+  for (let frame = 15; frame < 15 + count; frame++) cache.put(path, new VideoEditGpuFrame(
+    { timestamp: frame / 60, duration: 1 / 60, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false },
+    { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { releases++ }), new Set())
+  return { cache, released: () => releases }
+}
+it('拖动缓存可立即起播，原计划从缓存末尾准备；准确交接且不增加缓存预算或遗留帧', async () => {
+  boundary.scheduled = []
+  let ready!: () => void
+  boundary.pendingSchedule = new Promise(resolve => { ready = resolve })
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const renderer = new VideoEditRenderer(document, 3840)
+  const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path)
+  try {
+    await renderer.armPlayback(15)
+    await vi.waitFor(() => expect(boundary.scheduled).toHaveLength(1))
+    expect(boundary.scheduled[0].timestamps[0]).toBe(videoEditPictureSeconds(45 / 60))
+    for (let frame = 15; frame < 45; frame++) {
+      const picture = await renderer.render(frame, true)
+      expect(picture.cacheHits).toBe(1); expect(picture.sourceTimestamps).toEqual([frame / 60])
+      expect(cache.bytes).toBe(3000)
+    }
+    ready()
+    const handoff = await renderer.render(45, true)
+    expect(handoff.cacheHits).toBe(0); expect(handoff.sourceTimestamps).toEqual([45 / 60])
+    expect(boundary.scheduled).toHaveLength(1)
+  } finally { ready(); await renderer.dispose() }
+  expect(released()).toBe(30); expect(cache.bytes).toBe(0)
+})
+it('缓存起播前被驱逐时精确取回当前画面；零散短缓存不跳过原播放计划', async () => {
+  for (const count of [14, 30]) {
+    boundary.scheduled = []
+    const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+    const renderer = new VideoEditRenderer(document, 3840)
+    const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path, count)
+    try {
+      await renderer.armPlayback(15)
+      await vi.waitFor(() => expect(boundary.scheduled).toHaveLength(1))
+      expect(boundary.scheduled[0].timestamps[0]).toBe(videoEditPictureSeconds((count === 14 ? 15 : 45) / 60))
+      if (count === 30) renderer.setRenderDivisor(2); else cache.clear()
+      const picture = await renderer.render(15, true)
+      expect(picture.sourceTimestamps).toEqual([15 / 60]); expect(picture.cacheHits).toBe(0)
+      expect(boundary.scheduled).toHaveLength(count === 30 ? 2 : 1)
+      expect(boundary.scheduled.at(-1)!.timestamps[0]).toBe(videoEditPictureSeconds(15 / 60))
+    } finally { await renderer.dispose() }
+    expect(released()).toBe(count)
+  }
 })

@@ -46,12 +46,12 @@ export class VideoEditNativeFrameReceiver {
   private readonly counters = { received: 0, released: 0, unclaimed: 0 }
   /** 已决定交回、尚未发出的帧（等 GPU 工作完成或下一个任务）。 */
   private readonly sending = new Set<Promise<void>>()
-  private readonly calls = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>()
+  private readonly calls = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; method: string; started: number }>()
   private nextCall = 0
   private disposed = false
   private closed?: Promise<void>
 
-  constructor(private readonly port: MessagePort, private readonly now: () => number = () => performance.now()) {
+  constructor(private readonly port: MessagePort, private readonly now: () => number = () => performance.now(), private readonly timing?: (stage: string, durationMs: number) => void) {
     port.onmessage = (event: MessageEvent<PortMessage>) => {
       const message = event.data
       if (message?.type === 'schedule') this.scheduleHandlers.get(message.event.streamId)?.(message.event)
@@ -70,7 +70,7 @@ export class VideoEditNativeFrameReceiver {
     if (this.disposed) return Promise.reject(new VideoEditNativeCallError('原生帧通道已关闭。', 'CHANNEL_CLOSED'))
     const id = ++this.nextCall
     return new Promise((resolve, reject) => {
-      this.calls.set(id, { resolve: resolve as (value: unknown) => void, reject })
+      this.calls.set(id, { resolve: resolve as (value: unknown) => void, reject, method, started: this.now() })
       const request: VideoFramePortRequestMessage = { type: 'request', id, call: { method, params } as VideoFramePortCall }
       try { this.port.postMessage(request, []) } catch (error) { this.calls.delete(id); reject(error instanceof Error ? error : new Error(String(error))) }
     })
@@ -80,6 +80,7 @@ export class VideoEditNativeFrameReceiver {
     const call = this.calls.get(message.id)
     if (!call) return
     this.calls.delete(message.id)
+    if (call.method === 'openDecoder' || call.method === 'frameAt') this.timing?.(call.method, this.now() - call.started)
     if (message.error !== undefined) call.reject(new VideoEditNativeCallError(message.error, message.code))
     else call.resolve(message.result)
   }

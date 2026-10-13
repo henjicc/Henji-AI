@@ -35,7 +35,22 @@ class FakeWorker {
 vi.stubGlobal('Worker', FakeWorker)
 vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { drawImage: vi.fn() } } })
 
-const { VideoEditRenderSession } = await import('./videoEditRenderSession')
+const { VideoEditRenderSession, warmVideoEditNativeDecoder } = await import('./videoEditRenderSession')
+it('工作区预启动合并重复挂载，不创建帧通道或 Worker，失败后可以重试', async () => {
+  let finish!: () => void
+  platform.status.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve({ available: true, forcedBackend: null }) }))
+  const first = warmVideoEditNativeDecoder()
+  expect(warmVideoEditNativeDecoder()).toBe(first)
+  await Promise.resolve()
+  expect(platform.status).toHaveBeenCalledOnce()
+  expect(workers).toHaveLength(0)
+  expect(platform.connect).not.toHaveBeenCalled()
+  finish(); await first
+  platform.status.mockRejectedValueOnce(new Error('暂时不可用'))
+  await warmVideoEditNativeDecoder()
+  await warmVideoEditNativeDecoder()
+  expect(platform.status).toHaveBeenCalledTimes(3)
+})
 function composition(): VideoEditComposition {
   return {
     id: 'sequence', name: '序列', revision: 0, width: 1920, height: 1080, frameRate: { numerator: 60, denominator: 1 }, fps: 60, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
@@ -208,4 +223,33 @@ it('代理进入明确预览或代理导出会话，默认导出与抓原片保�
   const proxyInit = workers[2].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
   expect(proxyInit.decode?.proxies).toEqual({ pro: { ...proxy, path: 'url:' + proxy.path } }); expect(proxyInit.document.media[0].path).toBe('url:D:/prores.mov')
   await Promise.all([preview.dispose(), exported.dispose(), proxyExport.dispose()])
+})
+
+it('空闲会话准备 GPU 后只允许接管一次，项目接管后使用该项目的文档配置', async () => {
+  const session = new VideoEditRenderSession(composition(), 32)
+  await session.prepareGpu()
+  expect(workers[0].messages.some(value => value.message.kind === 'prepareGpu')).toBe(true)
+  session.adoptProject('project')
+  expect(() => session.adoptProject('another')).toThrow('接管')
+  await session.updateDocument({ ...composition(), id: 'another-sequence' })
+  expect(workers).toHaveLength(1)
+  await session.dispose()
+  expect(platform.disconnect).toHaveBeenCalledOnce()
+})
+
+it('切换预打开在普通文档更新前发送，只包含首帧可见的直接视频，重复切换合并为最新目标', async () => {
+  const document = composition()
+  document.items = [{ id: 'video', name: '视频', kind: 'video', mediaId: 'pro' }]
+  document.tracks = [{ id: 'v', name: '视频', index: 1, kind: 'video', enabled: true, locked: false, muted: false, solo: false }]
+  document.clips = [videoEditClipSchema.parse({ id: 'clip', itemId: 'video', name: '视频', kind: 'video', track: 1, start: 0, duration: 120, sourceInUs: 3500000, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })]
+  const session = new VideoEditRenderSession(composition(), 1920)
+  await session.prepareGpu()
+  session.preopenSequence(document, 0)
+  session.preopenSequence({ ...document, id: 'latest' }, 0)
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+  const messages = workers[0].messages.filter(value => value.message.kind === 'preopen')
+  expect(messages).toHaveLength(1)
+  expect(messages[0].message).toMatchObject({ media: [{ id: 'pro', path: `url:${document.media[0].path}` }] })
+  expect(workers[0].messages.some(value => value.message.kind === 'update')).toBe(false)
+  await session.dispose()
 })

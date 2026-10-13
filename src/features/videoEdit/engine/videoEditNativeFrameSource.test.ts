@@ -214,6 +214,21 @@ describe('原生帧源：单帧与会话', () => {
     expect(channel.released).toEqual([600_000])
   })
 
+  it('提前打开的定位器由正式读帧接管，释放预留不关闭正在使用的解码器，失败不泄露名额', async () => {
+    const channel = new FakeChannel(); const frames = backend(channel)
+    const reservation = frames.preopen(media()); await reservation.ready
+    const actual = frames.open(media()); const source = await actual.ready
+    await source.clipFrames()!.frameAt(3.5)
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
+    reservation.release(); reservation.release(); await frames.settled()
+    expect(frames.openSessions).toBe(1)
+    frames.release(actual.key); await frames.settled(); expect(frames.openSessions).toBe(0)
+    channel.answers.openDecoder = () => { throw new Error('open failed') }
+    const failed = frames.preopen(media())
+    await expect(failed.ready).rejects.toThrow(); failed.release(); await frames.settled()
+    expect(frames.openSessions).toBe(0)
+  })
+
   it('同一文件同一版本共用一个文件源；释放到最后一个使用者时关闭全部会话；没有本地路径给出可操作提示', async () => {
     const channel = new FakeChannel()
     const frames = backend(channel)
@@ -282,6 +297,25 @@ describe('原生帧：借用与方向', () => {
 describe('原生定位器', () => {
   const owned = (picture: { timestamp: number; duration: number }): VideoEditGpuFrame => new VideoEditGpuFrame({ timestamp: picture.timestamp, duration: picture.duration, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, {} as never, undefined, 100, () => {})
   const snapshot = vi.fn(async (picture: { timestamp: number; duration: number }) => owned(picture))
+
+  it('首次长 GOP 静止定位只导入目标帧；后续拖动仍走窗口缓存，关闭后迟到帧被交回', async () => {
+    const channel = new FakeChannel()
+    channel.answers.frameAt = params => { channel.frame('vf-1', { kind: 'frame_at', id: params.ticket as string }, 3_500_000); return { ticket: params.ticket, found: true, seeked: true, decodeMs: 2 } }
+    const cache = new VideoEditFrameCache(1024 ** 3)
+    const seeker = backend(channel).seeker(media(), cache, snapshot)
+    const result = await seeker.sample(3.5, 0, true)
+    expect(result.sample?.timestamp).toBe(3.5); result.sample?.close()
+    expect(channel.calls.filter(call => call.method === 'schedule')).toHaveLength(0)
+    expect((await seeker.sample(3.505, 0)).hit).toBe(true)
+    const scrub = seeker.sample(3.8, 1); await flush()
+    const plan = channel.last('schedule') as { streamId: string; scheduleId: string }
+    expect(channel.last('schedule')).toMatchObject({ range: { from: 3, to: 4 } })
+    channel.frame(plan.streamId, { kind: 'schedule', id: plan.scheduleId, index: 0 }, 3_800_000)
+    channel.event({ type: 'schedule_done', ...plan, reason: 'completed', message: null, delivered: 1 })
+    ;(await scrub).sample?.close(); await seeker.dispose()
+    const late = channel.frame(plan.streamId, { kind: 'schedule', id: plan.scheduleId, index: 1 }, 3_900_000)
+    expect(late.release).toHaveBeenCalledOnce()
+  })
 
   it('帧内编码素材直接取目标帧，复制后交回并放进共享缓存，再次定位命中缓存', async () => {
     const channel = new FakeChannel(); channel.intraOnly = true

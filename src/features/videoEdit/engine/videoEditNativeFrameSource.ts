@@ -377,6 +377,15 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     return { key, source: entry.source }
   }
 
+  /** A short-lived reservation warms the same seek decoder later acquired by the visible frame. */
+  preopen(media: VideoEditMedia): { ready: Promise<void>; release: () => void } {
+    const { key, source } = this.acquire(media)
+    let released = false
+    const release = (): void => { if (!released) { released = true; this.release(key) } }
+    const ready = source.seek().then(() => undefined).catch(error => { release(); throw error })
+    return { ready, release }
+  }
+
   open(media: VideoEditMedia): { key: string; ready: Promise<VideoEditFrameSource> } {
     try {
       const { key, source } = this.acquire(media)
@@ -436,7 +445,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     try { return await this.snapshot(picture, videoEditGpuFrameUsesChroma(picture)) } finally { picture.close() }
   }
 
-  async sample(time: number, direction: number): Promise<{ sample?: VideoEditGpuFrame; hit: boolean }> {
+  async sample(time: number, direction: number, singleFrame = false): Promise<{ sample?: VideoEditGpuFrame; hit: boolean }> {
     if (this.disposed) throw closedFailure()
     if (this.failure) throw this.failure
     const source = this.source()
@@ -447,8 +456,9 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     if (cached) { if (direction !== 0) this.prefetch(source, time, direction); return { sample: cached, hit: true } }
     const session = await source.seek()
     if (this.disposed) throw closedFailure()
-    if (session.intraOnly) {
-      // Every picture is a key frame: read exactly the requested one.
+    if (session.intraOnly || singleFrame) {
+      // A first still needs only one picture. Decode the GOP natively without importing/copying its preceding frames.
+      // Continuous scrubbing keeps the existing window cache and speculative neighbour decoding.
       const picture = await source.lane.run(() => session.frameAt(time))
       if (this.disposed) { picture?.close(); throw closedFailure() }
       if (!picture) return { hit: false }

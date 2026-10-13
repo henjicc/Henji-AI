@@ -9,7 +9,8 @@ import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
-import { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
+import type { VideoEditCodeGpu } from './videoEditCodeGpu'
+import { VideoEditCodePicture } from './videoEditCodePicture'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { videoEditClipTrackingQuad } from './videoEditTrackResults'
 import { videoEditCornerPinMatrix } from '@/core/videoEdit/tracking'
@@ -69,36 +70,55 @@ export class VideoEditGpuCompositor {
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private blankTexture?: GpuTexture
-  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => PresentationCapture | undefined) {
+  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => PresentationCapture | undefined, readyTiming?: (durationMs: number, stage?: string) => void) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
-    this.ready = this.initialize()
+    const started = performance.now()
+    this.ready = this.initialize(readyTiming).then(() => { readyTiming?.(performance.now() - started) })
   }
-  private async initialize(): Promise<void> {
+  async prepare(): Promise<void> {
+    await this.ready
+    if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
+  }
+  private async initialize(timing?: (durationMs: number, stage?: string) => void): Promise<void> {
+    const deviceStarted = performance.now()
     const managed = this.shared ? undefined : await this.manager.acquire()
     if (this.shared) await this.shared.ready
+    timing?.(performance.now() - deviceStarted, 'device')
+    const pipelineStarted = performance.now()
     this.device = this.shared?.device ?? managed!.device as VideoGpuDevice
     const format = this.shared?.canvasFormat ?? managed!.provider.getPreferredCanvasFormat()
     this.canvasFormat = format
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied', usage: 0x10 | 0x01 })
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
     this.device.pushErrorScope('validation')
-    Object.assign(this, this.layerPipelines(format))
+    // Independent pipelines compile concurrently; no synchronous driver compilation on the first frame.
+    const create = (descriptor: unknown): Promise<GpuRenderPipeline> => this.device.createRenderPipelineAsync?.(descriptor) ?? Promise.resolve(this.device.createRenderPipeline(descriptor))
+    const layers = this.layerPipelines(format, create)
     const copyShader = this.device.createShaderModule({ code: VIDEO_EDIT_COPY_SHADER })
-    const copy = (entryPoint: string, format: string): GpuRenderPipeline => this.device.createRenderPipeline({ layout: 'auto', vertex: { module: copyShader, entryPoint: 'vs' }, fragment: { module: copyShader, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
-    this.copyY = copy('y', 'r8unorm'); this.copyUv = copy('uv', 'rg8unorm')
-    this.copyRgba = copy('rgba', 'rgba8unorm')
-    for (const deep of ['rgb10a2unorm', 'rgba16float'] as const) this.copyDeep.set(deep, copy('rgba', deep))
+    const copy = (entryPoint: string, format: string): Promise<GpuRenderPipeline> => create({ layout: 'auto', vertex: { module: copyShader, entryPoint: 'vs' }, fragment: { module: copyShader, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+    const keys = Object.keys(layers) as Array<keyof LayerPipelines>
+    const pending = [...keys.map(key => layers[key]), copy('y', 'r8unorm'), copy('uv', 'rg8unorm'), copy('rgba', 'rgba8unorm'), copy('rgba', 'rgb10a2unorm'), copy('rgba', 'rgba16float')]
+    const results = await Promise.allSettled(pending)
     const error = await this.device.popErrorScope()
+    const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failed) throw failed.reason
     if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
+    const pipelines = results.map(result => (result as PromiseFulfilledResult<GpuRenderPipeline>).value)
+    for (const [index, key] of keys.entries()) this[key] = pipelines[index]
+    ;[this.copyY, this.copyUv, this.copyRgba] = pipelines.slice(4, 7)
+    this.copyDeep.set('rgb10a2unorm', pipelines[7]); this.copyDeep.set('rgba16float', pipelines[8])
+    timing?.(performance.now() - pipelineStarted, 'pipelines')
   }
   /** Nested layers must belong to this device so the parent can sample them without readback or 8-bit quantization. */
   fork(canvas: OffscreenCanvas): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this) }
-  private layerPipelines(format: string): LayerPipelines {
+  private layerPipelines(format: string): LayerPipelines
+  private layerPipelines(format: string, create: (descriptor: unknown) => Promise<GpuRenderPipeline>): { [K in keyof LayerPipelines]: Promise<GpuRenderPipeline> }
+  private layerPipelines(format: string, create: (descriptor: unknown) => GpuRenderPipeline | Promise<GpuRenderPipeline> = descriptor => this.device.createRenderPipeline(descriptor)): { [K in keyof LayerPipelines]: GpuRenderPipeline | Promise<GpuRenderPipeline> } {
     const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
-    const pipeline = (code: string): GpuRenderPipeline => {
+    const pipeline = (code: string): GpuRenderPipeline | Promise<GpuRenderPipeline> => {
       const shader = this.device.createShaderModule({ code })
-      return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend }] }, primitive: { topology: 'triangle-list' } })
+      return create({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend }] }, primitive: { topology: 'triangle-list' } })
     }
     const video = pipeline(videoEditLayerShader(true)); const image = pipeline(videoEditLayerShader(false)); const codeImage = pipeline(videoEditLayerShader(false, true))
     return { video, image, codeImage, cachedVideo: pipeline(VIDEO_EDIT_CACHED_YUV_SHADER) }
@@ -228,7 +248,11 @@ export class VideoEditGpuCompositor {
   async code(): Promise<VideoEditCodeGpu> {
     await this.ready
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
-    this.codeRuntime ??= new VideoEditCodeGpu(this.device)
+    if (!this.codeRuntime) {
+      const { VideoEditCodeGpu } = await import('./videoEditCodeGpu')
+      if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
+      this.codeRuntime ??= new VideoEditCodeGpu(this.device)
+    }
     return this.codeRuntime
   }
   codeDiagnostics(): ReturnType<VideoEditCodeGpu['diagnostics']> | undefined { return this.codeRuntime?.diagnostics() }

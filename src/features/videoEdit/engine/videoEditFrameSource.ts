@@ -92,7 +92,7 @@ export interface VideoEditFrameSeeker {
    * `direction` is the recent scrub direction (-1, 0, 1); it only steers prefetching. The picture is an owned GPU
    * frame, or a decoded picture the renderer still normalizes.
    */
-  sample(time: number, direction: number): Promise<{ sample?: VideoEditDecodedPicture | VideoEditGpuFrame; hit: boolean }>
+  sample(time: number, direction: number, singleFrame?: boolean): Promise<{ sample?: VideoEditDecodedPicture | VideoEditGpuFrame; hit: boolean }>
   dispose(): Promise<void>
 }
 
