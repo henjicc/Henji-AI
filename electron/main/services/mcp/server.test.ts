@@ -24,7 +24,6 @@ const closers: Array<() => Promise<void>> = []
 afterEach(async () => { for (const close of closers.reverse()) await close(); closers.length = 0 })
 async function fixture(options: { ready?: boolean; pending?: boolean; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
   let saved: string | null = null
-  let now = Date.now()
   const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } })
   const first = connections.create('客户端甲')
   const second = connections.create('客户端乙')
@@ -58,7 +57,7 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
   }
   return { server, connections, first, second, host, calls, cancellations, url, connect, rejected,
     reconnect: () => host.register({ ...registration, rendererEpoch: randomUUID(), attachmentSequence: 2, ready: true }, transportHost),
-    change: () => host.register(registration, transportHost), advance: () => { now += 31 * 86400_000 } }
+    change: () => host.register(registration, transportHost) }
 }
 
 describe('本地 MCP 协议与边界', () => {
@@ -341,8 +340,7 @@ describe('本地 MCP 协议与边界', () => {
     expect(await invalid.json()).toMatchObject({ error: 'invalid_token', message: expect.stringContaining('重新授权') })
     expect(f.rejected).toHaveBeenLastCalledWith({ reason: 'invalid_token' })
     const tokenB = f.connections.token(f.second.id)
-    f.advance()
-    // 连接长期有效：一个月后同一令牌仍可直接使用。
+    // 连接长期有效，没有到期：同一令牌继续可用。
     expect(f.connections.token(f.second.id)).toBe(tokenB)
     // 正式客户端沿同一传输配置继续调用；不重新创建授权或换令牌。
     const b = await f.connect(f.second.id)
