@@ -1,6 +1,12 @@
 import { expect, it } from 'vitest'
 import { offsetVideoEditSource, rescaleVideoEditFrame, videoEditSourceSeconds, VIDEO_EDIT_CONTAINER_TIMESTAMP_TOLERANCE_SECONDS, videoEditFps, videoEditPictureSeconds } from './time'
 import { changeVideoEditSequenceSettings, createVideoEditSequence } from './document'
+it('负帧换算与正帧使用同一四舍五入规则，不向零截断', () => {
+  const rate = { numerator: 30, denominator: 1 }
+  for (const frame of [-51, -50, -1, 0, 1, 50]) expect(rescaleVideoEditFrame(frame, rate, rate)).toBe(frame)
+  const half = { numerator: 15, denominator: 1 }
+  for (const frame of [-51, -50, -3, 0, 1, 51]) expect(rescaleVideoEditFrame(frame, rate, half)).toBe(Math.round(frame / 2))
+})
 
 it('29.97/59.94 连续源时间偏移与一次换算相等，不累计微秒舍入', () => {
   for (const rate of [{ numerator: 30000, denominator: 1001 }, { numerator: 60000, denominator: 1001 }]) {

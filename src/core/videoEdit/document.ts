@@ -387,6 +387,8 @@ export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, set
   const rate = settings.frameRate ?? sequence.frameRate
   const convert = (frame: number): number => rescaleVideoEditFrame(frame, sequence.frameRate, rate)
   if (sequence.clips.some(clip => convert(clip.start + clip.duration) <= convert(clip.start))) throw new Error('新帧率会使部分片段短于一帧。请先调整这些片段的长度，再修改帧率。')
+  if (sequence.captions?.some(caption => convert(caption.start + caption.duration) <= convert(caption.start))) throw new Error('新帧率会使部分字幕短于一帧。请先调整这些字幕的长度，再修改帧率。')
+  if (sequence.transitions?.some(transition => convert(transition.durationFrames) < 2)) throw new Error('新帧率会使部分转场短于两帧。请先调整这些转场的长度，再修改帧率。')
   return videoEditSequenceSchema.parse({ ...sequence, ...settings,
     clips: sequence.clips.map(clip => ({ ...rescaleVideoEditClipKeyframes(clip, time => convert(clip.start + time) - convert(clip.start), convert(clip.start + clip.duration) - convert(clip.start)), start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start), ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, convert(clip.fadeInFrames)) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, convert(clip.fadeOutFrames)) } : {}) })),
     annotations: sequence.annotations.map(mark => mapVideoEditAnnotationTime(mark, convert)),

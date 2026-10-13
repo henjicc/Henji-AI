@@ -69,6 +69,15 @@ function fixture() {
   sequence.transitions = [{ id: 'dissolve', kind: 'cross_dissolve', leftClipId: 'left', rightClipId: 'right', durationFrames: 30 }]
   return { document, sequence }
 }
+it.each(['caption', 'transition'] as const)('降帧率导致 %s 过短时给出可读错误且原文档不变', kind => {
+  const { document, sequence } = fixture()
+  if (kind === 'caption') sequence.captions = [{ id: 'caption', start: 0, duration: 1, text: '短字幕' }]
+  else sequence.transitions![0].durationFrames = 2
+  const before = structuredClone(document)
+  expect(() => changeVideoEditSequenceSettings(sequence, { frameRate: { numerator: 24, denominator: 1 } })).toThrow(kind === 'caption' ? '字幕短于一帧' : '转场短于两帧')
+  expect(document).toEqual(before)
+  expect(() => videoEditDocumentSchema.parse(document)).not.toThrow()
+})
 const source = (kind: 'generator' | 'filter', mode = 'dynamic', duration = 10): string => `export default {apiVersion:1,name:"时间验证",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:${duration},seed:0,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return ${kind === 'generator' ? '[rect({x:0,y:0,width:100,height:100,fill:[1,0,0,ctx.params.amount]})]' : 'sample(ctx.u,ctx.v)'};}}`
 function addEffect(document: VideoEditDocument, mode = 'static', duration = 10) {
   const text = source('filter', mode, duration); const program = compileCodeMaterial(text)

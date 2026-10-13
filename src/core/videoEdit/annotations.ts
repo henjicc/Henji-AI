@@ -59,6 +59,13 @@ export function mapVideoEditAnnotationTime(mark: VideoEditAnnotation, convert: (
   const frame = to === undefined ? from : Math.min(from, to); const endFrame = to === undefined ? undefined : Math.max(from, to)
   return { ...mark, frame, ...(endFrame === undefined ? {} : { endFrame }), target: mark.target.kind === 'range' ? { ...mark.target, startFrame: frame, endFrame: endFrame! } : mark.target }
 }
+/** 标注使用闭区间；内容范围使用半开区间。保留首末有效帧，整段位于空隙时丢弃。 */
+export function clipVideoEditAnnotationTime(mark: VideoEditAnnotation, ranges: readonly { from: number; to: number }[]): VideoEditAnnotation | undefined {
+  const intersections = ranges.map(range => ({ from: Math.max(mark.frame, range.from), to: Math.min(mark.endFrame ?? mark.frame, range.to - 1) })).filter(range => range.from <= range.to)
+  if (!intersections.length) return undefined
+  const from = Math.min(...intersections.map(range => range.from)); const to = Math.max(...intersections.map(range => range.to))
+  return mapVideoEditAnnotationTime(mark, frame => Math.max(from, Math.min(to, frame)))
+}
 /** Keep the marked source moment when speed, direction, source trim or placement changes. */
 export function retimeVideoEditAnnotation(mark: VideoEditAnnotation, before: VideoEditClip, after: VideoEditClip, fps: number): VideoEditAnnotation | undefined {
   const convert = (frame: number): number => {

@@ -1,4 +1,5 @@
-import { mapVideoEditAnnotationTime } from './annotations'
+import { clipVideoEditAnnotationTime, mapVideoEditAnnotationTime } from './annotations'
+import { sliceVideoEditClipKeyframes } from './keyframes'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { adjustVideoEditClip, splitVideoEditClip, videoEditClipMedia, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
@@ -386,8 +387,18 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     const origins = new Map<string, VideoEditContentOrigin>()
     for (const clip of overlapping) {
       const pieces: VideoEditClip[] = []
-      if (clip.start < edit.frame) pieces.push({ ...clip, duration: edit.frame - clip.start })
-      if (clip.start + clip.duration > end) pieces.push({ ...structuredClone(clip), ...(pieces.length && clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration: clip.start + clip.duration - end, ...splitVideoEditClipSource(clip, end - clip.start, sequence.frameRate) })
+      if (clip.start < edit.frame) {
+        const left = { ...sliceVideoEditClipKeyframes(clip, 0, edit.frame - clip.start), duration: edit.frame - clip.start }
+        delete left.fadeOutFrames
+        pieces.push(left)
+      }
+      if (clip.start + clip.duration > end) {
+        const duration = clip.start + clip.duration - end
+        const sliced = sliceVideoEditClipKeyframes(clip, end - clip.start, duration)
+        const right = { ...structuredClone(sliced), ...(pieces.length && sliced.effects ? { effects: sliced.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration, ...splitVideoEditClipSource(clip, end - clip.start, sequence.frameRate) }
+        if (pieces.length) delete right.fadeInFrames
+        pieces.push(right)
+      }
       fragments.set(clip.id, pieces)
       for (const piece of pieces) origins.set(piece.id, { originalId: clip.id, shift: 0 })
     }
@@ -402,14 +413,17 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
       return piece ? [{ ...mark, clipId: piece.id }] : []
     }) }, origins, true)
   }
-  const annotations = edit.clipboard.annotations.map(mark => {
-    const mapped = mapVideoEditAnnotationTime(mark, value => edit.frame + convert(value))
+  const copiedRanges = intervals(edit.clipboard.clips)
+  const annotations = edit.clipboard.annotations.flatMap(mark => {
+    const clipped = clipVideoEditAnnotationTime(mark, copiedRanges)
+    if (!clipped) return []
+    const mapped = mapVideoEditAnnotationTime(clipped, value => edit.frame + convert(value))
     const target = mapped.target.kind === 'range' ? { ...mapped.target, clipIds: mapped.target.clipIds?.flatMap(id => ids.has(id) ? [ids.get(id)!] : []), trackIds: mapped.target.trackIds?.map(id => {
       const index = edit.clipboard.annotationTrackIndices?.[id]; const destination = index !== undefined && sequence.tracks.find(value => value.index === (edit.trackMap?.[index] ?? index))
       if (!destination) throw new Error('标注轨道已移除，请重新复制片段。')
       return destination.id
     }) } : mapped.target
-    return { ...mapped, target, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: ids.get(mark.clipId)! } : {}), status: mark.status === 'draft' ? 'draft' as const : 'open' as const, addressedBy: undefined }
+    return [{ ...mapped, target, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: ids.get(mark.clipId)! } : {}), status: mark.status === 'draft' ? 'draft' as const : 'open' as const, addressedBy: undefined }]
   })
   const markers = (edit.clipboard.markers ?? []).map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId!)!, frame: edit.frame + convert(mark.frame) }))
   const captions = (edit.clipboard.captions ?? []).map(caption => ({ ...caption, id: crypto.randomUUID(), clipId: ids.get(caption.clipId!)!, start: edit.frame + convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) }))

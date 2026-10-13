@@ -71,7 +71,7 @@ class TrimContext {
   }
 }
 
-function assertNoTrackOverlap(clips: readonly VideoEditClip[], message: string): void {
+export function assertNoTrackOverlap(clips: readonly VideoEditClip[], message: string): void {
   const byTrack = new Map<number, VideoEditClip[]>()
   for (const clip of clips) byTrack.set(clip.track, [...(byTrack.get(clip.track) ?? []), clip])
   for (const lane of byTrack.values()) {
@@ -124,18 +124,22 @@ function ripple(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out
 }
 
 function roll(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out', requested: number): { clips: VideoEditClip[]; delta: number } {
-  const ids = new Set(edited.map(clip => clip.id))
+  const excluded = new Set<string>()
+  const tracks = new Set<number>()
   const pairs = new Map<string, { left?: VideoEditClip; right?: VideoEditClip }>()
-  for (const clip of edited) {
-    const pair = edge === 'out' ? { left: clip, right: context.adjacent(clip, 'after', ids) } : { left: context.adjacent(clip, 'before', ids), right: clip }
+  // 同轨只移动一个编辑点：出点从最前一段取，入点从最后一段取，不受选区排列影响。
+  for (const clip of [...edited].sort((a, b) => edge === 'out' ? a.start - b.start : b.start - a.start)) {
+    if (tracks.has(clip.track)) continue
+    tracks.add(clip.track)
+    const pair = edge === 'out' ? { left: clip, right: context.adjacent(clip, 'after', excluded) } : { left: context.adjacent(clip, 'before', excluded), right: clip }
     pairs.set(`${pair.left?.id ?? ''}|${pair.right?.id ?? ''}`, pair)
   }
   const range: Range = { lo: -Infinity, hi: Infinity }
   for (const { left, right } of pairs.values()) {
     if (left) narrow(range, 1 - left.duration, context.tail(left))
-    else narrow(range, context.gap(right!, ids).previous - right!.start, Infinity)
+    else narrow(range, context.gap(right!, excluded).previous - right!.start, Infinity)
     if (right) narrow(range, -context.head(right), right.duration - 1)
-    else narrow(range, -Infinity, context.gap(left!, ids).next - end(left!))
+    else narrow(range, -Infinity, context.gap(left!, excluded).next - end(left!))
   }
   const delta = clampDelta(range, requested)
   if (!delta) return { clips: context.sequence.clips, delta }
@@ -145,7 +149,9 @@ function roll(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out',
     if (right) changed.set(right.id, context.moveIn(right, delta))
   }
   assertVideoEditClipsEditable(context.sequence, [...changed.keys()])
-  return { clips: context.sequence.clips.map(clip => changed.get(clip.id) ?? clip), delta }
+  const clips = context.sequence.clips.map(clip => changed.get(clip.id) ?? clip)
+  assertNoTrackOverlap(clips, '滚动编辑会让片段重叠，请调整范围。')
+  return { clips, delta }
 }
 
 function slip(context: TrimContext, edited: VideoEditClip[], requested: number): { clips: VideoEditClip[]; delta: number } {

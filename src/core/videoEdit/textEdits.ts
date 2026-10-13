@@ -3,6 +3,7 @@ import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
 import { videoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
 import { mergeVideoEditTextRanges, type VideoEditTextRange } from './textTranscript'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
+import { clipVideoEditAnnotationTime, mapVideoEditAnnotationTime } from './annotations'
 
 const replace = (document: VideoEditDocument, sequence: VideoEditSequence): VideoEditDocument => ({ ...document, sequences: document.sequences.map(value => value.id === sequence.id ? sequence : value) })
 function remove(document: VideoEditDocument, sequenceId: string, range: VideoEditTextRange, ripple: boolean, metadata?: CodeMaterialMetadataReader): VideoEditDocument {
@@ -33,7 +34,15 @@ export function extractVideoEditTextRanges(document: VideoEditDocument, sequence
   const kept = next.sequences.find(value => value.id === sequenceId)!
   if (!kept.clips.length) throw new Error('选中文字没有对应媒体。')
   const mapFrame = (frame: number): number => selected.reduce((sum, range) => sum + Math.max(0, Math.min(frame, range.to) - range.from), 0)
-  const excerpt: VideoEditSequence = { ...kept, clips: kept.clips.map(clip => ({ ...clip, start: mapFrame(clip.start) })), annotations: kept.annotations.map(value => ({ ...value, frame: mapFrame(value.frame) })), markers: kept.markers?.filter(value => selected.some(range => value.frame >= range.from && value.frame < range.to)).map(value => ({ ...value, frame: mapFrame(value.frame) })), captions: kept.captions?.flatMap(value => selected.flatMap(range => { const from = Math.max(range.from, value.start); const to = Math.min(range.to, value.start + value.duration); return to > from ? [{ ...value, id: crypto.randomUUID(), start: mapFrame(from), duration: to - from }] : [] })), transitions: kept.transitions }
+  const clipIds = new Set(kept.clips.map(clip => clip.id))
+  const annotations = kept.annotations.flatMap(value => {
+    const clipped = clipVideoEditAnnotationTime(value, selected)
+    if (!clipped) return []
+    const mapped = mapVideoEditAnnotationTime(clipped, mapFrame)
+    if (mapped.target.kind === 'range' && mapped.target.clipIds) mapped.target.clipIds = mapped.target.clipIds.filter(id => clipIds.has(id))
+    return [mapped]
+  })
+  const excerpt: VideoEditSequence = { ...kept, clips: kept.clips.map(clip => ({ ...clip, start: mapFrame(clip.start) })), annotations, markers: kept.markers?.filter(value => selected.some(range => value.frame >= range.from && value.frame < range.to)).map(value => ({ ...value, frame: mapFrame(value.frame) })), captions: kept.captions?.flatMap(value => selected.flatMap(range => { const from = Math.max(range.from, value.start); const to = Math.min(range.to, value.start + value.duration); return to > from ? [{ ...value, id: crypto.randomUUID(), start: mapFrame(from), duration: to - from }] : [] })), transitions: kept.transitions }
   excerpt.tracks = sequence.tracks
   const copied = copyVideoEditSequence(excerpt); copied.name = name
   return copied
@@ -42,7 +51,7 @@ export function insertVideoEditTextRanges(document: VideoEditDocument, sequenceI
   const excerpt = extractVideoEditTextRanges(document, sequenceId, ranges, '文本摘选', metadata)
   const temporary = { ...document, sequences: [...document.sequences, excerpt] }
   const clipboard = copyVideoEditClips(temporary, excerpt.id, excerpt.clips.map(clip => clip.id), false)
-  // Include unanchored captions/markers from the excerpt as well; copyVideoEditClips keeps only clip-owned ones.
-  clipboard.captions = excerpt.captions; clipboard.markers = excerpt.markers
+  // 摘选中的序列级标注、字幕和标记也随内容插入；普通片段复制只收集片段所属内容。
+  clipboard.annotations = excerpt.annotations; clipboard.captions = excerpt.captions; clipboard.markers = excerpt.markers
   return replace(document, applyVideoEditTimelineEdit(document, sequenceId, { kind: 'place', clipboard, frame, mode: 'insert', targetTracks: videoEditComposition(document, sequenceId).tracks.map(track => track.index) }, metadata))
 }

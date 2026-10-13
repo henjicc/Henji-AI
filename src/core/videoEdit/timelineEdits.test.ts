@@ -24,6 +24,24 @@ function apply(document: ReturnType<typeof createVideoEditDocument>, edit: Param
   const sequence = applyVideoEditTimelineEdit(document, document.sequences[0].id, edit)
   return videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })
 }
+it('覆盖切段裁剪片段与内置效果曲线，并保留外侧淡入淡出', () => {
+  const { document, sequence } = fixture()
+  const curve = [{ time: 0, value: 0, interpolation: 'linear' as const }, { time: 59, value: 1, interpolation: 'linear' as const }]
+  Object.assign(sequence.clips[0], { curves: { opacity: curve }, fadeInFrames: 5, fadeOutFrames: 5,
+    effects: [{ id: 'exposure', name: '曝光', enabled: true, amount: 1, builtin: { id: 'color_grade', params: {}, curves: { exposure: curve } } }] })
+  const clipboard = copyVideoEditClips(document, sequence.id, ['b']); clipboard.clips[0].duration = 10
+  const result = apply(document, { kind: 'place', clipboard, frame: 40, mode: 'overwrite' }).sequences[0]
+  const left = result.clips.find(clip => clip.start === 10)!; const right = result.clips.find(clip => clip.start === 50)!
+  expect(left).toMatchObject({ duration: 30, fadeInFrames: 5 }); expect(left.fadeOutFrames).toBeUndefined()
+  expect(right).toMatchObject({ duration: 20, fadeOutFrames: 5 }); expect(right.fadeInFrames).toBeUndefined()
+  for (const clip of [left, right]) {
+    expect(clip.curves!.opacity!.every(point => point.time < clip.duration)).toBe(true)
+    expect(clip.effects![0].builtin!.curves!.exposure.every(point => point.time < clip.duration)).toBe(true)
+  }
+  expect(right.curves!.opacity![0]).toMatchObject({ time: 0, value: expect.closeTo(40 / 59, 8) })
+  expect(right.effects![0].builtin!.curves!.exposure[0].value).toBeCloseTo(40 / 59)
+  expect(right.effects![0].id).not.toBe(left.effects![0].id)
+})
 it('插入和覆盖只选择实际放置片段，不选择保留的原片段右尾', () => {
   const { document, sequence } = fixture()
   const clipboard = copyVideoEditClips(document, sequence.id, ['b']); clipboard.clips[0].duration = 10

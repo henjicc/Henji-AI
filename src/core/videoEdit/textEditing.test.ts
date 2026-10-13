@@ -6,6 +6,7 @@ import { addLegacyVideoEditTracks } from './testFixtures'
 import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, mapVideoEditTextRange, resolveVideoEditTextRanges, videoEditTranscriptWords } from './textTranscript'
 import { deleteVideoEditTextRanges, extractVideoEditTextRanges, insertVideoEditTextRanges } from './textEdits'
 import type { AudioEditProjectDocument } from '../audioEdit/types'
+import { videoEditAnnotationSchema } from './annotations'
 
 function fixture() {
   const document = createVideoEditDocument('口播'); const sequence = document.sequences[0]; addLegacyVideoEditTracks(sequence)
@@ -139,6 +140,19 @@ it('extracts disjoint ranges into a new compact sequence and inserts at the play
   expect(videoEditDocumentSchema.safeParse(inserted).success).toBe(true)
   expect(inserted.sequences[0].clips.filter(clip => clip.start === 90)).toHaveLength(2)
   expect(Math.max(...inserted.sequences[0].clips.map(clip => clip.start + clip.duration))).toBe(345)
+})
+it.each(['range', 'point'] as const)('摘选与插入裁剪 %s 时间段标注，丢弃间隙内标注', kind => {
+  const { document, sequence } = fixture(); const ranges = [{ from: 30, to: 60 }, { from: 100, to: 130 }]
+  const note = (id: string, frame: number, endFrame: number) => videoEditAnnotationSchema.parse({ id, frame, endFrame, space: 'composition-normalized',
+    target: kind === 'range' ? { kind, startFrame: frame, endFrame, clipIds: ['picture'] } : { kind, x: .5, y: .5 }, text: id, status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-13T00:00:00.000Z', thread: [] })
+  sequence.annotations = [note('inside', 40, 120), note('gap', 70, 80), note('clipped', 65, 150)]
+  const excerpt = extractVideoEditTextRanges(document, sequence.id, ranges)
+  expect(excerpt.annotations.map(mark => [mark.text, mark.frame, mark.endFrame])).toEqual([['inside', 10, 50], ['clipped', 30, 59]])
+  expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [...document.sequences, excerpt] })).not.toThrow()
+  const inserted = insertVideoEditTextRanges(document, sequence.id, ranges, 200)
+  const pasted = inserted.sequences[0].annotations.filter(mark => !sequence.annotations.some(original => original.id === mark.id))
+  expect(pasted.map(mark => [mark.text, mark.frame, mark.endFrame])).toEqual([['inside', 210, 250], ['clipped', 230, 259]])
+  expect(() => videoEditDocumentSchema.parse(inserted)).not.toThrow()
 })
 it('unrelated locked material outside an excerpt remains untouched; selected locked partners still refuse', () => {
   const { document, sequence } = fixture()

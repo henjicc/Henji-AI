@@ -46,6 +46,14 @@ describe('波纹编辑', () => {
 })
 
 describe('滚动编辑', () => {
+  it.each(['out', 'in'] as const)('编组相邻片段滚动 %s 端只移动一个编辑点且总长不变', edge => {
+    const { document, sequenceId } = fixture(); const sequence = document.sequences[0]
+    sequence.clips.filter(clip => ['a', 'b'].includes(clip.id)).forEach(clip => { clip.groupId = 'group' })
+    const result = applyVideoEditTimelineEdit(document, sequenceId, { kind: 'trim', mode: 'roll', clipIds: [edge === 'out' ? 'a' : 'b'], edge, delta: 20 })
+    expect(result.clips.filter(clip => ['a', 'b', 'c'].includes(clip.id)).map(clip => [clip.id, clip.start, clip.duration])).toEqual([['a', 0, 80], ['b', 80, 40], ['c', 120, 60]])
+    expect(Math.max(...result.clips.map(clip => clip.start + clip.duration))).toBe(180)
+    expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [result] })).not.toThrow()
+  })
   it('移动 a 与 b 之间的编辑点：a 出点与 b 入点一起变，总长不变', () => {
     const result = trim({ mode: 'roll', clipIds: ['a'], edge: 'out', delta: 10 })
     expect(result.clip('a')).toMatchObject({ start: 0, duration: 70 })
@@ -63,6 +71,13 @@ describe('滚动编辑', () => {
 })
 
 describe('外滑与内滑', () => {
+  it('相邻编组内滑时整体移动，外侧邻居让位且不相互覆盖', () => {
+    const { document, sequenceId } = fixture(); const original = document.sequences[0]
+    original.clips.filter(clip => ['a', 'b'].includes(clip.id)).forEach(clip => { clip.groupId = 'group' })
+    const result = applyVideoEditTimelineEdit(document, sequenceId, { kind: 'trim', mode: 'slide', clipIds: ['a'], delta: 20 })
+    expect(result.clips.filter(clip => ['a', 'b', 'c'].includes(clip.id)).map(clip => [clip.start, clip.duration])).toEqual([[20, 60], [80, 60], [140, 40]])
+    expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [result] })).not.toThrow()
+  })
   it('外滑只改源入点，位置与长度不变；超出素材时收紧', () => {
     const result = trim({ mode: 'slip', clipIds: ['b'], delta: 15 })
     expect(result.clip('b')).toMatchObject({ start: 60, duration: 60 })
