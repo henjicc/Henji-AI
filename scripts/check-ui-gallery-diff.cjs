@@ -1,16 +1,16 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const { compareGalleryImages, expectedGalleryCaptures, validateGalleryRun, GALLERY_DIFF_RATIO } = require('./lib/uiGalleryDiff.cjs')
+const { compareGalleryImages, expectedGalleryCaptures, validateGalleryRun, GALLERY_DIFF_RATIO, GALLERY_PRESETS } = require('./lib/uiGalleryDiff.cjs')
 
 async function main(argv) {
   const inputIndex = argv.indexOf('--input')
   const reasonIndex = argv.indexOf('--reason')
   const update = argv.includes('--update-baseline')
   if (process.platform !== 'win32') throw new Error('像素基线仅在固定 Windows 环境运行，CI 只运行规则自测')
-  if (inputIndex < 0 || !argv[inputIndex + 1]) throw new Error('需要 --input <正式 ui:tour 四预设输出目录>')
+  if (inputIndex < 0 || !argv[inputIndex + 1]) throw new Error('需要 --input <正式 ui:tour 石墨与纸白两预设输出目录>')
   if (update && (reasonIndex < 0 || (argv[reasonIndex + 1] || '').trim().length < 8)) throw new Error('更新基线需要 --reason <至少8字的有意改动原因>，并写入提交正文')
   const input = path.resolve(argv[inputIndex + 1])
-  // 基线只在本机比较（重要记录 012），放在已忽略的 .ui-tour 下：四预设约 130MB，入库会让每次有意改版都膨胀仓库。
+  // 基线只在本机比较（重要记录 012），放在已忽略的 .ui-tour 下：两预设约 75MB，入库会让每次有意改版都膨胀仓库。
   const baseline = path.resolve('.ui-tour/baselines/ui-gallery')
   const config = JSON.parse(fs.readFileSync('scripts/ui-review/ui-gallery.json', 'utf8'))
   const expected = expectedGalleryCaptures(config)
@@ -18,7 +18,7 @@ async function main(argv) {
   for (const file of expected) if (!fs.existsSync(path.join(input, file))) throw new Error(`缺少正式捕获：${file}`)
   const manifestPath = path.join(baseline, 'manifest.json')
   const windows = {}
-  for (const preset of ['graphite', 'ocean', 'film', 'paper']) {
+  for (const preset of GALLERY_PRESETS) {
     const read = name => JSON.parse(fs.readFileSync(path.join(input, preset, name), 'utf8'))
     const suffixes = expected.filter(file => file.startsWith(`${preset}/`)).map(file => file.replace(/^.*1440x900-review-ui-gallery-/, '').replace(/\.png$/, ''))
     windows[preset] = validateGalleryRun(read('audit.json'), read('evidence.json'), preset, suffixes)

@@ -2537,6 +2537,90 @@
         "target": {
           "selector": "[data-gallery-scroll]"
         },
+        "dy": 600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-parameters-6"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-parameters-7"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-parameters-8"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-parameters-9"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-parameters-10"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
+        "dy": 600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "gallery-parameters-11"
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": "[data-gallery-scroll]"
+        },
         "dy": 100000
       }
     },

@@ -62,6 +62,8 @@ function printHelp() {
   --matrix <名>   核对矩阵：review = 石墨 1440+960、深海/胶片/纸白 1440；screen = 石墨 1440+960。
                   与 --size / --theme-preset 互斥
   --audit         同一次巡检产出 audit.json、截图及运行时证据，规则命中时失败
+  --no-screenshots 与 --audit 同用：照常截图做像素与 DOM 审计，但只把有规则命中、对比度问题或场景失败的截图落盘；
+                  日常审计用它，像素基线（check:ui-gallery-diff）与需要目视全量时不加
   --contrast      对每张截图（含场景中途截图）做像素对比度审计，结果写 contrast.json 并汇总进 index.md
   --display-point <x,y|none> 测试窗口放到哪块显示器；默认取 HENJI_DEV_DISPLAY_POINT，未设置时用本机副屏 2561,1
 `)
@@ -207,6 +209,18 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
       }
       if (result.issues.length) console.error(`  对比度不达标 ${result.issues.length} 处：${key}`)
     }
+    // --no-screenshots：截图先留在内存，审计后只落盘有问题的那张；场景失败时整场景落盘便于排查。
+    const hasIssues = key => Boolean(contrastResults[key]?.issues.length
+      || (ruleResults[key] && UI_AUDIT_RULES.some(rule => ruleResults[key][rule.key]?.length)))
+    let pending = []
+    const persist = (item) => {
+      fs.writeFileSync(path.join(outDir, item.row.file), item.bytes)
+      rows.push(item.row)
+    }
+    const settle = (item) => {
+      if (options.screenshots !== false || hasIssues(item.key)) persist(item)
+      else pending.push(item)
+    }
 
     try {
       for (const size of run.sizes) {
@@ -217,6 +231,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
           let sceneFailed = false
           let sceneError = null
           const windowEvidence = { requestedOuter: size, baseline: null, completed: null, captures: [] }
+          pending = []
           const scrollCaptures = []
           try {
             // 启动位置必须在巡检主动居中/调整尺寸之前检查，而且每次进程只检查一次。
@@ -234,10 +249,10 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
               const clip = scene.captureRegion ? await targetPage.locator(scene.captureRegion).boundingBox() : undefined
               if (scene.captureRegion && !clip) throw new Error(`截图区域不可见：${scene.captureRegion}`)
               const bytes = await captureInspectionPage(app.app, targetPage, { clip, onEvidence: (value) => { pixels = value } })
-              fs.writeFileSync(path.join(outDir, fileName), bytes)
+              const shot = { key: `${evidenceKey} / ${suffix}`, bytes, row: { ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName } }
+              if (options.screenshots !== false) persist(shot)
               await assertInspectionWindowSize(app, size, windowEvidence.baseline)
               windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
-              rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
               if (scene.scrollCoverage) {
                 const measured = await targetPage.evaluate(auditUiDom)
                 const regions = await targetPage.locator(scene.scrollCoverage).evaluateAll(elements => elements.map((element, index) => ({
@@ -254,6 +269,7 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
                 if (failedSamples.length) throw new Error(`样张规则断牙失败：${failedSamples.map(sample => sample.id).join(', ')}`)
               }
               await auditContrast(`${evidenceKey} / ${suffix}`, targetPage, scene)
+              if (options.screenshots === false) settle(shot)
             }
             // 步骤描述的自动指标（行数、溢出、截断）；普通场景不调用
             const recordMetrics = ({ suffix, variant, metrics: value }) => {
@@ -271,16 +287,19 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
             const clip = scene.captureRegion ? await app.page.locator(scene.captureRegion).boundingBox() : undefined
             if (scene.captureRegion && !clip) throw new Error(`截图区域不可见：${scene.captureRegion}`)
             const bytes = await captureInspectionPage(app.app, app.page, { clip, onEvidence: (value) => { pixels = value } })
-            fs.writeFileSync(path.join(outDir, fileName), bytes)
+            const finalShot = { key: evidenceKey, bytes, row: { ...scene, size: sizeLabel, file: fileName } }
+            if (options.screenshots !== false) persist(finalShot)
             await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,
               pixels })
-            rows.push({ ...scene, size: sizeLabel, file: fileName })
             await auditContrast(evidenceKey, app.page, scene, true)
+            if (options.screenshots === false) settle(finalShot)
             console.log(`✓ ${sizeLabel} / ${scene.name}`)
           } catch (error) {
             sceneFailed = true
             sceneError = error
+            for (const item of pending) persist(item)
+            pending = []
             const message = error instanceof Error ? error.message : String(error)
             failures.push({ name: scene.name, size: sizeLabel, message })
             console.error(`✗ ${sizeLabel} / ${scene.name}：${message}`)

@@ -23,7 +23,7 @@ test('基线必须来自审计通过且有窗口尺寸证据的正式捕获', ()
 })
 test('捕获清单来自正式配置，缺图不能比较为零', () => {
   const list = expectedGalleryCaptures({ steps: [{ capture: 'gallery-one-top' }, { capture: { name: 'gallery-one-bottom' } }] })
-  assert.equal(list.length, 8)
+  assert.equal(list.length, 4)
   assert.ok(list.includes('paper/1440x900-review-ui-gallery-gallery-one-bottom.png'))
   assert.throws(() => expectedGalleryCaptures({ steps: [] }), /捕获/)
 })

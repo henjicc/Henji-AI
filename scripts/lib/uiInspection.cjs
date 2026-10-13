@@ -93,6 +93,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   let matrix = null
   let contrast = false
   let audit = false
+  let screenshots = true
   let displayPointValue
   let help = false
   let positionalOutUsed = false
@@ -175,6 +176,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
       continue
     }
     if (token === '--audit') { audit = true; continue }
+    if (token === '--no-screenshots') { screenshots = false; continue }
     if (token === '--contrast') {
       contrast = true
       continue
@@ -212,7 +214,8 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   }
   const steps = stepValues.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean)
   const displayPoint = resolveDisplayPoint(displayPointValue)
-  return { allowWrites, audit, contrast, displayPoint, help, matrix, only, outDir, profile, sizes, steps, themePresets }
+  if (!screenshots && !audit) throw new Error('--no-screenshots 只能与 --audit 同用：不审计又不存图，这次巡检没有产出')
+  return { allowWrites, audit, contrast, displayPoint, help, matrix, only, outDir, profile, screenshots, sizes, steps, themePresets }
 }
 
 /** `--theme-preset` 可重复或逗号分隔，`all` 表示四个预设；按登记顺序去重。 */

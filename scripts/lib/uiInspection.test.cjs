@@ -193,6 +193,12 @@ test('默认只跑一个窗口尺寸', () => {
   assert.equal(options.allowWrites, false)
 })
 
+test('不存图模式只能与审计同用，默认仍保存截图', () => {
+  assert.equal(parseUiInspectionArgs([], '.ui-tour').screenshots, true)
+  assert.equal(parseUiInspectionArgs(['--audit', '--no-screenshots'], '.ui-tour').screenshots, false)
+  assert.throws(() => parseUiInspectionArgs(['--no-screenshots'], '.ui-tour'), /--audit/)
+})
+
 test('真实数据模式必须显式开启，写业务数据的场景默认被拦截', () => {
   const options = parseUiInspectionArgs(['--real-data'], '.ui-tour')
   assert.equal(options.profile, 'real')
