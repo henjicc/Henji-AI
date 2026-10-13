@@ -141,7 +141,8 @@ describe('跨进程文件锁', () => {
       peak = Math.max(peak, ++active)
       await new Promise(resolve => setTimeout(resolve, 20))
       active--
-    }, { staleMs: 60 })))
+      // 残留锁已 60 秒未更新；staleMs 取 1 秒，避免机器繁忙时持有者心跳被拖过 3×staleMs 而被误判残留。
+    }, { staleMs: 1_000 })))
     expect(peak).toBe(1)
     expect(await fsp.readdir(root)).toEqual([])
   })
