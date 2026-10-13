@@ -60,6 +60,8 @@ export const UI_LOOP_MS = {
   spin: 1000,
   /** 任务状态与占位淡入淡出，沿用 Tailwind 原周期。 */
   pulse: 2000,
+  /** 画布运行中虚线环呼吸，沿用原执行反馈周期。 */
+  executing: 1500,
 } as const;
 
 /**

@@ -34,9 +34,10 @@ CSS 动画/过渡必须引用这些变量。`motionCss.test.ts` 编译 Tailwind 
 Tailwind 可能在 `motion-safe:` 的媒体作用域重复输出同一关键帧，定义必须一致；
 同一作用域不得重名，不得由第二份源码改变含义。
 
-循环档 `UI_LOOP_MS.spin/pulse` 为 1000/2000ms，CSS 对应 `--ui-loop-spin/pulse`，
-用于表达进行中，不用于进出场卸载。画布执行脉冲的 1500ms 仍在 storyboard.css，
-尚未纳入共享循环档，不能把当前收敛范围说成全仓已统一。
+循环档 `UI_LOOP_MS.spin/pulse/executing` 为 1000/2000/1500ms，CSS 对应
+`--ui-loop-spin/pulse/executing`，用于表达进行中，不用于进出场卸载。
+画布执行脉冲唯一关键帧在 storyboard.css，周期与缓动也引用共享变量。
+中心页为三个循环提供实际 CSS 动画的重放/停止样本，初始静止。
 
 唯一登记的例外缓动是 `UI_EASE_STACK`（缩略图扇形展开的弹性感），和具名阴影同一个逻辑：
 有具体功能语义才登记。**不要为了"想要点不一样"再发明缓动。**
@@ -46,6 +47,10 @@ Tailwind 可能在 `motion-safe:` 的媒体作用域重复输出同一关键帧�
 进出场复用 `useDialogTransition(isOpen, durationMs, appear)`，默认 base、双 rAF 进场，
 `appear=false` 只跳过首次进入。返回的 `onTransitionEnd` 或 `onAnimationEnd`
 挂到执行退出动画的根元素，忽略子元素冒泡与重开后迟到的信号；计时器作为卸载兜底。
+第四参数支持 `onExited`（退出只通知一次）、`exitRef`（原生结束事件根元素）与
+`enterKey`（内容替换时重播进入）。需要保留内容直到淡出结束的通知用同文件
+`useTimedToast<T>()`，全局与生成页共用；停留用 UI_TOAST_DISPLAY_MS、退出用 UI_TOAST_EXIT_MS。
+提示的悬停延迟、视频控制条自动隐藏等业务等待不属于进出场卸载，不应误删。
 CSS 与 JS 两个数字对不上就会把过渡截断：
 
 ```tsx
@@ -116,7 +121,8 @@ transition/animation 时长压到 0.01ms，延迟清零，循环只播一次，�
 
 公共 `useDialogTransition` 读取并订阅系统偏好：减少动效时直接显示/立即卸载，
 运行中改变偏好会取消当前 rAF/退出计时，并在卸载时清理订阅。
-尚未迁移的手写状态机可能仍保留原卸载计时，调用方迁移后才能统一生命周期。
+媒体查看器、浮层、提示、确认、设置、输入缩略图均委托公共生命周期；
+通知停留不因减少动效缩短，但停留结束后立即卸载。
 中心页“模拟减少动态”只影响本栏回放；验证正式组件必须切换系统偏好。
 
 ## 高频交互与逐字预览

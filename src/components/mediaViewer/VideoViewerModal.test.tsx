@@ -16,6 +16,18 @@ beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
 })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+it('打开期间切换视频源仍重新进场，播放器状态重置与画面同步', async () => {
+  const props = { open: true, videoUrl: 'first.mp4', onClose: vi.fn() }
+  const { rerender } = render(<VideoViewerModal {...props} />)
+  await act(async () => {})
+  act(() => vi.advanceTimersByTime(32))
+  const root = document.querySelector('.z-viewer') as HTMLElement
+  expect(root.style.opacity).toBe('1')
+  rerender(<VideoViewerModal {...props} videoUrl="second.mp4" />)
+  expect(root.style.opacity).toBe('0')
+  act(() => vi.advanceTimersByTime(32))
+  expect(root.style.opacity).toBe('1')
+})
 it.each(['same.mp4', 'another.mp4'])('常驻查看器重开 %s 只保留音量，控件与元素一致', async videoUrl => {
   const props = { open: true, videoUrl: 'same.mp4', onClose: vi.fn() }
   const { rerender } = render(<VideoViewerModal {...props} />)

@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { Play } from 'lucide-react'
+import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DURATION } from '@/components/ui/motion'
 
 export interface TaskInputPreviewProps {
@@ -107,42 +108,12 @@ function StackPreview({
 }: StackPreviewProps): JSX.Element | null {
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
-  const [fadeIn, setFadeIn] = useState(false)
-  const [renderAll, setRenderAll] = useState(false)
-  const [renderExtra, setRenderExtra] = useState(false)
-  const [extraVisible, setExtraVisible] = useState(false)
-
   const visible = items.slice(0, 3)
   const extra = items.length - visible.length
+  const { shouldRender: renderAll, isVisible: fadeIn, onTransitionEnd: onAllEnd } = useDialogTransition(expanded, UI_DURATION.base)
+  const { shouldRender: renderExtra, isVisible: extraVisible, onTransitionEnd: onExtraEnd } = useDialogTransition(!expanded && extra > 0, UI_DURATION.base)
   const displayItems = renderAll ? items : visible
   const showExtra = renderExtra && extra > 0
-
-  useEffect(() => {
-    if (!expanded) {
-      setFadeIn(false)
-      const timer = window.setTimeout(() => setRenderAll(false), UI_DURATION.base)
-      return () => window.clearTimeout(timer)
-    }
-    setRenderAll(true)
-    const raf = requestAnimationFrame(() => setFadeIn(true))
-    return () => cancelAnimationFrame(raf)
-  }, [expanded])
-
-  useEffect(() => {
-    if (extra <= 0) {
-      setRenderExtra(false)
-      setExtraVisible(false)
-      return
-    }
-    if (expanded) {
-      setExtraVisible(false)
-      const timer = window.setTimeout(() => setRenderExtra(false), UI_DURATION.base)
-      return () => window.clearTimeout(timer)
-    }
-    setRenderExtra(true)
-    const raf = requestAnimationFrame(() => setExtraVisible(true))
-    return () => cancelAnimationFrame(raf)
-  }, [expanded, extra])
 
   if (items.length === 0) return null
 
@@ -189,6 +160,7 @@ function StackPreview({
           index === 0 ? '' : (expanded ? 'ml-1' : '-ml-3')
         } ${index >= visible.length ? (fadeIn ? 'opacity-100' : 'opacity-0') : 'opacity-100'}`}
         style={{ zIndex: 20 - index }}
+        onTransitionEnd={index >= visible.length ? onAllEnd : undefined}
         onClick={handleClick}
         onMouseDown={handleMouseDown}
         draggable={nativeFileDragEnabled && Boolean(filePath)}
@@ -227,6 +199,7 @@ function StackPreview({
           className={`absolute top-0 w-12 h-12 flex-shrink-0 rounded-md bg-raised flex items-center justify-center text-xs text-text2 cursor-pointer transition-[opacity,transform] duration-180 ease-out ${
             extraVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-1 pointer-events-none'
           }`}
+          onTransitionEnd={onExtraEnd}
           style={{ left: collapsedWidth - base, zIndex: 0 }}
           onClick={(e) => {
             e.stopPropagation()

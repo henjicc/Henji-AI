@@ -258,11 +258,6 @@
     },
     {
       "definedIn": "src/index.css",
-      "names": ["animate-scale-in", "animate-scale-out", "animate-fade-in", "animate-fade-out"],
-      "reason": "共享浮层（Dropdown / PanelTrigger / Tooltip）的进出场关键帧，时长与 UI_DURATION 同档；关键帧只能写在样式表"
-    },
-    {
-      "definedIn": "src/index.css",
       "names": ["dockview-theme-abyss", "henji-cameraStage-dock", "henji-videoEdit-dock"],
       "reason": "第三方 dockview 的主题挂点：用 --dv-* 变量把停靠面板接到主题令牌，并控制面板头按钮的悬停显隐，库内部 DOM 无法加工具类"
     },

@@ -11,6 +11,7 @@
   --ui-ease: cubic-bezier(0, 0, 0.2, 1);
   --ui-loop-spin: 1000ms;
   --ui-loop-pulse: 2000ms;
+  --ui-loop-executing: 1500ms;
   /*
    * 主题颜色由 src/core/theme/runtimeTheme.ts 按种子推导后写到根节点内联样式（只写下方“新变量”）。
    * 这里的静态值 = 默认主题（石墨）的推导结果，用于首帧与无脚本环境；

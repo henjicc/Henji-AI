@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { toDisplaySrc } from '@/platform/desktopApi'
 import AudioPlayer from '@/components/AudioPlayer'
+import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { isTopmostUiOverlay, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui'
 
@@ -13,12 +14,11 @@ export interface AudioViewerModalProps {
 }
 
 export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay = false }: AudioViewerModalProps): JSX.Element | null {
-  const [visible, setVisible] = useState(open)
+  const { shouldRender: visible, isVisible, onTransitionEnd } = useDialogTransition(open, UI_DURATION.viewer)
   // 全屏查看器是模态浮层层（任务 4.3 / 5.9）：其上的子浮层先处理 Escape，查看器内点击不关掉打开它的面板
   const overlay = useUiOverlayLayer(open, { modal: true })
-  const [overlayOpacity, setOverlayOpacity] = useState(0)
-  const [playerOpacity, setPlayerOpacity] = useState(0)
-  const closeTimerRef = useRef<number | null>(null)
+  const overlayOpacity = isVisible ? 1 : 0
+  const playerOpacity = overlayOpacity
   const playbackUrl = useMemo(() => {
     const normalizedPath = filePath?.trim()
     if (normalizedPath) {
@@ -26,44 +26,6 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
     }
     return audioUrl
   }, [audioUrl, filePath])
-
-  useEffect(() => {
-    if (open) {
-      setVisible(true)
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
-      setOverlayOpacity(0)
-      setPlayerOpacity(0)
-      let openRaf1 = 0
-      let openRaf2 = 0
-      openRaf1 = requestAnimationFrame(() => {
-        openRaf2 = requestAnimationFrame(() => {
-          setOverlayOpacity(1)
-          setPlayerOpacity(1)
-        })
-      })
-      return () => {
-        if (openRaf1) cancelAnimationFrame(openRaf1)
-        if (openRaf2) cancelAnimationFrame(openRaf2)
-      }
-    }
-    if (!visible) {
-      return
-    }
-    setOverlayOpacity(0)
-    setPlayerOpacity(0)
-    closeTimerRef.current = window.setTimeout(() => {
-      setVisible(false)
-    }, 500)
-    return () => {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
-    }
-  }, [open, visible])
 
   useEffect(() => {
     if (!visible) return
@@ -82,15 +44,6 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open, onClose, overlay.id])
 
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
-    }
-  }, [])
-
   if (!visible) return null
 
   return (
@@ -104,9 +57,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
       // 收起中不可点击、对读屏隐藏；过渡结束即卸载，不只依赖计时器（任务 5.8）
       aria-hidden={!open || undefined}
       {...(!open ? { inert: '' } : {})}
-      onTransitionEnd={(event) => {
-        if (!open && event.target === event.currentTarget) setVisible(false)
-      }}
+      onTransitionEnd={onTransitionEnd}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose()

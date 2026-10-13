@@ -12,7 +12,8 @@ import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { useUiFormRowLabelling } from './formRowLabel'
 import { UiFieldTrigger, UiOptionButton } from './primitives'
-import { UI_DURATION } from './motion'
+import { UI_POPOVER_TRANSITION_MS } from './motion'
+import { useDialogTransition } from './useDialogTransition'
 import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
 import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
@@ -104,29 +105,22 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const toolbarLayout = !fillControl && fieldLayout === 'toolbar'
   const appearance = appearanceOverride ?? (toolbarLayout ? 'text' : 'field')
   const [open, setOpen] = useState(false)
-  const [closing, setClosing] = useState(false)
-  // 收起计时器（界面重设计 5.5 VE-06）：重新打开时必须取消上一次收起，否则窗口在后台被节流时，
-  // 迟到的计时器会把刚打开的面板关掉；收起动画结束也算收起完成，不只依赖计时器。
-  const closeTimerRef = useRef<number | undefined>(undefined)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const restoreFocusOnCloseRef = useRef(false)
-  useEffect(() => () => window.clearTimeout(closeTimerRef.current), [])
-  const finishClose = useCallback((): void => {
-    if (closeTimerRef.current === undefined) return
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = undefined
-    setOpen(false)
-    setClosing(false)
-    if (restoreFocusOnCloseRef.current) triggerRef.current?.focus()
-    restoreFocusOnCloseRef.current = false
-  }, [])
+  const { shouldRender, closing } = useDialogTransition(open, UI_POPOVER_TRANSITION_MS, true, {
+    exitRef: panelRef,
+    onExited: () => {
+      if (restoreFocusOnCloseRef.current) triggerRef.current?.focus()
+      restoreFocusOnCloseRef.current = false
+    },
+  })
   const scheduleClose = useCallback((restoreFocus = false): void => {
-    setClosing(true)
     restoreFocusOnCloseRef.current = restoreFocus
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = window.setTimeout(finishClose, UI_DURATION.base)
-  }, [finishClose])
+    setOpen(false)
+  }, [])
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1)
-  const overlay = useUiOverlayLayer(open)
+  const overlay = useUiOverlayLayer(shouldRender)
   // 从下拉面板里打开的弹窗期间面板让开（同 PanelTrigger，任务 5.8）
   const yieldToModal = useHasOpenModalUiOverlayDescendant(overlay.id)
   const onOpenChangeRef = useRef(onOpenChange)
@@ -139,16 +133,6 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     onOpenChangeRef.current?.(menuShown)
   }, [menuShown])
   const ref = useRef<HTMLDivElement | null>(null)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const panelRef = useRef<HTMLDivElement | null>(null)
-  // 收起动画结束即完成收起（原生事件监听，jsdom 与 Chromium 一致）
-  useEffect(() => {
-    const panel = panelRef.current
-    if (!closing || !panel) return
-    const onEnd = (event: Event): void => { if (event.target === panel) finishClose() }
-    panel.addEventListener('animationend', onEnd)
-    return () => panel.removeEventListener('animationend', onEnd)
-  }, [closing, finishClose])
   const dropdownId = useId().replace(/:/g, '')
   const panelId = `dropdown-panel-${dropdownId}`
   const triggerId = `dropdown-trigger-${dropdownId}`
@@ -175,10 +159,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       : resolveDropdownDisplay(display, value, options).trim() || t('dropdown.unselectedLabel'))
   useEffect(() => {
     if (!disabled || (!open && !closing)) return
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = undefined
     setOpen(false)
-    setClosing(false)
     setActiveOptionIndex(-1)
   }, [disabled, open, closing])
   const isSelectedOption = (optValue: T): boolean => {
@@ -196,9 +177,6 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const openPanel = (): void => {
     const selectedIndex = (options || []).findIndex((option) => isSelectedOption(option.value) && !option.disabled)
     setActiveOptionIndex(selectedIndex >= 0 ? selectedIndex : (enabledOptionIndices()[0] ?? -1))
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = undefined
-    setClosing(false)
     setOpen(true)
   }
   const closePanel = (restoreFocus = false): void => {
@@ -375,7 +353,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ownerWindow.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, panelMinWidthPx, panelWidthStrategy, scrollGutterPx])
+  }, [open, shouldRender, panelMinWidthPx, panelWidthStrategy, scrollGutterPx])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -383,7 +361,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     if (!list) return
     const gutter = Math.max(0, list.offsetWidth - list.clientWidth)
     if (gutter !== scrollGutterPx) setScrollGutterPx(gutter)
-  }, [fixedPos, open, options, scrollGutterPx])
+  }, [fixedPos, open, shouldRender, options, scrollGutterPx])
 
   const optionsPanelWidth = panelWidthStrategy === 'options' && panelMinWidthPx
     ? panelMinWidthPx + scrollGutterPx
@@ -466,7 +444,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       >
         {resolvedDisplay}
       </UiFieldTrigger>
-      {!disabled && (open || closing) && (
+      {!disabled && shouldRender && (
         portal && fixedPos ? (
           createPortal(
             <div

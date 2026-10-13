@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X, GripVertical } from 'lucide-react';
 
 import { isTopmostUiOverlay, UiButton, UiIconButton, UiError, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui';
+import { useDialogTransition } from '@/components/ui/useDialogTransition';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import type {
   ImageEditSessionData,
@@ -92,10 +93,10 @@ export function ImageViewerModal({
   onContextMenu,
 }: ImageViewerModalProps): JSX.Element | null {
   const { t } = useTranslation();
-  const [isVisible, setIsVisible] = useState(false);
+  const { shouldRender: isVisible, isVisible: motionVisible, onTransitionEnd } = useDialogTransition(open, UI_DURATION.viewer);
   // 全屏查看器是模态浮层层（任务 4.3 / 5.9）：其上的子浮层先处理 Escape，查看器内点击不关掉打开它的面板
   const overlay = useUiOverlayLayer(open, { modal: true });
-  const [overlayOpacity, setOverlayOpacity] = useState(0);
+  const overlayOpacity = motionVisible ? 1 : 0;
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
   const [swappedModes, setSwappedModes] = useState({ 'side-by-side': true, overlay: true });
   const [failedOriginal, setFailedOriginal] = useState<string | null>(null);
@@ -126,7 +127,6 @@ export function ImageViewerModal({
     }
   };
   const resetComparison = () => { resetView(); setDivider(50); };
-  const closeTimerRef = useRef<number | null>(null);
 
   const {
     containerRef,
@@ -161,42 +161,6 @@ export function ImageViewerModal({
       document.body.style.overflow = '';
     };
   }, [isVisible]);
-
-  useEffect(() => {
-    if (open) {
-      setIsVisible(true);
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-      setOverlayOpacity(0);
-      requestAnimationFrame(() => {
-        setOverlayOpacity(1);
-      });
-      return;
-    }
-    if (!isVisible) return;
-    setOverlayOpacity(0);
-    // 与退出过渡同档（UI_DURATION.viewer）；过渡结束先到时由 onTransitionEnd 卸载（任务 5.8）
-    closeTimerRef.current = window.setTimeout(() => {
-      setIsVisible(false);
-    }, UI_DURATION.viewer);
-    return () => {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-    };
-  }, [open, isVisible]);
-
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -244,9 +208,7 @@ export function ImageViewerModal({
       }}
       aria-hidden={!open || undefined}
       {...(!open ? { inert: '' } : {})}
-      onTransitionEnd={(event) => {
-        if (!open && event.target === event.currentTarget) setIsVisible(false);
-      }}
+      onTransitionEnd={onTransitionEnd}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

@@ -5,6 +5,7 @@ import {
   UiNavButton,
   UiSearchInput,
 } from '@/components/ui'
+import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { Bot, FolderOpen, KeyRound, LayoutGrid, Package, Settings2 } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
@@ -70,7 +71,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const [activeSectionId, setActiveSectionId] = useState<string>(
     target?.sectionId ?? SECTION_MAP[initialTab][0] ?? ''
   )
-  const [closing, setClosing] = useState(false)
+  const [open, setOpen] = useState(true)
   // 懒加载占位已经播过进入动画时，本弹窗直接以显示状态接替，不再从透明淡入第二次
   const [replacesPlaceholder] = useState(isSettingsPlaceholderShown)
   // 用状态而不是 ref 持有滚动容器：内容经 UiModal 延后挂载，容器出现时依赖它的定位与测量要重新执行。
@@ -85,33 +86,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const settledTabRef = useRef<SettingsTab | null>(null)
   const handledTargetRef = useRef(target ? `${target.tab}:${target.sectionId ?? ''}` : '')
 
-  // 关闭分两步：先让 UiModal 播完淡出，再由 App 卸载本组件。
-  // 等待时长必须跟着 UiModal 的过渡走，此前写死 300ms 比实际过渡长 120ms，
-  // 那段时间里弹窗已经全透明却还占着 DOM。
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const handleClose = () => {
-    setClosing(true)
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = setTimeout(() => {
-      closeTimerRef.current = null
-      onClose()
-    }, UI_DIALOG_TRANSITION_MS)
-  }
+  const { shouldRender } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS, !replacesPlaceholder, { onExited: onClose })
+  const handleClose = () => setOpen(false)
   // 淡出期间再次打开设置：取消收起与卸载计时，弹窗重新显示（否则这次点击被吞掉）
   const openRequest = useUiStore((state) => state.settingsOpenRequest)
   const mountedOpenRequestRef = useRef(openRequest)
   useEffect(() => {
     if (openRequest === mountedOpenRequestRef.current) return
     mountedOpenRequestRef.current = openRequest
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = null
-    }
-    setClosing(false)
+    setOpen(true)
   }, [openRequest])
-  useEffect(() => () => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-  }, [])
 
   const tabs = [
     { id: 'general' as const, label: t('tabs.general.label'), icon: Settings2, component: GeneralTab },
@@ -220,8 +204,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
     handleSectionSelect(target.tab, target.sectionId ?? SECTION_MAP[target.tab][0] ?? '')
   }, [handleSectionSelect, target])
 
+  if (!shouldRender) return null
+
   return (
-    <SettingsModalFrame isOpen={!closing} onClose={handleClose} appear={!replacesPlaceholder} surfaceId={activeSurfaceId}>
+    <SettingsModalFrame isOpen={open} onClose={handleClose} appear={!replacesPlaceholder} surfaceId={activeSurfaceId}>
       <div className="flex min-h-0 flex-1">
         {/*
           常驻目录：所有大类的分节一直展开，不再「先点大类才看得到子项」。

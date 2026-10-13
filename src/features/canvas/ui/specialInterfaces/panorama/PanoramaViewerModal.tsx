@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { UiButton, UiError, UiErrorBoundary, UiIconButton, UiLoading } from '@/components/ui';
+import { useDialogTransition } from '@/components/ui/useDialogTransition';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import { createLogger } from '@/core/logging';
 import { ICON_PANORAMA } from '@/core/theme/icons';
@@ -54,9 +55,8 @@ export function PanoramaViewerModal({
 }: CanvasImageViewerSurfaceProps): JSX.Element | null {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
-  const closeTimerRef = useRef<number | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [overlayOpacity, setOverlayOpacity] = useState(0);
+  const { shouldRender: isVisible, isVisible: motionVisible, closing, onTransitionEnd } = useDialogTransition(open, UI_DURATION.viewer);
+  const overlayOpacity = motionVisible ? 1 : 0;
   const [viewMode, setViewMode] = useState<PanoramaViewMode>('sphere');
   const [resetRevision, setResetRevision] = useState(0);
   const [retryRevision, setRetryRevision] = useState(0);
@@ -78,35 +78,15 @@ export function PanoramaViewerModal({
     [imageUrl, sourceNode, sourceNodeId],
   );
 
+  const previouslyOpenRef = useRef(false);
   useEffect(() => {
-    if (open) {
-      if (isVisible) return;
-      setIsVisible(true);
-      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-      setOverlayOpacity(0);
-      requestAnimationFrame(() => setOverlayOpacity(1));
-      logger.info('全景查看器打开', {
-        event: 'panorama.viewer.open.completed',
-        sourceNodeId: sourceNodeId ?? null,
-      });
-      return;
-    }
-    if (!isVisible) return;
-    setOverlayOpacity(0);
-    closeTimerRef.current = window.setTimeout(() => {
-      setIsVisible(false);
-      closeTimerRef.current = null;
-    }, UI_DURATION.viewer);
-    logger.info('全景查看器关闭', {
-      event: 'panorama.viewer.close.completed',
+    if (previouslyOpenRef.current === open) return;
+    previouslyOpenRef.current = open;
+    logger.info(open ? '全景查看器打开' : '全景查看器关闭', {
+      event: open ? 'panorama.viewer.open.completed' : 'panorama.viewer.close.completed',
       sourceNodeId: sourceNodeId ?? null,
     });
-  }, [isVisible, open, sourceNodeId]);
-
-  useEffect(() => () => {
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-  }, []);
+  }, [open, sourceNodeId]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -194,6 +174,9 @@ export function PanoramaViewerModal({
         transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: open ? 'auto' : 'none',
       }}
+      onTransitionEnd={onTransitionEnd}
+      aria-hidden={closing || undefined}
+      {...(closing ? { inert: '' } : {})}
       role="dialog"
       aria-modal={open ? 'true' : undefined}
       aria-label={t('viewer.panorama.title')}

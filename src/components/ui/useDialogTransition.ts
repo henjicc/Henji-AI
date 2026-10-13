@@ -1,37 +1,55 @@
-import { useCallback, useEffect, useRef, useState, type AnimationEvent, type TransitionEvent } from 'react';
-import { UI_DIALOG_TRANSITION_MS } from './motion';
+import { useCallback, useEffect, useRef, useState, type AnimationEvent, type RefObject, type TransitionEvent } from 'react';
+import { UI_DIALOG_TRANSITION_MS, UI_TOAST_DISPLAY_MS, UI_TOAST_EXIT_MS } from './motion';
+
+interface DialogTransitionOptions {
+  /** 退出完成回调；计时器与结束事件先到者通知一次，重开会取消旧通知。 */
+  onExited?: () => void;
+  /** 原生结束事件的动画根节点（跨文档浮层与 React 事件均可用）。 */
+  exitRef?: RefObject<HTMLElement>;
+  /** 替换内容但仍打开时，重新播放进入过渡。 */
+  enterKey?: unknown;
+}
 
 interface DialogTransitionState {
   shouldRender: boolean;
   isVisible: boolean;
-  /** 正在收起：已经关闭，只是还在播放退出过渡。此时不可点击、对读屏隐藏（调用方写 `inert` / `aria-hidden`）。 */
+  /** 已关闭，只保留退出过渡；调用方写 inert / aria-hidden。 */
   closing: boolean;
-  /**
-   * 挂到做退出过渡的那个元素上：过渡结束即卸载，不只依赖计时器（任务 5.8，同 VE-06）。
-   * 窗口在后台时计时器会被节流，只靠计时器时已关闭的浮层会长时间留在页面上。
-   */
   onTransitionEnd: (event: TransitionEvent<HTMLElement>) => void;
-  /** CSS animation 调用方挂到动画根元素；与过渡共用退出兜底。 */
   onAnimationEnd: (event: AnimationEvent<HTMLElement>) => void;
 }
 
 export function useDialogTransition(
   isOpen: boolean,
   durationMs: number = UI_DIALOG_TRANSITION_MS,
-  /** false：首次挂载即已显示，不再播进入过渡（接替一个已经播完进入动画的占位弹窗） */
-  appear = true
+  /** false 只跳过首次进入，用于接替已显示的占位。 */
+  appear = true,
+  { onExited, exitRef, enterKey }: DialogTransitionOptions = {},
 ): DialogTransitionState {
   const [motionPreference] = useState(() => (
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(prefers-reduced-motion: reduce)')
-      : null
+      ? window.matchMedia('(prefers-reduced-motion: reduce)') : null
   ));
   const [reducedMotion, setReducedMotion] = useState(motionPreference?.matches ?? false);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isVisible, setIsVisible] = useState((reducedMotion || !appear) && isOpen);
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
+  const onExitedRef = useRef(onExited);
+  onExitedRef.current = onExited;
+  const wasOpenRef = useRef(isOpen);
+  const exitPendingRef = useRef(false);
   const skipEnterRef = useRef(!appear && isOpen);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const finishExit = useCallback((): void => {
+    if (isOpenRef.current || !exitPendingRef.current) return;
+    exitPendingRef.current = false;
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setShouldRender(false);
+    onExitedRef.current?.();
+  }, []);
 
   useEffect(() => {
     if (!motionPreference) return;
@@ -44,60 +62,72 @@ export function useDialogTransition(
   useEffect(() => {
     let frameId1 = 0;
     let frameId2 = 0;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    if (reducedMotion || durationMs === 0) {
-      skipEnterRef.current = false;
-      setShouldRender(isOpen);
-      setIsVisible(isOpen);
-      return;
-    }
-
     if (isOpen) {
+      wasOpenRef.current = true;
+      exitPendingRef.current = false;
       setShouldRender(true);
-      if (skipEnterRef.current) {
+      if (reducedMotion || durationMs === 0 || skipEnterRef.current) {
         skipEnterRef.current = false;
-        return;
-      }
-      setIsVisible(false);
-      frameId1 = requestAnimationFrame(() => {
-        frameId2 = requestAnimationFrame(() => {
-          setIsVisible(true);
+        setIsVisible(true);
+      } else {
+        setIsVisible(false);
+        frameId1 = requestAnimationFrame(() => {
+          frameId2 = requestAnimationFrame(() => setIsVisible(true));
         });
-      });
-      return () => {
-        cancelAnimationFrame(frameId1);
-        cancelAnimationFrame(frameId2);
-        if (timer) {
-          clearTimeout(timer);
-        }
-      };
-    }
-
-    setIsVisible(false);
-    // 计时器与过渡结束先到先卸载
-    timer = setTimeout(() => {
-      setShouldRender(false);
-    }, durationMs);
-
-    return () => {
-      if (timer) {
-        clearTimeout(timer);
       }
+    } else {
+      setIsVisible(false);
+      if (wasOpenRef.current) {
+        wasOpenRef.current = false;
+        exitPendingRef.current = true;
+      }
+      if (reducedMotion || durationMs === 0) finishExit();
+      else if (exitPendingRef.current) timerRef.current = setTimeout(finishExit, durationMs);
+    }
+    return () => {
       cancelAnimationFrame(frameId1);
       cancelAnimationFrame(frameId2);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = null;
     };
-  }, [durationMs, isOpen, reducedMotion]);
+  }, [durationMs, enterKey, finishExit, isOpen, reducedMotion]);
 
-  const onTransitionEnd = useCallback((event: TransitionEvent<HTMLElement>): void => {
-    if (event.target !== event.currentTarget || isOpenRef.current) return;
-    setShouldRender(false);
+  useEffect(() => {
+    const element = exitRef?.current;
+    if (isOpen || !shouldRender || !element) return;
+    const onEnd = (event: Event): void => { if (event.target === element) finishExit(); };
+    element.addEventListener('transitionend', onEnd);
+    element.addEventListener('animationend', onEnd);
+    return () => {
+      element.removeEventListener('transitionend', onEnd);
+      element.removeEventListener('animationend', onEnd);
+    };
+  }, [exitRef, finishExit, isOpen, shouldRender]);
+
+  const onEnd = useCallback((event: TransitionEvent<HTMLElement> | AnimationEvent<HTMLElement>): void => {
+    if (event.target === event.currentTarget) finishExit();
+  }, [finishExit]);
+  return { shouldRender, isVisible, closing: shouldRender && !isOpen, onTransitionEnd: onEnd, onAnimationEnd: onEnd };
+}
+
+/** 通知只管理内容与停留，进入/退出统一委托公共生命周期。 */
+export function useTimedToast<T>(displayMs = UI_TOAST_DISPLAY_MS, exitMs = UI_TOAST_EXIT_MS) {
+  const [entry, setEntry] = useState<{ notification: T; version: number } | null>(null);
+  const [open, setOpen] = useState(false);
+  const versionRef = useRef(0);
+  const transition = useDialogTransition(open, entry ? exitMs : 0, true, {
+    enterKey: entry?.version,
+    onExited: () => setEntry(null),
+  });
+  useEffect(() => {
+    if (!entry) return;
+    const timer = setTimeout(() => setOpen(false), displayMs);
+    return () => clearTimeout(timer);
+  }, [displayMs, entry]);
+  const show = useCallback((notification: T): void => {
+    setEntry({ notification, version: ++versionRef.current });
+    setOpen(true);
   }, []);
-
-  const onAnimationEnd = useCallback((event: AnimationEvent<HTMLElement>): void => {
-    if (event.target !== event.currentTarget || isOpenRef.current) return;
-    setShouldRender(false);
-  }, []);
-
-  return { shouldRender, isVisible, closing: shouldRender && !isOpen, onTransitionEnd, onAnimationEnd };
+  const clear = useCallback((): void => { setOpen(false); setEntry(null); }, []);
+  return { notification: entry?.notification ?? null, visible: transition.isVisible, show, clear };
 }

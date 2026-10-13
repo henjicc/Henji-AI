@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from
 import { createPortal } from 'react-dom'
 import { ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { UI_DURATION } from './motion'
+import { useDialogTransition } from './useDialogTransition'
 import { resolveTooltipPosition, TOOLTIP_VIEWPORT_GUTTER_PX, type TooltipAnchorRect, type TooltipPlacement } from './tooltipPosition'
 
 export type { TooltipPlacement } from './tooltipPosition'
@@ -55,9 +56,10 @@ export function TooltipContent({ anchorRef, content, visible = true, closing = f
     }, [visible, content, anchorRef, updatePosition])
 
     return createPortal(
-        <span {...props} ref={tooltipRef} role={props.role ?? 'tooltip'} aria-hidden={!visible}
+        <span {...props} ref={tooltipRef} role={props.role ?? 'tooltip'} aria-hidden={!visible || closing}
+            {...(closing ? { inert: '' } : {})}
             data-tooltip-placement={position.placement}
-            className={`fixed z-tooltip box-border w-max whitespace-normal [overflow-wrap:anywhere] overflow-auto overscroll-contain text-left leading-5 bg-raised border border-line rounded-field shadow-panel text-xs text-text1 px-2.5 py-1.5 ${interactive ? 'pointer-events-auto' : 'pointer-events-none'} ${visible ? closing ? 'animate-fade-out' : 'animate-fade-in' : 'hidden'} ${className}`}
+            className={`fixed z-tooltip box-border w-max whitespace-normal [overflow-wrap:anywhere] overflow-auto overscroll-contain text-left leading-5 bg-raised border border-line rounded-field shadow-panel text-xs text-text1 px-2.5 py-1.5 ${interactive && visible && !closing ? 'pointer-events-auto' : 'pointer-events-none'} ${visible ? closing ? 'animate-fade-out' : 'animate-fade-in' : 'hidden'} ${className}`}
             style={{ ...props.style, top: position.top, left: position.left }}>
             {content}
         </span>, ownerDocumentOf(anchorRef.current).body,
@@ -76,45 +78,35 @@ type TooltipProps = {
 }
 
 export default function Tooltip({ children, content, delay = 300, className, contentId, anchor = 'trigger-center', placement = 'top' }: TooltipProps): JSX.Element {
-    const [visible, setVisible] = useState(false)
-    const [closing, setClosing] = useState(false)
+    const [open, setOpen] = useState(false)
+    const { shouldRender: visible, closing, onAnimationEnd } = useDialogTransition(open, UI_DURATION.slow)
     const triggerRef = useRef<HTMLElement>(null)
     const showTimerRef = useRef<number | null>(null)
-    const hideTimerRef = useRef<number | null>(null)
     // 卸载时 DOM ref 已可能清空，仍需在创建计时器的窗口取消计时。
     const timerWindowRef = useRef<Window | null>(null)
     const [pointer, setPointer] = useState<{ clientX: number; clientY: number } | null>(null)
     const clearTimers = useCallback(() => {
         const ownerWindow = timerWindowRef.current ?? ownerWindowOf(triggerRef.current)
         if (showTimerRef.current !== null) ownerWindow.clearTimeout(showTimerRef.current)
-        if (hideTimerRef.current !== null) ownerWindow.clearTimeout(hideTimerRef.current)
         showTimerRef.current = null
-        hideTimerRef.current = null
     }, [])
     useEffect(() => clearTimers, [clearTimers])
 
     const show = () => {
         clearTimers()
-        setVisible(true)
-        setClosing(false)
+        setOpen(true)
     }
     const handleMouseEnter = (event: React.MouseEvent) => {
         setPointer({ clientX: event.clientX, clientY: event.clientY })
         clearTimers()
-        setClosing(false)
+        if (visible) { show(); return }
         timerWindowRef.current = ownerWindowOf(triggerRef.current)
         showTimerRef.current = timerWindowRef.current.setTimeout(show, delay)
     }
     const handleMouseLeave = () => {
         clearTimers()
         if (!visible) return
-        setClosing(true)
-        timerWindowRef.current = ownerWindowOf(triggerRef.current)
-        hideTimerRef.current = timerWindowRef.current.setTimeout(() => {
-            setVisible(false)
-            setClosing(false)
-            hideTimerRef.current = null
-        }, UI_DURATION.slow)
+        setOpen(false)
     }
     const getPointerRect = useCallback((): TooltipAnchorRect => {
         if (!pointer) return triggerRef.current!.getBoundingClientRect()
@@ -129,11 +121,11 @@ export default function Tooltip({ children, content, delay = 300, className, con
             onMouseEnter={handleMouseEnter}
             onMouseMove={event => { if (anchor === 'pointer-start') setPointer({ clientX: event.clientX, clientY: event.clientY }) }}
             onMouseLeave={handleMouseLeave} onFocus={show} onBlur={handleMouseLeave}
-            onKeyDown={event => { if (event.key === 'Escape' && visible) { clearTimers(); setVisible(false); setClosing(false) } }}>
+            onKeyDown={event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } }}>
             {children}
         </span>
         <TooltipContent anchorRef={triggerRef} content={content} id={contentId} className={className}
-            visible={visible} closing={closing} placement={anchor === 'pointer-start' && pointer ? 'bottom' : placement}
+            visible={visible} closing={closing} onAnimationEnd={onAnimationEnd} placement={anchor === 'pointer-start' && pointer ? 'bottom' : placement}
             getAnchorRect={anchor === 'pointer-start' ? getPointerRect : undefined}
             alignment={anchor === 'pointer-start' && pointer ? 'start' : 'center'}
 />
