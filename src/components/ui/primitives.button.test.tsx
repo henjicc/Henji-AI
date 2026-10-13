@@ -158,7 +158,8 @@ describe('按钮皮肤只用主题令牌（index.css .ui-btn-*）', () => {
     expect(block).not.toMatch(/translateY/);
     expect(block).not.toMatch(/inset 0 1px/);
     expect(block).toMatch(/\.ui-btn-primary \{[^}]*background-color: rgb\(var\(--accent-rgb\)\)/);
-    expect(block).toMatch(/120ms/);
+    expect(block).toContain('background-color var(--ui-duration-fast) var(--ui-ease)');
+    expect(css).toMatch(/--ui-duration-fast:\s*120ms;/);
   });
 });
 

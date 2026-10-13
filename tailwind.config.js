@@ -13,6 +13,14 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    // 完整覆盖默认刻度，避免裸 transition-* 落到 150ms；镜像 UI_DURATION。
+    transitionDuration: {
+      DEFAULT: '180ms',
+      120: '120ms',
+      180: '180ms',
+      240: '240ms',
+      500: '500ms',
+    },
     // 阴影颜色工具类（shadow-{color}）默认取全部颜色，其中 `panel` 与阴影档位 shadow-panel 同名：
     // 两条规则会同时命中，后出现的 `--tw-shadow: var(--tw-shadow-colored)` 把浮层投影换成不透明的面板色。
     // 这里去掉同名键，shadow-panel 只表示浮层阴影档位。
@@ -102,14 +110,6 @@ export default {
       // 需要别的缓动时仍可用 `ease-linear`/`ease-in` 显式覆盖。
       transitionTimingFunction: {
         DEFAULT: 'cubic-bezier(0, 0, 0.2, 1)',
-      },
-      // 动效时长档位，与 src/components/ui/motion.ts 的 UI_DURATION 一一对应：
-      // 120 悬停/小控件、180 展开/弹窗（默认）、240 面板/大面积位移、500 全屏查看器（重要记录 004）。
-      // Tailwind 自带档位不删，但 ESLint 只允许 duration-120/180/240/500。
-      transitionDuration: {
-        120: '120ms',
-        180: '180ms',
-        240: '240ms',
       },
       // 圆角令牌（重要记录 004）：控件 6 / 输入与菜单 8 / 浮层 12，全部由 CSS 变量驱动，
       // 「设置 → 界面 → 圆角」通过 data-ui-radius 一处改值，界面控件与画布节点一起生效。
@@ -288,29 +288,44 @@ export default {
         },
       },
       keyframes: {
-        scaleIn: {
+        'ui-scale-in': {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' }
         },
-        'scale-in': {
-          '0%': { opacity: '0', transform: 'scale(0.95)' },
-          '100%': { opacity: '1', transform: 'scale(1)' }
-        },
-        'scale-out': {
+        'ui-scale-out': {
           '0%': { opacity: '1', transform: 'scale(1)' },
           '100%': { opacity: '0', transform: 'scale(0.95)' }
         },
-        radioDotAppear: {
+        'ui-fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' }
+        },
+        'ui-fade-out': {
+          '0%': { opacity: '1' },
+          '100%': { opacity: '0' }
+        },
+        // 保持任务状态可见；不使用旧 CSS 的 0.1/0.2 不透明度覆盖内置 pulse。
+        'ui-pulse': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' }
+        },
+        'ui-spin': {
+          to: { transform: 'rotate(360deg)' }
+        },
+        'ui-radio-dot-appear': {
           '0%': { transform: 'translate(-50%, -50%) scale(0)' },
           '100%': { transform: 'translate(-50%, -50%) scale(1)' }
         }
       },
-      // 时长与 UI_DURATION 同档：展开 120（fast）、收起 180（base，Dropdown/PanelTrigger 的卸载计时同值）
+      // 动画工具类唯一来源；浮层双向 base，与 Dropdown/PanelTrigger 卸载计时一致。
       animation: {
-        'scale-in': 'scale-in 120ms ease-out',
-        'scale-out': 'scale-out 180ms ease-out',
-        'scaleIn': 'scaleIn 120ms ease-out',
-        'radioDotAppear': 'radioDotAppear 180ms ease-out'
+        'scale-in': 'ui-scale-in var(--ui-duration-base) var(--ui-ease) forwards',
+        'scale-out': 'ui-scale-out var(--ui-duration-base) var(--ui-ease) forwards',
+        'fade-in': 'ui-fade-in var(--ui-duration-slow) var(--ui-ease) forwards',
+        'fade-out': 'ui-fade-out var(--ui-duration-slow) var(--ui-ease) forwards',
+        pulse: 'ui-pulse var(--ui-loop-pulse) var(--ui-ease) infinite',
+        spin: 'ui-spin var(--ui-loop-spin) linear infinite',
+        radioDotAppear: 'ui-radio-dot-appear var(--ui-duration-base) var(--ui-ease)'
       }
     },
   },
