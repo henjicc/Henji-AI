@@ -5,6 +5,7 @@ import { makeVideoEditItemClip } from './projectItems'
 import { ensureVideoEditSequenceItem, nestVideoEditClips, videoEditNestedFrame } from './nestedSequences'
 import { assertVideoEditSequenceGraph } from './sequenceGraph'
 import { videoEditMatchFrameTarget } from './matchFrame'
+import { videoEditAnnotationSchema } from './annotations'
 
 function fixture() {
   const document = createVideoEditDocument('嵌套'); const sequence = document.sequences[0]
@@ -14,6 +15,27 @@ function fixture() {
   sequence.clips = [{ ...makeVideoEditItemClip(document, 'item', sequence.id, { frame: 30, duration: 60, track }), id: 'a' }]
   return document
 }
+it.each(['range', 'point'] as const)('嵌套同步平移 %s 标注的两端与目标', kind => {
+  const document = fixture(); const parent = document.sequences[0]
+  parent.annotations = [videoEditAnnotationSchema.parse({ id: 'note', clipId: 'a', frame: 40, endFrame: 70, space: 'composition-normalized',
+    target: kind === 'range' ? { kind, startFrame: 40, endFrame: 70, clipIds: ['a'] } : { kind, x: .5, y: .5 },
+    text: '修改这段', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-13T00:00:00.000Z', thread: [] })]
+  const result = nestVideoEditClips(document, parent.id, ['a'], '子序列')
+  expect(result.sequence.annotations[0]).toMatchObject({ frame: 10, endFrame: 40 })
+  if (kind === 'range') expect(result.sequence.annotations[0].target).toMatchObject({ startFrame: 10, endFrame: 40, clipIds: ['a'] })
+  expect(() => videoEditDocumentSchema.parse(result.document)).not.toThrow()
+})
+it('嵌套范围标注只引用子序列中的片段和新轨道', () => {
+  const document = fixture(); const parent = document.sequences[0]
+  parent.clips.push({ ...parent.clips[0], id: 'outside', start: 120 })
+  const track = parent.tracks.find(track => track.index === parent.clips[0].track)!
+  parent.annotations = [videoEditAnnotationSchema.parse({ id: 'note', clipId: 'a', frame: 40, endFrame: 70, space: 'composition-normalized',
+    target: { kind: 'range', startFrame: 40, endFrame: 70, clipIds: ['a', 'outside'], trackIds: [track.id] },
+    text: '修改这段', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-13T00:00:00.000Z', thread: [] })]
+  const result = nestVideoEditClips(document, parent.id, ['a'], '子序列')
+  expect(result.sequence.annotations[0].target).toMatchObject({ clipIds: ['a'], trackIds: [result.sequence.tracks.find(value => value.index === track.index)!.id] })
+  expect(() => videoEditDocumentSchema.parse(result.document)).not.toThrow()
+})
 it('旧文件无需序列素材字段；嵌套保持源时钟与锚点，仅在父序列替换选区', () => {
   const document = fixture(); const parent = document.sequences[0]
   expect(videoEditDocumentSchema.parse(document)).toEqual(document)

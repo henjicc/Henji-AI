@@ -19,7 +19,8 @@ export function videoEditFps(rate: VideoEditRatio): number { return rate.numerat
 export function rescaleVideoEditFrame(frame: number, from: VideoEditRatio, to: VideoEditRatio): number {
   const numerator = BigInt(frame) * BigInt(from.denominator) * BigInt(to.numerator)
   const denominator = BigInt(from.numerator) * BigInt(to.denominator)
-  return Number((numerator * 2n + denominator) / (denominator * 2n))
+  const rounded = numerator * 2n + denominator; const divisor = denominator * 2n
+  return Number(rounded / divisor - (rounded % divisor < 0n ? 1n : 0n))
 }
 export interface VideoEditSourceTime { sourceInUs: number; sourceRemainder: VideoEditRatio }
 function gcd(left: bigint, right: bigint): bigint { while (right) { const remainder = left % right; left = right; right = remainder } return left }

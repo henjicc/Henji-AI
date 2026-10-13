@@ -11,6 +11,18 @@ export function annotation(input: Partial<VideoEditAnnotation> = {}): VideoEditA
   return videoEditAnnotationSchema.parse({ id: 'note', frame: 20, space: 'composition-normalized', target: { kind: 'point', x: .4, y: .3 }, text: '把标题移到这里', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-08T00:00:00.000Z', thread: [], ...input })
 }
 const reply = { id: 'reply', author: { kind: 'assistant' as const, name: '助手' }, createdAt: '2026-10-08T01:00:00.000Z', text: '移动了标题，撤销本次修改可恢复。' }
+it.each([0, 200])('跨片段标注只复制后段后粘贴到 %i，裁到所复制的时间范围', frame => {
+  const document = createVideoEditTestDocument('复制范围'); const sequence = document.sequences[0]
+  document.items.push({ id: 'item', name: '标题', kind: 'text' })
+  const clip: VideoEditClip = { id: 'a', itemId: 'item', name: '标题', kind: 'text', track: 1, start: 10, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '标题' }
+  sequence.clips = [clip, { ...clip, id: 'b', start: 70 }]
+  sequence.annotations = [annotation({ frame: 20, endFrame: 100, target: { kind: 'range', startFrame: 20, endFrame: 100, clipIds: ['a', 'b'] } })]
+  const clipboard = copyVideoEditClips(document, sequence.id, ['b'], false)
+  sequence.clips = []; sequence.annotations = []
+  const pasted = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', mode: 'paste', frame, clipboard })
+  expect(pasted.annotations[0]).toMatchObject({ frame, endFrame: frame + 30, target: { startFrame: frame, endFrame: frame + 30, clipIds: [pasted.clips[0].id] } })
+  expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [pasted] })).not.toThrow()
+})
 describe('标注状态与目标', () => {
   it('五种目标可写，错误矩形、时间段和元素定位均拒绝', () => {
     for (const target of [{ kind: 'point', x: .5, y: .5 }, { kind: 'region', x: .2, y: .2, width: .3, height: .4 }, { kind: 'stroke', strokes: [[{ x: .2, y: .3 }], [{ x: .4, y: .5 }]] }, { kind: 'element', elementId: 'headline', sourceSpan: { file: 'main.ts', start: 5, end: 15 } }, { kind: 'range', startFrame: 20, endFrame: 30 }]) expect(videoEditAnnotationSchema.safeParse({ ...annotation(), target, clipId: 'clip', ...(target.kind === 'range' ? { endFrame: 30 } : {}) }).success).toBe(true)

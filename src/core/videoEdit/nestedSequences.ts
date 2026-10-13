@@ -3,6 +3,7 @@ import { createVideoEditSequence, videoEditDocumentSchema, videoEditVisibleTrack
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { clipSourceSeconds } from './document'
 import { videoEditTransitionClipIds } from './transitions'
+import { mapVideoEditAnnotationTime } from './annotations'
 
 /** Shared by matching frames, preview and export (floor selects the child's half-open frame). */
 export function videoEditSequenceFrameAtSeconds(seconds: number, fps: number): number {
@@ -43,8 +44,9 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
   const movedTransitions = (parent.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id)))
   if ((parent.transitions ?? []).some(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id)) && !videoEditTransitionClipIds(transition).every(id => ids.has(id)))) throw new Error('过渡两侧片段必须一起嵌套，请扩大选区或先移除边界过渡。')
   const anchored = (value: { clipId?: string }): boolean => Boolean(value.clipId && ids.has(value.clipId))
+  const trackIds = new Map(parent.tracks.map(track => [track.id, crypto.randomUUID()]))
   const child: VideoEditSequence = { ...createVideoEditSequence(name), ...(parent.styleKitId ? { styleKitId: parent.styleKitId } : {}), width: parent.width, height: parent.height, frameRate: parent.frameRate, pixelAspectRatio: parent.pixelAspectRatio, sampleRate: parent.sampleRate, channels: parent.channels,
-    tracks: parent.tracks.map(track => ({ ...track, id: crypto.randomUUID(), locked: false })),
+    tracks: parent.tracks.map(track => ({ ...track, id: trackIds.get(track.id)!, locked: false })),
     clips: selected.map(clip => {
       const moved = { ...clip, start: clip.start - start }
       // Relations crossing the boundary cannot silently select unrelated parent clips.
@@ -52,7 +54,12 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
       if (clip.groupId && parent.clips.some(other => other.groupId === clip.groupId && !ids.has(other.id))) delete moved.groupId
       return moved
     }),
-    annotations: parent.annotations.filter(anchored).map(value => ({ ...value, frame: value.frame - start })),
+    annotations: parent.annotations.filter(anchored).map(value => {
+      const mapped = mapVideoEditAnnotationTime(value, frame => frame - start)
+      if (mapped.target.kind === 'range' && mapped.target.clipIds) mapped.target.clipIds = mapped.target.clipIds.filter(id => ids.has(id))
+      if (mapped.target.kind === 'range' && mapped.target.trackIds) mapped.target.trackIds = mapped.target.trackIds.map(id => trackIds.get(id)!)
+      return mapped
+    }),
     markers: (parent.markers ?? []).filter(anchored).map(value => ({ ...value, frame: value.frame - start })),
     captions: (parent.captions ?? []).filter(anchored).map(value => ({ ...value, start: value.start - start })), transitions: movedTransitions,
   }

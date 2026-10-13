@@ -27,6 +27,13 @@ function edit(change: Parameters<typeof applyVideoEditTimelineEdit>[2]) {
 }
 
 describe('速度/持续时间（Ctrl+R）', () => {
+  it.each([{ speed: { numerator: 1, denominator: 2 } }, { duration: 120 }])('同轨多选不波纹时每段只延伸到下一片段：%j', change => {
+    const result = edit({ kind: 'speed', clipIds: ['a', 'b'], linked: false, change })
+    expect(result.clip('a')).toMatchObject({ start: 0, duration: 60 })
+    expect(result.clip('b')).toMatchObject({ start: 60, duration: 90 })
+    expect(result.clip('a').start + result.clip('a').duration).toBeLessThanOrEqual(result.clip('b').start)
+    expect(result.clip('b').start + result.clip('b').duration).toBeLessThanOrEqual(result.clip('c').start)
+  })
   it('200%：时长减半，开头内容不变，链接的声音一起变', () => {
     const result = edit({ kind: 'speed', clipIds: ['a'], change: { speed: { numerator: 2, denominator: 1 } } })
     expect(result.clip('a')).toMatchObject({ start: 0, duration: 30, speed: { numerator: 2, denominator: 1 } })
@@ -58,6 +65,13 @@ describe('速度/持续时间（Ctrl+R）', () => {
 })
 
 describe('比率拉伸工具（R）', () => {
+  it.each(['in', 'out'] as const)('同轨多选拉伸 %s 端不能越过同选的邻居', edge => {
+    const { document, sequenceId } = fixture(); const original = document.sequences[0]
+    original.clips.forEach(clip => { clip.start += 30 })
+    const result = applyVideoEditTimelineEdit(document, sequenceId, { kind: 'stretch', clipIds: ['a', 'b'], linked: false, edge, delta: edge === 'out' ? 20 : -20 })
+    expect(result.clips.map(clip => [clip.id, clip.start, clip.duration])).toEqual(original.clips.map(clip => [clip.id, clip.start, clip.duration]))
+    expect(() => videoEditDocumentSchema.parse({ ...document, sequences: [result] })).not.toThrow()
+  })
   it('拖出点：长度变、源范围不变，碰到后面的片段收紧', () => {
     const result = edit({ kind: 'stretch', clipIds: ['b'], linked: false, edge: 'out', delta: 60 })
     const b = result.clip('b')

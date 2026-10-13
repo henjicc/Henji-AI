@@ -5,7 +5,7 @@ import { assertVideoEditClipsEditable } from './lockedTracks'
 import type { VideoEditRatio } from './time'
 import { retimeVideoEditContent } from './timedContent'
 import { rescaleVideoEditClipKeyframes } from './keyframes'
-import { retimeVideoEditAnnotations } from './timelineTrims'
+import { assertNoTrackOverlap, retimeVideoEditAnnotations } from './timelineTrims'
 import { changeVideoEditClipSpeed, setVideoEditClipReverse, stretchVideoEditClip, videoEditClipSpeedSupported, videoEditStretchDurationLimits } from './clipSpeed'
 
 /**
@@ -34,12 +34,12 @@ function sourceDuration(document: VideoEditDocument, sequence: VideoEditSequence
   if (program?.mode === 'dynamic') return program.durationSeconds
   return videoEditClipSourceDuration(videoEditComposition(document, sequence.id), clip)
 }
-/** 同轨道上 `clip` 之后最近的、不在 `excluded` 里的片段起点（没有时为序列上限）。 */
-function nextStart(sequence: VideoEditSequence, clip: VideoEditClip, excluded: ReadonlySet<string>, limit: number): number {
-  return Math.min(limit, ...sequence.clips.filter(other => other.track === clip.track && !excluded.has(other.id) && other.start >= end(clip)).map(other => other.start))
+/** 同轨道上下一片段的起点（没有时为序列上限）；其他选中片段仍是边界。 */
+function nextStart(sequence: VideoEditSequence, clip: VideoEditClip, limit: number): number {
+  return Math.min(limit, ...sequence.clips.filter(other => other.track === clip.track && other.id !== clip.id && other.start >= end(clip)).map(other => other.start))
 }
-function previousEnd(sequence: VideoEditSequence, clip: VideoEditClip, excluded: ReadonlySet<string>): number {
-  return Math.max(0, ...sequence.clips.filter(other => other.track === clip.track && !excluded.has(other.id) && end(other) <= clip.start).map(end))
+function previousEnd(sequence: VideoEditSequence, clip: VideoEditClip): number {
+  return Math.max(0, ...sequence.clips.filter(other => other.track === clip.track && other.id !== clip.id && end(other) <= clip.start).map(end))
 }
 function finish(sequence: VideoEditSequence, clips: VideoEditClip[], fps: number): VideoEditSequence {
   return retimeVideoEditContent(sequence, { ...sequence, clips, annotations: retimeVideoEditAnnotations(sequence, clips, fps) })
@@ -61,7 +61,7 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
     let next: VideoEditClip = clip
     if (change.reverse !== undefined) next = setVideoEditClipReverse(next, change.reverse, sequence.frameRate)
     if (change.preservePitch !== undefined) { next = { ...next }; if (change.preservePitch) next.preservePitch = true; else delete next.preservePitch }
-    const room = change.ripple ? limit - clip.start : nextStart(sequence, clip, ids, limit) - clip.start
+    const room = change.ripple ? limit - clip.start : nextStart(sequence, clip, limit) - clip.start
     if (change.duration !== undefined) next = stretchVideoEditClip(next, Math.min(change.duration, room))
     else if (change.speed) next = changeVideoEditClipSpeed(next, change.speed, fps, { sourceDurationSeconds: sourceDuration(document, sequence, clip, metadata), maxDuration: room })
     next = rescaleVideoEditClipKeyframes(next, time => Math.round(time * next.duration / clip.duration), next.duration)
@@ -77,6 +77,7 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
     clips = clips.map(clip => { const original = sequence.clips.find(value => value.id === clip.id)!; const shift = shiftOf(original); return shift ? { ...clip, start: clip.start + shift } : clip })
     if (clips.some(clip => end(clip) > limit)) throw new Error('波纹编辑会让后面的片段超出序列最长 24 小时，请先缩短序列。')
   }
+  if (!change.ripple) assertNoTrackOverlap(clips, '变速会让同轨片段重叠，请调整范围。')
   return finish(sequence, clips, fps)
 }
 
@@ -96,8 +97,8 @@ export function applyVideoEditRateStretch(document: VideoEditDocument, sequenceI
   let lo = -Infinity; let hi = Infinity
   for (const clip of edited) {
     const range = videoEditStretchDurationLimits(clip)
-    if (edge === 'out') { lo = Math.max(lo, range.min - clip.duration); hi = Math.min(hi, range.max - clip.duration, nextStart(sequence, clip, ids, limit) - end(clip)) }
-    else { lo = Math.max(lo, clip.duration - range.max, previousEnd(sequence, clip, ids) - clip.start); hi = Math.min(hi, clip.duration - range.min) }
+    if (edge === 'out') { lo = Math.max(lo, range.min - clip.duration); hi = Math.min(hi, range.max - clip.duration, nextStart(sequence, clip, limit) - end(clip)) }
+    else { lo = Math.max(lo, clip.duration - range.max, previousEnd(sequence, clip) - clip.start); hi = Math.min(hi, clip.duration - range.min) }
   }
   const delta = lo > hi ? 0 : Math.max(lo, Math.min(hi, requested))
   if (!delta) return { sequence, delta: 0 }
@@ -107,5 +108,6 @@ export function applyVideoEditRateStretch(document: VideoEditDocument, sequenceI
     const stretched = rescaleVideoEditClipKeyframes(raw, time => Math.round(time * raw.duration / clip.duration), raw.duration)
     return edge === 'in' ? { ...stretched, start: end(clip) - stretched.duration } : stretched
   })
+  assertNoTrackOverlap(clips, '比率拉伸会让同轨片段重叠，请调整范围。')
   return { sequence: finish(sequence, clips, composition.fps), delta }
 }
