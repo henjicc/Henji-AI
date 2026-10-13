@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_TITLE_CLASS, UiIconButton, UiLoading, UiModal } from '@/components/ui'
 import { X } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
+import { setSettingsPlaceholderShown } from './settingsPlaceholderState'
 
 /**
  * 设置弹窗外壳：真弹窗与懒加载占位共用，保证两者外观一致、交接时不跳。
@@ -49,16 +50,12 @@ export function SettingsModalFrame({ isOpen, onClose, appear, children, surfaceI
   )
 }
 
-/** 占位是否正在显示（已播过进入动画）；只读不清除，占位卸载时自行复位（StrictMode 会重复调用初始化函数）。 */
-let placeholderShown = false
-export function isSettingsPlaceholderShown(): boolean { return placeholderShown }
-
 /** 懒加载期间的占位：外壳 + 加载状态。关闭按钮直接卸载（还没有内容可收起）。 */
 export function SettingsModalPlaceholder({ onClose }: { onClose: () => void }): React.JSX.Element {
   // 真弹窗在交接那次渲染里读取标记，早于这里的清理；中途关掉占位时清理保证下次打开照常播进入动画
   useEffect(() => {
-    placeholderShown = true
-    return () => { placeholderShown = false }
+    setSettingsPlaceholderShown(true)
+    return () => setSettingsPlaceholderShown(false)
   }, [])
   return (
     <SettingsModalFrame isOpen onClose={onClose}>
