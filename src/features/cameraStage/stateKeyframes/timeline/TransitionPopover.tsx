@@ -139,7 +139,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
                 <UiButton
                   size="sm"
                   variant="secondary"
-                  className="shrink-0 gap-1"
+                  className="shrink-0"
                   onClick={() => editObjectPath(object.id)}
                 >
                   <PenTool  />在视口编辑

@@ -473,7 +473,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           <section className="flex flex-col gap-3">
             <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>一键处理</h2>
             <p className={`leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>压缩停顿、清理语气词。黄色区域预览将要删除的声音，处理后仍可逐词调整。</p>
-            <UiButton variant="secondary" className="w-full gap-1.5" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles  />快速处理</UiButton>
+            <UiButton variant="secondary" className="w-full" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles  />快速处理</UiButton>
           </section>
           <UiGroup divided titleTone="compact" gap="none">
             <AudioEditDisclosure title="自定义处理参数" value={`停顿 ≥ ${settings.silenceThresholdMs} 毫秒`}>

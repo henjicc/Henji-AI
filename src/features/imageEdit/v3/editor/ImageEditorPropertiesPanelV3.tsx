@@ -304,7 +304,7 @@ export function ImageEditorPropertiesPanelV3({
                 />
               </UiFormRow>
               <UiButton
-                className="justify-start gap-2"
+                className="justify-start"
                 disabled={contentLocked}
                 onClick={() => {
                   if (!contentLocked) { controller.setLayerMask(selected.id, null); selectImageEditTargetV3(controller, selected.id, 'pixels') }
@@ -317,7 +317,7 @@ export function ImageEditorPropertiesPanelV3({
           ) : (
             <UiButton
               variant="secondary"
-              className="justify-start gap-2"
+              className="justify-start"
               disabled={contentLocked}
               onClick={addMask}
             >

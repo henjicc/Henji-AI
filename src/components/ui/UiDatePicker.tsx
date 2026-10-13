@@ -176,7 +176,7 @@ export function UiDatePicker({
                   active={isSelected}
                   aria-pressed={isSelected}
                   aria-current={isToday ? 'date' : undefined}
-                  className="w-8 justify-center !px-0 tabular-nums"
+                  className="w-8 justify-center  tabular-nums"
                   onClick={() => {
                     onChange(iso)
                     setIsOpen(false)

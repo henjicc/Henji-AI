@@ -66,9 +66,9 @@ export const AssetBatchManager: React.FC<Props> = ({
         </div>
 
         <UiGroup title={t('assetLibrary.batchTags')}>
-          <div className="relative">
-            <Tags aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text3`} />
-            <UiInput disabled={busy} className="pl-8" aria-label={t('assetLibrary.batchTags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addDraftTags() }} placeholder={t('assetLibrary.tagPlaceholder')} />
+          <div className="flex items-center gap-2">
+            <Tags aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text3`} />
+            <UiInput disabled={busy} className="min-w-0 flex-1" aria-label={t('assetLibrary.batchTags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addDraftTags() }} placeholder={t('assetLibrary.tagPlaceholder')} />
           </div>
           {(tags.length > 0 || suggestions.length > 0) && (
             <div className="flex flex-wrap gap-1.5">

@@ -90,7 +90,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
               active={editor.tool === value}
               tooltip={label}
               aria-label={label}
-              size="md" className="px-2"
+              size="md"
               onClick={() => editor.setTool(value)}
             >
               <Icon className={`${UI_ICON_SIZE_CLASS.sm}`} />
@@ -103,7 +103,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
           active={editor.mode === 'erase'}
           tooltip={t('node.elementEditGeneration.tools.erase')}
           aria-label={t('node.elementEditGeneration.tools.erase')}
-          size="md" className="px-2"
+          size="md"
           onClick={() => editor.setMode(editor.mode === 'erase' ? 'paint' : 'erase')}
         >
           <Eraser className={`${UI_ICON_SIZE_CLASS.sm}`} />

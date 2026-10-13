@@ -218,7 +218,7 @@ export function AssistantComposer({
           submitShortcut="enter"
           onSubmit={submit}
           // 内容基础类已有 px-3 py-2.5 text-sm：这里用 pt/pb 与 text-13（产物中排在其后）收紧，不与之抢同一属性的同名档
-          height="short" editorClassName="max-h-32 pt-2 pb-1 text-13"
+          height="short" className="max-h-32" editorClassName="pt-2 pb-1 text-13"
         />
         {/* 底栏始终单行：左侧附件与权限，右侧停止与唯一主动作“发送”（强调色实底圆钮，与生成页一致） */}
         <div className="flex flex-nowrap items-center gap-1 px-1.5 pb-1.5">

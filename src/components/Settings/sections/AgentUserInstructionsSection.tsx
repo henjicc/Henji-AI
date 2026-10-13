@@ -161,7 +161,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           showCharacterCount
           error={warnings.length > 0}
           errorMessage={warnings.join(t('agentInstructions.warningSeparator'))}
-          height="tall" editorClassName={`max-h-96 px-3 py-3 ${UI_TEXT_BODY_CLASS}`}
+          height="tall" className="max-h-96" editorClassName={` px-3 py-3 ${UI_TEXT_BODY_CLASS}`}
         />
         <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>{t('agentInstructions.privacy')}</p>
       </UiFormRow>}

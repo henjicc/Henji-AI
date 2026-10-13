@@ -275,7 +275,7 @@ function CompactTextControl({
       textHistory={textHistory}
       onMouseDown={(event) => event.stopPropagation()}
       disabled={disabled}
-      size="sm" className="w-32 px-2"
+      size="sm" className="w-32"
     />
   );
 }

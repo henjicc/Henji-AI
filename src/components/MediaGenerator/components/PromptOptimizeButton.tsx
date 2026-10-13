@@ -480,7 +480,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
               aria-disabled={disabled || streaming}
               tooltip={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
               aria-busy={streaming || undefined}
-              className={`gap-1.5 ${streaming ? 'cursor-progress' : ''}`}
+              className={` ${streaming ? 'cursor-progress' : ''}`}
               data-panel-trigger-button
             >
               <WandSparkles aria-hidden="true" />

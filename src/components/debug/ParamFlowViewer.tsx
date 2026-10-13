@@ -30,7 +30,7 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
             <UiButton
               variant="primary"
               onClick={onExport}
-              className="px-3 py-1"
+
             >
               {t('debug.paramFlow.exportJson')}
             </UiButton>

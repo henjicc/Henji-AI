@@ -65,7 +65,7 @@ function JsonContainerNode({ label, value, depth, expandDepth }: JsonNodeProps):
       <UiOptionButton
         type="button"
         variant="menu"
-        className="w-full justify-start gap-1 !px-1 !py-0.5 font-mono font-normal"
+        className="w-full justify-start gap-1  font-mono font-normal"
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >

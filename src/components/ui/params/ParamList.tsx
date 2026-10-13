@@ -76,8 +76,8 @@ function FieldGroup({ title, fields, store }: { title: string; fields: readonly 
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const basic = fields.filter(field => !field.advanced)
   const advanced = fields.filter(field => field.advanced)
-  return <UiGroup titleTone="compact" gap="row" title={title ? <UiButton size="sm" className="-ml-2 gap-1" aria-expanded={open} aria-label={`${open ? '收起' : '展开'}${title}`} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown  /> : <ChevronRight  />}{title}</UiButton> : undefined}>
-    {open && <>{basic.map(field => <FieldRow key={field.key} field={field} store={store} />)}{advanced.length > 0 && <UiGroup gap="row" titleTone="compact" title={<UiButton size="sm" className="-ml-2 gap-1" aria-label={title ? `${title}更多` : '更多'} aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(value => !value)}>{advancedOpen ? <ChevronDown  /> : <ChevronRight  />}更多</UiButton>}>{advancedOpen && advanced.map(field => <FieldRow key={field.key} field={field} store={store} />)}</UiGroup>}</>}
+  return <UiGroup titleTone="compact" gap="row" title={title ? <UiButton size="sm" className="-ml-2" aria-expanded={open} aria-label={`${open ? '收起' : '展开'}${title}`} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown  /> : <ChevronRight  />}{title}</UiButton> : undefined}>
+    {open && <>{basic.map(field => <FieldRow key={field.key} field={field} store={store} />)}{advanced.length > 0 && <UiGroup gap="row" titleTone="compact" title={<UiButton size="sm" className="-ml-2" aria-label={title ? `${title}更多` : '更多'} aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(value => !value)}>{advancedOpen ? <ChevronDown  /> : <ChevronRight  />}更多</UiButton>}>{advancedOpen && advanced.map(field => <FieldRow key={field.key} field={field} store={store} />)}</UiGroup>}</>}
   </UiGroup>
 }
 

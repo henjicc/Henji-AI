@@ -207,7 +207,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           type="button"
           variant="primary"
           onClick={() => setIsAddingNew(true)}
-          className="mb-3 gap-2"
+          className="mb-3"
         >
           <Plus  />
           {t('modelscopeCustomModel.addNew')}

@@ -2,6 +2,7 @@ import { UI_ICON_SIZE, UI_WINDOW_ICON_SIZE, UI_WINDOW_ICON_STROKE_WIDTH } from '
 import {
   forwardRef,
   useContext,
+  useEffect,
   useId,
   type SyntheticEvent,
   type ReactNode,
@@ -42,7 +43,7 @@ import { resolveFormRowLabelling, useUiFormRowLabelling } from './formRowLabel';
 import { useScopedTextHistoryProps } from './useScopedTextHistory';
 import Tooltip from './Tooltip';
 import { UiSpinner } from './UiSpinner';
-import { UiPrimaryActionContext } from './actionPriority';
+import { UiPrimaryActionContext, actionGroupContext } from './actionPriority';
 import {
   type UiButtonProps,
   type UiButtonFeedbackProps,
@@ -104,7 +105,15 @@ const UI_ITEM_FOCUS_RING_CLASS = 'focus-visible:!ring-2 focus-visible:!ring-inse
  * 外观只由 variant/size 决定，className 只放布局类（check:surface 规则 E）。
  */
 export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
-  ({ className = '', variant = 'quiet', size = 'md', ...props }, ref) => {
+  ({ className = '', variant, size, ...props }, ref) => {
+    const group = useContext(actionGroupContext);
+    const groupConflict = Boolean(group && ((variant && variant !== group.tier) || (size && size !== group.size)));
+    useEffect(() => {
+      // eslint-disable-next-line no-console -- 开发期组件契约冲突提示，与主动作预算一致；生产构建不执行。
+      if (import.meta.env.DEV && groupConflict) console.warn('[ui] UiActionGroup 子按钮不得覆盖组档位或尺寸');
+    }, [groupConflict]);
+    variant = group?.tier ?? variant ?? 'quiet';
+    size = group?.size ?? size ?? 'md';
     const primaryAllowed = useContext(UiPrimaryActionContext);
     const resolvedVariant = !primaryAllowed && (variant === 'primary' || variant === 'secondary') ? 'quiet' : variant;
     return (
@@ -127,7 +136,7 @@ export function UiReadout({ size = 'md', tone = 'default', children }: {
   tone?: 'default' | 'media';
   children: ReactNode;
 }): JSX.Element {
-  return <span data-size={size} className={`inline-flex min-w-14 items-center justify-center px-2 text-xs tabular-nums ${UI_CONTROL_HEIGHT_CLASS[size]} ${UI_RADIUS_CLASS.control} ${tone === 'media' ? 'bg-media-control text-on-media' : 'bg-control text-text1'}`}>{children}</span>;
+  return <span data-ui-readout data-size={size} className={`inline-flex min-w-14 items-center justify-center px-2 text-xs tabular-nums ${UI_CONTROL_HEIGHT_CLASS[size]} ${UI_RADIUS_CLASS.control} ${tone === 'media' ? 'bg-media-control text-on-media' : 'bg-control text-text1'}`}>{children}</span>;
 }
 
 /** 纵向导航与列表导航的高度档：md 32 / lg 36（默认）/ auto（两行内容，高度随内容）。 */

@@ -183,7 +183,7 @@ export interface UiOptionButtonProps extends UiButtonFeedbackProps {
    * 用于同质选项的集合；孤立按钮不适用。
    *
    * 以下三档选中都是中性抬升（重要记录 003：单选不用强调色实底），尺寸由变体决定：
-   * - `segment`：分段选择的一段（28 高、居中）；放在 `UI_SEGMENTED_TRACK_CLASS` 轨道里；
+   * - `segment`：分段选择的一段（28 高、居中）；由 `UiSegmented` 提供共享轨道；
    * - `tile`：带小样的选项格（44 高，静息有底），如主题预设；
    * - `swatch`：圆形色样（32 外框），颜色由调用点经 `style.backgroundColor`/`backgroundImage` 传入（不要用 `background` 简写，
    *   它会重置 `background-clip`），选中为外圈一环。

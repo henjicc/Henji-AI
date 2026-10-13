@@ -10,7 +10,6 @@ import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabil
 import { getSocketColor, modelPortId } from '@/features/canvas/domain/socketTypes';
 import { NodeModelParamsControls } from './NodeModelParamsControls';
 import {
-  NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_MODEL_CHIP_CLASS,
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
@@ -81,7 +80,6 @@ export function ModelInputRow({
             onModelChange={onModelChange}
             requiredTags={requiredTags}
             modelPolicy={modelPolicy}
-            chipClassName={NODE_CONTROL_CHIP_CLASS}
             modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}
           />
         )}

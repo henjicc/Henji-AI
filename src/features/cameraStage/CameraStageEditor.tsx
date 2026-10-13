@@ -460,7 +460,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                 variant="primary"
                 size="sm"
                 onClick={() => void handleExportVideo()}
-                className="w-full gap-1.5"
+                className="w-full"
               >
                 <Film  />
                 导出 MP4

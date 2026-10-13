@@ -16,6 +16,20 @@ async function readGray(buffer) {
   return { data, width: info.width, height: info.height }
 }
 
+/** 组件基线须保留色相；画布既有灰度验证契约保持不变。 */
+async function diffColorBuffers(bufferA, bufferB) {
+  const [a, b, { default: pixelmatch }] = await Promise.all([
+    sharp(bufferA).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
+    sharp(bufferB).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
+    import('pixelmatch'),
+  ])
+  if (a.info.width !== b.info.width || a.info.height !== b.info.height) throw new Error('截图尺寸不一致')
+  const diff = Buffer.alloc(a.data.length)
+  const changedPixels = pixelmatch(a.data, b.data, diff, a.info.width, a.info.height, { threshold: 0.1, includeAA: true })
+  return { changedPixels, pixelCount: a.info.width * a.info.height,
+    diff: await sharp(diff, { raw: { width: a.info.width, height: a.info.height, channels: 4 } }).png().toBuffer() }
+}
+
 function normalizeRect(rect, width, height) {
   if (!rect) return { left: 0, top: 0, width, height }
   const left = Math.max(0, Math.min(width, Math.floor(rect.left ?? rect.x ?? 0)))
@@ -114,6 +128,7 @@ function passesRasterControl(candidate, negativeControl, ratioLimit = RASTER_CON
 }
 
 module.exports = {
+  diffColorBuffers,
   PIXEL_DIFF_THRESHOLD,
   RASTER_CONTROL_RATIO_LIMIT,
   cropCompare,

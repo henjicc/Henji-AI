@@ -71,6 +71,8 @@ jobs:
 
       - name: 表面层级检查
         run: npm run check:surface:strict
+      - name: 间距、CSS 动效与死令牌门禁
+        run: npm run check:ui-design
 
       - name: 图标令牌检查
         run: npm run check:icons:strict
@@ -125,6 +127,8 @@ jobs:
         run: npm run check:persistence-compat
 
       - name: 快速检查器自测与 Node 测试归属（去重）
+        # fast 唯一清单包括 AST、真实 auditUiDom 的 jsdom 正反样例、像素比较器和漏截规则自测。
+        # 不生成或对比 Windows 像素基线，不重复执行 fast 内的测试文件。
         run: npm run test:validation-tools
 
   # 普通单元测试分三片并行：单跑一片时间主要花在逐文件加载模块与建 jsdom 上（不是测试本身），
@@ -264,9 +268,13 @@ jobs:
       - name: 重建隔离 job 的 SQLite 驱动
         run: npm run electron:rebuild
       - name: 生成正式 Electron 巡检产物
+        env:
+          HENJI_BUNDLE_MODE: development
         run: npm run electron:bundle
       - name: DOM 规则正反样例
         run: xvfb-run -a npm run test:ui-visual-rules
+      - name: 设计系统中心 DOM 与对比度（像素基线不进 CI）
+        run: xvfb-run -a npm run check:ui-visual -- --steps scripts/ui-review/ui-gallery.json --theme-preset all --size 1440x900
       - name: 设置场景 DOM 与对比度（隔离资料，两个主题）
         run: xvfb-run -a npm run check:ui-visual -- --only 设置 --theme-preset graphite,paper --size 1440x900
       - name: 保留实际审计与运行时证据

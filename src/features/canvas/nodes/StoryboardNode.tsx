@@ -19,7 +19,6 @@ import { createLegacyPromptMediaLabels, createPromptMediaLabel } from '@/core/in
 import { createCanvasOutputPromptResourceId } from '@/features/canvas/application/generationPromptDocument';
 import { areMediaOutputListsEqual, collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
 import {
-  NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_ICON_CLASS,
   NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
@@ -319,7 +318,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
                 size="sm"
                 aria-expanded={open}
                 data-panel-trigger-button
-                className={NODE_CONTROL_CHIP_CLASS}
                 onClick={(event) => {
                   event.stopPropagation();
                   togglePanel();

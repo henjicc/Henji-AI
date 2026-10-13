@@ -72,7 +72,7 @@
 
 ## 同一工具栏的尺寸一致性
 
-行控件共用 `UiControlSize`：sm 28、md 32、lg 36；`UiIconButton` 扩展 2xs 20、xs 24、xl 40，默认 md。读数复用 `UiReadout`，不另画固定高度芯片。静态直接兄弟由 `check:icons:strict` S6 检查，动态/嵌套实际 DOM 等高审计由任务 5.2 接入。
+行控件共用 `UiControlSize`：sm 28、md 32、lg 36；`UiIconButton` 扩展 2xs 20、xs 24、xl 40，默认 md。读数复用 `UiReadout`，不另画固定高度芯片。静态直接兄弟由 `check:icons:strict` S6 检查，动态/嵌套由 rowHeightMismatch 比较实际外框高度与中心线（1px 容差）。2xs 图标按钮按20px紧凑例外检查，xs24不豁免。
 
 - 同一行、同一层级的按钮、图标按钮、分段选择器和读数芯片，使用同一个外框高度；宽度可随内容变化。优先复用该工具栏已有的高度令牌或唯一尺寸常量，不由各控件的默认 padding 推算。
 - 分段选择器比较的是**包括边框和内边距的整个外壳**。选中项在壳内填满可用高度，不得以“内部按钮等高”为由让外壳比旁边的控件更高。
@@ -107,7 +107,7 @@
 3. **不要写 `dark:` 变体**：深浅色由主题引擎改变量完成，`darkMode: 'class'` 只为让误写的 `dark:` 永不生效。
 4. **全局主题变量只能放 `src/index.css`**：放在 `storyboard.css` 这类被工作区懒加载的样式表里，会导致设置项在用户打开对应工作区之前完全不生效。
 5. **布局定位不得藏在外观样式表**：`scrollbar.css` 等具名样式表只能承担文件名承诺的外观或行为；`position`、`top/right/bottom/left`、`z-index` 必须直接写在组件 className。已知两次事故——`scrollbar.css` 藏 `position: fixed` 导致工作区逃逸助手插入量；懒加载的 `storyboard.css` 藏全局主题变量导致设置延迟生效。只 grep JSX 或按文件名查 CSS 都很难发现，确需 CSS 例外时必须就地注释原因。
-6. **`accent` 不能作文字色**（填充色，对比度不足），文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`），不写死白字。
+6. **`accent` 不能作文字色**（填充色，对比度不足），文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`，不写死白字。
 7. **同一插件的颜色类按类名字母序输出**（Tailwind 3.4），给类改名可能改变两个同属性类的胜负；同一元素上只留一个颜色类（互斥三元）。
 
 ## 颜色查改入口
@@ -119,3 +119,11 @@
 ## 界面改动后的检查
 
 见 [docs/rules/testing.md](../../docs/rules/testing.md) 的「界面改动」一节。改公共组件、主题引擎推导规则或令牌后，默认验收是 `src/core/theme` 的测试（含主题组合属性测试）+ 组件样张页四预设截图与 `check:ui-visual`（testing.md「界面改动」、skill `henji-ui-surface` 的 `references/review.md` 第 8 节）；改动涉及具体页面骨架时再按四个预设复跑相关场景的 `npm run check:ui-visual -- --theme-preset all --only <场景>`（对比度按渲染后像素审计，例外登记见 testing.md）。
+
+## 界面语法自动门禁（5.2）
+
+check:surface:strict 内的 S1 检查分段组合；S2 检查面板无标签控件；S3 检查内联标签挤行；S4 阻断无分隔记录（推荐 UiRecordItem，保留 border-t/b、divide-y 与 UI_DIVIDER_CLASS 识别）；S5 检查同一面板组列宽；S7 禁止 UiActionGroup 子按钮覆盖 variant/size；S8 阻断手写状态动画和按钮 title，非纯忙碌禁用无原因告警；S9 检查同一表面可共存主动作。S6 位于 check:icons:strict。完整边界与正反样例见 skill references/review.md 第7节。
+
+同组内容动作复用 UiActionGroup tier=secondary|quiet、size=sm|md|lg。弹窗、工具条与工作区开发态主动作预算为1，超额告警而不改业务逻辑。实际 DOM 还检查 multiplePrimary、rowHeightMismatch、actionStartsAtLabelColumn 和 formControlMisaligned；隐藏分支和独立嵌套表面分开计数。
+
+check:ui-design 接入日常局部验证与 CI，检查九档间距、CSS/内联布局动效、可确定的手写退出模式和 unusedToken。控件内部 padding/gap、Modal正文留白/滚动和 PromptEditor 内层高度不能用 className 覆盖；容器和选项内容的布局按组件职责判定。例外精确到文件/值/原因，存量登记只降不升。

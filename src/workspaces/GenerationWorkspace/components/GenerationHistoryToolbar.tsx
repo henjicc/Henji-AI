@@ -69,7 +69,7 @@ export function GenerationHistoryToolbar({
               type="button"
               variant="danger"
               size="sm"
-              className="w-full justify-start gap-2"
+              className="w-full justify-start"
               onClick={onOpenClearHistory}
             >
               <Trash2  />

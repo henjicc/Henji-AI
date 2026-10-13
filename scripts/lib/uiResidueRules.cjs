@@ -23,6 +23,7 @@ const LEGACY_CSS_VAR_PATTERN =
 const ARBITRARY_VALUE_PATTERN = new RegExp(
   '(?<![\\w-])(?:[\\w-]+:)*!?-?(?:text|h|w|size|min-w|max-w|min-h|max-h|p[xytrbl]?|m[xytrbl]?|gap(?:-[xy])?|space-[xy]'
   + '|top|left|right|bottom|inset(?:-[xy])?|rounded(?:-[a-z]+)?|leading|tracking|basis|translate-[xy]|z|shadow'
+  + '|grid-cols|grid-rows|col-span|aspect|scale(?:-[xy])?|rotate|transition'
   + '|border(?:-[trblxy])?|duration|delay|blur|backdrop-blur|opacity|bg|from|to|via|ring|outline)-\\[[^\\]\\s]+\\]',
   'g',
 )
@@ -100,6 +101,13 @@ function classifyArbitraryValue(token) {
   const inner = raw.replace(/^(?:length|color|number):/, '')
   if (VARIABLE_VALUE.test(inner)) return { verdict: 'allowed', rule: '引用变量（主题令牌或运行时写入）', value }
   if (/^(?:inherit|auto|none|currentColor)$/.test(inner)) return { verdict: 'allowed', rule: 'CSS 关键字', value }
+  if (/^grid-(cols|rows)$/.test(utility)) return /\bauto\b|\dfr\b|%|var\(/.test(inner.replaceAll('_', ' '))
+    ? { verdict: 'allowed', rule: '相对网格轨道（fr/auto/百分比）；控件私有列宽另由规则 E 阻断', value }
+    : { verdict: 'register', rule: '固定网格几何：登记理由', value }
+  if (utility === 'col-span' && /^\d+$/.test(inner)) return { verdict: 'violation', rule: '列跨度写标准 col-span 类', value }
+  if ((utility === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(inner)) || (/^scale(?:-[xy])?$/.test(utility) && /^\d+(?:\.\d+)?$/.test(inner))) return { verdict: 'allowed', rule: '无单位相对几何比例', value }
+  if (utility === 'rotate') return { verdict: 'register', rule: '旋转几何：登记理由', value }
+  if (utility === 'transition') return { verdict: 'allowed', rule: '显式过渡属性，由 check:ui-design 核查布局例外', value }
   if (COLOR_ARBITRARY_UTILITY.test(utility) || (utility === 'text' && !/^-?\d/.test(inner))) {
     return { verdict: 'violation', rule: '任意颜色值：改用语义令牌类', value }
   }

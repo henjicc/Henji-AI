@@ -18,10 +18,43 @@ test('S1 分段最多五项，更多项改下拉；动态项数交给共享组�
 for (const [rule, bad, good] of fixtures) test(`${rule}: 正反夹具与行级豁免`, () => {
   const hits = findUiSurfaceGrammar(bad)
   assert.equal(hits.filter(hit => hit.rule === rule).length, 1)
-  assert.equal(hits[0].severity, rule === 'S4' ? 'warning' : 'error')
+  assert.equal(hits[0].severity, 'error')
   assert.equal(findUiSurfaceGrammar(good).length, 0)
   assert.equal(findUiSurfaceGrammar(`// ui-surface-allow: ${rule} 夹具中有意演示反例\n${bad}`).length, 0)
   assert.equal(findUiSurfaceGrammar(`// ui-surface-allow: ${rule}\n${bad}`).length, 1)
+})
+
+test('S4 记录分隔认上边线与共享入口，不把大间距或选项集合判成记录', () => {
+  const row = '<h3>{item.title}</h3><p className="text-text2">{item.meta}</p>'
+  for (const cls of ['border-t border-line py-2.5', 'border-b border-line']) {
+    assert.equal(findUiSurfaceGrammar(`<div>{items.map(item => <div className="${cls}">${row}</div>)}</div>`).length, 0)
+  }
+  for (const parent of ['divide-y', 'UI_DIVIDER_CLASS']) {
+    assert.equal(findUiSurfaceGrammar(`<div className={${JSON.stringify(parent)}}>{items.map(item => <div>${row}</div>)}</div>`).length, 0)
+  }
+  assert.equal(findUiSurfaceGrammar(`<div className="space-y-6">{items.map(item => <div>${row}</div>)}</div>`)[0]?.rule, 'S4')
+  assert.equal(findUiSurfaceGrammar('<UiRecordList>{items.map(item => <UiRecordItem title={item.title} meta={item.meta}/>)}</UiRecordList>').length, 0)
+  for (const variant of ['grid', 'menu', 'cover']) assert.equal(findUiSurfaceGrammar(`<div>{items.map(item => <UiOptionButton variant="${variant}">${row}</UiOptionButton>)}</div>`).length, 0)
+})
+
+test('S7 动作组继承档位，别名与嵌套按钮均不能覆盖', () => {
+  assert.equal(findUiSurfaceGrammar('<UiActionGroup tier="secondary" size="sm"><UiButton>打开</UiButton></UiActionGroup>').length, 0)
+  assert.equal(findUiSurfaceGrammar('import { UiButton as B } from "ui"; <UiActionGroup><div><B variant="quiet" size="sm"/></div></UiActionGroup>')[0]?.rule, 'S7')
+})
+
+test('S8 原生 title 与手写状态阻断，禁用原因警告不误拦加载', () => {
+  for (const source of ['<UiButton title="打开"/>', '<Loader2 className="animate-spin"/>', '<div className="animate-pulse"/>']) assert.equal(findUiSurfaceGrammar(source)[0]?.rule, 'S8')
+  for (const source of ['<UiButton disabled={blocked}/>', '<UiButton disabled={busy || !selection} loading={busy}/>']) assert.equal(findUiSurfaceGrammar(source)[0]?.severity, 'warning')
+  for (const source of ['<UiButton disabled={busy}/>', '<UiButton disabled={view.isLoading}/>', '<UiButton disabled={busy} loading={busy}/>', '<UiButton disabledReason="先选择素材"/>', '<UiSpinner/>']) assert.equal(findUiSurfaceGrammar(source).length, 0)
+  assert.equal(findUiSurfaceGrammar('<p role="alert" className="text-danger-text">{error}</p>')[0]?.severity, 'warning')
+})
+
+test('S9 计数同表面可共存主动作，不合并互斥分支或嵌套表面', () => {
+  const button = '<UiButton variant="primary"/>'
+  assert.equal(findUiSurfaceGrammar(`<UiModal><div>${button}${button}</div></UiModal>`)[0]?.rule, 'S9')
+  assert.equal(findUiSurfaceGrammar(`<UiModal>{flag ? ${button} : ${button}}</UiModal>`).length, 0)
+  assert.equal(findUiSurfaceGrammar(`<UiModal>${button}<UiModal>${button}</UiModal></UiModal>`).length, 0)
+  assert.equal(findUiSurfaceGrammar(`<UiToolbar variant="command">${button}<UiIconButton tone="accent"/></UiToolbar>`)[0]?.rule, 'S9')
 })
 
 test('S5 列宽：继承、默认、别名、常量与不可静态判定的边界', () => {
@@ -29,7 +62,8 @@ test('S5 列宽：继承、默认、别名、常量与不可静态判定的边�
   assert.equal(hits('<div><UiFormRow labelColumn="panel"/><UiFormRow labelWidth={72}/></div>').length, 0)
   assert.equal(hits('<div><UiFormRow labelColumn="panel"/><UiFormRow labelWidth={96}/></div>').length, 1)
   assert.equal(hits('<UiGroup labelWidth={96}><UiFormRow/><UiGroup><UiFormRow labelColumn="panel"/></UiGroup><UiFormRow labelColumn="auto"/></UiGroup>').length, 0)
-  assert.equal(hits('<UiGroup labelWidth={96}><UiFormRow/><UiGroup labelWidth={120}><UiFormRow/></UiGroup></UiGroup>').length, 1)
+  assert.equal(hits('<UiGroup labelWidth={96}><UiFormRow/><UiGroup labelWidth={120}><UiFormRow/></UiGroup></UiGroup>').length, 0)
+  assert.equal(hits('<UiGroup labelWidth={96}><UiFormRow/><UiFormRow labelWidth={120}/></UiGroup>').length, 1)
   assert.equal(hits('import { UiFormRow as Row } from "ui"; const WIDTH = 96; <><Row labelWidth={WIDTH}/><Row labelWidth={120}/></>').length, 1)
   assert.equal(hits('<UiGroup labelWidth={unknown}><UiFormRow labelColumn="panel"/><UiFormRow labelWidth={96}/></UiGroup>').length, 0)
   assert.equal(hits('<UiToolbar><UiFormRow labelWidth={72}/></UiToolbar><UiGroup labelWidth={96}><UiFormRow/></UiGroup>').length, 0)

@@ -200,7 +200,7 @@ const TaskCard = React.memo(function TaskCard({
               <UiButton
                 variant="quiet"
                 size="sm"
-                className="gap-1.5"
+
                 onClick={() => openAssistantForDiagnosis({
                   title: t('history:failure.title'),
                   message: task.error || t('history:failure.title'),

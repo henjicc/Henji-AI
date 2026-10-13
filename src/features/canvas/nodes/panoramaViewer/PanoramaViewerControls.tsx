@@ -46,7 +46,7 @@ export function PanoramaViewerControls({
         <UiChipButton
           selectionRole="navigation"
           active={viewMode === 'sphere'}
-          size="md" className="px-3"
+          size="md"
           onClick={() => onViewModeChange('sphere')}
         >
           {t('viewer.panorama.spherical')}
@@ -54,7 +54,7 @@ export function PanoramaViewerControls({
         <UiChipButton
           selectionRole="navigation"
           active={viewMode === 'flat'}
-          size="md" className="px-3"
+          size="md"
           onClick={() => onViewModeChange('flat')}
         >
           {t('viewer.panorama.flat')}
@@ -70,13 +70,13 @@ export function PanoramaViewerControls({
         appearance="text"
         minWidthStrategy="display"
         className="nodrag nopan nowheel"
-        size="md" buttonClassName="px-3"
+        size="md"
       />
 
       <UiButton
         type="button"
         variant="secondary"
-        className="ml-auto gap-1.5"
+        className="ml-auto"
         disabled={!canCapture || isCapturing}
         tooltip={captureTitle}
         aria-label={captureTitle}

@@ -66,7 +66,7 @@ export const TextInput: React.FC<TextInputProps> = ({
           disabled={disabled}
           maxCharacters={param.maxLength}
           showCharacterCount={param.maxLength !== undefined}
-          height={param.rows && param.rows > 4 ? 'medium' : 'short'} editorClassName="max-h-[360px]"
+          height={param.rows && param.rows > 4 ? 'medium' : 'short'} className="max-h-[360px]"
         />
       </ParamField>
     )

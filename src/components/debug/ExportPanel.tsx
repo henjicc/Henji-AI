@@ -98,7 +98,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
               active={exportType === option.value}
               key={option.value}
               onClick={() => handleExportTypeChange(option.value as ExportType)}
-              className="px-3 py-2"
+
             >
               {option.label}
             </UiOptionButton>

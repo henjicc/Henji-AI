@@ -6,7 +6,7 @@
  * 外观只由组件的有限枚举决定——`UiButton variant/size`、`UiIconButton tone/size/on/shape`、
  * `UiOptionButton variant/size/active/selection`、`UiChipButton active/selectionRole/size`、`UiNavButton active/size`、
  * `UiFieldTrigger size/appearance`、`UiTextToken appearance/current/selected/excluded/flagged`（3.4）、`Dropdown`/`PanelTrigger` 的 `size`；className（下拉与面板触发器是 `buttonClassName`）
- * 只放布局（宽度、弹性、对齐、定位、外边距、内边距、显隐、过渡、指针）。以下类一律视为外观覆盖：
+ * 只放布局（宽度、弹性、对齐、定位、外边距、显隐、过渡、指针）。以下类一律视为外观覆盖：
  *   - 底色、边框、文字色、圆角、阴影/环/描边、毛玻璃与滤镜、下划线（链接档负责）；
  *   - 字号与高度（`size` 负责）；图标按钮的宽高（`size` 负责）。
  *   - 选项/标签/导航允许 `h-full`、`h-auto` 与 `min-h-*`/`max-h-*`（内容卡片随网格拉伸或随内容撑高），固定高度仍走 `size`。
@@ -54,6 +54,10 @@ const CHECKED_ATTRIBUTES = {
   UiColorInput: 'className',
   UiCheckbox: 'className',
   UiPanel: 'className',
+  UiModal: 'contentClassName',
+  UiGroup: 'className',
+  UiFormRow: 'className',
+  PromptEditor: 'editorClassName',
   // 4.5/4.6：状态反馈与记录项，className 只放布局；颜色、边框、分隔由组件参数决定
   UiSkeleton: 'className',
   UiFieldMessage: 'className',
@@ -71,20 +75,17 @@ const CHECKED_COMPONENTS = new Set(Object.keys(CHECKED_ATTRIBUTES));
  * 未接入的字段如实保留欠账，不能把既有业务覆盖偷换成合规；待 4.5/4.6 迁移后删除。
  */
 const RULE_E_EXEMPT = {
+  UiActionGroup: '只开放 tier/size 与子内容，组档位由上下文统一继承，不开放 className。',
   UiNumberStepper: '只供 NumberInput 内部组合，没有开放 className 属性。',
-  UiModal: '不开放 className，分别用 overlayClassName/panelClassName/contentClassName 传入宿主布局。',
   UiTooltipText: '说明文字的排版由宿主标签决定，className 不对应控件档位。',
   UiRegion: '区域容器接受宿主布局，高度、内边距与 gap 不是控件外观。',
-  UiGroup: '分组容器接受宿主布局，高度、内边距与 gap 不是控件外观。',
   UiPageHeader: '页头组合容器接受宿主布局，没有控件高度档位。',
-  UiFormRow: '参数行接受宿主布局，行宽与高度不等同字段高度。',
   UiDisclosurePanel: '折叠容器接受内容高度与宿主布局，没有控件高度档位。',
   UiToolbar: '工具条外壳及 barProps 承载布局，不能套字段高度规则。',
   UiEmpty: '状态容器的布局与排版由宿主内容区决定，没有控件高度档位。',
   UiLoading: '状态容器的布局与排版由宿主内容区决定，没有控件高度档位。',
   UiError: '状态容器的布局与排版由宿主内容区决定，没有控件高度档位。',
   PromptDocumentStatic: '用户文档内容的展示布局，不是固定尺寸的界面控件。',
-  PromptEditor: '编辑器容器接受内容高度与宿主布局，不是固定高度字段。',
   UiFieldLayoutContext: 'React 上下文对象，没有自身 DOM 与 className。',
   UiMarqueeText: '文字溢出容器接受宿主排版，没有控件高度档位。',
   StackedMediaUploader: '媒体缩略图布局随素材及宿主几何变化，不是固定高度字段。',
@@ -127,6 +128,14 @@ const BG_LAYOUT = new Set(['bg-clip-content', 'bg-clip-padding', 'bg-clip-border
  * @returns {string | null} 违规类别，null 表示允许
  */
 function classifyToken(token, component) {
+  // 编辑面积只由 height 或 fill-scroll 决定；内层可保留文档排版与占位提示的语义样式。
+  if (component === 'PromptEditor') return /^(h|min-h|max-h)-/.test(token) && !['h-full', 'min-h-0', 'max-h-full'].includes(token) ? '编辑面积（用 height 或外壳布局）' : null;
+  const layoutContainer = ['UiPanel', 'UiViewerShell', 'UiRecordList', 'UiSkeleton', 'UiFieldMessage', 'UiInlineStatus', 'UiOverflowRow'].includes(component);
+  const contentGap = component === 'UiOptionButton' && /^gap(?:-[xy])?-/.test(token);
+  const outerInset = ['UiGroup', 'UiRecordItem'].includes(component) && /^p[xytrbl]?-/.test(token);
+  if (/^(?:p[xytrbl]?|gap(?:-[xy])?)-/.test(token) && !layoutContainer && !contentGap && !outerInset) return '内边距/间距（用组件枚举）';
+  if (component === 'UiModal' && /^overflow(?:-[xy])?-/.test(token)) return '滚动（用 contentScroll）';
+  if (['UiGroup', 'UiFormRow'].includes(component) && /^(?:grid-cols|grid-rows)-/.test(token)) return '列布局（用 labelWidth/labelColumn）';
   if (/^bg-/.test(token) && !BG_LAYOUT.has(token)) return '底色';
   if (/^bg-gradient/.test(token) || /^(from|via|to)-/.test(token)) return '底色';
   if (/^border(?:$|-)/.test(token)) return '边框';
@@ -140,7 +149,7 @@ function classifyToken(token, component) {
   if (/^(ui-glass|backdrop-|brightness-|saturate-|contrast-)/.test(token)) return '材质';
   if (token === 'underline' || /^(underline-offset|decoration)-/.test(token)) return '下划线（用 variant="link"）';
   if (/^(h|min-h|max-h)-/.test(token)) {
-    if (component === 'UiPanel') return null;
+    if (['UiPanel', 'UiGroup', 'UiFormRow', 'UiModal'].includes(component)) return null;
     if (TEXT_AREA_COMPONENTS.has(component)) return null;
     if (ITEM_COMPONENTS.has(component) && ITEM_FLEXIBLE_HEIGHT.test(token)) return null;
     return '高度（用 size）';
@@ -356,7 +365,9 @@ function findButtonAppearanceOverridesInSource(raw, fileName, shared = new Map()
             if (seenTokens.has(token)) continue;
             seenTokens.add(token);
             const kind = classifyToken(token, component);
-            if (kind) violations.push({ token, kind });
+            const normalizedFile = fileName.replace(/\\/g, '/').replace(/^.*?\/src\//, 'src/');
+            const geometry = require('./uiDesignRules.cjs').SPACING_EXCEPTIONS[normalizedFile]?.[token];
+            if (kind && !geometry) violations.push({ token, kind });
           }
           if (violations.length) {
             const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;

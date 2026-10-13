@@ -43,7 +43,7 @@ export function PromptOptimizationSelectorPanel({
               active={profile.id === selectedProfileId}
               variant="menu"
               onClick={() => onSelectProfile(profile.id)}
-              className="w-full justify-start gap-2 px-3 py-3 text-left"
+              className="w-full justify-start gap-2 text-left"
               disabled={optimizing}
             >
               <Sparkles size={UI_ICON_SIZE.sm} className="shrink-0" />

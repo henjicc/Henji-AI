@@ -180,7 +180,8 @@ describe('check:surface 规则 E：调用点覆盖按钮外观会被拦截', () 
     expect(classifyToken('shadow-panel', 'UiIconButton')).toMatch(/阴影/);
     expect(classifyToken('h-8', 'UiButton')).toMatch(/高度/);
     expect(classifyToken('w-8', 'UiIconButton')).toMatch(/宽度/);
-    for (const layout of ['w-full', 'flex-1', 'shrink-0', 'justify-start', 'gap-2', 'px-2', 'absolute', 'opacity-0', 'text-left', 'truncate']) {
+    for (const spacing of ['gap-2', 'px-2']) expect(classifyToken(spacing, 'UiButton')).toMatch(/间距/);
+    for (const layout of ['w-full', 'flex-1', 'shrink-0', 'justify-start', 'absolute', 'opacity-0', 'text-left', 'truncate']) {
       expect(classifyToken(layout, 'UiButton')).toBeNull();
     }
   });

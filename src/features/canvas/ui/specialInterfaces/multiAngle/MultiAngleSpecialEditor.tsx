@@ -42,7 +42,7 @@ import {
 } from './multiAngleLocalization'
 
 // 同层级的三组选项共用尺寸，避免子元素字号与默认 padding 各自漂移。
-const OPTION_CLASS = 'min-w-0 justify-center px-2 font-medium'
+const OPTION_CLASS = 'min-w-0 justify-center font-medium'
 
 function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
   if (typeof state.sourceImageUrl === 'string' && state.sourceImageUrl.trim()) return state.sourceImageUrl

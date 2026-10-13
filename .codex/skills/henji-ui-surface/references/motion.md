@@ -134,3 +134,9 @@ transition/animation 时长压到 0.01ms，延迟清零，循环只播一次，�
 仅在交互期间添加并及时清理（performance.md 的复用规则由任务 4.7 维护）。
 
 状态循环只由 UiSpinner / UiSkeleton 消费；业务按钮传 loading，保持静息文案占位。减少动效时停止旋转/脉冲，保留图标、aria-busy 和状态文字。样张循环通过 active 开关复用正式组件，不另写动画。
+
+## 自动门禁（5.2）
+
+`check:ui-design` 全量扫描 src 的 CSS、TS/TSX 类串、style 与 uiTransition 属性列表。时长允许共享 --ui-duration/--ui-loop 变量、登记的助手 inset 时长、0；缓动允许 --ui-ease 具名变量和 linear；Tailwind 时长仅 0/120/180/240/500。布局属性及裸 transition/transition-all 阻断，五个文件例外与上表同源登记在 uiDesignRules.cjs 的 LAYOUT_EXCEPTIONS（TaskInputPreview 含 margin-left）。全局 reduced-motion 近零时长仅 index.css 的对应媒体查询例外。
+
+手写 useEffect 中 visible=false + setTimeout 卸载 mounted/shouldRender/rendered 会命中 manualExit，迁至 useDialogTransition；业务通知停留和延迟不按退出动画判。该静态规则是可确定模式，不宣称能识别所有动态写法。

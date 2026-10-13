@@ -205,7 +205,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     active={false}
                                     onClick={() => handleQuickSave('prompt')}
                                     size="sm"
-                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
+                                    className="h-full w-full flex-col justify-center gap-1"
                                     tooltip={t('ui:presets.saveMode.prompt.title')}
                                 >
                                     <Type aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
@@ -217,7 +217,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     active={false}
                                     onClick={() => handleQuickSave('prompt-image')}
                                     size="sm"
-                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
+                                    className="h-full w-full flex-col justify-center gap-1"
                                     tooltip={t('ui:presets.saveMode.promptImage.title')}
                                 >
                                     <Images aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
@@ -229,7 +229,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     active={false}
                                     onClick={() => handleQuickSave('full')}
                                     size="sm"
-                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
+                                    className="h-full w-full flex-col justify-center gap-1"
                                     tooltip={t('ui:presets.saveMode.full.title')}
                                 >
                                     <SlidersHorizontal aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />

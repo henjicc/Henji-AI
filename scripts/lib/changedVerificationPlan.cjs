@@ -216,6 +216,7 @@ function buildChangedVerificationPlan(options, root, exists = fs.existsSync, res
     const uiFiles = options.files.filter(file => file.startsWith('src/') && !TEST_PATTERN.test(file) && /\.(?:tsx?|css)$/.test(file) && exists(path.join(root, file)))
     const globalUi = options.files.includes('tailwind.config.js')
     gate('界面残留（严格）', 'check:ui-residue', !globalUi && uiFiles.length ? ['--', '--strict-local', '--files', uiFiles.join(','), '--no-report'] : [])
+    gate('间距与动效令牌（严格）', 'check:ui-design', !globalUi && uiFiles.length ? ['--', '--files', ...uiFiles] : [])
   }
   const applicationSources = sources.filter(file => /^(src|electron|packages)\//.test(file))
   const importsChanged = applicationSources.some((file) => /\b(?:import|export)\b[^\n]*(?:from\s|import\s*\(|['"]\.)|\b(?:import\s*['"]|require\s*\()/.test(changes.get(file)))

@@ -1,6 +1,6 @@
 /**
  * check:ui-visual 5.8 新规则的断牙样例：每条规则一对“未修复（必须命中）/ 已修复（不得命中）”的最小 DOM。
- * scripts/ui-visual-rule-samples.cjs 把它们注入真实 Electron 窗口，跑同一个 auditUiDom，按样例 id 对账。
+ * 纯 DOM 夹具供 Linux/jsdom 验证判据；真实 Electron 执行器改为审计中心页正式组件 Do/Don't。
  *
  * 样例只用内联样式与原生元素：要验证的是规则判据本身，与应用的组件和令牌无关（应用里的真实界面由
  * check:ui-visual 的场景负责不误报）。颜色写在这里不进 src，不受 check:colors 约束。
@@ -28,6 +28,18 @@ const ELLIPSIS = 'display:block;overflow:hidden;text-overflow:ellipsis;white-spa
 
 /** @type {{ id: string, rule: string, expect: 'hit' | 'clean', note: string, html: string }[]} */
 const UI_VISUAL_RULE_SAMPLES = Object.freeze([
+  ...['rowHeightMismatch', 'actionStartsAtLabelColumn', 'formControlMisaligned', 'multiplePrimary'].flatMap(rule => [false, true].map(bad => {
+    const id = `contract-${rule}-${bad ? 'bad' : 'good'}`
+    const button = (x, y, height = 32, props = '') => `<button style="${BUTTON}" data-rect="${x},${y},32,${height}" ${props}></button>`
+    const html = rule === 'multiplePrimary'
+      ? `<div id="${id}" data-ui-toolbar>${button(0,0,32,'data-variant="primary"')}${button(40,0,32,bad ? 'data-variant="primary"' : '')}</div>`
+      : rule === 'rowHeightMismatch'
+        ? `<div id="${id}" role="toolbar">${button(0,0)}${button(40,0,bad ? 28 : 32)}</div>`
+        : `<div id="${id}" data-ui-group><div data-ui-form-row="panel"><div data-ui-form-control data-rect="96,0,100,32">${button(96,0)}</div></div>${rule === 'formControlMisaligned'
+          ? `<div data-ui-form-row="panel"><div data-ui-form-control data-rect="${bad ? 120 : 96},40,100,32"></div></div>`
+          : button(bad ? 0 : 96,40,32,`id="${id}-action"`)}</div>`
+    return { id, rule, expect: bad ? 'hit' : 'clean', note: '5.2 外框、列对齐与主动作契约', html }
+  })),
   {
     id: 'bands-bad', rule: 'stackedBands', expect: 'hit', note: '命令带下又摞了两条带（图片编辑旧版的 4 刀）',
     html: `<div style="width:800px;display:flex;flex-direction:column">${band('bands-bad-a', '返回')}${band('bands-bad-b', '打开图片')}${band('bands-bad-c', '画笔')}</div>`,

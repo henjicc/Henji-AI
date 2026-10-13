@@ -21,6 +21,16 @@ const ROOT = path.resolve(__dirname, '..', '..')
 const categoriesOf = (findings) => findings.map((finding) => finding.category)
 const count = (findings, category) => findings.filter((finding) => finding.category === category).length
 
+test('结构任意值纳入扫描：相对网格/比例与固定几何分开，布局过渡由动效门禁处理', () => {
+  const source = '<div className="grid-cols-[1fr_auto] grid-rows-[120px_200px] col-span-[3] aspect-[16/10] scale-[0.985] rotate-[17deg] transition-[opacity,transform]"/>'
+  const hits = scanSourceText(source).filter(x => x.category === 'arbitraryValue')
+  assert.equal(hits.length, 7)
+  assert.equal(hits.find(x => x.text.includes('grid-rows')).verdict, 'register')
+  assert.equal(hits.find(x => x.text.includes('rotate')).verdict, 'register')
+  assert.equal(hits.find(x => x.text.includes('col-span')).verdict, 'violation')
+  for (const prefix of ['grid-cols', 'aspect', 'scale', 'transition']) assert.equal(hits.find(x => x.text.includes(prefix)).verdict, 'allowed')
+})
+
 test('外观报告复用规则 E 的动态类串判定，只有 surface 负责阻断', () => {
   const { findButtonAppearanceOverridesInSource } = require('./buttonAppearanceOverrides.cjs')
   const source = 'const STYLE = "bg-panel h-8"; <UiButton className={active ? STYLE : "w-full"}/>'

@@ -19,7 +19,6 @@ import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModel
 import { ModelPickerList } from '@/features/canvas/params/ModelPickerList';
 import { NodeModelParamsControls } from '@/features/canvas/params/NodeModelParamsControls';
 import { useModelPickerList } from '@/features/canvas/params/useModelPickerList';
-import { NODE_CONTROL_CHIP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { ValueSourceShell } from './ValueSourceShell';
@@ -104,7 +103,6 @@ function ModelSelectorCollapsedBody({
       mediaType={mediaType}
       modelId={data.modelId}
       onModelChange={setModelId}
-      chipClassName={NODE_CONTROL_CHIP_CLASS}
       modelChipClassName={MODEL_SELECTOR_CHIP_CLASS}
       onModelChipContentWidthChange={onContentWidthChange}
     />

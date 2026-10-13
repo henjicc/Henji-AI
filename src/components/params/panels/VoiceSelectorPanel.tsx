@@ -502,7 +502,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     disabled={training || failed || expired}
                     onClick={() => onChange(voice.id)}
                     tooltip={voice.description || voice.name}
-                    className={`w-full flex-col items-start justify-center px-3 py-2 ${
+                    className={`w-full flex-col items-start justify-center ${
                       hasDescription ? 'min-h-[58px] gap-1' : 'min-h-[52px]'
                     }`}
                   >
@@ -519,7 +519,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                       size="sm"
                       disabled={deletingVoiceId === voice.id}
                       tooltip="仅从本地列表移除，不删除供应商音色或取消计费"
-                      className="absolute right-1 top-1 !px-2"
+                      className="absolute right-1 top-1 "
                       onClick={(event) => {
                         event.preventDefault()
                         event.stopPropagation()

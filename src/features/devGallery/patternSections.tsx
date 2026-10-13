@@ -8,6 +8,7 @@ import { TriangleAlert } from 'lucide-react'
 import { UiButton, UiEmpty, UiFormRow, UiGroup, UiInput, UiLoading, UiError, UiPanel, UiSegmented, UiSwitch, UiToolbar, UiVirtualList, UiVirtualGrid, UI_TEXT_META_CLASS } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { GALLERY_SKILL_SOURCE } from './galleryIndex'
+import { GalleryRuleSamples } from './ruleSamples'
 
 const noop = (): void => undefined
 
@@ -49,7 +50,7 @@ export function RulesSection(): JSX.Element {
     ['动作层级', '动作层级视觉重量--动作的重要性'], ['选中态词汇表', '选中态词汇表先判断语义再选强度'],
     ['界面语法 G1–G5', '界面语法照着做就不会错2026-10-12-起强制'], ['必须复用', '必须复用-vs-允许新增'],
   ] as const
-  return <UiGroup title="规范速查：链接到唯一原文" titleTone="compact">{links.map(([label, anchor]) => <a key={label} className="py-3 text-13 text-accent-text underline" href={`${GALLERY_SKILL_SOURCE}#${anchor}`} target="_blank" rel="noreferrer">{label}</a>)}<p className={UI_TEXT_META_CLASS}>分段用中性抬起底 + 强文字（最多 5 项）；其他单选用淡强调底。当前组件尺寸读取真实枚举，任务 4.2 合并后自动反映。</p></UiGroup>
+  return <UiGroup title="规范速查：链接到唯一原文" titleTone="compact">{links.map(([label, anchor]) => <a key={label} className="py-3 text-13 text-accent-text underline" href={`${GALLERY_SKILL_SOURCE}#${anchor}`} target="_blank" rel="noreferrer">{label}</a>)}<p className={UI_TEXT_META_CLASS}>分段用中性抬起底 + 强文字（最多 5 项）；其他单选用淡强调底。当前组件尺寸读取真实枚举，任务 4.2 合并后自动反映。</p><GalleryRuleSamples /></UiGroup>
 }
 
 const LIST_SAMPLES = Array.from({ length: 1000 }, (_, id) => ({ id, name: `记录 ${id + 1}` }))

@@ -70,7 +70,7 @@ const ToolboxHome: React.FC = () => {
               <UiOptionButton
                 key={tool.id}
                 variant="card"
-                className="h-full flex-col !items-start gap-4 p-4 text-left"
+                className="h-full flex-col !items-start gap-4 text-left"
                 onClick={() => selectToolboxTool(tool.id)}
               >
                 <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-lg bg-control text-text1">
@@ -96,7 +96,7 @@ const ToolboxHome: React.FC = () => {
                   <UiOptionButton
                     key={file.key}
                     variant="menu"
-                    className="grid min-h-11 w-full grid-cols-[28px_minmax(0,1fr)_140px_120px] items-center gap-3 px-3"
+                    className="grid min-h-11 w-full grid-cols-[28px_minmax(0,1fr)_140px_120px] items-center gap-3"
                     tooltip={`在${tool ? t(tool.descriptor.titleKey) : '工具'}中打开`}
                     onClick={() => openRecent(file)}
                   >

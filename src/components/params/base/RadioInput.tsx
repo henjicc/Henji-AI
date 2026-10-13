@@ -54,7 +54,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
               key={String(option.value)}
               active={isSelected}
               aria-disabled={isDisabled || undefined}
-              className="w-full items-start gap-2 p-3"
+              className="w-full items-start gap-2"
               onClick={() => {
                 if (!isDisabled) {
                   onChange(option.value)

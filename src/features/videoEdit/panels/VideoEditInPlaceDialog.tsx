@@ -142,7 +142,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
     <UiGroup labelWidth={96} gap="stack" data-video-edit-in-place={intent.action}>
       {'error' in planned ? <UiError message={planned.error} /> : <>
         <p className={UI_TEXT_META_CLASS}>{describe(projectId, plan!)}</p>
-        <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}提示词`} placeholder={PLACEHOLDERS[intent.action]} autoFocus height="short" editorClassName="max-h-60" />
+        <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}提示词`} placeholder={PLACEHOLDERS[intent.action]} autoFocus height="short" className="max-h-60" />
         {intent.action === 'extend_shot' && <UiFormRow label="放置方式" info="插入会让后面的片段后移；覆盖会替换后面的画面。" inline>
           <UiSegmented ariaLabel="放置方式" size="sm" value={mode} onChange={setMode} options={[{ value: 'insert', label: '插入' }, { value: 'overwrite', label: '覆盖' }]} />
         </UiFormRow>}

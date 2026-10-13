@@ -475,7 +475,7 @@ test('输出目录相对项目根解析且绝对路径保持不变', () => {
   assert.equal(resolveOutputDir(root, absolute), absolute)
 })
 
-test('场景覆盖应用界面和原生窗口且规则数固定为十八条', () => {
+test('场景覆盖应用界面和原生窗口且规则数固定为二十二条', () => {
   // 界面名是固定词汇表：新增界面要在这里登记，拼错或漏登记必须红。
   assert.deepEqual([...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].sort(), [
     '付费确认',
@@ -493,8 +493,8 @@ test('场景覆盖应用界面和原生窗口且规则数固定为十八条', ()
     '镜头参考',
   ])
   // 4.3 新增 nestedSameBackground、menuOptionTruncated；5.8 新增 stackedBands、toolbarWrap、shortTextTruncated、selectedStateWeak、overlayClipped
-  assert.equal(UI_AUDIT_RULES.length, 18)
-  assert.equal(new Set(UI_AUDIT_RULES.map((rule) => rule.key)).size, 18)
+  assert.equal(UI_AUDIT_RULES.length, 22)
+  assert.equal(new Set(UI_AUDIT_RULES.map((rule) => rule.key)).size, 22)
   // auditUiDom 序列化进渲染进程，函数内阈值是导出常量的副本：两处必须一致
   const { UI_AUDIT_THRESHOLDS, auditUiDom } = require('./uiAuditDom.cjs')
   const inlineThresholds = /const T = (\{[^}]+\})/.exec(auditUiDom.toString())[1]

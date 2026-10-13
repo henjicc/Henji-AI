@@ -1,0 +1,10 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const { missingScrollCoverage } = require('./uiScrollCoverage.cjs')
+test('真实尺寸逐区间并集：顶部底部不能掩盖中段漏截', () => {
+  const region = top => ({ element: 'div#scroll', id: 'patterns', scrollTop: top, scrollHeight: 1000, clientHeight: 300, visibleHeight: 300 })
+  assert.equal(missingScrollCoverage([[region(0)], [region(700)]]).length, 1)
+  assert.equal(missingScrollCoverage([[region(0)], [region(280)], [region(560)], [region(700)]]).length, 0)
+  assert.equal(missingScrollCoverage([[region(0)], [{ ...region(0), id: 'other' }], [region(700)]]).length, 2)
+  assert.equal(missingScrollCoverage([[{...region(0), visibleOffset:40, visibleHeight:260}], [region(240)], [region(480)], [region(700)]]).length, 1, '视口裁掉容器顶部时不得声称顶部已截到')
+})

@@ -253,6 +253,7 @@ function normalizeStepSpec(raw, sourceFile = '<内联>') {
   return {
     id: raw.id,
     surface: raw.surface,
+    scrollCoverage: raw.scrollCoverage || null,
     name: raw.name,
     checklist: raw.checklist ?? [],
     sourceFile,
@@ -819,6 +820,7 @@ function compileStepScene(spec, context) {
     name: spec.name,
     checklist: spec.checklist,
     sourceFile: spec.sourceFile,
+    scrollCoverage: spec.scrollCoverage,
     writesUserData: spec.writesUserData,
     ...(spec.expectedLogEvents ? { expectedLogEvents: spec.expectedLogEvents } : {}),
     ...(spec.expectedBrowserErrors ? { expectedBrowserErrors: spec.expectedBrowserErrors } : {}),

@@ -65,3 +65,11 @@
 间距迁移：最近档，等距向上（10→12、14→16、28→32）。图标槽、负偏移、相对字体单位和大块空态需结合布局判断，不按数值盲替换。不得覆盖全局 spacing 以免连带改变宽高和定位。`veil`、`--ui-radius-*`、`leading-5.5`、`UI_ACCENT_HEX` 已删除；媒体层用 media/on-media。主题仅推导 accent/danger 的静息、悬停、按下纯色，不再生成 hi/hover-hi。
 
 记录留白由 UiRecordItem 的 density 管理：page 每侧20、panel 每侧12、compact 每侧4，内部 gap-2；边界复用 UI_DIVIDER_CLASS。UiFormRow.trailing 占 sm 控件宽度（28），同组传 null 保持列对齐。
+
+## 间距与死令牌门禁（5.2）
+
+`check:ui-design` 的 spacingScale 检查 p/m/gap/space、style 布局值和 CSS 声明，只允许 0 与九档。4.3 移交的 14 个文件几何例外精确登记在 scripts/lib/uiDesignRules.cjs 的 SPACING_EXCEPTIONS，包含标题栏/媒体覆盖槽、图标占位、空态留白、缩略图分界和滑杆校正；不扩大全局刻度。动态 var/calc 不作固定档位。
+
+unusedToken 检查 styleTokens 导出的真实 AST 消费、CSS --ui 变量和 Tailwind 映射；仅导入、转导、注释、测试与样张自动枚举都不算生产消费。UI_SPACING_SCALE 是样张与门禁的公开刻度契约，唯一明确保留的静态数据例外；UI_FORM_ROW_MIN_HEIGHT_CLASS 已由 UiFormRow 实际消费。废弃轨道与强调填充组合令牌已删除，新增令牌必须同时落真实消费者与中心页。
+
+任意值扫描补 grid-cols/grid-rows/col-span/aspect/scale/rotate/transition：fr/auto/百分比网格及无单位比例属相对几何，纯固定网格与旋转须登记；数字列跨度用标准类；显式过渡属性再由动效门禁核对。不允许用相对网格绕过规则 E 的面板私有列宽限制。
