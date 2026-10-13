@@ -12,6 +12,7 @@ import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
 import { cachedVideoEditSceneCuts } from './videoEditSceneDetection'
 import { analyzeVideoEditReframeOffThread } from './videoEditReframeWorkerClient'
 import { editVideoProject, holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 
 const logger = createLogger('features.videoEdit.reframe')
 export interface VideoEditReframeTarget { projectId: string; sequenceId: string; clipId?: string }
@@ -42,7 +43,7 @@ function ensureRegion(request: SmartRegionRequest, signal: AbortSignal): Promise
 /** Local analysis + keyframe generation + optional sequence copy commit as one undoable document edit. */
 export async function reframeVideoEdit(target: VideoEditReframeTarget, options: VideoEditReframeOptions, signal?: AbortSignal, onProgress?: (progress: number) => void): Promise<VideoEditReframeResult> {
   const settings = videoEditReframeSettingsSchema.parse(options.settings)
-  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const sequence = baseline.sequences.find(sequence => sequence.id === target.sequenceId)
   if (!sequence) throw new Error('原序列不存在，请重新选择。')
   const size = videoEditReframeSizeSchema.parse(target.clipId ? { width: sequence.width, height: sequence.height } : options.size)
@@ -52,7 +53,7 @@ export async function reframeVideoEdit(target: VideoEditReframeTarget, options: 
   if (target.clipId && sequence.tracks.find(track => track.index === clips[0].track)?.locked) throw new Error('目标轨道已锁定，请先解锁。')
   const operationSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(600000)]) : AbortSignal.timeout(600000)
   const release = holdVideoEditActivity(target.projectId, '自动重构画幅')
-  const current = (): void => { operationSignal.throwIfAborted(); if (requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('分析期间原剪辑已改变，请重新生成。') }
+  const current = (): void => { operationSignal.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('分析期间原剪辑已改变，请重新生成。') }
   const updated = new Map<string, VideoEditClip>(); let missingFrames = 0; let faceFrames = 0
   logger.info('开始自动重构画幅', { event: 'video_edit.reframe.start', context: { projectId: target.projectId, sequenceId: target.sequenceId, clips: clips.length } })
   try {

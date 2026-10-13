@@ -10,7 +10,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './videoEditCompositing'
 import { VideoEditSmartRegionControls } from '../panels/VideoEditSmartRegionControls'
-import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions, videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
+import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions, videoEditSmartRegionSegments, videoEditSmartRegionStatus, waitVideoEditSmartRegions } from './videoEditSmartRegions'
 import { nestVideoEditSelection } from './videoEditNesting'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -50,6 +50,61 @@ async function project() {
   return { owner, id, video, other }
 }
 const flush = async (): Promise<void> => { for (let index = 0; index < 20; index++) await Promise.resolve() }
+
+it.each([false, true])('等待快照分析期间撤销效果（嵌套=%s），租约保留请求并能完成', async nested => {
+  const { owner, id, video } = await project()
+  applyVideoEditBuiltinEffect(id, owner.activeSequenceId, [video.id], 'smart:face_mosaic'); await flush()
+  if (nested) nestVideoEditSelection({ projectId: id, sequenceId: owner.activeSequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '子序列')
+  const snapshot = structuredClone(getActiveVideoEditSequence(owner))
+  const controller = new AbortController()
+  let resolved = false
+  const waiting = waitVideoEditSmartRegions(snapshot, snapshot, controller.signal).then(() => { resolved = true }, () => {})
+  if (nested) undoVideoEdit(id)
+  undoVideoEdit(id); await flush()
+  const issued = ensure.mock.calls.at(-1)![0]
+  progress!({ request: issued, status: { state: 'ready', segment: { path: 'C:/cache/face.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'yunet', summary: { value: 1, peak: 1 } } } })
+  await flush()
+  controller.abort(); await waiting
+  expect(cancel).not.toHaveBeenCalled()
+  expect(resolved).toBe(true)
+})
+
+it('撤销再重做同一智能区域，重新请求后等待能结束', async () => {
+  const { owner, id, video } = await project()
+  applyVideoEditBuiltinEffect(id, owner.activeSequenceId, [video.id], 'smart:face_mosaic'); await flush()
+  undoVideoEdit(id); await flush(); expect(cancel).toHaveBeenCalledTimes(1)
+  undoVideoEdit(id, true); await flush(); expect(ensure).toHaveBeenCalledTimes(2)
+  const snapshot = getActiveVideoEditSequence(owner)
+  const waiting = waitVideoEditSmartRegions(snapshot, snapshot)
+  const issued = ensure.mock.calls.at(-1)![0]
+  progress!({ request: issued, status: { state: 'ready', segment: { path: 'C:/cache/face.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'yunet', summary: { value: 1, peak: 1 } } } })
+  await expect(waiting).resolves.toEqual(expect.any(Object))
+})
+it('完成进度先于 ensure 回执：迟到 analyzing 不倒退完成状态', async () => {
+  const { owner, id, video } = await project()
+  let release!: (status: SmartRegionStatus) => void
+  ensure.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+  applyVideoEditBuiltinEffect(id, owner.activeSequenceId, [video.id], 'smart:face_mosaic'); await flush()
+  const sequence = getActiveVideoEditSequence(owner)
+  const clip = sequence.clips.find(clip => clip.id === video.id)!
+  const issued = ensure.mock.calls.at(-1)![0]
+  progress!({ request: issued, status: { state: 'ready', segment: { path: 'C:/cache/face.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'yunet', summary: { value: 1, peak: 1 } } } })
+  release({ state: 'analyzing', progress: 0 }); await flush()
+  expect(videoEditSmartRegionStatus(sequence, sequence.frameRate, clip, clip.effects![0])?.state).toBe('ready')
+})
+
+it('等待已取消信号立即结束；释放租约后取消没有现行文档需求的分析', async () => {
+  const { owner, id, video } = await project()
+  applyVideoEditBuiltinEffect(id, owner.activeSequenceId, [video.id], 'smart:face_mosaic'); await flush()
+  const snapshot = structuredClone(getActiveVideoEditSequence(owner))
+  undoVideoEdit(id); await flush()
+  cancel.mockClear()
+  const controller = new AbortController(); controller.abort(new Error('取消导出'))
+  const assertion = expect(waitVideoEditSmartRegions(snapshot, snapshot, controller.signal)).rejects.toThrow('取消导出')
+  await flush()
+  await assertion
+  expect(cancel).toHaveBeenCalledTimes(1)
+})
 it('嵌套导出等待子序列智能区域，不因父片段没有文件而略过子遮罩', async () => {
   const { owner, id, video } = await project(); const sequenceId = owner.activeSequenceId
   applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic'); await flush()
@@ -118,7 +173,7 @@ it('导出前等待区域分析：完成后继续；失败时给出用户语言�
     const waiting = waitVideoEditSmartRegions(sequence, sequence)
     const issued = ensure.mock.calls.at(-1)![0] as SmartRegionRequest
     progress!({ request: issued, status: { state: 'ready', segment: { path: 'C:/cache/p.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'rvm', summary: { value: 0.3, peak: 0 } } } })
-    await expect(waiting).resolves.toBeUndefined()
+    await expect(waiting).resolves.toEqual(expect.any(Object))
 
     progress!({ request: issued, status: { state: 'failed', reason: 'model' } })
     ensure.mockResolvedValueOnce({ state: 'failed', reason: 'model' })

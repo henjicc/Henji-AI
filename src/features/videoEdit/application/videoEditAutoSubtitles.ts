@@ -25,6 +25,7 @@ import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit, preflightAudioEditTranscription } from '@/features/audioEdit'
 import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 import { editVideoSequence, requireVideoEditInstance, videoEditDocumentOperations, saveVideoEdit, verifyVideoEditSaved, holdVideoEditActivity, type VideoEditInstance } from './videoEditService'
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 
 const logger = createLogger('features.videoEdit.autoSubtitles')
 export type SubtitleScope = 'sequence' | 'in-out' | 'selection'
@@ -235,7 +236,7 @@ export function styleVideoEditSubtitles(projectId: string, sequenceId: string, s
 /** Reuse saved speech anchors; cue-only text falls back to proportional timing without recognition. */
 export async function segmentVideoEditSubtitles(projectId: string, sequenceId: string, options: AutoSubtitleOptions, ids?: readonly string[], signal?: AbortSignal): Promise<{ captionIds: string[]; createdIds: string[]; updatedIds: string[]; removedIds: string[] }> {
   const settings = autoSubtitleOptionsSchema.parse(options)
-  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document
+  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion
   const sequence = snapshot.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('序列不存在。')
   const all = [...(sequence.captions ?? [])].sort((a, b) => a.start - b.start)
@@ -311,7 +312,7 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
     const finals = new Map(captions.map(caption => [caption.id, caption]))
     updatedIds.push(...captionIds.filter(id => !created.has(id) && sortedJson(finals.get(id)) !== sortedJson(originals.get(id))))
     signal?.throwIfAborted()
-    if (owner.document !== snapshot) throw new Error('整理期间字幕已有修改，请重新整理。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('整理期间字幕已有修改，请重新整理。')
     editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions }))
     logger.info('整理字幕完成', { event: 'video_edit.subtitle.normalize.completed', context: { projectId, sequenceId, count: captionIds.length } })
     return { captionIds, createdIds, updatedIds, removedIds }

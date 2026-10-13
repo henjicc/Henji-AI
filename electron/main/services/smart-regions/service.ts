@@ -55,6 +55,8 @@ const MODELS: Readonly<Record<SmartRegionAnalysisKind, Array<{ id: LocalModelId;
 }
 
 function digest(parts: readonly unknown[]): string { return createHash('sha256').update(JSON.stringify(parts)).digest('hex') }
+/** 取帧时钟算法版本：丢弃修正容器起点前生成的错位缓存，文件容器格式不变。 */
+const ANALYSIS_CACHE_VERSION = 2
 
 class SmartRegionFailure extends Error { constructor(readonly reason: SmartRegionFailureReason, message: string) { super(message) } }
 
@@ -74,7 +76,7 @@ export class SmartRegionService {
     return { ...request, ...normalizeSmartRegionRange(request.startUs, request.endUs, request.still) }
   }
 
-  private indexKey(identity: string, kind: SmartRegionAnalysisKind): string { return digest(['smart-region-index', SMART_REGION_FORMAT_VERSION, identity, kind]) }
+  private indexKey(identity: string, kind: SmartRegionAnalysisKind): string { return digest(['smart-region-index', SMART_REGION_FORMAT_VERSION, ANALYSIS_CACHE_VERSION, identity, kind]) }
 
   private async readIndex(identity: string, kind: SmartRegionAnalysisKind): Promise<IndexEntry[]> {
     const bytes = await this.deps.indexes.read(this.indexKey(identity, kind)).catch(() => undefined)
@@ -102,11 +104,15 @@ export class SmartRegionService {
     const request = this.normalize(input)
     const key = smartRegionRequestKey(request)
     const running = this.jobs.get(key)
-    if (running) return running.status
+    if (running) {
+      if (!running.cancelled) return running.status
+      await running.done
+      return this.ensure(input)
+    }
     const { identity } = await this.deps.identity(request.source)
     const segment = await this.cached(identity, request)
     if (segment) return { state: 'ready', segment }
-    if (this.jobs.has(key)) return this.jobs.get(key)!.status
+    if (this.jobs.has(key)) return this.ensure(input)
     return this.start(key, request, identity).status
   }
 
@@ -139,7 +145,7 @@ export class SmartRegionService {
     ).then((status) => {
       this.jobs.delete(key)
       // 取消的分析不广播失败：请求方已经不需要它，下次 ensure 会重新开始。
-      if (job.cancelled && status.state === 'failed') this.deps.log('info', '智能区域分析已取消', 'smart_regions.analyze.cancelled', { kind: request.kind })
+      if (job.cancelled) this.deps.log('info', '智能区域分析已取消', 'smart_regions.analyze.cancelled', { kind: request.kind })
       else this.publish(job, status)
       return status
     })
@@ -164,18 +170,23 @@ export class SmartRegionService {
     try { probe = await this.deps.probe(request.source) } catch (error) { throw new SmartRegionFailure('decode', `素材读取失败：${error instanceof Error ? error.message : String(error)}`) }
     if (!(probe.width > 0 && probe.height > 0)) throw new SmartRegionFailure('decode', '素材没有画面。')
     const fps = request.still ? 1 : Math.max(1, Math.min(SMART_REGION_FPS_LIMITS[request.kind], probe.fps > 0 ? probe.fps : 30))
-    const key = digest(['smart-region', SMART_REGION_FORMAT_VERSION, identity, request.kind, request.startUs, request.endUs, request.still, fps])
+    const key = digest(['smart-region', SMART_REGION_FORMAT_VERSION, ANALYSIS_CACHE_VERSION, identity, request.kind, request.startUs, request.endUs, request.still, fps])
     const output = await this.deps.segments.prepareTemporary(key)
     if (!output) throw new SmartRegionFailure('disk', '智能区域缓存目录不可用。')
     const containerStartUs = Math.round(probe.startSeconds * 1e6)
+    const analysisStartUs = request.still ? request.startUs : Math.max(request.startUs, containerStartUs)
+    if (!request.still && request.endUs <= analysisStartUs) throw new SmartRegionFailure('decode', '请求范围内没有可分析的画面。')
+    const ffmpegPath = await this.deps.ffmpegPath()
     const analysisJob: SmartRegionAnalysisJob = {
-      id: job.id, kind: request.kind, models, ffmpegPath: await this.deps.ffmpegPath(), source: request.source,
-      seekSeconds: request.still ? 0 : Math.max(0, request.startUs - containerStartUs) / 1e6,
-      durationSeconds: request.still ? null : (request.endUs - request.startUs) / 1e6,
-      startUs: request.startUs, endUs: request.endUs, fps,
+      id: job.id, kind: request.kind, models, ffmpegPath, source: request.source,
+      seekSeconds: request.still ? 0 : (analysisStartUs - containerStartUs) / 1e6,
+      durationSeconds: request.still ? null : (request.endUs - analysisStartUs) / 1e6,
+      startUs: analysisStartUs, endUs: request.endUs, fps,
       display: { width: probe.width, height: probe.height }, outputPath: output, providers: this.deps.providers,
     }
+    if (this.disposed || job.cancelled) throw new SmartRegionFailure('inference', '分析已取消。')
     const result = await this.deps.analyze(analysisJob, (done, total) => { if (!job.cancelled) this.publish(job, { state: 'analyzing', progress: Math.min(0.99, done / Math.max(1, total)) }) })
+    if (this.disposed || job.cancelled) throw new SmartRegionFailure('inference', '分析已取消。')
     let path: string
     try { path = await this.deps.segments.adopt(key, output) } catch (error) { throw new SmartRegionFailure('disk', `分析结果写入缓存失败：${error instanceof Error ? error.message : String(error)}`) }
     const entry: IndexEntry = { key, startUs: request.startUs, endUs: request.endUs, still: request.still, model: result.model, summary: result.summary }

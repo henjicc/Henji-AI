@@ -11,6 +11,7 @@ import { trackingDefinitionKey, type TrackingDefinition, type TrackingFailureRea
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import { listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { VideoEditTrackingFrames } from './videoEditTrackingFrames'
+import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegionMasks'
 
 /*
  * 跟踪器协调（任务 4.10，渲染层）：打开着的剪辑里每个跟踪器，按片段用到的素材范围在后台跟踪（主进程缓存、去重）；
@@ -26,6 +27,7 @@ const entries = new Map<string, Entry>()
 const listeners = new Set<() => void>()
 const exportRequests = new Map<object, Map<string, Request>>()
 const sequenceSources = new Map<string, VideoEditComposition>()
+const sequenceRegions = new Map<string, VideoEditSmartRegionSegments>()
 const preparing = new Map<string, AbortController>()
 let revision = 0
 
@@ -63,7 +65,9 @@ async function prepareSequenceTracking(definition: TrackingDefinition, signal?: 
   // 先跟完子图依赖再提交父跟踪，避免单队列上的父取帧反过来等待排在其后的子推理。
   await waitVideoEditTracking(composition, composition, signal)
   const { waitVideoEditSmartRegions } = await import('./videoEditSmartRegions')
-  await waitVideoEditSmartRegions(composition, composition, signal)
+  const regions = await waitVideoEditSmartRegions(composition, composition, signal)
+  signal?.throwIfAborted()
+  sequenceRegions.set(definition.source.signature, regions)
 }
 
 function record(definition: TrackingDefinition, status: TrackingStatus): void {
@@ -126,6 +130,7 @@ function mergeRequest(requests: Map<string, Request>, request: Request): void {
 function reconcile(): void {
   sequenceSources.clear()
   const needed = neededTrackers()
+  for (const signature of sequenceRegions.keys()) if (!sequenceSources.has(signature)) sequenceRegions.delete(signature)
   for (const [key, request] of needed) {
     if (entries.has(key)) continue
     record(request.definition, { state: 'idle' })
@@ -155,7 +160,8 @@ export function startVideoEditTracking(): () => void {
   const frames = new VideoEditTrackingFrames(sequenceComposition, reply => getPlatform().tracking.replyFrames(reply), async (renderer, composition) => {
     renderer.setTracks(videoEditTrackResults(composition))
     const { videoEditSmartRegionSegments } = await import('./videoEditSmartRegions')
-    renderer.setSmartRegions(videoEditSmartRegionSegments())
+    const source = [...sequenceSources].find(([, snapshot]) => snapshot === composition)
+    renderer.setSmartRegions(source ? sequenceRegions.get(source[0]) ?? videoEditSmartRegionSegments() : videoEditSmartRegionSegments())
   })
   try {
     stopProgress = getPlatform().tracking.onProgress(({ definition, status }) => { if (entries.has(trackingDefinitionKey(definition))) record(definition, status) })
@@ -262,8 +268,9 @@ export async function waitVideoEditTracking(document: Pick<VideoEditDocument, 'm
         for (const [key, request] of requests) {
           const status = entries.get(key)?.status
           if (status?.state === 'tracking') { pending = true; continue }
-          if (status?.state !== 'ready' || videoEditTrackingCovers(status, request.range)) continue
+          if (videoEditTrackingCovers(status, request.range)) continue
           if ((attempts.get(key) ?? 0) < 1) { attempts.set(key, (attempts.get(key) ?? 0) + 1); pending = true; runVideoEditTracking(request.definition, request.range, { direction: 'both' }) }
+          else if (!status || status.state === 'idle') { finish(); reject(new Error('跟踪已被停止，导出无法继续，请重新开始跟踪后再导出')); return }
         }
         if (!pending && statuses.every(entry => entry.status?.state === 'ready')) { finish(); resolve() }
       }
@@ -277,4 +284,4 @@ export async function waitVideoEditTracking(document: Pick<VideoEditDocument, 'm
 }
 
 /** 仅供测试：清空状态。 */
-export function resetVideoEditTrackingForTests(): void { stop?.(); entries.clear(); exportRequests.clear(); sequenceSources.clear(); revision = 0 }
+export function resetVideoEditTrackingForTests(): void { stop?.(); entries.clear(); exportRequests.clear(); sequenceSources.clear(); sequenceRegions.clear(); revision = 0 }

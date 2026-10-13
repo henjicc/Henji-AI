@@ -14,7 +14,8 @@ import { videoEditTrackerBox } from '../engine/videoEditTrackResults'
 import { analyzeVideoEditReframeOffThread } from './videoEditReframeWorkerClient'
 import { reframeVideoEdit } from './videoEditReframe'
 import { executeVideoEditReframeCapability, queueVideoEditReframe } from './videoEditReframeCapability'
-import { editVideoProject, saveVideoEdit, undoVideoEdit } from './videoEditService'
+import { editVideoProject, saveVideoEdit, undoVideoEdit, recordVideoEditExport } from './videoEditService'
+import { VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
 import { closeAllVideoEdits, failVideoEditSaves, reopenVideoEdit, savedVideoEdit } from './videoEditDocumentTestKit'
 import { updateVideoEditClipKeyframes } from './videoEditClipProperties'
 import { detectVideoEditScenes } from './videoEditSceneDetection'
@@ -69,6 +70,20 @@ it('复制新序列、保留原序列/音画链接/声音/字幕/标记；一整
   await saveVideoEdit(id); expect(savedVideoEdit(id).sequences[1].id).toBe(result.sequenceId)
   undoVideoEdit(id); expect(owner.document.sequences).toEqual([original])
   await saveVideoEdit(id); expect((await reopenVideoEdit(id)).document.sequences).toEqual([original])
+})
+it('自动重构分析期间只写导出元数据不误报内容改变，应用后保留导出记录', async () => {
+  const { owner, id, target } = await fixture()
+  const baseline = owner.document; const contentVersion = owner.contentVersion
+  vi.mocked(analyzeVideoEditReframeOffThread).mockImplementationOnce(async request => {
+    const result = await analyzeVideoEditReframe(request)
+    recordVideoEditExport(id, { id: 'metadata', taskId: 'metadata', sequenceId: target.sequenceId, name: '已导出', presetName: '默认', path: 'D:/metadata.mp4', completedAt: 1, rangeSource: 'content', settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings, range: { startFrame: 0, endFrame: 30 } })
+    expect(owner.document).not.toBe(baseline)
+    expect(owner.contentVersion).toBe(contentVersion)
+    return result
+  })
+  await expect(reframeVideoEdit(target, { size: { width: 1080, height: 1920 }, settings })).resolves.toMatchObject({ created: true })
+  expect(owner.document.sequences).toHaveLength(2)
+  expect(owner.document.exportHistory?.[0].taskId).toBe('metadata')
 })
 it('单片段能力适配器重生成保留手动点、其他动画；UI 与助手同一写入口并核实保存', async () => {
   const { owner, target, id, input } = await fixture()
