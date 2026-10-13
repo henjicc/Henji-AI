@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 
 import { UI_TEXT_TITLE_CLASS, UiButton, UiModal } from '@/components/ui'
-import Toggle from '@/components/ui/Toggle'
+import { UiSwitch, UiFormRow } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { useLargeUploadPromptStore } from '@/services/largeUploadPolicy'
 
@@ -68,14 +68,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
         </div>
 
         <div className="border-t border-line pt-3">
-          <Toggle
-            label={t('largeUpload.rememberLabel')}
-            checked={remember}
-            onChange={setRemember}
-            onText={t('largeUpload.rememberOn')}
-            offText={t('largeUpload.rememberOff')}
-            className="flex w-full items-center justify-between gap-4"
-          />
+          <UiFormRow inline label={t('largeUpload.rememberLabel')}><UiSwitch checked={remember} onCheckedChange={setRemember} title={t(remember ? 'largeUpload.rememberOn' : 'largeUpload.rememberOff')} /></UiFormRow>
           <p className="mt-2 text-xs text-text3">{t('largeUpload.rememberHint')}</p>
         </div>
     </UiModal>

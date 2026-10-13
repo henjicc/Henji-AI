@@ -55,7 +55,7 @@
 | 纵向堆叠 | `UI_STACK_CLASS`：tight 4、control 6、group 8、row 12、section 16、form 20、stack 24、region 32 |
 | 条带 | `UI_BAND_HEIGHT_CLASS` / `UI_BAND_MIN_HEIGHT_CLASS`：row 28、tab 32、header 36、title 40、command 44；`UI_BAND_PADDING_CLASS` 横向 12 |
 | 表单行 | `UI_FORM_ROW_MIN_HEIGHT_CLASS` 与 sm28/md32/lg36 控件对齐；行的排布行为由 UiFormRow 管理 |
-| 多行文本 | `UI_TEXT_AREA_HEIGHT_CLASS`；UiTextArea、UiTextAreaField、PromptEditor 的 `height` short92/medium120/tall240，填充滚动布局不传 height 时跟随容器 |
+| 多行文本 | `UI_TEXT_AREA_HEIGHT_CLASS`；UiTextArea、PromptEditor 的 `height` short92/medium120/tall240，填充滚动布局不传 height 时跟随容器 |
 | 浮层 | `UI_TRIGGER_PANEL_SIZE_CLASS`；PanelTrigger/Dropdown 的 `panelSize` menu/compact/content/workspace，用 min/clamp 约束视口；内容测量菜单继续按测得宽度定位 |
 | 面板正文 | `UI_PANEL_BODY_HEIGHT_CLASS` compact/content/workspace，按视口和内容上限双重约束；浮动输入区用 `UI_INPUT_PANEL_MAX_HEIGHT_CLASS` |
 | 拖动面板 | `UI_PANEL_WIDTH`（core/theme/panelSizes.ts）：rail52、sidebar184/232/360、inspector248/320/460、assistant 最小320默认420；拖动由宿主夹取视口 |
@@ -63,3 +63,5 @@
 | 浮层投影 | `--shadow-overlay` 唯一几何，实底与玻璃共用；玻璃内侧亮边仍属于材质 |
 
 间距迁移：最近档，等距向上（10→12、14→16、28→32）。图标槽、负偏移、相对字体单位和大块空态需结合布局判断，不按数值盲替换。不得覆盖全局 spacing 以免连带改变宽高和定位。`veil`、`--ui-radius-*`、`leading-5.5`、`UI_ACCENT_HEX` 已删除；媒体层用 media/on-media。主题仅推导 accent/danger 的静息、悬停、按下纯色，不再生成 hi/hover-hi。
+
+记录留白由 UiRecordItem 的 density 管理：page 每侧20、panel 每侧12、compact 每侧4，内部 gap-2；边界复用 UI_DIVIDER_CLASS。UiFormRow.trailing 占 sm 控件宽度（28），同组传 null 保持列对齐。

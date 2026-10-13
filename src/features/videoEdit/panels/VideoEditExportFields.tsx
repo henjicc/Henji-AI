@@ -9,7 +9,7 @@ import { VIDEO_EDIT_EXPORT_AUDIO_BITRATES } from '../engine/videoEditExportEncod
 export type ExportSection = 'video' | 'audio' | 'loudness' | 'captions' | 'general'
 const expansion = new WeakMap<object, ExportSection[]>()
 export function VideoEditExportField({ label, info, children, lock }: { label: string; info?: string; children: ReactNode; lock?: ReactNode }): React.ReactElement {
-  return <UiFormRow label={label} info={info} inline density="compact" className="!grid grid-cols-[72px_minmax(0,1fr)] !gap-2"><div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_22px] items-center gap-2"><div className="min-w-0">{children}</div><div className="flex items-center justify-center">{lock}</div></div></UiFormRow>
+  return <UiFormRow label={label} info={info} density="compact" trailing={lock ?? null}>{children}</UiFormRow>
 }
 interface Props {
   viewer: object; settings: VideoEditExportSettings; busy: boolean; hasProxies: boolean
@@ -25,7 +25,7 @@ export function VideoEditExportFields({ viewer, settings: s, busy, hasProxies, p
   const [customSize, setCustomSize] = useState(false)
   const follow = (field: keyof VideoEditExportSettings['followSequence']): React.ReactNode => <UiIconButton size="xs" on={s.followSequence[field]} aria-label={`${{ resolution: '分辨率', fps: '帧率', sampleRate: '采样率', channels: '声道' }[field]}跟随序列`} aria-pressed={s.followSequence[field]} title={s.followSequence[field] ? '跟随序列；点击解锁' : '已解锁；点击跟随序列'} disabled={busy} onClick={() => patch({ followSequence: { ...s.followSequence, [field]: !s.followSequence[field] } })}>{s.followSequence[field] ? <Link  /> : <Unlink  />}</UiIconButton>
   const select = <T extends string | number>(label: string, value: T, options: { value: T; label: string; disabled?: boolean; tooltip?: string }[], onSelect: (value: T) => void, disabled = false): React.ReactNode => <Dropdown<T> ariaLabel={label} size="sm" className="w-full" value={value} options={options} onSelect={onSelect} disabled={busy || disabled} minWidthStrategy="none" />
-  const section = (id: ExportSection, label: string, children: ReactNode, enabled?: boolean, toggle?: (enabled: boolean) => void, disabled = false): React.ReactNode => <UiGroup divided gap="none" titleTone="compact" key={id}>
+  const section = (id: ExportSection, label: string, children: ReactNode, enabled?: boolean, toggle?: (enabled: boolean) => void, disabled = false): React.ReactNode => <UiGroup divided gap="none" titleTone="compact" labelWidth={72} key={id}>
     <div className="flex w-full items-center gap-2 px-3 pb-2"><UiButton size="sm" className="-ml-2 min-w-0 flex-1 !justify-start" aria-expanded={expanded.includes(id)} onClick={() => setExpanded(previous => { const next = previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]; expansion.set(viewer, next); return next })}>{expanded.includes(id) ? <ChevronDown  /> : <ChevronRight  />}{label}</UiButton>{toggle && <UiSwitch aria-label={`启用${label}`} checked={enabled ?? false} disabled={busy || disabled} onCheckedChange={toggle} />}</div>
     {expanded.includes(id) && (enabled === undefined || enabled) && <div className="space-y-2 px-3 pb-3">{children}</div>}
   </UiGroup>

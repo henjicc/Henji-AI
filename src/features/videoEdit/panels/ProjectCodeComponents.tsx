@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { UiGroup, UiOptionButton, UiButton, UiFormRow, UiInput, UiTextAreaField, UiError, UiLoading } from '@/components/ui'
+import { UiGroup, UiOptionButton, UiButton, UiFormRow, UiInput, UiTextArea, UiError, UiLoading } from '@/components/ui'
 import { componentSourceMetadata, type CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { projectCodeComponents, publishProjectCodeComponent, withdrawProjectCodeComponents } from '../application/videoEditCodeStorage'
 import type { CodeComponentVersion } from '@/core/videoEdit/codeMaterial/components'
@@ -50,7 +50,7 @@ export function ProjectCodeComponents({ projectId, file, source, module, onImpor
     {version && <UiGroup gap="row">
       {version.description && <span className="text-xs text-text2">{version.description}</span>}
       <span className="text-xs text-text3">导出：{version.exports.join('、')}</span>
-      <UiTextAreaField aria-label="项目组件源码" rows={6} readOnly className="font-mono" value={componentSourceMetadata(version.source).source} />
+      <UiTextArea aria-label="项目组件源码" rows={6} readOnly className="font-mono" value={componentSourceMetadata(version.source).source} />
       <UiButton disabled={!version.exports.length} onClick={() => onImport(`import { ${version.exports.join(', ')} } from ${JSON.stringify(`@组件/${version.name}`)};\n`)}>插入导入语句</UiButton>
     </UiGroup>}
     {module && <UiButton disabled={busy} onClick={() => { setPublishing(true); setName(file.split('/').at(-1)!.replace(/\.ts$/, '')); setDescription(''); setError(undefined) }}>发布为项目组件</UiButton>}

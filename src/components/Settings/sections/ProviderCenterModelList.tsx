@@ -1,3 +1,4 @@
+import { UiRecordItem, UiRecordList } from '@/components/ui'
 import { useRef, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import {
@@ -114,9 +115,9 @@ const ProviderCenterModelList = ({
             <span>{t('providerCenter.columns.capability')}</span>
             <span className="text-right">{t('providerCenter.columns.visibility')}</span>
           </div>
-          <div data-provider-model-list className="min-h-0 flex-1 divide-y divide-line overflow-y-auto overscroll-contain">
-            {filtered.map(model => (
-              <div key={model.id} className="grid min-h-14 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem] items-center gap-4 px-1 py-3">
+          <UiRecordList data-provider-model-list className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {filtered.map((model, index) => (
+              <UiRecordItem key={model.id} index={index} density="panel"><div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem] items-center gap-4 px-1">
                 <div className="min-w-0">
                   {renaming?.id === model.id ? (
                     <UiInput
@@ -190,9 +191,9 @@ const ProviderCenterModelList = ({
                     />
                   </span>
                 </div>
-              </div>
+              </div></UiRecordItem>
             ))}
-          </div>
+          </UiRecordList>
         </div>
       )}
     </div>

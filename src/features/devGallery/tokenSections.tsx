@@ -11,7 +11,7 @@ import { THEME_COLOR_TOKEN_NAMES } from '@/core/theme/themeEngine'
 import { THEME_TOKEN_CSS_VARS } from '@/core/theme/themeCssVars'
 import { contrastRatio } from '@/core/theme/themeColor'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
-import { Dropdown, PanelTrigger, UiButton, UiDisclosurePanel, UiGroup, UiModal, UiPanel, UiSwitch, UiToast, UiToolbar, PromptEditor, UiTextArea, UiTextAreaField, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiDisclosurePanel, UiGroup, UiModal, UiPanel, UiSwitch, UiToast, UiToolbar, PromptEditor, UiTextArea, UI_TEXT_META_CLASS } from '@/components/ui'
 import { TooltipContent } from '@/components/ui/Tooltip'
 import { GALLERY_STYLE_TOKENS, GALLERY_TEXT_TOKENS, GALLERY_SPACING_KEYS, GALLERY_ICON_TOKENS, GALLERY_ICON_METRIC_TOKENS, GALLERY_MOTION_TOKENS, GALLERY_TAILWIND_CONFIG, GALLERY_COLOR_CLASSES_BY_VARIABLE } from './galleryIndex'
 
@@ -86,7 +86,7 @@ export function LayerTokensSection(): JSX.Element {
 export function HeightTokensSection(): JSX.Element {
   return <UiGroup title="控件高度：当前令牌枚举" titleTone="compact">{Object.entries(styleTokens.UI_CONTROL_HEIGHT_CLASS).map(([name, cls]) => <div key={name} data-gallery-token={`UI_CONTROL_HEIGHT_CLASS.${name}`} className="flex items-center gap-4 py-3"><code className="w-40 text-xs text-text2">{name} · {cls}</code><span className={`w-40 bg-control ${cls}`} /></div>)}<TokenMapping category="height" values={extension?.height} />
     {Object.entries(styleTokens.UI_BAND_HEIGHT_CLASS).map(([name, cls]) => <div key={name} data-gallery-token={`UI_BAND_HEIGHT_CLASS.${name}`} className={`flex items-center bg-control px-3 ${cls}`}>{name} · {cls}</div>)}
-    {(['short', 'medium', 'tall'] as const).map(height => <div key={height} className="grid grid-cols-2 gap-4"><PromptEditor height={height} ariaLabel={`${height} 提示词`} value={createPlainTextPromptDocument('文本高度')} onChange={() => undefined} /><UiTextArea height={height} aria-label={`${height} 文本`} defaultValue={height} /><UiTextAreaField height={height} aria-label={`${height} 字段`} defaultValue={height} /></div>)}
+    {(['short', 'medium', 'tall'] as const).map(height => <div key={height} className="grid grid-cols-2 gap-4"><PromptEditor height={height} ariaLabel={`${height} 提示词`} value={createPlainTextPromptDocument('文本高度')} onChange={() => undefined} /><UiTextArea height={height} aria-label={`${height} 文本`} defaultValue={height} /></div>)}
     {(['menu', 'compact', 'content', 'workspace'] as const).map(panelSize => <PanelTrigger key={panelSize} panelSize={panelSize} display={panelSize} renderPanel={() => <div><p>{panelSize} · 响应式宽高</p><Dropdown panelSize={panelSize} display={panelSize} renderPanel={() => <p>下拉面板 {panelSize}</p>} /></div>} />)}
     {(['default', 'none', 'spacious'] as const).map(contentPadding => <div key={contentPadding} className="relative h-60"><UiModal scope="container" isOpen title={contentPadding} contentPadding={contentPadding} contentScroll="auto" onClose={() => undefined}>正文留白 {contentPadding}</UiModal></div>)}
     <div className="relative h-60"><UiModal scope="container" isOpen title="编辑器自管滚动" contentScroll="none" onClose={() => undefined}>自管滚动</UiModal></div></UiGroup>

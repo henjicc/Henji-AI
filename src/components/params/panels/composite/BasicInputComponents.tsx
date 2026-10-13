@@ -1,7 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import Dropdown from '@/components/ui/Dropdown'
-import Toggle from '@/components/ui/Toggle'
+import { UiSwitch } from '@/components/ui'
 import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput, UiOptionButton } from '@/components/ui'
 import { getI18nText, type I18nText } from '@/core/types'
 
@@ -171,14 +171,7 @@ export const CompositeSwitch: React.FC<CompositeComponentProps<SwitchConfig>> = 
     : undefined
 
   return (
-    <Toggle
-      checked={checked}
-      onChange={(next) => onChange(next)}
-      onText={onText}
-      offText={offText}
-      disabled={disabled}
-      className="w-full"
-    />
+    <UiSwitch checked={checked} onCheckedChange={onChange} disabled={disabled} title={checked ? onText : offText} />
   )
 }
 

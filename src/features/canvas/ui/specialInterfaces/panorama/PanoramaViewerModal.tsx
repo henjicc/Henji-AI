@@ -13,8 +13,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { UiButton, UiError, UiErrorBoundary, UiIconButton, UiLoading } from '@/components/ui';
-import { useDialogTransition } from '@/components/ui/useDialogTransition';
-import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
+import { UiViewerShell, useUiViewerShell } from '@/components/ui';
 import { createLogger } from '@/core/logging';
 import { ICON_PANORAMA } from '@/core/theme/icons';
 import {
@@ -56,8 +55,8 @@ export function PanoramaViewerModal({
 }: CanvasImageViewerSurfaceProps): JSX.Element | null {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
-  const { shouldRender: isVisible, isVisible: motionVisible, closing, onTransitionEnd } = useDialogTransition(open, UI_DURATION.viewer);
-  const overlayOpacity = motionVisible ? 1 : 0;
+  const viewer = useUiViewerShell(open, onClose, { closeOnEscape: () => document.fullscreenElement !== rootRef.current })
+  const isVisible = viewer.shouldRender
   const [viewMode, setViewMode] = useState<PanoramaViewMode>('sphere');
   const [resetRevision, setResetRevision] = useState(0);
   const [retryRevision, setRetryRevision] = useState(0);
@@ -89,14 +88,6 @@ export function PanoramaViewerModal({
     });
   }, [open, sourceNodeId]);
 
-  useEffect(() => {
-    if (!isVisible) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isVisible]);
 
   useEffect(() => {
     setViewMode('sphere');
@@ -148,7 +139,6 @@ export function PanoramaViewerModal({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && document.fullscreenElement !== rootRef.current) onClose();
       if (event.key === 'ArrowLeft') onNavigate('prev');
       if (event.key === 'ArrowRight') onNavigate('next');
     };
@@ -165,23 +155,7 @@ export function PanoramaViewerModal({
   const dimensions = isReady ? `${resource.width} × ${resource.height}` : '';
 
   return (
-    <div
-      ref={rootRef}
-      data-panorama-viewer="true"
-      data-panorama-view-mode={renderSphere ? 'sphere' : 'flat'}
-      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义 */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-gap`}
-      style={{
-        opacity: overlayOpacity,
-        transition: uiTransition(['opacity'], UI_DURATION.viewer),
-        pointerEvents: open ? 'auto' : 'none',
-      }}
-      onTransitionEnd={onTransitionEnd}
-      aria-hidden={closing || undefined}
-      {...(closing ? { inert: '' } : {})}
-      role="dialog"
-      aria-modal={open ? 'true' : undefined}
-      aria-label={t('viewer.panorama.title')}
-    >
+    <UiViewerShell viewer={viewer} ref={rootRef} surface="canvas" inset="content" closeOnBackdrop={false} data-panorama-viewer="true" data-panorama-view-mode={renderSphere ? 'sphere' : 'flat'} aria-label={t('viewer.panorama.title')}>
       <div className="absolute inset-0 pt-12">
         {renderSphere && resource.status === 'ready' ? (
           <UiErrorBoundary
@@ -311,6 +285,6 @@ export function PanoramaViewerModal({
           {t('viewer.panorama.downloadFailed')}
         </div>
       ) : null}
-    </div>
+    </UiViewerShell>
   );
 }

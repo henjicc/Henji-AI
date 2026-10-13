@@ -1,3 +1,4 @@
+import { UiRecordList, UiRecordItem, UiViewerShell, useUiViewerShell } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useState } from 'react'
 import { useStore } from 'zustand'
@@ -28,9 +29,13 @@ export function PatternSection(): JSX.Element {
       <Antipattern>独立 UiOptionButton 并排冒充分段；用强调实底表示当前值。</Antipattern>
     </UiGroup>
     <UiGroup title="G3 记录列表：标题、元信息、结果、恢复动作" titleTone="compact">
-      {['镜头 01', '镜头 02'].map((name, index) => <div key={name} className={`flex flex-col gap-2 py-5 ${index ? 'border-t border-line' : ''}`}><p className="text-sm font-medium text-text1">{name}</p><p className="text-xs text-text2">今天 · 图片 · 已完成</p><UiPanel variant="inset" className="p-4">结果预览</UiPanel><UiButton size="sm">继续编辑</UiButton></div>)}
+      <UiRecordList>{['镜头 01', '镜头 02', '镜头 03'].map((name, index) => <UiRecordItem key={name} index={index} density="page" title={name} meta={['今天', '图片', index === 1 ? '失败' : '已完成']}
+        status={index === 1 ? <UiError size="xs" align="start" message="未能读取图片，请重试。" /> : undefined}
+        actions={<UiButton size="sm">{index === 1 ? '重试' : '继续编辑'}</UiButton>}><UiPanel variant="inset" className="p-4">结果预览</UiPanel></UiRecordItem>)}</UiRecordList>
+      <UiRecordList><UiRecordItem index={0} density="panel" title="面板记录" meta={['每侧 12px 留白']}>结果</UiRecordItem><UiRecordItem index={1} density="compact" title="紧凑记录" meta={['每侧 4px 留白']}>结果</UiRecordItem></UiRecordList>
       <Antipattern>记录间距与块内间距相同；在面板内再逐项套卡片。</Antipattern>
     </UiGroup>
+    <ViewerShellSamples />
     <UiGroup title="G4 复用同类结构：空、加载、失败" titleTone="compact"><div className="grid grid-cols-3 gap-4"><UiEmpty size="xs" title="还没有素材" action={<UiButton>添加素材</UiButton>} /><UiLoading size="xs" message="处理中" /><UiError size="xs" message="读取失败" onRetry={noop} /></div><Antipattern>每个页面手画三态或再加一圈卡片壳。</Antipattern></UiGroup>
     <UiGroup title="G5 不可用动作不出现；设置行保持横排" titleTone="overline" labelWidth={96}><UiFormRow label="启用预览" inline><UiSwitch checked /></UiFormRow><UiFormRow label="文件名称" inline><UiInput defaultValue="镜头 01" /></UiFormRow><Antipattern>没有对象时仍常驻整排灰色动作；只读内部状态进入正式界面。</Antipattern></UiGroup>
     <UiGroup title="命令带与从属带共享表面" titleTone="compact"><UiToolbar variant="command" trailing={<UiButton variant="primary">导出</UiButton>} subordinate={<UiFormRow label="强度" inline><NumberInput value={50} onChange={noop} /></UiFormRow>}><span className="text-13 text-text1">当前作品</span><UiButton>撤销</UiButton></UiToolbar><Antipattern>返回、标题、工具、参数分别长出一条头带。</Antipattern></UiGroup>
@@ -59,11 +64,26 @@ export function LongListSection(): JSX.Element {
   const [clock] = useState(() => createStore(() => ({ ratio: 0 })))
   const preview = useRafCallback((ratio: number) => clock.setState({ ratio }))
   return <div className="flex flex-col gap-8">
-    <UiGroup title="共享虚拟列表：1000 条可变行高记录" titleTone="compact"><div className="h-80"><UiVirtualList data={LIST_SAMPLES} getKey={item => item.id} emptyState={<UiEmpty size="xs" title="暂无记录" />} renderItem={item => <div className="flex flex-col gap-2 border-b border-line py-5"><p className="text-sm font-medium text-text1">{item.name}</p>{item.id % 3 === 0 && <p className="text-xs text-text2">描述会增加本行高度，滚动位置由共享列表测量。</p>}<UiButton size="sm">继续编辑</UiButton></div>} /></div></UiGroup>
+    <UiGroup title="共享虚拟列表：1000 条可变行高记录" titleTone="compact"><UiRecordList className="h-80"><UiVirtualList data={LIST_SAMPLES} getKey={item => item.id} emptyState={<UiEmpty size="xs" title="暂无记录" />} renderItem={item => <UiRecordItem index={item.id} density="page" title={item.name}>{item.id % 3 === 0 && <p className="text-xs text-text2">描述会增加本行高度，滚动位置由共享列表测量。</p>}<UiButton size="sm">继续编辑</UiButton></UiRecordItem>} /></UiRecordList></UiGroup>
     <UiGroup title="共享虚拟网格：状态和描述可以改变行高" titleTone="compact"><div className="h-64"><UiVirtualGrid data={LIST_SAMPLES} columns={3} getKey={item => item.id} highlightedIndex={selected} renderItem={item => <UiButton variant={selected === item.id ? 'secondary' : 'quiet'} onClick={() => setSelected(item.id)} className="w-full">{item.name}</UiButton>} /></div></UiGroup>
     <UiGroup title="高频预览：合帧生产，叶子订阅" titleTone="compact"><div className="h-24 bg-control" onPointerMove={event => {
       const rect = event.currentTarget.getBoundingClientRect()
       preview.schedule(Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))))
     }} onPointerLeave={() => preview.flush()}><p className="p-3 text-xs text-text2">移动指针查看预览；外层列表不订阅位置。</p></div><PointerProgressReadout clock={clock} /></UiGroup>
   </div>
+}
+
+function ViewerShellSamples(): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const media = useUiViewerShell(true, noop, { scope: 'container' })
+  const canvas = useUiViewerShell(true, noop, { scope: 'container' })
+  const live = useUiViewerShell(open, () => setOpen(false))
+  return <UiGroup title="全屏查看器：共享外壳与关闭" titleTone="compact">
+    <div className="grid grid-cols-2 gap-4">
+      <div className="relative h-40"><UiViewerShell viewer={media} surface="media" presentation="centered" aria-label="媒体外壳样本"><span className="text-on-media">媒体底</span></UiViewerShell></div>
+      <div className="relative h-40"><UiViewerShell viewer={canvas} surface="canvas" aria-label="画布外壳样本"><p className="p-4 text-text1">画布底</p></UiViewerShell></div>
+    </div>
+    <UiButton onClick={() => setOpen(true)}>打开查看器，验证 Escape 关闭</UiButton>
+    <UiViewerShell viewer={live} aria-label="查看器交互样本" presentation="centered" controls={<UiButton variant="media" className="absolute right-4 top-4" onClick={() => setOpen(false)}>关闭</UiButton>}><span className="text-on-media">点击背景或按 Escape 关闭</span></UiViewerShell>
+  </UiGroup>
 }

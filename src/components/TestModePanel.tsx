@@ -25,7 +25,7 @@ import {
   UiGroup,
   UiModal,
 } from '@/components/ui'
-import Toggle from '@/components/ui/Toggle'
+import { UiSwitch } from '@/components/ui'
 
 /** 一个可勾选的测试选项：整行是 label，点哪里都切换，悬停只出中性底（任务 5.7：原为带底色的可点击 div）。 */
 function TestOptionRow({ title, description, checked, onChange }: {
@@ -122,13 +122,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
               {['Ctrl', 'Alt', 'Shift', 'T'].map((key) => <kbd key={key} className={kbdClass}>{key}</kbd>)}
             </div>
           </div>
-          <Toggle
-            checked={state.enabled}
-            onChange={handleToggleTestMode}
-            onText={t('testMode.enable.title')}
-            offText={t('testMode.enable.title')}
-            ariaLabel={t('testMode.enable.title')}
-          />
+          <UiSwitch checked={state.enabled} onCheckedChange={handleToggleTestMode} aria-label={t('testMode.enable.title')} title={t('testMode.enable.title')} />
         </div>
 
         {state.enabled && (

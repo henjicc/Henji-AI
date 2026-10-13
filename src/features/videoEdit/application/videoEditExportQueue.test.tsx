@@ -198,6 +198,8 @@ it('面板完整默认设置不表示主动要求响度；用户关闭再启用�
 })
 it('面板默认跟随、解锁变自定义，保存重命名删除；队列和立即导出使用相同设置', async () => {
   const owner = await project(); const close = vi.fn(); const ui = render(<VideoEditExportDialog projectId={owner.document.id} onClose={close} />)
+  expect(ui.getByRole('textbox', { name: '导出文件名' }).closest('[data-ui-form-row="panel"]')?.getAttribute('data-label-width')).toBe('72')
+  expect(ui.getByRole('button', { name: '管理导出预设' }).closest('[data-ui-form-trailing]')).not.toBeNull()
   expect(ui.getByRole('button', { name: '导出预设' }).textContent).toContain('与序列一致')
   expect(ui.getByRole('button', { name: '导出分辨率' })).toHaveProperty('disabled', true)
   fireEvent.click(ui.getByRole('button', { name: '分辨率跟随序列' }))

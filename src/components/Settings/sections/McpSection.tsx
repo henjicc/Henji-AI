@@ -1,5 +1,6 @@
+import { UiRecordItem, UiRecordList } from '@/components/ui'
 import React, { useEffect, useState } from 'react'
-import { UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS, UiButton, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiPanel, UiSwitch } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiButton, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiPanel, UiSwitch } from '@/components/ui'
 import { Virtuoso } from 'react-virtuoso'
 import NumberInput from '@/components/ui/NumberInput'
 import { getMcpConnectionService } from '@/commands/mcp'
@@ -61,8 +62,9 @@ export default function McpSection(): React.JSX.Element {
   }
   const connectionRow = (index: number, connection: McpConnectionInfo): React.JSX.Element => {
     const editing = editingId === connection.id
-    return <div key={connection.id} className={`flex flex-col gap-2 py-5 ${index ? 'border-t border-line' : ''}`}>
-      <UiFormRow label={<span className="break-words">{connection.name}</span>} inline>
+    return <UiRecordItem key={connection.id} index={index} density="page" title={<span className="break-words">{connection.name}</span>}
+      meta={[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])]}
+      actions={(
         <div className="flex items-center gap-2">
           <UiButton variant="quiet" disabled={busy} onClick={() => setEditingId(editing ? undefined : connection.id)}>{t(editing ? 'mcp.editDone' : 'mcp.edit')}</UiButton>
           <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => {
@@ -72,11 +74,9 @@ export default function McpSection(): React.JSX.Element {
           })}>{t('mcp.copy')}</UiButton>
           <UiButton variant="quiet" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig(''); setEditingId(undefined) })}>{t('mcp.revoke')}</UiButton>
         </div>
-      </UiFormRow>
-      {editing
-        ? <div className="pl-6"><McpAccessSwitches access={connection} disabled={busy} onChange={(access) => void act(() => getMcpConnectionService().update({ id: connection.id, access }))} /></div>
-        : <p className={UI_TEXT_SECONDARY_CLASS}>{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</p>}
-    </div>
+      )}>
+      {editing && <div className="pl-6"><McpAccessSwitches access={connection} disabled={busy} onChange={(access) => void act(() => getMcpConnectionService().update({ id: connection.id, access }))} /></div>}
+    </UiRecordItem>
   }
   return <>
     {error && <UiError size="xs" align="start" title={error} message="" onRetry={() => void act(refresh)} />}
@@ -101,8 +101,8 @@ export default function McpSection(): React.JSX.Element {
       <UiGroup title={t('mcp.connectionsTitle')} titleTone="overline">
         {status.connections.length === 0 ? <p className={UI_TEXT_META_CLASS}>{t('mcp.noConnections')}</p> : null}
         {status.connections.length > 50
-          ? <Virtuoso className="h-96" data={status.connections} computeItemKey={(_index, connection) => connection.id} itemContent={connectionRow} />
-          : status.connections.map((connection, index) => connectionRow(index, connection))}
+          ? <Virtuoso role="list" className="h-96" data={status.connections} computeItemKey={(_index, connection) => connection.id} itemContent={connectionRow} />
+          : <UiRecordList>{status.connections.map((connection, index) => connectionRow(index, connection))}</UiRecordList>}
         {/* 复制出的连接配置是只读预览：下沉为 inset 面，等宽字体 */}
         {config && <UiPanel variant="inset" className="p-3"><pre data-observation-sensitive className="overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-text2">{config}</pre></UiPanel>}
       </UiGroup>

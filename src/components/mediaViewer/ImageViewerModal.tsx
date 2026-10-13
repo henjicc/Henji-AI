@@ -3,9 +3,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X, GripVertical } from 'lucide-react';
 
-import { isTopmostUiOverlay, UiButton, UiIconButton, UiError, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui';
-import { useDialogTransition } from '@/components/ui/useDialogTransition';
-import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
+import { UiButton, UiIconButton, UiError } from '@/components/ui';
+import { UiViewerShell, useUiViewerShell } from '@/components/ui';
 import type {
   ImageEditSessionData,
   ImageEditSessionReferenceV3,
@@ -93,10 +92,9 @@ export function ImageViewerModal({
   onContextMenu,
 }: ImageViewerModalProps): JSX.Element | null {
   const { t } = useTranslation();
-  const { shouldRender: isVisible, isVisible: motionVisible, onTransitionEnd } = useDialogTransition(open, UI_DURATION.viewer);
-  // 全屏查看器是模态浮层层（任务 4.3 / 5.9）：其上的子浮层先处理 Escape，查看器内点击不关掉打开它的面板
-  const overlay = useUiOverlayLayer(open, { modal: true });
-  const overlayOpacity = motionVisible ? 1 : 0;
+  const viewer = useUiViewerShell(open, onClose, { closeOnEscape: !isEditorMode })
+  const isVisible = viewer.shouldRender
+  const overlayOpacity = viewer.opacity
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
   const [swappedModes, setSwappedModes] = useState({ 'side-by-side': true, overlay: true });
   const [failedOriginal, setFailedOriginal] = useState<string | null>(null);
@@ -155,14 +153,6 @@ export function ImageViewerModal({
   }, [isVisible]);
 
   useEffect(() => {
-    if (!isVisible) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isVisible]);
-
-  useEffect(() => {
     if (!open) return;
     resetView();
   }, [open, imageUrl, resetView]);
@@ -175,17 +165,13 @@ export function ImageViewerModal({
         onNavigate('prev');
       } else if (e.key === 'ArrowRight') {
         onNavigate('next');
-      } else if (e.key === 'Escape') {
-        // 查看器上打开的右键菜单等浮层先处理 Escape（只关最上层，任务 5.9）
-        if (!isTopmostUiOverlay(overlay.id)) return;
-        onClose();
       } else if (e.key === ' ') {
         e.preventDefault();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, isEditorMode, onNavigate, onClose, overlay.id]);
+  }, [open, isEditorMode, onNavigate]);
 
   if (!isVisible) return null;
 
@@ -194,27 +180,7 @@ export function ImageViewerModal({
   const editorAvailable = fromUpload && Boolean(onEnterEditor && onExitEditor && onSaveEdit);
 
   return (
-    <div
-      data-image-viewer="true"
-      data-comparison-mode={mode}
-      role="dialog"
-      aria-label={t('viewer.imageAlt', '图片')}
-      aria-modal={open ? 'true' : undefined}
-      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-media`}
-      style={{
-        opacity: overlayOpacity,
-        transition: uiTransition(['opacity'], UI_DURATION.viewer),
-        pointerEvents: open ? 'auto' : 'none',
-      }}
-      aria-hidden={!open || undefined}
-      {...(!open ? { inert: '' } : {})}
-      onTransitionEnd={onTransitionEnd}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      {...overlay.layerProps}
-    >
-      <UiOverlayLayerProvider id={overlay.id}>
+    <UiViewerShell viewer={viewer} inset="content" data-image-viewer="true" data-comparison-mode={mode} aria-label={t('viewer.imageAlt', '图片')}>
       {editorAvailable && !isEditorMode && (
         <div className="absolute top-12 left-1/2 z-raised -translate-x-1/2">
           <UiButton
@@ -388,8 +354,6 @@ export function ImageViewerModal({
               </UiButton>
             )}
           </div>
-
-
           <UiIconButton size="xl" tone="media" shape="circle"
             onClick={onClose}
             className="absolute right-4 top-4 z-sticky"
@@ -398,9 +362,7 @@ export function ImageViewerModal({
           >
             <X  />
           </UiIconButton>
-
           <ImageInfoPanel open={open} imageSource={resolvedInfoSource} />
-
           {imageFailed && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               {/* 查看器是固定深色媒体底，提示放进随主题的实底面板：文字色与底同源；玻璃在纸白下透出深底，危险色标题只有 4.29:1 */}
@@ -463,7 +425,6 @@ export function ImageViewerModal({
           </div>
         </div>
       )}
-      </UiOverlayLayerProvider>
-    </div>
+    </UiViewerShell>
   );
 }

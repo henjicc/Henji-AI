@@ -61,7 +61,6 @@ import {
   UiSwitch,
   UiTaskHistoryFilterBar,
   UiTextArea,
-  UiTextAreaField,
   UiTextToken,
   UiToast,
   UiToolbar,
@@ -74,8 +73,6 @@ import {
 import NumberInput from '@/components/ui/NumberInput'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import FileUploader from '@/components/ui/FileUploader'
-import Toggle from '@/components/ui/Toggle'
-import TextInput from '@/components/ui/TextInput'
 import Tooltip, { TooltipContent } from '@/components/ui/Tooltip'
 import ContextMenu from '@/components/ContextMenu'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -189,7 +186,7 @@ export function FieldSection(): JSX.Element {
       </GalleryRow>
       <GalleryRow label="多行">
         <UiTextArea aria-label="描述" rows={2} defaultValue="多行文本" className="min-w-0 flex-1" />
-        <UiTextAreaField aria-label="备注" rows={2} placeholder="空占位" className="min-w-0 flex-1" />
+        <UiTextArea aria-label="备注" rows={2} placeholder="空占位" className="min-w-0 flex-1" />
       </GalleryRow>
     </GallerySection>
   )
@@ -540,8 +537,8 @@ export function ContentSection(): JSX.Element {
         <FileUploader files={[]} onUpload={noop} onRemove={noop} density="default" disabled />
         <FileUploader files={[]} onUpload={noop} onRemove={noop} density="compact" disabled />
       </UiErrorBoundary>
-      <Toggle label="旧包装：开关（待统一迁移）" checked onChange={noop} />
-      <TextInput label="旧包装：文本（待统一迁移）" value="镜头 01" onChange={noop} />
+      <UiFormRow inline label="开关"><UiSwitch checked onCheckedChange={noop} /></UiFormRow>
+      <UiFormRow inline label="文本"><UiInput value="镜头 01" onChange={noop} /></UiFormRow>
     </GallerySection>
   )
 }

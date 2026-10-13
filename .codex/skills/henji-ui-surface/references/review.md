@@ -214,7 +214,7 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | 组件 | 用法与边界 |
 |---|---|
 | UiColorInput | 内容颜色输入原语，禁止业务重写颜色输入框 |
-| UiTextAreaField | 复用正式多行字段外壳，不叠第二层边框 |
+| UiTextArea | 唯一 forwardRef 多行字段实现，复用正文、无框与高度档 |
 | UiErrorBoundary | 领域组件渲染失败兜底，记录正式日志域，不吞掉错误 |
 | GlobalAlertDialog | App 根的全局确认宿主，调用 alertDialogStore，不重复挂载样张 |
 | UiDisclosurePanel | 正式折叠过渡，不自行拼另一套开合时长 |
@@ -226,6 +226,6 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | StackedMediaUploader | 叠放媒体上传组合，复用 FileUploader 与拖拽排序 |
 | TooltipContent | Tooltip 的唯一浮层实现；静态样本通过 visible + anchorRef 常驻 |
 | PriceEstimate | 注册模型计价结果的显示，沿用用户币种/费用显示偏好，不触发生成 |
-| Toggle / TextInput | 存量标签包装，本页展示并标注迁移欠账；新调用使用 UiFormRow + UiSwitch / UiInput |
+| UiRecordList / UiRecordItem / UiViewerShell | 界面模式栏目展示三档记录（含失败恢复）和两种查看器底色；查看器另有开关与 Escape 交互样本 |
 
-五个矩阵变体均包含完整分区组，不能按五张截图理解。旧 `Toggle` / `TextInput` 的删除与调用方迁移移交任务 4.6；跨场景的滚动漏截防线涉及巡检执行器与 DOM 审计，移交任务 5.2。
+五个矩阵变体均包含完整分区组，不能按五张截图理解。旧 `Toggle` / `TextInput` 与 `UiTextAreaField` 已在任务 4.6 删除；跨场景的滚动漏截防线涉及巡检执行器与 DOM 审计，移交任务 5.2。

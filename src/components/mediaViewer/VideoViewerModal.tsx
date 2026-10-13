@@ -3,12 +3,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
-import { isTopmostUiOverlay, UiError, UiIconButton, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui'
+import { UiError, UiIconButton } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import { readVideoInfo } from '@/commands/video'
 import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
-import { useDialogTransition } from '@/components/ui/useDialogTransition'
+import { UiViewerShell, useUiViewerShell } from '@/components/ui';
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
 const logger = createLogger('components.mediaViewer.VideoViewerModal')
@@ -34,11 +34,9 @@ export interface VideoViewerModalProps {
 
 export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange }: VideoViewerModalProps): JSX.Element | null {
   const { t } = useI18n()
-  const { shouldRender: isVisible, isVisible: motionVisible, onTransitionEnd } = useDialogTransition(open, UI_DURATION.viewer, true, { enterKey: videoUrl })
-  // 全屏查看器是模态浮层层：查看器里打开的子浮层（倍速菜单）归属它，Escape 只关最上层；
-  // 从某个面板里打开查看器时，查看器内的点击也不会关掉那个面板（任务 4.3 / 5.9）
-  const overlay = useUiOverlayLayer(open, { modal: true })
-  const overlayOpacity = motionVisible ? 1 : 0
+  const viewer = useUiViewerShell(open, onClose, { enterKey: videoUrl })
+  const isVisible = viewer.shouldRender
+  const overlayOpacity = viewer.opacity
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoViewportRef = useRef<HTMLDivElement>(null)
   const progressBarRef = useRef<HTMLDivElement>(null)
@@ -73,14 +71,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   })
   const controlsHideTimer = useRef<number | null>(null)
   const volumeIndicatorTimer = useRef<number | null>(null)
-
-  useEffect(() => {
-    if (!isVisible) return
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [isVisible])
 
   useEffect(() => {
     if (!open) return
@@ -124,11 +114,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // 查看器里打开的倍速菜单等子浮层先处理 Escape（只关最上层，任务 5.9）
-        if (!isTopmostUiOverlay(overlay.id)) return
-        onClose()
-      } else if (e.key === ' ') {
+      if (e.key === ' ') {
         e.preventDefault()
         if (videoRef.current) {
           if (isVideoPlaying) {
@@ -153,7 +139,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose, isVideoPlaying, overlay.id])
+  }, [open, isVideoPlaying])
 
   useEffect(() => {
     if (!open) return
@@ -376,23 +362,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   if (!isVisible) return null
 
   return createPortal(
-    <div
-      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ "fixed inset-0 z-viewer bg-media flex items-center justify-center p-6"}
-      {...overlay.layerProps}
-      style={{
-        opacity: overlayOpacity,
-        transition: uiTransition(['opacity'], UI_DURATION.viewer),
-        pointerEvents: open ? 'auto' : 'none',
-      }}
-      // 收起中不可点击、对读屏隐藏；过渡结束即卸载，不只依赖计时器（任务 5.8）
-      aria-hidden={!open || undefined}
-      {...(!open ? { inert: '' } : {})}
-      onTransitionEnd={onTransitionEnd}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <UiOverlayLayerProvider id={overlay.id}>
+    <UiViewerShell viewer={viewer} presentation="centered" aria-label={t('viewer.videoAlt', '视频')}>
       <div
         className="relative isolate w-[92vw] h-[90vh] flex items-center justify-center"
         onMouseEnter={() => {
@@ -507,7 +477,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             </UiIconButton>
           </div>
         </div>
-
         <VideoViewerControls
           controlsContainerRef={controlsContainerRef}
           progressBarRef={progressBarRef}
@@ -537,8 +506,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           trimRange={trimRange}
         />
       </div>
-      </UiOverlayLayerProvider>
-    </div>,
+    </UiViewerShell>,
     document.body,
   )
 }
