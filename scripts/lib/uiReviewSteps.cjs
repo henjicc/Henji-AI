@@ -560,6 +560,9 @@ async function runStep(page, step, runtime) {
         await page.waitForFunction(() => Boolean(window.henjiNative), null, { timeout: 30000 })
         await page.locator(`[data-application-surface-id="${step.surface}"]:visible`).first()
           .waitFor({ state: 'visible', timeout: 15000 })
+        // 重载后窗口缩放会先回到默认，再由界面缩放 hook 异步写回；等它写回并稳定，避免把过渡态当成尺寸漂移。
+        await page.waitForFunction(() => document.documentElement.dataset.uiScale !== undefined, null, { timeout: 15000 })
+        await context.settlePage(page)
       }
       return
     case 'click':
