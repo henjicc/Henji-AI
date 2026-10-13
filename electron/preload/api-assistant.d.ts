@@ -31,7 +31,13 @@ export interface HenjiIpcErrorEnvelope {
   message: string
   code: string
   stack?: string
+  paidFailureFacts?: import('../../src/core/application-control/paidApproval').PaidFailureFacts
 }
+
+/** 普通值穿过 contextBridge，在 PAL 中恢复 Error，避免丢失结构化事实。 */
+export type HenjiIpcResultEnvelope<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: HenjiIpcErrorEnvelope }
 
 export interface HenjiAssistantApi {
   getUserInstructions(): Promise<AssistantUserInstructions>

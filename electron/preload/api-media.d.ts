@@ -329,7 +329,9 @@ export interface HenjiAudioExtractSamplesResult {
 }
 
 export interface HenjiAudioApi {
-  recording: import('../../src/core/audioEdit/recordingAudio').RecordingAudioPlatform
+  recording: Omit<import('../../src/core/audioEdit/recordingAudio').RecordingAudioPlatform, 'transcribe'> & {
+    transcribe(input: Parameters<import('../../src/core/audioEdit/recordingAudio').RecordingAudioPlatform['transcribe']>[0]): Promise<import('./api-assistant').HenjiIpcResultEnvelope<import('../../src/core/audioEdit/recordingAudio').RecordingAudioResult>>
+  }
   loudness: import('../../src/platform/contracts/audioLoudness').AudioLoudnessPlatform
   extractSamples(payload: { source: string; bucketCount: number }): Promise<HenjiAudioExtractSamplesResult>
   extractRangeSamples(payload: AudioWaveformRangeRequest & { requestId: string }): Promise<AudioWaveformRangeResult>

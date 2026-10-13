@@ -178,8 +178,9 @@ const aiApi: HenjiAiApi = {
   getProviderKeyStatus: () => nativeInvoke('ai:getRuntimeProviderKeyStatus'),
   testProviderConnection: (providerId) => nativeInvoke('ai:testProviderConnection', { providerId }),
   listTtsVoices: (modelId) => nativeInvoke('ai:listTtsVoices', { modelId }),
-  generate: (request) => nativeInvoke('ai:generate', request),
-  continuePolling: (request) => nativeInvoke('ai:continuePolling', request),
+  // 与转录一致，错误信封按值跨桥；不能在 preload 抛带自定义事实的 Error。
+  generate: (request) => ipcRenderer.invoke('ai:generate', request),
+  continuePolling: (request) => ipcRenderer.invoke('ai:continuePolling', request),
   cancelTask: (taskId) => nativeInvoke('ai:cancelTask', { taskId }),
   getProgressEstimate: (request) => nativeInvoke('ai:getProgressEstimate', request),
   recordProgressSample: (request) => nativeInvoke('ai:recordProgressSample', request),
@@ -211,10 +212,15 @@ const llmApi: HenjiLlmApi = {
     }
     ipcRenderer.on('llm:chatStream:event', listener)
     try {
-      await nativeInvoke('llm:chatStream', { streamId, request })
+      const reply = await ipcRenderer.invoke('llm:chatStream', { streamId, request }) as IpcResultEnvelope<void>
+      if (!reply.ok) {
+        if (!terminalReceived) await waitForOptionalTerminalEvent(terminalEvent)
+        return reply
+      }
       if (!terminalReceived) {
         await terminalEvent
       }
+      return reply
     } catch (error) {
       if (!terminalReceived) {
         await waitForOptionalTerminalEvent(terminalEvent)
@@ -231,12 +237,12 @@ const llmApi: HenjiLlmApi = {
     }
     ipcRenderer.on('llm:modelStep:event', listener)
     try {
-      return await nativeInvoke('llm:modelStep', { streamId, input })
+      return await ipcRenderer.invoke('llm:modelStep', { streamId, input })
     } finally {
       ipcRenderer.removeListener('llm:modelStep:event', listener)
     }
   },
-  verifyModelCapabilities: request => nativeInvoke('llm:verifyModelCapabilities', request),
+  verifyModelCapabilities: request => ipcRenderer.invoke('llm:verifyModelCapabilities', request),
   cancelTask: (taskId) => nativeInvoke('llm:cancelTask', { taskId }),
   discoverModels: provider => nativeInvoke('llm:discoverModels', provider),
 }
@@ -387,7 +393,7 @@ const audioApi: HenjiAudioApi = {
     release: sessionId => nativeInvoke('audioEdit:explanation', { action: 'release', sessionId }),
     archive: sessionId => nativeInvoke('audioEdit:explanation', { action: 'archive', sessionId }),
     restore: input => nativeInvoke('audioEdit:explanation', input),
-    transcribe: input => nativeInvoke('audioEdit:explanation', input),
+    transcribe: input => ipcRenderer.invoke('audioEdit:explanation', input),
     preflight: input => nativeInvoke('audioEdit:explanation', input),
     cancel: sessionId => nativeInvoke('audioEdit:explanation', { action: 'cancel', sessionId }),
   },

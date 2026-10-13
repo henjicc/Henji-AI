@@ -1,5 +1,6 @@
 import type { AudioEditPlatform } from '@/platform/contracts/audioEdit'
 import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
+import { unwrapIpcResult } from './ipcResult'
 
 function api() {
   if (!window.henjiNative?.audio) throw new Error('Audio edit platform is unavailable')
@@ -42,7 +43,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
       write: input => api().recording.write(input),
       read: (sessionId, chunkId) => api().recording.read(sessionId, chunkId),
       erase: sessionId => api().recording.erase(sessionId),
-      transcribe: input => api().recording.transcribe(input),
+      transcribe: async input => unwrapIpcResult<Awaited<ReturnType<AudioEditPlatform['recording']['transcribe']>>>(await api().recording.transcribe(input)),
       preflight: input => api().recording.preflight(input),
       cancel: sessionId => api().recording.cancel(sessionId),
     },

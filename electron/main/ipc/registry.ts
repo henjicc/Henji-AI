@@ -1,5 +1,6 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { readTranscriptionFacts, type TranscriptionFacts } from '../../../src/core/audioEdit/transcriptionFailure'
+import { readPaidFailureFacts, type PaidFailureFacts } from '../../../src/core/application-control/paidApproval'
 
 export interface IpcErrorEnvelope {
   name: string
@@ -7,6 +8,7 @@ export interface IpcErrorEnvelope {
   code: string
   stack?: string
   transcriptionFacts?: TranscriptionFacts
+  paidFailureFacts?: PaidFailureFacts
 }
 
 export type IpcResultEnvelope<T> =
@@ -62,6 +64,7 @@ function normalizeError(error: unknown): IpcErrorEnvelope {
       code: error.name || 'Error',
       stack: error.stack,
       ...(readTranscriptionFacts(error) ? { transcriptionFacts: readTranscriptionFacts(error) } : {}),
+      paidFailureFacts: readPaidFailureFacts(error),
     }
   }
 
@@ -69,6 +72,7 @@ function normalizeError(error: unknown): IpcErrorEnvelope {
     name: 'Error',
     message: typeof error === 'string' ? error : 'Unknown IPC error',
     code: 'UnknownError',
+    paidFailureFacts: readPaidFailureFacts(error),
   }
 }
 

@@ -1,4 +1,5 @@
 import type { LlmRuntimePlatform } from '@/platform/contracts/llmRuntime'
+import { unwrapIpcResult } from './ipcResult'
 
 const DOMAIN = 'llmRuntime'
 
@@ -23,13 +24,13 @@ export function createElectronLlmRuntime(): LlmRuntimePlatform {
     commitProviderSettings: async request => await getNativeLlm().commitProviderSettings(request),
     deleteProviderSettings: async request => await getNativeLlm().deleteProviderSettings(request),
     chatStream: async (request, onEvent) => {
-      await getNativeLlm().chatStream(request, onEvent)
+      unwrapIpcResult(await getNativeLlm().chatStream(request, onEvent))
     },
     modelStep: async (input, onEvent) => {
-      return await getNativeLlm().modelStep(input, onEvent)
+      return unwrapIpcResult<Awaited<ReturnType<LlmRuntimePlatform['modelStep']>>>(await getNativeLlm().modelStep(input, onEvent))
     },
     verifyModelCapabilities: async (request) => {
-      return await getNativeLlm().verifyModelCapabilities(request)
+      return unwrapIpcResult<Awaited<ReturnType<LlmRuntimePlatform['verifyModelCapabilities']>>>(await getNativeLlm().verifyModelCapabilities(request))
     },
     cancelTask: async (taskId) => {
       await getNativeLlm().cancelTask(taskId)

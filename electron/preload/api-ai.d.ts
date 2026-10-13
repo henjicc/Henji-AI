@@ -12,6 +12,7 @@ import type {
   ModelCapabilitySmokeRequest,
   ModelCapabilitySmokeResult,
 } from '../../src/core/llm/capabilitySmoke'
+import type { HenjiIpcResultEnvelope } from './api-assistant'
 
 export interface HenjiProviderKeyStatus {
   providerId: string
@@ -107,8 +108,8 @@ export interface HenjiAiApi {
   getProviderKeyStatus(): Promise<HenjiProviderKeyStatus[]>
   testProviderConnection(providerId: string): Promise<HenjiProviderConnectionTestResult>
   listTtsVoices(modelId: string): Promise<import('@henjicc/ai-sdk').TtsVoice[]>
-  generate(request: HenjiAiGenerateRequest): Promise<HenjiAiGenerateResponse>
-  continuePolling(request: HenjiAiContinuePollingRequest): Promise<HenjiAiGenerateResponse>
+  generate(request: HenjiAiGenerateRequest): Promise<HenjiIpcResultEnvelope<HenjiAiGenerateResponse>>
+  continuePolling(request: HenjiAiContinuePollingRequest): Promise<HenjiIpcResultEnvelope<HenjiAiGenerateResponse>>
   cancelTask(taskId: string): Promise<void>
   getProgressEstimate(request: HenjiAiGetProgressEstimateRequest): Promise<HenjiAiProgressEstimate>
   recordProgressSample(request: HenjiAiRecordProgressSampleRequest): Promise<HenjiAiRecordProgressSampleResponse>
@@ -138,9 +139,9 @@ export interface HenjiLlmApi {
     providerId: string
     baselineConfig: LlmConfigState
   }): Promise<HenjiLlmProviderSettingsResult>
-  chatStream(request: HenjiLlmChatRequest, onEvent: (event: HenjiLlmStreamEvent) => void): Promise<void>
-  modelStep(input: ModelStepInput, onEvent: (event: ModelStepEvent) => void): Promise<ModelStepResult>
-  verifyModelCapabilities(request: ModelCapabilitySmokeRequest): Promise<ModelCapabilitySmokeResult>
+  chatStream(request: HenjiLlmChatRequest, onEvent: (event: HenjiLlmStreamEvent) => void): Promise<HenjiIpcResultEnvelope<void>>
+  modelStep(input: ModelStepInput, onEvent: (event: ModelStepEvent) => void): Promise<HenjiIpcResultEnvelope<ModelStepResult>>
+  verifyModelCapabilities(request: ModelCapabilitySmokeRequest): Promise<HenjiIpcResultEnvelope<ModelCapabilitySmokeResult>>
   cancelTask(taskId: string): Promise<void>
   discoverModels(provider: Pick<
     LlmProviderConfig,
