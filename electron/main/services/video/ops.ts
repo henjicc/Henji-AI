@@ -7,6 +7,7 @@ import { getUploadsDir } from '../image/path-utils'
 import { execFileAsyncBuffer, resolveLocalMediaPath } from '../media/shared'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
 import { withMediaHeavyTask } from '../media-import/concurrency'
+import { createMainLogger } from '../logging'
 import {
   getPreferredEncoder,
   invalidateEncoderCache,
@@ -22,10 +23,14 @@ import type {
 } from './types'
 
 const MAX_BUFFER_BYTES = 32 * 1024 * 1024
+const logger = createMainLogger('main.video.ops')
+const ENCODE_TIMEOUT_MS = 30 * 60 * 1000
 
-function execFileAsync(binaryPath: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+function execFileAsync(binaryPath: string, args: string[], signal?: AbortSignal, timeout = ENCODE_TIMEOUT_MS): Promise<{ stdout: string; stderr: string }> {
+  signal?.throwIfAborted()
   return new Promise((resolve, reject) => {
-    execFile(binaryPath, args, { maxBuffer: MAX_BUFFER_BYTES }, (error, stdout, stderr) => {
+    execFile(binaryPath, args, { maxBuffer: MAX_BUFFER_BYTES, signal, timeout }, (error, stdout, stderr) => {
+      if (signal?.aborted) { reject(signal.reason); return }
       if (error) {
         reject(new Error(`${path.basename(binaryPath)} failed: ${error.message}\n${stderr}`))
         return
@@ -33,6 +38,77 @@ function execFileAsync(binaryPath: string, args: string[]): Promise<{ stdout: st
       resolve({ stdout, stderr })
     })
   })
+}
+
+interface MediaJob { controller: AbortController; promise: Promise<void>; users: number }
+const pendingOutputs = new Map<string, MediaJob>()
+
+/** 相同产物共用编码；单个消费者取消不影响其他消费者，最后一个取消才结束进程。 */
+async function prepareOutput(outputPath: string, encode: (temporaryPath: string, signal: AbortSignal) => Promise<void>, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  let job = pendingOutputs.get(outputPath)
+  if (!job) {
+    const controller = new AbortController()
+    const created: MediaJob = { controller, users: 0, promise: Promise.resolve() }
+    created.promise = Promise.resolve().then(async () => {
+      const jobSignal = controller.signal
+      jobSignal.throwIfAborted()
+      if (await validOutput(outputPath, jobSignal)) return
+      // media-recycle-allow: invalid unpublished derived cache, no valid consumer may reuse it.
+      await fs.promises.rm(outputPath, { force: true })
+      const ext = path.extname(outputPath)
+      const temporaryPath = `${outputPath.slice(0, -ext.length)}.${crypto.randomUUID()}.tmp${ext}`
+      const requestId = crypto.randomUUID()
+      logger.info('开始处理视频', { event: 'video.prepare.start', requestId })
+      try {
+        await encode(temporaryPath, jobSignal)
+        jobSignal.throwIfAborted()
+        if (!await validOutput(temporaryPath, jobSignal)) throw new Error('视频处理未生成有效文件，请重试。')
+        jobSignal.throwIfAborted()
+        await fs.promises.rename(temporaryPath, outputPath)
+        logger.info('视频处理完成', { event: 'video.prepare.completed', requestId })
+      } catch (error) {
+        logger.warn('视频处理未完成', { event: 'video.prepare.failed', requestId, error })
+        throw error
+      } finally {
+        // media-recycle-allow: failed unpublished encoding staging or already renamed staging.
+        await fs.promises.rm(temporaryPath, { force: true })
+      }
+    }).finally(() => { if (pendingOutputs.get(outputPath) === created) pendingOutputs.delete(outputPath) })
+    pendingOutputs.set(outputPath, created)
+    job = created
+  }
+  const active = job
+  active.users++
+  let released = false
+  const release = (): void => { if (!released) { released = true; active.users-- } }
+  await new Promise<void>((resolve, reject) => {
+    const cancel = (): void => {
+      release()
+      if (active.users === 0) {
+        active.controller.abort(signal?.reason)
+        if (pendingOutputs.get(outputPath) === active) pendingOutputs.delete(outputPath)
+        active.promise.then(() => reject(signal?.reason), () => reject(signal?.reason))
+      } else reject(signal?.reason)
+    }
+    signal?.addEventListener('abort', cancel, { once: true })
+    active.promise.then(resolve, reject).finally(() => { signal?.removeEventListener('abort', cancel); release() })
+    if (signal?.aborted) cancel()
+  })
+  signal?.throwIfAborted()
+}
+
+async function validOutput(outputPath: string, signal: AbortSignal): Promise<boolean> {
+  try {
+    if ((await fs.promises.stat(outputPath)).size === 0) return false
+    const info = await readVideoInfo(outputPath, signal)
+    return info.width > 0 && info.height > 0
+  } catch (error) {
+    signal.throwIfAborted()
+    if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') throw error
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) logger.warn('视频缓存无法读取，将重新处理', { event: 'video.prepare.invalid_cache', error })
+    return false
+  }
 }
 
 interface FfprobeStream {
@@ -46,16 +122,17 @@ interface FfprobeOutput {
   streams?: FfprobeStream[]
 }
 
-export async function readVideoInfo(source: string): Promise<VideoInfoResultDto> {
+export async function readVideoInfo(source: string, signal?: AbortSignal): Promise<VideoInfoResultDto> {
+  signal?.throwIfAborted()
   const ffprobePath = await loadFfprobePath()
-  const localPath = await resolveLocalMediaPath(source)
+  const localPath = await resolveLocalMediaPath(source, signal)
   const { stdout } = await execFileAsync(ffprobePath, [
     '-v', 'quiet',
     '-print_format', 'json',
     '-show_format',
     '-show_streams',
     localPath,
-  ])
+  ], signal, 30_000)
   const parsed = JSON.parse(stdout) as FfprobeOutput
   const videoStream = parsed.streams?.find((stream) => stream.codec_type === 'video')
   const hasAudio = parsed.streams?.some((stream) => stream.codec_type === 'audio') ?? false
@@ -71,7 +148,8 @@ export async function readVideoInfo(source: string): Promise<VideoInfoResultDto>
   }
 }
 
-export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promise<TrimVideoSourceResultDto> {
+export async function trimVideoSource(payload: TrimVideoSourcePayloadDto, signal?: AbortSignal): Promise<TrimVideoSourceResultDto> {
+  signal?.throwIfAborted()
   const { source, startSeconds, endSeconds } = payload
   const durationSeconds = endSeconds - startSeconds
   if (!(durationSeconds > 0)) {
@@ -79,7 +157,7 @@ export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promi
   }
 
   const ffmpegPath = await loadFfmpegPath()
-  const localPath = await resolveLocalMediaPath(source)
+  const localPath = await resolveLocalMediaPath(source, signal)
 
   const digest = crypto
     .createHash('md5')
@@ -90,7 +168,7 @@ export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promi
   const sourceExt = path.extname(localPath) || '.mp4'
   const outputPath = path.join(getUploadsDir(), `trim-${digest}${sourceExt}`)
 
-  if (!fs.existsSync(outputPath)) {
+  await prepareOutput(outputPath, async (temporaryPath, jobSignal) => {
     // 只做时间切割、不重新编码（-c copy）：直接按关键帧复制流，裁剪近乎瞬间完成，
     // 代价是起止点会贴最近的关键帧（通常偏差不到一两秒）。本地裁剪不追求帧级精确，
     // 体积/画质有需要会在生成提交时单独跑 compressVideoToFit 重新编码。
@@ -104,9 +182,9 @@ export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promi
       '-avoid_negative_ts', 'make_zero',
       // movflags 是 mov/mp4 muxer 专用选项，喂给 webm/mkv 等容器会报错，按容器类型条件附加
       ...(isMp4Like ? ['-movflags', '+faststart'] : []),
-      outputPath,
-    ])
-  }
+      temporaryPath,
+    ], jobSignal)
+  }, signal)
 
   return { path: outputPath, durationSeconds }
 }
@@ -115,18 +193,20 @@ export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promi
  * 把视频压缩到不超过 maxSizeMB：按目标体积反推平均码率，单遍编码（CRF + 码率上限的约束模式），
  * preset=medium 取画质/速度中档。已经满足体积要求时直接原样返回，不重复编码。
  */
-export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto): Promise<CompressVideoToFitResultDto> {
+export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto, signal?: AbortSignal): Promise<CompressVideoToFitResultDto> {
+  signal?.throwIfAborted()
   const { source, maxSizeMB } = payload
-  const localPath = await resolveLocalMediaPath(source)
+  const localPath = await resolveLocalMediaPath(source, signal)
   const stat = await fs.promises.stat(localPath)
   const maxBytes = Math.floor(maxSizeMB * 1024 * 1024)
+  signal?.throwIfAborted()
 
   if (stat.size <= maxBytes) {
     return { path: localPath, sizeBytes: stat.size }
   }
 
   const ffmpegPath = await loadFfmpegPath()
-  const info = await readVideoInfo(localPath)
+  const info = await readVideoInfo(localPath, signal)
 
   const audioBitrateBps = 128_000
   const containerOverheadRatio = 0.92
@@ -143,9 +223,8 @@ export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto):
     .digest('hex')
   const outputPath = path.join(getUploadsDir(), `compressed-${digest}.mp4`)
 
-  if (!fs.existsSync(outputPath)) {
-    await encodeCompressedVideo(ffmpegPath, localPath, outputPath, videoBitrateKbps, maxrateKbps, bufsizeKbps)
-  }
+  await prepareOutput(outputPath, (temporaryPath, jobSignal) =>
+    encodeCompressedVideo(ffmpegPath, localPath, temporaryPath, videoBitrateKbps, maxrateKbps, bufsizeKbps, jobSignal), signal)
 
   const compressedStat = await fs.promises.stat(outputPath)
   return { path: outputPath, sizeBytes: compressedStat.size }
@@ -162,7 +241,8 @@ async function encodeCompressedVideo(
   outputPath: string,
   videoBitrateKbps: number,
   maxrateKbps: number,
-  bufsizeKbps: number
+  bufsizeKbps: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   const buildArgs = (profile: VideoEncoderProfile): string[] => [
     '-y',
@@ -179,17 +259,22 @@ async function encodeCompressedVideo(
   ]
 
   const profile = await getPreferredEncoder()
+  signal?.throwIfAborted()
   if (!isHardwareEncoder(profile)) {
-    await execFileAsync(ffmpegPath, buildArgs(profile))
+    await execFileAsync(ffmpegPath, buildArgs(profile), signal)
     return
   }
 
   try {
-    await execFileAsync(ffmpegPath, buildArgs(profile))
+    await execFileAsync(ffmpegPath, buildArgs(profile), signal)
   } catch (error) {
+    signal?.throwIfAborted()
     const retried = await invalidateEncoderCache()
+    signal?.throwIfAborted()
     if (retried.id === profile.id) throw error
-    await execFileAsync(ffmpegPath, buildArgs(retried))
+    // media-recycle-allow: unpublished failed encoder output, retry must start with a clean file.
+    await fs.promises.rm(outputPath, { force: true })
+    await execFileAsync(ffmpegPath, buildArgs(retried), signal)
   }
 }
 

@@ -1,4 +1,5 @@
 import { getPlatform } from '@/platform/runtime'
+import { createLogger } from '@/core/logging'
 import type {
   AppendVideoFrameExportPayload,
   CompressVideoToFitResult,
@@ -18,16 +19,25 @@ export async function readVideoInfo(source: string): Promise<VideoInfoResult> {
 export async function trimVideoSource(
   source: string,
   startSeconds: number,
-  endSeconds: number
+  endSeconds: number,
+  signal?: AbortSignal,
 ): Promise<TrimVideoSourceResult> {
-  return await getPlatform().video.trimVideoSource({ source, startSeconds, endSeconds })
+  return await processVideo(() => getPlatform().video.trimVideoSource({ source, startSeconds, endSeconds }, signal))
 }
 
 export async function compressVideoToFit(
   source: string,
-  maxSizeMB: number
+  maxSizeMB: number,
+  signal?: AbortSignal,
 ): Promise<CompressVideoToFitResult> {
-  return await getPlatform().video.compressVideoToFit({ source, maxSizeMB })
+  return await processVideo(() => getPlatform().video.compressVideoToFit({ source, maxSizeMB }, signal))
+}
+
+async function processVideo<T>(task: () => Promise<T>): Promise<T> {
+  try { return await task() } catch (error) {
+    createLogger('commands.video').warn('视频处理未完成', { event: 'video.processing.failed', error })
+    throw error
+  }
 }
 
 export async function startVideoFrameExport(

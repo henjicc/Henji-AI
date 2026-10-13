@@ -75,15 +75,26 @@ export function VideoTrimModal({
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const processingRef = useRef<AbortController | null>(null);
+  const cancelProcessing = useCallback(() => {
+    processingRef.current?.abort();
+    processingRef.current = null;
+  }, []);
+  const handleClose = useCallback(() => {
+    cancelProcessing();
+    onClose();
+  }, [cancelProcessing, onClose]);
 
   useEffect(() => {
+    setIsProcessing(false);
     if (!open) return;
     setIsProbing(true);
     setError(null);
     setDurationSeconds(0);
     // 上次关闭时 <video> 随弹窗卸载，监听已解绑，收不到那次的 pause；新开的视频总是暂停态。
     setIsPlaying(false);
-  }, [open, previewUrl]);
+    return cancelProcessing;
+  }, [open, previewUrl, cancelProcessing]);
 
   const handleLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
@@ -166,6 +177,7 @@ export function VideoTrimModal({
   };
 
   const handleConfirm = async () => {
+    if (processingRef.current) return;
     if (!maxSizeMB || !resolveSource) {
       onConfirm({ start, end });
       onClose();
@@ -173,19 +185,27 @@ export function VideoTrimModal({
     }
     setIsProcessing(true);
     setError(null);
+    const controller = new AbortController();
+    processingRef.current = controller;
     try {
       const source = await resolveSource();
-      const result = await compressVideoToFit(source, maxSizeMB);
+      controller.signal.throwIfAborted();
+      const result = await compressVideoToFit(source, maxSizeMB, controller.signal);
+      controller.signal.throwIfAborted();
       if (result.path !== source) {
         onVideoCompressed?.(result.path);
       }
       onConfirm({ start, end });
       onClose();
     } catch (confirmError) {
+      if (controller.signal.aborted) return;
       logger.error('[VideoTrimModal] compressVideoToFit failed', confirmError);
       setError(t('node.mediaRow.videoTrimFailed'));
     } finally {
-      setIsProcessing(false);
+      if (processingRef.current === controller) {
+        processingRef.current = null;
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -193,12 +213,12 @@ export function VideoTrimModal({
     <UiModal
       isOpen={open}
       title={t('node.mediaRow.videoTrimTitle')}
-      onClose={onClose}
+      onClose={handleClose}
       size="editor"
       contentClassName="overflow-y-auto px-4 py-4"
       footer={(
         <>
-          <UiButton variant="secondary" onClick={onClose} disabled={isProcessing}>
+          <UiButton variant="secondary" onClick={handleClose}>
             {t('common:cancel')}
           </UiButton>
           <UiButton

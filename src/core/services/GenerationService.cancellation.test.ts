@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import path from 'node:path'
 import i18n from '@/i18n'
 import { registry } from '@/core/ModelRegistry'
 import { aiCancelTask, aiContinuePolling, aiGenerate } from '@/commands/aiRuntime'
@@ -10,6 +11,8 @@ import { configureGenerationSubmissionConfirmation, transferGenerationPaidApprov
 import { bindApplicationConfirmation, requestApplicationPaidApproval } from '../application-control/userConfirmation'
 import { ttsPresentation } from '@/models/presentation/tts'
 import { clearProviderAvailability, getProviderAvailabilityFailure } from './providerAvailability'
+import { compressVideoToFit } from '@/commands/video'
+vi.mock('@/commands/video', () => ({ compressVideoToFit: vi.fn(), trimVideoSource: vi.fn(), readVideoInfo: vi.fn() }))
 
 vi.mock('@/commands/aiRuntime', () => ({
   aiCancelTask: vi.fn(async () => undefined), aiGenerate: vi.fn(), aiContinuePolling: vi.fn(),
@@ -151,6 +154,21 @@ it('媒体准备期间取消不会提交供应商请求', async () => {
   await assertion
   expect(aiGenerate).not.toHaveBeenCalled()
   expect(aiCancelTask).not.toHaveBeenCalled()
+})
+
+it('生成取消信号交给视频压缩预检，不继续提交供应商或开始计费', async () => {
+  registry.getModel('cancel-fixture')!.inputLimits = { rules: [{ when: () => true, videoConstraints: { maxSizeMB: 10 } }] }
+  let processSignal: AbortSignal | undefined
+  vi.mocked(compressVideoToFit).mockImplementation((_source, _max, signal) => {
+    processSignal = signal
+    return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }))
+  })
+  const controller = new AbortController()
+  const pending = service.generate('cancel-fixture', { uploadedVideoFilePaths: [path.resolve(path.sep, 'media', 'large.mp4')] }, undefined, { signal: controller.signal })
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.waitFor(() => expect(processSignal).toBe(controller.signal))
+  controller.abort(); await rejected
+  expect(aiGenerate).not.toHaveBeenCalled(); expect(paid.start).not.toHaveBeenCalled()
 })
 
 it.each(['generate', 'poll'] as const)('%s 只取消实际运行标识，不把信号发送到 IPC', async phase => {
