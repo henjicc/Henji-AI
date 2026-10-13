@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPortal } from 'react-dom'
 
 import {
   distanceFromScrollBottom,
@@ -83,6 +84,30 @@ describe('useConversationAutoScroll', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('浮窗贴底使用所属窗口，合并增长通知且卸载取消待执行滚动', () => {
+    const iframe = document.createElement('iframe'); document.body.append(iframe)
+    const popout = iframe.contentWindow!
+    const frames = new Map<number, FrameRequestCallback>(); let id = 0
+    const request = vi.spyOn(popout, 'requestAnimationFrame').mockImplementation(callback => { frames.set(++id, callback); return id })
+    vi.spyOn(popout, 'cancelAnimationFrame').mockImplementation(handle => { frames.delete(handle) })
+    const view = render(createPortal(<ScrollHarness />, popout.document.body))
+    const viewport = popout.document.querySelector<HTMLElement>('[data-testid="viewport"]')!
+    setScrollMetrics(viewport, { scrollHeight: 600, clientHeight: 200, scrollTop: 0 })
+    expect(frames.size).toBe(1)
+    act(() => { resizeCallback([], {} as ResizeObserver); resizeCallback([], {} as ResizeObserver) })
+    expect(request).toHaveBeenCalledTimes(1)
+    act(() => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(16)) })
+    expect(viewport.scrollTop).toBe(400)
+    expect(frames.size).toBe(0)
+    act(() => resizeCallback([], {} as ResizeObserver))
+    view.unmount()
+    expect(frames.size).toBe(0)
+    expect(viewport.scrollTop).toBe(400)
+    expect(scheduledFrames.size).toBe(0)
+    iframe.remove()
   })
 
   it('计算滚动视口距底部的剩余距离', () => {

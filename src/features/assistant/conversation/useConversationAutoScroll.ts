@@ -7,6 +7,8 @@ import {
   type RefObject,
   type WheelEvent,
 } from 'react'
+import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
+import { ownerWindowOf } from '@/utils/crossRealmDom'
 
 const STICKY_BOTTOM_THRESHOLD = 32
 const REATTACH_BOTTOM_THRESHOLD = 4
@@ -40,7 +42,7 @@ export function useConversationAutoScroll(resetKey: string | null): Conversation
   const viewportRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
-  const frameRef = useRef<number | null>(null)
+  const scrollSchedulerRef = useRef<RafScheduler<[]> | null>(null)
   /**
    * 我们自己刚刚滚到的位置。
    *
@@ -60,21 +62,24 @@ export function useConversationAutoScroll(resetKey: string | null): Conversation
   }, [])
 
   const cancelScheduledScroll = useCallback((): void => {
-    if (frameRef.current === null) return
-    cancelAnimationFrame(frameRef.current)
-    frameRef.current = null
+    scrollSchedulerRef.current?.cancel()
   }, [])
 
   const scheduleScrollToBottom = useCallback((): void => {
-    if (!stickToBottomRef.current || frameRef.current !== null) return
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null
+    if (!stickToBottomRef.current) return
+    scrollSchedulerRef.current?.schedule()
+  }, [])
+
+  useEffect(() => {
+    const scheduler = createRafScheduler(() => {
       const viewport = viewportRef.current
       if (!viewport || !stickToBottomRef.current) return
       const target = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
       expectedScrollTopRef.current = target
       viewport.scrollTop = target
-    })
+    }, ownerWindowOf(viewportRef.current))
+    scrollSchedulerRef.current = scheduler
+    return () => { scheduler.cancel(); scrollSchedulerRef.current = null }
   }, [])
 
   const handleObservedResize = useCallback((entries: ResizeObserverEntry[]): void => {
@@ -98,7 +103,8 @@ export function useConversationAutoScroll(resetKey: string | null): Conversation
   useEffect(() => {
     updateFollowing(true)
     scheduleScrollToBottom()
-  }, [resetKey, scheduleScrollToBottom, updateFollowing])
+    return cancelScheduledScroll
+  }, [resetKey, scheduleScrollToBottom, updateFollowing, cancelScheduledScroll])
 
   /*
    * 展开/收起折叠块必须保持点击位置不动。
