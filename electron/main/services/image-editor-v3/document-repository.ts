@@ -27,6 +27,7 @@ import {
 import type { ImageEditCommandHistorySnapshotV3 } from '../../../../src/core/imageEdit/v3/commandHistoryCodec'
 import type { ImageEditHistoryCheckpointV3 } from '../../../../src/core/imageEdit/v3/historyPaging/checkpoint'
 import { rebindImageLayoutDocument } from './layout-rebind'
+import { createImageEditSourceFingerprint } from './raster-export-snapshot'
 
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
@@ -339,6 +340,33 @@ export class ImageEditDocumentRepository {
     }))
   }
 
+  /** 预览只替换派生引用；文档锁内读最新历史，不能回写物化开始时的历史。 */
+  async publishPreview(documentId: string, request: {
+    expectedRevision: number
+    sourceFingerprint: string
+    previewRef: ResourceId
+  }): Promise<ImageEditDocumentEnvelope> {
+    documentId = validateDocumentId(documentId)
+    parseResourceId(request.previewRef)
+    return this.executor.run(documentId, () => this.withDocumentLock(documentId, async () => {
+      const current = await this.loadCheckpoint(documentId)
+      if (current.revision !== request.expectedRevision
+        || createImageEditSourceFingerprint(current) !== request.sourceFingerprint) {
+        throw new Error('Managed raster snapshot changed before preview publication')
+      }
+      const envelope: ImageEditDocumentEnvelope = {
+        ...current,
+        updatedAt: new Date().toISOString(),
+        previewRef: request.previewRef,
+        resourceRefs: mergePersistedImageEditResourceRefsV3(
+          current.document, current.resourceRefs, request.previewRef, current.historyCheckpoint ?? current.history,
+        ),
+      }
+      await this.persist(envelope, 'publish-preview')
+      return envelope
+    }))
+  }
+
   /**
    * 从调用方已确认的精确 revision 建立独立文档与历史头。
    * 像素与历史资源均为内容寻址不可变对象，因此这里只复制引用，不复制字节。
@@ -451,21 +479,23 @@ export class ImageEditDocumentRepository {
     return new DocumentAutosaveScheduler(this, delayMs)
   }
 
-  private async persist(envelope: ImageEditDocumentEnvelope, action: 'create' | 'save' | 'replace', signal?: AbortSignal): Promise<void> {
+  private async persist(envelope: ImageEditDocumentEnvelope, action: 'create' | 'save' | 'replace' | 'publish-preview', signal?: AbortSignal): Promise<void> {
     logger.info('开始保存图片编辑文档', {
       event: `image_editor_v3.document.${action}.start`,
       context: { documentId: envelope.documentId, revision: envelope.revision },
     })
     let release: (() => Promise<void>) | undefined
     try {
-      if (envelope.history) {
+      // 预览发布的 envelope 已在锁内读取，新预览由调用方持租约；已有历史
+      // 受落盘根与发布屏障保护，直接保留检查点，不物化或重新验证整份历史。
+      if (action !== 'publish-preview' && envelope.history) {
         const prepared = await this.historyPages.prepare(envelope.history, signal)
         release = prepared.release
         // 保存回执到达前，渲染层可能继续编辑并仍使用原检查点。
         // 当前请求引用的源页保留到下一次采用新检查点的保存，不能提前被 GC 删除。
         envelope.historyCheckpoint = prepared.checkpoint
         envelope.resourceRefs = mergePersistedImageEditResourceRefsV3(envelope.document, envelope.resourceRefs, envelope.previewRef, prepared.checkpoint)
-      } else if (envelope.historyCheckpoint) {
+      } else if (action !== 'publish-preview' && envelope.historyCheckpoint) {
         const lease = await this.resources.acquireLease(envelope.resourceRefs)
         release = () => lease.release()
         await this.historyPages.validate(envelope.historyCheckpoint, signal)

@@ -84,6 +84,16 @@ afterEach(async () => {
 })
 
 describe('BigTiffTileOutputSink', () => {
+  it('合法长目标名通过短暂存文件发布 BigTIFF 且清理临时文件', async () => {
+    const targetPath = path.join(rootDir, `${'测'.repeat(process.platform === 'win32' ? 220 : 72)}.tif`)
+    const sink = new BigTiffTileOutputSink(targetPath, { tileSize: 16, inputByteOrder: 'little-endian' })
+    await sink.begin(baseDescription)
+    await sink.writeTile({ x: 0, y: 0, width: 2, height: 1, rowStride: 16, pixels: new Uint8Array(16) })
+    await sink.complete()
+    expect((await fsp.readFile(targetPath)).readUInt16LE(2)).toBe(43)
+    expect(await fsp.readdir(rootDir)).toEqual([path.basename(targetPath)])
+  })
+
   it('写入规范 BigTIFF 头、颜色描述、alpha 与 ICC 标签', async () => {
     const targetPath = path.join(rootDir, 'metadata.tif')
     const profile = createIccProfile()

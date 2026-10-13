@@ -46,6 +46,7 @@ export function imageEditorSelectionAllowedCombineModesV3(
   return layer?.mask
     && isImageEditSparseMaskReferenceV3(layer.mask)
     && layer.mask.defaultValue === 0
+    && !layer.mask.vectorPaths
     ? ALL_COMBINE_MODES
     : REPLACE_ONLY
 }

@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { recordingFixtureSession } from '../../../../src/core/creativeIntent/fixtures/recordingFixtures'
 import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
@@ -20,6 +20,8 @@ import {
   toProjectReference,
 } from './document-repository'
 import { ContentAddressedResourceStore } from './resource-store'
+import { ImageEditHistoryPageStoreV3 } from './history-pages/store'
+import { createImageEditSourceFingerprint } from './raster-export-snapshot'
 
 let rootDir = ''
 
@@ -28,6 +30,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await fsp.rm(rootDir, { recursive: true, force: true })
 })
 
@@ -40,6 +43,34 @@ function documentAt(documentId: string, revision: number, marker = ''): ImageEdi
 }
 
 describe('ImageEditDocumentRepository', () => {
+  it('锁内预览发布保持最新检查点，不读写历史页；拒绝过期快照', async () => {
+    const resources = new ContentAddressedResourceStore(path.join(rootDir, 'resources'))
+    const repository = new ImageEditDocumentRepository(path.join(rootDir, 'documents'), { resources })
+    const history = new ImageEditCommandHistoryV3()
+    const initial = documentAt('preview-history', 0, 'start')
+    const document = history.execute(initial, { type: 'layer.update-common', commandId: 'rename',
+      expectedRevision: 0, layerId: 'layer-start', patch: { name: '最新名称' } })
+    await repository.create({ documentId: document.id, revision: document.revision, document,
+      history: history.createSnapshot() })
+    const baseline = await repository.loadCheckpoint(document.id)
+    const preview = await resources.putBuffer(Buffer.from('preview'))
+    const prepare = vi.spyOn(ImageEditHistoryPageStoreV3.prototype, 'prepare')
+    const validate = vi.spyOn(ImageEditHistoryPageStoreV3.prototype, 'validate')
+    const open = vi.spyOn(ImageEditHistoryPageStoreV3.prototype, 'open')
+    const saved = await repository.publishPreview(document.id, { expectedRevision: baseline.revision,
+      sourceFingerprint: createImageEditSourceFingerprint(baseline), previewRef: preview.id })
+    expect(saved.historyCheckpoint).toEqual(baseline.historyCheckpoint)
+    expect(saved.previewRef).toBe(preview.id)
+    expect(prepare).not.toHaveBeenCalled(); expect(validate).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled()
+    const file = path.join(repository.rootDir, `${document.id}.json`)
+    const bytes = await fsp.readFile(file)
+    await expect(repository.publishPreview(document.id, { expectedRevision: 0,
+      sourceFingerprint: createImageEditSourceFingerprint(saved), previewRef: preview.id })).rejects.toThrow('snapshot changed')
+    await expect(repository.publishPreview(document.id, { expectedRevision: saved.revision,
+      sourceFingerprint: `sha256:${'0'.repeat(64)}`, previewRef: preview.id })).rejects.toThrow('snapshot changed')
+    expect(await fsp.readFile(file)).toEqual(bytes)
+  })
+
   it('文档引用目录按稳定引用分页，不读取文档内容或暴露本地路径', async () => {
     const repository = new ImageEditDocumentRepository(rootDir)
     for (const id of ['b', 'a0', 'a']) await repository.create({ documentId: id, revision: 0, document: documentAt(id, 0) })

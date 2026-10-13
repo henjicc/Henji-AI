@@ -5,6 +5,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentFactory'
+import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
 import { ImageEditDocumentRepository } from './document-repository'
 import {
   ManagedRasterMaterializer,
@@ -12,6 +13,7 @@ import {
 } from './managed-raster-materializer'
 import { createImageEditSourceFingerprint } from './raster-export-snapshot'
 import { ContentAddressedResourceStore } from './resource-store'
+import { normalizePersistedImageEditDocumentV3 } from './history-persistence'
 import type {
   RasterExportSessionResult,
   RasterExportSessionStartResult,
@@ -127,6 +129,44 @@ function startRequest(
 }
 
 describe('图片编辑 V3 受管栅格物化', () => {
+  it('预览发布与同 revision 清空历史交错后，不恢复旧历史', async () => {
+    const { root, documents, resources, snapshot } = await fixture()
+    const history = new ImageEditCommandHistoryV3()
+    const original = normalizePersistedImageEditDocumentV3(snapshot.document, snapshot.documentId, snapshot.revision)
+    const document = history.execute(original, { type: 'layer.update-common',
+      commandId: 'rename', expectedRevision: 0, layerId: original.layers[0].id,
+      patch: { name: '修改后' } })
+    await documents.save({ documentId: document.id, expectedRevision: 0, nextRevision: document.revision,
+      document, history: history.createSnapshot(), resourceRefs: snapshot.resourceRefs })
+    const baseline = await documents.load(document.id)
+    const other = new ImageEditDocumentRepository(documents.rootDir)
+    const manager = fakeManager()
+    const service = new ManagedRasterMaterializer(manager, documents, resources, path.join(root, 'materializations'))
+    const started = await service.start(startRequest(baseline))
+    let concurrent: Promise<unknown> | undefined
+    const read = documents.loadCheckpoint.bind(documents)
+    const readSpy = vi.spyOn(documents, 'loadCheckpoint').mockImplementationOnce(async (id) => {
+      const stale = await read(id)
+      concurrent = other.save({ documentId: document.id, expectedRevision: document.revision,
+        nextRevision: document.revision, document, history: null, resourceRefs: baseline.resourceRefs })
+      return stale
+    })
+    const save = documents.save.bind(documents)
+    const saveSpy = vi.spyOn(documents, 'save').mockImplementation(async (request) => {
+      // 旧的锁外读/回写允许另一个仓库先保存历史；原子发布则由文档锁串行化。
+      await concurrent
+      return save(request)
+    })
+    try {
+      await service.complete(7, started.sessionId)
+      await concurrent
+      const saved = await other.load(document.id)
+      expect(saved.history).toBeUndefined()
+      expect(saved.historyCheckpoint).toBeUndefined()
+      expect(saved.document).toEqual(document)
+    } finally { readSpy.mockRestore(); saveSpy.mockRestore() }
+  })
+
   it('重启后保留publication映射且旧session不能发布', async () => {
     const { root, documents, resources, snapshot } = await fixture()
     const manager = fakeManager()

@@ -280,7 +280,23 @@ export class ContentAddressedResourceStore {
           } catch (error) {
             if (!isAlreadyExists(error)) throw error
           }
-          if (await verifyExistingObject(destination, sha256, byteLength)) return false
+          if (await verifyExistingObject(destination, sha256, byteLength)) {
+            // 哈希校验不占全局屏障；只把存在确认与年龄刷新和 GC 串行。
+            const reused = await this.executor.run('resource-leases', async () => {
+              try {
+                const now = new Date()
+                // utimes 成功同时确认对象仍存在；GC 无法在刷新过程中删除它。
+                await fsp.utimes(destination, now, now)
+                return true
+              } catch (error) {
+                if (isMissing(error)) return false
+                throw error
+              }
+            })
+            if (reused) return false
+            // 校验结束到进入屏障之间可能已被 GC 删除；重新发布暂存字节。
+            continue
+          }
           const quarantine = `${destination}.${crypto.randomUUID()}.corrupt`
           try {
             await fsp.rename(destination, quarantine)

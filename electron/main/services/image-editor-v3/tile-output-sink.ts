@@ -59,7 +59,7 @@ export abstract class FileTileOutputSinkBase implements TileOutputSink {
     this.description = { ...description }
     this.stagedPath = path.join(
       path.dirname(this.targetPath),
-      `.${path.basename(this.targetPath)}.${crypto.randomUUID()}.tmp`,
+      `.henji-${crypto.randomBytes(8).toString('hex')}.tmp`,
     )
     this.state = 'starting'
     const generation = ++this.generation
