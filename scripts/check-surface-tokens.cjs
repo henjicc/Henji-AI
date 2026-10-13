@@ -5,10 +5,10 @@
  * 规则来源：CLAUDE.md「UI Primitive 单点落地」+ skill `henji-ui-surface`。
  * 核心铁律：同一层视觉深度只画一次边框/背景。
  *
- * 四条规则：
+ * 五条规则：
  *   A. 手写面板表面（border + bg-panel + rounded）—— 那是 <UiPanel> 的活，任意数量即告警
  *   B. 同一文件出现 >= 2 处卡片表面 —— 高度疑似"卡片套卡片"
- *   C. 手写弹窗（fixed inset-0 + 黑遮罩，却没走 UiModal/AlertDialog）
+ *   C. 手写弹窗（同一元素 fixed inset-0 + 遮罩或模态语义，未由 UiModal/AlertDialog 承载）
  *   D. `.css` 里手写毛玻璃（backdrop-filter），绕开 `.ui-glass`
  *   E. 按钮、选项、标签、导航与字段触发器的调用点覆盖外观（底色/边框/文字色/圆角/阴影/高度/字号），见 lib/buttonAppearanceOverrides.cjs
  * 单个卡片表面不报（组件自己的根表面是合理的，比如画布节点外壳）。
@@ -18,14 +18,15 @@
  * 都抄漏了噪点层，`.context-menu` 还用第二条 box-shadow 把受光内阴影整条顶掉了。
  * 正确做法是在元素上加 `ui-glass` 类，CSS 只留布局。
  *
- * 默认只告警（exit 0），便于存量渐进治理；加 --strict 时违规即失败（exit 1）。
+ * 默认严格门禁（exit 1）；--report 显式选择告警视图，--strict 保留为明确的严格入口。
  *
  * 豁免方式：只有行级——行内或上一行注释包含 `ui-surface-allow` 并写明理由与接手任务。
  * 文件级 `ui-surface-allow-file` 已禁止（会把该文件将来真正的套娃一起放行），出现即报违规（4.2）。
  */
 const fs = require('fs');
 const path = require('path');
-const { findButtonAppearanceOverrides } = require('./lib/buttonAppearanceOverrides.cjs');
+const ts = require('typescript');
+const { findButtonAppearanceOverrides, collectConstants, collectStrings, collectImportedConstants } = require('./lib/buttonAppearanceOverrides.cjs');
 const { findUiSurfaceGrammar } = require('./lib/uiSurfaceGrammar.cjs');
 
 const projectRoot = process.cwd();
@@ -175,9 +176,32 @@ function hasLineAllowMarker(lines, lineNo) {
   return current.includes(LINE_ALLOW_MARKER) || previous.includes(LINE_ALLOW_MARKER);
 }
 
-const strict = process.argv.includes('--strict');
+const cli = { strict: true, files: [] };
+for (let index = 2; index < process.argv.length; index += 1) {
+  const arg = process.argv[index];
+  if (arg === '--strict') cli.strict = true;
+  else if (arg === '--report') cli.strict = false;
+  else if (arg === '--files') {
+    const value = process.argv[++index];
+    if (!value || value.startsWith('--')) throw new Error('--files 缺少文件列表');
+    for (const item of value.split(',').filter(Boolean)) {
+      const file = path.resolve(projectRoot, item);
+      const relative = path.relative(srcRoot, file);
+      if (relative.startsWith('..') || path.isAbsolute(relative) || !/\.(tsx|css)$/.test(file) || !fs.statSync(file).isFile()) {
+        throw new Error(`--files 只接受 src 内已有的 .tsx/.css 文件：${item}`);
+      }
+      cli.files.push(file);
+    }
+    if (!cli.files.length) throw new Error('--files 文件列表不能为空');
+  } else throw new Error(`未知参数：${arg}`);
+}
+if (process.argv.includes('--strict') && process.argv.includes('--report')) throw new Error('--strict 与 --report 不能同用');
+const strict = cli.strict;
+const selected = new Set(cli.files);
+const inScope = file => selected.size === 0 || selected.has(file);
 const files = collectSourceFiles(srcRoot).filter(
-  (file) => !exemptDirs.some((dir) => path.normalize(file).startsWith(path.normalize(dir)))
+  (file) => inScope(file) && !/\.(test|spec)\.tsx$/.test(file)
+    && !exemptDirs.some((dir) => path.relative(dir, file) === '' || !path.relative(dir, file).startsWith('..') && !path.isAbsolute(path.relative(dir, file)))
 );
 
 /** @type {{ relativePath: string, panelSurfaces: {lineNo:number,snippet:string}[], cardSurfaces: {lineNo:number,snippet:string}[] }[]} */
@@ -185,15 +209,51 @@ const fileReports = [];
 
 /**
  * 规则 C：手写弹窗。
- * 业务组件同时出现全屏遮罩定位（fixed inset-0 / UI_CONTENT_OVERLAY_INSET_CLASS）
- * 与半透明黑底，却没有走 UiModal / AlertDialog，说明自己搭了一套弹窗外壳。
+ * 同一元素出现全屏定位（fixed inset-0 / UI_CONTENT_OVERLAY_INSET_CLASS）
+ * 与遮罩或模态语义，且不在 UiModal / AlertDialog 子树内，说明自己搭了一套弹窗外壳。
  * 这类实现会各自定义圆角、遮罩透明度、宽度与过渡，是弹窗观感不统一的根源。
  * @type {{ relativePath: string, lineNo: number, snippet: string }[]}
  */
 const dialogBypasses = [];
 
-const OVERLAY_POSITION_PATTERN = /fixed\s+inset-0|UI_CONTENT_OVERLAY_INSET_CLASS/;
-const OVERLAY_SCRIM_PATTERN = /bg-black\/|bg-black\s+bg-opacity-/;
+/** 只检查同一元素的遮罩结构，组件子树由正式模态容器负责时不重复判定。 */
+function findDialogBypasses(raw, file) {
+  const sf = ts.createSourceFile(file, raw, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const lines = raw.split(/\r?\n/);
+  const hits = [];
+  const scopes = [collectConstants(sf), collectImportedConstants(sf, file, srcRoot)];
+  const modalNames = new Set(['UiModal', 'AlertDialog']);
+  for (const statement of sf.statements) {
+    if (!ts.isImportDeclaration(statement) || !statement.importClause?.namedBindings || !ts.isNamedImports(statement.importClause.namedBindings)) continue;
+    for (const binding of statement.importClause.namedBindings.elements) {
+      if (modalNames.has((binding.propertyName ?? binding.name).text)) modalNames.add(binding.name.text);
+    }
+  }
+  const visit = (node, modalOwner = false) => {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node;
+      const name = opening.tagName.getText(sf);
+      const owned = modalOwner || modalNames.has(name);
+      const attributes = opening.attributes.properties.filter(ts.isJsxAttribute);
+      const classes = attributes.find(attr => attr.name.getText(sf) === 'className');
+      const value = classes?.initializer?.getText(sf) ?? '';
+      const tokens = collectStrings(classes?.initializer, scopes).flatMap(tokenizeClassValue);
+      const fullScreen = tokens.includes('fixed') && (tokens.includes('inset-0') || value.includes('UI_CONTENT_OVERLAY_INSET_CLASS'));
+      const scrim = tokens.some(token => /^(?:bg-scrim(?:-|\/|$)|bg-(?:media|black)(?:\/|$)|ui-glass-scrim(?:-|$))/.test(token));
+      const dialog = attributes.some(attr => attr.name.getText(sf) === 'role' && /["']dialog["']/.test(attr.initializer?.getText(sf) ?? '')
+        || attr.name.getText(sf) === 'aria-modal' && /\btrue\b/.test(attr.initializer?.getText(sf) ?? ''));
+      if (!owned && fullScreen && (scrim || dialog)) {
+        const lineNo = sf.getLineAndCharacterOfPosition(classes.getStart(sf)).line + 1;
+        if (!hasLineAllowMarker(lines, lineNo)) hits.push({ lineNo, snippet: lines[lineNo - 1].trim().slice(0, 140) });
+      }
+      if (ts.isJsxElement(node)) for (const child of node.children) visit(child, owned);
+      return;
+    }
+    ts.forEachChild(node, child => visit(child, modalOwner));
+  };
+  visit(sf);
+  return hits;
+}
 
 /**
  * 规则 D：`.css` 里手写毛玻璃。
@@ -221,7 +281,7 @@ function collectStyleSheets(dir) {
   return result;
 }
 
-for (const file of collectStyleSheets(srcRoot)) {
+for (const file of collectStyleSheets(srcRoot).filter(inScope)) {
   // 材质定义处天然豁免：`.ui-glass` / `.ui-glass-scrim` 就住在这里
   if (path.normalize(file) === path.normalize(GLASS_DEFINITION_FILE)) continue;
 
@@ -248,28 +308,9 @@ for (const file of files) {
 
   const lines = raw.split(/\r?\n/);
 
-  if (
-    OVERLAY_POSITION_PATTERN.test(raw) &&
-    OVERLAY_SCRIM_PATTERN.test(raw) &&
-    !/\bUiModal\b/.test(raw) &&
-    !/\bAlertDialog\b/.test(raw)
-  ) {
-    // 优先定位真正的遮罩用法行，而不是 import UI_CONTENT_OVERLAY_INSET_CLASS 那一行
-    const usageIndex = lines.findIndex(
-      (line) => OVERLAY_POSITION_PATTERN.test(line) && !/^\s*import\b/.test(line)
-    );
-    const hitIndex = usageIndex >= 0
-      ? usageIndex
-      : lines.findIndex((line) => OVERLAY_POSITION_PATTERN.test(line));
-    const lineNo = hitIndex >= 0 ? hitIndex + 1 : 1;
-    if (!hasLineAllowMarker(lines, lineNo)) {
-      dialogBypasses.push({
-        relativePath: path.relative(projectRoot, file).replace(/\\/g, '/'),
-        lineNo,
-        snippet: (lines[lineNo - 1] ?? '').trim().slice(0, 140),
-      });
-    }
-  }
+  for (const hit of findDialogBypasses(raw, file)) dialogBypasses.push({
+    relativePath: path.relative(projectRoot, file).replace(/\\/g, '/'), ...hit,
+  });
 
   /** @type {{lineNo:number,snippet:string}[]} */
   const panelSurfaces = [];
@@ -325,11 +366,11 @@ for (const file of files) {
 const buttonOverrides = findButtonAppearanceOverrides({
   srcRoot,
   projectRoot,
-  files: collectSourceFiles(srcRoot),
+  files: collectSourceFiles(srcRoot).filter(inScope),
 });
 
 const grammarFindings = collectSourceFiles(srcRoot)
-  .filter(file => !/\.(?:test|spec)\.tsx$/.test(file))
+  .filter(file => inScope(file) && !/\.(?:test|spec)\.tsx$/.test(file))
   .flatMap(file => findUiSurfaceGrammar(fs.readFileSync(file, 'utf8'), file)
     .map(finding => ({ ...finding, relativePath: path.relative(projectRoot, file).replace(/\\/g, '/') })));
 for (const finding of grammarFindings) {
