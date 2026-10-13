@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { collectForcedRules, rewriteForcedSelector } from './forcedPseudoStates'
 
 describe('样张页强制伪类状态（任务 5.11）', () => {
+  it('按下态来自正式 :active 样式，否定按下态不得改写', () => {
+    expect(rewriteForcedSelector('.ui-btn-primary:active:not(:disabled)')).toBe('.ui-btn-primary.henji-gallery-force-active:not(:disabled)')
+    expect(rewriteForcedSelector('.a:not(:active)')).toBeNull()
+  })
   it('把 :hover / :focus-visible / :focus-within 换成强制类，保留其余选择器', () => {
     expect(rewriteForcedSelector('.ui-btn-quiet:hover:not(:disabled)')).toBe('.ui-btn-quiet.henji-gallery-force-hover:not(:disabled)')
     expect(rewriteForcedSelector('.hover\\:bg-hover:hover')).toBe('.hover\\:bg-hover.henji-gallery-force-hover')

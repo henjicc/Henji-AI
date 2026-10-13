@@ -1,6 +1,6 @@
 ---
 name: henji-ui-surface
-description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧栏/设置分区/节点 UI，或调整按钮层级、分隔线、颜色、图标、毛玻璃、动画、层级时使用。主文件涵盖“石墨”设计系统速览（主题引擎与语义令牌、按钮五档默认静默、淡强调底选中态、尺寸档位）、页面骨架的横向条带上限与命令带、表面层级（surface/elevation）铁律、五级容器词汇表、分隔线准入、选项集合静息态与选中态词汇表、必须复用的组件与枚举；颜色/材质、动效、图标、排版令牌、性能分层、静默失效坑、全界面核对规范与操作工具拆在 references/ 按需读。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"顶部堆了好几行/几个条/布局不合理"、"标题栏和工具栏能不能合并"、"这块儿怎么像张卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"统一一下 UI/配色/动画/模糊"、"这个动画太快/太慢/很生硬"、"这个界面卡顿/拖动掉帧"、"切换主题后有些地方没变色"、"为什么有的按钮有边框有的没有"、"这里要不要加分隔线"、"图标不一致"。
+description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧栏/设置分区/节点 UI，或调整按钮层级、分隔线、颜色、图标、毛玻璃、动画、层级时使用。主文件涵盖“石墨”设计系统速览（主题引擎与语义令牌、按钮五档默认静默、分段中性抬起底与其他单选淡强调底、尺寸档位）、页面骨架的横向条带上限与命令带、表面层级（surface/elevation）铁律、五级容器词汇表、分隔线准入、选项集合静息态与选中态词汇表、必须复用的组件与枚举；颜色/材质、动效、图标、排版令牌、性能分层、静默失效坑、全界面核对规范与操作工具拆在 references/ 按需读。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"顶部堆了好几行/几个条/布局不合理"、"标题栏和工具栏能不能合并"、"这块儿怎么像张卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"统一一下 UI/配色/动画/模糊"、"这个动画太快/太慢/很生硬"、"这个界面卡顿/拖动掉帧"、"切换主题后有些地方没变色"、"为什么有的按钮有边框有的没有"、"这里要不要加分隔线"、"图标不一致"。
 ---
 
 # Henji-AI 界面表面与层级规范
@@ -580,7 +580,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 | 需求 | 必须用 | 不要做 |
 |---|---|---|
-| 弹窗 | `UiModal` | 手写 `fixed inset-0` + `bg-black/…` + 卡片（存量已全部清零，`check:surface` 规则 C 会拦，别再加） |
+| 弹窗 | `UiModal`（正式业务默认 `scope="viewport"`，接管焦点与模态；设计系统常驻缩略样本用 `scope="container"`，不接管焦点） | 手写 `fixed inset-0` + `bg-black/…` + 卡片（存量已全部清零，`check:surface` 规则 C 会拦，别再加）；用容器预览替代正式模态 |
 | 分组 | `UiGroup`（相邻组统一 32px 留白；面板内跨包装层分组用 `gap="section"`，复用 `UI_SECTION_STACK_CLASS`） | 手写 `border + bg` 的 div |
 | 页面标题区 | `UiPageHeader`（标题旁的数量等用 `meta`，与标题基线对齐；页头兼作页面顶带时用 `divider` 画自适应下分隔线） | 手写 h2 + p；把数量塞进标题文字；调用点给页头写 `border-b` |
 | 封面内容卡（项目卡、工程卡、资产卡） | `UiOptionButton variant="cover"` + 封面框 `UI_COVER_FRAME_CLASS`；不是按钮的根元素（可拖拽的资产卡）加 `UI_COVER_GROUP_CLASS` 与 `data-selected` | 给整张卡铺底描边，或在调用点手写悬停描边/选中环 |
@@ -588,6 +588,11 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 可点的文字记号（逐字稿词块、时间轴字幕块） | `UiTextToken`（`appearance` inline/chip；`current` 播放中、`selected` 已选、`excluded` 已删除、`flagged` 待留意） | 用 `UiButton` 加 className 覆盖底色、圆角、划线 |
 | 表单行 | `UiFormRow`（窄停靠面板 `density="compact"`，配 `UiGroup titleTone="compact"`）；行内的 `Ui*` 控件没有自己的名称时自动 `aria-labelledby` 行标签、`aria-describedby` 说明（下拉读作“标签 + 当前值”，任务 5.8） | 手写 label + 间距；调用点改标签字号；给行内控件再手写一遍同样的 `aria-label` |
 | 字段 | `UiInput` / `UiSelect` / `UiTextArea` / `NumberInput`（数值拖动：读数或标签上左右拖，Shift 精细、Alt 粗调，单击编辑）；高度只用 `size`；直接落在所在表面上编辑的多行文本用 `UiTextArea frame="none"`；复合字段（表面与焦点环画在外壳上）的内层输入用 `UiInput frame="inner"` | 手写数值拖动、自绘步进器；调用点改高度；调用点给文本框去边框去底（`!bg-transparent !ring-0`） |
+| 颜色输入、多行字段外壳、数值步进列 | `UiColorInput` / `UiTextAreaField` / `UiNumberStepper`（步进列组合到数值字段中） | 重写颜色输入、叠第二层字段框、把步进列当独立数值框 |
+| 日期选择 | `UiDatePicker` | 裸输入重做日期字段与选择面板 |
+| 折叠内容与长用户文本 | `UiDisclosurePanel`（正式开合过渡）/ `UiMarqueeText`（受控长文本） | 自写折叠时长；用跑马灯隐藏短操作标签 |
+| 任务历史筛选 | `UiTaskHistoryFilterBar` | 另造同义字段与标签组合 |
+| 渲染错误兜底、全局确认 | `UiErrorBoundary`（保留正式日志域）/ `GlobalAlertDialog`（App 根宿主，调用 `alertDialogStore`） | 吞掉渲染错误；在业务页重复挂载全局确认宿主 |
 | 搜索框 | `UiSearchInput`（前置放大镜、`size`、可选 `onClear` + `clearLabel` 清除按钮；`className` 落在外层只放宽度） | 自己摆一个绝对定位的放大镜再给 `UiInput` 补 `pl-8` |
 | 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
@@ -596,17 +601,21 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底与强文字选中态由 primitive 维护；最多五项，超过五项转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
+| 存量标签包装（待任务 4.6 迁移） | 旧 `Toggle` / `TextInput` 只供既有调用；新代码用 `UiFormRow` + `UiSwitch` / `UiInput` | 新增旧包装调用；在中心页任务中删除或迁移业务调用方 |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |
 | 通知提示（操作反馈的短暂提示） | `UiToast`（`tone` success/error/warning，状态只进图标颜色；可选 `action` 复用 quiet 按钮提供可访问恢复动作；`surface` solid 默认 / 压在画布与媒体上用 `glass`；`placement` window 标题栏下居中 / container 画布内）；全局用 `useNotification().showNotification`，停留与淡出时长用 `motion.ts` 的 `UI_TOAST_DISPLAY_MS` / `UI_TOAST_EXIT_MS`（任务 5.7 把三套实现收敛到这里） | 自己画 `fixed top-*` 浮条、用危险实底或成功实底铺满通知、各写一份显示时长 |
-| 悬停说明 | `Tooltip`（300ms、raised 实底）；参数名、设置项标签用 `UiTooltipText`；`placement` 默认 `top`，一列紧挨着的表单行（画布节点参数行名称，经 `ParamLabel tooltipPlacement`）用 `left`，放不下依次退到右侧、上方，避免盖住上一行 | 自己写 title 浮层或 ⓘ 图标；为躲开相邻行另写定位 |
+| 悬停说明 | `Tooltip`（300ms、raised 实底，唯一浮层实现是 `TooltipContent`，中心页用 visible + anchorRef 常驻）；参数名、设置项标签用 `UiTooltipText`；`placement` 默认 `top`，一列紧挨着的表单行（画布节点参数行名称，经 `ParamLabel tooltipPlacement`）用 `left`，放不下依次退到右侧、上方，避免盖住上一行 | 自己写 title 浮层或 ⓘ 图标；为躲开相邻行另写定位 |
 | 音频波形（任何位置：口播剪辑、剪辑时间线与源监视器、画布音频节点、资产卡、音频播放器、生成记录） | `WaveformView`（`@/components/waveform/WaveformView`，`tier` mini/standard、`tone` neutral/clip）+ `useWaveformData` / `useWaveformDataList`（`@/hooks/useWaveformData`，多精度峰值、磁盘缓存，放大到采样点） | 自己解码音频、自写峰值缓存或 Canvas 波形绘制 |
 | 剪辑片段的视频缩略帧条 | `useFilmstripFrames` + `src/services/videoFilmstrip/filmstripFrameService.ts`（主进程 `electron/main/services/video/filmstrip.ts` 成批取帧、磁盘缓存） | 逐帧走原生解码或另建缩略图通道 |
 | 参数帮助说明 | 参数名称文本本身的 hover / focus tooltip | 加 Info 等额外图标、把 `description` 渲染成控件下方正文，或用 Tooltip 包住整个控件 |
 | 空/加载/错误 | `UiEmpty` / `UiLoading` / `UiError`（节点内容区的空占位用 `UiEmpty size="node"`） | 内联手写状态块 |
 | 按钮/输入/开关等 | `@/components/ui` 的 `Ui*` | 原生 `<button>/<input>` |
 | 提示词编辑 | `PromptEditor` | 自己拼 textarea |
+| 提示词只读展示 | `PromptDocumentStatic`（与 `PromptEditor` 共用文档语义） | 另造提示词文档格式或手写文本解析 |
 | 文件上传/排序 | `FileUploader` / `useReorderDrag` | 重写拖拽 |
+| 叠放媒体上传 | `StackedMediaUploader`（复用 `FileUploader` 与拖拽排序） | 另写媒体上传或排序链路 |
+| 费用估算 | `PriceEstimate`（已注册模型计价，遵循用户币种与费用显示偏好） | 固定价格、触发真实生成来展示价格 |
 | 文字与矢量外观编辑 | `@/components/typography/TypographyPanel`（领域组合面板，共用字体、排版、填充、描边、阴影；宿主提供布局与预设 footer） | 图片、字幕、标题、代码文字另写同义参数与外观面板 |
 | 字体选择与样式预览 | `UiFontPicker`（本机/导入字体、中英文搜索、分类与虚拟列表、真实样式、收藏/最近/工程字体；`onPreview(null)` 恢复，`onSelect` 提交） | 手动输入字体名、三种通用族固定下拉、另造字体弹层 |
 | 音频播放 | `@/components/AudioPlayer` | 再写一个播放器 |
@@ -712,8 +721,9 @@ npx vitest run src/components/ui/motion.test.ts
 ```
 
 **改公共组件（`@/components/ui`、`styleTokens.ts`、`index.css` 组件皮肤）或令牌 / 主题引擎时，默认验收 = 组件样张页 + 主题组合测试**（`references/review.md` 第 8 节）：
-跑 `npx vitest run src/core/theme`（含 `themeCombination.test.ts` 属性测试），再只截样张页（`ui:tour --steps scripts/ui-review/ui-gallery.json --matrix review --contrast`，四预设 1440 + 石墨 960 共 5 张）并跑同一步骤的 `check:ui-visual`，逐张目视。
-不再为公共组件或令牌改动按界面大范围截图；新增 `@/components/ui` 导出组件要同时在样张页补样本（`uiGalleryCoverage.test.ts` 会提醒）。
+跑 `npx vitest run src/core/theme`（含 `themeCombination.test.ts` 属性测试），再按 `references/review.md` 第 8 节准备 DEV=true 巡检产物，用 `ui:tour --steps scripts/ui-review/ui-gallery.json --matrix review --audit` 捕获目录分区的顶部、中段与底部，逐张目视。四预设 1440 + 石墨 960 是五个矩阵变体，每个变体都包含完整分区组；同次 `--audit` 已做像素与 DOM 审计，不再叠加同矩阵的 `check:ui-visual`。
+设计系统中心复用 `dev.ui_gallery`，开发构建可用启动参数或 `Ctrl+Shift+F8` 切换，正式构建裁掉入口与页面 chunk 引用，助手/MCP 不暴露。令牌、组件、界面模式与规范速查通过目录和搜索进入；样本及变体清单见 `galleryIndex.ts` 与组件栏目源码，不以首屏代表整页。
+不再为公共组件或令牌改动按界面大范围截图；新增共享组件要同时补中心页样本与本复用表（`uiGalleryCoverage.test.ts` 扫描 `src/components/ui/**` 的导出与视觉枚举）。
 
 只有共享页面骨架、浮层/滚动/溢出机制等高影响界面改动，才先构建并按场景缩小范围运行截图巡检与规则审计：
 
