@@ -65,7 +65,7 @@
 - 颜色三层：种子（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的语义令牌（`src/core/theme/themeEngine.ts` → `themeCssVars.ts` → `runtimeTheme.ts` 写到根节点）→ 组件内部令牌。界面只引用语义令牌；文字三档按对比度 ≥ 4.5:1 求解，实底上的字按对比度自动黑白（`text-on-accent` 等，不写死白字）
 - 非 DOM 渲染面（Canvas、WebGL/WebGPU、波形）用 `useThemeTokens()` 取令牌；内容色（标注、导出、端口类型色等）登记在 `src/core/theme/colorTokens.ts`，需要随模式变化时用 `light-dark()` 派生
 - 字体：拉丁与数字 Geist、等宽 Geist Mono（`@fontsource-variable`，随包离线），中文回落系统字体；正文基准 13px 设在 body
-- `veil` 六档是固定白纱（不随主题），只适合叠在图片/视频/深色画布上，放在主题表面上纸白下不可见；新代码压在媒体上优先用 `media-*`/`on-media` 固定令牌
+- 压在图片/视频/深色画布上的固定颜色只用 `media-*`/`on-media` 令牌（不随主题）；旧 `veil` 白纱令牌已在任务 4.3 删除
 - 排版层级先用 `styleTokens.ts` 的 `UI_TEXT_TITLE/SECTION/BODY/LABEL/META_CLASS` 建立，再考虑容器装饰
 - 通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
 
