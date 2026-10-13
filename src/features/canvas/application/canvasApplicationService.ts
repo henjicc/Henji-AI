@@ -1,7 +1,8 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { v4 as uuidv4 } from 'uuid'
 
-import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasStore, type CanvasHistorySnapshot } from '@/stores/canvasStore'
+import { hasCanvasContentChanged } from '@/stores/canvasStoreHelpers'
 import { verifyCanvasWrite } from './canvasQueryService'
 import { useProjectStore } from '@/stores/projectStore'
 import { maintainMultiLayerDocumentReleaseCandidates } from './multiLayerDocumentLifecycleService'
@@ -47,7 +48,9 @@ interface UndoRecord extends CanvasUndoPersistenceState {
   token: string
   projectId: string
   operation: string
-  historyDepth: number
+  historyEntry: CanvasHistorySnapshot | undefined
+  nodes: CanvasNode[]
+  edges: CanvasEdge[]
 }
 
 export { CanvasApplicationError } from './canvasApplicationError'
@@ -112,11 +115,12 @@ export async function openCanvasProject(
 
 export function rememberCanvasUndo(projectId: string, operation: string): string {
   const token = `canvas-undo:${uuidv4()}`
+  const { history, nodes, edges } = requireCanvasProjectInstance(projectId).store.getState()
   undoRecords.set(token, {
     token,
     projectId,
     operation,
-    historyDepth: requireCanvasProjectInstance(projectId).store.getState().history.past.length,
+    historyEntry: history.past.at(-1), nodes, edges,
   })
   while (undoRecords.size > MAX_UNDO_RECORDS) {
     const oldest = undoRecords.keys().next().value
@@ -384,7 +388,7 @@ export async function undoCanvasChange(projectId: string, undoRef: string): Prom
   }
   await runPersistedCanvasUndo(projectId, undoRef, () => {
     const canvas = requireCanvasProjectInstance(projectId).store.getState()
-    if (canvas.history.past.length !== record.historyDepth) {
+    if (canvas.history.past.at(-1) !== record.historyEntry || hasCanvasContentChanged(record, canvas)) {
       throw new CanvasApplicationError('STALE_CONTEXT', '画布在该操作后已发生其它变化，旧撤销引用失效')
     }
     if (!canvas.undo()) throw new CanvasApplicationError('CONFLICT', '当前画布没有可撤销操作')
@@ -395,7 +399,7 @@ export async function undoCanvasChange(projectId: string, undoRef: string): Prom
 }
 
 /**
- * 重做（3.1）：不需要 `undo_canvas_change` 那套 undoRef/historyDepth 安全校验——`history.future`
+ * 重做（3.1）：不需要 `undo_canvas_change` 那套撤销回执身份校验——`history.future`
  * 只在 `undo()` 之后才非空，且**任何**后续正向编辑（新增/改属性/删除等）都会把它清空
  * （`canvasStore.ts` 里每个正向动作都显式 `future: []`）。所以 `history.future` 非空这件事本身
  * 就等价于"确实存在一个刚被撤销、还没被别的改动覆盖的操作"，不需要额外的引用比对。

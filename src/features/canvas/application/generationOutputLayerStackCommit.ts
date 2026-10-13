@@ -20,6 +20,7 @@ import {
 } from './multiLayerDocumentNodeGenerationAdapter';
 import type { MultiLayerDocumentNodeProjection } from './multiLayerDocumentNodeApplicationContracts';
 import type { CanvasTransactionRuntime } from './canvasPersistenceService';
+import type { GenerationOutputTarget } from './generationOutputApplicationService';
 
 const logger = createLogger('features.canvas.generation-output');
 
@@ -27,7 +28,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
   completionId: string;
   ordered: CanvasGenerationOutputItem[];
   projectId: string;
-}, context?: { runtime: CanvasTransactionRuntime; assertCurrent: () => void }): Promise<CommitCanvasGenerationOutputsResult> {
+}, outputTarget: GenerationOutputTarget, context?: { runtime: CanvasTransactionRuntime; assertCurrent: () => void }): Promise<CommitCanvasGenerationOutputsResult> {
   if (!input.preparedLayerStack) {
     throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈必须先完成下载、像素验证与合成');
   }
@@ -51,14 +52,6 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
     throw new GenerationOutputApplicationError('INVALID_INPUT', '图层栈提交必须提供结果占位节点');
   }
   const store = context?.runtime.store ?? useCanvasStore;
-  const canvas = store.getState();
-  const placeholder = canvas.nodes.find((node) => node.id === placeholderNodeId);
-  if (!placeholder || placeholder.type !== input.resultNodeType) {
-    throw new GenerationOutputApplicationError('NOT_FOUND', '图层栈结果占位节点已不存在');
-  }
-  if (input.sourceNodeId && !canvas.nodes.some((node) => node.id === input.sourceNodeId)) {
-    throw new GenerationOutputApplicationError('NOT_FOUND', '图层栈来源节点已不存在');
-  }
   const composite = document.resources.find((resource) => resource.resourceId === document.compositeResourceId);
   const thumbnail = document.resources.find((resource) => resource.resourceId === document.thumbnailResourceId);
   if (!composite?.filePath || !thumbnail?.filePath) {
@@ -86,17 +79,9 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈提交已取消');
     }
     const committedProjection = projection;
+    let resultNodeId: string | undefined;
     const transaction = await runCanvasTransaction(input.projectId, 1, (options) => runCanvasMutationStage(options, () => {
-      const latest = store.getState();
-      const latestPlaceholder = latest.nodes.find((node) => node.id === placeholderNodeId);
-      if (!latestPlaceholder || latestPlaceholder.type !== input.resultNodeType) {
-        throw new GenerationOutputApplicationError('CONFLICT', '提交前结果占位节点已被删除');
-      }
-      if (input.sourceNodeId && !latest.nodes.some((node) => node.id === input.sourceNodeId)) {
-        throw new GenerationOutputApplicationError('CONFLICT', '提交前图层栈来源节点已被删除');
-      }
-      latest.updateNodeData(placeholderNodeId, {
-        ...latestPlaceholder.data,
+      resultNodeId = outputTarget.commit({
         imageUrl: committedProjection.imageUrl,
         previewImageUrl: committedProjection.previewImageUrl,
         aspectRatio: committedProjection.aspectRatio,
@@ -113,16 +98,15 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
         generationOutputStrategy: 'layer-stack',
         generationOutputDescriptors: input.ordered.map((item) => item.descriptor),
       });
-      if (input.sourceNodeId) latest.addEdge(input.sourceNodeId, placeholderNodeId);
-      latest.setSelectedNode(placeholderNodeId);
+      store.getState().setSelectedNode(resultNodeId);
       return [{
         operation: 'generation-output',
         completionId: input.completionId,
-        resultNodeIds: [placeholderNodeId],
+        resultNodeIds: [resultNodeId],
         groupNodeId: null,
       }];
     }), { completionId: input.completionId, strategy: 'layer-stack' }, context?.runtime);
-    if (transaction.appliedOperations.length !== 1) {
+    if (!resultNodeId || transaction.appliedOperations.length !== 1) {
       throw new GenerationOutputApplicationError('CONFLICT', '图层栈事务未完整应用');
     }
     ownershipTransferred = true;
@@ -140,7 +124,7 @@ export async function commitPreparedLayerStack(input: CommitCanvasGenerationOutp
       projectId: input.projectId,
       completionId: input.completionId,
       strategy: 'layer-stack',
-      resultNodeIds: [placeholderNodeId],
+      resultNodeIds: [resultNodeId],
       groupNodeId: null,
       idempotent: false,
     };

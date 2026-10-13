@@ -1,3 +1,4 @@
+import { isCanvasNodeEdit } from '@/stores/canvasStoreHelpers';
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { useNodeParameterContextMenu } from './hooks/useNodeParameterContextMenu';
 import {
@@ -278,6 +279,7 @@ export function Canvas() {
       changes = routeDuplicationChanges(changes);
       if (changes.length === 0) return;
       applyNodesChange(changes);
+      if (!changes.some(isCanvasNodeEdit)) return;
 
       const hasDragMove = changes.some(
         (change) =>

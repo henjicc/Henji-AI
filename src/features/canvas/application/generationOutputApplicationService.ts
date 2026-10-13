@@ -32,6 +32,47 @@ import { withCanvasProjectRuntime } from './canvasProjectRuntime';
 
 const logger = createLogger('features.canvas.generation-output');
 
+export interface GenerationOutputTarget {
+  placeholder: CanvasNode;
+  assertAvailable: () => void;
+  commit: (data: Partial<CanvasNodeData>) => string;
+}
+
+/** 媒体与图层文档共用目标校验和首个结果写入；补回节点只发生在最终画布事务内。 */
+function prepareGenerationOutputTarget(input: CommitCanvasGenerationOutputsInput, store: typeof useCanvasStore): GenerationOutputTarget {
+  const readPlaceholder = (code: 'NOT_FOUND' | 'CONFLICT'): CanvasNode | undefined => {
+    const { nodes } = store.getState();
+    const source = input.sourceNodeId ? nodes.find(node => node.id === input.sourceNodeId) : undefined;
+    const placeholder = input.placeholderNodeId ? nodes.find(node => node.id === input.placeholderNodeId) : undefined;
+    if ((input.sourceNodeId && !source)
+      || (placeholder && placeholder.type !== input.resultNodeType)
+      || (input.placeholderNodeId && !placeholder && !source)) {
+      throw new GenerationOutputApplicationError(code, '生成来源或结果占位节点已不存在或类型已改变');
+    }
+    return placeholder;
+  };
+  const placeholder = readPlaceholder('NOT_FOUND') ?? canvasNodeFactory.createNode(
+    input.resultNodeType,
+    input.sourceNodeId ? store.getState().findNodePosition(input.sourceNodeId, 384, 288) : { x: 0, y: 0 },
+    input.resultNodeData,
+  );
+  return {
+    placeholder,
+    assertAvailable: () => { readPlaceholder('CONFLICT'); },
+    commit: data => {
+      const live = readPlaceholder('CONFLICT');
+      const canvas = store.getState();
+      const completedData = { ...(live?.data ?? placeholder.data), ...data };
+      const nodeId = live?.id ?? canvas.addNode(input.resultNodeType, placeholder.position, completedData);
+      if (live) canvas.updateNodeData(live.id, completedData);
+      if (input.sourceNodeId && !canvas.edges.some(edge => edge.source === input.sourceNodeId && edge.target === nodeId)) {
+        canvas.addEdge(input.sourceNodeId, nodeId);
+      }
+      return nodeId;
+    },
+  };
+}
+
 class GenerationOutputContextChangedError extends GenerationOutputApplicationError {
   constructor() { super('CONFLICT', '原画布执行实例已经变化'); }
 }
@@ -177,31 +218,13 @@ export async function commitCanvasGenerationOutputs(
     };
   }
 
+  const outputTarget = prepareGenerationOutputTarget(input, store);
   if (input.contract.strategy === 'layer-stack') {
-    return await commitPreparedLayerStack({ ...input, completionId, ordered, projectId },
+    return await commitPreparedLayerStack({ ...input, completionId, ordered, projectId }, outputTarget,
       context ? { runtime: context.runtime, assertCurrent: assertContext } : undefined);
   }
 
-  const before = store.getState();
-  const sourceNode = input.sourceNodeId
-    ? before.nodes.find((node) => node.id === input.sourceNodeId)
-    : null;
-  const storedPlaceholder = input.placeholderNodeId
-    ? before.nodes.find((node) => node.id === input.placeholderNodeId)
-    : null;
-  if (
-    (input.sourceNodeId && !sourceNode)
-    || (input.placeholderNodeId && (!storedPlaceholder || storedPlaceholder.type !== input.resultNodeType))
-  ) {
-    throw new GenerationOutputApplicationError('NOT_FOUND', '生成来源或结果占位节点已不存在');
-  }
-  const placeholder = storedPlaceholder ?? canvasNodeFactory.createNode(
-    input.resultNodeType,
-    sourceNode
-      ? before.findNodePosition(input.sourceNodeId as string, 384, 288)
-      : { x: 0, y: 0 },
-    input.resultNodeData,
-  );
+  const { placeholder } = outputTarget;
   if (ordered.some((item) => item.descriptor.mediaType !== ordered[0].descriptor.mediaType)) {
     throw new GenerationOutputApplicationError('INVALID_INPUT', '同一生成批次不能混合不同媒体类型');
   }
@@ -254,13 +277,7 @@ export async function commitCanvasGenerationOutputs(
     });
 
     assertContext();
-    const latest = store.getState();
-    if (
-      (input.sourceNodeId && !latest.nodes.some((node) => node.id === input.sourceNodeId))
-      || (input.placeholderNodeId && !latest.nodes.some((node) => node.id === input.placeholderNodeId))
-    ) {
-      throw new GenerationOutputApplicationError('CONFLICT', '生成期间画布已变化，结果未落图');
-    }
+    outputTarget.assertAvailable();
 
     const result = await runCanvasTransaction(
       projectId,
@@ -275,17 +292,7 @@ export async function commitCanvasGenerationOutputs(
           completionId,
           appendLabel,
         );
-        const firstNodeId = input.placeholderNodeId ?? store.getState().addNode(
-          input.resultNodeType,
-          placeholder.position,
-          firstData,
-        );
-        if (input.placeholderNodeId) {
-          store.getState().updateNodeData(input.placeholderNodeId, firstData);
-        }
-        if (input.sourceNodeId) {
-          store.getState().addEdge(input.sourceNodeId, firstNodeId);
-        }
+        const firstNodeId = outputTarget.commit(firstData);
         resultNodeIds.push(firstNodeId);
 
         for (let index = 1; index < ordered.length; index += 1) {

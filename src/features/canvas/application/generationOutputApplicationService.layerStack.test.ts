@@ -1,5 +1,5 @@
 import { confirmCanvasPersistence } from './canvasPersistenceService';
-import { setCanvasTestProjectState, createCanvasTestProject } from '@/tests/canvasProjectFixture'
+import { setCanvasTestProjectState, createCanvasTestProject, canvasSaveSpy } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +33,12 @@ import {
   validateGenerationOutputBatchContract,
 } from './generationOutputApplicationService';
 import type { MultiLayerDocumentNodeProjection } from './multiLayerDocumentNodeApplicationContracts';
+import * as layerStackPreparation from './layerStackApplicationService';
+import * as layerStackDocuments from './multiLayerDocumentNodeGenerationAdapter';
+import * as generation from '../generation/runGeneration';
+import { layerSeparationGenerationExecution } from './layerSeparationGenerationService';
+import { resumeCanvasGenerationInProject } from './canvasResumePollingService';
+import { deleteCanvasNodes } from './canvasMutationService';
 
 const projectId = 'generation-output-project';
 
@@ -150,6 +156,35 @@ function layerStackProjection(revision = 0): MultiLayerDocumentNodeProjection {
   };
 }
 
+function deletedPlaceholderInput() {
+  const completionId = 'deleted-layer-placeholder';
+  const layerContract = contract(2, 'layer-stack');
+  layerContract.resultKind = 'layer-stack';
+  layerContract.outputs.forEach((item, index) => {
+    item.descriptor.semantic = { kind: 'layer', resultKind: 'image', label: `图层 ${index + 1}` };
+    item.descriptor.layer = { index, opacity: 1, blendMode: 'normal' };
+  });
+  return {
+    sourceNodeId: 'source-node', placeholderNodeId: 'placeholder-node',
+    resultNodeType: CANVAS_NODE_TYPES.layerStackResult, contract: layerContract, completionId,
+    preparedLayerStack: layerStackDocument(completionId),
+    resultNodeData: { generationTaskId: 'layer-task', generationSourceNodeId: 'source-node', displayName: '分层结果' },
+  };
+}
+
+function generatedLayers(): generation.CanvasGenerationOutput {
+  const outputs = [0, 1].map(index => ({
+    version: 1 as const, sourceOutputIndex: index, zIndex: index,
+    role: index === 0 ? 'base' as const : 'content' as const,
+    url: `/managed/layer-${index}.png`, filePath: `/managed/layer-${index}.png`,
+    width: 512, height: 512, format: 'png' as const,
+  }));
+  return { primary: outputs[0].filePath, outputs: outputs.map(output => output.filePath), structuredOutput: {
+    version: 1, kind: 'layer-stack', primary: outputs[0], outputs,
+    metadata: { colorSpace: 'srgb', alphaMode: 'straight', compositeOperation: 'source-over', order: 'bottom-to-top' },
+  } };
+}
+
 async function commit(
   value: CanvasGenerationOutputBatchContractV1,
   completionId = 'completion-1',
@@ -169,7 +204,95 @@ describe('generationOutputApplicationService 图层栈', () => {
     installHarnessNativeStorage();
     setupCanvas();
   });
-  afterEach(() => uninstallHarnessNativeStorage());
+  afterEach(() => { vi.restoreAllMocks(); uninstallHarnessNativeStorage(); });
+
+  it.each(['executor', 'resume'] as const)('真实 %s 图层提交链在占位删除后补回原任务元数据', async mode => {
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+    const input = deletedPlaceholderInput();
+    const metadata = { ...input.resultNodeData, resultKind: 'layer-stack' as const,
+      generationInputImages: ['/managed/input.png'], generationProviderId: 'fixture',
+      serverTaskId: 'layer-server', serverTaskModelId: 'fixture-model',
+    };
+    const completionId = mode === 'resume' ? `generation-output:${input.placeholderNodeId}` : input.completionId;
+    useCanvasStore.getState().updateNodeData(input.placeholderNodeId, metadata);
+    vi.spyOn(layerStackPreparation, 'prepareLayerStackDocument').mockResolvedValue(layerStackDocument(completionId));
+    vi.spyOn(layerStackDocuments, 'createMultiLayerDocumentFromLayerStack').mockResolvedValue(layerStackProjection());
+    if (mode === 'executor') {
+      await deleteCanvasNodes(projectId, [input.placeholderNodeId]);
+      await layerSeparationGenerationExecution.commitGenerationResult({
+        projectId, sourceNodeId: input.sourceNodeId, placeholderNodeId: input.placeholderNodeId,
+        resultNodeType: input.resultNodeType, completionId, modelId: 'fixture-model', providerId: 'fixture', params: {},
+        inputs: { images: ['/managed/input.png'], videos: [], audios: [] }, result: generatedLayers(), resultNodeData: metadata,
+      });
+    } else {
+      let finish!: (result: generation.CanvasGenerationOutput) => void;
+      const resumed = vi.spyOn(generation, 'resumeCanvasGeneration').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+      expect(await resumeCanvasGenerationInProject(projectId, new Set([input.placeholderNodeId]))).toBe(1);
+      await vi.waitFor(() => expect(resumed).toHaveBeenCalledOnce());
+      await deleteCanvasNodes(projectId, [input.placeholderNodeId]);
+      finish(generatedLayers());
+    }
+    await vi.waitFor(async () => {
+      const saved = await readPersistedCanvasProjectSnapshot(projectId);
+      expect(saved.nodes.find(node => node.data.generationOutputCommitId === completionId)?.data).toMatchObject({
+        ...input.resultNodeData, generationInputImages: metadata.generationInputImages,
+        imageEditSession: layerStackProjection().imageEditSession, isGenerating: false,
+      });
+    });
+  });
+
+  it.each(['before', 'during', 'undo'] as const)('占位在 %s 阶段删除且来源仍在，图层结果只补回一次并保留任务归属', async mode => {
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+    const input = deletedPlaceholderInput();
+    useCanvasStore.getState().updateNodeData(input.placeholderNodeId, input.resultNodeData);
+    if (mode === 'before') useCanvasStore.getState().deleteNode(input.placeholderNodeId);
+    const rollbackLayerStackDocument = vi.fn(async () => true);
+    const createLayerStackDocument = vi.fn(async () => {
+      if (mode !== 'before') useCanvasStore.getState().deleteNode(input.placeholderNodeId);
+      if (mode === 'undo') useCanvasStore.getState().undo();
+      return layerStackProjection();
+    });
+    const first = await commitCanvasGenerationOutputs({ ...input, createLayerStackDocument, rollbackLayerStackDocument });
+    const second = await commitCanvasGenerationOutputs({ ...input, createLayerStackDocument, rollbackLayerStackDocument });
+    expect(first.resultNodeIds).toHaveLength(1);
+    expect(second).toMatchObject({ idempotent: true, resultNodeIds: first.resultNodeIds });
+    const saved = await readPersistedCanvasProjectSnapshot(projectId);
+    expect(saved.nodes.filter(node => node.data.generationOutputCommitId === input.completionId)).toHaveLength(1);
+    expect(saved.nodes.find(node => node.id === first.resultNodeIds[0])?.data).toMatchObject({
+      ...input.resultNodeData, imageEditSession: layerStackProjection().imageEditSession, isGenerating: false,
+    });
+    expect(saved.edges.filter(edge => edge.source === input.sourceNodeId && edge.target === first.resultNodeIds[0])).toHaveLength(1);
+    expect(createLayerStackDocument).toHaveBeenCalledOnce();
+    expect(rollbackLayerStackDocument).not.toHaveBeenCalled();
+  });
+
+  it('补回图层节点后保存失败保留文档引用，重试只确认保存', async () => {
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+    const input = deletedPlaceholderInput();
+    useCanvasStore.getState().deleteNode(input.placeholderNodeId);
+    const createLayerStackDocument = vi.fn(async () => layerStackProjection());
+    const rollbackLayerStackDocument = vi.fn(async () => true);
+    canvasSaveSpy().mockRejectedValueOnce(new Error('disk full'));
+    await expect(commitCanvasGenerationOutputs({ ...input, createLayerStackDocument, rollbackLayerStackDocument }))
+      .rejects.toMatchObject({ code: 'PERSISTENCE_FAILED' });
+    const retained = useCanvasStore.getState().nodes.find(node => node.data.generationOutputCommitId === input.completionId)!;
+    expect(retained.data.imageEditSession).toEqual(layerStackProjection().imageEditSession);
+    expect(rollbackLayerStackDocument).not.toHaveBeenCalled();
+    await expect(commitCanvasGenerationOutputs({ ...input, createLayerStackDocument, rollbackLayerStackDocument }))
+      .resolves.toMatchObject({ idempotent: true, resultNodeIds: [retained.id] });
+    expect(createLayerStackDocument).toHaveBeenCalledOnce();
+    expect((await readPersistedCanvasProjectSnapshot(projectId)).nodes.some(node => node.id === retained.id)).toBe(true);
+  });
+
+  it('来源与占位都已删除时拒绝迟到结果，不创建图层文档', async () => {
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
+    const input = deletedPlaceholderInput();
+    useCanvasStore.getState().deleteNodes([input.sourceNodeId, input.placeholderNodeId]);
+    const createLayerStackDocument = vi.fn(async () => layerStackProjection());
+    await expect(commitCanvasGenerationOutputs({ ...input, createLayerStackDocument })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(createLayerStackDocument).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().nodes).toHaveLength(0);
+  });
 
   it.each(['background', 'switch', 'cancel', 'rollback-unknown', 'rollback-error'] as const)('图层原子提交使用原画布并正确补偿未提交文档（%s）', async mode => {
     let release!: () => void;
@@ -351,7 +474,7 @@ describe('generationOutputApplicationService 图层栈', () => {
     ))).toHaveLength(1);
   });
 
-  it('V3 保存失败时不提交完成态，节点删除或取消后按精确 projection 补偿', async () => {
+  it('V3 保存失败时不提交完成态，来源删除或取消后按精确 projection 补偿', async () => {
     setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
     const layerContract = contract(2, 'layer-stack');
     layerContract.resultKind = 'layer-stack';
@@ -385,11 +508,11 @@ describe('generationOutputApplicationService 图层栈', () => {
     await expect(commitCanvasGenerationOutputs({
       ...base,
       createLayerStackDocument: vi.fn(async () => {
-        useCanvasStore.getState().deleteNode('placeholder-node');
+        useCanvasStore.getState().deleteNodes(['source-node', 'placeholder-node']);
         return projection;
       }),
       rollbackLayerStackDocument: rollbackDeleted,
-    })).rejects.toThrow(/占位节点已被删除/);
+    })).rejects.toThrow(/已被删除|已不存在/);
     expect(rollbackDeleted).toHaveBeenCalledWith(projection);
     expect(useCanvasStore.getState().nodes.some((node) => (
       node.data.generationOutputCommitId === completionId

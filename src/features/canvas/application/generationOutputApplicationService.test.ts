@@ -132,6 +132,28 @@ async function commit(
 }
 
 describe('generationOutputApplicationService', () => {
+  it.each(['before', 'during', 'undo'] as const)('仅删除结果（%s）仍保留生成产物，重复完成不重复落图', async (when) => {
+    if (when === 'before') useCanvasStore.getState().deleteNodes(['placeholder-node']);
+    const commitOutput = () => commitCanvasGenerationOutputs({
+      sourceNodeId: 'source-node', placeholderNodeId: 'placeholder-node', resultNodeType: CANVAS_NODE_TYPES.exportImage,
+      contract: contract(1), completionId: 'deleted-result',
+      resultNodeData: { generationTaskId: 'original-task', generationSourceNodeId: 'source-node' },
+      persistOutput: async (_kind, source) => {
+        if (when !== 'before') {
+          useCanvasStore.getState().deleteNodes(['placeholder-node']);
+          if (when === 'undo') useCanvasStore.getState().undo();
+        }
+        return imagePatch(source);
+      },
+    });
+    const result = await commitOutput();
+    expect(useCanvasStore.getState().nodes.find(node => node.id === result.resultNodeIds[0])?.data).toMatchObject({ imageUrl: expect.any(String), isGenerating: false });
+    expect(useCanvasStore.getState().edges).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'source-node', target: result.resultNodeIds[0] })]));
+    expect(useCanvasStore.getState().edges.filter(edge => edge.source === 'source-node' && edge.target === result.resultNodeIds[0])).toHaveLength(1);
+    expect((await commitOutput()).idempotent).toBe(true);
+    expect(useCanvasStore.getState().nodes).toHaveLength(2);
+  });
+
   beforeEach(() => {
     registry.clear();
     registry.register(multiImageModel);

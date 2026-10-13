@@ -26,6 +26,7 @@ import type { CanvasImageCapabilityDefinition } from '@/features/canvas/capabili
 import {
   EXPORT_RESULT_NODE_DEFAULT_WIDTH,
   EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
+  type CanvasNode,
   type CanvasNodeData,
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes'
@@ -41,7 +42,8 @@ import { getPlatform } from '@/platform'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { withCanvasProjectRuntime } from './canvasProjectRuntime'
-import { createCanvasGenerationTaskRecord, canvasGenerationTaskControls } from './canvasGenerationTaskRecord'
+import { findCanvasProjectInstance, registerCanvasGenerationDeletionHandler } from './canvasProjectInstances'
+import { createCanvasGenerationTaskRecord, canvasGenerationTaskControls, canvasGenerationNodeTasks } from './canvasGenerationTaskRecord'
 import { retainCanvasTaskExecutor } from './canvasTaskExecutors'
 import type { CanvasTransactionRuntime } from './canvasPersistenceService'
 import type { CanvasNodeExecutionScheduler } from './canvasExecutionContracts'
@@ -68,6 +70,38 @@ import {
 } from '../nodes/shared/generationNodeRuntime'
 
 const logger = createLogger('features.canvas.generationExecutor')
+
+/** 删除落盘之后停止失去来源的任务；仅删占位时保留任务，由落图入口补回结果。 */
+async function cancelDeletedCanvasGenerationTasks(projectId: string, beforeNodes: CanvasNode[]): Promise<void> {
+  const instance = findCanvasProjectInstance(projectId)
+  if (!instance) return
+  const remaining = new Set(instance.store.getState().nodes.map(node => node.id))
+  const removed = new Set(beforeNodes.filter(node => !remaining.has(node.id)).map(node => node.id))
+  const taskIds = new Set<string>()
+  const serverTaskIds = new Set<string>()
+  for (const node of beforeNodes) {
+    if (!remaining.has(node.id)) {
+      const taskId = canvasGenerationNodeTasks.get(`${projectId}:${node.id}`)
+      if (taskId) taskIds.add(taskId)
+    }
+    if (node.data.isGenerating !== true && !node.data.serverTaskId) continue
+    const sourceId = typeof node.data.generationSourceNodeId === 'string' ? node.data.generationSourceNodeId : null
+    if (!removed.has(node.id) && !(sourceId && removed.has(sourceId))) continue
+    // 若保存期间用户撤销删除，或只删除结果而来源仍在，就不终止可交付的任务。
+    if (sourceId ? remaining.has(sourceId) : remaining.has(node.id)) continue
+    if (typeof node.data.generationTaskId === 'string') taskIds.add(node.data.generationTaskId)
+    if (typeof node.data.serverTaskId === 'string') serverTaskIds.add(node.data.serverTaskId)
+  }
+  for (const taskId of taskIds) {
+    canvasGenerationTaskControls.get(taskId)?.controller.abort(new Error('生成来源已删除'))
+    logger.info('删除后已请求停止画布生成', { event: 'canvas.generationTask.delete_cancel.requested', requestId: taskId, taskId, projectId })
+  }
+  const results = await Promise.allSettled([...serverTaskIds].map(taskId => GenerationService.getInstance().cancelTask(taskId)))
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (failures.length) throw new AggregateError(failures.map(result => result.reason), '删除后停止供应商任务失败')
+}
+
+registerCanvasGenerationDeletionHandler(cancelDeletedCanvasGenerationTasks)
 
 export interface GenerationNodeExecutionOptions {
   nodeId: string
@@ -254,6 +288,21 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
         await execution.assertCurrent()
 
         const generationStartedAt = Date.now()
+        const placeholderData = {
+          isGenerating: true,
+          generationStartedAt,
+          generationDurationMs: estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS,
+          displayName: buildResultNodeTitle(promptInput.prompt, current.t(current.resultTitleKey)),
+          generationSourceNodeId: current.nodeId,
+          generationInputSignature: execution.inputSignature,
+          generationProviderId: runtime.model?.meta.provider ?? null,
+          generationInputImages: [...runtime.images],
+          generationInputVideos: [...runtime.videos],
+          generationInputAudios: [...runtime.audios],
+          ...resultNodeExtraData,
+          ...(capabilityPreparation?.resultNodeData ?? {}),
+          ...resultNodeData,
+        }
         const createResultNode = (store: typeof useCanvasStore) => {
           const canvas = store.getState()
           const id = canvas.addNode(
@@ -263,21 +312,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
               EXPORT_RESULT_NODE_DEFAULT_WIDTH,
               EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
             ),
-            {
-              isGenerating: true,
-              generationStartedAt,
-              generationDurationMs: estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS,
-              displayName: buildResultNodeTitle(promptInput.prompt, current.t(current.resultTitleKey)),
-              generationSourceNodeId: current.nodeId,
-              generationInputSignature: execution.inputSignature,
-              generationProviderId: runtime.model?.meta.provider ?? null,
-              generationInputImages: [...runtime.images],
-              generationInputVideos: [...runtime.videos],
-              generationInputAudios: [...runtime.audios],
-              ...resultNodeExtraData,
-              ...(capabilityPreparation?.resultNodeData ?? {}),
-              ...resultNodeData,
-            },
+            placeholderData,
           )
           canvas.addEdge(current.nodeId, id)
           return id
@@ -329,7 +364,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
               params: requestParams,
               inputs: requestInputs,
               result,
-              resultNodeData,
+              resultNodeData: placeholderData,
             })
             return {
               status: committed.idempotent ? 'reused' : 'completed',
@@ -350,6 +385,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
             sourceNodeId: current.nodeId,
             placeholderNodeId: resultNodeId,
             resultNodeType: current.resultNodeType,
+            resultNodeData: placeholderData,
             contract: {
               version: 1,
               strategy,

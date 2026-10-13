@@ -1,5 +1,6 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import type { CanvasHistoryState, CanvasNode, CanvasEdge } from '@/stores/canvasStore'
+import { restoreCanvasSnapshot } from '@/stores/canvasStoreHelpers'
 import { CanvasApplicationError } from './canvasApplicationError'
 import { runPersistedCanvasUndo, type CanvasUndoPersistenceState } from './canvasPersistenceService'
 
@@ -30,7 +31,7 @@ export async function undoCanvasBatch(projectId: string, undoRef: string): Promi
     ) {
       throw new CanvasApplicationError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
     }
-    canvas.setCanvasData(record.beforeNodes, record.beforeEdges, record.beforeHistory)
+    restoreCanvasSnapshot(requireCanvasProjectInstance(projectId).store.setState, record.beforeNodes, record.beforeEdges, record.beforeHistory)
     canvas.setSelectedNode(record.beforeSelectedNodeId)
   }, record)
   canvasBatchUndos.delete(undoRef)

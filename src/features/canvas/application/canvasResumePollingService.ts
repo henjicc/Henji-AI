@@ -337,6 +337,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         sourceNodeId: resolvedSourceNodeId,
         placeholderNodeId: nodeId,
         resultNodeType,
+        resultNodeData,
         completionId: `generation-output:${nodeId}`,
         sourceImage,
         providerId,

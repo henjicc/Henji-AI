@@ -1,6 +1,8 @@
 import type { Viewport } from '@xyflow/react'
+import type { CanvasNode } from '../domain/canvasNodes'
 
 import { canvasStoreAttachment, createCanvasStore } from '@/stores/canvasStore'
+import { hasCanvasContentChanged } from '@/stores/canvasStoreHelpers'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
@@ -63,6 +65,20 @@ const leaving = new Map<string, Promise<DocumentLeaveOutcome>>()
 const idleListeners = new Map<string, Set<() => void>>()
 const changeListeners = new Set<(instance: CanvasProjectInstance) => void>()
 let closeGuardRegistered = false
+
+type GenerationDeletionHandler = (projectId: string, beforeNodes: CanvasNode[]) => Promise<void>
+const generationDeletionHandlers = new Set<GenerationDeletionHandler>()
+
+/** 生成运行时注册自己的清理；文档变更层不反向加载执行器。 */
+export function registerCanvasGenerationDeletionHandler(handler: GenerationDeletionHandler): void {
+  generationDeletionHandlers.add(handler)
+}
+
+export async function notifyCanvasGenerationNodesDeleted(projectId: string, beforeNodes: CanvasNode[]): Promise<void> {
+  const results = await Promise.allSettled([...generationDeletionHandlers].map(handler => handler(projectId, beforeNodes)))
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (failures.length) throw new AggregateError(failures.map(result => result.reason), '删除后的生成任务清理失败')
+}
 
 /** 应用退出前把每份打开画布的视口与撤销记录写进会话状态（文档本身由会话登记表的退出屏障写完）。 */
 function ensureCloseGuard(): void {
@@ -158,7 +174,7 @@ export function bindCanvasSession(session: DocumentSession, initial: CanvasSessi
     subscribe: (onChange) => {
       notifySession = onChange
       return store.subscribe((state, previous) => {
-        const contentChanged = state.nodes !== previous.nodes || state.edges !== previous.edges
+        const contentChanged = hasCanvasContentChanged(previous, state)
         const dragEnded = previous.dragHistorySnapshot !== null && state.dragHistorySnapshot === null
         if (!contentChanged && !dragEnded && state.history === previous.history) return
         if (contentChanged || state.history !== previous.history) {
@@ -392,6 +408,7 @@ export async function leaveCanvasProject(id: string): Promise<DocumentLeaveOutco
         if (canvasStoreAttachment.getStore() === instance.store) detachCanvasProject()
         closeWhenIdle.add(id)
         await instance.sessionState.flush()
+        if (!instance.leases) await closeIdleInstance(instance)
       } else {
         // 写完关闭（含草稿保存）后按最后的文件版本记下撤销记录与视口；不保存 / 空草稿已移走，不再写。
         if (outcome === 'closed' || outcome === 'saved') await instance.sessionState.flush()
