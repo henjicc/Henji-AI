@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { createTransientProgressStore } from './createTransientProgressStore';
 
 /**
  * 画布生成进度的独立状态源（nodeId -> 0~1）。
@@ -19,49 +19,12 @@ interface CanvasGenerationProgressState {
   clearAllProgress: () => void;
 }
 
-export const useCanvasGenerationProgressStore = create<CanvasGenerationProgressState>((set) => ({
-  progress: {},
-
-  setProgress: (nodeId, progress) => {
-    set((state) => {
-      const current = state.progress[nodeId];
-      if (progress === null) {
-        if (current === undefined) {
-          return state;
-        }
-        const next = { ...state.progress };
-        delete next[nodeId];
-        return { progress: next };
-      }
-
-      const clamped = Math.min(1, Math.max(0, progress));
-      if (current !== undefined && Math.abs(current - clamped) < 0.001) {
-        return state;
-      }
-      return {
-        progress: {
-          ...state.progress,
-          [nodeId]: clamped,
-        },
-      };
-    });
-  },
-
-  clearProgress: (nodeIds) => {
-    set((state) => {
-      const hitKeys = Object.keys(state.progress).filter((nodeId) => nodeIds.has(nodeId));
-      if (hitKeys.length === 0) {
-        return state;
-      }
-      const next = { ...state.progress };
-      for (const nodeId of hitKeys) {
-        delete next[nodeId];
-      }
-      return { progress: next };
-    });
-  },
-
-  clearAllProgress: () => {
-    set((state) => (Object.keys(state.progress).length === 0 ? state : { progress: {} }));
-  },
-}));
+const progressStore = createTransientProgressStore<number, CanvasGenerationProgressState>({
+  initialState: actions => ({ progress: {}, setProgress: actions.set, clearProgress: actions.clear, clearAllProgress: actions.clearAll }),
+  getEntry: (state, id) => state.progress[id],
+  entries: state => Object.entries(state.progress),
+  patch: entries => ({ progress: Object.fromEntries(entries) }),
+  normalize: progress => Math.min(1, Math.max(0, progress)),
+  equals: (current, next) => Math.abs(current - next) < 0.001,
+});
+export const useCanvasGenerationProgressStore = progressStore.store;

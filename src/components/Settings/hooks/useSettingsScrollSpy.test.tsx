@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React, { useCallback, useEffect, useState } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SETTINGS_SECTION_ATTR, useSettingsScrollSpy } from './useSettingsScrollSpy'
@@ -48,6 +48,23 @@ afterEach(() => {
 })
 
 describe('useSettingsScrollSpy', () => {
+  it('弹出宿主的滚动合帧使用所属窗口并取消待执行帧', () => {
+    const iframe = document.createElement('iframe')
+    document.body.append(iframe)
+    const owner = iframe.contentWindow!
+    const request = vi.fn(() => 7), cancel = vi.fn()
+    owner.requestAnimationFrame = request
+    owner.cancelAnimationFrame = cancel
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 99))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const container = owner.document.createElement('div')
+    const view = renderHook(() => useSettingsScrollSpy({ container, sectionIds: [], onActiveSectionChange: () => undefined }))
+    act(() => { container.dispatchEvent(new Event('scroll')); container.dispatchEvent(new Event('scroll')) })
+    expect(request).toHaveBeenCalledTimes(1)
+    view.unmount()
+    expect(cancel).toHaveBeenCalledWith(7)
+    iframe.remove()
+  })
   it('滚动容器延后挂载时仍给末节设最小高度，最后一个短分节可以滚到顶部', () => {
     render(<DelayedSettingsBody />)
     // 800 容器高 - 16 停靠距离 - 16 下内边距；末节内容伸缩时总高度不变，不会跳动

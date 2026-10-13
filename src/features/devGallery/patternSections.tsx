@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { Virtuoso } from 'react-virtuoso'
+import { useState } from 'react'
+import { useStore } from 'zustand'
+import { createStore, type StoreApi } from 'zustand/vanilla'
+import { useRafCallback } from '@/hooks/useRafCallback'
 import { TriangleAlert } from 'lucide-react'
-import { UiButton, UiEmpty, UiFormRow, UiGroup, UiInput, UiLoading, UiError, UiPanel, UiSegmented, UiSwitch, UiToolbar, UI_TEXT_META_CLASS } from '@/components/ui'
+import { UiButton, UiEmpty, UiFormRow, UiGroup, UiInput, UiLoading, UiError, UiPanel, UiSegmented, UiSwitch, UiToolbar, UiVirtualList, UiVirtualGrid, UI_TEXT_META_CLASS } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { GALLERY_SKILL_SOURCE } from './galleryIndex'
 
@@ -44,23 +46,23 @@ export function RulesSection(): JSX.Element {
   return <UiGroup title="规范速查：链接到唯一原文" titleTone="compact">{links.map(([label, anchor]) => <a key={label} className="py-3 text-13 text-accent-text underline" href={`${GALLERY_SKILL_SOURCE}#${anchor}`} target="_blank" rel="noreferrer">{label}</a>)}<p className={UI_TEXT_META_CLASS}>分段用中性抬起底 + 强文字（最多 5 项）；其他单选用淡强调底。当前组件尺寸读取真实枚举，任务 4.2 合并后自动反映。</p></UiGroup>
 }
 
+const LIST_SAMPLES = Array.from({ length: 1000 }, (_, id) => ({ id, name: `记录 ${id + 1}` }))
+
+function PointerProgressReadout({ clock }: { clock: StoreApi<{ ratio: number }> }): JSX.Element {
+  const ratio = useStore(clock, state => state.ratio)
+  return <div className="flex flex-col gap-2"><p className="text-xs text-text2">预览位置 {Math.round(ratio * 100)}%</p><div className="h-2 overflow-hidden rounded-full bg-control"><div className="h-full origin-left bg-accent" style={{ transform: `scaleX(${ratio})` }} /></div></div>
+}
+
 export function LongListSection(): JSX.Element {
-  const [fps, setFps] = useState<number | null>(null)
-  const frames = useRef({ count: 0, since: 0, frame: 0 })
-  useEffect(() => {
-    const measurement = frames.current
-    const tick = (time: number): void => {
-      if (!frames.current.since) frames.current.since = time
-      frames.current.count += 1
-      if (time - frames.current.since >= 1000) {
-        setFps(Math.round(frames.current.count * 1000 / (time - frames.current.since)))
-        frames.current.since = time
-        frames.current.count = 0
-      }
-      frames.current.frame = requestAnimationFrame(tick)
-    }
-    frames.current.frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(measurement.frame)
-  }, [])
-  return <UiGroup title="长列表：复用现有 react-virtuoso" titleTone="compact"><p className="text-xs text-text2">1000 条 · 当前窗口回调帧率 {fps ?? '测量中'}（不代表滚动性能验收）</p><div className="h-80"><Virtuoso totalCount={1000} itemContent={index => <div className="flex flex-col gap-2 border-b border-line py-5"><p className="text-sm font-medium text-text1">记录 {index + 1}</p><p className="text-xs text-text2">图片 · 已完成</p><UiButton size="sm">继续编辑</UiButton></div>} /></div></UiGroup>
+  const [selected, setSelected] = useState(0)
+  const [clock] = useState(() => createStore(() => ({ ratio: 0 })))
+  const preview = useRafCallback((ratio: number) => clock.setState({ ratio }))
+  return <div className="flex flex-col gap-8">
+    <UiGroup title="共享虚拟列表：1000 条可变行高记录" titleTone="compact"><div className="h-80"><UiVirtualList data={LIST_SAMPLES} getKey={item => item.id} emptyState={<UiEmpty size="xs" title="暂无记录" />} renderItem={item => <div className="flex flex-col gap-2 border-b border-line py-5"><p className="text-sm font-medium text-text1">{item.name}</p>{item.id % 3 === 0 && <p className="text-xs text-text2">描述会增加本行高度，滚动位置由共享列表测量。</p>}<UiButton size="sm">继续编辑</UiButton></div>} /></div></UiGroup>
+    <UiGroup title="共享虚拟网格：状态和描述可以改变行高" titleTone="compact"><div className="h-64"><UiVirtualGrid data={LIST_SAMPLES} columns={3} getKey={item => item.id} highlightedIndex={selected} renderItem={item => <UiButton variant={selected === item.id ? 'secondary' : 'quiet'} onClick={() => setSelected(item.id)} className="w-full">{item.name}</UiButton>} /></div></UiGroup>
+    <UiGroup title="高频预览：合帧生产，叶子订阅" titleTone="compact"><div className="h-24 bg-control" onPointerMove={event => {
+      const rect = event.currentTarget.getBoundingClientRect()
+      preview.schedule(Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))))
+    }} onPointerLeave={() => preview.flush()}><p className="p-3 text-xs text-text2">移动指针查看预览；外层列表不订阅位置。</p></div><PointerProgressReadout clock={clock} /></UiGroup>
+  </div>
 }

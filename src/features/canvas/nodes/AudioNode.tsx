@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type DragEvent } from 'react';
 import { useStore } from 'zustand';
-import { createStore, type StoreApi } from 'zustand/vanilla';
+import { usePlaybackClock, type PlaybackClockStore } from '@/hooks/usePlaybackClock';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -53,7 +53,7 @@ const AUDIO_NODE_WIDTH = 280;
 const AUDIO_NODE_HEIGHT = 96;
 const AUDIO_WAVEFORM_HEIGHT = 44;
 
-type PlaybackClock = StoreApi<{ currentTime: number }>;
+type PlaybackClock = PlaybackClockStore;
 
 // 时钟只通知显示播放位置的叶子，头部、端口和动作不订阅播放帧。
 const AudioPlaybackWaveform = memo(({ clock, startSeconds, ...props }: Omit<ComponentProps<typeof WaveformView>, 'playedSeconds'> & { clock: PlaybackClock; startSeconds: number }) => {
@@ -83,10 +83,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackClock] = useState(() => createStore(() => ({ currentTime: 0 })));
-  const setCurrentTime = useCallback((currentTime: number) => {
-    if (playbackClock.getState().currentTime !== currentTime) playbackClock.setState({ currentTime });
-  }, [playbackClock]);
+  const { store: playbackClock, setTime: setCurrentTime } = usePlaybackClock(audioRef, isPlaying, data.audioUrl ?? null);
   const [mediaDuration, setMediaDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
@@ -152,23 +149,6 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
     }
     return audioRef.current;
   }, [audioSource, muted]);
-
-  // 播放中用 rAF 驱动进度，避免原生 timeupdate 事件频率过低（~4Hz）导致波形进度跳动
-  useEffect(() => {
-    if (!isPlaying) {
-      return;
-    }
-    let rafId = 0;
-    const tick = () => {
-      const element = audioRef.current;
-      if (element) {
-        setCurrentTime(element.currentTime);
-      }
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [isPlaying, setCurrentTime]);
 
   const togglePlay = useCallback(() => {
     const element = ensureAudioElement();

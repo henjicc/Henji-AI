@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { createTransientProgressStore } from '@/stores/createTransientProgressStore';
 import type { CameraStageRenderTaskSnapshot } from '@/platform/contracts/cameraStageRender';
 
 export interface CameraStageNodeRenderProgress {
@@ -15,23 +15,22 @@ interface RenderProgressState {
   clearAll: () => void
 }
 const keyOf = (projectId: string, nodeId: string): string => `${projectId}:${nodeId}`;
-export const useCameraStageRenderProgressStore = create<RenderProgressState>((set) => ({
-  tasks: new Map(),
-  setProgress: (key, progress) => set((state) => {
-    const tasks = new Map(state.tasks);
-    if (progress) tasks.set(key, progress);
-    else tasks.delete(key);
-    return { tasks };
-  }),
-  clearAll: () => set({ tasks: new Map() }),
-}));
+const progressStore = createTransientProgressStore<CameraStageNodeRenderProgress, RenderProgressState>({
+  initialState: actions => ({ tasks: new Map(), setProgress: actions.set, clearAll: actions.clearAll }),
+  getEntry: (state, id) => state.tasks.get(id),
+  entries: state => state.tasks,
+  patch: tasks => ({ tasks }),
+  equals: (current, next) => current.outputKind === next.outputKind && current.progress === next.progress
+    && current.phase === next.phase && current.requestId === next.requestId,
+});
+export const useCameraStageRenderProgressStore = progressStore.store;
 
 export function setCameraStageNodeRenderProgress(projectId: string, nodeId: string, progress: CameraStageNodeRenderProgress | null): void {
   useCameraStageRenderProgressStore.getState().setProgress(keyOf(projectId, nodeId), progress);
 }
 
 export function useCameraStageNodeRenderProgress(projectId: string | null, nodeId: string): CameraStageNodeRenderProgress | null {
-  return useCameraStageRenderProgressStore((state) => projectId ? state.tasks.get(keyOf(projectId, nodeId)) ?? null : null);
+  return progressStore.useEntry(projectId ? keyOf(projectId, nodeId) : null) ?? null;
 }
 
 export function clearCameraStageRenderProgress(): void {

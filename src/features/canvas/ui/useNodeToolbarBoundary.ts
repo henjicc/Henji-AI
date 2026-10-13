@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { resolveNodeToolbarPosition, type ToolbarSide } from './nodeToolbarPosition'
+import { createRafScheduler } from '@/utils/createRafScheduler'
 
 /** 仅修正选中态浮层，不改变 ReactFlow 节点盒、缩放或画布位置。 */
-export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true) {
+export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true): RefObject<HTMLDivElement> {
   const panelRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
@@ -12,16 +13,15 @@ export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true) {
     if (!panel || !toolbar || !renderer) return
     let side: ToolbarSide = 'above'
     let shift = { x: 0, y: 0 }
-    let frame = 0
+    const owner = panel.ownerDocument.defaultView ?? window
     const ids = new Set((toolbar.dataset.id ?? '').split(' '))
     const nodes = Array.from(renderer.querySelectorAll<HTMLElement>('.react-flow__node')).filter((node) => ids.has(node.dataset.id ?? ''))
     const update = () => {
-      frame = 0
       const area = renderer.getBoundingClientRect()
       const boundary = {
         left: Math.max(0, area.left), top: Math.max(0, area.top),
-        width: Math.max(0, Math.min(window.innerWidth, area.right) - Math.max(0, area.left)),
-        height: Math.max(0, Math.min(window.innerHeight, area.bottom) - Math.max(0, area.top)),
+        width: Math.max(0, Math.min(owner.innerWidth, area.right) - Math.max(0, area.left)),
+        height: Math.max(0, Math.min(owner.innerHeight, area.bottom) - Math.max(0, area.top)),
       }
       const maxWidth = `${Math.max(0, boundary.width - 24)}px`
       if (panel.style.maxWidth !== maxWidth) panel.style.maxWidth = maxWidth
@@ -41,7 +41,8 @@ export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true) {
       toolbar.dataset.toolbarSide = side
       shift = { x, y }
     }
-    const schedule = () => { if (!frame) frame = requestAnimationFrame(update) }
+    const scheduler = createRafScheduler(update, owner)
+    const schedule = scheduler.schedule
     const resize = new ResizeObserver(schedule)
     ;[panel, renderer, ...nodes].forEach((element) => resize.observe(element))
     // ReactFlow 持有原始 transform；观察它的更新，并在独立 translate 中做边缘修正。
@@ -53,13 +54,13 @@ export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true) {
     })
     mutations.observe(toolbar, { attributes: true, attributeFilter: ['style'] })
     update()
-    window.addEventListener('resize', schedule)
+    owner.addEventListener('resize', schedule)
     return () => {
       toolbar.style.removeProperty('translate')
       resize.disconnect()
       mutations.disconnect()
-      cancelAnimationFrame(frame)
-      window.removeEventListener('resize', schedule)
+      scheduler.cancel()
+      owner.removeEventListener('resize', schedule)
     }
   }, [nodeIdsKey, visible])
 
