@@ -142,7 +142,7 @@ function buildChangedVerificationPlan(options, root, exists = fs.existsSync, res
   validateChangedVerificationOptions(options)
   const plans = []
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  const gate = (label, name) => plans.push(step(label, npmCommand, ['run', name]))
+  const gate = (label, name, args = []) => plans.push(step(label, npmCommand, ['run', name, ...args]))
   if (options.files.some(file => /^\.(?:claude|codex)\/skills\//.test(file))) gate('项目 skill 同步', 'check:skill-sync')
   if (options.level === 'L0') return plans
   const suppliedTests = options.files.filter((file) => TEST_PATTERN.test(file))
@@ -201,7 +201,7 @@ function buildChangedVerificationPlan(options, root, exists = fs.existsSync, res
     }
   }
 
-  // 现有颜色/图标/residue CLI 只支持全仓严格模式；界面改动时复用正式门禁，
+  // 颜色/图标与共享表面执行全仓严格模式；residue 可以按本次 src 文件严格扫描，
   // 不给纯逻辑及测试替身增加扫描成本。4.3 定稿后的间距门禁在这里接入。
   const uiChanged = options.files.some(file => !TEST_PATTERN.test(file) && (
     /^src\/.*\.(?:tsx|css)$/.test(file)
@@ -213,7 +213,9 @@ function buildChangedVerificationPlan(options, root, exists = fs.existsSync, res
     gate('界面表面（严格）', 'check:surface:strict')
     gate('界面颜色令牌', 'check:colors')
     gate('界面图标（严格）', 'check:icons:strict')
-    gate('界面残留（严格）', 'check:ui-residue')
+    const uiFiles = options.files.filter(file => file.startsWith('src/') && !TEST_PATTERN.test(file) && /\.(?:tsx?|css)$/.test(file) && exists(path.join(root, file)))
+    const globalUi = options.files.includes('tailwind.config.js')
+    gate('界面残留（严格）', 'check:ui-residue', !globalUi && uiFiles.length ? ['--', '--strict-local', '--files', uiFiles.join(','), '--no-report'] : [])
   }
   const applicationSources = sources.filter(file => /^(src|electron|packages)\//.test(file))
   const importsChanged = applicationSources.some((file) => /\b(?:import|export)\b[^\n]*(?:from\s|import\s*\(|['"]\.)|\b(?:import\s*['"]|require\s*\()/.test(changes.get(file)))

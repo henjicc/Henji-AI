@@ -21,6 +21,17 @@ const ROOT = path.resolve(__dirname, '..', '..')
 const categoriesOf = (findings) => findings.map((finding) => finding.category)
 const count = (findings, category) => findings.filter((finding) => finding.category === category).length
 
+test('外观报告复用规则 E 的动态类串判定，只有 surface 负责阻断', () => {
+  const { findButtonAppearanceOverridesInSource } = require('./buttonAppearanceOverrides.cjs')
+  const source = 'const STYLE = "bg-panel h-8"; <UiButton className={active ? STYLE : "w-full"}/>'
+  const reported = scanSourceText(source, 'Example.tsx').filter(item => item.category === 'appearanceOverride')
+  const checked = findButtonAppearanceOverridesInSource(source, 'Example.tsx')
+  assert.equal(reported.length, checked.length)
+  assert.equal(reported.length, 1)
+  assert.equal(reported[0].verdict, 'info')
+  assert.ok(reported[0].text.includes('bg-panel'))
+})
+
 test('旧别名类正则与 check:colors 的 legacy 规则同源（文本一致，防止两处漂移）', () => {
   const checker = fs.readFileSync(path.join(ROOT, 'scripts/check-color-tokens.cjs'), 'utf8')
   assert.ok(checker.includes(`const UTILITY_PREFIX = '${COLOR_UTILITY_PREFIX}'`))
@@ -206,9 +217,9 @@ test('调用点覆盖外观：标签内（开始标签到 className 之间）的
     '/>',
   ].join('\n'))
   assert.equal(count(inside, 'appearanceOverride'), 0)
-  const outside = scanSourceText(['// ui-surface-allow 很早以前的一条豁免，和下面无关', 'const a = 1', 'const b = 2', '<UiButton className="bg-panel" />'].join('\n'))
+  const outside = scanSourceText(['// ui-surface-allow 很早以前的一条豁免，和下面无关', 'const a = 1;', 'const b = 2;', '<UiButton className="bg-panel" />'].join('\n'))
   assert.equal(count(outside, 'appearanceOverride'), 1)
-  assert.equal(outside.find((item) => item.category === 'appearanceOverride').verdict, 'violation')
+  assert.equal(outside.find((item) => item.category === 'appearanceOverride').verdict, 'info')
 })
 
 test('行级豁免必须写理由（≥ 8 字），缺理由判违规', () => {

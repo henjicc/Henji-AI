@@ -5,6 +5,7 @@
  * 现在是报告模式（任务 5.2）；5.8 清零后把需要的类别接进构建门禁。正则与 5.1 盘点第二节一致。
  */
 const path = require('node:path')
+const { findButtonAppearanceOverridesInSource } = require('./buttonAppearanceOverrides.cjs')
 
 /** 与 scripts/check-color-tokens.cjs 的 UTILITY_PREFIX / LEGACY_ALIAS_COLOR_NAMES 一致（精确测试比对两处文本）。 */
 const COLOR_UTILITY_PREFIX = '(?:bg|text|border|ring|ring-offset|from|to|via|fill|stroke|outline|divide|placeholder|decoration|shadow|accent|caret)'
@@ -32,13 +33,6 @@ const INLINE_STYLE_COLOR_KEYS = /\b(?:color|background|backgroundColor|borderCol
 const INLINE_STYLE_SIZE_KEYS =
   /\b(?:width|height|minWidth|maxWidth|minHeight|maxHeight|fontSize|lineHeight|padding\w*|margin\w*|borderRadius|gap)\s*:/
 
-/** 调用点覆盖外观：Ui* 组件（以及 Dropdown / PanelTrigger 的 buttonClassName）的类串里出现外观类。 */
-const APPEARANCE_CLASS_PATTERN = new RegExp(
-  '(?<![\\w-])(?:[\\w-]+:)*!?(?:bg-[\\w/.[\\]-]+|border(?:-[\\w/.[\\]-]+)?|rounded(?:-[\\w[\\].-]+)?|shadow(?:-[\\w[\\].-]+)?'
-  + '|ring(?:-[\\w/.[\\]-]+)?|backdrop-[\\w[\\].-]+|text-(?:text\\d|accent[\\w-]*|on-[\\w-]+|[a-z]+-text|\\[[^\\]]+\\]|xs|sm|base|lg|xl|\\d?xl))(?![\\w-])',
-  'g',
-)
-const CLASS_LITERAL_PATTERN = /\b(className|buttonClassName)=(?:"([^"]*)"|'([^']*)'|\{\s*`([^`]*)`\s*\}|\{\s*["']([^"']*)["']\s*\})/g
 const OPENING_TAG_PATTERN = /<([A-Za-z][\w.]*)\b/g
 
 const SURFACE_ALLOW_PATTERN = /ui-surface-allow(?!-file)/
@@ -58,7 +52,7 @@ const RESIDUE_CATEGORIES = Object.freeze([
   { key: 'arbitraryPx', label: '任意值类（写死 px）', gate: '报告视图（门禁按任意值类判）' },
   { key: 'inlineStyleColor', label: '内联 style 含颜色', gate: '运行时数据与令牌变量合规；字面量颜色违规' },
   { key: 'inlineStyleSize', label: '内联 style 含尺寸', gate: '运行时计算值合规；字面量尺寸改类名或登记' },
-  { key: 'appearanceOverride', label: '调用点覆盖组件外观', gate: '违规；确属表面语义差异时用标签内 ui-surface-allow' },
+  { key: 'appearanceOverride', label: '调用点覆盖组件外观', gate: '规则 E 同源报告视图；由 check:surface 负责阻断' },
   { key: 'surfaceAllow', label: 'ui-surface-allow 行级豁免', gate: '必须写理由（≥ 8 字）；逐条复核' },
   { key: 'colorAllowlist', label: 'check:colors 登记项', gate: 'check:colors 登记文件（只能下调）' },
   { key: 'privateCssVar', label: '组件私有 CSS 变量', gate: '第三方库变量映射合规；其余登记' },
@@ -74,7 +68,7 @@ const VERDICT_BY_CATEGORY = Object.freeze({
   legacyAlias: 'violation',
   legacyCssVar: 'violation',
   arbitraryPx: 'info',
-  appearanceOverride: 'violation',
+  appearanceOverride: 'info',
   colorAllowlist: 'allowed',
   privateCssLiteral: 'register',
   privateCssClass: 'register',
@@ -225,7 +219,7 @@ function finding(category, line, text, extra = {}) {
   return { category, line, text, verdict: VERDICT_BY_CATEGORY[category] ?? 'violation', rule: '', value: text, ...extra }
 }
 
-function scanSourceText(text) {
+function scanSourceText(text, fileName = 'residue.tsx', srcRoot) {
   const findings = []
   const lines = text.split(/\r?\n/)
   lines.forEach((line, index) => {
@@ -268,19 +262,8 @@ function scanSourceText(text) {
         : { verdict: 'allowed', rule: '运行时计算（拖动、测量、定位、虚拟列表）' }))
     }
   }
-  for (const match of text.matchAll(CLASS_LITERAL_PATTERN)) {
-    const [, attribute, ...values] = match
-    const classes = values.find((value) => value !== undefined) ?? ''
-    const tag = enclosingTag(text, match.index)
-    if (!tag) continue
-    const checked = attribute === 'buttonClassName' ? ['Dropdown', 'PanelTrigger'].includes(tag.name) : /^Ui[A-Z]/.test(tag.name)
-    if (!checked) continue
-    const lineNo = lineNumberAt(text, match.index)
-    // 豁免注释写在开始标签上方一行，或开始标签到 className 之间任意一行
-    const tagLine = lineNumberAt(text, tag.index)
-    if (lines.slice(Math.max(0, tagLine - 2), lineNo).some((line) => SURFACE_ALLOW_PATTERN.test(line))) continue
-    const appearance = [...classes.replace(/\$\{[^}]*\}/g, ' ').matchAll(APPEARANCE_CLASS_PATTERN)].map((item) => item[0])
-    if (appearance.length) findings.push(finding('appearanceOverride', lineNo, `<${tag.name}> ${appearance.join(' ')}`))
+  for (const item of findButtonAppearanceOverridesInSource(text, fileName, undefined, srcRoot)) {
+    findings.push(finding('appearanceOverride', item.line, `<${item.component}> ${item.violations.map(hit => hit.token).join(' ')}`))
   }
   return findings
 }
@@ -519,7 +502,6 @@ function resolveRegion(relativePath, inventory) {
 }
 
 module.exports = {
-  APPEARANCE_CLASS_PATTERN,
   ARBITRARY_VALUE_PATTERN,
   COLOR_UTILITY_PREFIX,
   LEGACY_ALIAS_COLOR_NAMES,

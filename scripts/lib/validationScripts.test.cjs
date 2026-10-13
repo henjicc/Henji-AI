@@ -6,6 +6,102 @@ const test = require('node:test')
 const root = path.resolve(__dirname, '..', '..')
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 
+test('report npm 别名明确选择告警入口', () => {
+  assert.equal(packageJson.scripts['check:surface:report'], 'node scripts/check-surface-tokens.cjs --report')
+})
+
+test('role=button 禁令为 error，正式控件与非按钮语义不受影响', async () => {
+  const lint = new (require('eslint').ESLint)({ cwd: root })
+  for (const source of ['<div role="button"/>', '<div role={"button"}/>', '<span role="button"/>']) {
+    const [result] = await lint.lintText(`export const Sample = () => ${source}`, { filePath: 'src/features/RoleButton.tsx' })
+    assert.ok(result.messages.some(item => item.severity === 2 && /role.*button/.test(item.message)))
+  }
+  for (const source of ['<UiIconButton />', '<div role="slider"/>']) {
+    const [result] = await lint.lintText(`export const Sample = () => ${source}`, { filePath: 'src/features/RoleButton.tsx' })
+    assert.ok(result.messages.every(item => !/role.*button/.test(item.message)))
+  }
+})
+
+test('局部严格 residue 不误判其它文件过期，但仍阻断本文件违规与登记格式错误', () => {
+  const { parseArgs, evaluateGate } = require('../ui-residue-scan.cjs')
+  const options = parseArgs(['--strict', '--strict-local', '--files', 'src/App.tsx', '--no-report'])
+  assert.equal(options.strict, true)
+  assert.equal(options.strictLocal, true)
+  assert.throws(() => parseArgs(['--strict-local']), /--files/)
+  assert.throws(() => parseArgs(['--strict-local', '--files', '../outside.tsx']), /src/)
+  assert.throws(() => parseArgs(['--strict-local', '--files', 'src/missing-round2.tsx']), /不存在/)
+  assert.throws(() => parseArgs(['--strict-local', '--files', 'src/App.tsx', '--region', '5.3']), /region/)
+  const findings = new Map([['src/App.tsx', [{ category: 'arbitraryValue', value: 'text-[13px]', verdict: 'violation' }]]])
+  const allowlist = { version: 1, entries: [{ file: 'src/elsewhere.tsx', category: 'arbitraryValue', values: ['w-[78px]'], reason: '固定几何宽度由素材网格决定' }], cssClasses: [] }
+  const result = evaluateGate(findings, options, allowlist)
+  assert.equal(result.violations.length, 1)
+  assert.deepEqual(result.allowlistErrors, [])
+  const invalid = evaluateGate(findings, options, { ...allowlist, entries: [{ ...allowlist.entries[0], reason: '短' }] })
+  assert.ok(invalid.allowlistErrors.some(error => /理由/.test(error)))
+})
+
+function withSurfaceFixture(check) {
+  fs.mkdirSync(path.join(root, '.tmp'), { recursive: true })
+  const fixture = fs.mkdtempSync(path.join(root, '.tmp', 'surface-round2-'))
+  try {
+    fs.mkdirSync(path.join(fixture, 'src'))
+    const run = args => require('node:child_process').spawnSync(process.execPath, [path.join(root, 'scripts/check-surface-tokens.cjs'), ...(args ?? [])], { cwd: fixture, encoding: 'utf8' })
+    check(fixture, run)
+  } finally {
+    assert.equal(path.dirname(fixture), path.join(root, '.tmp'))
+    fs.rmSync(fixture, { recursive: true, force: true })
+  }
+}
+
+test('TS 类串常量同样检查 A/B，变量转引不重复计卡片', () => withSurfaceFixture((fixture, run) => {
+  const file = path.join(fixture, 'src/classes.ts')
+  fs.writeFileSync(file, 'const BG = "bg-panel"; export const PANEL_CLASS = `border rounded-control ${BG}`;')
+  let result = run(); assert.equal(result.status, 1); assert.match(result.stderr, /\[A\]/)
+  fs.writeFileSync(file, 'const FIRST_CLASS = "border rounded-control bg-window"; const SECOND_CLASS = "border rounded-control bg-raised";')
+  result = run(); assert.equal(result.status, 1); assert.match(result.stderr, /\[B\]/)
+  fs.writeFileSync(file, 'const FIRST_CLASS = "border rounded-control bg-window"; const ROW_CLASS = `flex ${FIRST_CLASS}`;')
+  assert.equal(run().status, 0)
+  fs.writeFileSync(file, 'const FIRST_CLASS = "border rounded-control bg-window"; const PANEL_CLASS = `flex ${FIRST_CLASS} bg-panel`;')
+  result = run(); assert.equal(result.status, 1); assert.match(result.stderr, /\[A\]/)
+}))
+
+test('表面豁免必须对应当前命中，字符串不是注释；有效标记仍放行', () => withSurfaceFixture((fixture, run) => {
+  const file = path.join(fixture, 'src/allow.tsx')
+  fs.writeFileSync(file, '// ui-surface-allow: 任务5.2 接手该空间叠层的几何外观\n<div className="flex"/>')
+  let result = run(); assert.equal(result.status, 1); assert.match(result.stderr, /过期/)
+  fs.writeFileSync(file, 'const value = "ui-surface-allow: 伪标记不能隐藏面板外观";\n<div className="border rounded-control bg-panel"/>')
+  result = run(); assert.equal(result.status, 1); assert.match(result.stderr, /\[A\]/)
+  fs.writeFileSync(file, '// ui-surface-allow: 任务5.2 接手该空间叠层的几何外观\n<div className="border rounded-control bg-panel"/>')
+  assert.equal(run().status, 0)
+  fs.writeFileSync(file, '<>{/* ui-surface-allow: 任务5.2 接手该空间叠层的几何外观 */}<UiButton className="bg-panel"/></>')
+  assert.equal(run().status, 0)
+}))
+
+test('surface 对 residue allowlist 的四个预算设上限，局部模式也不能绕过', () => withSurfaceFixture((fixture, run) => {
+  fs.writeFileSync(path.join(fixture, 'src/ok.tsx'), '<div/>')
+  fs.mkdirSync(path.join(fixture, 'scripts'))
+  const file = path.join(fixture, 'scripts/ui-residue.allowlist.json')
+  for (const allowlist of [
+    { entries: Array.from({ length: 35 }, () => ({ values: [] })), cssClasses: [] },
+    { entries: [{ values: Array.from({ length: 77 }, (_, i) => String(i)) }], cssClasses: [] },
+    { entries: [], cssClasses: Array.from({ length: 14 }, () => ({ names: [] })) },
+    { entries: [], cssClasses: [{ names: Array.from({ length: 37 }, (_, i) => String(i)) }] },
+  ]) {
+    fs.writeFileSync(file, JSON.stringify(allowlist))
+    const result = run(['--files', 'src/ok.tsx']); assert.equal(result.status, 1); assert.match(result.stderr, /上限/)
+  }
+  fs.writeFileSync(file, JSON.stringify({ entries: [], cssClasses: [] }))
+  assert.equal(run().status, 0)
+}))
+
+test('四个字段调用方移除尺寸覆盖后可以进入规则 E', () => {
+  const { CHECKED_ATTRIBUTES, findButtonAppearanceOverridesInSource } = require('./buttonAppearanceOverrides.cjs')
+  for (const name of ['UiInput', 'UiRangeInput', 'UiColorInput', 'UiCheckbox']) assert.equal(CHECKED_ATTRIBUTES[name], 'className')
+  for (const file of ['src/components/ui/NumberInput.tsx', 'src/features/canvas/nodes/video/CanvasVideoPlayer.tsx', 'src/components/Settings/sections/ThemeSection.tsx', 'src/components/debug/ExportPanel.tsx']) {
+    assert.deepEqual(findButtonAppearanceOverridesInSource(fs.readFileSync(path.join(root, file), 'utf8'), path.join(root, file), undefined, path.join(root, 'src')), [], file)
+  }
+})
+
 test('规则 E 覆盖 UI barrel 的每个组件，漏登记及无理由豁免阻断', () => {
   const ts = require('typescript')
   const { CHECKED_ATTRIBUTES, RULE_E_EXEMPT } = require('./buttonAppearanceOverrides.cjs')

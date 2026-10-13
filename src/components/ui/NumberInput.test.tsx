@@ -9,6 +9,13 @@ import { resolveScrubFactor } from './numberScrub'
 afterEach(cleanup)
 
 describe('NumberInput', () => {
+  it('复合字段沿用同名尺寸与 inner 变体，不覆盖输入框高度', () => {
+    const view = render(<NumberInput value={5} onChange={vi.fn()} size="sm" ariaLabel="数值" />)
+    const input = view.getByRole('spinbutton')
+    expect(input.className).not.toMatch(/!?h-full/)
+    fireEvent.change(input, { target: { value: '7' } })
+    expect(input).toHaveProperty('value', '7')
+  })
   it('以竖排箭头步进并遵守数值边界', () => {
     const onChange = vi.fn()
     const view = render(

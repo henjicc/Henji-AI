@@ -30,6 +30,7 @@
     "build:video-decoder": "node scripts/video-decoder-ffmpeg.cjs build",
     "check:colors": "node scripts/check-color-tokens.cjs",
     "check:surface": "node scripts/check-surface-tokens.cjs",
+    "check:surface:report": "node scripts/check-surface-tokens.cjs --report",
     "check:surface:strict": "node scripts/check-surface-tokens.cjs --strict",
     "check:ui-residue": "node scripts/ui-residue-scan.cjs --strict --no-report",
     "check:model-i18n": "node scripts/check-model-i18n.cjs",

@@ -49,6 +49,11 @@ const CHECKED_ATTRIBUTES = {
   UiSwitch: 'className',
   UiSeedInput: 'className',
   UiDatePicker: 'className',
+  UiInput: 'className',
+  UiRangeInput: 'className',
+  UiColorInput: 'className',
+  UiCheckbox: 'className',
+  UiPanel: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };
@@ -59,11 +64,6 @@ const CHECKED_COMPONENTS = new Set(Object.keys(CHECKED_ATTRIBUTES));
  * 未接入的字段如实保留欠账，不能把既有业务覆盖偷换成合规；待 4.5/4.6 迁移后删除。
  */
 const RULE_E_EXEMPT = {
-  UiPanel: '容器 className 承载宿主布局，允许高度、内边距与 gap；表面仍由 residue 检查。',
-  UiInput: '待任务4.5/5.2迁移 NumberInput 内部 !h-full，再接入字段高度检查。',
-  UiRangeInput: '待任务4.5/5.2迁移 CanvasVideoPlayer 的 h-2.5，再接入字段高度检查。',
-  UiColorInput: '待任务4.5/5.2增加尺寸枚举并迁移 ThemeSection 的 !h-8 !w-8。',
-  UiCheckbox: '待任务4.5/5.2增加尺寸枚举并迁移 ExportPanel 的 h-4 w-4。',
   UiNumberStepper: '只供 NumberInput 内部组合，没有开放 className 属性。',
   UiModal: '不开放 className，分别用 overlayClassName/panelClassName/contentClassName 传入宿主布局。',
   UiTooltipText: '说明文字的排版由宿主标签决定，className 不对应控件档位。',
@@ -103,8 +103,6 @@ const ITEM_FLEXIBLE_HEIGHT = /^(?:h-full|h-auto|min-h-.+|max-h-.+)$/;
 /** 多行文本框没有高度档：高度（行数、铺满）是布局，只禁外观。 */
 const TEXT_AREA_COMPONENTS = new Set(['UiTextArea', 'UiTextAreaField']);
 
-const LINE_ALLOW_MARKER = 'ui-surface-allow';
-
 const TEXT_NON_COLOR = new Set([
   'text-left', 'text-center', 'text-right', 'text-justify', 'text-start', 'text-end',
   'text-ellipsis', 'text-clip', 'text-wrap', 'text-nowrap', 'text-balance', 'text-pretty',
@@ -131,11 +129,12 @@ function classifyToken(token, component) {
   if (/^(ui-glass|backdrop-|brightness-|saturate-|contrast-)/.test(token)) return '材质';
   if (token === 'underline' || /^(underline-offset|decoration)-/.test(token)) return '下划线（用 variant="link"）';
   if (/^(h|min-h|max-h)-/.test(token)) {
+    if (component === 'UiPanel') return null;
     if (TEXT_AREA_COMPONENTS.has(component)) return null;
     if (ITEM_COMPONENTS.has(component) && ITEM_FLEXIBLE_HEIGHT.test(token)) return null;
     return '高度（用 size）';
   }
-  if (component === 'UiIconButton' && /^(w|min-w|max-w|size)-/.test(token)) return '宽度（用 size）';
+  if (['UiIconButton', 'UiColorInput', 'UiCheckbox'].includes(component) && /^(w|min-w|max-w|size)-/.test(token)) return '宽度（用 size）';
   return null;
 }
 
@@ -169,6 +168,31 @@ function collectConstants(sf) {
   };
   visit(sf);
   return map;
+}
+
+/** 只取真实注释；字符串、JSX 文本及模板字面量里的标记不能豁免。 */
+function getSurfaceAllowComments(raw, sf) {
+  const t = loadTypeScript();
+  const ranges = [];
+  function hide(node) {
+    if (t.isStringLiteralLike(node) || t.isTemplateHead(node) || t.isTemplateMiddle(node) || t.isTemplateTail(node) || t.isRegularExpressionLiteral(node) || t.isJsxText(node)) ranges.push([node.getStart(sf), node.end]);
+    else t.forEachChild(node, hide);
+  }
+  hide(sf);
+  let cursor = 0;
+  const parts = [];
+  for (const [start, end] of ranges.sort((a, b) => a[0] - b[0])) {
+    parts.push(raw.slice(cursor, start), raw.slice(start, end).replace(/[^\r\n]/g, ' ')); cursor = end;
+  }
+  const scanner = t.createScanner(t.ScriptTarget.Latest, false, t.LanguageVariant.JSX, parts.join('') + raw.slice(cursor));
+  const comments = [];
+  while (scanner.scan() !== t.SyntaxKind.EndOfFileToken) {
+    if ([t.SyntaxKind.SingleLineCommentTrivia, t.SyntaxKind.MultiLineCommentTrivia].includes(scanner.getToken())) {
+      const text = scanner.getTokenText();
+      if (/ui-surface-allow(?!-file)/.test(text)) comments.push({ start: scanner.getTokenPos(), end: scanner.getTextPos(), line: sf.getLineAndCharacterOfPosition(scanner.getTokenPos()).line + 1, text });
+    }
+  }
+  return comments;
 }
 
 /**
@@ -291,18 +315,23 @@ function collectImportedConstants(sf, fileName, srcRoot) {
  * @param {string} [srcRoot]
  * @returns {{ line: number, component: string, violations: { token: string, kind: string }[] }[]}
  */
-function findButtonAppearanceOverridesInSource(raw, fileName, shared = new Map(), srcRoot) {
+function findButtonAppearanceOverridesInSource(raw, fileName, shared = new Map(), srcRoot, { ignoreAllows = false } = {}) {
   const t = loadTypeScript();
   if (![...CHECKED_COMPONENTS].some((name) => raw.includes(name))) return [];
   const sf = t.createSourceFile(fileName, raw, t.ScriptTarget.Latest, true, t.ScriptKind.TSX);
   const local = collectConstants(sf);
   const imported = collectImportedConstants(sf, fileName, srcRoot);
-  const lines = raw.split(/\r?\n/);
+  const comments = getSurfaceAllowComments(raw, sf);
+  const aliases = new Map();
+  for (const statement of sf.statements) {
+    const bindings = t.isImportDeclaration(statement) && statement.importClause?.namedBindings;
+    if (bindings && t.isNamedImports(bindings)) for (const binding of bindings.elements) aliases.set(binding.name.text, (binding.propertyName ?? binding.name).text);
+  }
   const findings = [];
 
   const visit = (node) => {
     if ((t.isJsxOpeningElement(node) || t.isJsxSelfClosingElement(node))) {
-      const component = node.tagName.getText(sf);
+      const component = aliases.get(node.tagName.getText(sf)) ?? node.tagName.getText(sf);
       if (CHECKED_COMPONENTS.has(component)) {
         const attrName = CHECKED_ATTRIBUTES[component];
         const classAttr = node.attributes.properties.find(
@@ -320,9 +349,8 @@ function findButtonAppearanceOverridesInSource(raw, fileName, shared = new Map()
           }
           if (violations.length) {
             const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
-            const allowed = (lines[line - 1] ?? '').includes(LINE_ALLOW_MARKER)
-              || (lines[line - 2] ?? '').includes(LINE_ALLOW_MARKER);
-            if (!allowed) findings.push({ line, component, violations });
+            const allowed = !ignoreAllows && comments.some(comment => comment.line === line || comment.line === line - 1 || comment.start >= node.getStart(sf) && comment.end <= node.end);
+            if (!allowed) findings.push({ line, endLine: sf.getLineAndCharacterOfPosition(node.end).line + 1, component, violations });
           }
         }
       }
@@ -359,6 +387,7 @@ module.exports = {
   collectConstants,
   collectStrings,
   collectImportedConstants,
+  getSurfaceAllowComments,
   findButtonAppearanceOverrides,
   findButtonAppearanceOverridesInSource,
 };

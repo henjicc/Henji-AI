@@ -247,6 +247,14 @@
           {
             "selector": "JSXOpeningElement[name.name=/^(button|input|select|textarea)$/]",
             "message": "禁止业务与共享组件新增原生控件，请使用 @/components/ui；原生实现只允许在 primitives.tsx。"
+          },
+          {
+            "selector": "JSXAttribute[name.name='role'][value.value='button']",
+            "message": "禁止用 role=\"button\" 自制按钮，请使用 primitives.tsx 导出的正式控件。"
+          },
+          {
+            "selector": "JSXAttribute[name.name='role'] > JSXExpressionContainer > Literal[value='button']",
+            "message": "禁止用 role=\"button\" 自制按钮，请使用 primitives.tsx 导出的正式控件。"
           }
         ]
       }

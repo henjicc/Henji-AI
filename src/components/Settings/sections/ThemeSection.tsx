@@ -215,7 +215,6 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
             aria-label={t('sections.theme.accent.pick')}
             title={t('sections.theme.accent.pick')}
             onChange={(event) => setThemeAccent(event.target.value)}
-            className="!h-8 !w-8"
           />
         </div>
       </UiGroup>

@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { UiIconButton } from '@/components/ui';
 
 import { showAlertDialog } from '@/stores/alertDialogStore';
 
@@ -26,10 +27,10 @@ export function NodeGenerationError({ message }: NodeGenerationErrorProps) {
 
   return (
     /* 底色必须不透明：节点底层还在渲染"等待输出结果"占位，半透明会让两层文字叠在一起 */
-    <div
-      role="button"
-      tabIndex={0}
-      className="nodrag absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 bg-gap px-4 text-center"
+    <UiIconButton
+      type="button" tone="bare"
+      style={{ width: '100%', height: '100%' }}
+      className="nodrag absolute inset-0"
       onClick={(event) => {
         event.stopPropagation();
         openDetail();
@@ -42,10 +43,12 @@ export function NodeGenerationError({ message }: NodeGenerationErrorProps) {
         openDetail();
       }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-danger-tint" />
-      <AlertTriangle className="relative h-6 w-6 shrink-0 text-danger-text" />
-      <span className="relative line-clamp-3 text-xs leading-5 text-danger-text">{message}</span>
-      <span className="relative text-2xs text-text2">{t('node.generationError.viewDetail')}</span>
-    </div>
+      <span className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 bg-gap px-4 text-center">
+        <span className="pointer-events-none absolute inset-0 bg-danger-tint" />
+        <AlertTriangle className="relative h-6 w-6 shrink-0 text-danger-text" />
+        <span className="relative line-clamp-3 text-xs leading-5 text-danger-text">{message}</span>
+        <span className="relative text-2xs text-text2">{t('node.generationError.viewDetail')}</span>
+      </span>
+    </UiIconButton>
   );
 }

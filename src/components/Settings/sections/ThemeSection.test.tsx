@@ -31,6 +31,10 @@ function renderSection() {
 }
 
 describe('外观设置（种子式）', () => {
+  it('取色控件不覆盖共享默认尺寸', () => {
+    const view = renderSection()
+    expect(view.container.querySelector('input[type="color"]')?.className).not.toMatch(/!h-8|!w-8/)
+  })
   beforeAll(async () => { await i18n.changeLanguage('zh-CN') })
   beforeEach(resetTheme)
   afterEach(() => { cleanup(); resetTheme() })

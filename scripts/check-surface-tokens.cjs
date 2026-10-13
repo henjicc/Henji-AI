@@ -26,13 +26,13 @@
 const fs = require('fs');
 const path = require('path');
 const ts = require('typescript');
-const { findButtonAppearanceOverrides, collectConstants, collectStrings, collectImportedConstants } = require('./lib/buttonAppearanceOverrides.cjs');
+const { findButtonAppearanceOverrides, findButtonAppearanceOverridesInSource, collectConstants, collectStrings, collectImportedConstants, getSurfaceAllowComments } = require('./lib/buttonAppearanceOverrides.cjs');
 const { findUiSurfaceGrammar } = require('./lib/uiSurfaceGrammar.cjs');
 
 const projectRoot = process.cwd();
 const srcRoot = path.join(projectRoot, 'src');
 
-const targetExtensions = new Set(['.tsx']);
+const targetExtensions = new Set(['.tsx', '.ts']);
 
 /** UI primitive 自身就是表面的唯一实现处，天然豁免 */
 const exemptDirs = [path.join(srcRoot, 'components', 'ui')];
@@ -170,11 +170,41 @@ function lineNumberAt(raw, index) {
  * @param {number} lineNo
  * @returns {boolean}
  */
-function hasLineAllowMarker(lines, lineNo) {
-  const current = lines[lineNo - 1] ?? '';
-  const previous = lines[lineNo - 2] ?? '';
-  return current.includes(LINE_ALLOW_MARKER) || previous.includes(LINE_ALLOW_MARKER);
+function hasLineAllowMarker(comments, lineNo) {
+  return comments.some(comment => comment.line === lineNo || comment.line === lineNo - 1);
 }
+
+function allowComments(raw, file) {
+  if (file.endsWith('.css')) return [...raw.matchAll(/\/\*[\s\S]*?\*\//g)]
+    .filter(match => /ui-surface-allow(?!-file)/.test(match[0]))
+    .map(match => ({ start: match.index, end: match.index + match[0].length, line: lineNumberAt(raw, match.index), text: match[0] }));
+  const sf = ts.createSourceFile(file, raw, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  return getSurfaceAllowComments(raw, sf);
+}
+
+/** TS 中 Class / *_CLASS 声明也属于表面入口；引用已声明完整表面的派生布局不重复计数。 */
+function extractTsClassRegions(raw, file) {
+  const sf = ts.createSourceFile(file, raw, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const local = collectConstants(sf), imported = collectImportedConstants(sf, file, srcRoot);
+  const declarations = [];
+  const visit = node => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && /(?:Class|_CLASS)$/.test(node.name.text)) {
+      declarations.push({ name: node.name.text, node, value: collectStrings(node.initializer, [local, imported]).join(' ') });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  const cards = new Map(declarations.map(entry => [entry.name, classifySurface(tokenizeClassValue(entry.value))]).filter(([, surface]) => surface.isCard));
+  return declarations.filter(entry => {
+    const surface = classifySurface(tokenizeClassValue(entry.value));
+    let inherited = false;
+    const inspect = node => { if (ts.isIdentifier(node) && cards.has(node.text) && node.text !== entry.name && cards.get(node.text).isPanelSurface === surface.isPanelSurface) inherited = true; ts.forEachChild(node, inspect); };
+    inspect(entry.node.initializer);
+    return !inherited;
+  }).map(entry => ({ value: entry.value, index: entry.node.getStart(sf) }));
+}
+
+const surfaceRegions = (raw, file) => file.endsWith('.ts') ? extractTsClassRegions(raw, file) : extractClassNameRegions(raw);
 
 const cli = { strict: true, files: [] };
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -187,8 +217,8 @@ for (let index = 2; index < process.argv.length; index += 1) {
     for (const item of value.split(',').filter(Boolean)) {
       const file = path.resolve(projectRoot, item);
       const relative = path.relative(srcRoot, file);
-      if (relative.startsWith('..') || path.isAbsolute(relative) || !/\.(tsx|css)$/.test(file) || !fs.statSync(file).isFile()) {
-        throw new Error(`--files 只接受 src 内已有的 .tsx/.css 文件：${item}`);
+      if (relative.startsWith('..') || path.isAbsolute(relative) || !/\.(tsx?|css)$/.test(file) || !fs.statSync(file).isFile()) {
+        throw new Error(`--files 只接受 src 内已有的 .ts/.tsx/.css 文件：${item}`);
       }
       cli.files.push(file);
     }
@@ -200,7 +230,7 @@ const strict = cli.strict;
 const selected = new Set(cli.files);
 const inScope = file => selected.size === 0 || selected.has(file);
 const files = collectSourceFiles(srcRoot).filter(
-  (file) => inScope(file) && !/\.(test|spec)\.tsx$/.test(file)
+  (file) => inScope(file) && !/\.(test|spec)\.tsx?$/.test(file)
     && !exemptDirs.some((dir) => path.relative(dir, file) === '' || !path.relative(dir, file).startsWith('..') && !path.isAbsolute(path.relative(dir, file)))
 );
 
@@ -220,6 +250,7 @@ const dialogBypasses = [];
 function findDialogBypasses(raw, file) {
   const sf = ts.createSourceFile(file, raw, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const lines = raw.split(/\r?\n/);
+  const comments = allowComments(raw, file);
   const hits = [];
   const scopes = [collectConstants(sf), collectImportedConstants(sf, file, srcRoot)];
   const modalNames = new Set(['UiModal', 'AlertDialog']);
@@ -244,7 +275,7 @@ function findDialogBypasses(raw, file) {
         || attr.name.getText(sf) === 'aria-modal' && /\btrue\b/.test(attr.initializer?.getText(sf) ?? ''));
       if (!owned && fullScreen && (scrim || dialog)) {
         const lineNo = sf.getLineAndCharacterOfPosition(classes.getStart(sf)).line + 1;
-        if (!hasLineAllowMarker(lines, lineNo)) hits.push({ lineNo, snippet: lines[lineNo - 1].trim().slice(0, 140) });
+        if (!hasLineAllowMarker(comments, lineNo)) hits.push({ lineNo, snippet: lines[lineNo - 1].trim().slice(0, 140) });
       }
       if (ts.isJsxElement(node)) for (const child of node.children) visit(child, owned);
       return;
@@ -285,10 +316,11 @@ for (const file of collectStyleSheets(srcRoot).filter(inScope)) {
   // 材质定义处天然豁免：`.ui-glass` / `.ui-glass-scrim` 就住在这里
   if (path.normalize(file) === path.normalize(GLASS_DEFINITION_FILE)) continue;
 
-  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  const raw = fs.readFileSync(file, 'utf8');
+  const lines = raw.split(/\r?\n/), comments = allowComments(raw, file);
   lines.forEach((line, index) => {
     if (!BACKDROP_FILTER_PATTERN.test(line)) return;
-    if (hasLineAllowMarker(lines, index + 1)) return;
+    if (hasLineAllowMarker(comments, index + 1)) return;
     handRolledGlass.push({
       relativePath: path.relative(projectRoot, file).replace(/\\/g, '/'),
       lineNo: index + 1,
@@ -307,6 +339,7 @@ for (const file of files) {
   }
 
   const lines = raw.split(/\r?\n/);
+  const comments = allowComments(raw, file);
 
   for (const hit of findDialogBypasses(raw, file)) dialogBypasses.push({
     relativePath: path.relative(projectRoot, file).replace(/\\/g, '/'), ...hit,
@@ -317,12 +350,12 @@ for (const file of files) {
   /** @type {{lineNo:number,snippet:string}[]} */
   const cardSurfaces = [];
 
-  for (const region of extractClassNameRegions(raw)) {
+  for (const region of surfaceRegions(raw, file)) {
     const { isCard, isPanelSurface } = classifySurface(tokenizeClassValue(region.value));
     if (!isCard) continue;
 
     const lineNo = lineNumberAt(raw, region.index);
-    if (hasLineAllowMarker(lines, lineNo)) continue;
+    if (hasLineAllowMarker(comments, lineNo)) continue;
 
     const entry = { lineNo, snippet: (lines[lineNo - 1] ?? '').trim().slice(0, 140) };
     cardSurfaces.push(entry);
@@ -345,7 +378,7 @@ for (const file of files) {
       const attrs = match[1] ?? '';
       if (/\bvariant\s*=/.test(attrs)) continue;
       const lineNo = lineNumberAt(raw, match.index ?? 0);
-      if (hasLineAllowMarker(lines, lineNo)) continue;
+      if (hasLineAllowMarker(comments, lineNo)) continue;
       cardSurfaces.push({ lineNo, snippet: (lines[lineNo - 1] ?? '').trim().slice(0, 140) });
     }
   }
@@ -366,11 +399,11 @@ for (const file of files) {
 const buttonOverrides = findButtonAppearanceOverrides({
   srcRoot,
   projectRoot,
-  files: collectSourceFiles(srcRoot).filter(inScope),
+  files: collectSourceFiles(srcRoot).filter(file => inScope(file) && file.endsWith('.tsx')),
 });
 
 const grammarFindings = collectSourceFiles(srcRoot)
-  .filter(file => inScope(file) && !/\.(?:test|spec)\.tsx$/.test(file))
+  .filter(file => inScope(file) && file.endsWith('.tsx') && !/\.(?:test|spec)\.tsx$/.test(file))
   .flatMap(file => findUiSurfaceGrammar(fs.readFileSync(file, 'utf8'), file)
     .map(finding => ({ ...finding, relativePath: path.relative(projectRoot, file).replace(/\\/g, '/') })));
 for (const finding of grammarFindings) {
@@ -379,12 +412,58 @@ for (const finding of grammarFindings) {
 }
 const grammarErrors = grammarFindings.filter(finding => finding.severity === 'error');
 
+/** 每个注释都要能抑制当前 A–E 或界面语法命中，删除违规后必须同时删除标记。 */
+const allowProblems = [];
+const lifecycleFiles = [...collectSourceFiles(srcRoot), ...collectStyleSheets(srcRoot)]
+  .filter(file => inScope(file) && !/\.(?:test|spec)\.tsx?$/.test(file));
+for (const file of lifecycleFiles) {
+  const raw = fs.readFileSync(file, 'utf8');
+  if (!raw.includes(LINE_ALLOW_MARKER)) continue;
+  const comments = allowComments(raw, file);
+  if (!comments.length) continue;
+  let unmarked = raw;
+  for (const comment of [...comments].reverse()) unmarked = unmarked.slice(0, comment.start)
+    + unmarked.slice(comment.start, comment.end).replace(/ui-surface-allow/g, 'retired-marker  ') + unmarked.slice(comment.end);
+  const hits = [];
+  const isUiDefinition = exemptDirs.some(dir => !path.relative(dir, file).startsWith('..') && !path.isAbsolute(path.relative(dir, file)));
+  if (file.endsWith('.css')) {
+    if (file !== GLASS_DEFINITION_FILE) unmarked.split(/\r?\n/).forEach((line, index) => { if (BACKDROP_FILTER_PATTERN.test(line)) hits.push({ line: index + 1 }); });
+  } else {
+    if (!isUiDefinition) {
+      const cards = surfaceRegions(unmarked, file).filter(region => classifySurface(tokenizeClassValue(region.value)).isCard);
+      const panelCount = [...unmarked.matchAll(/<UiPanel(\s[^>]*)?>/g)].filter(match => !/\bvariant\s*=/.test(match[1] ?? '')).length;
+      for (const region of cards) if (classifySurface(tokenizeClassValue(region.value)).isPanelSurface || cards.length + panelCount > MAX_CARD_SURFACES_PER_FILE) hits.push({ line: lineNumberAt(unmarked, region.index) });
+      if (file.endsWith('.tsx')) for (const item of findDialogBypasses(unmarked, file)) hits.push({ line: item.lineNo });
+    }
+    if (file.endsWith('.tsx')) {
+      if (file !== path.join(srcRoot, 'components/ui/primitives.tsx')) hits.push(...findButtonAppearanceOverridesInSource(unmarked, file, undefined, srcRoot));
+      hits.push(...findUiSurfaceGrammar(unmarked, file).map(item => ({ line: item.lineNo })));
+    }
+  }
+  for (const comment of comments) {
+    const reason = comment.text.split(/ui-surface-allow\s*[:：]?/)[1]?.replace(/\*\/|\}\s*$/g, '').trim() ?? '';
+    const active = hits.some(hit => comment.line === hit.line || comment.line === hit.line - 1 || hit.endLine && comment.line >= hit.line && comment.line <= hit.endLine);
+    if (reason.length < 8 || !active) allowProblems.push({ relativePath: path.relative(projectRoot, file).replace(/\\/g, '/'), lineNo: comment.line, message: reason.length < 8 ? '豁免理由少于8字' : '过期豁免：该注释已无对应规则命中' });
+  }
+}
+
+// 只降不升；新增预算必须修改本脚本，不能只扩 allowlist 绕过审查。
+const RESIDUE_ALLOWLIST_CEILING = { entries: 34, values: 76, cssClasses: 13, names: 36 };
+const allowlistBudgetErrors = [];
+const residueAllowlistFile = path.join(projectRoot, 'scripts/ui-residue.allowlist.json');
+if (fs.existsSync(residueAllowlistFile)) {
+  const allowlist = JSON.parse(fs.readFileSync(residueAllowlistFile, 'utf8'));
+  const counts = { entries: allowlist.entries.length, values: allowlist.entries.reduce((total, item) => total + item.values.length, 0),
+    cssClasses: allowlist.cssClasses.length, names: allowlist.cssClasses.reduce((total, item) => total + item.names.length, 0) };
+  for (const [name, limit] of Object.entries(RESIDUE_ALLOWLIST_CEILING)) if (counts[name] > limit) allowlistBudgetErrors.push(`residue allowlist ${name} ${counts[name]} 超过上限 ${limit}`);
+}
+
 if (
   fileReports.length === 0 &&
   dialogBypasses.length === 0 &&
   handRolledGlass.length === 0 &&
   buttonOverrides.length === 0 &&
-  fileLevelAllows.length === 0
+  fileLevelAllows.length === 0 && allowProblems.length === 0 && allowlistBudgetErrors.length === 0
 ) {
   console.log(`[check-surface-tokens] 原有表面规则通过；界面语法错误 ${grammarErrors.length} 处，启发式告警 ${grammarFindings.length - grammarErrors.length} 处。`);
   process.exit(strict && grammarErrors.length > 0 ? 1 : 0);
@@ -395,6 +474,10 @@ const header = strict ? '检测到表面层级违规' : '检测到表面层级�
 log(`\n[check-surface-tokens] ${header}：\n`);
 
 let totalFindings = 0;
+
+for (const item of allowProblems) log(`[豁免] ${item.relativePath}:${item.lineNo} ${item.message}`);
+for (const error of allowlistBudgetErrors) log(`[登记] ${error}`);
+totalFindings += allowProblems.length + allowlistBudgetErrors.length;
 
 if (fileLevelAllows.length > 0) {
   log(`[豁免] 文件级 ${FILE_ALLOW_MARKER} 已禁止 ${fileLevelAllows.length} 处 → 改为在具体行上方写 ${LINE_ALLOW_MARKER} 并注明理由与接手任务`);

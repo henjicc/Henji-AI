@@ -1,6 +1,6 @@
 import React from 'react'
 import { Camera, Spline } from 'lucide-react'
-import { PanelTrigger } from '@/components/ui'
+import { PanelTrigger, UiIconButton } from '@/components/ui'
 import { hasForcedHardCut } from '../../domain/stateKeyframeCompiler'
 import type { StageObject } from '../../domain/sceneTypes'
 import type { StageStateKeyframe } from '../../domain/stateKeyframeTypes'
@@ -84,9 +84,9 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
             togglePanel()
           }
           return isHardCut ? (
-            <div
-              role="button"
-              tabIndex={0}
+            <UiIconButton
+              type="button" tone="bare" size="sm"
+              style={{ width: '100%', height: '100%' }}
               data-panel-trigger-button
               aria-label={transitionLabel}
               title={
@@ -94,7 +94,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
                   ? '机位切换（强制硬切），点击查看详情'
                   : '硬切（0 帧过渡），点击可调整；拖右缘可拉出过渡时长'
               }
-              className="flex h-full w-full cursor-pointer items-center justify-center"
+              className="cursor-pointer"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
@@ -103,35 +103,39 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               ) : (
                 <span className="h-full w-0.5 rounded-full bg-text2 transition-colors hover:bg-accent" />
               )}
-            </div>
+            </UiIconButton>
           ) : camerasDiffer ? (
-            <div
-              role="button"
-              tabIndex={0}
+            <UiIconButton
+              type="button" tone="bare" size="sm"
+              style={{ width: '100%', height: '100%' }}
               data-panel-trigger-button
               aria-label={transitionLabel}
               title="区间末端切换机位，点击查看详情"
-              className="flex h-full w-full cursor-pointer items-center justify-center gap-1 overflow-hidden border-y border-dashed border-line bg-hover/40 px-1 text-2xs text-text2 hover:bg-hover/70"
+              className="cursor-pointer"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
-              <Camera size={11} className="text-accent" />
-              <span className="truncate">末端硬切</span>
-            </div>
+              <span className="flex h-full w-full items-center justify-center gap-1 overflow-hidden border-y border-dashed border-line bg-hover/40 px-1 text-2xs text-text2 hover:bg-hover/70">
+                <Camera size={11} className="text-accent" />
+                <span className="truncate">末端硬切</span>
+              </span>
+            </UiIconButton>
           ) : (
-            <div
-              role="button"
-              tabIndex={0}
+            <UiIconButton
+              type="button" tone="bare" size="sm"
+              style={{ width: '100%', height: '100%' }}
               data-panel-trigger-button
               aria-label={transitionLabel}
               title={`过渡 ${stateKeyframe.transitionDuration.toFixed(2)}s`}
-              className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden border-y border-line bg-hover/50 px-1 text-2xs text-text2 transition-colors hover:bg-hover/80"
+              className="cursor-pointer"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
-              <Spline size={11} />
-              <span className="truncate">{stateKeyframe.transitionDuration.toFixed(2)}s</span>
-            </div>
+              <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden border-y border-line bg-hover/50 px-1 text-2xs text-text2 transition-colors hover:bg-hover/80">
+                <Spline size={11} />
+                <span className="truncate">{stateKeyframe.transitionDuration.toFixed(2)}s</span>
+              </span>
+            </UiIconButton>
           )
         }}
       </PanelTrigger>

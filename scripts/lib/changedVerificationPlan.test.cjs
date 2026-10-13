@@ -40,6 +40,18 @@ test('只改 skill 文档在 L0 与 L1 均执行同步门禁', () => {
   }
 })
 
+test('UI residue 只扫描显式 src 文件，Tailwind 全局变化仍做全仓严格检查', () => {
+  const files = ['src/example.tsx', 'src/example.css']
+  const plan = buildChangedVerificationPlan({ level: 'L1', files }, '/workspace', file => files.some(existing => path.join('/workspace', existing) === file), ['src/example.test.ts'], () => '')
+  const residue = plan.find(item => item.args.includes('check:ui-residue'))
+  assert.ok(residue.args.includes('--strict-local'))
+  assert.ok(residue.args.includes(files.join(',')))
+  const global = buildChangedVerificationPlan({ level: 'L1', files: ['tailwind.config.js'] }, '/workspace', () => false, ['src/example.test.ts'], () => '')
+  assert.ok(!global.find(item => item.args.includes('check:ui-residue')).args.includes('--strict-local'))
+  const removed = buildChangedVerificationPlan({ level: 'L1', files: ['src/removed.tsx'] }, '/workspace', () => false, ['src/example.test.ts'], () => '')
+  assert.ok(!removed.find(item => item.args.includes('check:ui-residue')).args.includes('--strict-local'))
+})
+
 test('构建与 CI 基础设施不能伪装成 L1/L2 局部验证', () => {
   const options = parseChangedVerificationArgs(['--level', 'L2', 'package.json'], '/workspace')
   assert.throws(() => buildChangedVerificationPlan(options, '/workspace'), /不支持降级为局部验证/)

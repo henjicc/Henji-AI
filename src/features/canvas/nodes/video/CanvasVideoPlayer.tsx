@@ -166,7 +166,7 @@ export function CanvasVideoPlayer({
             step={0.01}
             value={Math.min(currentTime, Math.max(duration, 0.01))}
             aria-label={t('node.videoPlayer.progress')}
-            className="canvas-video-progress h-2.5 min-w-0"
+            className="canvas-video-progress min-w-0"
             style={{ '--video-progress': `${progressPercent}%` } as CSSProperties}
             onChange={(event) => seekTo(Number(event.target.value))}
             onClick={(event) => event.stopPropagation()}

@@ -50,13 +50,14 @@ function printHelp() {
   --region <编号>  只输出某个区域（5.3 生成 / 5.4 画布 / 5.5 工具与剪辑 / 5.6 资产设置与助手 / 5.7 通用）
   --files <列表>   只扫描这些文件（逗号分隔，仓库相对路径），死代码与零引用类不统计
   --top <数量>     每个类别列出的文件数，默认 15
-  --strict         有违规、未登记或过期登记时退出码 1（不能与 --region / --files 同用：局部扫描判不了过期登记）
+  --strict         全仓严格门禁，包含过期登记检查
+  --strict-local   必须配 --files；严格检查本文件违规/未登记及登记格式，跳过全仓过期判定
   --no-report      不写报告文件，只在终端输出
 `)
 }
 
 function parseArgs(argv) {
-  const options = { outDir: '.ui-tour/residue', region: null, files: [], top: 15, help: false, strict: false, report: true }
+  const options = { outDir: '.ui-tour/residue', region: null, files: [], top: 15, help: false, strict: false, strictLocal: false, report: true }
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index]
     const value = () => {
@@ -71,11 +72,21 @@ function parseArgs(argv) {
     else if (token === '--files') options.files.push(...value().split(',').map((item) => item.trim()).filter(Boolean))
     else if (token === '--top') options.top = Number(value())
     else if (token === '--strict') options.strict = true
+    else if (token === '--strict-local') { options.strict = true; options.strictLocal = true }
     else if (token === '--no-report') options.report = false
     else throw new Error(`未知参数：${token}`)
   }
   if (!Number.isInteger(options.top) || options.top < 1) throw new Error('--top 必须是正整数')
-  if (options.strict && (options.region || options.files.length)) throw new Error('--strict 只能全量扫描，不能与 --region / --files 同用')
+  if (options.strictLocal && (!options.files.length || options.region)) throw new Error('--strict-local 必须配 --files，不能配 --region')
+  if (options.strictLocal) {
+    options.files = [...new Set(options.files.map(file => {
+      const absolute = path.resolve(ROOT, file), relative = path.relative(ROOT, absolute).replace(/\\/g, '/');
+      if (!/^src\/.*\.(?:tsx?|css|json)$/.test(relative)) throw new Error('--strict-local 只接受仓库 src 内的源码、样式或语言包');
+      if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) throw new Error(`局部文件不存在：${relative}`);
+      return relative;
+    }))];
+  }
+  if (options.strict && !options.strictLocal && (options.region || options.files.length)) throw new Error('--strict 只能全量扫描，不能与 --region / --files 同用')
   return options
 }
 
@@ -126,7 +137,7 @@ function collectFindings(options) {
     byFile.set(file, [...(byFile.get(file) ?? []), ...findings])
   }
 
-  for (const file of allSources.filter(inScope)) add(file, scanSourceText(readText(file)))
+  for (const file of allSources.filter(inScope)) add(file, scanSourceText(readText(file), path.join(ROOT, file), path.join(ROOT, 'src')))
   for (const file of cssFiles.filter(inScope)) add(file, scanCssText(readText(file), file))
   for (const file of localeFiles.filter(inScope)) add(file, scanLocaleJson(readText(file)))
 
@@ -141,7 +152,7 @@ function collectFindings(options) {
   }
 
   // 私有 CSS 类：定义在 css 里的类，在哪些源文件里用到；零引用的作为候选
-  const sourceTexts = new Map(allSources.map((file) => [file, readText(file)]))
+  const sourceTexts = new Map(allSources.filter(inScope).map((file) => [file, readText(file)]))
   // 其他样式表在选择器里引用共享类（`.storyboard-frame-actions .ui-glass`）不算定义私有类
   const sharedNames = new Set(cssFiles.includes(SHARED_CSS_FILE)
     ? extractCssClassNames(readText(SHARED_CSS_FILE), { includeShared: true }) : [])
@@ -279,8 +290,7 @@ function formatGateItem(item) {
 }
 
 /** 门禁结论：违规与未登记逐条列出；登记文件的格式、理由与过期问题单列。 */
-function evaluateGate(byFile, options) {
-  const allowlist = JSON.parse(readText(RESIDUE_ALLOWLIST_FILE))
+function evaluateGate(byFile, options, allowlist = JSON.parse(readText(RESIDUE_ALLOWLIST_FILE))) {
   const { errors } = applyResidueAllowlist(byFile, allowlist)
   // 局部扫描（--files / --region）看不到全部使用方，过期登记判不了，只保留格式与理由问题
   const scoped = options.files.length > 0 || Boolean(options.region)
@@ -344,9 +354,10 @@ function main() {
   }
 }
 
-try {
-  main()
-} catch (error) {
-  console.error(`FAILED: ${error instanceof Error ? error.message : String(error)}`)
-  process.exitCode = 1
+if (require.main === module) {
+  try { main() } catch (error) {
+    console.error(`FAILED: ${error instanceof Error ? error.message : String(error)}`)
+    process.exitCode = 1
+  }
 }
+module.exports = { parseArgs, evaluateGate }

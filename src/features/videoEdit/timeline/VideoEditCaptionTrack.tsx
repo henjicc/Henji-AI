@@ -2,6 +2,7 @@ import { isVideoEditContentCurrent } from '../application/videoEditDocumentAlgor
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Captions } from 'lucide-react'
+import { UiIconButton } from '@/components/ui'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import type { VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { retimeVideoEditCaption, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
@@ -27,7 +28,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
   useEffect(() => { cancel.current?.() }, [sequence, pixels])
   const run = (action: () => void): void => { try { action() } catch (error) { onError(error) } }
   const select = (id: string): void => { selectVideoEditSubtitle(projectId, sequence.id, id); focusVideoEditPanel(projectId, 'content') }
-  const down = (event: React.PointerEvent<HTMLDivElement>, caption: VideoEditCaption, mode: VideoEditCaptionGesture): void => {
+  const down = (event: React.PointerEvent<HTMLElement>, caption: VideoEditCaption, mode: VideoEditCaptionGesture): void => {
     if (event.button !== 0) return
     event.preventDefault(); event.stopPropagation()
     cancel.current?.()
@@ -83,14 +84,16 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     <VideoEditTrackHeader caption row={row} code="C1" targeted={false} onTarget={() => focusVideoEditPanel(projectId, 'content')} onResize={() => {}} onPatch={patch => run(() => updateVideoEditCaptionTrack(projectId, sequence.id, { ...(patch.enabled === undefined ? {} : { captionTrackEnabled: patch.enabled }), ...(patch.locked === undefined ? {} : { captionTrackLocked: patch.locked }) }))} />
     {(sequence.captions ?? []).filter(caption => caption.id === preview?.id || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
       const caption = preview?.id === original.id ? preview : original
-      return <div key={caption.id} role="button" tabIndex={0} aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={sequence.captionTrackLocked || undefined} title={caption.text}
+      return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={sequence.captionTrackLocked || undefined} title={caption.text}
         data-video-edit-caption-range={caption.id} data-caption-start={caption.start} data-caption-duration={caption.duration}
-        className={`absolute top-0.5 flex items-center gap-1 overflow-hidden rounded-md border bg-clip-title px-1.5 text-2xs text-text1 outline-none focus-visible:ring-1 focus-visible:ring-accent-ring ${selected === caption.id ? 'border-accent-ring ring-1 ring-accent-ring' : 'border-clip-title-line'} ${sequence.captionTrackLocked ? 'cursor-default' : 'cursor-grab'}`}
+        className={`absolute top-0.5 ${sequence.captionTrackLocked ? 'cursor-default' : 'cursor-grab'}`}
         style={{ height: row.height - 4, left: TIMELINE_HEADER_WIDTH + caption.start * pixels, width: Math.max(3, caption.duration * pixels) }}
         onPointerDown={event => down(event, original, 'move')} onClick={event => { if (event.detail === 0) run(() => select(caption.id)) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); run(() => select(caption.id)) } }}>
-        <Captions className="h-3 w-3 shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{caption.text}</span>
-        {!sequence.captionTrackLocked && (['in', 'out'] as const).map(edge => <div key={edge} data-caption-trim={edge} title={t(`captionTrack.${edge === 'in' ? 'trimStart' : 'trimEnd'}`)} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, original, edge)} />)}
-      </div>
+        <span className={`flex h-full w-full items-center gap-1 overflow-hidden rounded-md border bg-clip-title px-1.5 text-2xs text-text1 ${selected === caption.id ? 'border-accent-ring ring-1 ring-accent-ring' : 'border-clip-title-line'}`}>
+          <Captions className="h-3 w-3 shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{caption.text}</span>
+          {!sequence.captionTrackLocked && (['in', 'out'] as const).map(edge => <span key={edge} data-caption-trim={edge} title={t(`captionTrack.${edge === 'in' ? 'trimStart' : 'trimEnd'}`)} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, original, edge)} />)}
+        </span>
+      </UiIconButton>
     })}
   </div>
 }

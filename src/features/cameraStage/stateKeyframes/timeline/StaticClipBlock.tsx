@@ -143,12 +143,14 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
         )}
       >
         {({ togglePanel }) => (
-          <div
-            role="button"
-            tabIndex={0}
+          <UiIconButton
+            type="button"
+            tone="bare"
+            size="sm"
+            shape="circle"
             data-panel-trigger-button
             aria-label={`关键帧 ${stateKeyframe.name}`}
-            className={`flex h-full w-full cursor-grab items-center justify-center rounded-full outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-accent-ring ${dragging ? 'cursor-grabbing opacity-70' : ''}`}
+            className={`cursor-grab transition-transform hover:scale-110 ${dragging ? 'cursor-grabbing opacity-70' : ''}`}
             onPointerDown={dragHandlers.onPointerDown}
             onPointerMove={dragHandlers.onPointerMove}
             onPointerUp={dragHandlers.onPointerUp}
@@ -171,7 +173,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
               size={selected || isPlayhead ? 16 : 14}
               className={selected ? 'fill-accent text-accent' : isPlayhead ? 'fill-raised text-accent' : 'fill-raised text-text2'}
             />
-          </div>
+          </UiIconButton>
         )}
       </PanelTrigger>
     </div>

@@ -123,7 +123,6 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
               <UiCheckbox
                 checked={Boolean(cleanOptions[option.key as keyof CleanOptions])}
                 onCheckedChange={() => handleCleanOptionChange(option.key as keyof CleanOptions)}
-                className="h-4 w-4"
               />
               {option.label}
             </label>
