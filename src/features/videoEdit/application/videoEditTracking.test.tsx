@@ -198,7 +198,8 @@ it('嵌套跟踪准备中停止：等待重跑一次，再停止则给出终态�
     editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
     editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
     const snapshot = getActiveVideoEditSequence(owner)
-    const request = videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
+    const request = videoEditTrackingRequest(owner.document, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
+    expect(videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!.definition).toEqual(request.definition)
     let error: unknown
     const waiting = waitVideoEditTracking(snapshot, snapshot, controller.signal).catch(failure => { error = failure })
     await vi.waitFor(() => expect(videoEditTrackingStatus(request.definition)?.state).toBe('tracking'))
@@ -229,7 +230,8 @@ it('嵌套准备等待智能区域时修改子序列，快照完成后取帧仍�
     editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
     editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
     const snapshot = getActiveVideoEditSequence(owner)
-    const request = videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
+    const request = videoEditTrackingRequest(owner.document, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
+    expect(videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!.definition).toEqual(request.definition)
     const waiting = waitVideoEditTracking(snapshot, snapshot, controller.signal)
     const settled = waiting.catch(() => {})
     await new Promise(resolve => setTimeout(resolve, 0))

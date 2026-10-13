@@ -1,5 +1,5 @@
 import { v5 as uuidv5 } from 'uuid'
-import { videoEditClipMedia, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition, type VideoEditDocument } from './document'
+import { videoEditClipMedia, videoEditNestedComposition, videoEditSequenceSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
 import { videoEditReachableSequences } from './sequenceGraph'
 import { videoEditFps } from './time'
 import { videoEditSequenceFrameAtSeconds } from './nestedSequences'
@@ -7,7 +7,8 @@ import { codeMaterialImageIds } from './codeMaterialResources'
 import { videoEditEffectCodes } from './compositing'
 import type { TrackingSequenceSource } from '../../platform/contracts/tracking'
 
-export type TrackingDocument = Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences' | 'codeMaterials' | 'colorLuts' | 'revision'>>
+export type TrackingDocument = Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences' | 'codeMaterials' | 'colorLuts' | 'styleKits' | 'revision'>>
+const sequenceKeys = Object.keys(videoEditSequenceSchema.shape) as Array<keyof VideoEditSequence>
 
 /** Worker 与渲染协调器共用键；机位不同不能共用同一源的跟踪结果。 */
 export function videoEditTrackingSourceId(document: TrackingDocument, clip: VideoEditClip): string | undefined {
@@ -27,11 +28,9 @@ export function videoEditSequenceTrackingSource(document: TrackingDocument, clip
   for (const sequence of sequences) for (const clip of sequence.clips) {
     for (const instance of [clip.code, ...videoEditEffectCodes(clip.effects)]) for (const id of codeMaterialImageIds(instance)) mediaIds.add(id)
   }
-  const projection = { version: 1, sequences: sequences.map(sequence => {
-    // The root is a composition snapshot: keep only sequence fields, never the surrounding document.
-    const { media: _media, items: _items, revision: _revision, sequences: _sequences, codeMaterials: _code, colorLuts: _luts, fps: _fps, ...content } = sequence as VideoEditComposition
-    return content
-  }), items, media: document.media.filter(media => mediaIds.has(media.id)), codeMaterials: document.codeMaterials, colorLuts: document.colorLuts }
+  // 根是合成快照，可能继承工程外壳与任务元数据；按权威序列字段投影，不维护排除名单。
+  const projection = { version: 2, sequences: sequences.map(sequence => Object.fromEntries(sequenceKeys.map(key => [key, sequence[key]]))),
+    items, media: document.media.filter(media => mediaIds.has(media.id)), codeMaterials: document.codeMaterials, colorLuts: document.colorLuts, styleKits: document.styleKits }
   const canonical = JSON.stringify(projection, (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)
   return { composition, source: { kind: 'sequence', signature: uuidv5(canonical, uuidv5.URL), fps: composition.fps, width: composition.width, height: composition.height } }
 }

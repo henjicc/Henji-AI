@@ -5,7 +5,8 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
-import { closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, videoEditDocumentContent, videoEditDocumentFromContent, type VideoEditInstance } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, videoEditDocumentContent, videoEditDocumentFromContent, recordVideoEditExport, type VideoEditInstance } from './videoEditService'
+import { VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
 import { loadAudioEditProject, resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles, styleVideoEditSubtitles, segmentVideoEditSubtitles, subtitleRange } from './videoEditAutoSubtitles'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
@@ -69,6 +70,28 @@ beforeEach(async () => {
 })
 afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 const sequence = () => owner.document.sequences[0]
+
+it.each(['metadata', 'content'] as const)('字幕整理期间写入 %s：元数据可继续，内容编辑拒绝迟到回填', async change => {
+  const id = owner.document.id; const sequenceId = sequence().id
+  appendAutoSubtitles(id, sequenceId, [{ id: 'caption', clipId: 'voice', text: '这是一条已有字幕。', start: 0, duration: 90 }])
+  const baseline = owner.document; const version = owner.contentVersion
+  vi.mocked(getPlatform().audioEdit.detectSilence).mockImplementationOnce(async () => {
+    if (change === 'metadata') recordVideoEditExport(id, { id: 'metadata', taskId: 'metadata', sequenceId, name: '已导出', presetName: '默认', path: 'D:/metadata.mp4', completedAt: 1, rangeSource: 'content', settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings, range: { startFrame: 0, endFrame: 30 } })
+    else editVideoProject(id, document => { document.sequences[0].captions![0].text = '用户已修改'; return document })
+    expect(owner.document).not.toBe(baseline)
+    expect(owner.contentVersion === version).toBe(change === 'metadata')
+    return { revision: 0, suggestions: [] }
+  })
+  const processing = segmentVideoEditSubtitles(id, sequenceId, {})
+  if (change === 'metadata') {
+    await expect(processing).resolves.toMatchObject({ captionIds: ['caption'] })
+    expect(owner.document.exportHistory?.[0].taskId).toBe('metadata')
+  } else {
+    await expect(processing).rejects.toThrow('已有修改')
+    expect(sequence().captions![0].text).toBe('用户已修改')
+  }
+  expect(getPlatform().audioEdit.detectSilence).toHaveBeenCalled()
+})
 
 it('免费整理在独立组词边界吸附后延长前条接续，生成路径也只保留零或至少500ms的间隔', async () => {
   const parts = ['它不只是会聊天还能帮你写代码！', '画图、做视频……', '下一句！']
