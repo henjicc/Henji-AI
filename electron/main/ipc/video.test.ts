@@ -25,6 +25,27 @@ function sender(id: number): { event: IpcMainInvokeEvent; destroy: () => void } 
 function invoke(id: string, input: unknown, event: IpcMainInvokeEvent): Promise<unknown> { return Promise.resolve().then(() => mock.handlers.get(id)!(input, event)) }
 beforeEach(() => { vi.resetAllMocks(); mock.handlers.clear(); registerVideoIpc(); mock.stat.mockResolvedValue({ mtimeMs: 42 }) })
 
+it('视频处理取消按请求和宿主隔离，重复标识及非法标识不覆盖原任务', async () => {
+  const owner = sender(43); const other = sender(44)
+  let signal: AbortSignal | undefined
+  mock.compress.mockImplementation((_payload, current: AbortSignal) => {
+    signal = current
+    return new Promise((_resolve, reject) => current.addEventListener('abort', () => reject(current.reason), { once: true }))
+  })
+  const payload = { source: path.resolve(path.sep, 'media', 'video.mp4'), maxSizeMB: 10, requestId: 'compress-1' }
+  const pending = invoke('video:compressVideoToFit', payload, owner.event).catch(error => error)
+  await vi.waitFor(() => expect(signal).toBeDefined())
+  await invoke('video:cancelProcessing', { requestId: 'compress-1' }, other.event)
+  expect(signal?.aborted).toBe(false)
+  await expect(invoke('video:compressVideoToFit', payload, owner.event)).rejects.toThrow('已在使用')
+  for (const requestId of [null, '', 1, 'x'.repeat(257)]) {
+    await expect(invoke('video:compressVideoToFit', { ...payload, requestId }, owner.event)).rejects.toThrow()
+  }
+  await invoke('video:cancelProcessing', { requestId: 'compress-1' }, owner.event)
+  expect(await pending).toMatchObject({ name: 'AbortError' }); expect(signal?.aborted).toBe(true)
+  owner.destroy(); other.destroy()
+})
+
 it.each(['compress', 'trim'] as const)('%s 宿主销毁取消处理，只影响自身请求', async kind => {
   const owner = sender(41); const other = sender(42)
   const signals: AbortSignal[] = []

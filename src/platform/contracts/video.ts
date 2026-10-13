@@ -78,8 +78,8 @@ export interface VideoPlatform {
   /** 返回主进程磁盘缓存中该帧的路径（按内容身份缓存，二次打开直接命中）。 */
   getFilmstripFrame(request: FilmstripFrameRequest, signal?: AbortSignal): Promise<{ path: string }>
   readVideoInfo(source: string): Promise<VideoInfoResult>
-  trimVideoSource(payload: TrimVideoSourcePayload): Promise<TrimVideoSourceResult>
-  compressVideoToFit(payload: CompressVideoToFitPayload): Promise<CompressVideoToFitResult>
+  trimVideoSource(payload: TrimVideoSourcePayload, signal?: AbortSignal): Promise<TrimVideoSourceResult>
+  compressVideoToFit(payload: CompressVideoToFitPayload, signal?: AbortSignal): Promise<CompressVideoToFitResult>
   startFrameExport(payload: StartVideoFrameExportPayload): Promise<StartVideoFrameExportResult>
   appendFrameExport(payload: AppendVideoFrameExportPayload): Promise<{ frameIndex: number }>
   finishFrameExport(payload: FinishVideoFrameExportPayload): Promise<VideoFrameExportResult>

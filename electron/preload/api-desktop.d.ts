@@ -115,8 +115,15 @@ export interface HenjiMediaApi {
 
 export interface HenjiClipboardFileEntry {
   path: string
-  data: string
+  size: number
   mimeType: string
+}
+
+// 本任务的桌面视频取消声明合并到既有媒体 API；不引入第二套桥接接口。
+declare module './api-media' {
+  interface HenjiVideoTrimVideoSourcePayload { requestId?: string }
+  interface HenjiVideoCompressVideoToFitPayload { requestId?: string }
+  interface HenjiVideoApi { cancelProcessing(requestId: string): Promise<void> }
 }
 
 export interface HenjiClipboardImage {

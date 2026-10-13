@@ -54,12 +54,12 @@ describe('共享图片剪贴板写入', () => {
     expect(mocks.readFile).not.toHaveBeenCalled()
   })
 
-  it('超大图片不读；文件列表有总预算，读取失败记录警告', async () => {
+  it('超大图片不读；文件列表返回路径，读取失败记录警告', async () => {
     mocks.readImage.mockReturnValue({ isEmpty: () => true })
     setFilePaths([path.resolve('huge.png')])
     mocks.stat.mockResolvedValue({ isFile: () => true, size: 100 * 1024 * 1024 })
     expect(await readClipboardImage()).toBeNull()
-    expect(await readClipboardFiles()).toEqual([])
+    expect(await readClipboardFiles()).toEqual([{ path: path.resolve('huge.png'), size: 100 * 1024 * 1024, mimeType: 'image/png' }])
     expect(mocks.readFile).not.toHaveBeenCalled(); expect(mocks.boundedRead).not.toHaveBeenCalled()
     expect(mocks.warn).toHaveBeenCalled()
     mocks.stat.mockRejectedValue(new Error('文件已移除'))
@@ -67,13 +67,15 @@ describe('共享图片剪贴板写入', () => {
     expect(mocks.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ error: expect.any(Error) }))
   })
 
-  it('批量剪贴板共享字节预算，不为每个文件重新给一份预算', async () => {
-    setFilePaths([path.resolve('first.wav'), path.resolve('second.wav')])
-    mocks.stat.mockResolvedValue({ isFile: () => true, size: 10 * 1024 * 1024 })
-    mocks.boundedRead.mockResolvedValue(new Uint8Array(10 * 1024 * 1024))
+  it('剪贴板大小不影响路径 DTO：大视频和图片只返回元数据，完全不读取字节', async () => {
+    setFilePaths([path.resolve('large.mp4'), path.resolve('image.png')])
+    mocks.stat.mockResolvedValue({ isFile: () => true, size: 2 * 1024 * 1024 * 1024 })
     const files = await readClipboardFiles()
-    expect(files).toHaveLength(1); expect(files[0].mimeType).toBe('audio/wav')
-    expect(mocks.boundedRead).toHaveBeenCalledOnce(); expect(mocks.readFile).not.toHaveBeenCalled()
+    expect(files).toEqual([
+      { path: path.resolve('large.mp4'), mimeType: 'video/mp4', size: 2 * 1024 * 1024 * 1024 },
+      { path: path.resolve('image.png'), mimeType: 'image/png', size: 2 * 1024 * 1024 * 1024 },
+    ])
+    expect(mocks.boundedRead).not.toHaveBeenCalled(); expect(mocks.readFile).not.toHaveBeenCalled()
   })
 
   it('公布的图片始终不可读时有界结束，保留实际失败事实', async () => {

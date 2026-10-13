@@ -10,6 +10,25 @@ function getNativeVideo(): NonNullable<typeof window.henjiNative>['video'] {
   return native.video
 }
 
+async function processVideo<T>(task: (requestId: string) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted()
+  const requestId = crypto.randomUUID()
+  const native = getNativeVideo()
+  let rejectCancellation!: (error: unknown) => void
+  const cancellationFailure = new Promise<never>((_resolve, reject) => { rejectCancellation = reject })
+  const cancel = (): void => {
+    void native.cancelProcessing(requestId).catch(rejectCancellation)
+  }
+  const pending = task(requestId)
+  signal?.addEventListener('abort', cancel, { once: true })
+  if (signal?.aborted) cancel()
+  try {
+    const result = await Promise.race([pending, cancellationFailure])
+    signal?.throwIfAborted()
+    return result
+  } finally { signal?.removeEventListener('abort', cancel) }
+}
+
 /** 主进程缩略图缓存（资产缩略图与片段缩略帧共用同一请求/取消通道）：返回缓存文件路径。 */
 async function cachedThumbnail(payload: { source: string; maxSize?: number; cache?: boolean; frame?: { timeUs: number; height: number } }, signal?: AbortSignal): Promise<{ path: string }> {
   signal?.throwIfAborted()
@@ -31,8 +50,8 @@ export function createElectronVideo(): VideoPlatform {
     getCachedThumbnail: (source, signal) => cachedThumbnail({ source, maxSize: 320, cache: true }, signal),
     getFilmstripFrame: ({ source, timeUs, height }, signal) => cachedThumbnail({ source, frame: { timeUs, height } }, signal),
     readVideoInfo: (source) => getNativeVideo().readVideoInfo(source),
-    trimVideoSource: (payload) => getNativeVideo().trimVideoSource(payload),
-    compressVideoToFit: (payload) => getNativeVideo().compressVideoToFit(payload),
+    trimVideoSource: (payload, signal) => processVideo(requestId => getNativeVideo().trimVideoSource({ ...payload, requestId }), signal),
+    compressVideoToFit: (payload, signal) => processVideo(requestId => getNativeVideo().compressVideoToFit({ ...payload, requestId }), signal),
     startFrameExport: (payload) => getNativeVideo().startFrameExport(payload),
     appendFrameExport: (payload) => getNativeVideo().appendFrameExport(payload),
     finishFrameExport: (payload) => getNativeVideo().finishFrameExport(payload),

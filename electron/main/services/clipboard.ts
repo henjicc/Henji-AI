@@ -11,7 +11,7 @@ const MAX_CLIPBOARD_FILE_BYTES = 16 * 1024 * 1024
 
 export interface ClipboardFileEntryDto {
   path: string
-  data: string
+  size: number
   mimeType: string
 }
 
@@ -98,20 +98,13 @@ function readClipboardFilePaths(): string[] {
 export async function readClipboardFiles(): Promise<ClipboardFileEntryDto[]> {
   const entries: ClipboardFileEntryDto[] = []
   const filePaths = readClipboardFilePaths()
-  let remainingBytes = MAX_CLIPBOARD_FILE_BYTES
   for (const filePath of filePaths) {
     try {
       const stat = await fs.stat(filePath)
       if (!stat.isFile()) continue
-      if (remainingBytes < 1 || stat.size > remainingBytes) {
-        logger.warn('剪贴板文件超过读取预算，请通过文件导入入口添加', { event: 'clipboard.files_read.limit', context: { pathCount: filePaths.length, sizeBytes: stat.size } })
-        continue
-      }
-      const bytes = Buffer.from(await readFileBytes(filePath, { maxBytes: remainingBytes }))
-      remainingBytes -= bytes.length
       entries.push({
         path: filePath,
-        data: bytes.toString('base64'),
+        size: stat.size,
         mimeType: inferMimeFromPath(filePath),
       })
     } catch (error) {

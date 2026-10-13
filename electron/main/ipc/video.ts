@@ -32,22 +32,25 @@ import { FILMSTRIP_MAX_TIME_US, isFilmstripHeight, type FilmstripHeight } from '
 import type { IpcMainInvokeEvent } from 'electron'
 
 const thumbnailRequests = new Map<number, Map<string, AbortController>>()
-const processingRequests = new Map<number, Set<AbortController>>()
+const processingRequests = new Map<number, Map<string, AbortController>>()
+type ProcessingPayload<T> = T & { requestId?: string }
 
-async function withProcessingRequest<T>(event: IpcMainInvokeEvent, task: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function withProcessingRequest<T>(event: IpcMainInvokeEvent, requestId: string | undefined, task: (signal: AbortSignal) => Promise<T>): Promise<T> {
   let requests = processingRequests.get(event.sender.id)
   if (!requests) {
-    requests = new Set(); processingRequests.set(event.sender.id, requests)
+    requests = new Map(); processingRequests.set(event.sender.id, requests)
     const owned = requests
     event.sender.once('destroyed', () => {
-      for (const controller of owned) controller.abort(new DOMException('视频处理宿主已关闭。', 'AbortError'))
+      for (const controller of owned.values()) controller.abort(new DOMException('视频处理宿主已关闭。', 'AbortError'))
       processingRequests.delete(event.sender.id)
     })
   }
   if (requests.size >= 128) throw new Error('视频处理请求过多，请稍后重试。')
+  const key = requestId ?? crypto.randomUUID()
+  if (requests.has(key)) throw new Error('视频处理请求标识已在使用。')
   const controller = new AbortController()
-  requests.add(controller)
-  try { return await task(controller.signal) } finally { requests.delete(controller) }
+  requests.set(key, controller)
+  try { return await task(controller.signal) } finally { requests.delete(key) }
 }
 
 export function registerVideoIpc(): void {
@@ -55,11 +58,14 @@ export function registerVideoIpc(): void {
   registerIpcHandler<string, VideoInfoResultDto>('video:readVideoInfo', (input) => parseStringField(input, 'source'), (source) => {
     return readVideoInfo(source)
   })
-  registerIpcHandler<TrimVideoSourcePayloadDto, TrimVideoSourceResultDto>('video:trimVideoSource', parseTrimPayload, (payload, event) => {
-    return withProcessingRequest(event, signal => trimVideoSource(payload, signal))
+  registerIpcHandler<ProcessingPayload<TrimVideoSourcePayloadDto>, TrimVideoSourceResultDto>('video:trimVideoSource', parseTrimPayload, (payload, event) => {
+    return withProcessingRequest(event, payload.requestId, signal => trimVideoSource(payload, signal))
   })
-  registerIpcHandler<CompressVideoToFitPayloadDto, CompressVideoToFitResultDto>('video:compressVideoToFit', parseCompressPayload, (payload, event) => {
-    return withProcessingRequest(event, signal => compressVideoToFit(payload, signal))
+  registerIpcHandler<ProcessingPayload<CompressVideoToFitPayloadDto>, CompressVideoToFitResultDto>('video:compressVideoToFit', parseCompressPayload, (payload, event) => {
+    return withProcessingRequest(event, payload.requestId, signal => compressVideoToFit(payload, signal))
+  })
+  registerIpcHandler<string, void>('video:cancelProcessing', input => parseStringField(input, 'requestId'), (requestId, event) => {
+    processingRequests.get(event.sender.id)?.get(requestId)?.abort(new DOMException('视频处理已取消。', 'AbortError'))
   })
   registerIpcHandler<GenerateVideoThumbnailPayloadDto, GenerateVideoThumbnailResultDto>(
     'video:generateThumbnail',
@@ -142,20 +148,22 @@ export function registerVideoIpc(): void {
   )
 }
 
-function parseTrimPayload(input: unknown): TrimVideoSourcePayloadDto {
+function parseTrimPayload(input: unknown): ProcessingPayload<TrimVideoSourcePayloadDto> {
   const record = parseRecord(input)
   return {
     source: readString(record, 'source'),
     startSeconds: readNumber(record, 'startSeconds'),
     endSeconds: readNumber(record, 'endSeconds'),
+    requestId: readOptionalString(record, 'requestId'),
   }
 }
 
-function parseCompressPayload(input: unknown): CompressVideoToFitPayloadDto {
+function parseCompressPayload(input: unknown): ProcessingPayload<CompressVideoToFitPayloadDto> {
   const record = parseRecord(input)
   return {
     source: readString(record, 'source'),
     maxSizeMB: readNumber(record, 'maxSizeMB'),
+    requestId: readOptionalString(record, 'requestId'),
   }
 }
 
@@ -164,6 +172,13 @@ function readString(record: Record<string, unknown>, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`Expected non-empty string field "${field}"`)
   }
+  return value
+}
+
+function readOptionalString(record: Record<string, unknown>, field: string): string | undefined {
+  if (record[field] === undefined) return undefined
+  const value = readString(record, field)
+  if (value.length > 256) throw new Error(`Field "${field}" is too long`)
   return value
 }
 

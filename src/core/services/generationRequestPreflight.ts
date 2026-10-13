@@ -135,7 +135,7 @@ export async function compressFirstVideoIfNeeded(
   }
 
   try {
-    const compressed = await compressVideoToFit(firstVideoSource, maxSizeMB)
+    const compressed = await compressVideoToFit(firstVideoSource, maxSizeMB, signal)
     signal?.throwIfAborted()
     if (compressed.path === firstVideoSource) {
       return params
@@ -169,7 +169,7 @@ export async function trimFirstVideoIfSelected(
   }
 
   try {
-    const result = await trimVideoSource(source, start, end)
+    const result = await trimVideoSource(source, start, end, signal)
     signal?.throwIfAborted()
     return replaceVideoSourceInParams(params, source, result.path)
   } catch (error) {
