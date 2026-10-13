@@ -9,6 +9,10 @@ async function audit(html, context = {}) {
   const w = dom.window
   const nativeStyle = w.getComputedStyle.bind(w)
   w.getComputedStyle = element => nativeStyle(element)
+  const nativeMatches = w.Element.prototype.matches
+  w.Element.prototype.matches = function (selector) {
+    return selector === ':hover' ? this.hasAttribute('data-hover') : nativeMatches.call(this, selector)
+  }
   w.document.elementsFromPoint = () => [...w.document.querySelectorAll('*')]
   w.HTMLElement.prototype.getBoundingClientRect = function () {
     const [x, y, width, height] = (this.dataset.rect || '0,0,200,32').split(',').map(Number)
@@ -63,12 +67,67 @@ test('主动作只统计可见且最近表面拥有的按钮', async () => {
   assert.equal((await audit('<div role="dialog"><button data-variant="primary"></button><div role="dialog"><button data-variant="primary"></button></div><button style="display:none" data-variant="primary"></button></div>')).multiplePrimary.length, 0)
 })
 
+test('展示豁免只接受中心页分区内的逐区域逐规则声明和理由', async () => {
+  const controls = '<div data-ui-toolbar><button data-variant="primary" data-rect="0,0,16,16"></button><button data-variant="primary" data-rect="32,0,16,16"></button></div>'
+  const wrap = (attributes, inner = controls, surface = 'dev.ui_gallery') => `<main data-application-surface-id="${surface}"><section data-gallery-section="buttons"><div ${attributes}>${inner}</div></section></main>`
+  const declaration = 'data-gallery-ignore-rules="multiplePrimary" data-gallery-ignore-reason="主按钮状态矩阵需要并排展示"'
+  const valid = await audit(wrap(declaration))
+  assert.equal(valid.multiplePrimary.length, 0)
+  assert.equal(JSON.stringify(valid.galleryExemptions.map(entry => entry.rules).flat()), '["multiplePrimary"]')
+  assert.ok(valid.smallTargets.length > 0, '没有声明的规则仍检查')
+  assert.equal((await audit(wrap(declaration.replace('multiplePrimary', 'multiplePrimary smallTargets')))).smallTargets.length, 0)
+  assert.equal((await audit(wrap('data-gallery-ignore-rules="multiplePrimary"'))).multiplePrimary.length, 1)
+  assert.equal((await audit(wrap(declaration.replace('multiplePrimary', '*')))).multiplePrimary.length, 1)
+  assert.equal((await audit(wrap(declaration, controls, 'production'))).multiplePrimary.length, 1)
+  assert.equal((await audit(`<main data-application-surface-id="dev.ui_gallery" ${declaration}><section data-gallery-section="buttons">${controls}</section></main>`)).multiplePrimary.length, 1)
+  assert.equal((await audit(`<main data-application-surface-id="dev.ui_gallery"><section data-gallery-section="buttons" ${declaration}>${controls}</section></main>`)).multiplePrimary.length, 1)
+  assert.equal((await audit(wrap(declaration, controls) + '<div data-ui-toolbar><button data-variant="primary"></button><button data-variant="primary"></button></div>')).multiplePrimary.length, 1, '区域外问题保留')
+})
+
+test('搜索框按完整外框比较，清除按钮不与同行动作混算', async () => {
+  const fixture = height => `<div role="toolbar"><div data-ui-search-input data-rect="0,0,200,${height}"><input data-rect="0,0,200,${height}"><button data-rect="170,4,24,24"></button></div><button data-rect="220,0,64,32"></button></div>`
+  assert.equal((await audit(fixture(32))).rowHeightMismatch.length, 0)
+  assert.equal((await audit(fixture(28))).rowHeightMismatch.length, 1)
+})
+
 test('面板列对齐、动作不得从标签列起头，独立嵌套组不混算', async () => {
   const html = '<div data-ui-group><div data-ui-form-row="panel"><div data-ui-form-control data-rect="96,0,100,32"><button data-rect="96,0,32,32"></button></div></div>'
   assert.equal((await audit(`${html}<button data-rect="0,40,32,32"></button></div>`)).actionStartsAtLabelColumn.length, 1)
   assert.equal((await audit(`${html}<button data-rect="96,40,32,32"></button></div>`)).actionStartsAtLabelColumn.length, 0)
   assert.equal((await audit(`${html}<div data-ui-form-row="panel"><div data-ui-form-control data-rect="120,40,100,32"></div></div></div>`)).formControlMisaligned.length, 1)
   assert.equal((await audit(`${html}<div data-ui-group><div data-ui-form-row="panel"><div data-ui-form-control data-rect="120,40,100,32"></div></div></div></div>`)).formControlMisaligned.length, 0)
+  assert.equal((await audit(`${html}<div data-ui-form-row="auto"><input data-rect="0,40,100,32"><button data-ui-compact-stepper-button data-rect="0,40,16,16"></button><button data-rect="0,40,32,32"></button></div></div>`)).actionStartsAtLabelColumn.length, 0, 'auto 行是独立排布，不按面板动作检查')
+  assert.equal((await audit(`${html}<div data-ui-field-control><input data-rect="0,40,100,32"><button data-ui-compact-stepper-button data-rect="0,40,16,16"></button></div><button data-rect="0,80,32,32"></button></div>`)).actionStartsAtLabelColumn.length, 1, '字段和步进附属按钮不是行外动作，真正的动作仍报错')
+})
+
+test('同色控件只检查有交互悬停或选中态的容器，不把 hover 祖先页壳当作选项', async () => {
+  const fixture = attributes => `<div ${attributes} style="background:rgb(50,50,50)"><button style="background:rgb(50,50,50)"></button></div>`
+  assert.equal((await audit(fixture('data-hover'))).nestedSameBackground.length, 0)
+  assert.equal((await audit(fixture('data-hover role="option"'))).nestedSameBackground.length, 1)
+  assert.equal((await audit(fixture('data-hover class="hover:bg-hover"'))).nestedSameBackground.length, 1)
+  assert.equal((await audit(fixture('aria-selected="true"'))).nestedSameBackground.length, 1)
+  assert.equal((await audit(fixture('role="option"'))).nestedSameBackground.length, 0)
+})
+
+test('缩略浮层与独立滚动的展示声明不会放过区域外同类缺陷', async () => {
+  const fixture = declarations => `<main data-application-surface-id="dev.ui_gallery"><section data-gallery-section="sample"><div style="overflow-y:auto" data-scroll="100,800"><div ${declarations} data-gallery-ignore-reason="样本展示独立滚动及缩略浮层"><div style="overflow-y:auto" data-scroll="100,400"><div role="dialog" style="position:absolute;z-index:40" class="absolute" data-rect="0,-50,200,200"></div></div></div></div></section></main>`
+  const raw = await audit(fixture(''))
+  assert.equal(raw.nestedScroll.length, 1)
+  assert.equal(raw.overlayClipped.length, 1)
+  const marked = await audit(fixture('data-gallery-ignore-rules="nestedScroll overlayClipped"'))
+  assert.equal(marked.nestedScroll.length, 0)
+  assert.equal(marked.overlayClipped.length, 0)
+  assert.equal(marked.scrollRegions.length, raw.scrollRegions.length, '声明不影响完整滚动覆盖证据')
+})
+
+test('阴影令牌和缩放布局豁免不改变原始阴影及溢出判据', async () => {
+  const fixture = rules => `<main data-application-surface-id="dev.ui_gallery"><section data-gallery-section="tokens"><div data-gallery-ignore-rules="${rules}" data-gallery-ignore-reason="阴影令牌与缩放布局的静态展示"><div style="box-shadow:rgb(0,0,0) 0px 3px 8px" data-rect="1000,0,100,32"></div></div></section></main>`
+  const raw = await audit(fixture(''))
+  assert.ok(raw.shadowOutsideOverlay.length > 0)
+  assert.equal(raw.horizontalOverflow.length, 1)
+  const marked = await audit(fixture('shadowOutsideOverlay horizontalOverflow'))
+  assert.equal(marked.horizontalOverflow.length, 0)
+  assert.ok(marked.shadowOutsideOverlay.length < raw.shadowOutsideOverlay.length)
 })
 
 test('2xs 仅正式图标按钮 20px 例外，缩小与伪造标记仍失败；滚动尺寸不因子项不可见消失', async () => {

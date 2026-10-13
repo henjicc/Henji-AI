@@ -73,7 +73,7 @@ function GalleryContent(): JSX.Element {
       <UiFormRow label="只看问题" inline><UiSwitch aria-label="只看登记问题" checked={issuesOnly} onCheckedChange={setIssuesOnly} /></UiFormRow>
     </div>}>
       <span className="whitespace-nowrap text-sm font-medium text-text1">设计系统</span>
-      <Dropdown size="sm" ariaLabel="主题预设" value={preset} options={THEME_PRESET_IDS.map(value => ({ value, label: THEME_PRESETS[value].name.zh }))} onSelect={next => { setPreset(next); setMode(THEME_PRESETS[next].seed.mode); setPreviewChanged(true) }} />
+      <Dropdown size="md" ariaLabel="主题预设" value={preset} options={THEME_PRESET_IDS.map(value => ({ value, label: THEME_PRESETS[value].name.zh }))} onSelect={next => { setPreset(next); setMode(THEME_PRESETS[next].seed.mode); setPreviewChanged(true) }} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">
       <nav aria-label="设计系统目录" className="w-48 shrink-0 overflow-y-auto px-3 py-4">

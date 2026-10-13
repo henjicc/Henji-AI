@@ -34,7 +34,7 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
   const row = (label: string, children: ReactNode): React.ReactElement => <UiFormRow key={label} label={label} density="compact">{children}</UiFormRow>
   const color = (label: string, value: string, change: (value: string) => void): React.ReactElement => <span className="flex items-center gap-1">
     <UiColorInput aria-label={label} value={value} onPointerDown={onBegin} onFocus={onBegin} onBlur={() => onEnd?.(true)} onChange={event => change(event.target.value)} />
-    <UiIconButton size="xs" aria-label={`吸取${label}`} tooltip={`吸取${label}`} onClick={() => {
+    <UiIconButton size="lg" aria-label={`吸取${label}`} tooltip={`吸取${label}`} onClick={() => {
       const Constructor = (globalThis as typeof globalThis & { EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper
       if (!Constructor) { onError(new Error('此窗口无法取色，请使用颜色选择器。')); return }
       onEnd?.(true)

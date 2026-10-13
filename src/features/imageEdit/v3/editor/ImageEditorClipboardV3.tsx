@@ -54,7 +54,7 @@ export function ImageEditorClipboardV3({ bus, controller }: { bus: ImageEditComm
     </div>}>
       {({ togglePanel, open }) => <UiIconButton onClick={togglePanel} aria-haspopup="menu" aria-expanded={open} aria-label="图片剪贴板" tooltip="图片剪贴板" size="md"><Clipboard  /></UiIconButton>}
     </PanelTrigger>
-    {busy && <UiButton size="sm" onClick={() => operation.current?.abort()}>取消</UiButton>}
+    {busy && <UiButton size="md" onClick={() => operation.current?.abort()}>取消</UiButton>}
       {error && <span data-image-edit-clipboard-error role="alert" className="max-w-48 truncate text-xs text-text2" title={error}>{error}</span>}
   </div>
 }

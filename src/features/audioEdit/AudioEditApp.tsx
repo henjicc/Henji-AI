@@ -435,15 +435,15 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       trailing={<>
         {runningTasks.map((task) => <span key={task.requestId} role="status" className="flex items-center gap-1">
           <span className="text-xs tabular-nums text-text2">正在处理{task.progress === undefined ? '…' : ` ${Math.round(task.progress * 100)}%`}</span>
-          <UiButton size="sm" onClick={() => void run(() => getPlatform().audioEdit.cancelTask(task.requestId))}>取消</UiButton>
+          <UiButton size="md" onClick={() => void run(() => getPlatform().audioEdit.cancelTask(task.requestId))}>取消</UiButton>
         </span>)}
         {state.saveError && <span className="flex items-center gap-1">
           <UiInlineStatus role="alert" className="max-w-48 truncate" tooltip={state.saveError}>保存失败，修改仍保留</UiInlineStatus>
-          <UiButton size="sm" onClick={() => void run(() => flushAudioEditProject(project.id))}>重试保存</UiButton>
+          <UiButton size="md" onClick={() => void run(() => flushAudioEditProject(project.id))}>重试保存</UiButton>
         </span>}
         {!state.saveError && sourceError && <span className="flex items-center gap-1">
           <UiInlineStatus role="alert" className="max-w-48 truncate" tooltip={sourceError}>{sourceError}</UiInlineStatus>
-          <UiButton size="sm" disabled={disabled} onClick={() => void relinkSource()}>重新定位</UiButton>
+          <UiButton size="md" disabled={disabled} onClick={() => void relinkSource()}>重新定位</UiButton>
         </span>}
         <UiIconButton size="md" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} tooltip={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search  /></UiIconButton>
         <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification(notificationMessage('audioUndoAll')) }} />

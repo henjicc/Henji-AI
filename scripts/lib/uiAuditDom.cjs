@@ -153,6 +153,26 @@ function auditUiDom(context = {}) {
 
   const all = Array.from(document.querySelectorAll('body *')).filter(isVisible)
 
+  // 展示样本与断牙反例不同：仅中心页分区内有理由的局部区域可以声明具体规则。
+  // 页面根、整个分区、生产表面及通配符均不获得豁免；像素对比度不走此机制。
+  const galleryExemptions = new Map()
+  const ignoresGalleryRule = (element, rule) => {
+    const gallery = element.closest('[data-application-surface-id="dev.ui_gallery"]')
+    const section = element.closest('[data-gallery-section]')
+    if (!gallery || !section) return false
+    let region = element
+    while (region && region !== section && region !== gallery) {
+      const reason = region.getAttribute('data-gallery-ignore-reason')?.trim()
+      if (reason && (region.getAttribute('data-gallery-ignore-rules') || '').split(/\s+/).includes(rule)) {
+        if (!galleryExemptions.has(region)) galleryExemptions.set(region, { element: label(region), reason, rules: new Set() })
+        galleryExemptions.get(region).rules.add(rule)
+        return true
+      }
+      region = region.parentElement
+    }
+    return false
+  }
+
   const isSurface = (element) => {
     // 输入控件的边框表达可操作区域，不是结构层；把它算成一层会把
     // 「画布节点 → 参数行 → 下拉控件」误判为三层卡片。
@@ -208,7 +228,7 @@ function auditUiDom(context = {}) {
       }
       node = node.parentElement
     }
-    if (!floating) out.shadowOutsideOverlay.push({ element: label(element), shadow: style.boxShadow.slice(0, 80) })
+    if (!floating && !ignoresGalleryRule(element, 'shadowOutsideOverlay')) out.shadowOutsideOverlay.push({ element: label(element), shadow: style.boxShadow.slice(0, 80) })
   }
 
   for (const element of all) {
@@ -263,7 +283,7 @@ function auditUiDom(context = {}) {
       && element.scrollWidth > element.clientWidth + 2
       && ['hidden', 'clip'].includes(style.overflowX)
       && !element.matches('.react-flow')
-    if (outsideViewport || clippedContainer) {
+    if ((outsideViewport || clippedContainer) && !ignoresGalleryRule(element, 'horizontalOverflow')) {
       out.horizontalOverflow.push({
         reason: outsideViewport ? 'viewport' : 'clipped-container',
         width: Math.round(rect.width),
@@ -275,6 +295,7 @@ function auditUiDom(context = {}) {
   }
 
   for (const element of all.filter(isScrollableY)) {
+    if (ignoresGalleryRule(element, 'nestedScroll')) continue
     let ancestor = element.parentElement
     while (ancestor && ancestor !== document.body) {
       if (isScrollableY(ancestor)) {
@@ -300,6 +321,7 @@ function auditUiDom(context = {}) {
 
   const targetSelector = 'button, a[href], input, select, textarea, [role="button"], [role="checkbox"], [role="switch"]'
   for (const element of Array.from(document.querySelectorAll(targetSelector)).filter(isVisible)) {
+    if (ignoresGalleryRule(element, 'smallTargets')) continue
     const style = getComputedStyle(element)
     if (element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true' || style.pointerEvents === 'none') continue
     // 数字输入框的竖排步进箭头共享 38px/28px 字段高度，单个箭头无法达到 24px；
@@ -372,7 +394,10 @@ function auditUiDom(context = {}) {
     }
     return { color: result, glass }
   }
-  const isActiveContainer = (element) => element.matches(':hover')
+  // :hover 也会匹配工作区、页壳等所有祖先；只有交互容器或声明悬停表面的容器才有悬停态。
+  const isActiveContainer = (element) => (element.matches(':hover')
+    && (element.matches('button, a[href], [role="button"], [role="option"], [role="row"], [role="listitem"], [tabindex]')
+      || /(?:^|\s)(?:hover:|group-hover:)bg-/.test(classText(element))))
     || element.getAttribute('aria-selected') === 'true'
     || element.getAttribute('aria-current') === 'true'
     || element.getAttribute('aria-current') === 'page'
@@ -423,11 +448,11 @@ function auditUiDom(context = {}) {
   const surfaceSelector = '[role="dialog"], [data-ui-toolbar], [data-command-bar], [data-application-surface-id]'
   for (const surface of all.filter(element => element.matches(surfaceSelector))) {
     const primary = [...surface.querySelectorAll('[data-variant="primary"], [data-tone="accent"]')]
-      .filter(element => isVisible(element) && element.closest(surfaceSelector) === surface)
+      .filter(element => isVisible(element) && element.closest(surfaceSelector) === surface && !ignoresGalleryRule(element, 'multiplePrimary'))
     if (primary.length > 1) out.multiplePrimary.push({ element: label(surface), count: primary.length })
   }
   const rowSelector = '[role="toolbar"], [data-ui-toolbar], [data-command-bar], [data-ui-form-control], [data-ui-action-group]'
-  const frameSelector = '[data-ui-segmented], [data-ui-readout], [data-ui-field-control], [role="radiogroup"]'
+  const frameSelector = '[data-ui-segmented], [data-ui-readout], [data-ui-field-control], [data-ui-search-input], [role="radiogroup"]'
   for (const row of all.filter(element => element.matches(rowSelector))) {
     if (row.getAttribute('aria-orientation') === 'vertical' || getComputedStyle(row).flexDirection === 'column') continue
     const frames = [...new Set([...row.querySelectorAll(`${targetSelector}, ${frameSelector}`)].map(element => element.closest(frameSelector) || element))]
@@ -449,8 +474,8 @@ function auditUiDom(context = {}) {
     if (!controls.length) continue
     const lefts = controls.map(element => element.getBoundingClientRect().left)
     if (Math.max(...lefts) - Math.min(...lefts) > T.rowTolerance) out.formControlMisaligned.push({ element: label(group), lefts })
-    for (const button of group.querySelectorAll(targetSelector)) {
-      if (!isVisible(button) || button.closest('[data-ui-group]') !== group || button.closest('[data-ui-form-control]')) continue
+    for (const button of group.querySelectorAll('button, a[href], [role="button"]')) {
+      if (!isVisible(button) || button.closest('[data-ui-group]') !== group || button.closest('[data-ui-form-row], [data-ui-field-control]') || button.matches('[data-ui-compact-stepper-button]')) continue
       if (button.getBoundingClientRect().left < Math.min(...lefts) - T.rowTolerance) out.actionStartsAtLabelColumn.push({ element: label(button), controlLeft: Math.min(...lefts) })
     }
   }
@@ -656,6 +681,7 @@ function auditUiDom(context = {}) {
   })
   const outermostOverlays = overlays.filter((overlay) => !overlays.some((other) => other !== overlay && other.contains(overlay)))
   for (const overlay of outermostOverlays) {
+    if (ignoresGalleryRule(overlay, 'overlayClipped')) continue
     const rect = overlay.getBoundingClientRect()
     // 圆角外的角点本来就不属于浮层：取点内缩到圆弧以内（r × 0.3 + 2）
     const radius = Number.parseFloat(getComputedStyle(overlay).borderTopLeftRadius) || 0
@@ -723,6 +749,7 @@ function auditUiDom(context = {}) {
     if (rect.top >= 0 && rect.bottom <= window.innerHeight) out.gallerySamples.push({ id: sample.id, rule, expectHit, passed: expectHit === (issues.length > 0), issues })
     if (!context.includeGallerySamples && expectHit) out[rule] = (out[rule] || []).filter(issue => !JSON.stringify(issue).includes(`#${sample.id} / `))
   }
+  out.galleryExemptions = [...galleryExemptions.values()].map(entry => ({ ...entry, rules: [...entry.rules] }))
   return out
 }
 
