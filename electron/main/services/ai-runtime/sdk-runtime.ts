@@ -5,7 +5,6 @@ import {
   defaultFilename,
   inferMimeFromPath,
   noopTracer,
-  normalizeLocalSource,
   parseDataUri,
   type CredentialScope,
   type CredentialStore,
@@ -17,7 +16,7 @@ import { createHenjiAIClient } from '../../../../src/core/modelCatalog/applicati
 import { getAiProviderApiKey, getKey, getLlmProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
 import { createDiagnosticTransport } from './network-transport'
-import { createNativeFileUpload } from './native-file-upload'
+import { createNativeFileUpload, scopedUploadFile } from './native-file-upload'
 import { createNativeStreamFetch } from './native-stream-fetch'
 import { nativeMediaChunks } from './native-media-chunks'
 import type { ElectronHostTransport, ElectronHostMediaReader, ElectronHostRuntime } from './host-capabilities'
@@ -98,13 +97,11 @@ export const electronMediaReader: ElectronHostMediaReader = {
       }
     }
 
-    const localPath = normalizeLocalSource(trimmed)
-    if (!localPath) {
-      throw new Error(`Unsupported media ref: ${ref}`)
-    }
+    let localPath: string
     let bytes: Buffer
     mainLogger.debug('读取 SDK 本地媒体开始', { event: 'sdk.media.read.start' })
     try {
+      localPath = await scopedUploadFile(trimmed)
       bytes = await fs.promises.readFile(localPath)
       mainLogger.debug('读取 SDK 本地媒体完成', { event: 'sdk.media.read.completed', context: { byteLength: bytes.length } })
     } catch (error) {

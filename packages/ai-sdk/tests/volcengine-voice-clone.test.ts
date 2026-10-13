@@ -14,6 +14,21 @@ function input(fetch: ReturnType<typeof vi.fn>, body = build()): ProviderExecuti
 afterEach(() => vi.useRealTimers())
 
 describe('Seed-ICL V3 voice training', () => {
+  it('同一音色同名重训每次提交都有独立身份，续查保留该身份且不会重训', async () => {
+    // 状态 1 依据官方 fixture 的状态字段表构造；不会产生网络请求。
+    const fetch = vi.fn().mockImplementation(async (url: string) => response(url.endsWith('/voice_clone') ? { ...fixture.response, status: 1 } : fixture.response))
+    const request = input(fetch, build({ volcCloneExistingSlot: 'S_fixture' }))
+    const first = await execute(request)
+    const second = await execute(request)
+    expect(first.status).toBe('pending')
+    expect(second.status).toBe('pending')
+    expect(second.taskId).not.toBe(first.taskId)
+    for (const taskId of [first.taskId!, second.taskId!]) {
+      expect(await continuePolling({ ...request, taskId })).toMatchObject({ taskId, status: 'completed', url: fixture.response.speaker_status[0].demo_audio })
+      expect(JSON.parse(fetch.mock.lastCall![1].body)).toEqual({ speaker_id: 'S_fixture' })
+    }
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/voice_clone'))).toHaveLength(2)
+  })
   // synthetic-negative：网关 HTML 不是官方音色响应 fixture。
   it.each([false, true])('HTML 502 在新建/已有音色预检 existing=%s 归一为 SDK 错误', async existing => {
     const fetch = vi.fn().mockResolvedValue(new Response('<html>502</html>', { status: 502 }))

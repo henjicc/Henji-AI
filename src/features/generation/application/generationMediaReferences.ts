@@ -12,11 +12,21 @@ export async function resolveGenerationMediaReferences(options: Record<string, u
     { uploaded: 'uploadedVideos', visible: 'videos', paths: 'uploadedVideoFilePaths', type: 'video' },
     { uploaded: 'uploadedAudios', visible: 'audios', paths: 'uploadedAudioFilePaths', type: 'audio' },
   ] as const
+  // 校验全部输入载体，不能让优先级较低的字段藏入本地路径。
   for (const field of fields) {
-    const input = options[field.uploaded] ?? options[field.visible]
+    for (const key of [field.uploaded, field.visible, field.paths]) {
+      const values = options[key]
+      if (values === undefined) continue
+      if (!Array.isArray(values) || values.some(value => typeof value === 'string' && !/^(?:data:|https?:\/\/)/i.test(value.trim()))) {
+        throw new Error(`INVALID_INPUT:${key} 不接受本地路径，请使用 {kind,id} 素材引用，或 data:/HTTP(S) 媒体。`)
+      }
+    }
+  }
+  for (const field of fields) {
+    const input = options[field.uploaded] ?? options[field.visible] ?? options[field.paths]
     if (!Array.isArray(input)) continue
     const paths = await Promise.all(input.map(async (value: unknown): Promise<string> => {
-      if (typeof value === 'string') return value
+      if (typeof value === 'string') return value.trim()
       const ref = value as { kind?: unknown; id?: unknown } | null
       if (typeof ref?.id !== 'string' || !ref.id.trim() || !APPLICATION_MEDIA_REFERENCE_KINDS.some(kind => kind === ref.kind)) throw new Error(`INVALID_INPUT:${field.uploaded} 接受 {kind,id}，kind 可为 ${APPLICATION_MEDIA_REFERENCE_KINDS.join('、')}；无需加入素材库。`)
       if (ref.kind === 'image_edit.preview') {
@@ -33,8 +43,8 @@ export async function resolveGenerationMediaReferences(options: Record<string, u
       return asset.filePath
     }))
     resolved[field.visible] = paths.map(toFetchableMediaUrl)
-    // 显式本地路径优先；引用解析时填入原始路径，不能将显示协议传给 fs。
-    resolved[field.paths] = options[field.paths] ?? paths
+    // 只使用本轮解析结果，调用方不能覆盖稳定引用对应的真实素材。
+    resolved[field.paths] = paths
     delete resolved[field.uploaded]
   }
   return resolved

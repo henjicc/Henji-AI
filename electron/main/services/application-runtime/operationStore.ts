@@ -1,6 +1,16 @@
 import { randomUUID } from 'node:crypto'
 export { operationDigest } from '../application-control/operationDigest'
 import type Database from 'better-sqlite3'
+import { UI_PAID_CAPABILITIES } from '../../../../src/core/application-control/paidApproval'
+
+// UI 费用收据没有业务目标或派发身份；未知账单不能进入助手的修改核对流程。
+const uiPaidCapabilities = Object.keys(UI_PAID_CAPABILITIES)
+const uiPaidReceiptSql = `coalesce(json_extract(record_json, '$.origin.actor') = 'user'
+  AND json_extract(record_json, '$.capabilityId') IN (${uiPaidCapabilities.map(() => '?').join(',')})
+  AND json_type(record_json, '$.input.paid') = 'object'
+  AND NOT EXISTS (SELECT 1 FROM json_each(record_json, '$.input') WHERE key != 'paid')
+  AND request_id IS NULL AND renderer_epoch IS NULL
+  AND coalesce(json_array_length(record_json, '$.targetRefs'), 0) = 0, 0)`
 
 export type OperationState = import('../../../../src/core/application-control/userConfirmation').ApplicationOperationState
 export interface OperationRecord {
@@ -69,6 +79,7 @@ export function migrateApplicationReviewsV20(db: Database.Database): void {
 }
 
 export class ApplicationOperationStore {
+  private prunedPaidDay: number | undefined
   /** 表由迁移账本第 10 项创建。 */
   constructor(private readonly db: Database.Database) {}
   recoverInterrupted(): void {
@@ -86,6 +97,7 @@ export class ApplicationOperationStore {
       result: { ok: false, error: { code: 'PREPARATION_INTERRUPTED', message: '应用在提交前退出；本操作没有派发。', details: { execution: { notExecuted: true } } } } })
     const rows = this.db.prepare("SELECT record_json FROM application_invocations WHERE state = 'executing'").all() as Array<{ record_json: string }>
     for (const row of rows) this.save({ ...JSON.parse(row.record_json) as OperationRecord, state: 'unknown' })
+    this.pruneUiPaidReceipts()
     // 新宿主代次不会接受旧基线；分批删除以限制媒体回收触发器每批处理量。
     const prune = this.db.prepare('DELETE FROM application_observations WHERE rowid IN (SELECT rowid FROM application_observations LIMIT 256)')
     while (prune.run().changes > 0) { /* 只清理可重建的读取基线，不删除操作事实。 */ }
@@ -100,7 +112,18 @@ export class ApplicationOperationStore {
     return row ? JSON.parse(row.record_json) as OperationRecord : undefined
   }
   unresolved(): OperationRecord[] {
-    return (this.db.prepare("SELECT record_json FROM application_invocations WHERE state IN ('preparing','awaiting_user_confirmation','executing','unknown','partial')").all() as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
+    return (this.db.prepare(`SELECT record_json FROM application_invocations WHERE state IN ('preparing','awaiting_user_confirmation','executing','unknown','partial') AND NOT (${uiPaidReceiptSql})`).all(...uiPaidCapabilities) as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
+  }
+  /** 自然日预算过后只清理无业务恢复用途的 UI 终态收据；助手事实与在途请求永久保留原语义。 */
+  private pruneUiPaidReceipts(): void {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const since = today.getTime()
+    if (this.prunedPaidDay === since) return
+    this.db.prepare(`DELETE FROM application_invocations WHERE state IN ('completed','not_executed','unknown')
+      AND updated_at < ? AND (${uiPaidReceiptSql})
+      AND NOT EXISTS (SELECT 1 FROM json_each(record_json, '$.paidReservations') WHERE json_extract(value, '$.reservedAt') >= ?)`)
+      .run(since, ...uiPaidCapabilities, since)
+    this.prunedPaidDay = since
   }
   /** 持久预算按所有 Agent 共用的自然日范围统计，换会话或重启不会重置。 */
   generationSpendSince(since: number): number {
@@ -111,6 +134,7 @@ export class ApplicationOperationStore {
     }, 0)
   }
   prepare(record: OperationRecord): OperationRecord {
+    this.pruneUiPaidReceipts()
     record = { ...record, origin: record.origin ?? { at: Date.now(), actor: 'external' } }
     return this.db.transaction(() => {
       const existing = this.get(record.operationId, record.callerId)

@@ -1,14 +1,27 @@
 import { reserveGenerationBudget } from './generationBudget'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { decidePaidApproval, localDayStart, approvePaidOperation, handleUiPaidApproval } from './paidApprovalPolicy'
 import type { LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { DEFAULT_PAID_APPROVAL_SETTINGS, type PaidApprovalSettings, type PaidApprovalRequest } from '../../../../src/core/application-control/paidApproval'
 import type { ApplicationOperationStore, OperationRecord } from './operationStore'
+import { USER_CONFIRMATION_TIMEOUT_MS } from '../../../../src/core/application-control/userConfirmation'
 
 const preferences = vi.hoisted(() => ({ value: '' }))
 vi.mock('../settings/store', () => ({ getSettingsStore: () => ({ get: () => preferences.value || null, set: (_key: string, value: string) => { preferences.value = value } }) }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info() {} }) }))
 beforeEach(() => { preferences.value = '' })
+afterEach(() => { vi.useRealTimers() })
+it('确认恰好到期后拒绝 approve，不产生额度预留', () => {
+  vi.useFakeTimers()
+  preferences.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, mode: 'ask' })
+  let record: OperationRecord | undefined
+  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, prepare: (value: OperationRecord) => (record = value), generationSpendSince: () => 0 }
+  const reply: LocalHostReply = { requestId: 'expired', rendererEpoch: 'renderer', result: {}, uiPaidApproval: { capabilityId: 'ui_generate_title', action: 'prepare', request: { category: 'title', estimatedCny: 1 } } }
+  handleUiPaidApproval(store, reply)
+  vi.advanceTimersByTime(USER_CONFIRMATION_TIMEOUT_MS)
+  expect(() => handleUiPaidApproval(store, { ...reply, uiPaidApproval: { ...reply.uiPaidApproval!, action: 'approve' } })).toThrow('付费确认已结束')
+  expect(record?.paidReservations).toBeUndefined()
+})
 const project = { id: 'project', name: '测试项目' }
 const request = (amount: number | null): PaidApprovalRequest => ({ category: 'recognition', estimatedCny: amount, project })
 it.each([

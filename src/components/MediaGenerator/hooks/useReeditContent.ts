@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
 import type { ModelState } from '../state/useModelState'
 import type { UIState } from '../state/useUIState'
@@ -34,6 +34,14 @@ function sanitizePresetOptions(options: DynamicValueMap): DynamicValueMap {
 }
 
 export function useReeditContent(uiState: UIState, modelState: ModelState): void {
+  const [pending, setPending] = useState<{ modelId: string; options: DynamicValueMap } | null>(null)
+  const { setParams } = modelState
+  // useModelParams 的模型切换 effect 已先重置参数，此处使用本次渲染的目标 schema 回填。
+  useEffect(() => {
+    if (!pending || uiState.selectedModel !== pending.modelId) return
+    setParams(pending.options)
+    setPending(null)
+  }, [pending, uiState.selectedModel, setParams])
   useEffect(() => {
     const handleReedit = async (e: Event) => {
       const customEvent = e as CustomEvent<ReEditEventDetail>
@@ -51,6 +59,7 @@ export function useReeditContent(uiState: UIState, modelState: ModelState): void
       } = customEvent.detail
 
       logger.info('[MediaGenerator] Handle re-edit:', { model, provider })
+      setPending(options ? { modelId: model ?? uiState.selectedModel, options: sanitizePresetOptions(options) } : null)
 
       const hasImageCarrier = Boolean(promptMediaBindings?.length || images)
       const shouldLoadPromptCarrier = promptDocument !== undefined || (prompt !== undefined && hasImageCarrier)
@@ -106,16 +115,9 @@ export function useReeditContent(uiState: UIState, modelState: ModelState): void
         uiState.setUploadedVideoFilePaths([])
         uiState.setUploadedVideoFiles([])
       }
-
-      window.setTimeout(() => {
-        if (!options) return
-        const sanitizedOptions = sanitizePresetOptions(options)
-        logger.info('[MediaGenerator] Restore params:', sanitizedOptions)
-        modelState.setParams(sanitizedOptions)
-      }, 100)
     }
 
     window.addEventListener('reedit-content', handleReedit)
     return () => window.removeEventListener('reedit-content', handleReedit)
-  }, [modelState, uiState])
+  }, [uiState])
 }

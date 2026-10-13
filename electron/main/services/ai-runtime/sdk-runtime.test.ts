@@ -1,20 +1,30 @@
 import fs from 'node:fs'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() }))
 vi.mock('../logging', () => ({ createMainLogger: () => mocks }))
 vi.mock('../keystore', () => ({ getAiProviderApiKey: vi.fn(), getLlmProviderApiKey: vi.fn(), getKey: vi.fn() }))
 vi.mock('../../../../src/core/modelCatalog/applicationModelProfile', () => ({ createHenjiAIClient: vi.fn(() => ({})) }))
 vi.mock('./network-transport', () => ({ createDiagnosticTransport: vi.fn(() => ({ fetch: vi.fn() })) }))
-vi.mock('../../protocol', () => ({ isPathWithinAllowedMediaRoots: () => true }))
+const grants = vi.hoisted(() => ({ lexical: vi.fn(() => true), real: vi.fn(async () => true) }))
+vi.mock('../../protocol', () => ({ isPathWithinAllowedMediaRoots: grants.lexical, isRealPathWithinAllowedMediaRoots: grants.real }))
+vi.mock('node:fs/promises', () => ({ realpath: async (value: string) => value, access: async () => {}, stat: async () => ({ isFile: () => true }) }))
 
 import { electronMediaReader } from './sdk-runtime'
 import { sdkRuntimeContext } from './sdk-runtime'
 import { inspectElectronHostCapabilities } from './host-capabilities'
 
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
+beforeEach(() => { grants.lexical.mockReturnValue(true); grants.real.mockResolvedValue(true) })
 
 describe('Electron SDK media reader', () => {
+  it.each(['lexical', 'real'] as const)('拒绝 %s 授权检查失败的路径且不读取字节', async boundary => {
+    if (boundary === 'lexical') grants.lexical.mockReturnValue(false)
+    else grants.real.mockResolvedValue(false)
+    const read = vi.spyOn(fs.promises, 'readFile').mockResolvedValue(Buffer.from('private'))
+    await expect(electronMediaReader.read('/private/secret.png')).rejects.toMatchObject({ code: 'media_scope_denied' })
+    expect(read).not.toHaveBeenCalled()
+  })
   it('actual assembled runtime provides every enabled host hook without invoking adapters', () => {
     expect(inspectElectronHostCapabilities(sdkRuntimeContext)).toEqual({ missing: [], affectedCapabilities: [] })
   })

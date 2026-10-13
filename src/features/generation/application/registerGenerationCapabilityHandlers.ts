@@ -48,7 +48,7 @@ function generationDestination(input: GenerationInput): GenerationDestination {
 
 async function prepareInput(parsed: GenerationInput, destination = generationDestination(parsed)): Promise<ResolvedGenerationInput> {
   const resolved = resolveGenerationInput(parsed)
-  resolved.options = await resolveGenerationMediaReferences(resolved.options ?? {})
+  if (parsed.params !== undefined) resolved.options = await resolveGenerationMediaReferences(parsed.params)
   if (destination.mode === 'canvas') {
     const { resolveCanvasGenerationOptions } = await import('@/features/canvas/application/canvasGenerationTaskService')
     resolved.options = await resolveCanvasGenerationOptions(resolved, destination)
@@ -104,11 +104,11 @@ function resolveGenerationInput(input: GenerationInput): ResolvedGenerationInput
   }
 
   const options = input.params ?? {
-    uploadedImages: draft.uploadedPromptImages.map((image) => image.url),
+    images: draft.uploadedPromptImages.map((image) => image.url),
     uploadedFilePaths: draft.uploadedFilePaths,
-    uploadedVideos: draft.uploadedVideos,
+    videos: draft.uploadedVideos,
     uploadedVideoFilePaths: draft.uploadedVideoFilePaths,
-    uploadedAudios: draft.uploadedAudios,
+    audios: draft.uploadedAudios,
     uploadedAudioFilePaths: draft.uploadedAudioFilePaths,
   }
 

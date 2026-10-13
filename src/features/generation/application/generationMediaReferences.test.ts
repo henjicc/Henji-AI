@@ -11,6 +11,19 @@ vi.mock('@/commands/assetLibrary', () => ({ inspectAsset: inspect }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => true }))
 vi.mock('@/platform/desktopApi', () => ({ toDisplaySrc: (path: string) => `henji-media://local/${encodeURIComponent(path)}` }))
 beforeEach(() => { inspect.mockReset(); history.mockReset(); imageInfo.mockReset(); imageInfo.mockResolvedValue({ fileName: 'result.png' }) })
+it.each(['uploadedImages', 'images', 'uploadedVideos', 'videos', 'uploadedAudios', 'audios', 'uploadedFilePaths', 'uploadedVideoFilePaths', 'uploadedAudioFilePaths'])('拒绝 %s 中的调用方本地路径，包括被另一媒体字段遮盖的路径', async field => {
+  for (const path of ['/private/secret.png', '~/Documents/secret.png', 'file:///etc/hosts', 'C:\\private\\secret.png', 'henji-media://local/secret']) {
+    await expect(resolveGenerationMediaReferences({ [field]: [path] })).rejects.toThrow('INVALID_INPUT')
+  }
+  await expect(resolveGenerationMediaReferences({ uploadedImages: ['https://example.com/a.png'], [field]: ['/private/secret.png'] })).rejects.toThrow('INVALID_INPUT')
+})
+it('允许远程及内嵌媒体，显式路径字段不能覆盖已解析的引用', async () => {
+  for (const source of ['https://example.com/a.png', 'http://example.com/a.png', 'data:image/png;base64,AA==']) {
+    expect((await resolveGenerationMediaReferences({ images: [source] })).uploadedFilePaths).toEqual([source])
+  }
+  inspect.mockResolvedValue({ mediaType: 'image', filePath: 'C:/media/allowed.png' })
+  expect((await resolveGenerationMediaReferences({ uploadedImages: [{ kind: 'asset', id: 'a' }], uploadedFilePaths: ['https://example.com/other.png'] })).uploadedFilePaths).toEqual(['C:/media/allowed.png'])
+})
 it('每种正式媒体来源都必须有可执行解析样例，新增声明不能只更新工具说明', async () => {
   const examples: Record<typeof APPLICATION_MEDIA_REFERENCE_KINDS[number], () => void> = {
     asset: () => { inspect.mockResolvedValue({ mediaType: 'image', filePath: 'C:/data/images/result.png' }) },

@@ -68,7 +68,12 @@ export async function confirmGenerationSubmission(model: ModelDefinition, params
     onProject: () => { project = true },
   }, signal)
   if (!accepted || signal.aborted) throw new GenerationSubmissionCancelledError()
-  await paid.confirm(project)
+  try { await paid.confirm(project) }
+  catch (error) {
+    // IPC 往返期间刚好越过账本期限，仍属于未提交的取消。
+    if (error instanceof Error && error.message.includes('付费确认已结束，请重新发起。')) throw new GenerationSubmissionCancelledError()
+    throw error
+  }
   return paid
   } catch (error) { await paid.reject(); throw error }
 }

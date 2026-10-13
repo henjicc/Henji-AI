@@ -8,7 +8,7 @@ import { GenerationService } from './GenerationService'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { useAlertDialogStore, showAlertDialog, requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { configureGenerationSubmissionConfirmation, transferGenerationPaidApproval } from './generationSubmissionConfirmation'
-import { bindApplicationConfirmation, requestApplicationPaidApproval } from '../application-control/userConfirmation'
+import { bindApplicationConfirmation, requestApplicationPaidApproval, USER_CONFIRMATION_TIMEOUT_MS } from '../application-control/userConfirmation'
 import { ttsPresentation } from '@/models/presentation/tts'
 import { clearProviderAvailability, getProviderAvailabilityFailure } from './providerAvailability'
 import { compressVideoToFit } from '@/commands/video'
@@ -22,6 +22,7 @@ const paid = vi.hoisted(() => ({ prepare: vi.fn(), confirm: vi.fn(), start: vi.f
 vi.mock('@/services/paidApproval', () => ({ prepareGenerationPaidApproval: paid.prepare }))
 const service = GenerationService.getInstance()
 beforeEach(() => {
+  paid.confirm.mockReset()
   clearProviderAvailability('fixture')
   configureGenerationSubmissionConfirmation(requestAlertConfirmation)
   vi.clearAllMocks()
@@ -31,12 +32,28 @@ beforeEach(() => {
   registry.register({ meta: { id: 'cancel-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } },
     params: [], endpoints: '/fixture', pricing: { currency: '$', fixed: 0.01 }, request: { builder: params => params } })
 })
-afterEach(() => { registry.unregister('cancel-fixture'); vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
+afterEach(() => { registry.unregister('cancel-fixture'); vi.restoreAllMocks(); vi.useRealTimers(); useAlertDialogStore.setState({ queue: [] }) })
 
 function enableConfirmation(): void {
   paid.prepare.mockResolvedValue({ ...paid, project: undefined, decision: { decision: 'ask', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
   registry.getModel('cancel-fixture')!.submissionConfirmation = ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation
 }
+
+it.each(['timeout', 'expired-reply'])('付费确认 %s 按取消结束，不启动生成、不标记失败', async mode => {
+  vi.useFakeTimers()
+  enableConfirmation()
+  if (mode === 'expired-reply') paid.confirm.mockRejectedValueOnce(new Error('付费确认已结束，请重新发起。'))
+  const run = service.generate('cancel-fixture', { prompt: 'fixture' })
+  const assertion = expect(run).rejects.toMatchObject({ name: 'GenerationSubmissionCancelledError' })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(useAlertDialogStore.getState().queue).toHaveLength(1)
+  if (mode === 'timeout') await vi.advanceTimersByTimeAsync(USER_CONFIRMATION_TIMEOUT_MS)
+  else useAlertDialogStore.getState().confirmCurrent()
+  await assertion
+  expect(paid.reject).toHaveBeenCalledOnce()
+  expect(paid.start).not.toHaveBeenCalled()
+  expect(aiGenerate).not.toHaveBeenCalled()
+})
 
 it.each(['generate', 'poll'] as const)('%s 失败记住模型准入，手动重试仍派发且成功清除，界面文案不含内部码', async phase => {
   const dispatch = phase === 'generate' ? aiGenerate : aiContinuePolling

@@ -6,7 +6,7 @@ import { unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationOperationStore, createApplicationOperationTablesV1, migrateApplicationReviewsV20 } from './operationStore'
+import { ApplicationOperationStore, createApplicationOperationTablesV1, migrateApplicationReviewsV20, type OperationRecord } from './operationStore'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
@@ -35,6 +35,31 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('界面付费失败及重启未知仅保留预算，不进入助手核对；旧日终态账本可清理', () => {
+    const f = fixture()
+    const now = Date.now()
+    const ui = (id: string, state: OperationRecord['state'], at = now): OperationRecord => ({
+      operationId: id, callerId: 'renderer', capabilityId: 'create_visible_generation_task', input: { paid: { category: 'generation', estimatedCny: 1 } },
+      inputDigest: id, state, origin: { actor: 'user', at }, paidReservations: [{ category: 'generation', estimatedCny: 1, reservedAt: at, approval: { decision: 'auto', reason: '额度内' } }],
+    })
+    f.store.save(ui('failed', 'unknown'))
+    f.store.save(ui('interrupted', 'executing'))
+    const external = { ...ui('agent', 'unknown'), callerId: 'agent', origin: { actor: 'external' as const, at: now } }
+    f.store.save(external)
+    expect(f.store.unresolved().map(record => record.operationId)).toEqual(['agent'])
+    expect(f.coordinator.pendingReviews().some(item => item.callerId === 'renderer')).toBe(false)
+    f.store.recoverInterrupted()
+    expect(f.store.get('interrupted', 'renderer')?.state).toBe('unknown')
+    expect(f.store.unresolved().map(record => record.operationId)).toEqual(['agent'])
+    const today = new Date(now); today.setHours(0, 0, 0, 0)
+    expect(f.store.generationSpendSince(today.getTime())).toBe(3)
+    f.store.save(ui('old-ui', 'unknown', today.getTime() - 1))
+    f.db.prepare('UPDATE application_invocations SET updated_at = ? WHERE operation_id = ?').run(today.getTime() - 1, 'old-ui')
+    new ApplicationOperationStore(f.db).prepare(ui('new-ui', 'preparing'))
+    expect(f.store.get('old-ui', 'renderer')).toBeUndefined()
+    expect(f.store.get('failed', 'renderer')).toBeDefined()
+    expect(f.store.get('agent', 'agent')).toBeDefined()
+  })
   it.each(['mutate_properties', 'create_items'])('%s 的验证失败人工核对后释放写锁，重启不丢已执行事实', async kind => {
     const f = fixture(), show = vi.fn()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['asset', 'canvas.node', 'canvas.document']), show)

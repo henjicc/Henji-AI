@@ -7,7 +7,7 @@ import { toBase64 } from '../upload/base64'
 import { isJsonObject } from './helpers'
 import { fetchProvider } from './provider-fetch'
 
-interface CloneIdentity { speaker: string; name: string; postpaid: boolean }
+interface CloneIdentity { speaker: string; name: string; postpaid: boolean; submission: string }
 const TASK_PREFIX = 'volc-voice:'
 const MAX_AUDIO_BYTES = 10_000_000
 
@@ -18,8 +18,9 @@ function decodeTask(value: string): CloneIdentity {
     if (!value.startsWith(TASK_PREFIX)) throw new Error('prefix')
     const data = JSON.parse(decodeURIComponent(value.slice(TASK_PREFIX.length))) as JsonValue
     if (!isJsonObject(data) || typeof data.speaker !== 'string' || !data.speaker.trim()
-      || typeof data.name !== 'string' || !data.name.trim() || typeof data.postpaid !== 'boolean') throw new Error('identity')
-    return { speaker: data.speaker, name: data.name, postpaid: data.postpaid }
+      || typeof data.name !== 'string' || !data.name.trim() || typeof data.postpaid !== 'boolean'
+      || typeof data.submission !== 'string' || !data.submission.trim()) throw new Error('identity')
+    return { speaker: data.speaker, name: data.name, postpaid: data.postpaid, submission: data.submission }
   } catch { throw new AiRuntimeError('invalid_task_id', '无效的音色训练任务') }
 }
 
@@ -89,6 +90,7 @@ export async function executeVoiceClone(input: ProviderExecutionInput): Promise<
   const identity: CloneIdentity = {
     speaker: existing || custom || `henji${volcengineRequestId(input.requestId, undefined).replaceAll('-', '')}`,
     name: body.voice_name.trim(), postpaid: !existing,
+    submission: volcengineRequestId(input.requestId, undefined),
   }
   const audio = parseDataUri(body.clone_audio) ?? await input.runtime.media.read(body.clone_audio)
   if (!audio.bytes.length || audio.bytes.length > MAX_AUDIO_BYTES) throw new AiRuntimeError('invalid_media', '声音样本必须非空且不超过 10 MB')
