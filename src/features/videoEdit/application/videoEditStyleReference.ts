@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { z } from 'zod'
 import { createLogger } from '@/core/logging'
 import { stylePaletteFromClusters, type StylePaletteCluster } from '@/core/videoEdit/styleKitExtraction'
@@ -36,12 +37,12 @@ export async function extractVideoEditReferenceStyle(reference: StyleReference, 
       if (!media) throw new Error('此图片未落盘，请先下载素材。')
       bitmap = await createImageBitmap(await getPlatform().media.readLocalFileAsBlob(media))
     } else {
-      const owner = requireVideoEditInstance(reference.projectId); const document = owner.document
+      const owner = requireVideoEditInstance(reference.projectId); const document = owner.document; const contentVersion = owner.contentVersion
       const item = document.items.find(value => value.id === reference.itemId); const media = document.media.find(value => value.id === item?.mediaId)
       if (!item || !media || !['image', 'video'].includes(media.kind)) throw new Error('请选择剪辑中的图片或视频素材。')
       if (media.kind === 'image') bitmap = await createImageBitmap(await getPlatform().media.readLocalFileAsBlob(media.path))
       else { const composition = videoEditSourceComposition(document, item.id, reference.timeUs); bitmap = await trialVideoEditCodeFrames([{ document: composition, frame: 0 }], signal, true); if (!bitmap) throw new Error('参考视频帧读取失败。') }
-      if (requireVideoEditInstance(reference.projectId) !== owner || owner.document !== document) throw new Error('参考素材已有后续修改，请重新提取。')
+      if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('参考素材已有后续修改，请重新提取。')
     }
     signal?.throwIfAborted()
     const factor = Math.min(1, 128 / Math.max(bitmap.width, bitmap.height)); const width = Math.max(1, Math.round(bitmap.width * factor)); const height = Math.max(1, Math.round(bitmap.height * factor))

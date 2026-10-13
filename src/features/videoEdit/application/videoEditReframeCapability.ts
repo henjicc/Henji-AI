@@ -1,9 +1,10 @@
+import { verifyVideoEditContentSaved } from './videoEditDocumentAlgorithm'
 import type { z } from 'zod'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { reframeVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditReframeCapability'
 import { reframeVideoEdit, type VideoEditReframeResult } from './videoEditReframe'
 import { splitVideoEditRef } from './videoEditReflection'
-import { requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved } from './videoEditService'
+import { requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 import { enqueueVideoEditExports } from './videoEditExportQueue'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditTrackerEntityId } from './videoEditCompositeEntities'
@@ -40,9 +41,9 @@ export async function executeVideoEditReframeCapability(input: z.infer<typeof re
     trackers[clip.childId] = found.id
   }
   const result = await reframeVideoEdit({ projectId: id, sequenceId: sequence.id, ...(input.clipRef ? { clipId: target.childId } : {}) }, { size: input.targetSize, name: input.name, settings: input.settings, trackers }, signal)
-  const expected = owner.document
+  const expected = owner.document; const contentVersion = owner.contentVersion
   try { await saveVideoEdit(id) } catch (error) { throw new ApplicationPersistenceFailure('自动重构已完成但未保存，请重试保存，不要重复生成。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, error) }
-  const verified = requireVideoEditInstance(id) === owner && owner.document === expected && await verifyVideoEditSaved(id, expected)
+  const verified = await verifyVideoEditContentSaved(owner, expected, contentVersion)
   const exported = input.exportPresetRef && verified ? await queueVideoEditReframe(id, result.sequenceId, input.exportPresetRef.id, signal) : { exportJobIds: [] }
   return { resultRef: { kind: 'video_edit.sequence', id: `${id}:${result.sequenceId}` }, documentRef: input.documentRef, clipRefs: result.clipIds.map(clipId => ({ kind: 'video_edit.clip', id: `${id}:${clipId}` })), created: result.created, missingFrames: result.missingFrames, faceFrames: result.faceFrames, ...exported, message: videoEditReframeMessage(result) + (exported.exportIssue ?? '') + (exported.exportJobIds.length ? '已加入导出队列，请查询完成状态。' : ''), verified }
 }

@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { videoEditComposition, videoEditClipMedia, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditTrackerSchema, normalizeVideoEditTracker, VIDEO_EDIT_MAX_TRACKERS, videoEditFollowBinding, type VideoEditTracker, type VideoEditTrackPrompt } from '@/core/videoEdit/tracking'
 import { assertVideoEditMaskTrackers, isShapesMask, videoEditMaskShapeBounds, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
@@ -97,13 +98,13 @@ export async function readVideoEditTrackingGeometry(projectId: string, sequenceI
 }
 /** Bind at the current frame without moving the element. Late reads cannot change a newer document or playhead. */
 export async function bindVideoEditTracking(projectId: string, sequenceId: string, sourceId: string, trackerId: string, target: { clipId: string; scale: boolean; cornerPin?: boolean } | { effectId: string; shapeId: string }): Promise<void> {
-  const instance = requireVideoEditInstance(projectId); const before = instance.document; const frame = instance.frame
+  const instance = requireVideoEditInstance(projectId); const before = instance.document; const contentVersion = instance.contentVersion; const frame = instance.frame
   const box = await readVideoEditTrackingBox(projectId, sequenceId, sourceId, trackerId, frame)
   if (!box) throw new Error('这一帧还没有跟踪框，请先完成跟踪。')
   if ('clipId' in target && target.cornerPin && !(await readVideoEditTrackingGeometry(projectId,sequenceId,sourceId,trackerId,frame))?.quad) throw new Error('这一帧还没有可用的平面四角，请先跟踪或纠错。')
   const placement = await readVideoEditTrackingPlacement(projectId, sequenceId, sourceId, frame)
   const follower = 'clipId' in target ? await readVideoEditTrackingPlacement(projectId, sequenceId, target.clipId, frame) : undefined
-  if (instance.document !== before || instance.frame !== frame || instance.activeSequenceId !== sequenceId) throw new Error('画面已变化，请在当前帧重新绑定。')
+  if (!isVideoEditContentCurrent(instance, contentVersion) || instance.frame !== frame || instance.activeSequenceId !== sequenceId) throw new Error('画面已变化，请在当前帧重新绑定。')
   editVideoSequence(projectId, sequenceId, sequence => {
     const source = sequence.clips.find(clip => clip.id === sourceId)!
     if ('clipId' in target) {

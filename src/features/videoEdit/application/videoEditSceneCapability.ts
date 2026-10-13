@@ -1,9 +1,10 @@
+import { verifyVideoEditContentSaved } from './videoEditDocumentAlgorithm'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { detectVideoEditScenesCapability, applyVideoEditScenesCapability } from '@/core/application-control/domains/videoEdit/videoEditSceneCapabilities'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { splitVideoEditRef } from './videoEditReflection'
 import { applyVideoEditScenes, detectVideoEditScenes, type VideoEditSceneTarget } from './videoEditSceneDetection'
-import { requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved } from './videoEditService'
+import { requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 
 function targetOf(input: { documentRef: { id: string }; clipRef: { kind: string; id: string } }): VideoEditSceneTarget {
   const ref = splitVideoEditRef(input.clipRef)
@@ -22,9 +23,9 @@ export async function handleVideoEditSceneCapability(id: string, raw: unknown, c
   const input = applyVideoEditScenesCapability.inputSchema.parse(raw); const target = targetOf(input)
   const owner = requireVideoEditInstance(target.projectId)
   const result = await applyVideoEditScenes(target, input.analysisId, input.options, context.signal)
-  const expected = owner.document
+  const expected = owner.document; const contentVersion = owner.contentVersion
   try { await saveVideoEdit(target.projectId) } catch (error) { throw new ApplicationPersistenceFailure('切点已应用但未保存，请重试保存，不要重复应用。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, error) }
-  const verified = requireVideoEditInstance(target.projectId) === owner && owner.document === expected && await verifyVideoEditSaved(target.projectId, expected)
+  const verified = await verifyVideoEditContentSaved(owner, expected, contentVersion)
   const changedRefs = [
     ...result.clipIds.map(id => ({ kind: 'video_edit.clip' as const, id: `${target.projectId}:${id}` })),
     ...result.markerIds.map(id => ({ kind: 'video_edit.marker' as const, id: `${target.projectId}:${id}` })),

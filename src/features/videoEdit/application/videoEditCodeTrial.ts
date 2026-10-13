@@ -1,8 +1,9 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditComposition, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { ensureVideoEditCodeDocumentMetadata } from './videoEditCodeState'
-import { listVideoEditInstances, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
+import { subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { videoEditTransitionClipIds, videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 
 export interface VideoEditTrialTarget { sequenceId: string; clipId: string; effectIds?: string[] }
@@ -106,11 +107,11 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
   }
 }
 
-export async function trialVideoEditCodeDocument(owner: VideoEditInstance, baseline: VideoEditDocument, document: VideoEditDocument, sequenceId: string, frame: number, signal?: AbortSignal, targets?: VideoEditTrialTarget[]): Promise<void> {
+export async function trialVideoEditCodeDocument(owner: VideoEditInstance, contentVersion: number, document: VideoEditDocument, sequenceId: string, frame: number, signal?: AbortSignal, targets?: VideoEditTrialTarget[]): Promise<void> {
   signal?.throwIfAborted()
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('代码编辑已取消。'))
   signal?.addEventListener('abort', cancel, { once: true })
-  const assert = (): void => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('原剪辑已关闭或内容已改变，请重新编辑。') }
+  const assert = (): void => { if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或内容已改变，请重新编辑。') }
   const off = subscribeVideoEditDomain(() => { try { assert() } catch (error) { controller.abort(error) } })
   try {
     assert(); await ensureVideoEditCodeDocumentMetadata(owner, document, controller.signal)

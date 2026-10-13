@@ -161,9 +161,9 @@ export async function importVideoEditPathsAndFolders(projectId: string, paths: r
       if (afterImport && itemIds.length) {
         placing = true
         await waitVideoEditImportEdit(owner, signal)
-        const before = owner.document; const next = await afterImport(structuredClone(before), itemIds)
+        const before = owner.document; const contentVersion = owner.contentVersion; const next = await afterImport(structuredClone(before), itemIds)
         signal.throwIfAborted()
-        if (requireVideoEditInstance(projectId) !== owner || owner.document !== before) throw new Error('导入落点已改变，请重新拖入。')
+        if (requireVideoEditInstance(projectId) !== owner || owner.contentVersion !== contentVersion) throw new Error('导入落点已改变，请重新拖入。')
         commit(document => mergeVideoEditImportDocument(document, before, next))
         placing = false
       }

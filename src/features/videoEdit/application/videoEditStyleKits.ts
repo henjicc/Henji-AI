@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { styleKitSchema, styleKitContent, resolveVideoEditStyleKit, type StyleKit, type StyleKitContent } from '@/core/videoEdit/styleKit'
 import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
 import { extractStyleFromWork, type StyleWorkObservation } from '@/core/videoEdit/styleKitExtraction'
@@ -84,7 +85,7 @@ export function styleKitHostSummary(projectId: string, sequenceId: string): { re
   return kit ? { ref: `video_edit.style_kit:${projectId}:${kit.id}`, name: kit.name, summary: `AI 写新代码前先 read_application_entity 读取此风格包的 content（tokens、rules、samples），按 rules 做/不做并引用 ctx.style；标题 ${kit.tokens.fonts.display.family}，正文 ${kit.tokens.fonts.body.family}。` } : { ref: null, name: '', summary: '未绑定风格；ctx.style 使用默认令牌。可先列出 video_edit.style_preset，复制 content 创建 video_edit.style_kit，再写 sequence.style_kit_id。' }
 }
 export async function extractVideoEditWorkStyle(projectId: string, sequenceId: string, name: string, signal?: AbortSignal): Promise<StyleKit> {
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const sequence = baseline.sequences.find(value => value.id === sequenceId)
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion; const sequence = baseline.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('原序列不存在。')
   logger.info('style_kit.extract_work.start', '从作品提取风格', { context: { projectId, sequenceId } })
   try {
@@ -114,7 +115,7 @@ export async function extractVideoEditWorkStyle(projectId: string, sequenceId: s
       if (style) observations.push({ height: 1080, fonts: [{ family: style.fontFamily, weight: style.fontWeight, size: style.fontSize }], colors: style.fill.enabled ? [styleColorFromHex(style.fill.color)] : [], colorRoles: style.fill.enabled ? { fg: styleColorFromHex(style.fill.color) } : {} })
       if (index % 128 === 127) await new Promise<void>(resolve => setTimeout(resolve, 0))
     }
-    signal?.throwIfAborted(); if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('提取期间作品已修改，请重新提取。')
+    signal?.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion!)) throw new Error('提取期间作品已修改，请重新提取。')
     const base = resolveVideoEditStyleKit(baseline, sequence) ?? BUILTIN_STYLE_KITS[0]
     const candidate = extractStyleFromWork(observations, base, name)
     logger.info('style_kit.extract_work.completed', '已生成作品风格候选', { context: { projectId, sequenceId } }); return candidate

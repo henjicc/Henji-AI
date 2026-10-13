@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { z } from 'zod'
 import { fieldDescriptors, fieldReadValues, fieldWriterTable, unrestrictedCollectionAvailability, type ApplicationFieldDefinition, type ApplicationEntityRegistration, type ApplicationMutationExecutor, type ApplicationCollectionExecutor, type ApplicationPlannedStep, type ApplicationCompletedStepResult, type ApplicationExecutionContext, type ApplicationEvidence, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
@@ -50,7 +51,7 @@ class StyleKitExecutorBase {
 export class VideoEditStyleKitCollectionExecutor extends StyleKitExecutorBase implements ApplicationCollectionExecutor {
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     if (step.parent.kind !== 'video_edit.document') throw new Error('请使用剪辑文档作为风格库上下文。')
-    const owner = requireVideoEditInstance(step.parent.id); const baseline = owner.document; const before = this.snapshot(step.parent.id); const refs: ApplicationRef[] = []; const values = Array.isArray(before) ? before : before.styleKits ?? []; let next = [...values]
+    const owner = requireVideoEditInstance(step.parent.id); const baseline = owner.document; const contentVersion = owner.contentVersion; const before = this.snapshot(step.parent.id); const refs: ApplicationRef[] = []; const values = Array.isArray(before) ? before : before.styleKits ?? []; let next = [...values]
     if (step.operation.kind === 'create') {
       for (const item of step.operation.items) {
         if (Object.keys(item.properties).some(key => !fieldsFor(this.entityType).some(field => field.propertyId === key))) throw new Error('风格创建仅接受 name/content。')
@@ -60,7 +61,7 @@ export class VideoEditStyleKitCollectionExecutor extends StyleKitExecutorBase im
     } else {
       for (const ref of step.operation.targets) { requireKit(this.entityType, ref); const id = this.entityType === STYLE_KIT_ENTITY ? split(ref).id : ref.id; if (this.entityType === STYLE_KIT_ENTITY && split(ref).projectId !== step.parent.id || !values.some(value => value.id === id)) throw new Error('只能删除此上下文中的自定义风格。'); if (this.entityType === STYLE_KIT_ENTITY && baseline.sequences.some(sequence => sequence.styleKitId === id || sequence.clips.some(clip => clip.styleKitId === id))) throw new Error('风格仍被使用，请先清除序列/片段绑定。'); next = next.filter(value => value.id !== id); refs.push(ref) }
     }
-    context.signal?.throwIfAborted(); if (requireVideoEditInstance(step.parent.id) !== owner || owner.document !== baseline || JSON.stringify(this.snapshot(step.parent.id)) !== JSON.stringify(before)) throw new Error('检查期间风格状态已修改，请重新读取。')
+    context.signal?.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion) || Array.isArray(before) && JSON.stringify(this.snapshot(step.parent.id)) !== JSON.stringify(before)) throw new Error('检查期间风格状态已修改，请重新读取。')
     if (this.entityType === STYLE_KIT_ENTITY) editVideoProject(step.parent.id, document => ({ ...document, styleKits: next })); else videoEditStyleKitLibrary.replace(next)
     return this.remember(step.parent.id, before, refs)
   }
@@ -72,10 +73,10 @@ export class VideoEditStyleKitMutationExecutor extends StyleKitExecutorBase impl
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const old = requireKit(this.entityType, step.target); if (old.id.startsWith('builtin:')) throw new Error('内置风格固定，请复制到个人库。')
     const projectId = this.entityType === STYLE_KIT_ENTITY ? split(step.target).projectId : ''
-    const owner = this.entityType === STYLE_KIT_ENTITY ? requireVideoEditInstance(projectId) : undefined; const baseline = owner?.document; const before = this.snapshot(projectId); const draft = structuredClone(old)
+    const owner = this.entityType === STYLE_KIT_ENTITY ? requireVideoEditInstance(projectId) : undefined; const contentVersion = owner?.contentVersion; const before = this.snapshot(projectId); const draft = structuredClone(old)
     await applyWriterTable(fieldWriterTable(fieldsFor(this.entityType)), draft, step.mutations)
     const checked = await checkStyleKit(draft, context.signal, old); context.signal?.throwIfAborted()
-    if (owner && (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) || JSON.stringify(this.snapshot(projectId)) !== JSON.stringify(before)) throw new Error('检查期间风格状态已修改，请重新读取。')
+    if (owner && !isVideoEditContentCurrent(owner, contentVersion!) || Array.isArray(before) && JSON.stringify(this.snapshot(projectId)) !== JSON.stringify(before)) throw new Error('检查期间风格状态已修改，请重新读取。')
     if (this.entityType === STYLE_KIT_ENTITY) editVideoProject(projectId, document => ({ ...document, styleKits: document.styleKits!.map(kit => kit.id === old.id ? { ...checked, revision: projectStyleKit(document, old.id).revision + 1 } : kit) })); else videoEditStyleKitLibrary.update(old.id, checked)
     return this.remember(projectId, before, [step.target])
   }

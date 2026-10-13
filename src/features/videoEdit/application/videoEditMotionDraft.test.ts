@@ -20,6 +20,7 @@ import { motionDigest } from './videoEditMotionResources'
 import { updateVideoEditClipProperties } from './videoEditClipProperties'
 import type { IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
 import i18n from '@/i18n/config'
+import { updateVideoEditCreativeIntents } from './videoEditService'
 
 vi.mock('./videoEditMotionWorkerClient', () => ({ optimizeVideoEditMotionOffThread: async (input: Parameters<typeof optimizeMotionDraft>[0], signal: AbortSignal, pages?: AsyncIterable<Parameters<typeof optimizeMotionDraft>[0]['samples']>) => { const samples = [...input.samples]; if (pages) for await (const page of pages) samples.push(...page); signal.throwIfAborted(); input = { ...input, samples }; return { result: optimizeMotionDraft(input), original: optimizeMotionDraft({ ...input, draft: { ...input.draft, fidelity: 1 }, intent: undefined, beatFrames: undefined }).candidates[0] } } }))
 const files = new Map<string, Uint8Array>()
@@ -35,6 +36,35 @@ beforeEach(async () => {
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) { if (videoMotionState(owner)?.status === 'paused') await stopVideoMotion(owner.document.id); await closeVideoEditProject(owner.document.id) } vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 const setup = async () => { const owner = await createVideoEditTestProject(); appendVideoEditClip(owner.document.id); const clip = getActiveVideoEditSequence(owner).clips[0]; setVideoEditView(owner.document.id, { selection: clip.id, frame: 0 }); return owner }
+it('原稿读取允许无关元数据更新，但原稿被移除时不能用旧资源恢复', async () => {
+  const owner = await setup(); const id = owner.document.id
+  await startVideoMotion(id, 'place'); const state = videoMotionState(owner)!
+  present(owner, 0); demonstrateVideoMotion(id, state.pose, 'down')
+  present(owner, 30); demonstrateVideoMotion(id, { ...state.pose, position: [.7, .5] }, 'up')
+  present(owner, 30)
+  await stopVideoMotion(id)
+  const read = vi.mocked(getPlatform().system.fs.readFile).getMockImplementation()!
+  let remove = false
+  let injected = false
+  vi.mocked(getPlatform().system.fs.readFile).mockImplementation(async (...args) => {
+    if (!injected) {
+      injected = true
+      const current = owner.document.creativeIntents!
+      updateVideoEditCreativeIntents(id, {
+        ...current,
+        drafts: remove ? current.drafts.filter(draft => draft.id !== state.draft.id) : current.drafts,
+        motionOptions: remove ? current.motionOptions?.filter(options => options.draftId !== state.draft.id) : current.motionOptions,
+        sessions: [...current.sessions],
+      })
+    }
+    return read(...args)
+  })
+  await reopenVideoMotion(id, state.draft.id)
+  expect(videoMotionState(owner)?.draft.id).toBe(state.draft.id)
+  remove = true
+  injected = false
+  await expect(reopenVideoMotion(id, state.draft.id)).rejects.toThrow('原稿数据已改变')
+})
 const present = (owner: Awaited<ReturnType<typeof setup>>, frame: number) => { setVideoEditView(owner.document.id, { frame }); recordVideoMotionPresentation(owner, { sequenceId: owner.activeSequenceId, frame, revision: videoMotionComposition(owner)!.revision, at: performance.now() }) }
 it('超级关键帧现有分组的 UiSwitch 可一步修改当前片段吸附开关', async () => {
   const owner = await setup(), id = owner.document.id, onError = vi.fn(), history = owner.past.length

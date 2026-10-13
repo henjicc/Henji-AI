@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { getPlatform } from '@/platform/runtime'
 import { rememberCodeSource, loadCodeSourceReferences, addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { pinCodeComponentImports, expandPinnedCodeComponents, codeComponentExportNames, codeComponentNameSchema, componentSourceMetadata, rewriteCodeComponentImports, type CodeComponentVersion, type CodeComponent } from '@/core/videoEdit/codeMaterial/components'
@@ -34,7 +35,7 @@ export async function prepareCodeVersionPublication(projectId: string, files: Co
 /** Publishing never executes author JS; the same restricted AST/IR compiler checks the module. */
 export async function publishProjectCodeComponent(projectId: string, input: { name: string; source: string; description?: string }, signal?: AbortSignal, keepBoth = false): Promise<CodeComponentVersion> {
   const name = codeComponentNameSchema.parse(input.name)
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
   const source = input.source.startsWith('// henji-component ') ? componentSourceMetadata(input.source).source : input.source
   const exports = codeComponentExportNames(source)
   const contents: CodeMaterialFiles = { entry: '__check.ts', files: { '__check.ts': 'export default {languageVersion:3,apiVersion:1,name:"组件检查",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [];}}', 'component.ts': source } }
@@ -43,7 +44,7 @@ export async function publishProjectCodeComponent(projectId: string, input: { na
   await loadCodeSourceReferences({ files: [], imports }); signal?.throwIfAborted()
   await compileVideoEditCode(expandPinnedCodeComponents(contents, imports, documentCodeSourceResolver()), signal)
   signal?.throwIfAborted()
-  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('发布检查期间剪辑已改变，请重新发布。')
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('发布检查期间剪辑已改变，请重新发布。')
   const result = await getPlatform().documents.publishCodeComponent({ target: { id: projectId, path: owner.session.documentMeta.path }, name, source, description: input.description ?? '', exports, imports, keepBoth })
   rememberCodeSource(result.hash, result.source); publishVideoEdit(true)
   return result

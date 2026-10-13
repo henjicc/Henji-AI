@@ -1,3 +1,5 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { importAssetCodeComponents, withdrawProjectCodeComponents } from './videoEditCodeStorage'
 import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoEdit/codeAsset'
@@ -14,7 +16,6 @@ import type { CodeMaterialDefinition, CodeMaterialInstance } from '@/core/videoE
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { compileVideoEditCode, forgetVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
-import { editVideoProject, requireVideoEditInstance, listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeFrames, videoEditCodeValidationFrames } from './videoEditCodeTrial'
@@ -71,13 +72,13 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的代码素材。')
   const owner = requireVideoEditInstance(projectId)
-  const baseline = owner.document
+  const baseline = owner.document; const contentVersion = owner.contentVersion
   const controller = new AbortController()
   const cancel = (): void => { controller.abort(signal?.reason ?? new Error('代码素材创建已取消。')) }
   signal?.addEventListener('abort', cancel, { once: true })
   const unsubscribe = subscribeVideoEditDomain(() => {
     if (!listVideoEditInstances().includes(owner)) controller.abort(new Error('原剪辑已关闭，候选已取消。'))
-    else if (owner.document !== baseline) controller.abort(new Error('检查期间剪辑已修改，候选已取消。'))
+    else if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('检查期间剪辑已修改，候选已取消。'))
   })
   const candidates: Candidate[] = []
   logger.info('检查代码素材', { event: 'video_edit.code.create.start', context: { projectId, count: inputs.length } })
@@ -111,7 +112,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       candidates.push(checked)
       rememberVideoEditCodeMetadata(owner, definition.id, definition.versions[0], program)
     }
-    if (owner.document !== baseline) throw new Error('源码检查期间剪辑已修改，请重新检查候选。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码检查期间剪辑已修改，请重新检查候选。')
     const items = candidates.filter(candidate => !candidate.filter).map(candidate => candidate.item)
     let candidateDocument = videoEditDocumentSchema.parse({ ...baseline, media: [...baseline.media.map(media => publication?.media.find(incoming => incoming.id === media.id) ?? media), ...(publication?.media ?? []).filter(media => !baseline.media.some(existing => existing.id === media.id))], codeMaterials: [...(baseline.codeMaterials ?? []), ...candidates.map(candidate => candidate.definition)], items: [...baseline.items, ...items] })
     const filter = candidates.find(candidate => candidate.filter)
@@ -138,8 +139,8 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
     if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，候选不会写入新会话。')
-    if (owner.document !== baseline) throw new Error('试渲染期间剪辑已修改，请重新检查候选。')
-    editVideoProject(projectId, () => candidateDocument)
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('试渲染期间剪辑已修改，请重新检查候选。')
+    editVideoProject(projectId, current => withVideoEditCurrentMetadata(candidateDocument, current))
     logger.info('代码素材已创建', { event: 'video_edit.code.create.completed', context: { projectId, count: candidates.length } })
     return candidates
   } catch (error) {
@@ -186,10 +187,10 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
 export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal): Promise<string[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的源码版本。')
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('源码版本创建已取消。'))
   signal?.addEventListener('abort', cancel, { once: true })
-  const off = subscribeVideoEditDomain(() => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
+  const off = subscribeVideoEditDomain(() => { if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
   const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []
   try {
     for (const input of inputs) {
@@ -210,8 +211,8 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     // source trial avoids duplicate definitions while retaining one queue.
     await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false)), controller.signal)
     controller.signal.throwIfAborted()
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('源码版本检查期间原剪辑已改变。')
-    editVideoProject(projectId, () => document)
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
+    editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))
     return added
   } catch (error) { added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
   finally { off(); signal?.removeEventListener('abort', cancel) }

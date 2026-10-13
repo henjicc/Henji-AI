@@ -1,3 +1,5 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { prepareCodeVersionPublication } from './videoEditCodeStorage'
 import { documentCodeSourceResolver, loadCodeSourceReferences, normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { appendCodeMaterialVersion } from '@/core/videoEdit/codeMaterialVersions'
@@ -6,7 +8,6 @@ import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocum
 import { videoEditComposition, videoEditDocumentSchema, type VideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditCodeTarget } from './videoEditCodeParameters'
 import { compileVideoEditCode, forgetVideoEditCodeMetadata, readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
-import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { trialVideoEditCodeFrames, videoEditCodeValidationFrames } from './videoEditCodeTrial'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { createLogger } from '@/core/logging'
@@ -22,7 +23,7 @@ export interface VideoEditCodeCandidate {
   readonly bitmap: ImageBitmap
   readonly impacts: ReadonlyArray<CodeMaterialMigrationImpact & { sequenceName: string; clipName: string }>
 }
-interface CandidateState { owner: VideoEditInstance; baseline: VideoEditDocument; document: VideoEditDocument; controller: AbortController; clean: () => void; needsConfirmation: boolean }
+interface CandidateState { owner: VideoEditInstance; contentVersion: number; document: VideoEditDocument; controller: AbortController; clean: () => void; needsConfirmation: boolean }
 const candidates = new WeakMap<VideoEditCodeCandidate, CandidateState>()
 const active = new WeakMap<VideoEditInstance, Set<VideoEditCodeCandidate>>()
 const preparing = new WeakMap<VideoEditInstance, number>()
@@ -31,7 +32,7 @@ const preparing = new WeakMap<VideoEditInstance, number>()
  * its public display fields cannot be used to forge a publication. */
 export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget, source: string | CodeMaterialFiles, scope: VideoEditCodeApplyScope = 'single', signal?: AbortSignal, options: { clearElementOverrides?: readonly string[] } = {}): Promise<VideoEditCodeCandidate> {
   signal?.throwIfAborted()
-  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   if ((active.get(owner)?.size ?? 0) + (preparing.get(owner) ?? 0) >= 2) throw new Error('请先关闭或提交现有源码候选。')
   const sequence = baseline.sequences.find(sequence => sequence.id === target.sequenceId)
   const original = sequence?.clips.find(clip => clip.id === target.clipId)
@@ -46,7 +47,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   let candidate: VideoEditCodeCandidate | undefined; let newVersion: string | undefined; let bitmap: ImageBitmap | undefined
   let committed = false
   const unsubscribe = subscribeVideoEditDomain(() => {
-    if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) {
+    if (!isVideoEditContentCurrent(owner, contentVersion)) {
       controller.abort(new Error('原剪辑已关闭或内容已改变，请重新检查候选。'))
       if (candidate) disposeVideoEditCodeCandidate(candidate)
     }
@@ -96,9 +97,9 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const uniqueFrames = videoEditCodeValidationFrames(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: selectedEffects.get(clip.id) } : {}) }))), { sequenceId: target.sequenceId, frame })
     bitmap = await trialVideoEditCodeFrames(uniqueFrames, controller.signal, true)
     controller.signal.throwIfAborted()
-    if (!bitmap || requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('源码候选的原剪辑已改变。')
+    if (!bitmap || !isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码候选的原剪辑已改变。')
     candidate = Object.freeze({ target: Object.freeze({ ...target }), scope, files: normalizeCodeMaterialFiles(source), versionId: appended.versionId, clipCount: count, bitmap, impacts: structuredClone(impacts) })
-    candidates.set(candidate, { owner, baseline, document, controller, clean: () => { committed = owner.document.codeMaterials?.some(definition => definition.versions.some(version => version.id === newVersion)) ?? false; clean() }, needsConfirmation: impacts.length > 0 })
+    candidates.set(candidate, { owner, contentVersion, document, controller, clean: () => { committed = owner.document.codeMaterials?.some(definition => definition.versions.some(version => version.id === newVersion)) ?? false; clean() }, needsConfirmation: impacts.length > 0 })
     const set = active.get(owner) ?? new Set(); set.add(candidate); active.set(owner, set)
     logger.info('源码候选已生成', { event: 'video_edit.code.candidate.ready', context: { projectId: target.projectId, count, impacts: impacts.length } })
     return candidate
@@ -109,8 +110,8 @@ export function disposeVideoEditCodeCandidate(candidate: VideoEditCodeCandidate)
 export function commitVideoEditCodeCandidate(candidate: VideoEditCodeCandidate, confirmMigration = false): string {
   const state = candidates.get(candidate)
   if (!state || state.controller.signal.aborted) throw new Error('源码候选已失效，请重新检查。')
-  if (requireVideoEditInstance(candidate.target.projectId) !== state.owner || state.owner.document !== state.baseline) { state.clean(); throw new Error('原剪辑内容已改变，请重新检查候选。') }
+  if (!isVideoEditContentCurrent(state.owner, state.contentVersion)) { state.clean(); throw new Error('原剪辑内容已改变，请重新检查候选。') }
   if (state.needsConfirmation && !confirmMigration) throw new Error('请先确认列出的参数和关键帧迁移。')
-  try { editVideoProject(candidate.target.projectId, () => state.document); return candidate.versionId }
+  try { editVideoProject(candidate.target.projectId, current => withVideoEditCurrentMetadata(state.document, current)); return candidate.versionId }
   finally { state.clean() }
 }

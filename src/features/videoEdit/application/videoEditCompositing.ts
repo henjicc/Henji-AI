@@ -1,3 +1,5 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, updateVideoEditParameterGesture, updateVideoEditMaskGesture, type VideoEditGesture } from './videoEditService'
 import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditBuiltinCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditIntroducesCodeEffects, videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
@@ -10,7 +12,6 @@ import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransit
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import { editVideoProject, requireVideoEditInstance, updateVideoEditParameterGesture, updateVideoEditMaskGesture, type VideoEditGesture } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import type { VideoEditGraphicClipTarget as VideoEditCompositeTarget } from './videoEditGraphics'
@@ -30,7 +31,7 @@ function requireEffectClip(sequence: VideoEditSequence, clipId: string): VideoEd
 /** Trial only a newly introduced code execution input; structural edits publish once. */
 export async function editComposite(projectId: string, sequenceId: string, endpointIds: string[], change: (sequence: VideoEditSequence) => void, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const draft = structuredClone(baseline); const sequence = draft.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence) throw new Error('原序列已移除。')
   // 音频过渡两端是声音片段：不需要画面试渲染，只做结构校验。
@@ -38,14 +39,14 @@ export async function editComposite(projectId: string, sequenceId: string, endpo
   clipIds.forEach(id => requireClip(sequence, id)); change(sequence)
   const next = videoEditDocumentSchema.parse(draft)
   assertVideoEditLockedTracks(baseline, next)
-  if (!clipIds.length || !videoEditIntroducesCodeEffects(baseline, next)) { signal?.throwIfAborted(); editVideoProject(projectId, () => next); return }
+  if (!clipIds.length || !videoEditIntroducesCodeEffects(baseline, next)) { signal?.throwIfAborted(); editVideoProject(projectId, current => withVideoEditCurrentMetadata(next, current)); return }
   const requested = owner.activeSequenceId === sequenceId ? owner.frame : owner.sequenceViews.get(sequenceId)?.frame ?? 0
   const active = clipIds.some(id => { const clip = requireClip(sequence, id); return requested >= clip.start && requested < clip.start + clip.duration }) || videoEditTransitionsAt(sequence, requested).some(window => clipIds.includes(window.left.id) || clipIds.includes(window.right.id))
   const frame = active ? requested : requireClip(sequence, clipIds[0]).start
-  await trialVideoEditCodeDocument(owner, baseline, next, sequenceId, frame, signal, clipIds.map(clipId => ({ sequenceId, clipId })))
+  await trialVideoEditCodeDocument(owner, contentVersion, next, sequenceId, frame, signal, clipIds.map(clipId => ({ sequenceId, clipId })))
   signal?.throwIfAborted()
-  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('原剪辑已改变，请重新检查此编辑。')
-  editVideoProject(projectId, () => next)
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已改变，请重新检查此编辑。')
+  editVideoProject(projectId, current => withVideoEditCurrentMetadata(next, current))
 }
 export function listVideoEditFilterDefinitions(projectId: string): Array<{ id: string; name: string; versionId: string }> {
   const owner = requireVideoEditInstance(projectId); const read = readVideoEditCodeMetadata(owner, owner.document)

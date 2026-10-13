@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { resizeCodeMaterialCanvas } from '@/core/videoEdit/codeElementBake'
 import { styleKitSchema, type StyleKit } from '@/core/videoEdit/styleKit'
@@ -12,9 +13,9 @@ const logger = createLogger('features.videoEdit.styleKits')
 /** Compile/trial, snapshot binding and timeline insertion publish as one project edit. */
 export async function insertVideoEditStyleSample(projectId: string, sequenceId: string, kit: StyleKit, sampleId: string, placement?: VideoEditDropPlacement, signal?: AbortSignal): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
-  const baseline = owner.document
+  const contentVersion = owner.contentVersion
   const checked = styleKitSchema.parse(kit.id.startsWith('builtin:') ? availableStyleKitFonts(kit, (await loadFontLibrary()).faces) : kit); signal?.throwIfAborted()
-  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('原剪辑在检查期间已修改，请重新插入。')
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑在检查期间已修改，请重新插入。')
   const sample = checked.samples.find(value => value.id === sampleId)
   if (!sequence || !sample) throw new Error('请选择原序列与风格组件。')
   const existing = owner.document.styleKits?.find(value => value.id === checked.id)
