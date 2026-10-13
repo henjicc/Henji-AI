@@ -13,6 +13,7 @@ import { readApplicationMediaResource } from '../application-runtime/mediaResour
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { z } from 'zod'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
+import type { AgentMemoryStore, SharedMemoryChange } from '../assistant/memory-store'
 
 vi.mock('../application-runtime/mediaResources', async importOriginal => ({
   ...await importOriginal<typeof import('../application-runtime/mediaResources')>(),
@@ -23,7 +24,7 @@ vi.mock('../application-runtime/mediaResources', async importOriginal => ({
 
 const closers: Array<() => Promise<void>> = []
 afterEach(async () => { for (const close of closers.reverse()) await close(); closers.length = 0 })
-async function fixture(options: { ready?: boolean; pending?: boolean; operations?: ApplicationOperationCoordinator; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
+async function fixture(options: { ready?: boolean; pending?: boolean; operations?: ApplicationOperationCoordinator; memory?: Pick<AgentMemoryStore, 'onSharedMemoryChange'>; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
   let saved: string | null = null
   const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } })
   const first = connections.create('客户端甲')
@@ -46,7 +47,7 @@ async function fixture(options: { ready?: boolean; pending?: boolean; operations
   }
   host.register(registration, transportHost)
   const rejected = vi.fn()
-  const server = new LocalMcpServer(connections, host, undefined, options.operations, undefined, rejected)
+  const server = new LocalMcpServer(connections, host, undefined, options.operations, undefined, rejected, options.memory)
   await server.start(0)
   closers.push(() => server.stop())
   const url = () => `http://127.0.0.1:${server.listeningPort}/mcp`
@@ -67,6 +68,28 @@ async function fixture(options: { ready?: boolean; pending?: boolean; operations
 }
 
 describe('本地 MCP 协议与边界', () => {
+  it('主进程领域修订进入原资源订阅合并机制，未订阅客户端不收，停止时解除来源', async () => {
+    let revision = 1
+    let notify: ((change: SharedMemoryChange) => void) | undefined
+    const detach = vi.fn()
+    const memory = { onSharedMemoryChange: vi.fn((listener: (change: SharedMemoryChange) => void) => { notify = listener; return detach }) }
+    const uri = 'henji://entity/assistant.shared_memory/singleton'
+    const f = await fixture({ memory, reply: () => ({ ok: true, data: { ref: { kind: 'assistant.shared_memory', id: 'singleton' },
+      entityType: 'assistant.shared_memory', properties: { 'assistant.shared_memory.content': '偏好水墨' }, revisions: { assistant_memory: revision }, capturedAt: new Date(0).toISOString() } }) })
+    const a = await f.connect(); const b = await f.connect(f.second.id)
+    const updatedA = vi.fn(); const updatedB = vi.fn()
+    a.client.setNotificationHandler('notifications/resources/updated', updatedA)
+    b.client.setNotificationHandler('notifications/resources/updated', updatedB)
+    await a.client.listen({ resourceSubscriptions: [uri] })
+    await b.client.listen({ resourceSubscriptions: [] })
+    for (revision = 2; revision <= 20; revision++) notify?.({ domain: 'memory', revisions: { assistant_memory: revision } })
+    await vi.waitFor(() => expect(updatedA).toHaveBeenCalledOnce(), { timeout: 2000 })
+    expect(memory.onSharedMemoryChange).toHaveBeenCalledOnce()
+    expect(updatedA.mock.calls[0][0].params.uri).toBe(uri)
+    expect(updatedB).not.toHaveBeenCalled()
+    await f.server.stop()
+    expect(detach).toHaveBeenCalledOnce()
+  })
   it('连接权限变更只通知所属流，重新发现可见新增写工具与撤回结果', async () => {
     // 本用例只发现目录，不执行或登记写入；账本不能被意外调用。
     const operations = new Proxy({} as ApplicationOperationCoordinator, { get() { throw new Error('目录发现不应调用操作账本') } })

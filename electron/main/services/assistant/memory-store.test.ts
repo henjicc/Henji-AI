@@ -1,8 +1,11 @@
 import Database from 'better-sqlite3'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 import { createAssistantMemoryTablesV1 } from './storageSchema'
 import { AgentMemoryStore } from './memory-store'
+import { SHARED_MEMORY_ID } from '../../../../src/core/assistant/memory'
 
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
 
@@ -19,6 +22,54 @@ describeWithElectronSqlite('AgentMemoryStore', () => {
 
   afterEach(() => {
     database.close()
+  })
+
+  it('共享记忆事件只在提交成功且内容变化后发布领域和新修订，解除监听后不再接收', () => {
+    const listener = vi.fn(() => { expect(database.inTransaction).toBe(false) })
+    const detach = store.onSharedMemoryChange(listener)
+    const initial = store.getSharedMemory()
+    expect(store.updateSharedMemory({ content: '', expectedRevision: initial.revision })).toEqual(initial)
+    expect(listener).not.toHaveBeenCalled()
+    const saved = store.updateSharedMemory({ content: '偏好水墨。', expectedRevision: initial.revision })
+    expect(listener).toHaveBeenCalledOnce()
+    expect(listener).toHaveBeenCalledWith({ domain: 'memory', revisions: { assistant_memory: saved.revision } })
+    expect(store.updateSharedMemory({ content: '  偏好水墨。  ', expectedRevision: saved.revision })).toEqual(saved)
+    expect(() => store.updateSharedMemory({ content: '冲突', expectedRevision: initial.revision })).toThrow()
+    database.exec("CREATE TRIGGER reject_shared_write BEFORE UPDATE ON agent_memories BEGIN SELECT RAISE(ABORT, 'write failed'); END")
+    expect(() => store.updateSharedMemory({ content: '未保存的新偏好', expectedRevision: saved.revision })).toThrow('write failed')
+    expect(store.getSharedMemory()).toEqual(saved)
+    expect(listener).toHaveBeenCalledOnce()
+    database.exec('DROP TRIGGER reject_shared_write')
+    detach()
+    store.updateSharedMemory({ content: '', expectedRevision: saved.revision })
+    expect(listener).toHaveBeenCalledOnce()
+  })
+
+  it('普通候选不影响共享资源，取代共享摘要和过期清理成功时发布新修订', () => {
+    store.updateSharedMemory({ content: '原偏好', expectedRevision: store.getSharedMemory().revision })
+    const listener = vi.fn()
+    store.onSharedMemoryChange(listener)
+    const candidate = store.propose('run-memory', '用户确认', { content: '独立偏好', scope: { type: 'project', id: 'project-1' }, kind: 'preference' })
+    store.confirm(candidate.candidateId)
+    expect(listener).not.toHaveBeenCalled()
+    const before = store.getSharedMemory()
+    const replacement = store.propose('run-memory', '用户确认', { content: '替代偏好', scope: { type: 'global', id: null }, kind: 'preference', conflictKey: 'shared-summary' })
+    store.confirm(replacement.candidateId)
+    const replaced = store.getSharedMemory()
+    expect(replaced.content).toBe('')
+    expect(replaced.revision).toBeGreaterThan(before.revision)
+    expect(listener).toHaveBeenCalledOnce()
+    store.updateSharedMemory({ content: '待过期偏好', expectedRevision: replaced.revision })
+    listener.mockClear()
+    database.prepare('UPDATE agent_memories SET expires_at = ? WHERE memory_id = ?').run(Date.now() - 1, SHARED_MEMORY_ID)
+    const expiring = store.getSharedMemory()
+    store.getState()
+    const expired = store.getSharedMemory()
+    expect(expired.content).toBe('')
+    expect(expired.revision).toBeGreaterThan(expiring.revision)
+    expect(listener).toHaveBeenCalledOnce()
+    store.getState()
+    expect(listener).toHaveBeenCalledOnce()
   })
 
 
