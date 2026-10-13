@@ -88,7 +88,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               style={{ width: '100%', height: '100%' }}
               data-panel-trigger-button
               aria-label={transitionLabel}
-              title={
+              tooltip={
                 camerasDiffer
                   ? '机位切换（强制硬切），点击查看详情'
                   : '硬切（0 帧过渡），点击可调整；拖右缘可拉出过渡时长'
@@ -109,7 +109,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               style={{ width: '100%', height: '100%' }}
               data-panel-trigger-button
               aria-label={transitionLabel}
-              title="区间末端切换机位，点击查看详情"
+              tooltip="区间末端切换机位，点击查看详情"
               className="cursor-pointer"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
@@ -125,7 +125,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               style={{ width: '100%', height: '100%' }}
               data-panel-trigger-button
               aria-label={transitionLabel}
-              title={`过渡 ${stateKeyframe.transitionDuration.toFixed(2)}s`}
+              tooltip={`过渡 ${stateKeyframe.transitionDuration.toFixed(2)}s`}
               className="cursor-pointer"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}

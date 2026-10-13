@@ -1,6 +1,7 @@
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Virtuoso } from 'react-virtuoso'
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Route, Sparkles } from 'lucide-react'
+import { Activity, AlertTriangle, CheckCircle2, Route, Sparkles } from 'lucide-react'
 
 import { UiButton, UiEmpty, UiLoading, UiNavButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceRunSummary, AgentTraceStatus, AgentTraceStepSummary } from '@/core/assistant/trace'
@@ -52,14 +53,14 @@ export function AssistantTraceList({
       />
       {hasMore && (
         <div className="shrink-0 border-t border-line/35 p-2">
-          <UiButton
+          <UiButton loading={loadingMore}
             type="button"
             variant="secondary"
             className="w-full"
             disabled={loadingMore}
             onClick={onLoadMore}
           >
-            {loadingMore ? '正在加载…' : '加载更早的追踪'}
+            {'加载更早的追踪'}
           </UiButton>
         </div>
       )}
@@ -146,7 +147,7 @@ function TraceStepButton({
 
 function StatusMark({ status }: { status: AgentTraceStatus }): JSX.Element {
   if (status === 'completed') return <CheckCircle2 className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-success-text`} />
-  if (status === 'running') return <Clock3 className={`${UI_ICON_SIZE_CLASS.md} shrink-0 animate-pulse text-accent-text`} />
+  if (status === 'running') return <UiSpinner tone="accent" />
   return <AlertTriangle className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-warning-text`} />
 }
 

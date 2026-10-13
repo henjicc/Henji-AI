@@ -144,7 +144,7 @@ export const FrameCard = memo(({
               event.stopPropagation();
               onTogglePicker(frame.id, event.currentTarget);
             }}
-            title={t('canvas.storyboardFrame.replaceFromInput')}
+            tooltip={t('canvas.storyboardFrame.replaceFromInput')}
             aria-label={t('canvas.storyboardFrame.replaceFromInput')}
           >
             <ImagePlus  />
@@ -158,7 +158,7 @@ export const FrameCard = memo(({
               event.stopPropagation();
               onEditFrame(frame);
             }}
-            title={t('canvas.storyboardFrame.editFrame')}
+            tooltip={t('canvas.storyboardFrame.editFrame')}
             aria-label={t('canvas.storyboardFrame.editFrame')}
           >
             <SquareArrowOutUpRight  />

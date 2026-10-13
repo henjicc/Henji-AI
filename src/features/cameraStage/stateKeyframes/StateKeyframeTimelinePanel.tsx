@@ -173,7 +173,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
           onModeChange={setTimecodeMode}
         />
         <UiIconButton
-          title="在播放头位置添加关键帧"
+          tooltip="在播放头位置添加关键帧"
           aria-label="添加关键帧"
           onClick={addStateKeyframe}
         >

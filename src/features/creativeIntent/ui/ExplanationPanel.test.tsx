@@ -19,7 +19,7 @@ it('模型外发先确认；取消不生成，项目授权且只执行一次', a
   const onGenerate = vi.fn(async () => {}), confirm = vi.fn(async () => {})
   const prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, hasProject: true, cancel: vi.fn(async () => {}), modelName: '测试模型', imageCount: 3, confirm }))
   render(<ExplanationPanel {...props({ onGenerate, prepareGeneration })} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).getAttribute('aria-disabled')).not.toBe('true'))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   await screen.findByRole('alertdialog', { name: '发送讲解给 AI？' })
   expect(screen.getByText(/将发送讲解文字和 3 张画面给 测试模型。/)).toBeTruthy()
@@ -35,12 +35,12 @@ it('本地整理和已同意的生成无需外发确认；异步预检切换讲�
   let finish!: (value: undefined) => void
   const onGenerate = vi.fn(async () => {}), prepareGeneration = vi.fn(() => new Promise<undefined>(resolve => { finish = resolve }))
   const view = render(<ExplanationPanel {...props({ onGenerate, prepareGeneration, contextKey: 'first' })} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).getAttribute('aria-disabled')).not.toBe('true'))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   view.rerender(<ExplanationPanel {...props({ onGenerate, contextKey: 'second' })} />)
   await act(async () => { finish(undefined) })
   expect(onGenerate).not.toHaveBeenCalled(); expect(screen.queryByRole('alertdialog')).toBeNull()
-  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).getAttribute('aria-disabled')).not.toBe('true'))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
   expect(screen.queryByRole('alertdialog')).toBeNull()
@@ -53,7 +53,7 @@ function props(extra: Partial<ExplanationPanelProps> = {}): ExplanationPanelProp
 it('共享三段面板按对象动作显示摘要，前五行与折叠展开，不泄露坐标或内部原因', async () => {
   const onGenerate = vi.fn(async () => {})
   render(<ExplanationPanel {...props({ onGenerate })} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).getAttribute('aria-disabled')).not.toBe('true'))
   expect(screen.getByText('讲解 · 0:42')).toBeTruthy(); expect(screen.getByRole('button', { name: '删除讲解' })).toBeTruthy()
   expect(screen.queryByText('图片5 移到右侧')).toBeNull()
   fireEvent.click(screen.getByText('还有 2 处')); expect(screen.getByText('图片6 移到右侧')).toBeTruthy()
@@ -68,7 +68,7 @@ it('待确认只显示一行元信息，原因只在对应词的证据中出现�
   fireEvent.click(screen.getByText('还有 1 处需要确认'))
   await screen.findByText('说这句时没有指向画面，请点选对象')
   expect(screen.getAllByText('说这句时没有指向画面，请点选对象')).toHaveLength(1)
-  expect(screen.getByRole('button', { name: '生成候选' }).parentElement?.title).toBe('请先确认讲解中的指向')
+  fireEvent.focus(screen.getByRole('button', { name: '生成候选' })); expect(screen.getByRole('tooltip').textContent).toBe('请先确认讲解中的指向')
   fireEvent.click(screen.getByRole('button', { name: '查看「这个」的指向' }))
   expect(screen.queryByText('说这句时没有指向画面，请点选对象')).toBeNull()
   fireEvent.click(screen.getByText('还有 1 处需要确认'))
@@ -102,7 +102,7 @@ it('布局元数据不要求移动差异，已确认的否定只作为保护摘�
   const layout: ExplanationReviewResult = { ...result, plan: { ...result.plan, changes: [], status: 'satisfied' }, layout: { targetRefs: [ref, { ...ref, id: 'b' }, { ...ref, id: 'c' }], action: 'distribute' } }
   render(<ExplanationPanel {...props({ onRead: async () => layout })} />)
   await screen.findByText('3 张图片 等距排列')
-  expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false)
+  expect(screen.getByRole('button', { name: '生成候选' }).getAttribute('aria-disabled')).not.toBe('true')
 })
 it('首次开始录制的提示跨宿主重开仍只显示一次，不保存私密正文', () => {
   function Host({ recorded }: { recorded: boolean }): JSX.Element { return <span>{useExplanationHasRecorded(recorded) ? '已录制' : '首次提示'}</span> }
@@ -137,7 +137,7 @@ it('保存会话同意使审阅版本变化后仍执行生成，切换会话才�
     view.rerender(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:2', generationKey: 'session' })} />)
   } }))
   const view = render(<ExplanationPanel {...props({ onRead, onGenerate, prepareGeneration, contextKey: 'session:1', generationKey: 'session' })} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).getAttribute('aria-disabled')).not.toBe('true'))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   fireEvent.click(await screen.findByRole('button', { name: '本项目始终允许' }))
   await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce())
@@ -152,7 +152,7 @@ it('英文讲解确认沿全局弹窗显示内容与费用，卸载撤下请求'
     hasProject: true, cancel: vi.fn(async () => {}), modelName: 'Example model', imageCount: 3, confirm,
   }))
   const view = render(<ExplanationPanel {...props({ prepareGeneration })} />)
-  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expect(screen.getByRole('button', { name: '生成候选' }).getAttribute('aria-disabled')).not.toBe('true'))
   fireEvent.click(screen.getByRole('button', { name: '生成候选' }))
   const dialog = await screen.findByRole('alertdialog', { name: 'Send this explanation to AI?' })
   expect(dialog.textContent).toContain('Send the explanation text and 3 images to Example model.')

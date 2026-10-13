@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Camera, Clipboard, Film, LayoutDashboard, Save, Undo2, X } from 'lucide-react'
@@ -380,8 +381,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const outputActions = (
     <>
       {embeddedOutput && outputKind === 'image' ? (
-        <UiButton variant="primary" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!stateKeyframeAction}>
-          <Camera  className="mr-1.5" />{stateKeyframeAction ? '处理中…' : '更新图片'}
+        <UiButton loading={Boolean(stateKeyframeAction)} variant="primary" onClick={() => void handleUpdateCanvasFrame()} disabledReason={!canScreenshot ? '切换到摄像机视角后可截图' : undefined} disabled={!canScreenshot || !!stateKeyframeAction}>
+          <Camera  className="mr-1.5" />{'更新图片'}
         </UiButton>
       ) : !embeddedOutput ? <PanelTrigger
         disabled={!canScreenshot || !!stateKeyframeAction}
@@ -416,17 +417,17 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         )}
       >
         {({ open, togglePanel }) => (
-          <UiButton
+          <UiButton loading={Boolean(stateKeyframeAction)}
             variant={imagePrimary ? 'primary' : 'secondary'}
             onClick={togglePanel}
-            disabled={!canScreenshot || !!stateKeyframeAction}
-            title={canScreenshot ? '当前摄像机取景截图' : '切换到摄像机视角后可截图'}
+            disabledReason={!canScreenshot ? '切换到摄像机视角后可截图' : undefined} disabled={!canScreenshot || !!stateKeyframeAction}
+            tooltip={canScreenshot ? '当前摄像机取景截图' : '切换到摄像机视角后可截图'}
             aria-haspopup="menu"
             aria-expanded={open}
             data-panel-trigger-button
           >
             <Camera  className="mr-1.5" />
-            {stateKeyframeAction ? '处理中…' : '截图'}
+            {'截图'}
           </UiButton>
         )}
       </PanelTrigger> : null}
@@ -436,7 +437,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           取消导出
         </UiButton>
       ) : embeddedOutput && outputKind === 'video' ? (
-        <UiButton variant="primary" onClick={() => void handleExportVideo()} disabled={!canExportVideo}>
+        <UiButton variant="primary" onClick={() => void handleExportVideo()} disabledReason="切换到摄像机视角，并添加至少两个状态关键帧" disabled={!canExportVideo}>
           <Film  className="mr-1.5" />渲染视频
         </UiButton>
       ) : !embeddedOutput ? (
@@ -471,8 +472,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             <UiButton
               variant={imagePrimary ? 'secondary' : 'primary'}
               onClick={togglePanel}
-              disabled={!canExportVideo}
-              title={canExportVideo ? '导出当前摄像机动画为 MP4' : '切换到摄像机视角、并有两个以上状态关键帧后可导出视频'}
+              disabledReason="切换到摄像机视角，并添加至少两个状态关键帧" disabled={!canExportVideo}
+              tooltip={canExportVideo ? '导出当前摄像机动画为 MP4' : '切换到摄像机视角、并有两个以上状态关键帧后可导出视频'}
               aria-expanded={open}
               data-panel-trigger-button
             >
@@ -499,9 +500,9 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             )}
             {stateKeyframeHint && <span role="status" className="max-w-64 truncate text-xs text-text2" title={stateKeyframeHint}>{stateKeyframeHint}</span>}
             {autosaveErrorLabel && (
-              <span role="alert" className="max-w-28 truncate text-xs text-danger-text" title={autosaveErrorLabel}>
+              <UiInlineStatus role="alert" className="max-w-28 truncate" tooltip={autosaveErrorLabel}>
                 {autosaveErrorLabel}
-              </span>
+              </UiInlineStatus>
             )}
             <PanelTrigger
               panelSize="menu"
@@ -526,7 +527,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                       ...assetTarget,
                       libraryId: value === '__uncategorized__' ? null : value,
                     })}
-                    disabled={!assetTarget.enabled}
+                    disabledReason={assetTargetLabel} disabled={!assetTarget.enabled}
                     className="w-full"
                     size="sm"
                     minWidthStrategy="none"
@@ -541,7 +542,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                   onClick={togglePanel}
                   aria-expanded={open}
                   aria-label={assetTargetLabel}
-                  title={assetTargetLabel}
+                  tooltip={assetTargetLabel}
                   data-panel-trigger-button
                 >
                   <AssetLibraryIcon  />
@@ -552,7 +553,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               size="md"
               onClick={() => dockRef.current?.resetLayout()}
               aria-label="重置布局"
-              title="恢复默认面板布局"
+              tooltip="恢复默认面板布局"
             >
               <LayoutDashboard  />
             </UiIconButton>
@@ -570,7 +571,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           <UiIconButton
             size="md"
             aria-label={backLabel}
-            title={backLabel}
+            tooltip={backLabel}
             onClick={() => void handleBackToList()}
           >
             <ArrowLeft  />
@@ -581,9 +582,9 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         </span>
         <UiIconButton
           size="md"
-          disabled={!canUndo}
+          disabledReason="还没有可撤销的修改" disabled={!canUndo}
           aria-label="撤销"
-          title="撤销 (Ctrl+Z)"
+          tooltip="撤销 (Ctrl+Z)"
           onClick={() => undo()}
         >
           <Undo2  />

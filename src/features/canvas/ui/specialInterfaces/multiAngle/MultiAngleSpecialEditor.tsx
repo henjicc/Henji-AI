@@ -273,7 +273,7 @@ export function MultiAngleWorkbench({
                   aria-pressed={view.viewId === selected?.viewId}
                   size="lg"
                   className={OPTION_CLASS}
-                  title={`${index + 1}. ${translateMultiAngleViewLabel(t, view, index)}`}
+                  tooltip={`${index + 1}. ${translateMultiAngleViewLabel(t, view, index)}`}
                   onClick={() => setSelectedViewId(view.viewId)}
                 >
                   <span className="truncate">{index + 1}. {translateMultiAngleViewLabel(t, view, index)}</span>

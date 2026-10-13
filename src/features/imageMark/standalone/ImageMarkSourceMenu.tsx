@@ -62,7 +62,7 @@ export function ImageMarkSourceMenu({
           variant="secondary"
           disabled={disabled}
           onClick={togglePanel}
-          title={t('imageEditor.v3.host.sourceMenu.title')}
+          tooltip={t('imageEditor.v3.host.sourceMenu.title')}
         >
           <FolderOpen  className="mr-1.5" />
           {t('imageEditor.v3.host.sourceMenu.trigger')}

@@ -152,7 +152,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const estimated = bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${(bytes / 1e6).toFixed(1)} MB`
   const customPreset = presets.some(value => value.id === presetId && !value.id.startsWith('builtin:'))
   return <>
-    <UiModal isOpen title="导出" size="editor" contentPadding="none" contentScroll="none" onClose={onClose} footer={<>{(settingsError || encoderError) && <p role="alert" className="mr-auto self-center text-xs text-text2">{settingsError || encoderError}</p>}<UiButton variant="secondary" disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy || !canExport} onClick={() => void submit(true)}>{busy ? '正在导出…' : '导出'}</UiButton></>}>
+    <UiModal isOpen title="导出" size="editor" contentPadding="none" contentScroll="none" onClose={onClose} footer={<>{(settingsError || encoderError) && <p role="alert" className="mr-auto self-center text-xs text-text2">{settingsError || encoderError}</p>}<UiButton variant="secondary" disabledReason={settingsError || encoderError || (!canExport ? '请先设置导出位置和有效的导出范围' : undefined)} disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton loading={busy} variant="primary" disabledReason={settingsError || encoderError || (!canExport ? '请先设置导出位置和有效的导出范围' : undefined)} disabled={busy || !canExport} onClick={() => void submit(true)}>{'导出'}</UiButton></>}>
       <div className="flex min-h-0 flex-1">
         <div className="w-80 shrink-0 overflow-y-auto border-r border-line">
           <UiGroup labelWidth={72} gap="row" className="px-3 py-3">
@@ -160,8 +160,8 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
             <VideoEditExportField label="位置"><UiButton variant="link" disabled={busy} aria-label="选择导出目录" className="max-w-full" onClick={() => void chooseDirectory()}><span className="truncate" data-observation-sensitive={directory ? 'true' : undefined} title={directory}>{directory || '选择目录…'}</span></UiButton></VideoEditExportField>
             <VideoEditExportField label="预设" lock={<PanelTrigger size="sm" panelWidth="content" closeOnPanelClick panelPadding="menu" renderPanel={() => <>
               <UiOptionButton variant="menu" disabled={busy} onClick={() => { setPresetName(''); setPresetAction('save') }}>保存当前设置为预设</UiOptionButton>
-              <UiOptionButton variant="menu" disabled={busy || !customPreset} onClick={() => { setPresetName(presets.find(value => value.id === presetId)!.name); setPresetAction('rename') }}>重命名</UiOptionButton>
-              <UiOptionButton variant="menu" disabled={busy || !customPreset} onClick={() => { try { videoEditExportPresetLibrary.remove(presetId); setPresetId('custom'); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>删除自定义预设</UiOptionButton>
+              <UiOptionButton variant="menu" disabledReason={!customPreset ? '请先选择自定义预设' : undefined} disabled={busy || !customPreset} onClick={() => { setPresetName(presets.find(value => value.id === presetId)!.name); setPresetAction('rename') }}>重命名</UiOptionButton>
+              <UiOptionButton variant="menu" disabledReason={!customPreset ? '请先选择自定义预设' : undefined} disabled={busy || !customPreset} onClick={() => { try { videoEditExportPresetLibrary.remove(presetId); setPresetId('custom'); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>删除自定义预设</UiOptionButton>
             </>}>{controls => <UiIconButton size="xs" aria-label="管理导出预设" disabled={busy} onClick={controls.togglePanel}><MoreHorizontal  /></UiIconButton>}</PanelTrigger>}><Dropdown size="sm" className="w-full" ariaLabel="导出预设" value={presetId} minWidthStrategy="none" disabled={busy} options={[...presets.map(value => ({ value: value.id, label: value.name })), { value: 'custom', label: '自定义', disabled: true }]} onSelect={selectPreset} /></VideoEditExportField>
             <VideoEditExportField label="格式"><Dropdown size="sm" className="w-full" ariaLabel="导出格式" value={settings.videoEnabled ? settings.codec : settings.format} minWidthStrategy="none" disabled={busy} options={[
               ...(['avc', 'hevc'] as const).map(codec => ({ value: codec, label: codec === 'avc' ? 'MP4 · H.264' : 'MP4 · HEVC (H.265)', disabled: probing || !codecChoice(codec), tooltip: !codecChoice(codec) ? codec === 'avc' ? '当前规格不支持 H.264；8K 请尝试 HEVC，或降低规格。' : '当前规格不支持 HEVC；请降低规格。' : !support(codec, settings.encoderPreference, settings.bitrateMode) ? '选择后使用本机可用的性能与码率模式，请检查编码分区。' : undefined })),
@@ -188,7 +188,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
         </div>
       </div>
     </UiModal>
-    {presetAction && <UiModal isOpen title={presetAction === 'save' ? '保存导出预设' : '重命名导出预设'} onClose={() => setPresetAction(null)} footer={<UiButton variant="primary" disabled={!presetName.trim()} onClick={savePreset}>保存</UiButton>}><UiInput aria-label="自定义预设名称" value={presetName} onChange={event => setPresetName(event.target.value)} />{error && <UiError message={error} />}</UiModal>}
+    {presetAction && <UiModal isOpen title={presetAction === 'save' ? '保存导出预设' : '重命名导出预设'} onClose={() => setPresetAction(null)} footer={<UiButton variant="primary" disabledReason="请先输入预设名称" disabled={!presetName.trim()} onClick={savePreset}>保存</UiButton>}><UiInput aria-label="自定义预设名称" value={presetName} onChange={event => setPresetName(event.target.value)} />{error && <UiError message={error} />}</UiModal>}
     {showQueue && <UiModal isOpen title="导出队列" onClose={() => setShowQueue(false)}><VideoEditExportQueueList /></UiModal>}
   </>
 }

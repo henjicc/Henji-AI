@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-i18next')>();
-  return { ...actual, useTranslation: () => ({ t: (key: string) => key }) };
+  return { ...actual, useTranslation: () => ({ t: (key: string) => ({ 'viewer.panorama.flat': '平面', 'viewer.panorama.spherical': '球面' }[key] ?? key) }) };
 });
 
 vi.mock('./usePanoramaImageResource', () => ({
@@ -57,14 +57,14 @@ describe('PanoramaViewerModal', () => {
     expect(await screen.findByRole('dialog', { name: 'viewer.panorama.title' })).toBeTruthy();
     expect(screen.getByTestId('sphere-canvas')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('radio', { name: 'viewer.panorama.flat' }));
+    fireEvent.click(screen.getByRole('radio', { name: '平面' }));
     expect(screen.getByAltText('viewer.panorama.flatAlt')).toBeTruthy();
 
-    fireEvent.click(screen.getByTitle('viewer.next'));
+    fireEvent.click(screen.getByRole('button', { name: 'viewer.next' }));
     expect(onNavigate).toHaveBeenCalledWith('next');
-    fireEvent.click(screen.getByTitle('viewer.panorama.fullscreen'));
+    fireEvent.click(screen.getByRole('button', { name: 'viewer.panorama.fullscreen' }));
     expect(requestFullscreen).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByTitle('common.close'));
+    fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 });

@@ -254,7 +254,7 @@ export default function AgentSkillsSection(): JSX.Element {
             type="button"
             tone="danger"
             disabled={busy}
-            title={t('agentSkills.removeSkill', { name: skill.name })}
+            tooltip={t('agentSkills.removeSkill', { name: skill.name })}
             aria-label={t('agentSkills.removeSkill', { name: skill.name })}
             onClick={() => removeSkill(skill)}
           >

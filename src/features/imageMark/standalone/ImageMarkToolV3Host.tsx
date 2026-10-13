@@ -72,7 +72,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
   ) : onBack ? (
     <UiIconButton
       size="md"
-      title={t('imageEditor.v3.host.backToList')}
+      tooltip={t('imageEditor.v3.host.backToList')}
       aria-label={t('imageEditor.v3.host.backToList')}
       disabled={host.isHostBusy}
       onClick={onBack}

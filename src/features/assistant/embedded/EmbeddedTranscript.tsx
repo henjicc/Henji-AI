@@ -1,6 +1,7 @@
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, LoaderCircle, CircleAlert } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, CircleAlert } from 'lucide-react'
 import { UI_TEXT_SECONDARY_CLASS, UiButton } from '@/components/ui'
 import type { EmbeddedAgentMessage } from '@/core/assistant/embeddedAgent'
 import { AssistantMarkdown } from '../conversation/AssistantMarkdown'
@@ -29,7 +30,7 @@ function ProcessToggle({ expanded, label, onClick }: { expanded: boolean; label:
 function ToolStatusIcon({ status }: { status: EmbeddedAgentMessage['status'] }): JSX.Element {
   if (status === 'failed') return <CircleAlert aria-hidden="true" size={UI_ICON_SIZE.sm} className="shrink-0 text-danger-text" />
   if (status === 'completed') return <Check aria-hidden="true" size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" />
-  return <LoaderCircle aria-hidden="true" size={UI_ICON_SIZE.sm} className="shrink-0 text-accent-text motion-safe:animate-spin" />
+  return <UiSpinner size="sm" tone="accent" />
 }
 
 function AssistantTurn({ messages, busy, onToggle }: { messages: EmbeddedAgentMessage[]; busy: boolean; onToggle(): void }): JSX.Element {

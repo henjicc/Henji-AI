@@ -57,7 +57,7 @@ const QuickAddGroup: React.FC = () => {
           <UiIconButton
             key={value}
             size="md"
-            title={`添加${QUICK_ADD_LABELS[value]}`}
+            tooltip={`添加${QUICK_ADD_LABELS[value]}`}
             onClick={() => handleAdd(value)}
           >
             <Icon  />

@@ -34,12 +34,12 @@ function PopoutTitleBar({ entry, onCollapsedChange }: { entry: VideoEditPopoutEn
     }}
     onDoubleClick={() => entry.popout.toggleMaximized()}
     actions={<>
-      <UiIconButton size="xs" title={multiple ? '全部贴回主窗口' : '贴回主窗口'} aria-label="贴回主窗口" onClick={() => dockVideoEditPopoutWindow(entry.key)}><SquareArrowDownLeft  /></UiIconButton>
-      <UiWindowControl platform={MAC ? 'mac' : 'windows'} action="close" title={`关闭${label}`} aria-label={`关闭${label}`} onClick={() => closeVideoEditPopoutWindow(entry.key)} />
+      <UiIconButton size="xs" tooltip={multiple ? '全部贴回主窗口' : '贴回主窗口'} aria-label="贴回主窗口" onClick={() => dockVideoEditPopoutWindow(entry.key)}><SquareArrowDownLeft  /></UiIconButton>
+      <UiWindowControl platform={MAC ? 'mac' : 'windows'} action="close" tooltip={`关闭${label}`} aria-label={`关闭${label}`} onClick={() => closeVideoEditPopoutWindow(entry.key)} />
     </>}>
     <div className="flex h-full min-w-0 items-center gap-0.5 overflow-hidden" role="tablist" aria-label="浮动窗口中的面板">
       {entry.panels.map(id => <UiChipButton key={id} size="sm" className="h-full" role="tab" aria-selected={id === entry.active} selectionRole="navigation" selectionAppearance="subtle" active={id === entry.active} tabIndex={-1}
-        data-video-edit-popout-tab={id} title={multiple ? '单击切换；拖出可单独浮动或拖回主窗口；右键贴回或关闭' : undefined}
+        data-video-edit-popout-tab={id} tooltip={multiple ? '单击切换；拖出可单独浮动或拖回主窗口；右键贴回或关闭' : undefined}
         onClick={() => activateVideoEditPopoutPanel(entry.key, id)}
         onContextMenu={event => {
           if (!multiple) return

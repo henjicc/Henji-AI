@@ -115,7 +115,7 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
           <div className="flex h-10 shrink-0 items-center justify-end gap-1 px-1">
             <UiIconButton size="md"
               type="button"
-              title={collapsed ? '展开参数面板' : '折叠参数面板'}
+              tooltip={collapsed ? '展开参数面板' : '折叠参数面板'}
               aria-label={collapsed ? '展开参数面板' : '折叠参数面板'}
               onClick={() => setInspectorCollapsed(!collapsed)}
             >
@@ -124,7 +124,7 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
             {!collapsed && (
               <UiIconButton size="md"
                 type="button"
-                title="恢复面板默认值"
+                tooltip="恢复面板默认值"
                 aria-label="恢复面板默认值"
                 onClick={resetInspector}
               >

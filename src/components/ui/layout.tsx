@@ -18,6 +18,7 @@ import { ArrowLeft } from 'lucide-react';
 import Tooltip, { type TooltipPlacement } from './Tooltip';
 import { UiFormRowLabelContext } from './formRowLabel';
 import { useUiFieldLayout } from './fieldLayout';
+import { UiFieldMessage } from './states';
 import { UiIconButton } from './primitives';
 import {
   UI_DIVIDER_CLASS,
@@ -101,6 +102,7 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
    * 标签已经自解释的（「界面语言」「触发边缘」），两个都不要给。
    */
   hint?: ReactNode;
+  error?: ReactNode;
   /** 背景知识型说明：标签文字本身在悬停或聚焦时显示（不加 ⓘ 图标） */
   info?: ReactNode;
   /** 横向排列（标签左、控件右）；未指定时继承面板列宽，普通表单保持纵向 */
@@ -281,7 +283,7 @@ export function UiPageHeader({
         // -ml-1.5 让图标的视觉左边缘与标题文字对齐（按钮自带内边距）
         <UiIconButton
           className="-ml-1.5 shrink-0"
-          title={backLabel}
+          tooltip={backLabel}
           aria-label={backLabel}
           onClick={onBack}
         >
@@ -316,6 +318,7 @@ export function UiFormRow({
   className = '',
   label,
   hint,
+  error,
   info,
   inline = false,
   density = 'default',
@@ -331,10 +334,12 @@ export function UiFormRow({
   const baseId = useId();
   const labelId = `${baseId}-label`;
   const hintId = hint ? `${baseId}-hint` : undefined;
+  const errorId = error ? `${baseId}-error` : undefined;
+  const errorNode = error ? <UiFieldMessage id={errorId} className="mt-1">{error}</UiFieldMessage> : null;
   const labelNode = <UiTooltipText tooltip={info}>{label}</UiTooltipText>;
   const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
   // 行内控件没有自己的名称时，用 aria-labelledby 指向这行标签（B-50）
-  const labelling = { labelId, hintId, fillControl: fixedColumn };
+  const labelling = { labelId, hintId, errorId, fillControl: fixedColumn };
 
   if (fixedColumn) {
     const width = labelWidth ?? panelLabelWidth ?? 72;
@@ -345,6 +350,7 @@ export function UiFormRow({
       <div data-ui-form-control className="min-w-0 flex-1 text-left">
         <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
         {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
+        {errorNode}
       </div>
       {trailing !== undefined ? <div data-ui-form-trailing className="flex min-h-control-sm w-control-sm shrink-0 items-center justify-center">{trailing}</div> : null}
     </div>;
@@ -356,6 +362,7 @@ export function UiFormRow({
         <div className="min-w-0">
           <div id={labelId} className={labelClass}>{labelNode}</div>
           {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
+        {errorNode}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
@@ -369,6 +376,7 @@ export function UiFormRow({
       <div id={labelId} className={labelClass}>{labelNode}</div>
       {hint ? <p id={hintId} className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className={density === 'compact' ? 'h-1' : 'h-1.5'} />}
       <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
+      {errorNode}
     </div>
   );
 }

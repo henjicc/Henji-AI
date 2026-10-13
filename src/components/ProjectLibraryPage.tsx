@@ -429,7 +429,7 @@ export function ProjectLibraryPage({
         <div className="mt-2 flex flex-col gap-0.5">
           {railActions.map((action) => (
             // 与下方分类同一种行：左对齐，图标落在同一列（UiButton 固定居中，会让长短不一的文案参差不齐）
-            <UiNavButton key={action.label} size="md" onClick={action.onClick} disabled={busy || action.disabled} title={action.label}>
+            <UiNavButton key={action.label} size="md" onClick={action.onClick} disabled={busy || action.disabled} tooltip={action.label}>
               <action.icon className="h-4 w-4 shrink-0" />
               <span className="truncate">{action.label}</span>
             </UiNavButton>
@@ -508,10 +508,10 @@ export function ProjectLibraryPage({
         />
       ) : null}
       <div role="group" aria-label={`${labels.view.grid} / ${labels.view.list}`} className="flex items-center">
-        <UiIconButton size="md" on={view === 'grid'} title={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
+        <UiIconButton size="md" on={view === 'grid'} tooltip={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
           <LayoutGrid  />
         </UiIconButton>
-        <UiIconButton size="md" on={view === 'list'} title={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
+        <UiIconButton size="md" on={view === 'list'} tooltip={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
           <List  />
         </UiIconButton>
       </div>

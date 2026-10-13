@@ -122,7 +122,7 @@ export function UiDatePicker({
         onClick={() => setIsOpen((prev) => !prev)}
         open={isOpen}
         className="w-full"
-        title={ariaLabel}
+        tooltip={ariaLabel}
         // 可访问名称是“开始日期 / 结束日期”，不是占位的日期格式（任务 5.3）
         aria-label={selectedIso ? `${ariaLabel}：${toDisplayDate(selectedIso)}` : ariaLabel}
         aria-expanded={isOpen}

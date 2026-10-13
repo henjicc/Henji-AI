@@ -90,7 +90,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
               <UiIconButton size="xs"
                 className="nodrag nopan"
                 aria-label={t('canvas.assetGroup.manager.open')}
-                title={t('canvas.assetGroup.manager.open')}
+                tooltip={t('canvas.assetGroup.manager.open')}
                 onClick={(event) => {
                   event.stopPropagation();
                   canvasEventBus.publish('asset-group/open', { groupId: id });

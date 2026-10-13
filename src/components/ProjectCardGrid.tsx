@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Virtuoso, VirtuosoGrid, type VirtuosoHandle, type VirtuosoGridHandle } from 'react-virtuoso';
 import React from 'react';
@@ -302,7 +303,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
           <UiIconButton
             key={action.id}
             tone={tone}
-            title={action.label}
+            tooltip={action.label}
             aria-label={action.label}
             disabled={busy || action.disabled}
             onClick={(event) => {
@@ -316,7 +317,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
         {hasMenu(item) ? (
           <UiIconButton
             tone={tone}
-            title={labels.more}
+            tooltip={labels.more}
             aria-label={labels.more}
             aria-haspopup="menu"
             disabled={busy}
@@ -400,7 +401,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                     {item.draft ? draftMarker : null}
                     <span className="truncate font-medium text-text1" title={item.name}>{item.name}</span>
                     {item.status ? (
-                      <span className="shrink-0 text-xs text-danger-text">{item.status}</span>
+                      <UiInlineStatus className="shrink-0">{item.status}</UiInlineStatus>
                     ) : item.detail ? (
                       <span className="truncate text-xs text-text3">{item.detail}</span>
                     ) : null}
@@ -450,7 +451,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               {/* 长名称会截断：悬停名称看全名（A01.7） */}
               <span className="truncate text-13 font-medium text-text1" title={item.name}>{item.name}</span>
               {item.status ? (
-                <span className="truncate text-xs text-danger-text" title={item.status}>{item.status}</span>
+                <UiInlineStatus className="truncate" tooltip={item.status}>{item.status}</UiInlineStatus>
               ) : (
                 <span className="min-h-4 truncate text-xs text-text3" title={item.metaLine}>{item.metaLine}</span>
               )}

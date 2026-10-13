@@ -128,7 +128,7 @@ export function DocumentSaveNameDialog({ info, onDone, pickFolder = pickFolderWi
       )}
     >
       <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
-        <UiFormRow label={t('documentSession.nameDialog.nameLabel')}>
+        <UiFormRow label={t('documentSession.nameDialog.nameLabel')} error={message}>
           <UiInput
             value={name}
             autoFocus
@@ -138,7 +138,6 @@ export function DocumentSaveNameDialog({ info, onDone, pickFolder = pickFolderWi
             onChange={(event) => setName(event.target.value)}
             onFocus={(event) => event.currentTarget.select()}
           />
-          {message ? <p role="alert" className="mt-1.5 text-xs text-danger-text">{message}</p> : null}
         </UiFormRow>
         <UiFormRow label={t('documentSession.nameDialog.locationLabel')}>
           <div className="flex min-w-0 items-center gap-2">

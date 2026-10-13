@@ -84,7 +84,7 @@ export function CodeImageGenerationPanel({ target, parameterKey, title, onClose 
     <div className="flex items-center gap-2">
       <span className="mr-auto"><PriceEstimate providerId={providerId} modelId={modelId} params={{ ...params, prompt: text } as DynamicValueMap} /></span>
       <UiButton onClick={onClose}>关闭</UiButton>
-      <UiButton variant="primary" disabled={!context || !text || busy || configured !== true || mismatch} onClick={() => { void submit() }}>{busy ? '正在提交' : '生成图片'}</UiButton>
+      <UiButton loading={busy} variant="primary" disabledReason={!context ? '请先打开目标代码素材' : !text ? '请先填写图片描述' : configured !== true ? '请先配置生成模型' : mismatch ? '请选择图片模型' : undefined} disabled={!context || !text || busy || configured !== true || mismatch} onClick={() => { void submit() }}>生成图片</UiButton>
     </div>
   </div>
 }

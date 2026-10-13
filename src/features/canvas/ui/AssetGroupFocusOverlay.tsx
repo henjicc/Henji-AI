@@ -210,7 +210,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
         />
         <UiIconButton size="md"
           aria-label={t('canvas.assetGroup.manager.close')}
-          title={t('canvas.assetGroup.manager.close')}
+          tooltip={t('canvas.assetGroup.manager.close')}
           onClick={onClose}
         >
           <X  />

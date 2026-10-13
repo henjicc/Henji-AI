@@ -150,7 +150,7 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
         <VideoEditMonitorButtonEditor kind="source" specs={sourceButtons} />
       </div>
       {pictured && zoom.dropdown}
-      <UiIconButton aria-label="关闭源素材" title="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X /></UiIconButton>
+      <UiIconButton aria-label="关闭源素材" tooltip="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X /></UiIconButton>
     </div>}
     {state.error && <UiError size="sm" title={state.error} message="" />}
   </div>

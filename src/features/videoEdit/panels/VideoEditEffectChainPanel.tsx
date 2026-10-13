@@ -98,7 +98,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
     {clip.kind === 'adjustment' && <AdjustmentRange target={target} sequence={sequence} clip={clip} action={action} />}
     <VideoEditEffectSection id="effects" title={sound ? '音频效果' : '附加效果'} info="效果从上到下依次处理。"
       enabled={clip.effectsEnabled !== false} onEnabledChange={enabled => { try { updateVideoEditClipProperties(projectId, sequenceId, clipId, { effectsEnabled: enabled }) } catch (error) { onError(error) } }}
-      actions={<><UiIconButton size="2xs" aria-label="保存为预设" title="保存为预设" disabled={action.busy || !savableEffects.length} onClick={() => setSavingPreset(structuredClone(savableEffects))}><Save  /></UiIconButton>{!sound && <UiIconButton size="2xs" aria-label="编写新滤镜源码" title="编写新滤镜源码" disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon  /></UiIconButton>}</>}>
+      actions={<><UiIconButton size="2xs" aria-label="保存为预设" tooltip="保存为预设" disabled={action.busy || !savableEffects.length} onClick={() => setSavingPreset(structuredClone(savableEffects))}><Save  /></UiIconButton>{!sound && <UiIconButton size="2xs" aria-label="编写新滤镜源码" tooltip="编写新滤镜源码" disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon  /></UiIconButton>}</>}>
       <div ref={chain} className="flex flex-col gap-1" data-video-edit-effect-chain={clipId} tabIndex={-1}>
         {effects.length ? effects.map((effect, index) => {
           const open = !collapsed.has(effect.id)
@@ -107,10 +107,10 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
             {insertion && <span data-video-edit-effect-insertion aria-hidden="true" className={`pointer-events-none absolute inset-x-0 h-0.5 bg-accent ${dragState.fromIndex! < index ? 'bottom-0' : 'top-0'}`} />}
             <div ref={element => { itemRefs.current[index] = element }} tabIndex={0} role="group" aria-label={`效果${effect.name}`} data-selected={selectedId === effect.id} className={`flex min-w-0 cursor-grab items-center gap-1 rounded-control ${selectedId === effect.id ? UI_OPTION_ITEM_ACTIVE_CLASS : 'text-text2 hover:bg-hover'} ${dragState.isDragging && dragState.fromIndex === index ? 'opacity-50' : ''}`} onMouseDown={event => { if ((event.target as HTMLElement).closest('button')) return; setSelectedId(effect.id); event.currentTarget.focus(); handleMouseDown(index, event) }} onClick={() => { setSelectedId(effect.id); itemRefs.current[index]?.focus() }}>
               <UiIconButton size="2xs" aria-expanded={open} aria-label={`${open ? '收起' : '展开'}效果${effect.name}`} disabled={action.busy} onClick={event => { event.stopPropagation(); toggle(effect.id) }}>{open ? <ChevronDown  /> : <ChevronRight  />}</UiIconButton>
-              <UiIconButton size="2xs" on={effect.enabled} aria-pressed={effect.enabled} aria-label={`${effect.enabled ? '停用' : '启用'}效果${effect.name}`} title={effect.enabled ? '停用此效果（保留参数）' : '启用此效果'} disabled={action.busy} onClick={() => setEnabled(effect, !effect.enabled)}><Power  /></UiIconButton>
+              <UiIconButton size="2xs" on={effect.enabled} aria-pressed={effect.enabled} aria-label={`${effect.enabled ? '停用' : '启用'}效果${effect.name}`} tooltip={effect.enabled ? '停用此效果（保留参数）' : '启用此效果'} disabled={action.busy} onClick={() => setEnabled(effect, !effect.enabled)}><Power  /></UiIconButton>
               <span className={`min-w-0 flex-1 truncate text-xs ${effect.enabled ? '' : 'text-text3 line-through'}`}>{effect.name}</span>
-              <UiIconButton size="2xs" aria-label={`重置效果${effect.name}`} title="恢复默认参数、强度和开关，并移除此效果关键帧" disabled={action.busy} onClick={() => reset(effect)}><RotateCcw  /></UiIconButton>
-              <UiIconButton size="2xs" tone="danger" title="删除效果" aria-label={`删除效果${effect.name}`} disabled={action.busy} onClick={event => { event.stopPropagation(); remove(effect) }}><Trash2  /></UiIconButton>
+              <UiIconButton size="2xs" aria-label={`重置效果${effect.name}`} tooltip="恢复默认参数、强度和开关，并移除此效果关键帧" disabled={action.busy} onClick={() => reset(effect)}><RotateCcw  /></UiIconButton>
+              <UiIconButton size="2xs" tone="danger" tooltip="删除效果" aria-label={`删除效果${effect.name}`} disabled={action.busy} onClick={event => { event.stopPropagation(); remove(effect) }}><Trash2  /></UiIconButton>
             </div>
             {open && <div className="flex flex-col gap-1 pb-2 pl-5" data-video-edit-effect-editor={effect.id}>
               {isVideoEditBuiltinEffect(effect) ? <VideoEditBuiltinEffectControls target={target} effect={effect} onError={onError} /> : <>
@@ -128,7 +128,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
         {!sound && definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}
         {sources.length > 0 && <div className="flex items-center gap-1">
           <div className="min-w-0 flex-1"><Dropdown ariaLabel="复制效果的来源片段" value={source?.value} display={source ? undefined : '从其他片段复制效果'} options={sources} disabled={action.busy} onSelect={setCopySource} buttonClassName="w-full" /></div>
-          <UiIconButton size="xs" aria-label="复制并替换当前效果链" title="复制来源片段的整条效果链及关键帧，替换当前片段已有的附加效果" disabled={action.busy || !source} onClick={() => { if (source) void action.run(signal => copyVideoEditEffects(target, { sequenceId: source.sequenceId, clipId: source.clipId }, signal), () => setSelectedId(''), false) }}><Copy  /></UiIconButton>
+          <UiIconButton size="xs" aria-label="复制并替换当前效果链" tooltip="复制来源片段的整条效果链及关键帧，替换当前片段已有的附加效果" disabled={action.busy || !source} onClick={() => { if (source) void action.run(signal => copyVideoEditEffects(target, { sequenceId: source.sequenceId, clipId: source.clipId }, signal), () => setSelectedId(''), false) }}><Copy  /></UiIconButton>
         </div>}
         {action.busy && <div className="flex items-center gap-2"><UiLoading size="xs" message="正在检查混合画面" /><UiButton onClick={action.cancel}>取消检查</UiButton></div>}
       </div>

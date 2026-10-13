@@ -80,7 +80,7 @@ function ExpandToggleButton({ isExpanded, onToggle }: { isExpanded: boolean; onT
         onToggle();
       }}
       className="nodrag"
-      title={isExpanded ? t('modelParams.collapse', { defaultValue: '收起' }) : t('modelParams.expand', { defaultValue: '展开' })}
+      tooltip={isExpanded ? t('modelParams.collapse', { defaultValue: '收起' }) : t('modelParams.expand', { defaultValue: '展开' })}
     >
       {isExpanded ? <Minimize2  /> : <Maximize2  />}
     </UiIconButton>

@@ -331,7 +331,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                         type="button"
                         size="sm"
                         onClick={() => handleStartEdit(model)}
-                        title={t('common:edit')}
+                        tooltip={t('common:edit')}
                       >
                         {t('common:edit')}
                       </UiButton>
@@ -340,7 +340,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                         variant="danger"
                         size="sm"
                         onClick={() => void handleDelete(model.id)}
-                        title={t('modelscopeCustomModel.actions.deleteTitle')}
+                        tooltip={t('modelscopeCustomModel.actions.deleteTitle')}
                       >
                         {t('common:delete')}
                       </UiButton>

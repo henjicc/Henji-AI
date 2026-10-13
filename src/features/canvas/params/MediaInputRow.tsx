@@ -369,7 +369,7 @@ export function MediaInputRow({
                   event.stopPropagation();
                   setTrimTargetIndex(index);
                 }}
-                title={t('node.mediaRow.videoTrim')}
+                tooltip={t('node.mediaRow.videoTrim')}
                 className="absolute -left-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                 type="button"
               >
@@ -383,7 +383,7 @@ export function MediaInputRow({
                   handleRemove(index);
                 }}
                 aria-label={t('node.mediaRow.remove')}
-                title={t('node.mediaRow.remove')}
+                tooltip={t('node.mediaRow.remove')}
                 className="absolute -right-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                 type="button"
               >
@@ -401,7 +401,7 @@ export function MediaInputRow({
               event.stopPropagation();
               inputRef.current?.click();
             }}
-            title={constraintError ?? t('node.mediaRow.upload')}
+            disabledReason={constraintError ?? undefined} tooltip={constraintError ?? t('node.mediaRow.upload')}
             className="border border-dashed border-line hover:border-accent hover:text-accent-text"
           >
             <Icon  />

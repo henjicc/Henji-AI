@@ -114,7 +114,7 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
               </UiOptionButton>
             </Tooltip>
               </div>
-              <UiIconButton size="2xs" on={favorites.includes(entry.id)} aria-pressed={favorites.includes(entry.id)} aria-label={`${favorites.includes(entry.id) ? '取消收藏' : '收藏'}${entry.name}`} title={favorites.includes(entry.id) ? '取消收藏' : '收藏'} onClick={() => favorite(entry.id)}><Star  /></UiIconButton>
+              <UiIconButton size="2xs" on={favorites.includes(entry.id)} aria-pressed={favorites.includes(entry.id)} aria-label={`${favorites.includes(entry.id) ? '取消收藏' : '收藏'}${entry.name}`} tooltip={favorites.includes(entry.id) ? '取消收藏' : '收藏'} onClick={() => favorite(entry.id)}><Star  /></UiIconButton>
               </div>
             </Fragment>) : <UiEmpty size="xs" title={folder.id === 'favorites' ? '尚未收藏效果' : folder.id === 'presets' ? '在效果控件中保存预设' : '暂无可用项'} />}
           </div>}

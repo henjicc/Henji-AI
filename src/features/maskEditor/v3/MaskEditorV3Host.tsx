@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { getOrCreateImageEditPersistenceQueueV3, readImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import {
   forwardRef,
@@ -307,7 +308,7 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
         toolbarActions={(
           <>
             {saving ? <span role="status" className="text-xs text-text2">正在保存…</span> : null}
-            {saveError ? <span role="alert" className="text-xs text-danger-text">自动保存失败，请重试</span> : null}
+            {saveError ? <UiInlineStatus role="alert" className="">自动保存失败，请重试</UiInlineStatus> : null}
             {toolbarActions}
           </>
         )}

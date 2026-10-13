@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useState } from 'react'
 import { Info, RefreshCw, Trash2 } from 'lucide-react'
@@ -365,7 +366,7 @@ const LlmProviderDialog = ({
         </UiFormRow>
       ) : null}
 
-      {error ? <div role="alert" className="text-sm text-danger-text">{error}</div> : null}
+      {error ? <UiInlineStatus role="alert" className="">{error}</UiInlineStatus> : null}
 
       {isExisting ? (
         <UiGroup divided>
@@ -406,15 +407,13 @@ const LlmProviderDialog = ({
           <UiButton type="button" variant="secondary" onClick={handleClose}>
             {t(startInCreateMode ? 'llmProvider.actions.cancel' : 'llmProvider.actions.close')}
           </UiButton>
-          <UiButton
+          <UiButton loading={saving}
             type="button"
             variant="primary"
             disabled={saving || !draft.displayName.trim()}
             onClick={() => void handleSave()}
           >
-            {saving
-              ? t('llmProvider.actions.saving')
-              : startInCreateMode
+            {startInCreateMode
                 ? t('llmProvider.actions.add')
                 : isExisting ? t('llmProvider.actions.save') : t('llmProvider.actions.add')}
           </UiButton>

@@ -38,7 +38,7 @@ export const MultiAngleViewNavigator = memo(function MultiAngleViewNavigator({
             visibility={occluded ? 'hidden' : 'visible'} data-direction-depth={depth}>
             {/* ui-surface-allow 6px 方向点的透明命中区（外观由 SVG 圆点表达），不是按钮档位 */}
             <UiButton
-              type="button" aria-label={label} aria-pressed={active} title={label}
+              type="button" aria-label={label} aria-pressed={active} tooltip={label}
               tabIndex={occluded ? -1 : 0}
               data-multi-angle-direction={view.preset}
               className="pointer-events-auto !flex !h-full !w-full !rounded-full !p-0"

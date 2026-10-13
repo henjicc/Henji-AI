@@ -187,7 +187,7 @@ export function ImageEditorCropParametersV3({
       <UiIconButton size="md"
         className="shrink-0"
         aria-label={t('imageEditor.v3.crop.rotateLeft')}
-        title={t('imageEditor.v3.crop.rotateLeft')}
+        tooltip={t('imageEditor.v3.crop.rotateLeft')}
         onClick={() => rotate(-90)}
       >
         <RotateCcw  />
@@ -195,7 +195,7 @@ export function ImageEditorCropParametersV3({
       <UiIconButton size="md"
         className="shrink-0"
         aria-label={t('imageEditor.v3.crop.rotateRight')}
-        title={t('imageEditor.v3.crop.rotateRight')}
+        tooltip={t('imageEditor.v3.crop.rotateRight')}
         onClick={() => rotate(90)}
       >
         <RotateCw  />
@@ -205,7 +205,7 @@ export function ImageEditorCropParametersV3({
         on={orientation.mirrored}
         aria-label={t('imageEditor.v3.crop.mirror')}
         aria-pressed={orientation.mirrored}
-        title={t('imageEditor.v3.crop.mirror')}
+        tooltip={t('imageEditor.v3.crop.mirror')}
         onClick={() => {
           const next = { ...orientation, mirrored: !orientation.mirrored }
           setOrientation(next)
@@ -266,7 +266,7 @@ export function ImageEditorCropParametersV3({
             variant="secondary"
             className="w-24 justify-between"
             aria-label={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
-            title={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
+            tooltip={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
             aria-haspopup="menu"
             aria-expanded={open}
             onClick={togglePanel}

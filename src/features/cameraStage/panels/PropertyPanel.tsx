@@ -76,7 +76,7 @@ const PropertyPanel: React.FC = () => {
                   active={selected.color.toLowerCase() === hex.toLowerCase()}
                   aria-pressed={selected.color.toLowerCase() === hex.toLowerCase()}
                   aria-label={`颜色 ${hex}`}
-                  title={hex}
+                  tooltip={hex}
                   // 对象颜色是用户内容色（登记在 colorTokens），色样只能内联
                   style={{ backgroundColor: hex }}
                   onClick={() => updateObject(selected.id, { color: hex })}
@@ -106,7 +106,7 @@ const PropertyPanel: React.FC = () => {
               <UiIconButton
                 size="xs"
                 on={scaleLocked}
-                title={scaleLocked ? '已锁定等比缩放' : '独立缩放'}
+                tooltip={scaleLocked ? '已锁定等比缩放' : '独立缩放'}
                 aria-label={scaleLocked ? '关闭等比缩放' : '开启等比缩放'}
                 onClick={() => handleScaleLockedChange(!scaleLocked)}
               >

@@ -77,7 +77,7 @@ export function VideoEditAnnotationOverlay({ instance, mode, onError }: { instan
       if (mark.status === 'resolved' || !videoEditAnnotationAt(mark, instance.frame)) return []
       const at = labelPosition(mark.target)
       return [<div key={mark.id} className={`pointer-events-auto absolute ui-glass rounded-control ${selectedVideoEditAnnotation(instance.document.id) === mark.id ? 'ring-2 ring-accent-ring' : ''}`} style={{ left: `${Math.min(.85, at.x) * 100}%`, top: `${Math.min(.9, at.y) * 100}%` }}>
-        <UiButton variant="media" size="sm" onPointerDown={event => event.stopPropagation()} onClick={() => { try { jumpToVideoEditAnnotation(instance.document.id, mark.id) } catch (error) { onError(error) } }} title={mark.text}>{index + 1}{missing ? ' · 元素已不存在' : mark.status === 'addressed' ? ' · 待审查' : label ? ` · ${label}` : ''}</UiButton>
+        <UiButton variant="media" size="sm" onPointerDown={event => event.stopPropagation()} onClick={() => { try { jumpToVideoEditAnnotation(instance.document.id, mark.id) } catch (error) { onError(error) } }} tooltip={mark.text}>{index + 1}{missing ? ' · 元素已不存在' : mark.status === 'addressed' ? ' · 待审查' : label ? ` · ${label}` : ''}</UiButton>
       </div>]
     })}
     {draft && <PanelTrigger surface="glass" anchor={draft.anchor} open={inputOpen} panelSize="compact" onOpenChange={open => { setInputOpen(open); if (!open && mode !== 'stroke') { setDraft(null); setText('') } }} renderPanel={() => <div className="space-y-2" onPointerDown={event => event.stopPropagation()}>

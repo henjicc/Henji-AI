@@ -109,7 +109,7 @@ const ObjectListPanel: React.FC = () => {
                 onDoubleClick={() => beginRename(object)}
                 size="sm"
                 className="min-w-0 flex-1 gap-2"
-                title={`${object.name}（双击可改名）`}
+                tooltip={`${object.name}（双击可改名）`}
               >
                 <span aria-hidden="true" className="shrink-0 text-text2">
                   <TypeIcon object={object} />
@@ -122,7 +122,7 @@ const ObjectListPanel: React.FC = () => {
             )}
             <UiIconButton
               size="xs"
-              title={object.visible ? '隐藏' : '显示'}
+              tooltip={object.visible ? '隐藏' : '显示'}
               aria-label={object.visible ? `隐藏${object.name}` : `显示${object.name}`}
               onClick={() => updateObject(object.id, { visible: !object.visible })}
             >
@@ -130,7 +130,7 @@ const ObjectListPanel: React.FC = () => {
             </UiIconButton>
             <UiIconButton
               size="xs"
-              title="复制 (Ctrl+D)"
+              tooltip="复制 (Ctrl+D)"
               aria-label={`复制${object.name}`}
               onClick={() => duplicateObject(object.id)}
             >
@@ -139,7 +139,7 @@ const ObjectListPanel: React.FC = () => {
             <UiIconButton
               size="xs"
               tone="danger"
-              title="删除"
+              tooltip="删除"
               aria-label={`删除${object.name}`}
               onClick={() => removeObject(object.id)}
             >

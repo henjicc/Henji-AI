@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -335,7 +336,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
           </div>
         </div>
 
-        <UiButton
+        <UiButton loading={isExporting}
           variant="secondary"
           size="sm"
           className="nodrag"
@@ -346,11 +347,11 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
           disabled={isExporting}
         >
           <Download className={NODE_CONTROL_ICON_CLASS} />
-          {isExporting ? '导出中...' : '合并导出'}
+          {'合并导出'}
         </UiButton>
       </div>
 
-      {exportError && <div className="mt-2 shrink-0 text-xs text-danger-text">{exportError}</div>}
+      {exportError && <UiInlineStatus className="mt-2 shrink-0">{exportError}</UiInlineStatus>}
 
       <Handle
         type="target"

@@ -41,7 +41,7 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
   }
   return <>
     <UiIconButton size="md" disabled={disabled || (!canUndo && !canReset)}
-      aria-label="撤销；长按撤销所有修改" title="撤销 · 长按可撤销所有修改" aria-haspopup="menu" aria-expanded={menu.menuVisible}
+      aria-label="撤销；长按撤销所有修改" tooltip="撤销 · 长按可撤销所有修改" aria-haspopup="menu" aria-expanded={menu.menuVisible}
       onPointerDown={(event) => {
         if (event.button !== 0) return
         cancelPress(); longPressed.current = false

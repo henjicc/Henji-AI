@@ -90,17 +90,21 @@ describe('画布图片能力工具条入口', () => {
   })
 
   it('执行中禁用所有能力入口，阻止重复触发', () => {
+    const onExecute = vi.fn()
     const capability = getCanvasImageCapability(CANVAS_IMAGE_CAPABILITY_IDS.gridSplit)
     if (!capability) throw new Error('缺少宫格切分能力')
     const rendered = render(
       <CanvasImageCapabilityActions
         actions={[{ capability, disabledReasonKey: null }]}
         pendingCapabilityId={capability.id}
-        onExecute={vi.fn()}
+        onExecute={onExecute}
       />,
     )
 
-    expect(rendered.getByRole('button', { name: capability.titleKey }).hasAttribute('disabled')).toBe(true)
+    const button = rendered.getByRole('button', { name: capability.titleKey })
+    expect(button.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(button)
+    expect(onExecute).not.toHaveBeenCalled()
   })
 
   it('能力目录接管同一本地工具后只保留一个入口', () => {
@@ -147,7 +151,7 @@ describe('画布图片能力工具条入口', () => {
     expect(rendered.getByText('imageCapabilities.groups.structure')).toBeTruthy()
     expect(rendered.getByText('imageCapabilities.groups.local')).toBeTruthy()
     expect(rendered.getByText('imageCapabilities.status.experimental')).toBeTruthy()
-    expect(rendered.getByText('imageCapabilities.items.relight.description')).toBeTruthy()
+    expect(menu.textContent).toContain('imageCapabilities.items.relight.description')
 
     fireEvent.keyDown(menu, { key: 'End' })
     expect(document.activeElement).toBe(items.at(-1))

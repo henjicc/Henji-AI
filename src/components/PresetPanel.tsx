@@ -206,7 +206,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     onClick={() => handleQuickSave('prompt')}
                                     size="sm"
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
-                                    title={t('ui:presets.saveMode.prompt.title')}
+                                    tooltip={t('ui:presets.saveMode.prompt.title')}
                                 >
                                     <Type aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
                                     <span>{t('ui:presets.saveMode.prompt.label')}</span>
@@ -218,7 +218,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     onClick={() => handleQuickSave('prompt-image')}
                                     size="sm"
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
-                                    title={t('ui:presets.saveMode.promptImage.title')}
+                                    tooltip={t('ui:presets.saveMode.promptImage.title')}
                                 >
                                     <Images aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
                                     <span>{t('ui:presets.saveMode.promptImage.label')}</span>
@@ -230,7 +230,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     onClick={() => handleQuickSave('full')}
                                     size="sm"
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
-                                    title={t('ui:presets.saveMode.full.title')}
+                                    tooltip={t('ui:presets.saveMode.full.title')}
                                 >
                                     <SlidersHorizontal aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text2`} />
                                     <span>{t('ui:presets.saveMode.full.label')}</span>
@@ -319,7 +319,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                                 setDeletingPresetId(open ? null : preset.id)
                                                             }}
                                                             className={`transition-opacity duration-180 group-hover:opacity-100 focus-visible:opacity-100 ${open ? 'opacity-100' : 'opacity-0'}`}
-                                                            title={t('ui:presets.deleteTitle')}
+                                                            tooltip={t('ui:presets.deleteTitle')}
                                                         >
                                                             <Trash2  />
                                                         </UiIconButton>

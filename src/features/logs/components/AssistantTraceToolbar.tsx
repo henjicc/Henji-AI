@@ -64,8 +64,8 @@ export function AssistantTraceToolbar({
             <UiCheckbox checked={captureMode === 'detailed'} onCheckedChange={(checked) => onCaptureModeChange(checked ? 'detailed' : 'summary')} />
             助手详细追踪
           </label>
-          <UiIconButton type="button" onClick={onRefresh} title="刷新" aria-label="刷新"><RefreshCw  /></UiIconButton>
-          <UiIconButton type="button" tone="danger" onClick={onClear} title="清空助手追踪" aria-label="清空助手追踪"><Trash2  /></UiIconButton>
+          <UiIconButton type="button" onClick={onRefresh} tooltip="刷新" aria-label="刷新"><RefreshCw  /></UiIconButton>
+          <UiIconButton type="button" tone="danger" onClick={onClear} tooltip="清空助手追踪" aria-label="清空助手追踪"><Trash2  /></UiIconButton>
         </>
       }
       subordinate={

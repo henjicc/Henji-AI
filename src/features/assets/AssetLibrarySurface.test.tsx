@@ -9,7 +9,7 @@ import { useAssetLibraryStore } from './store/assetLibraryStore'
 import { resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
 
 const mocks = vi.hoisted(() => ({
-  query: vi.fn(), inspect: vi.fn(), readCode: vi.fn(), touch: vi.fn(), libraries: vi.fn(), tags: vi.fn(), t: (key: string) => key,
+  query: vi.fn(), inspect: vi.fn(), readCode: vi.fn(), touch: vi.fn(), libraries: vi.fn(), tags: vi.fn(), t: (key: string) => ({ 'assetLibrary.fitContain': '完整显示', 'assetLibrary.fitCover': '填满' } as Record<string, string>)[key] ?? key,
   relocate: vi.fn(), openDialog: vi.fn(),
   settings: { assetCardSize: 160, assetThumbnailFit: 'cover', setAssetCardSize: vi.fn(), setAssetThumbnailFit: vi.fn() },
 }))
@@ -136,7 +136,7 @@ describe('资产库命令带（界面重设计 3.3）', () => {
     fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.viewSettings' }))
     const group = await screen.findByRole('radiogroup', { name: 'assetLibrary.thumbnailFit' })
     expect(resolveUiOverlayTarget(group, panelLayerId)).toBe('descendant')
-    fireEvent.click(screen.getByRole('radio', { name: 'assetLibrary.fitContain' }))
+    fireEvent.click(screen.getByRole('radio', { name: '完整显示' }))
     expect(mocks.settings.setAssetThumbnailFit).toHaveBeenCalledWith('contain')
   })
 

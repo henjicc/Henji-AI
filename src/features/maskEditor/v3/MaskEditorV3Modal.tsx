@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { useRef, useState } from 'react'
 
 import { UiButton, UiModal } from '@/components/ui'
@@ -67,7 +68,7 @@ export function MaskEditorV3Modal({
         toolbarActions={(
           <div className="flex items-center gap-2">
             {confirmError ? (
-              <span role="alert" className="text-xs text-danger-text">保存蒙版失败，请重试</span>
+              <UiInlineStatus role="alert" className="">保存蒙版失败，请重试</UiInlineStatus>
             ) : null}
             <UiButton
               type="button"
@@ -77,13 +78,13 @@ export function MaskEditorV3Modal({
             >
               取消
             </UiButton>
-            <UiButton
+            <UiButton loading={confirming}
               type="button"
               variant="primary"
               disabled={confirming}
               onClick={() => { void confirm() }}
             >
-              {confirming ? '正在保存…' : '完成'}
+              {'完成'}
             </UiButton>
           </div>
         )}

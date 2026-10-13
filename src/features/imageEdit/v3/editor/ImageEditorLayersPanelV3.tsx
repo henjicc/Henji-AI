@@ -328,7 +328,7 @@ export function ImageEditorLayersPanelV3({
                     size="sm" className="w-full text-left"
                     disabled={disabled}
                     aria-label={disabled ? unavailableLabel : choice.name}
-                    title={disabled ? unavailableLabel : undefined}
+                    disabledReason={disabled ? unavailableLabel : undefined}
                     onClick={() => addChoice(choice)}
                   >
                     <span className="whitespace-nowrap">{choice.name}</span>
@@ -343,7 +343,7 @@ export function ImageEditorLayersPanelV3({
               data-panel-trigger-button
               on={open}
               aria-label={t('imageEditor.v3.layers.addLayer')}
-              title={t('imageEditor.v3.layers.addLayer')}
+              tooltip={t('imageEditor.v3.layers.addLayer')}
               aria-expanded={open}
               onClick={togglePanel}
             >
@@ -355,7 +355,7 @@ export function ImageEditorLayersPanelV3({
           disabled={!primaryEditable || !primaryLocation
             || primaryLocation.index >= primaryLocation.container.length - 1}
           aria-label={t('imageEditor.v3.layers.moveUp')}
-          title={t('imageEditor.v3.layers.moveUp')}
+          tooltip={t('imageEditor.v3.layers.moveUp')}
           onClick={() => {
             if (!primaryLocation || !primaryEditable) return
             runAction(() => controller.moveLayer(
@@ -370,7 +370,7 @@ export function ImageEditorLayersPanelV3({
         <UiIconButton
           disabled={!primaryEditable || !primaryLocation || primaryLocation.index <= 0}
           aria-label={t('imageEditor.v3.layers.moveDown')}
-          title={t('imageEditor.v3.layers.moveDown')}
+          tooltip={t('imageEditor.v3.layers.moveDown')}
           onClick={() => {
             if (!primaryLocation || !primaryEditable) return
             runAction(() => controller.moveLayer(
@@ -385,7 +385,7 @@ export function ImageEditorLayersPanelV3({
         <UiIconButton
           disabled={!primaryEditable || !primaryLocation}
           aria-label={t('imageEditor.v3.layers.duplicate')}
-          title={t('imageEditor.v3.layers.duplicate')}
+          tooltip={t('imageEditor.v3.layers.duplicate')}
           onClick={() => {
             if (!primaryLocation || !primaryEditable) return
             const duplicateId = controller.duplicateLayer(
@@ -401,7 +401,7 @@ export function ImageEditorLayersPanelV3({
         <UiIconButton tone="danger"
           disabled={!canDelete}
           aria-label={t('imageEditor.v3.layers.delete')}
-          title={t('imageEditor.v3.layers.delete')}
+          tooltip={t('imageEditor.v3.layers.delete')}
           onClick={() => {
             if (!canDelete) return
             effectiveSelectedIds.forEach(controller.deleteLayer)

@@ -329,7 +329,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   }
   const buttonSize = compact || layout === 'inline' ? 'sm' : 'md'
   const playButton = (
-    <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} size={buttonSize} title={t('ui:audioPlayer.playPause')}>
+    <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} size={buttonSize} tooltip={t('ui:audioPlayer.playPause')}>
       {isPlaying ? <Pause /> : <Play />}
     </UiIconButton>
   )
@@ -359,7 +359,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     <div ref={volumeContainerRef} className="relative flex items-center">
       <UiIconButton
         size={buttonSize}
-        title={t('ui:audioPlayer.volume')}
+        tooltip={t('ui:audioPlayer.volume')}
         disabled={!active || controlledPlayback?.disabled}
         onClick={() => setShowVolumeSlider((value) => !value)}
  >
@@ -443,7 +443,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             onClick={() => { void handleDownload() }}
             disabled={isDownloading}
             size={buttonSize}
-            title={t('common:actions.download')}
+            tooltip={t('common:actions.download')}
  >
             <Download />
           </UiIconButton>}

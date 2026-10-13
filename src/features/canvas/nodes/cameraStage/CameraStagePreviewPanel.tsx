@@ -1,5 +1,6 @@
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { AlertCircle, LoaderCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { UiEmpty } from '@/components/ui';
 import { useTranslation } from 'react-i18next';
 
@@ -48,7 +49,7 @@ export function CameraStagePreviewPanel({
         <>
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gap/65">
             <div className="ui-glass flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-text1">
-              <LoaderCircle className={`${UI_ICON_SIZE_CLASS.md} animate-spin text-accent-text`} />
+              <UiSpinner size="sm" tone="accent" />
               {t(progressKey, { progress: Math.round((renderProgress ?? 0) * 100) })}
             </div>
           </div>

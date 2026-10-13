@@ -1,9 +1,10 @@
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useSyncExternalStore } from 'react'
 import { CircleAlert, RotateCcw, Shuffle, X } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import Tooltip from '@/components/ui/Tooltip'
-import { ICON_NODE_AUDIO_GENERATION, ICON_NODE_VIDEO_GENERATION } from '@/core/theme/icons'
+
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import {
@@ -50,20 +51,19 @@ export function VideoEditInPlacePlaceholders({ projectId, sequence, rows, region
     if (!row) return null
     const width = Math.max(6, at.duration * pixels)
     const failed = job.status === 'failed'
-    const Icon = kind === 'audio' ? ICON_NODE_AUDIO_GENERATION : ICON_NODE_VIDEO_GENERATION
     const label = videoEditInPlaceActionLabel(job.plan.action)
     return <div key={job.id} role="status" aria-label={failed ? `${label}未完成：${job.error ?? ''}` : `${label}：${STATUS_TEXT[job.status as keyof typeof STATUS_TEXT] ?? ''}`}
       data-video-edit-in-place-job={job.id} data-status={job.status} data-video-edit-timeline-chrome
       onContextMenu={event => { event.preventDefault(); event.stopPropagation() }}
       className={`absolute z-raised flex items-center gap-1 overflow-hidden rounded-md border-2 border-dashed px-1 text-2xs leading-4 text-text1 ${failed ? 'border-danger-text bg-danger-tint' : 'border-accent-ring bg-accent-tint'}`}
       style={{ top: row.top - region.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + at.start * pixels, width }}>
-      {failed ? <CircleAlert size={UI_ICON_SIZE.xs} aria-hidden="true" className="shrink-0 text-danger-text" /> : <Icon size={UI_ICON_SIZE.xs} aria-hidden="true" className={`shrink-0 text-accent-text ${job.status === 'placing' ? '' : 'animate-pulse'}`} />}
+      {failed ? <CircleAlert size={UI_ICON_SIZE.xs} aria-hidden="true" className="shrink-0 text-danger-text" /> : <UiSpinner size="2xs" tone="accent" />}
       {width > SHOW_TEXT_WIDTH && <Tooltip content={failed ? job.error ?? '' : job.request.prompt}><span className="min-w-0 flex-1 truncate">{failed ? job.error : `${label} · ${STATUS_TEXT[job.status as keyof typeof STATUS_TEXT]}`}</span></Tooltip>}
       {!failed && width > SHOW_TEXT_WIDTH && <Progress taskId={job.taskId} />}
       {width > SHOW_BUTTONS_WIDTH && <span className="ml-auto flex shrink-0 items-center">
-        {failed && <UiIconButton size="2xs" aria-label="重试" title="重试" onClick={() => run(() => retryVideoEditInPlaceJob(job.id))}><RotateCcw  /></UiIconButton>}
-        {failed && <UiIconButton size="2xs" aria-label="换模型重新生成" title="换模型重新生成" onClick={() => onReopen(job)}><Shuffle  /></UiIconButton>}
-        <UiIconButton size="2xs" aria-label={failed ? '移除占位' : '取消生成'} title={failed ? '移除占位' : '取消生成'} onClick={() => run(() => failed ? dismissVideoEditInPlaceJob(job.id) : cancelVideoEditInPlaceJob(job.id))}><X  /></UiIconButton>
+        {failed && <UiIconButton size="2xs" aria-label="重试" tooltip="重试" onClick={() => run(() => retryVideoEditInPlaceJob(job.id))}><RotateCcw  /></UiIconButton>}
+        {failed && <UiIconButton size="2xs" aria-label="换模型重新生成" tooltip="换模型重新生成" onClick={() => onReopen(job)}><Shuffle  /></UiIconButton>}
+        <UiIconButton size="2xs" aria-label={failed ? '移除占位' : '取消生成'} tooltip={failed ? '移除占位' : '取消生成'} onClick={() => run(() => failed ? dismissVideoEditInPlaceJob(job.id) : cancelVideoEditInPlaceJob(job.id))}><X  /></UiIconButton>
       </span>}
     </div>
   })}</>

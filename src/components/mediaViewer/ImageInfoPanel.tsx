@@ -124,7 +124,7 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
         type="button"
         onClick={() => setCollapsed(!collapsed)}
         className="shrink-0"
-        title={t('viewer.toggleInfo', '显示/隐藏图片信息（I）')}
+        tooltip={t('viewer.toggleInfo', '显示/隐藏图片信息（I）')}
       >
         <Info  />
       </UiIconButton>

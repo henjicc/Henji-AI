@@ -84,8 +84,9 @@ describe('供应商中心：同步模型（5.6 第二批）', () => {
     render(<ProviderCenterSection llm={llm} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'providerCenter.actions.syncModels' }))
-    const syncing = await screen.findByRole('button', { name: 'providerCenter.actions.syncingModels' })
-    expect(syncing.hasAttribute('disabled')).toBe(true)
+    const syncing = await screen.findByRole('button', { name: 'providerCenter.actions.syncModels' })
+    expect(syncing.getAttribute('aria-busy')).toBe('true')
+    expect(syncing.getAttribute('aria-disabled')).toBe('true')
 
     reject(new Error('401 密钥无效'))
     const alert = await screen.findByRole('alert')

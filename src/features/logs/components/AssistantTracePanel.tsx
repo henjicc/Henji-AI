@@ -1,3 +1,4 @@
+import { UiInlineStatus } from '@/components/ui'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { UiButton, UiModal } from '@/components/ui'
@@ -237,7 +238,7 @@ export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTr
         <SummaryMetric label="总计" value={`${formatTraceTokens(totals.total)} tok`} />
         <SummaryMetric label="耗时" value={formatTraceDuration(totals.elapsed)} />
       </div>
-      {errorMessage && <div className="shrink-0 bg-danger-tint px-3 py-1.5 text-2xs text-danger-text">{errorMessage}</div>}
+      {errorMessage && <div className="shrink-0 bg-danger-tint px-3 py-1.5"><UiInlineStatus>{errorMessage}</UiInlineStatus></div>}
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(180px,36%)_minmax(0,1fr)] gap-3 p-3 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] lg:grid-rows-1">
         <AssistantTraceList
           runs={runs}

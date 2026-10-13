@@ -1,8 +1,10 @@
+import { UiFieldMessage } from '@/components/ui'
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { withPaidOperation } from '@/services/paidApproval'
 import { assistantErrorMessage } from '@/core/assistant/assistantErrorPresentation'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LoaderCircle, RotateCcw, Sparkles } from 'lucide-react'
+import { RotateCcw, Sparkles } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiError } from '@/components/ui'
 import { createEmptyPromptDocument, createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import { buildEmbeddedPromptContext, type EmbeddedAgentModel, type EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
@@ -116,16 +118,16 @@ export function EmbeddedConversation(): JSX.Element {
       {optimistic && state.sendingMessage?.id !== optimistic.id && !state.pendingMessages?.some(message => message.id === optimistic.id)
         ? <EmbeddedUserMessage message={optimistic} /> : null}
       {busy ? <div role="status" aria-label={switching ? "正在切换对话" : "助手正在回复"} className="flex h-6 items-center">
-        <LoaderCircle aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-accent-text motion-safe:animate-spin`} />
+        <UiSpinner size="sm" tone="accent" />
       </div> : null}
       {state.pendingMessages?.map(message => <div key={message.id} className="space-y-1"><EmbeddedUserMessage message={message} />
-        <p className={`text-right text-xs ${message.error ? 'text-danger-text' : 'text-text3'}`}>{message.error ? `发送未完成：${assistantErrorMessage(message.error)}` : '等待发送'}</p></div>)}
+        <UiFieldMessage tone={message.error ? 'error' : 'hint'} className="text-right">{message.error ? `发送未完成：${assistantErrorMessage(message.error)}` : '等待发送'}</UiFieldMessage></div>)}
       </div>
     </div>
     <AudioEditAssistantAction disabled={busy || !selectedModel} />
     {state.error || (needsModel && !isEmpty) ? <div className="px-4">
       {state.error ? <UiError message={assistantErrorMessage(state.error)} title="操作未完成" size="xs" align="start"
-        actions={canRetry ? <UiButton size="sm" onClick={retry} title="重新发送上一条消息">
+        actions={canRetry ? <UiButton size="sm" onClick={retry} tooltip="重新发送上一条消息">
           <RotateCcw aria-hidden="true" className={`mr-1`} />重试</UiButton> : undefined} /> : null}
       {needsModel && !isEmpty ? <UiButton variant="secondary" onClick={openModelSettings}>设置可调用工具的模型</UiButton> : null}
     </div> : null}

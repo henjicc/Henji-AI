@@ -92,7 +92,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
               </div>
               <UiIconButton
                 tone="danger"
-                title="删除关键帧"
+                tooltip="删除关键帧"
                 aria-label="删除关键帧"
                 onClick={onRemove}
               >
@@ -166,7 +166,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
               onSelect()
               togglePanel()
             }}
-            title={`${stateKeyframe.name} · ${formatStateKeyframeTimecode(stateKeyframe.time, 'secondsFrames', fps)}`}
+            tooltip={`${stateKeyframe.name} · ${formatStateKeyframeTimecode(stateKeyframe.time, 'secondsFrames', fps)}`}
           >
             {/* 选中 = 强调色实心；只是播放头停在这里 = 强调色描边空心；其余中性。三者一眼可辨。 */}
             <Diamond

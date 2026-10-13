@@ -1,3 +1,4 @@
+import { UiFieldMessage } from '@/components/ui'
 import React, { useId } from 'react'
 import { ExternalLink, Eye, EyeOff } from 'lucide-react'
 import {
@@ -100,7 +101,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           onClick={onToggleVisibility}
           disabled={disabled}
           className="absolute right-1 top-1/2 -translate-y-1/2"
-          title={toggleLabel}
+          tooltip={toggleLabel}
           aria-label={toggleLabel}
           aria-pressed={visible}
         >
@@ -108,7 +109,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
         </UiIconButton>
       </div>
       {hint ? <div id={hintId} className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}
-      {error ? <div id={errorId} role="alert" className="mt-2 text-xs text-danger-text">{error}</div> : null}
+      {error ? <UiFieldMessage id={errorId} className="mt-1">{error}</UiFieldMessage> : null}
     </div>
   )
 }

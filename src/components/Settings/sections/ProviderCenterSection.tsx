@@ -291,7 +291,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
             {filteredGroups.length === 0 ? <UiEmpty size="xs" title={t('providerCenter.searchNoResults')} /> : null}
             {filteredGroups.map(group => (
-              <UiOptionButton key={group.id} type="button" variant="menu" size="lg" active={group.id === selected?.id} className="w-full text-left" onClick={() => { setSelectedId(group.id); setCategory('all'); setFetchError(null) }} onContextMenu={(event) => openProviderMenu(event, group)} title={group.llmProvider && !(group.llmProvider.setup?.kind === 'preset' && group.llmProvider.setup.lifecycle === 'builtin') ? t('providerCenter.menuHint') : undefined}>
+              <UiOptionButton key={group.id} type="button" variant="menu" size="lg" active={group.id === selected?.id} className="w-full text-left" onClick={() => { setSelectedId(group.id); setCategory('all'); setFetchError(null) }} onContextMenu={(event) => openProviderMenu(event, group)} tooltip={group.llmProvider && !(group.llmProvider.setup?.kind === 'preset' && group.llmProvider.setup.lifecycle === 'builtin') ? t('providerCenter.menuHint') : undefined}>
                 <span className="block truncate text-sm font-medium">{group.displayName}</span>
               </UiOptionButton>
             ))}
@@ -375,8 +375,8 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               <div className="flex items-center gap-2">
                 {selected.llmProvider ? (
                   <>
-                    <UiButton type="button" variant="secondary" disabled={fetchingModels} onClick={() => void fetchModels()}>
-                      <RefreshCw className={`${fetchingModels ? 'motion-safe:animate-spin' : ''}`} />{fetchingModels ? t('providerCenter.actions.syncingModels') : t('providerCenter.actions.syncModels')}
+                    <UiButton loading={fetchingModels} type="button" variant="secondary" disabled={fetchingModels} onClick={() => void fetchModels()}>
+                      <RefreshCw />{t('providerCenter.actions.syncModels')}
                     </UiButton>
                     <UiButton type="button" variant="secondary" onClick={() => openModelDialog()}>
                       <Plus  />{t('providerCenter.actions.addModel')}

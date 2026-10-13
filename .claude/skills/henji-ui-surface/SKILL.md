@@ -328,7 +328,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 **同一处的交互层级不得同色**：悬停或选中的容器里，行内控件仍须与容器底可区分。字段触发器悬停取 `control-hover`（不是 `hover`）；悬停会换底的行容器里放取值触发器时，行悬停只加强描边（画布节点参数行）。选中项上悬停用 `selected-accent-hover`，不回落中性悬停。
 
-## 状态展示统一走这三个
+## 状态与反馈统一入口
 
 页面**不要**自己写空/加载/错误块（历史上因此出现同一状态在不同页面长得不一样）：
 
@@ -341,6 +341,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 状态块**不画卡片**——它已经在某个容器里了。失败必须一眼可辨：`UiError` 总有一行危险色标题（任务 5.8），
 标题已经是完整说法时传 `title={…} message=""`；不是失败的提示（“请先选择片段”）用 `UiEmpty`，不要借 `UiError`。
+
+按钮悬停说明统一传 `tooltip`，内部复用 `Tooltip` 的 300ms 延迟与主题皮肤，键盘聚焦立即显示。`UiIconButton` 可用 `label` / `aria-label` 命名；无显式名称时回退 tooltip。原生 `title` 不作悬停说明，只允许不可见的无障碍名称场景。`Tooltip asChild` 保留触发器 DOM、布局和 ref。状态新增组件的规则 E / S8 接入交任务 5.2，本任务不修改门禁脚本。
 
 ## 信息准入：先判断用户价值，再决定是否显示
 
@@ -525,7 +527,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 ### 5. 不可用就不出现，出现就说明为什么
 
 - 与当前模式无关的控件**隐藏**（如“速度”只在“录制轨迹”时出现），不要整排灰着。
-- 暂时不可用但用户会找的唯一入口可以禁用，同时在 `title` 写清前置条件（“先示范一次运动”）。
+- 暂时不可用但用户会找的唯一入口可以禁用，同时用 `disabledReason` 写清前置条件（“先示范一次运动”）。
 - 一个区块里全部控件都不可用时，整块不显示。
 
 ### 6. 交付证据：截图，不是“我检查过了”
@@ -578,6 +580,9 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 **先查表，再动手。已有实现的一律复用，不要另写一份：**
 
 | 需求 | 必须用 | 不要做 |
+| 按钮加载与不可用原因 | `UiButton` / `UiIconButton` 的 `loading` 保留静息内容占位、名称和尺寸并阻止重复操作；按钮类的 `disabledReason` 在禁用时通过统一 Tooltip 解释前置条件，保留键盘焦点并阻断操作 | 用进行中文案替换静息文案；手写转圈；包 span + title |
+| 行内加载与骨架 | `UiSpinner`（size 沿用图标按钮阶梯，tone default/accent，继承色默认）/ `UiSkeleton`（shape line/block/square）；active 仅供样张重放，减少动效走共享底座 | 业务手写 animate-spin/animate-pulse；把 StateSize 留白密度当控件高度 |
+| 字段与行内反馈 | `UiFormRow error` 自动关联行内控件 aria-invalid/aria-describedby；独立字段用 `UiFieldMessage`（tone error/hint，调用方关联 id）；操作状态用 `UiInlineStatus`（tone error/warning/success，可 truncate + tooltip） | 内联手写危险色错误文字与零散 alert |
 |---|---|---|
 | 弹窗 | `UiModal`（正式业务默认 `scope="viewport"`，接管焦点与模态；设计系统常驻缩略样本用 `scope="container"`，不接管焦点） | 手写 `fixed inset-0` + `bg-black/…` + 卡片（存量已全部清零，`check:surface` 规则 C 会拦，别再加）；用容器预览替代正式模态 |
 | 分组 | `UiGroup`（相邻组统一 32px 留白；面板内跨包装层分组用 `gap="section"`，复用 `UI_SECTION_STACK_CLASS`） | 手写 `border + bg` 的 div |
@@ -599,7 +604,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
-| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；最多五项，超过五项转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
+| 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用 `UiOptionButton segmentFrame="inset"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；最多五项且每项不超过四个 Unicode 字符，否则转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 工具栏只读数值 | `UiReadout size="sm" / "md" / "lg" tone="default" / "media"`；外框与同行控件等高，等宽数字 | 自写 h-7/h-8 读数仿控件 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |

@@ -1,3 +1,4 @@
+import { UiFieldMessage } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Brush, Circle, Eraser, Lasso, Redo2, Square, Trash2, Undo2 } from 'lucide-react';
 import { memo, useRef } from 'react';
@@ -87,7 +88,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
               type="button"
               selectionRole="navigation"
               active={editor.tool === value}
-              title={label}
+              tooltip={label}
               aria-label={label}
               size="md" className="px-2"
               onClick={() => editor.setTool(value)}
@@ -100,7 +101,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
           type="button"
           selectionRole="navigation"
           active={editor.mode === 'erase'}
-          title={t('node.elementEditGeneration.tools.erase')}
+          tooltip={t('node.elementEditGeneration.tools.erase')}
           aria-label={t('node.elementEditGeneration.tools.erase')}
           size="md" className="px-2"
           onClick={() => editor.setMode(editor.mode === 'erase' ? 'paint' : 'erase')}
@@ -147,9 +148,9 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
           onChange={(event) => editor.setBrushSize(Number(event.currentTarget.value))}
           className="min-w-0 flex-1"
         />
-        <span
+        <UiFieldMessage
           data-local-redraw-autosave-status={autosave.status}
-          className={`shrink-0 text-2xs ${autosave.status === 'failed' ? 'text-danger-text' : 'text-text2'}`}
+          tone={autosave.status === 'failed' ? 'error' : 'hint'} className="shrink-0"
         >
           {autosave.status === 'saving'
             ? t('node.elementEditGeneration.autosave.saving')
@@ -158,7 +159,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
               : autosave.status === 'failed'
                 ? t('node.elementEditGeneration.autosave.failed')
                 : t('node.elementEditGeneration.autosave.idle')}
-        </span>
+        </UiFieldMessage>
       </div>
     </div>
   );

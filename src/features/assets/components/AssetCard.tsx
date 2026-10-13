@@ -106,7 +106,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
           />
         )}
         <UiIconButton tone="media"
-          title={t('workspaceFilters.moreActions')}
+          tooltip={t('workspaceFilters.moreActions')}
           aria-label={t('workspaceFilters.moreActions')}
           className={`absolute right-2 top-2 transition-opacity duration-120 group-hover:opacity-100 focus-visible:opacity-100 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
           onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget, true) }}

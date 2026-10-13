@@ -139,7 +139,7 @@ export function VideoViewerControls({
         </div>
 
         <div className="flex items-center gap-3">
-          <UiIconButton size="xl" shape="circle" onClick={togglePlay} title={t('ui:audioPlayer.playPause')}>
+          <UiIconButton size="xl" shape="circle" onClick={togglePlay} tooltip={t('ui:audioPlayer.playPause')}>
             {isVideoPlaying ? <Pause /> : <Play />}
           </UiIconButton>
           <div className={`text-13 text-text1 ${UI_TEXT_TIMECODE_CLASS}`}>
@@ -157,7 +157,7 @@ export function VideoViewerControls({
                 <UiIconButton
                   size="md"
                   onClick={() => setMuted((value) => !value)}
-                  title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
+                  tooltip={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
  >
                   {muted || volume === 0 ? <VolumeX /> : <Volume2 />}
                 </UiIconButton>
@@ -191,14 +191,14 @@ export function VideoViewerControls({
               on={loop}
               aria-pressed={loop}
               onClick={() => setLoop((value) => !value)}
-              title={t('ui:viewer.loop')}
+              tooltip={t('ui:viewer.loop')}
  >
               <Repeat />
             </UiIconButton>
             {onDownload && filePath && (
               <UiIconButton size="md"
                 onClick={() => onDownload(filePath)}
-                title={t('common:actions.download')}
+                tooltip={t('common:actions.download')}
  >
                 <Download />
               </UiIconButton>

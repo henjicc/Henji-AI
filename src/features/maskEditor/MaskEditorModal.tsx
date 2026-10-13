@@ -99,7 +99,7 @@ function QuickMaskEditorModal({
         selectionRole="navigation"
         active={tool === 'brush'}
         onClick={() => setTool('brush')}
-        title="画笔(B)"
+        tooltip="画笔(B)"
       >
         <Brush className={`${UI_ICON_SIZE_CLASS.md}`} />
         画笔
@@ -109,7 +109,7 @@ function QuickMaskEditorModal({
         selectionRole="navigation"
         active={tool === 'rectangle'}
         onClick={() => setTool('rectangle')}
-        title="矩形框选(R)"
+        tooltip="矩形框选(R)"
       >
         <Square className={`${UI_ICON_SIZE_CLASS.md}`} />
         矩形
@@ -119,7 +119,7 @@ function QuickMaskEditorModal({
         selectionRole="navigation"
         active={tool === 'circle'}
         onClick={() => setTool('circle')}
-        title="圆形框选(O)"
+        tooltip="圆形框选(O)"
       >
         <Circle className={`${UI_ICON_SIZE_CLASS.md}`} />
         圆形
@@ -129,7 +129,7 @@ function QuickMaskEditorModal({
         selectionRole="navigation"
         active={tool === 'lasso'}
         onClick={() => setTool('lasso')}
-        title="自由框选(L)"
+        tooltip="自由框选(L)"
       >
         <Lasso className={`${UI_ICON_SIZE_CLASS.md}`} />
         自由框选
@@ -139,7 +139,7 @@ function QuickMaskEditorModal({
           type="button"
           disabled={history.undoStack.length === 0}
           onClick={() => dispatchHistory({ type: 'undo' })}
-          title="撤销(Ctrl+Z)"
+          tooltip="撤销(Ctrl+Z)"
           aria-label="撤销"
         >
           <Undo2  />
@@ -148,7 +148,7 @@ function QuickMaskEditorModal({
           type="button"
           disabled={history.redoStack.length === 0}
           onClick={() => dispatchHistory({ type: 'redo' })}
-          title="重做(Ctrl+Y)"
+          tooltip="重做(Ctrl+Y)"
           aria-label="重做"
         >
           <Redo2  />
@@ -157,7 +157,7 @@ function QuickMaskEditorModal({
           type="button"
           disabled={history.document.strokes.length === 0}
           onClick={clearDocument}
-          title="清空遮罩"
+          tooltip="清空遮罩"
           aria-label="清空遮罩"
         >
           <Trash2  />
@@ -167,13 +167,13 @@ function QuickMaskEditorModal({
         <UiButton type="button" variant="secondary" onClick={handleCancel} disabled={isConfirming}>
           取消
         </UiButton>
-        <UiButton
+        <UiButton loading={isConfirming}
           type="button"
           variant="primary"
           onClick={() => void handleConfirm()}
           disabled={!readyImage || !hasPaintedMask(history.document) || isConfirming}
         >
-          {isConfirming ? '正在保存…' : '完成'}
+          {'完成'}
         </UiButton>
       </div>
     </div>

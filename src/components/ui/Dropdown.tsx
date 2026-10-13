@@ -19,7 +19,6 @@ import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtil
 import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
 import { Check } from 'lucide-react'
-import Tooltip from './Tooltip'
 import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
@@ -41,8 +40,10 @@ type DropdownProps<T extends string | number | boolean> = {
   /** 普通选项下拉为空时的占位；自定义 renderPanel 不受选项数量影响。 */
   emptyLabel?: string
   onSelect?: (value: T) => void
+  onPreview?: (value: T | undefined) => void
   renderPanel?: () => React.ReactNode
   disabled?: boolean
+  disabledReason?: string
   className?: string
   /** 触发器的布局类（宽度、最大宽度、弹性）。外观只由 size / appearance 决定（check:surface 规则 E）。默认 `w-full`。 */
   buttonClassName?: string
@@ -81,8 +82,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     options,
     emptyLabel,
     onSelect,
+    onPreview,
     renderPanel,
     disabled: disabledOverride,
+    disabledReason,
     className,
     buttonClassName,
     size = 'md',
@@ -118,7 +121,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       restoreFocusOnCloseRef.current = false
     },
   })
+  const previewRef = useRef(onPreview)
+  previewRef.current = onPreview
   const scheduleClose = useCallback((restoreFocus = false): void => {
+    previewRef.current?.(undefined)
     restoreFocusOnCloseRef.current = restoreFocus
     setOpen(false)
   }, [])
@@ -194,6 +200,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       ? (direction === 1 ? 0 : indices.length - 1)
       : (currentPosition + direction + indices.length) % indices.length
     setActiveOptionIndex(indices[nextPosition])
+    onPreview?.(options?.[indices[nextPosition]].value)
   }
   const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (disabled) return
@@ -399,8 +406,13 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             variant="menu"
             size={size}
             disabled={option.disabled}
+            tooltip={option.tooltip}
+            disabledReason={option.disabled ? option.tooltip : undefined}
             className="w-full cursor-pointer justify-between gap-2"
-            onMouseEnter={() => setActiveOptionIndex(index)}
+            onMouseEnter={() => { setActiveOptionIndex(index); if (!option.disabled) onPreview?.(option.value) }}
+            onMouseLeave={() => onPreview?.(undefined)}
+            onFocus={() => { if (!option.disabled) onPreview?.(option.value) }}
+            onBlur={() => onPreview?.(undefined)}
             onClick={() => selectOption(option)}
           >
             <span className="block min-w-0 truncate whitespace-nowrap">{option.label}</span>
@@ -408,9 +420,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             {selected ? <Check aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} /> : null}
           </UiOptionButton>
         )
-        return option.tooltip
-          ? <div key={String(option.value)} className="flex flex-col"><Tooltip content={option.tooltip}><span tabIndex={option.disabled ? 0 : undefined}>{button}</span></Tooltip></div>
-          : button
+        return button
       })}
     </div>
   )
@@ -420,6 +430,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     <div className={`relative ${fillControl ? 'block min-w-0' : toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} style={fillControl ? { width: '100%' } : undefined} ref={ref}>
       {label ? <label className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiFieldTrigger
+        disabledReason={disabledReason}
         ref={triggerRef}
         disabled={disabled}
         size={size}

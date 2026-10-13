@@ -99,12 +99,12 @@ export function AssistantMemoryPanel(): JSX.Element {
   const refreshButton = (
     <UiIconButton
       type="button"
-      title="刷新助手记忆"
+      tooltip="刷新助手记忆"
       aria-label="刷新助手记忆"
       onClick={() => void refresh()}
-      disabled={loading}
+      loading={loading}
     >
-      <RefreshCw className={`${loading ? 'motion-safe:animate-spin' : ''}`} />
+      <RefreshCw />
     </UiIconButton>
   )
 
@@ -218,7 +218,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                         {editingId === memory.memoryId ? (
                           <UiIconButton
                             type="button"
-                            title="保存修改"
+                            tooltip="保存修改"
                             aria-label="保存修改"
                             onClick={() => void act(memory.memoryId, async () => {
                               if (memory.memoryId === SHARED_MEMORY_ID) await getPlatform().assistant.updateSharedMemory({ content: draft, expectedRevision: sharedRevision })
@@ -232,7 +232,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                         ) : (
                           <UiIconButton
                             type="button"
-                            title="编辑记忆"
+                            tooltip="编辑记忆"
                             aria-label="编辑记忆"
                             onClick={() => beginEdit(memory)}
                           >
@@ -241,7 +241,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                         )}
                         <UiIconButton tone="danger"
                           type="button"
-                          title="删除记忆"
+                          tooltip="删除记忆"
                           aria-label="删除记忆"
                           onClick={() => void act(memory.memoryId, async () => {
                             await deleteAgentMemory(memory.memoryId)

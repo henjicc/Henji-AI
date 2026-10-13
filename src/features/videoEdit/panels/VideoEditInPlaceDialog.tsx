@@ -137,7 +137,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   return <UiModal isOpen title={title} size="form" onClose={onClose} footer={<>
     {modelId && !mismatch && <span className="mr-auto flex items-center"><PriceEstimate providerId={providerId} modelId={modelId} params={{ ...params, prompt: text, images: usedImages, uploadedImages: usedImages }} /></span>}
     <UiButton onClick={onClose}>取消</UiButton>
-    <UiButton variant="primary" disabled={!plan || !modelId || Boolean(mismatch) || Boolean(selected.error) || !text || busy} onClick={() => { void submit() }}>{busy ? '正在提交…' : '生成'}</UiButton>
+    <UiButton loading={busy} variant="primary" disabledReason={!plan ? '请先选择有效的生成位置' : !modelId ? '请先选择模型' : mismatch || selected.error || (!text ? '请先填写生成描述' : undefined)} disabled={!plan || !modelId || Boolean(mismatch) || Boolean(selected.error) || !text || busy} onClick={() => { void submit() }}>{'生成'}</UiButton>
   </>}>
     <UiGroup labelWidth={96} gap="stack" data-video-edit-in-place={intent.action}>
       {'error' in planned ? <UiError message={planned.error} /> : <>

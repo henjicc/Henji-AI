@@ -15,7 +15,7 @@ it('分段单选方向键跳过禁用项并循环，选择与焦点同步，整�
   expect(screen.getByRole('radiogroup', { name: '方式' })).toBeDefined()
   const first = screen.getByRole('radio', { name: '摆放' }), last = screen.getByRole('radio', { name: '录制轨迹' })
   expect(first.className).not.toContain('bg-accent')
-  expect(first.title).toBe('摆放提示')
+  fireEvent.focus(first); expect(screen.getByRole('tooltip').textContent).toBe('摆放提示')
   expect(first.className).toContain('bg-segment-selected')
   expect(first.className).toContain('text-text1')
   expect(first.className).not.toContain('bg-accent')
@@ -26,7 +26,7 @@ it('分段单选方向键跳过禁用项并循环，选择与焦点同步，整�
   fireEvent.keyDown(last, { key: 'ArrowRight' }); expect(document.activeElement).toBe(first)
   fireEvent.keyDown(first, { key: 'ArrowLeft' }); expect(document.activeElement).toBe(last)
   view.rerender(<Example disabled />)
-  for (const radio of screen.getAllByRole('radio')) { expect((radio as HTMLButtonElement).disabled).toBe(true); expect(radio.tabIndex).toBe(-1) }
+  for (const radio of screen.getAllByRole('radio')) { expect(radio.getAttribute('aria-disabled')).toBe('true'); expect(radio.tabIndex).toBe(-1) }
   view.rerender(<UiSegmented ariaLabel="超过五项" value="1" onChange={() => undefined} options={Array.from({ length: 6 }, (_, i) => ({ value: String(i), label: String(i) }))} />)
   expect(screen.queryByRole('radiogroup')).toBeNull()
   expect(screen.getByRole('button', { name: '超过五项' }).textContent).toBe('1')

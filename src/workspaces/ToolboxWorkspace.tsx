@@ -97,7 +97,7 @@ const ToolboxHome: React.FC = () => {
                     key={file.key}
                     variant="menu"
                     className="grid min-h-11 w-full grid-cols-[28px_minmax(0,1fr)_140px_120px] items-center gap-3 px-3"
-                    title={`在${tool ? t(tool.descriptor.titleKey) : '工具'}中打开`}
+                    tooltip={`在${tool ? t(tool.descriptor.titleKey) : '工具'}中打开`}
                     onClick={() => openRecent(file)}
                   >
                     <Icon size={UI_ICON_SIZE.md} aria-hidden="true" className="text-text3" />

@@ -138,7 +138,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
           onClick={() => { setShowText(false); setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
         <UiChipButton role="tab" selectionRole="navigation" selectionAppearance="subtle" active={showText} aria-selected={showText} disabled={busy} onClick={() => { setShowText(true); setDraft(null) }}>文本</UiChipButton>
       </div> },
-    ...(!showText ? [{ id: 'add', priority: 5, node: <UiIconButton size="xs" aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || kind === 'caption' && sequence.captionTrackLocked} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus  /></UiIconButton> }] : []),
+    ...(!showText ? [{ id: 'add', priority: 5, node: <UiIconButton size="xs" aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} tooltip={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || kind === 'caption' && sequence.captionTrackLocked} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus  /></UiIconButton> }] : []),
     ...(!showText && kind === 'caption' ? [
       { id: 'subtitle', priority: 2, node: <VideoEditSubtitleActions instance={instance} sequence={sequence} selectedCaptionId={selectedCaptionId} onError={report} /> },
       { id: 'files', priority: 1, node: <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
@@ -146,7 +146,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'srt', sequence.id, signal, 'sequence'))}><FileOutput size={UI_ICON_SIZE.sm} />导出 SRT（序列时间）</UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'vtt', sequence.id, signal))}><FileOutput size={UI_ICON_SIZE.sm} />导出 WebVTT</UiOptionButton>
         </div>}>
-          {({ open, togglePanel }) => <UiIconButton size="xs" aria-label="导入或导出字幕" title="导入或导出字幕" on={open} aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal  /></UiIconButton>}
+          {({ open, togglePanel }) => <UiIconButton size="xs" aria-label="导入或导出字幕" tooltip="导入或导出字幕" on={open} aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal  /></UiIconButton>}
         </PanelTrigger> },
     ] : []),
   ]
@@ -182,7 +182,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
           {draft.kind === 'caption' && draft.id && <UiFormRow label="拆分文字位置" density="compact"><NumberInput ariaLabel="拆分文字位置" size="sm" value={splitCharacter} min={1} max={Math.max(1, Array.from(draft.text).length - 1)} precision={0} step={1} onChange={value => setSplitCharacter(Math.round(value))} /></UiFormRow>}
         </>}
         <div className="flex flex-wrap items-center gap-2">
-          <UiButton variant="primary" size="sm" disabled={editingLocked || busy || draft.kind !== 'import' && !draft.text.trim()} onClick={() => draft.kind === 'import' ? asyncFile(signal => importVideoEditCaptionFile(projectId, sequence.id, { offset: draft.start, ...(draft.clipId ? { clipId: draft.clipId } : {}) }, signal)) : saveDraft()}>{draft.kind === 'import' ? busy ? '正在导入…' : '选择字幕文件' : draft.id ? '保存修改' : '添加'}</UiButton>
+          <UiButton loading={busy} variant="primary" size="sm" disabled={editingLocked || busy || draft.kind !== 'import' && !draft.text.trim()} onClick={() => draft.kind === 'import' ? asyncFile(signal => importVideoEditCaptionFile(projectId, sequence.id, { offset: draft.start, ...(draft.clipId ? { clipId: draft.clipId } : {}) }, signal)) : saveDraft()}>{draft.kind === 'import' ? '选择字幕文件' : draft.id ? '保存修改' : '添加'}</UiButton>
           {selected && draft.id && <UiButton size="sm" disabled={editingLocked || busy} onClick={() => locate(selected)}>定位</UiButton>}
           {draft.kind === 'caption' && draft.id && <>
             <UiButton size="sm" disabled={editingLocked || busy || !selected || draft.text !== entryText(selected)} onClick={() => run(() => { assertCaptionDraft(); splitVideoEditSubtitle(projectId, sequence.id, draft.id!, instance.frame, splitCharacter); setDraft(null) })}>播放头拆分</UiButton>

@@ -156,7 +156,7 @@ export function ImageMarkToolV3ToolbarActions({
                       role="menuitem"
                       variant="menu"
                       disabled={disabled}
-                      title={reason}
+                      disabledReason={reason}
                       data-export-format={format}
                       data-export-readiness={readiness.state}
                       size="md" className="w-full gap-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -177,7 +177,7 @@ export function ImageMarkToolV3ToolbarActions({
                 variant="primary"
                 className="shrink-0"
                 disabled={host.isHostBusy || exportUnavailable}
-                title={exportReason}
+                disabledReason={exportReason}
                 aria-expanded={open}
                 aria-haspopup="menu"
                 aria-label={exportReason

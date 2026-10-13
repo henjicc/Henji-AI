@@ -7,7 +7,7 @@ import { useI18n } from '@/hooks/useI18n'
  * 不在这里改任何外观；新增共享组件时在这里补一个样本（uiGalleryCoverage.test 会提醒）。
  */
 import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
-import { Bold, Check, Image as ImageIcon, Italic, Link, Loader2, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Bold, Check, Image as ImageIcon, Italic, Link, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -17,6 +17,10 @@ import {
   PromptEditor,
   StackedMediaUploader,
   UiButton,
+  UiSpinner,
+  UiSkeleton,
+  UiFieldMessage,
+  UiInlineStatus,
   UiCheckbox,
   UiChipButton,
   UiColorInput,
@@ -123,8 +127,7 @@ export function ButtonSection(): JSX.Element {
           label,
           states: ['rest', 'hover', 'active', 'focus', 'disabled', 'loading'],
           render: (state) => (
-            <UiButton variant={variant} size="sm" disabled={disabledAt(state) || state === 'loading'} aria-busy={state === 'loading'}>
-              {state === 'loading' && <Loader2 className={`animate-spin`} />}
+            <UiButton variant={variant} size="sm" disabled={disabledAt(state)} loading={state === 'loading'}>
               {variant === 'link' ? '说明' : '保存'}
             </UiButton>
           ),
@@ -179,10 +182,9 @@ export function FieldSection(): JSX.Element {
         <UiDatePicker value={date} onChange={setDate} placeholder="选择日期" ariaLabel="开始日期" clearLabel="清除" todayLabel="今天" className="w-36" />
       </GalleryRow>
       <GalleryRow label="错误">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <UiInput size="sm" aria-label="接口地址" aria-invalid="true" defaultValue="http:/bad" />
-          <span className="text-xs text-danger-text">地址格式不正确</span>
-        </div>
+        <UiFormRow label="接口地址" error="地址格式不正确" className="min-w-0 flex-1">
+          <UiInput size="sm" defaultValue="http:/bad" />
+        </UiFormRow>
       </GalleryRow>
       <GalleryRow label="多行">
         <UiTextArea aria-label="描述" rows={2} defaultValue="多行文本" className="min-w-0 flex-1" />
@@ -449,9 +451,21 @@ export function ToolbarSection(): JSX.Element {
   )
 }
 
+function FeedbackSamples(): JSX.Element {
+  const [loading, setLoading] = useState(false)
+  return <>
+    <GalleryRow label="加载切换"><UiButton loading={loading}>保存文件</UiButton><UiButton onClick={() => setLoading(value => !value)}>切换加载</UiButton><UiButton disabled disabledReason="先选择素材" tooltip="导出所选素材">导出</UiButton></GalleryRow>
+    <GalleryRow label="行内加载">{GALLERY_ICON_SIZES.map(size => <UiSpinner key={size} size={size} />)}<UiSpinner tone="accent" /></GalleryRow>
+    <GalleryRow label="骨架"><UiSkeleton shape="line" /><div className="w-24"><UiSkeleton shape="block" /></div><div className="w-16"><UiSkeleton shape="square" /></div></GalleryRow>
+    <GalleryRow label="字段消息"><UiFieldMessage tone="error">名称已存在</UiFieldMessage><UiFieldMessage tone="hint">最多二十字</UiFieldMessage></GalleryRow>
+    <GalleryRow label="行内反馈"><UiInlineStatus tone="error">保存未完成</UiInlineStatus><UiInlineStatus tone="warning">部分素材缺失</UiInlineStatus><UiInlineStatus tone="success">保存完成</UiInlineStatus></GalleryRow>
+  </>
+}
+
 export function StateSection(): JSX.Element {
   return (
     <GallerySection title="空 / 加载 / 错误">
+      <FeedbackSamples />
       <div className="grid grid-cols-2 gap-3">
         <UiEmpty size="xs" title="还没有供应商" description="先添加一个吧" />
         <UiLoading size="xs" message="生成中…"><ProgressBar progress={42} className="w-32" /></UiLoading>
@@ -610,7 +624,7 @@ export function SizeLadderSection(): JSX.Element {
       <PanelTrigger size={size} appearance="field" surface="solid" display={`面板 ${size}`} renderPanel={() => <span>面板内容</span>} />
       <UiNumberStepper size={size} increaseLabel="增加" decreaseLabel="减少" canIncrease canDecrease onStep={noop} />
     </div>)}
-    <GalleryMatrix rows={GALLERY_ICON_SIZES.map(size => ({ label: `图标 ${size}`, states: ['rest', 'hover', 'active', 'focus', 'selected', 'disabled', 'loading'], render: state => <UiIconButton size={size} on={state === 'selected'} disabled={state === 'disabled' || state === 'loading'} aria-label={`添加 ${size} ${state}`} aria-busy={state === 'loading'}>{state === 'loading' ? <Loader2 className={`animate-spin`} /> : <Plus />}</UiIconButton> }))} />
+    <GalleryMatrix rows={GALLERY_ICON_SIZES.map(size => ({ label: `图标 ${size}`, states: ['rest', 'hover', 'active', 'focus', 'selected', 'disabled', 'loading'], render: state => <UiIconButton size={size} on={state === 'selected'} disabled={state === 'disabled'} loading={state === 'loading'} aria-label={`添加 ${size} ${state}`} aria-busy={state === 'loading'}><Plus /></UiIconButton> }))} />
     {GALLERY_SEGMENTED_SIZES.map(size => <GalleryRow key={size} label={size}><UiSegmented size={size} fullWidth ariaLabel={`分段 ${size}`} value="a" options={[{ value: 'a', label: '图片' }, { value: 'b', label: '视频' }]} onChange={noop} /></GalleryRow>)}
   </GallerySection>
 }

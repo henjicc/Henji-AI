@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { UiFieldMessage } from '@/components/ui'
+import { useId, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { UiButton, UiInput, UiModal } from '@/components/ui';
 
@@ -41,6 +42,7 @@ export function RenameDialog({
   validate,
 }: RenameDialogProps): JSX.Element {
   const { t } = useTranslation();
+  const errorId = useId();
   const [name, setName] = useState(defaultValue);
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle' });
   const [submitting, setSubmitting] = useState(false);
@@ -124,10 +126,11 @@ export function RenameDialog({
         onKeyDown={handleKeyDown}
         placeholder={placeholder ?? t('project.namePlaceholder')}
         aria-invalid={message ? true : undefined}
+        aria-describedby={message ? errorId : undefined}
         disabled={submitting}
         autoFocus
       />
-      {message ? <p role="alert" className="mt-1.5 text-xs text-danger-text">{message}</p> : null}
+      {message ? <UiFieldMessage id={errorId} className="mt-1">{message}</UiFieldMessage> : null}
     </UiModal>
   );
 }

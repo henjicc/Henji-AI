@@ -28,7 +28,7 @@ it('没有可编辑目标时隐藏路径蒙版，有目标时提供入口，目�
   expect((screen.getByRole('button', { name: '用路径作为蒙版' }) as HTMLButtonElement).disabled).toBe(false)
   document.layers = [layer, createImageEditRasterLayerV3('other', '另一图层')]
   view.rerender(<VectorProperties controller={controller} layer={layer} locked={false} />)
-  expect((screen.getByRole('button', { name: '用路径作为蒙版' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.getByRole('button', { name: '用路径作为蒙版' }).getAttribute('aria-disabled')).toBe('true')
 })
 
 it('文字属性连续修改经正式内容服务合并为一步历史，撤销读回原内容', () => {

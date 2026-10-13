@@ -74,7 +74,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
                         size="md"
                         disabled={item.disabled === true}
                         aria-disabled={item.disabled === true}
-                        title={item.title}
+                        tooltip={item.title}
                         className="w-full gap-3"
                         onKeyDown={event => {
                             if (event.key !== 'Enter' && event.key !== ' ') return

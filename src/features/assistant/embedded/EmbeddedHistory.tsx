@@ -29,7 +29,7 @@ export function EmbeddedHistory({ visible, onOpen }: { visible: boolean; onOpen(
     {/* 两行的历史对话列表行：menu 选项静息无底、悬停出底；当前对话用单选的淡强调底标出，高度随内容 */}
     {sessions.map((session) => <UiOptionButton key={session.id} variant="menu" active={session.id === state.sessionId}
       aria-current={session.id === state.sessionId ? 'true' : undefined}
-      className="w-full shrink-0 justify-start" title={session.title} disabled={state.busy} onClick={() => {
+      className="w-full shrink-0 justify-start" tooltip={session.title} disabled={state.busy} onClick={() => {
         void getPlatform().embeddedAgent.openSession(session.id).then(onOpen, reportEmbeddedAgentError)
       }}>
       <span className="min-w-0">

@@ -43,7 +43,7 @@ export function ImageEditorViewportChromeV3({
  >
         <UiIconButton size="sm" tone="media"
           aria-label={t('imageEditor.v3.zoomOut')}
-          title={t('imageEditor.v3.zoomOut')}
+          tooltip={t('imageEditor.v3.zoomOut')}
           disabled={zoom <= 0.05}
           onClick={() => onZoomChange(zoom / 1.25)}
  >
@@ -54,17 +54,17 @@ export function ImageEditorViewportChromeV3({
         </UiReadout>
         <UiIconButton size="sm" tone="media"
           aria-label={t('imageEditor.v3.zoomIn')}
-          title={t('imageEditor.v3.zoomIn')}
+          tooltip={t('imageEditor.v3.zoomIn')}
           disabled={zoom >= 8}
           onClick={() => onZoomChange(zoom * 1.25)}
  >
           <Plus />
         </UiIconButton>
-        <UiButton variant="media" size="sm" title={`${t('imageEditor.v3.fitWindow')} (Ctrl+0)`}
+        <UiButton variant="media" size="sm" tooltip={`${t('imageEditor.v3.fitWindow')} (Ctrl+0)`}
           onClick={() => onViewportPreset('fit')}>
           {t('imageEditor.v3.fitWindow')}
         </UiButton>
-        <UiButton variant="media" size="sm" title={`${t('imageEditor.v3.actualSize')} (Ctrl+1)`}
+        <UiButton variant="media" size="sm" tooltip={`${t('imageEditor.v3.actualSize')} (Ctrl+1)`}
           onClick={() => onViewportPreset('actual')}>
           {t('imageEditor.v3.actualSize')}
         </UiButton>

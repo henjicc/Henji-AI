@@ -132,3 +132,5 @@ transition/animation 时长压到 0.01ms，延迟清零，循环只播一次，�
 非替换 inline 盒不支持 transform，不能以无效位移掩盖问题。
 不要在批量生成元素的静态类上永久设置 `will-change`；确需提升合成层时
 仅在交互期间添加并及时清理（performance.md 的复用规则由任务 4.7 维护）。
+
+状态循环只由 UiSpinner / UiSkeleton 消费；业务按钮传 loading，保持静息文案占位。减少动效时停止旋转/脉冲，保留图标、aria-busy 和状态文字。样张循环通过 active 开关复用正式组件，不另写动画。

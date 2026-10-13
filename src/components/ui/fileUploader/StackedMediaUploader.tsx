@@ -406,7 +406,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                       setReplaceIndex(index)
                       replaceInputRef.current?.click()
                     }}
-                    title="替换"
+                    tooltip="替换"
                   >
                     <RefreshCw   />
                   </UiIconButton>
@@ -419,7 +419,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                       event.stopPropagation()
                       onTrim(index)
                     }}
-                    title="裁剪"
+                    tooltip="裁剪"
                   >
                     <Scissors   />
                   </UiIconButton>

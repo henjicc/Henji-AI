@@ -164,7 +164,7 @@ export const NodeModelParamsControls = memo(({
             aria-expanded={panelOpen}
             data-panel-trigger-button
             data-node-model-trigger
-            title={compactChip && selectedModel
+            tooltip={compactChip && selectedModel
               ? `${selectedModelName} · ${getProviderDisplayName(selectedModel.meta.provider, i18n.language)}`
               : undefined}
             className={`min-w-0 overflow-hidden ${chipClassName} ${modelChipClassName}`}

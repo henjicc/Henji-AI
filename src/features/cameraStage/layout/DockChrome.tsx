@@ -54,7 +54,7 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
         <UiIconButton
           size="xs"
           on={open}
-          title="面板菜单"
+          tooltip="面板菜单"
           aria-label="面板菜单"
           aria-haspopup="menu"
           aria-expanded={open}

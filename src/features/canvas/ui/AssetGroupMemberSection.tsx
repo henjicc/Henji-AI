@@ -136,7 +136,7 @@ export const AssetGroupMemberSection = memo(({
                 <div className="flex shrink-0 items-center gap-1">
                   <UiIconButton size="md"
                     aria-label={labels.moveEarlier}
-                    title={labels.moveEarlier}
+                    tooltip={labels.moveEarlier}
                     disabled={index === 0}
                     onClick={() => onReorder(index, index - 1)}
                   >
@@ -144,7 +144,7 @@ export const AssetGroupMemberSection = memo(({
                   </UiIconButton>
                   <UiIconButton size="md"
                     aria-label={labels.moveLater}
-                    title={labels.moveLater}
+                    tooltip={labels.moveLater}
                     disabled={index === members.length - 1}
                     onClick={() => onReorder(index, index + 1)}
                   >
@@ -153,7 +153,7 @@ export const AssetGroupMemberSection = memo(({
                   <UiIconButton size="md"
                     on={isCover}
                     aria-label={labels.setCover}
-                    title={labels.setCover}
+                    tooltip={labels.setCover}
                     onClick={() => onSetCover(member.id)}
                   >
                     <Star
@@ -164,7 +164,7 @@ export const AssetGroupMemberSection = memo(({
                   </UiIconButton>
                   <UiIconButton size="md" tone="danger"
                     aria-label={labels.remove}
-                    title={labels.remove}
+                    tooltip={labels.remove}
                     onClick={() => onRemoveRequest(member.id)}
                   >
                     <LogOut  />

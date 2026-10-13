@@ -188,7 +188,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
                 role="radio"
                 aria-checked={active}
                 aria-label={localize(swatch.name)}
-                title={localize(swatch.name)}
+                tooltip={localize(swatch.name)}
                 active={active}
                 onClick={() => setThemeAccent(swatch.hex)}
                 // 跟随预设：一半是预设强调色、一半是辅助文字灰，和具体颜色区分开
@@ -205,7 +205,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
               role="radio"
               aria-checked
               aria-label={t('sections.theme.accent.custom')}
-              title={t('sections.theme.accent.custom')}
+              tooltip={t('sections.theme.accent.custom')}
               active
               style={{ backgroundColor: customAccentFill }}
             />

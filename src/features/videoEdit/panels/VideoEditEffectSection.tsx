@@ -25,7 +25,7 @@ export function VideoEditEffectSection({ id, title, info, actions, children, ena
     if (next) collapsedSections.delete(id); else collapsedSections.add(id)
     setOpen(next)
   }
-  return <UiGroup data-video-edit-effect-section={id} titleTone="compact" divided gap="none" actions={actions} title={<div className="flex min-w-0 items-center gap-1">{onEnabledChange && <UiIconButton size="2xs" on={enabled} aria-pressed={enabled} aria-label={`${enabled ? '停用' : '启用'}${title}分区`} title={enabled ? '停用此分区（保留参数与关键帧）' : '恢复此分区'} onClick={() => onEnabledChange(!enabled)}><Power  /></UiIconButton>}<VideoEditEffectSectionTitle title={title} open={open} onToggle={toggle} info={info} inactive={enabled === false} /></div>}>
+  return <UiGroup data-video-edit-effect-section={id} titleTone="compact" divided gap="none" actions={actions} title={<div className="flex min-w-0 items-center gap-1">{onEnabledChange && <UiIconButton size="2xs" on={enabled} aria-pressed={enabled} aria-label={`${enabled ? '停用' : '启用'}${title}分区`} tooltip={enabled ? '停用此分区（保留参数与关键帧）' : '恢复此分区'} onClick={() => onEnabledChange(!enabled)}><Power  /></UiIconButton>}<VideoEditEffectSectionTitle title={title} open={open} onToggle={toggle} info={info} inactive={enabled === false} /></div>}>
     {open ? children : null}
   </UiGroup>
 }

@@ -82,7 +82,7 @@ export function VideoEditButtonBarEditorPanel<Id extends string>({ specs, saved,
   const draggingOut = dragState.isDragging && outside(dragState.currentX, dragState.currentY)
   return <div className="flex flex-col gap-3" aria-label="按钮编辑器">
     <div className="grid grid-cols-8 gap-1" role="group" aria-label="可用按钮">
-      {specs.map(spec => <UiIconButton key={spec.id} aria-label={spec.title} title={`${spec.title}：拖到下方按钮栏，或点击加入／移出`} on={draft.includes(spec.id)} aria-pressed={draft.includes(spec.id)} draggable
+      {specs.map(spec => <UiIconButton key={spec.id} aria-label={spec.title} tooltip={`${spec.title}：拖到下方按钮栏，或点击加入／移出`} on={draft.includes(spec.id)} aria-pressed={draft.includes(spec.id)} draggable
         onDragStart={event => { event.dataTransfer.setData(BUTTON_MIME, spec.id); event.dataTransfer.effectAllowed = 'copy' }}
         onDragEnd={() => setDropIndex(null)} onClick={() => toggle(spec.id)}><spec.Icon /></UiIconButton>)}
     </div>

@@ -79,7 +79,7 @@ export function BatchConnectionHandle({ nodes, onConnect }: BatchConnectionHandl
           <UiIconButton shape="circle" size="md"
             className="nodrag nopan"
             aria-label={t('nodeToolbar.batchConnect')}
-            title={t('nodeToolbar.batchConnect')}
+            tooltip={t('nodeToolbar.batchConnect')}
             onPointerDown={handlePointerDown}
           >
             <Cable  />

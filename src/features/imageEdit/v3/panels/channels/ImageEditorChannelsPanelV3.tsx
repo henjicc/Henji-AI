@@ -34,17 +34,17 @@ export function ImageEditorChannelsPanelV3({ controller }: { controller: ImageEd
   return <section data-channels-panel className="flex min-h-0 flex-1 flex-col">
     {error ? <UiError size="xs" message={error} /> : null}
     <div className="flex h-10 shrink-0 items-center gap-1 px-3">
-      <UiIconButton size="xs" aria-label={t('imageEditor.v3.channels.save')} title={t('imageEditor.v3.channels.save')} disabled={!selection || !controller.setNamedRegions}
+      <UiIconButton size="xs" aria-label={t('imageEditor.v3.channels.save')} tooltip={t('imageEditor.v3.channels.save')} disabled={!selection || !controller.setNamedRegions}
         onClick={() => run(() => {
           if (!selection) return
           const id = createImageEditIdV3('channel')
           write([...controller.document.namedRegions, { id, name: t('imageEditor.v3.channels.defaultName'), selection: structuredClone(selection) }]); setSelectedId(id)
         })}><Plus  /></UiIconButton>
-      <UiIconButton size="xs" aria-label={t('imageEditor.v3.channels.load')} title={t('imageEditor.v3.channels.load')} disabled={!selected}
+      <UiIconButton size="xs" aria-label={t('imageEditor.v3.channels.load')} tooltip={t('imageEditor.v3.channels.load')} disabled={!selected}
         onClick={() => selected && run(() => load(selected))}><ArrowDownToLine  /></UiIconButton>
-      <UiIconButton size="xs" aria-label={t('imageEditor.v3.channels.update')} title={t('imageEditor.v3.channels.update')} disabled={!selected || !selection}
+      <UiIconButton size="xs" aria-label={t('imageEditor.v3.channels.update')} tooltip={t('imageEditor.v3.channels.update')} disabled={!selected || !selection}
         onClick={() => run(() => { if (selected && selection) write(controller.document.namedRegions.map(region => region.id === selected.id ? { ...region, selection: structuredClone(selection) } : region)) })}><Copy  /></UiIconButton>
-      <UiIconButton size="xs" tone="danger" aria-label={t('imageEditor.v3.channels.delete')} title={t('imageEditor.v3.channels.delete')} disabled={!selected}
+      <UiIconButton size="xs" tone="danger" aria-label={t('imageEditor.v3.channels.delete')} tooltip={t('imageEditor.v3.channels.delete')} disabled={!selected}
         onClick={() => run(() => { if (selected) write(controller.document.namedRegions.filter(region => region.id !== selected.id)) })}><Trash2  /></UiIconButton>
     </div>
     {selected ? <div className="px-3 pb-2"><ChannelName key={selected.id} region={selected} onCommit={name => run(() => write(controller.document.namedRegions.map(region => region.id === selected.id ? { ...region, name } : region)))} /></div> : null}

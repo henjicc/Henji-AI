@@ -37,7 +37,7 @@ export function VideoEditTimelineTools({ presentation, execute }: { presentation
       const command = presentation(id); const Icon = TOOL_ICONS[id]
       const grouped = members.length > 1
       return <UiIconButton key={group} on={command.checked} disabled={!command.enabled} aria-label={command.title} aria-haspopup={grouped ? 'menu' : undefined}
-        title={grouped ? `${command.tooltip}（按住或右键切换：${members.filter(member => member !== id).map(member => presentation(member).title).join('、')}）` : command.tooltip}
+        tooltip={grouped ? `${command.tooltip}（按住或右键切换：${members.filter(member => member !== id).map(member => presentation(member).title).join('、')}）` : command.tooltip}
         onPointerDown={event => {
           if (!grouped || event.button !== 0) return
           held.current = false; const anchor = event.currentTarget

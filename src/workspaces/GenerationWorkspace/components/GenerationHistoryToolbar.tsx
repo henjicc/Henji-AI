@@ -56,7 +56,7 @@ export function GenerationHistoryToolbar({
           on={filtering}
           aria-expanded={searchOpen}
           onClick={onToggleSearch}
-          title={t('ui:workspaceFilters.searchHistory')}
+          tooltip={t('ui:workspaceFilters.searchHistory')}
         >
           <Search  />
         </UiIconButton>
@@ -83,7 +83,7 @@ export function GenerationHistoryToolbar({
               aria-haspopup="menu"
               aria-expanded={open}
               onClick={togglePanel}
-              title={t('ui:workspaceFilters.moreActions')}
+              tooltip={t('ui:workspaceFilters.moreActions')}
               data-panel-trigger-button
             >
               <MoreHorizontal  />

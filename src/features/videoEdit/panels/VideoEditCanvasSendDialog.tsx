@@ -49,7 +49,7 @@ export function VideoEditCanvasSendDialog({ request, onClose }: { request: Video
     finally { operation.current = null; setBusy(false) }
   }
   return <UiModal isOpen title={request.source.kind === 'frame' ? '发送当前帧到画布' : '发送片段到画布'} onClose={() => { if (!busy) onClose() }}
-    footer={<><UiButton onClick={() => { operation.current?.abort(); if (!busy) onClose() }}>{busy ? '取消发送' : '取消'}</UiButton><UiButton variant="primary" disabled={busy || !canvasId} onClick={() => void submit()}>{busy ? '正在处理…' : savePending ? '重试保存画布' : '发送'}</UiButton></>}>
+    footer={<><UiButton onClick={() => { operation.current?.abort(); if (!busy) onClose() }}>{busy ? '取消发送' : '取消'}</UiButton><UiButton loading={busy} variant="primary" disabledReason={!canvasId ? '请先选择目标画布' : undefined} disabled={busy || !canvasId} onClick={() => void submit()}>{savePending ? '重试保存画布' : '发送'}</UiButton></>}>
     <Dropdown label="目标画布" disabled={busy || Boolean(savePending)} value={canvasId} options={documents.map(value => ({ value: value.id, label: value.name }))} onSelect={setCanvasId} />
     {!loading && !canvasId && !error && <UiError title="请先创建或打开一份画布。" message="" />}
     {error && <UiError title={error} message="" />}

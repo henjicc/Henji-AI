@@ -53,7 +53,7 @@ export function ImageEditorDockHeaderActionsV3({ group, containerApi }: IDockvie
       aria-expanded={!isCollapsed} onClick={() => {
         for (const panel of group.panels) if (collapsed.has(panel.id) === isCollapsed) toggleCollapsed(panel.id)
       }}>{isCollapsed ? <ChevronDown  /> : <ChevronUp  />}</UiIconButton>
-    <UiIconButton size="xs" aria-label={title} title={title}
+    <UiIconButton size="xs" aria-label={title} tooltip={title}
       onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>
       {maximized ? <Minimize2  /> : <Maximize2  />}
     </UiIconButton>
@@ -109,7 +109,7 @@ export function ImageEditorPanelMenuV3(): JSX.Element | null {
         {t('imageEditor.v3.panels.defaultLayout', { defaultValue: '恢复默认布局' })}
       </UiOptionButton>
     </div>}>
-    {({ open, togglePanel }) => <UiIconButton size="md" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} on={open}
+    {({ open, togglePanel }) => <UiIconButton size="md" aria-label={label} tooltip={label} aria-haspopup="menu" aria-expanded={open} on={open}
       onClick={togglePanel}><LayoutPanelLeft  /></UiIconButton>}
   </PanelTrigger>
 }

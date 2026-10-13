@@ -1,7 +1,8 @@
+import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { LoaderCircle } from 'lucide-react';
+
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
@@ -180,7 +181,7 @@ export const TextAnnotationNode = memo(({
             <div className="space-y-3">
               <section aria-label={t('node.textAnnotation.reasoning')}>
                 <div className="sticky top-0 flex items-center gap-1.5 bg-panel py-0.5 text-xs text-text2">
-                  <LoaderCircle className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 animate-spin`} />
+                  <UiSpinner />
                   <span>{t('node.textAnnotation.reasoning')}</span>
                 </div>
                 <div className="mt-1 whitespace-pre-wrap break-words text-text2">

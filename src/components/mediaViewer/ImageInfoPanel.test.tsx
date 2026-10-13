@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, render, fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useSettingsStore } from '@/stores/settingsStore'
 import i18n from '@/i18n/config'
@@ -11,7 +11,8 @@ it.each(['zh-CN', 'en-US'])('%s 信息按钮及设置提示使用 I 快捷键', 
   await i18n.changeLanguage(language)
   const { container } = render(<ImageInfoPanel open imageSource="image.png" />)
   await act(async () => {})
-  expect(container.querySelector('button')?.title).toMatch(/[(（]I[)）]/)
+  fireEvent.focus(container.querySelector('button')!)
+  expect(screen.getByRole('tooltip').textContent).toMatch(/[(（]I[)）]/)
   expect(i18n.t('sections.canvas.imageViewerInfoHint', { ns: 'settings' })).toContain('I')
   expect(i18n.t('sections.canvas.imageViewerInfoHint', { ns: 'settings' })).not.toContain('Tab')
 })

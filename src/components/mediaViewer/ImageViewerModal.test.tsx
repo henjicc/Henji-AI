@@ -71,7 +71,7 @@ describe('图片查看与同步对比', () => {
     fireEvent.mouseUp(result);
     expect(result.style.transform).toBe(original.style.transform);
     fireEvent.wheel(result, { clientX: 200, clientY: 200, deltaY: -200 });
-    fireEvent.click(screen.getByTitle('重置视图'));
+    fireEvent.click(screen.getByRole('button', { name: '重置视图' }));
     act(() => vi.advanceTimersByTime(1000));
     expect(result.style.transform).toBe('scale(1) translate(0px, 0px)');
     expect(original.style.transform).toBe(result.style.transform);

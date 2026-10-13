@@ -156,7 +156,7 @@ const ProviderCenterModelList = ({
                       <UiIconButton size="md"
                         type="button"
                         aria-label={t('providerCenter.actions.editModel')}
-                        title={t('providerCenter.actions.editModel')}
+                        tooltip={t('providerCenter.actions.editModel')}
                         onClick={() => onEditModel(model)}
                       >
                         <Pencil  />
@@ -164,7 +164,7 @@ const ProviderCenterModelList = ({
                       <UiIconButton size="md" tone="danger"
                         type="button"
                         aria-label={t('providerCenter.actions.deleteModel')}
-                        title={t('providerCenter.actions.deleteModel')}
+                        tooltip={t('providerCenter.actions.deleteModel')}
                         onClick={() => void onDeleteModel(model)}
                       >
                         <Trash2  />
@@ -174,7 +174,7 @@ const ProviderCenterModelList = ({
                     <UiIconButton size="md"
                       type="button"
                       aria-label={t('providerCenter.actions.renameModel')}
-                      title={t('providerCenter.renameHint')}
+                      tooltip={t('providerCenter.renameHint')}
                       onClick={() => { cancelledRef.current = false; setRenaming({
                         id: model.id,
                         draft: model.name === model.generationModel?.originalName ? '' : model.name,

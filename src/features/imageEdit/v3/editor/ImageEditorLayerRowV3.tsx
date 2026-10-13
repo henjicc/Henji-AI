@@ -271,12 +271,12 @@ export function ImageEditorLayerRowV3({
       {row.layer.mask && controller.profile.layerControls.includes('mask') ? <>
         <UiIconButton size="2xs" on={row.layer.maskAttachment.linked} disabled={!editable}
           aria-label={row.layer.maskAttachment.linked ? t('imageEditor.v3.workflow.unlink') : t('imageEditor.v3.workflow.link')}
-          title={row.layer.maskAttachment.linked ? t('imageEditor.v3.workflow.unlink') : t('imageEditor.v3.workflow.link')}
+          tooltip={row.layer.maskAttachment.linked ? t('imageEditor.v3.workflow.unlink') : t('imageEditor.v3.workflow.link')}
           onClick={() => controller.updateLayerCommon(row.layer.id, { maskAttachment: { ...row.layer.maskAttachment, linked: !row.layer.maskAttachment.linked } })}>
           {row.layer.maskAttachment.linked ? <Link  /> : <Unlink  />}
         </UiIconButton>
         <UiIconButton data-layer-mask-target size="xs" on={selected && target === 'mask'}
-          aria-label={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })} title={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })}
+          aria-label={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })} tooltip={t('imageEditor.v3.workflow.maskTarget', { name: row.layer.name })}
           onClick={() => selectImageEditTargetV3(controller, row.layer.id, 'mask')}>
           <CircleDashed  />
         </UiIconButton>
