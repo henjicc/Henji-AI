@@ -368,10 +368,10 @@ wc -l src/App.tsx
 npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --theme-preset all --size 1440x900 --audit --out .ui-tour/review/ui-gallery-pixels
 # 退出码非0立即处理问题；不要接着更新基线。
 npm run check:ui-gallery-diff -- --input .ui-tour/review/ui-gallery-pixels
-# 首次或有意修改：必须逐张目视并在提交正文记录原因，才运行下一条。
+# 首次或有意修改：必须逐张目视并记录原因，才运行下一条。
 npm run check:ui-gallery-diff -- --input .ui-tour/review/ui-gallery-pixels --update-baseline --reason '填写至少八字的具体视觉变更原因'
 ```
 
-基线位于 scripts/ui-review/baselines/ui-gallery/<preset>/*.png 与 manifest.json。彩色 pixelmatch 单像素阈值0.1、includeAA=true，总差异比例严格 ≤0.001；超限输出到输入目录 diff/<preset>，尺寸不一致直接失败。缺基线、缺图/正式审计证据、对比度或 DOM 问题、捕获配置变化均阻断，不自动生成“通过”基线。更新前先检查所有输入解码与完整清单，基线变更需独立审查，阈值不得上调。需要响应式验收时另选 review 矩阵，960图不混入固定1440像素基线。
+基线位于本机 `.ui-tour/baselines/ui-gallery/<preset>/*.png` 与 manifest.json（已被 .gitignore 忽略，不入库：四预设约 130MB，且像素基线只在固定 Windows 环境有效）；换机器或清空后按上面流程目视后重建。彩色 pixelmatch 单像素阈值0.1、includeAA=true，总差异比例严格 ≤0.001；超限输出到输入目录 diff/<preset>，尺寸不一致直接失败。缺基线、缺图/正式审计证据、对比度或 DOM 问题、捕获配置变化均阻断，不自动生成“通过”基线。更新前先检查所有输入解码与完整清单，基线变更需独立审查，阈值不得上调。需要响应式验收时另选 review 矩阵，960图不混入固定1440像素基线。
 
 本轮执行者按用户禁令不运行排他窗口命令、不创建基线；这部分标待验证，由总管理者执行并补实际截图、差异图和审计证据。不要把上述步骤或规则自测的通过当成真实视觉通过。
