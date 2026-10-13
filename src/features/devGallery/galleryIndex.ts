@@ -59,6 +59,8 @@ export const GALLERY_STYLE_TOKENS = Object.entries(styleTokens).filter(([name]) 
 export const GALLERY_TEXT_TOKENS = GALLERY_STYLE_TOKENS.filter(([name, value]) => name.startsWith('UI_TEXT_') && name.endsWith('_CLASS') && typeof value === 'string')
 export const GALLERY_SPACING_KEYS = ['1', '2', '3', '4', '6', '8'] as const
 export const GALLERY_ICON_TOKENS = Object.entries(icons).filter(([name]) => name.startsWith('ICON_')) as Array<[string, typeof icons.ICON_ASSET_LIBRARY]>
+/** icons.ts 中的尺寸、描边等数值令牌（非图形登记），在图标栏目逐项展示原值。 */
+export const GALLERY_ICON_METRIC_TOKENS = Object.entries(icons).filter(([name]) => !name.startsWith('ICON_'))
 export const GALLERY_MOTION_TOKENS = Object.entries(motion).filter(([name]) => name.startsWith('UI_'))
 export const GALLERY_SKILL_SOURCE = 'https://github.com/henjicc/Henji-AI/blob/main/.codex/skills/henji-ui-surface/SKILL.md'
 export const GALLERY_TAILWIND_CONFIG = tailwindConfig as Config
@@ -130,7 +132,7 @@ export function searchGallery(query: string, issuesOnly = false): readonly Galle
     radius: `UI_RADIUS_CLASS ${Object.entries(styleTokens.UI_RADIUS_CLASS).flat().join(' ')}`,
     shadow: Object.keys(GALLERY_TAILWIND_CONFIG.theme?.extend?.boxShadow ?? {}).map(name => `boxShadow.${name} shadow-${name}`).join(' '),
     layers: Object.keys(GALLERY_TAILWIND_CONFIG.theme?.extend?.zIndex ?? {}).map(name => `z-${name} ${name}`).join(' '),
-    icons: GALLERY_ICON_TOKENS.map(([name]) => name).join(' '),
+    icons: [...GALLERY_ICON_TOKENS, ...GALLERY_ICON_METRIC_TOKENS].map(([name]) => name).join(' '),
     motion: `${GALLERY_MOTION_TOKENS.map(([name]) => name).join(' ')} ${Object.keys(motion.UI_DURATION).map(name => `UI_DURATION.${name}`).join(' ')}`,
     'source-tokens': GALLERY_STYLE_TOKENS.map(([name]) => name).join(' '),
   }

@@ -12,7 +12,7 @@ import { contrastRatio } from '@/core/theme/themeColor'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { Dropdown, PanelTrigger, UiButton, UiDisclosurePanel, UiGroup, UiModal, UiPanel, UiSwitch, UiToast, UI_TEXT_META_CLASS } from '@/components/ui'
 import { TooltipContent } from '@/components/ui/Tooltip'
-import { GALLERY_STYLE_TOKENS, GALLERY_TEXT_TOKENS, GALLERY_SPACING_KEYS, GALLERY_ICON_TOKENS, GALLERY_MOTION_TOKENS, GALLERY_TAILWIND_CONFIG, GALLERY_COLOR_CLASSES_BY_VARIABLE } from './galleryIndex'
+import { GALLERY_STYLE_TOKENS, GALLERY_TEXT_TOKENS, GALLERY_SPACING_KEYS, GALLERY_ICON_TOKENS, GALLERY_ICON_METRIC_TOKENS, GALLERY_MOTION_TOKENS, GALLERY_TAILWIND_CONFIG, GALLERY_COLOR_CLASSES_BY_VARIABLE } from './galleryIndex'
 
 const config = resolveConfig(GALLERY_TAILWIND_CONFIG)
 const extension = GALLERY_TAILWIND_CONFIG.theme?.extend
@@ -88,7 +88,7 @@ export function HeightTokensSection(): JSX.Element {
 export function IconTokensSection(): JSX.Element {
   const groups = new Map<unknown, string[]>()
   GALLERY_ICON_TOKENS.forEach(([name, Icon]) => groups.set(Icon, [...(groups.get(Icon) ?? []), name]))
-  return <UiGroup title="登记图标：同形多义标黄，仅作为设计审查提示" titleTone="compact"><div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{GALLERY_ICON_TOKENS.map(([name, Icon]) => <div key={name} data-gallery-token={name} className="flex items-center gap-3 py-3"><Icon className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text1`} /><span className={`break-all text-xs ${(groups.get(Icon)?.length ?? 0) > 1 ? 'text-warning-text' : 'text-text2'}`}>{name}<br />{(groups.get(Icon)?.length ?? 0) > 1 ? `共用图形：${groups.get(Icon)?.join('、')}` : '独立图形'}</span></div>)}</div><div className="flex flex-wrap items-end gap-4">{Object.entries(styleTokens.UI_ICON_SIZE_CLASS).map(([name, className]) => <div key={name} data-gallery-token={`UI_ICON_SIZE_CLASS.${name}`} className="flex flex-col items-center gap-2"><Play className={className} /><code className="text-xs text-text2">{name}</code></div>)}</div><p className="text-xs text-text2">按钮自动提供子图标尺寸，描边沿用 lucide 默认 2；窗口控件仅使用登记的 1.5 描边例外。</p></UiGroup>
+  return <UiGroup title="登记图标：同形多义标黄，仅作为设计审查提示" titleTone="compact"><div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{GALLERY_ICON_TOKENS.map(([name, Icon]) => <div key={name} data-gallery-token={name} className="flex items-center gap-3 py-3"><Icon className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text1`} /><span className={`break-all text-xs ${(groups.get(Icon)?.length ?? 0) > 1 ? 'text-warning-text' : 'text-text2'}`}>{name}<br />{(groups.get(Icon)?.length ?? 0) > 1 ? `共用图形：${groups.get(Icon)?.join('、')}` : '独立图形'}</span></div>)}</div><div className="flex flex-wrap items-end gap-4">{Object.entries(styleTokens.UI_ICON_SIZE_CLASS).map(([name, className]) => <div key={name} data-gallery-token={`UI_ICON_SIZE_CLASS.${name}`} className="flex flex-col items-center gap-2"><Play className={className} /><code className="text-xs text-text2">{name}</code></div>)}</div><div className="flex flex-col gap-1">{GALLERY_ICON_METRIC_TOKENS.map(([name, value]) => <code key={name} data-gallery-token={name} className="break-all text-xs text-text2">{name} = {valueText(value)}</code>)}</div><p className="text-xs text-text2">按钮自动提供子图标尺寸，描边沿用 lucide 默认 2；窗口控件仅使用登记的 1.5 描边例外。</p></UiGroup>
 }
 
 function MotionSample({ name, duration, reduced }: { name: string; duration: number; reduced: boolean }): JSX.Element {
