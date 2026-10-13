@@ -44,6 +44,6 @@ export class VideoEditProxyFrames implements VideoEditFrameBackend {
     const picture = videoEditDecodeSource(media, this.proxies.get(media.id), true, 'playback')
     const seeker = this.backend.seeker(picture, cache, snapshot)
     if (picture === media) return seeker
-    return { sample: (time, direction) => seeker.sample(time, direction), dispose: async () => { await seeker.dispose(); cache.deleteMedia(picture.path) } }
+    return { sample: (time, direction, singleFrame) => seeker.sample(time, direction, singleFrame), dispose: async () => { await seeker.dispose(); cache.deleteMedia(picture.path) } }
   }
 }

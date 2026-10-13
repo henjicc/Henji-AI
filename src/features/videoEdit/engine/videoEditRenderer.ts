@@ -92,6 +92,13 @@ export class VideoEditRenderer {
   private capturePresentation?: (pixels: Promise<ImageBitmap>) => void
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
+  private ensureCompositor(): VideoEditGpuCompositor {
+    if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    return this.compositor!
+  }
+  /** Only devices/pipelines: no project media, render targets or sound are opened during workspace warmup. */
+  async prepareGpu(): Promise<void> { await this.ensureCompositor().prepare() }
   /** Preview only (task 4.9): the canvas, composition targets and owned pictures are 1/divisor of the sequence size. */
   private renderDivisor: VideoEditRenderDivisor = 1
   /** High-precision composition counters and, with `row`, that row of the last high-precision frame before 8-bit quantization (task 2.7 acceptance). */
@@ -392,7 +399,7 @@ export class VideoEditRenderer {
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    const gpu = this.ensureCompositor()
     const effectErrors: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`
@@ -501,7 +508,7 @@ export class VideoEditRenderer {
         let seeker = this.seekers.get(media.path)
         if (!seeker) { seeker = this.frames.seeker(media, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
         const direction = source.previousTime < 0 || Math.abs(time - source.previousTime) > 1 ? 0 : Math.sign(time - source.previousTime)
-        const result = await seeker.sample(time, direction)
+        const result = await seeker.sample(time, direction, source.previousTime < 0 && !_scrubbing && !sequential)
         if (result.hit) cacheHits++
         source.current?.close(); source.current = result.sample
       } else if (sequential && !this.previewWidth) {
@@ -556,10 +563,10 @@ export class VideoEditRenderer {
     const decodeMs = performance.now() - decodeStart
     const gpuStart = performance.now()
     let result: { presented: boolean; completion: Promise<void> }
-    const nestedPicture = nestedRender ? await (await this.compositor.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
+    const nestedPicture = nestedRender ? await (await gpu.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
     try {
       const drawn = this.drawDocument(document)
-      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality) : await this.compositor.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
+      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), gpu, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality) : await gpu.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }

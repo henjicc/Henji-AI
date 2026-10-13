@@ -45,6 +45,7 @@ export interface HenjiDiagnosticsStreamEvent {
 }
 
 export interface HenjiDiagnosticsApi {
+  memoryInfo(): Promise<{ availableBytes: number; totalBytes: number }>
   ping(): Promise<{ pong: true; timestamp: number }>
   streamEcho(message: string, onEvent: (event: HenjiDiagnosticsStreamEvent) => void): Promise<() => Promise<void>>
 }

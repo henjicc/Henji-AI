@@ -61,9 +61,12 @@ const BODIES: Record<VideoEditPanelId, PanelBody> = { style_kits: StyleKitsBody,
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
     const [visible, setVisible] = useState(api.isVisible)
+    const visited = useRef(false)
+    visited.current ||= visible
     useEffect(() => trackVideoEditDockPanel(id), [])
     useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
-    return <Body visible={visible} />
+    // Keep local panel state after its first visit, but do not mount unseen libraries during project opening.
+    return visited.current ? <Body visible={visible} /> : <div data-video-edit-panel={id} />
   }
 }
 const COMPONENTS = Object.fromEntries(VIDEO_EDIT_PANELS.map(({ id }) => [id, dockPanel(id, BODIES[id])])) as Record<VideoEditPanelId, (props: IDockviewPanelProps) => React.ReactElement>

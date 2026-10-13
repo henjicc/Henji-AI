@@ -224,3 +224,32 @@ it('代理进入明确预览或代理导出会话，默认导出与抓原片保�
   expect(proxyInit.decode?.proxies).toEqual({ pro: { ...proxy, path: 'url:' + proxy.path } }); expect(proxyInit.document.media[0].path).toBe('url:D:/prores.mov')
   await Promise.all([preview.dispose(), exported.dispose(), proxyExport.dispose()])
 })
+
+it('空闲会话准备 GPU 后只允许接管一次，项目接管后使用该项目的文档配置', async () => {
+  const session = new VideoEditRenderSession(composition(), 32)
+  await session.prepareGpu()
+  expect(workers[0].messages.some(value => value.message.kind === 'prepareGpu')).toBe(true)
+  session.adoptProject('project')
+  expect(() => session.adoptProject('another')).toThrow('接管')
+  await session.updateDocument({ ...composition(), id: 'another-sequence' })
+  expect(workers).toHaveLength(1)
+  await session.dispose()
+  expect(platform.disconnect).toHaveBeenCalledOnce()
+})
+
+it('切换预打开在普通文档更新前发送，只包含首帧可见的直接视频，重复切换合并为最新目标', async () => {
+  const document = composition()
+  document.items = [{ id: 'video', name: '视频', kind: 'video', mediaId: 'pro' }]
+  document.tracks = [{ id: 'v', name: '视频', index: 1, kind: 'video', enabled: true, locked: false, muted: false, solo: false }]
+  document.clips = [videoEditClipSchema.parse({ id: 'clip', itemId: 'video', name: '视频', kind: 'video', track: 1, start: 0, duration: 120, sourceInUs: 3500000, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })]
+  const session = new VideoEditRenderSession(composition(), 1920)
+  await session.prepareGpu()
+  session.preopenSequence(document, 0)
+  session.preopenSequence({ ...document, id: 'latest' }, 0)
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+  const messages = workers[0].messages.filter(value => value.message.kind === 'preopen')
+  expect(messages).toHaveLength(1)
+  expect(messages[0].message).toMatchObject({ media: [{ id: 'pro', path: `url:${document.media[0].path}` }] })
+  expect(workers[0].messages.some(value => value.message.kind === 'update')).toBe(false)
+  await session.dispose()
+})

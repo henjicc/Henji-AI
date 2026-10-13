@@ -76,6 +76,7 @@ export interface HttpPlatform {
 }
 
 export interface SystemPlatform {
+  memoryInfo(): Promise<{ availableBytes: number; totalBytes: number }>
   fs: FsPlatform
   dialog: DialogPlatform
   shell: ShellPlatform

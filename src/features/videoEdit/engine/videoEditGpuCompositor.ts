@@ -76,6 +76,10 @@ export class VideoEditGpuCompositor {
     const started = performance.now()
     this.ready = this.initialize(readyTiming).then(() => { readyTiming?.(performance.now() - started) })
   }
+  async prepare(): Promise<void> {
+    await this.ready
+    if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
+  }
   private async initialize(timing?: (durationMs: number, stage?: string) => void): Promise<void> {
     const deviceStarted = performance.now()
     const managed = this.shared ? undefined : await this.manager.acquire()

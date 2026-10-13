@@ -17,10 +17,12 @@ test('巡检读取正式连接说明内的 JSON 配置，不把整段说明当 J
 })
 test('cold open is excluded from warm median; switching keeps all three samples', () => {
   const run = (reason, elapsedMs) => ({ reason, first: { elapsedMs }, window: { longTaskMaxMs: 60 } })
-  const result = summarize([run('open', 2000), run('open', 200), run('open', 400), run('open', 300), run('switch', 50), run('switch', 20), run('switch', 80)])
+  const result = summarize([run('open', 2000), run('open', 200), run('open', 400), run('open', 300), run('switch', 50), run('switch', 20), run('switch', 80), run('switch-many', 400), run('switch-many', 300), run('switch-many', 500)])
   assert.equal(result.open.cold.first.elapsedMs, 2000)
   assert.equal(result.open.medianMs, 300)
   assert.equal(result.open.samples, 3)
   assert.equal(result.switch.medianMs, 50)
   assert.equal(result.switch.samples, 3)
+  assert.equal(result['switch-many'].medianMs, 400)
+  assert.equal(result['switch-many'].samples, 3)
 })

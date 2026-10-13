@@ -31,6 +31,8 @@ export type RenderRequest = { id: number } & (
   /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
   | { kind: 'scale'; divisor: number }
   | { kind: 'arm'; frame: number }
+  | { kind: 'prepareGpu' }
+  | { kind: 'preopen'; media: VideoEditComposition['media']; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
@@ -66,6 +68,27 @@ let nativeFrames: VideoEditNativeFrameReceiver | undefined
 let nativeDiagnostics: NativeFrameDiagnostics | undefined
 let nativeBackend: VideoEditNativeFrames | undefined
 let router: VideoEditFrameRouter | undefined
+let preopened: Array<() => void> = []
+let preopenTimer: ReturnType<typeof setTimeout> | undefined
+function releasePreopened(): void { clearTimeout(preopenTimer); for (const release of preopened) release(); preopened = [] }
+function preopenMedia(request: Extract<RenderRequest, { kind: 'preopen' }>): void {
+  releasePreopened()
+  if (!nativeBackend) return
+  if (request.timing) { timing = request.timing; timedStages.clear() }
+  timingEvent('native.preopen.start')
+  for (const media of request.media.slice(0, 2)) {
+    const path = request.localPaths[media.path]
+    if (!path) continue
+    localPaths.set(media.path, path)
+    try {
+      const reservation = nativeBackend.preopen(media)
+      preopened.push(reservation.release)
+      const started = performance.now()
+      void reservation.ready.then(() => { if (timing?.startedAt === request.timing?.startedAt) timingEvent('native.preopen.ready', performance.now() - started) }).catch(error => log('info', '序列预打开失败，正式取帧时重试', 'video_edit.render.preopen.failed', { sequenceId: request.timing?.sequenceId, reason: String(error) }))
+    } catch (error) { log('info', '序列预打开不可用，正式取帧时重试', 'video_edit.render.preopen.failed', { reason: String(error) }) }
+  }
+  preopenTimer = setTimeout(releasePreopened, 2000)
+}
 let effectWarnings = new Set<string>()
 const proxies = new Map<string, VideoProxyResult>()
 function setProxies(values: Record<string, VideoProxyResult> | undefined): void { proxies.clear(); for (const [id, result] of Object.entries(values ?? {})) proxies.set(id, result) }
@@ -85,6 +108,7 @@ function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFr
 }
 /** Releases the renderer, then the native sessions it closed, then the frame channel (frames return before it closes). */
 async function disposeRenderer(): Promise<void> {
+  releasePreopened()
   await renderer?.dispose()
   await nativeBackend?.settled(); router?.dispose()
   nativeBackend = undefined; router = undefined
@@ -102,6 +126,7 @@ function handleNativeFrames(request: NativeFramesRequest): void {
 self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
+  if (request.kind === 'preopen') { preopenMedia(request); return }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
@@ -164,6 +189,9 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)
           void finish().catch(error => self.postMessage({ id: request.id, error: String(error) } satisfies RenderResponse))
         } else await finish()
+      } else if (request.kind === 'prepareGpu') {
+        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        await renderer.prepareGpu(); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'arm') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         await renderer.armPlayback(request.frame); self.postMessage({ id: request.id } satisfies RenderResponse)

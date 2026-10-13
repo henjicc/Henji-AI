@@ -1,3 +1,4 @@
+import { freemem, totalmem } from 'node:os'
 import {
   copyFilePath,
   dirnamePath,
@@ -227,6 +228,7 @@ function parseNativeFetchRequest(input: unknown): NativeFetchRequestDto {
 }
 
 export function registerSystemIpc(): void {
+  registerIpcHandler('system:memoryInfo', parseVoid, () => ({ availableBytes: freemem(), totalBytes: totalmem() }))
   registerIpcHandler<WriteFilePayload, void>('fs:writeFile', parseWriteFilePayload, ({ path, data, exclusive, position }) => writeFileBytes(path, data, { exclusive, position }))
   registerIpcHandler<WriteTextFilePayload, void>('fs:writeTextFile', parseWriteTextFilePayload, ({ path, data }) => writeTextFile(path, data))
   registerIpcHandler<ReadFilePayload, Uint8Array>('fs:readFile', parseReadFilePayload, ({ path, maxBytes }) => readFileBytes(path, maxBytes === undefined ? undefined : { maxBytes }))

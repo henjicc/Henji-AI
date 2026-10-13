@@ -81,7 +81,9 @@ function createVideoEditPlayStartScene() {
         console.log('[play-start]', JSON.stringify(run))
       }
       await capture('play-start')
-      await button(page, '关闭项目').click(); await waitReleased(page)
+      await button(page, '关闭项目').click()
+      // Workspace owns one idle program session; leaving the workspace must retire it too.
+      await button(page, '生成').click(); await waitReleased(page)
       for (const run of evidence.runs) {
         assert.ok(run.firstSecondUpdates >= 58, `起播第一秒只有 ${run.firstSecondUpdates} 次画面更新`)
         // 暂停停稳后起播已预热（解码定位、声音设备与第一块混音），按下到画面开始走不再等解码。

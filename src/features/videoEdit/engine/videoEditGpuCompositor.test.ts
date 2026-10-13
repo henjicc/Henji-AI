@@ -25,6 +25,13 @@ it('首帧管线并行异步编译，全部就绪前不提交 GPU 命令', async
   expect(device.queue.submit).toHaveBeenCalledOnce()
   await compositor.dispose()
 })
+it('空闲预建只完成设备和管线，不提交画面；释放后不能再接管', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  await compositor.prepare()
+  expect(device.queue.submit).not.toHaveBeenCalled()
+  await compositor.dispose()
+  await expect(compositor.prepare()).rejects.toThrow('会话不可用')
+})
 it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不受上帧绑定污染',async()=> {
   const {compositor,device}=copyFixture(async()=>{})
   const project=createVideoEditDocument('贴屏');project.items.push({id:'image',kind:'image',name:'输入'})

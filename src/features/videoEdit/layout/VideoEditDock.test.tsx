@@ -73,6 +73,19 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
+it('未访问的隐藏面板不挂载，首次显示后保留挂载状态', () => {
+  const document = createVideoEditDocument('首次挂载')
+  const instance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], openSequenceIds: [document.sequences[0].id], frame: 0, playing: false, past: [], future: [] } as unknown as VideoEditInstance
+  let api: DockviewApi | null = null
+  const view = render(<VideoEditDock instance={instance} onError={vi.fn()} onApiChange={value => { api = value }} />)
+  expect(view.queryByText('风格面板')).toBeNull()
+  const dock = api as unknown as DockviewApi
+  act(() => showVideoEditPanel(dock, 'style_kits'))
+  const style = view.getByText('风格面板')
+  act(() => showVideoEditPanel(dock, 'effects'))
+  expect(view.getByText('风格面板')).toBe(style)
+})
+
 it('真实 Dockview React 移动、隐藏标签、缩放和重置不卸载节目；关闭释放，重开只有一个视图', () => {
   const document = createVideoEditDocument('布局验收')
   const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 17, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0 }
