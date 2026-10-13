@@ -27,7 +27,7 @@ export const useCanvasGenerationProgressStore = create<CanvasGenerationProgressS
       const current = state.progress[nodeId];
       if (progress === null) {
         if (current === undefined) {
-          return {};
+          return state;
         }
         const next = { ...state.progress };
         delete next[nodeId];
@@ -36,7 +36,7 @@ export const useCanvasGenerationProgressStore = create<CanvasGenerationProgressS
 
       const clamped = Math.min(1, Math.max(0, progress));
       if (current !== undefined && Math.abs(current - clamped) < 0.001) {
-        return {};
+        return state;
       }
       return {
         progress: {
@@ -51,7 +51,7 @@ export const useCanvasGenerationProgressStore = create<CanvasGenerationProgressS
     set((state) => {
       const hitKeys = Object.keys(state.progress).filter((nodeId) => nodeIds.has(nodeId));
       if (hitKeys.length === 0) {
-        return {};
+        return state;
       }
       const next = { ...state.progress };
       for (const nodeId of hitKeys) {
@@ -62,6 +62,6 @@ export const useCanvasGenerationProgressStore = create<CanvasGenerationProgressS
   },
 
   clearAllProgress: () => {
-    set((state) => (Object.keys(state.progress).length === 0 ? {} : { progress: {} }));
+    set((state) => (Object.keys(state.progress).length === 0 ? state : { progress: {} }));
   },
 }));

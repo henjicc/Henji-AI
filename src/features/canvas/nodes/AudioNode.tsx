@@ -1,4 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type DragEvent } from 'react';
+import { useStore } from 'zustand';
+import { createStore, type StoreApi } from 'zustand/vanilla';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -51,6 +53,21 @@ const AUDIO_NODE_WIDTH = 280;
 const AUDIO_NODE_HEIGHT = 96;
 const AUDIO_WAVEFORM_HEIGHT = 44;
 
+type PlaybackClock = StoreApi<{ currentTime: number }>;
+
+// 时钟只通知显示播放位置的叶子，头部、端口和动作不订阅播放帧。
+const AudioPlaybackWaveform = memo(({ clock, startSeconds, ...props }: Omit<ComponentProps<typeof WaveformView>, 'playedSeconds'> & { clock: PlaybackClock; startSeconds: number }) => {
+  const currentTime = useStore(clock, (state) => state.currentTime);
+  return <WaveformView {...props} playedSeconds={startSeconds + currentTime} />;
+});
+AudioPlaybackWaveform.displayName = 'AudioPlaybackWaveform';
+
+const AudioPlaybackReadout = memo(({ clock, durationLabel }: { clock: PlaybackClock; durationLabel: string }) => {
+  const currentTimeLabel = useStore(clock, (state) => formatDuration(state.currentTime));
+  return <span className="shrink-0 text-2xs leading-none tabular-nums text-text2">{currentTimeLabel} / {durationLabel}</span>;
+});
+AudioPlaybackReadout.displayName = 'AudioPlaybackReadout';
+
 /** 音频节点：服务于结果音频与上传音频，卡片式展示 + 懒挂载播放 */
 export const AudioNode = memo(({ id, data, selected, type, width, height }: AudioNodeProps) => {
   const { t } = useTranslation();
@@ -66,7 +83,10 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [playbackClock] = useState(() => createStore(() => ({ currentTime: 0 })));
+  const setCurrentTime = useCallback((currentTime: number) => {
+    if (playbackClock.getState().currentTime !== currentTime) playbackClock.setState({ currentTime });
+  }, [playbackClock]);
   const [mediaDuration, setMediaDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
@@ -116,7 +136,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
     setCurrentTime(0);
     setMediaDuration(0);
     setMuted(false);
-  }, [audioSource]);
+  }, [audioSource, setCurrentTime]);
 
   const ensureAudioElement = useCallback((): HTMLAudioElement | null => {
     if (!audioSource) {
@@ -148,7 +168,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [isPlaying]);
+  }, [isPlaying, setCurrentTime]);
 
   const togglePlay = useCallback(() => {
     const element = ensureAudioElement();
@@ -172,7 +192,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
     }
     element.currentTime = ratio * total;
     setCurrentTime(element.currentTime);
-  }, [ensureAudioElement, effectiveDuration]);
+  }, [ensureAudioElement, effectiveDuration, setCurrentTime]);
 
   const handleWaveformSeekEnd = useCallback((ratio: number, dragged: boolean) => {
     seekToRatio(ratio);
@@ -268,10 +288,11 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
         {generationError ? null : data.audioUrl ? (
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-1">
             <div className="nodrag nowheel" style={{ height: waveformHeight }}>
-              <WaveformView
+              <AudioPlaybackWaveform
+                clock={playbackClock}
                 waveform={waveform}
                 height={waveformHeight}
-                playedSeconds={(wavePyramid?.startSeconds ?? 0) + currentTime}
+                startSeconds={wavePyramid?.startSeconds ?? 0}
                 durationSeconds={effectiveDuration}
                 onSeekStart={seekToRatio}
                 onSeekMove={seekToRatio}
@@ -289,9 +310,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
               </UiIconButton>
-              <span className="shrink-0 text-2xs leading-none tabular-nums text-text2">
-                {formatDuration(currentTime)} / {durationLabel ?? formatDuration(effectiveDuration)}
-              </span>
+              <AudioPlaybackReadout clock={playbackClock} durationLabel={durationLabel ?? formatDuration(effectiveDuration)} />
               <span className="min-w-0 flex-1" />
               <UiIconButton
                 aria-label={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}

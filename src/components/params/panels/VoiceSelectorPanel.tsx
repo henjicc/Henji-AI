@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiEmpty, UiError, UiLoading, UiInput, UiSearchInput, UiOptionButton } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
@@ -183,6 +184,17 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const configuredVoices = useMemo(() => config?.voices ?? [], [config?.voices])
   const voiceLibraryScope = config?.voiceLibrary
   const remoteModelId = config?.remoteModelId
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [columns, setColumns] = useState(2)
+  useEffect(() => {
+    const query = panelRef.current?.ownerDocument.defaultView?.matchMedia('(min-width: 768px)')
+    if (!query) return
+    const update = () => setColumns(query.matches ? 3 : 2)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+  const recordsByVoiceId = useMemo(() => new Map(libraryRecords.map(record => [record.voiceId, record])), [libraryRecords])
 
   const loadRemoteVoices = useCallback(async (force = false): Promise<void> => {
     if (!remoteModelId) return
@@ -375,6 +387,13 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     })
   }, [normalizedKeyword, selectedAge, selectedGender, selectedLanguage, selectedSource, voiceItems])
 
+  // 按行虚拟化：描述和克隆操作可改变行高，不能按等高网格估算滚动位置。
+  const voiceRows = useMemo(() => {
+    const rows: VoiceViewItem[][] = []
+    for (let index = 0; index < filteredVoices.length; index += columns) rows.push(filteredVoices.slice(index, index + columns))
+    return rows
+  }, [columns, filteredVoices])
+
   const handleWheelCapture = useCallback((event: React.WheelEvent<HTMLDivElement>): void => {
     event.stopPropagation()
   }, [])
@@ -423,10 +442,11 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     }
   }
 
-  const preview = libraryRecords.find(item => item.voiceId === previewVoiceId)?.previewPath
+  const preview = previewVoiceId ? recordsByVoiceId.get(previewVoiceId)?.previewPath : undefined
 
   return (
     <div
+      ref={panelRef}
       className="flex h-[460px] w-full min-w-[520px] max-w-[720px] flex-col overflow-hidden overscroll-contain p-4"
       data-voice-selector-panel
       onWheelCapture={handleWheelCapture}
@@ -465,12 +485,17 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
       )}
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto overscroll-contain pr-1">
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-            {filteredVoices.map((voice) => {
+        {filteredVoices.length > 0 ? <Virtuoso
+          key={`${columns}:${voiceRows.length}:${normalizedKeyword}:${selectedSource}:${selectedGender}:${selectedAge}:${selectedLanguage}`}
+          className="h-full overscroll-contain pr-1"
+          data={voiceRows}
+          initialItemCount={Math.min(4, voiceRows.length)}
+          computeItemKey={(_index, row) => row[0].id}
+          itemContent={(_index, row) => <div className={`grid gap-2 pb-2 ${columns === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            {row.map((voice) => {
               const active = value === voice.id
               const hasDescription = voice.description.length > 0
-              const record = libraryRecords.find(item => item.voiceId === voice.id)
+              const record = recordsByVoiceId.get(voice.id)
               const canDelete = Boolean(record) && voice.isCustom && voiceLibraryScope?.allowDelete === true
               const training = record?.status === 'training'
               const failed = record?.status === 'failed'
@@ -523,12 +548,8 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                 </div>
               )
             })}
-          </div>
-
-          {filteredVoices.length === 0 && (
-            <UiEmpty size="xs" title="未找到匹配音色" />
-          )}
-        </div>
+          </div>}
+        /> : <UiEmpty size="xs" title="未找到匹配音色" />}
       </div>
 
       {preview && <div className="mt-2 shrink-0"><AudioPlayer compact surface="plain" src={toFetchableMediaUrl(preview)} filePath={isLikelyLocalImagePath(preview) ? preview : undefined} /></div>}

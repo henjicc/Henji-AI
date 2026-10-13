@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
 import { aiGetCachedTtsVoices, aiListTtsVoices } from '@/commands/aiRuntime'
 import { VoiceSelectorPanel } from './VoiceSelectorPanel'
@@ -13,9 +13,25 @@ vi.mock('@/components/AudioPlayer', () => ({ default: () => null }))
 
 vi.mock('@/commands/aiRuntime', () => ({ aiListTtsVoices: vi.fn(), aiGetCachedTtsVoices: vi.fn() }))
 
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+})
+
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+it('305 个音色只挂载可见行，搜索末项仍可选择', () => {
+  const onChange = vi.fn()
+  render(<VoiceSelectorPanel value="" onChange={onChange} config={{ voices: Array.from({ length: 305 }, (_, index) => ({ id: `voice-${index}`, name: `测试声音${index}` })) }} />)
+  expect(screen.getAllByRole('button', { name: /^测试声音/ }).length).toBeLessThan(50)
+  fireEvent.change(screen.getByRole('textbox', { name: '搜索音色' }), { target: { value: '测试声音304' } })
+  fireEvent.click(screen.getByRole('button', { name: '测试声音304' }))
+  expect(onChange).toHaveBeenCalledWith('voice-304')
 })
 
 describe('TTS voice selector', () => {
