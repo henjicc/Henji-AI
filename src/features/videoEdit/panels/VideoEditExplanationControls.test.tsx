@@ -15,7 +15,7 @@ vi.mock('../application/videoEditExplanation', () => ({ videoExplanationState: (
 vi.mock('../application/videoEditService', () => ({ subscribeVideoEditDomain: () => () => {}, subscribeVideoEditView: () => () => {}, videoEditDomainRevision: () => 0, videoEditViewRevision: () => 0 }))
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: unknown[]; itemContent: (index: number, value: unknown) => ReactNode }) => <div>{data.map((value, index) => <div key={index}>{itemContent(index, value)}</div>)}</div> }))
 let root: Root | undefined, element: HTMLElement | undefined
-const owner = { version: 0, document: { id: 'fixture-document', revision: 1 } } as unknown as VideoEditInstance
+const owner = { version: 0, contentVersion: 0, document: { id: 'fixture-document', revision: 1 } } as unknown as VideoEditInstance
 const onError = vi.fn()
 afterEach(async () => { await act(async () => root?.unmount()); element?.remove(); root = undefined; owner.version = 0; control.state = undefined; control.listeners.clear(); vi.clearAllMocks() })
 function state(id: string): VideoExplanationState {

@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent, verifyVideoEditContentSaved } from './videoEditDocumentAlgorithm'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, getVideoEditClipPausesCapability } from '@/core/application-control/domains/videoEdit/videoEditTextCapabilities'
@@ -7,7 +8,7 @@ import { videoEditComposition } from '@/core/videoEdit/document'
 import { resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
 import { editVideoEditText, restoreVideoEditText } from './videoEditTextEditing'
 import { splitVideoEditRef } from './videoEditReflection'
-import { openVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved } from './videoEditService'
+import { openVideoEditDocument, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 
 export async function handleVideoEditTextCapability(id: string, raw: unknown, signal?: AbortSignal): Promise<Record<string, unknown> | undefined> {
   if (id === getVideoEditClipPausesCapability.id) {
@@ -35,7 +36,7 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
   } else {
     const parsed = detectVideoEditTextSilenceCapability.inputSchema.parse(raw)
     if (parsed.clipRef) {
-      const snapshot = owner.document
+      const contentVersion = owner.contentVersion
       const ref = splitVideoEditRef(parsed.clipRef)
       const composition = videoEditComposition(owner.document, sequence.childId)
       const clip = composition.clips.find(value => value.id === ref.childId)
@@ -44,7 +45,7 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
         const a = videoEditClipFrameBoundaryAtSource(clip, pause.startMs / 1000, composition.fps); const b = videoEditClipFrameBoundaryAtSource(clip, pause.endMs / 1000, composition.fps)
         return { from: Math.max(clip.start, Math.floor(Math.min(a, b))), to: Math.min(clip.start + clip.duration, Math.ceil(Math.max(a, b))) }
       }).filter(range => range.to > range.from)
-      if (owner.document !== snapshot) throw new ApplicationPreflightFailure('检测期间片段已改变，请重新检测静音。')
+      if (!isVideoEditContentCurrent(owner, contentVersion)) throw new ApplicationPreflightFailure('检测期间片段已改变，请重新检测静音。')
       return { documentRef: input.documentRef, resultRef: input.sequenceRef, ranges, changed: false, verified: true, message: `已免费检测 ${ranges.length} 处片段静音，未修改剪辑。` }
     }
     const audioId = videoEditComposition(owner.document, sequence.childId).textTranscription?.audioDocumentId
@@ -52,8 +53,8 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
     await restoreVideoEditText(projectId, sequence.childId, audioId, true, signal)
     ranges = resolveVideoEditTextRanges(videoEditComposition(owner.document, sequence.childId), { kind: 'silence' })
   }
-  const expected = owner.document
+  const expected = owner.document; const contentVersion = owner.contentVersion
   try { await saveVideoEdit(projectId) } catch (error) { throw new ApplicationPersistenceFailure('文本剪辑已处理但保存未确认，请重试保存，不要重复剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: input.documentRef, replayMutation: false } }, error) }
-  const verified = requireVideoEditInstance(projectId) === owner && owner.document === expected && await verifyVideoEditSaved(projectId, expected)
+  const verified = await verifyVideoEditContentSaved(owner, expected, contentVersion)
   return { documentRef: input.documentRef, resultRef: { kind: 'video_edit.sequence', id: `${projectId}:${resultSequenceId}` }, ranges, changed, verified, message: changed ? `已处理 ${ranges.length} 处文本范围，可一步撤销。` : '当前稿子没有符合条件的可编辑范围，未修改时间线。' }
 }

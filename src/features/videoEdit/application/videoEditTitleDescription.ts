@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { executeApplicationWrite } from '@/core/application-control/execution/writeExecution'
 import { withPaidOperation, isPaidOperationCancelled } from '@/services/paidApproval'
 import { z } from 'zod'
@@ -16,7 +17,7 @@ export interface TitleDescriptionOptions { description: string; providerId?: str
 export async function generateTitleFromDescription(projectId: string, sequenceId: string, options: TitleDescriptionOptions, signal?: AbortSignal): Promise<{ template: TitleTemplate; clipIds: string[] }> {
   return executeApplicationWrite(async execution => {
   const description = z.string().trim().min(1).max(2000).parse(options.description); signal?.throwIfAborted()
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   if (!baseline.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('原序列不存在。')
   // Capture the location before approval/configuration/network waits; tab switches cannot redirect it.
   const placement = { frame: owner.activeSequenceId === sequenceId ? owner.frame : 0, ...options.placement }
@@ -46,7 +47,7 @@ export async function generateTitleFromDescription(projectId: string, sequenceId
     if (!completed) throw new Error('标题生成未完整返回，请重试。')
     let result: z.infer<typeof titleDescriptionResultSchema>
     try { result = titleDescriptionResultSchema.parse(JSON.parse(output.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, ''))) } catch { throw new Error('模型未返回有效的标题参数，请调整描述后重试。') }
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('生成期间原剪辑已有修改，请重新生成；未覆盖当前剪辑。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('生成期间原剪辑已有修改，请重新生成；未覆盖当前剪辑。')
     const template = titleTemplateSchema.parse({ id: crypto.randomUUID(), name: '描述生成的标题', ...result })
     const clipIds = applyTitleTemplate(projectId, sequenceId, template, {}, placement)
     execution.report({ targetMutation: 'applied' })

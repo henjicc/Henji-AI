@@ -168,7 +168,7 @@ export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   return handle
 }
 function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }) === JSON.stringify({ ...right, revision: 0, exportHistory: undefined, inPlaceGenerations: undefined, creativeIntents: undefined }) }
-function withInPlaceMetadata(document: VideoEditDocument, current: VideoEditDocument): VideoEditDocument {
+export function withVideoEditCurrentMetadata(document: VideoEditDocument, current: VideoEditDocument): VideoEditDocument {
   const next = { ...document }
   if (current.exportHistory) next.exportHistory = current.exportHistory
   else delete next.exportHistory
@@ -181,7 +181,7 @@ function withInPlaceMetadata(document: VideoEditDocument, current: VideoEditDocu
 /** 内容恢复共用新快照，保留当前元数据并保持两种版本单调递增。 */
 function restoreVideoEditDocumentContent(owner: VideoEditInstance, snapshot: VideoEditDocument): void {
   const before = owner.document
-  owner.document = withInPlaceMetadata({ ...snapshot, id: before.id, name: before.name, revision: before.revision + 1 }, before)
+  owner.document = withVideoEditCurrentMetadata({ ...snapshot, id: before.id, name: before.name, revision: before.revision + 1 }, before)
   owner.version++; owner.contentVersion++
 }
 /** 页已封存后才发布头；采集不会产生作品撤销步，也不会清空重做。 */
@@ -553,7 +553,7 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id); assertVideoEditWritable(instance)
   if (gestures.has(instance) || !sameDocumentContent(instance.document, expected)) throw new Error('剪辑已有后续修改，请逐步撤销。')
-  return applyVideoEditDocument(instance, () => withInPlaceMetadata(snapshot, instance.document), true, true)
+  return applyVideoEditDocument(instance, () => withVideoEditCurrentMetadata(snapshot, instance.document), true, true)
 }
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   const requested = update(structuredClone(instance.document))
@@ -815,7 +815,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const adapter: DocumentContentAdapter<VideoEditDocumentContent> = {
     // 参数调整进行中时写调整前的内容；提交后再标脏保存
     getContent: () => {
-      const document = withInPlaceMetadata(gestures.get(instance)?.before ?? instance.document, instance.document)
+      const document = withVideoEditCurrentMetadata(gestures.get(instance)?.before ?? instance.document, instance.document)
       if (document.creativeIntents) document.creativeIntents = { ...document.creativeIntents, resources: creativeIntentLiveResources([document.creativeIntents, ...instance.past.map(d => d.creativeIntents), ...instance.future.map(d => d.creativeIntents)]) }
       return videoEditDocumentContent(document)
     },

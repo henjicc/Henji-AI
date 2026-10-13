@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from '../application/videoEditDocumentAlgorithm'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Captions } from 'lucide-react'
@@ -36,13 +37,13 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     if (sequence.captionTrackLocked || clip && sequence.tracks.find(track => track.index === clip.track)?.locked) return
     const host = viewport.current
     if (!host) return
-    const win = ownerWindowOf(host); const before = instance.document
+    const win = ownerWindowOf(host); const contentVersion = instance.contentVersion
     const origin = event.clientX; const scroll = host.scrollLeft
     const points = timelineSnapPoints(sequence, { playhead: instance.frame, extra: (sequence.captions ?? []).filter(value => value.id !== caption.id).flatMap(value => [value.start, value.start + value.duration]) })
     const axis = timelineEdgeAxis(origin)
     let x = origin; let delta = 0; let moved = false; let animation = 0
     const update = (): void => {
-      if (instance.document !== before || instance.activeSequenceId !== sequence.id) { finish(false); return }
+      if (!isVideoEditContentCurrent(instance, contentVersion) || instance.activeSequenceId !== sequence.id) { finish(false); return }
       moved ||= Math.abs(x - origin) >= 3
       if (!moved) return
       delta = Math.round((x - origin + host.scrollLeft - scroll) / pixels)
@@ -71,7 +72,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
       cancel.current = null; win.cancelAnimationFrame(animation)
       win.removeEventListener('pointermove', move); win.removeEventListener('pointerup', up); win.removeEventListener('pointercancel', abort); win.removeEventListener('blur', abort); win.removeEventListener('keydown', key, true)
       setPreview(null); clearTimelineSnap()
-      if (commit && moved && instance.document === before && instance.activeSequenceId === sequence.id) run(() => moveVideoEditCaption(projectId, sequence.id, caption.id, mode, delta))
+      if (commit && moved && isVideoEditContentCurrent(instance, contentVersion) && instance.activeSequenceId === sequence.id) run(() => moveVideoEditCaption(projectId, sequence.id, caption.id, mode, delta))
     }
     cancel.current = abort
     win.addEventListener('pointermove', move); win.addEventListener('pointerup', up); win.addEventListener('pointercancel', abort); win.addEventListener('blur', abort); win.addEventListener('keydown', key, true)

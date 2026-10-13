@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
 import { audibleVideoEditClips, videoEditComposition } from '@/core/videoEdit/document'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
@@ -5,7 +6,7 @@ import { mergeVideoEditAudioActivity, replaceVideoEditDuckingKeyframes, videoEdi
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { spoolVideoEditAudio, videoEditClipHasSound, type VideoEditGainTarget } from './videoEditLoudness'
-import { editVideoSequence, listVideoEditInstances, requireVideoEditInstance } from './videoEditService'
+import { editVideoSequence, requireVideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.audioDucking')
 export function setVideoEditAudioRoles(target: VideoEditGainTarget, role: VideoEditAudioRole): void {
@@ -19,7 +20,7 @@ export function setVideoEditAudioRoles(target: VideoEditGainTarget, role: VideoE
 /** UI and public capability share this analysis + one atomic document edit. */
 export async function generateVideoEditAudioDucking(target: VideoEditGainTarget, rawSettings: VideoEditDuckingSettings, signal?: AbortSignal): Promise<string[]> {
   const settings = videoEditDuckingSettingsSchema.parse(rawSettings)
-  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const composition = structuredClone(videoEditComposition(baseline, target.sequenceId))
   const ids = new Set(target.clipIds); const music = composition.clips.filter(clip => ids.has(clip.id))
   if (!ids.size || music.length !== ids.size || music.some(clip => clip.audioRole !== 'music' || !videoEditClipHasSound(composition, clip))) throw new Error('请先把要压低的声音片段标为音乐，再生成回避。')
@@ -29,7 +30,7 @@ export async function generateVideoEditAudioDucking(target: VideoEditGainTarget,
   const triggers = audibleVideoEditClips(composition).filter(clip => clip.audioRole === settings.targetRole && videoEditClipHasSound(composition, clip) && clip.start < end && clip.start + clip.duration > start)
   const assertCurrent = (): void => {
     signal?.throwIfAborted()
-    if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('分析期间剪辑已有修改或已关闭，请重新生成回避。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('分析期间剪辑已有修改或已关闭，请重新生成回避。')
   }
   assertCurrent()
   logger.info('开始生成音频回避', { event: 'video_edit.ducking.start', context: { projectId: target.projectId, music: music.length, triggers: triggers.length } })

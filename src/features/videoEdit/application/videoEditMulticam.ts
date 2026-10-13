@@ -1,3 +1,5 @@
+import { withVideoEditCurrentMetadata, editVideoProject, editVideoSequence, getActiveVideoEditSequence, holdVideoEditActivity, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { videoEditAudioSyncSize } from '@/core/videoEdit/multicamSync'
 import { createLogger } from '@/core/logging'
 import { activeVideoEditClips, clipSourceSeconds, videoEditComposition, type VideoEditComposition } from '@/core/videoEdit/document'
@@ -7,7 +9,6 @@ import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { synchronizeVideoEditMulticam } from './videoEditMulticamWorkerClient'
-import { editVideoProject, editVideoSequence, getActiveVideoEditSequence, holdVideoEditActivity, listVideoEditInstances, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
 
 export function videoEditProgramMulticam(instance: VideoEditInstance): { clip: VideoEditInstance['document']['sequences'][number]['clips'][number]; source: VideoEditInstance['document']['sequences'][number] } | undefined {
   const parent = getActiveVideoEditSequence(instance)
@@ -41,9 +42,9 @@ async function readSyncSound(composition: VideoEditComposition, start: number, d
 
 /** Entire asynchronous preparation is isolated; baseline rechecked immediately before the one undoable commit. */
 export async function createVideoEditMulticamSource(projectId: string, sequenceId: string, options: VideoEditMulticamCreate, signal?: AbortSignal): Promise<ReturnType<typeof createVideoEditMulticam>> {
-  const owner = requireVideoEditInstance(projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const release = holdVideoEditActivity(projectId, '正在同步多机位')
-  const current = (): void => { signal?.throwIfAborted(); if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('同步期间剪辑已有修改或已关闭，请重新创建多机位。') }
+  const current = (): void => { signal?.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('同步期间剪辑已有修改或已关闭，请重新创建多机位。') }
   logger.info('开始同步多机位', { event: 'video_edit.multicam.create.start', context: { projectId, cameras: options.cameras.length, sync: options.sync } })
   try {
     current(); let offsets: number[] | undefined
@@ -64,7 +65,7 @@ export async function createVideoEditMulticamSource(projectId: string, sequenceI
     }
     current()
     const result = createVideoEditMulticam(baseline, sequenceId, options, offsets)
-    editVideoProject(projectId, () => result.document)
+    editVideoProject(projectId, current => withVideoEditCurrentMetadata(result.document, current))
     logger.info('多机位源序列已创建', { event: 'video_edit.multicam.create.completed', context: { projectId, sequenceId: result.sequence.id } })
     return result
   } catch (error) { logger.error('多机位同步失败', error, { event: 'video_edit.multicam.create.failed', context: { projectId } }); throw error }
@@ -76,12 +77,12 @@ export function switchVideoEditMulticam(target: VideoEditMulticamTarget, cameraI
 }
 
 export async function autoSwitchVideoEditMulticam(target: VideoEditMulticamTarget, options: VideoEditMulticamAutoOptions = {}, signal?: AbortSignal): Promise<string[]> {
-  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document
+  const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const parent = videoEditComposition(baseline, target.sequenceId); const clip = parent.clips.find(clip => clip.id === target.clipId)
   const source = clip && videoEditMulticamSource(baseline, clip)
   if (!clip || !source?.multicam) throw new Error('请选择时间线中的多机位片段。')
   assertVideoEditClipsEditable(parent, [clip.id])
-  const current = (): void => { signal?.throwIfAborted(); if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) throw new Error('分析期间剪辑已有修改或已关闭，请重新建议切换。') }
+  const current = (): void => { signal?.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('分析期间剪辑已有修改或已关闭，请重新建议切换。') }
   const release = holdVideoEditActivity(target.projectId, '正在建议多机位切换')
   logger.info('开始建议多机位切换', { event: 'video_edit.multicam.auto.start', context: { projectId: target.projectId, clipId: clip.id } })
   try {

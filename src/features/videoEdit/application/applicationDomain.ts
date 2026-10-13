@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
 import { videoEditStaggerCapability } from '@/core/application-control/domains/videoEdit/videoEditStaggerCapability'
 import { staggerVideoMotion } from './videoEditMotionDraft'
@@ -22,7 +23,7 @@ import { handleVideoEditSceneCapability } from './videoEditSceneCapability'
 import { handleVideoEditWorkspaceTransfer } from './videoEditWorkspaceTransfer'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
-import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, videoEditDocumentFromContent, type VideoEditInstance } from './videoEditService'
+import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, videoEditDocumentFromContent, type VideoEditInstance, undoVideoEdit, videoEditBusyReason } from './videoEditService'
 import { videoEditCoverSource, videoEditFrameSourceAt } from './videoEditProjectCover'
 import { registerDocumentCoverProvider, registerDocumentHoverPreview } from '@/features/documents/documentCovers'
 import { getDocumentOperations, registerDocumentBusyCheck, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
@@ -31,7 +32,6 @@ import { startVideoEditImageDocumentLinks } from './videoEditImageLinks'
 import { startVideoEditSmartRegions } from './videoEditSmartRegions'
 import { startVideoEditTracking } from './videoEditTracking'
 import { openVideoEditClipSource, videoEditClipSource, videoEditEmbedHost } from './videoEditComposition'
-import { undoVideoEdit, videoEditBusyReason } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { splitVideoEditRef } from './videoEditReflection'
@@ -230,7 +230,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const id = input.documentRef.id; const owner = requireVideoEditInstance(id)
       switch (definition.id) {
         case 'import_video_edit_folder': {
-          const baseline = owner.document
+          const contentVersion = owner.contentVersion
           let result
           try { result = await chooseVideoEditFolders(id, undefined, { signal: context.signal }) }
           catch (error) {
@@ -244,7 +244,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
               partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] },
             })
           }
-          if (owner.document === baseline && !result.skipped) throw new Error('未导入素材，用户取消选择或所选目录无法读取。')
+          if (isVideoEditContentCurrent(owner, contentVersion) && !result.skipped) throw new Error('未导入素材，用户取消选择或所选目录无法读取。')
           await saveVideoEdit(id)
           const current = requireVideoEditInstance(id)
           const verified = await verifyVideoEditSaved(id, current.document)
@@ -265,10 +265,10 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         }
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')
-          const importBaseline = owner.document
+          const contentVersion = owner.contentVersion
           const asset = await assetApplicationService.inspect(input.assetRef.id)
           context.signal?.throwIfAborted()
-          if (requireVideoEditInstance(id) !== owner || owner.document !== importBaseline) throw new Error('原剪辑已关闭或导入期间已有修改，请重新引用素材。')
+          if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或导入期间已有修改，请重新引用素材。')
           if (asset.mediaType === 'code') {
             let filterTarget: { sequenceId: string; clipId: string } | undefined
             if (input.clipRef) {

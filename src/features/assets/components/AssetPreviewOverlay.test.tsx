@@ -47,7 +47,7 @@ function owner(id = 'project-a'): VideoEditInstance {
     sequenceViews: new Map(), selectedItemIds: [], selectedBinId: 'bin-a', openSequenceIds: [],
     selectedClipIds: ['clip-a'], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null,
     dirty: false, error: null, past: [], future: [], selection: 'clip-a', frame: 0, playing: false, playbackDirection: 1,
-    busy: false, activePanel: 'timeline', version: 0,
+    busy: false, activePanel: 'timeline', version: 0, contentVersion: 0,
   }
 }
 function deferred<T>() {

@@ -11,7 +11,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia } from './videoEditService'
+import { closeVideoEditProject, listVideoEditInstances, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia, duplicateVideoEditSequence, editVideoSequence, updateVideoEditCreativeIntents } from './videoEditService'
 import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials, createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
 import { readVideoEditCodeMetadata, forgetVideoEditCodeMetadata } from './videoEditCodeState'
@@ -22,7 +22,6 @@ import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { duplicateVideoEditSequence, editVideoSequence } from './videoEditService'
 import { createVideoEditEffect, updateVideoEditEffect, reorderVideoEditEffects, copyVideoEditEffects, deleteVideoEditEffects, createVideoEditTransition, updateVideoEditTransition, deleteVideoEditTransition } from './videoEditCompositing'
 import { readVideoEditCodeEditor } from './videoEditCodeParameters'
 import { videoEditGraphicObjectId } from './videoEditCompositeEntities'
@@ -75,6 +74,27 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 } }))
 const source = `export default {apiVersion:1,name:"原创移动圆",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:4,seed:7,parameters:{amount:{type:"number",title:"透明度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return [ellipse({x:100+ctx.time*20,y:100,width:500,height:500,fill:[0,1,1,ctx.params.amount]})];}}`
 const files = new Map<string, string>()
+it('编译期间及源码候选等待期间的元数据不使内容检查失效或被提交覆盖', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  let release!: () => void
+  boundary.compileGate = new Promise<void>(resolve => { release = resolve })
+  const operation = createVideoEditCodeItems(id, [{ source }]).then(value => ({ value }), error => ({ error }))
+  await vi.waitFor(() => expect(boundary.compileCalls).toBeGreaterThan(0))
+  updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+  release(); const result = await operation
+  if ('error' in result) throw result.error
+  expect(result.value).toHaveLength(1)
+  expect(owner.document.creativeIntents).toEqual({ drafts: [], sessions: [], resources: [] })
+  boundary.compileGate = undefined
+  appendVideoEditItems(id, result.value, owner.activeSequenceId, { frame: 0 })
+  const clip = getActiveVideoEditSequence(owner).clips[0]
+  const candidate = await prepareVideoEditCodeCandidate({ projectId: id, sequenceId: owner.activeSequenceId, clipId: clip.id, versionId: clip.code!.versionId }, source.replace('x:100+', 'x:150+'))
+  try {
+    updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+    expect(commitVideoEditCodeCandidate(candidate)).toBe(candidate.versionId)
+    expect(owner.document.creativeIntents).toEqual({ drafts: [], sessions: [], resources: [] })
+  } finally { disposeVideoEditCodeCandidate(candidate) }
+})
 it('关闭的剪辑可后台创建代码素材和组件，读取组件不抢占活动剪辑', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
   const app = createApplicationHarness()

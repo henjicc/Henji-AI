@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
 import { videoEditComposition, type VideoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_COLOR_GRADE } from '@/core/videoEdit/colorGrade'
@@ -40,7 +41,7 @@ export function editVideoEditColorGrade(target: VideoEditCompositeTarget, change
 /** Same production renderer/trial queue as preview/export; isolate the selected clip before its selected ColorGrade.
  * No asset/file writes, no changes to transport. Suggestions are absolute basic-correction values. */
 export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarget, frame?: number, signal = new AbortController().signal, effectId?: string, options: ColorGradeAnalysisOptions = {}): Promise<ColorGradeAnalysisResult> {
-  const started = performance.now(); const owner = requireVideoEditInstance(target.projectId); const snapshot = owner.document
+  const started = performance.now(); const owner = requireVideoEditInstance(target.projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion
   const documentVersion = videoEditObservationVersion(owner, snapshot.revision)
   const sequence = snapshot.sequences.find(value => value.id === target.sequenceId); const clip = sequence?.clips.find(value => value.id === target.clipId)
   if (!sequence || !clip || clip.kind === 'audio' || clip.kind === 'adjustment') throw new Error('请选择带画面的片段，调整图层和声音片段不能自动校色。')
@@ -69,7 +70,7 @@ export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarge
           context.drawImage(bitmap, 0, 0, width, height)
           chunks.push(context.getImageData(0, 0, width, height).data)
         } finally { bitmap.close() }
-        if (requireVideoEditInstance(target.projectId) !== owner || owner.document !== snapshot) throw new Error('片段已发生修改，请重新自动校色。')
+        if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('片段已发生修改，请重新自动校色。')
       }
       const pixels = new Uint8ClampedArray(chunks.reduce((size, chunk) => size + chunk.length, 0)); let offset = 0
       for (const chunk of chunks) { pixels.set(chunk, offset); offset += chunk.length }
@@ -82,7 +83,7 @@ export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarge
       parameters = await analyzeVideoEditColorGradeOffThread(pixels, await sample(referenceDocument, colorGradeSampleFrames(reference.start, reference.duration, options.sampleCount ?? 5)), options.matchMethod, signal)
     } else parameters = await analyzeVideoEditColorGradeOffThread(pixels, undefined, undefined, signal)
     signal.throwIfAborted()
-    if (requireVideoEditInstance(target.projectId).document !== snapshot) throw new Error('片段已发生修改，请重新自动校色。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('片段已发生修改，请重新自动校色。')
     logger.info('自动校色分析完成', { event: 'video_edit.color_grade.analyze.completed', context: { projectId: target.projectId, clipId: clip.id, frame: at, durationMs: Math.round(performance.now() - started) } })
     return { parameters, frame: at, frames, documentRevision: snapshot.revision, documentVersion }
   } catch (error) {

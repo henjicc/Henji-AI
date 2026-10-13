@@ -1,3 +1,5 @@
+import { withVideoEditCurrentMetadata, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { codeFilesFromInput } from '@/core/videoEdit/codeMaterial/sources'
 import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
 import { loadFontLibrary } from '@/platform/fonts'
@@ -12,7 +14,6 @@ import { fieldEffectContract, fieldWriterTable, type ApplicationEffectContract, 
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { videoEditAnnotationSchema, videoEditClipSchema, videoEditDocumentSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
-import { editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE, VIDEO_EDIT_TIME_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
 import { pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, revertVideoEditSourcePause, matchesVideoEditSourceCommand, videoEditSourceCommandIdentity, type VideoEditSourcePause } from './videoEditSource'
 import { videoEditCaptionSchema, videoEditMarkerSchema, reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
@@ -174,7 +175,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
   constructor(readonly entityType: VideoEditEntityType) { const table = fieldWriterTable(VIDEO_EDIT_FIELDS[entityType]); this.writableProperties = writableProperties(table); this.propertyOperations = propertyOperations(table); this.effectContract = fieldEffectContract(VIDEO_EDIT_FIELDS[entityType]) }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const { projectId, childId } = splitVideoEditRef(step.target)
-    const owner = requireVideoEditInstance(projectId); const before = owner.document
+    const owner = requireVideoEditInstance(projectId); const before = owner.document; const contentVersion = owner.contentVersion
     const keys = step.mutations.map(mutation => mutation.propertyId)
     const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback', 'video_edit.document.playback_resolution', 'video_edit.document.proxy_preference'].includes(key))
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
@@ -188,7 +189,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       assertVideoEditAnnotationTransition(prior, next, context?.exposure === 'ui' ? 'user' : 'agent')
       if (context?.exposure !== 'ui' && next.thread.slice(prior.thread.length).some(message => message.author.kind === 'user')) throw new Error('Agent回复不能冒充用户。')
     }
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('剪辑或浏览会话已有后续修改，请重读当前状态。')
+    if (!isVideoEditContentCurrent(owner, contentVersion) || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('剪辑或浏览会话已有后续修改，请重读当前状态。')
     if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => mutation.propertyId === 'video_edit.clip.source_in_us')) data.sourceRemainder = { numerator: 0, denominator: 1 }
     if (this.entityType === 'video_edit.item') for (const key of ['graphicKind', 'graphicWidth', 'graphicHeight']) delete data[key]
     if (data.label === null) delete data.label
@@ -240,7 +241,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
       assertVideoEditLockedTracks(before, next)
       const target = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) ? videoEditCompositeOwner(next, this.entityType as VideoEditCompositeEntityType, childId) : { sequence: next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!, clipIds: [childId] }
-      if (videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(owner, before, next, target.sequence.id, target.sequence.clips.find(clip => clip.id === target.clipIds[0])!.start, context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
+      if (videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(owner, contentVersion, next, target.sequence.id, target.sequence.clips.find(clip => clip.id === target.clipIds[0])!.start, context?.signal, target.clipIds.map(clipId => ({ sequenceId: target.sequence.id, clipId })))
     } else if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => ['video_edit.clip.code_version_id', 'video_edit.clip.code_parameters'].includes(mutation.propertyId))) {
       const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
       const sequence = next.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId))!
@@ -251,14 +252,14 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         const owner = requireVideoEditInstance(projectId)
         const clip = sequence.clips.find(clip => clip.id === childId)!
         assertVideoEditLockedTracks(before, next)
-        await trialVideoEditCodeDocument(owner, before, next, sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)), context?.signal, [{ sequenceId: sequence.id, clipId: childId }])
+        await trialVideoEditCodeDocument(owner, contentVersion, next, sequence.id, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)), context?.signal, [{ sequenceId: sequence.id, clipId: childId }])
       }
     }
     const fontCandidate = update(structuredClone(before))
     if (changedVideoEditFonts(before, fontCandidate, readVideoEditCodeMetadata(owner, before), readVideoEditCodeMetadata(owner, fontCandidate)).some(use => !GENERIC_FONT_FACES.some(face => face.family === use.font))) {
       await loadFontLibrary(true)
       context?.signal?.throwIfAborted()
-      if (requireVideoEditInstance(projectId) !== owner || owner.document !== before) throw new Error('剪辑已有后续修改，请重读当前状态。')
+      if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('剪辑已有后续修改，请重读当前状态。')
     }
     let sourcePause: VideoEditSourcePause | undefined
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback') && (data.programPlayback as ProjectViewSnapshot['program']).playing) {
@@ -266,7 +267,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       sourcePause = await pauseVideoEditSourceForProgram(projectId, context?.signal)
       try {
         context?.signal?.throwIfAborted()
-        if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore)) throw new Error('剪辑或节目已有后续修改，节目尚未开始。')
+        if (!isVideoEditContentCurrent(owner, contentVersion) || viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore)) throw new Error('剪辑或节目已有后续修改，节目尚未开始。')
       } catch (error) {
         if (sourcePause && listVideoEditInstances().includes(owner) && viewBefore && !viewBefore.program.playing && videoEditProgramCommandIdentity(projectId) === viewBefore.programCommand && matchesVideoEditSourceCommand(projectId, sourcePause.afterCommand)) {
           try { await restoreVideoEditSourcePause(projectId, sourcePause) }
@@ -297,7 +298,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     const nested = ['video_edit.clip', 'video_edit.annotation', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition', 'video_edit.track'].includes(this.entityType)
     if (step.parent.kind !== (clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.document')) throw new Error('请使用目录声明的所属父实体。')
     const parsed = splitVideoEditRef(step.parent)
-    const instance = requireVideoEditInstance(parsed.projectId); const before = instance.document
+    const instance = requireVideoEditInstance(parsed.projectId); const before = instance.document; const contentVersion = instance.contentVersion
     const refs: ApplicationRef[] = []
     if (this.entityType === 'video_edit.code_version') {
       if (step.operation.kind !== 'create') throw new Error('源码版本不可删除或原位改写，请创建新候选。')
@@ -434,16 +435,16 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       const sequence = next.sequences.find(sequence => this.entityType === 'video_edit.transition' ? sequence.id === parsed.childId : sequence.clips.some(clip => clip.id === parsed.childId))!
       // 音频过渡两端是声音片段，不做画面试渲染。
       const pictured = clipIds.filter(clipId => sequence.clips.find(clip => clip.id === clipId)?.kind !== 'audio')
-      if (pictured.length && videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(instance, before, next, sequence.id, sequence.clips.find(clip => clip.id === pictured[0])!.start, context?.signal, pictured.map(clipId => ({ sequenceId: sequence.id, clipId })))
+      if (pictured.length && videoEditIntroducesCodeEffects(before, next)) await trialVideoEditCodeDocument(instance, contentVersion, next, sequence.id, sequence.clips.find(clip => clip.id === pictured[0])!.start, context?.signal, pictured.map(clipId => ({ sequenceId: sequence.id, clipId })))
     }
     if (this.entityType === 'video_edit.clip' && step.operation.kind === 'create') {
       const sequence = next.sequences.find(sequence => sequence.id === parsed.childId)!
       const added = new Set(refs.map(ref => splitVideoEditRef(ref).childId))
       for (const clip of sequence.clips) if (added.has(clip.id) && clip.code && (codeMaterialImageIds(clip.code).size > 0 || next.items.find(item => item.id === clip.itemId)?.code?.versionId !== clip.code.versionId)) {
-        await trialVideoEditCodeDocument(instance, before, next, sequence.id, clip.start, context?.signal, [{ sequenceId: sequence.id, clipId: clip.id }])
+        await trialVideoEditCodeDocument(instance, contentVersion, next, sequence.id, clip.start, context?.signal, [{ sequenceId: sequence.id, clipId: clip.id }])
       }
     }
-    const after = editVideoProject(before.id, () => next)
+    const after = editVideoProject(before.id, current => withVideoEditCurrentMetadata(next, current))
     const result = completed(before, after, refs)
     // 删除轨道连同其上的片段（同 PR）：被删片段是级联副作用。
     if (this.entityType === 'video_edit.track') {

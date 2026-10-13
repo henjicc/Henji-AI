@@ -11,17 +11,17 @@ import { VideoEditStyleKitLibrary, videoEditStyleKitLibrary } from './videoEditS
 import { VideoEditLocalLibrary } from './videoEditLocalLibrary'
 import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
 import { styleKitContent } from '@/core/videoEdit/styleKit'
-import { undoVideoEdit, saveVideoEdit, editVideoProject } from './videoEditService'
+import { undoVideoEdit, saveVideoEdit, editVideoProject, updateVideoEditCreativeIntents } from './videoEditService'
 import { releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import { measureCodeText } from '../videoEditGlyphMetrics'
 import { createVideoEditCodeItems } from './videoEditCodeService'
 import { appendVideoEditItems } from './videoEditProjectItems'
-const trial = vi.hoisted(() => ({ fail: false, documents: [] as VideoEditComposition[] }))
+const trial = vi.hoisted(() => ({ fail: false, documents: [] as VideoEditComposition[], beforeCompile: undefined as (() => void) | undefined }))
 vi.mock('../engine/videoEditCodeCompiler', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
-  return { VideoEditCodeCompiler: class { async compile(source: string) { return compileCodeMaterial(source) } dispose() {} } }
+  return { VideoEditCodeCompiler: class { async compile(source: string) { trial.beforeCompile?.(); return compileCodeMaterial(source) } dispose() {} } }
 })
 vi.mock('../engine/videoEditRenderSession', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
@@ -43,9 +43,18 @@ vi.mock('../engine/videoEditRenderSession', async () => {
     async dispose() {}
   } }
 })
-beforeEach(() => { installHarnessNativeStorage(); videoEditStyleKitLibrary.replace([]); trial.fail = false; trial.documents = []; vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { return { width: text.length * 20, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 20 } } } } }) })
+beforeEach(() => { installHarnessNativeStorage(); videoEditStyleKitLibrary.replace([]); trial.fail = false; trial.documents = []; trial.beforeCompile = undefined; vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { return { width: text.length * 20, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 20 } } } } }) })
 afterEach(async () => { await closeAllVideoEdits(); releaseVideoEditCodeCompiler(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 const available = () => availableStyleKitFonts(BUILTIN_STYLE_KITS[0], [])
+it('公共风格校验期间仅写元数据不使文档快照校验失效', async () => {
+  const owner = await createVideoEditTestProject(); const id = owner.document.id; const app = createApplicationHarness()
+  trial.beforeCompile = () => updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+  try {
+    await app.requireResult('change_application_entities', { summary: '创建风格', changes: [{ kind: 'create_items', entityType: 'video_edit.style_kit', parent: { kind: 'video_edit.document', id }, items: [{ properties: { 'video_edit.style_kit.name': '并发风格', 'video_edit.style_kit.content': styleKitContent(available()) } }] }] })
+    expect(owner.document.styleKits).toHaveLength(1)
+    expect(owner.document.creativeIntents).toEqual({ drafts: [], sessions: [], resources: [] })
+  } finally { app.dispose() }
+})
 it('本机库复用存储服务：坏盘保护、落盘先于发布、磁盘失败不改内存、无条目上限', () => {
   const values = new Map<string, string>(); const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) } }
   const publish = vi.fn(); const library = new VideoEditStyleKitLibrary(storage, publish)

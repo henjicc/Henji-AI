@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
 import { CUBE_LUT_MAX_BYTES, type CubeLut } from '@/core/videoEdit/cubeLut'
 import type { ColorLutAsset } from '@/core/videoEdit/colorLutAsset'
@@ -15,14 +16,14 @@ async function read(path: string, signal?: AbortSignal): Promise<{ lut: CubeLut;
 }
 /** Project-local source reference; existing dialog grants file access and document paths own relocation/collection. */
 export async function importVideoEditColorLut(projectId: string, signal?: AbortSignal): Promise<ColorLutAsset | null> {
-  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document
+  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion
   logger.info('LUT 导入开始', { event: 'video_edit.color_grade.lut.import.start', context: { projectId } })
   try {
     const selected = await getPlatform().system.dialog.open({ multiple: false, filters: [{ name: '颜色查找表', extensions: ['cube'] }] })
     signal?.throwIfAborted(); const path = Array.isArray(selected) ? selected[0] : selected
     if (!path) return null
     const { contentIdentity } = await read(path, signal)
-    if (requireVideoEditInstance(projectId) !== owner || owner.document !== snapshot) throw new Error('剪辑已改变，请重新导入 LUT。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('剪辑已改变，请重新导入 LUT。')
     const previous = snapshot.colorLuts?.find(value => sameVideoEditMediaPath(value.path, path) && value.contentIdentity === contentIdentity)
     if (previous) return previous
     const asset: ColorLutAsset = { id: crypto.randomUUID(), name: path.split(/[\\/]/).at(-1) ?? 'LUT', path, contentIdentity }

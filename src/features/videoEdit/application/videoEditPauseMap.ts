@@ -1,3 +1,4 @@
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import type { SpeechTimings } from '@/core/media/speechTimings'
@@ -65,7 +66,7 @@ export async function readSourceEnergyPauses(sourcePath: string, signal?: AbortS
 }
 
 export async function getVideoEditClipPauseMap(projectId: string, sequenceId: string, clipId: string, signal?: AbortSignal): Promise<{ pauses: VideoEditPause[]; words: Array<{ text: string; startFrame: number; endFrame: number }>; source: 'words' | 'energy' }> {
-  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document
+  const owner = requireVideoEditInstance(projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion
   const composition = videoEditComposition(snapshot, sequenceId); const clip = composition.clips.find(value => value.id === clipId)
   if (!clip) throw new Error('找不到目标片段。')
   logger.info('片段停顿图开始', { event: 'video_edit.pause_map.start', context: { projectId, sequenceId, clipId } })
@@ -90,7 +91,7 @@ export async function getVideoEditClipPauseMap(projectId: string, sequenceId: st
       return { ...range, durationMs: (range.endFrame - range.startFrame) / composition.fps * 1000, kind: 'silence' as const }
     }).filter(pause => pause.endFrame > pause.startFrame)
     signal?.throwIfAborted()
-    if (owner.document !== snapshot) throw new Error('检测期间片段已改变，请重新读取停顿图。')
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('检测期间片段已改变，请重新读取停顿图。')
     logger.info('片段停顿图完成', { event: 'video_edit.pause_map.completed', context: { projectId, clipId, count: pauses.length, source: words.length ? 'words' : 'energy' } })
     return { pauses, words, source: words.length ? 'words' : 'energy' }
   } catch (error) { logger.error('片段停顿图失败', { event: 'video_edit.pause_map.failed', context: { projectId, clipId }, error }); throw error }

@@ -74,7 +74,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 it('真实 Dockview React 移动、隐藏标签、缩放和重置不卸载节目；关闭释放，重开只有一个视图', () => {
   const document = createVideoEditDocument('布局验收')
-  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 17, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
+  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 17, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0 }
   let api: DockviewApi | null = null
   const onApiChange = (value: DockviewApi | null): void => { api = value }
   const onError = vi.fn()
@@ -103,7 +103,7 @@ it('真实 Dockview React 移动、隐藏标签、缩放和重置不卸载节目
 
 it('DOM 面板浮出到系统窗口后仍由同一 React 树渲染；关闭窗口即关闭面板，贴回按钮与拖回落点放回 Dock，重置与卸载不留浮窗或重复面板', () => {
   const document = createVideoEditDocument('浮窗验收')
-  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 3, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
+  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 3, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0 }
   let api: DockviewApi | null = null
   const onError = vi.fn()
   const view = render(<VideoEditDock instance={instance} onError={onError} onApiChange={value => { api = value }} />)
@@ -162,7 +162,7 @@ it('DOM 面板浮出到系统窗口后仍由同一 React 树渲染；关闭窗�
 
 const makeInstance = (name: string): VideoEditInstance => {
   const document = createVideoEditDocument(name)
-  return { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
+  return { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0 }
 }
 const savedPopouts = (): unknown => JSON.parse(localStorage.getItem(VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY) ?? 'null')
 
@@ -421,7 +421,7 @@ it('旧布局里的应用内浮动组恢复后贴回主区域（浮动统一为�
 
 it('面板菜单紧跟在组内当前标签的标题旁（PR），切换当前标签随之移动', () => {
   const document = createVideoEditDocument('面板菜单')
-  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
+  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0 }
   let api: DockviewApi | null = null
   const view = render(<VideoEditDock instance={instance} onError={vi.fn()} onApiChange={value => { api = value }} />)
   const dock = api as unknown as DockviewApi
