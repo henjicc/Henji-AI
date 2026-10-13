@@ -1,12 +1,18 @@
 import { useEffect } from 'react'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import type { ClipboardFileEntry } from '@/platform/contracts/clipboard'
+import type { LocalMediaImportInput } from '@/services/localMediaImport'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.MediaGenerator.hooks.useGlobalPasteImage')
 
 interface UseGlobalPasteImageParams {
   selectedModel: string
   modelParams: DynamicValueMap
   uploadedImagesCount: number
   uploadedVideosCount: number
-  handleImageFileUpload: (files: File[], maxImageCount: number) => Promise<void>
+  handleImageFileUpload: (files: LocalMediaImportInput[], maxImageCount: number) => Promise<void>
+  onPasteError?: (error: unknown) => void
 }
 
 function dataUrlToFile(dataUrl: string, fileName: string): File | null {
@@ -33,7 +39,8 @@ export function useGlobalPasteImage(params: UseGlobalPasteImageParams): void {
     modelParams,
     uploadedImagesCount,
     uploadedVideosCount,
-    handleImageFileUpload
+    handleImageFileUpload,
+    onPasteError
   } = params
 
   useEffect(() => {
@@ -46,13 +53,17 @@ export function useGlobalPasteImage(params: UseGlobalPasteImageParams): void {
     const handleGlobalPasteImage = async (e: Event) => {
       const customEvent = e as CustomEvent<{
         files?: File[]
+        clipboardPaths?: ClipboardFileEntry[]
         clipboardFiles?: Array<{ data: string; mimeType: string; name: string }>
         imageBlob?: Blob
         imageType?: string
       }>
       const detail = customEvent.detail
 
-      if (detail?.clipboardFiles && detail.clipboardFiles.length > 0) {
+      if (detail?.clipboardPaths && detail.clipboardPaths.length > 0) {
+        const images = detail.clipboardPaths.filter(file => file.mimeType.startsWith('image/'))
+        if (images.length) await handleImageFileUpload(images, getMaxCount())
+      } else if (detail?.clipboardFiles && detail.clipboardFiles.length > 0) {
         const files: File[] = []
         for (const clipFile of detail.clipboardFiles) {
           const file = dataUrlToFile(clipFile.data, clipFile.name)
@@ -71,7 +82,13 @@ export function useGlobalPasteImage(params: UseGlobalPasteImageParams): void {
       }
     }
 
-    window.addEventListener('globalPasteImage', handleGlobalPasteImage)
-    return () => window.removeEventListener('globalPasteImage', handleGlobalPasteImage)
-  }, [handleImageFileUpload, modelParams, selectedModel, uploadedImagesCount, uploadedVideosCount])
+    const listener = (event: Event): void => {
+      void handleGlobalPasteImage(event).catch(error => {
+        logger.error('全局图片粘贴失败', { event: 'media_upload.clipboard.failed', error })
+        onPasteError?.(error)
+      })
+    }
+    window.addEventListener('globalPasteImage', listener)
+    return () => window.removeEventListener('globalPasteImage', listener)
+  }, [handleImageFileUpload, modelParams, onPasteError, selectedModel, uploadedImagesCount, uploadedVideosCount])
 }

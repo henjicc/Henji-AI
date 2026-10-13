@@ -5,7 +5,7 @@ import ContextMenu from '@/components/ContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { Clipboard } from 'lucide-react'
-import { readClipboardImage } from '@/commands/clipboard'
+import { readClipboardFiles, readClipboardImage } from '@/commands/clipboard'
 
 const logger = createLogger('contexts.GlobalContextMenuProvider')
 
@@ -83,9 +83,17 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       targetElement.focus()
 
       try {
-        // 桌面位图和文件图片共用有界读取入口，不读取剪贴板里的视频或其他大文件。
+        // 文件只传路径给统一导入入口；仅无文件路径的截图读取位图。
         if (isDesktopRuntime()) {
-          const image = await readClipboardImage()
+          const files = await readClipboardFiles()
+          const images = files.filter(file => file.mimeType.startsWith('image/'))
+          if (images.length) {
+            window.dispatchEvent(new CustomEvent(PASTE_IMAGE_EVENT, {
+              detail: { clipboardPaths: images },
+            }))
+            return
+          }
+          const image = files.length === 0 ? await readClipboardImage() : null
           if (image) {
             window.dispatchEvent(new CustomEvent(PASTE_IMAGE_EVENT, {
               detail: { clipboardFiles: [{ data: image.dataUrl, name: image.name }] },

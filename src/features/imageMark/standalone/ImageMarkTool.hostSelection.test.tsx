@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import path from 'node:path'
 
 import { NotificationProvider } from '@/contexts/NotificationContext'
 import type { ProjectLibraryCreate } from '@/components/ProjectLibraryPage'
@@ -15,6 +16,8 @@ import type { ImageDocumentRecoveryInfo, ImageDocumentRecoveryChoice } from '@/f
 import { ImageMarkTool } from './ImageMarkTool'
 
 const mocks = vi.hoisted(() => ({
+  clipboardSource: vi.fn(),
+  importMedia: vi.fn(),
   openDialog: vi.fn(),
   allowMediaRoot: vi.fn(),
   createFromSource: vi.fn(),
@@ -23,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   saveDocument: vi.fn(),
   saveDocumentAs: vi.fn(),
 }))
+vi.mock('@/services/localMediaImport', () => ({ readClipboardImageSource: mocks.clipboardSource, importLocalMedia: mocks.importMedia }))
 
 vi.mock('@/platform/runtime', () => ({
   isDesktopRuntime: () => false,
@@ -87,6 +91,8 @@ describe('ImageMarkTool（图片文档）', () => {
     await i18n.changeLanguage('zh-CN')
     window.history.replaceState({}, '', '/')
     resetImageDocumentWorkspaceForTests()
+    mocks.clipboardSource.mockReset().mockResolvedValue(null)
+    mocks.importMedia.mockReset()
     mocks.openDialog.mockReset().mockResolvedValue('/private/tmp/source.png')
     mocks.allowMediaRoot.mockReset().mockResolvedValue(undefined)
     mocks.createFromSource.mockReset().mockImplementation(async () => fakeDocument('doc-1'))
@@ -98,6 +104,44 @@ describe('ImageMarkTool（图片文档）', () => {
 
   afterEach(() => {
     cleanup()
+  })
+
+  it('粘贴来源为大图片路径时先统一导入再创建图片文档', async () => {
+    const entry = { path: path.resolve(path.sep, 'media', 'large.png'), mimeType: 'image/png', size: 2 * 1024 ** 3 }
+    mocks.clipboardSource.mockResolvedValue(entry)
+    mocks.importMedia.mockResolvedValue({ kind: 'image', fullPath: entry.path })
+    renderTool()
+    fireEvent.click(screen.getByRole('button', { name: '粘贴剪贴板图片' }))
+    await waitFor(() => expect(mocks.createFromSource).toHaveBeenCalledWith({ url: entry.path }))
+    expect(mocks.importMedia).toHaveBeenCalledWith(entry, 'image')
+  })
+
+  it('列表页键盘粘贴文件同样使用路径来源，不读取事件 File 字节', async () => {
+    const entry = { path: path.resolve(path.sep, 'media', 'large.png'), mimeType: 'image/png', size: 2 * 1024 ** 3 }
+    const file = new File(['unused'], 'large.png', { type: 'image/png' })
+    const read = vi.spyOn(file, 'arrayBuffer')
+    mocks.clipboardSource.mockResolvedValue(entry)
+    mocks.importMedia.mockResolvedValue({ kind: 'image', fullPath: entry.path })
+    renderTool()
+    fireEvent.paste(window, { clipboardData: { files: [file], items: [] } })
+    await waitFor(() => expect(mocks.createFromSource).toHaveBeenCalledWith({ url: entry.path }))
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('截图继续以 data URL 创建图片文档，路径导入失败显示错误且不创建文档', async () => {
+    renderTool()
+    mocks.clipboardSource.mockResolvedValue({ dataUrl: 'data:image/png;base64,AQID', name: '截图.png', origin: 'bitmap' })
+    fireEvent.click(screen.getByRole('button', { name: '粘贴剪贴板图片' }))
+    await waitFor(() => expect(mocks.createFromSource).toHaveBeenCalledWith({ url: 'data:image/png;base64,AQID' }))
+    expect(mocks.importMedia).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'back' }))
+    await screen.findByTestId('image-document-library')
+    mocks.createFromSource.mockClear()
+    mocks.clipboardSource.mockResolvedValue({ path: path.resolve(path.sep, 'media', 'large.png'), mimeType: 'image/png', size: 2 * 1024 ** 3 })
+    mocks.importMedia.mockRejectedValue(new Error('文件不可读'))
+    fireEvent.click(screen.getByRole('button', { name: '粘贴剪贴板图片' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('文件不可读'))
+    expect(mocks.createFromSource).not.toHaveBeenCalled()
   })
 
   it('列表页“打开图片”把图片作为内容新建草稿图片文档并进入编辑器', async () => {

@@ -8,10 +8,10 @@ import { AlertDialog, UiLoading } from '@/components/ui';
 import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage';
 import { returnFromEmbedded } from '@/features/documents/embeddedDocuments';
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons';
-import { readClipboardImage } from '@/commands/clipboard';
+import { importLocalMedia, readClipboardImageSource } from '@/services/localMediaImport';
 import { useNotification } from '@/contexts/NotificationContext';
-import { allowMediaRoot, dirname, getPathForFile, openDialog } from '@/platform/desktopApi';
-import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSource';
+import { allowMediaRoot, dirname, openDialog } from '@/platform/desktopApi';
+import { isLikelyLocalImagePath } from '@/services/imageSource';
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore';
 import {
   findOpenImageDocument,
@@ -191,17 +191,24 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   }, [createFrom, developmentLaunch.mediaPath]);
 
   const acceptFile = useCallback(async (file: File) => {
-    const nativePath = getPathForFile(file);
-    await createFrom({ url: nativePath || await readFileAsDataUrl(file) });
+    const imported = await importLocalMedia(file, 'image');
+    await createFrom({ url: imported.fullPath });
   }, [createFrom]);
 
   const handlePasteFromClipboard = useCallback(async () => {
-    const image = await readClipboardImage();
-    if (!image) {
-      showNotification(t('imageEditor.v3.host.document.pasteEmpty'), 'error');
-      return;
+    if (busyRef.current) return;
+    try {
+      const image = await readClipboardImageSource();
+      if (!image) {
+        showNotification(t('imageEditor.v3.host.document.pasteEmpty'), 'error');
+        return;
+      }
+      const url = 'path' in image ? (await importLocalMedia(image, 'image')).fullPath : image.dataUrl;
+      await createFrom({ url });
+    } catch (error) {
+      logger.error('image_document.toolbox.paste.failed', { error: errorMessage(error) });
+      showNotification(t('imageEditor.v3.host.notifications.createFailed', { message: errorMessage(error) }), 'error');
     }
-    await createFrom({ url: image.dataUrl });
   }, [createFrom, showNotification, t]);
 
   const handleOpenFile = useCallback(async () => {
@@ -223,14 +230,15 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   useEffect(() => {
     if (shown) return undefined;
     const handlePaste = (event: ClipboardEvent) => {
-      const imageFile = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith('image/'));
-      if (!imageFile) return;
+      const containsFile = Array.from(event.clipboardData?.items ?? []).some(item => item.kind === 'file')
+        || (event.clipboardData?.files.length ?? 0) > 0;
+      if (!containsFile) return;
       event.preventDefault();
-      void acceptFile(imageFile);
+      void handlePasteFromClipboard();
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [acceptFile, shown]);
+  }, [handlePasteFromClipboard, shown]);
 
   const handleDropFiles = useCallback((files: File[]) => {
     const file = files.find((entry) =>

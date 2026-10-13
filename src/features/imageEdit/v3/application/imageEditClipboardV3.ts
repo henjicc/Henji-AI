@@ -1,4 +1,5 @@
 import { readClipboardImage } from '@/commands/clipboard'
+import { importLocalMedia, readClipboardImageSource } from '@/services/localMediaImport'
 import { createImageEditorV3RequestId, ingestImageEditorV3Source, loadImageEditorV3Document, pinImageEditorV3RepairResources, releaseImageEditorV3RepairResources } from '@/commands/imageEditorV3'
 import { materializeImageEditorV3StandaloneRaster } from '@/commands/imageEditorV3Export'
 import { createImageEditGroupLayerV3, createImageEditIdV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -83,12 +84,13 @@ export async function copyImageEditClipboardV3(bus: ImageEditCommandBusV3, layer
 }
 
 export async function pasteImageEditClipboardV3(bus: ImageEditCommandBusV3, signal?: AbortSignal): Promise<string> {
-  const image = await readClipboardImage()
+  signal?.throwIfAborted()
+  const image = await readClipboardImageSource()
   if (!image) throw new Error('剪贴板中没有图片')
   signal?.throwIfAborted()
   let layer: ImageEditLayerV3
   let sizes: Readonly<Record<string, number>>
-  if (editableCopy?.dataUrl === image.dataUrl) {
+  if (!('path' in image) && editableCopy?.dataUrl === image.dataUrl) {
     const copy = editableCopy
     const document = { ...bus.getSnapshot().document, layers: [structuredClone(copy.layer)] }
     const idMap = createImageEditDuplicateIdMapV3(copy.layer)
@@ -98,8 +100,14 @@ export async function pasteImageEditClipboardV3(bus: ImageEditCommandBusV3, sign
     layer = result.document.layers[1]; sizes = copy.sizes
   } else {
     await clearEditableCopy()
-    const source = await ingestImageEditorV3Source({ requestId: createImageEditorV3RequestId('clipboard-paste'), source: { kind: 'data-url', dataUrl: image.dataUrl } }, signal)
-    layer = createImageEditRasterLayerV3(createImageEditIdV3('layer'), image.name || '粘贴的图片', source.resource.resourceRef)
+    const imported = 'path' in image ? await importLocalMedia(image, 'image') : null
+    signal?.throwIfAborted()
+    const locator = 'path' in image
+      ? { kind: 'local-path' as const, filePath: imported!.fullPath }
+      : { kind: 'data-url' as const, dataUrl: image.dataUrl }
+    const source = await ingestImageEditorV3Source({ requestId: createImageEditorV3RequestId('clipboard-paste'), source: locator }, signal)
+    const name = 'path' in image ? image.path.split(/[\\/]/).pop() : image.name
+    layer = createImageEditRasterLayerV3(createImageEditIdV3('layer'), name || '粘贴的图片', source.resource.resourceRef)
     layer.rasterCanvasSize = { width: source.metadata.width, height: source.metadata.height }
     const geometry = bus.getSnapshot().document.geometry
     layer.transform = [1,0,0,1, (geometry.width - source.metadata.width) / 2, (geometry.height - source.metadata.height) / 2]
