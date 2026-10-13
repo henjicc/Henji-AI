@@ -44,6 +44,8 @@ window.addEventListener('unhandledrejection', (event) => {
 // 独立日志窗口（2.1）与主界面共用同一份渲染产物，通过 `?view=logs` 查询参数在入口处分流：
 // 日志窗口只渲染精简的 `LogsShell`，不挂载主界面相关的拖拽/右键菜单等全局 Provider。
 const isLogsView = new URLSearchParams(window.location.search).get('view') === 'logs'
+const isRecordingControlView = new URLSearchParams(window.location.search).get('view') === 'recording-control'
+const RecordingControlBar = React.lazy(() => import('./features/screenRecording/RecordingControlBar'))
 const isCameraStageRenderView = new URLSearchParams(window.location.search).get('view') === 'camera-stage-render'
 
 // 日志窗口与三维渲染窗口都只在各自的 `?view=` 分流下挂载，主窗口永远用不到。
@@ -55,7 +57,9 @@ const CameraStageRenderWorker = React.lazy(
 )
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-    isCameraStageRenderView ? (
+    isRecordingControlView ? (
+        <React.Suspense fallback={null}><RecordingControlBar /></React.Suspense>
+    ) : isCameraStageRenderView ? (
         <React.Suspense fallback={null}>
             <CameraStageRenderWorker />
         </React.Suspense>

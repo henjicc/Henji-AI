@@ -3,6 +3,7 @@ import { formatMigrations } from '@/core/persistence/formatMigrations';
 import { rendererSettingsSchema, SETTINGS_STORAGE_VERSION } from '@/core/persistence/settingsSchema';
 import { VIDEO_EDIT_SEQUENCE_DEFAULTS, videoEditSequenceDefaultsSchema, type VideoEditSequenceDefaults } from '@/core/videoEdit/sequenceDefaults';
 import { create } from 'zustand';
+import { DEFAULT_RECORDING_SHORTCUTS, recordingShortcutsSchema, type RecordingShortcuts } from '@/core/screenRecording/contracts';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
 import { sanitizeVideoEditMonitorButtons, withVideoEditMonitorButtons, type VideoEditMonitorButtonLayouts, type VideoEditMonitorKind } from '@/core/videoEdit/monitorButtons';
@@ -99,6 +100,7 @@ interface SettingsState {
   videoEditSequenceDefaults: VideoEditSequenceDefaults;
   setVideoEditSequenceDefaults: (value: VideoEditSequenceDefaults) => void;
   videoEditShortcuts: VideoEditShortcutOverrides;
+  recordingShortcuts: RecordingShortcuts;
   /** 剪辑节目／源监视器按钮栏（按钮编辑器）；只存改过的那一侧。 */
   videoEditMonitorButtons: VideoEditMonitorButtonLayouts;
   /** 剪辑视频轨／音频轨轨道头按钮（按钮编辑器）；只存改过的那一类。 */
@@ -150,6 +152,7 @@ interface SettingsState {
   setAssetCardSize: (size: number) => void;
   setAssetThumbnailFit: (fit: AssetThumbnailFit) => void;
   setVideoEditShortcuts: (shortcuts: VideoEditShortcutOverrides) => void;
+  setRecordingShortcuts: (shortcuts: RecordingShortcuts) => void;
   /** `null` = 重置为默认按钮。 */
   setVideoEditMonitorButtons: (kind: VideoEditMonitorKind, ids: readonly string[] | null) => void;
   /** `null` = 重置为默认按钮。 */
@@ -219,6 +222,7 @@ export const useSettingsStore = create<SettingsState>()(
       videoEditSequenceDefaults: structuredClone(VIDEO_EDIT_SEQUENCE_DEFAULTS),
       setVideoEditSequenceDefaults: (value) => set({ videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.parse(value) }),
       videoEditShortcuts: {},
+      recordingShortcuts: { ...DEFAULT_RECORDING_SHORTCUTS },
       videoEditMonitorButtons: {},
       videoEditTrackHeaderButtons: {},
       videoEditDefaultTransitions: {},
@@ -309,6 +313,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAssetCardSize: (assetCardSize) => set({ assetCardSize: Math.min(280, Math.max(112, assetCardSize)) }),
       setAssetThumbnailFit: (assetThumbnailFit) => set({ assetThumbnailFit }),
       setVideoEditShortcuts: (shortcuts) => set({ videoEditShortcuts: parseVideoEditShortcutOverrides(shortcuts) }),
+      setRecordingShortcuts: (shortcuts) => set({ recordingShortcuts: recordingShortcutsSchema.parse(shortcuts) }),
       setVideoEditMonitorButtons: (kind, ids) => set((state) => ({ videoEditMonitorButtons: withVideoEditMonitorButtons(state.videoEditMonitorButtons, kind, ids) })),
       setVideoEditTrackHeaderButtons: (kind, ids) => set((state) => ({ videoEditTrackHeaderButtons: withVideoEditTrackHeaderButtons(state.videoEditTrackHeaderButtons, kind, ids) })),
       setVideoEditDefaultTransition: (medium, kind) => set((state) => { const next = { ...state.videoEditDefaultTransitions }; if (kind) next[medium] = kind; else delete next[medium]; return { videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(next) }; }),
@@ -320,7 +325,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: createJSONStorage(() => guardedStateStorage('settings-storage', { id: 'settings', name: '界面设置', version: SETTINGS_STORAGE_VERSION, schema: rendererSettingsSchema, migrations: formatMigrations('settings') }, localStorage)),
-      // 接入基线为v13；接入前开发期数据的放弃已登记，不保留隐式迁移。
+      // 当前基线为v14；开发期格式放弃已登记，不保留隐式迁移。
       version: SETTINGS_STORAGE_VERSION,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀。

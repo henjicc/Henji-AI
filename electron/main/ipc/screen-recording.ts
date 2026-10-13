@@ -1,0 +1,39 @@
+import { screenRecordingRequestSchema } from '../../../src/core/screenRecording/contracts'
+import { assertTrustedApplicationSender } from './application-control'
+import { registerIpcHandler } from './registry'
+import { mediaPermissions } from '../services/media-permissions'
+import { isRecordingControlSender, recordingControl } from '../services/screen-recording/runtime'
+import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
+import { createMainLogger } from '../services/logging'
+
+export function registerScreenRecordingIpc(): void {
+  const logger = createMainLogger('main.screen_recording.ipc')
+  registerIpcHandler('screenRecording:request', raw => screenRecordingRequestSchema.parse(raw), async (request, event) => {
+    if (request.action !== 'snapshot' && request.action !== 'control') assertTrustedApplicationSender(event)
+    else if (!isRecordingControlSender(event.sender)) {
+      // 主窗口可以查询空会话；辅助窗口不能控制别人的会话。
+      assertTrustedApplicationSender(event)
+    }
+    if (request.action === 'control' && recordingControl.snapshot()?.sessionId !== request.sessionId) throw new Error('录制会话已改变，请刷新后重试')
+    try {
+      switch (request.action) {
+        case 'sources': return await mediaPermissions.sources(request.excludedSourceIds)
+        case 'permissions': return mediaPermissions.statuses()
+        case 'grant': {
+          await mediaPermissions.requestAccess(request.kinds)
+          // OS 弹窗期间宿主可能已经导航或关闭，提交前再次核对。
+          assertTrustedApplicationSender(event)
+          mediaPermissions.grant(event.sender, request.sessionId, request.kinds, request.selection)
+          return
+        }
+        case 'revoke': return mediaPermissions.revoke(event.sender, request.sessionId)
+        case 'settings': return await mediaPermissions.openSettings(request.kind)
+        case 'snapshot': return recordingControl.snapshot()
+        case 'shortcuts': return recordingControl.configureShortcuts(request.shortcuts)
+        case 'control': await recordingControl.command(request.command); return recordingControl.snapshot()
+      }
+    } catch (error) { logger.warn('录制请求未完成', { event: 'recording.request.failed', context: { action: request.action }, error }); throw error }
+  }, event => {
+    if (event.senderFrame !== event.sender.mainFrame || !isTrustedMainRendererUrl(event.senderFrame.url)) throw new Error('录制请求来源不可信')
+  })
+}

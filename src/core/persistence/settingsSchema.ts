@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import { videoEditSequenceDefaultsSchema } from '../videoEdit/sequenceDefaults'
+import { recordingShortcutsSchema } from '../screenRecording/contracts'
 
-export const SETTINGS_STORAGE_VERSION = 13
+export const SETTINGS_STORAGE_VERSION = 14
 // Existing merge normalizes partial settings; this schema describes accepted persisted fields.
 export const rendererSettingsSchema = z.object({
+  recordingShortcuts: recordingShortcutsSchema.optional(),
   providerKeyStatus: z.record(z.string(), z.boolean()).optional(), uploadProvider: z.string().optional(), uploadFallbackEnabled: z.boolean().optional(),
   largeUploadStrategy: z.enum(['ask', 'copy', 'reference']).optional(), downloadPresetPaths: z.array(z.string()).optional(),
   ...Object.fromEntries(['useUploadFilenameAsNodeTitle', 'enableImageViewerInfoPanel', 'imageViewerInfoPanelCollapsed', 'storyboardGenKeepStyleConsistent', 'storyboardGenDisableTextInImage', 'storyboardGenAutoInferEmptyFrame', 'ignoreAtTagWhenCopyingAndGenerating', 'autoInsertTextDisplayNode', 'uiBlurEnabled', 'assetEdgeTriggerEnabled', 'videoEditSelectionFollowsPlayhead', 'videoEditBinsFirst', 'videoEditImportFolderBins'].map(key => [key, z.boolean().optional()])),

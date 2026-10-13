@@ -67,9 +67,9 @@
       "supportedFrom": 14
     },
     "settings": {
-      "version": 13,
-      "fingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
-      "supportedFrom": 13
+      "version": 14,
+      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
+      "supportedFrom": 14
     },
     "theme": {
       "version": 1,
@@ -1340,6 +1340,15 @@
       "reason": "f4 稳定字段覆盖补全：提示词文档、媒体绑定、素材组与图片文档引用纳入指纹；保留开放扩展字段。",
       "previousFingerprint": "39801f4a26e4516fb26dba9d624b8123e4b8d3d7253c877a761444b6d07619f1",
       "fingerprint": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-13T21:45:22.432Z",
+      "format": "settings",
+      "version": 14,
+      "reason": "屏幕录制1.1新增全局录制快捷键，开发期只读取新版设置，不保留旧开发设置迁移",
+      "previousFingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
+      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
       "waivedFixtureVersions": []
     }
   ],

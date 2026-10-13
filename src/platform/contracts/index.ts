@@ -28,8 +28,10 @@ import type { SmartRegionsPlatform } from './smartRegions'
 import type { TrackingPlatform } from './tracking'
 import type { VideoProxyPlatform } from './videoProxy'
 import type { SceneDetectionPlatform } from './sceneDetection'
+import type { ScreenRecordingPlatform } from './screenRecording'
 
 export interface PlatformRuntime {
+  screenRecording: ScreenRecordingPlatform
   embeddedAgent: EmbeddedAgentPlatform
   applicationControl: ApplicationHostPlatform
   mcp: McpPlatform

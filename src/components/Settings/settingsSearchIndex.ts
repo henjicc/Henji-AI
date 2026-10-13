@@ -138,6 +138,9 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'agentSkills.builtinGroup',
     ['agentSkills.installGroup', ['安装', 'install']],
   ]),
+  ...rows('general-view', [
+    ['recordingShortcuts.title', ['录屏', '录制', '快捷键', 'screen recording', 'hotkeys']],
+  ]),
 ]
 
 export function settingsTabOfSection(sectionId: SettingsSectionId): SettingsTabId {

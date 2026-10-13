@@ -1,0 +1,37 @@
+import { beforeEach, expect, it, vi } from 'vitest'
+import type { IpcMainInvokeEvent } from 'electron'
+import type { ScreenRecordingRequest } from '../../../src/core/screenRecording/contracts'
+import { registerScreenRecordingIpc } from './screen-recording'
+
+const hooks = vi.hoisted(() => ({ handler: undefined as ((request: ScreenRecordingRequest, event: IpcMainInvokeEvent) => Promise<unknown>) | undefined, guard: undefined as ((event: IpcMainInvokeEvent) => void) | undefined, trusted: vi.fn(), sender: vi.fn(), snapshot: vi.fn(), command: vi.fn(), access: vi.fn(), grant: vi.fn(), revoke: vi.fn() }))
+vi.mock('./registry', () => ({ registerIpcHandler: (_channel: string, _parse: unknown, handler: typeof hooks.handler, guard: typeof hooks.guard) => { hooks.handler = handler; hooks.guard = guard } }))
+vi.mock('./application-control', () => ({ assertTrustedApplicationSender: hooks.trusted }))
+vi.mock('../security/main-renderer-url', () => ({ isTrustedMainRendererUrl: (url: string) => url === 'app://henji' }))
+vi.mock('../services/media-permissions', () => ({ mediaPermissions: { requestAccess: hooks.access, grant: hooks.grant, revoke: hooks.revoke } }))
+vi.mock('../services/screen-recording/runtime', () => ({ isRecordingControlSender: hooks.sender, recordingControl: { snapshot: hooks.snapshot, command: hooks.command } }))
+vi.mock('../services/logging', () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
+beforeEach(() => { vi.resetAllMocks(); registerScreenRecordingIpc() })
+function event(url = 'app://henji', main = true): IpcMainInvokeEvent {
+  const frame = { url }
+  return { senderFrame: frame, sender: { mainFrame: main ? frame : { url }, id: 10 } } as unknown as IpcMainInvokeEvent
+}
+it('唯一桥拒绝外部来源/子frame，辅助控制窗只能控制归属会话，过期会话不执行', async () => {
+  expect(() => hooks.guard!(event('https://other'))).toThrow('来源不可信')
+  expect(() => hooks.guard!(event('app://henji', false))).toThrow('来源不可信')
+  hooks.sender.mockReturnValue(true); hooks.snapshot.mockReturnValue({ sessionId: 'live' })
+  await expect(hooks.handler!({ action: 'control', sessionId: 'old', command: 'stop' }, event())).rejects.toThrow('会话已改变')
+  expect(hooks.command).not.toHaveBeenCalled()
+  await hooks.handler!({ action: 'control', sessionId: 'live', command: 'stop' }, event())
+  expect(hooks.command).toHaveBeenCalledWith('stop')
+  hooks.trusted.mockImplementation(() => { throw new Error('不是主窗口') })
+  await expect(hooks.handler!({ action: 'grant', sessionId: 'live', userReceipt: 'receipt', kinds: ['camera'] }, event())).rejects.toThrow('不是主窗口')
+  expect(hooks.grant).not.toHaveBeenCalled()
+})
+it('OS授权等待后重新核对宿主；导航后的迟到授权不能落地', async () => {
+  let finish!: () => void
+  hooks.access.mockImplementation(() => new Promise<void>(resolve => { finish = resolve }))
+  const pending = hooks.handler!({ action: 'grant', sessionId: 'live', userReceipt: 'receipt', kinds: ['microphone'] }, event())
+  hooks.trusted.mockImplementation(() => { throw new Error('宿主已改变') }); finish()
+  await expect(pending).rejects.toThrow('宿主已改变')
+  expect(hooks.grant).not.toHaveBeenCalled()
+})

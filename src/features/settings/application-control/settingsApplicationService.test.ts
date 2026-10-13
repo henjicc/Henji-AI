@@ -25,6 +25,14 @@ const defaultImageModel: ModelDefinition = {
 }
 
 describe('assistant settings registry', () => {
+  it('录制快捷键复用正式设置读写，重复键拒绝且不写入', () => {
+    const keys = { toggle: 'Alt+F9', mark: 'Alt+F10', stop: null }
+    applyApplicationSettingsChange(planApplicationSettingsChange([{ id: 'screen_recording.shortcuts', value: keys }]).planRef)
+    expect(getApplicationSettings(['screen_recording.shortcuts']).settings[0]).toMatchObject({ value: keys })
+    expect(useSettingsStore.getState().recordingShortcuts).toEqual(keys)
+    expect(() => planApplicationSettingsChange([{ id: 'screen_recording.shortcuts', value: { ...keys, stop: 'Alt+F9' } }])).toThrow('INVALID_INPUT')
+    expect(useSettingsStore.getState().recordingShortcuts).toEqual(keys)
+  })
   beforeEach(() => {
     useSettingsStore.getState().setVideoEditShortcuts({})
     useSettingsStore.getState().setUiBlurEnabled(true)

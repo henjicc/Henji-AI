@@ -1,4 +1,9 @@
 {
+  "screenRecording": {
+    "title": "录制控制", "ready": "准备就绪", "countdown": "{{seconds}} 秒后开始", "recording": "正在录制", "paused": "已暂停", "stopping": "正在保存录制", "stopped": "录制已停止", "failed": "录制未完成", "preparing": "准备录制",
+    "start": "开始录制", "resume": "继续录制", "pause": "暂停录制", "mark": "添加标记", "stop": "停止录制", "microphoneLevel": "麦克风电平", "microphoneInactive": "麦克风未采集",
+    "readFailed": "无法读取录制状态，请使用主窗口停止录制", "operationFailed": "录制操作未完成，请重试", "shortcutConflict": "部分快捷键被占用，请在设置中改键；仍可使用控制条。", "toggleUnavailable": "请等待录制状态切换完成", "markUnavailable": "标记只能在录制过程中添加", "stopUnavailable": "当前没有正在录制的会话"
+  },
   "promptProfileFields": {"provider": "供应商", "model": "模型"},
   "notifications": {
     "filesImported": "已导入 {{imported}} 个文件，跳过 {{skipped}} 个",
