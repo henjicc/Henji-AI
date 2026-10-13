@@ -165,15 +165,21 @@ export const agentTraceQuerySchema = z.object({
   modelId: z.string().max(300).optional(),
   status: agentTraceStatusSchema.optional(),
   beforeTimestamp: z.string().datetime().optional(),
+  beforeTraceId: z.string().min(1).optional(),
   limit: z.number().int().min(1).max(200).default(50),
-}).strict()
+}).strict().refine(query => Boolean(query.beforeTimestamp) === Boolean(query.beforeTraceId), {
+  message: '分页时须同时提供 beforeTimestamp 和 beforeTraceId。',
+})
 export type AgentTraceQuery = z.infer<typeof agentTraceQuerySchema>
 
 export const agentTraceQueryResultSchema = z.object({
   runs: z.array(agentTraceRunSummarySchema),
   hasMore: z.boolean(),
   nextBeforeTimestamp: z.string().datetime().optional(),
-}).strict()
+  nextBeforeTraceId: z.string().min(1).optional(),
+}).strict().refine(result => !result.hasMore || Boolean(result.nextBeforeTimestamp && result.nextBeforeTraceId), {
+  message: '还有更多追踪时须返回完整分页游标。',
+})
 export type AgentTraceQueryResult = z.infer<typeof agentTraceQueryResultSchema>
 
 export const agentTraceDetailResultSchema = z.object({

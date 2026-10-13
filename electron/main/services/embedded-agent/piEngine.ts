@@ -116,6 +116,7 @@ export class PiEngine implements EmbeddedAgentEngine {
         contextWindow: model.capabilities.contextWindow ?? 32768,
         maxOutputTokens: model.capabilities.maxOutputTokens ?? 4096,
         instructions: session.systemPrompt, tools: this.disclosure!.tools.filter(tool => active.has(tool.name)),
+        attachmentTokens: text => this.attachments.estimateTokens(text),
       })
     }
     const onPayload = session.agent.onPayload
@@ -243,6 +244,7 @@ export class PiEngine implements EmbeddedAgentEngine {
       this.emit({ type: 'log', phase: this.cancelled ? 'cancelled' : 'failed', requestId: this.requestId,
         durationMs: Date.now() - startedAt, sessionId: this.manager.getSessionId(), message: this.state.error })
     } finally {
+      this.attachments.endTurn()
       if (this.state.error && !this.cancelled && command.input.creativeIntent) {
         try {
           for (const draftRef of command.input.creativeIntent.draftRefs) {

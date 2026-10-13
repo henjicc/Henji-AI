@@ -6,6 +6,7 @@ import { videoEditCodeElementHostSummary } from '@/features/videoEdit/applicatio
 import { styleKitHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
+  HOST_ANNOTATION_PREVIEW_CHARACTERS,
   hostContextSnapshotSchema,
   type HostContextSnapshot,
   type HostScope,
@@ -302,6 +303,8 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     rendererEpoch,
     revision,
     scopeRevisions: getHostScopeRevisions(),
+    resourceRevisions: Object.fromEntries((['assets', 'canvas', 'camera_stage'] as const)
+      .map(scope => [scope, getApplicationDomainChangeRevision(scope)])),
     catalogRevision,
     surface,
     workspace: {
@@ -325,7 +328,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     },
     generation: { commandReady: generationReady },
     ...(videoEdit ? { videoEdit: {
-      openAnnotations: (() => { const marks = videoEdit.document.sequences.flatMap(sequence => sequence.annotations.filter(mark => mark.status === 'open').map(mark => ({ id: mark.id, ref: `video_edit.annotation:${videoEdit.document.id}:${mark.id}`, text: mark.text, frame: mark.frame, sequenceRef: `video_edit.sequence:${videoEdit.document.id}:${sequence.id}` }))); return { count: marks.length, items: marks.slice(0, 12) } })(),
+      openAnnotations: (() => { const marks = videoEdit.document.sequences.flatMap(sequence => sequence.annotations.filter(mark => mark.status === 'open').map(mark => ({ id: mark.id, ref: `video_edit.annotation:${videoEdit.document.id}:${mark.id}`, text: mark.text.slice(0, HOST_ANNOTATION_PREVIEW_CHARACTERS), ...(mark.text.length > HOST_ANNOTATION_PREVIEW_CHARACTERS ? { truncated: true } : {}), frame: mark.frame, sequenceRef: `video_edit.sequence:${videoEdit.document.id}:${sequence.id}` }))); return { count: marks.length, items: marks.slice(0, 12) } })(),
       documentRef: `video_edit.document:${videoEdit.document.id}`,
       sequenceRef: videoEdit.activeSequenceId ? `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}` : null,
       frame: videoEdit.frame, playing: videoEdit.playing, inFrame: videoEdit.inFrame, outFrame: videoEdit.outFrame, focusedPanel: videoEdit.activePanel,

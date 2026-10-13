@@ -33,4 +33,9 @@ describe('embedded attachment host boundary', () => {
     await expect(prepareEmbeddedAttachments([{ ...attachment, dataClass: 'C3' }], model, new AbortController().signal)).rejects.toThrow('C3')
     await expect(prepareEmbeddedAttachments([attachment], model, AbortSignal.abort())).rejects.toThrow()
   })
+  it('Responses 音频在读取素材之前被最终边界拒绝', async () => {
+    await expect(prepareEmbeddedAttachments([{ ...attachment, modality: 'audio', mimeType: 'audio/mpeg' }],
+      { ...model, api: 'openai-responses' }, new AbortController().signal)).rejects.toThrow('连接方式不支持音频')
+    expect(inspectAsset).not.toHaveBeenCalled()
+  })
 })

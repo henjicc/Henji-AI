@@ -152,6 +152,14 @@ describe('宿主作用域 revision', () => {
     expect(getHostScopeRevisions().canvas).toBeGreaterThan(before.canvas)
   })
 
+  it('后台画布领域信号独立推进订阅版本，不污染当前画布写入基线', () => {
+    const before = createHostContextSnapshot()
+    notifyApplicationDomainChanged('canvas')
+    const after = createHostContextSnapshot()
+    expect(after.scopeRevisions.canvas).toBe(before.scopeRevisions.canvas)
+    expect(after.resourceRevisions?.canvas).toBe((before.resourceRevisions?.canvas ?? 0) + 1)
+  })
+
   it('三维场景数据变化只推进 camera_stage，保留工具箱自身基线', () => {
     const before = getHostScopeRevisions()
     useCameraStageStore.setState({ objects: [] })

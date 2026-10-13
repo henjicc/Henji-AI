@@ -404,7 +404,7 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '第三条', context: '{"surface":"settings"}' } })
     expect(JSON.stringify(f.requests.at(-1)).split('当前应用上下文').length - 1).toBe(2)
   })
-  it('DeepSeek 使用的 Responses 链路发送原生图片并在重启续聊时恢复内容', async () => {
+  it('Responses 链路本轮发送原生图片，重启续聊保留引用而不重复发送图片', async () => {
     const f = await fixture({ image: true }, 'openai-responses')
     const attachment = { schemaVersion: 'agent-attachment/v1' as const, mediaRef: 'asset:image', modality: 'image' as const, mimeType: 'image/png', sizeBytes: 5,
       displayName: '图片.png', dataClass: 'C1' as const, lifecycle: 'asset_library' as const, sourceStatus: 'ready' as const }
@@ -419,19 +419,19 @@ describe('Pi official SDK engine', () => {
     await restarted.command({ action: 'configure', input: f.configuration })
     await restarted.command({ action: 'prompt', input: { text: '继续分析', context: '' } })
     expect(f.requests).toHaveLength(2)
-    for (const request of f.requests) {
-      expect(request.input?.find((message) => message.role === 'user')?.content).toEqual(expect.arrayContaining([
+      expect(f.requests[0].input?.find((message) => message.role === 'user')?.content).toEqual(expect.arrayContaining([
         { type: 'input_image', image_url: 'data:image/png;base64,bWVkaWE=', detail: 'auto' },
       ]))
-    }
+    expect(JSON.stringify(f.requests[1])).not.toContain('data:image/')
+    expect(JSON.stringify(f.requests[1])).toContain('asset:image')
     await restarted.command({ action: 'configure', input: { ...f.configuration, model: { ...f.configuration.model,
       model: { ...f.configuration.model.model, capabilities: { ...f.configuration.model.model.capabilities, image: false } } } } })
     await restarted.command({ action: 'prompt', input: { text: '改为文字交流', context: '' } })
     expect(JSON.stringify(f.requests[2])).not.toContain('data:image/')
-    expect(JSON.stringify(f.requests[2])).toContain('当前模型无法读取这份历史附件')
+    expect(JSON.stringify(f.requests[2])).toContain('asset:image')
     expect(await restarted.command({ action: 'snapshot' })).toMatchObject({ error: null })
   }, 30000)
-  it('附件实际进入官方 SDK 的每轮 HTTP 请求，并能从冷启动会话恢复', async () => {
+  it('附件进入本轮工具循环的 HTTP 请求，冷启动保留附件引用', async () => {
     const f = await fixture({ image: true, video: true, audio: true })
     const attachments = (['image', 'video', 'audio'] as const).map((modality) => ({
       attachment: { schemaVersion: 'agent-attachment/v1' as const, mediaRef: `asset:${modality}`, modality,
@@ -460,6 +460,16 @@ describe('Pi official SDK engine', () => {
     await restarted.command({ action: 'open', input: sessions[0].id })
     expect(await restarted.command({ action: 'snapshot' })).toMatchObject({ messages: [{ attachments: attachments.map((item) => item.attachment) }, { kind: 'tool' }, { kind: 'answer' }] })
   }, 30000)
+  it('附件标记的媒体预算在实际请求前拒绝，不向供应商发送超限请求', async () => {
+    const f = await fixture({ image: true, contextWindow: 5000 })
+    await f.engine.command({ action: 'prompt', input: { text: '普通文字', context: '' } })
+    expect(f.requests).toHaveLength(2)
+    const attachment = { schemaVersion: 'agent-attachment/v1' as const, mediaRef: 'asset:image', modality: 'image' as const, mimeType: 'image/png', sizeBytes: 5,
+      displayName: '图片.png', dataClass: 'C1' as const, lifecycle: 'asset_library' as const, sourceStatus: 'ready' as const }
+    await f.engine.command({ action: 'prompt', input: { text: '看图', context: '', attachments: [{ attachment, data: 'bWVkaWE=' }] } })
+    expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ error: expect.stringContaining('上下文预算') })
+    expect(f.requests).toHaveLength(2)
+  })
   it('真实 SDK 只运行宿主工具，流式输出并恢复官方会话文件', async () => {
     const f = await fixture()
     await f.engine.command({ action: 'prompt', input: { text: '读取项目', context: '{"workspace":"canvas"}' } })

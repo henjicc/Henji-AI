@@ -1,7 +1,7 @@
 import { resolveLlmEndpointIdentity, resolveModelStepBaseUrl } from '@henjicc/ai-sdk'
 import { createProviderSettingsFileStorage } from '../llm/provider-settings-storage'
 import { getLlmProviderApiKey } from '../keystore'
-import type { EmbeddedAgentModel } from '../../../../src/core/assistant/embeddedAgent'
+import { embeddedInputModalities, type EmbeddedAgentModel } from '../../../../src/core/assistant/embeddedAgent'
 import type { EmbeddedModel } from './contracts'
 
 async function configuredModels() {
@@ -11,6 +11,9 @@ async function configuredModels() {
     return model.enabled && model.capabilities.text && model.capabilities.toolCall && provider ? [{ model, provider }] : []
   })
 }
+function resolveEmbeddedApi(config: { apiProtocol?: string }): EmbeddedModel['api'] {
+  return config.apiProtocol === 'openai-responses' ? 'openai-responses' : 'openai-completions'
+}
 export async function listEmbeddedModels(): Promise<EmbeddedAgentModel[]> {
   const config = await createProviderSettingsFileStorage().readConfig()
   const profile = config?.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config?.agentProfiles[0]
@@ -19,7 +22,7 @@ export async function listEmbeddedModels(): Promise<EmbeddedAgentModel[]> {
     ? entries.filter(({ model }) => model.modelId === profile.primary.modelId && model.providerId === profile.primary.providerId)
     : entries.slice(0, 1)
   return selected.map(({ model, provider }) => ({ providerId: model.providerId, modelId: model.modelId, name: `${model.displayName} · ${provider.displayName}`,
-    inputModalities: (['image', 'video', 'audio'] as const).filter((type) => model.capabilities[type]) }))
+    inputModalities: embeddedInputModalities(model.capabilities, resolveEmbeddedApi({ ...provider, ...model })) }))
 }
 export async function resolveEmbeddedModel(selection: { providerId: string; modelId: string }): Promise<EmbeddedModel> {
   const entry = (await configuredModels()).find(({ model }) => model.providerId === selection.providerId && model.modelId === selection.modelId)
@@ -29,5 +32,5 @@ export async function resolveEmbeddedModel(selection: { providerId: string; mode
   const apiKey = getLlmProviderApiKey(identity.credentialId)
   if (!apiKey) throw new Error('所选供应商还没有 API Key，请到设置中填写。')
   return { providerId: config.providerId, model: entry.model, baseUrl: resolveModelStepBaseUrl(config),
-    api: config.apiProtocol === 'openai-responses' ? 'openai-responses' : 'openai-completions', apiKey }
+    api: resolveEmbeddedApi(config), apiKey }
 }

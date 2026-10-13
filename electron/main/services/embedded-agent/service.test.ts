@@ -81,9 +81,50 @@ function setup({ holdNavigation = false } = {}) {
   const finishNavigation = () => { const id = navigations.shift(); if (id) reply(id) }
   return { service, send, prompts, finish, child, navigations, finishNavigation, finishCancel: () => { finish(); if (cancelId) { reply(cancelId); cancelId = undefined } } }
 }
-afterEach(() => { vi.clearAllMocks() })
+afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
 describe('内置助手消息调度', () => {
+  it('持续输出超过三十分钟仍继续，十分钟无进展先取消再等六十秒强杀', async () => {
+    vi.useFakeTimers()
+    const f = setup()
+    const post = vi.spyOn(f.child, 'postMessage')
+    const kill = vi.spyOn(f.child, 'kill')
+    await f.send('长任务')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(f.prompts).toHaveLength(1)
+    for (let index = 0; index < 5; index++) {
+      await vi.advanceTimersByTimeAsync(9 * 60_000)
+      f.child.emit('message', { type: 'snapshot', value: { ...f.service.snapshot(), activity: `输出 ${index}` } })
+    }
+    expect(kill).not.toHaveBeenCalled()
+    expect(post.mock.calls.some(([value]) => value.command.action === 'cancel')).toBe(false)
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(post.mock.calls.some(([value]) => value.command.action === 'cancel')).toBe(true)
+    expect(kill).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(kill).toHaveBeenCalledOnce()
+  })
+  it('工具执行等待期间不计空闲，工具结束后重新计算；取消确认后不强杀', async () => {
+    vi.useFakeTimers()
+    const f = setup()
+    const kill = vi.spyOn(f.child, 'kill')
+    await f.send('等待工具')
+    await vi.advanceTimersByTimeAsync(0)
+    let resolveTool!: (value: unknown) => void
+    mocks.call.mockImplementationOnce(() => new Promise(resolve => { resolveTool = resolve }))
+    const original = f.child.postMessage
+    f.child.postMessage = value => { if (value.command) original(value) }
+    f.child.emit('message', { type: 'tool', id: 'waiting', name: 'wait_generation_task', input: {} })
+    await vi.advanceTimersByTimeAsync(40 * 60_000)
+    expect(kill).not.toHaveBeenCalled()
+    resolveTool({ ok: true })
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    f.finishCancel()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(kill).not.toHaveBeenCalled()
+    f.service.dispose()
+  })
   it('每条消息读取最新共享记忆，关闭后不注入正文', async () => {
     const f = setup()
     const calls = vi.spyOn(f.child, 'postMessage')

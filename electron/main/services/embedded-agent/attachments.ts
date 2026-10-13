@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import { AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENT_MIME_TYPES, validateAgentAttachmentLimits, type AgentAttachment } from '../../../../src/core/assistant/attachments'
 import { inspectAsset } from '../asset-library'
 import type { EmbeddedModel, PreparedEmbeddedAttachment } from './contracts'
+import { embeddedInputModalities } from '../../../../src/core/assistant/embeddedAgent'
 
 // 先检查权威素材信息，再读内容；不信任渲染层传来的大小、类型或文件路径。
 export async function prepareEmbeddedAttachments(attachments: AgentAttachment[], model: EmbeddedModel, signal: AbortSignal): Promise<PreparedEmbeddedAttachment[]> {
@@ -11,7 +12,7 @@ export async function prepareEmbeddedAttachments(attachments: AgentAttachment[],
   for (const attachment of attachments) {
     signal.throwIfAborted()
     if (!model.model.capabilities[attachment.modality]) throw new Error(`当前模型不支持“${attachment.displayName}”的附件类型，请移除附件或切换模型。`)
-    if (attachment.modality === 'audio' && model.api !== 'openai-completions') throw new Error('当前模型的连接方式不支持音频输入，请选择使用兼容对话接口的音频模型。')
+    if (!embeddedInputModalities(model.model.capabilities, model.api).includes(attachment.modality)) throw new Error('当前模型的连接方式不支持音频输入，请选择使用兼容对话接口的音频模型。')
     const asset = await inspectAsset(attachment.mediaRef.slice('asset:'.length))
     if (asset.inspectionStatus !== 'ready' || asset.mediaType !== attachment.modality) throw new Error(`附件“${attachment.displayName}”已失效，请重新添加。`)
     const mimeType = asset.mimeType ?? ''

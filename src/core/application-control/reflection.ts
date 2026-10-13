@@ -96,6 +96,8 @@ export const applicationPropertyDescriptorSchema = z.object({
   revisionScopes: z.array(applicationScopeIdSchema).min(1).max(16),
   schemaRef: applicationSchemaRefSchema,
   readOnlyReason: z.string().min(1).max(500).optional(),
+  /** 合并型写入必须携带读取时的版本；通用入口不得自动补齐或刷新此基线。 */
+  requiresReadBaseline: z.boolean().optional(),
   /** 会话控制会在提交后继续变化；这类属性以执行器证据验收，不做最终状态等值断言。 */
   verificationStrategy: z.enum(['state', 'execution']).optional(),
   /** 仅显式声明的集合忽略顺序；时间线、节点排序等数组仍按顺序核对。 */

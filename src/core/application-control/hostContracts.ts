@@ -3,6 +3,7 @@ import { VIDEO_EDIT_FOCUSABLE_PANELS } from '../videoEdit/panels'
 import { videoEditSelectedCodeElementContextSchema } from '../videoEdit/codeElementSelection'
 
 export const APPLICATION_HOST_CONTRACT_VERSION = 'application-host/v1' as const
+export const HOST_ANNOTATION_PREVIEW_CHARACTERS = 200
 
 export const hostScopeSchema = z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/)
 export type HostScope = z.infer<typeof hostScopeSchema>
@@ -21,6 +22,8 @@ export const hostContextSnapshotSchema = z.object({
   rendererEpoch: z.string().min(1),
   revision: z.number().int().nonnegative(),
   scopeRevisions: hostScopeRevisionsSchema,
+  /** 领域全局变更通知（含后台工程），只供订阅失效判断，不作为写入基线。 */
+  resourceRevisions: z.record(z.string(), z.number().int().nonnegative()).optional(),
   catalogRevision: z.number().int().nonnegative().optional(),
   surface: z.object({
     id: z.string().min(1).max(120),
@@ -74,7 +77,7 @@ export const hostContextSnapshotSchema = z.object({
     selectedCodeElement: videoEditSelectedCodeElementContextSchema.optional(),
     elementOverrides: z.object({ count: z.number().int().nonnegative(), items: z.array(z.object({ clipRef: z.string(), elementId: z.string(), fields: z.array(z.string()), missing: z.boolean() }).strict()).max(12) }).strict().optional(),
     currentStyleKit: z.object({ ref: z.string().nullable(), name: z.string(), summary: z.string() }).strict().optional(),
-    openAnnotations: z.object({ count: z.number().int().nonnegative(), items: z.array(z.object({ id: z.string().min(1), ref: z.string().min(1), text: z.string(), frame: z.number().int().nonnegative(), sequenceRef: z.string().min(1) }).strict()).max(12) }).strict(),
+    openAnnotations: z.object({ count: z.number().int().nonnegative(), items: z.array(z.object({ id: z.string().min(1), ref: z.string().min(1), text: z.string().max(HOST_ANNOTATION_PREVIEW_CHARACTERS), truncated: z.boolean().optional(), frame: z.number().int().nonnegative(), sequenceRef: z.string().min(1) }).strict()).max(12) }).strict(),
     targetTrackRefs: z.array(z.string().min(1).max(500)).max(32),
   }).strict().optional(),
   assets: z.object({
