@@ -36,7 +36,10 @@ export interface TimestampedTranscript {
   granularity: AsrWordGranularity | 'segment' | 'mixed' | 'none'
 }
 
-/** 检验 SDK 的毫秒 DTO，不解析供应商响应、不均分句子、不夹断非法时间。 */
+/** SDK 时间戳的量化尾差最多容忍两个 20ms 量子；明显越界仍拒绝。 */
+const TIMESTAMP_QUANTIZATION_TOLERANCE_MS = 40
+
+/** 检验 SDK 毫秒 DTO，词按自身时间编辑，所属句仅作为文本分组。 */
 export function normalizeTimestampedTranscript(
   output: SpeechRecognitionOutput,
   durationMs: number,
@@ -45,12 +48,15 @@ export function normalizeTimestampedTranscript(
   if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error('ASR_DURATION_INVALID')
   const range = (start: number | undefined, end: number | undefined): [number, number] | null => {
     for (const value of [start, end]) {
-      if (value !== undefined && (!Number.isFinite(value) || value < 0 || value > durationMs)) {
+      if (value !== undefined && (!Number.isFinite(value) || value < 0 || value > durationMs + TIMESTAMP_QUANTIZATION_TOLERANCE_MS)) {
         throw new Error('ASR_TIMESTAMP_INVALID：识别结果时间超出录音范围。')
       }
     }
     if (start !== undefined && end !== undefined && end <= start) throw new Error('ASR_TIMESTAMP_INVALID：识别结果时间顺序无效。')
-    return start === undefined || end === undefined ? null : [start, end]
+    if (start === undefined || end === undefined) return null
+    const clippedStart = Math.min(start, durationMs)
+    const clippedEnd = Math.min(end, durationMs)
+    return clippedEnd > clippedStart ? [clippedStart, clippedEnd] : null
   }
   const words: TimestampedTranscriptPart[] = []
   const segments: TimestampedTranscript['segments'] = []
@@ -58,9 +64,6 @@ export function normalizeTimestampedTranscript(
     const segmentRange = range(segment.startMs, segment.endMs)
     const segmentWords = (segment.words ?? []).map((word): TimestampedTranscriptPart => {
       const wordRange = range(word.startMs, word.endMs)
-      if (wordRange && segmentRange && (wordRange[0] < segmentRange[0] || wordRange[1] > segmentRange[1])) {
-        throw new Error('ASR_TIMESTAMP_INVALID：词时间超出所属句子。')
-      }
       return {
         text: word.text, startMs: wordRange?.[0] ?? null, endMs: wordRange?.[1] ?? null,
         confidence: word.confidence, granularity: wordRange ? wordGranularity : 'none',

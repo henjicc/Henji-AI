@@ -65,7 +65,8 @@ export async function invokeAudioWorker<T>(command: Record<string, unknown>, tim
       child.once('error', (error) => {
         finish(() => reject(error))
       })
-      child.once('exit', (code) => {
+      // close 等待 stdio 排空；exit 可能早于 stdout 的最后一行。
+      child.once('close', (code) => {
         if (code && code !== 0) {
           finish(() => reject(new Error(`音频 Worker 异常退出（${code}）：${stderr}`)))
         } else {

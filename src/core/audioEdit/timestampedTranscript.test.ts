@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeTimestampedTranscript, audioEditTranscriptBlocks } from './timestampedTranscript'
 import { ASR_CATALOG, listTimestampedLocalAsr } from './asrCatalog'
+import { parseGroqTranscription } from '../../../packages/ai-sdk/src/capabilities/speech-recognition/groq/parse'
 
 describe('带时间转写 DTO（synthetic-negative / 受控毫秒真值）', () => {
   it('保留字级时间，不把整句均分成词', () => {
@@ -20,12 +21,20 @@ describe('带时间转写 DTO（synthetic-negative / 受控毫秒真值）', () 
       words: [{ text: '你', startMs: 10, endMs: 80 }, { text: '好', startMs: 100 }] }] }, 1_000, 'word'))
       .toMatchObject({ granularity: 'mixed', words: [{ timing: 'precise' }, { text: '好', startMs: null, endMs: null, timing: 'missing' }] })
   })
-  it.each([[-1, 10], [200, 100], [0, 1_001], [NaN, 100], [0, Infinity], [10, 10]])('拒绝非法时间 %s/%s，不夹断掩盖错误', (startMs, endMs) => {
+  it.each([[-1, 10], [200, 100], [0, 1_041], [NaN, 100], [0, Infinity], [10, 10]])('拒绝非法时间 %s/%s，不夹断掩盖错误', (startMs, endMs) => {
     expect(() => normalizeTimestampedTranscript({ text: '错', segments: [{ text: '错', startMs, endMs }] }, 1_000, 'word')).toThrow('ASR_TIMESTAMP_INVALID')
   })
-  it('拒绝超出所属句的词；缺时刻的另一个非法端点同样拒绝', () => {
-    expect(() => normalizeTimestampedTranscript({ text: '错', segments: [{ text: '错', startMs: 100, endMs: 300, words: [{ text: '错', startMs: 0, endMs: 200 }] }] }, 1_000, 'word')).toThrow('所属句')
+  it('保留 SDK 跨句词精确时间；缺时刻的另一个非法端点同样拒绝', () => {
+    expect(normalizeTimestampedTranscript({ text: '词', segments: [{ text: '词', startMs: 100, endMs: 300, words: [{ text: '词', startMs: 0, endMs: 200 }] }] }, 1_000, 'word').words[0]).toMatchObject({ startMs: 0, endMs: 200 })
     expect(() => normalizeTimestampedTranscript({ text: '错', segments: [{ text: '错', startMs: -10 }] }, 1_000, 'word')).toThrow('ASR_TIMESTAMP_INVALID')
+  })
+  it('接受 Groq 官方字段构造夹具中的跨句词及 20ms 量化超长，保留词采样时间', () => {
+    const dto = parseGroqTranscription({ text: '你好', duration: 1.02,
+      segments: [{ text: '你', start: 0, end: .5 }, { text: '好', start: .5, end: 1.02 }],
+      words: [{ word: '你', start: .1, end: .52 }, { word: '好', start: .52, end: 1.02 }] })
+    const output = normalizeTimestampedTranscript(dto, 1000, 'word')
+    expect(output.words.map(word => [word.startMs, word.endMs])).toEqual([[100, 520], [520, 1000]])
+    expect(audioEditTranscriptBlocks(output, 1000).map(block => [block.startFrame, block.endFrame])).toEqual([[100, 520], [520, 1000]])
   })
   it('TTS、仅文本、远端输入和未配置模型均不能成为候选', () => {
     const candidates = listTimestampedLocalAsr((provider) => provider === 'bailian')

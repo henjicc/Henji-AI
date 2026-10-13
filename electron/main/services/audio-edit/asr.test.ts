@@ -11,7 +11,7 @@ vi.mock('./media', () => ({ verifyAudioEditSource: mock.verify, prepareAudioEdit
 vi.mock('./timestamped-asr', () => ({ timestampedAsrService: {
   client: { get: () => ({ descriptor: { features: ['resume-task'] } }) }, listModels: () => [],
   preflight: mock.preflight, execute: mock.execute,
-  prepare: (input: Record<string, unknown>) => ({ ...input, modelId: 'fixture-asr', providerId: 'fixture', cost: { status: 'unknown', amount: null, currency: null } }),
+  prepare: (input: Record<string, unknown>) => ({ ...input, modelId: 'groq.speech-recognition.whisper-large-v3-turbo', providerId: 'groq', cost: { status: 'unknown', amount: null, currency: null } }),
 } }))
 vi.mock('./task-store', () => ({
   findAudioEditTranscription: () => mock.task,
@@ -62,4 +62,56 @@ it('历史 native_upload_unsupported 有零提交证据，可复用原口播重�
   expect((await preflightAudioEditTranscription({ sourcePath: source.sourcePath, durationMs: 2400, audioDocumentId: 'audio' })).requiresConfirmation).toBe(true)
   await transcribeAudioEditProject(request)
   expect(mock.execute.mock.calls[0][1]).toMatchObject({ requestId: 'previous', resumeTaskId: undefined })
+})
+
+it('同步供应商完成后本地规范化失败：回执保存原始付费结果，重试只重新解析', async () => {
+  const raw = { text: '你好', segments: [{ text: '你好', startMs: 0, endMs: 1000 }] }
+  mock.execute.mockImplementationOnce(async (_plan, context) => {
+    context.onOutput?.(raw)
+    throw new Error('本地规范化失败')
+  })
+  await expect(transcribeAudioEditProject(request)).rejects.toMatchObject({ transcriptionFacts: { billing: 'completed' } })
+  expect(JSON.parse(mock.task!.result_json!)).toMatchObject({ billing: 'completed', rawOutput: raw })
+  expect((await preflightAudioEditTranscription({ sourcePath: source.sourcePath, durationMs: 2400, audioDocumentId: 'audio' })).requiresConfirmation).toBe(false)
+  const module = await import('./timestamped-asr')
+  const prepare = vi.spyOn(module.timestampedAsrService, 'prepare').mockImplementationOnce(() => { throw new Error('凭据已删除') })
+  expect((await transcribeAudioEditProject({ ...request, requestId: 'retry' })).project.transcript).toHaveLength(1)
+  expect(prepare).not.toHaveBeenCalled()
+  prepare.mockRestore()
+  expect(mock.execute).toHaveBeenCalledTimes(1)
+  expect(mock.preflight).toHaveBeenCalledTimes(1)
+})
+
+it('SDK started 会话标识不是可恢复供应商任务，未知结果不能据此查询或重放', async () => {
+  mock.execute.mockImplementationOnce(async (_plan, context) => {
+    context.onEvent({ type: 'started', sessionId: 'sdk-session' })
+    throw new Error('响应中断')
+  })
+  await expect(transcribeAudioEditProject(request)).rejects.toThrow('响应中断')
+  expect(mock.task!.provider_task_id).toBeNull()
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'retry' })).rejects.toThrow('无法确认')
+  expect(mock.execute).toHaveBeenCalledTimes(1)
+})
+
+it('供应商完成后空时间戳结果同样保留原始回执，再次失败不重复付费', async () => {
+  const raw = { text: '只有文本' }
+  mock.execute.mockImplementationOnce(async (_plan, context) => {
+    context.onOutput?.(raw)
+    return { text: raw.text, words: [], segments: [], granularity: 'none', unit: 'ms' }
+  })
+  await expect(transcribeAudioEditProject(request)).rejects.toThrow('没有可用时间戳')
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'retry' })).rejects.toThrow('没有可用时间戳')
+  expect(mock.execute).toHaveBeenCalledTimes(1)
+  expect(JSON.parse(mock.task!.result_json!)).toMatchObject({ billing: 'completed', rawOutput: raw })
+})
+
+it('付费结果后的源核验失败：重试复用完整结果；源身份变化拒绝旧结果', async () => {
+  mock.verify.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('素材暂不可读'))
+  await expect(transcribeAudioEditProject(request)).rejects.toThrow('素材暂不可读')
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'retry' })).resolves.toMatchObject({ granularity: 'segment' })
+  expect(mock.execute).toHaveBeenCalledTimes(1)
+  const project = await mock.project()
+  mock.project.mockResolvedValue({ ...project, source: { ...source, identity: { digest: 'changed' } } })
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'changed' })).rejects.toThrow('素材已变化')
+  expect(mock.execute).toHaveBeenCalledTimes(1)
 })

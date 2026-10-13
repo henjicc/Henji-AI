@@ -28,6 +28,19 @@ function runtime(fetch: RuntimeContext['transport']['fetch']): RuntimeContext {
 const context = (): { requestId: string; signal: AbortSignal } => ({ requestId: 'fixture-transcription', signal: new AbortController().signal })
 
 describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
+  it('供应商完成后先交付原始 DTO：即使本地规范化或随后取消失败，owner 仍得到付费结果', async () => {
+    const payload = { text: 'fixture', segments: [{ text: 'fixture', start: 0, end: 3 }] }
+    const fetch = vi.fn(async () => json(payload))
+    const service = createTimestampedAsrService(runtime(fetch), id => id === 'groq')
+    const plan = service.prepare({ audioPath: 'voice.wav', durationMs: 1000 })
+    const onOutput = vi.fn()
+    await expect(service.execute(plan, { ...context(), onOutput })).rejects.toThrow('ASR_TIMESTAMP_INVALID')
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ text: 'fixture', segments: [{ text: 'fixture', startMs: 0, endMs: 3000 }] }))
+    const controller = new AbortController()
+    await expect(service.execute(plan, { ...context(), signal: controller.signal, onOutput: output => { onOutput(output); controller.abort() } })).rejects.toThrow()
+    expect(onOutput).toHaveBeenCalledTimes(2)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
   it('预检拒绝缺凭据、缺原生直传与不可读素材，始终不请求供应商', async () => {
     const fetch = vi.fn()
     const media = vi.fn().mockRejectedValue(new Error('unreadable'))

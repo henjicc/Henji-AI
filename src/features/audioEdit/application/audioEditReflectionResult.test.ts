@@ -105,6 +105,26 @@ it('通过通用 change 删除词块并让成片映射同步缩短', async () =>
   }
 })
 
+it('正式公共事务同一步删除并锁定后，可用本连接 undoRef 恢复内容和锁并保存', async () => {
+  const app = createApplicationHarness()
+  try {
+    const blockRef = { kind: 'audio_edit.transcript_block', id: 'audio-result:first' }
+    const changed = await app.change(blockRef, {
+      'audio_edit.transcript_block.included': false,
+      'audio_edit.transcript_block.locked': true,
+    })
+    expect(changed.ok).toBe(true)
+    if (!changed.ok) throw new Error(JSON.stringify(changed.error))
+    const instance = await loadAudioEditProject('audio-result')
+    expect(instance.document.transcript[0]).toMatchObject({ included: false, locked: true })
+    expect(instance.past).toHaveLength(1)
+    await app.requireResult('undo_application_changes', { undoRef: changed.data.undoRef })
+    expect(instance.document.transcript[0]).toMatchObject({ included: true, locked: false })
+    const stored = harnessDocumentStore().stored('audio-result')!.content as AudioEditProjectDocument
+    expect(stored.transcript[0]).toMatchObject({ included: true, locked: false })
+  } finally { app.dispose() }
+})
+
 it('助手修改与手工历史共存，撤销助手操作不会抹去之前的手工编辑', async () => {
   const app = createApplicationHarness()
   try {

@@ -41,7 +41,16 @@ export interface TimestampedAsrService {
   listModels(): TimestampedAsrModel[]
   preflight(input: TranscriptionPreflight): Promise<{ modelId: string; cost: AsrCostEstimate }>
   prepare(input: { modelId?: string; providerId?: string; audioPath: string; durationMs: number; language?: string }): TimestampedTranscriptionPlan
-  execute(plan: TimestampedTranscriptionPlan, context: { requestId: string; signal: AbortSignal; resumeTaskId?: string; onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void> }): Promise<TimestampedTranscript>
+  execute(plan: TimestampedTranscriptionPlan, context: TimestampedAsrExecutionContext): Promise<TimestampedTranscript>
+}
+
+export interface TimestampedAsrExecutionContext {
+  requestId: string
+  signal: AbortSignal
+  resumeTaskId?: string
+  onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void>
+  /** 供应商完成后、取消与本地规范化前，由 owner 持久化已付费原始 DTO。 */
+  onOutput?: (output: SpeechRecognitionOutput) => void | Promise<void>
 }
 
 export function createTimestampedAsrService(runtime: RuntimeContext, isConfigured: (providerId: string) => boolean, checkMedia: (ref: string) => Promise<unknown> = scopedUploadFile): TimestampedAsrService {
@@ -82,7 +91,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
     /** 仅执行一次；owner 负责授权、operationId、任务账本、恢复和音频→墙钟映射。 */
     execute: async (
       plan: TimestampedTranscriptionPlan,
-      context: { requestId: string; signal: AbortSignal; resumeTaskId?: string; onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void> },
+      context: TimestampedAsrExecutionContext,
     ): Promise<TimestampedTranscript> => {
       context.signal.throwIfAborted()
       const entry = ASR_CATALOG.find((entry) => entry.descriptor.id === plan.modelId)
@@ -96,6 +105,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
           audio: { kind: 'media-ref', ref: plan.audioPath }, language: plan.language, punctuation: true, timestamps: true,
           options: { ...entry.timestampOptions, ...(context.resumeTaskId ? { resumeTaskId: context.resumeTaskId } : {}) },
         }, context)
+        await context.onOutput?.(output)
         context.signal.throwIfAborted()
         const result = normalizeTimestampedTranscript(output, plan.durationMs, entry.wordGranularity)
         logger.info('带时间转写完成', { event: 'audio_edit.timestamped_asr.completed', requestId: context.requestId, modelId: plan.modelId, context: { granularity: result.granularity } })
