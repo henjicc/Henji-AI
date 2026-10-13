@@ -14,6 +14,9 @@ export const DEVELOPMENT_SURFACE_IDS = {
   uiGallery: 'dev.ui_gallery',
 } as const
 
+/** 分区在既有 dev.ui_gallery 页内选择；不新增应用 Surface 或助手入口。 */
+export const DEVELOPMENT_GALLERY_QUERY_KEYS = { section: 'henjiGallerySection' } as const
+
 export type DevelopmentSurfaceId = (typeof DEVELOPMENT_SURFACE_IDS)[keyof typeof DEVELOPMENT_SURFACE_IDS]
 
 export function isDevelopmentSurfaceId(value: unknown): value is DevelopmentSurfaceId {

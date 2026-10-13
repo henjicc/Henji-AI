@@ -207,7 +207,7 @@ const ASSISTANT_BLIND_FEATURES = {
     + 'API 密钥继续走受保护的 security.provider_keys，步骤进度与提示显隐属于 view_state，'
     + '不为助手另建专用能力或伪造 StoreLedger。',
   toolbox: '工具目录由正式工具注册表定义，属于应用结构而非用户数据，已有 toolbox.tool 的 writeExclusion。',
-  devGallery: '开发模式组件样张页只在开发构建中挂载，用于目视检查界面组件与主题组合，'
+  devGallery: '开发设计系统中心页自身使用 DEV 守卫，不登记应用 Surface，用于目视检查界面组件与主题组合，'
     + '不承载用户数据、不出现在正式界面，助手无需观察或操作。',
   localModels: '本地模型状态由主进程 LocalModelService 持有，没有 Zustand store；localModelsReflection 的 '
     + 'local_model.item 与 local_model.settings 两个实体及其执行器覆盖状态读取、下载、删除与下载源设置。',

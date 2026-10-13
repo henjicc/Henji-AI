@@ -9,21 +9,31 @@
  * - `:not(:hover)` 这类否定伪类不改写（改写后会对所有非强制元素生效，反而盖掉真实悬停）。
  */
 
-export type GalleryForcedState = 'hover' | 'focus'
+export type GalleryForcedState = 'hover' | 'active' | 'focus'
+
+export const GALLERY_MATRIX_COLUMNS = [
+  { state: 'rest', label: '静息' }, { state: 'hover', label: '悬停' },
+  { state: 'active', label: '按下' }, { state: 'focus', label: '聚焦' },
+  { state: 'selected', label: '选中' }, { state: 'disabled', label: '禁用' },
+  { state: 'loading', label: '加载' },
+] as const
+export type GalleryMatrixState = (typeof GALLERY_MATRIX_COLUMNS)[number]['state']
 
 export const GALLERY_FORCED_STATE_CLASS: Record<GalleryForcedState, string> = {
   hover: 'henji-gallery-force-hover',
+  active: 'henji-gallery-force-active',
   focus: 'henji-gallery-force-focus',
 }
 
 const PSEUDO_TO_CLASS: ReadonlyArray<[RegExp, string]> = [
   [/:hover\b/g, `.${GALLERY_FORCED_STATE_CLASS.hover}`],
+  [/:active\b/g, `.${GALLERY_FORCED_STATE_CLASS.active}`],
   [/:focus-visible\b/g, `.${GALLERY_FORCED_STATE_CLASS.focus}`],
   [/:focus-within\b/g, `.${GALLERY_FORCED_STATE_CLASS.focus}`],
 ]
 
-const FORCEABLE = /:(hover|focus-visible|focus-within)\b/
-const NEGATED = /:not\([^)]*:(hover|focus-visible|focus-within)/
+const FORCEABLE = /:(hover|active|focus-visible|focus-within)\b/
+const NEGATED = /:not\([^)]*:(hover|active|focus-visible|focus-within)/
 
 /** 单个选择器（可含逗号分组）→ 强制类版本；没有可改写的伪类时返回 null。 */
 export function rewriteForcedSelector(selectorText: string): string | null {

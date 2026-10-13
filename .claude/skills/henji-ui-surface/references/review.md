@@ -168,19 +168,63 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 `check:colors` 另有**未定义颜色类**规则（不可登记）：`bg-overlay`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌不能再加 `/透明度`）、`border-current/15` 这类 Tailwind 按实际配置不生成样式的颜色类。用 Tailwind 自己的生成器判定，只看类名语境的字符串（`className=`、`*Class =` 常量、多数词是有效类的类名列表）；样式表里定义的同名类算已定义。
 
-## 8. 改公共组件或令牌的默认验收：组件样张页 + 主题组合测试（任务 5.11）
+## 8. 改公共组件或令牌的验收：设计系统中心与定向测试
 
-改 `@/components/ui` 的共享组件、`styleTokens.ts`、`src/index.css` 的组件皮肤或主题引擎 / 语义令牌时，**默认**用下面两道验收，替代按界面大范围截图；只有改动同时涉及某个页面的骨架或业务布局，才再按第 5 节截那个页面。
+验证风险分级以 `docs/rules/testing.md` 为准。只改事件或无视觉影响属性时跑组件精确测试；主题求解变化跑对应主题测试（含组合属性测试）；布局、滚动、溢出或跨主题外观无法由精确测试证明时才升级真实 Electron 截图。
 
-1. **主题组合测试**（代码保证主题适配）：`npx vitest run src/core/theme`。其中 `themeCombination.test.ts` 用固定随机种子覆盖“四预设（深浅两种模式）× 任意强调色 × 层级对比度全范围”与预设附近的自定义底色，判三档文字、强调文字、选中淡底上的文字、实底按钮（静息与悬停渐变两端）上的文字、玻璃面上的文字、状态文字 ≥ 4.5:1，选中与悬停、静息可辨（`SELECTION_MIN_DELTA`）；失败时 fast-check 输出收缩后的最小反例。判定集合在 `themeCombinationTestFixture.ts`，门槛与引擎求解共用常量。**发现不达标修引擎求解，不放宽门槛**；四个预设的取值由 `themeEngine.test.ts` 快照锁定，必须变化时在任务记录写明。
-2. **组件样张页**（看一页就知道共享组件在四个预设下的样子）：`--dev-surface=dev.ui_gallery` 进入（开发页面，正式界面、助手与 MCP 都没有入口），`@/components/ui` 全部导出组件与静息、悬停、聚焦、选中、禁用、错误、加载、空等状态一页铺开；悬停、聚焦用强制状态类展示（`src/features/devGallery/forcedPseudoStates.ts`，同 Storybook pseudo-states 的做法），不依赖鼠标。
+中心页仍用 `--dev-surface=dev.ui_gallery`，自身由 `import.meta.env.DEV` 守卫；不登记应用 Surface，也不向助手或 MCP 开放。左侧目录有令牌、组件、界面模式、规范速查四栏，搜索组件名、令牌名或规范词即可筛选跳转。分区 query 为 `henjiGallerySection`，与已有 `henjiDevSurface=dev.ui_gallery` 配合；不另建 `dev.design_system`。应用内打开入口仍须由应用壳在开发构建挂载。
 
-```bash
-npm run electron:bundle
-npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --contrast --out .ui-tour/review/ui-gallery
-npm run check:ui-visual -- --steps scripts/ui-review/ui-gallery.json --matrix review
+- 样本与目录清单：`src/features/devGallery/galleryIndex.ts`、`gallerySections.tsx`、`tokenSections.tsx`、`patternSections.tsx`。
+- 覆盖门禁：`uiGalleryCoverage.test.ts` 扫描 `src/components/ui/**` 的导出与 default export，并检查视觉枚举；不具备独立视觉的对象在 `NON_VISUAL` 写具体理由。内部预览包装的枚举覆盖必须来自实际调用样本，不用类型声明代替展示。
+- 状态矩阵：静息、悬停、按下、聚焦、选中、禁用、加载；按组件能力选择样本，不支持的状态明确写“不适用”。悬停/按下/聚焦复制正式 CSS 伪类规则，选中与加载使用真实组件属性和内容。
+- `UiModal scope="container"` 用于常驻缩略预览，不接管焦点/模态；正式业务默认 viewport 行为不变。TooltipContent 与 ContextMenu 常开，保证浮层进入截图。
+- 主题预览从现有引擎推导并写临时 CSS 变量、发布令牌；退出恢复原值，不调用会写首帧缓存的 `applyRuntimeTheme`。缩放仅改变样张展示；界面圆角与玻璃也是临时预览。
+
+### 截图配置与目视范围
+
+`scripts/ui-review/ui-gallery.json` 按目录逐区进入，每区先截顶部，再以 360 DIP 滚动并截中段，最后截底部；不再把首屏当成整页。当前有 32 个分区、每个矩阵变体 210 次 capture（允许重叠，用于排除漏截）。新增栏目必须补对应 click/capture/scroll 步骤，覆盖测试会提醒；栏目增高后需核对中段预算，最后一张 bottom 不代表中间已完整覆盖。
+
+`review` 矩阵是石墨/深海/胶片/纸白 1440×900 + 石墨 960×640，每种尺寸都有整套分区截图。一次 `ui:tour --audit` 同时生成截图、像素对比度、DOM 规则与运行时证据，不再叠加同矩阵的 `check:ui-visual`。
+
+中心页仅开发构建显示。总管理者在互斥构建安全边界中准备 **DEV=true 的巡检产物** 后运行（默认生产 bundle 不能显示此页；本机 Vite 的 DEV 由构建时 NODE_ENV 决定）：
+
+```powershell
+$galleryNodeEnvBefore = $env:NODE_ENV
+try {
+  $env:NODE_ENV = 'development'
+  npm run electron:bundle
+  if ($LASTEXITCODE -ne 0) { throw '开发巡检产物构建失败' }
+} finally {
+  $env:NODE_ENV = $galleryNodeEnvBefore
+}
+npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --audit --out .ui-tour/review/ui-gallery
 ```
 
-`--matrix review` 正好是四个预设 1440 各一张 + 石墨 960 一张；Agent 逐张目视（第 2 节核对项，重点看状态可辨、对比度、尺寸与对齐），再看 `contrast.json` 与 `check:ui-visual` 结论。
+任务执行者受并行环境约束时不运行这些排他命令，将任务置为待验证。上述构建与实际窗口流程须由总管理者执行，不能把未跑过的截图说成通过。
 
-`@/components/ui` 新增导出组件而没有上样张页时，`src/features/devGallery/uiGalleryCoverage.test.ts`（普通单测，进 CI）会失败并列出组件名：在 `gallerySections.tsx` 补一个样本（含它的关键状态），确实不是可见组件的在该测试的 `NON_VISUAL` 写理由。
+逐张重点核对：命令带与目录在 960 下不折行；按钮七态可辨；当前真实尺寸阶梯的外框高度；三档文字在 window/panel/raised 底上可读；紧凑/标准/大圆角；中性分段选中与其他淡强调单选；实底/玻璃菜单、top/left 提示；各尺寸弹窗完整按比例展示；令牌清单与颜色长页中段没有漏截；界面语法正例与标注的禁止写法分开；动效重放与 1000 条虚拟列表需再操作观察。不能用 rAF 读数代替滚动性能验收。
+
+费用样本读取已注册固定价格模型，遵循当前“显示费用”设置；未注册模型或费用关闭时明确显示原因，不为截图改用户设置。音频播放器采用无媒体来源的受控条，波形展示正式空状态；这不代表媒体解码或真实波形性能已验证。
+
+### 已有组件的复用补充（不新增另一套实现）
+
+主复用表未列出的现有共享组件在此补充；新通用组件仍必须登记主复用表。本次只新增中心页私有组合，没有新增通用组件或令牌。
+
+| 组件 | 用法与边界 |
+|---|---|
+| UiColorInput | 内容颜色输入原语，禁止业务重写颜色输入框 |
+| UiTextAreaField | 复用正式多行字段外壳，不叠第二层边框 |
+| UiErrorBoundary | 领域组件渲染失败兜底，记录正式日志域，不吞掉错误 |
+| GlobalAlertDialog | App 根的全局确认宿主，调用 alertDialogStore，不重复挂载样张 |
+| UiDisclosurePanel | 正式折叠过渡，不自行拼另一套开合时长 |
+| UiMarqueeText | 长用户文本的受控展示，不用于藏起短操作标签 |
+| UiTaskHistoryFilterBar | 任务历史筛选组合，复用字段与标签控件 |
+| UiNumberStepper | 复合数值字段的步进列，不当作独立数值框 |
+| PromptDocumentStatic | 提示词文档只读视图，与 PromptEditor 共用文档语义 |
+| UiDatePicker | 日期字段与选择面板，不以裸输入重做 |
+| StackedMediaUploader | 叠放媒体上传组合，复用 FileUploader 与拖拽排序 |
+| TooltipContent | Tooltip 的唯一浮层实现；静态样本通过 visible + anchorRef 常驻 |
+| PriceEstimate | 注册模型计价结果的显示，沿用用户币种/费用显示偏好，不触发生成 |
+| Toggle / TextInput | 存量标签包装，本页展示并标注迁移欠账；新调用使用 UiFormRow + UiSwitch / UiInput |
+
+主 skill 文案里关于“一屏铺开”和“五张”的旧说明由规则统一任务更新；此处五个矩阵变体均包含完整分区组，不能按五张截图理解。

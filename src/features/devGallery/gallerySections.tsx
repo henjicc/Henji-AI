@@ -5,8 +5,8 @@ import { useI18n } from '@/hooks/useI18n'
  * 组件样张页的各分区（任务 5.11）。每个样本都直接用 `@/components/ui` 的正式组件与枚举，
  * 不在这里改任何外观；新增共享组件时在这里补一个样本（uiGalleryCoverage.test 会提醒）。
  */
-import { useState } from 'react'
-import { Bold, Check, Image as ImageIcon, Italic, Link, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { Bold, Check, Image as ImageIcon, Italic, Link, Loader2, Pause, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -66,14 +66,43 @@ import {
   UiTooltipText,
   UiWindowControl,
   UI_COVER_FRAME_CLASS,
-  UI_SEGMENTED_TRACK_CLASS,
+  UI_MODAL_SIZE_CLASS,
+  type UiModalSize,
 } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import FileUploader from '@/components/ui/FileUploader'
+import Toggle from '@/components/ui/Toggle'
+import TextInput from '@/components/ui/TextInput'
+import Tooltip, { TooltipContent } from '@/components/ui/Tooltip'
+import ContextMenu from '@/components/ContextMenu'
+import PriceEstimate from '@/components/ui/PriceEstimate'
+import { registry } from '@/core/ModelRegistry'
+import { readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
+import AudioPlayer from '@/components/AudioPlayer'
+import { WaveformView } from '@/components/waveform/WaveformView'
+import { TypographyPanel } from '@/components/typography/TypographyPanel'
+import { defaultTextStyle } from '@/core/imaging/vectorContent/text'
+import { type ButtonSize } from '@/components/ui/primitiveInternals'
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument/types'
 import { THEME_SEED_ACCENT_HEX } from '@/core/theme/colorTokens'
 
-import { GalleryForce, GalleryMatrix, GalleryRow, GallerySection, type GalleryMatrixState } from './galleryLayout'
+import { GalleryForce, GalleryRow, GallerySection } from './galleryLayout'
+import { GALLERY_MATRIX_COLUMNS, type GalleryMatrixState } from './forcedPseudoStates'
+import { GALLERY_CONTROL_SIZES, GALLERY_ICON_SIZES, GALLERY_SEGMENTED_SIZES, GALLERY_PARAMETER_SIZES } from './galleryIndex'
+
+/** 七列只对组件支持的状态渲染样本；不支持的明确写“不适用”。 */
+function GalleryMatrix({ rows }: { rows: readonly { label: string; states?: readonly GalleryMatrixState[]; render: (state: GalleryMatrixState) => ReactNode }[] }): JSX.Element {
+  return <table className="w-full border-separate border-spacing-x-2 border-spacing-y-2">
+    <thead><tr><th scope="col" className="text-left text-xs text-text2">档位</th>{GALLERY_MATRIX_COLUMNS.map(column => <th key={column.state} scope="col" className="text-left text-xs text-text2">{column.label}</th>)}</tr></thead>
+    <tbody>{rows.map(row => <tr key={row.label}><th scope="row" className="text-left text-xs text-text2">{row.label}</th>{GALLERY_MATRIX_COLUMNS.map(column => {
+      if (!(row.states ?? ['rest', 'hover', 'active', 'focus', 'disabled']).includes(column.state)) return <td key={column.state} className="text-2xs text-text3">不适用</td>
+      const sample = row.render(column.state)
+      const forced = column.state === 'hover' || column.state === 'active' || column.state === 'focus' ? column.state : undefined
+      return <td key={column.state} data-gallery-state={column.state}>{forced && sample ? <GalleryForce state={forced}>{sample as ReactElement}</GalleryForce> : sample}</td>
+    })}</tr>)}</tbody>
+  </table>
+}
 
 const noop = (): void => undefined
 const disabledAt = (state: GalleryMatrixState): boolean => state === 'disabled'
@@ -86,14 +115,17 @@ export function ButtonSection(): JSX.Element {
     ['危险', 'danger'],
     ['危险实底', 'dangerSolid'],
     ['链接', 'link'],
+    ['媒体', 'media'],
   ] as const
   return (
     <GallerySection title="按钮">
       <GalleryMatrix
         rows={variants.map(([label, variant]) => ({
           label,
+          states: ['rest', 'hover', 'active', 'focus', 'disabled', 'loading'],
           render: (state) => (
-            <UiButton variant={variant} size="sm" disabled={disabledAt(state)}>
+            <UiButton variant={variant} size="sm" disabled={disabledAt(state) || state === 'loading'} aria-busy={state === 'loading'}>
+              {state === 'loading' && <Loader2 className="h-4 w-4 animate-spin" />}
               {variant === 'link' ? '说明' : '保存'}
             </UiButton>
           ),
@@ -217,14 +249,7 @@ export function OptionSection(): JSX.Element {
       <GalleryRow label="统一分段">
         <UiSegmented ariaLabel="示范方式样张" size="sm" value={segment} onChange={setSegment} options={[{ value: 'place', label: '分时摆放' }, { value: 'record', label: '录制轨迹' }, { value: 'disabled', label: '禁用', disabled: true }]} />
       </GalleryRow>
-      <GalleryRow label="分段">
-        <div className={UI_SEGMENTED_TRACK_CLASS}>
-          <UiOptionButton variant="segment" active aria-pressed>图片</UiOptionButton>
-          <GalleryForce state="hover"><UiOptionButton variant="segment" aria-pressed={false}>视频</UiOptionButton></GalleryForce>
-          <GalleryForce state="focus"><UiOptionButton variant="segment" aria-pressed={false}>音频</UiOptionButton></GalleryForce>
-          <UiOptionButton variant="segment" aria-pressed={false} disabled>3D</UiOptionButton>
-        </div>
-      </GalleryRow>
+      <p className="text-xs text-text2">分段选中：中性抬起底 + 强文字，最多 5 项；其他单选：淡强调底。</p>
       <GalleryRow label="网格">
         <UiOptionButton variant="grid" gridCell="tier" active aria-pressed className="justify-center">1K</UiOptionButton>
         <GalleryForce state="hover"><UiOptionButton variant="grid" gridCell="tier" aria-pressed={false} className="justify-center">2K</UiOptionButton></GalleryForce>
@@ -356,7 +381,7 @@ export function FormSection(): JSX.Element {
           <UiSwitch checked />
         </UiFormRow>
       </UiGroup>
-      <UiGroup divided titleTone="compact" title="紧凑分组">
+      <UiGroup divided titleTone="compact" title="紧凑分组" labelWidth={96}>
         <UiFormRow label="不透明度" density="compact">
           <UiRangeInput defaultValue={40} />
         </UiFormRow>
@@ -438,6 +463,7 @@ export function StateSection(): JSX.Element {
 }
 
 export function DialogSection(): JSX.Element {
+  const { t } = useI18n('common')
   return (
     <GallerySection title="弹窗与通知">
       {/* 确认弹窗限定在容器内常开：危险确认按钮、次按钮与正文 */}
@@ -454,11 +480,19 @@ export function DialogSection(): JSX.Element {
         />
       </div>
       <div className="relative h-12">
-        <UiToast placement="container" tone="success" message={notificationMessage('saved')} />
+        <UiToast placement="container" surface="solid" tone="success" message={notificationMessage('saved')} />
       </div>
       <div className="relative h-12">
         <UiToast placement="container" tone="error" message={notificationMessage('exportFailed')} />
       </div>
+      <div className="relative h-20"><UiToast placement="container" tone="warning" action={{ label: '重试', onClick: noop }} message="需要重试" /></div>
+      <UiGroup title="测试夹具：仅核对付费确认弹窗，不提交生成" titleTone="compact" data-gallery-fixture="paid-approval">
+        <UiButton data-paid-approval-fixture onClick={() => { void requestAlertConfirmation({
+          title: t('paidApproval.sendExplanation'), message: t('paidApproval.explanationContent', { count: 2, modelName: 'Example model' }),
+          confirmLabel: t('paidApproval.allowOnce'), paidConfirmation: true, projectConfirmation: true,
+          paidDetails: { estimatedCny: 1.25, dailySpentCny: 3, category: 'explanation', modelName: 'Example model' },
+        }) }}>{t('paidApproval.allowOnce')}</UiButton>
+      </UiGroup>
     </GallerySection>
   )
 }
@@ -500,23 +534,21 @@ export function ContentSection(): JSX.Element {
       <PromptDocumentStatic document={PROMPT_TEXT} ariaLabel="提示词只读" />
       <UiErrorBoundary loggerDomain="DevGallery" event="dev_gallery.render_failed" title="样张渲染失败">
         <StackedMediaUploader files={[]} fileTypes={['image']} onUpload={noop} onRemove={noop} hintText="拖入或点击上传图片" />
+        <FileUploader files={[]} onUpload={noop} onRemove={noop} density="default" disabled />
+        <FileUploader files={[]} onUpload={noop} onRemove={noop} density="compact" disabled />
       </UiErrorBoundary>
+      <Toggle label="旧包装：开关（待统一迁移）" checked onChange={noop} />
+      <TextInput label="旧包装：文本（待统一迁移）" value="镜头 01" onChange={noop} />
     </GallerySection>
   )
 }
 
 export function FilterSection(): JSX.Element {
-  const { t } = useI18n('common')
   const [keyword, setKeyword] = useState('')
   // UiModal 是视口级模态（焦点陷阱），不常开：点按钮打开后目视；截图里由常开的 AlertDialog 代表弹窗外观
   const [modalOpen, setModalOpen] = useState(false)
   return (
     <GallerySection title="筛选条">
-      <UiButton data-paid-approval-fixture onClick={() => { void requestAlertConfirmation({
-        title: t('paidApproval.sendExplanation'), message: t('paidApproval.explanationContent', { count: 2, modelName: 'Example model' }),
-        confirmLabel: t('paidApproval.allowOnce'), paidConfirmation: true, projectConfirmation: true,
-        paidDetails: { estimatedCny: 1.25, dailySpentCny: 3, category: 'explanation', modelName: 'Example model' },
-      }) }}>{t('paidApproval.allowOnce')}</UiButton>
       <UiOverlayLayerProvider id="dev-gallery-filter">
         <UiTaskHistoryFilterBar
           mode="always"
@@ -552,4 +584,131 @@ export function FilterSection(): JSX.Element {
       </UiModal>
     </GallerySection>
   )
+}
+
+/** 读取当前真实枚举；4.2 调整命名后不需要再改中心页。 */
+export function SizeLadderSection(): JSX.Element {
+  return <GallerySection title="尺寸阶梯：同名档同一行核对高度">
+    {GALLERY_CONTROL_SIZES.map(size => <div key={size} data-gallery-size={size} className="flex flex-wrap items-center gap-3 border-b border-line py-4">
+      <code className="w-12 text-xs text-text2">{size}</code>
+      <UiButton size={size as ButtonSize} variant="secondary">按钮</UiButton>
+      <UiFieldTrigger size={size}>触发器</UiFieldTrigger>
+      <Dropdown size={size} ariaLabel={`下拉 ${size}`} value="a" options={[{ value: 'a', label: '下拉' }]} onSelect={noop} />
+      <UiInput size={size} aria-label={`输入 ${size}`} defaultValue="输入" className="w-24" />
+      <UiSearchInput size={size} aria-label={`搜索 ${size}`} defaultValue="搜索" onClear={noop} clearLabel="清除" className="w-28" />
+      <UiSelect size={size} aria-label={`原生选择 ${size}`}><option>选择</option></UiSelect>
+      <NumberInput size={size} value={12} onChange={noop} ariaLabel={`数值 ${size}`} widthClassName="w-24" />
+      <UiChipButton size={size}>标签</UiChipButton>
+      <UiOptionButton size={size}>选项</UiOptionButton>
+      <UiFontPicker size={size} value="sans-serif" onSelect={noop} ariaLabel={`字体 ${size}`} />
+      <PanelTrigger size={size} appearance="field" surface="solid" display={`面板 ${size}`} renderPanel={() => <span>面板内容</span>} />
+      <UiNumberStepper size={size} increaseLabel="增加" decreaseLabel="减少" canIncrease canDecrease onStep={noop} />
+    </div>)}
+    <GalleryMatrix rows={GALLERY_ICON_SIZES.map(size => ({ label: `图标 ${size}`, states: ['rest', 'hover', 'active', 'focus', 'selected', 'disabled', 'loading'], render: state => <UiIconButton size={size} on={state === 'selected'} disabled={state === 'disabled' || state === 'loading'} aria-label={`添加 ${size} ${state}`} aria-busy={state === 'loading'}>{state === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</UiIconButton> }))} />
+    {GALLERY_SEGMENTED_SIZES.map(size => <GalleryRow key={size} label={size}><UiSegmented size={size} fullWidth ariaLabel={`分段 ${size}`} value="a" options={[{ value: 'a', label: '图片' }, { value: 'b', label: '视频' }]} onChange={noop} /></GalleryRow>)}
+  </GallerySection>
+}
+
+export function VariantSection(): JSX.Element {
+  return <GallerySection title="补充变体（正式枚举）">
+    <GalleryRow label="面板"><UiPanel variant="panel" className="p-3">浮层面板</UiPanel><UiPanel variant="inset" className="p-3">内嵌预览</UiPanel><UiPanel variant="bare">纯容器</UiPanel></GalleryRow>
+    <GalleryRow label="选项"><UiOptionButton variant="default" selection="single">默认</UiOptionButton><UiOptionButton variant="card">内容卡</UiOptionButton><UiIconButton shape="square" tone="default" aria-label="方形"><Plus className="h-4 w-4" /></UiIconButton><UiIconButton shape="circle" aria-label="圆形"><Plus className="h-4 w-4" /></UiIconButton></GalleryRow>
+    <GalleryRow label="格子"><UiOptionButton variant="grid" gridCell="ratio">16:9</UiOptionButton><UiOptionButton variant="grid" gridCell="tier-detail">2K · 精细</UiOptionButton><UiOptionButton variant="grid" gridCell="preset">预设 16:9</UiOptionButton></GalleryRow>
+    <GalleryRow label="表面"><Dropdown appearance="text" surface="solid" ariaLabel="静默下拉" value="a" options={[{ value: 'a', label: '静默' }]} onSelect={noop} /><Dropdown appearance="field" surface="glass" ariaLabel="玻璃下拉" value="a" options={[{ value: 'a', label: '玻璃' }]} onSelect={noop} /></GalleryRow>
+    <GalleryRow label="字段"><UiInput frame="field" aria-label="外框输入" defaultValue="外框" /><UiInput frame="inner" aria-label="复合字段内层" defaultValue="内层" /><UiTextArea frame="field" aria-label="有框文本" defaultValue="文本" /><UiTextArea frame="none" aria-label="无框文本" defaultValue="原位编辑" /><UiFieldTrigger appearance="field">字段表面</UiFieldTrigger></GalleryRow>
+    <GalleryRow label="浮层"><PanelTrigger appearance="quiet" surface="glass" display="玻璃面板触发器" renderPanel={() => <span>玻璃面板</span>} /></GalleryRow>
+    <ProgressBar progress={40} appearance="default" />
+    <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="field" ariaLabel="有框提示词" />
+    <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="none" ariaLabel="原位提示词" />
+    <GalleryRow label="轨道"><UiRangeInput trackTone="neutral" aria-label="中性轨道" /><UiRangeInput trackTone="hue" aria-label="色相轨道" /><UiRangeInput trackTone="lighting" aria-label="打光轨道" /></GalleryRow>
+    <GalleryRow label="导航"><UiNavButton size="lg">较大</UiNavButton><UiNavButton size="auto">两行内容<br />自动高度</UiNavButton><UiChipButton selectionAppearance="default">默认多选</UiChipButton><UiTextToken appearance="inline">行内</UiTextToken></GalleryRow>
+    <GalleryRow label="双段"><UiSwitch appearance="pill" checked /><UiSwitch appearance="segmented" size="field" checked onLabel="打开" offLabel="关闭" /></GalleryRow>
+    <UiToolbar variant="plain"><UiButton>普通动作组</UiButton></UiToolbar><UiPageHeader title="带分隔页头" divider />
+    {([72, 96, 120] as const).map(labelWidth => <UiGroup key={labelWidth} labelWidth={labelWidth} title={`标签列 ${labelWidth}`} titleTone="overline" gap="row"><UiFormRow label="名称" labelWidth={labelWidth} density="default" labelColumn="panel"><UiInput defaultValue="镜头 01" /></UiFormRow><UiFormRow label="成对网格" labelColumn="auto"><div className="grid grid-cols-2 gap-3"><NumberInput value={1} onChange={noop} /><NumberInput value={2} onChange={noop} /></div></UiFormRow></UiGroup>)}
+    <UiGroup titleTone="section" title="分区间距" gap="section"><span className="text-xs text-text2">分区</span><span className="text-xs text-text2">分区</span></UiGroup><UiGroup gap="stack"><span className="text-xs text-text2">堆叠间距</span></UiGroup><UiGroup gap="none"><span className="text-xs text-text2">无间距</span></UiGroup>
+    {(['sm', 'md'] as const).map(size => <div key={size} className="grid grid-cols-3 gap-3"><UiEmpty size={size} title="没有结果" action={<UiButton>添加</UiButton>} /><UiLoading size={size} message="加载中" /><UiError size={size} message="读取失败" align="start" onRetry={noop} /></div>)}
+  </GallerySection>
+}
+
+export function ModalSizeSection(): JSX.Element {
+  return <GallerySection title="弹窗尺寸：静态常驻，每档读取真实宽高令牌">
+    {(Object.keys(UI_MODAL_SIZE_CLASS) as UiModalSize[]).map(size => <UiGroup key={size} title={`${size} · ${UI_MODAL_SIZE_CLASS[size]}`} titleTone="compact"><ModalPreview size={size} surface="panel" /></UiGroup>)}
+    <ModalPreview size="compact" surface="glass" />
+  </GallerySection>
+}
+
+/** 按实际视口比例缩小整个预览，不裁掉 workspace/fullscreen，也不覆盖弹窗尺寸令牌。 */
+function ModalPreview({ size, surface }: { size: UiModalSize; surface: 'panel' | 'glass' }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const [geometry, setGeometry] = useState({ width: window.innerWidth, height: window.innerHeight, scale: 0 })
+  useLayoutEffect(() => {
+    const update = (): void => {
+      const rect = ref.current?.getBoundingClientRect()
+      if (!rect) return
+      setGeometry({ width: window.innerWidth, height: window.innerHeight, scale: Math.min(rect.width / Math.max(1, window.innerWidth), rect.height / Math.max(1, window.innerHeight)) })
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    if (ref.current) observer.observe(ref.current)
+    window.addEventListener('resize', update)
+    return () => { observer.disconnect(); window.removeEventListener('resize', update) }
+  }, [])
+  return <div ref={ref} data-gallery-static="UiModal" className={`relative h-72 overflow-hidden rounded-overlay ${surface === 'glass' ? 'bg-media' : 'bg-window'}`}><div className="relative origin-top-left" style={{ width: geometry.width, height: geometry.height, transform: `scale(${geometry.scale})` }}>
+    <UiModal isOpen scope="container" appear={false} size={size} surface={surface} title={`${size} 弹窗`} onClose={noop} headerActions={<UiButton size="sm">上下文</UiButton>} footer={<><UiButton variant="secondary">取消</UiButton><UiButton variant="primary">确定</UiButton></>}><UiFormRow label="名称" inline><UiInput defaultValue="作品" /></UiFormRow></UiModal>
+  </div></div>
+}
+
+export function StaticOverlaySection(): JSX.Element {
+  const top = useRef<HTMLSpanElement>(null)
+  const left = useRef<HTMLSpanElement>(null)
+  const solid = useRef<HTMLDivElement>(null)
+  const glass = useRef<HTMLDivElement>(null)
+  const [positions, setPositions] = useState<{ solid: { x: number; y: number }; glass: { x: number; y: number } } | null>(null)
+  useLayoutEffect(() => {
+    const update = (): void => {
+      const a = solid.current?.getBoundingClientRect(), b = glass.current?.getBoundingClientRect()
+      if (a && b) setPositions({ solid: { x: a.left, y: a.top }, glass: { x: b.left, y: b.top } })
+    }
+    update()
+    window.addEventListener('resize', update); window.addEventListener('scroll', update, true)
+    return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true) }
+  }, [])
+  const items = [{ id: 'edit', label: '继续编辑', icon: <Plus className="h-4 w-4" />, onClick: noop }, { id: 'copy', label: '复制', icon: <Plus className="h-4 w-4" />, onClick: noop }, { id: 'remove', label: '删除（禁用）', icon: <Trash2 className="h-4 w-4" />, disabled: true, onClick: noop }]
+  return <GallerySection title="静态浮层：无需鼠标或计时器">
+    <div className="flex h-32 items-center justify-around gap-6"><span ref={top} className="text-xs text-text2">上方锚点</span><span ref={left} className="text-xs text-text2">左侧锚点</span><Tooltip placement="top" content="正式悬停说明"><UiButton>上方说明</UiButton></Tooltip><Tooltip placement="left" content="正式悬停说明"><UiButton>左侧说明</UiButton></Tooltip></div>
+    <GalleryRow label="标签"><UiTooltipText placement="top" tooltip="上方说明">参数名称</UiTooltipText><UiTooltipText placement="left" tooltip="左侧说明">参数名称</UiTooltipText></GalleryRow>
+    <TooltipContent visible data-gallery-static="Tooltip" anchorRef={top} content="上方说明" placement="top" />
+    <TooltipContent visible data-gallery-static="TooltipContent" anchorRef={left} content="左侧说明" placement="left" />
+    <div data-gallery-static="ContextMenu" className="grid grid-cols-2 gap-6"><div ref={solid} className="h-52"><span className="text-xs text-text2">实底菜单</span></div><div ref={glass} className="h-52 rounded-overlay bg-media"><span className="text-xs text-on-media">媒体上的玻璃菜单</span></div></div>
+    {positions && <><ContextMenu items={items} position={positions.solid} visible surface="solid" onClose={noop} /><ContextMenu items={items} position={positions.glass} visible surface="glass" onClose={noop} /></>}
+  </GallerySection>
+}
+
+export function ParameterSizeSection(): JSX.Element {
+  const gesture = { onBegin: noop, onFinish: noop, onCancel: noop }
+  return <GallerySection title="参数原件：读取当前尺寸联合类型">{GALLERY_PARAMETER_SIZES.map(size => <UiGroup key={size} title={size} titleTone="compact"><div className="grid grid-cols-2 gap-4">
+    <UiAngleDial size={size} label="角度" value={30} onChange={noop} {...gesture} />
+    <UiPointPad size={size} label="中心" value={{ x: 0.5, y: 0.5 }} onChange={noop} {...gesture} />
+    <UiRangeSlider size={size} label="区间" value={[20, 70]} onChange={noop} {...gesture} />
+    <UiGradientEditor size={size} label="渐变" value={[]} onChange={noop} {...gesture} />
+    <UiGradeWheel size={size} label="色轮" value={{ hue: 200, strength: 0.3, luminance: 0.1 }} onChange={noop} {...gesture} />
+    <UiCurveEditor size={size} label="曲线" value={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} onChange={noop} {...gesture} />
+    <UiEasingEditor size={size} label="缓动" value="ease" onChange={noop} presets={[{ value: 'ease', label: '缓出', curve: [0, 0, 0.2, 1] }]} {...gesture} />
+    <UiSeedInput size={size} label="种子" value={42} onChange={noop} {...gesture} />
+  </div></UiGroup>)}</GallerySection>
+}
+
+export function SharedDomainSection(): JSX.Element {
+  const model = registry.listAllModels().find(candidate => candidate.pricing.fixed !== undefined && !candidate.pricing.mediaContext)
+  const priceVisible = readPriceEstimateDisplaySettings().showPriceEstimate
+  const [textStyle, setTextStyle] = useState(() => defaultTextStyle(300))
+  const [textError, setTextError] = useState('')
+  return <GallerySection title="共享领域组件：只读样张，不读取素材或调用模型">
+    <UiGroup title="PriceEstimate：读取已注册模型的静态价格" titleTone="compact">
+      {model && priceVisible ? <><PriceEstimate providerId="" modelId={model.meta.id} params={{}} variant="panel" /><PriceEstimate providerId="" modelId={model.meta.id} params={{}} variant="badge" /></> : <UiEmpty size="xs" title="费用样张未显示" description={priceVisible ? '当前没有已注册的固定价格模型。' : '当前费用显示设置为关闭，本页不改用户设置。'} />}
+    </UiGroup>
+    <UiGroup title="AudioPlayer：受控播放条，无音频来源" titleTone="compact"><AudioPlayer src="" surface="plain" controlledPlayback={{ currentTime: 12, duration: 60, playing: false, volume: 0.8, disabled: true, onTogglePlay: noop, onSeek: noop, onVolume: noop }} /></UiGroup>
+    <UiGroup title="WaveformView：正式空波形状态，无解码请求" titleTone="compact"><div className="h-20"><WaveformView waveform={{ status: 'idle' }} label="空波形样张" /></div></UiGroup>
+    <UiGroup title="TypographyPanel：正式文字外观面板" titleTone="compact">{textError && <UiError size="xs" message={textError} />}<TypographyPanel style={textStyle} onChange={setTextStyle} onError={error => setTextError(error instanceof Error ? error.message : String(error))} fields="code-element" /></UiGroup>
+  </GallerySection>
 }
