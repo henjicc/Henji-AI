@@ -238,8 +238,8 @@ it('字幕独占一行，拖动与双端修剪仅提交一步；取消、锁定�
   const id = createVideoEditCaption(owner.document.id, current().id, { start: 40, duration: 40, text: '可编辑字幕' })
   const view = render(<SpeedKeyboardView />)
   const row = view.container.querySelector<HTMLElement>('[data-video-edit-caption-track]')!
-  const video = view.container.querySelector<HTMLElement>('[data-video-edit-track-kind="video"], [data-track-kind="video"]')!
-  expect(Number.parseFloat(row.style.top) + Number.parseFloat(row.style.height)).toBe(Number.parseFloat(video.style.top))
+  // 同 PR 置顶：字幕轨贴在视频区最上方（区内偏移 0），不随视频轨滚动
+  expect(row.style.top).toBe('0px')
   expect(row.style.height).toBe('24px')
   expect(view.container.querySelector('[data-video-edit-ruler] [data-video-edit-caption-range]')).toBeNull()
   const block = view.getByRole('button', { name: '定位字幕 可编辑字幕' })
@@ -809,7 +809,8 @@ it('轨道头右键：添加／删除单个轨道各一步撤销，重命名，�
   await waitFor(() => expect(count('video')).toBe(8)); expect(owner.past).toHaveLength(history + 1)
   // 新轨道紧贴在 V1 之上，原 V2 及以上顺延为 V3…
   const codes = [...view.container.querySelectorAll('[data-video-edit-track-code]')].map(node => node.textContent)
-  expect(codes.filter(code => code?.startsWith('V'))).toEqual(['V7', 'V6', 'V5', 'V4', 'V3', 'V2', 'V1'])
+  // 最上面的轨道被置顶字幕轨盖住、不在可见范围内挂载，只核对可见的连续编号
+  expect(codes.filter(code => code?.startsWith('V')).slice(-6)).toEqual(['V6', 'V5', 'V4', 'V3', 'V2', 'V1'])
   expect(current().clips.every(clip => current().tracks.some(track => track.index === clip.track))).toBe(true)
   act(() => undoVideoEdit(owner.document.id)); expect(count('video')).toBe(7)
   fireEvent.contextMenu(headerOf(v1.id), { clientX: 40, clientY: 100 }); fireEvent.click(await view.findByText('重命名'))

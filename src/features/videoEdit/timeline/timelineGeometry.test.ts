@@ -2,7 +2,7 @@ import { createVideoEditTestDocument as createVideoEditDocument } from '../../..
 import { expect, it } from 'vitest'
 import { type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction } from './timelineGeometry'
+import { TIMELINE_CAPTION_HEIGHT, TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction } from './timelineGeometry'
 
 function fixture(): VideoEditSequence {
   const document = createVideoEditDocument('轨道几何')
@@ -66,7 +66,9 @@ it('两区各自滚动并夹在范围内：视频区往上滚露出上层轨道�
 it('轨道命中采用半开边界，标尺、分隔条与新建轨道空白不伪装成轨道', () => {
   const { rows } = timelineLayout(fixture(), input())
   expect(timelineTrackAt(rows, TIMELINE_RULER_HEIGHT - 1)).toBeUndefined()
-  expect(timelineTrackAt(rows, 28)?.track.index).toBe(3)
+  // 置顶的字幕轨盖住其下滚上来的视频轨，那一段不命中视频轨
+  expect(timelineTrackAt(rows, 28)).toBeUndefined()
+  expect(timelineTrackAt(rows, 28 + TIMELINE_CAPTION_HEIGHT)?.track.index).toBe(3)
   expect(timelineTrackAt(rows, 111.999)?.track.index).toBe(3)
   expect(timelineTrackAt(rows, 112)?.track.index).toBe(1)
   expect(timelineTrackAt(rows, 160)).toBeUndefined()
@@ -89,20 +91,22 @@ it('新序列 V1/A1 居中：最上视频轨之上、最下音频轨之下是新
   expect(timelineLayout(sequence, { ...input(), split: 0 }).regions.video.height).toBe(40)
 })
 
-it('字幕紧贴最上视频轨并共同滚动，新建视频轨落点仅在字幕上方，裁切区域一致', () => {
+it('字幕轨置顶在视频区最上方且不随滚动，被盖住的视频轨不命中，新建视频轨落点在字幕与最上视频轨之间', () => {
   const sequence = createVideoEditDocument('字幕轨位置').sequences[0]
   for (const tracks of [sequence.tracks, fixture().tracks, sequence.tracks.filter(track => track.kind === 'audio')]) {
     for (const scroll of [0, 1000]) {
       const layout = timelineLayout({ tracks }, input({ video: scroll }))
       const { caption, regions: { video } } = layout
       const first = layout.rows.find(row => row.region === 'video')
-      expect(caption.top + caption.height).toBe(first?.top ?? video.top + video.height + video.scroll)
+      expect(caption.top).toBe(video.top)
       expect(caption.clipTop).toBe(video.top); expect(caption.clipBottom).toBe(video.top + video.height)
       const midpoint = caption.top + caption.height / 2
       expect(timelineNewTrackZone(layout, midpoint)).toBeUndefined()
       expect(timelineTrackAt(layout.rows, midpoint)).toBeUndefined()
-      if (caption.top > video.top) expect(timelineNewTrackZone(layout, caption.top - 1)).toBe('video')
-      expect(timelineNewTrackZone(layout, caption.top)).toBeUndefined()
+      const captionBottom = caption.top + caption.height
+      const tracksTop = first?.top ?? video.top + video.height
+      if (tracksTop > captionBottom) expect(timelineNewTrackZone(layout, captionBottom)).toBe('video')
+      if (first) expect(timelineNewTrackZone(layout, first.top)).toBeUndefined()
     }
   }
 })

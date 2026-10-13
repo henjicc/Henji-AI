@@ -26,7 +26,8 @@ export interface TimelineViewport { left: number; top: number; width: number; he
 export const TIMELINE_DEFAULT_SPLIT = 0.5
 /**
  * PR 的时间线：视频区在上、音频区在下，中间一条分隔条，两区各自纵向滚动；V1 贴在分隔条上方，A1 贴在下方，
- * 轨道少时视频轨靠下、音频轨靠上，整体居中。
+ * 轨道少时视频轨靠下、音频轨靠上，整体居中。字幕轨 C1 同 PR 置顶在视频区最上方（标尺下），不随视频区滚动；
+ * 视频轨滚到它下面时被它盖住、也不再接收命中。
  */
 export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, input: TimelineLayoutInput, resized?: { trackId: string; height: number } | null): TimelineLayout {
   const trackTop = TIMELINE_RULER_HEIGHT
@@ -44,10 +45,11 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   const audio = region('audio', trackTop + videoHeight + TIMELINE_TRACK_SECTION_GAP, area - videoHeight)
   const rows: TimelineTrackRow[] = []
   let bottom = video.top + video.height + video.scroll
+  const videoClipTop = Math.min(video.top + video.height, video.top + TIMELINE_CAPTION_HEIGHT)
   // V1 在最下：从 V1 往上排，显示时最上面的合成层在前。
-  for (const track of tracks.video) { const value = height(track); bottom -= value; rows.push({ track, top: bottom, height: value, region: 'video', clipTop: video.top, clipBottom: video.top + video.height }) }
+  for (const track of tracks.video) { const value = height(track); bottom -= value; rows.push({ track, top: bottom, height: value, region: 'video', clipTop: videoClipTop, clipBottom: video.top + video.height }) }
   rows.reverse()
-  const caption = { top: bottom - TIMELINE_CAPTION_HEIGHT, height: TIMELINE_CAPTION_HEIGHT, clipTop: video.top, clipBottom: video.top + video.height }
+  const caption = { top: video.top, height: TIMELINE_CAPTION_HEIGHT, clipTop: video.top, clipBottom: video.top + video.height }
   let top = audio.top - audio.scroll
   for (const track of tracks.audio) { const value = height(track); rows.push({ track, top, height: value, region: 'audio', clipTop: audio.top, clipBottom: audio.top + audio.height }); top += value }
   return { rows, caption, regions: { video, audio }, divider: video.top + video.height + TIMELINE_TRACK_SECTION_GAP / 2 }
@@ -57,11 +59,13 @@ export function timelineRegionAt(layout: TimelineLayout, y: number): TimelineReg
   if (y < layout.regions.video.top) return undefined
   return y < layout.divider ? 'video' : 'audio'
 }
-/** 落在视频区最上轨之上或音频区最下轨之下的空白里：在那里放下片段会新建一条该类轨道。 */
+/** 落在字幕轨与最上视频轨之间、或音频区最下轨之下的空白里：在那里放下片段会新建一条该类轨道。 */
 export function timelineNewTrackZone(layout: TimelineLayout, y: number): TimelineRegionKind | undefined {
   const { video, audio } = layout.regions
   const audioRows = layout.rows.filter(row => row.region === 'audio')
-  if (y >= video.top && y < video.top + video.height && y < layout.caption.top) return 'video'
+  const firstVideo = layout.rows.find(row => row.region === 'video')
+  const videoTracksTop = firstVideo ? firstVideo.top : video.top + video.height
+  if (y >= layout.caption.top + layout.caption.height && y < video.top + video.height && y < videoTracksTop) return 'video'
   const last = audioRows.at(-1)
   if (y >= audio.top && y < audio.top + audio.height && y >= (last ? last.top + last.height : audio.top)) return 'audio'
   return undefined

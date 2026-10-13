@@ -78,7 +78,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     animation = win.requestAnimationFrame(tick)
   }
   const row = { track: { id: `${sequence.id}:captions`, name: t('captionTrack.name'), index: -1, kind: 'video' as const, enabled: sequence.captionTrackEnabled !== false, locked: sequence.captionTrackLocked === true, muted: false, solo: false }, ...geometry, region: 'video' as const }
-  return <div className="absolute left-0 right-0 border-b border-gap bg-window" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" onPointerDown={event => event.stopPropagation()}>
+  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" onPointerDown={event => event.stopPropagation()}>
     <VideoEditTrackHeader caption row={row} code="C1" targeted={false} onTarget={() => focusVideoEditPanel(projectId, 'content')} onResize={() => {}} onPatch={patch => run(() => updateVideoEditCaptionTrack(projectId, sequence.id, { ...(patch.enabled === undefined ? {} : { captionTrackEnabled: patch.enabled }), ...(patch.locked === undefined ? {} : { captionTrackLocked: patch.locked }) }))} />
     {(sequence.captions ?? []).filter(caption => caption.id === preview?.id || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
       const caption = preview?.id === original.id ? preview : original

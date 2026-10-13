@@ -399,7 +399,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   /** 落点提示的纵向位置：命中轨道上，或新建轨道的空白里贴着最外侧轨道。 */
   const hintTop = (at: VideoEditDropPlacement): number => {
     const { video, audio } = layout.regions
-    if (at.newTrack === 'video') return Math.max(video.top, layout.caption.top - 26)
+    if (at.newTrack === 'video') { const first = rows.find(row => row.region === 'video'); return Math.max(layout.caption.top + layout.caption.height + 2, (first ? first.top : video.top + video.height) - 26) }
     if (at.newTrack === 'audio') { const last = rows.filter(row => row.region === 'audio').at(-1); return Math.min(audio.top + audio.height - 26, last ? last.top + last.height + 2 : audio.top + 2) }
     return (rows.find(row => row.track.index === at.track)?.top ?? 0) + 2
   }
@@ -508,7 +508,6 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           const region = layout.regions[kind]
           // 每一区单独裁切：滚出本区的轨道与片段不显示（overflow-y: clip 不建立滚动容器，轨道头仍能横向吸附在左侧）。
           return <div key={kind} className="absolute left-0 right-0 overflow-y-clip" style={{ top: region.top, height: region.height }} data-video-edit-track-region={kind}>
-            {kind === 'video' && <VideoEditCaptionTrack instance={instance} sequence={sequence} geometry={layout.caption} pixels={pixels} view={view} viewport={pointer.viewport} onError={onError} />}
             {headerRows.filter(row => row.region === kind).map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-gap bg-window" style={{ top: row.top - region.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
               <VideoEditTrackHeader row={row} code={trackCodes.get(row.track.id) ?? ''} targeted={instance.targetTrackIds.includes(row.track.id)} renaming={trackMenu.renaming === row.track.id} onRename={name => trackMenu.rename(row.track.id, name)} onStartRename={() => trackMenu.startRename(row.track.id)}
                 onContextMenu={event => trackMenu.show(event, row.track.id)}
@@ -520,6 +519,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {transitionHint && rows.find(row => row.track.index === transitionHint.track)?.region === kind && <VideoEditTransitionDropBlock hint={transitionHint} row={rows.find(value => value.track.index === transitionHint.track)!} region={region} pixels={pixels} />}
             <VideoEditEffectDropTargets projectId={projectId} clips={visibleClips} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} />
             <VideoEditInPlacePlaceholders projectId={projectId} sequence={displayed} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} onReopen={inPlace.reopen} onError={onError} />
+            {/* 字幕轨置顶：放在本区最后并压在滚上来的视频轨之上 */}
+            {kind === 'video' && <VideoEditCaptionTrack instance={instance} sequence={sequence} geometry={layout.caption} pixels={pixels} view={view} viewport={pointer.viewport} onError={onError} />}
           </div>
         })}
         <div role="separator" aria-label="画面与声音轨道分界" aria-orientation="horizontal" aria-valuemin={10} aria-valuemax={90} aria-valuenow={Math.round(split * 100)} tabIndex={0} data-video-edit-track-divider data-video-edit-timeline-chrome
