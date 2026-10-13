@@ -7,6 +7,7 @@ import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { sameEntryName } from '../../../../src/core/documents/naming'
 import { INTERNAL_FOLDER_NAME, ProjectManifestError, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
 import type { DocumentIndexScanReport } from '../../../../src/core/documents/types'
+import { PersistenceError } from '../../../../src/core/persistence/migrations'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
 import { writeBufferAtomically } from '../fs/atomic-file'
 import type { MainLogger } from '../logging/main-logger'
@@ -54,6 +55,19 @@ type MutableReport = Omit<DocumentIndexScanReport, 'durationMs'>
 
 const DEFAULT_MAX_DEPTH = 8
 
+/** 内容错误可以跳过；备份/磁盘错误仍须中止本轮，保留原索引。 */
+function isUnreadableFileContent(error: unknown): boolean {
+  let cause = error
+  const seen = new Set<unknown>()
+  while (cause instanceof Error && !seen.has(cause)) {
+    seen.add(cause)
+    if (/^E[A-Z0-9]+$/.test(errorCode(cause) ?? '') || (cause instanceof PersistenceError && cause.code === 'backup-failed')) return false
+    cause = cause.cause
+  }
+  return error instanceof DocumentFormatError || error instanceof ProjectManifestError
+    || error instanceof SyntaxError || (error instanceof PersistenceError && error.code !== 'backup-failed')
+}
+
 function isMissing(error: unknown): boolean {
   return error instanceof DocumentNotFoundError || errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
 }
@@ -73,6 +87,7 @@ export class DocumentIndexScanner {
   private mutations: Array<() => void> = []
   private scannedProjectRoots: string[] = []
   private rebuilding = false
+  private readonly invalidPaths = new Set<string>()
 
   constructor(private readonly options: DocumentIndexScannerOptions) {}
 
@@ -109,6 +124,7 @@ export class DocumentIndexScanner {
     this.mutations = []
     this.scannedProjectRoots = []
     this.rebuilding = rebuilding
+    this.invalidPaths.clear()
     let publishingIndex = false
     logger.info('开始扫描作品索引', { event: 'documents.index.scan.start' })
     try {
@@ -160,16 +176,11 @@ export class DocumentIndexScanner {
       try {
         manifest = (await this.workspace.ensureManifest(candidate.root)).manifest
       } catch (error) {
-        if (!(error instanceof ProjectManifestError)) throw error
-        report.invalid += 1
-        this.options.logger.warn('项目说明无法读取，跳过这个项目', {
-          event: 'documents.index.project_invalid',
-          context: { root: candidate.root },
-          error: error instanceof ProjectManifestError ? error.message : error,
-        })
+        if (!isUnreadableFileContent(error)) throw error
+        this.recordInvalid(candidate.root, error, report, true)
         continue
       }
-      if (await this.isDuplicateProject(manifest.id, candidate.root, claimed)) {
+      if (await this.isDuplicateProject(manifest.id, candidate.root, claimed, report)) {
         const previousId = manifest.id
         manifest = { ...manifest, id: this.workspace.randomId() }
         await this.workspace.writeManifest(candidate.root, manifest)
@@ -188,12 +199,18 @@ export class DocumentIndexScanner {
     return claimed
   }
 
-  private async isDuplicateProject(id: string, root: string, claimed: ReadonlyMap<string, ResolvedContainer>): Promise<boolean> {
+  private async isDuplicateProject(id: string, root: string, claimed: ReadonlyMap<string, ResolvedContainer>, report: MutableReport): Promise<boolean> {
     if (claimed.has(id)) return true
     const existing = this.workspace.catalog.getProject(id)
     if (!existing || samePath(this.workspace.style, existing.path, root)) return false
-    const other = await this.workspace.readManifest(existing.path)
-    return other?.id === id
+    try {
+      const other = await this.workspace.readManifest(existing.path)
+      return other?.id === id
+    } catch (error) {
+      if (!isUnreadableFileContent(error) && !isMissing(error)) throw error
+      this.recordInvalid(existing.path, error, report, true)
+      return false
+    }
   }
 
   /** 本轮没扫到的项目：文件夹不在了标缺失，不在扫描范围的旧记录删除。 */
@@ -227,12 +244,12 @@ export class DocumentIndexScanner {
     for (const container of projects.values()) {
       const manifest = container.manifest as ProjectManifest
       const skipTop = [manifest.folders.generated, manifest.folders.materials, INTERNAL_FOLDER_NAME]
-      await this.collect(container.root, container, candidates, { depth, skipTop })
+      await this.collect(container.root, container, candidates, { depth, skipTop }, report)
     }
     const user = this.workspace.userContainerNow()
-    for (const folder of this.standaloneFolders()) await this.collect(folder, user, candidates, { depth, skipTop: [] })
+    for (const folder of this.standaloneFolders()) await this.collect(folder, user, candidates, { depth, skipTop: [] }, report)
     for (const location of this.workspace.catalog.listExternalLocations()) {
-      if (location.kind === 'folder') await this.collect(location.path, user, candidates, { depth: 0, skipTop: [] })
+      if (location.kind === 'folder') await this.collect(location.path, user, candidates, { depth: 0, skipTop: [] }, report)
     }
 
     const catalog = this.workspace.catalog
@@ -283,6 +300,7 @@ export class DocumentIndexScanner {
     container: ResolvedContainer,
     candidates: ScanCandidate[],
     options: { depth: number; skipTop: readonly string[] },
+    report: MutableReport,
     level = 0,
   ): Promise<void> {
     for (const entry of await this.readDirectory(directory)) {
@@ -292,8 +310,12 @@ export class DocumentIndexScanner {
         if (level >= options.depth || entry.name.startsWith('.')) continue
         if (level === 0 && options.skipTop.some((name) => sameEntryName(name, entry.name))) continue
         try { if (await this.workspace.readManifest(entryPath)) continue }
-        catch (error) { if (error instanceof ProjectManifestError) continue; throw error }
-        await this.collect(entryPath, container, candidates, options, level + 1)
+        catch (error) {
+          if (!isUnreadableFileContent(error)) throw error
+          this.recordInvalid(entryPath, error, report, true)
+          continue
+        }
+        await this.collect(entryPath, container, candidates, options, report, level + 1)
         continue
       }
       if (!entry.isFile() || !this.options.kinds.forFileName(entry.name)) continue
@@ -310,19 +332,14 @@ export class DocumentIndexScanner {
       file = await loadDocumentFile(candidate.path, { kinds: this.options.kinds, adapters: this.options.adapters })
     } catch (error) {
       if (error instanceof DocumentUnsupportedError) return null
-      if (!(error instanceof DocumentFormatError) && !isMissing(error)) throw error
-      report.invalid += 1
-      this.options.logger.debug('跳过无法识别的文档文件', {
-        event: 'documents.index.document_invalid',
-        context: { path: candidate.path },
-        error: error instanceof DocumentFormatError ? error.message : error,
-      })
+      if (!isUnreadableFileContent(error) && !isMissing(error)) throw error
+      this.recordInvalid(candidate.path, error, report)
       return null
     }
     report.readDocuments += 1
     const id = file.header.id
     const existing = catalog.getDocument(id)
-    if (claimed.has(id) || await this.otherCopyStillThere(existing, candidate.path, id)) {
+    if (claimed.has(id) || await this.otherCopyStillThere(existing, candidate.path, id, report)) {
       file = await this.reassignId(file, candidate.container, report)
     } else if (existing && !samePath(this.workspace.style, existing.path, candidate.path)) {
       report.moved += 1
@@ -333,15 +350,30 @@ export class DocumentIndexScanner {
     return row
   }
 
-  private async otherCopyStillThere(existing: IndexedDocument | null, candidatePath: string, id: string): Promise<boolean> {
+  private async otherCopyStillThere(existing: IndexedDocument | null, candidatePath: string, id: string, report: MutableReport): Promise<boolean> {
     if (!existing || samePath(this.workspace.style, existing.path, candidatePath)) return false
     try {
       const other = await loadDocumentFile(existing.path, { kinds: this.options.kinds, adapters: this.options.adapters })
       return other.header.id === id
     } catch (error) {
-      if (isMissing(error) || error instanceof DocumentFormatError || error instanceof DocumentUnsupportedError) return false
+      if (isMissing(error) || error instanceof DocumentUnsupportedError) return false
+      if (isUnreadableFileContent(error)) {
+        this.recordInvalid(existing.path, error, report)
+        return false
+      }
       throw error
     }
+  }
+
+  private recordInvalid(target: string, error: unknown, report: MutableReport, project = false): void {
+    const key = pathKey(this.workspace.style, target) ?? target
+    if (this.invalidPaths.has(key)) return
+    this.invalidPaths.add(key)
+    report.invalid += 1
+    this.options.logger.warn(project ? '项目说明无法读取，跳过这个项目' : '跳过无法识别的文档文件', {
+      event: project ? 'documents.index.project_invalid' : 'documents.index.document_invalid',
+      context: { path: target }, error,
+    })
   }
 
   /** 给新发现的副本换新 ID 并写回它的文件头；所在项目的主剪辑指向旧 ID 时一并改写。 */

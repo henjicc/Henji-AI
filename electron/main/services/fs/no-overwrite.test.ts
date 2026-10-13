@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { withFileLock } from './file-lock'
 import {
@@ -15,6 +15,10 @@ import {
 } from './no-overwrite'
 
 let root: string
+
+vi.mock('../logging/main-logger', () => ({
+  createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+}))
 
 beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-no-overwrite-')) })
 afterEach(() => { fs.rmSync(root, { recursive: true, force: true }) })
@@ -63,6 +67,51 @@ describe('不覆盖的文件操作', () => {
 })
 
 describe('跨进程文件锁', () => {
+  it('多个等待者同时回收同一残留锁时，只有一个进入操作', async () => {
+    const lock = path.join(root, 'stale.lock')
+    await fsp.writeFile(lock, 'abandoned')
+    const old = new Date(Date.now() - 60_000)
+    await fsp.utimes(lock, old, old)
+    let active = 0
+    let peak = 0
+    await Promise.all(Array.from({ length: 8 }, () => withFileLock(lock, async () => {
+      peak = Math.max(peak, ++active)
+      await new Promise(resolve => setTimeout(resolve, 20))
+      active--
+    }, { staleMs: 60 })))
+    expect(peak).toBe(1)
+    expect(await fsp.readdir(root)).toEqual([])
+  })
+  it('持锁超过 staleMs 时多个等待者仍串行，心跳持续更新', async () => {
+    const lock = path.join(root, 'long.lock')
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    let active = 0
+    let peak = 0
+    const operation = async () => {
+      peak = Math.max(peak, ++active)
+      entered()
+      await new Promise(resolve => setTimeout(resolve, 240))
+      active--
+    }
+    const first = withFileLock(lock, operation, { staleMs: 60 })
+    await started
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const age = Date.now() - (await fsp.stat(lock)).mtimeMs
+    await Promise.all([first, ...Array.from({ length: 3 }, () => withFileLock(lock, operation, { staleMs: 60 }))])
+    expect(peak).toBe(1)
+    expect(age).toBeLessThan(60)
+  })
+
+  it('释放时不删除替换后的其他持有者锁', async () => {
+    const lock = path.join(root, 'ownership.lock')
+    await withFileLock(lock, async () => {
+      await fsp.rm(lock)
+      await fsp.writeFile(lock, 'replacement-owner')
+    })
+    expect(await fsp.readFile(lock, 'utf8')).toBe('replacement-owner')
+  })
+
   it('同一把锁串行执行，结束后释放；操作抛错也释放', async () => {
     const lock = path.join(root, 'locks', 'doc.lock')
     const order: string[] = []

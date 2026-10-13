@@ -398,10 +398,12 @@ export class DocumentOperations {
         const kind = session?.documentMeta.kind ?? (await this.findDocument(target.id)).kind
         if (!this.canStandalone(kind)) throw new DocumentStandaloneNotAllowedError(kind)
       }
-      if (session) await session.prepareTransfer()
-      const result = await this.commands.moveDocument({ target: session?.target ?? target, container, onConflict })
-      if (session && !session.isEnded) await session.applyTransfer(result)
-      return result
+      const transfer = async (): Promise<DocumentTransferResult> => {
+        const result = await this.commands.moveDocument({ target: session?.target ?? target, container, onConflict })
+        if (session && !session.isEnded) await session.applyTransfer(result)
+        return result
+      }
+      return session ? session.withTransfer(transfer) : transfer()
     })
   }
 
@@ -528,13 +530,17 @@ export class DocumentOperations {
 
   async renameProject(projectId: string, name: string): Promise<ProjectSummary> {
     return await this.write('rename_project', projectId, async () => {
-      const project = await this.commands.renameProject({ projectId, name })
-      // 项目改名后其中已打开的文档路径变了，按 ID 重新定位
-      for (const session of this.registry().list()) {
+      const sessions = this.registry().list().filter(session => {
         const container = session.documentMeta.container
-        if (container.kind === 'project' && container.projectId === projectId && !session.isEnded) await session.relocate()
-      }
-      return project
+        return container.kind === 'project' && container.projectId === projectId && !session.isEnded
+      })
+      for (const session of sessions) await session.suspend()
+      try {
+        for (const session of sessions) await session.prepareTransfer()
+        const project = await this.commands.renameProject({ projectId, name })
+        for (const session of sessions) if (!session.isEnded) await session.relocate()
+        return project
+      } finally { for (const session of sessions) session.resume() }
     })
   }
 
@@ -551,10 +557,12 @@ export class DocumentOperations {
       const session = this.registry().get(target.id)
       const busy = session ? this.busyChecks.get(session.documentMeta.kind)?.(target.id) ?? null : null
       if (busy) throw new Error(busy)
-      if (session) await session.flush()
-      const result = await this.commands.collectDocumentMedia(session?.target ?? target)
-      if (session && !session.isEnded) await session.applyTransfer(result)
-      return result
+      const transfer = async (): Promise<DocumentTransferResult> => {
+        const result = await this.commands.collectDocumentMedia(session?.target ?? target)
+        if (session && !session.isEnded) await session.applyTransfer(result)
+        return result
+      }
+      return session ? session.withTransfer(transfer) : transfer()
     })
   }
 

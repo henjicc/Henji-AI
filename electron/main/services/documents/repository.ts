@@ -166,7 +166,9 @@ function sameContainer(left: DocumentContainerRef, right: DocumentContainerRef):
 export class DocumentRepository {
   private readonly executor = new KeyedSerialExecutor()
 
-  constructor(private readonly options: DocumentRepositoryOptions) {}
+  constructor(private readonly options: DocumentRepositoryOptions) {
+    options.workspace.registerDocumentLockDirectory(options.lockDirectory)
+  }
 
   private get workspace(): DocumentWorkspace {
     return this.options.workspace
@@ -966,7 +968,7 @@ export class DocumentRepository {
   private async exclusive<T>(documentId: string, operation: () => Promise<T>): Promise<T> {
     return await this.executor.run(documentId, async () => await withFileLock(
       path.join(this.options.lockDirectory, `${documentId}.lock`),
-      operation,
+      () => this.workspace.withProjectMutation(this.workspace.catalog.getDocument(documentId)?.projectId, operation),
       { timeoutMessage: '文档正被另一个窗口或助手写入，请稍后重试。' },
     ))
   }

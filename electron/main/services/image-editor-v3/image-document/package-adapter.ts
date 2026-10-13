@@ -4,6 +4,8 @@ import type {
   PackageDocumentHeaderPatch,
 } from '../../documents/package-adapters'
 import { createMainLogger } from '../../logging'
+import { DocumentFormatError, errorCode } from '../../documents/errors'
+import { PersistenceError } from '../../../../../src/core/persistence/migrations'
 import { isImageDocumentHeaderEmpty } from './header'
 import { readImageDocumentPackageHeader, rewriteImageDocumentPackageHeader } from './package-file'
 
@@ -22,7 +24,10 @@ export function createImageDocumentPackageAdapter(): PackageDocumentAdapter {
   return {
     kind: 'image_document',
     async readHeader(filePath: string): Promise<PackageDocumentHeader> {
-      const { header } = await readImageDocumentPackageHeader(filePath)
+      const { header } = await readImageDocumentPackageHeader(filePath).catch((error: unknown) => {
+        if (error instanceof PersistenceError || errorCode(error)) throw error
+        throw new DocumentFormatError('图片文档包头无法读取。', { cause: error })
+      })
       return {
         id: header.id,
         // 文档名以文件名为准；通用仓库对外一律用文件名，这里给什么都不会被显示。

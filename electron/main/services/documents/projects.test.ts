@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTestEnvironment, listFiles, type TestEnvironment } from './documents.test-support'
 
@@ -14,6 +14,37 @@ async function manifestOf(root: string): Promise<Record<string, unknown>> {
 describe('项目：新建、改名、转正', () => {
   beforeEach(() => { env = createTestEnvironment() })
   afterEach(async () => { await env.cleanup() })
+
+  it.each(['rename', 'finalize'] as const)('保存定位后与项目 %s 交错：旧目录不重建，新位置保留最新内容', async action => {
+    const { service, workspace } = env.services
+    const project = await service.createProject()
+    const doc = await service.createDocument({ kind: 'canvas', name: '文档', container: { kind: 'project', projectId: project.id } })
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    const original = workspace.containerForPath.bind(workspace)
+    const spy = vi.spyOn(workspace, 'containerForPath').mockImplementationOnce(async file => {
+      const container = await original(file)
+      entered()
+      await gate
+      return container
+    })
+    const saving = service.saveDocument({ target: { id: doc.meta.id }, expectedRevision: 0, content: { latest: true } })
+    await started
+    const moving = action === 'rename'
+      ? service.renameProject({ projectId: project.id, name: '新位置' })
+      : service.finalizeProject({ projectId: project.id, name: '新位置' })
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    } finally { release() }
+    const [, moved] = await Promise.all([saving, moving])
+    spy.mockRestore()
+    expect(fs.existsSync(project.path)).toBe(false)
+    const read = await service.readDocument({ id: doc.meta.id })
+    expect(read.content).toEqual({ latest: true })
+    expect(read.meta.path).toBe(path.join(moved.path, '文档.henji-canvas'))
+  })
 
   it('新建项目以草稿建在“项目”里，自动名顺延，写入按语言命名子文件夹的项目说明', async () => {
     const { service } = env.services
