@@ -11,6 +11,11 @@ import { inferLocalMediaKind } from '@/services/localMediaImport'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { dropVideoEditInput, readVideoEditDrop, videoEditDropPaths } from './videoEditDrop'
 import { savedVideoEdit, reopenVideoEdit, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
+import { recordVideoEditExport, updateVideoEditCreativeIntents, updateVideoEditInPlaceMetadata } from './videoEditService'
+import { planVideoEditInPlaceGeneration } from '@/core/videoEdit/inPlaceGeneration'
+import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
+import type { VideoEditInPlaceRecord } from '@/core/videoEdit/inPlacePersistence'
+import { resolve } from 'node:path'
 
 const files = new Map<string, string>()
 const video = vi.hoisted(() => ({ duration: 3, fps: 60, hasAudio: false, decodable: true }))
@@ -32,6 +37,26 @@ function deferred<T>() {
   const promise = new Promise<T>(finish => { resolve = finish })
   return { promise, resolve }
 }
+it('导入复核保留导出、讲解及其他生成记录，只合并本次落位记录的改动', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id; const sequence = getActiveVideoEditSequence(owner)
+  const plan = planVideoEditInPlaceGeneration(owner.document, sequence.id, { action: 'generate_shot', frame: 0, duration: 30 })
+  const first: VideoEditInPlaceRecord = { id: 'landing', taskId: 'landing-task', modelId: 'model', plan, request: { sequenceId: sequence.id, intent: { action: 'generate_shot' }, prompt: '镜头' }, status: 'generating' }
+  const second: VideoEditInPlaceRecord = { ...first, id: 'other', taskId: 'other-task' }
+  updateVideoEditInPlaceMetadata(id, [first, second]); const contentVersion = owner.contentVersion
+  const exportEntry = { id: 'export', taskId: 'export-task', sequenceId: sequence.id, name: '成片', presetName: '序列', path: resolve('fixture', 'export.mp4'), completedAt: 1, rangeSource: 'content' as const, settings: videoEditSequenceExportSettings(sequence), range: { startFrame: 0, endFrame: 30 } }
+  vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValueOnce(asset()).mockImplementationOnce(async () => {
+    recordVideoEditExport(id, exportEntry)
+    updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+    updateVideoEditInPlaceMetadata(id, [{ ...first, error: '并发保留' }, { ...second, status: 'failed', error: '另一个任务失败' }, { ...second, id: 'new', taskId: 'new-task' }])
+    expect(owner.contentVersion).toBe(contentVersion)
+    return asset()
+  })
+  await importVideoEditSources(id, [{ assetId: 'image-asset' }], undefined, undefined, document => ({ ...document, inPlaceGenerations: document.inPlaceGenerations!.map(record => record.id === first.id ? { ...record, status: 'placing', clipId: 'landed-clip' } : record) }))
+  expect(owner.document.exportHistory).toEqual([exportEntry])
+  expect(owner.document.creativeIntents).toEqual({ drafts: [], sessions: [], resources: [] })
+  expect(owner.document.inPlaceGenerations).toEqual([{ ...first, status: 'placing', clipId: 'landed-clip', error: '并发保留' }, { ...second, status: 'failed', error: '另一个任务失败' }, { ...second, id: 'new', taskId: 'new-task' }])
+  expect(owner.contentVersion).toBe(contentVersion + 1)
+})
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
   // 测试环境没有原生解码服务：按“不可用”走后备探测，而不是让替身抛错再记一条探测异常。

@@ -6,13 +6,15 @@ import { getPlatform } from '@/platform/runtime'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import path from 'node:path'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { createVideoEditSequence } from '@/core/videoEdit/document'
+import { createVideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { listVideoEditInstances, closeVideoEditProject, editVideoProject, switchVideoEditSequence, undoVideoEdit, saveVideoEdit, subscribeVideoEditDomain } from './videoEditService'
 import { VideoEditCollectionExecutor } from './videoEditExecutors'
 import { captureVideoEditResultTarget, commitVideoEditCreativeResult, type VideoEditCreativeResult } from './videoEditResultTarget'
 import { VIDEO_EDIT_FIELDS } from './videoEditFields'
 import { reopenVideoEdit, replaceSavedVideoEdit } from './videoEditDocumentTestKit'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
+import { updateVideoEditCreativeIntents, verifyVideoEditSaved } from './videoEditService'
+import { assertVideoEditResultTarget } from './videoEditResultTarget'
 
 const mediaMode = vi.hoisted(() => ({ video: false }))
 vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: class {
@@ -46,6 +48,53 @@ async function setup() {
   const owner = (await createVideoEditProject())!; const sequence = owner.document.sequences[0]
   return { owner, sequence, target: captureVideoEditResultTarget(owner.document.id, sequence.id, { mode: 'add', frame: 30, duration: 60, trackId: sequence.tracks.find(track => track.kind === 'video')!.id }), result: { asset: asset(), origin } satisfies VideoEditCreativeResult }
 }
+
+it('结果捕获后及导入复核、保存回读期间的元数据不使落点失效且不会被覆盖', async () => {
+  const { owner, target, result } = await setup(); const id = owner.document.id
+  const head = { drafts: [], sessions: [], resources: [] }
+  updateVideoEditCreativeIntents(id, head)
+  expect(() => assertVideoEditResultTarget(target)).not.toThrow()
+  const inspect = vi.mocked(getPlatform().assetLibrary.inspectAsset)
+  inspect.mockResolvedValueOnce(asset()).mockImplementationOnce(async () => {
+    updateVideoEditCreativeIntents(id, head)
+    return asset()
+  })
+  const read = harnessDocumentStore().readDocument.bind(harnessDocumentStore())
+  vi.spyOn(harnessDocumentStore(), 'readDocument').mockImplementation(async (...args) => {
+    const stored = await read(...args)
+    updateVideoEditCreativeIntents(id, head)
+    return stored
+  })
+  expect(await commitVideoEditCreativeResult(target, result)).toMatchObject({ verified: true })
+  expect(owner.document.creativeIntents).toEqual(head)
+  expect(owner.past).toHaveLength(1)
+})
+
+it('导入复核期间新增元数据保留在发布内容中', async () => {
+  const { owner, target, result } = await setup()
+  vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValueOnce(asset()).mockImplementationOnce(async () => {
+    updateVideoEditCreativeIntents(owner.document.id, { drafts: [], sessions: [], resources: [] })
+    return asset()
+  })
+  expect(await commitVideoEditCreativeResult(target, result)).toMatchObject({ verified: true })
+  expect(owner.document.creativeIntents).toEqual({ drafts: [], sessions: [], resources: [] })
+})
+
+it('保存回读包含较新的并发元数据时仍确认结果内容，默认回读保持完整比较', async () => {
+  const { owner, target, result } = await setup(); const id = owner.document.id
+  const store = harnessDocumentStore(); const read = store.readDocument.bind(store)
+  let beforeMetadata: VideoEditDocument | undefined
+  vi.spyOn(store, 'readDocument').mockImplementation(async (...args) => {
+    beforeMetadata ??= owner.document
+    updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+    // 原生读回前另一笔元数据保存已经完成。
+    const stored = store.stored(id)!
+    stored.content = { ...(stored.content as object), creativeIntents: owner.document.creativeIntents }
+    return read(...args)
+  })
+  expect(await commitVideoEditCreativeResult(target, result)).toMatchObject({ verified: true })
+  expect(await verifyVideoEditSaved(id, beforeMetadata)).toBe(false)
+})
 
 it('切序列与选区后仍回原序列：一次媒体/片段历史、固定来源、保存重开和重复回执', async () => {
   const { owner, result } = await setup(); const first = owner.document.sequences[0]; const other = createVideoEditSequence('另一序列')

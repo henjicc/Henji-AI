@@ -11,7 +11,7 @@ type Capture = (request: VideoEditProgramCaptureRequest, signal?: AbortSignal) =
 const providers = new WeakMap<VideoEditInstance, { sequenceId: string | (() => string); capture: Capture }>()
 const providerSequence = (provider: { sequenceId: string | (() => string) }): string => typeof provider.sequenceId === 'function' ? provider.sequenceId() : provider.sequenceId
 const pending = new WeakSet<VideoEditInstance>()
-const published = new WeakMap<VideoEditInstance, { document: VideoEditInstance['document']; sequenceId: string; frame: number; output: VideoEditOutputReceipt }>()
+const published = new WeakMap<VideoEditInstance, { contentVersion: number; sequenceId: string; frame: number; output: VideoEditOutputReceipt }>()
 
 /** `sequenceId` 可以是取值函数：节目面板在同尺寸序列间切换时复用同一个渲染器，呈现的序列随之改变。 */
 export function registerVideoEditProgramCapture(owner: VideoEditInstance, sequenceId: string | (() => string), capture: Capture): () => void {
@@ -32,12 +32,13 @@ export async function captureVideoEditProgramFrame(projectId: string, frame?: nu
     if (!Number.isSafeInteger(target) || target < 0 || target !== owner.frame) throw new Error('请先将节目定位到要收录的整数帧。')
     if (owner.playing) throw new Error('请先暂停节目播放，再保存当前节目帧。')
     const baseline = owner.document; const document = getActiveVideoEditSequence(owner); const command = videoEditProgramCommandIdentity(projectId)
+    const contentVersion = owner.contentVersion
     const assertCurrent = (): void => {
       signal?.throwIfAborted()
-      if (!listVideoEditInstances().includes(owner) || owner.document !== baseline || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing || videoEditProgramCommandIdentity(projectId) !== command) throw new Error('原节目帧已改变或剪辑已关闭，请重新选帧。')
+      if (!listVideoEditInstances().includes(owner) || owner.contentVersion !== contentVersion || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing || videoEditProgramCommandIdentity(projectId) !== command) throw new Error('原节目帧已改变或剪辑已关闭，请重新选帧。')
     }
     const cached = published.get(owner)
-    if (typeof requestedPath !== 'string' && cached?.document === baseline && cached.sequenceId === document.id && cached.frame === target) {
+    if (typeof requestedPath !== 'string' && cached?.contentVersion === contentVersion && cached.sequenceId === document.id && cached.frame === target) {
       try { await verifyVideoEditOutput(cached.output); assertCurrent(); return cached.output } catch (error) { assertCurrent(); published.delete(owner); logger.debug('已发布节目选帧不可复用', { event: 'video_edit.program_frame.cache_discarded', error }) }
     }
     const provider = providers.get(owner)
@@ -55,7 +56,7 @@ export async function captureVideoEditProgramFrame(projectId: string, frame?: nu
     // From this point the complete image is published. Collection failure or a
     // late cancellation must never remove it or cause a second frame capture.
     const output = await publishVideoEditOutput({ owner, sequenceId: document.id, revision: document.revision, path, name: `${baseline.name} · 帧 ${target}`, kind: 'image', frame: target })
-    published.set(owner, { document: baseline, sequenceId: document.id, frame: target, output })
+    published.set(owner, { contentVersion, sequenceId: document.id, frame: target, output })
     assertCurrent()
     logger.info('节目选帧已保存', { event: 'video_edit.program_frame.completed', context: { projectId, outputId: output.id, frame: target } })
     return output
@@ -72,12 +73,12 @@ export async function setVideoEditPosterFrame(projectId: string, signal?: AbortS
   const owner = requireVideoEditInstance(projectId)
   if (owner.playing) throw new Error('请先暂停节目播放，再设为封面。')
   const target = owner.frame
-  const baseline = owner.document; const document = getActiveVideoEditSequence(owner)
+  const contentVersion = owner.contentVersion; const document = getActiveVideoEditSequence(owner)
   const provider = providers.get(owner)
   if (!provider || providerSequence(provider) !== document.id) throw new Error('请打开当前序列的节目面板后再设为封面。')
   const assertCurrent = (): void => {
     signal?.throwIfAborted()
-    if (!listVideoEditInstances().includes(owner) || owner.document !== baseline || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing) throw new Error('节目画面已变化，请重新设为封面。')
+    if (!listVideoEditInstances().includes(owner) || owner.contentVersion !== contentVersion || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing) throw new Error('节目画面已变化，请重新设为封面。')
   }
   const blob = await provider.capture({ document, frame: target, assertCurrent }, signal)
   assertCurrent()

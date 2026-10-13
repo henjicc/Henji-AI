@@ -210,6 +210,24 @@ beforeEach(() => {
 })
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
+it('内容版本覆盖编辑、撤销重做、取消草稿和接收内容，元数据及空手势不推进', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  let version = owner.contentVersion
+  const gesture = beginVideoEditGesture(id)
+  updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+  finishVideoEditGesture(gesture, false)
+  expect(owner.contentVersion).toBe(version)
+  appendVideoEditClip(id); expect(owner.contentVersion).toBe(++version)
+  undoVideoEdit(id); expect(owner.contentVersion).toBe(++version)
+  undoVideoEdit(id, true); expect(owner.contentVersion).toBe(++version)
+  const draft = beginVideoEditGesture(id)
+  updateVideoEditPicturePosition(draft, owner.activeSequenceId, owner.document.sequences[0].clips[0].id, { x: .1, y: .2 })
+  expect(owner.contentVersion).toBe(++version)
+  finishVideoEditGesture(draft, false); expect(owner.contentVersion).toBe(++version)
+  await saveVideoEdit(id)
+  await owner.session.reload(); expect(owner.contentVersion).toBe(++version)
+})
+
 it('公共修改与手动编辑共用历史并可保存重开', async () => {
   const instance = (await createLegacyTrackVideoEditProject())
   appendVideoEditClip(instance.document.id)

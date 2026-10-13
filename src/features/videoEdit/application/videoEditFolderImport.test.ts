@@ -13,6 +13,7 @@ import { cancelVideoEditImport, videoEditImportTask, subscribeVideoEditImport, t
 import { useSettingsStore } from '@/stores/settingsStore'
 import { readVideoEditData } from './videoEditReflection'
 import { createApplicationHarness } from '@/tests/applicationHarness'
+import { updateVideoEditCreativeIntents } from './videoEditService'
 
 const rateMetrics = vi.hoisted(() => ({ probedPacketCount: 256, bestGuessFrameRate: 30, frameRateIsConstant: true }))
 vi.mock('mediabunny', () => ({
@@ -149,6 +150,51 @@ function simpleTree(paths: Record<string, string[]>): void {
     return { realPath: path, entries: paths[path].map(name => ({ name, isDirectory: false })) }
   })
 }
+it('落位仅写元数据仍成功', async () => {
+  const root = resolve('fixture', 'metadata'); simpleTree({ [root]: ['a.mp4'] })
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  const head = { drafts: [], sessions: [], resources: [] }
+  await importVideoEditPathsAndFolders(id, [root], undefined, async candidate => {
+    updateVideoEditCreativeIntents(id, head); return candidate
+  })
+  expect(owner.document.items).toHaveLength(1); expect(owner.document.creativeIntents).toEqual(head)
+})
+it('落位失败回滚保留元数据并推进修订号', async () => {
+  const root = resolve('fixture', 'metadata-rollback'); simpleTree({ [root]: ['a.mp4'] })
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  const head = { drafts: [], sessions: [], resources: [] }
+  let placementRevision = 0
+  await expect(importVideoEditPathsAndFolders(id, [root], undefined, async () => {
+    updateVideoEditCreativeIntents(id, head); placementRevision = owner.document.revision
+    throw new Error('落位失败')
+  })).rejects.toThrow('落位失败')
+  expect(owner.document).toMatchObject({ media: [], items: [], bins: [], creativeIntents: head })
+  expect(owner.document.revision).toBeGreaterThan(placementRevision)
+})
+
+it.each([{ fail: false, depth: 1 }, { fail: true, depth: 1 }, { fail: false, depth: 2 }, { fail: true, depth: 2 }])('导入撤销再重做 $depth 步后继续批次，落位失败=$fail时清理全部新增内容', async ({ fail, depth }) => {
+  const root = resolve('fixture', 'redo-import'); simpleTree({ [root]: Array.from({ length: 33 }, (_, i) => `${i}.mp4`) })
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  if (depth === 2) editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, name: '导入前编辑' })) }))
+  const history = owner.past.length
+  let replayed = false
+  const importing = importVideoEditPathsAndFolders(id, [root], undefined, fail ? () => { throw new Error('落位失败') } : undefined, {
+    onProgress: () => {
+      if (!replayed && owner.document.items.length === 32) {
+        replayed = true
+        for (let i = 0; i < depth; i++) undoVideoEdit(id)
+        updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
+        for (let i = 0; i < depth; i++) undoVideoEdit(id, true)
+      }
+    },
+  })
+  if (fail) await expect(importing).rejects.toThrow('落位失败')
+  else await importing
+  expect(replayed).toBe(true)
+  expect(owner.document.items).toHaveLength(fail ? 0 : 33)
+  expect(owner.document.bins).toHaveLength(fail ? 0 : 1)
+  expect(owner.past).toHaveLength(history + (fail ? 0 : 1))
+})
 it.each(['unknown', 'variable'] as const)('目录拖入%s帧率视频先回滚全部批次与素材箱，确认后重新导入且只提交一步', async mode => {
   const root = resolve('fixture', mode)
   simpleTree({ [root]: Array.from({ length: 40 }, (_, index) => `${String(index).padStart(3, '0')}.mp4`) })
@@ -164,7 +210,9 @@ it.each(['unknown', 'variable'] as const)('目录拖入%s帧率视频先回滚�
   expect(error).toBeInstanceOf(VideoEditSequenceFrameRateRequired)
   if (!(error instanceof VideoEditSequenceFrameRateRequired)) throw error
   expect(error.settings).toMatchObject({ width: 1920, height: 1080, binId: 'target' })
-  expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history); expect(owner.future).toBe(future)
+  expect({ ...owner.document, revision: before.revision }).toEqual(before)
+  expect(owner.document.revision).toBeGreaterThan(before.revision)
+  expect(owner.past).toHaveLength(history); expect(owner.future).toBe(future)
   expect(videoEditImportTask(id)).toBeUndefined()
   // Closing the confirmation performs no operation; a later confirmed retry imports the whole request.
   await dropVideoEditInput(id, input, { frame: 0 }, 'target', { sequenceSettings: { ...error.settings, frameRate: { numerator: 60, denominator: 1 } } })

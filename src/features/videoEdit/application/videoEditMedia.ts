@@ -167,6 +167,7 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   const ids: string[] = []
   if (options.commit) await waitVideoEditImportEdit(owner, signal)
   const baseline = owner.document
+  const contentVersion = owner.contentVersion
   const document = structuredClone(baseline)
   const mediaByPath = new Map(document.media.map(media => [videoEditMediaPathKey(media.path), media]))
   const itemsByMedia = new Map(document.items.filter(item => item.binId === binId).map(item => [item.mediaId, item]))
@@ -194,9 +195,9 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   const recheckFailure = rechecks.find(result => result.status === 'rejected')
   if (recheckFailure?.status === 'rejected') throw recheckFailure.reason
   signal?.throwIfAborted()
-  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('导入检查期间原剪辑已改变，请重新导入。')
+  if (requireVideoEditInstance(projectId) !== owner || owner.contentVersion !== contentVersion) throw new Error('导入检查期间原剪辑已改变，请重新导入。')
   if (options.commit) options.commit(document => mergeVideoEditImportDocument(document, baseline, next))
-  else editVideoProject(projectId, () => next, preserveProgramAnchors)
+  else editVideoProject(projectId, current => mergeVideoEditImportDocument(current, baseline, next), preserveProgramAnchors)
   options.task.imported += next.items.length - baseline.items.length
   const nextItems = new Map(next.items.map(item => [item.id, item]))
   void autoCreateVideoEditProxies(projectId, ids.flatMap(id => { const item = nextItems.get(id); return item?.mediaId ? [item.mediaId] : [] })).catch(error => logger.warn('导入后代理创建未完成', { event: 'video_edit.proxy.import_failed', error }))
