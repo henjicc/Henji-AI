@@ -13,6 +13,6 @@ test('关闭项不能无 guard、借用不存在 guard 或省略修复提交', (
 
 test('u7 与 5.8 遗留全部登记，guard 来自真实注册表', () => {
   assert.deepEqual(checkUiFindings(), [])
-  const ids = require('../ui-review/findings.json').map(entry => entry.id)
+  const ids = require('../ui-review-findings.json').map(entry => entry.id)
   for (const id of ['u7-K03', 'u7-K06', 'u7-K08', 'u7-K09', '5.8-window-size', '5.8-video-edit-960', '5.8-heavy-scenes', '5.8-ruler-corner', '5.8-llm-eperm']) assert.ok(ids.includes(id), id)
 })

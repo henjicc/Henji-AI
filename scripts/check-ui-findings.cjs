@@ -23,7 +23,7 @@ function validateFindings(entries, { sceneIds, ruleKeys }) {
   return problems
 }
 function checkUiFindings(root = process.cwd()) {
-  const entries = JSON.parse(fs.readFileSync(path.join(root, 'scripts/ui-review/findings.json'), 'utf8'))
+  const entries = JSON.parse(fs.readFileSync(path.join(root, 'scripts/ui-review-findings.json'), 'utf8'))
   const scenes = createUiInspectionScenes({ canvasFixtureProjectId: '__catalog_only__', settlePage: async () => undefined })
   return validateFindings(entries, { sceneIds: new Set(scenes.map(scene => scene.id)), ruleKeys: new Set(UI_AUDIT_RULES.map(rule => rule.key)) })
 }

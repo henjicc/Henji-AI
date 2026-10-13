@@ -735,7 +735,7 @@ npm run check:icons
 npx vitest run src/components/ui/motion.test.ts
 ```
 
-公共组件先跑精确测试；主题求解变化才选相关主题测试（包括 `themeCombination.test.ts`）。只有公共布局、滚动、溢出或跨主题外观风险无法由精确测试证明时，升级 `references/review.md` 第 8 节的真实样张页或受影响宿主。升级后只运行一次 `ui:tour --steps scripts/ui-review/ui-gallery.json --matrix review --audit`；矩阵仅在令牌/主题或明确布局矩阵风险时使用，其他情况选一个故障尺寸与受影响预设。
+公共组件先跑精确测试；主题求解变化才选相关主题测试（包括 `themeCombination.test.ts`）。只有公共布局、滚动、溢出或跨主题外观风险无法由精确测试证明时，升级 `references/review.md` 第 8 节的真实样张页或受影响宿主。升级后只运行一次 `ui:tour --steps scripts/ui-review/ui-gallery.json --matrix review --audit --no-screenshots`（只落盘有问题的截图；需要目视时去掉该参数，每轮抽看约 10 张以内）；矩阵仅在令牌/主题或明确布局矩阵风险时使用，其他情况选一个故障尺寸与受影响预设。
 
 设计系统中心复用开发页 `dev.ui_gallery`，令牌、组件、模式与规范通过目录与搜索进入；正式构建裁掉入口，助手/MCP 不暴露。新增共享组件同时补真实样本与本复用表，覆盖由 `uiGalleryCoverage.test.ts` 保护。Windows 像素基线只在本机按 testing.md 的固定流程运行，不作为 CI 门禁。
 

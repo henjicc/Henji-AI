@@ -67,7 +67,7 @@
 
 ## 6. 操作工具：`ui:tour --steps`
 
-场景必须声明审查主图（执行记录记录场景 id + capture 后缀）：先清理隔离夹具并断言目标状态，再在关闭工程/清理现场之前捕获工作面。默认终态若已回到项目列表只能作为辅助证据。空态场景必须清除隔离夹具历史并断言为空；禁止在真实资料目录清空用户历史。转换确认必须清楚描述转换前后作用方式与可见后果，不只重复同一图层名。巡检遗留统一登记 `scripts/ui-review/findings.json`，关闭条目须有可查 guard 和修复证据。
+场景必须声明审查主图（执行记录记录场景 id + capture 后缀）：先清理隔离夹具并断言目标状态，再在关闭工程/清理现场之前捕获工作面。默认终态若已回到项目列表只能作为辅助证据。空态场景必须清除隔离夹具历史并断言为空；禁止在真实资料目录清空用户历史。转换确认必须清楚描述转换前后作用方式与可见后果，不只重复同一图层名。巡检遗留统一登记 `scripts/ui-review-findings.json`，关闭条目须有可查 guard 和修复证据。
 
 不另起启动链：步骤描述编译成与 `ui:tour` / `check:ui-visual` 同一套的场景，复用共享启动器（隔离资料、静音、副屏）、窗口尺寸、正式截屏、运行时错误证据与多预设。
 
@@ -224,7 +224,7 @@ try {
 } finally {
   Remove-Item Env:HENJI_BUNDLE_MODE -ErrorAction SilentlyContinue
 }
-npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --audit --out .ui-tour/review/ui-gallery
+npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --audit --no-screenshots --out .ui-tour/review/ui-gallery
 ```
 
 任务执行者受并行环境约束时不运行这些排他命令，将任务置为待验证。上述构建与实际窗口流程须由总管理者执行，不能把未跑过的截图说成通过。
@@ -260,4 +260,4 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 
 需要完整内容截图的任意步骤场景声明 `scrollCoverage: "<滚动容器 selector>"`，动态分区用 data-ui-scroll-key 或 data-gallery-section 作为身份。执行器记录真实 scrollHeight/clientHeight/scrollTop，按捕获区间并集检查顶部、中段、尾部；只截 top/bottom 不能通过。不要求局部交互场景遍历无关列表。中心页已经启用，分区增高时补中段步骤，禁止放宽 1px 容差。
 
-像素基线复用正式捕获与彩色 pixelmatch，固定 Windows 四预设 1440×900；`check:ui-gallery-diff` 不进 CI。基线目录、环境约束和更新命令见 docs/rules/testing.md 的“中心页像素基线”。未创建基线、缺图、尺寸/DPI/zoom 不符、DOM/对比度审计未通过一律失败。不能把 jsdom 通过写成像素或 Electron 通过。
+像素基线复用正式捕获与彩色 pixelmatch，固定 Windows 石墨与纸白两预设 1440×900（其余预设的颜色差异由对比度审计覆盖），基线存本机忽略目录不入库；`check:ui-gallery-diff` 不进 CI。基线目录、环境约束和更新命令见 docs/rules/testing.md 的“中心页像素基线”。未创建基线、缺图、尺寸/DPI/zoom 不符、DOM/对比度审计未通过一律失败。不能把 jsdom 通过写成像素或 Electron 通过。

@@ -394,8 +394,9 @@
   }
 
   /*
-   * 单选选中底（UiOptionButton menu/grid/segment/tile、下拉当前项、UiSwitch segmented 滑块）：
-   * 淡强调底（重要记录 012，任务 4.3；修订 003 的中性抬升——中性 selected 与 hover 只差 0.03，看不清）。
+   * 单选选中底（UiOptionButton menu/grid/tile、下拉当前项、UiSwitch segmented 滑块）：
+   * 淡强调底（重要记录 012，任务 4.3）。分段 UiSegmented 例外：中性抬起底 + 强文字（界面重设计重要记录 017，
+   * 缺陷修复计划记录 014），不走这里。
    * 选中项悬停再加一档淡强调，不回落中性悬停；玻璃里用 --ui-glass-selected-accent，同样不盖实心色。
    * 类名沿用 adaptive-selected（styleTokens 的令牌名与注释随 4.3 第二批改动一并更新）。
    */
