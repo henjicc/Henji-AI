@@ -492,7 +492,6 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
               const failed = record?.status === 'failed'
               const expired = !record?.activated && Boolean(record?.expiresAt && Date.parse(record.expiresAt) <= Date.now())
               return (
-                // ui-surface-allow: S4 音色是二维可试听单选网格，grid 底色和格间距已区分选项；u6。
                 <div key={voice.id} className="relative">
                   <UiOptionButton
                     type="button"

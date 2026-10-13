@@ -96,6 +96,8 @@ const RULE_E_EXEMPT = {
   UiOverlayLayerProvider: '浮层上下文 provider，没有自身控件外观。',
   ParamList: '参数组合布局，不是固定高度字段；字段通过 ParamField 复用共享组件。',
   ParamField: 'schema 字段组合入口，没有可覆盖共享控件的对外 className。',
+  UiVirtualList: '长列表滚动容器，没有对外 className；行内控件由各自共享组件按规则 E 检查。',
+  UiVirtualGrid: '长网格滚动容器，没有对外 className；格内控件由各自共享组件按规则 E 检查。',
 };
 /** 内容随网格拉伸或随内容撑高的条目类组件：只禁止固定高度。 */
 const ITEM_COMPONENTS = new Set(['UiOptionButton', 'UiChipButton', 'UiNavButton']);
