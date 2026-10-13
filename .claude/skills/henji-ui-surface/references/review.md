@@ -186,7 +186,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 `review` 矩阵是石墨/深海/胶片/纸白 1440×900 + 石墨 960×640，每种尺寸都有整套分区截图。一次 `ui:tour --audit` 同时生成截图、像素对比度、DOM 规则与运行时证据，不再叠加同矩阵的 `check:ui-visual`。
 
-中心页仅开发构建显示。总管理者在互斥构建安全边界中准备 **DEV=true 的巡检产物** 后运行（默认生产 bundle 不能显示此页；本机 Vite 的 DEV 由构建时 NODE_ENV 决定）：
+中心页仅开发构建显示，可用 `--dev-surface=dev.ui_gallery` 直接进入，或在主窗口按 `Ctrl+Shift+F8` 打开/返回。正式构建在应用壳裁掉中心页与加载引用；带开发页参数时继续正常工作区启动流程。总管理者在互斥构建安全边界中准备 **DEV=true 的巡检产物** 后运行（默认生产 bundle 不能显示此页；本机 Vite 的 DEV 由构建时 NODE_ENV 决定）：
 
 ```powershell
 $galleryNodeEnvBefore = $env:NODE_ENV
@@ -208,7 +208,7 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 
 ### 已有组件的复用补充（不新增另一套实现）
 
-主复用表未列出的现有共享组件在此补充；新通用组件仍必须登记主复用表。本次只新增中心页私有组合，没有新增通用组件或令牌。
+下表说明现有共享组件在中心页的样本边界；业务复用以主 SKILL.md 的“必须复用”表为准。本次只新增中心页私有组合，没有新增通用组件或令牌。
 
 | 组件 | 用法与边界 |
 |---|---|
@@ -227,4 +227,4 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | PriceEstimate | 注册模型计价结果的显示，沿用用户币种/费用显示偏好，不触发生成 |
 | Toggle / TextInput | 存量标签包装，本页展示并标注迁移欠账；新调用使用 UiFormRow + UiSwitch / UiInput |
 
-主 skill 文案里关于“一屏铺开”和“五张”的旧说明由规则统一任务更新；此处五个矩阵变体均包含完整分区组，不能按五张截图理解。
+五个矩阵变体均包含完整分区组，不能按五张截图理解。旧 `Toggle` / `TextInput` 的删除与调用方迁移移交任务 4.6；跨场景的滚动漏截防线涉及巡检执行器与 DOM 审计，移交任务 5.2。

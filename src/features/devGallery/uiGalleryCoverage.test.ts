@@ -119,9 +119,9 @@ describe('设计系统中心覆盖 ui/** 全部导出组件', () => {
     }
   })
 
-  it('可见导出组件在 skill 或其复用补充说明中登记', () => {
+  it('可见导出组件必须在主 skill 登记，不能只在截图附录出现', () => {
     const skillRoot = path.resolve(UI_DIR, '../../../.codex/skills/henji-ui-surface')
-    const docs = readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf8') + readFileSync(path.join(skillRoot, 'references/review.md'), 'utf8')
+    const docs = readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf8')
     const missing = exported.filter(name => !NON_VISUAL[name] && !docs.includes(name))
     expect(missing, `未登记的共享组件：${missing.join('、')}`).toEqual([])
   })
