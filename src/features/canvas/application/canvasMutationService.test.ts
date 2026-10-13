@@ -125,6 +125,17 @@ describe('画布清空与解散分组', () => {
   })
 
   describe('clearCanvasProject', () => {
+    it.each(['delete', 'clear'] as const)('%s 的非法延迟选项在修改前拒绝，不影响默认 UI 选项', async operation => {
+      const id = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
+      const before = useCanvasStore.getState();
+      const action = operation === 'delete'
+        ? deleteCanvasNodes(projectId, [id], { deferCommit: true })
+        : clearCanvasProject(projectId, { deferCommit: true });
+      await expect(action).rejects.toThrow('延迟画布事务缺少持久化后置协调器');
+      expect(useCanvasStore.getState().nodes).toBe(before.nodes);
+      expect(useCanvasStore.getState().history).toBe(before.history);
+    });
+
     it('清空全部节点与连线，返回可撤销引用', async () => {
       await addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } })
       await addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } })

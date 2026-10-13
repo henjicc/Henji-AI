@@ -6,7 +6,7 @@ import type { CanvasGenerationOutput } from '@/features/canvas/generation/runGen
 import { getPlatform } from '@/platform/runtime';
 import { useProjectStore } from '@/stores/projectStore';
 
-import type { CanvasNodeType } from '../domain/canvasNodes';
+import type { CanvasNodeData, CanvasNodeType } from '../domain/canvasNodes';
 import type { CanvasGenerationOutputBatchContractV1 } from '../domain/generationOutputs';
 import type { LayerStackDocumentV1 } from '../domain/layerStack';
 import { GenerationOutputRollbackError } from './generationOutputApplicationContracts';
@@ -27,6 +27,7 @@ export interface CommitLayerSeparationGenerationInput {
   sourceNodeId: string;
   placeholderNodeId: string;
   resultNodeType: CanvasNodeType;
+  resultNodeData?: Partial<CanvasNodeData>;
   completionId: string;
   sourceImage: string;
   providerId: string;
@@ -121,6 +122,7 @@ export async function commitLayerSeparationGeneration(
       sourceNodeId: input.sourceNodeId,
       placeholderNodeId: input.placeholderNodeId,
       resultNodeType: input.resultNodeType,
+      resultNodeData: input.resultNodeData,
       contract: createLayerStackGenerationContract(structuredOutput),
       completionId: input.completionId,
       preparedLayerStack: document,
@@ -155,6 +157,7 @@ export const layerSeparationGenerationExecution = {
       sourceNodeId: context.sourceNodeId,
       placeholderNodeId: context.placeholderNodeId,
       resultNodeType: context.resultNodeType,
+      resultNodeData: context.resultNodeData,
       completionId: context.completionId,
       sourceImage,
       providerId: context.providerId,

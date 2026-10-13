@@ -149,6 +149,7 @@ describe('generationOutputApplicationService', () => {
     const result = await commitOutput();
     expect(useCanvasStore.getState().nodes.find(node => node.id === result.resultNodeIds[0])?.data).toMatchObject({ imageUrl: expect.any(String), isGenerating: false });
     expect(useCanvasStore.getState().edges).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'source-node', target: result.resultNodeIds[0] })]));
+    expect(useCanvasStore.getState().edges.filter(edge => edge.source === 'source-node' && edge.target === result.resultNodeIds[0])).toHaveLength(1);
     expect((await commitOutput()).idempotent).toBe(true);
     expect(useCanvasStore.getState().nodes).toHaveLength(2);
   });
