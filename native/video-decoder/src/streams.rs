@@ -428,20 +428,24 @@ mod tests {
         let waiter = {
             let table = table.clone();
             std::thread::spawn(move || {
-                let started = Instant::now();
                 loop {
                     if let Some(slot) = table.acquire() {
-                        return (slot, started.elapsed());
+                        return (slot, Instant::now());
                     }
                     table.wait_freed(Duration::from_millis(500));
                 }
             })
         };
         std::thread::sleep(Duration::from_millis(30));
+        // 以真实释放时刻为基准：等待者不得在释放前拿到槽位，且应在释放后很快被唤醒（远早于 500ms 轮询超时）。
+        // 原写法从等待线程启动才计时，线程启动延迟会让“至少等了 20ms”在繁忙机器上误报。
+        let released_at = Instant::now();
         assert!(table.release(0));
-        let (slot, waited) = waiter.join().unwrap();
+        let (slot, acquired_at) = waiter.join().unwrap();
         assert_eq!(slot, 0);
-        assert!(waited >= Duration::from_millis(20) && waited < Duration::from_millis(400), "释放后应立即唤醒：{waited:?}");
+        assert!(acquired_at >= released_at, "释放前不应拿到槽位");
+        let woke_after = acquired_at - released_at;
+        assert!(woke_after < Duration::from_millis(400), "释放后应立即唤醒：{woke_after:?}");
     }
 
     #[test]
