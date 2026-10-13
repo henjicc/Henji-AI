@@ -361,7 +361,7 @@ export function UiFormRow({
 
   if (inline) {
     return (
-      <div className={`flex items-center justify-between gap-4 ${className}`} {...props}>
+      <div data-ui-form-row="auto" className={`flex items-center justify-between gap-4 ${className}`} {...props}>
         <div className="min-w-0">
           <div id={labelId} className={labelClass}>{labelNode}</div>
           {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
@@ -375,7 +375,7 @@ export function UiFormRow({
   }
 
   return (
-    <div className={className} {...props}>
+    <div data-ui-form-row="auto" className={className} {...props}>
       <div id={labelId} className={labelClass}>{labelNode}</div>
       {hint ? <p id={hintId} className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className={density === 'compact' ? 'h-1' : 'h-1.5'} />}
       <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>

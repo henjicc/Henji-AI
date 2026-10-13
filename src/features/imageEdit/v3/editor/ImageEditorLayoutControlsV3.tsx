@@ -105,6 +105,6 @@ export function ImageEditorLayoutControlsV3({ bus, controller, openRequest = 0 }
           onClick={() => run(() => adapter.apply())}>{state.needsSave ? '重试保存' : '应用'}</UiButton>
       </div>}
     </UiGroup>}>
-    {controls => <UiButton size="sm" onClick={controls.togglePanel} aria-expanded={controls.open}><LayoutGrid  />随手摆</UiButton>}
+    {controls => <UiButton size="md" onClick={controls.togglePanel} aria-expanded={controls.open}><LayoutGrid  />随手摆</UiButton>}
   </PanelTrigger>
 }

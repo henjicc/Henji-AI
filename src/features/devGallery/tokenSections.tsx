@@ -77,7 +77,7 @@ function TokenMapping({ category, values }: { category: string; values: unknown 
 }
 
 export function ShadowTokensSection(): JSX.Element {
-  return <UiGroup title="阴影：仅浮层与具名特效" titleTone="compact"><div className="grid grid-cols-2 gap-8 py-6">{Object.entries((GALLERY_TAILWIND_CONFIG.theme?.boxShadow ?? {}) as Record<string, string>).map(([name, value]) => <div key={name} data-gallery-token={`boxShadow.${name}`} className="flex flex-col gap-4"><UiPanel className="p-4" style={{ boxShadow: value }}>{name}</UiPanel><code className="break-all text-xs text-text2">{value}</code></div>)}</div></UiGroup>
+  return <UiGroup title="阴影：仅浮层与具名特效" titleTone="compact"><div className="grid grid-cols-2 gap-8 py-6">{Object.entries((GALLERY_TAILWIND_CONFIG.theme?.boxShadow ?? {}) as Record<string, string>).map(([name, value]) => <div key={name} data-gallery-token={`boxShadow.${name}`} className="flex flex-col gap-4"><UiPanel data-gallery-ignore-rules="shadowOutsideOverlay" data-gallery-ignore-reason="阴影令牌独立展示，不代表生产页面的表面层级" className="p-4" style={{ boxShadow: value }}>{name}</UiPanel><code className="break-all text-xs text-text2">{value}</code></div>)}</div></UiGroup>
 }
 
 export function LayerTokensSection(): JSX.Element {
@@ -89,8 +89,8 @@ export function HeightTokensSection(): JSX.Element {
     {Object.entries(styleTokens.UI_BAND_HEIGHT_CLASS).map(([name, cls]) => <div key={name} data-gallery-token={`UI_BAND_HEIGHT_CLASS.${name}`} className={`flex items-center bg-control px-3 ${cls}`}>{name} · {cls}</div>)}
     {(['short', 'medium', 'tall'] as const).map(height => <div key={height} className="grid grid-cols-2 gap-4"><PromptEditor height={height} ariaLabel={`${height} 提示词`} value={createPlainTextPromptDocument('文本高度')} onChange={() => undefined} /><UiTextArea height={height} aria-label={`${height} 文本`} defaultValue={height} /></div>)}
     {(['menu', 'compact', 'content', 'workspace'] as const).map(panelSize => <PanelTrigger key={panelSize} panelSize={panelSize} display={panelSize} renderPanel={() => <div><p>{panelSize} · 响应式宽高</p><Dropdown panelSize={panelSize} display={panelSize} renderPanel={() => <p>下拉面板 {panelSize}</p>} /></div>} />)}
-    {(['default', 'none', 'spacious'] as const).map(contentPadding => <div key={contentPadding} className="relative h-60"><UiModal scope="container" isOpen title={contentPadding} contentPadding={contentPadding} contentScroll="auto" onClose={() => undefined}>正文留白 {contentPadding}</UiModal></div>)}
-    <div className="relative h-60"><UiModal scope="container" isOpen title="编辑器自管滚动" contentScroll="none" onClose={() => undefined}>自管滚动</UiModal></div></UiGroup>
+    {(['default', 'none', 'spacious'] as const).map(contentPadding => <div key={contentPadding} data-gallery-ignore-rules="overlayClipped" data-gallery-ignore-reason="正文留白与滚动档位的容器内弹窗样本随目录滚动，不是视口浮层" className="relative h-60"><UiModal scope="container" isOpen title={contentPadding} contentPadding={contentPadding} contentScroll="auto" onClose={() => undefined}>正文留白 {contentPadding}</UiModal></div>)}
+    <div data-gallery-ignore-rules="overlayClipped" data-gallery-ignore-reason="正文留白与滚动档位的容器内弹窗样本随目录滚动，不是视口浮层" className="relative h-60"><UiModal scope="container" isOpen title="编辑器自管滚动" contentScroll="none" onClose={() => undefined}>自管滚动</UiModal></div></UiGroup>
 }
 
 export function IconTokensSection(): JSX.Element {
@@ -124,7 +124,7 @@ function TransitionExamples(): JSX.Element {
   return <UiGroup title="正式组件开合：点击收起 / 展开后观察实际过渡" titleTone="compact">
     <UiButton size="sm" onClick={() => setOpen(value => !value)}>{open ? '收起组件' : '展开组件'}</UiButton>
     <UiDisclosurePanel open={open}><p className="py-3 text-xs text-text2">UiDisclosurePanel · {motion.UI_DURATION.base}ms</p></UiDisclosurePanel>
-    <div className="relative h-56"><UiModal scope="container" isOpen={open} title="弹窗过渡" onClose={() => setOpen(false)}>UI_DIALOG_TRANSITION_MS · {motion.UI_DIALOG_TRANSITION_MS}ms</UiModal></div>
+    <div data-gallery-ignore-rules="overlayClipped" data-gallery-ignore-reason="容器内动效样本随目录滚动，不是视口浮层" className="relative h-56"><UiModal scope="container" isOpen={open} title="弹窗过渡" onClose={() => setOpen(false)}>UI_DIALOG_TRANSITION_MS · {motion.UI_DIALOG_TRANSITION_MS}ms</UiModal></div>
     <div className="relative h-20"><UiToast placement="container" tone="success" visible={open} message="通知过渡样本" /></div>
     <div className="flex h-24 items-center justify-between gap-4"><span ref={tooltipAnchor} className="text-xs text-text2">提示锚点</span><TooltipContent anchorRef={tooltipAnchor} visible={open} content="Tooltip 进场过渡" /><Dropdown ariaLabel="下拉过渡样本" value="a" options={[{ value: 'a', label: '下拉过渡' }, { value: 'b', label: '另一个选项' }]} onSelect={() => undefined} /><PanelTrigger display="浮层过渡" open={panelOpen} onOpenChange={setPanelOpen} renderPanel={() => <span className="text-xs text-text2">UI_POPOVER_TRANSITION_MS · {motion.UI_POPOVER_TRANSITION_MS}ms</span>} /></div>
   </UiGroup>

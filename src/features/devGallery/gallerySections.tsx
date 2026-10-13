@@ -122,6 +122,7 @@ export function ButtonSection(): JSX.Element {
   ] as const
   return (
     <GallerySection title="按钮">
+      <div className="contents" data-gallery-ignore-rules="multiplePrimary" data-gallery-ignore-reason="按钮状态矩阵并排展示主动作的全部视觉状态">
       <GalleryMatrix
         rows={variants.map(([label, variant]) => ({
           label,
@@ -142,6 +143,7 @@ export function ButtonSection(): JSX.Element {
           { label: '危险', render: (state) => <UiIconButton aria-label="删除" tone="danger" disabled={disabledAt(state)}><Trash2 /></UiIconButton> },
         ]}
  />
+      </div>
       <GalleryRow label="窗口">
         <UiWindowControl action="minimize" aria-label="最小化" />
         <UiWindowControl action="maximize" aria-label="最大化" />
@@ -388,12 +390,14 @@ export function FormSection(): JSX.Element {
         <UiFormRow label="不透明度" density="compact">
           <UiRangeInput defaultValue={40} />
         </UiFormRow>
-        <div className="flex items-center gap-2">
-          <UiButton size="sm" onClick={() => setOpen(!open)}>{open ? '收起' : '展开'}</UiButton>
-          <UiDisclosurePanel open={open}>
-            <span className="text-xs text-text2">展开区内容</span>
-          </UiDisclosurePanel>
-        </div>
+        <UiFormRow label="">
+          <div className="flex items-center gap-2">
+            <UiButton size="sm" onClick={() => setOpen(!open)}>{open ? '收起' : '展开'}</UiButton>
+            <UiDisclosurePanel open={open}>
+              <span className="text-xs text-text2">展开区内容</span>
+            </UiDisclosurePanel>
+          </div>
+        </UiFormRow>
       </UiGroup></div>
       <div><UiGroup divided titleTone="compact" title="调色控件">
         <div className="flex items-center gap-4">
@@ -431,7 +435,7 @@ export function ToolbarSection(): JSX.Element {
       <UiPanel variant="bare" className="overflow-hidden">
         <UiToolbar
           variant="command"
-          trailing={<UiButton variant="primary" size="sm">导出</UiButton>}
+          trailing={<UiButton variant="primary" size="md">导出</UiButton>}
           center={<UiSegmented ariaLabel="编辑模式" value={mode} onChange={setMode} options={[{ value: 'edit', label: '编辑' }, { value: 'preview', label: '预览' }]} />}
           subordinate={<span className="text-xs text-text2">从属参数带</span>}
  >
@@ -673,7 +677,7 @@ function ModalPreview({ size, surface }: { size: UiModalSize; surface: 'panel' |
     window.addEventListener('resize', update)
     return () => { observer.disconnect(); window.removeEventListener('resize', update) }
   }, [])
-  return <div ref={ref} data-gallery-static="UiModal" className={`relative h-72 overflow-hidden rounded-overlay ${surface === 'glass' ? 'bg-media' : 'bg-window'}`}><div className="relative origin-top-left" style={{ width: geometry.width, height: geometry.height, transform: `scale(${geometry.scale})` }}>
+  return <div ref={ref} data-gallery-ignore-rules="smallTargets overlayClipped horizontalOverflow" data-gallery-ignore-reason="完整视口按比例缩成静态弹窗示意，原始布局尺寸与滚动裁切不代表实际浮层" data-gallery-static="UiModal" className={`relative h-72 overflow-hidden rounded-overlay ${surface === 'glass' ? 'bg-media' : 'bg-window'}`}><div className="relative origin-top-left" style={{ width: geometry.width, height: geometry.height, transform: `scale(${geometry.scale})` }}>
     <UiModal isOpen scope="container" appear={false} size={size} surface={surface} title={`${size} 弹窗`} onClose={noop} headerActions={<UiButton size="sm">上下文</UiButton>} footer={<><UiButton variant="secondary">取消</UiButton><UiButton variant="primary">确定</UiButton></>}><UiFormRow label="名称" inline><UiInput defaultValue="作品" /></UiFormRow></UiModal>
   </div></div>
 }

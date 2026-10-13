@@ -65,8 +65,8 @@ export function LongListSection(): JSX.Element {
   const [clock] = useState(() => createStore(() => ({ ratio: 0 })))
   const preview = useRafCallback((ratio: number) => clock.setState({ ratio }))
   return <div className="flex flex-col gap-8">
-    <UiGroup title="共享虚拟列表：1000 条可变行高记录" titleTone="compact"><UiRecordList className="h-80"><UiVirtualList data={LIST_SAMPLES} getKey={item => item.id} emptyState={<UiEmpty size="xs" title="暂无记录" />} renderItem={item => <UiRecordItem index={item.id} density="page" title={item.name}>{item.id % 3 === 0 && <p className="text-xs text-text2">描述会增加本行高度，滚动位置由共享列表测量。</p>}<UiButton size="sm">继续编辑</UiButton></UiRecordItem>} /></UiRecordList></UiGroup>
-    <UiGroup title="共享虚拟网格：状态和描述可以改变行高" titleTone="compact"><div className="h-64"><UiVirtualGrid data={LIST_SAMPLES} columns={3} getKey={item => item.id} highlightedIndex={selected} renderItem={item => <UiButton variant={selected === item.id ? 'secondary' : 'quiet'} onClick={() => setSelected(item.id)} className="w-full">{item.name}</UiButton>} /></div></UiGroup>
+    <UiGroup title="共享虚拟列表：1000 条可变行高记录" titleTone="compact"><UiRecordList data-gallery-ignore-rules="nestedScroll" data-gallery-ignore-reason="独立虚拟列表滚动样本嵌在中心页目录滚动区内" className="h-80"><UiVirtualList data={LIST_SAMPLES} getKey={item => item.id} emptyState={<UiEmpty size="xs" title="暂无记录" />} renderItem={item => <UiRecordItem index={item.id} density="page" title={item.name}>{item.id % 3 === 0 && <p className="text-xs text-text2">描述会增加本行高度，滚动位置由共享列表测量。</p>}<UiButton size="sm">继续编辑</UiButton></UiRecordItem>} /></UiRecordList></UiGroup>
+    <UiGroup title="共享虚拟网格：状态和描述可以改变行高" titleTone="compact"><div data-gallery-ignore-rules="nestedScroll" data-gallery-ignore-reason="独立虚拟网格滚动样本嵌在中心页目录滚动区内" className="h-64"><UiVirtualGrid data={LIST_SAMPLES} columns={3} getKey={item => item.id} highlightedIndex={selected} renderItem={item => <UiButton variant={selected === item.id ? 'secondary' : 'quiet'} onClick={() => setSelected(item.id)} className="w-full">{item.name}</UiButton>} /></div></UiGroup>
     <UiGroup title="高频预览：合帧生产，叶子订阅" titleTone="compact"><div className="h-24 bg-control" onPointerMove={event => {
       const rect = event.currentTarget.getBoundingClientRect()
       preview.schedule(Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))))
@@ -81,8 +81,8 @@ function ViewerShellSamples(): JSX.Element {
   const live = useUiViewerShell(open, () => setOpen(false))
   return <UiGroup title="全屏查看器：共享外壳与关闭" titleTone="compact">
     <div className="grid grid-cols-2 gap-4">
-      <div className="relative h-40"><UiViewerShell viewer={media} surface="media" presentation="centered" aria-label="媒体外壳样本"><span className="text-on-media">媒体底</span></UiViewerShell></div>
-      <div className="relative h-40"><UiViewerShell viewer={canvas} surface="canvas" aria-label="画布外壳样本"><p className="p-4 text-text1">画布底</p></UiViewerShell></div>
+      <div data-gallery-ignore-rules="overlayClipped" data-gallery-ignore-reason="容器内查看器外壳样本随目录滚动，不是视口浮层" className="relative h-40"><UiViewerShell viewer={media} surface="media" presentation="centered" aria-label="媒体外壳样本"><span className="text-on-media">媒体底</span></UiViewerShell></div>
+      <div data-gallery-ignore-rules="overlayClipped" data-gallery-ignore-reason="容器内查看器外壳样本随目录滚动，不是视口浮层" className="relative h-40"><UiViewerShell viewer={canvas} surface="canvas" aria-label="画布外壳样本"><p className="p-4 text-text1">画布底</p></UiViewerShell></div>
     </div>
     <UiButton onClick={() => setOpen(true)}>打开查看器，验证 Escape 关闭</UiButton>
     <UiViewerShell viewer={live} aria-label="查看器交互样本" presentation="centered" controls={<UiButton variant="media" className="absolute right-4 top-4" onClick={() => setOpen(false)}>关闭</UiButton>}><span className="text-on-media">点击背景或按 Escape 关闭</span></UiViewerShell>
