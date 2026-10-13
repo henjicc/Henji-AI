@@ -1,5 +1,8 @@
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { createFixture, createEngine } from '@/core/application-control/execution/engineTestFixture'
+import * as authorization from '../creativeIntentAuthorization'
+
+afterEach(() => { vi.restoreAllMocks() })
 
 const state = vi.hoisted(() => ({ current: undefined as undefined | ReturnType<typeof createEngine> & { fixture: ReturnType<typeof createFixture> } }))
 vi.mock('./applicationControlRegistry', () => ({
@@ -20,6 +23,7 @@ it('同一 requestId 零步失败后通过真实计划存储重试成功', async
 })
 
 it('公开撤销回执淘汰最旧项，最新回执仍属于原调用方', async () => {
+  const forget = vi.spyOn(authorization, 'forgetExplanationUndoAccess')
   const fixture = createFixture()
   state.current = { fixture, ...createEngine(fixture) }
   const refs: string[] = []
@@ -29,7 +33,22 @@ it('公开撤销回执淘汰最旧项，最新回执仍属于原调用方', asyn
     refs.push(result.undoRef!)
   }
   await expect(applicationReflectionHandlers.undoEntities({ undoRef: refs[0] }, context)).rejects.toThrow('PERMISSION_DENIED')
+  expect(forget).toHaveBeenCalledWith(refs[0])
   await expect(applicationReflectionHandlers.undoEntities({ undoRef: refs.at(-1)! }, context)).resolves.toMatchObject({ status: 'completed' })
+  expect(forget).toHaveBeenCalledWith(refs.at(-1))
+})
+
+it('私密索引释放回调同步作废公开撤销回执', async () => {
+  const remember = vi.spyOn(authorization, 'rememberExplanationUndoAccess')
+  const fixture = createFixture()
+  state.current = { fixture, ...createEngine(fixture) }
+  const context = { requestId: 'release-private', signal: new AbortController().signal }
+  const result = await applicationReflectionHandlers.changeEntities({ summary: '修改数值', changes: [{ kind: 'set_properties', entityType: 'sample.item', target: { kind: 'sample.item', id: 'one' }, properties: { 'sample.value': 6 } }] }, { ...context, expectedRevisions: { 'sample.scope': 0 } })
+  const call = remember.mock.calls.find(args => args[0] === result.undoRef)!
+  expect(call[2]).toBeTypeOf('function')
+  call[2]()
+  await expect(applicationReflectionHandlers.undoEntities({ undoRef: result.undoRef! }, context)).rejects.toThrow('PERMISSION_DENIED')
+  expect(fixture.values.get('one')).toBe(6)
 })
 
 it('同一 requestId 的撤销在零执行冲突消除后可以重试', async () => {

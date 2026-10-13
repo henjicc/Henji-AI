@@ -1,4 +1,4 @@
-import { rememberExplanationUndoAccess } from '../creativeIntentAuthorization'
+import { forgetExplanationUndoAccess, rememberExplanationUndoAccess } from '../creativeIntentAuthorization'
 import { describeJsonValueShape } from '@/core/application-control/registry/jsonValueShape'
 import type {
   ApplicationPlannedStep,
@@ -505,13 +505,15 @@ export const applicationReflectionHandlers = {
       rawResult = await execute(refreshed, 1)
     }
     if ((rawResult.status === 'completed' || rawResult.status === 'failed') && rawResult.undoRef) {
-      rememberExplanationUndoAccess(rawResult.undoRef, changes.flatMap(change => 'target' in change ? [change.target] : []))
+      const undoRef = rawResult.undoRef
+      rememberExplanationUndoAccess(undoRef, changes.flatMap(change => 'target' in change ? [change.target] : []), () => { publicUndos.delete(undoRef) })
       publicUndos.set(rawResult.undoRef, { callerId: context.callerGrant?.callerId ?? 'renderer',
         revisions: rawResult.status === 'completed' ? rawResult.resultingRevisions : rawResult.currentRevisions ?? {} })
       while (publicUndos.size > 256) {
         const oldest = publicUndos.keys().next().value
         if (oldest === undefined) break
         publicUndos.delete(oldest)
+        forgetExplanationUndoAccess(oldest)
       }
     }
     const result = completedTransaction(rawResult)
@@ -531,7 +533,10 @@ export const applicationReflectionHandlers = {
     if (!record || record.callerId !== (context.callerGrant?.callerId ?? 'renderer')) throw new Error('PERMISSION_DENIED:撤销回执不属于本连接或已使用。')
     const raw = await getApplicationControlExecutionEngine().undo({ undoRef: input.undoRef,
       expectedRevisions: record.revisions, idempotencyKey: `undo:${input.undoRef}:${crypto.randomUUID()}` }, executionContext(context))
-    if (raw.status === 'completed' || raw.status === 'failed' && raw.persistence) publicUndos.delete(input.undoRef)
+    if (raw.status === 'completed' || raw.status === 'failed' && raw.persistence) {
+      publicUndos.delete(input.undoRef)
+      forgetExplanationUndoAccess(input.undoRef)
+    }
     const result = completedTransaction(raw)
     return { status: 'completed' as const, transactionRef: result.transactionRef, verification: result.verification,
       resultingRevisions: result.resultingRevisions, resultRefs: result.resultRefs as unknown as Array<Record<string, unknown>>,

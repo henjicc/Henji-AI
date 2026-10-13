@@ -98,6 +98,8 @@
     "explanationContent": "Send the explanation text and {{count}} images to {{modelName}}."
   },
   "operationReview": {
+    "executedTitle": "Review the changes already made",
+    "acknowledge": "Reviewed; continue editing",
     "title": "Did this change take effect?",
     "notExecuted": "No change; allow a retry",
     "completed": "The change took effect",

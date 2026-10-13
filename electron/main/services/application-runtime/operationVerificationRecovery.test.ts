@@ -8,6 +8,12 @@ function record(): OperationRecord {
     result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', partial: { completedStepIndexes: [0], compensatedStepIndexes: [], uncompensatedStepIndexes: [0] } } } } } }
 }
 describe('仅回读恢复操作核实', () => {
+  it('已执行的属性写入进入人工核对后仍可自动读回恢复', () => {
+    const original = record()
+    expect(operationVerificationRecovery({ ...original, state: 'awaiting_user_confirmation', confirmation: {
+      title: '核对', message: '已执行', confirmLabel: '已核对', purpose: 'review', location: '应用', expiresAt: null, continuation: '核对',
+    } })).toEqual(operationVerificationRecovery(original))
+  })
   it('保留原输入的精确预期值，重复属性仅核对最终值', () => {
     const original = record()
     const changes = original.input.changes as Array<Record<string, unknown>>

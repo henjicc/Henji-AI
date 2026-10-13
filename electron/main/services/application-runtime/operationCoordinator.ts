@@ -3,7 +3,7 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 import { z } from 'zod'
 import { localHostReplySchema, type LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { ApplicationOperationStore, operationDigest, type OperationRecord } from './operationStore'
-import { operationVerificationRecovery } from './operationVerificationRecovery'
+import { canReviewOperation, isExecutedVerificationFailure, operationVerificationRecovery } from './operationVerificationRecovery'
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 import { requiresMutationReview } from '../../../../src/core/application-control/applicationCapabilities'
 import type { OperationReviewItem } from '../../../../src/core/application-control/operationReview'
@@ -119,8 +119,8 @@ export class ApplicationOperationCoordinator {
   }
   async review(record: OperationRecord, rendererEpoch: string, readTarget: (ref: { kind: string; id: string }) => Promise<Record<string, unknown>>, assertAuthorized: () => void): Promise<void> {
     record = this.recoverPreflight(record)
-    if (record.state !== 'unknown' && !(record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review')) return
-    if (!rendererEpoch || rendererEpoch === record.rendererEpoch) throw new Error('RECOVERY_SESSION_ACTIVE:原执行宿主尚未结束，请先查询回执；应用重新加载后可核对。')
+    if (!canReviewOperation(record)) return
+    if (!rendererEpoch || rendererEpoch === record.rendererEpoch && !isExecutedVerificationFailure(record)) throw new Error('RECOVERY_SESSION_ACTIVE:原执行宿主尚未结束，请先查询回执；应用重新加载后可核对。')
     if (!this.requestReview) throw new Error('RECOVERY_REVIEW_UNAVAILABLE:当前宿主不能发起人工核对，请在痕迹AI桌面应用中重试。')
     const targets = [...new Map([...(record.targetRefs ?? []), ...resultRefs(record.input)].map(ref => [refKey(ref), ref])).values()]
     const observations: Record<string, unknown>[] = []
@@ -129,16 +129,16 @@ export class ApplicationOperationCoordinator {
     }
     assertAuthorized()
     const current = this.store.get(record.operationId, record.callerId)
-    if (!current || !['unknown', 'awaiting_user_confirmation'].includes(current.state) || current.requestId !== record.requestId) return
-    const item = reviewPresentation(record, observations)
-    const confirmation = applicationUserConfirmation({ title: item.title, message: item.message, confirmLabel: '已经生效' }, 'review')
+    if (!current || !canReviewOperation(current) || current.requestId !== record.requestId || current.inputDigest !== record.inputDigest) return
+    const item = reviewPresentation(current, observations)
+    const confirmation = applicationUserConfirmation({ title: item.title, message: item.message, confirmLabel: item.executed ? '已核对，继续编辑' : '已经生效' }, 'review')
     this.store.save({ ...current, state: 'awaiting_user_confirmation', verificationState: 'unresolved', confirmation })
     this.changed()
     this.requestReview(item)
   }
   pendingReviews(): OperationReviewItem[] {
     return this.store.unresolved().map(record => this.recoverPreflight(record))
-      .filter(record => record.state === 'unknown' || record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review')
+      .filter(canReviewOperation)
       .map(record => ({ ...reviewPresentation(record),
         targets: [...operationAccess(record).keys()].map(key => ({ kind: key.slice(0, key.indexOf(':')), id: key.slice(key.indexOf(':') + 1) })),
         ...(record.confirmation ? { title: record.confirmation.title, message: record.confirmation.message } : {}) }))
@@ -147,6 +147,7 @@ export class ApplicationOperationCoordinator {
   resolveReview(operationId: string, callerId: string, decision: 'completed' | 'not_executed' | 'later'): void {
     const record = this.store.get(operationId, callerId)
     if (!record || record.state !== 'awaiting_user_confirmation' || record.confirmation?.purpose !== 'review') return
+    if (decision === 'not_executed' && isExecutedVerificationFailure(record)) throw new Error('RECOVERY_ALREADY_EXECUTED:这次修改已执行，请查看结果后确认，不能将它记为未执行。')
     if (decision !== 'later') this.store.save({ ...record, state: decision, confirmation: undefined, verificationState: 'verified',
       recoveryResult: { ok: true, verification: { verified: true, source: 'application_user_review', decision } } })
     createMainLogger('main.application_runtime').info('应用内核对已处理', { event: 'application.confirmation.review_resolved', context: { operationId, decision } })

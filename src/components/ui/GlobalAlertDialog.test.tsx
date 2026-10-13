@@ -97,6 +97,29 @@ describe('GlobalAlertDialog', () => {
 })
 
 
+afterEach(() => { cleanup(); useAlertDialogStore.setState({ queue: [] }) })
+
+it.each([
+  ['zh-CN', '请核对已执行的修改', '已核对，继续编辑', '稍后处理'],
+  ['en-US', 'Review the changes already made', 'Reviewed; continue editing', 'Review later'],
+])('已执行核对仅提供确认和稍后（%s）', async (language, title, confirm, later) => {
+  cleanup()
+  await i18n.changeLanguage(language)
+  useAlertDialogStore.setState({ queue: [] })
+  const decisions: string[] = []
+  const review = { operationId: 'secret-operation', callerId: 'secret-caller', executed: true, resolve: (decision: 'completed' | 'not_executed' | 'later') => { decisions.push(decision) } }
+  showAlertDialog({ title: '内部标题', message: '请查看海报素材。', review })
+  const view = render(<GlobalAlertDialog />)
+  expect(screen.getByText(title)).toBeTruthy()
+  expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual([confirm, later])
+  expect(screen.getByRole('alertdialog').textContent).not.toMatch(/secret|revision/)
+  fireEvent.click(screen.getByRole('button', { name: confirm }))
+  expect(decisions).toEqual(['completed'])
+  view.unmount()
+  useAlertDialogStore.setState({ queue: [] })
+  await i18n.changeLanguage('zh-CN')
+})
+
 it('英文付费确认由结构化费用拼句，核对标题与三个动作均翻译', async () => {
   await i18n.changeLanguage('en-US')
   useAlertDialogStore.setState({ queue: [] })

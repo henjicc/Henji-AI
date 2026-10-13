@@ -4,6 +4,19 @@ import type { OperationRecord } from './operationStore'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
+/** 从原交易回执保留执行事实，进入人工核对后也不能把它视为未执行。 */
+export function isExecutedVerificationFailure(record: OperationRecord): boolean {
+  const details = object(object(record.result?.error).details)
+  const transaction = object(details.transaction)
+  return transaction.code === 'VERIFICATION_FAILED' && !transaction.persistence && !details.persistence
+}
+
+export function canReviewOperation(record: OperationRecord): boolean {
+  return record.state === 'unknown'
+    || record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review'
+    || record.state === 'partial' && isExecutedVerificationFailure(record)
+}
+
 /** 只接受原执行器的恢复证明或已全部落地的验证失败；不能从当前值猜执行，也不替代保存恢复。 */
 export function operationVerificationRecovery(record: OperationRecord): NonNullable<OperationRecord['recoveryVerification']> | undefined {
   const details = object(object(record.result?.error).details)
@@ -14,7 +27,8 @@ export function operationVerificationRecovery(record: OperationRecord): NonNulla
     const value = proof as NonNullable<OperationRecord['recoveryVerification']>
     if (value.conditions?.length && value.evidence?.length) return value
   }
-  if (record.state !== 'partial' || transaction.code !== 'VERIFICATION_FAILED' || transaction.persistence || details.persistence) return undefined
+  if (!(record.state === 'partial' || record.state === 'awaiting_user_confirmation' && record.confirmation?.purpose === 'review')
+    || !isExecutedVerificationFailure(record)) return undefined
   const changes = record.input.changes
   const partial = object(transaction.partial)
   if (!Array.isArray(changes) || changes.length === 0
