@@ -3,6 +3,16 @@ const test = require('node:test')
 const { WINDOWS_MAX_FRAME_INSET_DIP, maximizedFrameInsets } = require('./uiInspectionSceneWindowStartup.cjs')
 const { SELECTION_MIN_CONTRAST, averageColor, contrastRatio, sampleTrimBoundary } = require('./uiInspectionSceneGenerationVideoViewer.cjs')
 const { chooseVideoEditImportFiles } = require('./uiInspectionVideoEditDocuments.cjs')
+const { parseMcpConnectionInstructions } = require('./uiInspectionMcpClient.cjs')
+
+test('MCP连接夹具读取正式说明的JSON块；旧纯JSON、缺配置与无效文本拒绝且不回显令牌', () => {
+  const config = { type: 'http', url: 'http://127.0.0.1:18080/mcp', headers: { Authorization: 'Bearer fixture-private-token' } }
+  const raw = JSON.stringify({ mcpServers: { henji: config } }, null, 2)
+  assert.deepEqual(parseMcpConnectionInstructions(`请帮我连接痕迹AI\n\n\`\`\`json\n${raw}\n\`\`\``), config)
+  assert.throws(() => parseMcpConnectionInstructions(raw), /缺少 JSON/)
+  assert.throws(() => parseMcpConnectionInstructions('```json\n{}\n```'), /缺少 henji/)
+  assert.throws(() => parseMcpConnectionInstructions('```json\nBearer fixture-private-token\n```'), error => /无法解析/.test(error.message) && !error.message.includes('fixture-private-token'))
+})
 
 test('剪辑文件导入要选择菜单动作，展开工具栏不会导入文件', async () => {
   let menuOpen = false

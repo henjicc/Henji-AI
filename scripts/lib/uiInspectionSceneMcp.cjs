@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict')
 const { Client } = require('@modelcontextprotocol/client')
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
+const { parseMcpConnectionInstructions } = require('./uiInspectionMcpClient.cjs')
 
 // 只读连接必须始终看得到的读取工具，以及任何情况下都不得出现在只读清单里的写入工具。
 const REQUIRED_READ_TOOLS = ['describe_application_contract', 'describe_application_entities', 'list_application_entities', 'read_application_entity', 'read_application_media']
@@ -83,8 +84,9 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       const connection = await page.evaluate(async () => {
         const status = await window.henjiNative.mcp.status()
         const identity = status.connections.find((item) => item.name === '协议验收客户端')
-        return { id: identity.id, config: JSON.parse(await window.henjiNative.mcp.connectionConfig({ id: identity.id })).mcpServers.henji }
+        return { id: identity.id, config: await window.henjiNative.mcp.connectionConfig({ id: identity.id }) }
       })
+      connection.config = parseMcpConnectionInstructions(connection.config)
       const connect = async () => {
         const client = new Client({ name: 'Henji Reality', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
         await client.connect(new StreamableHTTPClientTransport(new URL(connection.config.url), { requestInit: { headers: connection.config.headers } }))
@@ -144,11 +146,11 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       await section.getByPlaceholder('例如：Codex').fill('受控写入验收')
       await section.getByRole('button', { name: '创建授权' }).click()
       await waitReady(page)
-      const config = await page.evaluate(async () => {
+      const config = parseMcpConnectionInstructions(await page.evaluate(async () => {
         const state = await window.henjiNative.mcp.status()
         const connection = state.connections.find((item) => item.name === '受控写入验收')
-        return JSON.parse(await window.henjiNative.mcp.connectionConfig({ id: connection.id })).mcpServers.henji
-      })
+        return await window.henjiNative.mcp.connectionConfig({ id: connection.id })
+      }))
       const client = new Client({ name: 'Henji write Reality', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
       const operations = []
       const call = async (name, args) => {
@@ -251,8 +253,9 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         const state = await window.henjiNative.mcp.status()
         const connection = state.connections.find((item) => item.name === '后台跨域验收')
         return { allowPaid: connection.allowPaid === true, allowDestructive: connection.allowDestructive === true,
-          config: JSON.parse(await window.henjiNative.mcp.connectionConfig({ id: connection.id })).mcpServers.henji }
+          config: await window.henjiNative.mcp.connectionConfig({ id: connection.id }) }
       })
+      identity.config = parseMcpConnectionInstructions(identity.config)
       assert.equal(identity.allowPaid, false, '本场景必须使用未授权付费的连接')
       assert.equal(identity.allowDestructive, false)
       const client = new Client({ name: 'Henji background Reality', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } })
