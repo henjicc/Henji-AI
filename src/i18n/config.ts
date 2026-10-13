@@ -76,6 +76,10 @@ function deepMergeLocale(
   return next
 }
 
+export function normalizeLanguage(raw: string): 'zh-CN' | 'en-US' {
+  return /^en(?:[-_]|$)/i.test(raw.trim()) ? 'en-US' : 'zh-CN'
+}
+
 const resources = {
   'zh-CN': {
     common: deepMergeLocale(zhCN_common as DynamicValueMap, zhCN_storyboard as DynamicValueMap),
@@ -105,6 +109,8 @@ i18n
   .init({
     resources,
     fallbackLng: 'zh-CN',
+    supportedLngs: ['zh-CN', 'en-US'],
+    load: 'currentOnly',
     defaultNS: 'common',
     ns: ['common', 'models', 'params', 'errors', 'ui', 'history', 'settings', 'onboarding'],
 
@@ -116,6 +122,7 @@ i18n
       order: ['localStorage', 'navigator'],
       caches: [],
       lookupLocalStorage: 'henji-language',
+      convertDetectedLanguage: normalizeLanguage,
     },
 
     debug: import.meta.env.DEV,

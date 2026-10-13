@@ -5,6 +5,7 @@
 
 import { useTranslation } from 'react-i18next'
 import { getI18nText, type I18nText } from '@/core/types/I18nText'
+import { normalizeLanguage } from '@/i18n/config'
 
 export function useI18n(namespace?: string | string[]) {
   const { t, i18n } = useTranslation(namespace)
@@ -21,7 +22,7 @@ export function useI18n(namespace?: string | string[]) {
    * 切换语言
    */
   const changeLanguage = (lang: string) => {
-    return i18n.changeLanguage(lang)
+    return i18n.changeLanguage(normalizeLanguage(lang))
   }
 
   return {

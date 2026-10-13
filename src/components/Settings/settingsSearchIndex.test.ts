@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import zhSettings from '@/i18n/locales/zh-CN/settings.json'
 import enSettings from '@/i18n/locales/en-US/settings.json'
 import zhOnboarding from '@/i18n/locales/zh-CN/onboarding.json'
@@ -21,6 +23,23 @@ function lookup(lang: 'zh' | 'en', key: string): string | undefined {
 const translate = (lang: 'zh' | 'en') => (key: string): string => lookup(lang, key) ?? key
 
 describe('设置搜索索引', () => {
+  it('所有分区的字面量表单行标签都有索引', () => {
+    const directory = join(process.cwd(), 'src/components/Settings/sections')
+    const missing: string[] = []
+    for (const filename of readdirSync(directory).filter(name => name.endsWith('Section.tsx'))) {
+      const source = readFileSync(join(directory, filename), 'utf8')
+      for (const match of source.matchAll(/<UiFormRow\b[\s\S]*?label=\{t\(['"]([^'"]+)['"]/g)) {
+        const key = /useI18n\('onboarding'\)/.test(source) ? `onboarding:${match[1]}` : match[1]
+        if (!SETTINGS_SEARCH_INDEX.some(entry => entry.labelKey === key)) missing.push(`${filename}: ${key}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+  it.each(['素材箱', '重复文件', '触发边缘', '唤起前等待', '移出后等待', '授权方式', '单次自动通过', '全部第三方组件', '连接名称'])('可以搜索 %s 且不显示插值占位符', query => {
+    const results = searchSettings(query, translate('zh'))
+    expect(results.length).toBeGreaterThan(0)
+    expect(results.every(item => !item.label.includes('{{'))).toBe(true)
+  })
   it('每条标签在中英文里都有文案，每个分区至少能搜到一条', () => {
     for (const entry of SETTINGS_SEARCH_INDEX) {
       expect(lookup('zh', entry.labelKey), entry.labelKey).toBeTypeOf('string')

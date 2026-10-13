@@ -272,7 +272,6 @@ export async function ensureCompressedJpegBytesWithPica(
     // createImageBitmap may fail for uncommon image encodings.
   }
 
-  const cleanup: Array<() => void> = []
   let w0 = 0
   let h0 = 0
   let srcCanvas: HTMLCanvasElement
@@ -287,21 +286,24 @@ export async function ensureCompressedJpegBytesWithPica(
     sctx.drawImage(bitmap, 0, 0)
   } else {
     const url = URL.createObjectURL(blob)
-    cleanup.push(() => URL.revokeObjectURL(url))
     const img = new Image()
     const p = new Promise<HTMLImageElement>((resolve, reject) => {
       img.onload = () => resolve(img)
       img.onerror = reject
     })
-    img.src = url
-    const image = await p
-    w0 = image.naturalWidth || image.width
-    h0 = image.naturalHeight || image.height
-    srcCanvas = document.createElement('canvas')
-    srcCanvas.width = w0
-    srcCanvas.height = h0
-    const sctx = srcCanvas.getContext('2d')!
-    sctx.drawImage(image, 0, 0)
+    try {
+      img.src = url
+      const image = await p
+      w0 = image.naturalWidth || image.width
+      h0 = image.naturalHeight || image.height
+      srcCanvas = document.createElement('canvas')
+      srcCanvas.width = w0
+      srcCanvas.height = h0
+      const sctx = srcCanvas.getContext('2d')!
+      sctx.drawImage(image, 0, 0)
+    } finally {
+      URL.revokeObjectURL(url)
+    }
   }
 
   const total = w0 * h0
@@ -333,13 +335,5 @@ export async function ensureCompressedJpegBytesWithPica(
     const bytes = new Uint8Array(binary.length)
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
     return bytes
-  } finally {
-    cleanup.forEach(fn => {
-      try {
-        fn()
-      } catch {
-        // Ignore cleanup failures.
-      }
-    })
   }
 }

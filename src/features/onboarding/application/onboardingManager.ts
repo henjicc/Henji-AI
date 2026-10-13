@@ -333,7 +333,14 @@ export class OnboardingManager {
   }
 
   private persist(): void {
-    this.storage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(this.state))
+    try {
+      this.storage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(this.state))
+    } catch (error) {
+      persistenceLogger.warn('引导进度无法保存，本次会话仍可继续，原数据保留', {
+        event: 'onboarding.persist.failed',
+        error: String(error),
+      })
+    }
   }
 
   private publish(): void {

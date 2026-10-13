@@ -754,7 +754,7 @@
   },
   "viewer": {
     "imageAlt": "Image",
-    "toggleInfo": "Show/Hide image info (Tab)",
+    "toggleInfo": "Show/Hide image info (I)",
     "infoLoading": "Loading image info…",
     "infoUnavailable": "Image info unavailable",
     "resolution": "Resolution",

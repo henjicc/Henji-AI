@@ -25,6 +25,24 @@ function createManager(storage = new MemoryStorage()): OnboardingManager {
 }
 
 describe('OnboardingManager', () => {
+  it.each(['{broken', JSON.stringify({ version: 1 })])('读失败后仍可推进引导并保留原值：%s', raw => {
+    const storage = new MemoryStorage()
+    storage.setItem(ONBOARDING_STORAGE_KEY, raw)
+    const manager = createManager(storage)
+    let notifications = 0
+    manager.subscribe(() => { notifications += 1 })
+    expect(() => manager.open()).not.toThrow()
+    expect(() => manager.skip()).not.toThrow()
+    expect(manager.getSnapshot().status).toBe('skipped')
+    expect(() => manager.restart()).not.toThrow()
+    expect(() => manager.next()).not.toThrow()
+    expect(manager.getSnapshot().activeStepId).toBe('basics')
+    expect(() => manager.markProviderConfigured('fal')).not.toThrow()
+    expect(() => manager.complete()).not.toThrow()
+    expect(manager.getSnapshot().status).toBe('completed')
+    expect(notifications).toBeGreaterThan(0)
+    expect(storage.getItem(ONBOARDING_STORAGE_KEY)).toBe(raw)
+  })
   it('新安装自动打开欢迎流程并写入版本化状态', () => {
     const storage = new MemoryStorage()
     const manager = createManager(storage)

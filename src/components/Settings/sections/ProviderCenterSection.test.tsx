@@ -3,13 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { UseLlmSettingsResult } from '../hooks/useLlmSettings'
+import type { Provider } from '@/config/providers'
+import i18n from '@/i18n/config'
 
-const mocks = vi.hoisted(() => ({ fetchModels: vi.fn() }))
+const mocks = vi.hoisted(() => ({ fetchModels: vi.fn(), providers: [] as Provider[], errors: {} as Record<string, string>, language: '' }))
 
-vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key, currentLanguage: 'zh-CN' }) }))
+vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: mocks.language ? i18n.getFixedT(mocks.language, 'settings') : (key: string) => key, currentLanguage: mocks.language || 'zh-CN' }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/config/providers', () => ({ getProviders: () => [] }))
-vi.mock('../hooks/useApiKeys', () => ({ useApiKeys: () => ({ keys: {}, visibility: {}, updateKey: vi.fn(), toggleVisibility: vi.fn() }) }))
+vi.mock('@/config/providers', () => ({ getProviders: () => mocks.providers }))
+vi.mock('../hooks/useApiKeys', () => ({ useApiKeys: () => ({ keys: {}, visibility: {}, errors: mocks.errors, updateKey: vi.fn(), toggleVisibility: vi.fn() }) }))
 vi.mock('../hooks/useExternalLink', () => ({ useExternalLink: () => ({ openExternal: vi.fn() }) }))
 vi.mock('./useGenerationModelVisibility', () => ({
   useGenerationModelVisibility: () => ({
@@ -37,13 +39,43 @@ const provider: LlmProviderConfig = {
 const llm = {
   loading: false,
   config: { providers: [provider], models: [], agentProfiles: [], selectedAgentProfileId: '' },
-  keys: {}, visibility: {},
+  keys: {}, visibility: {}, keyErrors: {},
   updateKey: vi.fn(), toggleVisibility: vi.fn(),
   saveConfig: vi.fn(), commitProviderSettings: vi.fn(), deleteProviderSettings: vi.fn(),
 } as unknown as UseLlmSettingsResult
 
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => { vi.clearAllMocks(); mocks.providers = []; mocks.errors = {}; mocks.language = '' })
 afterEach(cleanup)
+
+describe('供应商中心密钥错误', () => {
+  it.each([
+    ['zh-CN', 'encryptionUnavailable', '系统加密'],
+    ['en-US', 'encryptionUnavailable', 'secure key storage'],
+    ['zh-CN', 'unreadable', '无法读取'],
+    ['en-US', 'unreadable', 'could not be read'],
+    ['zh-CN', 'saveFailed', '可用空间'],
+    ['en-US', 'saveFailed', 'free space'],
+  ])('%s 密钥失败显示分类原因和恢复提示：%s', async (language, category, reason) => {
+    mocks.language = language
+    render(<ProviderCenterSection llm={{ ...llm, keyErrors: { 'custom-relay': `apiKeys.errors.${category}` } }} />)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(reason)
+    expect(alert.textContent).not.toContain('apiKeys.errors.')
+    expect(alert.textContent).not.toContain('safeStorage')
+  })
+  it('LLM 凭据错误通过现有 alert 显示', async () => {
+    render(<ProviderCenterSection llm={{ ...llm, keyErrors: { 'custom-relay': 'apiKeys.errors.saveFailed' } }} />)
+    expect((await screen.findByRole('alert')).textContent).toBe('apiKeys.errors.saveFailed')
+  })
+  it.each([['fal'], ['volcengine', 'volcengine-speech']])('生成凭据 %s 分别显示错误', async (...ids) => {
+    mocks.providers = ids.map(id => ({ id, name: id, type: 'image', models: [] }))
+    mocks.errors = Object.fromEntries(ids.map(id => [id, `error-${id}`]))
+    render(<ProviderCenterSection llm={{ ...llm, config: { ...llm.config, providers: [] } }} />)
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts.map(alert => alert.textContent)).toEqual(ids.map(id => `error-${id}`))
+    expect(screen.getAllByRole('textbox').length).toBeGreaterThan(0)
+  })
+})
 
 describe('供应商中心：同步模型（5.6 第二批）', () => {
   it('同步中有进行中文案；失败后留在原位说明原因，按钮恢复可再试', async () => {

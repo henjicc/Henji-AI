@@ -33,7 +33,7 @@ function approximateAspectRatio(width: number, height: number): string {
   return `${bestCandidate[0]}:${bestCandidate[1]}`;
 }
 
-/** 图片信息浮层（分辨率/大小/比例/创建时间），Tab 或按钮切换折叠 */
+/** 图片信息浮层（分辨率/大小/比例/创建时间），I 或按钮切换折叠 */
 export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.Element | null {
   const { t, i18n } = useTranslation();
   const enabled = useSettingsStore((state) => state.enableImageViewerInfoPanel);
@@ -72,11 +72,13 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
     };
   }, [enabled, imageSource, open]);
 
-  // Tab 键切换折叠
+  // I 键切换折叠，保留 Tab 焦点导航与输入操作。
   useEffect(() => {
     if (!enabled || !open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
+      if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+      if (e.key.toLowerCase() === 'i') {
         e.preventDefault();
         setCollapsed(!collapsed);
       }
@@ -122,7 +124,7 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
         type="button"
         onClick={() => setCollapsed(!collapsed)}
         className="shrink-0"
-        title={t('viewer.toggleInfo', '显示/隐藏图片信息（Tab）')}
+        title={t('viewer.toggleInfo', '显示/隐藏图片信息（I）')}
       >
         <Info className="h-4 w-4" />
       </UiIconButton>
