@@ -91,7 +91,11 @@ export class DocumentWorkspace {
     this.documentLockDirectory = directory
   }
 
-  /** 项目路径变更与项目内文档写入共用互斥，锁不能随项目目录移动。 */
+  /**
+   * 项目路径变更与项目内文档写入共用互斥，锁不能随项目目录移动。
+   * 取锁顺序为文档锁 → 项目锁；operation 不得调用仓库写操作或重入同一项目锁。
+   * 项目 rename/finalize 只持项目锁，直接操作目录、清单与索引。
+   */
   withProjectMutation<T>(projectId: string | null | undefined, operation: () => Promise<T>): Promise<T> {
     if (!projectId) return operation()
     if (!this.documentLockDirectory) throw new Error('文档锁目录尚未配置。')

@@ -15,13 +15,14 @@ import {
 } from './no-overwrite'
 
 let root: string
+const logWarn = vi.hoisted(() => vi.fn())
 
 vi.mock('../logging/main-logger', () => ({
-  createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+  createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: logWarn, error: vi.fn() }),
 }))
 
-beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-no-overwrite-')) })
-afterEach(() => { fs.rmSync(root, { recursive: true, force: true }) })
+beforeEach(() => { logWarn.mockClear(); root = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-no-overwrite-')) })
+afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }) })
 
 describe('不覆盖的文件操作', () => {
   it('独占创建：目标已存在时报 EntryExistsError 且原内容不变；成功时不留暂存文件', async () => {
@@ -67,6 +68,49 @@ describe('不覆盖的文件操作', () => {
 })
 
 describe('跨进程文件锁', () => {
+  it('PID 仍存活但心跳停止远超 staleMs 时回收残留，不因 PID 复用永久锁死', async () => {
+    const lock = path.join(root, 'reused-pid.lock')
+    await fsp.writeFile(lock, `${process.pid} previous-owner\n`)
+    const old = new Date(Date.now() - 4_000)
+    await fsp.utimes(lock, old, old)
+    await expect(withFileLock(lock, async () => 'recovered', { staleMs: 1_000, timeoutMs: 100 })).resolves.toBe('recovered')
+    expect(fs.existsSync(lock)).toBe(false)
+  })
+
+  it('存活 PID 的心跳只超过 staleMs、尚在宽限期内时不接管', async () => {
+    const lock = path.join(root, 'delayed-heartbeat.lock')
+    const owner = `${process.pid} delayed-owner\n`
+    await fsp.writeFile(lock, owner)
+    const old = new Date(Date.now() - 1_500)
+    await fsp.utimes(lock, old, old)
+    await expect(withFileLock(lock, async () => 'never', { staleMs: 1_000, timeoutMs: 50 })).rejects.toThrow('Timed out')
+    expect(await fsp.readFile(lock, 'utf8')).toBe(owner)
+  })
+
+  it.each([false, true])('关闭句柄失败仍释放锁并保留操作结果（操作失败：%s）', async fails => {
+    const lock = path.join(root, 'close-error.lock')
+    const closeError = new Error('close failed')
+    const operationError = new Error('operation failed')
+    const open = fsp.open.bind(fsp)
+    vi.spyOn(fsp, 'open').mockImplementationOnce(async (...args) => {
+      const handle = await open(...args)
+      const close = handle.close.bind(handle)
+      vi.spyOn(handle, 'close').mockImplementationOnce(async () => {
+        await close()
+        throw closeError
+      })
+      return handle
+    })
+    const result = withFileLock(lock, async () => {
+      if (fails) throw operationError
+      return 'operation result'
+    })
+    if (fails) await expect(result).rejects.toBe(operationError)
+    else await expect(result).resolves.toBe('operation result')
+    expect(fs.existsSync(lock)).toBe(false)
+    expect(logWarn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'fs.file_lock.close_failed', error: closeError }))
+  })
+
   it('多个等待者同时回收同一残留锁时，只有一个进入操作', async () => {
     const lock = path.join(root, 'stale.lock')
     await fsp.writeFile(lock, 'abandoned')

@@ -5,14 +5,14 @@ import { createMainLogger } from '../logging/main-logger'
 
 /*
  * 跨进程文件锁：同一份数据可能同时被正式窗口与无窗口助手进程写入，进程内的串行执行器挡不住，
- * 用独占创建的锁文件互斥。持有者心跳续期，过期且进程已退出才接管。
+ * 用独占创建的锁文件互斥。持有者心跳续期；进程退出或心跳长期停止时接管。
  * 图片编辑器文档仓库与通用文档仓库共用这一份实现。
  */
 
 export interface FileLockOptions {
   /** 等待锁的最长时间。 */
   timeoutMs?: number
-  /** 心跳超过此时长且持有进程已退出时才回收。 */
+  /** 进程退出后的心跳过期时长；存活 PID 另有三倍宽限期，避免 PID 复用永久占锁。 */
   staleMs?: number
   /** 超时错误信息。 */
   timeoutMessage?: string
@@ -20,6 +20,9 @@ export interface FileLockOptions {
 
 const DEFAULT_TIMEOUT_MS = 5_000
 const DEFAULT_STALE_MS = 30_000
+// 心跳每 staleMs/3 一次：允许连续错过 9 次（默认 90 秒）再忽略 PID 存活状态。
+// 这是调度延迟的宽限，不是操作时长上限；长操作应一直续期。
+const LIVE_PID_STALE_MULTIPLIER = 3
 const RETRY_DELAY_MS = 10
 const logger = createMainLogger('main.fs.file_lock')
 
@@ -42,9 +45,10 @@ async function readOwner(lockPath: string): Promise<string | null> {
 async function removeStale(lockPath: string, staleMs: number): Promise<void> {
   try {
     const before = await fsp.stat(lockPath)
-    if (Date.now() - before.mtimeMs <= staleMs) return
+    const heartbeatAge = Date.now() - before.mtimeMs
+    if (heartbeatAge <= staleMs) return
     const owner = await readOwner(lockPath)
-    if (owner === null || ownerAlive(owner)) return
+    if (owner === null || (heartbeatAge <= staleMs * LIVE_PID_STALE_MULTIPLIER && ownerAlive(owner))) return
     // 回收者也互斥；回收进程若中途退出，其锁仍由同一规则回收。
     // 只在已确认残留时拿此锁，不把普通持锁工作串进另一个等待队列。
     await withFileLock(`${lockPath}.reaper`, async () => {
@@ -53,7 +57,7 @@ async function removeStale(lockPath: string, staleMs: number): Promise<void> {
       const stalePath = `${lockPath}.stale-${randomUUID()}`
       await fsp.rename(lockPath, stalePath)
       await fsp.rm(stalePath)
-      logger.warn('已回收退出进程留下的文件锁', { event: 'fs.file_lock.reclaimed', context: { lockPath } })
+      logger.warn('已回收心跳过期的残留文件锁', { event: 'fs.file_lock.reclaimed', context: { lockPath, heartbeatAge } })
     }, { staleMs })
   } catch (error) {
     if (errorCode(error) !== 'ENOENT') throw error
@@ -105,7 +109,9 @@ export async function withFileLock<T>(
   } finally {
     clearInterval(timer)
     await heartbeat
-    await lock.close()
+    await lock.close().catch((error: unknown) => {
+      logger.warn('文件锁句柄关闭失败，继续按持有者释放', { event: 'fs.file_lock.close_failed', context: { lockPath }, error })
+    })
     if (await readOwner(lockPath) === owner) await fsp.rm(lockPath, { force: true })
     else logger.warn('文件锁持有者已变化，保留当前锁', { event: 'fs.file_lock.owner_changed', context: { lockPath } })
   }
