@@ -5,7 +5,8 @@ import path from 'node:path'
 import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../../protocol'
 import { getProgramStoreDir } from '../appPaths'
 import { getDb } from '../db'
-import { databaseLocations } from '../db-locations'
+import { databaseLocations, databaseLocationContext } from '../db-locations'
+import { createLocationCodec } from '../../../../src/core/storage/locationCodec'
 import { PROJECT_ASSET_MISSING } from '../documents/index-store'
 import { createMainLogger } from '../logging'
 import { inspectMedia, normalizeAssetPath } from './mediaInspection'
@@ -238,7 +239,25 @@ export async function inspectAsset(id: string): Promise<AssetDto> {
 }
 
 export async function inspectAssets(ids: string[]): Promise<AssetDto[]> { return await Promise.all(ids.map(inspectAsset)) }
-export async function relocateAsset(id: string, nextPath: string): Promise<AssetDto> { const filePath = normalizeAssetPath(nextPath); invalidateAssetInspection(id); getDb().prepare(`UPDATE assets SET file_path=?, inspection_status='pending', inspection_error=NULL, content_identity=NULL, updated_at=? WHERE id=?`).run(encodeAssetPath(filePath), Date.now(), id); return await inspectAsset(id) }
+export async function relocateAsset(id: string, nextPath: string): Promise<AssetDto> {
+  getAsset(id)
+  let resolved = nextPath
+  let missingProject = false
+  if (nextPath.startsWith('henji:') || nextPath.startsWith('henji-media:')) {
+    const codec = createLocationCodec(databaseLocationContext(getDb()))
+    const decoded = codec.decode(codec.encode(nextPath).stored)
+    if (decoded.unresolved && decoded.unresolved.reason !== 'unknown_project') throw new Error('素材位置无效')
+    resolved = decoded.value
+    missingProject = decoded.unresolved?.reason === 'unknown_project'
+  }
+  // An undo may restore a project location which is still unavailable. Keep its
+  // exact location string so restoring the project can repair this asset later.
+  const filePath = missingProject ? resolved : normalizeAssetPath(resolved)
+  invalidateAssetInspection(id)
+  getDb().prepare('UPDATE assets SET file_path=?, inspection_status=?, inspection_error=?, content_identity=NULL, updated_at=? WHERE id=?')
+    .run(encodeAssetPath(filePath), missingProject ? 'missing' : 'pending', missingProject ? PROJECT_ASSET_MISSING : null, Date.now(), id)
+  return await inspectAsset(id)
+}
 export function updateAsset(input: UpdateAssetRequest): AssetDto { getDb().prepare('UPDATE assets SET display_name=?, updated_at=? WHERE id=?').run(input.displayName.trim(), Date.now(), input.id); return getAsset(input.id) }
 export function deleteAsset(id: string): void {
   invalidateAssetInspection(id)

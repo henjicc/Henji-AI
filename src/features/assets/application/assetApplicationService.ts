@@ -13,6 +13,7 @@ import {
   updateAsset,
   renameAssetLibrary,
   restoreAssetLibrary,
+  relocateAsset,
 } from '@/commands/assetLibrary'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import type { AssetQueryInput, AssetRecord } from '@/platform/contracts/assetLibrary'
@@ -20,10 +21,11 @@ import type { AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 
 function publicAsset(asset: AssetRecord): Record<string, unknown> {
   const { filePath: _filePath, thumbnailPath: _thumbnailPath, contentIdentity: _contentIdentity, ...safe } = asset
-  return safe
+  return { ...safe, location: asset.filePath.startsWith('henji:') ? asset.filePath : asset.displayUrl }
 }
 
 export interface AssetMutationSnapshot {
+  filePath: string
   displayName: string
   tags: string[]
   libraryIds: string[]
@@ -42,6 +44,7 @@ export const assetApplicationService = {
   async readMutationSnapshot(assetId: string): Promise<AssetMutationSnapshot> {
     const asset = await inspectAsset(assetId)
     return {
+      filePath: asset.filePath,
       displayName: asset.displayName,
       tags: [...asset.tags],
       libraryIds: [...asset.libraryIds],
@@ -93,6 +96,14 @@ export const assetApplicationService = {
   async rename(assetId: string, displayName: string): Promise<Record<string, unknown>> {
     const asset = await updateAsset(assetId, displayName)
     return { assetId: asset.id, displayName: asset.displayName, revision: asset.updatedAt }
+  },
+
+  async relocate(assetId: string, location: string): Promise<AssetRecord> {
+    const asset = await relocateAsset(assetId, location)
+    if (useAssetLibraryStore.getState().selectedAsset?.id === assetId) {
+      useAssetLibraryStore.getState().setSelectedAsset(asset)
+    }
+    return asset
   },
 
   async addToLibrary(libraryId: string, assetId: string): Promise<Record<string, unknown>> {

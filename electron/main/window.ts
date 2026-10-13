@@ -25,6 +25,8 @@ let mainWindow: BrowserWindow | null = null
 export interface CreateWindowOptions {
   headless?: boolean
   presentation?: WindowPresentationMode
+  /** Show the native shell first; admit the renderer only after startup I/O settles. */
+  beforeRendererLoad?: () => Promise<void>
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -62,7 +64,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   })
   mainWindow = win
 
-  bindWindowStateEvents(win)
+  const openSession = bindWindowStateEvents(win, Boolean(options.beforeRendererLoad))
   // 只有剪辑系统浮窗的受控 about:blank 请求放行，其余开窗一律拒绝。
   const videoEditPopouts = createVideoEditPopoutHost(win)
   win.webContents.setWindowOpenHandler(details => videoEditPopouts.handleWindowOpen(details) ?? { action: 'deny' })
@@ -97,7 +99,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
 
   if (!headless) win.once('ready-to-show', () => {
     if (win.isDestroyed()) return
-    presentWindow(win, presentation)
+    if (!options.beforeRendererLoad) presentWindow(win, presentation)
     setTimeout(() => {
       if (!win.isDestroyed()) void warmupMediaImportPipeline()
     }, 1500)
@@ -115,7 +117,8 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
     win.setMenuBarVisibility(false)
   }
 
-  if (!win.isDestroyed()) {
+  const loadRenderer = (): void => {
+    if (win.isDestroyed()) return
     const developmentLaunch = resolveDevelopmentLaunchQuery()
     developmentLaunch.warnings.forEach((message) => {
       logger.warn(message, { event: 'window.development_launch.invalid' })
@@ -132,6 +135,22 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
       void win.loadURL(rendererUrl.toString())
     }
   }
+
+  if (options.beforeRendererLoad) {
+    if (!headless) presentWindow(win, presentation)
+    // Yield to the native window before starting the census. No renderer can
+    // create unsaved media references while this gate is closed.
+    setImmediate(() => {
+      void options.beforeRendererLoad!().then(() => {
+        if (win.isDestroyed()) return
+        openSession()
+        loadRenderer()
+      }).catch(error => {
+        logger.error('启动准备失败', { event: 'window.startup.failed', error })
+        if (!win.isDestroyed()) win.destroy()
+      })
+    })
+  } else loadRenderer()
 
   return win
 }

@@ -10,6 +10,7 @@ const commands = vi.hoisted(() => ({
   listAssetLibraries: vi.fn(),
   listAssetTags: vi.fn(),
   queryAssets: vi.fn(),
+  relocateAsset: vi.fn(),
   removeAssetFromLibrary: vi.fn(),
   setAssetTags: vi.fn(),
 }))
@@ -22,6 +23,10 @@ import { assetApplicationService } from './assetApplicationService'
 import { deleteAssetsBatch } from './assetBatchOperations'
 import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandlers'
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
+import { ApplicationControlExecutionEngine, ApplicationReflectionRegistry, type ApplicationExecutionContext } from '@/core/application-control'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
+import { createAssetReflectionRegistrations } from './assetReflection'
+import { AssetMutationExecutor } from './assetMutationExecutor'
 
 const asset = {
   id: 'asset-1',
@@ -49,6 +54,53 @@ const asset = {
 }
 
 describe('asset application service', () => {
+  it('位置通过正式描述、通用属性事务和读回生效，撤销恢复失联位置', async () => {
+    let revision = 0
+    const original = 'henji://project/lost/materials/image.png'
+    let current = { ...asset, filePath: original, displayUrl: '' }
+    commands.inspectAsset.mockImplementation(async () => current)
+    commands.relocateAsset.mockImplementation(async (_id: string, location: string) => {
+      current = { ...current, filePath: location, displayUrl: location.startsWith('henji:') ? '' : location }
+      return current
+    })
+    const registry = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
+    createAssetReflectionRegistrations(() => revision).forEach(item => registry.register(item))
+    const engine = new ApplicationControlExecutionEngine(registry)
+    const executor = new AssetMutationExecutor({ readRevision: () => revision, bumpRevision: () => { revision++ } })
+    engine.registerMutationExecutor(executor)
+    const context: ApplicationExecutionContext = { requestId: 'asset-location', exposure: 'assistant', permissions: new Set(['assets:read', 'assets:write']), acceptedDataClasses: new Set(['C0', 'C1']) }
+    const descriptor = registry.describe({ entityTypes: ['asset'] }, context).properties.find(item => item.id === 'asset.location')
+    expect(descriptor).toMatchObject({ requiredPermissions: { write: ['assets:write'] } })
+    expect(executor.propertyOperations.get('asset.location')).toEqual(new Set(['set']))
+    const location = 'henji-media://local/%2Fmedia%2Fnew.png'
+    const request = { summary: '重新定位素材', transactionMode: 'atomic' as const, steps: [{ kind: 'mutation' as const, target: { kind: 'asset', id: asset.id }, entityType: 'asset', expectedRevisions: { assets: 0 }, mutations: [{ propertyId: 'asset.location', operation: 'set' as const, value: location }] }] }
+    await expect(engine.plan(request, { ...context, permissions: new Set(['assets:read']) })).rejects.toThrow()
+    const invalidPlan = await engine.plan({ ...request, steps: [{ ...request.steps[0], mutations: [{ propertyId: 'asset.location', operation: 'set', value: 'https://example.com/image.png' }] }] }, context)
+    expect((await engine.commit({ planRef: invalidPlan.planRef, expectedRevisions: { assets: 0 }, idempotencyKey: 'asset-location-invalid-01' }, context)).status).toBe('failed')
+    expect(current.filePath).toBe(original)
+    expect(commands.relocateAsset).not.toHaveBeenCalled()
+    const plan = await engine.plan(request, context)
+    const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { assets: 0 }, idempotencyKey: 'asset-location-change-01' }, context)
+    if (result.status !== 'completed') throw new Error(JSON.stringify(result))
+    const provider = createAssetReflectionRegistrations(() => revision).find(item => item.entity.id === 'asset')!.provider!
+    expect((await provider.readEntity({ kind: 'asset', id: asset.id }, {})).properties['asset.location']).toBe(location)
+    expect(current.filePath).toBe(location)
+    const undo = await engine.undo({ undoRef: result.undoRef!, expectedRevisions: { assets: revision }, idempotencyKey: 'asset-location-undo-01' }, context)
+    expect(undo.status).toBe('completed')
+    expect(current.filePath).toBe(original)
+    expect((await provider.readEntity({ kind: 'asset', id: asset.id }, {})).properties['asset.location']).toBe(original)
+  })
+  it('重新定位复用正式命令并刷新选中素材，失败保持选择', async () => {
+    useAssetLibraryStore.getState().setSelectedAsset(asset)
+    const next = { ...asset, filePath: '/media/new.png', displayUrl: 'henji-media://local/%2Fmedia%2Fnew.png' }
+    commands.relocateAsset.mockResolvedValueOnce(next)
+    await assetApplicationService.relocate(asset.id, next.filePath)
+    expect(commands.relocateAsset).toHaveBeenCalledWith(asset.id, next.filePath)
+    expect(useAssetLibraryStore.getState().selectedAsset).toEqual(next)
+    commands.relocateAsset.mockRejectedValueOnce(new Error('位置无效'))
+    await expect(assetApplicationService.relocate(asset.id, 'bad')).rejects.toThrow('位置无效')
+    expect(useAssetLibraryStore.getState().selectedAsset).toEqual(next)
+  })
   it('删除由主进程核验；不存在的素材不能再用严格检查接口读回', async () => {
     commands.inspectAssets.mockRejectedValue(new Error('资产不存在'))
     expect(await assetApplicationService.delete(asset.id)).toMatchObject({ verification: { verified: true } })

@@ -28,6 +28,7 @@ export interface AssetMutationDependencies {
 const DISPLAY_NAME_PROPERTY = `${ASSET_ENTITY_TYPES.asset}.display_name`
 const TAGS_PROPERTY = `${ASSET_ENTITY_TYPES.asset}.tags`
 const LIBRARY_REFS_PROPERTY = `${ASSET_ENTITY_TYPES.asset}.library_refs`
+const LOCATION_PROPERTY = `${ASSET_ENTITY_TYPES.asset}.location`
 
 interface AssetUndoRecord {
   assetId: string
@@ -43,6 +44,9 @@ async function restoreSnapshot(
   propertyIds: ReadonlySet<string>,
 ): Promise<void> {
   const failures: unknown[] = []
+  if (propertyIds.has(LOCATION_PROPERTY)) {
+    try { await assetApplicationService.relocate(assetId, snapshot.filePath) } catch (error) { failures.push(error) }
+  }
   if (propertyIds.has(DISPLAY_NAME_PROPERTY)) {
     try { await assetApplicationService.rename(assetId, snapshot.displayName) } catch (error) { failures.push(error) }
   }

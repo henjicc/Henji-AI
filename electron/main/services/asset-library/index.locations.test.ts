@@ -15,7 +15,7 @@ vi.mock('../media/rootGrants', () => ({ persistMediaRootGrant: vi.fn(), restoreP
 vi.mock('../image-editor-v3/resource-media-url', () => ({ IMAGE_EDITOR_V3_MEDIA_HOST: 'image-editor-v3', resolveImageEditorV3ResourceMediaUrl: vi.fn() }))
 vi.mock('./mediaInspection', () => ({ inspectMedia: vi.fn(), normalizeAssetPath: (value: string) => value }))
 vi.mock('./thumbnailService', () => ({ ensureAssetThumbnail: vi.fn() }))
-import { deleteAsset, getAssetFilePath, inspectAsset, queryAssets } from './index'
+import { deleteAsset, getAssetFilePath, inspectAsset, queryAssets, relocateAsset } from './index'
 
 let fixture: ReturnType<typeof createCountedSqlite>
 let catalog: DocumentIndexStore
@@ -30,6 +30,16 @@ beforeEach(() => {
   insert.run('normal', '正常素材', path.resolve('normal.png'))
 })
 afterEach(() => fixture.native.close())
+
+it('重新定位接受现有本地媒体引用，撤销可恢复失联项目原串，拒绝越界位置', async () => {
+  catalog.removeProject(project.id)
+  const replacement = path.resolve('relocated.png')
+  await expect(relocateAsset('lost', `henji-media://local/${encodeURIComponent(replacement)}`)).resolves.toMatchObject({ filePath: replacement })
+  await relocateAsset('lost', 'henji://project/project_1/materials/a.png')
+  expect(fixture.db.prepare('SELECT file_path, inspection_status FROM assets WHERE id=?').get('lost')).toMatchObject({ file_path: 'henji://project/project_1/materials/a.png', inspection_status: 'missing' })
+  await expect(relocateAsset('lost', 'henji://project/project_1/../escape.png')).rejects.toThrow()
+  expect(fixture.db.prepare('SELECT file_path FROM assets WHERE id=?').get('lost')).toMatchObject({ file_path: 'henji://project/project_1/materials/a.png' })
+})
 
 it('未登记项目不会让整页查询或严格检查失败，也不向媒体消费者提供未解码串', async () => {
   fixture.db.prepare('DELETE FROM document_index_projects').run()

@@ -10,9 +10,11 @@ import { resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } fro
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(), inspect: vi.fn(), readCode: vi.fn(), touch: vi.fn(), libraries: vi.fn(), tags: vi.fn(), t: (key: string) => key,
+  relocate: vi.fn(), openDialog: vi.fn(),
   settings: { assetCardSize: 160, assetThumbnailFit: 'cover', setAssetCardSize: vi.fn(), setAssetThumbnailFit: vi.fn() },
 }))
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: mocks.t }) }))
+vi.mock('@/platform/desktopApi', async importOriginal => ({ ...await importOriginal<typeof import('@/platform/desktopApi')>(), openDialog: mocks.openDialog }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (selector: (state: typeof mocks.settings) => unknown) => selector(mocks.settings) }))
 vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: () => ({ status: 'idle' }) }))
@@ -28,6 +30,7 @@ vi.mock('@/commands/assetLibrary', () => ({
   addAssetToLibrary: vi.fn(), createAssetLibrary: vi.fn(), deleteAsset: vi.fn(), deleteAssetLibrary: vi.fn(),
   removeAssetFromLibrary: vi.fn(), renameAssetLibrary: vi.fn(), setAssetTags: vi.fn(), updateAsset: vi.fn(),
   inspectAsset: vi.fn(), inspectAssets: mocks.inspect, inspectAssetLibrary: vi.fn(), restoreAssetLibrary: vi.fn(),
+  relocateAsset: mocks.relocate,
 }))
 
 const asset: AssetRecord = {
@@ -47,6 +50,24 @@ beforeEach(() => {
   HTMLElement.prototype.scrollTo = (_optionsOrX?: ScrollToOptions | number, _y?: number): void => undefined
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+it('失联素材从菜单重新定位后刷新正式列表与当前选择', async () => {
+  const missing: AssetRecord = { ...asset, inspectionStatus: 'missing', filePath: 'henji://project/lost/materials/code.henji-code', displayUrl: '' }
+  mocks.query.mockResolvedValue({ items: [missing], total: 1, page: 1, pageSize: 30 })
+  mocks.openDialog.mockResolvedValue('/media/recovered.henji-code')
+  mocks.relocate.mockImplementation(async () => {
+    mocks.query.mockResolvedValue({ items: [asset], total: 1, page: 1, pageSize: 30 })
+    return asset
+  })
+  useAssetLibraryStore.setState({ selectedAsset: missing })
+  render(<AssetLibrarySurface mode="floating" />)
+  await screen.findByText('库中代码')
+  fireEvent.contextMenu(document.querySelector('[data-asset-id="library-code"]')!)
+  fireEvent.click(await screen.findByRole('button', { name: 'assetLibrary.relocate' }))
+  await waitFor(() => expect(mocks.relocate).toHaveBeenCalledWith(asset.id, '/media/recovered.henji-code'))
+  await waitFor(() => expect(mocks.query.mock.calls.length).toBeGreaterThan(1))
+  expect(useAssetLibraryStore.getState().selectedAsset?.inspectionStatus).toBe('ready')
+})
 
 describe('资产库代码类型入口', () => {
   it('侧栏代码筛选沿原store和查询，选择系统类型退出当前分类', async () => {
