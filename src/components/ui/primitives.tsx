@@ -582,7 +582,6 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
     return (
     <input
       ref={ref}
-
       type="range"
       className={`h-6 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
       [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
@@ -593,7 +592,7 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
       ${UI_RANGE_TRACK_TONE_CLASS[trackTone]}
       ${className}`}
       {...props}
-        {...rowLabelling}
+      {...rowLabelling}
  />
     );
   }
@@ -624,7 +623,6 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       type="button"
       role="checkbox"
       aria-checked={checked}
-
       className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors duration-120 ${UI_FIELD_DISABLED_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${
         checked
           ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
@@ -637,7 +635,7 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
         }
       }}
       {...props}
-        {...rowLabelling}
+      {...rowLabelling}
  >
       <Check className={`${UI_ICON_SIZE_CLASS.sm}`} />
     </button>
@@ -671,11 +669,10 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
           type="button"
           role="switch"
           aria-checked={checked}
-
           className={`relative inline-grid grid-cols-2 items-stretch rounded-lg bg-gap/60 p-0.5 font-medium transition-colors duration-120 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${sizeClass} ${className}`}
           onClick={handleClick}
           {...props}
-        {...rowLabelling}
+          {...rowLabelling}
  >
           <span
             aria-hidden="true"

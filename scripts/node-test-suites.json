@@ -2,6 +2,7 @@
   "fast": [
     "scripts/check-dead-code.test.cjs",
     "scripts/check-dependency-graph.test.cjs",
+    "scripts/check-icon-tokens.test.cjs",
     "scripts/check-ipc-contract.test.cjs",
     "scripts/check-media-recycle.test.cjs",
     "scripts/check-persistence-compat.test.cjs",
@@ -45,15 +46,16 @@
     "scripts/lib/uiInspectionVideoEditExportDialog.test.cjs",
     "scripts/lib/uiInspectionVideoEditMonitorFixtures.test.cjs",
     "scripts/lib/uiResidueRules.test.cjs",
-    "scripts/lib/uiSurfaceGrammar.test.cjs",
     "scripts/lib/uiReviewMetrics.test.cjs",
     "scripts/lib/uiReviewSteps.test.cjs",
     "scripts/lib/uiReviewSummary.test.cjs",
+    "scripts/lib/uiSurfaceGrammar.test.cjs",
     "scripts/lib/undefinedColorClasses.test.cjs",
     "scripts/lib/validationScripts.test.cjs",
     "scripts/lib/videoEditLayoutRestart.test.cjs",
     "scripts/lib/withUnthrottledBenchmark.test.cjs",
-    "scripts/lib/xyflowStoreSubscriptions.test.cjs"
+    "scripts/lib/xyflowStoreSubscriptions.test.cjs",
+    "scripts/mcp-paid-generation-check.test.cjs"
   ],
   "native": [
     "scripts/lib/nativePersistenceRunner.test.cjs"

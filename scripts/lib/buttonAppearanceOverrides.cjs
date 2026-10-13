@@ -54,6 +54,13 @@ const CHECKED_ATTRIBUTES = {
   UiColorInput: 'className',
   UiCheckbox: 'className',
   UiPanel: 'className',
+  // 4.5/4.6：状态反馈与记录项，className 只放布局；颜色、边框、分隔由组件参数决定
+  UiSkeleton: 'className',
+  UiFieldMessage: 'className',
+  UiInlineStatus: 'className',
+  UiRecordList: 'className',
+  UiRecordItem: 'className',
+  UiViewerShell: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };
@@ -97,13 +104,15 @@ const RULE_E_EXEMPT = {
   ParamList: '参数组合布局，不是固定高度字段；字段通过 ParamField 复用共享组件。',
   ParamField: 'schema 字段组合入口，没有可覆盖共享控件的对外 className。',
   UiVirtualList: '长列表滚动容器，没有对外 className；行内控件由各自共享组件按规则 E 检查。',
+  UiReadout: '只开放 size/tone 语义参数，没有对外 className。',
+  UiSpinner: '只开放 size/tone/active 语义参数，没有对外 className。',
   UiVirtualGrid: '长网格滚动容器，没有对外 className；格内控件由各自共享组件按规则 E 检查。',
 };
 /** 内容随网格拉伸或随内容撑高的条目类组件：只禁止固定高度。 */
 const ITEM_COMPONENTS = new Set(['UiOptionButton', 'UiChipButton', 'UiNavButton']);
 const ITEM_FLEXIBLE_HEIGHT = /^(?:h-full|h-auto|min-h-.+|max-h-.+)$/;
-/** 多行文本框没有高度档：高度（行数、铺满）是布局，只禁外观。 */
-const TEXT_AREA_COMPONENTS = new Set(['UiTextArea', 'UiTextAreaField']);
+/** 没有高度档的组件：高度（行数、铺满、占位）是布局，只禁外观。多行文本框，以及 4.5/4.6 的容器与状态组件。 */
+const TEXT_AREA_COMPONENTS = new Set(['UiTextArea', 'UiTextAreaField', 'UiSkeleton', 'UiFieldMessage', 'UiInlineStatus', 'UiRecordList', 'UiRecordItem', 'UiViewerShell']);
 
 const TEXT_NON_COLOR = new Set([
   'text-left', 'text-center', 'text-right', 'text-justify', 'text-start', 'text-end',
