@@ -70,6 +70,7 @@ export function registerMcpIpc(): void {
   const identity = (value: unknown): { id: string } => z.object({ id: z.string().uuid() }).strict().parse(value)
   registerIpcHandler('mcp:update', value => z.object({ id: z.string().uuid(), access: mcpDefaultAccessSchema }).strict().parse(value), ({ id, access }) => {
     const connection = connections.update(id, access)
+    server.accessChanged(id)
     logger.info('已修改外部连接权限', { event: 'mcp.update.completed', context: { callerId: id, ...access } })
     return connection
   }, trusted)

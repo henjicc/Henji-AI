@@ -1,6 +1,41 @@
 import { z } from 'zod'
 import { applicationRefSchema } from '../application-control/identifiers'
 import { agentAttachmentsSchema, type AgentAttachment } from './attachments'
+import { HOST_ANNOTATION_PREVIEW_CHARACTERS, type HostContextSnapshot } from '../application-control/hostContracts'
+
+export const EMBEDDED_CONTEXT_MAX_CHARACTERS = 16000
+/** 高频宿主摘要只含首段；完整选区随独立快照保存，标注正文通过实体读取。 */
+export function buildEmbeddedPromptContext(snapshot: HostContextSnapshot): string {
+  const context = { workspace: snapshot.workspace, canvas: snapshot.canvas,
+    surface: snapshot.surface ? { ...snapshot.surface, selectedRefs: [...snapshot.surface.selectedRefs ?? []] } : undefined,
+    ...(snapshot.videoEdit ? { videoEdit: { ...snapshot.videoEdit,
+      selectedClipRefs: [...snapshot.videoEdit.selectedClipRefs], targetTrackRefs: [...snapshot.videoEdit.targetTrackRefs],
+      openAnnotations: { ...snapshot.videoEdit.openAnnotations, items: snapshot.videoEdit.openAnnotations.items.map(item => ({ ...item,
+        text: item.text.slice(0, HOST_ANNOTATION_PREVIEW_CHARACTERS), ...(item.text.length > HOST_ANNOTATION_PREVIEW_CHARACTERS ? { truncated: true } : {}) })) },
+    } } : {}),
+    read: '标注完整正文用 read_application_entity 按 ref 读取；完整选区用 read_assistant_context 按发送时选区引用分页读取。',
+    selectionCounts: { selectedRefs: snapshot.surface?.selectedRefs?.length ?? 0,
+      selectedClipRefs: snapshot.videoEdit?.selectedClipRefs.length ?? 0, targetTrackRefs: snapshot.videoEdit?.targetTrackRefs.length ?? 0 },
+    truncated: false,
+  }
+  let serialized = JSON.stringify(context)
+  for (const items of [context.surface?.selectedRefs, context.videoEdit?.selectedClipRefs, context.videoEdit?.targetTrackRefs, context.videoEdit?.openAnnotations.items]) {
+    while (serialized.length > EMBEDDED_CONTEXT_MAX_CHARACTERS && items?.length) {
+      items.pop(); context.truncated = true; serialized = JSON.stringify(context)
+    }
+  }
+  if (serialized.length > EMBEDDED_CONTEXT_MAX_CHARACTERS && context.videoEdit) {
+    delete context.videoEdit.selectedCodeElement; delete context.videoEdit.elementOverrides; delete context.videoEdit.currentStyleKit
+    context.truncated = true; serialized = JSON.stringify(context)
+  }
+  if (serialized.length > EMBEDDED_CONTEXT_MAX_CHARACTERS) throw new Error('当前界面摘要过长，请缩小选区后重试。')
+  return serialized
+}
+
+/** 界面与执行边界共用真实传输支持的输入模态。 */
+export function embeddedInputModalities(capabilities: Partial<Record<AgentAttachment['modality'], boolean>>, api: string): AgentAttachment['modality'][] {
+  return (['image', 'video', 'audio'] as const).filter(type => capabilities[type] && !(api === 'openai-responses' && type === 'audio'))
+}
 
 export const embeddedIntentRequestSchema = z.object({
   documentRef: applicationRefSchema.extend({ kind: z.enum(['video_edit.document', 'image_edit.document']) }),
@@ -23,7 +58,7 @@ export const embeddedAgentPromptSchema = z.object({
   text: z.string().trim().min(1).max(32000),
   model: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }).strict(),
   access: z.enum(['read', 'write', 'full']),
-  context: z.string().max(16000),
+  context: z.string().max(EMBEDDED_CONTEXT_MAX_CHARACTERS),
   selectionSnapshot: embeddedSelectionSnapshotSchema.optional(),
   attachments: agentAttachmentsSchema.optional(),
   delivery: z.enum(['wait', 'interrupt']).optional(),

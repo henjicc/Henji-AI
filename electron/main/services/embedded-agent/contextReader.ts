@@ -67,7 +67,7 @@ export function contextReader(manager: SessionManager): ToolDefinition {
       if (source === undefined) throw new Error('这份引用不在当前对话中。请使用本对话摘要返回的 reference；不会重新执行原操作。')
       if (offset > source.length) throw new Error(`分页起点超出资料长度（${source.length}），请使用上一页的 nextOffset。`)
       const envelope = (data: string | string[]) => ({ reference, offset, total: source!.length,
-        data, nextOffset: offset + data.length, hasMore: offset + data.length < source!.length })
+        nextOffset: offset + data.length, hasMore: offset + data.length < source!.length, data })
       let data: string | string[]
       if (typeof source === 'string') {
         data = fitText(source.slice(offset), part => estimateContextTokens(JSON.stringify(envelope(part))) <= 2000)

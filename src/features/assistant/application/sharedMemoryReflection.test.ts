@@ -2,6 +2,8 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 // @vitest-environment jsdom
 import { beforeEach, expect, it, vi } from 'vitest'
 import { applicationReflectionHandlers } from '../../application-control/capabilities/applicationReflectionAdapter'
+import { SharedMemoryExecutor } from './sharedMemoryReflection'
+import type { ApplicationPlannedStep } from '@/core/application-control'
 const memory = vi.hoisted(() => ({ content: '', enabled: true, revision: 1 }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ assistant: {
   getSharedMemory: async () => ({ ...memory }),
@@ -27,4 +29,11 @@ it('关闭记忆后通用事务不保存', async () => {
   memory.enabled = false
   await expect(change('不应写入')).rejects.toThrow()
   expect(memory.content).toBe('')
+})
+it('执行器不能用再次读取到的新版本替换计划中的旧基线', async () => {
+  memory.content = '其他人刚保存的偏好'; memory.revision = 2
+  const step = { kind: 'mutation', target: ref, entityType: ref.kind, expectedRevisions: { assistant_memory: 1 },
+    mutations: [{ propertyId: 'assistant.shared_memory.content', operation: 'set', value: '旧文本合并结果' }] } as Extract<ApplicationPlannedStep, { kind: 'mutation' }>
+  await expect(new SharedMemoryExecutor().apply(step)).rejects.toThrow('conflict')
+  expect(memory).toMatchObject({ content: '其他人刚保存的偏好', revision: 2 })
 })

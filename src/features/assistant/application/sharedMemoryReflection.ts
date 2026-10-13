@@ -47,7 +47,7 @@ export class SharedMemoryExecutor implements ApplicationMutationExecutor {
     const before = await read()
     const draft: { content?: string } = {}
     await applyWriterTable(writers, draft, step.mutations)
-    const after = await getPlatform().assistant.updateSharedMemory({ content: draft.content ?? before.content, expectedRevision: before.revision })
+    const after = await getPlatform().assistant.updateSharedMemory({ content: draft.content ?? before.content, expectedRevision: step.expectedRevisions.assistant_memory ?? before.revision })
     return { status: 'completed', resultingRevisions: revisions(after), directRefs: [ref],
       evidence: [{ kind: 'entity_state', target: ref, fact: '共享记忆已保存。', capturedAt: new Date().toISOString() }],
       undoToken: JSON.stringify({ content: before.content, expectedRevision: after.revision }) }

@@ -27,12 +27,18 @@ export class LocalMcpServer {
     private readonly onRejected: (info: { reason: 'invalid_token' }) => void = () => {}) {}
   get listening(): boolean { return this.http?.listening === true }
   get listeningPort(): number { return this.port }
+  accessChanged(callerId: string): void {
+    this.subscriptions?.publishTo(callerId, { kind: 'tools_list_changed' })
+    this.subscriptions?.publishTo(callerId, { kind: 'resources_list_changed' })
+  }
 
   async start(port: number): Promise<void> {
     if (this.http) throw new Error('服务已经启用，请先关闭再更换端口。')
     const subscriptions = new ApplicationResourceSubscriptions(id => this.connections.assertActive(id),
       (id, uri, signal) => readApplicationResource(new ApplicationToolDispatcher(this.connections, this.host, this.operations), id, uri, signal))
     this.subscriptions = subscriptions
+    const initialContext = this.host.getContext()
+    subscriptions.contextChanged(initialContext?.scopeRevisions ?? {}, initialContext?.resourceRevisions)
     const handler = createMcpHandler(context => {
       const callerId = context.authInfo?.clientId
       if (!callerId) throw new Error('调用者未获授权。')
@@ -63,8 +69,12 @@ export class LocalMcpServer {
       if (kind === 'catalog') {
         const current = directorySignature()
         if (current !== signature) { signature = current; handler.notify.toolsChanged() }
+        handler.notify.resourcesChanged()
+        subscriptions.refresh()
+      } else {
+        const context = this.host.getContext()
+        subscriptions.contextChanged(context?.scopeRevisions ?? {}, context?.resourceRevisions)
       }
-      handler.notify.resourcesChanged()
     })
     this.authorizationTimer = setInterval(() => {
       for (const [response, callerId] of this.active) {

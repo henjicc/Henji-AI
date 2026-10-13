@@ -3,15 +3,15 @@ import { installPaidApprovalTestBridge } from '@/tests/paidApprovalTestKit'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { StrictMode } from 'react'
-import { emptyEmbeddedAgentSnapshot } from '@/core/assistant/embeddedAgent'
+import { embeddedAgentPromptSchema, emptyEmbeddedAgentSnapshot } from '@/core/assistant/embeddedAgent'
 import { UiButton } from '@/components/ui'
 import { toModelPromptText, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { openAssistant, useAssistantUiStore } from '../store/assistantUiStore'
 
-const mocks = vi.hoisted(() => ({ complete: vi.fn(), prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn() }))
+const mocks = vi.hoisted(() => ({ complete: vi.fn(), prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn(), context: vi.fn() }))
 vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ applicationControl: mocks, embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
-vi.mock('../../application-control/hostContext/hostContext', () => ({ captureHostSelection: () => ({ capturedAt: "sent", selectedRefs: [], selectedClipRefs: [], targetTrackRefs: [] }), createHostContextSnapshot: () => ({ workspace: {}, project: {}, surface: {} }) }))
+vi.mock('../../application-control/hostContext/hostContext', () => ({ captureHostSelection: () => ({ capturedAt: "sent", selectedRefs: [], selectedClipRefs: [], targetTrackRefs: [] }), createHostContextSnapshot: mocks.context }))
 vi.mock('../conversation/useConversationAutoScroll', () => ({ useConversationAutoScroll: () => ({ scrollToBottom: vi.fn(), suspendFollowing: vi.fn() }) }))
 vi.mock('../conversation/AssistantComposer', () => ({ AssistantComposer: ({ onSubmit, disabled, value }: { onSubmit(text: string, attachments: []): void; disabled: boolean; value: PromptDocumentV1 }) =>
   <><div data-testid="draft">{toModelPromptText(value)}</div><UiButton disabled={disabled} onClick={() => onSubmit('第一条消息', [])}>发送</UiButton></> }))
@@ -24,6 +24,24 @@ beforeEach(() => {
   mocks.snapshot.value = emptyEmbeddedAgentSnapshot()
   mocks.models.mockResolvedValue([{ providerId: 'test', modelId: 'test', inputModalities: [] }])
   mocks.prompt.mockResolvedValue(undefined)
+  mocks.context.mockReturnValue({ workspace: {}, canvas: {}, surface: {} })
+})
+it('长标注与满额选区发送仍满足 IPC 上限并保留完整数量和读取指引', async () => {
+  const refs = (count: number) => Array.from({ length: count }, (_, i) => `video_edit.clip:${'d'.repeat(200)}:${i}`)
+  const snapshot = { workspace: { id: 'videoEdit' }, canvas: {}, surface: { selectedRefs: refs(32) }, videoEdit: {
+    selectedClipRefs: refs(48), targetTrackRefs: refs(32),
+    openAnnotations: { count: 12, items: Array.from({ length: 12 }, (_, i) => ({ id: String(i), ref: `annotation:${i}`, text: '标注'.repeat(280) })) },
+  } }
+  mocks.context.mockReturnValue(snapshot)
+  render(<EmbeddedConversation />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(mocks.prompt).toHaveBeenCalledOnce())
+  const input = mocks.prompt.mock.calls[0][0]
+  expect(embeddedAgentPromptSchema.safeParse(input).success).toBe(true)
+  expect(JSON.parse(input.context).videoEdit.openAnnotations.count).toBe(12)
+  expect(JSON.parse(input.context).truncated).toBe(true)
+  expect(snapshot.surface.selectedRefs).toHaveLength(32)
 })
 it('首次发送不等待 IPC 或模型启动就出现气泡，只展示加载动画', async () => {
   mocks.snapshot.value = emptyEmbeddedAgentSnapshot()

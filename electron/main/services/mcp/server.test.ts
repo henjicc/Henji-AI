@@ -12,6 +12,7 @@ import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRe
 import { readApplicationMediaResource } from '../application-runtime/mediaResources'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { z } from 'zod'
+import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 
 vi.mock('../application-runtime/mediaResources', async importOriginal => ({
   ...await importOriginal<typeof import('../application-runtime/mediaResources')>(),
@@ -22,13 +23,14 @@ vi.mock('../application-runtime/mediaResources', async importOriginal => ({
 
 const closers: Array<() => Promise<void>> = []
 afterEach(async () => { for (const close of closers.reverse()) await close(); closers.length = 0 })
-async function fixture(options: { ready?: boolean; pending?: boolean; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
+async function fixture(options: { ready?: boolean; pending?: boolean; operations?: ApplicationOperationCoordinator; result?: Record<string, unknown>; reply?: (request: LocalHostRequest) => Record<string, unknown> } = {}) {
   let saved: string | null = null
   const connections = new McpConnections({ read: () => saved, write: (value) => { saved = value } })
   const first = connections.create('客户端甲')
   const second = connections.create('客户端乙')
   const host = new ApplicationHostBridge((id) => connections.assertActive(id))
   const calls: LocalHostRequest[] = []
+  let resourceRevision = 0
   const cancellations: string[] = []
   const registration = { rendererEpoch: randomUUID(), attachmentSequence: 1, ready: options.ready ?? true, domains: [{ id: 'settings', readable: true, writable: true, entities: [{ id: 'settings.registry', title: '设置', writableProperties: 1, creatable: false, removable: false }] }], tools: [] }
   const transportHost = {
@@ -39,12 +41,12 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
       calls.push(request)
       if (!options.pending) host.complete({ requestId: request.requestId, rendererEpoch: request.rendererEpoch, result: options.reply?.(request) ?? options.result ?? (request.capabilityId === 'list_application_entities'
         ? { ok: true, data: { refs: [{ kind: 'settings.registry', id: 'singleton' }], nextCursor: null, revisions: {} } }
-        : { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: {}, capturedAt: new Date(0).toISOString(), revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 } } }) })
+        : { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: { settings: resourceRevision }, capturedAt: new Date(0).toISOString(), revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 } } }) })
     },
   }
   host.register(registration, transportHost)
   const rejected = vi.fn()
-  const server = new LocalMcpServer(connections, host, undefined, undefined, undefined, rejected)
+  const server = new LocalMcpServer(connections, host, undefined, options.operations, undefined, rejected)
   await server.start(0)
   closers.push(() => server.stop())
   const url = () => `http://127.0.0.1:${server.listeningPort}/mcp`
@@ -56,11 +58,54 @@ async function fixture(options: { ready?: boolean; pending?: boolean; result?: R
     return { client, transport }
   }
   return { server, connections, first, second, host, calls, cancellations, url, connect, rejected,
+    resourceChange: () => { resourceRevision++; host.publishContext({ schemaVersion: 'application-host/v1', rendererEpoch: registration.rendererEpoch, revision: resourceRevision,
+      scopeRevisions: { navigation: 0, surface: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0, settings: resourceRevision },
+      workspace: { id: 'nodes', activeToolId: null }, canvas: { id: null, selectedNodeId: null }, generation: { commandReady: true },
+      assets: { view: 'closed', selectedAssetId: null }, uiReady: true, capturedAt: new Date().toISOString() }) },
     reconnect: () => host.register({ ...registration, rendererEpoch: randomUUID(), attachmentSequence: 2, ready: true }, transportHost),
     change: () => host.register(registration, transportHost) }
 }
 
 describe('本地 MCP 协议与边界', () => {
+  it('连接权限变更只通知所属流，重新发现可见新增写工具与撤回结果', async () => {
+    // 本用例只发现目录，不执行或登记写入；账本不能被意外调用。
+    const operations = new Proxy({} as ApplicationOperationCoordinator, { get() { throw new Error('目录发现不应调用操作账本') } })
+    const f = await fixture({ operations })
+    const a = await f.connect(); const b = await f.connect(f.second.id)
+    const toolsA = vi.fn(); const resourcesA = vi.fn(); const toolsB = vi.fn(); const resourcesB = vi.fn()
+    a.client.setNotificationHandler('notifications/tools/list_changed', toolsA)
+    a.client.setNotificationHandler('notifications/resources/list_changed', resourcesA)
+    b.client.setNotificationHandler('notifications/tools/list_changed', toolsB)
+    b.client.setNotificationHandler('notifications/resources/list_changed', resourcesB)
+    await a.client.listen({ toolsListChanged: true, resourcesListChanged: true })
+    await b.client.listen({ toolsListChanged: true, resourcesListChanged: true })
+    expect((await a.client.listTools()).tools.some(tool => tool.name === 'change_application_entities')).toBe(false)
+    f.connections.update(f.first.id, { allowWrites: true, allowDestructive: true, allowPaid: true })
+    f.server.accessChanged(f.first.id)
+    await vi.waitFor(() => { expect(toolsA).toHaveBeenCalledOnce(); expect(resourcesA).toHaveBeenCalledOnce() })
+    expect((await a.client.listTools()).tools.some(tool => tool.name === 'change_application_entities')).toBe(true)
+    f.connections.update(f.first.id, { allowWrites: false, allowDestructive: false, allowPaid: false })
+    f.server.accessChanged(f.first.id)
+    await vi.waitFor(() => expect(toolsA).toHaveBeenCalledTimes(2))
+    expect((await a.client.listTools()).tools.some(tool => tool.name === 'change_application_entities')).toBe(false)
+    expect(toolsB).not.toHaveBeenCalled(); expect(resourcesB).not.toHaveBeenCalled()
+  })
+  it('纯选区与导航上下文变化不广播资源目录也不授权回读', async () => {
+    const f = await fixture()
+    const { client } = await f.connect()
+    const updated = vi.fn(); const listed = vi.fn()
+    client.setNotificationHandler('notifications/resources/updated', updated)
+    client.setNotificationHandler('notifications/resources/list_changed', listed)
+    await client.listen({ resourcesListChanged: true, resourceSubscriptions: ['henji://entity/settings.registry/singleton'] })
+    const before = f.calls.length
+    for (let revision = 1; revision <= 10; revision++) f.host.publishContext({ schemaVersion: 'application-host/v1', rendererEpoch: 'fixture', revision,
+      scopeRevisions: { navigation: revision, surface: revision, generation: 0, canvas: 0, toolbox: 0, assets: 0 },
+      workspace: { id: 'nodes', activeToolId: null }, canvas: { id: null, selectedNodeId: null }, generation: { commandReady: true },
+      assets: { view: 'closed', selectedAssetId: null }, uiReady: true, capturedAt: new Date().toISOString() })
+    await new Promise(resolve => setTimeout(resolve, 350))
+    expect(f.calls).toHaveLength(before)
+    expect(updated).not.toHaveBeenCalled(); expect(listed).not.toHaveBeenCalled()
+  })
   it('真实 tools/list 保留媒体 mode，上下文与精简契约均披露当前版本', async () => {
     const f = await fixture({ result: { ok: true, data: { surface: { id: 'workspace.videoEdit', kind: 'workspace', focusedRef: null, selectedRefs: [] }, catalogRevision: 1, ready: true, revision: 0 } } })
     const { client } = await f.connect()
@@ -200,8 +245,9 @@ describe('本地 MCP 协议与边界', () => {
     })
     closers.push(async () => { subscriptionSpy.mockRestore() })
     const allowed = new Set<string>()
+    let resourceRevision = 0
     const f = await fixture({ reply: request => allowed.has(request.callerId)
-      ? { ok: true, data: { ref: request.input.ref, entityType: 'settings.registry', capturedAt: new Date(0).toISOString(), properties: { name: '可读' } } }
+      ? { ok: true, data: { ref: request.input.ref, entityType: 'settings.registry', capturedAt: new Date(0).toISOString(), properties: { name: '可读' }, revisions: { settings: resourceRevision } } }
       : { ok: false, error: { code: 'PERMISSION_DENIED', message: 'PERMISSION_DENIED:资源不可读取。' } } })
     allowed.add(f.first.id)
     const a = await f.connect()
@@ -217,7 +263,8 @@ describe('本地 MCP 协议与边界', () => {
     allowed.add(f.second.id)
     const subB = await b.client.listen({ resourceSubscriptions: [uri] })
     allowed.delete(f.first.id)
-    f.change()
+    resourceRevision++
+    f.resourceChange()
     await vi.waitFor(() => expect(eventsB).toEqual([uri]))
     expect(eventsA).toEqual([])
     await subA.close(); await subB.close()
@@ -237,6 +284,9 @@ describe('本地 MCP 协议与边界', () => {
     const subscription = await client.listen({ resourceSubscriptions: [uri] })
     expect(subscription.honoredFilter.resourceSubscriptions).toEqual([uri])
     f.change()
+    await new Promise(resolve => setTimeout(resolve, 350))
+    expect(updates).toEqual([])
+    f.resourceChange()
     await vi.waitFor(() => expect(updates).toContain(uri))
     await subscription.close()
     expect(await subscription.closed).toBe('local')
@@ -304,7 +354,7 @@ describe('本地 MCP 协议与边界', () => {
     const readOnlyTools = (await a.client.listTools()).tools
     expect(readOnlyTools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['read_application_entity', 'read_application_media', 'describe_application_contract']))
     expect(readOnlyTools.filter((tool) => tool.annotations?.readOnlyHint !== true)).toEqual([])
-    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, revision: 0, revisionEpoch: f.host.rendererEpoch, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, capturedAt: new Date(0).toISOString() } })
+    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, revision: 0, revisionEpoch: f.host.rendererEpoch, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: { settings: 0 }, capturedAt: new Date(0).toISOString() } })
     expect((await a.client.callTool({ name: 'change_application_entities', arguments: {} })).isError).toBe(true)
     expect(f.calls).toHaveLength(1)
     await a.client.close()

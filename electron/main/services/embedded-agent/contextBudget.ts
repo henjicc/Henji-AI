@@ -1,6 +1,7 @@
 import type { AgentSession, ToolDefinition } from '@earendil-works/pi-coding-agent'
 
 type AgentMessage = AgentSession['messages'][number]
+export const CONTEXT_BUDGET_ERROR = '当前对话和已加载工具超出所选模型的上下文预算。请新建对话并只加载本次所需工具，或切换更大上下文的模型；已有操作不会重新执行。'
 
 /** 多模型预算估算，不是计费分词：ASCII 单词按三字符，标点逐个，非 ASCII 按 UTF-8 字节保守计。 */
 export function estimateContextTokens(text: string): number {
@@ -12,11 +13,12 @@ export function estimateContextTokens(text: string): number {
   return tokens
 }
 
-export function messageTokens(message: AgentMessage): number {
+export function messageTokens(message: AgentMessage, attachmentTokens: (text: string) => number = () => 0): number {
+  const textTokens = (text: string): number => estimateContextTokens(text) + attachmentTokens(text)
   if ('content' in message) {
-    if (typeof message.content === 'string') return 16 + estimateContextTokens(message.content)
+    if (typeof message.content === 'string') return 16 + textTokens(message.content)
     return 16 + message.content.reduce((sum, part) => sum + (part.type === 'image' ? 4096
-      : estimateContextTokens(part.type === 'text' ? part.text : JSON.stringify(part))), 0)
+      : textTokens(part.type === 'text' ? part.text : JSON.stringify(part))), 0)
   }
   return 16 + estimateContextTokens(JSON.stringify(message))
 }
@@ -45,46 +47,68 @@ function factSummary(text: string): Record<string, unknown> {
   for (const key of ['ok', 'executionState', 'operationId', 'verificationState', 'persistenceState', 'message', 'error', 'recovery', 'data']) {
     if (record[key] === undefined) continue
     const encoded = JSON.stringify(record[key])
-    facts[key] = estimateContextTokens(encoded) <= 180 ? record[key]
+    facts[key] = !['data', 'message', 'recovery'].includes(key) || estimateContextTokens(encoded) <= 180 ? record[key]
       : { omitted: true, ...(Array.isArray(record[key]) ? { count: record[key].length } : {}) }
   }
   return facts
 }
 
-export function projectText(text: string, reference: string, budget: number): string {
-  if (estimateContextTokens(text) <= budget) return text
+function minimalProjection(text: string, reference: string): { facts: Record<string, unknown>; hasMore: true; reference: string; read: string } {
   try {
     const previous = JSON.parse(text) as { hasMore?: unknown; reference?: unknown; read?: unknown }
     if (previous.hasMore === true && typeof previous.reference === 'string' && previous.read) reference = previous.reference
   } catch { /* 普通文本没有已有续读引用。 */ }
-  const facts = factSummary(text)
+  return { facts: factSummary(text), hasMore: true, reference, read: 'read_assistant_context' }
+}
+
+export function projectText(text: string, reference: string, budget: number): string {
+  if (estimateContextTokens(text) <= budget) return text
+  const minimum = minimalProjection(text, reference)
+  const { facts } = minimum
+  reference = minimum.reference
   const wrap = (excerpt: string) => JSON.stringify({ facts, hasMore: true, reference,
     read: { name: 'read_assistant_context', reference, offset: 0 }, excerpt })
   if (estimateContextTokens(wrap('')) > budget) {
-    return JSON.stringify({ hasMore: true, reference, read: 'read_assistant_context', summary: '结果超出本轮预算，需分页读取；尚不能据此判定完成。' })
+    for (const key of ['data', 'message', 'recovery']) if (key in facts) facts[key] = { omitted: true }
+    const compact = JSON.stringify(minimum)
+    if (estimateContextTokens(compact) > budget) throw new Error(CONTEXT_BUDGET_ERROR)
+    return compact
   }
   return wrap(fitText(text, excerpt => estimateContextTokens(wrap(excerpt)) <= budget))
 }
 
 /** 只投影模型上下文，原始 Pi 消息与错误事实留在会话中，不改业务回执或重放工具。 */
 export function budgetContext(messages: AgentMessage[], input: {
-  contextWindow: number; maxOutputTokens: number; instructions: string; tools: ToolDefinition[]
+  contextWindow: number; maxOutputTokens: number; instructions: string; tools: ToolDefinition[]; attachmentTokens?: (text: string) => number
 }): AgentMessage[] {
   const fixed = estimateContextTokens(input.instructions) + estimateContextTokens(JSON.stringify(input.tools.map(tool => ({
     name: tool.name, description: tool.description, parameters: tool.parameters,
   }))))
   const remaining = input.contextWindow - fixed - input.maxOutputTokens - Math.max(1024, Math.ceil(input.contextWindow * 0.05))
-  const textParts = messages.flatMap(message => message.role === 'toolResult' ? message.content.filter(part => part.type === 'text') : [])
-  const nonResult = messages.reduce((sum, message) => sum + (message.role === 'toolResult'
-    ? 16 + message.content.filter(part => part.type === 'image').length * 4096 : messageTokens(message)), 0)
-  // 每个结果首段最多 4000 估算 token；按实际剩余窗口平分，后续分页不是产品数量上限。
-  const perPart = Math.min(4000, Math.floor((remaining - nonResult) / Math.max(1, textParts.length)) - 32)
-  const projected = messages.map(message => message.role !== 'toolResult' ? message : { ...message,
-    content: message.content.map((part, index) => part.type !== 'text' ? part : { ...part,
-      text: projectText(part.text, `tool:${resultId(message)}:${index}`, perPart) }),
+  let lastUser = -1
+  messages.forEach((message, index) => { if (message.role === 'user') lastUser = index })
+  const parts: Array<{ part: { type: 'text'; text: string }; original: string; reference: string }> = []
+  // 先保底所有事实。历史消息次序不变；当前轮的资料分页原样保留。
+  const projected = messages.map((message, messageIndex) => message.role !== 'toolResult' ? message : { ...message,
+    content: message.content.map((part, index) => {
+      if (part.type !== 'text' || (messageIndex > lastUser && message.toolName === 'read_assistant_context')) return part
+      const reference = `tool:${resultId(message)}:${index}`
+      const minimum = JSON.stringify(minimalProjection(part.text, reference))
+      const next = { ...part, text: estimateContextTokens(minimum) < estimateContextTokens(part.text) ? minimum : part.text }
+      parts.push({ part: next, original: part.text, reference })
+      return next
+    }),
   })
-  if (projected.reduce((sum, message) => sum + messageTokens(message), 0) > remaining) {
-    throw new Error('当前对话和已加载工具超出所选模型的上下文预算。请新建对话并只加载本次所需工具，或切换更大上下文的模型；已有操作不会重新执行。')
+  let available = remaining - projected.reduce((sum, message) => sum + messageTokens(message, input.attachmentTokens), 0)
+  if (available < 0) throw new Error(CONTEXT_BUDGET_ERROR)
+  // 最新结果先拿正文预算；旧结果保留事实与引用，窗口不足时不再平均稀释最新写入。
+  for (const { part, original, reference } of parts.reverse()) {
+    const minimumCost = estimateContextTokens(part.text)
+    const budget = Math.min(4000, minimumCost + available)
+    if (budget <= minimumCost) continue
+    const expanded = projectText(original, reference, budget)
+    available -= estimateContextTokens(expanded) - minimumCost
+    part.text = expanded
   }
   return projected
 }

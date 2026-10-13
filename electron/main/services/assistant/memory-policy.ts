@@ -22,7 +22,7 @@ export function evaluateAgentMemoryProposal(input: unknown): AgentMemoryPolicyRe
     throw new Error('[memory_sensitive] 记忆候选可能包含密钥、令牌或密码，已拒绝保存')
   }
   if (
-    /(?:^|\n)\s*(?:\d{4}-\d{2}-\d{2}|\[\w+\])?.{0,20}(?:error|warn|info|debug|trace)\b/i.test(content)
+    /(?:^|\n)\s*(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|\[(?:error|warn|info|debug|trace)\])/i.test(content)
     || /(?:完整日志|原始日志|整份文件|完整文件|完整提示词|full log|entire file|full prompt)/i.test(content)
     || /[A-Za-z]:\\[^\r\n]{20,}|file:\/\/[^\s]+/i.test(content)
   ) {
