@@ -13,14 +13,18 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { appendVideoEditClip, closeVideoEditProject, editVideoProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit, setVideoEditTimelineView } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, deleteVideoEditSequence, videoEditExportRange, undoVideoEdit, setVideoEditTimelineView } from './videoEditService'
 import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
-import { exportVideoEdit } from './videoEditExport'
+import { exportVideoEdit, videoEditExportTask } from './videoEditExport'
+import { applyVideoEditBuiltinEffect } from './videoEditCompositing'
+import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions } from './videoEditSmartRegions'
+import type { SmartRegionProgressEvent, SmartRegionRequest } from '@/platform/contracts/smartRegions'
+import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegionMasks'
 
-const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][] }))
+const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][], smartRegions: [] as VideoEditSmartRegionSegments[] }))
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], Input: class { dispose() {} async getPrimaryVideoTrack() { return { codec: 'avc', displayWidth: 1920, displayHeight: 1080, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 4, bestGuessFrameRate: 30, frameRateIsConstant: true }) } } async getPrimaryAudioTrack() { return { codec: 'aac', numberOfChannels: 2, sampleRate: 48000, canDecode: async () => true } } async getAudioTracks() { return [await this.getPrimaryAudioTrack()] } async computeDuration() { return .2 } }, UrlSource: class {},
   Mp4OutputFormat: class { constructor() { encoding.formats.push('mp4') } }, AdtsOutputFormat: class { constructor() { encoding.formats.push('aac') } }, WavOutputFormat: class { constructor() { encoding.formats.push('wav') } }, StreamTarget: class {},
@@ -32,7 +36,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   canvas = {}; constructor(private composition: VideoEditComposition, ...options: unknown[]) { encoding.pictures.push(composition); encoding.rendererOptions.push(options) }
   updateDocument(document: VideoEditComposition) { this.composition = document }
   async renderBitmap() { return { bitmap: { width: 640, height: 360, close() {} } } }
-  setSmartRegions() {} setTracks() {} async dispose() {}
+  setSmartRegions(segments: VideoEditSmartRegionSegments) { encoding.smartRegions.push(segments) } setTracks() {} async dispose() {}
   async render(frame: number) { encoding.rendered.push([this.composition.name, frame]); return { singleFrameReads: 0 } }
   async mixAudio(_time: number, duration: number) { return new AudioBuffer({ numberOfChannels: this.composition.channels, sampleRate: this.composition.sampleRate, length: Math.round(duration * this.composition.sampleRate) }) }
 } }))
@@ -86,6 +90,28 @@ async function project() {
 function localJob(owner: Awaited<ReturnType<typeof project>>, name: string): VideoEditExportJob {
   return { id: name, name, owner, presetName: name, snapshot: structuredClone(getActiveVideoEditSequence(owner)), range: videoEditExportRange(owner), rangeSource: 'content', settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, loudness: null }, path: file(`${name}.mp4`), state: 'queued', controller: new AbortController(), release: vi.fn() }
 }
+it('快照导出等待中撤销智能效果，完成后仍把快照蒙版交给渲染器', async () => {
+  const owner = await project(); const id = owner.document.id
+  let progress!: (event: SmartRegionProgressEvent) => void
+  const ensure = vi.spyOn(getPlatform().smartRegions, 'ensure').mockResolvedValue({ state: 'analyzing', progress: 0 })
+  const cancel = vi.spyOn(getPlatform().smartRegions, 'cancel').mockResolvedValue(undefined)
+  vi.spyOn(getPlatform().smartRegions, 'onProgress').mockImplementation(handler => { progress = handler; return () => {} })
+  resetVideoEditSmartRegionsForTests(); startVideoEditSmartRegions(); encoding.smartRegions.length = 0
+  try {
+    appendVideoEditMedia(id, { id: 'video', path: file('source.mp4'), name: '视频', kind: 'video', durationSeconds: 1, width: 1920, height: 1080 })
+    appendVideoEditClip(id, 'video')
+    const clip = getActiveVideoEditSequence(owner).clips.find(clip => clip.kind === 'video')!
+    applyVideoEditBuiltinEffect(id, owner.activeSequenceId, [clip.id], 'smart:face_mosaic')
+    const exporting = exportVideoEdit(id, file('snapshot.mp4'))
+    await vi.waitFor(() => expect(videoEditExportTask(id)?.state).toBe('running'))
+    const issued = ensure.mock.calls.at(-1)![0] as SmartRegionRequest
+    undoVideoEdit(id)
+    progress({ request: issued, status: { state: 'ready', segment: { path: file('face.hsrg'), startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'yunet', summary: { value: 1, peak: 1 } } } })
+    await exporting
+    expect(cancel).not.toHaveBeenCalled()
+    expect(Object.values(encoding.smartRegions.at(-1)!)[0]?.face).toHaveLength(1)
+  } finally { resetVideoEditSmartRegionsForTests() }
+})
 it('队列严格顺序；等待项可取消；失败不阻断后续；重试排到末尾且只释放各自租用', async () => {
   const owner = await project(); const gate = deferred<void>(); const order: string[] = []; let fail = true
   const queue = new VideoEditExportQueue(async job => { order.push(job.id); if (job.id === 'a') await gate.promise; if (job.id === 'b' && fail) throw new Error('codec failure') })

@@ -13,7 +13,7 @@ import { adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditEx
 import { recordVideoEditExport, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
-import { videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
+import { waitVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTracking'
 
 const logger = createLogger('features.videoEdit.export')
@@ -92,14 +92,14 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     const videoCodec = settings.videoEnabled ? settings.codec : undefined
     task.controller.signal.throwIfAborted()
     // 智能区域（4.7d）：导出用到的区域先全部分析完成，导出画面与预览同一份蒙版。
-    await waitVideoEditSmartRegions(document, document, task.controller.signal)
+    const smartRegions = await waitVideoEditSmartRegions(document, document, task.controller.signal)
     await waitVideoEditTracking(document, document, task.controller.signal)
     const pictures = settings.captionMode === 'burn' ? document : { ...document, captions: [], sequences: document.sequences?.map(sequence => ({ ...sequence, captions: [] })) }
     // Mix in the delivery layout before measuring loudness. Downmixing after normalization
     // changes LUFS; the shared mixer already resamples and maps mono/stereo correctly.
     const renderDocument = { ...pictures, sampleRate: settings.sampleRate, channels: settings.channels }
     renderer = new VideoEditRenderSession(renderDocument, undefined, undefined, undefined, undefined, settings.useProxies ? projectId : undefined, settings.useProxies)
-    renderer.setSmartRegions(videoEditSmartRegionSegments())
+    renderer.setSmartRegions(smartRegions)
     renderer.setTracks(videoEditTrackResults(document))
     if (loudness) {
       soundSession = await spoolVideoEditAudio(renderDocument, range, task.controller.signal, renderer, fraction => { task.progress = fraction * .1; publishVideoEdit() })

@@ -21,8 +21,9 @@ import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingSta
 
 const logger = createLogger('features.videoEdit.smartRegions')
 
-interface Entry { request: SmartRegionRequest; status: SmartRegionStatus }
+interface Entry { request: SmartRegionRequest; status: SmartRegionStatus; operation?: object }
 const entries = new Map<string, Entry>()
+const waitLeases = new Map<object, Map<string, SmartRegionRequest>>()
 const listeners = new Set<() => void>()
 let revision = 0
 
@@ -57,6 +58,7 @@ function neededRequests(): Map<string, SmartRegionRequest> {
       if (request) needed.set(smartRegionRequestKey(request), request)
     }
   }
+  for (const requests of waitLeases.values()) for (const [key, request] of requests) needed.set(key, request)
   return needed
 }
 
@@ -64,14 +66,22 @@ function record(request: SmartRegionRequest, status: SmartRegionStatus): void {
   const key = smartRegionRequestKey(request)
   const previous = entries.get(key)
   if (previous && JSON.stringify(previous.status) === JSON.stringify(status)) return
-  entries.set(key, { request, status })
+  entries.set(key, { request, status, operation: previous?.operation })
   publish()
 }
 
 function ensure(request: SmartRegionRequest): void {
-  const current = entries.get(smartRegionRequestKey(request))?.status
+  const key = smartRegionRequestKey(request)
+  const current = entries.get(key)?.status
   record(request, current?.state === 'ready' ? current : { state: 'analyzing', progress: 0 })
-  void Promise.resolve().then(() => getPlatform().smartRegions.ensure(request)).then(status => record(request, status), (error: unknown) => {
+  const operation = {}; entries.get(key)!.operation = operation
+  void Promise.resolve().then(() => getPlatform().smartRegions.ensure(request)).then(status => {
+    const entry = entries.get(key)
+    if (entry?.operation !== operation || entry.status.state !== 'analyzing') return
+    record(request, status)
+  }, (error: unknown) => {
+    const entry = entries.get(key)
+    if (entry?.operation !== operation || entry.status.state !== 'analyzing') return
     logger.warn('智能区域分析请求失败', { event: 'video_edit.smart_region.ensure_failed', error, context: { kind: request.kind } })
     record(request, { state: 'failed', reason: 'inference' })
   })
@@ -81,11 +91,13 @@ function ensure(request: SmartRegionRequest): void {
 function reconcile(): void {
   const needed = neededRequests()
   for (const [key, request] of needed) if (!entries.has(key)) ensure(request)
+  let removed = false
   for (const [key, entry] of entries) {
     if (needed.has(key)) continue
-    entries.delete(key)
+    entries.delete(key); removed = true
     if (entry.status.state === 'analyzing') void Promise.resolve().then(() => getPlatform().smartRegions.cancel(entry.request)).catch(() => undefined)
   }
+  if (removed) publish()
 }
 
 let stop: (() => void) | undefined
@@ -144,9 +156,10 @@ export function videoEditSmartRegionStatusText(document: Pick<VideoEditDocument,
 export function retryVideoEditSmartRegion(request: SmartRegionRequest): void { ensure(request) }
 
 /** 发给渲染 Worker 的已分析段落：素材与结果文件都换成 Worker 可 fetch 的地址。 */
-export function videoEditSmartRegionSegments(): VideoEditSmartRegionSegments {
+export function videoEditSmartRegionSegments(requests?: ReadonlyMap<string, SmartRegionRequest>): VideoEditSmartRegionSegments {
   const result: Record<string, Partial<Record<SmartRegionAnalysisKind, Array<{ url: string; startUs: number; endUs: number; still: boolean }>>>> = {}
-  for (const { request, status } of entries.values()) {
+  for (const [key, { request, status }] of entries) {
+    if (requests && !requests.has(key)) continue
     if (status.state !== 'ready') continue
     const media = result[toFetchableMediaUrl(request.source)] ??= {}
     const list = media[request.kind] ??= []
@@ -166,34 +179,38 @@ export function videoEditSmartRegionFailureText(reason: SmartRegionFailureReason
   }
 }
 
-/** 导出前：等这份剪辑序列需要的区域全部分析完成；有失败时以用户语言报错。 */
-export async function waitVideoEditSmartRegions(document: Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences'>>, sequence: { frameRate: { numerator: number; denominator: number }; clips: readonly VideoEditClip[] }, signal?: AbortSignal): Promise<void> {
+/** 等快照需要的区域分析完成，并在释放租约前取出渲染输入；后续编辑不会丢掉快照蒙版。 */
+export async function waitVideoEditSmartRegions(document: Pick<VideoEditDocument, 'media' | 'items'> & Partial<Pick<VideoEditDocument, 'sequences'>>, sequence: { frameRate: { numerator: number; denominator: number }; clips: readonly VideoEditClip[] }, signal?: AbortSignal): Promise<VideoEditSmartRegionSegments> {
   const requests = new Map<string, SmartRegionRequest>()
   for (const reachable of videoEditReachableSequences(document, sequence)) for (const clip of reachable.clips) for (const effect of clip.effects ?? []) {
     if (!effect.enabled || effect.amount <= 0) continue
     const request = videoEditSmartRegionRequest(document, reachable.frameRate, clip, effect)
     if (request) requests.set(smartRegionRequestKey(request), request)
   }
-  if (!requests.size) return
-  for (const request of requests.values()) {
-    const key = smartRegionRequestKey(request)
-    if (entries.get(key)?.status.state === 'failed') ensure(request)
-    else if (!entries.has(key)) ensure(request)
-  }
-  await new Promise<void>((resolve, reject) => {
-    const check = (): void => {
-      const statuses = [...requests.keys()].map(key => entries.get(key)?.status)
-      const failed = statuses.find(status => status?.state === 'failed')
-      if (failed?.state === 'failed') { finish(); reject(new Error(`作用区域分析失败：${videoEditSmartRegionFailureText(failed.reason)}`)); return }
-      if (statuses.every(status => status?.state === 'ready')) { finish(); resolve() }
+  if (!requests.size) { signal?.throwIfAborted(); return {} }
+  const lease = {}; waitLeases.set(lease, requests)
+  try {
+    for (const request of requests.values()) {
+      const key = smartRegionRequestKey(request)
+      if (entries.get(key)?.status.state === 'failed') ensure(request)
+      else if (!entries.has(key)) ensure(request)
     }
-    const abort = (): void => { finish(); reject(signal?.reason ?? new DOMException('已取消', 'AbortError')) }
-    const unsubscribe = subscribeVideoEditSmartRegions(check)
-    const finish = (): void => { unsubscribe(); signal?.removeEventListener('abort', abort) }
-    signal?.addEventListener('abort', abort, { once: true })
-    check()
-  })
+    return await new Promise<VideoEditSmartRegionSegments>((resolve, reject) => {
+      const check = (): void => {
+        const statuses = [...requests.keys()].map(key => entries.get(key)?.status)
+        if (statuses.some(status => !status)) { finish(); reject(new Error('所需区域分析已被取消，请重新导出。')); return }
+        const failed = statuses.find(status => status?.state === 'failed')
+        if (failed?.state === 'failed') { finish(); reject(new Error(`作用区域分析失败：${videoEditSmartRegionFailureText(failed.reason)}`)); return }
+        if (statuses.every(status => status?.state === 'ready')) { finish(); resolve(videoEditSmartRegionSegments(requests)) }
+      }
+      const abort = (): void => { finish(); reject(signal?.reason ?? new DOMException('已取消', 'AbortError')) }
+      const unsubscribe = subscribeVideoEditSmartRegions(check)
+      const finish = (): void => { unsubscribe(); signal?.removeEventListener('abort', abort) }
+      signal?.addEventListener('abort', abort, { once: true })
+      if (signal?.aborted) abort(); else check()
+    })
+  } finally { waitLeases.delete(lease); reconcile() }
 }
 
 /** 仅供测试：清空状态。 */
-export function resetVideoEditSmartRegionsForTests(): void { stop?.(); entries.clear(); revision = 0 }
+export function resetVideoEditSmartRegionsForTests(): void { stop?.(); entries.clear(); waitLeases.clear(); revision = 0 }

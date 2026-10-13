@@ -67,9 +67,10 @@ export class TrackingService {
     return { source: definition.source, method: definition.method, prompts: normalizeVideoEditTracker(videoEditTrackerSchema.parse({ id: 'x', name: 'x', method: definition.method, prompts: definition.prompts })).prompts }
   }
 
-  /** 素材身份、显示尺寸、帧率与结果键（同一定义只算一次）。 */
-  private prepare(definition: TrackingDefinition): Promise<Prepared> {
-    const definitionKey = trackingDefinitionKey(definition)
+  /** 文件身份每次重新读取；显示尺寸、帧率与结果键按定义和文件版本复用。 */
+  private async prepare(definition: TrackingDefinition): Promise<Prepared> {
+    const identity = typeof definition.source === 'string' ? (await this.deps.identity(definition.source)).identity : definition.source.signature
+    const definitionKey = digest([trackingDefinitionKey(definition), identity])
     let pending = this.prepared.get(definitionKey)
     if (!pending) {
       pending = (async () => {
@@ -78,7 +79,6 @@ export class TrackingService {
           const fps = videoEditTrackFps(source.fps)
           return { identity: source.signature, probe: { width: source.width, height: source.height, fps: source.fps, startSeconds: 0, durationSeconds: 1800 }, fps, key: digest(['tracking', TRACKING_RESULT_VERSION, source, definition.method, definition.prompts, fps]) }
         }
-        const { identity } = await this.deps.identity(definition.source)
         let probe: SmartRegionSourceProbe
         try { probe = await this.deps.probe(definition.source) } catch (error) { throw new TrackingFailure('decode', `素材读取失败：${error instanceof Error ? error.message : String(error)}`) }
         if (!(probe.width > 0 && probe.height > 0)) throw new TrackingFailure('decode', '素材没有画面。')
@@ -123,10 +123,13 @@ export class TrackingService {
     const found = await this.existing(prepared)
     const job: Job = { id: randomUUID(), definition, status: { state: 'tracking', progress: 0, direction: options.direction, ...(found ? { result: found.result } : {}) }, stopped: false, done: Promise.resolve({ state: 'idle' }) }
     job.done = this.execute(job, prepared, range, options, found, frames).then(
-      (result): TrackingStatus => ({ state: 'ready', result: result.ref, ...(result.stopped ? { stopped: true } : {}) }),
+      (result): TrackingStatus => ({ state: 'ready', result: result.ref, ...(result.stopped || job.stopped ? { stopped: true } : {}) }),
       (error: unknown): TrackingStatus => {
         // 停止（含还在下载模型、排队时就停）不算失败：回到已有结果。
-        if (job.stopped) return found ? { state: 'ready', result: found.result, stopped: true } : { state: 'idle' }
+        if (job.stopped) {
+          this.deps.log('info', '跟踪已停止', 'tracking.run.stopped', { method: definition.method, retained: Boolean(found) })
+          return found ? { state: 'ready', result: found.result, stopped: true } : { state: 'idle' }
+        }
         const reason = trackingFailureReason(error)
         this.deps.log('error', '跟踪失败', 'tracking.run.failed', { method: definition.method, reason, message: error instanceof Error ? error.message.slice(0, 300) : String(error) })
         return { state: 'failed', reason, message: error instanceof Error ? error.message.slice(0, 300) : undefined, ...(found ? { result: found.result } : {}) }
@@ -202,21 +205,24 @@ export class TrackingService {
     const output = await this.deps.results.prepareTemporary(prepared.key)
     if (!output) throw new TrackingFailure('disk', '跟踪结果目录不可用。')
     const fps = prepared.fps
+    const ffmpegPath = await this.deps.ffmpegPath()
     const trackingJob: TrackingJob = {
-      id: job.id, method: definition.method, models, ffmpegPath: await this.deps.ffmpegPath(), source: definition.source,
+      id: job.id, method: definition.method, models, ffmpegPath, source: definition.source,
       containerStartUs: Math.round(prepared.probe.startSeconds * 1e6), fps, display: { width: prepared.probe.width, height: prepared.probe.height },
       prompts: definition.prompts.map(({timeUs, ...prompt}) => ({...prompt, frame: videoEditTrackFrame(timeUs, fps)})),
       range: { first: videoEditTrackFrame(range.startUs, fps), last: Math.max(videoEditTrackFrame(range.startUs, fps), Math.ceil(range.endUs * fps / 1e6) - 1) },
       direction: options.direction, ...(options.limit ? { limit: options.limit } : {}), ...(found ? { existingPath: found.path } : {}), outputPath: output, providers: this.deps.providers,
     }
-    const result = await this.deps.track(trackingJob, (done, total) => { if (!this.disposed) this.publish(job, { ...job.status, state: 'tracking', progress: Math.min(0.99, done / Math.max(1, total)), direction: options.direction } as TrackingStatus) }, frames)
+    if (this.disposed || job.stopped) throw new TrackingFailure('inference', '跟踪已停止。')
+    const result = await this.deps.track(trackingJob, (done, total) => { if (!this.disposed && !job.stopped) this.publish(job, { ...job.status, state: 'tracking', progress: Math.min(0.99, done / Math.max(1, total)), direction: options.direction } as TrackingStatus) }, frames)
     let path: string
     try { path = await this.deps.results.adopt(prepared.key, output) } catch (error) { throw new TrackingFailure('disk', `跟踪结果写入缓存失败：${error instanceof Error ? error.message : String(error)}`) }
-    this.deps.log('info', result.stopped ? '跟踪已停止（保留已跟踪的部分）' : '跟踪完成', result.stopped ? 'tracking.run.stopped' : 'tracking.run.completed', {
+    const stopped = result.stopped || job.stopped
+    this.deps.log('info', stopped ? '跟踪已停止（保留已跟踪的部分）' : '跟踪完成', stopped ? 'tracking.run.stopped' : 'tracking.run.completed', {
       method: definition.method, model: result.model, provider: result.provider, frames: result.frameCount, tracked: result.tracked, fps,
       durationMs: Date.now() - started, decodeMs: result.decodeMs, inferenceMs: result.inferenceMs, summary: result.summary,
     })
-    return { stopped: result.stopped, ref: { path, startUs: videoEditTrackFrameTime(result.firstFrame, fps), endUs: videoEditTrackFrameTime(result.firstFrame + result.frameCount, fps), fps, summary: result.summary } }
+    return { stopped, ref: { path, startUs: videoEditTrackFrameTime(result.firstFrame, fps), endUs: videoEditTrackFrameTime(result.firstFrame + result.frameCount, fps), fps, summary: result.summary } }
   }
 
   hasActiveJobs(): boolean { return this.jobs.size > 0 }

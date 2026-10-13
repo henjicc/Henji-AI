@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
+import { SMART_REGION_FORMAT_VERSION } from '../../../../src/core/videoEdit/smartRegions'
 import type { SmartRegionProgressEvent, SmartRegionRequest } from '../../../../src/platform/contracts/smartRegions'
 import type { ContentDiskCache } from '../media/content-disk-cache'
 import { LocalInferenceFailure } from '../local-inference/host'
@@ -44,6 +46,87 @@ function setup(overrides: Partial<SmartRegionServiceDependencies> = {}) {
 
 const request = (overrides: Partial<SmartRegionRequest> = {}): SmartRegionRequest => ({ source: '/media/a.mp4', kind: 'face', startUs: 2_300_000, endUs: 4_100_000, still: false, ...overrides })
 const flush = async (): Promise<void> => { for (let index = 0; index < 50; index++) await Promise.resolve() }
+
+it('取消后旧分析尚未结束就 ensure/wait：重新提交一次并收到终态', async () => {
+  const { service, jobs, events } = setup()
+  await service.ensure(request()); await flush()
+  service.cancel(request())
+  const renewed = service.ensure(request())
+  const waiting = service.wait(request())
+  jobs[0].reject(new LocalInferenceFailure('cancelled', '已取消'))
+  await flush()
+  expect(jobs).toHaveLength(2)
+  jobs[1].resolve(done)
+  await expect(renewed).resolves.toMatchObject({ state: 'analyzing' })
+  await expect(waiting).resolves.toMatchObject({ state: 'ready' })
+  expect(events.at(-1)?.status.state).toBe('ready')
+})
+
+it('模型下载中取消再请求：下载完成后只提交新分析', async () => {
+  let release!: (path: string) => void
+  const ensureModel = vi.fn<Parameters<SmartRegionServiceDependencies['ensureModel']>, ReturnType<SmartRegionServiceDependencies['ensureModel']>>()
+    .mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    .mockResolvedValue('/models/yunet.onnx')
+  const { service, jobs, events } = setup({ ensureModel })
+  await service.ensure(request()); await flush()
+  service.cancel(request())
+  const waiting = service.wait(request())
+  release('/models/yunet.onnx'); await flush()
+  expect(ensureModel).toHaveBeenCalledTimes(2)
+  expect(jobs).toHaveLength(1)
+  jobs[0].resolve(done)
+  await expect(waiting).resolves.toMatchObject({ state: 'ready' })
+  expect(events.at(-1)?.status.state).toBe('ready')
+})
+
+it('容器起点晚于取整范围：第零帧与实际解码起点一致，索引仍覆盖请求范围', async () => {
+  const { service, jobs } = setup({ probe: async () => ({ width: 1920, height: 1080, fps: 30, startSeconds: 1.4 }) })
+  const input = request({ startUs: 1_400_000, endUs: 2_500_000 })
+  const waiting = service.wait(input); await flush()
+  expect(jobs[0].job).toMatchObject({ startUs: 1_400_000, seekSeconds: 0, durationSeconds: 1.6, endUs: 3_000_000 })
+  jobs[0].resolve(done)
+  await expect(waiting).resolves.toMatchObject({ state: 'ready', segment: { startUs: 1_000_000, endUs: 3_000_000 } })
+  await expect(service.ensure(input)).resolves.toMatchObject({ state: 'ready' })
+  expect(jobs).toHaveLength(1)
+})
+
+it('请求完全早于容器起点：报解码失败，不提交分析', async () => {
+  const analyze = vi.fn<Parameters<SmartRegionServiceDependencies['analyze']>, ReturnType<SmartRegionServiceDependencies['analyze']>>()
+  const { service } = setup({ probe: async () => ({ width: 1920, height: 1080, fps: 30, startSeconds: 6 }), analyze })
+  await expect(service.wait(request())).resolves.toMatchObject({ state: 'failed', reason: 'decode' })
+  expect(analyze).not.toHaveBeenCalled()
+})
+
+it('修正容器时钟后不复用旧算法留下的错位缓存', async () => {
+  const { service, segments, indexes } = setup()
+  const oldIndexKey = createHash('sha256').update(JSON.stringify(['smart-region-index', SMART_REGION_FORMAT_VERSION, 'id:/media/a.mp4', 'face'])).digest('hex')
+  const oldKey = 'a'.repeat(64)
+  segments.files.set(oldKey, new Uint8Array(1))
+  indexes.files.set(oldIndexKey, new TextEncoder().encode(JSON.stringify([{ key: oldKey, startUs: 2_000_000, endUs: 5_000_000, still: false, model: 'yunet', summary: done.summary }])))
+  await expect(service.ensure(request())).resolves.toMatchObject({ state: 'analyzing' })
+})
+
+it.each(['probe', 'temporary', 'ffmpeg'] as const)('在 %s 前置等待中取消，不提交分析也不发布 ready', async stage => {
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const fixture = setup()
+  if (stage === 'probe') fixture.deps.probe = async () => { await gate; return { width: 640, height: 360, fps: 30, startSeconds: 0 } }
+  if (stage === 'temporary') fixture.deps.segments.prepareTemporary = async () => { await gate; return '/cache/temp' }
+  if (stage === 'ffmpeg') fixture.deps.ffmpegPath = async () => { await gate; return 'ffmpeg' }
+  await fixture.service.ensure(request()); await flush()
+  fixture.service.cancel(request()); release(); await flush()
+  expect(fixture.jobs).toHaveLength(0)
+  expect(fixture.events.some(event => event.status.state === 'ready')).toBe(false)
+  expect(fixture.service.hasActiveJobs()).toBe(false)
+})
+
+it('分析已提交后取消，迟到成功不进入缓存或广播 ready', async () => {
+  const { service, jobs, events, segments } = setup()
+  await service.ensure(request()); await flush()
+  service.cancel(request()); jobs[0].resolve(done); await flush()
+  expect(events.some(event => event.status.state === 'ready')).toBe(false)
+  expect(segments.files.size).toBe(0)
+})
 
 describe('智能区域分析服务', () => {
   it('按整秒范围分析一次：并发请求共用，进度广播，完成后命中缓存；被覆盖的更短范围直接复用', async () => {

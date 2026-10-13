@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os'
 import { getPlatform } from '@/platform/runtime'
 import { videoEditClipSchema, videoEditDocumentSchema } from '@/core/videoEdit/document'
 import { videoEditEffectMaskSchema } from '@/core/videoEdit/effectMasks'
-import type { TrackingDefinition, TrackingProgressEvent, TrackingRange, TrackingRunOptions, TrackingStatus } from '@/platform/contracts/tracking'
+import type { TrackingDefinition, TrackingFrameEvent, TrackingProgressEvent, TrackingRange, TrackingRunOptions, TrackingStatus } from '@/platform/contracts/tracking'
+import type { SmartRegionProgressEvent } from '@/platform/contracts/smartRegions'
+import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegionMasks'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
@@ -15,7 +17,9 @@ import { editVideoEditTracker } from './videoEditTrackingEdits'
 import { nestVideoEditSelection } from './videoEditNesting'
 import * as trackingEdits from './videoEditTrackingEdits'
 import { videoEditTrackerEntityId } from './videoEditCompositeEntities'
-import { resetVideoEditTrackingForTests, runVideoEditTracking, startVideoEditTracking, videoEditTrackResults, videoEditTrackingRequest, videoEditTrackingStatus, waitVideoEditTracking } from './videoEditTracking'
+import { resetVideoEditTrackingForTests, runVideoEditTracking, stopVideoEditTracking, startVideoEditTracking, videoEditTrackResults, videoEditTrackingRequest, videoEditTrackingStatus, waitVideoEditTracking } from './videoEditTracking'
+import { applyVideoEditBuiltinEffect } from './videoEditCompositing'
+import { resetVideoEditSmartRegionsForTests, startVideoEditSmartRegions } from './videoEditSmartRegions'
 import { getVideoEditTrackingEditing, setVideoEditTrackingEditing } from './videoEditTrackingEditing'
 import { getVideoEditMaskEditing, setVideoEditMaskEditing } from './videoEditMaskEditing'
 import { VideoEditTrackingPanel } from '../panels/VideoEditTrackingPanel'
@@ -26,14 +30,17 @@ import { encodeSmartRegionSegment } from '@/core/videoEdit/smartRegions'
 import { videoEditTrackingSourceId } from '@/core/videoEdit/trackingSource'
 import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
 
+const trackingFrames = vi.hoisted(() => ({ regions: [] as VideoEditSmartRegionSegments[] }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
-  setSmartRegions() {}
+  setSmartRegions(segments: VideoEditSmartRegionSegments) { trackingFrames.regions.push(segments) }
+  async setRenderDivisor() {}
   async updateDocument() {}
-  async present() { return { presented: true, bitmap: { close() {} } } }
+  async present(_frame?: number, _sequential?: boolean, _scrub?: boolean, _deadline?: unknown, _submitted?: unknown, size?: { width: number; height: number }) { return { presented: true, bitmap: { close() {} }, ...(size ? { rgb: new Uint8Array(size.width * size.height * 3) } : {}) } }
   async dispose() {}
 } }))
 let progress: (event: TrackingProgressEvent) => void
+let frameRequest: (event: TrackingFrameEvent) => void
 const status = vi.fn<[TrackingDefinition], Promise<TrackingStatus>>()
 const run = vi.fn<[TrackingDefinition, TrackingRange, TrackingRunOptions], Promise<TrackingStatus>>()
 beforeEach(() => {
@@ -43,7 +50,7 @@ beforeEach(() => {
   vi.spyOn(getPlatform().tracking, 'run').mockImplementation(run)
   vi.spyOn(getPlatform().tracking, 'stop').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().tracking, 'onProgress').mockImplementation(handler => { progress = handler; return () => {} })
-  vi.spyOn(getPlatform().tracking, 'onFrameRequest').mockImplementation(() => () => {})
+  vi.spyOn(getPlatform().tracking, 'onFrameRequest').mockImplementation(handler => { frameRequest = handler; return () => {} })
   startVideoEditTracking()
 })
 afterEach(async () => {
@@ -177,6 +184,68 @@ it('导出等待使用的跟踪；停止后仅续跟一次仍不满则按已有�
   await expect(waitVideoEditTracking(sequence, sequence)).rejects.toThrow('本地模型下载失败')
   const controller = new AbortController(); controller.abort(new Error('cancel'))
   await expect(waitVideoEditTracking(sequence, sequence, controller.signal)).rejects.toThrow('cancel')
+})
+it('嵌套跟踪准备中停止：等待重跑一次，再停止则给出终态错误', async () => {
+  const { owner, id, sequenceId, video } = await project()
+  vi.spyOn(getPlatform().smartRegions, 'ensure').mockResolvedValue({ state: 'analyzing', progress: 0 })
+  vi.spyOn(getPlatform().smartRegions, 'cancel').mockResolvedValue(undefined)
+  vi.spyOn(getPlatform().smartRegions, 'onProgress').mockImplementation(() => () => {})
+  resetVideoEditSmartRegionsForTests(); startVideoEditSmartRegions()
+  const controller = new AbortController()
+  try {
+    applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic')
+    const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '待分析的子序列')
+    editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
+    editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+    const snapshot = getActiveVideoEditSequence(owner)
+    const request = videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
+    let error: unknown
+    const waiting = waitVideoEditTracking(snapshot, snapshot, controller.signal).catch(failure => { error = failure })
+    await vi.waitFor(() => expect(videoEditTrackingStatus(request.definition)?.state).toBe('tracking'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    stopVideoEditTracking(request.definition)
+    expect(videoEditTrackingStatus(request.definition)?.state).toBe('tracking')
+    await flush()
+    stopVideoEditTracking(request.definition); await flush()
+    const actualError = error
+    controller.abort(); await waiting
+    expect(actualError).toBeInstanceOf(Error)
+    expect((actualError as Error).message).toContain('跟踪已被停止')
+    expect(run).not.toHaveBeenCalled()
+  } finally { controller.abort(); resetVideoEditSmartRegionsForTests() }
+})
+it('嵌套准备等待智能区域时修改子序列，快照完成后取帧仍携带原蒙版', async () => {
+  const { owner, id, sequenceId, video } = await project()
+  let regionProgress!: (event: SmartRegionProgressEvent) => void
+  const ensure = vi.spyOn(getPlatform().smartRegions, 'ensure').mockResolvedValue({ state: 'analyzing', progress: 0 })
+  const cancel = vi.spyOn(getPlatform().smartRegions, 'cancel').mockResolvedValue(undefined)
+  vi.spyOn(getPlatform().smartRegions, 'onProgress').mockImplementation(handler => { regionProgress = handler; return () => {} })
+  vi.spyOn(getPlatform().tracking, 'replyFrames').mockResolvedValue(undefined)
+  resetVideoEditSmartRegionsForTests(); startVideoEditSmartRegions(); trackingFrames.regions.length = 0
+  const controller = new AbortController()
+  try {
+    applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:face_mosaic')
+    const nested = nestVideoEditSelection({ projectId: id, sequenceId, clipIds: getActiveVideoEditSequence(owner).clips.map(clip => clip.id) }, '子序列')
+    editVideoEditTracker(id, sequenceId, nested.clip.id, tracker)
+    editVideoSequence(id, sequenceId, sequence => { sequence.clips.find(clip => clip.id === nested.clip.id)!.effects = [{ id: 'fx', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'tracker', trackerId: tracker.id } }]; return sequence })
+    const snapshot = getActiveVideoEditSequence(owner)
+    const request = videoEditTrackingRequest(snapshot, snapshot.frameRate, snapshot.clips.find(clip => clip.id === nested.clip.id)!, tracker)!
+    const waiting = waitVideoEditTracking(snapshot, snapshot, controller.signal)
+    const settled = waiting.catch(() => {})
+    await new Promise(resolve => setTimeout(resolve, 0))
+    editVideoSequence(id, nested.sequence.id, sequence => { for (const clip of sequence.clips) delete clip.effects; return sequence })
+    const issued = ensure.mock.calls.at(-1)![0]
+    regionProgress({ request: issued, status: { state: 'ready', segment: { path: 'C:/cache/face.hsrg', startUs: issued.startUs, endUs: issued.endUs, still: false, model: 'yunet', summary: { value: 1, peak: 1 } } } })
+    await vi.waitFor(() => expect(run).toHaveBeenCalledWith(request.definition, request.range, { direction: 'both' }))
+    if (typeof request.definition.source === 'string') throw new Error('必须使用嵌套源')
+    frameRequest({ kind: 'frames', id: 'read', jobId: 'parent', source: request.definition.source, request: { first: 0, count: 1, width: 64, height: 36 } })
+    await vi.waitFor(() => expect(trackingFrames.regions).toHaveLength(1))
+    await vi.waitFor(() => expect(getPlatform().tracking.replyFrames).toHaveBeenCalledWith({ id: 'read', frames: [expect.any(Uint8Array)] }))
+    const regions = trackingFrames.regions[0]
+    controller.abort(); await settled
+    expect(cancel).not.toHaveBeenCalled()
+    expect(Object.values(regions)[0]?.face).toHaveLength(1)
+  } finally { controller.abort(); resetVideoEditSmartRegionsForTests() }
 })
 it('助手同一正式事务创建、修改与回读跟踪，绑定与取消跟随，错误引用被拒绝', async () => {
   const { owner, id, video, text } = await project(); const app = createApplicationHarness()
