@@ -5,10 +5,14 @@ import { createLocationCodec, type LocationContext } from '../../../../src/core/
 import { DOCUMENT_KINDS } from '../../../../src/core/documents/kinds'
 import { getDb } from '../db'
 import { databaseLocationContext } from '../db-locations'
-import { getProgramDataDir, getProgramStoreDir } from '../appPaths'
+import { getProgramDataDir, getProgramStoreDir, getUserModelsLocation } from '../appPaths'
 import { MEDIA_REFERENCE_TABLES } from './schema'
 import { scanReferenceFiles, type ReferenceScanRoot } from './file-scanner'
 import { canonicalPath, within } from './paths'
+import { managedMediaRoots, overlapsManagedMediaRoot } from './queue'
+import { createMainLogger } from '../logging/main-logger'
+
+const logger = createMainLogger('main.media_recycle')
 
 /** Save acknowledgement records the handoff even if the user removes the document
  * again before the next quiet window. This only retires references; never unlinks. */
@@ -47,10 +51,16 @@ export async function releaseDocumentSubmissionReferences(references: readonly s
   }
 }
 
-export function decodeReferenceValues(values: unknown, context: LocationContext): string[] {
+export function decodeReferenceValues(values: unknown, context: LocationContext, source = 'paths', rowId?: string): string[] {
   const result = createLocationCodec(context).decodeContent(values)
-  if (result.report.unresolved.length) throw new Error('Unresolved stored media locations')
-  return collectMediaReferences(result.content)
+  const unresolved = result.report.unresolved
+  if (unresolved.some(item => item.reason !== 'unknown_project')) throw new Error('Unresolved stored media locations')
+  if (unresolved.length) {
+    if (context.projects.some(project => overlapsManagedMediaRoot(project.root))) throw new Error('Unresolved project overlaps managed media storage')
+    logger.warn('媒体引用指向已移除项目，已跳过项目外部位置', { event: 'media_recycle.references.unknown_project', context: { source, rowId, projectIds: [...new Set(unresolved.map(item => item.projectId))], count: unresolved.length } })
+  }
+  const ignored = new Set(unresolved.map(item => item.value))
+  return collectMediaReferences(result.content).filter(value => !ignored.has(value))
 }
 
 export function recordReferences(source: string, raw: Record<string, unknown>, context: LocationContext): string[] {
@@ -63,7 +73,7 @@ export function recordReferences(source: string, raw: Record<string, unknown>, c
   if (source === 'settings' && raw.type === 'json' && typeof raw.value === 'string') values.push(JSON.parse(raw.value))
   if (source === 'assets' && raw.thumbnail_name) values.push(path.join(getProgramStoreDir('thumbnails'), String(raw.thumbnail_name)))
   if (source === 'history' && raw.id) values.push(path.join(getProgramDataDir(), 'EditStates', `${String(raw.id)}.json`))
-  return decodeReferenceValues(values, context)
+  return decodeReferenceValues(values, context, source, String(raw.id ?? raw.request_id ?? raw.cursor ?? ''))
 }
 
 export async function collectSqlReferences(source: keyof typeof MEDIA_REFERENCE_TABLES, signal: AbortSignal): Promise<string[]> {
@@ -87,8 +97,9 @@ export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: 
   const context = databaseLocationContext(db)
   const refs = new Set<string>()
   const documentExtensions = [...new Set([...DOCUMENT_KINDS.map(kind => kind.extension), '.henjipack'])]
+  const exclude = onlyRoot ? [] : [...managedMediaRoots(), getUserModelsLocation().dir]
   const roots: ReferenceScanRoot[] = onlyRoot ? [{ path: onlyRoot }] : [
-    { path: context.userRoot, extensions: documentExtensions },
+    { path: context.userRoot, extensions: documentExtensions, exclude },
     ...(db.prepare('SELECT path FROM document_external_locations').all() as Array<{ path: string }>).map(root => ({ ...root, extensions: documentExtensions })),
     ...(db.prepare('SELECT path FROM document_index_documents').all() as Array<{ path: string }>).map(root => ({ ...root, extensions: documentExtensions })),
     { path: path.join(getProgramStoreDir('documentStore'), 'session-state'), optional: true },

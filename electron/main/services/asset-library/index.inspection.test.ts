@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import path from 'node:path'
 import type { MediaInspectionResult } from './mediaInspection'
+import { PROJECT_ASSET_MISSING } from '../documents/index-store'
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(), stat: vi.fn(), realpath: vi.fn(), allowed: vi.fn(), probe: vi.fn(), thumbnail: vi.fn(), allowRoot: vi.fn(),
@@ -79,6 +80,16 @@ function mediaInfo(width = 1920, stat = fileStat()): MediaInspectionResult {
 function missingError(): NodeJS.ErrnoException { return Object.assign(new Error('源文件不存在'), { code: 'ENOENT' }) }
 
 describe('资产检查与原文件内容归属', () => {
+  it('项目扫描标记缺失后，迟到的检查不能把素材重新发布为 ready', async () => {
+    const probe = deferred<MediaInspectionResult>()
+    mocks.probe.mockReturnValueOnce(probe.promise)
+    const pending = inspectAsset('asset-1')
+    await vi.waitFor(() => expect(mocks.probe).toHaveBeenCalledTimes(1))
+    Object.assign(database.asset(), { inspection_status: 'missing', inspection_error: PROJECT_ASSET_MISSING })
+    probe.resolve(mediaInfo())
+    expect(await pending).toMatchObject({ inspectionStatus: 'missing', inspectionError: PROJECT_ASSET_MISSING })
+    expect(mocks.thumbnail).not.toHaveBeenCalled()
+  })
   it('固定原路径只读核验和正式资产检查同身份，删除资产记录不改变源文件核验', async () => {
     const original = await inspectAsset('asset-1')
     expect(await inspectAssetFileContent(original.filePath, original.mediaType)).toEqual({ sizeBytes: original.sizeBytes, fileModifiedAt: original.fileModifiedAt, contentIdentity: original.contentIdentity })

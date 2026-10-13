@@ -6,6 +6,7 @@ import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../../protocol'
 import { getProgramStoreDir } from '../appPaths'
 import { getDb } from '../db'
 import { databaseLocations } from '../db-locations'
+import { PROJECT_ASSET_MISSING } from '../documents/index-store'
 import { createMainLogger } from '../logging'
 import { inspectMedia, normalizeAssetPath } from './mediaInspection'
 import { ensureAssetThumbnail } from './thumbnailService'
@@ -23,16 +24,18 @@ function thumbnailPathFor(name: string | null): string | null {
 /** 读出：文件位置换回绝对路径，缩略图按当前程序目录拼出。 */
 function decodeAssetRows(rows: StoredAssetRow[]): AssetRow[] {
   if (rows.length === 0) return []
-  return databaseLocations.use((scope) => rows.map(({ thumbnail_name: thumbnailName, ...row }) => ({
-    ...row, file_path: scope.decodePath(row.file_path), thumbnail_path: thumbnailPathFor(thumbnailName),
-  })))
+  return databaseLocations.use((scope) => rows.map(({ thumbnail_name: thumbnailName, ...row }) => {
+    const filePath = scope.decodePath(row.file_path)
+    return { ...row, file_path: filePath, thumbnail_path: thumbnailPathFor(thumbnailName),
+      ...(filePath.startsWith('henji:') ? { inspection_status: 'missing' as const, inspection_error: PROJECT_ASSET_MISSING } : {}) }
+  }))
 }
 /** 写入与按位置查找：绝对路径 → 位置写法。 */
 function encodeAssetPath(filePath: string): string {
   return databaseLocations.use((scope) => scope.encodePath(filePath))
 }
 
-function mediaUrl(filePath: string): string { return `henji-media://local/${encodeURIComponent(filePath)}` }
+function mediaUrl(filePath: string): string { return filePath.startsWith('henji:') ? '' : `henji-media://local/${encodeURIComponent(filePath)}` }
 // 999 is SQLite's portable minimum variable budget. It bounds each SQL batch,
 // never the number of assets or relations returned to the caller.
 const RELATION_BATCH_SIZE = 999
@@ -109,7 +112,8 @@ export async function inspectAssetFileContent(filePath: string, mediaType: Asset
   } finally { const next = fileContentQueue.shift(); if (next) next(); else fileContentActive-- }
 }
 function matchesInspectionAsset(row: AssetRow | undefined, asset: AssetDto): boolean {
-  return Boolean(row && row.file_path === asset.filePath && row.media_type === asset.mediaType && row.created_at === asset.createdAt)
+  return Boolean(row && !(row.inspection_status === 'missing' && row.inspection_error === PROJECT_ASSET_MISSING)
+    && row.file_path === asset.filePath && row.media_type === asset.mediaType && row.created_at === asset.createdAt)
 }
 function ownsAssetInspection(job: AssetInspection): boolean {
   return assetInspections.get(job.asset.id) === job && getDb() === job.database && matchesInspectionAsset(getAssetRow(job.asset.id), job.asset)
@@ -216,6 +220,7 @@ export function createAsset(input: CreateAssetRequest): AssetDto {
 
 export async function inspectAsset(id: string): Promise<AssetDto> {
   const asset = getAsset(id)
+  if (asset.filePath.startsWith('henji:') || asset.inspectionStatus === 'missing' && asset.inspectionError === PROJECT_ASSET_MISSING) return asset
   const previous = assetInspections.get(id)
   let preflight: InspectionPreflight | undefined
   if (previous && previous.database === getDb() && matchesInspectionAsset(getAssetRow(id), previous.asset)) {
@@ -235,7 +240,14 @@ export async function inspectAsset(id: string): Promise<AssetDto> {
 export async function inspectAssets(ids: string[]): Promise<AssetDto[]> { return await Promise.all(ids.map(inspectAsset)) }
 export async function relocateAsset(id: string, nextPath: string): Promise<AssetDto> { const filePath = normalizeAssetPath(nextPath); invalidateAssetInspection(id); getDb().prepare(`UPDATE assets SET file_path=?, inspection_status='pending', inspection_error=NULL, content_identity=NULL, updated_at=? WHERE id=?`).run(encodeAssetPath(filePath), Date.now(), id); return await inspectAsset(id) }
 export function updateAsset(input: UpdateAssetRequest): AssetDto { getDb().prepare('UPDATE assets SET display_name=?, updated_at=? WHERE id=?').run(input.displayName.trim(), Date.now(), input.id); return getAsset(input.id) }
-export function deleteAsset(id: string): void { invalidateAssetInspection(id); getDb().prepare('DELETE FROM assets WHERE id=?').run(id) }
+export function deleteAsset(id: string): void {
+  invalidateAssetInspection(id)
+  const db = getDb()
+  db.prepare('DELETE FROM assets WHERE id=?').run(id)
+  // The IPC acknowledgement proves absence in the authoritative index. Inspection
+  // deliberately rejects missing IDs and must not be used as an existence query.
+  if (db.prepare('SELECT * FROM assets WHERE id = ?').get(id)) throw new Error('删除后素材仍存在')
+}
 export function touchAsset(id: string): void { getDb().prepare('UPDATE assets SET last_used_at=?, updated_at=? WHERE id=?').run(Date.now(), Date.now(), id) }
 export function checkAssetPaths(filePaths: string[]): boolean[] {
   const find = getDb().prepare('SELECT 1 FROM assets WHERE file_path=? LIMIT 1')
@@ -352,7 +364,7 @@ export function queryAssets(query: AssetQuery): AssetPageDto {
   const order = query.sort === 'recent' ? 'COALESCE(a.last_used_at,0) DESC, a.created_at DESC, a.id' : 'a.created_at DESC, a.id'
   const rows = decodeAssetRows(getDb().prepare(`SELECT a.* FROM assets a${join}${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, query.pageSize, offset) as StoredAssetRow[])
   for (const row of rows) {
-    allowMediaRoot(path.dirname(row.file_path))
+    if (path.isAbsolute(row.file_path)) allowMediaRoot(path.dirname(row.file_path))
     if (row.thumbnail_path) allowMediaRoot(path.dirname(row.thumbnail_path))
   }
   const relations = loadAssetRelations(rows.map((row) => row.id))
@@ -361,5 +373,6 @@ export function queryAssets(query: AssetQuery): AssetPageDto {
 
 /** 资产原文件的绝对路径（MCP 媒体读取用）；资产不存在返回 null。 */
 export function getAssetFilePath(id: string): string | null {
-  return getAssetRow(id)?.file_path ?? null
+  const filePath = getAssetRow(id)?.file_path
+  return filePath && path.isAbsolute(filePath) ? filePath : null
 }

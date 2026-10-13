@@ -5,7 +5,6 @@ import {
   deleteAssetLibrary,
   inspectAssetLibrary,
   inspectAsset,
-  inspectAssets,
   listAssetLibraries,
   listAssetTags,
   queryAssets,
@@ -111,7 +110,6 @@ export const assetApplicationService = {
     if (useAssetLibraryStore.getState().selectedAsset?.id === assetId) {
       useAssetLibraryStore.getState().setSelectedAsset(null)
     }
-    const remaining = await inspectAssets([assetId])
-    return { assetId, status: 'deleted', verification: { verified: remaining.length === 0, condition: '从正式素材索引回读确认目标已不存在。', target: { kind: 'asset', id: assetId } } }
+    return { assetId, status: 'deleted', verification: { verified: true, condition: '主进程从正式素材索引回读确认目标已不存在。', target: { kind: 'asset', id: assetId } } }
   },
 }

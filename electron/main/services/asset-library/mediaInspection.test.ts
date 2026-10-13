@@ -25,3 +25,21 @@ it('无效清单及超预算读取失败直接拒绝，不回退媒体探测', a
   await expect(inspectMedia('D:/oversized.henji-code', 'code')).rejects.toThrow('超预算')
   expect(boundary.image).not.toHaveBeenCalled(); expect(boundary.exec).not.toHaveBeenCalled()
 })
+
+it('无容器 PCM 探测失败仍可收录，其他音频失败继续上抛', async () => {
+  boundary.binary.mockResolvedValue('ffprobe')
+  boundary.exec.mockImplementation((_binary, _args, callback) => callback(new Error('probe failed'), ''))
+  await expect(inspectMedia('D:/voice.pcm', 'audio')).resolves.toMatchObject({ mimeType: 'audio/pcm', durationSeconds: null })
+  await expect(inspectMedia('D:/voice.aac', 'audio')).rejects.toThrow('probe failed')
+})
+
+it.each([
+  ['aac', 'audio', 'audio/aac'], ['opus', 'audio', 'audio/opus'],
+  ['mkv', 'video', 'video/x-matroska'], ['m4v', 'video', 'video/mp4'], ['avif', 'image', 'image/avif'],
+] as const)('检查 %s 使用导入层同源 MIME', async (extension, kind, mimeType) => {
+  boundary.binary.mockResolvedValue('ffprobe')
+  boundary.exec.mockImplementation((_binary, _args, callback) => callback(null, '2'))
+  boundary.image.mockResolvedValue({ width: 10, height: 10 })
+  boundary.video.mockResolvedValue({ width: 10, height: 10, durationSeconds: 2 })
+  await expect(inspectMedia(`D:/source.${extension}`, kind)).resolves.toMatchObject({ mimeType })
+})
