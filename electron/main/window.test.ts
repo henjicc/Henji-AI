@@ -24,7 +24,7 @@ vi.mock('./ipc/window', () => ({ bindWindowStateEvents: () => state.beginSession
 vi.mock('./services/logging/main-logger', () => ({ createMainLogger: () => ({ warn: vi.fn(), error: state.error }) }))
 vi.mock('./services/video/frame-export', () => ({ cleanupAllVideoFrameExports: vi.fn() }))
 vi.mock('./windows/log-window', () => ({ closeLogWindow: vi.fn() }))
-vi.mock('./windows/video-edit-popout', () => ({ createVideoEditPopoutHost: () => ({ handleWindowOpen: vi.fn() }) }))
+vi.mock('./windows/video-edit-popout', () => ({ createVideoEditPopoutHost: () => ({ handleWindowOpen: (details: { url: string }) => details.url === 'about:blank' ? { action: 'allow' } : undefined }) }))
 vi.mock('./services/camera-stage-render', () => ({ closeCameraStageRenderWindow: vi.fn() }))
 vi.mock('./services/window-appearance', () => ({ windowAppearance: { getBackgroundColor: () => '' } }))
 vi.mock('./services/media-import', () => ({ warmupMediaImportPipeline: vi.fn() }))
@@ -35,7 +35,22 @@ import { createWindow } from './window'
 
 describe('startup window admission', () => {
   beforeEach(() => { vi.useFakeTimers(); state.events.length = 0; vi.clearAllMocks() })
-  afterEach(() => { vi.useRealTimers() })
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs() })
+
+  it('共享守卫保留受控剪辑浮窗放行，阻止外部导航、重定向与 webview', () => {
+    vi.stubEnv('ELECTRON_RENDERER_URL', 'http://127.0.0.1:5173/')
+    const win = createWindow({ headless: true })
+    const contents = win.webContents as unknown as EventEmitter & { setWindowOpenHandler: ReturnType<typeof vi.fn> }
+    const handler = contents.setWindowOpenHandler.mock.calls[0][0]
+    expect(handler({ url: 'about:blank' })).toEqual({ action: 'allow' })
+    expect(handler({ url: 'https://evil.example/' })).toEqual({ action: 'deny' })
+    const preventDefault = vi.fn()
+    contents.emit('will-navigate', { preventDefault }, 'http://127.0.0.1:5173/?view=logs#details')
+    expect(preventDefault).not.toHaveBeenCalled()
+    for (const event of ['will-navigate', 'will-redirect']) contents.emit(event, { preventDefault }, 'https://evil.example/')
+    contents.emit('will-attach-webview', { preventDefault })
+    expect(preventDefault).toHaveBeenCalledTimes(3)
+  })
 
   it('先显示窗口，回收结束后才加载业务页面和准入文档会话', async () => {
     let finish!: () => void

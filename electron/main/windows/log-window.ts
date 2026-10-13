@@ -1,6 +1,7 @@
 import { BrowserWindow, screen } from 'electron'
 import path from 'node:path'
-import { bindWindowStateEvents } from '../ipc/window'
+import { bindWindowStateBroadcast } from '../ipc/window'
+import { installRendererNavigationGuards } from '../security/main-renderer-url'
 import { windowAppearance } from '../services/window-appearance'
 import { resolveAppIconPath } from '../app-icon'
 import { resolveInitialWindowPosition } from '../window-presentation'
@@ -46,7 +47,8 @@ export function openLogWindow(): void {
     },
   })
 
-  bindWindowStateEvents(win)
+  bindWindowStateBroadcast(win)
+  installRendererNavigationGuards(win.webContents, 'logs')
 
   win.once('ready-to-show', () => {
     if (!win.isDestroyed()) {

@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { nativeFetch } from '@/platform/desktopApi'
+import type { HttpFetchInit } from '@/platform/contracts/system'
 
 const logger = createLogger('services.modelscopeCustomModels.availability')
 
@@ -60,7 +61,8 @@ export async function checkModelscopeModelAvailability(
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const response = await nativeFetch(url, { method: 'GET', signal: controller.signal })
+    const init: HttpFetchInit = { method: 'GET', signal: controller.signal, timeoutMs: REQUEST_TIMEOUT_MS }
+    const response = await nativeFetch(url, init)
     if (response.status === 500) {
       // 魔搭对查不到的 ModelId 统一返回 500，而不是 404 或 200+空结果
       return { state: 'not-found' }

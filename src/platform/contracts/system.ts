@@ -66,8 +66,13 @@ export interface PathsPlatform {
   tempDir(): Promise<string>
 }
 
+export interface HttpFetchInit extends RequestInit {
+  /** 包含响应体读取的主进程请求时限；正整数，最多 5 分钟，默认 60 秒。 */
+  timeoutMs?: number
+}
+
 export interface HttpPlatform {
-  fetch(url: string, init?: RequestInit): Promise<Response>
+  fetch(url: string, init?: HttpFetchInit): Promise<Response>
 }
 
 export interface SystemPlatform {

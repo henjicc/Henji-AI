@@ -7,10 +7,10 @@ import i18n from '@/i18n/config'
 import { createUpdatePreviewRelease } from '@/core/development/updatePreviewFixture'
 import UpdateDialog from './UpdateDialog'
 
-vi.mock('@/services/updateChecker', () => ({
+vi.mock('@/services/updateChecker', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/services/updateChecker')>(),
   downloadElectronUpdate: vi.fn(),
   installElectronUpdate: vi.fn(),
-  formatReleaseDate: () => '2 天前',
 }))
 
 describe('UpdateDialog（任务 5.7 标准弹窗骨架）', () => {
@@ -18,6 +18,14 @@ describe('UpdateDialog（任务 5.7 标准弹窗骨架）', () => {
     await i18n.changeLanguage('zh-CN')
   })
   afterEach(() => cleanup())
+
+  it('英文界面的发布日期使用英文相对日期', async () => {
+    await i18n.changeLanguage('en-US')
+    const release = { ...createUpdatePreviewRelease('available', '1.0.0'), publishedAt: new Date().toISOString() }
+    render(<UpdateDialog releaseInfo={release} currentVersion="1.0.0" onClose={() => undefined} />)
+    expect(screen.getByText('today')).toBeTruthy()
+    expect(screen.queryByText('今天')).toBeNull()
+  })
 
   it('有新版本：标准标题栏、更新说明分段为标题与列表、主动作在最右，不用符号字符当图标', () => {
     render(<UpdateDialog releaseInfo={createUpdatePreviewRelease('available', '1.0.0')} currentVersion="1.0.0" onClose={() => undefined} />)

@@ -70,7 +70,7 @@ function ReleaseNotes({ body, emptyText }: { body: string; emptyText: string }):
 }
 
 const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion, onClose }) => {
-  const { t } = useI18n('ui')
+  const { t, i18n } = useI18n('ui')
   const [isUpdating, setIsUpdating] = useState(false)
   // 本次点击产生的失败；更新器推送的失败（下载中断）从 releaseInfo 读取
   const [localFailure, setLocalFailure] = useState<string | null>(null)
@@ -152,7 +152,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
             <span className={UI_TEXT_TIMECODE_CLASS}>{currentVersion}</span>
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 text-text3" />
             <span className={`${UI_TEXT_TIMECODE_CLASS} text-accent-text`}>{releaseInfo.version}</span>
-            <span>{formatReleaseDate(releaseInfo.publishedAt)}</span>
+            <span>{formatReleaseDate(releaseInfo.publishedAt, i18n.language)}</span>
           </div>
         </div>
 

@@ -34,7 +34,11 @@ export interface NativeFetchRequestDto {
   method?: string
   headers?: Record<string, string>
   body?: string | Uint8Array
+  timeoutMs?: number
 }
+
+export const NATIVE_FETCH_DEFAULT_TIMEOUT_MS = 60_000
+export const NATIVE_FETCH_MAX_TIMEOUT_MS = 300_000
 
 export interface NativeFetchResponseDto {
   status: number
@@ -219,6 +223,7 @@ export async function nativeFetch(request: NativeFetchRequestDto): Promise<Nativ
     method: request.method,
     headers: request.headers,
     body: requestBody,
+    signal: AbortSignal.timeout(request.timeoutMs ?? NATIVE_FETCH_DEFAULT_TIMEOUT_MS),
   })
   const body = new Uint8Array(await response.arrayBuffer())
   return {

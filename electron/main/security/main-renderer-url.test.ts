@@ -1,7 +1,8 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+vi.mock('../services/logging/main-logger', () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
 
 import { isTrustedMainRendererUrl } from './main-renderer-url'
 
