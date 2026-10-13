@@ -22,7 +22,8 @@ import { VIDEO_EDIT_LABEL_COLOR_HEX } from '@/core/theme/colorTokens'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { FloatingPanelAnchorRect } from '@/components/ui/floatingPanelPosition'
 import { acceptsVideoEditDrop, dropVideoEditInput, endVideoEditItemDrag, readVideoEditDrop, writeVideoEditItemDrag } from '../application/videoEditDrop'
-import { appendVideoEditSequence, deleteVideoEditSequence, setVideoEditProjectView, switchVideoEditSequence, updateVideoEditSequenceSettings, type VideoEditInstance } from '../application/videoEditService'
+import { appendVideoEditSequence, deleteVideoEditSequence, focusVideoEditPanel, setVideoEditProjectView, switchVideoEditSequence, updateVideoEditSequenceSettings, type VideoEditInstance } from '../application/videoEditService'
+import { focusVideoEditPanelElement } from '../layout/videoEditPanelFocus'
 import { chooseVideoEditMedia, relinkVideoEditMedia } from '../application/videoEditMedia'
 import { appendVideoEditItems, createVideoEditAdjustmentItem, createVideoEditBin, createVideoEditGraphicItem, createVideoEditSequenceFromItem, deleteVideoEditBins, deleteVideoEditItems, setVideoEditLabels, updateVideoEditBin, updateVideoEditItems, type VideoEditGraphicItemInput } from '../application/videoEditProjectItems'
 import { updateVideoEditSource } from '../application/videoEditSource'
@@ -134,6 +135,12 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     if (error instanceof Error && /源预览请求已被更新|源预览已关闭/.test(error.message)) return
     onError(error)
   }) }
+  /** 双击打开序列：播放头回到第一帧，焦点进入时间线，接着按空格就从头播放。 */
+  const openSequence = (sequenceId: string): void => {
+    switchVideoEditSequence(projectId, sequenceId, { fromStart: true })
+    focusVideoEditPanel(projectId, 'timeline')
+    focusVideoEditPanelElement('timeline')
+  }
   const choose = (): void => run(() => chooseVideoEditMedia(projectId, binId || undefined))
   /** 文件夹的素材进了新建的子素材箱：当前素材箱只选中直接放进来的素材项。 */
   const selectImported = (targetBin: string, ids: string[]): void => {
@@ -253,7 +260,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       if (!event.shiftKey) anchor.current = entry.value.id
       run(() => setVideoEditProjectView(projectId, { selectedItemIds: selection }))
     },
-    onDoubleClick: (event: React.MouseEvent) => { event.stopPropagation(); if (entry.kind === 'bin') { selectBin(entry.value.id); return } run(() => entry.kind === 'sequence' ? switchVideoEditSequence(projectId, entry.value.id) : entry.value.mediaId ? updateVideoEditSource(projectId, { itemId: entry.value.id }) : appendVideoEditItems(projectId, [entry.value.id], instance.activeSequenceId)) },
+    onDoubleClick: (event: React.MouseEvent) => { event.stopPropagation(); if (entry.kind === 'bin') { selectBin(entry.value.id); return } run(() => entry.kind === 'sequence' ? openSequence(entry.value.id) : entry.value.mediaId ? updateVideoEditSource(projectId, { itemId: entry.value.id }) : appendVideoEditItems(projectId, [entry.value.id], instance.activeSequenceId)) },
     onContextMenu: (event: React.MouseEvent) => {
       event.stopPropagation(); pointerAt.current = { left: event.clientX, top: event.clientY, bottom: event.clientY, width: 0 }
       if (entry.kind === 'item' && !selected) run(() => setVideoEditProjectView(projectId, { selectedItemIds: [entry.value.id] }))

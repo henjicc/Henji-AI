@@ -8,11 +8,13 @@ import { publishVideoEditOutput, verifyVideoEditOutput, type VideoEditOutputRece
 const logger = createLogger('features.videoEdit.programCapture')
 export interface VideoEditProgramCaptureRequest { document: VideoEditComposition; frame: number; assertCurrent(): void }
 type Capture = (request: VideoEditProgramCaptureRequest, signal?: AbortSignal) => Promise<Blob>
-const providers = new WeakMap<VideoEditInstance, { sequenceId: string; capture: Capture }>()
+const providers = new WeakMap<VideoEditInstance, { sequenceId: string | (() => string); capture: Capture }>()
+const providerSequence = (provider: { sequenceId: string | (() => string) }): string => typeof provider.sequenceId === 'function' ? provider.sequenceId() : provider.sequenceId
 const pending = new WeakSet<VideoEditInstance>()
 const published = new WeakMap<VideoEditInstance, { document: VideoEditInstance['document']; sequenceId: string; frame: number; output: VideoEditOutputReceipt }>()
 
-export function registerVideoEditProgramCapture(owner: VideoEditInstance, sequenceId: string, capture: Capture): () => void {
+/** `sequenceId` 可以是取值函数：节目面板在同尺寸序列间切换时复用同一个渲染器，呈现的序列随之改变。 */
+export function registerVideoEditProgramCapture(owner: VideoEditInstance, sequenceId: string | (() => string), capture: Capture): () => void {
   if (providers.has(owner)) throw new Error('此剪辑已有节目选帧宿主。')
   const provider = { sequenceId, capture }; providers.set(owner, provider)
   return () => { if (providers.get(owner) === provider) providers.delete(owner) }
@@ -39,7 +41,7 @@ export async function captureVideoEditProgramFrame(projectId: string, frame?: nu
       try { await verifyVideoEditOutput(cached.output); assertCurrent(); return cached.output } catch (error) { assertCurrent(); published.delete(owner); logger.debug('已发布节目选帧不可复用', { event: 'video_edit.program_frame.cache_discarded', error }) }
     }
     const provider = providers.get(owner)
-    if (!provider || provider.sequenceId !== document.id) throw new Error('请打开当前序列的节目面板后再选帧。')
+    if (!provider || providerSequence(provider) !== document.id) throw new Error('请打开当前序列的节目面板后再选帧。')
     const platform = getPlatform()
     const path = typeof requestedPath === 'function' ? await requestedPath() : requestedPath ?? await platform.system.dialog.save({ defaultPath: `${baseline.name}-${target}.png`, filters: [{ name: 'PNG 图片', extensions: ['png'] }] })
     if (!path) return null
@@ -72,7 +74,7 @@ export async function setVideoEditPosterFrame(projectId: string, signal?: AbortS
   const target = owner.frame
   const baseline = owner.document; const document = getActiveVideoEditSequence(owner)
   const provider = providers.get(owner)
-  if (!provider || provider.sequenceId !== document.id) throw new Error('请打开当前序列的节目面板后再设为封面。')
+  if (!provider || providerSequence(provider) !== document.id) throw new Error('请打开当前序列的节目面板后再设为封面。')
   const assertCurrent = (): void => {
     signal?.throwIfAborted()
     if (!listVideoEditInstances().includes(owner) || owner.document !== baseline || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing) throw new Error('节目画面已变化，请重新设为封面。')

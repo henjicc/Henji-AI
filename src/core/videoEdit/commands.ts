@@ -5,6 +5,8 @@ export interface VideoEditShortcut { code: string; ctrl: boolean; alt: boolean; 
 const key = (code: string, ctrl = false, shift = false, alt = false): VideoEditShortcut => ({ code, ctrl, shift, alt, meta: false })
 const editScopes: VideoEditCommandScope[] = ['timeline', 'program']
 const monitorScopes: VideoEditCommandScope[] = ['timeline', 'program', 'source']
+/** 空格同 PR：焦点在素材、效果等面板里也能播放/暂停当前序列（遮罩编辑等专用作用域除外）。 */
+const playbackScopes: VideoEditCommandScope[] = [...monitorScopes, 'global', 'project', 'effects', 'content', 'annotations', 'tracking', 'color_grade', 'title_templates', 'style_kits']
 /**
  * `alternates`：同一命令的第二组默认键（Premiere 里 Delete 与 Backspace 都能清除片段）。用户改键后只保留用户的那一个。
  * 默认键位以本机 Adobe Premiere Pro 2026（Windows）`Adobe Premiere Pro Defaults.kys` 为准，对照表见任务 2.2。
@@ -46,7 +48,7 @@ export const VIDEO_EDIT_COMMANDS = [
   // 匹配帧（PR 序列菜单）：F 在源监视器打开播放头下片段的素材并定位到同一帧；Shift+R 反过来把播放头移到源监视器当前帧在序列里的位置。
   command('match_frame', '匹配帧', editScopes, key('KeyF')),
   command('reverse_match_frame', '反向匹配帧', monitorScopes, key('KeyR', false, true)),
-  command('play_pause', '播放／暂停', monitorScopes, key('Space')),
+  command('play_pause', '播放／暂停', playbackScopes, key('Space')),
   command('step_back', '上一帧', monitorScopes, key('ArrowLeft'), true),
   command('step_forward', '下一帧', monitorScopes, key('ArrowRight'), true),
   command('step_back_five', '后退五帧', monitorScopes, key('ArrowLeft', false, true), true),

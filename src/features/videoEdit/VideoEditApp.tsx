@@ -20,6 +20,7 @@ import { isUiInspectionActive } from '@/platform/runtime'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
 import { videoEditKeyboardCommand } from './application/videoEditKeyboard'
+import { focusVideoEditPanelElement } from './layout/videoEditPanelFocus'
 import { VideoEditShortcutDialog } from './panels/VideoEditShortcutSettings'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
@@ -38,15 +39,6 @@ import { cancelVideoEditBeatAnalysis, subscribeVideoEditBeats, videoEditBeatRevi
 
 /** Shift+1…5（Premiere 默认）切到的面板；切换后键盘焦点也进入该面板，后续快捷键按它的作用域生效。 */
 const FOCUS_COMMANDS: Partial<Record<VideoEditCommandId, 'project' | 'source' | 'timeline' | 'program' | 'effects'>> = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' }
-function focusPanelElement(panel: string): void {
-  requestAnimationFrame(() => {
-    const element = document.querySelector<HTMLElement>(`[data-video-edit-panel="${panel}"]`)
-    if (!element) return
-    const target = element.querySelector<HTMLElement>('[data-video-edit-timeline-viewport],[tabindex="0"]') ?? element
-    if (target === element && !element.hasAttribute('tabindex')) element.tabIndex = -1
-    target.focus({ preventScroll: true })
-  })
-}
 /** `（Premiere 默认）：最大化光标下的面板组，已有最大化时还原。 */
 function toggleMaximizedGroup(api: DockviewApi | null, hovered: Element | null): void {
   if (!api) return
@@ -138,16 +130,34 @@ export default function VideoEditApp(): React.ReactElement {
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const hovered = useRef<Element | null>(null)
-  return <div className="relative flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onPointerMoveCapture={event => { hovered.current = elementOfEventTarget(event.target) }} onKeyDown={event => {
-    const binding = videoEditKeyboardCommand({ ...event.nativeEvent, code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.nativeEvent.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, instance?.activePanel ?? 'global', shortcuts)
+  /** 剪辑快捷键分发：根节点的键盘事件和“焦点落在页面本身”时的事件共用。 */
+  const dispatchKey = (event: KeyboardEvent): void => {
+    const binding = videoEditKeyboardCommand({ ...event, code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, instance?.activePanel ?? 'global', shortcuts)
     if (!binding) return
     if (binding.id === 'maximize_panel') { event.preventDefault(); event.stopPropagation(); toggleMaximizedGroup(dockApi, hovered.current); return }
     const context = captureVideoEditCommandContext(projectId, binding.scope)
     if (!videoEditCommandState(context, binding.id).enabled) return
     event.preventDefault(); event.stopPropagation()
     const panel = FOCUS_COMMANDS[binding.id]
-    run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusPanelElement(panel) })
-  }}>
+    run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusVideoEditPanelElement(panel) })
+  }
+  const dispatchKeyRef = useRef(dispatchKey)
+  dispatchKeyRef.current = dispatchKey
+  const rootRef = useRef<HTMLDivElement>(null)
+  // 拖放新建序列、切换序列等会重建时间线，原先获得焦点的元素随之消失，焦点落回页面本身（body）。
+  // 这时键盘事件到不了剪辑根节点，空格就“没反应”。剪辑可见时由窗口兜底接住这类事件。
+  useEffect(() => {
+    if (!projectId) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.target !== document.body && event.target !== document.documentElement) return
+      const root = rootRef.current
+      if (!root || !root.isConnected || root.getClientRects().length === 0) return
+      dispatchKeyRef.current(event)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [projectId])
+  return <div ref={rootRef} className="relative flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onPointerMoveCapture={event => { hovered.current = elementOfEventTarget(event.target) }} onKeyDown={event => dispatchKey(event.nativeEvent)}>
     {instance ? <>
       <ApplicationOperationReviewBanner documentId={instance.document.id} domain="video_edit" label="剪辑" />
       <VideoEditImportProgress projectId={instance.document.id} />

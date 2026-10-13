@@ -100,7 +100,7 @@ export class VideoEditRenderer {
   }
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private readonly sequencePath: string[] = [document.id]) {
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id]) {
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
@@ -191,7 +191,17 @@ export class VideoEditRenderer {
     void image.pending.then(bitmap => bitmap.close(), () => {})
   }
   async updateDocument(document: VideoEditComposition): Promise<void> {
-    if (document.id !== this.document.id) throw new Error('渲染目标剪辑已经改变。')
+    if (document.id !== this.document.id) {
+      // 只有顶层节目渲染器可以换序列（同尺寸序列间切换复用 Worker 与 GPU，免去重建的等待）；嵌套渲染器绑定在自己的序列上。
+      if (this.sequencePath.length > 1) throw new Error('渲染目标剪辑已经改变。')
+      // 片段级的解码源、播放流与音频效果链属于上一个序列，全部释放；按媒体路径共享的帧缓存与解码器保留。
+      this.cancelPresentation(); await this.disposePlayback()
+      await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
+      this.sources.clear()
+      for (const chain of this.audioChains.values()) chain.dispose()
+      this.audioChains.clear()
+      this.sequencePath = [document.id]
+    }
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     await Promise.allSettled([...this.nestedPictures.values()].map(entry => entry.renderer.dispose()))
     await Promise.allSettled([...this.nestedSounds.values()].map(renderer => renderer.dispose()))

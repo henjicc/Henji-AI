@@ -1,3 +1,4 @@
+import { focusVideoEditPanelElement } from './videoEditPanelFocus'
 import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
 import { VideoEditStyleKitsPanel } from '../panels/VideoEditStyleKitsPanel'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
@@ -100,6 +101,16 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
       else if (apiRef.current) showVideoEditPanel(apiRef.current, instance.activePanel)
     })
   }, [instance])
+  // 当前序列一变（拖素材自动新建、双击打开、新建序列、撤销切换）就把键盘焦点交给时间线，接着按空格即可播放。
+  // 正在输入文字时不抢焦点（例如外部智能体切换序列时用户正在聊天框打字）；弹窗还开着就等它关掉再聚焦。
+  useEffect(() => {
+    let previous = instance.activeSequenceId
+    return subscribeVideoEditView(() => {
+      if (instance.activeSequenceId === previous) return
+      previous = instance.activeSequenceId
+      if (apiRef.current?.getPanel('timeline')?.api.location.type === 'grid') focusVideoEditPanelElement('timeline')
+    })
+  }, [instance])
   useEffect(() => subscribeVideoEditSource(() => {
     if (!listVideoEditInstances().some(value => value.document.id === instance.document.id)) return
     const source = readVideoEditSource(instance.document.id)
@@ -116,6 +127,16 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     const unbindGestures = root ? bindDockDragGestures(api, { root, canFloat: canFloatVideoEditDockSource, float: (source, at) => floatVideoEditDockSource(api, source, at) }) : () => {}
     // Dock 只在剪辑已打开时挂载：此时恢复上次浮出的面板，没有剪辑时不会弹窗。
     restoreVideoEditPopouts(api)
+    // 打开项目时左侧堆叠先显示「素材」：上次停在效果控件等标签时，进来不便找素材。
+    // 只切换那一组的可见标签，随后把激活面板交还时间线，空格播放等快捷键照常作用于时间线。
+    const project = api.getPanel('project')
+    if (project && project.api.location.type === 'grid') {
+      project.api.setActive()
+      const timeline = api.getPanel('timeline')
+      if (timeline && timeline.api.location.type === 'grid' && timeline.group !== project.group) timeline.api.setActive()
+    }
+    // 激活面板只是高亮；键盘焦点也要真正进入时间线，打开项目后直接按空格就能播放。
+    if (api.getPanel('timeline')?.api.location.type === 'grid') focusVideoEditPanelElement('timeline')
     onApiChange(api)
     let timer: ReturnType<typeof setTimeout> | undefined
     let failed = false

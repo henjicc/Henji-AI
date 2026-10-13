@@ -389,16 +389,25 @@ function rescaleSequenceViews(instance: VideoEditInstance, before: VideoEditDocu
     if (instance.activeSequenceId === sequence.id) { instance.frame = convert(instance.frame)!; instance.inFrame = convert(instance.inFrame); instance.outFrame = convert(instance.outFrame); instance.playing = false }
   }
 }
-export function switchVideoEditSequence(projectId: string, sequenceId: string): void {
+/**
+ * 切换到序列。切换已打开的标签保留各自的播放头；`fromStart` 用于“打开”这个动作（素材面板双击），
+ * 播放头回到第一帧，节目画面显示序列开头。记住的播放头已在序列末尾之后（内容被删短）时也回到第一帧，不停在空白处。
+ */
+export function switchVideoEditSequence(projectId: string, sequenceId: string, options: { fromStart?: boolean } = {}): void {
   const instance = requireVideoEditInstance(projectId)
   if (!instance.document.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('目标序列不存在。')
-  if (instance.activeSequenceId === sequenceId) return
+  if (instance.activeSequenceId === sequenceId) {
+    if (options.fromStart && instance.frame !== 0) { instance.playing = false; instance.scrubbing = false; instance.frame = 0; publishVideoEdit(true) }
+    return
+  }
   cancelVideoEditGesture(instance)
   instance.sequenceViews.set(instance.activeSequenceId, { ...getVideoEditTimelineView(projectId), selection: instance.selection, frame: instance.frame })
   instance.activeSequenceId = sequenceId
   instance.selectedCodeElement = null
   if (!instance.openSequenceIds.includes(sequenceId)) instance.openSequenceIds.push(sequenceId)
   Object.assign(instance, structuredClone(instance.sequenceViews.get(sequenceId) ?? defaultSequenceView(findActiveVideoEditSequence(instance))))
+  const opened = findActiveVideoEditSequence(instance)
+  if (options.fromStart || (opened && instance.frame >= videoEditDuration(opened))) instance.frame = 0
   instance.playing = false; instance.playbackDirection = 1; instance.scrubbing = false; programCommands.set(instance, {}); reconcileSequenceView(instance); publishVideoEdit(true)
 }
 export function editVideoSequence(projectId: string, sequenceId: string, update: (sequence: VideoEditSequence) => VideoEditSequence, gesture?: VideoEditGesture): VideoEditDocument {

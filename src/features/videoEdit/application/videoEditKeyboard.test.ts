@@ -28,12 +28,17 @@ it('当前真实面板限定命令；输入、原生按钮和弹窗保留自己�
   const child = document.createElement('div'); source.append(child)
   expect(videoEditKeyboardCommand(event(child, 'KeyI'), 'timeline', {})).toEqual({ id: 'mark_in', scope: 'source' })
   expect(videoEditKeyboardCommand(event(child, 'KeyV'), 'timeline', {})).toBeUndefined()
-  for (const selector of ['input', 'textarea', 'select', 'button']) {
+  for (const selector of ['input', 'textarea', 'select']) {
     const native = document.createElement(selector); source.append(native)
     expect(videoEditKeyboardCommand(event(native, 'Space'), 'timeline', {})).toBeUndefined()
   }
-  const button = document.createElement('div'); button.setAttribute('role', 'button'); source.append(button)
-  expect(videoEditKeyboardCommand(event(button, 'Space'), 'timeline', {})).toBeUndefined()
+  // 同 PR：普通按钮获得焦点时空格仍是播放；开关类控件保留空格切换
+  for (const node of [document.createElement('button'), Object.assign(document.createElement('div'), { role: 'button' })]) {
+    source.append(node)
+    expect(videoEditKeyboardCommand(event(node, 'Space'), 'timeline', {})?.id).toBe('play_pause')
+  }
+  const toggle = document.createElement('button'); toggle.setAttribute('role', 'switch'); source.append(toggle)
+  expect(videoEditKeyboardCommand(event(toggle, 'Space'), 'timeline', {})).toBeUndefined()
   const modal = document.createElement('div'); modal.setAttribute('role', 'dialog'); modal.append(child)
   expect(videoEditKeyboardCommand(event(child, 'KeyS', true), 'timeline', {})).toBeUndefined()
   for (const role of ['listbox', 'option']) {

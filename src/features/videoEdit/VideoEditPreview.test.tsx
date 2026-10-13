@@ -282,19 +282,33 @@ it('拖动在 GPU 合成期间准备最新帧，完成回执才公布画面，�
   await act(async () => { pixel.requests[3].resolve({ sourceTimestamps: [11 / 30] }) })
   expect(canvas.dataset.presentedFrame).toBe('11'); expect(canvas.dataset.scrubbing).toBe('false')
 })
-it('快速切序列等待旧GPU所有者释放，只初始化最新序列', async () => {
+it('切换序列（含尺寸不同的序列）复用同一渲染会话只换文档，不销毁也不重建', async () => {
   const instance = (await createVideoEditProject())!; const first = instance.activeSequenceId
-  const second = appendVideoEditSequence(instance.document.id)
+  const { width, height } = getActiveVideoEditSequence(instance)
+  const same = appendVideoEditSequence(instance.document.id, { width, height })
+  const other = appendVideoEditSequence(instance.document.id, { width: width / 2, height: height / 2 })
   const onError = vi.fn(); const view = render(<VideoEditPreview instance={instance} onError={onError} />)
   await act(async () => { await Promise.resolve() })
   expect(pixel.sessions).toBe(1)
-  let finish!: () => void
-  pixel.dispose.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
-  act(() => { switchVideoEditSequence(instance.document.id, second) }); view.rerender(<VideoEditPreview instance={instance} onError={onError} />)
-  await act(async () => { await Promise.resolve() }); expect(pixel.sessions).toBe(1)
-  act(() => { switchVideoEditSequence(instance.document.id, first) }); view.rerender(<VideoEditPreview instance={instance} onError={onError} />)
-  await act(async () => { finish() }); expect(pixel.sessions).toBe(2)
-  expect(pixel.dispose).toHaveBeenCalledTimes(1)
+  for (const target of [same, other, first]) {
+    act(() => { switchVideoEditSequence(instance.document.id, target) }); view.rerender(<VideoEditPreview instance={instance} onError={onError} />)
+    await act(async () => { await Promise.resolve() })
+  }
+  expect(pixel.sessions).toBe(1); expect(pixel.dispose).not.toHaveBeenCalled()
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('没有序列时预热渲染会话，第一个序列出现时节目面板直接接管，不新建也不释放', async () => {
+  const instance = (await createVideoEditProject())!
+  deleteVideoEditSequence(instance.document.id, instance.activeSequenceId)
+  expect(instance.activeSequenceId).toBe('')
+  const onError = vi.fn(); const view = render(<VideoEditPreview instance={instance} onError={onError} />)
+  await act(async () => { await Promise.resolve() })
+  expect(pixel.sessions).toBe(1)
+  act(() => { switchVideoEditSequence(instance.document.id, appendVideoEditSequence(instance.document.id)) }); view.rerender(<VideoEditPreview instance={instance} onError={onError} />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.sessions).toBe(1); expect(pixel.dispose).not.toHaveBeenCalled()
+  expect(view.getByLabelText('剪辑画面')).toBeTruthy()
   expect(onError).not.toHaveBeenCalled()
 })
 

@@ -135,9 +135,13 @@ export class VideoEditRenderSession {
       if (videoEditParameterNeedsFonts(this.document, update)) await this.syncFonts(document)
       await this.request({ kind: 'parameters', update }); this.document = document; return
     }
-    await this.selectProxies(original); await this.content.check(document); await this.authorizeLuts(document); await this.syncFonts(document)
-    const codeSources = await this.codeSources(document)
-    await this.request({ kind: 'update', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() }); this.document = document
+    const started = performance.now(); const steps: Record<string, number> = {}
+    const step = async (name: string, work: Promise<unknown>): Promise<void> => { const at = performance.now(); await work; steps[name] = Math.round(performance.now() - at) }
+    await step('proxies', this.selectProxies(original)); await step('content', this.content.check(document)); await step('luts', this.authorizeLuts(document)); await step('fonts', this.syncFonts(document))
+    let codeSources: Record<string, string> = {}
+    await step('code', this.codeSources(document).then(value => { codeSources = value }))
+    await step('worker', this.request({ kind: 'update', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() })); this.document = document
+    logger.debug('剪辑渲染文档已更新', { event: 'video_edit.render.document.updated', context: { sequenceId: document.id, durationMs: Math.round(performance.now() - started), steps } })
   }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }

@@ -92,7 +92,8 @@ export class VideoEditCodeSources {
   }
   updateDocument(document: VideoEditComposition): void {
     if (this.disposed) throw new Error('代码素材源会话已关闭。')
-    if (document.id !== this.document.id) throw new Error('代码素材源目标序列已改变。')
+    // 节目渲染器在序列间切换时沿用同一会话：代码素材定义与版本是项目级、不可变的，编译结果按版本缓存可直接复用；
+    // 片段级的静态画面在下一次渲染时由 releaseUnused 按实际用到的键释放。
     this.checkVersions(document); this.cancel(); this.document = document
   }
   /** The caller has established that immutable code versions and media did not change. */
