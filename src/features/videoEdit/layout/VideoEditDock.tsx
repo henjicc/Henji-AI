@@ -1,7 +1,7 @@
 import { focusVideoEditPanelElement } from './videoEditPanelFocus'
 import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
 import { VideoEditStyleKitsPanel } from '../panels/VideoEditStyleKitsPanel'
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWatermarkPanelProps, type IDockviewPanelProps } from 'dockview-react'
@@ -9,7 +9,7 @@ import 'dockview-react/dist/styles/dockview.css'
 import { UiButton, UiEmpty } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import { VIDEO_EDIT_FOCUSABLE_PANELS } from '@/core/videoEdit/panels'
-import { focusVideoEditPanel, listVideoEditInstances, subscribeVideoEditView, type VideoEditInstance } from '../application/videoEditService'
+import { focusVideoEditPanel, listVideoEditInstances, subscribeVideoEdit, videoEditRevision, subscribeVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { VideoEditPreview } from '../VideoEditPreview'
 import { VideoEditTimeline } from '../VideoEditTimeline'
 import { VideoEditProjectPanel } from '../panels/VideoEditProjectPanel'
@@ -32,23 +32,31 @@ import { VideoEditPopoutPortals } from './popout/VideoEditPopoutPortals'
 const logger = createLogger('features.videoEdit.layout')
 interface DockContext { instance: VideoEditInstance; onError: (reason: unknown) => void; onEffectsAdded?: (effectIds: readonly string[]) => void }
 const Context = createContext<DockContext | null>(null)
-function useDock(): DockContext { const value = useContext(Context); if (!value) throw new Error('剪辑面板宿主尚未就绪'); return value }
+const subscribeHidden = (): (() => void) => () => {}
+function useDock(visible: boolean): DockContext {
+  const value = useContext(Context)
+  // Some panels read the mutable domain instance directly. Subscribe while visible instead of
+  // invalidating every Context consumer (including hidden panels) on each host publication.
+  useSyncExternalStore(visible ? subscribeVideoEdit : subscribeHidden, visible ? videoEditRevision : () => 0)
+  if (!value) throw new Error('剪辑面板宿主尚未就绪')
+  return value
+}
 type PanelBody = (props: { visible: boolean }) => React.ReactElement
 /** 面板内容只有这一份：Dock 与系统浮窗共用，浮窗只是换挂载点。 */
-function ProjectBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="project"><VideoEditProjectPanel {...useDock()} visible={visible} /></div> }
-function EffectsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditEffectsPanel {...useDock()} visible={visible} /></div> }
-function ProgramBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock()} visible={visible} /></div> }
-function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock()} visible={visible} /></div> }
-function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock()} visible={visible} /></div> }
-function EffectsLibraryBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="effects_library"><VideoEditEffectsLibraryPanel {...useDock()} visible={visible} /></div> }
-function SourceBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditSourcePanel {...useDock()} visible={visible} /></div> }
+function ProjectBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="project"><VideoEditProjectPanel {...useDock(visible)} visible={visible} /></div> }
+function EffectsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditEffectsPanel {...useDock(visible)} visible={visible} /></div> }
+function ProgramBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock(visible)} visible={visible} /></div> }
+function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock(visible)} visible={visible} /></div> }
+function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock(visible)} visible={visible} /></div> }
+function EffectsLibraryBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="effects_library"><VideoEditEffectsLibraryPanel {...useDock(visible)} visible={visible} /></div> }
+function SourceBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0"><VideoEditSourcePanel {...useDock(visible)} visible={visible} /></div> }
 /** 面板之间露 4px 间隙（参照 PR 的深色边），当前面板组描强调色边，见 index.css 剪辑工作区一节。 */
 const VIDEO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock', 4)
-function TrackingBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="tracking"><VideoEditTrackingPanel {...useDock()} visible={visible} /></div> }
-function ColorGradeBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="color_grade"><VideoEditColorGradePanel {...useDock()} visible={visible} /></div> }
-function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="title_templates"><VideoEditTitleTemplatesPanel {...useDock()} visible={visible} /></div> }
-function AnnotationsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="annotations"><VideoEditAnnotationsPanel {...useDock()} visible={visible} /></div> }
-function StyleKitsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="style_kits"><VideoEditStyleKitsPanel {...useDock()} visible={visible} /></div> }
+function TrackingBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="tracking"><VideoEditTrackingPanel {...useDock(visible)} visible={visible} /></div> }
+function ColorGradeBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="color_grade"><VideoEditColorGradePanel {...useDock(visible)} visible={visible} /></div> }
+function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="title_templates"><VideoEditTitleTemplatesPanel {...useDock(visible)} visible={visible} /></div> }
+function AnnotationsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="annotations"><VideoEditAnnotationsPanel {...useDock(visible)} visible={visible} /></div> }
+function StyleKitsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="style_kits"><VideoEditStyleKitsPanel {...useDock(visible)} visible={visible} /></div> }
 const BODIES: Record<VideoEditPanelId, PanelBody> = { style_kits: StyleKitsBody, annotations: AnnotationsBody, title_templates: TitleTemplatesBody, color_grade: ColorGradeBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
@@ -175,7 +183,8 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     disposeRef.current = () => { event.dispose(); focus.dispose(); unbindGestures(); if (timer !== undefined) save() }
   }, [onApiChange, onError, instance])
   useEffect(() => () => { bindVideoEditPopoutDock(null); disposeRef.current(); apiRef.current = null; onApiChange(null) }, [onApiChange])
-  return <Context.Provider value={{ instance, onError, onEffectsAdded }}>
+  const context = useMemo(() => ({ instance, onError, onEffectsAdded }), [instance, onError, onEffectsAdded])
+  return <Context.Provider value={context}>
     {/* 层叠隔离与分隔条拖动保护见 DockviewHost（与 3D 镜头参考共用） */}
     <DockviewHost ref={hostRef} className="h-full min-h-0 w-full">
       <DockviewReact className="henji-cameraStage-dock henji-videoEdit-dock dockview-theme-abyss h-full min-h-0 w-full" theme={VIDEO_EDIT_DOCK_THEME} components={COMPONENTS}

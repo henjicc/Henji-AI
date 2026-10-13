@@ -1,3 +1,5 @@
+import { VideoEditCodePicture } from './videoEditCodePicture'
+export { VideoEditCodePicture } from './videoEditCodePicture'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { paintNativeText } from '@/services/vectorContent/textRaster'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
@@ -81,14 +83,6 @@ const imageShader = `${shapeShader}
 /** Borrowed from the compositor; this runtime never decodes, uploads, caches or destroys these textures. */
 export interface VideoEditCodeImageInput { texture: GpuTexture; width: number; height: number; owner: GpuDevice; premultiplied: boolean }
 
-/** Texture belongs to the compositor's device, with premultiplied alpha. */
-export class VideoEditCodePicture {
-  /** True for `rgba16float` surfaces: effects and transitions on high-precision material keep its precision. */
-  readonly highPrecision: boolean
-  constructor(readonly texture: GpuTexture, readonly width: number, readonly height: number, readonly owner: GpuDevice, readonly textureFormat: VideoEditGpuColorFormat = 'rgba8unorm') {
-    this.highPrecision = textureFormat === VIDEO_EDIT_PRECISE_FORMAT
-  }
-}
 interface Surface { picture: VideoEditCodePicture; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer; maskData?: Uint8Array; maskRgba?: Uint8Array }
 /** A filter version's compiled pipelines, one per output format. */
 interface CompiledFilter { program: CodeMaterialProgram; pipelines: Map<VideoEditGpuColorFormat, GpuRenderPipeline>; transitionHandles: boolean }

@@ -35,7 +35,22 @@ class FakeWorker {
 vi.stubGlobal('Worker', FakeWorker)
 vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { drawImage: vi.fn() } } })
 
-const { VideoEditRenderSession } = await import('./videoEditRenderSession')
+const { VideoEditRenderSession, warmVideoEditNativeDecoder } = await import('./videoEditRenderSession')
+it('工作区预启动合并重复挂载，不创建帧通道或 Worker，失败后可以重试', async () => {
+  let finish!: () => void
+  platform.status.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve({ available: true, forcedBackend: null }) }))
+  const first = warmVideoEditNativeDecoder()
+  expect(warmVideoEditNativeDecoder()).toBe(first)
+  await Promise.resolve()
+  expect(platform.status).toHaveBeenCalledOnce()
+  expect(workers).toHaveLength(0)
+  expect(platform.connect).not.toHaveBeenCalled()
+  finish(); await first
+  platform.status.mockRejectedValueOnce(new Error('暂时不可用'))
+  await warmVideoEditNativeDecoder()
+  await warmVideoEditNativeDecoder()
+  expect(platform.status).toHaveBeenCalledTimes(3)
+})
 function composition(): VideoEditComposition {
   return {
     id: 'sequence', name: '序列', revision: 0, width: 1920, height: 1080, frameRate: { numerator: 60, denominator: 1 }, fps: 60, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,

@@ -18,7 +18,8 @@ function finish(projectId: string, reason: string): void {
   if (!value) return
   value.observer?.takeRecords().forEach(entry => value.tasks.push({ at: performance.timeOrigin + entry.startTime - value.context.startedAt, durationMs: entry.duration }))
   value.observer?.disconnect(); clearTimeout(value.timer); windows.delete(projectId)
-  videoEditTimingEvent(value.context, 'program.window.completed', { reason, firstFrameMs: value.firstFrameAt, publications: value.publications, commits: value.commits, longTasks: value.tasks, longTaskCount: value.tasks.length, longTaskMaxMs: Math.max(0, ...value.tasks.map(task => task.durationMs)) })
+  const afterFirst = value.firstFrameAt === undefined ? [] : value.tasks.filter(task => task.at + task.durationMs > value.firstFrameAt!)
+  videoEditTimingEvent(value.context, 'program.window.completed', { reason, firstFrameMs: value.firstFrameAt, publications: value.publications, commits: value.commits, postFirstFrameLongTaskCount: afterFirst.length, postFirstFrameLongTaskMaxMs: Math.max(0, ...afterFirst.map(task => task.durationMs)), longTasks: value.tasks, longTaskCount: value.tasks.length, longTaskMaxMs: Math.max(0, ...value.tasks.map(task => task.durationMs)) })
 }
 export function beginVideoEditFirstFrame(projectId: string, sequenceId: string, reason: 'open' | 'switch'): void {
   finish(projectId, 'superseded')

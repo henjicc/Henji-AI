@@ -17,7 +17,7 @@ import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { planVideoEditAudioEffectBlock, VideoEditAudioEffectChain } from './videoEditAudioEffects'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
-import { VideoEditCodeSources } from './videoEditCodeSources'
+import type { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
@@ -226,7 +226,6 @@ export class VideoEditRenderer {
     }
     this.document = document
     this.resizeCanvas()
-    this.warmShaderGraphs()
   }
   /** Preserve decoder, uploaded source pictures, nested sessions and playback schedules during parameter gestures. */
   updateParameters(update: VideoEditParameterUpdate): void {
@@ -240,7 +239,7 @@ export class VideoEditRenderer {
   private warmShaderGraphs(): void {
     const compositor = this.compositor
     if (!compositor) return
-    const specs = videoEditShaderGraphWarmSpecs(this.document.sequences ?? [this.document], kind => isShaderGraphTransition(kind) ? shaderGraphTransitionSpec(kind) : undefined)
+    const specs = videoEditShaderGraphWarmSpecs([this.document], kind => isShaderGraphTransition(kind) ? shaderGraphTransitionSpec(kind) : undefined)
     if (specs.length) void compositor.code().then(code => code.shaderGraphs().warm(specs)).catch(() => undefined)
   }
   /** Newly imported/replaced fonts must rebuild cached glyphs and nested text surfaces. */
@@ -302,6 +301,7 @@ export class VideoEditRenderer {
     if (this.playback) await this.disposePlayback()
     this.buildPlayback(this.document, frame, videoEditVisibleTracks(this.document))
     this.armedFrame = frame; this.lastForwardFrame = frame - 1
+    this.warmShaderGraphs()
   }
   private async disposePlayback(): Promise<void> {
     this.armedFrame = undefined
@@ -392,7 +392,7 @@ export class VideoEditRenderer {
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, durationMs => this.timing?.('compositor.ready', durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor); this.warmShaderGraphs() }
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
     const effectErrors: string[] = []
     const onEffectError = (effect: VideoEditEffect, error: unknown): void => {
       const message = `效果“${effect.name}”无法应用，已跳过；请重置参数或修改滤镜源码。`
@@ -400,7 +400,11 @@ export class VideoEditRenderer {
       logger.warn(message, { event: 'video_edit.effect.render_failed', error, context: { sequenceId: document.id, effectId: effect.id, frame } })
     }
     const decodeStart = performance.now()
-    if (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length)) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
+    if (!this.codeSources && (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length))) {
+      const { VideoEditCodeSources } = await import('./videoEditCodeSources')
+      if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
+      this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
+    }
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {
       const media = document.media.find(media => media.id === id && media.kind === 'image')

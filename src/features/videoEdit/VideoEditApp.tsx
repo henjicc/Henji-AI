@@ -1,4 +1,5 @@
 import { countVideoEditTiming } from './engine/videoEditFirstFrameTiming'
+import { warmVideoEditNativeDecoder } from './engine/videoEditRenderSession'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationText } from '@/i18n/notifications'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
@@ -109,6 +110,7 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
 
 export default function VideoEditApp(): React.ReactElement {
   useEffect(() => { countVideoEditTiming('commits') })
+  useEffect(() => { void warmVideoEditNativeDecoder() }, [])
   useEffect(() => { if (isUiInspectionActive()) void import('./engine/videoEditCodeProbe') }, [])
   useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
   const instance = activeVideoEditInstance()

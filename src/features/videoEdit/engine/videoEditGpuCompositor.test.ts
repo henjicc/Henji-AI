@@ -10,6 +10,21 @@ import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0 }))
+it('首帧管线并行异步编译，全部就绪前不提交 GPU 命令', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  const finishes: Array<() => void> = []
+  const compile = vi.fn((descriptor: unknown) => new Promise<ReturnType<typeof device.createRenderPipeline>>(resolve => finishes.push(() => resolve({ descriptor, getBindGroupLayout: () => ({}) }))))
+  Object.assign(device, { createRenderPipelineAsync: compile })
+  const project = createVideoEditDocument('并行初始化')
+  const draw = compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)
+  await vi.waitFor(() => expect(compile).toHaveBeenCalledTimes(9))
+  expect(device.createRenderPipeline).not.toHaveBeenCalled()
+  expect(device.queue.submit).not.toHaveBeenCalled()
+  for (const finish of finishes) finish()
+  await (await draw).completion
+  expect(device.queue.submit).toHaveBeenCalledOnce()
+  await compositor.dispose()
+})
 it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不受上帧绑定污染',async()=> {
   const {compositor,device}=copyFixture(async()=>{})
   const project=createVideoEditDocument('贴屏');project.items.push({id:'image',kind:'image',name:'输入'})

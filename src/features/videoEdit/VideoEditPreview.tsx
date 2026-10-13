@@ -304,6 +304,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const stopAudio = (): void => audioScheduler.stop()
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(instance.playing && instance.playbackDirection === 1 ? meter.read() : Array.from({ length: appliedDocument.channels }, () => ({ peak: 0, rms: 0 }))) }, 50)
     let lastPresentation = -Infinity
+    let firstPresentationAt = Infinity
+    let presentedSequenceId = ''
+    let lastInteractionAt = -Infinity
+    const interaction = (): void => { lastInteractionAt = performance.now() }
+    const idleEvents = ['pointerdown', 'pointermove', 'wheel', 'keydown'] as const
+    for (const event of idleEvents) window.addEventListener(event, interaction, { passive: true, capture: true })
     // 智能区域（4.7d）：分析完成的段落交给渲染 Worker，并重画当前帧（之前跳过了未就绪区域的效果）。
     let appliedRegions = ''
     const pushRegions = (): void => {
@@ -340,6 +346,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       } else if (explanationSurface && (explanationSurface.dataset.presentedFrame !== String(target) || explanationSurface.dataset.presentedRevision !== String(revision))) {
         explanationSurface.remove(); explanationSurface = undefined
       }
+      if (presentedSequenceId !== composition.id) { presentedSequenceId = composition.id; firstPresentationAt = performance.now() }
       retainExplanationPixels(surface, target, result.history)
       if (result.presented === true) recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs })
       lastPresentation = requestedAt
@@ -526,8 +533,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             if (playing && current.playing && current.playbackDirection === direction && videoEditProgramCommandIdentity(instance.document.id) === command) setVideoEditView(instance.document.id, { frame: target }, true)
           }
         }
-        // 起播预热：暂停画面一出来，就在后台把前向解码定位到播放头（从关键帧解到当前帧），按下播放即可直接出下一帧。
-        if (!playing && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && (!current.scrubbing || performance.now() - lastPresentation > PLAY_ARM_SCRUB_REST_MS) && captureFull === 0) {
+        // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
+        if (!playing && performance.now() - firstPresentationAt >= 1100 && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && (!current.scrubbing || performance.now() - lastPresentation > PLAY_ARM_SCRUB_REST_MS) && captureFull === 0) {
           armedDocument = document; armedFrame = current.frame
           // 声音设备一并提前打开（首次创建 AudioContext 在 Windows 上要几百毫秒）。
           firstBlock = undefined
@@ -559,7 +566,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     let retired = false
     stopCurrent = (): void => {
       if (retired) return
-      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
+      retired = true; for (const event of idleEvents) window.removeEventListener(event, interaction, true); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
       programReleases.set(instance, Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()]))
       retainExplanationPixels(surface, -1)
       explanationSurface?.remove(); explanationSurface = undefined

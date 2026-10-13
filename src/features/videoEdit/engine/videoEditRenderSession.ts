@@ -19,6 +19,19 @@ import { loadDocumentFont, pinDocumentFonts, releaseDocumentFonts } from '@/plat
 import { videoEditParameterUpdate, videoEditParameterNeedsFonts } from './videoEditParameterUpdate'
 
 const logger = createLogger('features.videoEdit.render')
+let nativeWarmup: Promise<void> | undefined
+/** The application owns the decoder process; warming status creates no frame route or decoder session. */
+export function warmVideoEditNativeDecoder(): Promise<void> {
+  if (nativeWarmup) return nativeWarmup
+  const started = performance.now()
+  logger.info('剪辑原生解码服务开始预启动', { event: 'video_edit.decode.prewarm.start' })
+  nativeWarmup = Promise.resolve().then(() => getPlatform().videoDecoder.status()).then(status => {
+    logger.info('剪辑原生解码服务预启动完成', { event: 'video_edit.decode.prewarm.completed', context: { durationMs: performance.now() - started, available: status.available } })
+  }).catch(error => {
+    logger.warn('剪辑原生解码服务预启动未完成，打开画面时重试', { event: 'video_edit.decode.prewarm.failed', error })
+  }).finally(() => { nativeWarmup = undefined })
+  return nativeWarmup
+}
 
 /** A bounded request stream owned by a view/export, independent from the project lifetime. */
 export class VideoEditRenderSession {

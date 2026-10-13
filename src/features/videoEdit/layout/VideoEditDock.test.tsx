@@ -16,10 +16,11 @@ import { videoEditClipSchema } from '@/core/videoEdit/document'
 import * as compositing from '../application/videoEditCompositing'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { closeAllVideoEdits, openSeededVideoEdit } from '../application/videoEditDocumentTestKit'
-import { focusVideoEditPanel, setVideoEditView } from '../application/videoEditService'
+import { focusVideoEditPanel, setVideoEditView, publishVideoEdit } from '../application/videoEditService'
 
 const lifetime = vi.hoisted(() => ({ created: 0, live: 0, peak: 0, disposed: 0 }))
 const effectScroll = vi.hoisted(() => vi.fn())
+const projectRenders = vi.hoisted(() => vi.fn())
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/contexts/NotificationContext', () => ({ useNotification: () => ({ showNotification: vi.fn() }) }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -36,7 +37,7 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
     dispose() {}
   } }
 })
-vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: () => <div>素材面板</div> }))
+vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: ({ instance }: { instance: VideoEditInstance }) => { projectRenders(); return <div>素材面板 {instance.document.name}</div> } }))
 vi.mock('../panels/VideoEditStyleKitsPanel', () => ({ VideoEditStyleKitsPanel: () => <div>风格面板</div> }))
 vi.mock('../panels/VideoEditAnnotationsPanel', () => ({ VideoEditAnnotationsPanel: () => <div>批注面板</div> }))
 vi.mock('../panels/VideoEditTitleTemplatesPanel', () => ({ VideoEditTitleTemplatesPanel: () => <div>基本图形面板</div> }))
@@ -497,4 +498,23 @@ it('面板菜单紧跟在组内当前标签的标题旁（PR），切换当前�
   act(() => dock.getPanel('program')!.api.setActive())
   expect(menuTabs().some(text => text.includes('节目画面'))).toBe(true)
   expect(menuTabs().some(text => text.includes('时间线'))).toBe(false)
+})
+
+it('宿主重复发布不重绘隐藏素材面板，重新显示时读到最新文档', () => {
+  const document = createVideoEditDocument('隐藏前')
+  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0, contentVersion: 0 }
+  let api: DockviewApi | null = null
+  const onApiChange = (value: DockviewApi | null): void => { api = value }
+  const onError = vi.fn()
+  const view = render(<VideoEditDock instance={instance} onError={onError} onApiChange={onApiChange} />)
+  const dock = api as unknown as DockviewApi
+  act(() => { const effects = dock.getPanel('effects')!; dock.getPanel('project')!.api.moveTo({ group: effects.group, position: 'center' }); effects.api.setActive() })
+  expect(dock.getPanel('project')!.api.isVisible).toBe(false)
+  projectRenders.mockClear()
+  instance.document = { ...document, name: '隐藏后更新' }
+  for (let i = 0; i < 3; i++) act(() => { publishVideoEdit(); view.rerender(<VideoEditDock instance={instance} onError={onError} onApiChange={onApiChange} />) })
+  expect(projectRenders).not.toHaveBeenCalled()
+  act(() => { showVideoEditPanel(dock, 'project') })
+  expect(view.getByText('素材面板 隐藏后更新')).toBeTruthy()
+  expect(projectRenders).toHaveBeenCalledOnce()
 })

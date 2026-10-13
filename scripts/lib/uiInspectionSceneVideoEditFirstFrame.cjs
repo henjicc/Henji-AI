@@ -36,7 +36,7 @@ function createVideoEditFirstFrameScene() {
         const first = events.find(entry => entry.event === 'video_edit.program.first_frame')?.context
         const window = events.find(entry => entry.event === 'video_edit.program.window.completed' && entry.context?.reason === 'presented')?.context
         assert.ok(first && window, `缺少首帧及长任务回执：${JSON.stringify(events)}`)
-        const run = { reason, first, window, stages: events.filter(entry => entry.context?.startedAt === first.startedAt).map(entry => ({ event: entry.event, ...entry.context })) }
+        const run = { reason, first, window, prewarm: events.filter(entry => entry.event === 'video_edit.decode.prewarm.completed').map(entry => entry.context), stages: events.filter(entry => entry.context?.startedAt === first.startedAt).map(entry => ({ event: entry.event, ...entry.context })) }
         evidence.runs.push(run); save(); console.log('[first-frame]', JSON.stringify(run))
       }
       // 首次原生子进程冷启动单列；随后三次打开同一已存项目。
@@ -56,7 +56,7 @@ function createVideoEditFirstFrameScene() {
           const sequence = readVideoEditFile(seeded.file).sequences.find(value => value.name === name)
           assert.ok(sequence)
           const sequenceRef = { kind: 'video_edit.sequence', id: `${seeded.documentId}:${sequence.id}` }
-          await callTool(client, 'change_application_entities', operationEnvelope([await read(sequenceRef)], { summary: '加入首帧音画', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: ['video'].map(kind => ({ properties: { 'video_edit.clip.item_id': kind === 'audio' ? 'item-audio' : 'item-source', 'video_edit.clip.name': kind, 'video_edit.clip.kind': kind, 'video_edit.clip.track': sequence.tracks.find(track => track.kind === kind).index, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 480 } })) }] }))
+          await callTool(client, 'change_application_entities', operationEnvelope([await read(sequenceRef)], { summary: '加入首帧画面', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: ['video'].map(kind => ({ properties: { 'video_edit.clip.item_id': 'item-source', 'video_edit.clip.name': kind, 'video_edit.clip.kind': kind, 'video_edit.clip.track': sequence.tracks.find(track => track.kind === kind).index, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 480 } })) }] }))
           await page.waitForTimeout(1500)
           const after = new Date().toISOString()
           await page.locator(`[data-video-edit-project-entry="${sequence.id}"]`).dblclick()
