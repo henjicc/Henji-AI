@@ -46,6 +46,33 @@ afterEach(async () => {
 })
 
 describe('TranscodingTileOutputSink 小尺寸文档', () => {
+  it('接近 Windows 路径上限的目录使用短暂存和中间文件完成导出', async () => {
+    const deepDir = path.join(rootDir, 'd'.repeat(Math.max(1, 224 - rootDir.length - 1)))
+    const targetPath = path.join(deepDir, 'image.png')
+    expect(targetPath.length).toBeLessThan(260)
+    const sink = new TranscodingTileOutputSink(targetPath, { format: 'png8', inputByteOrder: 'little-endian' })
+    await sink.begin(baseDescription)
+    const pixels = createPixels(baseDescription)
+    await sink.writeTile({ x: 0, y: 0, width: 1, height: 1, rowStride: 4, pixels })
+    await sink.complete()
+    const sharp = await loadSharp()
+    expect(await sharp(await fsp.readFile(targetPath)).ensureAlpha().raw().toBuffer()).toEqual(Buffer.from(pixels))
+    expect(await fsp.readdir(deepDir)).toEqual(['image.png'])
+  })
+
+  it('合法长目标名不影响同目录暂存与 PNG 发布', async () => {
+    const targetPath = path.join(rootDir, `${'测'.repeat(process.platform === 'win32' ? 220 : 72)}.png`)
+    const sink = new TranscodingTileOutputSink(targetPath, { format: 'png8', inputByteOrder: 'little-endian' })
+    const pixels = createPixels(baseDescription)
+    await sink.begin(baseDescription)
+    await sink.writeTile({ x: 0, y: 0, width: 1, height: 1, rowStride: 4, pixels })
+    await sink.complete()
+    const sharp = await loadSharp()
+    // Windows 的原生解码器仍可能不支持长路径；用已发布的字节验证像素。
+    expect(await sharp(await fsp.readFile(targetPath)).ensureAlpha().raw().toBuffer()).toEqual(Buffer.from(pixels))
+    expect(await fsp.readdir(rootDir)).toEqual([path.basename(targetPath)])
+  })
+
   it.each([
     ...[
       { format: 'png8' as const, extension: 'png', sharpFormat: 'png' as const },

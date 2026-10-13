@@ -4,7 +4,6 @@ import path from 'node:path'
 
 import { createMainLogger } from '../logging'
 import { persistImageSourceTracked } from '../image/image-file-ops'
-import { createImageEditSourceFingerprint } from './raster-export-snapshot'
 import { createImageEditorV3ResourceMediaUrl } from './resource-media-url'
 import type { ImageEditDocumentRepository } from './document-repository'
 import type { ContentAddressedResourceStore } from './resource-store'
@@ -130,18 +129,9 @@ export class ManagedRasterMaterializer {
       })
       const lease = await this.resources.acquireLease([stored.id])
       try {
-        const current = await this.documents.loadPaged(completed.documentId)
-        if (
-          current.revision !== completed.revision
-          || createImageEditSourceFingerprint(current) !== completed.sourceFingerprint
-        ) throw new Error('Managed raster snapshot changed before preview publication')
-        await this.documents.save({
-          documentId: current.documentId,
-          expectedRevision: current.revision,
-          nextRevision: current.revision,
-          document: current.document,
-          history: current.history,
-          resourceRefs: current.resourceRefs,
+        await this.documents.publishPreview(completed.documentId, {
+          expectedRevision: completed.revision,
+          sourceFingerprint: completed.sourceFingerprint,
           previewRef: stored.id,
         })
       } finally {

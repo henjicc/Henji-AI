@@ -20,6 +20,16 @@ afterEach(async () => {
 })
 
 describe('ContentAddressedResourceStore', () => {
+  it('去重写入刷新旧对象年龄，默认 GC 保留尚未保存的引用', async () => {
+    const bytes = Buffer.from('reused mask tile')
+    const first = await store.putBuffer(bytes)
+    const old = new Date(Date.now() - 120_000)
+    await fsp.utimes(store.getFilesystemPath(first.id), old, old)
+    expect((await store.putBuffer(bytes)).created).toBe(false)
+    expect((await store.garbageCollect(new Set())).deleted).toEqual([])
+    expect(await store.has(first.id)).toBe(true)
+  })
+
   it('按 SHA-256 去重并拒绝与声明哈希不一致的内容', async () => {
     const bytes = Buffer.from('same immutable pixels')
     const expected = crypto.createHash('sha256').update(bytes).digest('hex')

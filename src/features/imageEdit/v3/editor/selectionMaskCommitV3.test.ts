@@ -6,6 +6,7 @@ import {
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
+import { rectanglePath } from '@/core/imaging/vectorContent'
 import { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import {
   IMAGE_EDITOR_SELECTION_PERSIST_BATCH_SIZE_V3,
@@ -41,6 +42,37 @@ function persistWithSequentialHashes() {
 }
 
 describe('图片编辑 V3 选区蒙版原子提交', () => {
+  it('矢量蒙版 replace 清除全部矢量覆盖，撤销恢复原蒙版', async () => {
+    const { bus, document, layer } = createFixture(1024, 64)
+    layer.mask = { ...createImageEditSparseMaskReferenceV3('vector-mask', false, 0),
+      vectorPaths: [{ operation: 'replace', path: rectanglePath(0, 0, 1024, 64) }] }
+    const original = structuredClone(layer.mask)
+    const commit = new ImageEditorSelectionMaskCommitV3({
+      bus, document, layer, shape: { type: 'rectangle', x: 2, y: 3, width: 10, height: 12 },
+      combineMode: 'replace', resourceByteSizes: new Map(),
+      persistTiles: persistWithSequentialHashes(), collectGarbage: vi.fn(),
+    })
+    await expect(commit.commit()).resolves.toBe(true)
+    expect(bus.getSnapshot().document.layers[0].mask).not.toHaveProperty('vectorPaths')
+    expect(bus.getPersistenceSnapshot().history.undo[0].forward.type).toBe('layer.set-mask')
+    expect(bus.undo()).toBe(true)
+    expect(bus.getSnapshot().document.layers[0].mask).toEqual(original)
+  })
+
+  it.each(['add', 'subtract', 'intersect'] as const)('矢量蒙版拒绝 %s，不写像素或历史', async (combineMode) => {
+    const { bus, document, layer } = createFixture()
+    layer.mask = { ...createImageEditSparseMaskReferenceV3('vector-mask', false, 0),
+      vectorPaths: [{ operation: 'replace', path: rectanglePath(0, 0, 64, 64) }] }
+    const persistTiles = persistWithSequentialHashes()
+    const commit = new ImageEditorSelectionMaskCommitV3({
+      bus, document, layer, shape: { type: 'rectangle', x: 2, y: 3, width: 10, height: 12 },
+      combineMode, resourceByteSizes: new Map(), persistTiles, collectGarbage: vi.fn(),
+    })
+    await expect(commit.commit()).rejects.toThrow('只能使用替换')
+    expect(persistTiles).not.toHaveBeenCalled()
+    expect(bus.getSnapshot().history.undoCount).toBe(0)
+  })
+
   it('无蒙版 replace 写成严格 default0 稀疏蒙版，整次手势只产生一条可撤销历史', async () => {
     const { bus, document, layer } = createFixture()
     const persistTiles = persistWithSequentialHashes()

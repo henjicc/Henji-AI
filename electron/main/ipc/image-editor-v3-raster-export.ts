@@ -1,4 +1,5 @@
 import path from 'node:path'
+import fsp from 'node:fs/promises'
 
 import { BrowserWindow, dialog, type IpcMainInvokeEvent } from 'electron'
 
@@ -136,20 +137,40 @@ export function registerImageEditorV3RasterExportIpc(
       event.sender.id,
       async (signal) => {
         const presentation = formatPresentation(payload.format)
-        const selection = await dialog.showSaveDialog(ownerFor(event), {
+        const owner = ownerFor(event)
+        const dialogOptions = {
           defaultPath: exportFileName(payload.suggestedName, payload.documentRef, payload.format),
           filters: [{ name: presentation.label, extensions: presentation.acceptedExtensions }],
-        })
-        if (selection.canceled || !selection.filePath) {
-          logger.info('用户取消栅格图片导出', {
-            event: 'image_editor_v3.raster_export.dialog_cancelled',
+        }
+        let targetPath: string
+        for (;;) {
+          signal.throwIfAborted()
+          const selection = await dialog.showSaveDialog(owner, dialogOptions)
+          if (selection.canceled || !selection.filePath) {
+            logger.info('用户取消栅格图片导出', {
+              event: 'image_editor_v3.raster_export.dialog_cancelled',
+              requestId: payload.requestId,
+            })
+            return { status: 'cancelled' as const }
+          }
+          targetPath = normalizeSelectedPath(selection.filePath, payload.format)
+          if (targetPath === selection.filePath) break
+          const exists = await fsp.lstat(targetPath).then(() => true).catch((error: unknown) => {
+            if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false
+            throw error
+          })
+          if (!exists) break
+          // 系统只确认过原路径；改写后已存在的目标必须再次由保存对话框授权。
+          logger.info('导出扩展名调整后重新确认目标', {
+            event: 'image_editor_v3.raster_export.overwrite_confirmation',
             requestId: payload.requestId,
           })
-          return { status: 'cancelled' as const }
+          dialogOptions.defaultPath = targetPath
         }
+        signal.throwIfAborted()
         const started = await options.manager.start({
           ownerId: event.sender.id,
-          targetPath: normalizeSelectedPath(selection.filePath, payload.format),
+          targetPath,
           documentRef: payload.documentRef,
           revision: payload.revision,
           sourceFingerprint: payload.sourceFingerprint,

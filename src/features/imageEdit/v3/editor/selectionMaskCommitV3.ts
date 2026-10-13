@@ -158,6 +158,7 @@ export class ImageEditorSelectionMaskCommitV3 {
       const editableMask = mask
         && isImageEditSparseMaskReferenceV3(mask)
         && mask.defaultValue === 0
+        && !mask.vectorPaths
         ? mask
         : null
       if (!editableMask && this.options.combineMode !== 'replace') {

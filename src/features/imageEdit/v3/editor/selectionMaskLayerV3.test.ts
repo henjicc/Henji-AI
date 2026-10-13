@@ -6,6 +6,7 @@ import {
   createImageEditRasterLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import { createImageEditSparseMaskReferenceV3 } from '@/core/imageEdit/v3/layerTypes'
+import { rectanglePath } from '@/core/imaging/vectorContent'
 import { mapAnnotationPointV3 } from './annotationGeometryV3'
 import {
   imageEditorSelectionAllowedCombineModesV3,
@@ -15,6 +16,13 @@ import {
 const RESOURCE_ID = `sha256:${'a'.repeat(64)}`
 
 describe('图片编辑 V3 选区蒙版目标', () => {
+  it('带矢量覆盖的 default0 蒙版只允许 replace', () => {
+    const layer = createImageEditRasterLayerV3('layer', '图层')
+    layer.mask = { ...createImageEditSparseMaskReferenceV3('vector-mask', false, 0),
+      vectorPaths: [{ operation: 'replace', path: rectanglePath(0, 0, 64, 64) }] }
+    expect(imageEditorSelectionAllowedCombineModesV3(layer)).toEqual(['replace'])
+  })
+
   it('只有 defaultValue=0 的稀疏蒙版允许全组合模式', () => {
     const layer = createImageEditRasterLayerV3('layer', '图层')
     expect(imageEditorSelectionAllowedCombineModesV3(layer)).toEqual(['replace'])

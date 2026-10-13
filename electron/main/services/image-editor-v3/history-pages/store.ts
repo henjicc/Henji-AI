@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises';
 import {
   decodeImageEditHistoryCheckpointV3, IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3,
-  IMAGE_EDIT_HISTORY_PAGE_MAX_BYTES_V3, splitImageEditHistoryPagesV3,
+  IMAGE_EDIT_HISTORY_PAGE_MAX_BYTES_V3, IMAGE_EDIT_HISTORY_PAGE_ENTRIES_V3, splitImageEditHistoryPagesV3,
   type ImageEditHistoryCheckpointV3,
 } from '../../../../../src/core/imageEdit/v3/historyPaging/checkpoint';
 import { decodeImageEditCommandHistorySnapshotV3, stringifyImageEditCommandHistorySnapshotV3, type ImageEditCommandHistorySnapshotV3, type ImageEditHistoryEntrySnapshotV3 } from '../../../../../src/core/imageEdit/v3/commandHistoryCodec';
@@ -13,6 +13,10 @@ import { decodeImageEditRuntimeHistoryV3 } from '../../../../../src/core/imageEd
 import { collectImageEditResourceRolesV3, type ImageEditSparseResourceStorageV3 } from '../../../../../src/core/imageEdit/v3/resourceRoles';
 
 const logger = createMainLogger('main.image_editor_v3.history');
+type HistoryPageSource = ImageEditCommandHistorySnapshotV3 | {
+  descriptor: ImageEditHistoryCheckpointV3['pages'][number];
+  entries?: ImageEditHistoryEntrySnapshotV3[];
+};
 
 /** 保存 owner 先 prepare，再原子发布 checkpoint；确认后 release，失败不替换旧检查点。 */
 export class ImageEditHistoryPageStoreV3 {
@@ -35,11 +39,52 @@ export class ImageEditHistoryPageStoreV3 {
     const release = async (): Promise<void> => { for (const lease of leases) await lease.release(); };
     try {
       const retained = new Map<string, number | null>();
+      const cold = snapshot.cold;
+      // 正常冷化保存可直接保留已验证的引用。截断且有像素引用时没有逐页索引，
+      // 必须读保留部分重新收集引用（整页字节仍复用），不能留下丢弃分支的引用。
+      const reuseReferences = !mapEntry && !!cold
+        && (cold.prefixLength === cold.checkpoint.total || cold.checkpoint.resources.length === 0);
+      if (reuseReferences && cold) {
+        for (const ref of cold.checkpoint.resources) retained.set(ref.resourceId, ref.byteSize);
+        if (retained.size) leases.push(await this.resources.reservePublication([...retained.keys()] as ResourceId[]));
+      }
       let start = 0;
       const ids = new Set<string>();
       let previousRevision = -1;
-      for await (const page of this.sourcePages(snapshot, signal)) {
+      const retain = async (entries: ImageEditHistoryEntrySnapshotV3[], trusted: boolean): Promise<void> => {
+        const refs = mergeImageEditHistoryResourceReferencesV3(entries.flatMap(entry => entry.resources));
+        const newRefs = refs.filter(ref => !retained.has(ref.resourceId));
+        if (newRefs.length) {
+          const resourceIds = newRefs.map(ref => ref.resourceId as ResourceId);
+          leases.push(trusted ? await this.resources.reservePublication(resourceIds) : await this.resources.acquireLease(resourceIds));
+        }
+        if (!trusted) for (const ref of newRefs) {
+          if (ref.byteSize !== null && (await this.resources.describe(ref.resourceId as ResourceId)).byteLength !== ref.byteSize) throw new Error(`History resource byte length mismatch: ${ref.resourceId}`);
+        }
+        for (const ref of refs) {
+          const previous = retained.get(ref.resourceId);
+          if (previous !== undefined && previous !== null && ref.byteSize !== null && previous !== ref.byteSize) throw new Error('历史资源引用冲突');
+          retained.set(ref.resourceId, previous ?? ref.byteSize);
+        }
+      };
+      const firstTail = snapshot.undo[0] ?? snapshot.redo.at(-1);
+      if (cold && cold.prefixLength > 0 && firstTail
+        && firstTail.forward.expectedRevision < cold.checkpoint.headRevision) throw new Error('历史尾部 revision 早于冷页历史头');
+      for await (const page of this.sourcePages(snapshot, signal, !mapEntry)) {
         signal?.throwIfAborted();
+        if ('descriptor' in page) {
+          const { descriptor, entries } = page;
+          if (entries) await retain(entries, true);
+          // 原检查点已验证且被持久根保护，只预留租约，不重新 stat/hash。
+          leases.push(await this.resources.reservePublication([descriptor.resourceId as ResourceId]));
+          for (const id of cold!.commandIds.slice(descriptor.start, descriptor.start + descriptor.count)) {
+            if (ids.has(id)) throw new Error('历史命令 ID 重复');
+            ids.add(id);
+          }
+          checkpoint.pages.push({ ...descriptor, start });
+          start += descriptor.count;
+          continue;
+        }
         if (mapEntry) {
           const entries: ImageEditHistoryEntrySnapshotV3[] = [];
           for (const entry of page.undo) entries.push(await mapEntry(entry));
@@ -49,17 +94,7 @@ export class ImageEditHistoryPageStoreV3 {
           if (ids.has(entry.forward.commandId) || entry.forward.expectedRevision <= previousRevision) throw new Error('历史命令 ID 重复或分页顺序无效');
           ids.add(entry.forward.commandId); previousRevision = entry.forward.expectedRevision;
         }
-        const pageResources = mergeImageEditHistoryResourceReferencesV3(page.undo.flatMap(entry => entry.resources));
-        const newRefs = pageResources.filter(ref => !retained.has(ref.resourceId));
-        if (newRefs.length) leases.push(await this.resources.acquireLease(newRefs.map(ref => ref.resourceId as ResourceId)));
-        for (const ref of newRefs) {
-          if (ref.byteSize !== null && (await this.resources.describe(ref.resourceId as ResourceId)).byteLength !== ref.byteSize) throw new Error(`History resource byte length mismatch: ${ref.resourceId}`);
-        }
-        for (const ref of pageResources) {
-          const previous = retained.get(ref.resourceId);
-          if (previous !== undefined && previous !== null && ref.byteSize !== null && previous !== ref.byteSize) throw new Error('历史资源引用冲突');
-          retained.set(ref.resourceId, previous ?? ref.byteSize);
-        }
+        await retain(page.undo, false);
         const bytes = Buffer.from(stringifyImageEditCommandHistorySnapshotV3(page), 'utf8');
         const publication = await this.resources.putBufferLeased(bytes, { mediaType: 'application/vnd.henji.image-history+json', maxBytes: IMAGE_EDIT_HISTORY_PAGE_MAX_BYTES_V3, signal });
         const stored = publication.resource;
@@ -82,18 +117,31 @@ export class ImageEditHistoryPageStoreV3 {
     }
   }
 
-  private async *sourcePages(snapshot: ImageEditCommandHistorySnapshotV3, signal?: AbortSignal): AsyncGenerator<ImageEditCommandHistorySnapshotV3> {
+  private async *sourcePages(snapshot: ImageEditCommandHistorySnapshotV3, signal: AbortSignal | undefined, reuseCold: boolean): AsyncGenerator<HistoryPageSource> {
     const { cold, ...tail } = snapshot;
+    let remainder: ImageEditHistoryEntrySnapshotV3[] = [];
     if (cold) {
       for (let index = 0; index < cold.checkpoint.pages.length; index++) {
         const descriptor = cold.checkpoint.pages[index];
         if (descriptor.start >= cold.prefixLength) break;
+        const complete = descriptor.start + descriptor.count <= cold.prefixLength;
+        const last = descriptor.start + descriptor.count >= cold.prefixLength;
+        const hasTail = tail.undo.length + tail.redo.length > 0;
+        if (reuseCold && complete && (!last || !hasTail || descriptor.count >= IMAGE_EDIT_HISTORY_PAGE_ENTRIES_V3)) {
+          // 截断有资源的历史时缺少逐页引用索引；读取只为精确收集引用，整页不重写。
+          const entries = cold.prefixLength < cold.checkpoint.total && cold.checkpoint.resources.length > 0
+            ? await this.readValidatedPage(cold.checkpoint, index, signal) : undefined;
+          if (entries?.some((entry, offset) => entry.forward.commandId !== cold.commandIds[descriptor.start + offset])) throw new Error('历史命令索引不匹配');
+          yield { descriptor, entries };
+          continue;
+        }
         const entries = (await this.readValidatedPage(cold.checkpoint, index, signal)).slice(0, cold.prefixLength - descriptor.start);
         if (entries.some((entry, offset) => entry.forward.commandId !== cold.commandIds[descriptor.start + offset])) throw new Error('历史命令索引不匹配');
-        yield { version: cold.checkpoint.snapshotVersion, documentId: 'image-history-page', headRevision: entries.at(-1)!.forward.expectedRevision + 1, undo: entries, redo: [] };
+        if (last) remainder = entries;
+        else yield { version: cold.checkpoint.snapshotVersion, documentId: 'image-history-page', headRevision: entries.at(-1)!.forward.expectedRevision + 1, undo: entries, redo: [] };
       }
     }
-    yield* splitImageEditHistoryPagesV3(tail);
+    yield* splitImageEditHistoryPagesV3({ ...tail, undo: [...remainder, ...tail.undo] });
   }
 
   /** 按页校验并建立紧凑 ID 索引；绝不全量克隆命令。 */
