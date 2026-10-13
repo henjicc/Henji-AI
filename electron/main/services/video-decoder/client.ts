@@ -36,6 +36,7 @@ export interface VideoDecoderChildProcess {
   readonly stderr: Readable
   kill(): boolean
   once(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): this
+  once(event: 'close', listener: (code: number | null, signal: NodeJS.Signals | null) => void): this
   once(event: 'error', listener: (error: Error) => void): this
 }
 
@@ -287,11 +288,11 @@ export class VideoDecoderService {
       this.rejectAll(new VideoDecoderError('STOPPED', '原生视频解码服务已关闭'))
       return
     }
-    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()))
     const id = this.allocateId()
     this.writeCommand(child, id, { type: 'shutdown' })
     const timer = setTimeout(() => child.kill(), this.options.shutdownTimeoutMs)
-    await exited
+    await closed
     clearTimeout(timer)
     this.options.logger.info('原生视频解码服务已关闭', { event: 'video_decoder.service.stopped', context: { pid: child.pid } })
   }
@@ -499,10 +500,11 @@ export class VideoDecoderService {
         newline = stderrBuffer.indexOf('\n')
       }
     })
-    // 进程退出后写入会触发 EPIPE；退出由 exit 事件统一处理。
+    // 进程退出后写入会触发 EPIPE；等待 close 排空 stdio 后统一处理退出。
     child.stdin.on('error', () => undefined)
     child.once('error', (error) => this.handleChildGone(generation, child, { error }))
-    child.once('exit', (code, signal) => this.handleChildGone(generation, child, { code, signal }))
+    // exit 可能早于 stdout 尾部响应；close 才是 stdio 已排空的结束边界。
+    child.once('close', (code, signal) => this.handleChildGone(generation, child, { code, signal }))
   }
 
   private emitLifecycle(event: VideoDecoderLifecycleEvent): void {
@@ -590,7 +592,7 @@ export class VideoDecoderService {
     this.stopHeartbeat()
     const killReason = this.killReason
     this.killReason = null
-    this.generation += 1 // 同一进程的 error 与 exit 只处理一次
+    this.generation += 1 // 同一进程的 error 与 close 只处理一次
     const intentional = this.stateValue === 'stopped'
     const startFailed = detail.error !== undefined
     this.rejectAll(intentional

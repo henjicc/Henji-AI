@@ -37,7 +37,12 @@ class FakeChild extends EventEmitter {
   exit(code: number | null, signal: NodeJS.Signals | null = null): void {
     if (this.exited) return
     this.exited = true
-    setImmediate(() => this.emit('exit', code, signal))
+    setImmediate(() => {
+      this.emit('exit', code, signal)
+      this.stdout.end()
+      this.stderr.end()
+      this.emit('close', code, signal)
+    })
   }
 
   kill(): boolean {
@@ -267,6 +272,74 @@ describe('VideoDecoderService', () => {
     expect((await service.probe('D:\\ok.mov')).path).toBe('D:\\ok.mov')
   })
 
+  it('delivers the final stdout response after exit and rejects remaining requests only at close', async () => {
+    const { service, children, events } = createHarness(standardHandler({ probe: () => undefined }), {
+      restart: { maxRestarts: 0 },
+    })
+    await service.ensureStarted()
+    let remainingSettled = false
+    const final = service.probe('final.mov').then(result => result, (error: VideoDecoderError) => error.code)
+    const remaining = service.probe('remaining.mov').then(() => 'resolved', (error: VideoDecoderError) => error.code)
+    void remaining.then(() => { remainingSettled = true })
+    await waitFor(() => children[0].received.filter(message => message.type === 'probe').length === 2)
+    const child = children[0]
+    const finalRequest = child.received.find(message => message.path === 'final.mov')!
+    child.emit('exit', 1, null)
+    await Promise.resolve()
+    const stateAfterExit = service.state
+    child.reply(finalRequest.id, { ...PROBE_RESULT, path: 'final.mov' })
+    const finalResult = await final
+    const settledBeforeClose = remainingSettled
+    const exitedBeforeClose = events().includes('video_decoder.service.exited')
+    child.stdout.end()
+    child.stderr.end()
+    child.emit('close', 1, null)
+    const remainingResult = await remaining
+    await service.shutdown()
+
+    expect(stateAfterExit).toBe('ready')
+    expect(finalResult).toMatchObject({ path: 'final.mov' })
+    expect(settledBeforeClose).toBe(false)
+    expect(exitedBeforeClose).toBe(false)
+    expect(remainingResult).toBe('PROCESS_EXITED')
+    expect(events().filter(event => event === 'video_decoder.service.exited')).toHaveLength(1)
+    expect(service.state).toBe('stopped')
+  })
+
+  it('waits for close during shutdown and delivers trailing responses before rejecting unfinished requests', async () => {
+    const { service, children, events } = createHarness(standardHandler({ probe: () => undefined, shutdown: () => undefined }))
+    await service.ensureStarted()
+    const final = service.probe('final.mov').then(result => result, (error: VideoDecoderError) => error.code)
+    let remainingSettled = false
+    const remaining = service.probe('remaining.mov').then(() => 'resolved', (error: VideoDecoderError) => error.code)
+    void remaining.then(() => { remainingSettled = true })
+    await waitFor(() => children[0].received.filter(message => message.type === 'probe').length === 2)
+    let shutdownSettled = false
+    const shutdown = service.shutdown().then(() => { shutdownSettled = true })
+    const child = children[0]
+    child.emit('exit', 0, null)
+    await Promise.resolve()
+    await Promise.resolve()
+    const stoppedBeforeClose = events().includes('video_decoder.service.stopped')
+    const shutdownBeforeClose = shutdownSettled
+    child.reply(child.received.find(message => message.path === 'final.mov')!.id, { ...PROBE_RESULT, path: 'final.mov' })
+    const finalResult = await final
+    const settledBeforeClose = remainingSettled
+    child.stdout.end()
+    child.stderr.end()
+    child.emit('close', 0, null)
+    await shutdown
+
+    expect(shutdownBeforeClose).toBe(false)
+    expect(stoppedBeforeClose).toBe(false)
+    expect(finalResult).toMatchObject({ path: 'final.mov' })
+    expect(settledBeforeClose).toBe(false)
+    expect(await remaining).toBe('STOPPED')
+    expect(events().filter(event => event === 'video_decoder.service.stopped')).toHaveLength(1)
+    expect(events()).not.toContain('video_decoder.service.restart_scheduled')
+    await expectCode(service.probe('later.mov'), 'STOPPED')
+  })
+
   it('stops restarting after the limit and recovers after the window passes', async () => {
     let now = 1_000
     const crashOnHello: Handler = (_message, child) => child.exit(1)
@@ -297,7 +370,10 @@ describe('VideoDecoderService', () => {
         if (attempts > 1) return new FakeChild(attempts, standardHandler()) as unknown as VideoDecoderChildProcess
         // 与 Node 行为一致：可执行文件无法启动时异步触发 error，且不会触发 exit。
         const child = new FakeChild(attempts, () => undefined)
-        setImmediate(() => child.emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' })))
+        setImmediate(() => {
+          child.emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }))
+          child.emit('close', -2, null)
+        })
         return child as unknown as VideoDecoderChildProcess
       },
     })
