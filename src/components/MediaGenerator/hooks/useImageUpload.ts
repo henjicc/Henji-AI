@@ -1,14 +1,16 @@
 import { createLogger } from '@/core/logging'
-import { useState } from 'react'
-import { saveUploadImage } from '@/utils/save'
-import { extractImagesFromClipboard } from '@/utils/imageConversion'
+import { useRef, useState } from 'react'
+import { dataUrlToFile, extractImagesFromClipboard } from '@/utils/imageConversion'
+import { importLocalMedia, readClipboardImageSources, type LocalMediaImportInput } from '@/services/localMediaImport'
+import { toDisplaySrc } from '@/platform/desktopApi'
+import { isDesktopRuntime } from '@/platform/runtime'
 
 const logger = createLogger('components.MediaGenerator.hooks.useImageUpload')
 
 interface ImageUploadHandlers {
   isDraggingImage: boolean
   setIsDraggingImage: React.Dispatch<React.SetStateAction<boolean>>
-  handleImageFileUpload: (files: File[], maxImageCount: number) => Promise<void>
+  handleImageFileUpload: (files: LocalMediaImportInput[], maxImageCount: number) => Promise<void>
   handleImageReplace: (index: number, newFile: File) => Promise<void>
   handlePaste: (event: ClipboardEvent, maxImageCount: number) => Promise<void>
   removeImage: (index: number) => void
@@ -20,54 +22,74 @@ interface ImageUploadHandlers {
  * 图片上传处理逻辑
  * 包含上传、粘贴、拖拽、替换、删除、重排序等功能
  *
- * 注意：上传时只保存到内存（memory 模式），点击生成时才保存到 uploads 目录
+ * 文件与剪贴板路径都经唯一媒体导入入口，预览与生成使用的原文件路径同时回填。
  */
 export const useImageUpload = (
   uploadedImages: string[],
   setUploadedImages: React.Dispatch<React.SetStateAction<string[]>>,
-  _uploadedFilePaths: string[],
+  uploadedFilePaths: string[],
   setUploadedFilePaths: React.Dispatch<React.SetStateAction<string[]>>
 ): ImageUploadHandlers => {
   const [isDraggingImage, setIsDraggingImage] = useState(false)
+  const imagesRef = useRef(uploadedImages)
+  const pathsRef = useRef(uploadedFilePaths)
+  imagesRef.current = uploadedImages
+  pathsRef.current = uploadedFilePaths
+  const pendingCount = useRef(0)
 
-  // 文件上传 - 只保存到内存
-  const handleImageFileUpload = async (files: File[], maxImageCount: number) => {
-    if (files.length > 0) {
-      for (const file of files) {
-        if (file) {
-          const saved = await saveUploadImage(file, 'memory')
-          setUploadedImages(prev => {
-            if (prev.length >= maxImageCount) return prev
-            return [...prev, saved.dataUrl]
-          })
-          // 不设置 filePath，因为还没有保存到 uploads 目录
-        }
+  const handleImageFileUpload = async (files: LocalMediaImportInput[], maxImageCount: number): Promise<void> => {
+    for (const file of files) {
+      if (imagesRef.current.length + pendingCount.current >= maxImageCount) break
+      pendingCount.current++
+      try {
+        const imported = await importLocalMedia(file, 'image')
+        if (imported.kind !== 'image') throw new Error('导入的文件不是图片')
+        imagesRef.current = [...imagesRef.current, toDisplaySrc(imported.previewPath)]
+        pathsRef.current = [...imagesRef.current.slice(0, -1).map((_, index) => pathsRef.current[index] || ''), imported.fullPath]
+        setUploadedImages(imagesRef.current)
+        setUploadedFilePaths(pathsRef.current)
+      } finally {
+        pendingCount.current--
       }
     }
   }
 
-  // 替换图片 - 只保存到内存
+  // 替换时保留预览与原文件路径的一一对应。
   const handleImageReplace = async (index: number, newFile: File) => {
-    const saved = await saveUploadImage(newFile, 'memory')
+    const imported = await importLocalMedia(newFile, 'image')
+    if (imported.kind !== 'image') throw new Error('导入的文件不是图片')
     setUploadedImages(prev => {
       const updated = [...prev]
-      updated[index] = saved.dataUrl
+      updated[index] = toDisplaySrc(imported.previewPath)
       return updated
     })
-    // 清除旧的 filePath
     setUploadedFilePaths(prev => {
-      const updated = [...prev]
-      updated[index] = ''
+      const updated = imagesRef.current.map((_, i) => prev[i] || '')
+      updated[index] = imported.fullPath
       return updated
     })
   }
 
-  // 粘贴图片 - 只保存到内存
+  // 桌面复制文件优先按路径导入；截图继续走位图，浏览器走事件 File。
   const handlePaste = async (event: ClipboardEvent, maxImageCount: number): Promise<void> => {
     try {
-      const containsImage = Array.from(event.clipboardData?.items ?? [])
-        .some((item) => item.type.startsWith('image/'))
-      if (containsImage) event.preventDefault()
+      const containsMedia = Array.from(event.clipboardData?.items ?? [])
+        .some((item) => item.type.startsWith('image/') || item.kind === 'file')
+        || (event.clipboardData?.files.length ?? 0) > 0
+      if (containsMedia) event.preventDefault()
+      if (uploadedImages.length >= maxImageCount) return
+      if (isDesktopRuntime()) {
+        const sources = await readClipboardImageSources()
+        if (sources.length) {
+          event.preventDefault()
+          const files: LocalMediaImportInput[] = []
+          for (const source of sources.slice(0, maxImageCount - imagesRef.current.length)) {
+            files.push('path' in source ? source : await dataUrlToFile(source.dataUrl, source.name || 'pasted-image.png'))
+          }
+          await handleImageFileUpload(files, maxImageCount)
+          return
+        }
+      }
       const pastedFiles = await extractImagesFromClipboard(event)
       if (pastedFiles.length === 0) return
 
@@ -76,16 +98,10 @@ export const useImageUpload = (
       const availableSlots = maxImageCount - uploadedImages.length
       const filesToAdd = pastedFiles.slice(0, availableSlots)
 
-      for (const file of filesToAdd) {
-        const saved = await saveUploadImage(file, 'memory')
-        setUploadedImages(prev => {
-          if (prev.length >= maxImageCount) return prev
-          return [...prev, saved.dataUrl]
-        })
-        // 不设置 filePath，因为还没有保存到 uploads 目录
-      }
+      await handleImageFileUpload(filesToAdd, maxImageCount)
     } catch (error) {
       logger.error('[useImageUpload] 粘贴图片失败', error)
+      throw error
     }
   }
 
@@ -112,18 +128,9 @@ export const useImageUpload = (
     })
   }
 
-  // 拖拽图片 - 只保存到内存
+  // 拖拽与选择文件共用导入入口。
   const handleImageFileDrop = async (files: File[], maxImageCount: number) => {
-    for (const file of files) {
-      if (file.type.startsWith('image/')) {
-        const saved = await saveUploadImage(file, 'memory')
-        setUploadedImages(prev => {
-          if (prev.length >= maxImageCount) return prev
-          return [...prev, saved.dataUrl]
-        })
-        // 不设置 filePath，因为还没有保存到 uploads 目录
-      }
-    }
+    await handleImageFileUpload(files.filter(file => file.type.startsWith('image/')), maxImageCount)
   }
 
   return {

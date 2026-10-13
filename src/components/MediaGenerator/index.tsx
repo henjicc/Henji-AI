@@ -253,7 +253,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     modelParams: modelState.params,
     uploadedImagesCount: uiState.uploadedImages.length,
     uploadedVideosCount: uiState.uploadedVideos.length,
-    handleImageFileUpload: imageUpload.handleImageFileUpload
+    handleImageFileUpload: imageUpload.handleImageFileUpload,
+    onPasteError: (error) => uiState.showAlert(t('ui:uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
   })
 
   useReeditContent(uiState, modelState)
@@ -351,10 +352,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onImageReplace={imageUpload.handleImageReplace}
         onImageReorder={imageUpload.handleImageReorder}
         onImageClick={onImageClick}
-        onPaste={(e) => imageUpload.handlePaste(
-          e,
-          maxImageCount
-        )}
+        onPaste={(e) => {
+          void imageUpload.handlePaste(e, maxImageCount).catch(error => {
+            uiState.showAlert(t('ui:uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
+          })
+        }}
         onImageDrop={(files) => imageUpload.handleImageFileDrop(
           files,
           maxImageCount

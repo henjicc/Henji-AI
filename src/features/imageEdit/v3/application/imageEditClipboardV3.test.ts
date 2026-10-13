@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import path from 'node:path'
 import { createImageEditDocumentV3, createImageEditGroupLayerV3, createImageEditRasterLayerV3, createImageEditTextLayerV3 } from '@/core/imageEdit/v3/documentFactory'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
@@ -10,7 +11,8 @@ import { imageEditV3DocumentRef } from './imageEditDocumentRefs'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { imageEditClipboardCapability } from '@/core/application-control/domains/imageEdit/imageEditClipboardCapabilities'
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn(), ingest: vi.fn(), load: vi.fn(), pin: vi.fn(), release: vi.fn(), confirm: vi.fn(), cleanup: vi.fn() }))
+const mocks = vi.hoisted(() => ({ clipboardSource: vi.fn(), importMedia: vi.fn(), read: vi.fn(), write: vi.fn(), ingest: vi.fn(), load: vi.fn(), pin: vi.fn(), release: vi.fn(), confirm: vi.fn(), cleanup: vi.fn() }))
+vi.mock('@/services/localMediaImport', () => ({ readClipboardImageSource: mocks.clipboardSource, importLocalMedia: mocks.importMedia }))
 vi.mock('@/commands/clipboard', () => ({ readClipboardImage: mocks.read }))
 vi.mock('@/commands/imageEditorV3', async original => ({ ...await original<typeof import('@/commands/imageEditorV3')>(),
   ingestImageEditorV3Source: mocks.ingest, loadImageEditorV3Document: mocks.load, pinImageEditorV3RepairResources: mocks.pin, releaseImageEditorV3RepairResources: mocks.release }))
@@ -28,10 +30,25 @@ const ref = `sha256:${'a'.repeat(64)}` as const
 beforeEach(() => {
   installHarnessNativeStorage(); vi.clearAllMocks()
   mocks.read.mockResolvedValue({ dataUrl: 'data:image/png;base64,test', name: '截图', origin: 'bitmap' })
+  mocks.clipboardSource.mockImplementation(() => mocks.read())
   mocks.ingest.mockResolvedValue({ resource: { resourceRef: ref, byteLength: 1024 }, metadata: { width: 8, height: 6 } })
 })
 afterEach(uninstallHarnessNativeStorage)
 describe('图片剪贴板唯一服务', () => {
+  it('大图片路径经统一导入后按原文件路径摄取，保留尺寸与单步撤销', async () => {
+    const entry = { path: path.resolve(path.sep, 'media', 'large.png'), mimeType: 'image/png', size: 2 * 1024 ** 3 }
+    mocks.clipboardSource.mockResolvedValue(entry)
+    mocks.read.mockResolvedValue(null)
+    mocks.importMedia.mockResolvedValue({ kind: 'image', fullPath: entry.path })
+    const bus = new ImageEditCommandBusV3(createImageEditDocumentV3({ width: 32, height: 16 }))
+    const original = bus.getSnapshot().document
+    await pasteImageEditClipboardV3(bus)
+    expect(mocks.importMedia).toHaveBeenCalledWith(entry, 'image')
+    expect(mocks.ingest).toHaveBeenCalledWith(expect.objectContaining({ source: { kind: 'local-path', filePath: entry.path } }), undefined)
+    expect(mocks.read).not.toHaveBeenCalled()
+    await bus.undo()
+    expect(bus.getSnapshot().document.layers).toEqual(original.layers)
+  })
   it('正式助手能力执行粘贴并通过通用实体读回图层内容', async () => {
     const document = createImageEditDocumentV3({ width: 32, height: 16 }), bus = new ImageEditCommandBusV3(document)
     const dispose = registerPersistedImageEditTestSession('clipboard-capability', bus)

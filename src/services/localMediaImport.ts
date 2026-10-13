@@ -1,10 +1,31 @@
 import type { LocalMediaImportResult, LocalMediaKind } from '@/core/media/localMediaImportContracts'
+import type { ClipboardFileEntry, ClipboardImage } from '@/platform/contracts/clipboard'
+import { readClipboardFiles, readClipboardImage } from '@/commands/clipboard'
 import { createLogger } from '@/core/logging'
 import { getPathForFile } from '@/platform/desktopApi'
-import { getPlatform } from '@/platform/runtime'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { resolveLargeUploadAction } from '@/services/largeUploadPolicy'
 
 const logger = createLogger('services.localMediaImport')
+
+export type LocalMediaImportInput = File | ClipboardFileEntry
+export type ClipboardImageSource = ClipboardFileEntry | ClipboardImage
+
+/** 文件图片优先只取路径；没有图片文件时仍读取截图位图。 */
+export async function readClipboardImageSources(): Promise<ClipboardImageSource[]> {
+  if (isDesktopRuntime()) {
+    const files = await readClipboardFiles()
+    const images = files.filter(file => inferLocalMediaKind({ name: file.path, type: file.mimeType }) === 'image')
+    if (images.length) return images
+  }
+  const image = await readClipboardImage()
+  return image ? [image] : []
+}
+
+/** 编辑器单图入口与生成页多图入口共用来源选择。 */
+export async function readClipboardImageSource(): Promise<ClipboardImageSource | null> {
+  return (await readClipboardImageSources())[0] ?? null
+}
 
 const EXTENSION_KINDS: Record<string, LocalMediaKind> = {
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', avif: 'image', svg: 'image',
@@ -26,9 +47,19 @@ function createImportId(): string {
 }
 
 export async function importLocalMedia(
-  file: File,
+  input: LocalMediaImportInput,
   expectedKind?: LocalMediaKind,
 ): Promise<LocalMediaImportResult> {
+  const pathEntry = 'path' in input ? input : null
+  // 现有大文件策略只读取 File 的 name/size；空 File 承载元数据，不分配或读取原文件字节。
+  let file: File
+  if ('path' in input) {
+    if (!input.path.trim() || !Number.isSafeInteger(input.size) || input.size < 0) {
+      throw new Error('Invalid media path or size')
+    }
+    file = new File([], input.path.split(/[\\/]/).pop() || 'media', { type: input.mimeType })
+    Object.defineProperty(file, 'size', { value: input.size })
+  } else file = input
   const kind = inferLocalMediaKind(file)
   if (!kind || (expectedKind && kind !== expectedKind)) {
     throw new Error('Unsupported or mismatched media file')
@@ -36,7 +67,7 @@ export async function importLocalMedia(
 
   const importId = createImportId()
   const startedAt = performance.now()
-  const directPath = getPathForFile(file).trim()
+  const directPath = pathEntry ? pathEntry.path.trim() : getPathForFile(file).trim()
   logger.info('媒体导入已提交', {
     event: 'media_import.renderer.start',
     requestId: importId,
