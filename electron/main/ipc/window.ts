@@ -63,7 +63,18 @@ function toggleMaximizeWindow(win: BrowserWindow): void {
   }
 }
 
+/** 无文档状态的辅助窗口只需要广播，不参加保存屏障与媒体回收。 */
+export function bindWindowStateBroadcast(win: BrowserWindow): void {
+  const emit = (): void => sendWindowState(win)
+  win.on('maximize', emit)
+  win.on('unmaximize', emit)
+  win.on('resize', emit)
+  win.on('enter-full-screen', emit)
+  win.on('leave-full-screen', emit)
+}
+
 export function bindWindowStateEvents(win: BrowserWindow, deferSession = false): () => void {
+  bindWindowStateBroadcast(win)
   let sessionOpened = false
   const openSession = (): void => {
     if (sessionOpened || win.isDestroyed()) return
@@ -72,15 +83,6 @@ export function bindWindowStateEvents(win: BrowserWindow, deferSession = false):
   }
   if (!deferSession) openSession()
   win.once('closed', () => { if (sessionOpened) mediaRecycleLifecycle.closed(win.id) })
-  const emit = (): void => {
-    sendWindowState(win)
-  }
-
-  win.on('maximize', emit)
-  win.on('unmaximize', emit)
-  win.on('resize', emit)
-  win.on('enter-full-screen', emit)
-  win.on('leave-full-screen', emit)
   win.on('close', (event) => {
     // The startup shell has no renderer or document state to save yet.
     if (!sessionOpened) return

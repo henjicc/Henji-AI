@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createElectronSystem } from '@/platform/adapters/electron/system'
 
 const nativeFetch = vi.fn()
 
@@ -37,8 +38,21 @@ const UNAVAILABLE_PAYLOAD = {
 }
 
 describe('checkModelscopeModelAvailability', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
   beforeEach(() => {
     nativeFetch.mockReset()
+  })
+
+  it('实际 Electron 适配器挂起时，10 秒内降级 unknown，并向主进程传入同一预算', async () => {
+    vi.useFakeTimers()
+    const bridgeFetch = vi.fn(() => new Promise(() => undefined))
+    vi.stubGlobal('window', { henjiNative: { http: { fetch: bridgeFetch } } })
+    nativeFetch.mockImplementation((url, init) => createElectronSystem().http.fetch(url, init))
+    const pending = checkModelscopeModelAvailability('Qwen/Qwen-Image')
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(bridgeFetch).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 10000 }))
+    await expect(pending).resolves.toMatchObject({ state: 'unknown' })
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('支持 API-Inference 的模型返回 available，并带出魔粒档位', async () => {

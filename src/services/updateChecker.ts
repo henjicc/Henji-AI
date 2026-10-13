@@ -179,25 +179,26 @@ export async function installElectronUpdate(): Promise<void> {
 /**
  * 格式化发布日期
  */
-export function formatReleaseDate(dateString: string): string {
+export function formatReleaseDate(dateString: string, locale: string): string {
   const date = new Date(dateString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
 
   if (diffDays === 0) {
-    return '今天'
+    return relative.format(0, 'day')
   } else if (diffDays === 1) {
-    return '昨天'
+    return relative.format(-1, 'day')
   } else if (diffDays < 7) {
-    return `${diffDays} 天前`
+    return relative.format(-diffDays, 'day')
   } else if (diffDays < 30) {
     const weeks = Math.floor(diffDays / 7)
-    return `${weeks} 周前`
+    return relative.format(-weeks, 'week')
   } else if (diffDays < 365) {
     const months = Math.floor(diffDays / 30)
-    return `${months} 个月前`
+    return relative.format(-months, 'month')
   } else {
-    return date.toLocaleDateString('zh-CN')
+    return date.toLocaleDateString(locale)
   }
 }

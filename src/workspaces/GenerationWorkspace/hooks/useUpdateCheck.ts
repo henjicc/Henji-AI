@@ -29,8 +29,9 @@ export function useUpdateCheck(): UseUpdateCheckReturn {
 
   const applyUpdaterResult = (result: UpdaterCheckResult): void => {
     if (!result.releaseInfo && !result.hasUpdate) return
+    const version = result.latestVersion || result.releaseInfo?.version || ''
     setReleaseInfo({
-      version: result.latestVersion || result.releaseInfo?.version || '',
+      version,
       name: result.releaseInfo?.name || '',
       body: result.releaseInfo?.body || '',
       publishedAt: result.releaseInfo?.publishedAt || new Date().toISOString(),
@@ -39,6 +40,7 @@ export function useUpdateCheck(): UseUpdateCheckReturn {
       updateStatus: result.status,
       progressPercent: result.progress?.percent,
     })
+    if (result.status === 'available' && isVersionIgnored(version)) return
     if (result.hasUpdate || result.status === 'downloaded' || result.status === 'downloading') {
       setShowUpdateDialog(true)
     }

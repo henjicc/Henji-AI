@@ -124,17 +124,37 @@ async function normalizeFetchBody(body: BodyInit | null | undefined): Promise<st
 function createHttp(): HttpPlatform {
   return {
     fetch: async (url, init) => {
-      const result = await getNative().http.fetch({
-        url,
-        method: init?.method,
-        headers: normalizeFetchHeaders(init?.headers),
-        body: await normalizeFetchBody(init?.body),
-      })
-      return new Response(result.body, {
-        status: result.status,
-        statusText: result.statusText,
-        headers: result.headers,
-      })
+      const signal = init?.signal
+      const abortError = (): DOMException => new DOMException('Aborted', 'AbortError')
+      if (signal?.aborted) throw abortError()
+      let onAbort: (() => void) | undefined
+      const aborted = signal ? new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(abortError())
+        signal.addEventListener('abort', onAbort, { once: true })
+      }) : undefined
+      try {
+        const execute = async () => {
+          const body = await normalizeFetchBody(init?.body)
+          if (signal?.aborted) throw abortError()
+          // preload 原样透传请求对象；AbortSignal 留在渲染层，时限以可序列化字段进入主进程。
+          const request = {
+            url,
+            method: init?.method,
+            headers: normalizeFetchHeaders(init?.headers),
+            body,
+            timeoutMs: init?.timeoutMs,
+          }
+          return await getNative().http.fetch(request)
+        }
+        const result = await (aborted ? Promise.race([execute(), aborted]) : execute())
+        return new Response(result.body, {
+          status: result.status,
+          statusText: result.statusText,
+          headers: result.headers,
+        })
+      } finally {
+        if (signal && onAbort) signal.removeEventListener('abort', onAbort)
+      }
     },
   }
 }

@@ -1,4 +1,5 @@
 import { BrowserWindow, powerSaveBlocker, webContents } from 'electron'
+import { installRendererNavigationGuards } from '../security/main-renderer-url'
 import path from 'node:path'
 import { windowAppearance } from './window-appearance'
 import { cleanupAllVideoFrameExports } from './video/frame-export'
@@ -167,6 +168,7 @@ function ensureWorkerWindow(): BrowserWindow {
       backgroundThrottling: false,
     },
   })
+  installRendererNavigationGuards(win.webContents, 'camera-stage-render')
   win.webContents.setAudioMuted(true)
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     const message = `隐藏渲染页面加载失败（${errorCode}）：${errorDescription}`

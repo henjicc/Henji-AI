@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 import type { BrowserWindow } from 'electron'
+vi.mock('electron', () => ({ BrowserWindow: {} }))
 
 import { bindWindowStateEvents, parseZoomFactor } from './window'
 import { mediaRecycleLifecycle } from '../services/media-recycle/lifecycle'
