@@ -12,6 +12,8 @@ import { THEME_COLOR_TOKEN_NAMES } from '@/core/theme/themeEngine'
 import { themeTokenCssVar } from '@/core/theme/themeCssVars'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { UI_DURATION, UI_DURATION_CLASS } from './motion'
+import * as styleTokens from './styleTokens'
+import { UI_MENU_ITEM_PADDING_X_PX, resolveMenuItemHorizontalChrome } from './dropdownUtils'
 import { resolveIconButtonClass } from './primitiveInternals'
 import {
   UI_CONTROL_HEIGHT_CLASS,
@@ -90,7 +92,10 @@ describe('设计令牌：Tailwind ↔ CSS 变量', () => {
     const shadows = tailwindConfig.slice(tailwindConfig.indexOf('boxShadow: {'), tailwindConfig.indexOf('transitionTimingFunction'))
     expect(shadows).not.toMatch(/rgb\(0 0 0/)
     expect(shadows).toMatch(/'node-error': '0 0 0 1px color-mix\(in srgb, var\(--danger\) 28%/)
-    expect(rootVars.get('--ui-shadow-panel')).toContain('var(--shade)')
+    expect(rootVars.get('--shadow-overlay')).toContain('var(--shade)')
+    expect(config.theme.boxShadow.panel).toBe('var(--shadow-overlay)')
+    expect(indexCss).not.toContain('--ui-shadow-panel')
+    expect(indexCss).toMatch(/\.ui-glass-elevated\s*\{[^}]*var\(--shadow-overlay\)/)
   })
 
   it('不再有旧主题的 dark.* 写死色组', () => {
@@ -99,6 +104,35 @@ describe('设计令牌：Tailwind ↔ CSS 变量', () => {
 })
 
 describe('设计令牌：尺寸、圆角、动效、层级', () => {
+  it('登记的间距、条带与文本高度都生成实际 CSS，条带复用同行控件尺寸', async () => {
+    expect(styleTokens.UI_SPACING_SCALE).toEqual([2, 4, 6, 8, 12, 16, 20, 24, 32])
+    const classes = [
+      ...Object.values(styleTokens.UI_INLINE_GAP_CLASS),
+      ...Object.values(styleTokens.UI_STACK_CLASS),
+      ...Object.values(styleTokens.UI_BAND_HEIGHT_CLASS),
+      ...Object.values(styleTokens.UI_BAND_MIN_HEIGHT_CLASS),
+      ...Object.values(styleTokens.UI_TEXT_AREA_HEIGHT_CLASS),
+      ...Object.values(styleTokens.UI_TRIGGER_PANEL_SIZE_CLASS),
+    ].join(' ')
+    const result = await postcss([tailwindcss({ ...(config as Config), content: [{ raw: classes }] })]).process('@tailwind utilities;', { from: undefined })
+    const rules = new Map<string, Map<string, string>>()
+    result.root.walkRules(rule => { const declarations = new Map<string, string>(); rule.walkDecls(decl => { declarations.set(decl.prop, decl.value) }); rules.set(rule.selector, declarations) })
+    for (const band of Object.keys(styleTokens.UI_BAND_HEIGHT_CLASS)) {
+      expect(rules.get(`.h-band-${band}`)?.get('height')).toBe(`var(--size-band-${band})`)
+      expect(rules.get(`.min-h-band-${band}`)?.get('min-height')).toBe(`var(--size-band-${band})`)
+    }
+    expect(rootVars.get('--size-band-row')).toBe('var(--size-control-sm)')
+    expect(rootVars.get('--size-band-tab')).toBe('var(--size-control-md)')
+    expect(rootVars.get('--size-band-header')).toBe('var(--size-control-lg)')
+    expect(indexCss).toContain('--dv-tabs-and-actions-container-height: var(--size-band-tab)')
+    for (const height of Object.keys(styleTokens.UI_TEXT_AREA_HEIGHT_CLASS)) {
+      expect(rules.get(`.min-h-textarea-${height}`)?.get('min-height')).toBe(`var(--size-textarea-${height})`)
+    }
+    // 面板的 clamp 及高度预算必须真实生成，不能只是 TS 字符串登记。
+    expect([...rules.values()].filter(declarations => declarations.has('--trigger-panel-max-height'))).toHaveLength(4)
+    expect([...rules.values()].filter(declarations => declarations.get('width')?.includes('clamp('))).toHaveLength(4)
+  })
+
   it('六档方形按钮实际生成的宽高使用同一变量，图标类与数值登记一致', async () => {
     const sizes = { '2xs': 20, xs: 24, sm: 28, md: 32, lg: 36, xl: 40 } as const
     const classes = Object.keys(sizes).flatMap(size => [`h-control-${size}`, `w-control-${size}`, `size-control-${size}`]).join(' ')
@@ -155,8 +189,9 @@ describe('设计令牌：尺寸、圆角、动效、层级', () => {
       const px = (name: string) => Number.parseFloat(values.get(name) ?? 'NaN')
       expect(px('--radius-control')).toBeLessThan(px('--radius-field'))
       expect(px('--radius-field')).toBeLessThan(px('--radius-overlay'))
-      expect(Number.isFinite(px('--node-radius'))).toBe(true)
+      expect(values.has('--node-radius')).toBe(false)
     }
+    expect(rootVars.get('--node-radius')).toBe('var(--radius-overlay)')
   })
 
   it('tailwind.config.js 登记了 120/180/240 时长档（Tailwind 默认没有，漏登记不生成 CSS）', () => {
@@ -174,6 +209,44 @@ describe('设计令牌：尺寸、圆角、动效、层级', () => {
 })
 
 describe('设计令牌：字体与字号', () => {
+  it('实际生成的正文及辅助字号均固定行高，不继承父级绝对行高', async () => {
+    const sizes = { '2xs': [11, 16], xs: [12, 16], 13: [13, 20], sm: [14, 20], 15: [15, 22], base: [16, 24], xl: [20, 28] }
+    const result = await postcss([tailwindcss({ ...(config as Config), content: [{ raw: Object.keys(sizes).map(key => `text-${key}`).join(' ') }] })]).process('@tailwind utilities;', { from: undefined })
+    for (const [key, [size, lineHeight]] of Object.entries(sizes)) {
+      const declarations = new Map<string, string>()
+      result.root.walkRules(`.text-${key}`, rule => { rule.walkDecls(decl => { declarations.set(decl.prop, decl.value) }) })
+      expect(declarations.get('font-size')).toBe(`${size}px`)
+      expect(declarations.get('line-height')).toBe(`${lineHeight}px`)
+    }
+  })
+
+  it('菜单测宽与实际生成的选项留白和透明边框一致', async () => {
+    const result = await postcss([tailwindcss({ ...(config as Config), content: [{ raw: `${Object.values(styleTokens.UI_FIELD_PADDING_CLASS).join(' ')} border` }] })]).process('@tailwind utilities;', { from: undefined })
+    const px = (value: string) => parseFloat(value) * (value.endsWith('rem') ? 16 : 1)
+    let border = 0
+    result.root.walkRules('.border', rule => { rule.walkDecls('border-width', decl => { border = px(decl.value) * 2 }) })
+    for (const size of ['sm', 'md', 'lg'] as const) {
+      let padding = 0
+      result.root.walkRules(`.${styleTokens.UI_FIELD_PADDING_CLASS[size]}`, rule => { rule.walkDecls(decl => { padding += px(decl.value) }) })
+      expect(UI_MENU_ITEM_PADDING_X_PX[size]).toBe(padding)
+      expect(resolveMenuItemHorizontalChrome(size, 'none')).toBe(padding + border)
+    }
+  })
+
+  it('未登记的默认字号、阴影、圆角和旧类不生成 CSS', async () => {
+    const result = await postcss([tailwindcss({ ...(config as Config), content: [{ raw: 'text-14 text-4xs text-lg text-2xl shadow-lg shadow-2xl rounded rounded-sm rounded-2xl bg-veil-faint leading-5.5 text-sm shadow-panel rounded-control' }] })]).process('@tailwind utilities;', { from: undefined })
+    const selectors: string[] = []
+    result.root.walkRules(rule => { selectors.push(rule.selector) })
+    expect(selectors).toEqual(expect.arrayContaining(['.text-sm', '.shadow-panel', '.rounded-control']))
+    for (const name of ['text-14', 'text-4xs', 'text-lg', 'text-2xl', 'shadow-lg', 'shadow-2xl', 'rounded', 'rounded-sm', 'rounded-2xl', 'bg-veil-faint']) expect(selectors).not.toContain(`.${name}`)
+    expect(result.css).not.toContain('line-height: 1.375rem')
+  })
+
+  it('已确认零消费的令牌不再导出或保留重复变量', () => {
+    expect(styleTokens).not.toHaveProperty('UI_ACCENT_HEX')
+    expect(styleTokens).not.toHaveProperty('UI_TEXT_LIGHT_HEX')
+    expect(indexCss).not.toMatch(/--ui-radius-(lg|xl|2xl)/)
+  })
   it('排版档位 20/600、16/600、14/500、13/400、12、11/500', () => {
     expect(UI_TEXT_TITLE_CLASS).toMatch(/^text-xl font-semibold /)
     expect(UI_TEXT_SECTION_CLASS).toMatch(/^text-base font-semibold /)

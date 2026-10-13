@@ -1,3 +1,4 @@
+import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
@@ -335,7 +336,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
   }
 
   return (
-    <div className="relative flex h-[820px] max-h-[96vh] min-h-[660px] w-full min-w-[760px] max-w-[960px] flex-col overflow-hidden rounded-[inherit]">
+    <div className={`relative flex w-full min-w-0 ${UI_PANEL_BODY_HEIGHT_CLASS.workspace} flex-col overflow-hidden rounded-[inherit]`}>
       <div className="flex h-full w-full flex-col p-4">
         <div className="flex-1 min-h-0 overflow-y-auto pr-1">
           <div className="space-y-3 pb-2">

@@ -106,11 +106,11 @@ export const PromptSuggestionList = forwardRef<
               <img
                 src={reference.thumbnailSrc}
                 alt=""
-                className="h-8 w-8 shrink-0 rounded object-cover"
+                className="h-8 w-8 shrink-0 rounded-control object-cover"
                 draggable={false}
               />
             ) : (
-              <span className="flex h-8 min-w-8 items-center justify-center rounded bg-hover px-1 text-2xs text-text2">
+              <span className="flex h-8 min-w-8 items-center justify-center rounded-control bg-hover px-1 text-2xs text-text2">
                 {reference?.mediaType ?? '{{ }}'}
               </span>
             )}
@@ -123,7 +123,7 @@ export const PromptSuggestionList = forwardRef<
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate text-xs text-text1">{getSuggestionLabel(item)}</span>
                   {variable?.group ? (
-                    <span className="shrink-0 rounded border border-line px-1 py-0.5 text-2xs text-text2">
+                    <span className="shrink-0 rounded-control border border-line px-1 py-0.5 text-2xs text-text2">
                       {variable.group}
                     </span>
                   ) : null}

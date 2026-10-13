@@ -63,7 +63,7 @@ export function PaintOptionsV3({ controller }: ToolOptionsProps): JSX.Element | 
         : <UiColorInput aria-label={label('endColor')} title={label('endColor')} value={settings.paintEndColor}
           onChange={event => store.setToolSetting(controller.sessionId, 'paintEndColor', event.currentTarget.value)} />}
     </>}
-    {painting && <PanelTrigger panelPadding="content" panelWidth={280} renderPanel={() => <div className="flex flex-col gap-3" data-paint-brush-settings>
+    {painting && <PanelTrigger panelPadding="content" panelSize="compact" renderPanel={() => <div className="flex flex-col gap-3" data-paint-brush-settings>
       <PaintTipPreview brush={brush} />
       <UiGroup labelWidth={96} title={label('tip')} titleTone="compact">
         <UiFormRow label={label('tip')} density="compact" labelColumn="panel"><Dropdown value={dynamics.tip ?? 'round'} display={label(dynamics.tip ?? 'round')} options={(['round', 'chisel'] as const).map(value => ({ value, label: label(value) }))}

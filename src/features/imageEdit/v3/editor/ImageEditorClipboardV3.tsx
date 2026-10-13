@@ -47,7 +47,7 @@ export function ImageEditorClipboardV3({ bus, controller }: { bus: ImageEditComm
     return () => { window.removeEventListener('keydown', down, true); operation.current?.abort() }
   }, [bus, controller.sessionId])
   return <div ref={anchor} className="flex min-w-0 items-center gap-1">
-    <PanelTrigger panelPadding="menu" panelWidth={220} closeOnPanelClick renderPanel={() => <div role="menu" aria-label="图片剪贴板" className="flex flex-col gap-1">
+    <PanelTrigger panelPadding="menu" panelSize="menu" closeOnPanelClick renderPanel={() => <div role="menu" aria-label="图片剪贴板" className="flex flex-col gap-1">
       <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('copy') }}><Copy className={`${UI_ICON_SIZE_CLASS.md}`} />复制图层或选区 Ctrl+C</UiOptionButton>
       <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('merged') }}><Layers className={`${UI_ICON_SIZE_CLASS.md}`} />复制合成结果 Ctrl+Shift+C</UiOptionButton>
       <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('paste') }}><Clipboard className={`${UI_ICON_SIZE_CLASS.md}`} />粘贴图片 Ctrl+V</UiOptionButton>

@@ -29,7 +29,7 @@ const HistoryThumbnail = memo(function HistoryThumbnail({ thumbnails, row, gener
     })
     return () => abort.abort()
   }, [generation, row.key, row.position, thumbnails])
-  return <span className="flex h-8 w-10 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-raised">
+  return <span className="flex h-8 w-10 shrink-0 items-center justify-center overflow-hidden rounded-hairline bg-raised">
     {url ? <img className="h-full w-full object-contain" src={resolveImageDisplayUrl(url)} alt="" /> : <Image className={`${UI_ICON_SIZE_CLASS.md} text-text3`} aria-hidden="true" />}
   </span>
 })

@@ -323,7 +323,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
       {/* 拖拽高亮写成三元互斥：此前是一层固定灰底再叠一层拖拽灰底，
           两个 bg 同属性打架，而前者在 Tailwind 产物里排在后者之后，
           所以底色永远赢——拖拽高亮其实一直没显示出来 */}
-      <div className={`relative min-h-[82px] rounded-2xl p-1.5 transition-colors ${isDragging ? 'bg-raised/55' : 'bg-panel/30'}`}>
+      <div className={`relative min-h-[82px] rounded-overlay p-1.5 transition-colors ${isDragging ? 'bg-raised/55' : 'bg-panel/30'}`}>
         <div className="relative h-[66px] overflow-visible">
           {files.map((file, index) => {
             const isVideo = fileTypes ? fileTypes[index] === 'video' : false
@@ -444,7 +444,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                 type="button"
                 variant="secondary"
                 className={`p-0 text-text1 ${plusUseCardShape
-                  ? `h-16 w-12 ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
+                  ? `h-16 w-12 ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
                   : 'h-[29px] w-[29px] aspect-square !rounded-full border-line-strong bg-hover/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {

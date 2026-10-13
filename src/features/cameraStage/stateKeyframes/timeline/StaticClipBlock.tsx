@@ -78,7 +78,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
       <PanelTrigger
         alignment="aboveCenter"
         gap={8}
-        panelWidth={280}
+        panelSize="compact"
         className="h-full w-full"
         panelPadding="content"
         renderPanel={() => (

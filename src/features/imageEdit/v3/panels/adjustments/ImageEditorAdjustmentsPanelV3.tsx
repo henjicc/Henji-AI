@@ -77,7 +77,7 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
         value={filterLayer ? 'below' : scope} disabled={locked || filterLayer || progress !== null}
         display={t(`imageEditor.v3.filterWorkspace.${filterLayer ? 'below' : scope}`, { defaultValue: filterLayer || scope === 'below' ? '下方合成' : '当前图层' })}
         options={[{ value: 'content', label: t('imageEditor.v3.filterWorkspace.content', { defaultValue: '当前图层' }) }, { value: 'below', label: t('imageEditor.v3.filterWorkspace.below', { defaultValue: '下方合成' }) }]} onSelect={setScope} />
-      <PanelTrigger panelWidth={240} panelPadding="menu" closeOnPanelClick renderPanel={() => <div role="menu" className="flex flex-col gap-2">
+      <PanelTrigger panelSize="menu" panelPadding="menu" closeOnPanelClick renderPanel={() => <div role="menu" className="flex flex-col gap-2">
         {(['adjustment', 'effect'] as const).map(kind => <UiGroup key={kind} titleTone="compact" title={t(`imageEditor.v3.filterWorkspace.${kind}Library`, { defaultValue: kind === 'adjustment' ? '颜色调整' : '空间滤镜' })}>
           <div className="flex w-full flex-col gap-1">
           {choices.filter(choice => choice.kind === kind).map(choice => <Tooltip key={choice.id} content={choice.available ? null : choice.reason ?? t('imageEditor.v3.filterWorkspace.unavailable')}><span className="flex" tabIndex={choice.available ? undefined : 0}><UiOptionButton role="menuitem" variant="menu" size="sm" disabled={!choice.available}
@@ -135,7 +135,7 @@ export function ImageEditorAdjustmentsPanelV3({ controller, visible }: ImageEdit
               itemContent={(index, item) => <div data-filter-row={item.id} className="flex items-center gap-1 px-3 py-1">
                 <UiSwitch aria-label={t('imageEditor.v3.filterWorkspace.enabled', { defaultValue: '启用{{title}}', title: title(item.effectId, item.operationType) })} checked={item.enabled} disabled={locked} onCheckedChange={enabled => change(item.id, { kind: 'update', patch: { enabled } })} />
                 <UiOptionButton variant="menu" size="sm" className="min-w-0 flex-1" title={title(item.effectId, item.operationType)} active={filter?.id === item.id} onClick={() => setSelectedFilter(item.id)}><span className="truncate">{title(item.effectId, item.operationType)}</span></UiOptionButton>
-                <PanelTrigger panelPadding="menu" panelWidth={180} closeOnPanelClick renderPanel={() => <div role="menu" className="flex flex-col gap-1">
+                <PanelTrigger panelPadding="menu" panelSize="menu" closeOnPanelClick renderPanel={() => <div role="menu" className="flex flex-col gap-1">
                   <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked || index === 0} onClick={() => change(item.id, { kind: 'move', index: index - 1 })}><ArrowUp className={`${UI_ICON_SIZE_CLASS.sm}`} />{t('imageEditor.v3.filterWorkspace.earlier', { defaultValue: '提前执行' })}</UiOptionButton>
                   <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked || index === layer.filters.length - 1} onClick={() => change(item.id, { kind: 'move', index: index + 1 })}><ArrowDown className={`${UI_ICON_SIZE_CLASS.sm}`} />{t('imageEditor.v3.filterWorkspace.later', { defaultValue: '延后执行' })}</UiOptionButton>
                   <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={locked} onClick={() => prepareConversion(item.id)}>{t('imageEditor.v3.filterWorkspace.convertComposite')}</UiOptionButton>

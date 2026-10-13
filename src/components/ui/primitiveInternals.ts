@@ -1,3 +1,4 @@
+import type { UiTextAreaHeight } from './styleTokens'
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -226,6 +227,7 @@ export interface UiSearchInputProps extends Omit<UiInputProps, 'type'> {
 }
 
 export interface UiTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  height?: UiTextAreaHeight
   textHistory?: ScopedTextHistoryBinding
   /**
    * `field`（默认）：raised 字段表面 + 焦点环。
@@ -270,9 +272,9 @@ export const UI_BUTTON_VARIANT_CLASS: Record<ButtonVariant, string> = {
 // 按钮是固定高度的一行控件：文字不换行（任务 5.3：“上传 PDF”在流式浮层里被挤成两行，溢出按钮框）。
 // 此前个别调用点自己补 whitespace-nowrap，统一收进尺寸档。
 const UI_BUTTON_SIZE_CLASS: Record<ButtonSize, { box: string; padding: string; quietPadding: string }> = {
-  sm: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} gap-1.5 whitespace-nowrap text-xs ${UI_RADIUS_CLASS.control}`, padding: 'px-2.5', quietPadding: 'px-2' },
-  md: { box: `${UI_CONTROL_HEIGHT_CLASS.md} gap-1.5 whitespace-nowrap text-13 ${UI_RADIUS_CLASS.control}`, padding: 'px-3', quietPadding: 'px-2.5' },
-  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.lg} gap-2 whitespace-nowrap text-sm ${UI_RADIUS_CLASS.field}`, padding: 'px-4', quietPadding: 'px-3.5' },
+  sm: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} gap-1.5 whitespace-nowrap text-xs ${UI_RADIUS_CLASS.control}`, padding: 'px-3', quietPadding: 'px-2' },
+  md: { box: `${UI_CONTROL_HEIGHT_CLASS.md} gap-1.5 whitespace-nowrap text-13 ${UI_RADIUS_CLASS.control}`, padding: 'px-3', quietPadding: 'px-2' },
+  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.lg} gap-2 whitespace-nowrap text-sm ${UI_RADIUS_CLASS.field}`, padding: 'px-4', quietPadding: 'px-3' },
 }
 
 export function resolveButtonVariant(variant: ButtonVariant): string {
@@ -282,7 +284,7 @@ export function resolveButtonVariant(variant: ButtonVariant): string {
 export function resolveButtonSize(size: ButtonSize, variant: ButtonVariant = 'quiet'): string {
   if (variant === 'link') {
     // 行内链接：跟随所在文字的字号与行高，只保留一点圆角给键盘焦点环。
-    return 'gap-1 rounded-sm [&_svg.lucide]:size-[1em]'
+    return 'gap-1 rounded-hairline [&_svg.lucide]:size-[1em]'
   }
   const entry = UI_BUTTON_SIZE_CLASS[size]
   const padding = variant === 'quiet' || variant === 'danger' ? entry.quietPadding : entry.padding

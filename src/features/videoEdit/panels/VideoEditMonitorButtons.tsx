@@ -35,7 +35,7 @@ export function VideoEditMonitorButtonEditor({ kind, specs }: { kind: VideoEditM
   const saved = useVideoEditMonitorButtonIds(kind)
   // 每次打开都从已保存的按钮栏重新起草（收起动画期间再次打开也不沿用上一次没确定的草稿）。
   const [session, setSession] = useState(0)
-  return <PanelTrigger controlsRef={controls} panelWidth={300} zIndex={Z_LAYERS.dropdown} panelPadding="content" alignment="bottomRight"
+  return <PanelTrigger controlsRef={controls} panelSize="compact" zIndex={Z_LAYERS.dropdown} panelPadding="content" alignment="bottomRight"
     renderPanel={() => <VideoEditButtonBarEditorPanel key={session} specs={specs} saved={saved} defaults={VIDEO_EDIT_MONITOR_BUTTON_DEFAULTS[kind]} onSave={ids => useSettingsStore.getState().setVideoEditMonitorButtons(kind, ids)} onClose={() => controls.current?.closePanel()} />}>
     {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="按钮编辑器" title="按钮编辑器：自定义这一栏的按钮" aria-expanded={open} on={open} data-panel-trigger-button onClick={() => { if (!open) setSession(value => value + 1); togglePanel() }}><Plus /></UiIconButton>}
   </PanelTrigger>

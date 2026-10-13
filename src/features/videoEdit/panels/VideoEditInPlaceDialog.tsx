@@ -123,7 +123,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
     setRoles(on ? [...current, role] : current.filter(value => value !== role))
   }
 
-  const modelTrigger = <PanelTrigger className="min-w-0" panelWidth={1100} alignment="aboveCenter" stableHeight
+  const modelTrigger = <PanelTrigger className="min-w-0" panelSize="workspace" alignment="aboveCenter" stableHeight
     closeOnPanelClick={target => { if ((target as HTMLElement).closest('[data-prevent-close]')) return false; return Boolean((target as HTMLElement).closest('[data-close-on-select]')) }}
     renderPanel={() => <ModelSelectorPanel selectedProvider={providerId} selectedModel={modelId ?? ''} modelFilterProvider={filterProvider} modelFilterType={filterType} modelFilterFunction={filterFunction} favoriteModels={favorites}
       onModelSelect={(_, id) => setModelId(id)} onFilterProviderChange={setFilterProvider} onFilterTypeChange={setFilterType} onFilterFunctionChange={setFilterFunction}
@@ -142,7 +142,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
     <UiGroup labelWidth={96} gap="stack" data-video-edit-in-place={intent.action}>
       {'error' in planned ? <UiError message={planned.error} /> : <>
         <p className={UI_TEXT_META_CLASS}>{describe(projectId, plan!)}</p>
-        <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}提示词`} placeholder={PLACEHOLDERS[intent.action]} autoFocus editorClassName="min-h-24 max-h-60" />
+        <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}提示词`} placeholder={PLACEHOLDERS[intent.action]} autoFocus height="short" editorClassName="max-h-60" />
         {intent.action === 'extend_shot' && <UiFormRow label="放置方式" info="插入会让后面的片段后移；覆盖会替换后面的画面。" inline>
           <UiSegmented ariaLabel="放置方式" size="sm" value={mode} onChange={setMode} options={[{ value: 'insert', label: '插入' }, { value: 'overwrite', label: '覆盖' }]} />
         </UiFormRow>}

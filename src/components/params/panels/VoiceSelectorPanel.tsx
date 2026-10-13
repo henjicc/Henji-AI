@@ -1,3 +1,4 @@
+import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiEmpty, UiError, UiLoading, UiInput, UiSearchInput, UiOptionButton, UiVirtualGrid } from '@/components/ui'
@@ -439,7 +440,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   return (
     <div
       ref={panelRef}
-      className="flex h-[460px] w-full min-w-[520px] max-w-[720px] flex-col overflow-hidden overscroll-contain p-4"
+      className={`flex w-full min-w-0 ${UI_PANEL_BODY_HEIGHT_CLASS.content} flex-col overflow-hidden overscroll-contain p-4`}
       data-voice-selector-panel
       onWheelCapture={handleWheelCapture}
     >

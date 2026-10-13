@@ -23,7 +23,7 @@ export function LayerThumbnailV3({ document, layer, thumbnails, fallback }: { do
       .catch(error => { if (!abort.signal.aborted) logger.warn('图层缩略图暂不可用', { event: 'image_edit.layer.thumbnail.failed', error }) })
     return () => abort.abort()
   }, [key, thumbnails, snapshot, layer])
-  return <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-raised text-text2">
+  return <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-control bg-raised text-text2">
     {url ? <img data-layer-thumbnail className="h-full w-full object-contain" alt="" src={resolveImageDisplayUrl(url)} /> : fallback}
   </span>
 }

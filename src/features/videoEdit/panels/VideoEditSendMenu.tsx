@@ -19,7 +19,7 @@ export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, 
     void runSend(() => run(controller.signal), notify).finally(() => { operation.current = null; setRunning(current => current === controller ? null : current) })
   }
   if (running) return <UiButton variant="secondary" onClick={() => running.abort()}>正在加入剪辑… 取消</UiButton>
-  return <PanelTrigger disabled={disabled} panelWidth={340} panelPadding="menu" renderPanel={() => (
+  return <PanelTrigger disabled={disabled} panelSize="compact" panelPadding="menu" renderPanel={() => (
     <VideoEditSendOptions mediaKind={mediaKind} send={(mode, projectId) => start(async signal => sendCreativeResultToVideoEdit(resolveSource, { mediaKind, mode, ...(projectId ? { projectId } : {}) }, signal))}>
       {boundTarget && <UiOptionButton type="button" role="menuitem" variant="menu" size="md" className="w-full flex-col items-start gap-0.5 text-left"
         onClick={() => start(async signal => runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(boundTarget.target, await resolveSource()), signal))}>

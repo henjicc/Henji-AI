@@ -30,7 +30,7 @@ export const DockTab: React.FC<IDockviewPanelHeaderProps> = (props) => {
 
 export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ containerApi }) => (
   <PanelTrigger
-    panelWidth={160}
+    panelSize="menu"
     zIndex={Z_LAYERS.dropdown}
     closeOnPanelClick
     panelPadding="menu"

@@ -90,6 +90,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     error = false,
     errorMessage,
     layout = 'auto',
+    height,
     className = '',
     frame = 'field',
     editorShellClassName = '',
@@ -107,7 +108,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     onKeyDown,
     onError,
   }, ref): JSX.Element {
-    const layoutClasses = getPromptEditorLayoutClasses(layout)
+    const layoutClasses = getPromptEditorLayoutClasses(layout, height)
     const callbacksRef = useRef({
       onChange,
       onSubmit,

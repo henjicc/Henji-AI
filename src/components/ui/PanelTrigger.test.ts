@@ -24,6 +24,7 @@ async function flushAfterEvent(): Promise<void> {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('PanelTrigger 面板内部点击关闭策略', () => {
@@ -51,7 +52,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
 
     const view = render(React.createElement(PanelTrigger, {
       display: '比例 / 分辨率',
-      panelWidth: 360,
+      panelSize: 'compact' as const,
       alignment: 'aboveCenter',
       renderPanel: () => React.createElement('div', { style: { height: '900px' } }),
     }))
@@ -78,6 +79,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
   })
 
   it('首选的上方空间不足时自动向下展开', () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(260)
     vi.stubGlobal('ResizeObserver', class {
       observe(): void {}
       disconnect(): void {}
@@ -85,8 +87,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
 
     const view = render(React.createElement(PanelTrigger, {
       display: '模型',
-      panelWidth: 320,
-      panelHeight: 260,
+      panelSize: 'compact' as const,
       alignment: 'aboveCenter',
       gap: 8,
       renderPanel: () => React.createElement('div', null, '模型列表'),
@@ -140,8 +141,8 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     fireEvent.click(trigger)
 
     const panel = document.querySelector<HTMLElement>('[data-panel-placement]')
-    // 动作菜单（默认）：82 文字 + 浮层 p-1 8 + 菜单项内边距 20 + 边框 2 + 取整余量 2，不留选中勾槽（5.9：原 56 留白超过 40 上限）
-    expect(panel?.style.width).toBe('114px')
+    // 动作菜单（默认）：82 文字 + 浮层 p-1 8 + 菜单项内边距 24 + 选项透明边框 2 + 边框 2 + 取整余量 2，不留选中勾槽（5.9：原 56 留白超过 40 上限）
+    expect(panel?.style.width).toBe('120px')
   })
 
   it('选值菜单（menuSelection="single"）额外预留选中勾槽', () => {
@@ -158,8 +159,8 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     }))
     fireEvent.click(view.getByRole('button'))
     const panel = document.querySelector<HTMLElement>('[data-panel-placement]')
-    // 82 + 8 + 内边距 20 + 勾槽 22 + 2 + 2（4.3：原 30 未计勾槽）
-    expect(panel?.style.width).toBe('136px')
+    // 82 + 8 + 内边距 24 + 选项透明边框 2 + 勾槽 22 + 2 + 2（4.3：原 30 未计勾槽）
+    expect(panel?.style.width).toBe('142px')
   })
   it('收起动画期间再次点触发器会重新打开，收起计时器不会把它关掉', async () => {
     vi.useFakeTimers()
@@ -352,6 +353,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     }
   })
   it('锚点模式（任务 5.9）：无内置触发器，按外部元素定位；点锚点元素不算点外，点外收起后回调 onOpenChange(false)', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(256)
     vi.useFakeTimers()
     try {
       vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
@@ -364,13 +366,13 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
         open: true,
         onOpenChange,
         alignment: 'bottomRight',
-        panelWidth: 200,
+        panelSize: 'compact' as const,
         renderPanel: () => React.createElement('div', null, '菜单内容'),
       }))
       expect(view.container.querySelector('button')).toBeNull()
       const panel = view.getByText('菜单内容').closest('[data-panel-placement]') as HTMLElement
-      // 右缘对齐锚点：328 - 200
-      expect(panel.style.left).toBe('128px')
+      // 响应式面板实测 256，右缘对齐锚点：328 - 256
+      expect(panel.style.left).toBe('72px')
       expect(panel.style.top).toBe('132px')
       expect(panel.hasAttribute('data-ui-overlay-id')).toBe(true)
 
@@ -396,7 +398,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
       const props = (open: boolean, x: number) => ({
         anchor: { left: x, top: 50, bottom: 50, width: 0 },
         open,
-        panelWidth: 120,
+        panelSize: 'compact' as const,
         renderPanel: () => React.createElement('div', null, '右键菜单'),
       })
       const view = render(React.createElement(PanelTrigger, props(true, 40)))

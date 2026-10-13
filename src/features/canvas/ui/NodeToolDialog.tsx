@@ -361,7 +361,7 @@ export function NodeToolDialog() {
       title={`${activePlugin?.label ?? ''}${t('toolDialog.suffix')}`}
       onClose={closeDialog}
       size={activePlugin?.dialog.size ?? 'form'}
-      contentClassName="overflow-y-auto px-4 py-4"
+      contentPadding="default" contentScroll="auto"
       footer={
         <>
           <UiButton variant="secondary" onClick={closeDialog}>

@@ -344,7 +344,7 @@ export default function MultiAngleSpecialEditor({
       title={t('node.multiAngleEditor.title')}
       size="workspace"
       surface="glass"
-      contentClassName="min-h-0 p-0"
+      contentPadding="none" contentScroll="none" contentClassName="min-h-0"
       onClose={close}
       footer={session.discardConfirmationRequested ? (
         <div className="flex w-full items-center justify-between gap-3">

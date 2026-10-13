@@ -369,7 +369,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
     );
     return (
       <div ref={hostRef} onKeyDownCapture={navigate} data-project-list-view className="flex flex-col">
-        <div className={`grid ${columnsClass} items-center gap-4 border-b border-line pb-1.5 ${selection.active ? 'pl-11' : 'pl-2.5'} pr-2.5`}>
+        <div className={`grid ${columnsClass} items-center gap-4 border-b border-line pb-1.5 ${selection.active ? 'pl-11' : 'pl-3'} pr-3`}>
           {headerCell(columns.name, 'name')}
           {hasLocation ? headerCell(columns.location) : null}
           {headerCell(timeSort === 'updated' ? columns.modified : columns.created, timeSort)}

@@ -10,6 +10,8 @@ import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership';
 import { ownerDocumentOf } from '@/utils/crossRealmDom';
 import {
   UI_MODAL_SIZE_CLASS,
+  UI_MODAL_CONTENT_PADDING_CLASS,
+  UI_MODAL_CONTENT_SCROLL_CLASS,
   UI_TEXT_TITLE_CLASS,
   type UiModalSize,
 } from './styleTokens';
@@ -30,6 +32,8 @@ interface UiModalProps {
   /** 仅用于非尺寸类的表面微调。 */
   panelClassName?: string;
   contentClassName?: string;
+  contentPadding?: keyof typeof UI_MODAL_CONTENT_PADDING_CLASS;
+  contentScroll?: keyof typeof UI_MODAL_CONTENT_SCROLL_CLASS;
   hideHeader?: boolean;
   overlayClassName?: string;
   /**
@@ -62,7 +66,9 @@ export function UiModal({
   headerActions,
   size = 'compact',
   panelClassName = '',
-  contentClassName = 'px-4 py-4',
+  contentClassName = '',
+  contentPadding = 'default',
+  contentScroll = 'auto',
   hideHeader = false,
   overlayClassName = '',
   surface = 'panel',
@@ -143,7 +149,7 @@ export function UiModal({
           </div>
         )}
 
-        <div className={`flex min-h-0 flex-1 flex-col ${contentClassName}`}>{children}</div>
+        <div className={`flex min-h-0 flex-1 flex-col ${UI_MODAL_CONTENT_PADDING_CLASS[contentPadding]} ${UI_MODAL_CONTENT_SCROLL_CLASS[contentScroll]} ${contentClassName}`}>{children}</div>
 
         {footer && (
           <div className="flex justify-end gap-2 border-t border-line px-4 py-3">

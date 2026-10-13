@@ -20,7 +20,7 @@ export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult
     <div className="min-h-96">
       <h3 className={UI_TEXT_SECTION_CLASS}>{t('basics.headline')}</h3>
       <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('basics.description')}</p>
-      <UiPanel variant="inset" className="mt-7 p-4">
+      <UiPanel variant="inset" className="mt-8 p-4">
         <div className="flex items-start gap-3">
           <Database className={`${UI_ICON_SIZE_CLASS.lg} mt-0.5 shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
           <div className="min-w-0 flex-1">

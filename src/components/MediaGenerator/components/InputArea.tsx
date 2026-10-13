@@ -315,7 +315,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   // 长提示词在编辑区内部滚动。
   const promptHeightClass = compact
     ? 'min-h-12 max-h-44'
-    : 'min-h-[72px] max-h-[260px]'
+    : 'min-h-textarea-short max-h-[260px]'
   const uploaderRef = useRef<StackedMediaUploaderHandle>(null)
   const dragInProgress = useMediaDragInProgress()
   const showReferenceRow = mixedFiles.length > 0 || dragInProgress || importingMedia
@@ -427,15 +427,15 @@ const InputArea: React.FC<InputAreaProps> = ({
                   : t('inputArea.placeholder.default')
             }
             className="relative isolate"
-            // 内容基础类已有 px-3 py-2.5 text-sm：这里用 pl/pr/pt/pb 与 text-14（产物中排在其后）收紧，不与之抢同一属性的同名档
-            editorClassName={`w-full pl-2 pr-2 pt-1 pb-1 text-14 ${promptHeightClass}`}
+            // 内容基础留白为 12px；输入卡片通过方向留白收紧，字号共用 text-sm。
+            editorClassName={`w-full pl-2 pr-2 pt-1 pb-1 text-sm ${promptHeightClass}`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (
           <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-dropdown overflow-hidden rounded-lg bg-panel ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
             <div
               ref={promptOptimizationScrollRef}
-              className="prompt-optimize-preview__stream h-full overflow-y-scroll px-2 py-1 text-14 leading-6 text-text1"
+              className="prompt-optimize-preview__stream h-full overflow-y-scroll px-2 py-1 text-sm leading-6 text-text1"
             >
               {displayedPromptOptimizationReasoningGlyphs.length > 0 ? (
                 <PromptOptimizationPreviewText

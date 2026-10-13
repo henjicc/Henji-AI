@@ -67,10 +67,10 @@ export function referenceDerive(seed: ReferenceSeed): Record<string, string> {
   const a = toOklch(s.accent);
   const aL = dark ? Math.min(0.64, Math.max(0.5, a.L)) : Math.min(0.6, Math.max(0.46, a.L));
   const A = (L: number, C?: number) => ok(L, C === undefined ? a.C : C, a.H);
-  Object.assign(t, { accent: A(aL), accentHi: A(aL + 0.035), accentHover: A(aL + 0.04), accentHoverHi: A(aL + 0.075), accentPressed: A(aL - 0.045), accentText: dark ? A(0.8, Math.min(a.C, 0.13)) : A(0.5), accentRing: A(dark ? 0.7 : 0.62) });
+  Object.assign(t, { accent: A(aL), accentHover: A(aL + 0.04), accentPressed: A(aL - 0.045), accentText: dark ? A(0.8, Math.min(a.C, 0.13)) : A(0.5), accentRing: A(dark ? 0.7 : 0.62) });
   t.accentTint = alpha(t.accent, dark ? 0.2 : 0.12);
   t.onAccent = referenceContrast(WHITE_HEX.toUpperCase(), t.accent) >= 4.5 ? WHITE_HEX.toUpperCase() : N(0.17, 0.01);
-  Object.assign(t, { danger: ok(dark ? 0.6 : 0.55, 0.19, 25), dangerHi: ok(dark ? 0.635 : 0.585, 0.19, 25), dangerText: ok(dark ? 0.74 : 0.5, 0.15, 25), success: ok(dark ? 0.76 : 0.55, 0.15, 155), warning: ok(dark ? 0.8 : 0.64, 0.15, 75) });
+  Object.assign(t, { danger: ok(dark ? 0.6 : 0.55, 0.19, 25), dangerText: ok(dark ? 0.74 : 0.5, 0.15, 25), success: ok(dark ? 0.76 : 0.55, 0.15, 155), warning: ok(dark ? 0.8 : 0.64, 0.15, 75) });
   t.dangerTint = alpha(t.danger, dark ? 0.16 : 0.1);
   const clipL = dark ? L0 + 6 * st : L0 - 0.12; const edgeL = clipL + (dark ? 0.07 : -0.09);
   Object.assign(t, { clipVideo: ok(clipL, 0.045, 255), clipVideoLine: ok(edgeL, 0.07, 255), clipAudio: ok(clipL, 0.045, 165), clipAudioLine: ok(edgeL, 0.07, 165), clipText: ok(clipL, 0.045, 305), clipTextLine: ok(edgeL, 0.07, 305), clipWave: dark ? ok(0.84, 0.06, 165) : ok(0.36, 0.07, 165), wave: N(0.6), wavePlayed: t.text1, waveCut: ok(dark ? 0.42 : 0.78, 0.09, 25) });

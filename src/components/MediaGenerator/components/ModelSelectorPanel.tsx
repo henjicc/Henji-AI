@@ -307,7 +307,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 // 但不描边——底色已经表达过一次边界；方向键当前项用悬停底表达。
                 variant="grid"
                 highlighted={isHighlighted}
-                className="relative w-full flex-col items-start px-3 py-2.5"
+                className="relative w-full flex-col items-start px-3 py-3"
               >
                 {/* 两列两行（表格式）: 左列=名称/供应商，右列=收藏/类型 */}
                 <div className={`grid w-full grid-cols-[minmax(0,1fr)_auto] ${MODEL_CARD_COLUMN_GAP_CLASS} ${MODEL_CARD_ROW_GAP_CLASS}`}>

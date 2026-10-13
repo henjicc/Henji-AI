@@ -69,7 +69,7 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
   return <div className="flex flex-col gap-2" aria-label={`${title}图片拖放区`} data-video-edit-code-image={parameterKey} onDrop={drop} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy' } }}>
     <Dropdown ariaLabel={`${title}素材图片`} value={value?.mediaId ?? ''} options={[{ value: '', label: '未绑定图片' }, ...images.map(media => ({ value: media.id, label: media.name }))]} disabled={busy} onSelect={mediaId => bind(mediaId ? { kind: 'media', mediaId } : null)} />
     <div className="flex flex-wrap items-center gap-2">
-      <PanelTrigger key={scope} panelWidth={560} open={generationOpen} onOpenChange={setGenerationOpen} renderPanel={() => <CodeImageGenerationPanel target={target} parameterKey={parameterKey} title={title} onClose={() => setGenerationOpen(false)} />}>
+      <PanelTrigger key={scope} panelSize="content" open={generationOpen} onOpenChange={setGenerationOpen} renderPanel={() => <CodeImageGenerationPanel target={target} parameterKey={parameterKey} title={title} onClose={() => setGenerationOpen(false)} />}>
         {({ togglePanel }) => <UiButton variant="secondary" disabled={busy || activeJobs.length > 0} onClick={togglePanel}>生成</UiButton>}
       </PanelTrigger>
       <UiButton variant="secondary" disabled={busy} onClick={() => { void run(signal => chooseVideoEditCodeImage(target, parameterKey, signal)) }}>选择文件</UiButton>
@@ -77,7 +77,7 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
       <UiButton disabled={!value || busy} onClick={() => bind(null)}>清除图片</UiButton>
       {busy && <UiButton onClick={cancel}>取消选择</UiButton>}
     </div>
-    {candidates.length > 0 && <PanelTrigger label="生成候选" display={`已生成 ${candidates.length} 张`} panelWidth={320} closeOnPanelClick disabled={busy} renderPanel={() => <Virtuoso className="h-60" data={candidates} itemContent={(_, media) => <UiOptionButton variant="menu" active={value?.mediaId === media.id} className="w-full" aria-label={`使用候选${media.name}`} onClick={() => bind({ kind: 'media', mediaId: media.id })}>
+    {candidates.length > 0 && <PanelTrigger label="生成候选" display={`已生成 ${candidates.length} 张`} panelSize="compact" closeOnPanelClick disabled={busy} renderPanel={() => <Virtuoso className="h-60" data={candidates} itemContent={(_, media) => <UiOptionButton variant="menu" active={value?.mediaId === media.id} className="w-full" aria-label={`使用候选${media.name}`} onClick={() => bind({ kind: 'media', mediaId: media.id })}>
       <img src={resolveImageDisplayUrl(media.path)} alt="" className="h-12 w-12 object-contain" /><span className="min-w-0 truncate">{media.name}</span>
     </UiOptionButton>} />} />}
     {activeJobs.map(job => <UiLoading key={job.id} size="xs" message={job.status === 'placing' ? '正在应用生成图片' : `正在生成图片 ${Math.round(Math.max(0, Math.min(100, job.progress)))}%`}><UiButton disabled={Boolean(job.mediaId)} onClick={() => { void cancelCodeImageGeneration(job.id) }}>取消生成</UiButton></UiLoading>)}

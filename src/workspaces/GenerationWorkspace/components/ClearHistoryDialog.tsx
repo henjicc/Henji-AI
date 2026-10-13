@@ -31,7 +31,7 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
       onClose={close}
       hideHeader
       size="compact"
-      contentClassName="p-4"
+      contentPadding="default" contentScroll="auto"
     >
       <div className={UI_TEXT_TITLE_CLASS}>{t('ui:workspace.clearDialog.title')}</div>
       <div className={`mt-2 ${UI_TEXT_BODY_CLASS}`}>{t('ui:workspace.clearDialog.subtitle')}</div>

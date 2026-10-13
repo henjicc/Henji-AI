@@ -129,7 +129,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
           <UiEmpty title={t('node.layerStackView.unavailable')} size="xs" className="h-full" />
         )}
         {document?.status === 'degraded' && !isEditableV3 && (
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 ui-glass rounded-lg px-2.5 py-1.5 text-2xs text-text2">
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 ui-glass rounded-lg px-3 py-1.5 text-2xs text-text2">
             <span>{t('node.layerStackView.degraded')}</span>
           </div>
         )}

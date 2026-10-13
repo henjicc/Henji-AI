@@ -1,3 +1,4 @@
+import type { UiTextAreaHeight } from '../styleTokens'
 import type { PromptDocumentV1, PromptMediaType } from '@/core/inputs/promptDocument'
 
 export type PromptEditorPreset =
@@ -87,6 +88,7 @@ export interface PromptEditorProps {
   getVariableSuggestions?: PromptVariableSuggestionProvider
   suggestionContainer?: string | HTMLElement
   mode?: PromptEditorMode
+  height?: UiTextAreaHeight
   layout?: PromptEditorLayout
   ariaLabel: string
   placeholder?: string

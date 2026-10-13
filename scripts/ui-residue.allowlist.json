@@ -25,14 +25,8 @@
     {
       "file": "src/components/MediaGenerator/components/InputArea.tsx",
       "category": "arbitraryValue",
-      "values": ["min-h-[72px]", "max-h-[260px]"],
-      "reason": "生成输入卡片：提示词区展开后高度限制为 72–260，再高滚动"
-    },
-    {
-      "file": "src/components/MediaGenerator/components/PromptOptimizationProfilesPanel.tsx",
-      "category": "arbitraryValue",
-      "values": ["min-h-[120px]"],
-      "reason": "多行指令编辑区的最小高度按 5 行正文（5 × 24）定，与参数面板 TextInput 的长文本档一致"
+      "values": ["max-h-[260px]"],
+      "reason": "生成输入卡片：提示词区最小高度走 short 令牌，最高 260 后滚动"
     },
     {
       "file": "src/components/mediaViewer/AudioViewerModal.tsx",
@@ -61,7 +55,7 @@
     {
       "file": "src/components/params/base/TextInput.tsx",
       "category": "arbitraryValue",
-      "values": ["min-h-[120px]", "min-h-[92px]", "max-h-[360px]"],
+      "values": ["max-h-[360px]"],
       "reason": "长文本参数编辑区按行数定高：rows > 4 为 5 行正文 120，其余 92（与 PromptEditor content 档一致），最高 360 后滚动"
     },
     {
@@ -73,13 +67,13 @@
     {
       "file": "src/components/params/panels/MinimaxVoiceClonePanel.tsx",
       "category": "arbitraryValue",
-      "values": ["h-[820px]", "min-h-[660px]", "min-w-[760px]", "max-w-[960px]", "w-[92px]"],
+      "values": ["w-[92px]"],
       "reason": "音色克隆弹窗的固定版式：左右两栏同时放样本、参数与试听需要 760–960 宽、660–820 高（max-h-[96vh] 兜底小窗口）；数值框 92 宽容纳 4 位数与单位"
     },
     {
       "file": "src/components/params/panels/VoiceSelectorPanel.tsx",
       "category": "arbitraryValue",
-      "values": ["h-[460px]", "min-w-[520px]", "max-w-[720px]", "min-h-[58px]", "min-h-[52px]"],
+      "values": ["min-h-[58px]", "min-h-[52px]"],
       "reason": "音色选择浮层：固定 460 高让分类切换时浮层不跳，宽 520–720 放两列音色卡；音色卡单行 52 / 带说明 58 高，保证一列里卡片等高"
     },
     {
@@ -97,14 +91,8 @@
     {
       "file": "src/components/PresetPanel.tsx",
       "category": "arbitraryValue",
-      "values": ["max-h-[500px]", "h-[60px]"],
+      "values": ["h-[60px]"],
       "reason": "预设面板：面板最高 500 后滚动；快速保存区的两种状态（保存按钮 / 名称输入）叠放切换，容器固定 60 高避免切换时跳动"
-    },
-    {
-      "file": "src/components/Settings/sections/ModelSyncDialog.tsx",
-      "category": "arbitraryValue",
-      "values": ["h-[420px]"],
-      "reason": "虚拟列表（Virtuoso）必须给定高度才能计算可见行；420 是弹窗内列表区的固定高度"
     },
     {
       "file": "src/components/ui/fileUploader/StackedMediaUploader.tsx",
@@ -121,7 +109,7 @@
     {
       "file": "src/components/ui/PromptEditor/promptEditorStyles.ts",
       "category": "arbitraryValue",
-      "values": ["min-h-[92px]", "max-w-[180px]"],
+      "values": ["max-w-[180px]"],
       "reason": "提示词编辑器：正文区最少 92 高（约 4 行 13/22 正文 + 内边距）；行内引用芯片最宽 180 后省略"
     },
     {
@@ -161,12 +149,6 @@
       "reason": "图片节点浮动标题最宽 220 后省略，与素材组节点最小宽度一致，标题不超出常见节点宽"
     },
     {
-      "file": "src/features/canvas/params/ModelPickerList.tsx",
-      "category": "arbitraryValue",
-      "values": ["h-[300px]"],
-      "reason": "节点模型选择浮层里模型列表的固定高度（内嵌形态改为 flex-1）：切换供应商或搜索时浮层不跳"
-    },
-    {
       "file": "src/features/canvas/params/NodeModelParamsControls.tsx",
       "category": "arbitraryValue",
       "values": ["max-w-[260px]"],
@@ -195,12 +177,6 @@
       "category": "arbitraryValue",
       "values": ["-left-[5px]"],
       "reason": "请求链时间线节点圆点 10 宽，左移 5 让圆点中心压在 1px 竖线上"
-    },
-    {
-      "file": "src/workspaces/GenerationWorkspace/components/FloatingInputPanel.tsx",
-      "category": "arbitraryValue",
-      "values": ["max-h-[600px]"],
-      "reason": "生成输入卡片展开时的高度上限，同时是 max-height 收起动画的终点（48 ↔ 600）"
     },
     {
       "file": "src/features/canvas/storyboard.css",

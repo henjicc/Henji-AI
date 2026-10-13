@@ -177,7 +177,7 @@ export function CanvasImageCapabilityActions({
           alignment="bottomLeft"
           boundarySelector=".react-flow__renderer"
           gap={8}
-          panelWidth={320}
+          panelSize="compact"
           zIndex={Z_LAYERS.dropdown}
           surface="glass"
           closeOnPanelClick={(target) => {
@@ -225,7 +225,7 @@ export function CanvasImageCapabilityActions({
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate">{t(capability.titleKey)}</span>
                             {capability.availability.releaseStage === 'experimental' && (
-                              <span className="shrink-0 rounded border border-line px-1 py-0.5 text-2xs leading-none text-text2">
+                              <span className="shrink-0 rounded-control border border-line px-1 py-0.5 text-2xs leading-none text-text2">
                                 {t('imageCapabilities.status.experimental')}
                               </span>
                             )}

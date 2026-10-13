@@ -9,7 +9,7 @@ import React, {
   type KeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_SIZE_CLASS, type UiTriggerPanelSize, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { useUiFormRowLabelling } from './formRowLabel'
 import { UiFieldTrigger, UiOptionButton } from './primitives'
@@ -51,6 +51,7 @@ type DropdownProps<T extends string | number | boolean> = {
   /** 浮层表面：默认实底；压在画布、图片、视频、3D 视口上时传 `glass`。 */
   surface?: UiTriggerPanelSurface
   /** 浮层内边距档；浮层外壳表面不接受覆盖。 */
+  panelSize?: UiTriggerPanelSize
   panelPadding?: UiTriggerPanelPadding
   ariaLabel?: string
   ariaLabelledBy?: string
@@ -86,6 +87,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     buttonClassName,
     size = 'md',
     panelPadding = 'none',
+    panelSize,
     surface = 'solid',
     ariaLabel,
     ariaLabelledBy,
@@ -320,6 +322,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     computeMinWidth()
   }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, renderPanel, resolvedDisplay, size])
 
+  const hasFixedPosition = fixedPos !== null
   useLayoutEffect(() => {
     const updatePos = () => {
       if (!ref.current) return
@@ -327,7 +330,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       const target = el || ref.current
       const rect = target.getBoundingClientRect()
       const panelHeight = panelRef.current?.getBoundingClientRect().height ?? 0
-      const panelWidth = panelWidthStrategy === 'options' && panelMinWidthPx
+      const panelWidth = panelSize ? (panelRef.current?.getBoundingClientRect().width ?? rect.width) : panelWidthStrategy === 'options' && panelMinWidthPx
         ? Math.max(rect.width, panelMinWidthPx + scrollGutterPx)
         : rect.width
       const viewportPadding = 8
@@ -354,7 +357,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ownerWindow.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, shouldRender, panelMinWidthPx, panelWidthStrategy, scrollGutterPx])
+  }, [open, shouldRender, panelMinWidthPx, panelWidthStrategy, scrollGutterPx, panelSize, hasFixedPosition])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -369,7 +372,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     : null
 
   const menuBody = renderPanel ? (
-    <div id={panelId} className="max-h-60 overflow-y-auto">
+    <div id={panelId} className={panelSize ? "max-h-[var(--trigger-panel-max-height)] overflow-y-auto" : "max-h-60 overflow-y-auto"}>
       {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
       <UiFieldLayoutContext.Provider value="form">{renderPanel()}</UiFieldLayoutContext.Provider>
     </div>
@@ -380,7 +383,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       role="listbox"
       aria-label={ariaLabel ?? label ?? resolvedDisplay}
       aria-labelledby={ariaLabelledBy}
-      className="max-h-60 overflow-y-auto p-1"
+      className={panelSize ? "max-h-[var(--trigger-panel-max-height)] overflow-y-auto p-1" : "max-h-60 overflow-y-auto p-1"}
     >
       {(options || []).map((option, index) => {
         const selected = isSelectedOption(option.value)
@@ -450,7 +453,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           createPortal(
             <div
               ref={panelRef}
-              className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
+              className={`${panelSize ? UI_TRIGGER_PANEL_SIZE_CLASS[panelSize] : ''} ${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
               // 收起中的面板已经关闭：不再接收指针与键盘，也不再按角色暴露（与 PanelTrigger 一致）
               aria-hidden={closing || undefined}
               {...(closing ? { inert: '' } : {})}
@@ -458,7 +461,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                 position: 'fixed',
                 top: fixedPos.top,
                 left: fixedPos.left,
-                width: optionsPanelWidth !== null
+                maxWidth: 'calc(100vw - 16px)',
+                width: panelSize ? undefined : optionsPanelWidth !== null
                   ? Math.max(fixedPos.width, optionsPanelWidth)
                   : fixedPos.width,
                 zIndex,
@@ -477,12 +481,12 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           <div
             ref={panelRef}
             // 非 portal 面板在触发器所在的层叠上下文里展开，只需盖住同一上下文里的兄弟内容：下拉档即可
-            className={`absolute left-0 z-dropdown ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
+            className={`absolute left-0 z-dropdown ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelSize ? '' : panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${panelSize ? UI_TRIGGER_PANEL_SIZE_CLASS[panelSize] : ''} ${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
               // 收起中的面板已经关闭：不再接收指针与键盘，也不再按角色暴露（与 PanelTrigger 一致）
               aria-hidden={closing || undefined}
               {...(closing ? { inert: '' } : {})}
             // 非 portal 面板与触发器同一定位上下文：不窄于触发器（100%），选项更长时按内容加宽
-            style={optionsPanelWidth !== null ? { minWidth: `max(100%, ${optionsPanelWidth}px)` } : undefined}
+            style={panelSize ? { maxWidth: 'calc(100vw - 16px)' } : optionsPanelWidth !== null ? { minWidth: `max(100%, ${optionsPanelWidth}px)` } : undefined}
             data-dropdown-portal="true"
             data-dropdown-placement={fixedPos?.placement ?? 'below'}
             {...overlay.layerProps}

@@ -104,7 +104,7 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
   }
   const perform = async (operation: () => Promise<void>): Promise<void> => { setBusy(true); setError(''); restore(); try { await operation() } catch (reason) { report(reason) } finally { setBusy(false) } }
   return <div className="flex min-w-0 flex-col gap-1" data-ui-font-picker>
-    <PanelTrigger size={size} panelWidth={384} panelPadding="content" open={open} onOpenChange={next => { if (!next) restore(); else void loadFontLibrary(true).catch(report); setOpen(next) }} renderPanel={() => <div className="flex min-w-0 flex-col gap-2" onKeyDown={event => {
+    <PanelTrigger size={size} panelSize="compact" panelPadding="content" open={open} onOpenChange={next => { if (!next) restore(); else void loadFontLibrary(true).catch(report); setOpen(next) }} renderPanel={() => <div className="flex min-w-0 flex-col gap-2" onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); restore(); setOpen(false) }
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault(); event.stopPropagation()

@@ -207,7 +207,7 @@ export function VideoTrimModal({
       title={t('node.mediaRow.videoTrimTitle')}
       onClose={handleClose}
       size="editor"
-      contentClassName="overflow-y-auto px-4 py-4"
+      contentPadding="default" contentScroll="auto"
       footer={(
         <>
           <UiButton variant="secondary" onClick={handleClose}>

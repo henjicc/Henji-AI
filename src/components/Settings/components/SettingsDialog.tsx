@@ -46,7 +46,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
     onClose={() => onClose?.()}
     hideHeader
     size="compact"
-    contentClassName="p-4"
+    contentPadding="default" contentScroll="auto"
     footer={actions.map(action => (
       <UiButton
         key={action.label}

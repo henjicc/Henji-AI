@@ -28,7 +28,7 @@ export function LogEventRow({ event, selected, onSelect }: LogEventRowProps): JS
         <span className="shrink-0 text-2xs uppercase tracking-wide text-text3">{event.level}</span>
       </div>
       <div className="mt-1 flex items-center gap-1 truncate text-2xs text-text2">
-        <span className="rounded bg-hover px-1 py-0.5">{event.source}</span>
+        <span className="rounded-control bg-hover px-1 py-0.5">{event.source}</span>
         <span>{getDomainHint(event.domain)}</span>
       </div>
       <div className="mt-1 truncate text-xs">{display.summary}</div>

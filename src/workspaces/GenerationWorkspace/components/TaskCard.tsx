@@ -381,7 +381,7 @@ const TaskCard = React.memo(function TaskCard({
             </span>
           </div>
           {durationBadge && (
-            <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-media-scrim px-1.5 py-0.5 font-mono text-2xs tabular-nums text-on-media">
+            <span className="pointer-events-none absolute bottom-2 right-2 rounded-control bg-media-scrim px-1.5 py-0.5 font-mono text-2xs tabular-nums text-on-media">
               {durationBadge}
             </span>
           )}

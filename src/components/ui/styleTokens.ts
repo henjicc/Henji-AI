@@ -1,5 +1,5 @@
 import {
-  APP_ACCENT_HEX, TEXT_LIGHT_HEX, WHITE_HEX, BLACK_HEX, CAMERA_STAGE_COLOR_HEX,
+  TEXT_LIGHT_HEX, WHITE_HEX, BLACK_HEX, CAMERA_STAGE_COLOR_HEX,
   IMAGE_EDITOR_GLOW_TINT_HEX, SOCKET_TYPE_COLOR_HEX, CANVAS_GRID_ALT_HEX,
 } from '@/core/theme/colorTokens';
 import type { UiControlSize, IconButtonSize } from './primitiveInternals';
@@ -27,9 +27,7 @@ export const UI_COLOR_ACCENT_BG_CLASS = 'bg-accent';
 export const UI_COLOR_ACCENT_FILL_TEXT_CLASS = 'bg-accent text-on-accent';
 /** 强调文字（深浅主题都满足 4.5:1；不要用 `text-accent` 压文字）。 */
 export const UI_COLOR_ACCENT_TEXT_CLASS = 'text-accent-text';
-export const UI_ACCENT_HEX = APP_ACCENT_HEX;
 export const UI_WHITE_HEX = WHITE_HEX;
-export const UI_TEXT_LIGHT_HEX = TEXT_LIGHT_HEX;
 
 /* ---------------------------------------------------------------------------
  * 选中态词汇表（重要记录 001/012，任务 2.2 → 4.3）
@@ -138,11 +136,45 @@ export const UI_RADIUS_CLASS = {
  * 间距与分隔令牌
  * ------------------------------------------------------------------------- */
 
+/** 纵横共用刻度（px）；0 表示清除间距，不是视觉档位。Tailwind key = px / 4。 */
+export const UI_SPACING_SCALE = [2, 4, 6, 8, 12, 16, 20, 24, 32] as const;
+
+/** 行内关系从紧到松；行与列使用相同刻度。 */
+export const UI_INLINE_GAP_CLASS = {
+  micro: 'gap-0.5', tight: 'gap-1', control: 'gap-1.5', group: 'gap-2', row: 'gap-3', section: 'gap-4',
+} as const;
+export type UiInlineGap = keyof typeof UI_INLINE_GAP_CLASS;
+
+export const UI_STACK_CLASS = {
+  tight: 'space-y-1', control: 'space-y-1.5', group: 'space-y-2', row: 'space-y-3',
+  section: 'space-y-4', form: 'space-y-5', stack: 'space-y-6', region: 'space-y-8',
+} as const;
+
+/** 命令带和其从属带共享左右 12px，不能分别定留白。 */
+export const UI_BAND_PADDING_CLASS = 'px-3';
+/** 条带中的行控件居中：row 28、tab 32、header 36、title 40、command 44。 */
+export const UI_BAND_HEIGHT_CLASS = {
+  row: 'h-band-row', tab: 'h-band-tab', header: 'h-band-header', title: 'h-band-title', command: 'h-band-command',
+} as const;
+export const UI_BAND_MIN_HEIGHT_CLASS = {
+  row: 'min-h-band-row', tab: 'min-h-band-tab', header: 'min-h-band-header', title: 'min-h-band-title', command: 'min-h-band-command',
+} as const;
+/** 表单行只设下限，长标签和多行输入可继续撑高；默认行对齐 md 控件。 */
+export const UI_FORM_ROW_MIN_HEIGHT_CLASS: Record<UiControlSize, string> = {
+  sm: 'min-h-control-sm', md: 'min-h-control-md', lg: 'min-h-control-lg',
+};
+
+/** 多行文本只约束最小编辑面积，rows 仍作为原生 DOM 属性。 */
+export const UI_TEXT_AREA_HEIGHT_CLASS = {
+  short: 'min-h-textarea-short', medium: 'min-h-textarea-medium', tall: 'min-h-textarea-tall',
+} as const;
+export type UiTextAreaHeight = keyof typeof UI_TEXT_AREA_HEIGHT_CLASS;
+
 /** 分区之间的纵向间距 */
-export const UI_STACK_GAP_CLASS = 'space-y-6';
+export const UI_STACK_GAP_CLASS = UI_STACK_CLASS.stack;
 
 /** 分区内部行之间的纵向间距 */
-export const UI_ROW_GAP_CLASS = 'space-y-3';
+export const UI_ROW_GAP_CLASS = UI_STACK_CLASS.row;
 
 /**
  * 表单行之间的纵向间距。
@@ -152,7 +184,7 @@ export const UI_ROW_GAP_CLASS = 'space-y-3';
  * 而 `UI_STACK_GAP_CLASS`（24px）是分区级的距离，用在行之间会把一个分区拆散。
  * 设置面板的行全部用这一档，不要在调用点各写各的 `space-y-4/5/6`。
  */
-export const UI_FORM_ROW_GAP_CLASS = 'space-y-5';
+export const UI_FORM_ROW_GAP_CLASS = UI_STACK_CLASS.form;
 
 /** 唯一允许的分隔线写法：一条线，不是一个框 */
 export const UI_DIVIDER_CLASS = 'border-t border-line/60';
@@ -162,7 +194,7 @@ export const UI_DIVIDER_CLASS = 'border-t border-line/60';
  * 比原先卡片时代的 space-y-5 更宽松，用留白换回呼吸感。
  * 若将来需要更强切分，只改这一处（加 `divide-y divide-line/60 [&>*+*]:pt-8`）。
  */
-export const UI_SECTION_STACK_CLASS = 'space-y-8';
+export const UI_SECTION_STACK_CLASS = UI_STACK_CLASS.region;
 /** 相邻分组按同一 32px 分区档留白；比父级行间距优先，首组不增空白。 */
 export const UI_GROUP_SIBLING_GAP_CLASS = '[&+[data-ui-group]]:mt-8';
 
@@ -182,10 +214,10 @@ export const UI_INSET_SURFACE_CLASS = 'bg-window/40 text-text1';
  * 元信息徽标（类型/尺寸/时长/时间这类只读标签）。
  * 之前在 TaskCard 里同一串类名抄了 5 遍，收敛到这里；强调态用下面的 accent 变体。
  */
-export const UI_META_BADGE_CLASS = 'bg-hover border border-line px-2 py-0.5 rounded';
+export const UI_META_BADGE_CLASS = 'bg-hover border border-line px-2 py-0.5 rounded-control';
 
 export const UI_META_BADGE_ACCENT_CLASS =
-  'bg-accent/10 border border-accent/40 text-accent-text px-2 py-0.5 rounded';
+  'bg-accent/10 border border-accent/40 text-accent-text px-2 py-0.5 rounded-control';
 
 /*
  * 这里曾经有过 UI_LIST_ITEM_SKIP_TALL_CLASS
@@ -223,7 +255,7 @@ export type UiFieldSize = UiControlSize;
 /** 字段内边距（左右），与尺寸档对应；带图标/附件的字段由调用点用 pl-/pr- 预留位置。 */
 export const UI_FIELD_PADDING_CLASS: Record<UiFieldSize, string> = {
   sm: 'px-2',
-  md: 'px-2.5',
+  md: 'px-3',
   lg: 'px-3',
 };
 
@@ -290,6 +322,22 @@ export const UI_TRIGGER_PANEL_PADDING_CLASS = {
 } as const;
 
 export type UiTriggerPanelPadding = keyof typeof UI_TRIGGER_PANEL_PADDING_CLASS;
+
+/** 锚定浮层按内容选档；定位器进一步收紧到宿主边界和可用高度。 */
+export const UI_TRIGGER_PANEL_SIZE_CLASS = {
+  menu: 'w-[min(92vw,clamp(12rem,20vw,22.5rem))] [--trigger-panel-max-height:min(60vh,24rem)]',
+  compact: 'w-[min(92vw,clamp(16rem,28vw,24rem))] [--trigger-panel-max-height:min(70vh,32rem)]',
+  content: 'w-[min(92vw,clamp(24rem,48vw,45rem))] [--trigger-panel-max-height:min(78vh,40rem)]',
+  workspace: 'w-[min(94vw,clamp(40rem,80vw,60rem))] [--trigger-panel-max-height:min(88vh,52rem)]',
+} as const;
+export type UiTriggerPanelSize = keyof typeof UI_TRIGGER_PANEL_SIZE_CLASS;
+
+/** 可拖动面板的宽度预算（px）；宿主仍须按当前工作区可用宽度夹取。 */
+export { UI_PANEL_WIDTH } from '@/core/theme/panelSizes';
+
+/** 弹窗内容区留白与滚动分开决策，迁移调用点时使用有限枚举。 */
+export const UI_MODAL_CONTENT_PADDING_CLASS = { default: 'p-4', none: 'p-0', spacious: 'px-6 py-5' } as const;
+export const UI_MODAL_CONTENT_SCROLL_CLASS = { auto: 'overflow-y-auto', none: 'overflow-hidden' } as const;
 
 /** 描边选项（`UiOptionButton` 默认变体）的静息态：纯文字 chip 组靠一圈发丝线保留点击可供性。 */
 export const UI_OPTION_ITEM_CLASS =
@@ -428,3 +476,12 @@ export function uiParameterHex(color: readonly number[]): string {
 
 /** 分段选中：中性抬起底 + 强文字，与其他单选的淡强调底区分。 */
 export const UI_SEGMENT_SELECTED_CLASS = 'bg-segment-selected text-text1';
+
+/** 面板正文占用可用视口的高度；宽度由宿主 panelSize 决定。 */
+export const UI_PANEL_BODY_HEIGHT_CLASS = {
+  compact: 'h-[min(50vh,20rem)]',
+  content: 'h-[min(65vh,30rem)]',
+  workspace: 'h-[min(78vh,48rem)]',
+} as const;
+
+export const UI_INPUT_PANEL_MAX_HEIGHT_CLASS = 'max-h-[min(70vh,40rem)]';

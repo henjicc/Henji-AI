@@ -209,15 +209,15 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
       <UiIconButton aria-label="放大波形" title="放大波形" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus  /></UiIconButton>
     </div> },
     { id: 'help', priority: 30, node: <PanelTrigger
-      panelWidth={248}
+      panelSize="menu"
       panelPadding="content"
       renderPanel={() => (
         <div className="flex flex-col gap-3 text-xs">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
             {SHORTCUTS.map(([key, label]) => <div key={key} className="contents"><dt className="font-mono text-text1">{key}</dt><dd className="text-text2">{label}</dd></div>)}
           </dl>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2.5 text-text2">
-            {LEGEND.map(([swatch, label]) => <span key={label} className="flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${swatch}`} />{label}</span>)}
+          <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-3 text-text2">
+            {LEGEND.map(([swatch, label]) => <span key={label} className="flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-hairline ${swatch}`} />{label}</span>)}
           </div>
         </div>
       )}
@@ -230,7 +230,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
   return (
     <section ref={wheelRegion} aria-label="波形" data-audio-timeline className="shrink-0 border-t border-gap bg-panel">
       {/* 播放条：放不下时按优先级把右侧控件收进“更多”（UiOverflowRow），任何宽度下都不折行 */}
-      <div className="flex min-h-10 items-center gap-1.5 px-2.5 py-1">
+      <div className="flex min-h-10 items-center gap-1.5 px-3 py-1">
         <UiIconButton size="md" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'} aria-label={playing ? '暂停' : '播放'}>{playing ? <Pause  /> : <Play  />}</UiIconButton>
         <span className="shrink-0 whitespace-nowrap font-mono text-13 tabular-nums" data-audio-edit-time>
           <span className="text-text1">{preciseTime(outputFrame, rate)}</span><span className="text-text3"> / {preciseTime(playDuration, rate)}</span>
@@ -240,7 +240,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
           items={transportItems}
           renderOverflow={(hiddenIds) => (
             <PanelTrigger
-              panelWidth={280}
+              panelSize="compact"
               panelPadding="content"
               renderPanel={() => (
                 <div className="flex flex-col items-start gap-3">
@@ -253,7 +253,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
           )}
         />
       </div>
-      <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">
+      <div className="flex flex-col gap-1.5 px-3 pb-3">
         <div ref={container} role="slider" tabIndex={0} aria-label="口播波形定位" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={sourceFrame} aria-valuetext={time(sourceFrame, rate)}
           data-view-start={view.start} data-view-end={view.end}
           className="relative h-[clamp(8rem,18vh,14rem)] touch-none select-none overflow-hidden rounded-md bg-gap outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
@@ -320,7 +320,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
             : <UiLoading size="xs" message="正在准备波形…" className="pointer-events-none absolute inset-0" />)}
         </div>
         <AudioEditOverview duration={duration} sampleRate={rate} sourceFrame={sourceFrame} waveform={waveform} view={view} onChange={(next) => { pauseFollow(); setView(next) }} />
-        {waveform.data && <div className="grid grid-cols-[96px_minmax(0,1fr)] items-stretch gap-2.5" data-audio-detail>
+        {waveform.data && <div className="grid grid-cols-[96px_minmax(0,1fr)] items-stretch gap-3" data-audio-detail>
           <div className="flex flex-col justify-center gap-0.5">
             <span className="text-xs font-medium text-text1">放大</span>
             <span className="font-mono text-2xs tabular-nums text-text3">{preciseTime(detailStart * rate, rate).slice(3)}–{preciseTime(detailEnd * rate, rate).slice(3)}</span>

@@ -310,7 +310,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'open', label: '打开素材箱', icon: <FolderOpen size={UI_ICON_SIZE.md} />, onClick: () => selectBin(bin.id) },
     { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={UI_ICON_SIZE.md} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
   ]
-  const followLabel = dragFollow && !dragFollow.hidden ? createPortal(<div aria-hidden="true" data-video-edit-drag-follow className="pointer-events-none fixed z-drag rounded-full bg-raised px-2.5 py-1 text-xs text-text1 shadow-panel" style={{ left: dragFollow.x + 14, top: dragFollow.y + 14 }}>{dragFollow.count > 1 ? `${dragFollow.count} 个素材` : '1 个素材'}</div>, document.body) : null
+  const followLabel = dragFollow && !dragFollow.hidden ? createPortal(<div aria-hidden="true" data-video-edit-drag-follow className="pointer-events-none fixed z-drag rounded-full bg-raised px-3 py-1 text-xs text-text1 shadow-panel" style={{ left: dragFollow.x + 14, top: dragFollow.y + 14 }}>{dragFollow.count > 1 ? `${dragFollow.count} 个素材` : '1 个素材'}</div>, document.body) : null
   return <div className="relative flex h-full min-h-0 flex-col" aria-label="素材面板" tabIndex={0}
     onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDrop={event => drop(event)}
     onKeyDown={event => {
@@ -351,7 +351,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>}
       <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
-      <PanelTrigger panelWidth={168} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={UI_ICON_SIZE.sm} />列表视图</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={UI_ICON_SIZE.sm} />缩略图视图</UiOptionButton>
         <div className={`my-1 ${UI_DIVIDER_CLASS}`} />
@@ -361,7 +361,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </PanelTrigger>
       <UiIconButton aria-label="资产库" title="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon /></UiIconButton>
       <VideoEditProjectDocumentsButton instance={instance} onError={onError} />
-      <PanelTrigger panelWidth={184} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={UI_ICON_SIZE.sm} />新建素材箱</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={newSequence}><SequenceIcon size={UI_ICON_SIZE.sm} />新建序列</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setCreatingCode(true)}><Code2 size={UI_ICON_SIZE.sm} />新建代码素材</UiOptionButton>
@@ -370,7 +370,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus /></UiIconButton>}
       </PanelTrigger>
-      <PanelTrigger panelWidth={240} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={UI_ICON_SIZE.sm} />导入文件</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={UI_ICON_SIZE.sm} />导入文件夹</UiOptionButton>
         <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
@@ -384,7 +384,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         : view === 'grid' ? <VirtuosoGrid ref={gridRef} key={`${binId}:grid`} data={entries} components={gridComponents} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderTile} />
           // 列表视图（PR）：表头点击排序，素材箱是可展开的树；窄面板横向滚动看全部列。
           : <div className="flex h-full flex-col" style={{ minWidth: tableWidth }}>
-            <div className="flex h-7 shrink-0 items-center border-b border-gap pl-5 pr-1.5" role="row" aria-label="列表列">
+            <div className="flex h-band-row shrink-0 items-center border-b border-gap pl-5 pr-1.5" role="row" aria-label="列表列">
               {([{ key: 'name' as const, label: '名称' }, ...LIST_COLUMNS]).map(column => <div key={column.key} className="relative flex shrink-0 items-center" style={{ width: columnWidths[column.key] }}>
                 <UiButton size="sm" className="min-w-0 flex-1 !justify-start !px-1.5" disabled={column.key === 'proxy'} aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => { if (column.key !== 'proxy') sortBy(column.key) }}>{column.label}{column.key !== 'proxy' && <SortMark sort={sort} column={column.key} />}</UiButton>
                 {/* 列分隔线：按住左右拖动调整列宽 */}
@@ -395,7 +395,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
           </div>}
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
-    {labelPicker && <PanelTrigger anchor={labelPicker.anchor} open onOpenChange={open => { if (!open) setLabelPicker(null) }} panelWidth={200} zIndex={Z_LAYERS.dropdown} panelPadding="content" closeOnPanelClick
+    {labelPicker && <PanelTrigger anchor={labelPicker.anchor} open onOpenChange={open => { if (!open) setLabelPicker(null) }} panelSize="menu" zIndex={Z_LAYERS.dropdown} panelPadding="content" closeOnPanelClick
       renderPanel={() => <div className="flex flex-col gap-2" aria-label="颜色标签">
         <div className="grid grid-cols-6 gap-1">
           {VIDEO_EDIT_LABELS.map(label => <UiOptionButton key={label} variant="swatch" active={labelPicker.current === label} aria-label={VIDEO_EDIT_LABEL_NAMES[label]} title={VIDEO_EDIT_LABEL_NAMES[label]} style={{ backgroundColor: VIDEO_EDIT_LABEL_COLOR_HEX[label] }} onClick={() => run(() => setVideoEditLabels(projectId, labelPicker.targets, label))} />)}
@@ -426,5 +426,5 @@ function SortMark({ sort, column }: { sort: VideoEditProjectSort; column: VideoE
 }
 /** 颜色标签小方块（PR 素材面板的标签列）：颜色是用户内容色，名称进悬停说明。 */
 function LabelSwatch({ label }: { label: VideoEditLabel }): React.ReactElement {
-  return <span className="h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: VIDEO_EDIT_LABEL_COLOR_HEX[label] }} title={VIDEO_EDIT_LABEL_NAMES[label]} data-video-edit-label={label} aria-hidden="true" />
+  return <span className="h-3 w-3 shrink-0 rounded-hairline" style={{ backgroundColor: VIDEO_EDIT_LABEL_COLOR_HEX[label] }} title={VIDEO_EDIT_LABEL_NAMES[label]} data-video-edit-label={label} aria-hidden="true" />
 }

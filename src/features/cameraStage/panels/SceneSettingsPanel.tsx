@@ -43,7 +43,7 @@ const SceneSettingsPanel: React.FC = () => {
 
   return (
     // 未选中对象时属性面板显示场景设置；面板标题由停靠标签给出，这里不再重复一条标题带
-    <UiGroup labelWidth={96} className="h-full w-full overflow-y-auto overflow-x-hidden px-3 py-2.5" gap="stack">
+    <UiGroup labelWidth={96} className="h-full w-full overflow-y-auto overflow-x-hidden px-3 py-3" gap="stack">
       <UiGroup title="地面" titleTone="compact">
         <UiFormRow label="样式" density="compact">
           <Dropdown<StageGroundPattern>

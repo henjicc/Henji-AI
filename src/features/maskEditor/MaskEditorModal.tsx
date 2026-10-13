@@ -221,7 +221,7 @@ function QuickMaskEditorModal({
       ariaLabel="绘制局部重绘遮罩"
       hideHeader
       size="workspace"
-      contentClassName="p-0"
+      contentPadding="none" contentScroll="none"
       onClose={handleCancel}
     >
       <ImageEditorShell

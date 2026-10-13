@@ -61,7 +61,7 @@ export function GenerationHistoryToolbar({
           <Search  />
         </UiIconButton>
         <PanelTrigger
-          panelWidth={168}
+          panelSize="menu"
           panelPadding="menu"
           closeOnPanelClick
           renderPanel={() => (

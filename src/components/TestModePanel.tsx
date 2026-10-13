@@ -109,7 +109,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
       title={t('testMode.title')}
       onClose={handleClose}
       size="form"
-      contentClassName="overflow-y-auto px-4 py-4"
+      contentPadding="default" contentScroll="auto"
     >
       <div className="space-y-5">
         {/* 开关 + 快捷键 */}

@@ -458,7 +458,7 @@ export function ProjectLibraryPage({
           ) : null}
           {filter && groupOptions.length ? (
             <>
-              <div className={`px-2.5 pb-1 pt-3 ${UI_TEXT_META_CLASS}`}>{filter.label}</div>
+              <div className={`px-3 pb-1 pt-3 ${UI_TEXT_META_CLASS}`}>{filter.label}</div>
               {groupOptions.map((option) => (
                 <UiNavButton
                   key={option.value}

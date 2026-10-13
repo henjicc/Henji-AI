@@ -73,7 +73,7 @@ export function AudioPreviewCard({
   }
 
   return (
-    <div className="rounded-lg border border-line/80 bg-raised/20 p-2.5">
+    <div className="rounded-lg border border-line/80 bg-raised/20 p-3">
       {(title || subtitle || headerAction) && (
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
@@ -93,7 +93,7 @@ export function AudioPreviewCard({
             rightActions={playerRightActions}
             compact
             waveformHeight={compact ? 40 : 58}
-            className={`!w-full !max-w-none ${compact ? '!p-2.5' : '!p-3'}`}
+            className={`!w-full !max-w-none ${compact ? '!p-3' : '!p-3'}`}
           />
         </div>
       ) : (

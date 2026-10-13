@@ -55,9 +55,16 @@ describe('UiButton 档位与尺寸（重要记录 003）', () => {
     const primary = view.getByRole('button', { name: '大主' });
     expect(primary.classList.contains('h-control-lg')).toBe(true);
     expect(primary.classList.contains('px-4')).toBe(true);
-    expect(view.getByRole('button', { name: '大静' }).classList.contains('px-3.5')).toBe(true);
+    expect(view.getByRole('button', { name: '大静' }).classList.contains('px-3')).toBe(true);
     const link = view.getByRole('button', { name: '链接' });
     expect(classes(link).some((name) => name.startsWith('h-'))).toBe(false);
+  });
+
+  it.each(['sm', 'md', 'lg'] as const)('%s 静默按钮在九档刻度内仍比主按钮少一档留白', size => {
+    const view = render(<><UiButton size={size}>静默</UiButton><UiButton size={size} variant="primary">主动作</UiButton></>);
+    const padding = (name: string) => Number(classes(view.getByRole('button', { name })).find(value => /^px-[0-9]/.test(value))?.slice(3)) * 4;
+    expect([2, 4, 6, 8, 12, 16, 20, 24, 32]).toContain(padding('静默'));
+    expect(padding('静默')).toBeLessThan(padding('主动作'));
   });
 
   it('不再接受旧档位名（muted / ghost / plain / glass）', () => {

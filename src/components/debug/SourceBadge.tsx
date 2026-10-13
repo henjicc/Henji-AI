@@ -47,7 +47,7 @@ export function SourceBadge({ record }: SourceBadgeProps) {
 
   return (
     <div className="flex flex-col gap-1">
-      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getBadgeClass()}`}>
+      <span className={`inline-block px-2 py-0.5 rounded-control text-xs font-medium ${getBadgeClass()}`}>
         {getSourceLabel()}
       </span>
 

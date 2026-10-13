@@ -20,7 +20,7 @@ export function AssistantTraceDiffDialog({
   loading,
 }: AssistantTraceDiffDialogProps): JSX.Element {
   return (
-    <UiModal isOpen={isOpen} onClose={onClose} title={title} size="workspace" contentClassName="overflow-y-auto px-4 py-4">
+    <UiModal isOpen={isOpen} onClose={onClose} title={title} size="workspace" contentPadding="default" contentScroll="auto">
       {loading ? (
         <UiLoading size="sm" message="正在计算相邻轮次差异…" />
       ) : !diff ? (
@@ -46,7 +46,7 @@ export function AssistantTraceDiffDialog({
             {diff.messages.changed.length > 0 && (
               <div className="mt-2 space-y-2">
                 {diff.messages.changed.map((item) => (
-                  <div key={item.index} className="grid gap-2 rounded border border-line/40 p-2 md:grid-cols-2">
+                  <div key={item.index} className="grid gap-2 rounded-control border border-line/40 p-2 md:grid-cols-2">
                     <div><div className="mb-1 text-2xs text-danger-text">上一轮 #{item.index + 1}</div><JsonTree value={item.previous} /></div>
                     <div><div className="mb-1 text-2xs text-success-text">当前轮 #{item.index + 1}</div><JsonTree value={item.current} /></div>
                   </div>
@@ -88,7 +88,7 @@ export function AssistantTraceDiffDialog({
 
 /** 对比分区：弹窗里的内嵌下沉面（无描边，与追踪详情的分区同一做法，任务 5.7）。 */
 function DiffBlock({ title, badge, children }: { title: string; badge?: string; children: ReactNode }): JSX.Element {
-  return <section className={`rounded-lg ${UI_INSET_SURFACE_CLASS}`}><div className="flex items-center justify-between border-b border-line/35 px-3 py-2"><span className="text-xs font-medium text-text1">{title}</span>{badge && <span className="rounded bg-hover px-1.5 py-0.5 text-2xs text-text2">{badge}</span>}</div><div className="p-3">{children}</div></section>
+  return <section className={`rounded-lg ${UI_INSET_SURFACE_CLASS}`}><div className="flex items-center justify-between border-b border-line/35 px-3 py-2"><span className="text-xs font-medium text-text1">{title}</span>{badge && <span className="rounded-control bg-hover px-1.5 py-0.5 text-2xs text-text2">{badge}</span>}</div><div className="p-3">{children}</div></section>
 }
 
 function DeltaMetric({ label, value }: { label: string; value: number }): JSX.Element {
@@ -97,11 +97,11 @@ function DeltaMetric({ label, value }: { label: string; value: number }): JSX.El
 }
 
 function ChangeList({ title, values, tone }: { title: string; values: string[]; tone: 'added' | 'removed' | 'changed' | 'neutral' }): JSX.Element {
-  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-2xs font-medium uppercase tracking-wider">{title} · {values.length}</div>{values.length === 0 ? <div className="text-2xs">无</div> : <div className="space-y-1">{values.map((value, index) => <div key={`${value}-${index}`} className="break-all rounded bg-window/40 px-1.5 py-1 font-mono text-2xs">{value}</div>)}</div>}</div>
+  return <div className={`rounded-control border p-2 ${toneClass(tone)}`}><div className="mb-1 text-2xs font-medium uppercase tracking-wider">{title} · {values.length}</div>{values.length === 0 ? <div className="text-2xs">无</div> : <div className="space-y-1">{values.map((value, index) => <div key={`${value}-${index}`} className="break-all rounded-control bg-window/40 px-1.5 py-1 font-mono text-2xs">{value}</div>)}</div>}</div>
 }
 
 function TextCompare({ label, value, tone }: { label: string; value: string; tone: 'added' | 'removed' }): JSX.Element {
-  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-2xs font-medium">{label}</div><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words bg-window/40 p-2 font-mono text-2xs leading-relaxed">{value}</pre></div>
+  return <div className={`rounded-control border p-2 ${toneClass(tone)}`}><div className="mb-1 text-2xs font-medium">{label}</div><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words bg-window/40 p-2 font-mono text-2xs leading-relaxed">{value}</pre></div>
 }
 
 function toneClass(tone: 'added' | 'removed' | 'changed' | 'neutral'): string {

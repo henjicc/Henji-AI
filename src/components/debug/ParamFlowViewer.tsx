@@ -21,7 +21,7 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
   return (
     <UiPanel variant="inset" className="mt-4 p-4">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-text1">{t('debug.paramFlow.title')}</h3>
+        <h3 className="text-base font-semibold text-text1">{t('debug.paramFlow.title')}</h3>
         <div className="flex gap-2 items-center">
           <span className="text-xs text-text2">
             {t('debug.paramFlow.modelLabel')}: {record.modelId}

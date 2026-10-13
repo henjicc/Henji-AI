@@ -83,11 +83,11 @@ export function MediaReferenceNodeView({
         <img
           src={reference.thumbnailSrc}
           alt=""
-          className="h-[1.25em] w-[1.25em] shrink-0 rounded object-cover"
+          className="h-[1.25em] w-[1.25em] shrink-0 rounded-control object-cover"
           draggable={false}
         />
       ) : (
-        <span className="inline-flex h-[1.25em] min-w-[1.25em] items-center justify-center rounded bg-raised px-1 text-[0.65em] text-text2">
+        <span className="inline-flex h-[1.25em] min-w-[1.25em] items-center justify-center rounded-control bg-raised px-1 text-[0.65em] text-text2">
           {attrs.mediaType}
         </span>
       )}

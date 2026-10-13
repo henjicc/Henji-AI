@@ -1,3 +1,4 @@
+import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
 import type { AssistantAttachmentDraft } from '../conversation/assistantAttachments'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -49,7 +50,7 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       open: false,
       mode: 'right',
       floatingPosition: { x: 720, y: 72 },
-      size: { width: 420, height: 680 },
+      size: { width: UI_PANEL_WIDTH.assistant.default, height: 680 },
       pendingGoal: null,
       pendingGoalOptions: null,
       embeddedAccess: 'full',

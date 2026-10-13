@@ -52,7 +52,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 颜色 | 三层：**种子**（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的**语义令牌**（CSS 变量 + Tailwind 类）→ 组件内部令牌。**界面只引用语义令牌**；预设石墨/深海/胶片/纸白只是种子组合，文字三档按对比度 ≥ 4.5:1 求解 | `references/color-and-material.md` |
 | 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
 | 选中 | 分段例外：**中性抬起底 + 强文字**（`UiSegmented` / 双段开关）；其余一眼可辨：**淡强调底**（`selected-accent`，强调色低透明度）+ 强调文字 / 勾 / 指示条（重要记录 012，修订 003 的中性抬升）；强调色**实底**只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
-| 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 4/8/12/16/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
+| 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 2/4/6/8/12/16/20/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
 | 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`），纯色界面上的浮层一律实底 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
@@ -594,7 +594,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 任务历史筛选 | `UiTaskHistoryFilterBar` | 另造同义字段与标签组合 |
 | 渲染错误兜底、全局确认 | `UiErrorBoundary`（保留正式日志域）/ `GlobalAlertDialog`（App 根宿主，调用 `alertDialogStore`） | 吞掉渲染错误；在业务页重复挂载全局确认宿主 |
 | 搜索框 | `UiSearchInput`（前置放大镜、`size`、可选 `onClear` + `clearLabel` 清除按钮；`className` 落在外层只放宽度） | 自己摆一个绝对定位的放大镜再给 `UiInput` 补 `pl-8` |
-| 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
+| 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`、`panelSize` menu/compact/content/workspace）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
@@ -630,6 +630,9 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 音频播放位置 | `usePlaybackClock`（`@/hooks/usePlaybackClock`；单个播放循环，波形与秒读数叶子订阅，AudioPlayer / AudioNode 已接入） | 播放帧 setState 重渲染整个播放器或节点 |
 | 瞬态 keyed 进度 | `createTransientProgressStore`（`@/stores/createTransientProgressStore`；set / clear / clearAll / useEntry，自定义 normalize / equals；Record/Map 适配只保留字段与动作名） | 拷贝三套相等短路和清理逻辑；瞬态进度入文档或撤销 |
 | 丰富参数原件（角度、二维点、区间、渐变、专业色轮、线性曲线、缓动、种子） | `UiAngleDial` / `UiPointPad` / `UiRangeSlider` / `UiGradientEditor` / `UiGradeWheel` / `UiCurveEditor` / `UiEasingEditor` / `UiSeedInput`（`@/components/ui`；受控 `value/onChange`、`defaultValue`、`disabled`、`size` sm/md/lg；共享 `GestureProps` 开始/结束/取消，读数复用 `NumberInput`；色相/通道/轨道只用登记令牌；缓动预设由调用方提供） | 业务组件自写参数拖动、数值读数、曲线或色轮；新增重复分段控件（分段复用 `UiSegmented`）；旧 `UiToneCurve` / `UiColorWheel` 仅供现有调色调用，待 t87 替换 |
+
+| 间距、条带与面板尺寸 | `UI_SPACING_SCALE`、`UI_INLINE_GAP_CLASS` / `UiToolbar.gap`、`UI_STACK_CLASS`；条带 `UI_BAND_HEIGHT_CLASS` / `UI_BAND_MIN_HEIGHT_CLASS`；面板 `UI_PANEL_WIDTH` / `UI_PANEL_BODY_HEIGHT_CLASS` | 越档 padding/gap；业务数值 panelWidth/panelHeight |
+| 多行与弹窗正文尺寸 | `UiTextArea` / `UiTextAreaField` / `PromptEditor` 的 `height` short/medium/tall；`UiModal.contentPadding` default/none/spacious 与 `contentScroll` auto/none | 用 className 取消默认留白；给文本自造最小高度 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：
 1. 在 `@/components/ui` 与本表中确认没有可复用或可扩展的组件
@@ -687,7 +690,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - [ ] 有没有固定调色板、黑白类、rgba、命名色或旧别名类（`bg-app`、`text-text-muted`…）？换主题预设时它们不会跟着动，一律改语义令牌
 - [ ] 用 `accent` 当文字色了吗？文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`，黑白由引擎按对比度决定）
 - [ ] 分段是否中性抬起底 + 强文字，其他选中/当前值是否淡强调底且与悬停可辨？强调色实底只属于唯一主动作；悬停/选中的容器里行内控件仍可辨
-- [ ] 至少在“石墨”“纸白”两个预设下看过吗？浅色模式下白纱（`veil`）、黑白类、媒体叠层令牌放错位置最容易露馅
+- [ ] 至少在“石墨”“纸白”两个预设下看过吗？浅色模式下黑白类、媒体叠层令牌放错位置最容易露馅
 - [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该用 `danger`（静息中性、hover 才出危险色），确认弹窗里用 `dangerSolid`
 - [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`
 - [ ] 新加的全局样式/变量放对文件了吗？懒加载的样式表里不能放全局主题变量
@@ -786,3 +789,7 @@ npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 - 组件复用与原生标签落点、颜色令牌三处入口：见 [docs/rules/frontend-ui.md](../../../docs/rules/frontend-ui.md) 与 [docs/rules/architecture.md](../../../docs/rules/architecture.md)
 - 画布节点的行组件拼装：见 skill `canvas-node-builder`
 - 提示词编辑器、文件上传控件：必须复用 `PromptEditor` / `FileUploader`，不要重写
+
+### 间距与尺寸复用补充（4.3）
+
+纵横间距统一 `UI_SPACING_SCALE` 九档。工具条用 `UiToolbar.gap`，堆叠用 `UI_STACK_CLASS`；条带用 `UI_BAND_HEIGHT_CLASS`、`UI_BAND_MIN_HEIGHT_CLASS`、`UI_BAND_PADDING_CLASS`，表单行最小高度用 `UI_FORM_ROW_MIN_HEIGHT_CLASS`。PanelTrigger/Dropdown 用 `panelSize` 四档，正文高度用 `UI_PANEL_BODY_HEIGHT_CLASS`；可拖动侧栏共用 core/theme/panelSizes 的 `UI_PANEL_WIDTH`。UiTextArea/UiTextAreaField/PromptEditor 用 `height` 三档。UiModal 用 `contentPadding` 与 `contentScroll`，不能靠 contentClassName 替换默认留白。完整像素、用途和迁移规则见 references/typography-and-tokens.md；新档必须同时补设计系统中心页真实样本与枚举覆盖。

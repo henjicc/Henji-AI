@@ -14,7 +14,7 @@ import {
   type FloatingPanelAnchorRect,
   type FloatingPanelPosition,
 } from './floatingPanelPosition'
-import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UI_TRIGGER_PANEL_SIZE_CLASS, type UiTriggerPanelSize, UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { useUiFormRowLabelling } from './formRowLabel'
 import { measureElementTextWidth } from './textMeasurement'
@@ -43,9 +43,11 @@ type PanelTriggerProps = {
   surface?: UiTriggerPanelSurface
   /** 浮层内边距档（none / menu 4px / content 12px）；浮层外壳表面不接受覆盖。 */
   panelPadding?: UiTriggerPanelPadding
+  /** 内容宽高预算；实际外框仍受宿主边界约束。 */
+  panelSize?: UiTriggerPanelSize
   zIndex?: number
-  /** 浮层宽度：像素值；`content` = 按内容自然宽度（受视口约束），右键菜单这类没有触发器宽度可参照的浮层用。不传时取触发器宽度。 */
-  panelWidth?: number | 'content'
+  /** 浮层宽度：`content` = 按内容自然宽度（受视口约束），右键菜单这类没有触发器宽度可参照的浮层用。不传时取触发器宽度。 */
+  panelWidth?: 'content'
   /** 可选的最近宿主边界，如画布可见区域。 */
   boundarySelector?: string
   /** 纯文字菜单可传入全部项目文案，在打开前按最长项计算稳定宽度。 */
@@ -56,7 +58,6 @@ type PanelTriggerProps = {
   alignment?: 'bottomLeft' | 'bottomRight' | 'aboveCenter'
   /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45；工具条排布下默认 8；与画布节点行内紧凑触发器保持一致时可调小） */
   gap?: number
-  panelHeight?: number
   /**
    * 是否在点击面板内容后关闭。交互型面板默认保持打开；
    * 纯动作菜单应显式传入 true，或用函数只匹配会完成选择的元素。
@@ -135,6 +136,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     size = 'md',
     appearance,
     panelPadding = 'none',
+    panelSize,
     surface = 'solid',
     zIndex = Z_LAYERS.popover,
     panelWidth,
@@ -143,7 +145,6 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     menuSelection = 'none',
     alignment = 'bottomLeft',
     gap: gapOverride,
-    panelHeight: _panelHeight,
     closeOnPanelClick,
     renderPanel,
     stableHeight,
@@ -156,7 +157,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     anchor,
   } = props
   const anchorMode = anchor !== undefined
-  const contentWidth = panelWidth === 'content'
+  const contentWidth = panelSize !== undefined || panelWidth === 'content'
   const onOpenChangeRef = useRef(onOpenChange)
   onOpenChangeRef.current = onOpenChange
   const anchorKey = anchorDependencyKey(anchor)
@@ -207,7 +208,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     }
   }, [menuSelection, panelWidthLabels])
 
-  const resolvedPanelWidth = typeof panelWidth === 'number' ? panelWidth : (contentWidth ? null : measuredPanelWidth)
+  const resolvedPanelWidth = contentWidth ? null : measuredPanelWidth
 
   /** 浮层定位的锚点：锚点模式取外部元素实时位置或给定矩形，否则取内置触发器。 */
   const anchorRef = useRef(anchor)
@@ -230,7 +231,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   const updatePanelPosition = useCallback((rect: FloatingPanelAnchorRect, reveal: boolean): void => {
     anchorRectRef.current = rect
     const measuredPanelHeight = Math.max(
-      _panelHeight ?? 0,
+      0,
       panelRef.current?.scrollHeight ?? 0,
       panelRef.current?.getBoundingClientRect().height ?? 0,
     )
@@ -255,7 +256,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
     setPos(position)
     if (reveal) setReady(true)
-  }, [_panelHeight, alignment, boundarySelector, contentWidth, gapProp, resolvedPanelWidth, stableHeight])
+  }, [alignment, boundarySelector, contentWidth, gapProp, resolvedPanelWidth, stableHeight])
 
   const computePanelPosition = useCallback((): void => {
     const rect = readAnchorRect()
@@ -436,6 +437,9 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     return () => obs.disconnect()
   }, [freezePositionOnOpen, open, shouldRender, stableHeight, updatePanelPosition])
 
+  const panelBoundary = boundarySelector ? ref.current?.closest(boundarySelector)?.getBoundingClientRect() : undefined
+  const panelMaxWidth = Math.max(0, Math.min(ownerWindowOf(ref.current).innerWidth, panelBoundary ? panelBoundary.left + panelBoundary.width : Infinity) - Math.max(0, panelBoundary?.left ?? 0) - PANEL_VIEWPORT_GUTTER_PX * 2)
+
   // 锚点模式没有内置触发器：留一个隐藏节点，用来得知所在文档（主窗口或剪辑系统浮窗）。
   const anchorOnly = anchorMode && !children
   return (
@@ -464,7 +468,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       {shouldRender && pos && createPortal(
         <div
           ref={panelRef}
-          className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} flex flex-col ${contentWidth ? 'w-max' : ''} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
+          className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} flex flex-col ${panelSize ? UI_TRIGGER_PANEL_SIZE_CLASS[panelSize] : contentWidth ? 'w-max' : ''} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
           // 收起中的面板已经关闭：不再接收指针与键盘，也不再暴露给读屏与按角色查找（否则会和新打开的菜单并存、被点中）
           aria-hidden={closing || undefined}
           {...(closing ? { inert: '' } : {})}
@@ -474,9 +478,11 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             bottom: pos.bottom,
             left: pos.left,
             width: contentWidth ? undefined : pos.width,
-            maxWidth: contentWidth ? ownerWindowOf(ref.current).innerWidth - PANEL_VIEWPORT_GUTTER_PX * 2 : undefined,
-            maxHeight: pos.maxHeight,
-            minHeight: stableHeight && maxHeightRef.current ? Math.min(maxHeightRef.current, pos.maxHeight) : undefined,
+            maxWidth: contentWidth ? panelMaxWidth : undefined,
+            maxHeight: panelSize ? `min(${pos.maxHeight}px, var(--trigger-panel-max-height))` : pos.maxHeight,
+            minHeight: stableHeight && maxHeightRef.current
+              ? panelSize ? `min(${Math.min(maxHeightRef.current, pos.maxHeight)}px, var(--trigger-panel-max-height))` : Math.min(maxHeightRef.current, pos.maxHeight)
+              : undefined,
             zIndex,
             opacity: ready ? 1 : 0,
             visibility: ready && !yieldToModal ? 'visible' : 'hidden'

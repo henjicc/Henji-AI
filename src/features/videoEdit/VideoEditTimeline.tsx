@@ -32,7 +32,7 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
     return <UiIconButton tone={tone} aria-label={id === 'split' ? '拆分' : '删除'} title={command.tooltip} disabled={!command.enabled} onClick={() => execute(id)}><Icon  /></UiIconButton>
   }
   return <div className="flex h-full min-h-0 select-none flex-col bg-panel" aria-label="剪辑时间线" data-video-edit-timeline>
-    <div className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-gap px-2" role="toolbar" aria-label="时间线工具栏">
+    <div className="flex h-band-header shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-gap px-2" role="toolbar" aria-label="时间线工具栏">
       {/* 时间码放在最左（Premiere 时间线左上角的播放指示器位置），可拖动、单击输入、Ctrl+单击切换帧号 */}
       <VideoEditTimecode instance={instance} label="当前时间码" className="px-1.5 text-13" />
       <VideoEditSequenceTabs instance={instance} onError={onError} />

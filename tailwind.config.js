@@ -28,6 +28,53 @@ export default {
       const { panel: _panel, ...colors } = theme('colors')
       return colors
     },
+    // 字号和行高配对，禁止小字号继承父级的绝对行高。
+    fontSize: {
+      '3xs': ['10px', { lineHeight: '14px' }],
+      '2xs': ['11px', { lineHeight: '16px' }],
+      xs: ['12px', { lineHeight: '16px' }],
+      13: ['13px', { lineHeight: '20px' }],
+      sm: ['14px', { lineHeight: '20px' }],
+      15: ['15px', { lineHeight: '22px' }],
+      base: ['16px', { lineHeight: '24px' }],
+      xl: ['20px', { lineHeight: '28px' }],
+    },
+    // 浮层阴影唯一档位。内容区一律不用阴影，层次靠间距与排版建立。
+    // 几何取值与 Tailwind shadow-2xl 一致；颜色走主题 shade 令牌（深色下仍是黑 25%，像素不变）。
+    //
+    // 其余档位是「登记过的特效阴影」：它们不是层次装饰，而是有具体功能语义
+    // （选中描边 / 失败描边 / 堆叠缩略图立体感），不可用 shadow-panel 替代。
+    // 新增特效阴影必须在此登记具名档位，禁止在业务组件写 shadow-[...]。
+    boxShadow: {
+      none: 'none',
+      panel: 'var(--shadow-overlay)',
+      // 画布节点选中描边。刻意走 --accent-rgb：此前硬编码 rgba(59,130,246) 是默认强调色，
+      // 用户在设置里改 accentColor 后描边不跟随，而紧邻的 border-accent 却会跟随，导致颜色不一致。
+      'node-selected': '0 0 0 1px rgb(var(--accent-rgb) / 0.32)',
+      // 画布节点生成失败描边（配合 NodeGenerationError 覆盖层），走危险实底令牌
+      'node-error': '0 0 0 1px color-mix(in srgb, var(--danger) 28%, transparent)',
+      // 堆叠媒体缩略图的立体感
+      thumb: `0 8px 16px ${shade(90)}`,
+      // 内容色滑杆（打光亮度/色调）的滑块：白边之外再描 1px 固定深色细线。滑块与轨道都是灯光内容色、
+      // 不随主题，纯白滑块停在白端时只靠这圈深线与白边的双色轮廓辨认（4.1：纸白下白端几乎不可见）。
+      'thumb-ring': `0 0 0 1px var(--media-scrim), 0 8px 16px ${shade(90)}`,
+      'thumb-sm': `0 6px 14px ${shade(84)}`,
+    },
+    // 圆角令牌（重要记录 004）：控件 6 / 输入与菜单 8 / 浮层 12，全部由 CSS 变量驱动，
+    // 「设置 → 界面 → 圆角」通过 data-ui-radius 一处改值，界面控件与画布节点一起生效。
+    // rounded-md/lg/xl 改指同一组变量：标准档像素与 Tailwind 默认值相同（6/8/12），存量调用点不变。
+    borderRadius: {
+      none: '0',
+      full: '9999px',
+      control: 'var(--radius-control)',
+      field: 'var(--radius-field)',
+      overlay: 'var(--radius-overlay)',
+      md: 'var(--radius-control)',
+      lg: 'var(--radius-field)',
+      xl: 'var(--radius-overlay)',
+      // 时间轴关键帧菱形标记的极小圆角
+      hairline: '1px',
+    },
     extend: {
       // 字体：拉丁字母与数字 Geist / Geist Mono（@fontsource-variable，随包、离线可用，SIL OFL 1.1），
       // 中文按平台回落系统字体（重要记录 004）：Windows 微软雅黑 UI，macOS 苹方，Linux 思源/Noto。
@@ -59,49 +106,10 @@ export default {
           'monospace',
         ],
       },
-      // 字号令牌：Tailwind 最小档 text-xs 是 12px，项目实际需要 9~11px 三档。
-      // 刻意使用字符串形式（只产出 font-size，不带 line-height），
-      // 与原先散落的 text-[11px] / text-[10px] / text-[9px] 计算值完全一致。
-      //
-      // 界面文字最小 11px（text-2xs，重要记录 004 的“元信息”档）；10/9px 只允许用于
-      // 压在媒体上的叠层读数、标尺刻度和紧凑徽标，调用点逐处登记在 1.3 执行记录。
-      // 排版层级优先用 styleTokens.ts 的 UI_TEXT_* 令牌（20/16/14/13/12/11）。
-      fontSize: {
-        '4xs': '9px',
-        '3xs': '10px',
-        '2xs': '11px',
-        // 13/14/15px 档：Tailwind 无对应步进（或对应步进会强制带上 line-height）。
-        // 同样用字符串形式，只产出 font-size，用于行高需要由 leading-* 或继承决定的场景。
-        // 13px 是正文与控件的基准字号（body 默认值，见 index.css）。
-        13: '13px',
-        14: '14px',
-        15: '15px',
-      },
-      // 行高令牌：Tailwind 只有 20 / 24 两档贴近正文。14px 正文的记录行（生成记录的提示词，设计稿 Generation 14 / 22）
-      // 需要 22px，用具名档 leading-5.5，不写 leading-[22px]（ui:residue 门禁把写死的行高判为违规）。
-      lineHeight: {
-        5.5: '1.375rem',
-      },
-      // 浮层阴影唯一档位。内容区一律不用阴影，层次靠间距与排版建立。
-      // 几何取值与 Tailwind shadow-2xl 一致；颜色走主题 shade 令牌（深色下仍是黑 25%，像素不变）。
-      //
-      // 其余档位是「登记过的特效阴影」：它们不是层次装饰，而是有具体功能语义
-      // （选中描边 / 失败描边 / 堆叠缩略图立体感），不可用 shadow-panel 替代。
-      // 新增特效阴影必须在此登记具名档位，禁止在业务组件写 shadow-[...]。
-      boxShadow: {
-        panel: `0 25px 50px -12px ${shade(50)}`,
-        // 画布节点选中描边。刻意走 --accent-rgb：此前硬编码 rgba(59,130,246) 是默认强调色，
-        // 用户在设置里改 accentColor 后描边不跟随，而紧邻的 border-accent 却会跟随，导致颜色不一致。
-        'node-selected': '0 0 0 1px rgb(var(--accent-rgb) / 0.32)',
-        // 画布节点生成失败描边（配合 NodeGenerationError 覆盖层），走危险实底令牌
-        'node-error': '0 0 0 1px color-mix(in srgb, var(--danger) 28%, transparent)',
-        // 堆叠媒体缩略图的立体感
-        thumb: `0 8px 16px ${shade(90)}`,
-        // 内容色滑杆（打光亮度/色调）的滑块：白边之外再描 1px 固定深色细线。滑块与轨道都是灯光内容色、
-        // 不随主题，纯白滑块停在白端时只靠这圈深线与白边的双色轮廓辨认（4.1：纸白下白端几乎不可见）。
-        'thumb-ring': `0 0 0 1px var(--media-scrim), 0 8px 16px ${shade(90)}`,
-        'thumb-sm': `0 6px 14px ${shade(84)}`,
-      },
+
+      // 间距统一 2/4/6/8/12/16/20/24/32px（UI_SPACING_SCALE）。
+      // 不覆盖 theme.spacing：它同时控制宽高、定位等几何；越档 padding/gap 由 5.2 门禁限制。
+
       // 把默认缓动改成 ease-out。Tailwind 原本的默认是 ease-in-out（起步和收尾都慢），
       // 在小尺度 UI 上显得拖沓；而"进场退场都该减速落位"是标准动效原则。
       //
@@ -111,19 +119,7 @@ export default {
       transitionTimingFunction: {
         DEFAULT: 'cubic-bezier(0, 0, 0.2, 1)',
       },
-      // 圆角令牌（重要记录 004）：控件 6 / 输入与菜单 8 / 浮层 12，全部由 CSS 变量驱动，
-      // 「设置 → 界面 → 圆角」通过 data-ui-radius 一处改值，界面控件与画布节点一起生效。
-      // rounded-md/lg/xl 改指同一组变量：标准档像素与 Tailwind 默认值相同（6/8/12），存量调用点不变。
-      borderRadius: {
-        control: 'var(--radius-control)',
-        field: 'var(--radius-field)',
-        overlay: 'var(--radius-overlay)',
-        md: 'var(--radius-control)',
-        lg: 'var(--radius-field)',
-        xl: 'var(--radius-overlay)',
-        // 时间轴关键帧菱形标记的极小圆角
-        hairline: '1px',
-      },
+
       borderWidth: {
         1.5: '1.5px',
       },
@@ -143,11 +139,24 @@ export default {
         'control-xl': 'var(--size-control-xl)',
       },
       height: {
+        'band-row': 'var(--size-band-row)',
+        'band-tab': 'var(--size-band-tab)',
+        'band-header': 'var(--size-band-header)',
+        'band-title': 'var(--size-band-title)',
+        'band-command': 'var(--size-band-command)',
         'control-sm': 'var(--size-control-sm)',
         'control-md': 'var(--size-control-md)',
         'control-lg': 'var(--size-control-lg)',
       },
       minHeight: {
+        'band-row': 'var(--size-band-row)',
+        'band-tab': 'var(--size-band-tab)',
+        'band-header': 'var(--size-band-header)',
+        'band-title': 'var(--size-band-title)',
+        'band-command': 'var(--size-band-command)',
+        'textarea-short': 'var(--size-textarea-short)',
+        'textarea-medium': 'var(--size-textarea-medium)',
+        'textarea-tall': 'var(--size-textarea-tall)',
         'control-sm': 'var(--size-control-sm)',
         'control-md': 'var(--size-control-md)',
         'control-lg': 'var(--size-control-lg)',
@@ -234,9 +243,7 @@ export default {
         // —— 强调 ——（accent 实底不能直接压文字，文字用 accent-text，实底上的字用 on-accent）
         accent: {
           DEFAULT: withOpacity('--accent-rgb'),
-          hi: withOpacity('--accent-hi-rgb'),
           hover: withOpacity('--accent-hover-rgb'),
-          'hover-hi': withOpacity('--accent-hover-hi-rgb'),
           pressed: withOpacity('--accent-pressed-rgb'),
           text: withOpacity('--accent-text-rgb'),
           ring: withOpacity('--accent-ring-rgb'),
@@ -247,9 +254,7 @@ export default {
         // 不恢复为实底，避免不带后缀的 text-danger 一类写法在旧义“文字色”与新义“实底”之间混淆）。
         danger: {
           solid: cssVar('--danger'),
-          hi: withOpacity('--danger-hi-rgb'),
           hover: withOpacity('--danger-hover-rgb'),
-          'hover-hi': withOpacity('--danger-hover-hi-rgb'),
           pressed: withOpacity('--danger-pressed-rgb'),
           text: withOpacity('--danger-text-rgb'),
           tint: cssVar('--danger-tint'),
@@ -288,17 +293,6 @@ export default {
           DEFAULT: withOpacity('--wave-rgb'),
           played: withOpacity('--wave-played-rgb'),
           cut: withOpacity('--wave-cut-rgb'),
-        },
-        // 白色半透明「薄纱」层：画布节点边框、玻璃质感底色、渐变高光统一走这套档位。
-        // 固定白色，只适合压在媒体/深色画布上；界面面上的边与底由 2.x/3.6 按位置改
-        // line / hover / raised 或媒体叠层令牌（media-line 等），本组不随主题。
-        veil: {
-          faint: 'rgb(255 255 255 / 0.04)',
-          subtle: 'rgb(255 255 255 / 0.10)',
-          soft: 'rgb(255 255 255 / 0.16)',
-          DEFAULT: 'rgb(255 255 255 / 0.22)',
-          strong: 'rgb(255 255 255 / 0.34)',
-          bright: 'rgb(255 255 255 / 0.40)',
         },
       },
       keyframes: {

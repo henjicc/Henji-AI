@@ -177,7 +177,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
       </UiGroup>
 
       <UiGroup title={t('sections.theme.accent.label')} titleTone="overline">
-        <div role="radiogroup" aria-label={t('sections.theme.accent.label')} className="flex flex-wrap items-center gap-2.5">
+        <div role="radiogroup" aria-label={t('sections.theme.accent.label')} className="flex flex-wrap items-center gap-3">
           {accentSwatches.map((swatch) => {
             const active = swatch.hex === null ? selection.accent === null : selection.accent === swatch.hex;
             return (

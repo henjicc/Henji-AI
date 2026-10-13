@@ -95,7 +95,7 @@ export function RelightLightingControls({ value, brightnessTitle, colorTitle, on
           onLostPointerCapture={() => { if (activePointer.current !== null) cancel() }}
           onBlur={finish}
         />
-        <div aria-hidden="true" className={`pointer-events-none flex justify-between px-3.5 ${UI_TEXT_META_CLASS}`}>
+        <div aria-hidden="true" className={`pointer-events-none flex justify-between px-4 ${UI_TEXT_META_CLASS}`}>
           {control.labels.map((label, index) => (
             <span key={label} className="flex w-0 justify-center">
               <span className={`h-1 w-1 shrink-0 rounded-full ${index === control.index ? 'opacity-100' : 'opacity-30'}`}

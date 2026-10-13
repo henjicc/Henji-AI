@@ -46,7 +46,7 @@ export function VideoEditDockTab({ api, containerApi }: IDockviewPanelHeaderProp
 function VideoEditPanelMenu({ containerApi, group }: { containerApi: DockviewApi; group: DockviewGroupPanel }): React.ReactElement {
   const maximized = useDockGroupMaximized(containerApi, group)
   const toggleMaximized = (): void => { toggleDockGroupMaximized(containerApi, undefined, group) }
-  return <PanelTrigger panelWidth={196} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu"
+  return <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu"
     renderPanel={() => {
       const { activePanel, panels } = group
       const canFloatPanel = Boolean(activePanel && isVideoEditPopoutPanel(activePanel.id))
@@ -84,7 +84,7 @@ export function VideoEditLayoutMenu({ api }: { api: DockviewApi | null }): React
     const events = [api.onDidAddPanel(() => refresh(value => value + 1)), api.onDidRemovePanel(() => refresh(value => value + 1))]
     return () => events.forEach(event => event.dispose())
   }, [api])
-  return <PanelTrigger panelWidth={164} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu"
+  return <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu"
     renderPanel={() => <div className="flex flex-col gap-1">
       {VIDEO_EDIT_PANELS.map(panel => <UiOptionButton key={panel.id} variant="menu" size="sm" className="flex items-center justify-between" onClick={() => {
         if (!api) return

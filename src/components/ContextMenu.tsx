@@ -75,7 +75,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
                         disabled={item.disabled === true}
                         aria-disabled={item.disabled === true}
                         title={item.title}
-                        className="w-full gap-2.5"
+                        className="w-full gap-3"
                         onKeyDown={event => {
                             if (event.key !== 'Enter' && event.key !== ' ') return
                             // 阻止按钮原生激活，避免同一次按键执行两遍

@@ -124,7 +124,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
       onClose={close}
       hideHeader
       size="fullscreen"
-      contentClassName="min-h-0 flex-1"
+      contentPadding="none" contentScroll="none" contentClassName="min-h-0 flex-1"
     >
       <div className="h-full overflow-hidden">
         {loading ? (

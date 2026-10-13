@@ -1,3 +1,4 @@
+import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Check } from 'lucide-react';
@@ -91,7 +92,7 @@ export function ModelPickerList({
   const measuredModels = modelsForWidthMeasurement ?? filteredModels;
   const listClassName = variant === 'inline'
     ? 'mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1'
-    : 'mt-2 h-[300px] min-h-0 shrink space-y-1 overflow-y-auto overscroll-contain pr-1';
+    : `mt-2 ${UI_PANEL_BODY_HEIGHT_CLASS.compact} min-h-0 shrink space-y-1 overflow-y-auto overscroll-contain pr-1`;
 
   const updateProviderScrollMetrics = useCallback(() => {
     const providerList = providerListRef.current;
@@ -232,7 +233,7 @@ export function ModelPickerList({
           </div>
           <div className="flex w-max flex-col items-start" style={{ paddingRight: MODEL_LIST_SCROLLBAR_CHROME }}>
             {measuredModels.map((model) => (
-              <div key={model.key} className="inline-flex items-start gap-2.5 border border-transparent px-2.5 py-1.5">
+              <div key={model.key} className="inline-flex items-start gap-3 border border-transparent px-3 py-1.5">
                 {model.icon && <span className="h-7 w-7 shrink-0" />}
                 <div className="flex flex-col">
                   <span className="whitespace-nowrap text-13">{model.displayName}</span>
@@ -416,7 +417,7 @@ export function ModelPickerList({
               key={model.key}
               active={active}
               variant="menu"
-              className="w-full items-start gap-2.5 px-2.5 py-1.5"
+              className="w-full items-start gap-3 px-3 py-1.5"
               onClick={(event) => {
                 event.stopPropagation();
                 onModelChange(model.key);

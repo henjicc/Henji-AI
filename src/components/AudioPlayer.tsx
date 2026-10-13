@@ -398,7 +398,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     return (
       <div
         ref={playerRef}
-        className={`flex w-full max-w-[32.5rem] items-center gap-2.5 outline-none ${className || ''}`}
+        className={`flex w-full max-w-[32.5rem] items-center gap-3 outline-none ${className || ''}`}
         onContextMenu={onContextMenu}
         tabIndex={0}
         onKeyDown={keyboardToggle}

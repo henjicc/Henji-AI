@@ -104,7 +104,7 @@ export function TextProcessingPromptTemplateManager({
       onClose={onClose}
       title={t('node.templateManager.title')}
       size="editor"
-      contentClassName="overflow-hidden p-4"
+      contentPadding="default" contentScroll="none"
       footer={(
         <>
           <UiButton type="button" variant="secondary" onClick={onClose} disabled={saving}>

@@ -64,7 +64,7 @@ export function CodeImageGenerationPanel({ target, parameterKey, title, onClose 
     catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { submitting.current = false; if (alive.current) setBusy(false) }
   }
-  const modelTrigger = <PanelTrigger panelWidth={1100} alignment="aboveCenter" stableHeight closeOnPanelClick={node => Boolean((node as Element).closest('[data-close-on-select]'))}
+  const modelTrigger = <PanelTrigger panelSize="workspace" alignment="aboveCenter" stableHeight closeOnPanelClick={node => Boolean((node as Element).closest('[data-close-on-select]'))}
     renderPanel={() => <ModelSelectorPanel selectedProvider={providerId} selectedModel={modelId} modelFilterProvider={filterProvider} modelFilterType={filterType} modelFilterFunction={filterFunction} favoriteModels={favorites}
       onModelSelect={(_, id) => setModelId(id)} onFilterProviderChange={setFilterProvider} onFilterTypeChange={setFilterType} onFilterFunctionChange={setFilterFunction}
       onToggleFavorite={(event, provider, id) => { event.stopPropagation(); const key = `${provider}-${id}`; patchDraftField('favoriteModels', current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next }) }} />}>
@@ -72,7 +72,7 @@ export function CodeImageGenerationPanel({ target, parameterKey, title, onClose 
   </PanelTrigger>
   return <div className="flex flex-col gap-3" aria-label={`生成${title}图片`}>
     {!context && !error ? <UiLoading size="xs" message="正在准备图片生成" /> : <>
-      <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}生成提示词`} autoFocus editorClassName="min-h-24 max-h-60" />
+      <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}生成提示词`} autoFocus height="short" editorClassName="max-h-60" />
       <UiFieldLayoutContext.Provider value="toolbar">
         <ParameterPanel currentModel={model} selectedModel={modelId} uploadedImages={[]} uploadedVideos={[]} values={params as DynamicValueMap}
           onChange={(id, value) => setParams(current => ({ ...current, [id]: value }))} onChanges={changes => setParams(current => ({ ...current, ...changes }))} toolbarLeading={modelTrigger} />

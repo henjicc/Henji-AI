@@ -22,7 +22,7 @@ export function ImageMarkSourceMenu({
 
   return (
     <PanelTrigger
-      panelWidth={172}
+      panelSize="menu"
       panelPadding="menu"
       closeOnPanelClick
       renderPanel={() => (

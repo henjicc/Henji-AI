@@ -9,6 +9,7 @@ import {
 import { Check, ChevronDown, Copy, Minus, Search, Square, X } from 'lucide-react';
 import {
   UI_ICON_SIZE_CLASS,
+  UI_TEXT_AREA_HEIGHT_CLASS,
   UI_SEGMENT_SELECTED_CLASS,
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
   UI_BUTTON_RESET_CLASS,
@@ -103,7 +104,7 @@ export function UiReadout({ size = 'md', tone = 'default', children }: {
 /** 纵向导航与列表导航的高度档：md 32 / lg 36（默认）/ auto（两行内容，高度随内容）。 */
 const UI_NAV_SIZE_CLASS = {
   sm: `${UI_CONTROL_HEIGHT_CLASS.sm} gap-1.5 px-2`,
-  md: `${UI_CONTROL_HEIGHT_CLASS.md} gap-2 px-2.5`,
+  md: `${UI_CONTROL_HEIGHT_CLASS.md} gap-2 px-3`,
   lg: `${UI_CONTROL_HEIGHT_CLASS.lg} gap-2 px-3`,
   auto: 'min-h-control-lg gap-0.5 px-3 py-2',
 } as const;
@@ -158,7 +159,7 @@ UiIconButton.displayName = 'UiIconButton';
 /** 标签/芯片高度档：28 / 32 / 36，字号 12 / 13 / 13。 */
 const UI_CHIP_SIZE_CLASS: Record<UiControlSize, string> = {
   sm: `${UI_CONTROL_HEIGHT_CLASS.sm} px-2 text-xs`,
-  md: `${UI_CONTROL_HEIGHT_CLASS.md} px-2.5 text-13`,
+  md: `${UI_CONTROL_HEIGHT_CLASS.md} px-3 text-13`,
   lg: `${UI_CONTROL_HEIGHT_CLASS.lg} px-3 text-13`,
 };
 
@@ -219,8 +220,8 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
 UiChipButton.displayName = 'UiChipButton';
 
 const UI_TEXT_TOKEN_LAYOUT_CLASS = {
-  inline: 'inline rounded-sm px-[0.1em] text-left align-baseline',
-  chip: 'inline-flex h-full min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap rounded px-1.5 text-left text-2xs',
+  inline: 'inline rounded-hairline px-[0.1em] text-left align-baseline',
+  chip: 'inline-flex h-full min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap rounded-control px-1.5 text-left text-2xs',
 } as const;
 
 /**
@@ -353,7 +354,7 @@ const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
     active: `border-transparent ${UI_SEGMENT_SELECTED_CLASS}`,
   },
   tile: {
-    layout: 'h-11 gap-2.5 rounded-lg px-2.5 text-13',
+    layout: 'h-11 gap-3 rounded-lg px-3 text-13',
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
     active: `border-transparent text-accent-text ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
   },
@@ -375,10 +376,10 @@ const UI_OPTION_GRID_CELL_CLASS: Record<NonNullable<UiOptionButtonProps['gridCel
 };
 
 const UI_OPTION_SIZE_CLASS: Record<UiControlSize | 'auto', string> = {
-  auto: 'px-2.5 py-2',
-  sm: 'min-h-control-sm px-2 py-1 text-xs',
-  md: 'min-h-control-md px-2.5 py-1 text-13',
-  lg: 'min-h-control-lg px-3 py-1.5 text-13',
+  auto: 'px-3 py-2',
+  sm: `min-h-control-sm ${UI_FIELD_PADDING_CLASS.sm} py-1 text-xs`,
+  md: `min-h-control-md ${UI_FIELD_PADDING_CLASS.md} py-1 text-13`,
+  lg: `min-h-control-lg ${UI_FIELD_PADDING_CLASS.lg} py-1.5 text-13`,
 };
 
 /**
@@ -394,7 +395,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
         <button
           ref={ref}
           data-selected={active ? 'true' : 'false'}
-          className={`${UI_COVER_GROUP_CLASS} relative flex min-w-0 flex-col items-stretch gap-2.5 border-0 bg-transparent p-0 text-left text-text1 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+          className={`${UI_COVER_GROUP_CLASS} relative flex min-w-0 flex-col items-stretch gap-3 border-0 bg-transparent p-0 text-left text-text1 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
           {...props}
  />
       );
@@ -443,12 +444,13 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
 
 UiOptionButton.displayName = 'UiOptionButton';
 
+/** 高度属于文本编辑面积，与单行控件 size 分开。 */
 const UI_TEXT_AREA_FRAME_CLASS: Record<NonNullable<UiTextAreaProps['frame']>, string> = {
-  field: `w-full resize-none ${UI_RADIUS_CLASS.field} px-2.5 py-2 text-13 leading-5 ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`,
+  field: `w-full resize-none ${UI_RADIUS_CLASS.field} px-3 py-2 text-13 leading-5 ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`,
   none: `w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-text1 outline-none ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_DISABLED_CLASS}`,
 };
 
-export function UiTextArea({ className = '', textHistory, value, frame = 'field', ...props }: UiTextAreaProps): JSX.Element {
+export function UiTextArea({ className = '', textHistory, value, frame = 'field', height = 'short', ...props }: UiTextAreaProps): JSX.Element {
   const historyProps = useScopedTextHistoryProps(
     resolveTextHistoryValue(value),
     textHistory,
@@ -458,7 +460,7 @@ export function UiTextArea({ className = '', textHistory, value, frame = 'field'
   return (
     <textarea
       value={value}
-      className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${className}`}
+      className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${UI_TEXT_AREA_HEIGHT_CLASS[height]} ${className}`}
       {...rowLabelling}
       {...props}
       {...historyProps}
@@ -467,7 +469,7 @@ export function UiTextArea({ className = '', textHistory, value, frame = 'field'
 }
 
 export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
-  ({ className = '', textHistory, value, frame = 'field', ...props }, ref) => {
+  ({ className = '', textHistory, value, frame = 'field', height = 'short', ...props }, ref) => {
     const historyProps = useScopedTextHistoryProps(
       resolveTextHistoryValue(value),
       textHistory,
@@ -478,7 +480,7 @@ export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
       <textarea
         ref={ref}
         value={value}
-        className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${className}`}
+        className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${UI_TEXT_AREA_HEIGHT_CLASS[height]} ${className}`}
         {...rowLabelling}
         {...props}
         {...historyProps}

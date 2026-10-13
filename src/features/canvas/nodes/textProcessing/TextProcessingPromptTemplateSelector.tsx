@@ -60,7 +60,7 @@ export function TextProcessingPromptTemplateSelector({
         <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
           <PanelTrigger
             display={display}
-            panelWidth={320}
+            panelSize="compact"
             alignment="aboveCenter"
             gap={8}
             closeOnPanelClick={false}

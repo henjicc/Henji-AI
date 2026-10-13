@@ -1,3 +1,4 @@
+import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
 import {
   useCallback,
   useEffect,
@@ -20,7 +21,7 @@ const VIEWPORT_GAP = 12
 const TITLEBAR_HEIGHT = 40
 /** 悬浮态与标题栏之间再留一档空隙，避免助手顶栏和窗口按钮贴在一起 */
 const TITLEBAR_BOTTOM = 48
-const PANEL_MIN_WIDTH = 320
+const PANEL_MIN_WIDTH = UI_PANEL_WIDTH.assistant.min
 const PANEL_MIN_HEIGHT = 320
 const MIN_WORKSPACE_WIDTH = 320
 /** 面板边沿离视口边缘不超过这个距离就吸附停靠；必须大于 VIEWPORT_GAP，否则永远够不着 */

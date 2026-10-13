@@ -194,7 +194,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
                 {layout.lineRects.map((rect, index) => (
                   <div
                     key={`line-${index}`}
-                    className="absolute bg-danger-hi/40"
+                    className="absolute bg-danger-text/40"
                     style={{
                       left: toPercent(rect.x, naturalSize.width),
                       top: toPercent(rect.y, naturalSize.height),
@@ -222,7 +222,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </div>
 
         <div className={`inline-flex items-center gap-2 ${UI_TEXT_META_CLASS}`}>
-          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-danger-hi/70" />
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-hairline bg-danger-text/70" />
           {t('toolDialog.split.discardLegend')}
         </div>
       </div>

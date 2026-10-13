@@ -129,6 +129,13 @@ describe('PromptEditor', () => {
     expect(shell?.classList.contains('content-box')).toBe(false)
   })
 
+  it.each(['static', 'edit'] as const)('%s 态使用同一多行文本高度档', async mode => {
+    const rendered = render(<PublicPromptEditor mode={mode} height="medium" ariaLabel="高度" value={createPlainTextPromptDocument('正文')} onChange={vi.fn()} />)
+    const content = await rendered.findByRole('textbox')
+    expect(content.classList.contains('min-h-textarea-medium')).toBe(true)
+    expect(content.classList.contains('min-h-textarea-short')).toBe(false)
+  })
+
   it('填充滚动布局在静态态建立单一内容滚动容器', () => {
     const rendered = render(
       <PublicPromptEditor
@@ -147,7 +154,7 @@ describe('PromptEditor', () => {
     expect(shell?.classList.contains('overflow-hidden')).toBe(true)
     expect(content.classList.contains('overflow-y-auto')).toBe(true)
     expect(content.classList.contains('overscroll-contain')).toBe(true)
-    expect(content.classList.contains('min-h-[92px]')).toBe(false)
+    expect(content.classList.contains('min-h-textarea-short')).toBe(false)
   })
 
   it('填充滚动布局在编辑态复用同一尺寸契约', async () => {
@@ -167,7 +174,7 @@ describe('PromptEditor', () => {
     expect(outer?.classList.contains('min-h-0')).toBe(true)
     expect(shell?.classList.contains('overflow-hidden')).toBe(true)
     expect(content.classList.contains('overflow-y-auto')).toBe(true)
-    expect(content.classList.contains('min-h-[92px]')).toBe(false)
+    expect(content.classList.contains('min-h-textarea-short')).toBe(false)
   })
 
   it('编辑器在浏览器绘制前通知调用方恢复选区', () => {

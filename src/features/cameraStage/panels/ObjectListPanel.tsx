@@ -76,7 +76,7 @@ const ObjectListPanel: React.FC = () => {
           <div key={object.id} role="listitem" className="flex items-center gap-0.5">
             {isEditing ? (
               // 改名直接把名称换成输入框，不再给输入框外面套一圈强调色描边的框
-              <div className="flex min-w-0 flex-1 items-center gap-2 pl-2.5">
+              <div className="flex min-w-0 flex-1 items-center gap-2 pl-3">
                 <span aria-hidden="true" className="shrink-0 text-text2">
                   <TypeIcon object={object} />
                 </span>

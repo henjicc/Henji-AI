@@ -385,7 +385,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         </UiButton>
       ) : !embeddedOutput ? <PanelTrigger
         disabled={!canScreenshot || !!stateKeyframeAction}
-        panelWidth={156}
+        panelSize="menu"
         closeOnPanelClick
         panelPadding="menu"
         renderPanel={() => (
@@ -442,7 +442,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       ) : !embeddedOutput ? (
         <PanelTrigger
           disabled={!canExportVideo}
-          panelWidth={176}
+          panelSize="menu"
           panelPadding="content"
           renderPanel={() => (
             <div className="flex flex-col gap-2">
@@ -504,7 +504,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               </span>
             )}
             <PanelTrigger
-              panelWidth={208}
+              panelSize="menu"
               panelPadding="content"
               renderPanel={() => (
                 <div className="flex flex-col gap-2">

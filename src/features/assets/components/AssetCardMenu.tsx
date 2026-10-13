@@ -131,7 +131,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       // 面板里是输入框与标签芯片（表单内容）：玻璃压在亮色封面上时占位文字只有 2.5:1，改实底（5.6 第二批 B-45）
       surface="solid"
       panelPadding="content"
-      panelWidth={320}
+      panelSize="compact"
       renderPanel={() => (
     <div data-asset-card-menu>
       <div className="mb-3 flex min-w-0 items-center gap-1">

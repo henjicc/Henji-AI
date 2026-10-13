@@ -98,8 +98,8 @@ function WelcomeStep(): JSX.Element {
   ]
   return (
     <div className="flex min-h-96 flex-col justify-center">
-      <div className="mb-7 flex items-center gap-4">
-        <img src={appIconUrl} alt="" className="h-16 w-16 rounded-2xl" />
+      <div className="mb-8 flex items-center gap-4">
+        <img src={appIconUrl} alt="" className="h-16 w-16 rounded-overlay" />
         <div>
           <div className={`text-xs font-medium uppercase tracking-wider ${UI_COLOR_ACCENT_TEXT_CLASS}`}>
             {t('welcome.eyebrow')}
@@ -109,7 +109,7 @@ function WelcomeStep(): JSX.Element {
       </div>
       <h3 className={`max-w-xl ${UI_TEXT_SECTION_CLASS}`}>{t('welcome.headline')}</h3>
       <p className={`mt-3 max-w-xl leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('welcome.description')}</p>
-      <div className="mt-7 space-y-3">
+      <div className="mt-8 space-y-3">
         {features.map(({ icon: Icon, text }) => (
           <div key={text} className="flex items-center gap-3">
             <Icon className={`${UI_ICON_SIZE_CLASS.md} shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
@@ -187,7 +187,7 @@ function ApiKeyStep({
     <div className="min-h-96">
       <h3 className={UI_TEXT_SECTION_CLASS}>{t('apiKey.headline', { provider: providerName })}</h3>
       <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('apiKey.description')}</p>
-      <div className="mt-7">
+      <div className="mt-8">
         <ApiKeyInput
           value={apiKey}
           visible={visible}
@@ -229,7 +229,7 @@ function FirstTaskStep({
     <div className="min-h-96">
       <h3 className={UI_TEXT_SECTION_CLASS}>{t('firstTask.headline')}</h3>
       <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('firstTask.description')}</p>
-      <UiPanel variant="inset" className="mt-7 p-4">
+      <UiPanel variant="inset" className="mt-8 p-4">
         <div className={UI_TEXT_META_CLASS}>{t('firstTask.promptLabel')}</div>
         <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('firstTask.prompt')}</p>
       </UiPanel>
@@ -434,7 +434,7 @@ export function OnboardingModal(): JSX.Element {
       )}
       onClose={() => onboardingManager.defer()}
       size="form"
-      contentClassName="px-6 py-5"
+      contentPadding="spacious" contentScroll="auto"
       footer={footer}
     >
       <div className="mb-5 flex items-center gap-3">

@@ -57,7 +57,7 @@ type OverflowEntry =
  * “更多参数”浮层宽度：含展示分组时按分组声明的宽度，含大块控件（多行文本、上传等）时 440；
  * 只有零散参数时按内容（列网格的自然宽度），不再固定 360 留出大片空白（任务 5.3）。
  */
-function resolveMorePanelWidth(entries: OverflowEntry[]): number | 'content' {
+function resolveMorePanelWidth(entries: OverflowEntry[]): number {
   const groupWidths = entries.flatMap((entry) => entry.kind === 'group' ? [entry.item.group.panelWidth ?? 440] : [])
   const hasBlock = entries.some((entry) => entry.kind === 'param' && isToolbarBlockParam(entry.param))
   if (groupWidths.length > 0) return Math.max(...groupWidths)
@@ -275,7 +275,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return (
       <PanelTrigger
         controlsRef={moreControlsRef}
-        panelWidth={resolveMorePanelWidth(entries)}
+        panelSize={resolveMorePanelWidth(entries) > 720 ? 'workspace' : 'content'}
         alignment="aboveCenter"
         closeOnPanelClick={false}
         renderPanel={() => renderOverflowPanel(entries)}

@@ -409,7 +409,7 @@ export function ImageEditorLayersPanelV3({
         >
           <Trash2  />
         </UiIconButton>
-      {controller.profile.layerKinds.includes('group') ? <PanelTrigger panelWidth={200} panelPadding="menu" closeOnPanelClick
+      {controller.profile.layerKinds.includes('group') ? <PanelTrigger panelSize="menu" panelPadding="menu" closeOnPanelClick
         renderPanel={() => <div role="menu" className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.group')}
           disabled={!canGroupImageEditLayersV3(controller.document.layers, effectiveSelectedIds)}

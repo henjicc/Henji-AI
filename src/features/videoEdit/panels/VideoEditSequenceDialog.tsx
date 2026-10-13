@@ -107,7 +107,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
   const parKey = `${values.pixelAspectRatio.numerator}/${values.pixelAspectRatio.denominator}`
   const par = PIXEL_ASPECT_RATIOS.find(value => value.numerator * values.pixelAspectRatio.denominator === values.pixelAspectRatio.numerator * value.denominator)
   const tierAspect = preset.ratio === '自定义' ? currentAspect : videoEditSequenceRatioValue(preset.ratio)
-  return <UiModal isOpen size="form" title={title} contentClassName="overflow-y-auto px-4 py-4" onClose={() => { if (!busy) onClose() }} footer={<>
+  return <UiModal isOpen size="form" title={title} contentPadding="default" contentScroll="auto" onClose={() => { if (!busy) onClose() }} footer={<>
     <UiButton variant="quiet" className="mr-auto" disabled={busy || defaultsSaved || Boolean(sizeError)} onClick={saveAsDefaults}>{defaultsSaved ? '已保存为默认值' : '保存为默认值'}</UiButton>
     <UiButton disabled={busy} onClick={onClose}>取消</UiButton>
     <UiButton variant="primary" disabled={busy || Boolean(sizeError)} onClick={() => { void submit() }}>{mode === 'edit' ? '保存' : '新建'}</UiButton>

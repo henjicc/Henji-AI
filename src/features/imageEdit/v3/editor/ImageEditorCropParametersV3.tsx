@@ -219,7 +219,7 @@ export function ImageEditorCropParametersV3({
       <div className="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true" />
       <PanelTrigger
         className="shrink-0"
-        panelWidth={278}
+        panelSize="compact"
         closeOnPanelClick
         renderPanel={() => (
           <div

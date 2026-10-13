@@ -116,7 +116,7 @@ const ProviderCenterModelList = ({
           </div>
           <div data-provider-model-list className="min-h-0 flex-1 divide-y divide-line overflow-y-auto overscroll-contain">
             {filtered.map(model => (
-              <div key={model.id} className="grid min-h-14 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem] items-center gap-4 px-1 py-2.5">
+              <div key={model.id} className="grid min-h-14 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem] items-center gap-4 px-1 py-3">
                 <div className="min-w-0">
                   {renaming?.id === model.id ? (
                     <UiInput
@@ -144,7 +144,7 @@ const ProviderCenterModelList = ({
                 <div className="flex min-w-0 flex-wrap gap-1.5">
                   {model.capabilityIds.slice(0, 4).map(capability => (
                     // 能力徽标：中性 raised 浅底、圆角 4、12 号次要文字
-                    <span key={capability} className="shrink-0 rounded bg-raised px-2 py-0.5 text-xs text-text2">
+                    <span key={capability} className="shrink-0 rounded-control bg-raised px-2 py-0.5 text-xs text-text2">
                       {t(`providerCenter.capabilities.${capability}`, { defaultValue: capability })}
                     </span>
                   ))}

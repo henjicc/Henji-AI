@@ -30,7 +30,7 @@ export function WindowTitleBar({ children, actions, size = 'window', dragRegion 
     <header
       {...props}
       data-window-titlebar={size}
-      className={`flex shrink-0 select-none items-center justify-between gap-3 border-b border-line bg-window text-text1 ${size === 'window' ? 'h-10 pl-4 pr-1.5' : 'h-8 pl-1 pr-1'} ${className}`}
+      className={`flex shrink-0 select-none items-center justify-between gap-3 border-b border-line bg-window text-text1 ${size === 'window' ? 'h-band-title pl-4 pr-1.5' : 'h-band-tab pl-1 pr-1'} ${className}`}
       style={native ? DRAG_REGION : undefined}
     >
       <div className="flex h-full min-w-0 flex-1 items-center">{children}</div>

@@ -73,7 +73,7 @@ export function VideoEditEffectsLibraryPanel({ instance, onError, onEffectsAdded
       }
     } catch (error) { onError(error) }
   }
-  return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-2.5" aria-label="效果" data-video-edit-effects-library>
+  return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-3" aria-label="效果" data-video-edit-effects-library>
     <UiSearchInput size="sm" aria-label="搜索效果" placeholder="搜索效果与过渡" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除搜索" />
     {loadError && <UiError size="xs" title="效果库读取失败" message={loadError} />}
     <div role="tree" aria-label="效果与过渡" className="flex min-h-0 flex-1 flex-col overflow-auto">

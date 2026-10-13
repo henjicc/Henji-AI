@@ -129,7 +129,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
       title={t('updateDialog.title')}
       onClose={onClose}
       size="form"
-      contentClassName="min-h-0 overflow-y-auto px-4 py-4"
+      contentPadding="default" contentScroll="auto" contentClassName="min-h-0"
       footer={
         <>
           <UiButton onClick={handleIgnore} variant="secondary">

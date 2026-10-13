@@ -136,7 +136,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             disabled={disabled}
             className="w-auto"
             buttonClassName="w-auto"
-            panelWidth={420}
+            panelSize="content"
             alignment="aboveCenter"
             stableHeight={true}
             closeOnPanelClick={(target) => {
@@ -148,7 +148,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                 return !!element.closest('[data-preset-item]')
             }}
             renderPanel={() => (
-                <div className="p-4 h-full flex flex-col max-h-[500px]">
+                <div className="p-4 h-full flex flex-col max-h-[var(--trigger-panel-max-height)]">
                     {/* 顶部区域：快速保存或输入名称 */}
                     <div className="mb-4 space-y-2">
                         <div className="text-xs text-text2 mb-2">
@@ -276,7 +276,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                     className="flex"
                                                     open={deletingPresetId === preset.id}
                                                     onOpenChange={(open) => setDeletingPresetId((current) => open ? preset.id : (current === preset.id ? null : current))}
-                                                    panelWidth={200}
+                                                    panelSize="menu"
                                                     panelPadding="content"
                                                     alignment="aboveCenter"
                                                     gap={8}

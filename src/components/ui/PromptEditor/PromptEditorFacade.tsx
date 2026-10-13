@@ -29,6 +29,7 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     disabled = false,
     error = false,
     layout = 'auto',
+    height,
     className = '',
     frame = 'field',
     editorShellClassName = '',
@@ -40,7 +41,7 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     resolveVariable,
   }, ref): JSX.Element {
     const contentRef = useRef<HTMLDivElement | null>(null)
-    const layoutClasses = getPromptEditorLayoutClasses(layout)
+    const layoutClasses = getPromptEditorLayoutClasses(layout, height)
 
     useImperativeHandle(ref, () => ({
       focus: (): void => onActivate?.(),

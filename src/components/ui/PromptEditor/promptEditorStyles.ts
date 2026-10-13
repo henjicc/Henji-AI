@@ -1,7 +1,8 @@
+import { UI_TEXT_AREA_HEIGHT_CLASS, type UiTextAreaHeight } from '../styleTokens'
 import type { PromptEditorLayout } from './types'
 
 export const PROMPT_EDITOR_CONTENT_CLASS = [
-  'whitespace-pre-wrap break-words px-3 py-2.5 text-sm leading-6 text-text1 outline-none',
+  'whitespace-pre-wrap break-words px-3 py-3 text-sm leading-6 text-text1 outline-none',
   '[&_.is-editor-empty:first-child::before]:pointer-events-none',
   '[&_.is-editor-empty:first-child::before]:float-left',
   '[&_.is-editor-empty:first-child::before]:h-0',
@@ -25,7 +26,7 @@ const PROMPT_EDITOR_LAYOUT_CLASSES: Record<PromptEditorLayout, PromptEditorLayou
   auto: {
     outer: '',
     shell: '',
-    content: 'min-h-[92px]',
+    content: 'min-h-textarea-short',
   },
   'fill-scroll': {
     outer: 'flex min-h-0 min-w-0 flex-1 flex-col',
@@ -36,8 +37,10 @@ const PROMPT_EDITOR_LAYOUT_CLASSES: Record<PromptEditorLayout, PromptEditorLayou
 
 export function getPromptEditorLayoutClasses(
   layout: PromptEditorLayout,
+  height?: UiTextAreaHeight,
 ): PromptEditorLayoutClasses {
-  return PROMPT_EDITOR_LAYOUT_CLASSES[layout]
+  const classes = PROMPT_EDITOR_LAYOUT_CLASSES[layout]
+  return height ? { ...classes, content: `${classes.content.replace(/min-h-(?:0|textarea-short)/g, '').trim()} ${UI_TEXT_AREA_HEIGHT_CLASS[height]}`.trim() } : classes
 }
 
 export const PROMPT_ATOM_CLASS =

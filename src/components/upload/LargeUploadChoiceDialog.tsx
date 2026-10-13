@@ -35,7 +35,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
       onClose={() => { /* 必须做出选择，不允许关闭 */ }}
       hideHeader
       size="compact"
-      contentClassName="space-y-4 p-4"
+      contentPadding="default" contentScroll="auto" contentClassName="space-y-4"
     >
         {/* 不能关闭的强制选择：不用标准标题栏（它带关闭按钮），标题与 AlertDialog 同档（任务 5.7） */}
         <h3 className={UI_TEXT_TITLE_CLASS}>

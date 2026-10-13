@@ -532,8 +532,8 @@ export function ContentSection(): JSX.Element {
   const [prompt, setPrompt] = useState(PROMPT_TEXT)
   return (
     <GallerySection title="内容输入">
-      <PromptEditor value={prompt} onChange={setPrompt} ariaLabel="提示词" placeholder="描述画面" editorClassName="min-h-14" />
-      <PromptEditor value={createPlainTextPromptDocument('')} onChange={noop} ariaLabel="提示词（错误）" placeholder="描述画面" error errorMessage="提示词不能为空" editorClassName="min-h-10" />
+      <PromptEditor value={prompt} onChange={setPrompt} ariaLabel="提示词" placeholder="描述画面" height="short" />
+      <PromptEditor value={createPlainTextPromptDocument('')} onChange={noop} ariaLabel="提示词（错误）" placeholder="描述画面" error errorMessage="提示词不能为空" height="short" />
       <PromptDocumentStatic document={PROMPT_TEXT} ariaLabel="提示词只读" />
       <UiErrorBoundary loggerDomain="DevGallery" event="dev_gallery.render_failed" title="样张渲染失败">
         <StackedMediaUploader files={[]} fileTypes={['image']} onUpload={noop} onRemove={noop} hintText="拖入或点击上传图片" />

@@ -134,7 +134,7 @@ export function ImageMarkToolV3ToolbarActions({
           ) : null}
           <PanelTrigger
             disabled={host.isHostBusy || exportUnavailable}
-            panelWidth={190}
+            panelSize="menu"
             panelPadding="menu"
             closeOnPanelClick
             renderPanel={() => (

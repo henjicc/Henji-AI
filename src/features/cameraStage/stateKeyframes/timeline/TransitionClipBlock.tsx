@@ -13,7 +13,6 @@ const HARD_CUT_HIT_WIDTH = 16
 /** 极窄过渡块保底最小可视宽度，与静止块对齐（重要记录/01-实施方案 风险控制） */
 const MIN_TRANSITION_WIDTH = 16
 /** 过渡参数气泡宽度（重要记录 004） */
-const POPOVER_WIDTH = 380
 
 interface TransitionClipBlockProps {
   stateKeyframe: StageStateKeyframe
@@ -62,7 +61,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
     <div className="absolute inset-y-2 z-raised" style={{ left, width }}>
       <PanelTrigger
         alignment="aboveCenter"
-        panelWidth={POPOVER_WIDTH}
+        panelSize="compact"
         className="h-full w-full"
         renderPanel={() => (
           <TransitionPopover

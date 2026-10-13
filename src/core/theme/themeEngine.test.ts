@@ -12,7 +12,6 @@ import {
   THEME_TEXT_MIN_CONTRAST,
   deriveThemeTokens,
   normalizeThemeSeed,
-  solidLabelBeds,
   solveSolidRamp,
   type ThemeColorTokens,
   type ThemeSeed,
@@ -40,8 +39,8 @@ const COMBOS = THEME_PRESET_IDS.flatMap((id) =>
  */
 const CORRECTED_TOKENS = new Set([
   'text2', 'text3', 'accentText',
-  'accent', 'accentHi', 'accentHover', 'accentHoverHi', 'accentPressed', 'accentTint', 'onAccent',
-  'danger', 'dangerHi', 'dangerTint',
+  'accent', 'accentHover', 'accentPressed', 'accentTint', 'onAccent',
+  'danger', 'dangerTint',
 ])
 
 /** 扁平实底按钮（重要记录 016）上文字实际所在处：静息、悬停、按下三种纯色。 */
@@ -155,7 +154,6 @@ describe('themeEngine 对比度（重要记录 010）', () => {
       const reference = referenceDerive(REFERENCE_PRESETS[id])
       expect(tokens(id).onAccent).toBe(reference.onAccent)
       expect(tokens(id).accent).toBe(reference.accent)
-      expect(tokens(id).accentHi).toBe(reference.accentHi)
     }
     for (const id of THEME_PRESET_IDS) {
       const t = tokens(id)
@@ -185,14 +183,11 @@ describe('themeEngine 对比度（重要记录 010）', () => {
     expect(minContrast(t.accentText, beds)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
   })
 
-  it('回归基线：危险实底只判渐变中点时，悬停渐变的标签上端达不到 4.5（5.3 / 5.6 实测 4.28–4.43）', () => {
-    const options = { startL: 0.6, floorL: 0, chroma: 0.19, hue: 25, ink: WHITE, allowInk: false } as const
-    const midpointOnly = solveSolidRamp(options)
-    const band = solveSolidRamp({ ...options, coverage: 'labelBand' })
-    const worst = (L: number) => minContrast(WHITE, solidLabelBeds(L, 0.19, 25, 'labelBand'))
-    expect(worst(midpointOnly.L)).toBeLessThan(THEME_TEXT_MIN_CONTRAST)
-    expect(worst(band.L)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
-    expect(band.L).toBeLessThan(midpointOnly.L)
+  it('危险按钮三态直接按实际纯色求解，起点达标不压暗', () => {
+    const result = solveSolidRamp({ startL: 0.55, floorL: 0, chroma: 0.19, hue: 25, ink: WHITE, allowInk: false })
+    expect(result.L).toBe(0.55)
+    expect(result.on).toBe(WHITE)
+    expect(minContrast(WHITE, [0.55, 0.49, 0.44].map(L => oklchToHex(L, 0.19, 25)))).toBeGreaterThanOrEqual(4.5)
   })
 
   it('扁平实底的悬停一眼可见：亮度变化 ≥ 0.05（预设与任意强调色，重要记录 016）', () => {

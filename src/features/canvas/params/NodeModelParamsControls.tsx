@@ -126,7 +126,7 @@ export const NodeModelParamsControls = memo(({
         onOpenChange={setPanelOpen}
         surface="glass"
         panelPadding="content"
-        panelWidth={modelPanelWidth}
+        panelSize={modelPanelWidth > 720 ? 'workspace' : 'content'}
         alignment="aboveCenter"
         gap={MODEL_PANEL_GAP}
         renderPanel={() => (

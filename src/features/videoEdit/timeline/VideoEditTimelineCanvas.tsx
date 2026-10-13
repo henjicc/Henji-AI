@@ -363,7 +363,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
             {/* ui-surface-allow 片段体：整块是选择命中区，名称条压在缩略图/波形之上（设计稿 VideoEdit 片段名称条） */}
             <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${speedLabel ? ` ${speedLabel}` : ''}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 !items-start !justify-start !rounded-none !bg-transparent !p-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.shiftKey || event.ctrlKey || event.metaKey, false, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
-              <span data-user-content className={`max-w-full truncate rounded-br-sm px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`}>{clip.name}{speedLabel && <span className={UI_TEXT_NUMERIC_CLASS}> {speedLabel}</span>}</span>
+              <span data-user-content className={`max-w-full truncate rounded-br-hairline px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`}>{clip.name}{speedLabel && <span className={UI_TEXT_NUMERIC_CLASS}> {speedLabel}</span>}</span>
             </UiButton>
             {/* ui-surface-allow 出点裁剪柄，同入点 */}
             <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
@@ -379,7 +379,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
               className={`absolute top-0.5 z-raised h-2.5 w-2.5 cursor-ew-resize rounded-hairline border border-line-strong bg-control transition-opacity duration-120 ${length > 0 || selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
               style={edge === 'in' ? { left: offset } : { right: offset }} />
           })}
-          {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-sm bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
+          {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-hairline bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
         </div>
   }
   /** 从素材面板拖来的素材项：按松手时同一套规则预演，得到将要落下的片段（虚影）；预演不了时只显示落点提示。 */
@@ -492,8 +492,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         } catch (error) { fail(error) }
       }}>
       <div className="relative" style={{ width, height: Math.max(view.height, TIMELINE_RULER_HEIGHT) }} data-video-edit-timeline-content>
-        <div className="sticky top-0 z-sticky flex h-7 border-b border-line bg-panel" data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
-          <div className="sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel px-2.5 text-2xs text-text3" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
+        <div className="sticky top-0 z-sticky flex h-band-row border-b border-line bg-panel" data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
+          <div className="sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel px-3 text-2xs text-text3" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
           <VideoEditTimelinePosition instance={instance}>
             <VideoEditAnnotationMarks instance={instance} sequence={sequence} pixels={pixels} left={view.left} width={view.width} onError={onError} />
             {annotationRange.range && <div className="pointer-events-none absolute inset-y-0 bg-selected-accent ring-1 ring-accent-ring" style={{ left: Math.min(annotationRange.range.from, annotationRange.range.to) * pixels, width: Math.max(1, Math.abs(annotationRange.range.to - annotationRange.range.from) * pixels) }} />}

@@ -188,7 +188,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   }
   return (
     <div className="flex flex-col h-full">
-      <UiPanel variant="inset" className="mb-3 p-2.5">
+      <UiPanel variant="inset" className="mb-3 p-3">
         <div className="text-xs text-text2">
           {t('modelscopeCustomModel.tip.prefix')}
           <UiButton
@@ -335,12 +335,12 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       </div>
                       <div className="flex gap-2 mt-1.5">
                         {model.modelType.imageGeneration && (
-                          <span className="inline-flex items-center rounded bg-raised px-2 py-0.5 text-xs text-text2">
+                          <span className="inline-flex items-center rounded-control bg-raised px-2 py-0.5 text-xs text-text2">
                             {t('modelscopeCustomModel.types.imageGeneration')}
                           </span>
                         )}
                         {model.modelType.imageEditing && (
-                          <span className="inline-flex items-center rounded bg-raised px-2 py-0.5 text-xs text-text2">
+                          <span className="inline-flex items-center rounded-control bg-raised px-2 py-0.5 text-xs text-text2">
                             {t('modelscopeCustomModel.types.imageEditing')}
                           </span>
                         )}

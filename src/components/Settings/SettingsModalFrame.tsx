@@ -34,7 +34,7 @@ export function SettingsModalFrame({ isOpen, onClose, appear, children, surfaceI
       // 打开时先闪一帧纯黑、关闭时黑幕又突然消失。
       overlayClassName="p-4"
       size="settings"
-      contentClassName="flex min-h-0 flex-1"
+      contentPadding="none" contentScroll="none" contentClassName="flex min-h-0 flex-1"
     >
       {/* relative：让内容压在 .ui-glass::after 的噪点层同一层，避免文字被颗粒扰动 */}
       <div data-application-surface-id={surfaceId} className={`relative flex h-full w-full flex-col ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>

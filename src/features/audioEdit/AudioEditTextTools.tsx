@@ -29,7 +29,7 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink }: {
     <PanelTrigger
       className="min-w-0 max-w-64"
       disabled={disabled}
-      panelWidth={200}
+      panelSize="menu"
       panelPadding="menu"
       closeOnPanelClick
       renderPanel={() => (
@@ -101,7 +101,7 @@ export function AudioEditMatchedText({ block, search }: { block: AudioEditTransc
   // ui-surface-allow: S4 这些 span 是同一段正文的查找高亮片段，分隔线会割裂连续文本；u6。
   return <>{fragments.map((fragment, index) => fragment.matchIndex === undefined ? <span key={index}>{fragment.text}</span> : <span key={index}
     data-audio-search-current={fragment.matchIndex === search.currentIndex ? 'true' : undefined}
-    className={fragment.matchIndex === search.currentIndex ? 'rounded-sm bg-warning-tint text-text1 ring-1 ring-accent-ring' : 'rounded-sm bg-warning-tint text-text1'}>
+    className={fragment.matchIndex === search.currentIndex ? 'rounded-hairline bg-warning-tint text-text1 ring-1 ring-accent-ring' : 'rounded-hairline bg-warning-tint text-text1'}>
     {fragment.replacement === undefined ? fragment.text : <><del className="text-text3">{fragment.text}</del>{fragment.replacement && <ins className="ml-1 bg-accent-tint font-medium text-accent-text no-underline">{fragment.replacement}</ins>}</>}
   </span>)}</>
 }

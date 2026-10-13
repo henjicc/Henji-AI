@@ -1,8 +1,9 @@
+import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 
-export const ASSET_SIDEBAR_MIN_WIDTH = 184
-export const ASSET_SIDEBAR_MAX_WIDTH = 360
-export const ASSET_SIDEBAR_DEFAULT_WIDTH = 232
+export const ASSET_SIDEBAR_MIN_WIDTH = UI_PANEL_WIDTH.sidebar.min
+export const ASSET_SIDEBAR_MAX_WIDTH = UI_PANEL_WIDTH.sidebar.max
+export const ASSET_SIDEBAR_DEFAULT_WIDTH = UI_PANEL_WIDTH.sidebar.default
 
 export function clampAssetSidebarWidth(width: number, viewportWidth: number): number {
   const viewportMax = Math.max(ASSET_SIDEBAR_MIN_WIDTH, Math.min(ASSET_SIDEBAR_MAX_WIDTH, viewportWidth * 0.3))
@@ -17,7 +18,7 @@ export function useAssetSidebarResize(): {
   const [width, setWidth] = useState(() => clampAssetSidebarWidth(ASSET_SIDEBAR_DEFAULT_WIDTH, window.innerWidth))
   const widthRef = useRef(width)
   const resizingRef = useRef(false)
-  const originRef = useRef({ pointerX: 0, width: ASSET_SIDEBAR_DEFAULT_WIDTH })
+  const originRef = useRef<{ pointerX: number; width: number }>({ pointerX: 0, width: ASSET_SIDEBAR_DEFAULT_WIDTH })
   widthRef.current = width
 
   const handlePointerMove = useCallback((event: globalThis.PointerEvent): void => {

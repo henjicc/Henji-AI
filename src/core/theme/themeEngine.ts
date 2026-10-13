@@ -18,7 +18,6 @@ import {
   deltaEOK,
   hexToOklch,
   minContrast,
-  mixOklab,
   normalizeHex,
   oklchToHex,
   withAlpha,
@@ -133,9 +132,7 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'textDisabled',
   // 强调
   'accent',
-  'accentHi',
   'accentHover',
-  'accentHoverHi',
   'accentPressed',
   'accentText',
   'accentRing',
@@ -145,9 +142,7 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'onAccent',
   // 状态
   'danger',
-  'dangerHi',
   'dangerHover',
-  'dangerHoverHi',
   'dangerPressed',
   'dangerText',
   'dangerTint',
@@ -363,14 +358,6 @@ export function solveSolidFillL(startL: number, chroma: number, hue: number, ink
 }
 
 /**
- * 实底按钮各状态相对静息亮度的偏移。静息渐变 = hi → 静息；悬停渐变 = hoverHi → hover；按下为瞬态。
- * 悬停主要靠顶部高光（hoverHi）表达，底色不再提亮（hover = 0），使“悬停中点 − 静息中点”的亮度提升
- * = (hover + hoverHi − hi) / 2 = 0.0175，满足主控“≤ 0.02”（设计稿原为 hover +0.04 / hoverHi +0.075，提升 0.04）；
- * hoverHi 由 0.075 微调到 0.07，给出色域裁剪留余量（深海 0.075 时实测 0.0206）。
- */
-export const SOLID_RAMP_OFFSETS = { hi: 0.035, hover: 0, hoverHi: 0.07, pressed: -0.045 } as const;
-
-/**
  * 扁平实底按钮（重要记录 016）的悬停、按下亮度变化幅度（OKLCH L）。
  * 按钮不再有渐变高光，悬停只能靠底色本身变化表达，必须一眼可见：白字实底往暗走（白字对比只会更高），
  * 墨水字实底往亮走（墨水对比只会更高）——两个方向都不会让文字变得更难读，无需再求解。
@@ -390,38 +377,6 @@ export interface SolidRampResult {
   on: string;
 }
 
-/**
- * 实底按钮标签所占的竖向区间（相对按钮高度，自上而下）。28–36 高的按钮里 11–14 号字的行框约占中间 60%，
- * 像素审计取文字区域最差 10% 分位，落在行框上端附近。
- */
-export const SOLID_LABEL_BAND = { top: 0.2, bottom: 0.8 } as const;
-
-/**
- * 判定实底上文字对比度时取哪些位置：
- * - `midpoint`：静息、悬停两条渐变的 OKLab 中点（强调色主按钮，主控 2026-10-03 修订版）；
- * - `labelBand`：两条渐变在标签区间上下两端的实际颜色（CSS 渐变按 sRGB 插值）。危险确认按钮用它：
- *   只判中点会漏掉悬停渐变上半段，5.3 / 5.6 像素审计实测悬停白字只有 4.28–4.43:1（任务 5.7）。
- */
-export type SolidLabelCoverage = 'midpoint' | 'labelBand';
-
-/** CSS `linear-gradient` 默认在 sRGB 空间插值：from → to 之间位置 t 处的颜色。 */
-function gradientAt(from: string, to: string, t: number): string {
-  return compositeOver(withAlpha(from, 1 - t), to);
-}
-
-/** 实底按钮上文字实际所在处的颜色（顶端 1px 高光不参与判定；渐变上亮下暗，白字最差在上端、墨水最差在下端）。 */
-export function solidLabelBeds(L: number, chroma: number, hue: number, coverage: SolidLabelCoverage = 'midpoint'): string[] {
-  const at = (offset: number) => oklchToHex(L + offset, chroma, hue);
-  const rest: [string, string] = [at(SOLID_RAMP_OFFSETS.hi), at(0)];
-  const hover: [string, string] = [at(SOLID_RAMP_OFFSETS.hoverHi), at(SOLID_RAMP_OFFSETS.hover)];
-  if (coverage === 'midpoint') {
-    // 扁平实底（重要记录 016）文字直接压在静息纯色上：白字时它比中点更暗（不改变结论），墨水字时它更严格
-    return [mixOklab(...rest), mixOklab(...hover), rest[1]];
-  }
-  const { top, bottom } = SOLID_LABEL_BAND;
-  return [rest, hover].flatMap(([from, to]) => [gradientAt(from, to, top), gradientAt(from, to, bottom)]);
-}
-
 /** 在 [low, high] 内找满足 ok 的、离 from 最近的亮度（ok 在区间上单调）。 */
 function bisectLightness(from: number, to: number, ok: (L: number) => boolean): number {
   let fail = from;
@@ -437,35 +392,7 @@ function bisectLightness(from: number, to: number, ok: (L: number) => boolean): 
   return pass;
 }
 
-/**
- * 白字实底的悬停渐变上端提亮幅度（相对静息亮度）：默认 `SOLID_RAMP_OFFSETS.hoverHi`；
- * 白字在悬停渐变标签区间（`SOLID_LABEL_BAND` 上下两端）不足 4.5 时，收敛到刚好达标的最大幅度。
- * 只动悬停一档，静息渐变、实底亮度与“最多压暗”上限都不变；墨水字（上端更亮反而更清楚）保持默认（任务 5.7）。
- */
-export function solveSolidHoverHiOffset(L: number, chroma: number, hue: number, on: string): number {
-  const fallback = SOLID_RAMP_OFFSETS.hoverHi;
-  if (on !== WHITE) {
-    return fallback;
-  }
-  const hover = oklchToHex(L + SOLID_RAMP_OFFSETS.hover, chroma, hue);
-  const ok = (offset: number) => {
-    const top = oklchToHex(L + offset, chroma, hue);
-    const { top: t0, bottom: t1 } = SOLID_LABEL_BAND;
-    return minContrast(WHITE, [gradientAt(top, hover, t0), gradientAt(top, hover, t1)]) >= THEME_TEXT_MIN_CONTRAST;
-  };
-  if (ok(fallback)) {
-    return fallback;
-  }
-  return bisectLightness(fallback, SOLID_RAMP_OFFSETS.hover, ok);
-}
-
-
-/**
- * 实底按钮亮度与其上文字（主控决定 2026-10-03 修订版）：判定位置由 `coverage` 决定（默认静息、悬停两个渐变中点，危险确认按钮取标签区间上下两端），均需 ≥ 4.5。
- * - 白字优先：起点已达标不动；否则在 [floorL, 起点] 内整体压暗到刚好达标（只降 L，色相、彩度、偏移不变）；
- * - 压到 floorL 仍不达标：`allowInk` 时改用墨水（起点达标不动，否则往亮处求解到刚好达标）；
- *   不允许墨水（危险确认按钮）时 floorL 应为 0，结果总能让白字达标。
- */
+/** 只对实际纯色实底求解；悬停和按下朝提高文字对比度方向变化。 */
 export function solveSolidRamp(options: {
   startL: number;
   floorL: number;
@@ -473,20 +400,10 @@ export function solveSolidRamp(options: {
   hue: number;
   ink: string;
   allowInk: boolean;
-  coverage?: SolidLabelCoverage;
 }): SolidRampResult {
-  const { startL, floorL, chroma, hue, ink, allowInk, coverage = 'midpoint' } = options;
-  // 墨水字的最差处在渐变下端（更暗）。白字的悬停区间由 solveSolidHoverHiOffset 收敛上端保证；墨水字不能靠收上端，
-  // 只判中点会漏掉悬停渐变下端（任务 5.11 组合测试：深海 + 亮紫强调色悬停下端 4.47:1），因此墨水还要覆盖悬停标签区间。
-  const inkBeds = (L: number) => {
-    const beds = solidLabelBeds(L, chroma, hue, coverage);
-    if (coverage !== 'midpoint') return beds;
-    const top = oklchToHex(L + SOLID_RAMP_OFFSETS.hoverHi, chroma, hue);
-    const bottom = oklchToHex(L + SOLID_RAMP_OFFSETS.hover, chroma, hue);
-    return [...beds, gradientAt(top, bottom, SOLID_LABEL_BAND.top), gradientAt(top, bottom, SOLID_LABEL_BAND.bottom)];
-  };
+  const { startL, floorL, chroma, hue, ink, allowInk } = options;
   const passes = (text: string, L: number) =>
-    minContrast(text, text === WHITE ? solidLabelBeds(L, chroma, hue, coverage) : inkBeds(L)) >= THEME_TEXT_MIN_CONTRAST;
+    minContrast(text, [L, flatSolidStateL(L, text, 'hover'), flatSolidStateL(L, text, 'pressed')].map(value => oklchToHex(value, chroma, hue))) >= THEME_TEXT_MIN_CONTRAST;
 
   if (passes(WHITE, startL)) {
     return { L: startL, on: WHITE };
@@ -500,7 +417,7 @@ export function solveSolidRamp(options: {
   if (passes(ink, startL)) {
     return { L: startL, on: ink };
   }
-  const maxL = 1 - SOLID_RAMP_OFFSETS.hoverHi;
+  const maxL = 1;
   return passes(ink, maxL) ? { L: bisectLightness(startL, maxL, (L) => passes(ink, L)), on: ink } : { L: startL, on: ink };
 }
 
@@ -607,14 +524,11 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     allowInk: true,
   });
   const aL = accentRamp.L;
-  const accentHoverHiOffset = solveSolidHoverHiOffset(aL, a.C, a.H, accentRamp.on);
   const A = (L: number, C: number = a.C) => oklchToHex(L, C, a.H);
   const accentTextChroma = dark ? Math.min(a.C, 0.13) : a.C;
   Object.assign(t, {
     accent: A(aL),
-    accentHi: A(aL + SOLID_RAMP_OFFSETS.hi),
     accentHover: A(flatSolidStateL(aL, accentRamp.on, 'hover')),
-    accentHoverHi: A(aL + accentHoverHiOffset),
     accentPressed: A(flatSolidStateL(aL, accentRamp.on, 'pressed')),
     accentRing: A(dark ? 0.7 : 0.62),
   });
@@ -707,7 +621,7 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       hue
     );
   };
-  // 危险确认按钮（dangerSolid）必须白字：按需压暗到静息、悬停渐变在标签区间内处处达标，不设降幅上限
+  // 危险确认按钮（dangerSolid）必须白字：按需压暗到静息、悬停、按下纯色均达标，不设降幅上限
   const dangerRamp = solveSolidRamp({
     startL: dark ? 0.6 : 0.55,
     floorL: 0,
@@ -715,17 +629,12 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     hue: 25,
     ink,
     allowInk: false,
-    coverage: 'labelBand',
   });
   const D = (offset: number) => oklchToHex(dangerRamp.L + offset, 0.19, 25);
   t.danger = D(0);
-  t.dangerHi = D(SOLID_RAMP_OFFSETS.hi);
   t.dangerHover = oklchToHex(flatSolidStateL(dangerRamp.L, dangerRamp.on, 'hover'), 0.19, 25);
-  t.dangerHoverHi = D(SOLID_RAMP_OFFSETS.hoverHi);
   t.dangerPressed = oklchToHex(flatSolidStateL(dangerRamp.L, dangerRamp.on, 'pressed'), 0.19, 25);
-  // 危险浅底（危险文字、静默危险按钮悬停、状态块）不是确认按钮实底，沿用中点求解的色值，不随标签区间判定加深（5.7）
-  const dangerTintRamp = solveSolidRamp({ startL: dark ? 0.6 : 0.55, floorL: 0, chroma: 0.19, hue: 25, ink, allowInk: false });
-  t.dangerTint = withAlpha(oklchToHex(dangerTintRamp.L, 0.19, 25), statusTintAlpha);
+  t.dangerTint = withAlpha(t.danger, statusTintAlpha);
   t.dangerText = statusText(dark ? 0.74 : 0.5, 25, t.dangerTint);
   t.onDanger = dangerRamp.on;
   t.success = oklchToHex(solveSolidFillL(dark ? 0.76 : 0.55, 0.15, 155, ink), 0.15, 155);

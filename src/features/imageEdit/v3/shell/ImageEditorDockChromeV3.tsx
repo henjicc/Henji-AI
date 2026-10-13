@@ -72,7 +72,7 @@ export function ImageEditorPanelMenuV3(): JSX.Element | null {
   }, [api])
   if (!panels.length) return null
   const label = t('imageEditor.v3.panels.menu', { defaultValue: '面板' })
-  return <PanelTrigger panelWidth={196} panelPadding="menu" closeOnPanelClick
+  return <PanelTrigger panelSize="menu" panelPadding="menu" closeOnPanelClick
     renderPanel={() => <div className="flex flex-col gap-1" role="menu" aria-label={label}>
       {panels.map(definition => {
         const title = t(definition.titleKey, { defaultValue: definition.title })

@@ -29,7 +29,7 @@ Tailwind 类名规则：**类名里的颜色名 = CSS 变量名去掉 `--`**（`
 旧类名（`bg-app`、`bg-bg-dark`、`bg-surface-dark`、`bg-layer`、`border-border-dark`、`text-text-dark`/`-muted`/`-soft`/`-faint`、
 `brand-300/500/600/700`、不带后缀的 `text-danger`/`text-success`/`text-warning`）与旧 CSS 变量（`--app-rgb`、`--text-muted-rgb`、
 `--ui-surface-panel` 等）是 1.3 的过渡别名，4.2 删除；`check:colors` 的 legacy 规则与旧变量规则拦截它们再次出现。
-`veil` 六档是**固定白纱**（不随主题），只适合压在媒体与深色画布上，新代码压在媒体上优先用 `media-*` / `on-media`。
+`veil` 已删除。媒体上用 `media-*` / `on-media`，界面表面用 line / hover / raised；主题按钮仅用纯色三态，不生成渐变高光令牌。
 
 非 DOM 渲染面（Canvas 2D、WebGL/WebGPU、波形绘制）读令牌用 `useThemeTokens()`（`themeTokenStore` 订阅），不要硬编码或读 CSS 字符串再解析。
 内容色（标注默认色、导出图配色、算法遮罩、端口类型色等，不属于界面皮肤）登记在 `src/core/theme/colorTokens.ts`；需要随模式变化时

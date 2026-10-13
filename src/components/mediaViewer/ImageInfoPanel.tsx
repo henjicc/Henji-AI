@@ -135,7 +135,7 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
         }`}
         aria-hidden={collapsed}
       >
-        <div className="px-3 py-2.5">
+        <div className="px-3 py-3">
           {status === 'loading' && (
             <p className="text-xs leading-5 text-text2">{t('viewer.infoLoading', '正在读取图片信息…')}</p>
           )}

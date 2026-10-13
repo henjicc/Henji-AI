@@ -50,7 +50,7 @@ export const NODE_ROW_GAP_CLASS = 'gap-1.5';
 
 /** 结果节点生成失败时的红色描边（配合 NodeGenerationError 覆盖层使用） */
 export const NODE_GENERATION_ERROR_BORDER_CLASS =
-  'border-danger-hi/70 shadow-node-error';
+  'border-danger-text/70 shadow-node-error';
 
 /**
  * 节点外壳的选中 / 未选中描边。

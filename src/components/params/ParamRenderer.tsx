@@ -142,7 +142,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
               // 工具条（生成底栏）里触发器宽度随取值：固定最小宽会让“Vivi 2.0”“未设置”后面空出一段才是箭头（任务 5.3）
               className={toolbarLayout ? 'w-auto' : 'w-auto min-w-[100px]'}
               buttonClassName={toolbarLayout ? 'w-auto' : undefined}
-              panelWidth={panelWidth}
+              panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'content' : 'compact'}
               alignment="aboveCenter"
               closeOnPanelClick={false}
               freezePositionOnOpen={compositeParam.panel === 'voice-selector'}

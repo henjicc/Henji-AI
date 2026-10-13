@@ -410,7 +410,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         display={streaming ? '优化中' : '优化'}
         disabled={disabled || streaming}
         className="w-auto"
-        panelWidth={panelMode === 'selector' ? 360 : 820}
+        panelSize={panelMode === 'selector' ? 'compact' : 'workspace'}
         alignment="aboveCenter"
         stableHeight
         stableHeightKey={panelMode}

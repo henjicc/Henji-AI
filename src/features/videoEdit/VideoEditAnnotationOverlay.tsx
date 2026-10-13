@@ -80,7 +80,7 @@ export function VideoEditAnnotationOverlay({ instance, mode, onError }: { instan
         <UiButton variant="media" size="sm" onPointerDown={event => event.stopPropagation()} onClick={() => { try { jumpToVideoEditAnnotation(instance.document.id, mark.id) } catch (error) { onError(error) } }} title={mark.text}>{index + 1}{missing ? ' · 元素已不存在' : mark.status === 'addressed' ? ' · 待审查' : label ? ` · ${label}` : ''}</UiButton>
       </div>]
     })}
-    {draft && <PanelTrigger surface="glass" anchor={draft.anchor} open={inputOpen} panelWidth={280} onOpenChange={open => { setInputOpen(open); if (!open && mode !== 'stroke') { setDraft(null); setText('') } }} renderPanel={() => <div className="space-y-2" onPointerDown={event => event.stopPropagation()}>
+    {draft && <PanelTrigger surface="glass" anchor={draft.anchor} open={inputOpen} panelSize="compact" onOpenChange={open => { setInputOpen(open); if (!open && mode !== 'stroke') { setDraft(null); setText('') } }} renderPanel={() => <div className="space-y-2" onPointerDown={event => event.stopPropagation()}>
       <UiInput autoFocus aria-label="这里要改什么？" placeholder="这里要改什么？" value={text} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); confirm() } }} />
       <div className="flex justify-end gap-2"><UiButton onClick={() => { setDraft(null); setText('') }}>取消</UiButton><UiButton variant="primary" disabled={!text.trim()} onClick={confirm}>加入待发送</UiButton></div>
     </div>} />}

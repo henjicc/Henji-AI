@@ -53,7 +53,7 @@ const KEYBOARD_COARSE_FACTOR = 10
 
 /** 输入框左右内边距 + 步进列宽 + 余量（px）：外框最小宽度 = 读数字符数 × 1ch + 这个值，保证读数不被裁切。 */
 const NUMBER_FIELD_CHROME_PX: Record<UiFieldSize, number> = { sm: 30, md: 34, lg: 38 }
-const NUMBER_FIELD_INPUT_PADDING_CLASS: Record<UiFieldSize, string> = { sm: 'px-1.5', md: 'px-2', lg: 'px-2.5' }
+const NUMBER_FIELD_INPUT_PADDING_CLASS: Record<UiFieldSize, string> = { sm: 'px-1.5', md: 'px-2', lg: 'px-3' }
 
 function resolvePrecision(step: number): number {
   const normalized = String(step).toLowerCase()

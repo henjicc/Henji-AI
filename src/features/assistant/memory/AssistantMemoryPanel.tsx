@@ -49,7 +49,7 @@ function scopeLabel(memory: AgentMemoryRecord): string {
   return memory.scope.type === 'workspace' ? '工作区' : '项目'
 }
 
-const memoryItemClass = `rounded-lg ${UI_INSET_SURFACE_CLASS} p-2.5`
+const memoryItemClass = `rounded-lg ${UI_INSET_SURFACE_CLASS} p-3`
 
 export function AssistantMemoryPanel(): JSX.Element {
   const [state, setState] = useState<AgentMemoryState | null>(null)

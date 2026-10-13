@@ -239,13 +239,13 @@ describe('Dropdown 菜单宽度（任务 4.3）', () => {
   })
 
   it('菜单宽度按菜单项自己的留白计算，含选中勾槽，并封顶', () => {
-    // 文字 65 + 菜单项（md：左右 20 + 间距 8 + 勾 14）+ 浮层（边框 2 + p-1 8）+ 取整余量 2
-    expect(resolveDropdownMenuWidth(65, 'md')).toBe(119)
-    expect(resolveDropdownMenuWidth(65, 'sm')).toBe(115)
-    expect(resolveDropdownMenuWidth(65, 'lg')).toBe(123)
+    // 文字 65 + 菜单项（md：左右 24 + 选项透明边框 2 + 间距 8 + 勾 14）+ 浮层（边框 2 + p-1 8）+ 取整余量 2
+    expect(resolveDropdownMenuWidth(65, 'md')).toBe(125)
+    expect(resolveDropdownMenuWidth(65, 'sm')).toBe(117)
+    expect(resolveDropdownMenuWidth(65, 'lg')).toBe(125)
     expect(resolveDropdownMenuWidth(1000, 'md')).toBe(DROPDOWN_MENU_MAX_WIDTH_PX)
-    // 自定义面板（动作菜单）不留勾槽：65 + 20 + 10 + 2
-    expect(resolveDropdownMenuWidth(65, 'md', 'none')).toBe(97)
+    // 自定义面板（动作菜单）不留勾槽：65 + 24 + 2 + 10 + 2
+    expect(resolveDropdownMenuWidth(65, 'md', 'none')).toBe(103)
   })
 
   it('静默触发器（工具条）下，选中项“参考生视频”的菜单宽度足够放下文字与勾', () => {
@@ -269,8 +269,8 @@ describe('Dropdown 菜单宽度（任务 4.3）', () => {
     fireEvent.click(trigger)
     const panel = document.getElementById(trigger.getAttribute('aria-controls') ?? '')
       ?.closest<HTMLElement>('[data-dropdown-portal="true"]')
-    // 5 字 × 13 = 65，需要 119；修复前按触发器留白算只有 65 + 16 + 24 = 105
-    expect(Number.parseFloat(panel?.style.width ?? '0')).toBeGreaterThanOrEqual(119)
+    // 5 字 × 13 = 65，需要 125；修复前按触发器留白算只有 65 + 16 + 24 = 105
+    expect(Number.parseFloat(panel?.style.width ?? '0')).toBeGreaterThanOrEqual(125)
   })
 
   it('选项超出可视高度出现竖向滚动条时，菜单加上滚动条宽度，选中项不被挤成“5.”（任务 5.3）', () => {

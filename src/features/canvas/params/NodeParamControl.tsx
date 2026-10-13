@@ -186,7 +186,7 @@ function CompactAspectRatioControl({
       size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
       surface="glass"
-      panelWidth={panelWidth}
+      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'content' : 'compact'}
       alignment="aboveCenter"
       gap={8}
       closeOnPanelClick
@@ -238,7 +238,7 @@ function CompactTextControl({
         size="sm"
         buttonClassName={`${COMPACT_TRIGGER_CLASS} max-w-32`}
         surface="glass"
-        panelWidth={360}
+        panelSize="compact"
         alignment="aboveCenter"
         gap={8}
         closeOnPanelClick={false}
@@ -303,7 +303,7 @@ function CompactPanelControl({
       size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
       surface="glass"
-      panelWidth={panelWidth}
+      panelSize={panelWidth > 720 ? 'workspace' : panelWidth > 384 ? 'content' : 'compact'}
       alignment="aboveCenter"
       gap={8}
       closeOnPanelClick={false}
@@ -341,7 +341,7 @@ function CompactUploadControl({
       size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
       surface="glass"
-      panelWidth={280}
+      panelSize="compact"
       alignment="aboveCenter"
       gap={8}
       closeOnPanelClick={false}

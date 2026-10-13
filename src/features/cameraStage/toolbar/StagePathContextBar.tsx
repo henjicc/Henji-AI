@@ -206,7 +206,7 @@ const StagePathContextBar: React.FC = () => {
       alwaysShowOverflow
       renderOverflow={(hiddenIds) => (
       <PanelTrigger
-        panelWidth={288}
+        panelSize="compact"
         panelPadding="content"
         renderPanel={() => (
           <div className="flex flex-col gap-3">

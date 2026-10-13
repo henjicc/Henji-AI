@@ -135,7 +135,7 @@ describe('设计系统中心覆盖 ui/** 全部导出组件', () => {
 })
 
 /** TypeScript AST 读取字面量联合、别名、继承和 keyof typeof 令牌对象。 */
-const ENUM_PROPS = new Set(['size', 'variant', 'tone', 'shape', 'appearance', 'surface', 'frame', 'density', 'labelWidth', 'gap', 'titleTone', 'gridCell', 'placement', 'trackTone'])
+const ENUM_PROPS = new Set(['size', 'variant', 'tone', 'shape', 'appearance', 'surface', 'frame', 'density', 'labelWidth', 'gap', 'titleTone', 'gridCell', 'placement', 'trackTone', 'height', 'panelSize', 'contentPadding', 'contentScroll'])
 const uiAsts = sourceFiles(UI_DIR).map(file => ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS))
 const declarations = new Map<string, ts.TypeAliasDeclaration | ts.InterfaceDeclaration>()
 const objects = new Map<string, ts.ObjectLiteralExpression>()

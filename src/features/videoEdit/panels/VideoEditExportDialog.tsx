@@ -152,7 +152,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const estimated = bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${(bytes / 1e6).toFixed(1)} MB`
   const customPreset = presets.some(value => value.id === presetId && !value.id.startsWith('builtin:'))
   return <>
-    <UiModal isOpen title="导出" size="editor" contentClassName="overflow-hidden" onClose={onClose} footer={<>{(settingsError || encoderError) && <p role="alert" className="mr-auto self-center text-xs text-text2">{settingsError || encoderError}</p>}<UiButton variant="secondary" disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy || !canExport} onClick={() => void submit(true)}>{busy ? '正在导出…' : '导出'}</UiButton></>}>
+    <UiModal isOpen title="导出" size="editor" contentPadding="none" contentScroll="none" onClose={onClose} footer={<>{(settingsError || encoderError) && <p role="alert" className="mr-auto self-center text-xs text-text2">{settingsError || encoderError}</p>}<UiButton variant="secondary" disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton variant="primary" disabled={busy || !canExport} onClick={() => void submit(true)}>{busy ? '正在导出…' : '导出'}</UiButton></>}>
       <div className="flex min-h-0 flex-1">
         <div className="w-80 shrink-0 overflow-y-auto border-r border-line">
           <div className="space-y-2 px-3 py-3">

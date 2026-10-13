@@ -54,7 +54,7 @@ export function ImageEditorExplanationControlsV3({ bus, controller, onGenerated 
   }
   return <>
     <div className="flex shrink-0 items-center gap-1" role="group" aria-label="录制讲解控制">
-      <PanelTrigger open={open} onOpenChange={changeOpen} size="sm" alignment="bottomRight" panelPadding="content" panelWidth={360}
+      <PanelTrigger open={open} onOpenChange={changeOpen} size="sm" alignment="bottomRight" panelPadding="content" panelSize="compact"
         renderPanel={() => <div data-image-explanation-controls><ExplanationPanel entries={entries} stage={stage} elapsedUs={state.elapsedUs} busy={state.busy} loading={loading} hasRecorded={hasRecorded}
           failed={failed || !!state.message?.includes('未保存')} failureTitle={failed ? failureTitle : t('explanation.saveFailed')} onRetry={() => run(retryWork.current ?? (failed ? async () => { retry() } : () => adapter.save()), failed ? failureTitle : t('explanation.saveFailed'))}
           onStart={() => run(() => adapter.snapshot().session?.state === 'paused' ? adapter.resume() : adapter.start(crypto.randomUUID()), '录制失败')} onTranscribe={transcribe} onCancel={() => run(() => adapter.cancelTranscription())} onDelete={state.session ? () => setDeleting(true) : undefined}

@@ -53,11 +53,15 @@ describe('外观设置（种子式）', () => {
     expect(screen.queryAllByRole('textbox')).toHaveLength(0)
   })
 
-  it('色样显示当前底色下推导后的强调实底，而不是种子原值', () => {
+  it('色样消费纯色推导结果，达标种子不强制压暗', () => {
     renderSection()
     const blue = THEME_ACCENT_CHOICES.find((choice) => choice.id === 'blue')!.hex!
     const derived = deriveThemeTokens({ ...THEME_PRESETS.graphite.seed, accent: blue }).colors.accent
-    expect(derived).not.toBe(blue)
+    expect(derived).toBe(blue)
+    const orange = THEME_ACCENT_CHOICES.find((choice) => choice.id === 'orange')!.hex!
+    const derivedOrange = deriveThemeTokens({ ...THEME_PRESETS.graphite.seed, accent: orange }).colors.accent
+    expect(derivedOrange).not.toBe(orange)
+    expect(screen.getByRole('radio', { name: '橙' }).style.backgroundColor).toBe(hexToRgb(derivedOrange))
     expect(screen.getByRole('radio', { name: '蓝' }).style.backgroundColor).toBe(hexToRgb(derived))
   })
 

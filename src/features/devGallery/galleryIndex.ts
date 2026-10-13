@@ -57,7 +57,7 @@ export const GALLERY_SEGMENTED_SIZES = readSizeUnion(segmentedSource) as UiContr
 export const GALLERY_PARAMETER_SIZES = readSizeUnion(parameterSource) as UiControlSize[]
 export const GALLERY_STYLE_TOKENS = Object.entries(styleTokens).filter(([name]) => name.startsWith('UI_'))
 export const GALLERY_TEXT_TOKENS = GALLERY_STYLE_TOKENS.filter(([name, value]) => name.startsWith('UI_TEXT_') && name.endsWith('_CLASS') && typeof value === 'string')
-export const GALLERY_SPACING_KEYS = ['1', '2', '3', '4', '6', '8'] as const
+export const GALLERY_SPACING_KEYS = ['0.5', '1', '1.5', '2', '3', '4', '5', '6', '8'] as const
 export const GALLERY_ICON_TOKENS = Object.entries(icons).filter(([name]) => name.startsWith('ICON_')) as Array<[string, typeof icons.ICON_ASSET_LIBRARY]>
 /** icons.ts 中的尺寸、描边等数值令牌（非图形登记），在图标栏目逐项展示原值。 */
 export const GALLERY_ICON_METRIC_TOKENS = Object.entries(icons).filter(([name]) => !name.startsWith('ICON_'))

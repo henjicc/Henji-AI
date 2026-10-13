@@ -61,7 +61,7 @@ const ToolboxHome: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto bg-window">
-      <UiRegion maxWidthClassName="max-w-5xl" className="mx-auto flex flex-col gap-10 p-10">
+      <UiRegion maxWidthClassName="max-w-5xl" className="mx-auto flex flex-col gap-8 p-8">
         <UiPageHeader title="工具" description="不依赖生成和画布、可以单独打开的处理工具" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {TOOLS.map((tool) => {
@@ -70,7 +70,7 @@ const ToolboxHome: React.FC = () => {
               <UiOptionButton
                 key={tool.id}
                 variant="card"
-                className="h-full flex-col !items-start gap-3.5 p-4 text-left"
+                className="h-full flex-col !items-start gap-4 p-4 text-left"
                 onClick={() => selectToolboxTool(tool.id)}
               >
                 <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-lg bg-control text-text1">
@@ -86,9 +86,9 @@ const ToolboxHome: React.FC = () => {
           })}
         </div>
         {listed.length > 0 ? (
-          <section aria-label="最近文件" className="flex flex-col gap-2.5">
+          <section aria-label="最近文件" className="flex flex-col gap-3">
             <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>最近文件</h3>
-            <div className="-mx-2.5 flex flex-col">
+            <div className="-mx-3 flex flex-col">
               {listed.map((file) => {
                 const tool = TOOL_BY_ID.get(file.toolId)
                 const Icon = tool?.icon ?? ICON_TOOL_AUDIO_EDIT
@@ -96,7 +96,7 @@ const ToolboxHome: React.FC = () => {
                   <UiOptionButton
                     key={file.key}
                     variant="menu"
-                    className="grid min-h-11 w-full grid-cols-[28px_minmax(0,1fr)_140px_120px] items-center gap-3 px-2.5"
+                    className="grid min-h-11 w-full grid-cols-[28px_minmax(0,1fr)_140px_120px] items-center gap-3 px-3"
                     title={`在${tool ? t(tool.descriptor.titleKey) : '工具'}中打开`}
                     onClick={() => openRecent(file)}
                   >

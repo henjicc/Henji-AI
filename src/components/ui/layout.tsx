@@ -26,6 +26,11 @@ import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_ROW_GAP_CLASS,
   UI_STACK_GAP_CLASS,
+  UI_INLINE_GAP_CLASS,
+  UI_BAND_HEIGHT_CLASS,
+  UI_BAND_MIN_HEIGHT_CLASS,
+  UI_BAND_PADDING_CLASS,
+  type UiInlineGap,
   UI_TEXT_META_CLASS,
   UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS,
   UI_TEXT_TITLE_CLASS,
@@ -123,6 +128,8 @@ interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
    *   导出/保存全部进这一条，内层功能组件不得再长自己的头带（用 props 注入）。
    */
   variant?: 'plain' | 'command';
+  /** 行内动作的间距；默认 command 用 control，plain 用 group。 */
+  gap?: UiInlineGap;
   /** 左侧内容（command：返回、文件上下文、主工具组） */
   children?: ReactNode;
   /**
@@ -168,7 +175,7 @@ export function UiTooltipText({ tooltip, children, className = '', placement }: 
       <span
         tabIndex={0}
         aria-describedby={tooltipId}
-        className={`cursor-help rounded-sm underline decoration-line-strong decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${className}`}
+        className={`cursor-help rounded-hairline underline decoration-line-strong decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${className}`}
       >
         {children}
       </span>
@@ -226,11 +233,11 @@ export function UiGroup({
   return (
     <div
       data-ui-group
-      className={`${UI_GROUP_SIBLING_GAP_CLASS} ${divided ? `${UI_DIVIDER_CLASS} ${titleTone === 'compact' ? 'pt-2.5' : 'pt-4'}` : ''} ${className}`}
+      className={`${UI_GROUP_SIBLING_GAP_CLASS} ${divided ? `${UI_DIVIDER_CLASS} ${titleTone === 'compact' ? 'pt-3' : 'pt-4'}` : ''} ${className}`}
       {...props}
     >
       {hasHeader && (
-        <div className={`${titleTone === 'compact' ? 'mb-1.5 min-h-7 items-center' : 'mb-3 items-start'} flex justify-between gap-3`}>
+        <div className={`${titleTone === 'compact' ? `mb-1.5 ${UI_BAND_MIN_HEIGHT_CLASS.row} items-center` : 'mb-3 items-start'} flex justify-between ${UI_INLINE_GAP_CLASS.row}`}>
           <div className="min-w-0">
             {title ? (
               <div className={`flex items-center gap-1 ${titleClass}`}>
@@ -267,7 +274,7 @@ export function UiPageHeader({
 }: UiPageHeaderProps): JSX.Element {
   return (
     // 没有说明行时标题只有一行，与右侧 32 高的动作垂直居中；有说明时标题区两行，动作贴顶。
-    <div data-ui-page-header className={`flex ${description ? 'items-start' : 'items-center'} gap-2 ${divider ? `border-b ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}` : ''} ${className}`} {...props}>
+    <div data-ui-page-header className={`flex ${description ? 'items-start' : 'items-center'} ${UI_INLINE_GAP_CLASS.group} ${divider ? `border-b ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}` : ''} ${className}`} {...props}>
       {onBack ? (
         // -ml-1.5 让图标的视觉左边缘与标题文字对齐（按钮自带内边距）
         <UiIconButton
@@ -281,7 +288,7 @@ export function UiPageHeader({
       ) : null}
       <div className="min-w-0 flex-1">
         {meta ? (
-          <div className="flex min-w-0 items-baseline gap-2.5">
+          <div className="flex min-w-0 items-baseline gap-3">
             <h2 data-ui-page-title className={`min-w-0 truncate ${UI_TEXT_TITLE_CLASS}`}>{title}</h2>
             <span className="shrink-0 text-13 tabular-nums text-text3">{meta}</span>
           </div>
@@ -412,11 +419,12 @@ export function UiDisclosurePanel({ open, children, className = '' }: UiDisclosu
  *
  * - 默认 `plain`：横向排布容器，无边框无背景；需要与内容区分隔时用一条线，不要包成卡片。
  * - `command`：工具页统一骨架的命令带（口播剪辑、图片编辑、3D 镜头参考共用，界面重设计 3.4）。
- *   左端 / 中间 / 右端三段 + 可选从属参数带；横向内边距与其下内容区对齐（10px）。
+ *   左端 / 中间 / 右端三段 + 可选从属参数带；横向内边距与其下内容区对齐（12px）。
  */
 export function UiToolbar({
   className = '',
   variant = 'plain',
+  gap,
   children,
   center,
   centerLayout = 'fill',
@@ -425,6 +433,7 @@ export function UiToolbar({
   barProps,
   ...props
 }: UiToolbarProps): JSX.Element {
+  const gapClass = UI_INLINE_GAP_CLASS[gap ?? (variant === 'command' ? 'control' : 'group')];
   if (variant === 'command') {
     const { className: barClassName = '', ...barRest } = barProps ?? {};
     return (
@@ -435,15 +444,15 @@ export function UiToolbar({
       >
         <div
           data-command-bar
-          className={`flex h-11 min-w-0 items-center gap-1.5 px-2.5 ${barClassName}`}
+          className={`flex ${UI_BAND_HEIGHT_CLASS.command} min-w-0 items-center ${gapClass} ${UI_BAND_PADDING_CLASS} ${barClassName}`}
           {...barRest}
         >
-          <div data-command-bar-leading className="flex min-w-0 shrink items-center gap-1.5">{children}</div>
+          <div data-command-bar-leading className={`flex min-w-0 shrink items-center ${gapClass}`}>{children}</div>
           <div data-command-bar-center className={`flex flex-1 items-center justify-center ${centerLayout === 'fit' ? 'min-w-fit' : 'min-w-0'}`}>{center}</div>
-          {trailing ? <div data-command-bar-trailing className="flex shrink-0 items-center gap-1.5">{trailing}</div> : null}
+          {trailing ? <div data-command-bar-trailing className={`flex shrink-0 items-center ${gapClass}`}>{trailing}</div> : null}
         </div>
         {subordinate ? (
-          <div data-command-subordinate className="flex min-h-10 min-w-0 items-center gap-3 px-2.5 pb-1.5">
+          <div data-command-subordinate className={`flex ${UI_BAND_MIN_HEIGHT_CLASS.title} min-w-0 items-center ${UI_INLINE_GAP_CLASS.row} ${UI_BAND_PADDING_CLASS} pb-1.5`}>
             {subordinate}
           </div>
         ) : null}
@@ -452,8 +461,8 @@ export function UiToolbar({
   }
   return (
     <div data-ui-toolbar className={`flex items-center justify-between gap-3 ${className}`} {...props}>
-      <div className="flex min-w-0 items-center gap-2">{children}</div>
-      {trailing ? <div className="flex shrink-0 items-center gap-2">{trailing}</div> : null}
+      <div className={`flex min-w-0 items-center ${gapClass}`}>{children}</div>
+      {trailing ? <div className={`flex shrink-0 items-center ${gapClass}`}>{trailing}</div> : null}
     </div>
   );
 }

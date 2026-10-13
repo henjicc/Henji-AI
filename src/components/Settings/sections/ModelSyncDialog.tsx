@@ -1,3 +1,4 @@
+import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { ChevronRight, Minus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -131,7 +132,7 @@ export function ModelSyncDialog({
           )
           : (
             <Virtuoso
-              className="h-[420px]"
+              className={UI_PANEL_BODY_HEIGHT_CLASS.content}
               data={rows}
               computeItemKey={(_, row) => row.key}
               itemContent={(_, row) => {

@@ -1,10 +1,11 @@
+import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export const IMAGE_EDITOR_INSPECTOR_DEFAULT_WIDTH = 320;
-export const IMAGE_EDITOR_INSPECTOR_MIN_WIDTH = 248;
-export const IMAGE_EDITOR_INSPECTOR_MAX_WIDTH = 460;
-export const IMAGE_EDITOR_TOOL_RAIL_WIDTH = 52;
+export const IMAGE_EDITOR_INSPECTOR_DEFAULT_WIDTH = UI_PANEL_WIDTH.inspector.default;
+export const IMAGE_EDITOR_INSPECTOR_MIN_WIDTH = UI_PANEL_WIDTH.inspector.min;
+export const IMAGE_EDITOR_INSPECTOR_MAX_WIDTH = UI_PANEL_WIDTH.inspector.max;
+export const IMAGE_EDITOR_TOOL_RAIL_WIDTH = UI_PANEL_WIDTH.rail;
 
 export function clampImageEditorInspectorWidth(width: number): number {
   return Math.min(IMAGE_EDITOR_INSPECTOR_MAX_WIDTH, Math.max(IMAGE_EDITOR_INSPECTOR_MIN_WIDTH, Math.round(width)));

@@ -100,7 +100,7 @@ function PromptTemplateEditor({
       ariaLabel={placeholder}
       placeholder={placeholder}
       className="relative isolate"
-      editorClassName={rows > 4 ? 'min-h-[120px]' : 'min-h-24'}
+      height={rows > 4 ? 'medium' : 'short'}
     />
   )
 }

@@ -1,3 +1,4 @@
+import { UI_INPUT_PANEL_MAX_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React from 'react'
 import { UiPanel } from '@/components/ui'
@@ -55,7 +56,7 @@ export function FloatingInputPanel({
       {/* 一整块实底输入卡片（设计稿 Generation）：浮在记录列表之上，是这页唯一的卡片 */}
       {/* 收起 48 高（一行提示）↔ 展开最高 600：max-height 过渡做收起动画 */}
       <UiPanel
-        className={`relative cursor-pointer overflow-hidden ${isCollapsed || isCollapsing ? 'max-h-12 min-h-12' : 'max-h-[600px]'} ${compact ? 'p-2' : 'px-2.5 pb-2 pt-2.5'}`}
+        className={`relative cursor-pointer overflow-hidden ${isCollapsed || isCollapsing ? 'max-h-12 min-h-12' : UI_INPUT_PANEL_MAX_HEIGHT_CLASS} ${compact ? 'p-2' : 'px-3 pb-2 pt-3'}`}
         style={{
           transition: uiTransition(['max-height'], UI_DURATION.slow),
           opacity: 1,

@@ -48,7 +48,7 @@ export function UiToast({ message, tone, visible = true, surface = 'solid', plac
         variant={surface === 'glass' ? 'glass' : 'panel'}
         role={tone === 'success' ? 'status' : 'alert'}
         data-tone={tone}
-        className="flex max-w-lg items-start gap-2.5 px-4 py-2.5"
+        className="flex max-w-lg items-start gap-3 px-4 py-3"
       >
         <Icon
           aria-hidden="true"

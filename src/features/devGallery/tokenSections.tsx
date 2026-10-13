@@ -1,3 +1,4 @@
+import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { LoaderCircle, Play, Square } from 'lucide-react'
@@ -10,7 +11,7 @@ import { THEME_COLOR_TOKEN_NAMES } from '@/core/theme/themeEngine'
 import { THEME_TOKEN_CSS_VARS } from '@/core/theme/themeCssVars'
 import { contrastRatio } from '@/core/theme/themeColor'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
-import { Dropdown, PanelTrigger, UiButton, UiDisclosurePanel, UiGroup, UiModal, UiPanel, UiSwitch, UiToast, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiDisclosurePanel, UiGroup, UiModal, UiPanel, UiSwitch, UiToast, UiToolbar, PromptEditor, UiTextArea, UiTextAreaField, UI_TEXT_META_CLASS } from '@/components/ui'
 import { TooltipContent } from '@/components/ui/Tooltip'
 import { GALLERY_STYLE_TOKENS, GALLERY_TEXT_TOKENS, GALLERY_SPACING_KEYS, GALLERY_ICON_TOKENS, GALLERY_ICON_METRIC_TOKENS, GALLERY_MOTION_TOKENS, GALLERY_TAILWIND_CONFIG, GALLERY_COLOR_CLASSES_BY_VARIABLE } from './galleryIndex'
 
@@ -56,7 +57,8 @@ export function TypeTokensSection(): JSX.Element {
 }
 
 export function SpacingTokensSection(): JSX.Element {
-  return <UiGroup title="间距刻度：读取 Tailwind 标准刻度" titleTone="compact">
+  return <UiGroup title="间距刻度：纵横共用 2 / 4 / 6 / 8 / 12 / 16 / 20 / 24 / 32" titleTone="compact">
+    {(['micro', 'tight', 'control', 'group', 'row', 'section'] as const).map(gap => <UiToolbar key={gap} gap={gap}><code>{gap}</code><UiButton size="sm">动作一</UiButton><UiButton size="sm">动作二</UiButton></UiToolbar>)}
     {GALLERY_SPACING_KEYS.map(key => <div key={key} className="flex items-center gap-4 py-2"><code className="w-32 text-xs text-text2">spacing.{key} · {String(config.theme.spacing?.[key])}</code><span className="h-6 bg-accent" style={{ width: String(config.theme.spacing?.[key]) }} /></div>)}
     {GALLERY_STYLE_TOKENS.filter(([name]) => /GAP_CLASS|STACK_CLASS/.test(name)).map(([name, value]) => <p key={name} data-gallery-token={name} className="break-all text-xs text-text2">{name} · {valueText(value)}</p>)}
   </UiGroup>
@@ -65,7 +67,7 @@ export function SpacingTokensSection(): JSX.Element {
 export function RadiusTokensSection(): JSX.Element {
   return <UiGroup title="圆角：使用命令带切换紧凑 / 标准 / 大圆角" titleTone="compact">
     <div className="flex flex-wrap gap-6">{Object.entries(styleTokens.UI_RADIUS_CLASS).map(([name, cls]) => <div key={name} data-gallery-token={`UI_RADIUS_CLASS.${name}`} className="flex flex-col gap-2"><span className={`block h-24 w-32 bg-control ${cls}`} /><code className="text-xs text-text2">{name} · {cls}</code></div>)}</div>
-    <TokenMapping category="borderRadius" values={extension?.borderRadius} />
+    <TokenMapping category="borderRadius" values={GALLERY_TAILWIND_CONFIG.theme?.borderRadius} />
   </UiGroup>
 }
 
@@ -74,7 +76,7 @@ function TokenMapping({ category, values }: { category: string; values: unknown 
 }
 
 export function ShadowTokensSection(): JSX.Element {
-  return <UiGroup title="阴影：仅浮层与具名特效" titleTone="compact"><div className="grid grid-cols-2 gap-8 py-6">{Object.entries((extension?.boxShadow ?? {}) as Record<string, string>).map(([name, value]) => <div key={name} data-gallery-token={`boxShadow.${name}`} className="flex flex-col gap-4"><UiPanel className="p-4" style={{ boxShadow: value }}>{name}</UiPanel><code className="break-all text-xs text-text2">{value}</code></div>)}</div></UiGroup>
+  return <UiGroup title="阴影：仅浮层与具名特效" titleTone="compact"><div className="grid grid-cols-2 gap-8 py-6">{Object.entries((GALLERY_TAILWIND_CONFIG.theme?.boxShadow ?? {}) as Record<string, string>).map(([name, value]) => <div key={name} data-gallery-token={`boxShadow.${name}`} className="flex flex-col gap-4"><UiPanel className="p-4" style={{ boxShadow: value }}>{name}</UiPanel><code className="break-all text-xs text-text2">{value}</code></div>)}</div></UiGroup>
 }
 
 export function LayerTokensSection(): JSX.Element {
@@ -82,7 +84,12 @@ export function LayerTokensSection(): JSX.Element {
 }
 
 export function HeightTokensSection(): JSX.Element {
-  return <UiGroup title="控件高度：当前令牌枚举" titleTone="compact">{Object.entries(styleTokens.UI_CONTROL_HEIGHT_CLASS).map(([name, cls]) => <div key={name} data-gallery-token={`UI_CONTROL_HEIGHT_CLASS.${name}`} className="flex items-center gap-4 py-3"><code className="w-40 text-xs text-text2">{name} · {cls}</code><span className={`w-40 bg-control ${cls}`} /></div>)}<TokenMapping category="height" values={extension?.height} /></UiGroup>
+  return <UiGroup title="控件高度：当前令牌枚举" titleTone="compact">{Object.entries(styleTokens.UI_CONTROL_HEIGHT_CLASS).map(([name, cls]) => <div key={name} data-gallery-token={`UI_CONTROL_HEIGHT_CLASS.${name}`} className="flex items-center gap-4 py-3"><code className="w-40 text-xs text-text2">{name} · {cls}</code><span className={`w-40 bg-control ${cls}`} /></div>)}<TokenMapping category="height" values={extension?.height} />
+    {Object.entries(styleTokens.UI_BAND_HEIGHT_CLASS).map(([name, cls]) => <div key={name} data-gallery-token={`UI_BAND_HEIGHT_CLASS.${name}`} className={`flex items-center bg-control px-3 ${cls}`}>{name} · {cls}</div>)}
+    {(['short', 'medium', 'tall'] as const).map(height => <div key={height} className="grid grid-cols-2 gap-4"><PromptEditor height={height} ariaLabel={`${height} 提示词`} value={createPlainTextPromptDocument('文本高度')} onChange={() => undefined} /><UiTextArea height={height} aria-label={`${height} 文本`} defaultValue={height} /><UiTextAreaField height={height} aria-label={`${height} 字段`} defaultValue={height} /></div>)}
+    {(['menu', 'compact', 'content', 'workspace'] as const).map(panelSize => <PanelTrigger key={panelSize} panelSize={panelSize} display={panelSize} renderPanel={() => <div><p>{panelSize} · 响应式宽高</p><Dropdown panelSize={panelSize} display={panelSize} renderPanel={() => <p>下拉面板 {panelSize}</p>} /></div>} />)}
+    {(['default', 'none', 'spacious'] as const).map(contentPadding => <div key={contentPadding} className="relative h-60"><UiModal scope="container" isOpen title={contentPadding} contentPadding={contentPadding} contentScroll="auto" onClose={() => undefined}>正文留白 {contentPadding}</UiModal></div>)}
+    <div className="relative h-60"><UiModal scope="container" isOpen title="编辑器自管滚动" contentScroll="none" onClose={() => undefined}>自管滚动</UiModal></div></UiGroup>
 }
 
 export function IconTokensSection(): JSX.Element {

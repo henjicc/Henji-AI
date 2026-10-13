@@ -57,7 +57,7 @@ export function useTrackHeaderMenu(instance: VideoEditInstance, sequence: VideoE
     {dialog?.kind === 'add' && <VideoEditAddTracksDialog sequence={sequence} kind={dialog.trackKind} onClose={() => setDialog(null)} onSubmit={requests => { addVideoEditTracks(projectId, sequence.id, requests) }} />}
     {dialog?.kind === 'delete' && <VideoEditDeleteTracksDialog sequence={sequence} kind={dialog.trackKind} targetTrackIds={instance.targetTrackIds} onClose={() => setDialog(null)} onSubmit={ids => deleteVideoEditTracks(projectId, sequence.id, ids)} />}
     {/* PR 的“自定义…”：按钮编辑器贴在所点的轨道头旁，视频轨与音频轨各一栏。 */}
-    {dialog?.kind === 'buttons' && editorTrack && <PanelTrigger anchor={dialog.anchor} open onOpenChange={open => { if (!open) setDialog(null) }} panelWidth={300} zIndex={Z_LAYERS.dropdown} panelPadding="content"
+    {dialog?.kind === 'buttons' && editorTrack && <PanelTrigger anchor={dialog.anchor} open onOpenChange={open => { if (!open) setDialog(null) }} panelSize="compact" zIndex={Z_LAYERS.dropdown} panelPadding="content"
       renderPanel={() => <VideoEditButtonBarEditorPanel specs={videoEditTrackHeaderButtonSpecs(editorTrack, instance.targetTrackIds.includes(editorTrack.id), () => undefined, () => undefined)} saved={videoEditTrackHeaderButtons(layouts, dialog.trackKind)} defaults={VIDEO_EDIT_TRACK_HEADER_BUTTON_DEFAULTS[dialog.trackKind]}
         onSave={ids => useSettingsStore.getState().setVideoEditTrackHeaderButtons(dialog.trackKind, ids)} onClose={() => setDialog(null)} />} />}
   </>

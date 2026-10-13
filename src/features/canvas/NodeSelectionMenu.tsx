@@ -188,7 +188,7 @@ function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMen
                 tabIndex={-1}
                 variant="menu"
                 size="md"
-                className="w-full gap-2.5"
+                className="w-full gap-3"
                 onClick={() => {
                   if (chooseFileFirst) {
                     uploadInputRef.current?.click()

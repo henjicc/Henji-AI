@@ -176,7 +176,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
                 {open ? <ChevronDown  /> : <ChevronRight  />}
               </UiButton>
               {open && (
-                <div className="flex flex-col gap-2.5 px-1 pb-2 pt-1">
+                <div className="flex flex-col gap-3 px-1 pb-2 pt-1">
                   {group.joints.map((joint) => (
                     <JointSliders
                       key={joint.id}

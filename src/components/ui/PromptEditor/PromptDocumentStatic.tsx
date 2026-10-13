@@ -178,7 +178,7 @@ function renderInlineNode(
         data-reference-state={reference ? 'resolved' : 'missing'}
       >
         {reference?.thumbnailSrc ? (
-          <img src={reference.thumbnailSrc} alt="" className="h-[1.25em] w-[1.25em] rounded object-cover" />
+          <img src={reference.thumbnailSrc} alt="" className="h-[1.25em] w-[1.25em] rounded-control object-cover" />
         ) : null}
         <span className="truncate">@{label}</span>
       </span>

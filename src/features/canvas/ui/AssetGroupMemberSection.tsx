@@ -117,11 +117,11 @@ export const AssetGroupMemberSection = memo(({
                   </div>
                 )}
                 {/* 压在素材预览上的读数与徽标用固定媒体叠层令牌（4.1：主题色徽标压在图片上对比不足） */}
-                <span className="absolute left-2 top-2 rounded bg-media-control px-2 py-0.5 text-2xs text-on-media">
+                <span className="absolute left-2 top-2 rounded-control bg-media-control px-2 py-0.5 text-2xs text-on-media">
                   {index + 1}
                 </span>
                 {isCover && (
-                  <span className="absolute right-2 top-2 flex items-center gap-1 rounded bg-media-control px-2 py-0.5 text-2xs text-on-media">
+                  <span className="absolute right-2 top-2 flex items-center gap-1 rounded-control bg-media-control px-2 py-0.5 text-2xs text-on-media">
                     <Star className={`${UI_ICON_SIZE_CLASS.xs}`} fill="currentColor"  />
                     {labels.cover}
                   </span>

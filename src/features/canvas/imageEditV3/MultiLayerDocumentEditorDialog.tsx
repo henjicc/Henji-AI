@@ -191,7 +191,7 @@ export function MultiLayerDocumentEditorDialog({
       hideHeader={bootstrapKind === 'ready'}
       onClose={requestCloseFromUi}
       size="workspace"
-      contentClassName="p-0"
+      contentPadding="none" contentScroll="none"
     >
       <CanvasEditToolEditorV3Host
         key={`${node.id}:${documentState.session.documentRef}`}

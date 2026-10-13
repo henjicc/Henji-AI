@@ -46,7 +46,7 @@ const PropertyPanel: React.FC = () => {
 
   return (
     <div
-      className="flex h-full w-full flex-col gap-3 overflow-y-auto overflow-x-hidden px-3 py-2.5"
+      className="flex h-full w-full flex-col gap-3 overflow-y-auto overflow-x-hidden px-3 py-3"
       // 一段连续编辑（聚焦某控件时的输入/滑杆拖动）合并为一条撤销记录：焦点进入开会话，离开提交
       onFocusCapture={beginHistorySession}
       onBlurCapture={endHistorySession}

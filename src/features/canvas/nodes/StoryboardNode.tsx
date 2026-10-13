@@ -302,7 +302,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
             className="nodrag"
             surface="glass"
             panelPadding="content"
-            panelWidth={340}
+            panelSize="compact"
             alignment="aboveCenter"
             gap={8}
             renderPanel={() => (

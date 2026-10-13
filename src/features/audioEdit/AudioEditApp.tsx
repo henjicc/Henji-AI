@@ -172,7 +172,7 @@ function Transcript({
                   return (
                     <Fragment key={block.id}>
                       {previous && pause >= pauseFrames ? (
-                        <span aria-hidden="true" title="停顿" className="mx-1 inline-block rounded bg-raised px-1.5 align-middle font-mono text-2xs leading-5 text-text3">{(pause / project.source.sampleRate).toFixed(1)}s</span>
+                        <span aria-hidden="true" title="停顿" className="mx-1 inline-block rounded-control bg-raised px-1.5 align-middle font-mono text-2xs leading-5 text-text3">{(pause / project.source.sampleRate).toFixed(1)}s</span>
                       ) : null}
                       <UiTextToken
                         data-audio-word={block.id}
@@ -462,14 +462,14 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       <main className="min-h-0 min-w-0 flex-1"><Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} search={textSearch} /></main>
       <aside aria-label="处理" className="w-64 shrink-0 overflow-y-auto border-l border-gap bg-panel p-4 xl:w-72">
         <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-5">
-          {!project.transcript.length && <section className="flex flex-col gap-2.5">
+          {!project.transcript.length && <section className="flex flex-col gap-3">
             <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>语音识别</h2>
             <p className={`leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>{transcriptionInterrupted ? '上次转写未完成，可先恢复原任务。' : '无须转写也可压缩停顿。识别按配置的模型计费。'}</p>
             {transcriptionInterrupted
               ? <UiButton variant="secondary" className="w-full" onClick={() => void run(() => transcribeAudioEdit({ projectId: project.id }))}>恢复转写</UiButton>
               : <UiButton variant="secondary" className="w-full" disabled={!configuredAsr || Boolean(sourceError)} onClick={() => void run(async () => { await transcribeAudioEdit({ projectId: project.id }); showNotification(notificationMessage('audioTranscribed')) })}>开始转写</UiButton>}
           </section>}
-          <section className="flex flex-col gap-2.5">
+          <section className="flex flex-col gap-3">
             <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>一键处理</h2>
             <p className={`leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>压缩停顿、清理语气词。黄色区域预览将要删除的声音，处理后仍可逐词调整。</p>
             <UiButton variant="secondary" className="w-full gap-1.5" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(notificationMessage('audioQuickProcessed', { seconds: (result.shortenedMs / 1000).toFixed(2) })) })}><Sparkles  />快速处理</UiButton>

@@ -95,7 +95,7 @@ export const StoryboardGridEditor = memo(({
 
   return (
     <>
-      <div className="canvas-node-lod-detail mb-2.5 flex shrink-0 items-center justify-between gap-2">
+      <div className="canvas-node-lod-detail mb-3 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <GridStepperControl
             label={t('canvas.storyboardGrid.rows')}
@@ -135,7 +135,7 @@ export const StoryboardGridEditor = memo(({
             return (
               <div
                 key={frame.id}
-                className="relative overflow-hidden rounded border border-line bg-gap/40 transition-colors focus-within:border-accent/50"
+                className="relative overflow-hidden rounded-control border border-line bg-gap/40 transition-colors focus-within:border-accent/50"
                 style={cellStyle}
               >
                 <FrameDescriptionEditor

@@ -74,7 +74,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
           canvasEventBus.publish('asset-group/open', { groupId: id });
         }}
       >
-        <div className="shrink-0 border-b border-line px-2.5 py-1">
+        <div className="shrink-0 border-b border-line px-3 py-1">
           <NodeHeader
             icon={<ICON_NODE_ASSET_GROUP className={`${UI_ICON_SIZE_CLASS.sm}`} />}
             titleText={title}

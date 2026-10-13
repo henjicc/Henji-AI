@@ -137,7 +137,7 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
       title={t('sections.about.viewer.title')}
       onClose={onClose}
       size="editor"
-      contentClassName="flex min-h-0 flex-1"
+      contentPadding="none" contentScroll="none" contentClassName="flex min-h-0 flex-1"
     >
       <div className="flex min-h-0 flex-1">
         <div className="flex w-72 shrink-0 flex-col gap-2 border-r border-line p-3">

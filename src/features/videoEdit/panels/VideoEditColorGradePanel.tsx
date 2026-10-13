@@ -88,7 +88,7 @@ function VideoEditColorGradePanelContent({ instance, onError, visible = true }: 
   const effects = clip?.effects?.filter(effect => effect.builtin?.id === VIDEO_EDIT_COLOR_GRADE.id) ?? []
   const selectedId = choice && choice.clipId === clip?.id && effects.some(effect => effect.id === choice.effectId) ? choice.effectId : ''
   if (!clip || clip.kind === 'audio') return <UiEmpty size="sm" title="选择画面片段以调色" />
-  return <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto px-3 py-2.5" aria-label="全能调色">
+  return <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto px-3 py-3" aria-label="全能调色">
     <span className="truncate text-xs font-semibold text-text1" title={clip.name}>{clip.name}</span>
     {effects.length > 1 && <Dropdown ariaLabel="编辑全能调色效果" value={selectedId || effects[0].id} options={effects.map((effect, i) => ({ value: effect.id, label: `${effect.name} ${i + 1}` }))} onSelect={effectId => setChoice({ clipId: clip.id, effectId })} />}
     {visible && <ColorGradeEditor key={`${instance.document.id}:${sequence.id}:${clip.id}:${selectedId}`} target={{ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }} clip={clip} selectedId={selectedId} onError={onError} />}

@@ -28,7 +28,7 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
       onClose={() => { /* 迁移进行中，刻意不允许关闭 */ }}
       hideHeader
       size="compact"
-      contentClassName="p-4"
+      contentPadding="default" contentScroll="auto"
       footer={onCancel ? (
         <UiButton size="lg" variant="secondary" onClick={onCancel}>{cancelLabel}</UiButton>
       ) : undefined}

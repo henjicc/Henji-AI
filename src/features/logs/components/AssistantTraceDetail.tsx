@@ -72,10 +72,10 @@ export function AssistantTraceDetail({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-text1">{getTraceStepLabel(summary)}</span>
-              <span className="rounded bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">
+              <span className="rounded-control bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">
                 {summary.providerId}/{summary.modelId}
               </span>
-              <span className={`rounded px-1.5 py-0.5 text-2xs ${statusClass(summary.status)}`}>
+              <span className={`rounded-control px-1.5 py-0.5 text-2xs ${statusClass(summary.status)}`}>
                 {statusLabel(summary.status)}
               </span>
             </div>
@@ -145,7 +145,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
           <Metric label="压缩状态" value={context?.compacted ? '已压缩' : '未压缩'} />
         </div>
         {context?.layerReports && context.layerReports.length > 0 && (
-          <div className="mt-2 overflow-hidden rounded border border-line/40">
+          <div className="mt-2 overflow-hidden rounded-control border border-line/40">
             {context.layerReports.map((layer) => (
               <div key={layer.id} className="grid grid-cols-[110px_70px_80px_minmax(0,1fr)] gap-2 border-b border-line/30 px-2 py-1.5 text-2xs last:border-b-0">
                 <span className="font-mono text-text1">{layer.id}</span>
@@ -216,7 +216,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
           {open ? <ChevronDown  /> : <ChevronRight  />}
           {title}
         </span>
-        {badge && <span className="rounded bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">{badge}</span>}
+        {badge && <span className="rounded-control bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">{badge}</span>}
       </UiButton>
       {open && <div className="border-t border-line/35 p-3">{children}</div>}
     </section>
