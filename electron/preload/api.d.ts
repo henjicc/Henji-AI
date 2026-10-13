@@ -1,4 +1,4 @@
-import type { EmbeddedAgentPlatform } from '../../src/core/assistant/embeddedAgent'
+import type { HenjiEmbeddedAgentApi } from './api-assistant'
 import type { HenjiAssistantApi } from './api-assistant'
 import type { ApplicationHostPlatform, McpPlatform } from '../../src/core/application-control/localHostContracts'
 import type {
@@ -48,7 +48,7 @@ export type { HenjiDocumentsApi } from './api-documents'
 export type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export interface HenjiNativeApi {
-  embeddedAgent: EmbeddedAgentPlatform
+  embeddedAgent: HenjiEmbeddedAgentApi
   applicationControl: ApplicationHostPlatform
   mcp: McpPlatform
   runtimeInfo: {

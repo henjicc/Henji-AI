@@ -123,4 +123,13 @@ describe('生成 IPC 计费事实往返', () => {
     await expect(roundtrip(() => native().llm.modelStep({ ...request, ...stepOptions }, vi.fn()))).resolves.toEqual(response)
     expect(bridge.listeners.has('llm:modelStep:event')).toBe(false)
   })
+
+  it('讲解 prompt 拒绝的计费事实穿过 preload，成功接收仍返回空值', async () => {
+    registerIpcHandler('embedded-agent:prompt', parseRecord, () => { throw Object.assign(new Error('未提交'), { paidFailureFacts: { billing: 'not_charged' } }) })
+    const input = { text: 'test', context: '', access: 'read' as const, model: { providerId: 'test', modelId: 'test' } }
+    const failure = await roundtrip(() => native().embeddedAgent.prompt(input)).catch((error: unknown) => error)
+    expect(readPaidFailureFacts(failure)).toEqual({ billing: 'not_charged' })
+    registerIpcHandler('embedded-agent:prompt', parseRecord, () => undefined)
+    await expect(roundtrip(() => native().embeddedAgent.prompt(input))).resolves.toBeUndefined()
+  })
 })

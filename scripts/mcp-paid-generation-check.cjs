@@ -326,7 +326,9 @@ async function main() {
          */
         const direct = await page.evaluate(async ({ id, modelId, prompt, params }) => {
           try {
-            const response = await window.henjiNative.ai.generate({ requestId: id, modelId, params: { prompt, ...params } })
+            const reply = await window.henjiNative.ai.generate({ requestId: id, modelId, params: { prompt, ...params } })
+            if (!reply.ok) return { outcome: 'refused', message: reply.error.message, paidFailureFacts: reply.error.paidFailureFacts ?? { billing: 'unknown' } }
+            const response = reply.data
             return { outcome: 'receipt', taskId: response?.taskId ?? null, status: response?.status ?? null }
           } catch (error) { return { outcome: 'refused', message: String(error?.message ?? error) } }
         }, { id: taskId, modelId: chosen.modelId, prompt: PROMPT, params: chosen.params })

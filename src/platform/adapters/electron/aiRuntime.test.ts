@@ -3,6 +3,7 @@ import { readPaidFailureFacts } from '@/core/application-control/paidApproval'
 import { createElectronAiRuntime } from './aiRuntime'
 import { createElectronLlmRuntime } from './llmRuntime'
 import { createElectronAudioEdit } from './audioEdit'
+import { createElectronEmbeddedAgent } from './embeddedAgent'
 
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -14,6 +15,7 @@ describe('付费 PAL 错误恢复', () => {
       ai: { generate: invoke, continuePolling: invoke },
       llm: { chatStream: invoke, modelStep: invoke, verifyModelCapabilities: invoke },
       audio: { recording: { transcribe: invoke } },
+      embeddedAgent: { prompt: invoke },
     } })
     const request = { requestId: 'request', providerId: 'test', modelId: 'test', messages: [] }
     const ai = createElectronAiRuntime(); const llm = createElectronLlmRuntime()
@@ -21,6 +23,7 @@ describe('付费 PAL 错误恢复', () => {
       () => ai.generate({ modelId: 'test', params: {} }),
       () => ai.continuePolling({ modelId: 'test', taskId: 'task' }),
       () => llm.chatStream(request, vi.fn()),
+      () => createElectronEmbeddedAgent().prompt({ text: 'test', context: '', access: 'read', model: { providerId: 'test', modelId: 'test' } }),
       () => llm.modelStep({ ...request, runId: 'run', stepId: 'step', output: { mode: 'text' }, capabilities: { image: false, video: false, audio: false, streaming: true, toolCall: false, parallelTools: false, structuredOutputMode: 'none', reasoning: false, sampling: true, usage: true } }, vi.fn()),
       () => llm.verifyModelCapabilities({ ...request, structuredOutputMode: 'json' }),
       () => createElectronAudioEdit().recording.transcribe({ action: 'transcribe', sessionId: crypto.randomUUID(), chunkId: crypto.randomUUID(), requestId: crypto.randomUUID(), audioUploadReceipt: crypto.randomUUID(), modelId: 'test', resume: false }),

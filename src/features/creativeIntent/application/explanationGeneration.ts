@@ -49,7 +49,7 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
   assertCurrent()
   const paid = await prepareExplanationPaidApproval(host.documentRef)
   let authorized = paid.decision.decision === 'auto'
-  let consumed = false, started = false
+  let consumed = false, started = false, completed = false
   const cancel = async () => { if (!consumed) { consumed = true; await paid.reject() } }
   try { assertCurrent() } catch (error) { await cancel(); throw error }
   const request: ExplanationSendRequest | undefined = authorized ? undefined : {
@@ -94,9 +94,10 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
         void platform.prompt({ text: '根据指定讲解整理候选。完整读取讲解文字和必要画面，核对原稿后提交封闭语义计划。只生成候选，不应用作品，不修改其他内容。',
           context: JSON.stringify({ creativeIntent }), creativeIntent, model: { providerId: model.providerId, modelId: model.modelId }, access: 'write', clientMessageId: crypto.randomUUID() }).catch(error => { release(); reject(error) })
       })
+      completed = true
       await paid.complete()
     } catch (error) {
-      if (started) await paid.failed()
+      if (started) await paid.failed(completed ? { paidFailureFacts: { billing: 'completed' }, cause: error } : error)
       else await paid.reject()
       throw error
     } finally {

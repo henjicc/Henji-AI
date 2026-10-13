@@ -39,6 +39,10 @@ export type HenjiIpcResultEnvelope<T> =
   | { ok: true; data: T }
   | { ok: false; error: HenjiIpcErrorEnvelope }
 
+export type HenjiEmbeddedAgentApi = Omit<import('../../src/core/assistant/embeddedAgent').EmbeddedAgentPlatform, 'prompt'> & {
+  prompt(input: import('../../src/core/assistant/embeddedAgent').EmbeddedAgentPrompt): Promise<HenjiIpcResultEnvelope<void>>
+}
+
 export interface HenjiAssistantApi {
   getUserInstructions(): Promise<AssistantUserInstructions>
   updateUserInstructions(update: AssistantUserInstructionsUpdate): Promise<AssistantUserInstructions>

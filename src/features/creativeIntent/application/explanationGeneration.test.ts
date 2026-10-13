@@ -4,6 +4,7 @@ import { prepareExplanationGeneration } from './explanationGeneration'
 import { recordingFixtureSession } from '@/core/creativeIntent/fixtures/recordingFixtures'
 import type { EmbeddedAgentSnapshot } from '@/core/assistant/embeddedAgent'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
+import { readPaidFailureFacts } from '@/core/application-control/paidApproval'
 
 const ports = vi.hoisted(() => ({ models: vi.fn(), snapshot: vi.fn(), prompt: vi.fn(), onSnapshot: vi.fn(), resolutions: vi.fn() }))
 const paid = vi.hoisted(() => ({ prepare: vi.fn(), confirm: vi.fn(), start: vi.fn(), complete: vi.fn(), reject: vi.fn(), failed: vi.fn() }))
@@ -70,6 +71,26 @@ it('讲解变化使旧确认失效，模型错误仍清理单次授权', async (
   ports.prompt.mockRejectedValue(new Error('模型初始化失败'))
   await expect(plan.run(f.local)).rejects.toThrow('模型初始化失败')
   expect(f.local).toHaveBeenCalledOnce(); expect(f.session.consent?.textUpload).toBe(false)
+})
+
+it.each(['not_charged', 'submitted', 'completed', 'unknown'] as const)('讲解失败将 %s 原始事实交给费用结算', async billing => {
+  const f = fixture(), plan = await prepareExplanationGeneration(f.host)
+  await plan.request!.confirm(false)
+  const failure = Object.assign(new Error('讲解失败'), { paidFailureFacts: { billing } })
+  ports.prompt.mockRejectedValueOnce(failure)
+  await expect(plan.run(f.local)).rejects.toBe(failure)
+  expect(paid.failed).toHaveBeenCalledWith(failure)
+  expect(f.session.consent?.textUpload).toBe(false)
+})
+
+it('讲解已完成而回执保存失败时，不误用收尾错误的未计费事实', async () => {
+  const f = fixture(), plan = await prepareExplanationGeneration(f.host)
+  await plan.request!.confirm(false)
+  const failure = Object.assign(new Error('费用回执保存失败'), { paidFailureFacts: { billing: 'not_charged' } })
+  paid.complete.mockRejectedValueOnce(failure)
+  await expect(plan.run(f.local)).rejects.toBe(failure)
+  expect(readPaidFailureFacts(paid.failed.mock.calls[0]?.[0])).toEqual({ billing: 'completed' })
+  expect(f.session.consent?.textUpload).toBe(false)
 })
 
 it('确认显示实际去重后的必要画面总数，文本模型不能偷偷发送画面', async () => {
