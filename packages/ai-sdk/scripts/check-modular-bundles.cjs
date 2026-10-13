@@ -76,7 +76,8 @@ const expectedToolModelPacks = new Set([
   'qwen-image-edit-2511-multiple-angles.ts',
   'relighting.ts',
 ])
-if (modelFiles.length !== 124 || generatedModelPacks.length !== 124) {
+// 期望数量从 catalog 源码派生，增删模型无需改门禁；只要求单模型 pack 与源码一一对应。
+if (modelFiles.length === 0 || generatedModelPacks.length !== modelFiles.length) {
   fail(`单模型导出不完整：catalog=${modelFiles.length}, packs=${generatedModelPacks.length}`)
 }
 if (generatedProviderAdapters.length !== providerDirectories.length || generatedProviderPacks.length !== providerDirectories.length) {
@@ -282,8 +283,8 @@ const defaultGeneration = bundle('DefaultGeneration', [
 ].join('\n'), (inputs) => {
   const models = inputs.filter((input) => modelPattern.test(`/${input}`))
   const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
-  if (models.length !== 124 || tools.length !== 0) {
-    fail(`默认generation目录不再严格124或误入工具：models=${models.length}, tools=${tools.length}`)
+  if (models.length !== modelFiles.length || tools.length !== 0) {
+    fail(`默认generation目录未装入全部 ${modelFiles.length} 个模型或误入工具：models=${models.length}, tools=${tools.length}`)
   }
 })
 

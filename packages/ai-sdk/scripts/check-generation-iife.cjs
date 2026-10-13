@@ -1,11 +1,23 @@
 #!/usr/bin/env node
 
 const path = require('path')
+const fs = require('fs')
 const vm = require('vm')
 const { buildSync } = require('esbuild')
 
 const packageRoot = path.resolve(__dirname, '..')
 const entry = path.join(packageRoot, 'src', 'generation.ts')
+const catalogRoot = path.join(packageRoot, 'src', 'catalog')
+
+// 期望数量从 catalog 源码派生：默认 generation 目录必须装入全部 *.model.ts，增删模型无需改门禁。
+function countModelFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).reduce((total, item) => {
+    const absolute = path.join(directory, item.name)
+    if (item.isDirectory()) return total + countModelFiles(absolute)
+    return total + (item.isFile() && item.name.endsWith('.model.ts') ? 1 : 0)
+  }, 0)
+}
+const expectedModelCount = countModelFiles(catalogRoot)
 
 function fail(message) {
   console.error(`✘ generation IIFE 门禁失败：${message}`)
@@ -89,11 +101,12 @@ const client = api.createGenerationClient({
   },
 })
 const modelCount = client.catalog.list().length
-if (modelCount !== 124) fail(`catalog 数量不是 124：${modelCount}`)
+if (expectedModelCount === 0) fail('catalog 源码中没有找到 *.model.ts')
+if (modelCount !== expectedModelCount) fail(`catalog 数量与源码不一致：期望 ${expectedModelCount}，实际 ${modelCount}`)
 client.dispose()
 if (networkCalls !== 0) fail(`import/create/catalog/dispose 触发 ${networkCalls} 次网络请求`)
 
 console.log(
   `✔ generation IIFE 门禁通过（${code.length} bytes，${Object.keys(result.metafile.inputs).length} modules，` +
-  `124 models，networkCalls=0，风险计数=0）`
+  `${modelCount} models，networkCalls=0，风险计数=0）`
 )
