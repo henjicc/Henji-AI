@@ -168,6 +168,8 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 新规则的断牙证据：`npm run test:ui-dom-rules` 在 jsdom 执行序列化的正式 auditUiDom，给外框与滚动尺寸确定性夹具；低层 HTML 夹具仍在 uiVisualRuleSamples.cjs。`npm run test:ui-visual-rules` 在真实 Electron 打开中心页“规范”分区，核对正式组件 9 组 Do/Don't（18 项）。反例标 data-gallery-expect-hit；只扣对应规则的预期命中，正例回归、反例失效与其他规则问题仍失败。目录外壳不属于条带样本的独立工作面。规则自测不能证明真实应用全部无误报。
 
+中心页的展示样本（尺寸阶梯、按钮状态矩阵、缩略弹窗、阴影令牌、虚拟列表等）为了展示而故意违反某条规则时，在**分区内部的具体区域**同时声明 `data-gallery-ignore-rules="<规则 key…>"` 与 `data-gallery-ignore-reason="<理由>"`。只在 `dev.ui_gallery` 的分区内部生效，页面根、整个分区、生产表面、通配符和无理由声明一律不生效；像素对比度不走这个机制。审计输出的 `galleryExemptions` 列出每条生效的声明，供审查。真实违规要修代码，不能用声明掩盖。判据补充：搜索框按完整外框参与同行等高比较；auto 表单行里的字段和步进按钮不算行外动作；`:hover` 只对交互容器或声明了悬停底色的容器算激活态。
+
 | 新 DOM 规则 | 判据 |
 |---|---|
 | rowHeightMismatch | toolbar/命令带/表单控件列/动作组中，真实外框高度或中心线相差 >1px；分段、字段、读数按外壳，不重复计内部按钮；竖排、xl 查看器及步进附属按钮除外 |
