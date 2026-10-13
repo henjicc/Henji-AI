@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ContentAddressedResourceStore } from './resource-store'
 
@@ -16,10 +16,68 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await fsp.rm(rootDir, { recursive: true, force: true })
 })
 
 describe('ContentAddressedResourceStore', () => {
+  it('一个资源的去重校验挂起时，不同 id 的写入仍可完成', async () => {
+    const bytes = Buffer.from('slow duplicate verification')
+    const first = await store.putBuffer(bytes)
+    const destination = store.getFilesystemPath(first.id)
+    let entered!: () => void
+    let resume!: () => void
+    const enteredVerification = new Promise<void>((resolve) => { entered = resolve })
+    const barrier = new Promise<void>((resolve) => { resume = resolve })
+    const open = fsp.open.bind(fsp)
+    const spy = vi.spyOn(fsp, 'open').mockImplementation(async (file, flags, mode) => {
+      const handle = await open(file, flags, mode)
+      if (file === destination) { entered(); await barrier }
+      return handle
+    })
+    const duplicate = store.putBuffer(bytes)
+    let other: ReturnType<typeof store.putBuffer> | undefined
+    try {
+      await enteredVerification
+      let completed = false
+      other = store.putBuffer(Buffer.from('independent resource')).then((result) => {
+        completed = true
+        return result
+      })
+      await vi.waitFor(() => expect(completed).toBe(true), { timeout: 2_000, interval: 10 })
+      expect((await other).created).toBe(true)
+    } finally {
+      resume()
+      await Promise.allSettled([duplicate, ...(other ? [other] : [])])
+      spy.mockRestore()
+    }
+    expect((await duplicate).created).toBe(false)
+  })
+
+  it('去重校验后对象消失时重新发布，而不是在刷新 mtime 时失败', async () => {
+    const bytes = Buffer.from('duplicate collected before refresh')
+    const first = await store.putBuffer(bytes)
+    const destination = store.getFilesystemPath(first.id)
+    const open = fsp.open.bind(fsp)
+    const spy = vi.spyOn(fsp, 'open').mockImplementation(async (file, flags, mode) => {
+      const handle = await open(file, flags, mode)
+      if (file === destination) {
+        const close = handle.close.bind(handle)
+        vi.spyOn(handle, 'close').mockImplementationOnce(async () => {
+          await close()
+          // 模拟 GC 在完整校验结束、尚未进入刷新临界区时移除旧对象。
+          await fsp.rm(destination)
+        })
+      }
+      return handle
+    })
+    try {
+      await expect(store.putBuffer(bytes)).resolves.toMatchObject({ id: first.id, created: true })
+    } finally { spy.mockRestore() }
+    expect((await store.garbageCollect(new Set())).deleted).toEqual([])
+    expect((await store.verify(first.id)).byteLength).toBe(bytes.byteLength)
+  })
+
   it('去重写入刷新旧对象年龄，默认 GC 保留尚未保存的引用', async () => {
     const bytes = Buffer.from('reused mask tile')
     const first = await store.putBuffer(bytes)

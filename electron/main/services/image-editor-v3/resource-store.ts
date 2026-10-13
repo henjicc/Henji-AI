@@ -271,7 +271,7 @@ export class ContentAddressedResourceStore {
       const id = `sha256:${sha256}` as ResourceId
       const destination = this.getFilesystemPath(id)
       await fsp.mkdir(path.dirname(destination), { recursive: true })
-      const created = await this.executor.run('resource-leases', () => this.executor.run(id, async () => {
+      const created = await this.executor.run(id, async () => {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
             // link 在同一资源库内提供 no-clobber 提交；并发写同一哈希时只有一个会成功。
@@ -281,10 +281,21 @@ export class ContentAddressedResourceStore {
             if (!isAlreadyExists(error)) throw error
           }
           if (await verifyExistingObject(destination, sha256, byteLength)) {
-            // 与 GC 共用屏障；重新引用旧对象也获得完整的未保存年龄保护。
-            const now = new Date()
-            await fsp.utimes(destination, now, now)
-            return false
+            // 哈希校验不占全局屏障；只把存在确认与年龄刷新和 GC 串行。
+            const reused = await this.executor.run('resource-leases', async () => {
+              try {
+                const now = new Date()
+                // utimes 成功同时确认对象仍存在；GC 无法在刷新过程中删除它。
+                await fsp.utimes(destination, now, now)
+                return true
+              } catch (error) {
+                if (isMissing(error)) return false
+                throw error
+              }
+            })
+            if (reused) return false
+            // 校验结束到进入屏障之间可能已被 GC 删除；重新发布暂存字节。
+            continue
           }
           const quarantine = `${destination}.${crypto.randomUUID()}.corrupt`
           try {
@@ -295,7 +306,7 @@ export class ContentAddressedResourceStore {
           }
         }
         throw new Error(`Unable to replace corrupt resource object: ${id}`)
-      }))
+      })
       await removeUnmanagedCachePath(stagedPath, { force: true })
       logger.debug('图片编辑资源写入完成', {
         event: 'image_editor_v3.resource.put.completed',
