@@ -101,6 +101,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     setIsVideoPlaying(false)
     setCurrentTime(0)
     setVideoDuration(0)
+    setMuted(false)
+    setPlaybackRate(1)
+    setLoop(false)
     setIsBuffering(false)
     setIsControlsVisible(true)
     setIsSpeedMenuOpen(false)
@@ -243,19 +246,19 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume
-  }, [volume])
+  }, [volume, isVisible, videoUrl])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted
-  }, [muted])
+  }, [muted, isVisible, videoUrl])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = playbackRate
-  }, [playbackRate])
+  }, [playbackRate, isVisible, videoUrl])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.loop = loop
-  }, [loop])
+  }, [loop, isVisible, videoUrl])
 
   const showVolumeHud = useCallback((): void => {
     setShowVolumeIndicator(true)

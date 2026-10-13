@@ -45,6 +45,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'sections.about.homepageLabel',
     ['sections.about.licenseLabel', ['许可', 'license']],
     ['sections.about.componentsLabel', ['开源', '第三方', 'open source']],
+    'sections.about.allComponentsLabel',
   ]),
   ...rows('providers', [
     ['providerCenter.apiKey', ['密钥', 'API Key', 'key', 'token']],
@@ -64,6 +65,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     ['sections.promptOptimization.title', ['提示词', 'prompt']],
     'sections.display.autoFocusLabel',
     ['sections.interface.autoCollapseLabel', ['底部面板', '折叠', 'collapse']],
+    ['sections.interface.collapseDelayLabel', ['移出后等待', 'collapse delay']],
   ]),
   ...rows('workspace-canvas', [
     ['sections.canvas.lodLabel', ['卡顿', '性能', '流畅', 'performance']],
@@ -77,11 +79,16 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   ...rows('workspace-video-edit', [
     ['videoEditShortcuts.label', ['快捷键', '键位', 'shortcut', 'hotkey']],
     ['sections.videoEdit.selectionFollowsPlayheadLabel', ['剪辑', '播放头', '自动选中', '效果控件', 'playhead', 'selection']],
+    ['sections.videoEdit.binsFirstLabel', ['素材箱', 'bin']],
+    ['sections.videoEdit.folderBinsLabel', ['素材箱', 'folder bin']],
+    ['sections.videoEdit.duplicatePolicyLabel', ['重复文件', 'duplicate']],
   ]),
   ...rows('workspace-assets', [
     ['sections.assetLibrary.tabAction', ['资产', '素材', 'asset']],
     'sections.assetLibrary.panelPosition',
     'sections.assetLibrary.edgeTrigger',
+    'sections.assetLibrary.triggerEdge',
+    ['sections.assetLibrary.delay', ['唤起前等待', 'trigger delay']],
   ]),
   ...rows('files-storage', [
     ['sections.dataPath.pathLabel', ['作品目录', '数据目录', '保存位置', '更换位置', '存储', 'works folder', 'storage', 'folder']],
@@ -111,6 +118,9 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   ]),
   ...rows('assistant-preferences', [
     ['paidApproval.title', ['付费', '授权', '单次', '每日上限', '始终允许', 'auto', 'bypass', 'payment']],
+    'paidApproval.mode',
+    'paidApproval.single',
+    'paidApproval.daily',
     ['agentInstructions.label', ['指令', '偏好', '提示词', 'instructions']],
   ]),
   ...rows('assistant-mcp', [
@@ -120,6 +130,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'mcp.allowDelete',
     ['mcp.allowPaid', ['付费']],
     ['mcp.connectionsTitle', ['授权', 'authorization']],
+    'mcp.name',
     ['mcp.edit', ['修改权限', '修改配置', 'permission']],
   ]),
   ...rows('assistant-skills', [
@@ -155,7 +166,7 @@ export function searchSettings(
   const scored: Array<SettingsSearchResult & { score: number }> = []
   for (const entry of SETTINGS_SEARCH_INDEX) {
     const tab = settingsTabOfSection(entry.sectionId)
-    const label = translate(entry.labelKey)
+    const label = translate(entry.labelKey).replace(/\{\{[^}]+\}\}/g, '').replace(/\s*\(\s*s\)|\s*（\s*秒）/g, '').trim()
     const section = translate(`navSections.${entry.sectionId}`)
     const tabLabel = translate(`tabs.${tab}.label`)
     const hit = (value: string): boolean => value.toLocaleLowerCase().includes(needle)

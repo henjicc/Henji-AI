@@ -16,6 +16,9 @@ import { importLocalMedia } from '@/services/localMediaImport'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { isUiInspectionReadOnly } from '@/platform/runtime'
 import { ParamLabel } from '../ParamLabel'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.params.upload.ImageUpload')
 
 interface ImageUploadProps {
   param: ImageUploadParamDef
@@ -69,16 +72,22 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       let imageData: string
       let metadata: ImageMetadata
       if (param.format === 'base64' || isUiInspectionReadOnly()) {
-        const img = await loadImage(file)
-        const base64 = await fileToBase64(file)
-        // 真实资料只读巡检不能把测试图片导入用户媒体目录；保留 data URL 仅用于本次内存态视觉检查。
-        imageData = isUiInspectionReadOnly()
-          ? base64
-          : (param.base64Prefix ? base64 : base64.split(',')[1])
-        metadata = {
-          aspectRatio: calculateAspectRatio(img.width, img.height),
-          width: img.width,
-          height: img.height,
+        try {
+          const img = await loadImage(file)
+          const base64 = await fileToBase64(file)
+          // 真实资料只读巡检不能把测试图片导入用户媒体目录；保留 data URL 仅用于本次内存态视觉检查。
+          imageData = isUiInspectionReadOnly()
+            ? base64
+            : (param.base64Prefix ? base64 : base64.split(',')[1])
+          metadata = {
+            aspectRatio: calculateAspectRatio(img.width, img.height),
+            width: img.width,
+            height: img.height,
+          }
+        } catch (error) {
+          logger.warn('图片读取失败', { event: 'image_upload.decode.failed', error: String(error) })
+          showNotification(t('uploadArea.uploadFailed'), 'error')
+          continue
         }
       } else {
         const imported = await importLocalMedia(file, 'image')
@@ -126,11 +135,15 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
+    const url = URL.createObjectURL(file)
     img.onload = () => {
-      URL.revokeObjectURL(img.src)
+      URL.revokeObjectURL(url)
       resolve(img)
     }
-    img.onerror = reject
-    img.src = URL.createObjectURL(file)
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Failed to decode uploaded image'))
+    }
+    img.src = url
   })
 }

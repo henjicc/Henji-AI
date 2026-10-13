@@ -103,29 +103,40 @@ function useHighlightGeometry(targetId: string | null): HighlightGeometry | null
 
     let observedTarget: Element | null = null
     let resizeObserver: ResizeObserver | null = null
+    let frame: number | null = null
+    const scheduleUpdate = (): void => {
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => { frame = null; update() })
+    }
     const update = (): void => {
       const nextTarget = document.querySelector(`[data-onboarding-target="${targetId}"]`)
       if (nextTarget !== observedTarget) {
         resizeObserver?.disconnect()
         observedTarget = nextTarget
         if (observedTarget) {
-          resizeObserver = new ResizeObserver(update)
+          resizeObserver = new ResizeObserver(scheduleUpdate)
           resizeObserver.observe(observedTarget)
         }
       }
-      setGeometry(observedTarget ? measureTarget(observedTarget) : null)
+      const next = observedTarget ? measureTarget(observedTarget) : null
+      setGeometry(previous => {
+        if (previous === next) return previous
+        if (previous && next && (Object.keys(next) as Array<keyof HighlightGeometry>).every(key => previous[key] === next[key])) return previous
+        return next
+      })
     }
 
     update()
-    const mutationObserver = new MutationObserver(update)
+    const mutationObserver = new MutationObserver(scheduleUpdate)
     mutationObserver.observe(document.body, { childList: true, subtree: true })
-    window.addEventListener('resize', update)
-    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', scheduleUpdate)
+    window.addEventListener('scroll', scheduleUpdate, true)
     return () => {
       mutationObserver.disconnect()
       resizeObserver?.disconnect()
-      window.removeEventListener('resize', update)
-      window.removeEventListener('scroll', update, true)
+      if (frame !== null) cancelAnimationFrame(frame)
+      window.removeEventListener('resize', scheduleUpdate)
+      window.removeEventListener('scroll', scheduleUpdate, true)
     }
   }, [targetId])
 
