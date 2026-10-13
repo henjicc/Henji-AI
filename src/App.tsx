@@ -1,6 +1,7 @@
 import { GenerationLifecycleProvider } from '@/features/generation/application/GenerationLifecycleProvider'
 import { createLogger } from '@/core/logging'
 import React, { Suspense, lazy, useState, useEffect } from 'react'
+import { SettingsModalPlaceholder } from '@/components/Settings/SettingsModalFrame'
 import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
 import { databaseService } from './services/database/DatabaseService'
@@ -18,7 +19,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
 import { hasOpenAssetChildOverlay } from '@/features/assets/assetOverlayOwnership'
 import { NotificationProvider } from '@/contexts/NotificationContext'
-import { McpExpiryNotifications } from '@/features/settings/McpExpiryNotifications'
 import { useUiStore } from '@/stores/uiStore'
 import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
@@ -265,7 +265,6 @@ const App: React.FC = () => {
 
   return (
     <NotificationProvider>
-      {isReady && <McpExpiryNotifications />}
       <GenerationLifecycleProvider>
       <CameraStageRenderLifecycleHost />
       <div
@@ -312,7 +311,8 @@ const App: React.FC = () => {
         <Suspense fallback={null}>
           {assistantMounted && <AssistantSidebar workspaceRef={assistantWorkspaceRef} />}
         </Suspense>
-        <Suspense fallback={null}>
+        {/* 占位是同款外壳 + 加载态：首次打开 chunk 未就绪时点击立刻有带动画的弹窗，而不是卡住后突然出现 */}
+        <Suspense fallback={isSettingsOpen ? <SettingsModalPlaceholder onClose={closeSettings} /> : null}>
           {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
         </Suspense>
         <LargeUploadChoiceDialog />

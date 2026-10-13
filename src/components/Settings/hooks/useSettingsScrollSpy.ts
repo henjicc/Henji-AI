@@ -30,7 +30,7 @@ interface UseSettingsScrollSpyOptions {
 interface UseSettingsScrollSpyResult {
   /** 目录点击时调用；平滑滚动期间会屏蔽 spy，避免中途分节被依次点亮 */
   scrollToSection: (sectionId: string, behavior?: ScrollBehavior) => void
-  /** 尾部占位高度：没有它，最后一个分节永远滚不到顶，点目录会「没反应」 */
+  /** 末节最小高度（随容器尺寸变化）：没有它，最后一个分节永远滚不到顶，点目录会「没反应」 */
   tailSpacerHeight: number
 }
 
@@ -133,32 +133,31 @@ export function useSettingsScrollSpy({
     }
   }, [container, releaseProgrammaticScroll, sectionKey])
 
-  // 尾部占位测量。刻意只依赖「容器高度」和「最后一个分节高度」，不读 scrollHeight，
-  // 否则占位本身会算进去，形成 ResizeObserver 的自激循环。
+  // 末节最小高度：让最后一个分节至少撑满「容器高度 − 停靠距离 − 下内边距」，它才滚得到顶。
   //
-  // 必须是 layout effect 且首测同步：切大类时占位高度会变（上一个大类的末节高、
-  // 新大类的末节矮），而「跳到新大类的最后一个分节」恰恰要靠这块占位才滚得上去。
-  // 首测若排到 rAF，本帧的占位还是上一个大类的旧值，那次跳转就会停在半路，
-  // 要等 DEEP_LINK_RESCROLL_MS 的补位才落位——用户看到的就是"先显示别处，过一会儿才跳"。
+  // 以前是在末节后面放一块占位，由 ResizeObserver 在下一帧按「容器高 − 末节高」重算。
+  // 末节内容一变（展开/收起修改权限、出现复制预览），总高度先变、占位晚一帧才补回来：
+  // 收起时 scrollTop 被浏览器先夹到新的最大值，画面跳一下；展开时滚动条也闪一下。
+  // 改成给末节本身设 min-height 后，末节内容在最小高度内伸缩时总高度不变，没有这一帧。
+  // 最小高度只取决于容器高度，因此只在容器尺寸变化时重算。
+  //
+  // 必须是 layout effect 且首测同步：切大类时要在本次提交里就给新末节设好最小高度，
+  // 「跳到新大类的最后一个分节」靠它才滚得上去，推迟到 rAF 那次跳转就会停在半路。
   useLayoutEffect(() => {
     if (!container) return
 
     let frame = 0
+    let styled: HTMLElement | undefined
     const measure = (): void => {
       frame = 0
       const sections = readSections(container)
       const last = sections[sections.length - 1]
-      if (!last) {
-        setTailSpacerHeight(0)
-        return
-      }
-      const next = Math.max(
-        0,
-        container.clientHeight -
-          last.getBoundingClientRect().height -
-          SECTION_ANCHOR_OFFSET -
-          CONTENT_BOTTOM_PADDING
-      )
+      // 铺满型大类（容器不滚动）由分节自己填满剩余高度，不需要也不能再撑最小高度
+      const scrollable = /auto|scroll/.test(getComputedStyle(container).overflowY)
+      const next = scrollable ? Math.max(0, container.clientHeight - SECTION_ANCHOR_OFFSET - CONTENT_BOTTOM_PADDING) : 0
+      if (styled && styled !== last) styled.style.minHeight = ''
+      styled = last
+      if (last) last.style.minHeight = next ? `${next}px` : ''
       setTailSpacerHeight((prev) => (Math.abs(prev - next) < 1 ? prev : next))
     }
 
@@ -167,17 +166,14 @@ export function useSettingsScrollSpy({
       frame = requestAnimationFrame(measure)
     }
 
-    // 首测同步：本次提交里就要拿到新大类的占位高度，不能推迟到下一帧
     measure()
     const observer = new ResizeObserver(schedule)
     observer.observe(container)
-    const sections = readSections(container)
-    const last = sections[sections.length - 1]
-    if (last) observer.observe(last)
 
     return () => {
       observer.disconnect()
       if (frame !== 0) cancelAnimationFrame(frame)
+      if (styled) styled.style.minHeight = ''
     }
   }, [container, sectionKey])
 

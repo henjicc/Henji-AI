@@ -42,6 +42,11 @@ interface UiModalProps {
    * 选这档会同时把遮罩换成 soft 档，否则遮罩与玻璃 tint 相乘会把背景压死。
    */
   surface?: 'panel' | 'glass';
+  /**
+   * 是否播放进入过渡，默认 true。只在接替一个外观相同、已经播完进入动画的占位弹窗时传 false
+   * （懒加载弹窗的 Suspense 占位 → 真弹窗），否则交接那一刻会从全透明重新淡入一次。
+   */
+  appear?: boolean;
 }
 
 export function UiModal({
@@ -58,9 +63,10 @@ export function UiModal({
   hideHeader = false,
   overlayClassName = '',
   surface = 'panel',
+  appear = true,
 }: UiModalProps): JSX.Element | null {
   const isGlass = surface === 'glass';
-  const { shouldRender, isVisible, closing, onTransitionEnd } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
+  const { shouldRender, isVisible, closing, onTransitionEnd } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS, appear);
   const dialogRef = useRef<HTMLDivElement>(null);
   // 弹窗没有触发元素：用原位的隐藏锚点得知自己处在哪个文档（主窗口或剪辑系统浮窗），
   // 再挂到该文档的 body。锚点只在弹窗渲染期间存在。

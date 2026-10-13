@@ -15,12 +15,15 @@ interface DialogTransitionState {
 
 export function useDialogTransition(
   isOpen: boolean,
-  durationMs: number = UI_DIALOG_TRANSITION_MS
+  durationMs: number = UI_DIALOG_TRANSITION_MS,
+  /** false：首次挂载即已显示，不再播进入过渡（接替一个已经播完进入动画的占位弹窗） */
+  appear = true
 ): DialogTransitionState {
   const [shouldRender, setShouldRender] = useState(isOpen);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(!appear && isOpen);
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
+  const skipEnterRef = useRef(!appear && isOpen);
 
   useEffect(() => {
     let frameId1 = 0;
@@ -29,6 +32,10 @@ export function useDialogTransition(
 
     if (isOpen) {
       setShouldRender(true);
+      if (skipEnterRef.current) {
+        skipEnterRef.current = false;
+        return;
+      }
       setIsVisible(false);
       frameId1 = requestAnimationFrame(() => {
         frameId2 = requestAnimationFrame(() => {

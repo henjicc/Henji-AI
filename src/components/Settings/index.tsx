@@ -1,16 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
-  UI_GLASS_ADAPTIVE_REGION_CLASS,
   UI_GLASS_ADAPTIVE_SURFACE_CLASS,
-  UI_TEXT_TITLE_CLASS,
-  UiIconButton,
-  UiModal,
   UiNavButton,
   UiSearchInput,
 } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
-import { Bot, FolderOpen, KeyRound, LayoutGrid, Package, Settings2, X } from 'lucide-react'
+import { Bot, FolderOpen, KeyRound, LayoutGrid, Package, Settings2 } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
 import ProvidersTab from './tabs/ProvidersTab'
 import WorkspaceTab from './tabs/WorkspaceTab'
@@ -18,6 +14,7 @@ import FilesTab from './tabs/FilesTab'
 import AssistantTab from './tabs/AssistantTab'
 import SkillsTab from './tabs/SkillsTab'
 import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
+import { SettingsModalFrame, isSettingsPlaceholderShown } from './SettingsModalFrame'
 import SettingsSearchResults from './components/SettingsSearchResults'
 import { searchSettings, type SettingsSearchResult } from './settingsSearchIndex'
 import { useI18n } from '@/hooks/useI18n'
@@ -73,6 +70,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
     target?.sectionId ?? SECTION_MAP[initialTab][0] ?? ''
   )
   const [closing, setClosing] = useState(false)
+  // 懒加载占位已经播过进入动画时，本弹窗直接以显示状态接替，不再从透明淡入第二次
+  const [replacesPlaceholder] = useState(isSettingsPlaceholderShown)
   // 用状态而不是 ref 持有滚动容器：内容经 UiModal 延后挂载，容器出现时依赖它的定位与测量要重新执行。
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null)
   // 切大类时要跳到的分节。跨大类点击目录时目标分节还没挂载，只能等这一帧渲染完再滚。
@@ -221,120 +220,87 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   }, [handleSectionSelect, target])
 
   return (
-    <UiModal
-      isOpen={!closing}
-      title={t('title')}
-      onClose={handleClose}
-      hideHeader
-      // 设置弹窗铺满 90vw，背后压着的是画布/生成结果这类用户内容而不是纯色 UI，
-      // 所以整块走玻璃；内部区域、目录与中性控件由 UI_GLASS_ADAPTIVE_* 跟随开关退化。
-      surface="glass"
-      // 只给内边距，不要在这里再铺一层底色：UiModal 内部已经有一层会做淡入淡出的
-      // 遮罩，外层再叠 bg-black/70 会（1）把背景压到近 86% 黑，(2) 因为外层没有过渡，
-      // 打开时先闪一帧纯黑、关闭时黑幕又突然消失。
-      overlayClassName="p-4"
-      size="settings"
-      contentClassName="flex min-h-0 flex-1"
-    >
-      {/* relative：让内容压在 .ui-glass::after 的噪点层同一层，避免文字被颗粒扰动 */}
-      <div
-        data-application-surface-id={activeSurfaceId}
-        className={`relative flex h-full w-full flex-col ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}
-      >
-        <div className={`flex h-14 shrink-0 items-center justify-between border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
-          <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>
-          <UiIconButton
-            onClick={handleClose}
-            aria-label={t('actions.close')}
-            title={t('actions.close')}
-          >
-            <X className="h-4 w-4" />
-          </UiIconButton>
-        </div>
-
-        <div className="flex min-h-0 flex-1">
-          {/*
-            常驻目录：所有大类的分节一直展开，不再「先点大类才看得到子项」。
-            它只负责定位，不再决定右侧渲染什么——右侧是当前大类的一整页内容。
-          */}
-          <nav
-            aria-label={t('title')}
-            className={`w-52 shrink-0 overflow-y-auto border-r p-2 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}
-          >
-            <UiSearchInput
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onClear={() => setQuery('')}
-              clearLabel={t('search.clear')}
-              placeholder={t('search.placeholder')}
-              aria-label={t('search.placeholder')}
-              className="mb-2"
-              onKeyDown={(event) => {
-                // 有关键词时 Esc 先清空搜索，不关闭设置
-                if (event.key === 'Escape' && query) {
-                  event.stopPropagation()
-                  setQuery('')
-                }
-                if (event.key === 'Enter' && searchResults[0]) handleSearchSelect(searchResults[0])
-              }}
-            />
-            <div className="space-y-1">
-              {tabs.map(tab => {
-                const sections = SECTION_MAP[tab.id]
-                const isCurrentTab = activeTab === tab.id
-                // 只有一个分节的大类，大类本身就是叶子：再画一条只有一项的子列表是纯噪音
-                const isLeafGroup = sections.length <= 1
-                const firstSectionId = sections[0] ?? ''
-                return (
-                  <div key={tab.id}>
-                    <UiNavButton
-                      active={isLeafGroup && isCurrentTab}
-                      onClick={() => handleSectionSelect(tab.id, firstSectionId)}
-                      size="lg"
-                    >
-                      <tab.icon className="h-4 w-4 shrink-0" />
-                      <span className={`text-left font-medium leading-none ${!isLeafGroup && isCurrentTab ? 'text-text1' : ''}`}>{tab.label}</span>
-                    </UiNavButton>
-                    {isLeafGroup ? null : (
-                      <div className="space-y-1 py-1">
-                        {sections.map(sectionId => (
-                          <UiNavButton
-                            key={sectionId}
-                            active={isCurrentTab && activeSectionId === sectionId}
-                            onClick={() => handleSectionSelect(tab.id, sectionId)}
-                            size="md"
-                            className="pl-11"
-                          >
-                            {t(`navSections.${sectionId}`)}
-                          </UiNavButton>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </nav>
-
-          <div
-            ref={setContentElement}
-            className={`settings-scroll-body min-w-0 flex-1 ${FILL_TABS.has(activeTab) && !query.trim() ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'}`}
-          >
-            {query.trim() ? (
-              <div className="mx-auto max-w-3xl px-4 pb-4 pt-5">
-                <SettingsSearchResults results={searchResults} onSelect={handleSearchSelect} />
-              </div>
-            ) : (
-              <>
-                {ActiveTabComponent && <ActiveTabComponent />}
-                {/* 没有这段占位，最后一个分节永远滚不到顶，点目录最后一项会像「没反应」 */}
-                {FILL_TABS.has(activeTab) ? null : <div aria-hidden style={{ height: tailSpacerHeight }} />}
-              </>
-            )}
+    <SettingsModalFrame isOpen={!closing} onClose={handleClose} appear={!replacesPlaceholder} surfaceId={activeSurfaceId}>
+      <div className="flex min-h-0 flex-1">
+        {/*
+          常驻目录：所有大类的分节一直展开，不再「先点大类才看得到子项」。
+          它只负责定位，不再决定右侧渲染什么——右侧是当前大类的一整页内容。
+        */}
+        <nav
+          aria-label={t('title')}
+          className={`w-52 shrink-0 overflow-y-auto border-r p-2 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}
+        >
+          <UiSearchInput
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onClear={() => setQuery('')}
+            clearLabel={t('search.clear')}
+            placeholder={t('search.placeholder')}
+            aria-label={t('search.placeholder')}
+            className="mb-2"
+            onKeyDown={(event) => {
+              // 有关键词时 Esc 先清空搜索，不关闭设置
+              if (event.key === 'Escape' && query) {
+                event.stopPropagation()
+                setQuery('')
+              }
+              if (event.key === 'Enter' && searchResults[0]) handleSearchSelect(searchResults[0])
+            }}
+          />
+          <div className="space-y-1">
+            {tabs.map(tab => {
+              const sections = SECTION_MAP[tab.id]
+              const isCurrentTab = activeTab === tab.id
+              // 只有一个分节的大类，大类本身就是叶子：再画一条只有一项的子列表是纯噪音
+              const isLeafGroup = sections.length <= 1
+              const firstSectionId = sections[0] ?? ''
+              return (
+                <div key={tab.id}>
+                  <UiNavButton
+                    active={isLeafGroup && isCurrentTab}
+                    onClick={() => handleSectionSelect(tab.id, firstSectionId)}
+                    size="lg"
+                  >
+                    <tab.icon className="h-4 w-4 shrink-0" />
+                    <span className={`text-left font-medium leading-none ${!isLeafGroup && isCurrentTab ? 'text-text1' : ''}`}>{tab.label}</span>
+                  </UiNavButton>
+                  {isLeafGroup ? null : (
+                    <div className="space-y-1 py-1">
+                      {sections.map(sectionId => (
+                        <UiNavButton
+                          key={sectionId}
+                          active={isCurrentTab && activeSectionId === sectionId}
+                          onClick={() => handleSectionSelect(tab.id, sectionId)}
+                          size="md"
+                          className="pl-11"
+                        >
+                          {t(`navSections.${sectionId}`)}
+                        </UiNavButton>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
+        </nav>
+
+        <div
+          ref={setContentElement}
+          className={`settings-scroll-body min-w-0 flex-1 ${FILL_TABS.has(activeTab) && !query.trim() ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'}`}
+        >
+          {query.trim() ? (
+            <div className="mx-auto max-w-3xl px-4 pb-4 pt-5">
+              <SettingsSearchResults results={searchResults} onSelect={handleSearchSelect} />
+            </div>
+          ) : (
+            <>
+              {ActiveTabComponent && <ActiveTabComponent />}
+            </>
+          )}
         </div>
       </div>
-    </UiModal>
+    </SettingsModalFrame>
   )
 }
 
