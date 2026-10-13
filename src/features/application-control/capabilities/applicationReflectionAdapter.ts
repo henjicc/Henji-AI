@@ -324,6 +324,7 @@ function describedProperty(property: Record<string, unknown>, context?: Capabili
     // 取值类型与范围是模型填参数的唯一依据。
     value: property.value,
     ...(property.valueComparison ? { valueComparison: property.valueComparison } : {}),
+    ...(property.requiresReadBaseline ? { requiresReadBaseline: true } : {}),
     ...(property.nullable === true ? { nullable: true } : {}),
     ...(property.defaultValue !== undefined ? { defaultValue: property.defaultValue } : {}),
     // 权限名对模型没有用，它只需要知道这一条能不能写；能不能通过由网关判定。
@@ -391,6 +392,7 @@ export const applicationReflectionHandlers = {
       if (input.detail === 'full') return { ...full, ...(schema ? { valueSchema: schema } : {}) }
       return { id: property.id, entityType: property.entityType, title: property.title, writable: full.writable,
         valueShape: schema ? describeJsonValueShape(schema) : property.value.kind,
+        ...(property.requiresReadBaseline ? { requiresReadBaseline: true } : {}),
         ...((input.entityType || input.entityTypes.length || input.propertyIds?.length) && property.description ? { description: property.description } : {}),
         ...(property.nullable ? { nullable: true } : {}) }
     })
@@ -466,6 +468,17 @@ export const applicationReflectionHandlers = {
         return changes
       } catch (error) { throw new ApplicationPreflightFailure(error) }
     })()
+    const strictProperties = changes.flatMap(change => {
+      if (change.kind !== 'set_properties' && change.kind !== 'mutate_properties') return []
+      const ids = new Set((change.kind === 'set_properties' ? Object.keys(change.properties) : change.mutations.map(item => item.propertyId))
+        .map(id => resolvePropertyId(change.entityType, id)))
+      return getApplicationReflectionRegistry().listProperties(change.entityType)
+        .filter(property => ids.has(property.id) && property.requiresReadBaseline)
+    })
+    if (strictProperties.some(property => property.revisionScopes.some(scope => expected[scope] === undefined))) {
+      throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:请先用 read_application_entity 读取目标，合并内容后携带该次读取的 baselineIds。'))
+    }
+    const requiresReadBaseline = strictProperties.length > 0
     const baselines = await captureMutationBaselines(changes, appContext).catch((error) => { throw new ApplicationPreflightFailure(error) })
     if (context.callerGrant && context.expectedRevisions === undefined) {
       if (changes.some((change) => change.kind === 'remove_items')) throw new ApplicationPreflightFailure(new Error('BASELINE_REQUIRED:删除前请读取目标并提供 baselineIds。'))
@@ -492,13 +505,13 @@ export const applicationReflectionHandlers = {
     try {
       rawResult = await execute(expected, 0)
     } catch (error) {
-      if (context.callerGrant) throw error
+      if (context.callerGrant || requiresReadBaseline) throw error
       if (!(error instanceof Error) || !error.message.includes('REVISION_CONFLICT')) throw error
       const refreshed = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
       if (!refreshed) throw new Error('CONFLICT:目标属性已在刷新期间变化，请重新读取并规划。')
       rawResult = await execute(refreshed, 1)
     }
-    if (!context.callerGrant && rawResult.status === 'failed' && rawResult.code === 'CONFLICT'
+    if (!context.callerGrant && !requiresReadBaseline && rawResult.status === 'failed' && rawResult.code === 'CONFLICT'
       && (!rawResult.partial || rawResult.partial.completedStepIndexes.length === 0)) {
       const refreshed = await refreshedRevisionsIfTargetsUnchanged(baselines, changes, appContext)
       if (!refreshed) throw new Error('CONFLICT:目标属性已在刷新期间变化，请重新读取并规划。')

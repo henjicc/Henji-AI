@@ -1,8 +1,11 @@
 import Database from 'better-sqlite3'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createModelTraceTablesV1 } from './traceSchema'
 import { AgentTraceStore } from './agent-trace-store'
+
+// 本文件只验证内存数据库，诊断日志不能写入用户资料目录。
+vi.mock('./main-logger', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), trace: vi.fn() }) }))
 
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
 
@@ -31,6 +34,31 @@ describeWithElectronSqlite('AgentTraceStore', () => {
 
   afterEach(() => {
     database?.close()
+  })
+
+  it.each([1, 2, 3])('复合游标以每页 %i 条遍历同毫秒边界，无遗漏或重复', (limit) => {
+    const now = Date.now()
+    const ids = ['trace-a', 'trace-z', 'trace-b', 'trace-y', 'trace-c']
+    for (const traceId of ids) {
+      store.start({ traceId, runId: 'run-1', requestId: traceId, stepId: traceId, kind: 'primary',
+        providerId: 'test', modelId: 'test', startedAt: new Date(now).toISOString(), captureMode: 'summary' })
+      store.complete({ traceId, completedAt: new Date(now + 10).toISOString(), elapsedMs: 10, usage })
+    }
+    store.start({ traceId: 'older', runId: 'run-1', requestId: 'older', stepId: 'older', kind: 'primary',
+      providerId: 'test', modelId: 'test', startedAt: new Date(now - 1).toISOString(), captureMode: 'summary' })
+    const seen: string[] = []
+    let page = store.query({ limit })
+    for (let requests = 0; requests < 6; requests++) {
+      seen.push(...page.runs.flatMap(run => run.steps.map(step => step.traceId)))
+      if (!page.hasMore) break
+      expect(page).toHaveProperty('nextBeforeTraceId')
+      page = store.query({ limit, beforeTimestamp: page.nextBeforeTimestamp, beforeTraceId: page.nextBeforeTraceId })
+    }
+    expect(seen).toHaveLength(6)
+    expect(new Set(seen)).toEqual(new Set([...ids, 'older']))
+    expect(page.hasMore).toBe(false)
+    expect(page.nextBeforeTraceId).toBeUndefined()
+    expect(page.nextBeforeTimestamp).toBeUndefined()
   })
 
   it('按运行聚合模型步骤并按需读取详情', () => {

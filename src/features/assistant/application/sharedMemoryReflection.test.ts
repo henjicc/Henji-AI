@@ -37,3 +37,31 @@ it('执行器不能用再次读取到的新版本替换计划中的旧基线', a
   await expect(new SharedMemoryExecutor().apply(step)).rejects.toThrow('conflict')
   expect(memory).toMatchObject({ content: '其他人刚保存的偏好', revision: 2 })
 })
+
+it('执行器拒绝缺少读取基线的计划', async () => {
+  memory.content = '用户已有偏好'
+  const step = { kind: 'mutation', target: ref, entityType: ref.kind, expectedRevisions: {},
+    mutations: [{ propertyId: 'assistant.shared_memory.content', operation: 'set', value: '覆盖内容' }] } as Extract<ApplicationPlannedStep, { kind: 'mutation' }>
+  await expect(new SharedMemoryExecutor().apply(step)).rejects.toThrow('BASELINE_REQUIRED')
+  expect(memory).toMatchObject({ content: '用户已有偏好', revision: 1 })
+})
+
+it.each<Record<string, number> | undefined>([undefined, {}, { unrelated: 1 }])('共享记忆自动模式或不完整基线不允许覆盖期间他人的修改：%j', async (expectedRevisions) => {
+  const oldContent = memory.content
+  memory.content = '用户刚保存的新偏好'; memory.revision = 2
+  await expect(applicationReflectionHandlers.changeEntities({ summary: '合并偏好', changes: [{ kind: 'set_properties',
+    target: ref, entityType: ref.kind, properties: { content: `${oldContent}旧内容合并` } }] }, { ...context(), expectedRevisions }))
+    .rejects.toThrow('BASELINE_REQUIRED')
+  expect(memory).toMatchObject({ content: '用户刚保存的新偏好', revision: 2 })
+})
+
+it('过期读取基线拒绝写入，重新读取后合并可成功', async () => {
+  const stale = context()
+  memory.content = '其他调用者的偏好'; memory.revision = 2
+  const input = { summary: '合并偏好', changes: [{ kind: 'set_properties' as const, target: ref, entityType: ref.kind,
+    properties: { content: '旧合并内容' } }] }
+  await expect(applicationReflectionHandlers.changeEntities(input, stale)).rejects.toThrow(/CONFLICT/)
+  expect(memory.content).toBe('其他调用者的偏好')
+  await change(`${memory.content}；我新增的偏好`)
+  expect(memory).toMatchObject({ content: '其他调用者的偏好；我新增的偏好', revision: 3 })
+})

@@ -50,6 +50,43 @@ import { applicationReflectionHandlers } from './applicationReflectionAdapter'
 const context = { signal: new AbortController().signal, requestId: 'reflection-adapter-test' }
 
 describe('应用反射通用能力适配器', () => {
+  it.each(['set_properties', 'mutate_properties'] as const)('任意声明强制基线的属性在 %s 入口都拒绝自动补齐', async kind => {
+    const declared = [{ id: 'sample.item.value', requiresReadBaseline: true, revisionScopes: ['sample'] }]
+    const original = mocks.listProperties.getMockImplementation()!
+    mocks.listProperties.mockImplementation(() => declared)
+    try {
+      const target = { kind: 'sample.item', id: 'item-1' }
+      const change = kind === 'set_properties'
+        ? { kind, target, entityType: target.kind, properties: { value: 'new' } }
+        : { kind, target, entityType: target.kind, mutations: [{ propertyId: 'sample.item.value', operation: 'set' as const, value: 'new' }] }
+      await expect(applicationReflectionHandlers.changeEntities({ summary: '合并更新', changes: [change] }, context))
+        .rejects.toThrow('BASELINE_REQUIRED')
+    } finally { mocks.listProperties.mockImplementation(original) }
+  })
+
+  it.each(['compact', 'full'] as const)('%s 属性说明保留强制读取基线声明', async detail => {
+    mocks.describe.mockReturnValueOnce({ entities: [], properties: [{ id: 'sample.item.value', entityType: 'sample.item',
+      title: '值', value: { kind: 'string' }, requiresReadBaseline: true, requiredPermissions: { write: ['assets:write'] } }] })
+    const result = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: ['sample.item'], detail }, context)
+    expect(result.properties[0]).toMatchObject({ requiresReadBaseline: true })
+  })
+
+  it.each(['throw', 'result'] as const)('强制读取基线在 %s 冲突后不能自动刷新重试', async mode => {
+    const original = mocks.listProperties.getMockImplementation()!
+    const declared = [{ id: 'sample.item.value', requiresReadBaseline: true, revisionScopes: ['sample'] }]
+    mocks.listProperties.mockImplementation(() => declared)
+    const reads = mocks.readEntity.mock.calls.length
+    mocks.plan.mockResolvedValueOnce({ planRef: 'strict-plan' })
+    if (mode === 'throw') mocks.commit.mockRejectedValueOnce(new Error('REVISION_CONFLICT'))
+    else mocks.commit.mockResolvedValueOnce({ status: 'failed', code: 'CONFLICT', message: '读取基线过期', recoverable: true })
+    try {
+      await expect(applicationReflectionHandlers.changeEntities({ summary: '合并更新', changes: [{ kind: 'set_properties',
+        target: { kind: 'sample.item', id: 'item-1' }, entityType: 'sample.item', properties: { value: 'new' } }] },
+      { ...context, expectedRevisions: { sample: 1 } })).rejects.toThrow(mode === 'throw' ? 'REVISION_CONFLICT' : '读取基线过期')
+      expect(mocks.readEntity).toHaveBeenCalledTimes(reads + 1)
+    } finally { mocks.listProperties.mockImplementation(original) }
+  })
+
   beforeEach(() => {
     mocks.readEntity.mockResolvedValue({
       ref: { kind: 'sample.item', id: 'item-1' }, entityType: 'sample.item',

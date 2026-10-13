@@ -162,7 +162,7 @@ export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTr
   }
 
   async function handleLoadMore(): Promise<void> {
-    if (!queryResult.hasMore || !queryResult.nextBeforeTimestamp || loadingMore) return
+    if (!queryResult.hasMore || !queryResult.nextBeforeTimestamp || !queryResult.nextBeforeTraceId || loadingMore) return
     setLoadingMore(true)
     try {
       const next = await queryAgentTraces({
@@ -172,6 +172,7 @@ export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTr
         ...(modelId !== 'all' ? { modelId } : {}),
         ...(status !== 'all' ? { status } : {}),
         beforeTimestamp: queryResult.nextBeforeTimestamp,
+        beforeTraceId: queryResult.nextBeforeTraceId,
         limit: 100,
       })
       setQueryResult((current) => mergeTraceQueryResults(current, next))
@@ -295,6 +296,7 @@ function mergeTraceQueryResults(
     runs: [...runs.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
     hasMore: next.hasMore,
     nextBeforeTimestamp: next.nextBeforeTimestamp,
+    nextBeforeTraceId: next.nextBeforeTraceId,
   }
 }
 

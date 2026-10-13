@@ -305,9 +305,10 @@ export class AgentTraceStore {
       clauses.push('t.started_at >= ? AND t.started_at < ?')
       params.push(start, end)
     }
-    if (query.beforeTimestamp) {
-      clauses.push('t.started_at < ?')
-      params.push(toTimestamp(query.beforeTimestamp))
+    if (query.beforeTimestamp && query.beforeTraceId) {
+      clauses.push('(t.started_at < ? OR (t.started_at = ? AND t.trace_id < ?))')
+      const timestamp = toTimestamp(query.beforeTimestamp)
+      params.push(timestamp, timestamp, query.beforeTraceId)
     }
     if (query.providerId) {
       clauses.push('t.provider_id = ?')
@@ -332,7 +333,7 @@ export class AgentTraceStore {
       FROM application_model_traces t
       LEFT JOIN model_trace_contexts r ON r.run_id = t.run_id
       ${where}
-      ORDER BY t.started_at DESC
+      ORDER BY t.started_at DESC, t.trace_id DESC
       LIMIT ?
     `).all(...params, query.limit + 1) as TraceRow[]
 
@@ -379,11 +380,11 @@ export class AgentTraceStore {
         steps: run.steps.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
       }))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    const oldest = visibleRows[visibleRows.length - 1]?.started_at
+    const oldest = visibleRows[visibleRows.length - 1]
     return agentTraceQueryResultSchema.parse({
       runs,
       hasMore,
-      ...(hasMore && oldest !== undefined ? { nextBeforeTimestamp: toIso(oldest) } : {}),
+      ...(hasMore && oldest ? { nextBeforeTimestamp: toIso(oldest.started_at), nextBeforeTraceId: oldest.trace_id } : {}),
     })
   }
 
