@@ -15,7 +15,7 @@ import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } fro
 import { capabilityPublicOutputSchema } from '../../../../src/core/application-control/capabilityVerification'
 import { applicationUserConfirmationSchema } from '../../../../src/core/application-control/userConfirmation'
 
-const confirmationGuidance = '付费操作按用户在应用里设置的 AI 付费授权自动放行或请求确认。可能立即返回 awaiting_user_confirmation：请用户到痕迹AI确认对话框核对费用或发送内容，应用随后自动继续；用原 operationId 查询 get_application_operation，不要重复提交。'
+const confirmationGuidance = '付费操作按用户的 AI 付费授权自动放行或请求确认；返回 awaiting_user_confirmation 时请用户在痕迹AI确认对话框核对，确认后自动继续，用原 operationId 查 get_application_operation，勿重复提交。'
 const waitingOutput = z.object({ ok: z.literal(false), operationId: z.string().uuid(), executionState: z.literal('awaiting_user_confirmation'),
   verificationState: z.literal('unresolved'), confirmation: applicationUserConfirmationSchema }).passthrough()
 
@@ -246,9 +246,9 @@ const WORKFLOWS = [
   confirmationGuidance,
   '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
   '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除前才必须逐个读取目标与集合父对象。',
-  '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。不要传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
+  '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；删除或要求严格按旧状态写入时提供相关 baselineIds。勿传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
   '镜头参考修订：2.6.0 起文档与子实体的 revisions、resultingRevisions 和宿主 scopeRevisions 使用 camera_stage，toolbox 仅表示工具箱自身状态。旧 toolbox 镜头基线返回 BASELINE_EXPIRED；请重新 read_application_entity 读取原目标，使用新 baselineId 提交。',
-  '共享长期记忆：可通过通用实体工具读写 assistant.shared_memory，引用 id 为 singleton。新任务按需读取，明确偏好或纠正后，先读取并携带返回的 baselineIds 合并更新 content；遇到 CONFLICT 时重新读取、重新合并，不追加流水账；尊重用户关闭与连接写权限。查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
+  '共享长期记忆：可通过通用实体工具读写 assistant.shared_memory，引用 id 为 singleton。新任务按需读取；有明确偏好或纠正时，带读取返回的 baselineIds 合并更新 content，CONFLICT 则重读重合并，不追加流水账；尊重用户关闭与连接写权限。查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
   '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
   '失败恢复：执行状态 unknown 时禁止换标识重试，用原 operationId 查询；partial 且账本登记了仅保存恢复入口时调 retry_application_operation_save，它不会重放业务修改。',
   '前置条件：写入被会话挡住时，对目标 ref 调 describe_application_entities，propertyAvailability 的 reasons 与 recoveries 就是声明层给出的前置条件和恢复入口。',
@@ -282,7 +282,7 @@ export function buildApplicationContract(input: {
       server: EXTERNAL_SERVER_INFO,
       protocolVersions: [...EXTERNAL_PROTOCOL_VERSIONS],
       sdkVersion: EXTERNAL_SDK_VERSION,
-      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，宿主登记变更时核对目录，仅工具定义或契约版本真实变化才发送 notifications/tools/list_changed；普通上下文更新及相同目录重连不发送，客户端重新 tools/list。用户修改连接权限后会向该连接发送 notifications/tools/list_changed 与 notifications/resources/list_changed，客户端重新读取目录；撤销连接关闭旧订阅。应用重启会关闭旧连接，重连后须重新订阅并读取目录。' },
+      transport: input.callerKind === 'embedded' ? { kind: 'embedded', authorization: '助手对话中的操作权限', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，仅工具定义或契约版本真实变化才发送 notifications/tools/list_changed，客户端据此重新 tools/list；普通上下文更新与同目录重连不发。连接权限变更时向该连接发送 tools/resources 的 list_changed，需重读目录；撤销连接关闭旧订阅。应用重启关闭旧连接，重连后重新订阅并读取目录。' },
       limits: EXTERNAL_LIMITS,
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },
@@ -332,10 +332,10 @@ export function buildApplicationContract(input: {
     domains: full.domains,
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
     workflows: [
-      '发现：按域 describe_application_entities；list_application_entities 分页/where 定位；read_application_entity 读属性与 baselineId。完整授权工具清单、排除理由和弃用策略：describe_application_contract(detail="full")；可用工具：tools/list。',
-      '写入：客户端生成 UUID operationId。同一 ID 重传返回原事实；普通修改/新增省略 baselineIds，删除必须读取目标及集合父对象后提供。不要传 expectedRevisions。默认修订仅相关域；includeRevisions=true 获取全表，includeEvidence=true 获取验证明细。',
+      '发现：按域 describe_application_entities；list_application_entities 分页/where 定位；read_application_entity 读属性与 baselineId。完整工具清单、排除理由与弃用策略：describe_application_contract(detail="full")；可用工具：tools/list。',
+      '写入：客户端生成 UUID operationId。同一 ID 重传返回原事实；普通修改/新增可省略 baselineIds（共享记忆须带），删除必须读取目标及集合父对象后提供。勿传 expectedRevisions。默认修订仅相关域；includeRevisions=true 获取全表，includeEvidence=true 获取验证明细。',
       '恢复：unknown 用原 operationId 查 get_application_operation，禁止换 ID 重放；partial 按登记的恢复入口仅重试保存。前置拒绝用 describe_application_entities(refs) 查可用条件。',
-      '结果：生成用 wait_generation_task 等终态；看图用 read_application_media(mode="image")，其他媒体分块读到 eof。无需通知扩展。技能按 skills 的适用条件用 load_assistant_skill 按需读取主文件和单份参考。',
+      '结果：生成用 wait_generation_task 等终态；看图用 read_application_media(mode="image")，其他媒体分块读到 eof。无需通知扩展。技能按 skills 适用条件用 load_assistant_skill 按需读主文件和单份参考。',
       confirmationGuidance,
     ],
   }
