@@ -12,6 +12,7 @@ import ImageViewerSection from '../sections/ImageViewerSection'
 import ThemeSection from '../sections/ThemeSection'
 import UpdateSection from '../sections/UpdateSection'
 import AboutSection from '../sections/AboutSection'
+import { RecordingShortcutSettings } from '@/features/screenRecording/RecordingShortcutSettings'
 
 const logger = createLogger('components.Settings.tabs.GeneralTab')
 
@@ -60,6 +61,7 @@ const GeneralTab: React.FC = () => {
 
       <SettingsSection id="general-view">
         <ImageViewerSection />
+        <RecordingShortcutSettings />
       </SettingsSection>
 
       <SettingsSection id="general-appearance">

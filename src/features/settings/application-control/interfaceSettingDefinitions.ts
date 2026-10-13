@@ -16,6 +16,7 @@ import { videoEditMonitorButtonLayoutsSchema } from '@/core/videoEdit/monitorBut
 import { videoEditTrackHeaderButtonLayoutsSchema } from '@/core/videoEdit/trackHeaderButtons'
 import { videoEditDefaultTransitionPreferencesSchema } from '@/core/videoEdit/transitions'
 import { z } from 'zod'
+import { DEFAULT_RECORDING_SHORTCUTS, recordingShortcutsSchema } from '@/core/screenRecording/contracts'
 
 import { hexSettingSchema, storageSetting, storeSetting } from './definitionFactories'
 import type { ApplicationSettingDefinition } from './types'
@@ -35,6 +36,11 @@ function writeThemePreset(preset: ThemeSelectionPreset): void {
 }
 
 export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
+  storeSetting({
+    id: 'screen_recording.shortcuts', title: '屏幕录制快捷键', description: '设置开始/暂停(toggle)、添加标记(mark)与停止(stop)的全局快捷键；每项可用 CommandOrControl、Control、Command、Alt、Shift、Super 搭配字母、数字、F1–F24，null 表示禁用。仅录制会话存在时注册，被系统占用时控制条提示并保留按钮操作。',
+    aliases: ['屏幕录制快捷键', '录屏改键', 'recording hotkeys'], schema: recordingShortcutsSchema, defaultValue: DEFAULT_RECORDING_SHORTCUTS,
+    target: { tab: 'general', sectionId: 'general-view' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().recordingShortcuts, value => useSettingsStore.getState().setRecordingShortcuts(value)),
   storeSetting({
     id: 'video_edit.bins_first', title: '名称排序时素材箱优先', description: '按名称排序时素材箱统一排在素材和序列前面，升序和降序都生效。默认开启。',
     aliases: ['名称排序时素材箱优先'], schema: z.boolean(), defaultValue: true,

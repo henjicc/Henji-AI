@@ -5,11 +5,11 @@ import { registerExplanationAudioHandlers } from './explanation-audio'
 type RequestDetails = Parameters<NonNullable<Parameters<Session['setPermissionRequestHandler']>[0]>>[3]
 
 const hooks=vi.hoisted(()=>({check:undefined as ((...args:unknown[])=>boolean)|undefined,request:undefined as ((...args:unknown[])=>void)|undefined,handler:undefined as ((input:RecordingAudioRequest,event:IpcMainInvokeEvent)=>unknown)|undefined,cancel:vi.fn(),erase:vi.fn(),release:vi.fn()}))
-vi.mock('electron',()=>({app:{on:vi.fn()},session:{defaultSession:{setPermissionCheckHandler:(fn:typeof hooks.check)=>{hooks.check=fn},setPermissionRequestHandler:(fn:typeof hooks.request)=>{hooks.request=fn}}}}))
+vi.mock('electron',()=>({app:{on:vi.fn()},session:{defaultSession:{setPermissionCheckHandler:(fn:typeof hooks.check)=>{hooks.check=fn},setPermissionRequestHandler:(fn:typeof hooks.request)=>{hooks.request=fn},setDisplayMediaRequestHandler:vi.fn()}}}))
 vi.mock('./registry',()=>({registerIpcHandler:(_channel:string,_parse:unknown,handler:typeof hooks.handler)=>{hooks.handler=handler}}))
 vi.mock('./application-control',()=>({assertTrustedApplicationSender:vi.fn()}))
 vi.mock('../security/main-renderer-url',()=>({isTrustedMainRendererUrl:(url:string)=>url==='app://henji'}))
-vi.mock('../services/logging',()=>({createMainLogger:()=>({warn:vi.fn()})}))
+vi.mock('../services/logging',()=>({createMainLogger:()=>({warn:vi.fn(),info:vi.fn()})}))
 vi.mock('../services/audio-edit/explanation-audio',()=>({explanationAudioService:{cleanupExpired:vi.fn(async()=>{}),cancel:hooks.cancel,release:hooks.release,erase:hooks.erase}}))
 beforeEach(()=>{vi.clearAllMocks();registerExplanationAudioHandlers()})
 it('知情arming仅允许可信主frame麦克风；摄像头/混合请求/非应用frame都拒绝',async()=>{

@@ -21,11 +21,11 @@ function resetTheme(): void {
   })
 }
 
-describe('settingsStore 外观选择（v13）', () => {
+describe('settingsStore 外观选择（v14）', () => {
   beforeEach(resetTheme)
 
   it('默认是石墨预设、跟随预设强调色、标准对比度；派生种子即石墨种子', () => {
-    expect(useSettingsStore.persist.getOptions().version).toBe(13)
+    expect(useSettingsStore.persist.getOptions().version).toBe(14)
     const state = useSettingsStore.getInitialState()
     expect(state.themeSelection).toEqual(DEFAULT_THEME_SELECTION)
     expect(state.themeSeed).toEqual(DEFAULT_THEME_SEED)

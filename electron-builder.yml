@@ -75,6 +75,10 @@ nsis:
 msi:
   artifactName: henji-ai-${version}-${arch}.${ext}
 mac:
+  extendInfo:
+    NSMicrophoneUsageDescription: 痕迹AI使用麦克风录制讲解和屏幕录制的旁白。
+    NSCameraUsageDescription: 痕迹AI使用摄像头录制屏幕教程的人像画面。
+    NSAudioCaptureUsageDescription: 痕迹AI使用系统声音采集录制屏幕教程的应用声音。
   icon: resources/icons/icon.icns
   # 非 Windows 平台在 macOS 计划确定前维持 ffmpeg-ffprobe-static（重要记录 014）。
   asarUnpack:

@@ -1,5 +1,6 @@
 import { createApplicationControlApi } from './application-control-api'
 import { createAudioLoudnessApi } from './audio-loudness-api'
+import { createScreenRecordingApi } from './screen-recording-api'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   HenjiAudioApi,
@@ -158,6 +159,7 @@ const automationTestMode = process.env['HENJI_AUTOMATION'] === '1' || Boolean(pr
 
 /** 测试夹具（测试专用）：经拥有该表的仓库核对或清理记录；画布读写经正式文档接口（canvas-test-fixtures.ts）。 */
 const testFixturesApi: HenjiTestFixturesApi = {
+  recordingControl: action => nativeInvoke('testFixtures:recordingControl', action),
   inspectGenerationSubmission: (requestId) => nativeInvoke('testFixtures:generationSubmission:inspect', { requestId }),
   deleteGenerationSubmission: (requestId) => nativeInvoke('testFixtures:generationSubmission:delete', { requestId }),
   ...createCanvasTestFixturesApi(createDocumentsApi(nativeInvoke)),
@@ -504,6 +506,7 @@ const api: HenjiNativeApi = {
   tracking: createTrackingApi(nativeInvoke, subscribeChannel),
   videoProxy: createVideoProxyApi(nativeInvoke, subscribeChannel),
   sceneDetection: createSceneDetectionApi(nativeInvoke, subscribeChannel),
+  screenRecording: createScreenRecordingApi(nativeInvoke, subscribeChannel),
 }
 
 contextBridge.exposeInMainWorld('henjiNative', api)

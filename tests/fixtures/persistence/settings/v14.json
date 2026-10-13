@@ -1,0 +1,17 @@
+{
+  "version": 14,
+  "state": {
+    "recordingShortcuts": {
+      "toggle": "CommandOrControl+Shift+F9",
+      "mark": "CommandOrControl+Shift+F10",
+      "stop": "CommandOrControl+Shift+F11"
+    },
+    "providerKeyStatus": {
+      "kie": false
+    },
+    "uploadProvider": "kie",
+    "uploadFallbackEnabled": false,
+    "videoEditBinsFirst": true,
+    "canvasLodLevel": "balanced"
+  }
+}

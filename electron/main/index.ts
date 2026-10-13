@@ -4,6 +4,8 @@ import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerAudioIpc } from './ipc/audio'
+import { registerScreenRecordingIpc } from './ipc/screen-recording'
+import { closeRecordingControl } from './services/screen-recording/runtime'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
@@ -137,6 +139,7 @@ app.whenReady().then(async () => {
   registerLocalModelsIpc()
   registerSmartRegionsIpc()
   registerVideoProxyHandlers()
+  registerScreenRecordingIpc()
   registerSceneDetectionHandlers()
   registerTrackingIpc()
   registerDragIpc()
@@ -232,7 +235,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [closeRecordingControl, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
   if (isAssistantCliMode() || process.argv.includes('--verify-model')) return

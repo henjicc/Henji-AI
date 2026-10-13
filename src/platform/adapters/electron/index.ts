@@ -30,9 +30,11 @@ import { createElectronSmartRegions } from './smartRegions'
 import { createElectronTracking } from './tracking'
 import { createElectronVideoProxy } from './videoProxy'
 import { createElectronSceneDetection } from './sceneDetection'
+import { createElectronScreenRecording } from './screenRecording'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
+    screenRecording: createElectronScreenRecording(),
     embeddedAgent: createElectronEmbeddedAgent(),
     mcp: createElectronMcp(),
     applicationControl: createElectronApplicationControl(),

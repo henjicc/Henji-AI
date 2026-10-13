@@ -34,6 +34,7 @@ import type { SmartRegionsPlatform } from '../../src/platform/contracts/smartReg
 import type { TrackingPlatform } from '../../src/platform/contracts/tracking'
 import type { VideoProxyPlatform } from '../../src/platform/contracts/videoProxy'
 import type { SceneDetectionPlatform } from '../../src/platform/contracts/sceneDetection'
+import type { ScreenRecordingPlatform } from '../../src/platform/contracts/screenRecording'
 import type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export * from './api-assistant'
@@ -48,6 +49,7 @@ export type { HenjiDocumentsApi } from './api-documents'
 export type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export interface HenjiNativeApi {
+  screenRecording: ScreenRecordingPlatform
   embeddedAgent: HenjiEmbeddedAgentApi
   applicationControl: ApplicationHostPlatform
   mcp: McpPlatform
