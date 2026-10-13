@@ -2,7 +2,7 @@ import i18n from '@/i18n'
 import { getI18nText } from '@/core/types/I18nText'
 import type { ModelDefinition } from '@/core/types/ModelDefinition'
 import { hasApplicationPaidApproval } from '../application-control/userConfirmation'
-import { paidApprovalMessage, type PaidApprovalDisplay } from '../application-control/paidApproval'
+import { paidApprovalMessage, isPaidConfirmationExpired, type PaidApprovalDisplay } from '../application-control/paidApproval'
 import { prepareGenerationPaidApproval } from '@/services/paidApproval'
 
 export interface GenerationSubmissionConfirmationRequest {
@@ -33,7 +33,7 @@ export function consumeGenerationPaidApproval(taskId: string): boolean { return 
 export interface GenerationPaidExecution {
   start(): Promise<unknown>
   complete(): Promise<unknown>
-  failed(): Promise<unknown>
+  failed(error?: unknown): Promise<unknown>
   reject(): Promise<unknown>
 }
 
@@ -71,7 +71,7 @@ export async function confirmGenerationSubmission(model: ModelDefinition, params
   try { await paid.confirm(project) }
   catch (error) {
     // IPC 往返期间刚好越过账本期限，仍属于未提交的取消。
-    if (error instanceof Error && error.message.includes('付费确认已结束，请重新发起。')) throw new GenerationSubmissionCancelledError()
+    if (isPaidConfirmationExpired(error)) throw new GenerationSubmissionCancelledError()
     throw error
   }
   return paid

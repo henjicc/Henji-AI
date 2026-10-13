@@ -38,6 +38,28 @@ function enableConfirmation(): void {
   paid.prepare.mockResolvedValue({ ...paid, project: undefined, decision: { decision: 'ask', reason: '每次询问', estimatedCny: 0.1, dailySpentCny: 0 } })
   registry.getModel('cancel-fixture')!.submissionConfirmation = ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation
 }
+it('生成失败把原始计费事实交给共享回执，不因提交入口已启动而丢失', async () => {
+  const failure = Object.assign(new Error('生成预检拒绝'), { paidFailureFacts: { billing: 'not_charged' } })
+  vi.mocked(aiGenerate).mockRejectedValueOnce(failure)
+  await expect(service.generate('cancel-fixture', { prompt: 'fixture' })).rejects.toThrow('生成预检拒绝')
+  expect(paid.failed).toHaveBeenCalledWith(failure)
+})
+it('供应商已经返回结果后回执保存失败不释放费用', async () => {
+  vi.mocked(aiGenerate).mockResolvedValueOnce({ status: 'completed', urls: [], filePaths: [] })
+  paid.complete.mockRejectedValueOnce(Object.assign(new Error('回执保存失败'), { paidFailureFacts: { billing: 'not_charged' } }))
+  await expect(service.generate('cancel-fixture', { prompt: 'fixture' })).rejects.toThrow('回执保存失败')
+  expect(paid.failed).toHaveBeenCalledWith(expect.objectContaining({ paidFailureFacts: { billing: 'completed' } }))
+})
+it('生成确认使用主进程剩余期限，过期不发送请求', async () => {
+  vi.useFakeTimers()
+  enableConfirmation()
+  paid.prepare.mockResolvedValueOnce({ ...paid, decision: { decision: 'ask', reason: '询问', estimatedCny: 1, dailySpentCny: 0, expiresAt: Date.now() + 100 } })
+  const outcome = service.generate('cancel-fixture', { prompt: 'fixture' }).catch(error => error)
+  await vi.advanceTimersByTimeAsync(100)
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  expect(await outcome).toMatchObject({ name: 'GenerationSubmissionCancelledError' })
+  expect(aiGenerate).not.toHaveBeenCalled()
+})
 
 it.each(['timeout', 'expired-reply'])('付费确认 %s 按取消结束，不启动生成、不标记失败', async mode => {
   vi.useFakeTimers()

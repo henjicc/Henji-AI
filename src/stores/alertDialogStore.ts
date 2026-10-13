@@ -90,8 +90,9 @@ export async function requestAlertConfirmation(
     const abort = (): void => controller.abort()
     signal?.addEventListener('abort', abort, { once: true })
     if (signal?.aborted) abort()
-    const expiresAt = Date.now() + USER_CONFIRMATION_TIMEOUT_MS
-    const timer = setTimeout(abort, USER_CONFIRMATION_TIMEOUT_MS)
+    const expiresAt = request.paidDetails?.expiresAt ?? Date.now() + USER_CONFIRMATION_TIMEOUT_MS
+    if (expiresAt <= Date.now()) abort()
+    const timer = setTimeout(abort, Math.max(0, expiresAt - Date.now()))
     try { return await showAlertConfirmation(request, controller.signal, expiresAt) }
     finally { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
   }

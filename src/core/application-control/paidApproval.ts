@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ApplicationPreflightFailure } from './execution/transactionFailure'
 
 export const PAID_APPROVAL_SETTING_KEY = 'ai.paid_approval'
 export const paidOperationCategorySchema = z.enum(['generation', 'recognition', 'translation', 'title', 'explanation'])
@@ -30,11 +31,36 @@ export const UI_PAID_CAPABILITIES = {
   ui_verify_model: 'generation', ui_assistant_chat: 'generation',
 } as const satisfies Record<string, PaidOperationCategory>
 /** Trusted application UI, never an Agent tool input. */
+export const paidFailureFactsSchema = z.object({ billing: z.enum(['not_charged', 'submitted', 'completed', 'unknown']) }).strict()
+export type PaidFailureFacts = z.infer<typeof paidFailureFactsSchema>
+
+/** 只消费执行层的明确计费事实；HTTP 状态、错误文案与取消本身都不能证明未计费。 */
+export function readPaidFailureFacts(error: unknown): PaidFailureFacts {
+  const seen = new Set<object>()
+  while (error && typeof error === 'object' && !seen.has(error)) {
+    seen.add(error)
+    const record = error as Record<string, unknown>
+    for (const field of ['paidFailureFacts', 'execution', 'transcriptionFacts', 'details']) {
+      const value = record[field]
+      const facts = paidFailureFactsSchema.safeParse(value && typeof value === 'object' && 'billing' in value ? { billing: value.billing } : undefined)
+      if (facts.success) return facts.data
+    }
+    if (error instanceof ApplicationPreflightFailure) return { billing: 'not_charged' }
+    error = record.cause
+  }
+  return { billing: 'unknown' }
+}
+
+export function isPaidConfirmationExpired(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('付费确认已结束，请重新发起。')
+}
+
 export const uiPaidApprovalSchema = z.object({
   action: z.enum(['prepare', 'approve', 'start', 'complete', 'reject', 'failed']),
   request: paidApprovalRequestSchema,
   capabilityId: z.enum(Object.keys(UI_PAID_CAPABILITIES) as [keyof typeof UI_PAID_CAPABILITIES, ...(keyof typeof UI_PAID_CAPABILITIES)[]]),
   projectConsent: z.boolean().optional(),
+  failureFacts: paidFailureFactsSchema.optional(),
 }).strict()
 export const paidApprovalDecisionSchema = z.object({
   decision: z.enum(['auto', 'ask', 'deny']), reason: z.string(),
@@ -42,6 +68,8 @@ export const paidApprovalDecisionSchema = z.object({
   dailySpentCny: z.number().finite().nonnegative(),
 }).strict()
 export type PaidApprovalDecision = z.infer<typeof paidApprovalDecisionSchema>
+/** 仅可信 UI prepare 的返回值；不改变助手 paid_approval 的公开决策结构。 */
+export const uiPaidApprovalDecisionSchema = paidApprovalDecisionSchema.extend({ expiresAt: z.number().finite().nullable() })
 export const paidApprovalReceiptSchema = z.object({ decision: z.enum(['auto', 'user']), reason: z.string() }).strict()
 export type PaidApprovalReceipt = z.infer<typeof paidApprovalReceiptSchema>
 export const paidReservationSchema = paidApprovalRequestSchema.extend({
@@ -52,8 +80,10 @@ export interface PaidApprovalDisplay {
   dailySpentCny: number
   category: PaidOperationCategory
   modelName?: string
+  expiresAt?: number
 }
 /** 业务层只提供费用事实；展示层按当前语言组织确认文案。 */
-export function paidApprovalMessage(value: PaidApprovalDecision, category: PaidOperationCategory, modelName?: string): PaidApprovalDisplay {
-  return { estimatedCny: value.estimatedCny, dailySpentCny: value.dailySpentCny, category, ...(modelName ? { modelName } : {}) }
+export function paidApprovalMessage(value: PaidApprovalDecision & { expiresAt?: number | null }, category: PaidOperationCategory, modelName?: string): PaidApprovalDisplay {
+  return { estimatedCny: value.estimatedCny, dailySpentCny: value.dailySpentCny, category, ...(modelName ? { modelName } : {}),
+    ...(typeof value.expiresAt === 'number' ? { expiresAt: value.expiresAt } : {}) }
 }

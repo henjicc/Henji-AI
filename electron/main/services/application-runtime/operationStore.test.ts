@@ -14,6 +14,7 @@ import { reserveGenerationBudget } from './generationBudget'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
+import { handleUiPaidApproval } from './paidApprovalPolicy'
 
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
 
@@ -35,6 +36,23 @@ function input(baselineId: string): Record<string, unknown> {
 }
 
 describe('应用原生操作记录与恢复', () => {
+  it('正式费用失败回执在原生账本释放明确未计费额度，重启后未知费用仍保留', () => {
+    const f = fixture(), now = Date.now()
+    const request = { category: 'generation' as const, estimatedCny: 1 }
+    for (const billing of ['not_charged', 'unknown'] as const) {
+      f.store.save({ operationId: billing, callerId: f.rendererEpoch, capabilityId: 'create_visible_generation_task',
+        input: { paid: request }, inputDigest: JSON.stringify(request), state: 'executing', origin: { actor: 'user', at: now },
+        paidReservations: [{ ...request, reservedAt: now, approval: { decision: 'auto', reason: '额度内' } }] })
+      handleUiPaidApproval(f.store, { requestId: billing, rendererEpoch: f.rendererEpoch, result: {},
+        uiPaidApproval: { action: 'failed', request, capabilityId: 'create_visible_generation_task', failureFacts: { billing } } })
+    }
+    f.store.recoverInterrupted()
+    expect(f.store.get('not_charged', f.rendererEpoch)).toMatchObject({ state: 'not_executed', result: { error: { details: { billing: 'not_charged' } } } })
+    expect(f.store.get('unknown', f.rendererEpoch)?.state).toBe('unknown')
+    const today = new Date(now); today.setHours(0, 0, 0, 0)
+    expect(f.store.generationSpendSince(today.getTime())).toBe(1)
+    expect(f.store.unresolved()).toEqual([])
+  })
   it('界面付费失败及重启未知仅保留预算，不进入助手核对；旧日终态账本可清理', () => {
     const f = fixture()
     const now = Date.now()

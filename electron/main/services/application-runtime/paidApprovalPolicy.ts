@@ -47,7 +47,7 @@ export function approvePaidOperation(store: Pick<ApplicationOperationStore, 'get
 }
 
 /** All UI paid operations share the policy, reservations and operation lifecycle. */
-export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince' | 'prepare'>, reply: LocalHostReply): PaidApprovalDecision | void {
+export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince' | 'prepare'>, reply: LocalHostReply): (PaidApprovalDecision & { expiresAt?: number | null }) | void {
   const command = reply.uiPaidApproval!
   if (command.request.category !== UI_PAID_CAPABILITIES[command.capabilityId]) throw new Error('付费类别与正式操作不一致。')
   const callerId = reply.rendererEpoch
@@ -58,9 +58,9 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
       input: { paid: command.request }, inputDigest: JSON.stringify(command.request), state: 'preparing', origin: { at: Date.now(), actor: 'user' } })
     const decision = approvePaidOperation(store, record, command.request, true)
     const current = store.get(record.operationId, callerId)!
-    store.save({ ...current, state: decision.decision === 'ask' ? 'awaiting_user_confirmation' : 'preparing',
-      confirmation: decision.decision === 'ask' ? applicationUserConfirmation({ title: PAID_OPERATION_LABELS[command.request.category], message: '你发起的操作将使用已配置的模型，按模型计费。', confirmLabel: '允许本次', paid: decision }) : undefined })
-    return decision
+    const confirmation = decision.decision === 'ask' ? applicationUserConfirmation({ title: PAID_OPERATION_LABELS[command.request.category], message: '你发起的操作将使用已配置的模型，按模型计费。', confirmLabel: '允许本次', paid: decision }) : undefined
+    store.save({ ...current, state: confirmation ? 'awaiting_user_confirmation' : 'preparing', confirmation })
+    return { ...decision, expiresAt: confirmation?.expiresAt ?? null }
   }
   if (!record || record.capabilityId !== command.capabilityId || record.inputDigest !== JSON.stringify(command.request)) throw new Error('付费请求与原授权不一致。')
   if (command.action === 'approve') {
@@ -77,6 +77,12 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
     store.save({ ...record, state: 'not_executed', confirmation: undefined, verificationState: 'verified' })
   } else {
     if (record.state !== 'executing') throw new Error('付费操作尚未开始。')
-    store.save({ ...record, state: command.action === 'complete' ? 'completed' : 'unknown', verificationState: command.action === 'complete' ? 'verified' : 'unresolved' })
+    const completed = command.action === 'complete'
+    const notCharged = !completed && command.failureFacts?.billing === 'not_charged'
+    store.save({ ...record, state: completed ? 'completed' : notCharged ? 'not_executed' : 'unknown',
+      verificationState: completed || notCharged ? 'verified' : 'unresolved',
+      ...(!completed ? { result: { ok: false, error: { code: 'PAID_OPERATION_FAILED', message: '付费操作失败', details: command.failureFacts ?? { billing: 'unknown' } } } } : {}) })
+    logger.info('AI 付费执行事实已记录', { event: 'application.paid_approval.settled', requestId: record.operationId,
+      context: { outcome: completed ? 'completed' : notCharged ? 'not_charged' : 'unknown', category: command.request.category } })
   }
 }

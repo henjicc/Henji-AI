@@ -17,12 +17,25 @@ it('确认恰好到期后拒绝 approve，不产生额度预留', () => {
   let record: OperationRecord | undefined
   const store = { get: () => record, save: (value: OperationRecord) => { record = value }, prepare: (value: OperationRecord) => (record = value), generationSpendSince: () => 0 }
   const reply: LocalHostReply = { requestId: 'expired', rendererEpoch: 'renderer', result: {}, uiPaidApproval: { capabilityId: 'ui_generate_title', action: 'prepare', request: { category: 'title', estimatedCny: 1 } } }
-  handleUiPaidApproval(store, reply)
+  expect(handleUiPaidApproval(store, reply)).toMatchObject({ expiresAt: Date.now() + USER_CONFIRMATION_TIMEOUT_MS })
   vi.advanceTimersByTime(USER_CONFIRMATION_TIMEOUT_MS)
   expect(() => handleUiPaidApproval(store, { ...reply, uiPaidApproval: { ...reply.uiPaidApproval!, action: 'approve' } })).toThrow('付费确认已结束')
   expect(record?.paidReservations).toBeUndefined()
 })
 const project = { id: 'project', name: '测试项目' }
+it.each(['not_charged', 'submitted', 'completed', 'unknown', undefined] as const)('UI 失败 billing=%s 仅明确未计费时释放预留', billing => {
+  let record: OperationRecord | undefined
+  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, prepare: (value: OperationRecord) => (record = value),
+    generationSpendSince: () => record?.state === 'not_executed' ? 0 : (record?.paidReservations ?? []).reduce((sum, item) => sum + (item.estimatedCny ?? 0), 0) }
+  const reply: LocalHostReply = { requestId: 'bill', rendererEpoch: 'renderer', result: {}, uiPaidApproval: { capabilityId: 'ui_generate_title', action: 'prepare', request: { category: 'title', estimatedCny: 1 } } }
+  handleUiPaidApproval(store, reply)
+  handleUiPaidApproval(store, { ...reply, uiPaidApproval: { ...reply.uiPaidApproval!, action: 'start' } })
+  expect(store.generationSpendSince()).toBe(1)
+  handleUiPaidApproval(store, { ...reply, uiPaidApproval: { ...reply.uiPaidApproval!, action: 'failed', ...(billing ? { failureFacts: { billing } } : {}) } })
+  expect(record?.state).toBe(billing === 'not_charged' ? 'not_executed' : 'unknown')
+  expect(store.generationSpendSince()).toBe(billing === 'not_charged' ? 0 : 1)
+  expect(() => handleUiPaidApproval(store, { ...reply, uiPaidApproval: { ...reply.uiPaidApproval!, action: 'failed', failureFacts: { billing: 'not_charged' } } })).toThrow('尚未开始')
+})
 const request = (amount: number | null): PaidApprovalRequest => ({ category: 'recognition', estimatedCny: amount, project })
 it.each([
   ['ask', 0, 0, false, 'ask'], ['ask', 2, 18, true, 'auto'], ['ask', 2.01, 0, true, 'ask'],

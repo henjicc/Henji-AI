@@ -97,7 +97,7 @@ function replaceVideoSourceInParams(
   newSource: string,
 ): DynamicValueMap {
   const next = { ...params }
-  for (const key of ['uploadedVideoFilePaths', 'videos'] as const) {
+  for (const key of ['uploadedVideoFilePaths', 'videos', 'uploadedVideos'] as const) {
     const candidate = next[key]
     if (!isStringArray(candidate)) {
       continue

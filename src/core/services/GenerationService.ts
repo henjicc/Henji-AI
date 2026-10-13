@@ -133,6 +133,7 @@ export class GenerationService {
     let paidExecution: GenerationPaidExecution | undefined
     let paidStarted = false
     let paidCompleted = false
+    let providerResponded = false
     const paidApproved = consumeGenerationPaidApproval(requestId)
 
     try {
@@ -199,6 +200,7 @@ export class GenerationService {
         requestId,
         ...(options.outputContainer ? { outputContainer: options.outputContainer } : {}),
       }))
+      providerResponded = true
       if (paidExecution) { await paidExecution.complete(); paidCompleted = true }
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
       await captureClonedVoice(modelId, model.meta.provider, response)
@@ -282,7 +284,7 @@ export class GenerationService {
       }
     } catch (error) {
       if (paidExecution && !paidCompleted) {
-        try { await (paidStarted ? paidExecution.failed() : paidExecution.reject()) }
+        try { await (paidStarted ? paidExecution.failed(providerResponded ? { paidFailureFacts: { billing: 'completed' }, cause: error } : error) : paidExecution.reject()) }
         catch (receiptError) { logger.error('生成费用回执保存失败', receiptError, { event: 'generation.paid_receipt.failed', requestId }) }
       }
       let message = getErrorMessage(error)

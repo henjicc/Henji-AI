@@ -8,8 +8,8 @@ import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecu
 import type { TranscriptionPreparation } from '@/core/audioEdit/transcriptionFailure'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { hasApplicationConfirmation, hasApplicationPaidApproval } from '@/core/application-control/userConfirmation'
-import type { PaidApprovalRequest, PaidOperationCategory } from '@/core/application-control/paidApproval'
-import { paidApprovalDecisionSchema, paidApprovalMessage } from '@/core/application-control/paidApproval'
+import type { PaidApprovalRequest, PaidOperationCategory, PaidFailureFacts } from '@/core/application-control/paidApproval'
+import { uiPaidApprovalDecisionSchema, paidApprovalMessage, isPaidConfirmationExpired, readPaidFailureFacts } from '@/core/application-control/paidApproval'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { notifyUser } from '@/contexts/NotificationContext'
 import { getPlatform } from '@/platform/runtime'
@@ -58,14 +58,20 @@ export async function prepareGenerationPaidApproval(modelId: string, params: Dyn
 
 export async function prepareUiPaidApproval(request: PaidApprovalRequest, capabilityId: NonNullable<LocalHostReply['uiPaidApproval']>['capabilityId']) {
   const requestId = crypto.randomUUID()
-  const send = (action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], projectConsent?: boolean) => getPlatform().applicationControl.complete({
-    requestId, rendererEpoch, result: {}, uiPaidApproval: { action, request, capabilityId, projectConsent },
+  const send = (action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], projectConsent?: boolean, failureFacts?: PaidFailureFacts) => getPlatform().applicationControl.complete({
+    requestId, rendererEpoch, result: {}, uiPaidApproval: { action, request, capabilityId, projectConsent, ...(failureFacts ? { failureFacts } : {}) },
   })
-  const decision = paidApprovalDecisionSchema.parse(await send('prepare'))
-  return { decision, project: request.project, confirm: (project: boolean) => send('approve', project), start: async () => {
+  const decision = uiPaidApprovalDecisionSchema.parse(await send('prepare'))
+  return { decision, project: request.project, confirm: async (project: boolean) => {
+    try { return await send('approve', project) }
+    catch (error) {
+      if (isPaidConfirmationExpired(error)) throw new PaidOperationCancelledError(error)
+      throw error
+    }
+  }, start: async () => {
     await send('start')
     if (decision.decision === 'auto') notifyUser(decision.estimatedCny === null ? notificationMessage('autoApprovedMetered') : notificationMessage('autoApprovedEstimate', { amount: decision.estimatedCny.toFixed(2) }))
-  }, complete: () => send('complete'), reject: () => send('reject'), failed: () => send('failed') }
+  }, complete: () => send('complete'), reject: () => send('reject'), failed: (error?: unknown) => send('failed', undefined, readPaidFailureFacts(error)) }
 }
 
 export interface PaidOperationOptions {
@@ -109,6 +115,7 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
   signal?.addEventListener('abort', abort, { once: true })
   if (signal?.aborted) abort()
   let started = false
+  let workCompleted = false
   try {
     controller.signal.throwIfAborted()
     if (paid.decision.decision === 'deny') throw new ApplicationPreflightFailure(paid.decision.reason)
@@ -124,10 +131,11 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
     await paid.start(); started = true
     activeApprovals.set(controller.signal, options.category)
     const result = await work(controller.signal)
+    workCompleted = true
     await paid.complete()
     return result
   } catch (error) {
-    await (started ? paid.failed() : paid.reject())
+    await (started ? paid.failed(workCompleted ? { paidFailureFacts: { billing: 'completed' }, cause: error } : error) : paid.reject())
     throw error
   } finally {
     activeApprovals.delete(controller.signal)
