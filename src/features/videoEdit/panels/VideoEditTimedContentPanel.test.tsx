@@ -224,6 +224,18 @@ it('字幕浮层区分模型加载、失败重试和未配置，每次重开刷�
   await view.findByText('尚未配置时间戳识别模型')
   fireEvent.click(trigger)
   await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('false'))
+  // aria-expanded 在退出开始时就变为 false；配置刷新要等退出完成通知父级关闭。
+  const exitingPanel = view.getByText('尚未配置时间戳识别模型').closest('[data-panel-placement]')!
+  expect(exitingPanel.getAttribute('aria-hidden')).toBe('true')
+  // 退出途中重开会取消旧退出通知，迟到的结束事件不能关闭新浮层。
+  fireEvent.click(trigger)
+  act(() => exitingPanel.dispatchEvent(new Event('animationend')))
+  expect(trigger.getAttribute('aria-expanded')).toBe('true')
+  expect(view.getByText('尚未配置时间戳识别模型')).toBeTruthy()
+  expect(getPlatform().audioEdit.listAsrModels).toHaveBeenCalledTimes(2)
+  fireEvent.click(trigger)
+  act(() => exitingPanel.dispatchEvent(new Event('animationend')))
+  expect(view.queryByText('尚未配置时间戳识别模型')).toBeNull()
   vi.mocked(getPlatform().audioEdit.listAsrModels).mockResolvedValue([{ id: 'configured', providerId: 'test', timestamps: true, configured: true, longAudio: true }])
   fireEvent.click(trigger)
   await waitFor(() => expect(view.getByRole('button', { name: '转录并生成字幕' }).hasAttribute('disabled')).toBe(false))
