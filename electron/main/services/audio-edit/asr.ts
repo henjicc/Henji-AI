@@ -1,9 +1,7 @@
 import crypto from 'node:crypto'
-import { AiRuntimeError, type SpeechRecognitionOutput } from '@henjicc/ai-sdk'
-import { timestampedAsrService } from './timestamped-asr'
+import { timestampedAsrService, prepareTimestampedAsrWithReceipt, executeTimestampedAsrWithReceipt, type TimestampedAsrReceipt } from './timestamped-asr'
 import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts, type TranscriptionPreflight, type TranscriptionPreparation } from '../../../../src/core/audioEdit/transcriptionFailure'
-import { audioEditTranscriptBlocks, normalizeTimestampedTranscript } from '../../../../src/core/audioEdit/timestampedTranscript'
-import { ASR_CATALOG, asrProviderId, estimateAsrCost } from '../../../../src/core/audioEdit/asrCatalog'
+import { audioEditTranscriptBlocks } from '../../../../src/core/audioEdit/timestampedTranscript'
 
 import type {
   AudioEditTranscriptionRequest,
@@ -21,13 +19,8 @@ const controllers = new Map<string, AbortController>()
 
 const client = timestampedAsrService.client
 
-interface TranscriptionReceipt {
-  modelId?: string
-  sourceDigest?: string
-  language?: string
+interface TranscriptionReceipt extends TimestampedAsrReceipt {
   output?: AudioEditTranscriptionResult
-  rawOutput?: SpeechRecognitionOutput
-  billing?: TranscriptionFacts['billing']
 }
 
 export const listAudioEditAsrModels = timestampedAsrService.listModels
@@ -86,25 +79,20 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
     return { ...cached, project: { ...project, transcript: cached.project.transcript, suggestions: cached.project.suggestions,
       selectedAsrModelId: cached.modelId, editBaseline: cached.project.editBaseline } }
   }
-  let rawOutput = priorInput?.rawOutput
+  const rawOutput = priorInput?.rawOutput
   if (previous && !neverSubmitted && !rawOutput && (!previous.provider_task_id || !priorInput?.modelId)) throw new Error('上次转写的提交结果无法确认，已阻止重复付费。请核对原口播任务。')
   const durationMs = project.source.durationFrames * 1_000 / project.source.sampleRate
-  const cachedModel = rawOutput ? ASR_CATALOG.find(entry => entry.descriptor.id === priorInput?.modelId) : undefined
-  if (rawOutput && !cachedModel) throw new Error('原转写模型不在目录中，请保留已付费结果。')
-  // 已付费原始结果的恢复只用目录元数据，不再检查凭据、上传或请求供应商。
-  const plan = cachedModel ? Object.freeze({
-    modelId: cachedModel.descriptor.id, providerId: asrProviderId(cachedModel), audioPath: project.source.audioPath,
-    durationMs, language: priorInput?.language ?? 'zh', cost: estimateAsrCost(cachedModel.descriptor.id, durationMs),
-  }) : timestampedAsrService.prepare({
+  const plan = prepareTimestampedAsrWithReceipt(timestampedAsrService, {
     modelId: priorInput?.modelId ?? request.modelId, audioPath: project.source.sourcePath,
     durationMs,
     language: priorInput?.language ?? request.language,
-  })
+  }, priorInput, sourceDigest)
   const modelId = plan.modelId
   if (previous && !neverSubmitted && !rawOutput && !client.get(modelId)?.descriptor.features?.includes('resume-task')) throw new Error('此模型不支持恢复查询，已阻止自动重复提交。')
   const language = priorInput?.language ?? request.language ?? 'zh'
   const inputDigest = crypto.createHash('sha256').update(JSON.stringify({ projectId: project.id, sourceDigest, modelId, language })).digest('hex')
   const requestId = previous?.request_id ?? request.requestId ?? crypto.randomUUID()
+  const receipt: TranscriptionReceipt = { modelId, sourceDigest, language, billing, rawOutput }
   if (!previous || neverSubmitted) await timestampedAsrService.preflight({ sourcePath: plan.audioPath, durationMs: plan.durationMs, modelId })
   controller.signal.throwIfAborted()
   assertAudioEditProjectIdle(project.id)
@@ -121,19 +109,10 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
   try {
     const audioPath = previous && !neverSubmitted ? project.source.audioPath : await prepareAudioEditAudio(project, controller.signal)
     controller.signal.throwIfAborted()
-    if (!rawOutput) billing = previous?.provider_task_id ? 'submitted' : 'unknown'
-    updateAudioEditTask(requestId, { state: 'running', result: { modelId, sourceDigest, language, billing, rawOutput } })
-    const output = rawOutput && cachedModel
-      ? normalizeTimestampedTranscript(rawOutput, durationMs, cachedModel.wordGranularity)
-      : await timestampedAsrService.execute(Object.freeze({ ...plan, audioPath }), {
+    const output = await executeTimestampedAsrWithReceipt(timestampedAsrService, Object.freeze({ ...plan, audioPath }), {
       requestId,
       signal: controller.signal,
       resumeTaskId: previous?.provider_task_id ?? undefined,
-      onOutput: (output) => {
-        rawOutput = output
-        billing = 'completed'
-        updateAudioEditTask(requestId, { state: 'running', result: { modelId, sourceDigest, language, billing, rawOutput } })
-      },
       onEvent: (event) => {
         // started.sessionId 是 SDK 会话标识，只有 processing.taskId 能恢复供应商任务。
         if (event.type === 'processing') {
@@ -141,6 +120,9 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
           updateAudioEditTask(requestId, { state: 'running', providerTaskId: event.taskId })
         }
       },
+    }, receipt, saved => {
+      billing = saved.billing ?? 'unknown'
+      updateAudioEditTask(requestId, { state: 'running', result: saved })
     })
     billing = 'completed'
     const transcript = audioEditTranscriptBlocks(output, project.source.sampleRate)
@@ -163,17 +145,18 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
       context: { projectId: project.id, blockCount: transcript.length, granularity },
     })
     const result: AudioEditTranscriptionResult = { project: next, modelId, granularity }
+    receipt.output = result
     // Keep the paid result in the existing task receipt before IPC delivery; reload can retrieve it.
-    updateAudioEditTask(requestId, { state: 'completed', result: { modelId, sourceDigest, language, billing, rawOutput, output: result } })
+    updateAudioEditTask(requestId, { state: 'completed', result: receipt })
     controller.signal.throwIfAborted()
     await verifyAudioEditSource(project, true, controller.signal)
     return result
   } catch (error) {
-    if (!rawOutput && ((error instanceof AiRuntimeError && error.details?.billing === 'not_charged') || (error instanceof Error && error.message.startsWith('[native_upload_unsupported]')))) billing = 'not_charged'
+    billing = receipt.billing ?? billing
     updateAudioEditTask(requestId, {
       state: controller.signal.aborted ? 'cancelled' : 'failed',
       errorMessage: error instanceof Error ? error.message : String(error),
-      ...(rawOutput || billing === 'not_charged' ? { result: { modelId, sourceDigest, language, billing, rawOutput } } : {}),
+      result: receipt,
     })
     logger.error('口播转写失败', {
       event: 'audio_edit.transcription.failed', requestId, modelId,

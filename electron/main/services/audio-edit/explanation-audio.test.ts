@@ -10,11 +10,20 @@ import { normalizeTimestampedTranscript } from '../../../../src/core/audioEdit/t
 import { ExplanationAudioService } from './explanation-audio'
 
 const ledger = vi.hoisted(() => new Map<string, AudioEditStoredTask & { document_id: string }>())
-vi.mock('./timestamped-asr', () => ({ timestampedAsrService: undefined }))
+const failures = vi.hoisted(() => ({ completion: false }))
+vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
+vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn() }))
+vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
+vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined } } }))
+vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<typeof import('./timestamped-asr')>(), timestampedAsrService: undefined }))
 vi.mock('./task-store', () => ({
   getAudioEditStoredTask: (id: string) => ledger.get(id),
   createAudioEditTask: (input: { requestId:string;projectId:string;inputDigest:string }) => { if (ledger.has(input.requestId)) throw new Error('duplicate'); ledger.set(input.requestId,{request_id:input.requestId,document_id:input.projectId,input_digest:input.inputDigest,state:'queued',provider_task_id:null,result_json:null}) },
-  updateAudioEditTask: (id:string, patch:{state?:AudioEditStoredTask['state'];providerTaskId?:string;result?:unknown}) => { const entry=ledger.get(id); if (entry) Object.assign(entry,{...(patch.state?{state:patch.state}:{}),...(patch.providerTaskId?{provider_task_id:patch.providerTaskId}:{}),...(patch.result?{result_json:JSON.stringify(patch.result)}:{})}) },
+  updateAudioEditTask: (id:string, patch:{state?:AudioEditStoredTask['state'];providerTaskId?:string;result?:unknown}) => {
+    if (patch.state === 'completed' && failures.completion) { failures.completion = false; throw new Error('receipt write failed') }
+    const entry = ledger.get(id)
+    if (entry) Object.assign(entry, { ...(patch.state ? { state: patch.state } : {}), ...(patch.providerTaskId ? { provider_task_id: patch.providerTaskId } : {}), ...(patch.result ? { result_json: JSON.stringify(patch.result) } : {}) })
+  },
   deleteAudioEditTasks: (scope:string) => { for (const [id,row] of ledger) if (row.document_id===scope) ledger.delete(id) },
   registerAudioEditTaskController: () => () => {},
 }))
@@ -26,9 +35,47 @@ const dto = normalizeTimestampedTranscript({text:'本地夹具',segments:[{text:
 function fixtureAsr(): Pick<TimestampedAsrService,'prepare'|'execute'|'preflight'> {
   return {preflight:vi.fn(async input=>({modelId:input.modelId!,cost:{status:'unknown' as const,amount:null,currency:null}})),prepare: input=>Object.freeze({modelId:input.modelId!,providerId:'fixture',audioPath:input.audioPath,durationMs:input.durationMs,language:'zh',cost:{status:'unknown' as const,amount:null,currency:null}}),execute:vi.fn(async()=>dto)}
 }
-beforeEach(async()=>{ root=await fs.mkdtemp(path.join(os.tmpdir(),'henji-recording-test-')); ledger.clear() })
+beforeEach(async()=>{ root=await fs.mkdtemp(path.join(os.tmpdir(),'henji-recording-test-')); ledger.clear(); failures.completion = false })
 afterEach(async()=>{ await fs.rm(root,{recursive:true,force:true}) })
 describe('E06/E09 零网络录音与转写生命周期',()=>{
+  it.each(['normalize', 'cancel', 'receipt'] as const)('供应商完成后 %s 失败，重载后只解析付费原始结果，不依赖凭据或重新提交', async stage => {
+    const asr = fixtureAsr()
+    const service = new ExplanationAudioService(root, asr)
+    const input = { ...request(), modelId: 'groq.speech-recognition.whisper-large-v3-turbo' }
+    const raw = { text: '本地夹具', segments: [{ text: '本地夹具', startMs: 0, endMs: 100 }] }
+    await service.write({ action: 'write', sessionId, chunkId, sampleRate: 48000, samples: synthetic() })
+    vi.mocked(asr.execute).mockImplementationOnce(async (_plan, context) => {
+      await context.onOutput?.(raw)
+      if (stage === 'cancel') { service.cancel(sessionId); context.signal.throwIfAborted() }
+      if (stage === 'normalize') throw new Error('private transcript/url local failure')
+      failures.completion = true
+      return dto
+    })
+    await expect(service.transcribe(input)).rejects.toThrow('讲解转写未完成')
+    expect(JSON.parse(ledger.get(chunkId)!.result_json!)).toMatchObject({ billing: 'completed', rawOutput: raw })
+    expect(ledger.get(chunkId)!.provider_task_id).toBeNull()
+    const prepare = vi.fn(() => { throw new Error('凭据已移除') })
+    const reloaded = new ExplanationAudioService(root, { ...asr, prepare })
+    await reloaded.preflight({ ...input, action: 'preflight', resume: true })
+    const result = await reloaded.transcribe({ ...input, resume: true })
+    expect(result.transcript).toEqual(dto)
+    expect(result.modelId).toBe(input.modelId)
+    expect(asr.execute).toHaveBeenCalledTimes(1)
+    expect(asr.preflight).toHaveBeenCalledTimes(1)
+    expect(prepare).not.toHaveBeenCalled()
+  })
+
+  it('原始付费结果确实非法时可重复本地解析失败，仍保留回执且不发新请求', async () => {
+    const asr = fixtureAsr(); const service = new ExplanationAudioService(root, asr)
+    const input = { ...request(), modelId: 'groq.speech-recognition.whisper-large-v3-turbo' }
+    const raw = { text: '错', segments: [{ text: '错', startMs: 0, endMs: 200 }] }
+    await service.write({ action: 'write', sessionId, chunkId, sampleRate: 48000, samples: synthetic() })
+    vi.mocked(asr.execute).mockImplementationOnce(async (_plan, context) => { await context.onOutput?.(raw); throw new Error('invalid timestamps') })
+    await expect(service.transcribe(input)).rejects.toThrow('讲解转写未完成')
+    await expect(service.transcribe({ ...input, resume: true })).rejects.toThrow('讲解转写未完成')
+    expect(asr.execute).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(ledger.get(chunkId)!.result_json!)).toMatchObject({ billing: 'completed', rawOutput: raw })
+  })
   it('确认前检查媒体与宿主可执行性，不登记收费任务、不执行识别',async()=>{
     const asr=fixtureAsr(); const service=new ExplanationAudioService(root,asr)
     const { audioUploadReceipt: _receipt, ...rest } = request(); const preflight={...rest,action:'preflight' as const}
@@ -62,7 +109,12 @@ describe('E06/E09 零网络录音与转写生命周期',()=>{
   it('并发转写拒绝；删除中迟到结果不入账、不重新写回音频',async()=>{
     const asr=fixtureAsr(); const service=new ExplanationAudioService(root,asr); await service.write({action:'write',sessionId,chunkId,sampleRate:48000,samples:synthetic()})
     let resolve!: (result:typeof dto)=>void; let started!:()=>void; const ready=new Promise<void>(r=>{started=r})
-    vi.mocked(asr.execute).mockImplementationOnce(async()=>{started();return new Promise(r=>{resolve=r})})
+    vi.mocked(asr.execute).mockImplementationOnce(async (_plan, context) => {
+      started()
+      const output = await new Promise<typeof dto>(r => { resolve = r })
+      await context.onOutput?.({ text: '迟到结果', segments: [{ text: '迟到结果', startMs: 0, endMs: 100 }] })
+      return output
+    })
     const first=service.transcribe(request()); const rejected=expect(first).rejects.toThrow('讲解转写未完成'); await ready
     await expect(service.transcribe(request())).rejects.toThrow('正在转写'); await service.erase(sessionId); resolve(dto); await rejected
     expect(ledger.size).toBe(0); await expect(service.read(sessionId,chunkId)).rejects.toThrow(); await expect(service.write({action:'write',sessionId,chunkId,sampleRate:48000,samples:synthetic()})).rejects.toThrow('已删除')

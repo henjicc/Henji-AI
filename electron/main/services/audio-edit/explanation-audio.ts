@@ -7,8 +7,12 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import { ZipArchive } from 'archiver'
 import { openZip, iterateEntries, readEntryBytes, isSymbolicLinkEntry } from '../zip-archive'
 import { encodeRecordingWav, type RecordingAudioRequest, type RecordingAudioResult } from '../../../../src/core/audioEdit/recordingAudio'
-import { timestampedAsrService, type TimestampedAsrService } from './timestamped-asr'
+import { timestampedAsrService, prepareTimestampedAsrWithReceipt, executeTimestampedAsrWithReceipt, type TimestampedAsrService, type TimestampedAsrReceipt } from './timestamped-asr'
 import { createAudioEditTask, updateAudioEditTask, registerAudioEditTaskController, deleteAudioEditTasks, getAudioEditStoredTask } from './task-store'
+import { createMainLogger } from '../logging'
+
+const logger = createMainLogger('main.audio_edit.explanation')
+interface ExplanationTranscriptionReceipt extends TimestampedAsrReceipt { output?: RecordingAudioResult }
 
 /** Original audio is private temporary media. No raw paths cross the IPC. */
 export class ExplanationAudioService {
@@ -112,14 +116,16 @@ export class ExplanationAudioService {
     const inputDigest = crypto.createHash('sha256').update(JSON.stringify([request.sessionId, request.chunkId, request.modelId, identity.digest, identity.bytes])).digest('hex')
     const existing = getAudioEditStoredTask(request.requestId)
     if (existing && (existing.document_id !== projectId || existing.input_digest !== inputDigest)) throw new Error('转写任务与录音不符。')
-    if (existing && !(existing.state === 'completed' && existing.result_json) && (!request.resume || !existing.provider_task_id)) throw new Error('提交结果尚未确认，禁止重新发送收费请求。请核对原任务。')
-    return { audioPath, durationMs, projectId, inputDigest, existing }
+    const prior = existing?.result_json ? JSON.parse(existing.result_json) as ExplanationTranscriptionReceipt : undefined
+    const neverSubmitted = existing?.state === 'failed' && prior?.billing === 'not_charged'
+    if (existing && !prior?.output && !prior?.rawOutput && !neverSubmitted && (!request.resume || !existing.provider_task_id)) throw new Error('提交结果尚未确认，禁止重新发送收费请求。请核对原任务。')
+    return { audioPath, durationMs, projectId, inputDigest, sourceDigest: identity.digest, existing, prior, neverSubmitted }
   }
   async preflight(request: Extract<RecordingAudioRequest, { action: 'preflight' }>): Promise<void> {
     if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
-    const { audioPath, durationMs, existing } = await this.prepareRecording(request)
-    if (existing?.state === 'completed' && existing.result_json) return
-    if (existing?.provider_task_id) { this.asr.prepare({ modelId: request.modelId, audioPath, durationMs }); return }
+    const { audioPath, durationMs, existing, prior, neverSubmitted } = await this.prepareRecording(request)
+    if (prior?.output || prior?.rawOutput) return
+    if (!neverSubmitted && existing?.provider_task_id) { this.asr.prepare({ modelId: request.modelId, audioPath, durationMs }); return }
     await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
   }
   async transcribe(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>): Promise<RecordingAudioResult> {
@@ -129,28 +135,39 @@ export class ExplanationAudioService {
   }
   private async performTranscription(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>, controller: AbortController): Promise<RecordingAudioResult> {
     if (!request.audioUploadReceipt) throw new Error('请先确认音频外发与转写费用。')
-    const { audioPath, durationMs, projectId, inputDigest, existing } = await this.prepareRecording(request)
-    if (existing?.state === 'completed' && existing.result_json) return JSON.parse(existing.result_json) as RecordingAudioResult
-    if (!existing) await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
-    const plan = this.asr.prepare({ modelId: request.modelId, audioPath, durationMs })
+    const { audioPath, durationMs, projectId, inputDigest, sourceDigest, existing, prior, neverSubmitted } = await this.prepareRecording(request)
+    if (prior?.output) return prior.output
+    if (!existing || neverSubmitted) await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
+    const plan = prepareTimestampedAsrWithReceipt(this.asr, { modelId: request.modelId, audioPath, durationMs }, prior, sourceDigest)
+    const receipt: ExplanationTranscriptionReceipt = { modelId: plan.modelId, sourceDigest, language: plan.language,
+      billing: prior?.rawOutput ? 'completed' : existing && !neverSubmitted ? 'unknown' : 'not_charged', rawOutput: prior?.rawOutput }
     controller.signal.throwIfAborted()
     if (this.erased.has(request.sessionId)) throw new Error('原录音已删除。')
     const release = registerAudioEditTaskController(request.requestId, projectId, controller)
     try {
       if (!existing) createAudioEditTask({ requestId: request.requestId, projectId, kind: 'explanation-transcription', inputDigest })
-      updateAudioEditTask(request.requestId, { state: 'running' })
-      const transcript = await this.asr.execute(plan, { requestId: request.requestId, signal: controller.signal, resumeTaskId: existing?.provider_task_id ?? undefined, onEvent: event => {
+      updateAudioEditTask(request.requestId, { state: 'running', result: receipt })
+      logger.info('讲解转写开始', { event: 'audio_edit.explanation_transcription.start', requestId: request.requestId, modelId: plan.modelId })
+      const transcript = await executeTimestampedAsrWithReceipt(this.asr, plan, { requestId: request.requestId, signal: controller.signal, resumeTaskId: existing?.provider_task_id ?? undefined, onEvent: event => {
         // started.sessionId identifies the SDK session, not the provider's resumable job.
         const taskId = event.type === 'processing' ? event.taskId : undefined
         if (taskId) updateAudioEditTask(request.requestId, { state: 'running', providerTaskId: taskId })
-      } })
+      } }, receipt, saved => {
+        if (this.erased.has(request.sessionId)) throw new Error('原录音已删除。')
+        updateAudioEditTask(request.requestId, { state: 'running', result: saved })
+      })
       controller.signal.throwIfAborted()
       if (this.erased.has(request.sessionId)) throw new Error('原录音已删除。')
       const result = { transcript, modelId: plan.modelId, providerId: plan.providerId, requestId: request.requestId }
-      updateAudioEditTask(request.requestId, { state: 'completed', result }); return result
+      receipt.output = result
+      updateAudioEditTask(request.requestId, { state: 'completed', result: receipt })
+      logger.info('讲解转写完成', { event: 'audio_edit.explanation_transcription.completed', requestId: request.requestId, modelId: plan.modelId })
+      return result
     } catch {
       // SDK error messages can contain a transcript or URL. Never retain them in the task/log.
-      if (!this.erased.has(request.sessionId)) updateAudioEditTask(request.requestId, { state: controller.signal.aborted ? 'cancelled' : 'failed', errorMessage: '讲解转写未完成，请查询原任务。' }); throw new Error('讲解转写未完成，请查询原任务。')
+      if (!this.erased.has(request.sessionId)) updateAudioEditTask(request.requestId, { state: controller.signal.aborted ? 'cancelled' : 'failed', result: receipt, errorMessage: '讲解转写未完成，请查询原任务。' })
+      logger.error('讲解转写未完成', { event: 'audio_edit.explanation_transcription.failed', requestId: request.requestId, context: { cancelled: controller.signal.aborted } })
+      throw new Error('讲解转写未完成，请查询原任务。')
     } finally { release() }
   }
 }

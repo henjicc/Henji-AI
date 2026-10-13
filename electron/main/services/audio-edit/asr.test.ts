@@ -8,7 +8,10 @@ const mock = vi.hoisted(() => ({ project: vi.fn(), verify: vi.fn(), prepareAudio
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('./project-store', () => ({ requireAudioEditProject: mock.project }))
 vi.mock('./media', () => ({ verifyAudioEditSource: mock.verify, prepareAudioEditAudio: mock.prepareAudio }))
-vi.mock('./timestamped-asr', () => ({ timestampedAsrService: {
+vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
+vi.mock('../ai-runtime/native-file-upload', () => ({ scopedUploadFile: vi.fn() }))
+vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined } } }))
+vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<typeof import('./timestamped-asr')>(), timestampedAsrService: {
   client: { get: () => ({ descriptor: { features: ['resume-task'] } }) }, listModels: () => [],
   preflight: mock.preflight, execute: mock.execute,
   prepare: (input: Record<string, unknown>) => ({ ...input, modelId: 'groq.speech-recognition.whisper-large-v3-turbo', providerId: 'groq', cost: { status: 'unknown', amount: null, currency: null } }),
