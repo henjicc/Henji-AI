@@ -15,7 +15,7 @@ async function compileApp(dev: boolean) {
   const script = `require('esbuild').build({
     entryPoints: [process.argv[1]], bundle: true, write: false,
     format: 'cjs', platform: 'node', target: 'es2020', treeShaking: true, minifySyntax: true,
-    define: { 'import.meta.env.DEV': process.argv[2] },
+    define: { 'import.meta.env.DEV': process.argv[2], 'import.meta.env.MODE': process.argv[2] === 'true' ? '"development"' : '"production"' },
     plugins: [{ name: 'isolate-app-shell', setup(builder) {
       builder.onResolve({ filter: /.*/ }, args => {
         if (args.kind === 'entry-point') return undefined

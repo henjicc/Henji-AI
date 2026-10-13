@@ -186,16 +186,15 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 `review` 矩阵是石墨/深海/胶片/纸白 1440×900 + 石墨 960×640，每种尺寸都有整套分区截图。一次 `ui:tour --audit` 同时生成截图、像素对比度、DOM 规则与运行时证据，不再叠加同矩阵的 `check:ui-visual`。
 
-中心页仅开发构建显示，可用 `--dev-surface=dev.ui_gallery` 直接进入，或在主窗口按 `Ctrl+Shift+F8` 打开/返回。正式构建在应用壳裁掉中心页与加载引用；带开发页参数时继续正常工作区启动流程。总管理者在互斥构建安全边界中准备 **DEV=true 的巡检产物** 后运行（默认生产 bundle 不能显示此页；本机 Vite 的 DEV 由构建时 NODE_ENV 决定）：
+中心页仅开发构建显示，可用 `--dev-surface=dev.ui_gallery` 直接进入，或在主窗口按 `Ctrl+Shift+F8` 打开/返回。正式构建在应用壳裁掉中心页与加载引用；带开发页参数时继续正常工作区启动流程。总管理者在互斥构建安全边界中准备**开发巡检产物**后运行。`electron-vite build` 总把 `NODE_ENV` 固定为 production，`import.meta.env.DEV` 在任何 bundle 里都为 false；中心页守卫因此同时接受 `import.meta.env.MODE === 'development'`，由 `HENJI_BUNDLE_MODE=development` 让构建传 `--mode development`（正式 `electron:build`/`electron:dist` 不设，页面与 chunk 仍被裁掉）：
 
 ```powershell
-$galleryNodeEnvBefore = $env:NODE_ENV
+$env:HENJI_BUNDLE_MODE = 'development'
 try {
-  $env:NODE_ENV = 'development'
   npm run electron:bundle
   if ($LASTEXITCODE -ne 0) { throw '开发巡检产物构建失败' }
 } finally {
-  $env:NODE_ENV = $galleryNodeEnvBefore
+  Remove-Item Env:HENJI_BUNDLE_MODE -ErrorAction SilentlyContinue
 }
 npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --audit --out .ui-tour/review/ui-gallery
 ```

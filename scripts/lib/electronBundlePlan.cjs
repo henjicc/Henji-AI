@@ -13,7 +13,9 @@ function buildElectronBundlePlan(root) {
     {
       label: '构建 Electron main/preload/renderer',
       command: process.execPath,
-      args: [path.join(root, 'node_modules/electron-vite/bin/electron-vite.js'), 'build'],
+      // electron-vite build 总把 NODE_ENV 固定为 production；开发巡检产物用 HENJI_BUNDLE_MODE=development 传 --mode，
+      // 渲染层以 import.meta.env.MODE 判断（Vite 静态替换，正式构建仍可裁掉开发页）。
+      args: [path.join(root, 'node_modules/electron-vite/bin/electron-vite.js'), 'build', ...(process.env.HENJI_BUNDLE_MODE ? ['--mode', process.env.HENJI_BUNDLE_MODE] : [])],
     },
   ]
 }

@@ -71,8 +71,10 @@ const AssetLibraryFloatingPanel = lazy(() =>
  * 所以在启动之后的空闲时间把这两块 chunk 先取回来，用户真正点击时 import() 直接命中缓存。
  * 顺序按点击概率排：设置 > 资产面板；助手入口当前隐藏，不预取。
  */
-// 编译期守卫：正式构建裁掉开发中心页及其 chunk 引用。
-const UiGalleryPage = import.meta.env.DEV
+// 编译期守卫：正式构建裁掉开发中心页及其 chunk 引用。开发巡检产物以 --mode development 构建
+// （electron-vite build 固定 NODE_ENV=production，DEV 恒为 false，只能看 MODE）。每处都内联写判断式，
+// 让打包器在各使用点直接折叠成常量并裁掉分支，不依赖跨绑定的常量传播。
+const UiGalleryPage = (import.meta.env.DEV || import.meta.env.MODE === 'development')
   ? lazy(() => import('@/features/devGallery/UiGalleryPage').then((m) => ({ default: m.UiGalleryPage })))
   : null
 
@@ -86,7 +88,7 @@ const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel]
 const OVERLAY_PREFETCH_DEV_DELAY_MS = 20000
 const developmentLaunch = readDevelopmentLaunchOptions()
 // 只忽略正式构建中的开发中心页参数；其他正式 Surface 的巡检定位沿用原契约。
-const startupSurfaceId = !import.meta.env.DEV && developmentLaunch.surfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery
+const startupSurfaceId = !(import.meta.env.DEV || import.meta.env.MODE === 'development') && developmentLaunch.surfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery
   ? null : developmentLaunch.surfaceId
 
 /**
@@ -111,9 +113,9 @@ const App: React.FC = () => {
   useDevToolsShortcut()
   useLogWindowShortcut()
   const [isReady, setIsReady] = useState(false)
-  const [galleryOpen, setGalleryOpen] = useState(import.meta.env.DEV && startupSurfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery)
+  const [galleryOpen, setGalleryOpen] = useState((import.meta.env.DEV || import.meta.env.MODE === 'development') && startupSurfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery)
   useEffect(() => {
-    if (!import.meta.env.DEV) return
+    if (!(import.meta.env.DEV || import.meta.env.MODE === 'development')) return
     // 复用全局开发快捷键监听方式；只影响本次视图，不写用户设置或正式导航。
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.isComposing || !event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey || event.repeat || event.key !== 'F8') return
@@ -305,7 +307,7 @@ const App: React.FC = () => {
         />
 
         {/* 工作区容器；开发样张页启动时占用这块区域 */}
-        {import.meta.env.DEV && galleryOpen && UiGalleryPage ? (
+        {(import.meta.env.DEV || import.meta.env.MODE === 'development') && galleryOpen && UiGalleryPage ? (
           <Suspense fallback={null}>
             <UiGalleryPage />
           </Suspense>
