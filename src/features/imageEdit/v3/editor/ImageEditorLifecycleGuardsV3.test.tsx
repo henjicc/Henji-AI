@@ -1,3 +1,4 @@
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 /** @vitest-environment jsdom */
 
 import '@/tests/imageEditDocumentFixture'
@@ -118,7 +119,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     })
     expect(changes[0].layers[1].mask).toBeNull()
     expect(changes[0].revision).toBe(1)
-    expect((screen.getByRole('button', { name: '添加蒙版' }) as HTMLButtonElement).disabled).toBe(false)
+    expectButtonEnabled(screen.getByRole('button', { name: '添加蒙版' }))
   })
 
   it('opacity pointercancel 清除瞬态值且不提交历史', async () => {
@@ -147,6 +148,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
     }
     const document = createImageEditDocumentV3({ width: 640, height: 480, documentId: 'locked-ui' })
     document.layers = [createImageEditRasterLayerV3('outside', '外部层'), group]
+    const changed = vi.fn()
     const rendered = render(
       <VirtuosoMockContext.Provider value={{ viewportHeight: 264, itemHeight: 44 }}><div style={{ width: 1000, height: 700 }}>
         <ImageEditorV3
@@ -154,7 +156,7 @@ describe('ImageEditorV3 lifecycle guards', () => {
           document={document}
           profileId="full"
           previewRenderer={previewRenderer}
-          onDocumentChange={vi.fn()}
+          onDocumentChange={changed}
         />
       </div></VirtuosoMockContext.Provider>,
     )
@@ -166,14 +168,15 @@ describe('ImageEditorV3 lifecycle guards', () => {
     fireEvent.click(layerButton('锁定组子层') as HTMLButtonElement)
     fireEvent.click(screen.getByRole('tab', { name: '基础' }))
 
-    expect((screen.getByRole('switch', { name: '可见' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('switch', { name: '锁定' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('switch', { name: '可见' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('switch', { name: '锁定' })).toHaveProperty('disabled', true)
     expect((screen.getByRole('slider', { name: '不透明度滑杆' }) as HTMLInputElement).matches(':disabled')).toBe(true)
     expect(screen.queryByRole('combobox', { name: '混合模式' })).toBeNull()
-    expect((screen.getByRole('button', { name: '删除所选图层' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: '复制图层' }) as HTMLButtonElement).disabled).toBe(true)
+    expectButtonDisabled(screen.getByRole('button', { name: '删除所选图层' }))
+    expectButtonDisabled(screen.getByRole('button', { name: '复制图层' }))
 
     fireEvent.click(layerButton('外部层') as HTMLButtonElement, { ctrlKey: true })
-    expect((screen.getByRole('button', { name: '删除所选图层' }) as HTMLButtonElement).disabled).toBe(true)
+    expectButtonDisabled(screen.getByRole('button', { name: '删除所选图层' }))
+    expect(changed).not.toHaveBeenCalled()
   })
 })

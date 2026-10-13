@@ -64,6 +64,35 @@ describe('状态与反馈契约', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('带说明的提交按钮阻断表单和冒泡，反馈状态切换保留 DOM、ref 与焦点', () => {
+    const submit = vi.fn(event => event.preventDefault()), click = vi.fn(), parentClick = vi.fn()
+    const keyDown = vi.fn(), keyUp = vi.fn(), ref = createRef<HTMLButtonElement>()
+    const form = (blocked: boolean, loading = false) => <form onSubmit={submit} onClick={parentClick}>
+      <UiButton ref={ref} type="submit" disabled={blocked} loading={loading} tooltip="导出文件"
+        disabledReason="先选择素材" onClick={click} onKeyDown={keyDown} onKeyUp={keyUp}>导出</UiButton>
+    </form>
+    const view = render(form(false)), button = screen.getByRole('button', { name: '导出' })
+    act(() => button.focus())
+    expect(document.activeElement).toBe(button)
+    for (const [blocked, loading] of [[true, false], [false, true], [true, true]]) {
+      view.rerender(form(blocked, loading))
+      expect(ref.current).toBe(button)
+      expect(document.activeElement).toBe(button)
+      expect(button.getAttribute('aria-disabled')).toBe('true')
+      expect(fireEvent.click(button)).toBe(false)
+      for (const key of ['Enter', ' ']) {
+        expect(fireEvent.keyDown(button, { key })).toBe(false)
+        expect(fireEvent.keyUp(button, { key })).toBe(false)
+      }
+    }
+    expect(click).not.toHaveBeenCalled(); expect(parentClick).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled(); expect(keyDown).not.toHaveBeenCalled(); expect(keyUp).not.toHaveBeenCalled()
+    view.rerender(form(false))
+    expect(ref.current).toBe(button)
+    fireEvent.click(button)
+    expect(click).toHaveBeenCalledOnce(); expect(parentClick).toHaveBeenCalledOnce(); expect(submit).toHaveBeenCalledOnce()
+  })
+
   it('字段错误保留自定义名称和已有描述，错误清除后关联恢复', () => {
     const view = render(<UiFormRow label="名称" hint="最多二十字" error="名称已存在"><UiInput aria-label="项目名称" aria-describedby="external" /></UiFormRow>)
     const input = screen.getByRole('textbox', { name: '项目名称' })

@@ -1,3 +1,4 @@
+import { expectButtonDisabled } from '@/tests/buttonAssertions'
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
@@ -139,7 +140,7 @@ it('固有效果不展示颜色和亮度', async () => {
 it('从附加效果标题打开预设面板，默认全选，按链顺序只保存勾选子集', async () => {
   const { owner, id, sequenceId, clipId } = await project()
   const panel = render(<Panel owner={owner} />); const ui = within(panel.container)
-  expect(ui.getByRole('button', { name: '保存为预设' }).hasAttribute('disabled')).toBe(true)
+  expectButtonDisabled(ui.getByRole('button', { name: '保存为预设' }))
   act(() => {
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'gaussian_blur')
     applyVideoEditBuiltinEffect(id, sequenceId, [clipId], 'brightness_contrast')

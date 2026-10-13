@@ -1,3 +1,4 @@
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 /** @vitest-environment jsdom */
 
 import '@/tests/imageEditDocumentFixture'
@@ -147,7 +148,7 @@ describe('ImageEditorV3 professional shell', () => {
     const options = within(view.container.querySelector('[data-transform-options]') as HTMLElement)
     fireEvent.click(options.getByRole('button', { name: '恢复原像素' }))
     expect(changed).not.toHaveBeenCalled()
-    expect((options.getByRole('button', { name: '应用' }) as HTMLButtonElement).disabled).toBe(false)
+    expectButtonEnabled(options.getByRole('button', { name: '应用' }))
     fireEvent.click(options.getByRole('button', { name: '取消' }))
     expect(changed).not.toHaveBeenCalled()
     fireEvent.click(options.getByRole('button', { name: '恢复原像素' }))
@@ -644,7 +645,7 @@ describe('ImageEditorV3 professional shell', () => {
     await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(6))
     expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: '撤销' }).hasAttribute('disabled')).toBe(true)
+    expectButtonDisabled(screen.getByRole('button', { name: '撤销' }))
   })
 
 })

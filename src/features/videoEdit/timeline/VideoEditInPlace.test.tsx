@@ -1,3 +1,4 @@
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
@@ -107,7 +108,8 @@ it('参考来源逐项选择与取消，指定时间码传入同一生成入口�
   await act(async () => { fireEvent.click(view.getByRole('button', { name: '生成' })) })
   expect(submit.mock.calls.at(-1)?.[0]).toMatchObject({ referenceRoles: ['next_head'], referenceFrame: 15 })
   fireEvent.change(view.getByRole('textbox', { name: '参考帧时间码' }), { target: { value: '无效' } })
-  expect(view.getByRole('button', { name: '生成' }).hasAttribute('disabled')).toBe(true)
+  expectButtonDisabled(view.getByRole('button', { name: '生成' }))
+  expect(submit).toHaveBeenCalledTimes(1)
   fireEvent.click(view.getByRole('checkbox', { name: '指定时间帧' }))
   expect(view.queryByRole('textbox', { name: '参考帧时间码' })).toBeNull()
   await act(async () => { fireEvent.click(view.getByRole('button', { name: '生成' })) })
@@ -122,7 +124,7 @@ it('重开面板时已消失的参考来源不阻止取消参考并继续提交'
   const view = render(<VideoEditInPlaceDialog projectId={owner.document.id} sequenceId={current().id}
     intent={{ action: 'replace_shot', clipId: current().clips[0].id }}
     initial={{ modelId: videoModel, prompt: '日落空镜', referenceRoles: ['previous_tail'] }} onClose={() => undefined} />)
-  await waitFor(() => expect(view.getByRole('button', { name: '生成' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expectButtonEnabled(view.getByRole('button', { name: '生成' })))
   await act(async () => { fireEvent.click(view.getByRole('button', { name: '生成' })) })
   expect(submit.mock.calls.at(-1)?.[0]).toMatchObject({ referenceRoles: [] })
 })

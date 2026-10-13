@@ -1,3 +1,4 @@
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -99,13 +100,13 @@ it('各预设比例的 8K 都可选（21:9 为 7680×3200）；自定义超宽�
   expect(view.getByRole('tooltip').textContent).toBe('预览可能较吃力，可在节目监视器降低回放分辨率')
   fireEvent.click(eight)
   select(view, '画面比例', '21:9'); dimensions(view, '7680', '3200')
-  expect(view.getByRole('button', { name: '新建' })).toHaveProperty('disabled', false)
+  expectButtonEnabled(view.getByRole('button', { name: '新建' }))
   cleanup()
   const wide = dialog({ width: 4000, height: 1000 })
   fireEvent.click(wide.getByRole('button', { name: '分辨率' }))
   const disabled = wide.getByRole('option', { name: '8K' })
-  expect(disabled).toHaveProperty('disabled', true)
-  fireEvent.focus(disabled.parentElement!)
+  expectButtonDisabled(disabled)
+  fireEvent.focus(disabled)
   expect(wide.getByRole('tooltip').textContent).toBe('超过 8K 上限')
   fireEvent.click(disabled); dimensions(wide, '4000', '1000')
 })
@@ -114,8 +115,8 @@ it.each([{ width: '8194', height: '1000', error: '超过 8K 上限' }, { width: 
   fireEvent.click(view.getByRole('button', { name: '锁定比例' }))
   fireEvent.change(view.getByLabelText('宽度'), { target: { value: width } }); fireEvent.change(view.getByLabelText('高度'), { target: { value: height } })
   expect(view.getByText(error)).toBeTruthy()
-  expect(view.getByRole('button', { name: '新建' })).toHaveProperty('disabled', true)
-  expect(view.getByRole('button', { name: '保存为默认值' })).toHaveProperty('disabled', true)
+  expectButtonDisabled(view.getByRole('button', { name: '新建' }))
+  expectButtonDisabled(view.getByRole('button', { name: '保存为默认值' }))
   await act(async () => fireEvent.click(view.getByRole('button', { name: '新建' })))
   expect(view.submit).not.toHaveBeenCalled()
   expect(useSettingsStore.getState().videoEditSequenceDefaults).toEqual(VIDEO_EDIT_SEQUENCE_DEFAULTS)

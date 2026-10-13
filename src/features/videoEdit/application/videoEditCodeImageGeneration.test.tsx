@@ -1,3 +1,4 @@
+import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAssertions'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
@@ -114,7 +115,8 @@ it('无密钥安全拒绝；浮层提示并打开供应商设置，费用和默�
   expect(submit).not.toHaveBeenCalled()
   const view = render(<CodeImageGenerationPanel target={target()} parameterKey="photo" title="产品图" onClose={vi.fn()} />)
   await view.findByText('请先配置生成密钥')
-  expect(view.getByRole('button', { name: '生成图片' }).hasAttribute('disabled')).toBe(true)
+  expectButtonDisabled(view.getByRole('button', { name: '生成图片' }))
+  expect(submit).not.toHaveBeenCalled()
   expect(view.getByTestId('model').textContent).toBe('kie-gpt-image-2'); expect(view.getByText('预计费用')).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: '去设置' })); expect(useUiStore.getState().settingsTarget).toEqual({ tab: 'providers', sectionId: 'providers' })
 })
@@ -138,7 +140,7 @@ it('进度取消走正式任务；迟到成功不导入、不绑定', async () =
 })
 it('浮层提交编辑后的提示词，关闭控件后后台仍完成；落库来源和绑定一步撤销', async () => {
   const view = render(<CodeImageGenerationPanel target={target()} parameterKey="photo" title="产品图" onClose={vi.fn()} />)
-  await waitFor(() => expect(view.getByRole('button', { name: '生成图片' }).hasAttribute('disabled')).toBe(false))
+  await waitFor(() => expectButtonEnabled(view.getByRole('button', { name: '生成图片' })))
   fireEvent.click(view.getByRole('textbox')); fireEvent.click(view.getByRole('button', { name: '生成图片' }))
   await waitFor(() => expect(images.codeImageGenerationJobs(target(), 'photo')).toHaveLength(1))
   const job = images.codeImageGenerationJobs(target(), 'photo')[0]; view.unmount()
