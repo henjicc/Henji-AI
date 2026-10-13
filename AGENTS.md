@@ -22,6 +22,7 @@
 | 新增/改造工作区、页面/工具入口、工具箱工具、设置项、用户可查询数据、业务操作、长任务、稳定引用、权限、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability`；先做覆盖分级，命中 skill 不等于新增 MCP 工具 |
 | 涉及网络请求、文件读写、长耗时任务、导入导出、状态流转、用户可见失败 | [docs/rules/logging.md](docs/rules/logging.md) |
 | 改动 `electron/main/**` 或 `electron/preload/**`、加 IPC、打包配置、自动更新 | [docs/rules/electron-desktop.md](docs/rules/electron-desktop.md) |
+| 规划路线、评审新功能是否跑偏、决定优先级、判断“做不做 / 做到什么程度” | [docs/rules/product-goal.md](docs/rules/product-goal.md) |
 | **准备收尾任何改动前** | [docs/rules/testing.md](docs/rules/testing.md) |
 
 **skill 在两个工具下的读法不同**（内容相同，两份需同步维护，`npm run check:skill-sync` 校验并已进 CI 门禁）：
@@ -49,6 +50,8 @@ Henji-AI（痕迹AI）是 **Electron + React + TypeScript** 桌面应用，聚�
 - **传统软件是下限，不是上限**：剪辑对齐 PR、合成参照 AE、修图参照 PS，是为了让专业用户零迁移成本。能力和形态要按上面四条重新设计。照搬传统形态而 AI 难以调用，就是跑偏。
 
 设计新功能时拿这三句自查：**助手能不能只凭名称和说明用对它？这一步能不能让 AI 先做掉、人只确认？产物能不能直接流进其他工作区？**
+
+以上是摘要。目标用户画像、三条北极星场景、各工作区的对标下限与达标判据、流转矩阵、轻量边界、不做清单与阶段里程碑见 [docs/rules/product-goal.md](docs/rules/product-goal.md)；两处冲突以那份为准。
 
 ## 常用命令
 
