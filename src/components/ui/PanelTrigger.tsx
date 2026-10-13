@@ -20,7 +20,8 @@ import { useUiFormRowLabelling } from './formRowLabel'
 import { measureElementTextWidth } from './textMeasurement'
 import { MENU_TEXT_ROUNDING_SLACK_PX, resolveMenuItemHorizontalChrome, type UiMenuSelection } from './dropdownUtils'
 import { UiFieldTrigger } from './primitives'
-import { UI_DURATION } from './motion'
+import { UI_POPOVER_TRANSITION_MS } from './motion'
+import { useDialogTransition } from './useDialogTransition'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { isDomNode, isElementNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
@@ -169,13 +170,16 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   // 表单排布的触发器在输入区顶部，浮层要越过整块输入区；工具条里的触发器就近弹出。
   const gapProp = gapOverride ?? (toolbarLayout ? 8 : 45)
   const [open, setOpen] = useState(false)
-  const [closing, setClosing] = useState(false)
-  const overlay = useUiOverlayLayer(open)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const { shouldRender, closing } = useDialogTransition(open, UI_POPOVER_TRANSITION_MS, true, {
+    exitRef: panelRef,
+    onExited: () => onOpenChangeRef.current?.(false),
+  })
+  const overlay = useUiOverlayLayer(shouldRender)
   // 从面板里打开的弹窗期间面板让开（浮层层级高于弹窗，否则压在弹窗上），保持挂载，弹窗关闭后原样回来（任务 5.8）
   const yieldToModal = useHasOpenModalUiOverlayDescendant(overlay.id)
   const [pos, setPos] = useState<FloatingPanelPosition | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
-  const panelRef = useRef<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
   const anchorRectRef = useRef<FloatingPanelAnchorRect | null>(null)
   const maxHeightRef = useRef<number>(0)
@@ -260,27 +264,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     updatePanelPosition(rect, false)
   }, [readAnchorRect, updatePanelPosition])
 
-  // 收起动画期间（UI_DURATION.base）再次点触发器应当留在打开态，而不是被当成“已打开 → 关闭”：
-  // 收起计时器可被取消（界面重设计 3.5：剪辑面板的新建/更多菜单连续使用时暴露）。
-  const closeTimerRef = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearTimeout(closeTimerRef.current), [])
-
-  // 收起完成：计时器或收起动画结束，谁先到算谁（界面重设计 5.5 VE-06）。窗口在后台或被遮挡时 Chromium 会把
-  // 计时器节流到秒级甚至分钟级，只靠计时器时，已经关掉的菜单会长时间停在收起态、仍挂在页面上。
-  const finishClose = useCallback((): void => {
-    if (closeTimerRef.current === undefined) return
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = undefined
-    setOpen(false)
-    setClosing(false)
-    onOpenChangeRef.current?.(false)
-  }, [])
-
-  const closePanel = useCallback((): void => {
-    setClosing(true)
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = window.setTimeout(finishClose, UI_DURATION.base)
-  }, [finishClose])
+  const closePanel = useCallback((): void => setOpen(false), [])
 
   const openPanel = useCallback((): void => {
     if (disabled) return
@@ -289,47 +273,35 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     onOpenChangeRef.current?.(true)
   }, [computePanelPosition, disabled])
 
-  // 收起动画结束即完成收起（原生事件监听：与 React 的动画事件名探测无关，jsdom 与 Chromium 一致）
-  useEffect(() => {
-    const panel = panelRef.current
-    if (!closing || !panel) return
-    const onEnd = (event: Event): void => { if (event.target === panel) finishClose() }
-    panel.addEventListener('animationend', onEnd)
-    return () => panel.removeEventListener('animationend', onEnd)
-  }, [closing, finishClose])
-
   // 受控开合：父组件打开、关闭，或在打开期间换锚点（在另一处再次右键）。
   const openStateRef = useRef({ open, closing })
   openStateRef.current = { open, closing }
   useEffect(() => {
     if (openProp === undefined) return
-    const { open: isOpen, closing: isClosing } = openStateRef.current
+    const { open: isOpen } = openStateRef.current
     if (openProp) {
       if (!isOpen) {
         computePanelPosition()
         setOpen(true)
         return
       }
-      // 已打开或正在收起：取消收起，按新锚点就位
-      window.clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = undefined
-      if (isClosing) setClosing(false)
+      // 已打开时按新锚点就位
       const rect = readAnchorRect()
       if (rect) updatePanelPosition(rect, true)
       return
     }
-    if (isOpen && !isClosing) closePanel()
+    if (isOpen) closePanel()
     // 只响应受控值与锚点变化；其余依赖经 ref 读取
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openProp, anchorKey])
 
   const togglePanel = useCallback((): void => {
     if (disabled) return
-    if (open && closing) {
-      // 仍在收起动画中：取消收起即可，面板保持原位（不重新定位，避免停在未就绪的隐藏态）。
-      window.clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = undefined
-      setClosing(false)
+    if (closing) {
+      setOpen(true)
+      onOpenChangeRef.current?.(true)
+      const rect = readAnchorRect()
+      if (rect) updatePanelPosition(rect, true)
       return
     }
     if (open) {
@@ -337,7 +309,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       return
     }
     openPanel()
-  }, [closePanel, closing, disabled, open, openPanel])
+  }, [closePanel, closing, disabled, open, openPanel, readAnchorRect, updatePanelPosition])
 
   useEffect(() => {
     if (!controlsRef) return
@@ -441,7 +413,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     if (!open) return
     if (!anchorRectRef.current) return
     updatePanelPosition(anchorRectRef.current, true)
-  }, [open, updatePanelPosition])
+  }, [open, shouldRender, updatePanelPosition])
 
   useEffect(() => {
     if (!open || !panelRef.current) return
@@ -462,7 +434,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     })
     obs.observe(panelRef.current)
     return () => obs.disconnect()
-  }, [freezePositionOnOpen, open, stableHeight, updatePanelPosition])
+  }, [freezePositionOnOpen, open, shouldRender, stableHeight, updatePanelPosition])
 
   // 锚点模式没有内置触发器：留一个隐藏节点，用来得知所在文档（主窗口或剪辑系统浮窗）。
   const anchorOnly = anchorMode && !children
@@ -489,7 +461,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           {display ?? ''}
         </UiFieldTrigger>
       )}
-      {(open || closing) && pos && createPortal(
+      {shouldRender && pos && createPortal(
         <div
           ref={panelRef}
           className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} flex flex-col ${contentWidth ? 'w-max' : ''} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}

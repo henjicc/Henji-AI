@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { UiButton, UiPanel } from './primitives'
 import { useI18n } from '@/hooks/useI18n'
+import { useDialogTransition } from './useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
 import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
@@ -66,11 +67,18 @@ export default function AlertDialog({
   actionLayout = 'standard',
 }: AlertDialogProps): JSX.Element | null {
   const { t } = useI18n('common')
-  const [opacity, setOpacity] = useState(0)
-  // 收起中（任务 5.8，同 VE-06）：已关闭、只是在播退出过渡——不可点击、对读屏隐藏，
-  // 过渡结束或计时器先到即通知调用方，避免退出动画期间再次点到确认或计时器被后台节流后迟迟不关
-  const [closing, setClosing] = useState(false)
+  const [closeRequested, setCloseRequested] = useState(false)
   const closeNotifiedRef = useRef(false)
+  const finishClose = (): void => {
+    if (closeNotifiedRef.current) return
+    closeNotifiedRef.current = true
+    onClose()
+  }
+  const { shouldRender, isVisible, closing, onTransitionEnd } = useDialogTransition(
+    isOpen && !closeRequested, UI_DIALOG_TRANSITION_MS, true,
+    { onExited: () => { if (closeRequested) finishClose() } },
+  )
+  const opacity = isVisible ? 1 : 0
   const dialogRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const messageId = useId()
@@ -78,36 +86,22 @@ export default function AlertDialog({
   const overlay = useUiOverlayLayer(isOpen, { modal: true })
 
   useEffect(() => {
-    if (isOpen) {
-      setClosing(false)
-      closeNotifiedRef.current = false
-      requestAnimationFrame(() => setOpacity(1))
-    }
+    if (!isOpen) return
+    setCloseRequested(false)
+    closeNotifiedRef.current = false
   }, [isOpen])
-
-  const finishClose = (): void => {
-    if (closeNotifiedRef.current) return
-    closeNotifiedRef.current = true
-    onClose()
-  }
-
   const handleClose = () => {
-    if (closing) return
-    setOpacity(0)
-    if (closeImmediately) {
-      finishClose()
-      return
-    }
-    setClosing(true)
-    setTimeout(finishClose, UI_DIALOG_TRANSITION_MS)
+    if (closeRequested) return
+    setCloseRequested(true)
+    if (closeImmediately) finishClose()
   }
   useDialogFocusTrap({
-    active: isOpen,
+    active: isOpen && !closeRequested,
     dialogRef,
     onClose: handleClose,
   })
 
-  if (!isOpen) return null
+  if (!shouldRender || (closeImmediately && closeRequested)) return null
 
   // 根据类型选择图标和颜色
   const getIconAndColor = () => {
@@ -172,9 +166,7 @@ export default function AlertDialog({
           transform: `scale(${0.97 + 0.03 * opacity})`,
           transition: uiTransition(['opacity', 'transform'], UI_DIALOG_TRANSITION_MS)
         }}
-        onTransitionEnd={(event) => {
-          if (closing && event.target === event.currentTarget && event.propertyName === 'opacity') finishClose()
-        }}
+        onTransitionEnd={onTransitionEnd}
       >
         {/* 标题 */}
         <div className="flex items-center gap-2">

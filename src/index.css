@@ -3,6 +3,15 @@
 @tailwind utilities;
 
 :root {
+  /* 动效令牌与 motion.ts 镜像，由 motionCss.test.ts 校验；拖动不使用过渡。 */
+  --ui-duration-fast: 120ms;
+  --ui-duration-base: 180ms;
+  --ui-duration-slow: 240ms;
+  --ui-duration-viewer: 500ms;
+  --ui-ease: cubic-bezier(0, 0, 0.2, 1);
+  --ui-loop-spin: 1000ms;
+  --ui-loop-pulse: 2000ms;
+  --ui-loop-executing: 1500ms;
   /*
    * 主题颜色由 src/core/theme/runtimeTheme.ts 按种子推导后写到根节点内联样式（只写下方“新变量”）。
    * 这里的静态值 = 默认主题（石墨）的推导结果，用于首帧与无脚本环境；
@@ -499,10 +508,10 @@
   .ui-btn {
     border: 0;
     transition:
-      background-color 120ms ease,
-      color 120ms ease,
-      box-shadow 120ms ease,
-      transform 80ms ease;
+      background-color var(--ui-duration-fast) var(--ui-ease),
+      color var(--ui-duration-fast) var(--ui-ease),
+      box-shadow var(--ui-duration-fast) var(--ui-ease),
+      transform var(--ui-duration-fast) var(--ui-ease);
   }
 
   .ui-btn:focus-visible {
@@ -781,85 +790,6 @@ body {
   background: rgb(var(--text2-rgb) / 0.72);
 }
 
-/* 动画关键帧 */
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes scaleOut {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes fadeOut {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes pulse {
-
-  0%,
-  100% {
-    opacity: 0.2;
-  }
-
-  50% {
-    opacity: 0.1;
-  }
-}
-
-/* 动画类 */
-/* 时长与 UI_DURATION 同档；Dropdown/PanelTrigger/Tooltip 的卸载计时引用同一常量 */
-.animate-scale-in {
-  animation: scaleIn 180ms ease-out forwards;
-}
-
-.animate-scale-out {
-  animation: scaleOut 180ms ease-out forwards;
-}
-
-.animate-fade-in {
-  animation: fadeIn 240ms ease-out forwards;
-}
-
-.animate-fade-out {
-  animation: fadeOut 240ms ease-out forwards;
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
 /* 固定滚动条占位，避免 Tab 切换时内容宽度跳动 */
 .settings-scroll-body {
   padding: 0;
@@ -875,16 +805,16 @@ body {
 /* 提示词优化流式预览：逐字淡入只能写在 CSS 里（每个字形一个 span，数量随流式增长）；
    时长取动效档 180 / 240 / 500（任务 5.3）。 */
 .prompt-optimize-preview {
-  animation: promptOptimizePreviewIn 180ms ease-out both;
+  animation: ui-prompt-optimize-preview-in var(--ui-duration-base) var(--ui-ease) both;
 }
 
 .prompt-optimize-preview.is-closing {
-  animation: promptOptimizePreviewOut 240ms ease-in both;
+  animation: ui-prompt-optimize-preview-out var(--ui-duration-slow) var(--ui-ease) both;
   pointer-events: none;
 }
 
 .prompt-optimize-preview__stream {
-  animation: promptOptimizeStreamRise 500ms ease-out both;
+  animation: ui-prompt-optimize-stream-rise var(--ui-duration-viewer) var(--ui-ease) both;
   overscroll-behavior: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -904,11 +834,10 @@ body {
 
 .prompt-optimize-preview__glyph {
   display: inline;
-  animation: promptOptimizeGlyphIn 180ms ease-out both;
-  will-change: opacity, transform;
+  animation: ui-prompt-optimize-glyph-in var(--ui-duration-base) var(--ui-ease) both;
 }
 
-@keyframes promptOptimizePreviewIn {
+@keyframes ui-prompt-optimize-preview-in {
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.992);
@@ -920,7 +849,7 @@ body {
   }
 }
 
-@keyframes promptOptimizePreviewOut {
+@keyframes ui-prompt-optimize-preview-out {
   from {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -932,7 +861,7 @@ body {
   }
 }
 
-@keyframes promptOptimizeStreamRise {
+@keyframes ui-prompt-optimize-stream-rise {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -944,15 +873,28 @@ body {
   }
 }
 
-@keyframes promptOptimizeGlyphIn {
+@keyframes ui-prompt-optimize-glyph-in {
   from {
     opacity: 0;
-    transform: translateY(0.18em);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+  }
+}
+
+/* 系统减少动态：不吞结束事件，停止循环与延迟；只有必要的进行中反馈可显式放行。
+   标记只作用于本元素及其伪元素，不放行整个子树。JS 公共进出场 hook 同时立即卸载。 */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-motion-essential]),
+  *:not([data-motion-essential])::before,
+  *:not([data-motion-essential])::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -1125,7 +1067,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
  * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */
 .henji-videoEdit-dock [data-video-edit-dock-actions] {
   opacity: 0;
-  transition: opacity 120ms ease-out;
+  transition: opacity var(--ui-duration-fast) var(--ui-ease);
 }
 
 .henji-videoEdit-dock .dv-groupview:hover [data-video-edit-dock-actions],
@@ -1198,7 +1140,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   border-radius: inherit;
   pointer-events: none;
   box-shadow: inset 0 0 0 1px transparent;
-  transition: box-shadow 120ms ease-out;
+  transition: box-shadow var(--ui-duration-fast) var(--ui-ease);
 }
 
 .ui-cover-group:hover .ui-cover-frame::after {

@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react'
-import { Play } from 'lucide-react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { LoaderCircle, Play, Square } from 'lucide-react'
+import '@/features/canvas/storyboard.css'
 import resolveConfig from 'tailwindcss/resolveConfig'
 import * as styleTokens from '@/components/ui/styleTokens'
 import * as motion from '@/components/ui/motion'
@@ -120,11 +121,28 @@ function TransitionExamples(): JSX.Element {
   </UiGroup>
 }
 
+function LoopSample({ name, reduced }: { name: keyof typeof motion.UI_LOOP_MS; reduced: boolean }): JSX.Element {
+  const [running, setRunning] = useState(false)
+  const [replay, setReplay] = useState(0)
+  const active = running && !reduced
+  return <div data-gallery-token={`UI_LOOP_MS.${name}`} className="flex items-center gap-4 py-3">
+    <code className="w-56 text-xs text-text2">UI_LOOP_MS.{name} · {motion.UI_LOOP_MS[name]}ms</code>
+    <div key={replay} className={`relative h-8 w-8 ${name === 'executing' && active ? 'canvas-node-paint-frame--executing' : ''}`}
+      style={{ '--canvas-node-paint-top': '0px', '--canvas-node-paint-right': '0px', '--canvas-node-paint-bottom': '0px', '--canvas-node-paint-left': '0px' } as CSSProperties}>
+      {name === 'spin' ? <LoaderCircle className={`h-8 w-8 text-accent-text ${active ? 'animate-spin' : ''}`} />
+        : <span className={`block h-8 w-8 rounded-control bg-control ${name === 'pulse' && active ? 'animate-pulse' : ''}`} />}
+    </div>
+    <UiButton size="sm" onClick={() => { setRunning(true); setReplay(value => value + 1) }}><Play className="h-4 w-4" />重放循环</UiButton>
+    <UiButton size="sm" disabled={!running} onClick={() => setRunning(false)}><Square className="h-4 w-4" />停止</UiButton>
+  </div>
+}
+
 export function MotionTokensSection(): JSX.Element {
   const [reduced, setReduced] = useState(false)
   return <UiGroup title="动效：实际时长与正式缓动" titleTone="compact">
     <div className="flex items-center gap-3"><span className="text-xs text-text2">模拟减少动态（仅本栏回放）</span><UiSwitch aria-label="模拟减少动态" checked={reduced} onCheckedChange={setReduced} /></div>
     {Object.entries(motion.UI_DURATION).map(([name, duration]) => <MotionSample key={name} name={`UI_DURATION.${name}`} duration={duration} reduced={reduced} />)}
+    {Object.entries(motion.UI_LOOP_MS).map(([name]) => <LoopSample key={name} name={name as keyof typeof motion.UI_LOOP_MS} reduced={reduced} />)}
     {GALLERY_MOTION_TOKENS.filter(([, value]) => typeof value === 'number').map(([name, value]) => <MotionSample key={name} name={name} duration={Number(value)} reduced={reduced} />)}
     <p className="break-all text-xs text-text2">UI_EASE · {motion.UI_EASE}<br />UI_EASE_STACK · {motion.UI_EASE_STACK}</p>
     <TokenMapping category="motion" values={Object.fromEntries(GALLERY_MOTION_TOKENS)} />

@@ -54,6 +54,16 @@ export const UI_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
  */
 export const UI_EASE_STACK = 'cubic-bezier(0.15, 0.75, 0.3, 1)';
 
+/** 循环状态动效的周期，独立于进出场四档；index.css 的 --ui-loop-* 镜像。 */
+export const UI_LOOP_MS = {
+  /** 进行中图标匀速旋转，沿用 Tailwind 原周期。 */
+  spin: 1000,
+  /** 任务状态与占位淡入淡出，沿用 Tailwind 原周期。 */
+  pulse: 2000,
+  /** 画布运行中虚线环呼吸，沿用原执行反馈周期。 */
+  executing: 1500,
+} as const;
+
 /**
  * 数据补间档：把离散到达的生成进度平滑成连续推进。
  *
@@ -91,7 +101,7 @@ export const UI_TOAST_DISPLAY_MS = 3000;
 export const UI_TOAST_EXIT_MS = UI_DURATION.slow;
 
 /** 浮层（下拉、右键菜单、节点菜单）的进出场时长 */
-export const UI_POPOVER_TRANSITION_MS = UI_DURATION.fast;
+export const UI_POPOVER_TRANSITION_MS = UI_DURATION.base;
 
 // Keep custom overlays below the app title bar (h-10 = 40px).
 export const UI_CONTENT_OVERLAY_INSET_CLASS = 'inset-x-0 bottom-0 top-10';

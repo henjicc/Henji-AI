@@ -7,6 +7,7 @@ import { createLogger } from '@/core/logging'
 import { readVideoInfo } from '@/commands/video'
 import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
+import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
 const logger = createLogger('components.mediaViewer.VideoViewerModal')
@@ -32,11 +33,11 @@ export interface VideoViewerModalProps {
 
 export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange }: VideoViewerModalProps): JSX.Element | null {
   const { t } = useI18n()
-  const [isVisible, setIsVisible] = useState(open)
+  const { shouldRender: isVisible, isVisible: motionVisible, onTransitionEnd } = useDialogTransition(open, UI_DURATION.viewer, true, { enterKey: videoUrl })
   // 全屏查看器是模态浮层层：查看器里打开的子浮层（倍速菜单）归属它，Escape 只关最上层；
   // 从某个面板里打开查看器时，查看器内的点击也不会关掉那个面板（任务 4.3 / 5.9）
   const overlay = useUiOverlayLayer(open, { modal: true })
-  const [overlayOpacity, setOverlayOpacity] = useState(0)
+  const overlayOpacity = motionVisible ? 1 : 0
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoViewportRef = useRef<HTMLDivElement>(null)
   const progressBarRef = useRef<HTMLDivElement>(null)
@@ -44,9 +45,8 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const controlsContainerRef = useRef<HTMLDivElement>(null)
   const frameIntervalRef = useRef(1 / 30)
   const videoFrameCallbackIdRef = useRef<number | null>(null)
-  const closeTimerRef = useRef<number | null>(null)
 
-  const [viewerOpacity, setViewerOpacity] = useState(0)
+  const viewerOpacity = overlayOpacity
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [videoDuration, setVideoDuration] = useState(0)
@@ -83,21 +83,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   useEffect(() => {
     if (!open) return
-    setIsVisible(true)
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = null
-    }
-    setOverlayOpacity(0)
-    setViewerOpacity(0)
-    let openRaf1 = 0
-    let openRaf2 = 0
-    openRaf1 = requestAnimationFrame(() => {
-      openRaf2 = requestAnimationFrame(() => {
-        setOverlayOpacity(1)
-        setViewerOpacity(1)
-      })
-    })
     setIsVideoPlaying(false)
     setCurrentTime(0)
     setVideoDuration(0)
@@ -109,10 +94,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     setIsSpeedMenuOpen(false)
     setIsDraggingProgress(false)
     setAutoPlayOnOpen(true)
-    return () => {
-      if (openRaf1) cancelAnimationFrame(openRaf1)
-      if (openRaf2) cancelAnimationFrame(openRaf2)
-    }
   }, [open, videoUrl])
 
   useEffect(() => {
@@ -137,27 +118,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     videoRef.current?.pause()
     setIsVideoPlaying(false)
     setAutoPlayOnOpen(false)
-    setOverlayOpacity(0)
-    setViewerOpacity(0)
-    closeTimerRef.current = window.setTimeout(() => {
-      setIsVisible(false)
-    }, 500)
-    return () => {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
-    }
   }, [open, isVisible])
-
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
-    }
-  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -425,9 +386,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       // 收起中不可点击、对读屏隐藏；过渡结束即卸载，不只依赖计时器（任务 5.8）
       aria-hidden={!open || undefined}
       {...(!open ? { inert: '' } : {})}
-      onTransitionEnd={(event) => {
-        if (!open && event.target === event.currentTarget) setIsVisible(false)
-      }}
+      onTransitionEnd={onTransitionEnd}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

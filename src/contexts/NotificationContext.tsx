@@ -1,6 +1,6 @@
 import type { NotificationMessage } from '@/i18n/notifications'
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
-import { UI_TOAST_DISPLAY_MS, UI_TOAST_EXIT_MS } from '@/components/ui/motion'
+import React, { createContext, useContext, useCallback, useEffect } from 'react'
+import { useTimedToast } from '@/components/ui/useDialogTransition'
 import { UiToast, type UiToastTone, type UiToastAction } from '@/components/ui/UiToast'
 
 interface NotificationState {
@@ -36,30 +36,11 @@ interface NotificationProviderProps {
 }
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
-    const [notification, setNotification] = useState<NotificationState | null>(null)
-    const [notificationVisible, setNotificationVisible] = useState(false)
-    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    const clearTimers = useCallback(() => {
-        if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
-        if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
-        hideTimerRef.current = null
-        clearTimerRef.current = null
-    }, [])
-
+    const { notification, visible: notificationVisible, show } = useTimedToast<NotificationState>()
     const showNotification = useCallback((message: NotificationMessage, type: UiToastTone = 'success', action?: UiToastAction) => {
-        clearTimers()
-        setNotification({ message, type, ...(action ? { action } : {}) })
-        setNotificationVisible(true)
-        // 停留后淡出，淡出结束再卸载（时长与 UiToast 的 duration-240 同档）
-        hideTimerRef.current = setTimeout(() => {
-            setNotificationVisible(false)
-            clearTimerRef.current = setTimeout(() => setNotification(null), UI_TOAST_EXIT_MS)
-        }, UI_TOAST_DISPLAY_MS)
-    }, [clearTimers])
+        show({ message, type, ...(action ? { action } : {}) })
+    }, [show])
 
-    useEffect(() => clearTimers, [clearTimers])
     useEffect(() => {
         const receive = (event: Event): void => showNotification((event as CustomEvent<NotificationMessage>).detail)
         notificationEvents.addEventListener('notification', receive)
