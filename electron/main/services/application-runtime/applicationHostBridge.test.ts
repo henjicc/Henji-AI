@@ -1,6 +1,37 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
+import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
+
+it.each(['confirmation', 'release', 'abort'] as const)('八个已派发写操作释放等待后不阻塞其他调用方读取：%s', async mode => {
+  const bridge = new ApplicationHostBridge(() => undefined)
+  const requests: LocalHostRequest[] = []
+  const cancelled: string[] = []
+  bridge.register({ rendererEpoch: '00000000-0000-4000-8000-000000000001', attachmentSequence: 1, ready: true, tools: [], domains: [] }, {
+    send(channel, payload) {
+      if (channel === 'application:host:cancel') cancelled.push(payload as string)
+      if (channel !== 'application:host:request') return
+      const request = payload as LocalHostRequest
+      requests.push(request)
+      if (request.capabilityId === 'get_current_application_context') bridge.complete({ ...request, result: { ok: true } })
+    },
+  })
+  try {
+    for (let i = 0; i < 8; i++) {
+      const controller = new AbortController()
+      const pending = bridge.execute('writer', 'change_application_entities', {}, controller.signal, {
+        operation: { operationId: `operation-${i}`, callerId: 'writer', inputDigest: 'digest', input: {}, capabilityId: 'change_application_entities', state: 'prepared' },
+      }).catch(() => undefined)
+      if (mode === 'confirmation') bridge.complete({ ...requests.at(-1)!, result: { ok: false }, progress: { phase: 'awaiting_user_confirmation', confirmation: applicationUserConfirmation({ title: '确认修改', message: '是否继续？', confirmLabel: '继续' }) } })
+      else if (mode === 'release') bridge.releaseCaller('writer')
+      else controller.abort()
+      await pending
+    }
+    await expect(bridge.execute('reader', 'get_current_application_context', {}, new AbortController().signal)).resolves.toMatchObject({ ok: true })
+    bridge.revoke('writer')
+    expect(cancelled).toHaveLength(8)
+  } finally { bridge.cancelPending() }
+})
 
 afterEach(() => { vi.useRealTimers() })
 it.each(['observe_video_edit_frame', 'get_current_application_context'] as const)('%s 在重载断开期间等待注册；在途断开也可读取新宿主，忽略旧回执', async capabilityId => {

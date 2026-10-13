@@ -178,11 +178,12 @@ export class ApplicationPlanBuilder {
       ...(request.verificationConditions ?? []),
     ]
     const generatedVerificationConditions: ApplicationVerificationCondition[] = []
+    const workingValues = new Map<string, JsonValue>()
 
     for (const step of request.steps) {
       if (step.kind === 'mutation') {
-        const prepared = await this.prepareMutation(step, context, normalizedSteps)
-        normalizedSteps.push(prepared.step)
+        const prepared = await this.prepareMutation(step, context, normalizedSteps, workingValues)
+        if (prepared.step.mutations.length) normalizedSteps.push(prepared.step)
         generatedVerificationConditions.push(...prepared.conditions)
         risk = highestRisk(risk, 'R1')
       } else if (step.kind === 'collection') {
@@ -266,6 +267,7 @@ export class ApplicationPlanBuilder {
     step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>,
     context: ApplicationExecutionContext,
     earlierSteps: readonly ApplicationPlannedStep[],
+    workingValues: Map<string, JsonValue>,
   ): Promise<{
     step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>
     conditions: ApplicationVerificationCondition[]
@@ -332,7 +334,19 @@ export class ApplicationPlanBuilder {
           `PROPERTY_NOT_WRITABLE:${mutation.propertyId}${reasons.length > 0 ? `（${reasons.join('；')}）` : ''}`
         )
       }
-      const currentValue = snapshot.properties[mutation.propertyId]
+      const key = `${normalizedTarget.kind}\u0000${normalizedTarget.id}\u0000${mutation.propertyId}`
+      // 删除或语义操作后的状态不能用计划前快照推测，拒绝依赖该未知状态的后续写入。
+      let previousWrite = -1
+      earlierSteps.forEach((earlier, index) => {
+        if (earlier.kind === 'mutation' && earlier.target.kind === normalizedTarget.kind && earlier.target.id === normalizedTarget.id
+          && earlier.mutations.some(item => item.propertyId === mutation.propertyId)) previousWrite = index
+      })
+      if (previousWrite >= 0 && earlierSteps.slice(previousWrite + 1).some(earlier => earlier.kind === 'operation')
+        || earlierSteps.some(earlier => earlier.kind === 'collection' && earlier.operation.kind === 'remove'
+          && earlier.operation.targets.some(target => target.kind === normalizedTarget.kind && target.id === normalizedTarget.id))) {
+        throw new Error('PROPERTY_OPERATION_CONFLICT:请在删除或语义操作完成后重新读取目标，再规划属性写入。')
+      }
+      const currentValue = workingValues.has(key) ? workingValues.get(key) : snapshot.properties[mutation.propertyId]
       const resultingValue = this.dependencies.registry.normalizePropertyValue(
         step.entityType,
         mutation.propertyId,
@@ -356,13 +370,15 @@ export class ApplicationPlanBuilder {
         )
       }
       if (mutation.operation === 'set' && !writerOperations?.has('set')) {
+        workingValues.set(key, resultingValue)
         return lowerReplaceListMutation(currentValue, resultingValue, mutation.propertyId)
       }
+      workingValues.set(key, resultingValue)
       return [mutation.operation === 'set' || mutation.operation === 'clear'
         ? { ...mutation, value: mutation.operation === 'set' ? resultingValue : undefined }
         : mutation]
     })
-    if (mutations.length === 0) throw new Error('NO_STATE_CHANGE')
+    if (mutations.length === 0 && earlierSteps.length === 0) throw new Error('NO_STATE_CHANGE')
     return { step: { ...step, target: normalizedTarget, mutations }, conditions }
   }
 

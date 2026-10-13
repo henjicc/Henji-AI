@@ -18,7 +18,15 @@ export function retainIntentUndo(restore: (context?: ApplicationExecutionContext
     return intentHost(documentRef).read().sessions.map(session => { const body = explanationBodyRef(documentRef, session.id); return `${body.kind}:${body.id}` })
   })
   const token = crypto.randomUUID(); undoPrivateHeads.set(token, privateRefs)
-  undos.set(token, async context => { await restore(context); undos.delete(token); undoPrivateHeads.delete(token); return intentResult(refs, domain) }); return token
+  undos.set(token, async context => { await restore(context); undos.delete(token); undoPrivateHeads.delete(token); return intentResult(refs, domain) })
+  // 同时释放闭包及隐私索引；不依赖用户实际点击撤销来回收文档快照。
+  while (undos.size > 256) {
+    const oldest = undos.keys().next().value
+    if (oldest === undefined) break
+    undos.delete(oldest)
+    undoPrivateHeads.delete(oldest)
+  }
+  return token
 }
 export async function undoIntent(token: string, context?: ApplicationExecutionContext) { const restore = undos.get(token); if (!restore) throw new Error('原撤销记录已失效，请读取文档历史。'); return restore(context) }
 export class CreativeIntentMutationExecutor implements ApplicationMutationExecutor {

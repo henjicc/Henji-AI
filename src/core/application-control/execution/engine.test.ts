@@ -2,6 +2,72 @@ import { describe, expect, it, vi } from 'vitest'
 import { createFixture, createEngine, context, mutationStep, collectionStep, removalStep } from './engineTestFixture'
 
 describe('ApplicationControlExecutionEngine', () => {
+  it('计划中删除后不再对同一目标使用旧快照写属性', async () => {
+    const { engine } = createEngine(createFixture())
+    await expect(engine.plan({ summary: '删除后再写', transactionMode: 'non_reversible', steps: [removalStep('one'), mutationStep('one', 6)] }, context())).rejects.toThrow('PROPERTY_OPERATION_CONFLICT')
+  })
+
+  it('两次属性写入中间有语义操作时拒绝沿用计划内旧值', async () => {
+    const { engine } = createEngine(createFixture())
+    engine.registerOperationExecutor({ capabilityId: 'transform_sample_item', capabilityVersion: 1, risk: 'R1', requiredPermissions: ['sample:write'], supportsAtomic: false,
+      effectContract: { direct: [], cascades: [] }, normalizeInput: input => input, getCurrentRevisions: async () => ({ 'sample.scope': 0 }),
+      execute: vi.fn(),
+    })
+    await expect(engine.plan({ summary: '写入间夹语义操作', transactionMode: 'non_reversible', steps: [mutationStep('one', 4),
+      { kind: 'operation', capabilityId: 'transform_sample_item', capabilityVersion: 1, input: {}, expectedRevisions: { 'sample.scope': 0 } }, mutationStep('one', 6),
+    ] }, context())).rejects.toThrow('PROPERTY_OPERATION_CONFLICT')
+  })
+  it.each([
+    ['append', 'append', ['link-1', 'link-2', 'link-3', 'link-4']],
+    ['remove', 'append', ['link-2', 'link-4']],
+    ['set', 'set', ['link-1']],
+    ['append', 'set', ['link-1', 'link-2', 'link-3']],
+    ['append', 'set', ['link-1']],
+    ['remove', 'set', ['link-2', 'link-1']],
+  ] as const)('计划内列表累积 %s → %s → %j', async (first, second, ids) => {
+    const fixture = createFixture()
+    const { engine } = createEngine(fixture)
+    const link = (id: string) => ({ kind: 'sample.link', id })
+    const desired = ids.map(link)
+    const plan = await engine.plan({ summary: '累积修改列表', transactionMode: 'compensatable', steps: [
+      { kind: 'mutation', entityType: 'sample.item', target: { kind: 'sample.item', id: 'one' }, expectedRevisions: { 'sample.scope': 0 },
+        mutations: [{ propertyId: 'sample.links', operation: first, value: first === 'set' ? [link('link-3')] : link(first === 'remove' ? 'link-1' : 'link-3') }] },
+      { kind: 'mutation', entityType: 'sample.item', target: { kind: 'sample.item', id: 'one' }, expectedRevisions: { 'sample.scope': 0 },
+        mutations: [{ propertyId: 'sample.links', operation: second, value: second === 'set' ? desired : link('link-4') }] },
+    ] }, context())
+    expect(plan.verificationConditions).toEqual([{ kind: 'property_equals', target: { kind: 'sample.item', id: 'one' }, propertyId: 'sample.links', expected: desired }])
+    const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'list-accumulation' }, context())
+    expect(result.status).toBe('completed')
+    expect(fixture.links.get('one')).toEqual(desired)
+  })
+
+  it('零步失败的新计划可复用幂等键，成功结果仍拒绝跨计划复用', async () => {
+    const fixture = createFixture()
+    const { engine, executor } = createEngine(fixture)
+    vi.spyOn(executor, 'apply').mockRejectedValueOnce(new Error('temporary failure'))
+    const plan = () => engine.plan({ summary: '重试写入', transactionMode: 'compensatable', steps: [mutationStep('one', 6)] }, context())
+    const commit = (planRef: string) => engine.commit({ planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'retry-same-operation' }, context())
+    expect(await commit((await plan()).planRef)).toMatchObject({ status: 'failed', partial: { completedStepIndexes: [] } })
+    expect(await commit((await plan()).planRef)).toMatchObject({ status: 'completed' })
+    const next = await engine.plan({ summary: '另一计划', transactionMode: 'compensatable', steps: [mutationStep('one', 8, fixture.revisions.value)] }, context())
+    expect(await commit(next.planRef)).toMatchObject({ status: 'failed', code: 'INVALID_PLAN' })
+  })
+
+  it('撤销记录只保留最近 256 次，旧回执失效而最新回执可用', async () => {
+    const fixture = createFixture()
+    const { engine } = createEngine(fixture)
+    const refs: string[] = []
+    for (let i = 0; i < 257; i++) {
+      const revision = fixture.revisions.value
+      const plan = await engine.plan({ summary: '修改数值', transactionMode: 'compensatable', steps: [mutationStep('one', (i % 5) * 2, revision)] }, context())
+      const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': revision }, idempotencyKey: `bounded-undo-operation-${i}` }, context())
+      if (result.status !== 'completed' || !result.undoRef) throw new Error(JSON.stringify(result))
+      refs.push(result.undoRef)
+    }
+    const undo = (undoRef: string) => engine.undo({ undoRef, expectedRevisions: { 'sample.scope': fixture.revisions.value }, idempotencyKey: `undo-${undoRef}` }, context())
+    expect(await undo(refs[0])).toMatchObject({ status: 'failed', code: 'NOT_FOUND' })
+    expect(await undo(refs.at(-1)!)).toMatchObject({ status: 'completed' })
+  })
   it('仅声明为无序集合的属性忽略顺序和重复，缺项与多项仍失败', async () => {
     const fixture = createFixture()
     const { engine } = createEngine(fixture)

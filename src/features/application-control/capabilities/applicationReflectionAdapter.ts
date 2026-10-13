@@ -484,7 +484,7 @@ export const applicationReflectionHandlers = {
       return engine.commit({
         planRef: plan.planRef,
         expectedRevisions: revisions,
-        idempotencyKey: `change:${context.taskId ?? context.requestId ?? 'renderer'}:${attempt}:${JSON.stringify(revisions)}`
+        idempotencyKey: `change:${plan.planRef}:${attempt}:${context.taskId ?? context.requestId ?? 'renderer'}`
           .padEnd(16, '0').slice(0, 256),
       }, appContext)
     }
@@ -508,6 +508,11 @@ export const applicationReflectionHandlers = {
       rememberExplanationUndoAccess(rawResult.undoRef, changes.flatMap(change => 'target' in change ? [change.target] : []))
       publicUndos.set(rawResult.undoRef, { callerId: context.callerGrant?.callerId ?? 'renderer',
         revisions: rawResult.status === 'completed' ? rawResult.resultingRevisions : rawResult.currentRevisions ?? {} })
+      while (publicUndos.size > 256) {
+        const oldest = publicUndos.keys().next().value
+        if (oldest === undefined) break
+        publicUndos.delete(oldest)
+      }
     }
     const result = completedTransaction(rawResult)
     return {
@@ -525,7 +530,7 @@ export const applicationReflectionHandlers = {
     const record = publicUndos.get(input.undoRef)
     if (!record || record.callerId !== (context.callerGrant?.callerId ?? 'renderer')) throw new Error('PERMISSION_DENIED:撤销回执不属于本连接或已使用。')
     const raw = await getApplicationControlExecutionEngine().undo({ undoRef: input.undoRef,
-      expectedRevisions: record.revisions, idempotencyKey: `undo:${context.requestId ?? crypto.randomUUID()}` }, executionContext(context))
+      expectedRevisions: record.revisions, idempotencyKey: `undo:${input.undoRef}:${crypto.randomUUID()}` }, executionContext(context))
     if (raw.status === 'completed' || raw.status === 'failed' && raw.persistence) publicUndos.delete(input.undoRef)
     const result = completedTransaction(raw)
     return { status: 'completed' as const, transactionRef: result.transactionRef, verification: result.verification,

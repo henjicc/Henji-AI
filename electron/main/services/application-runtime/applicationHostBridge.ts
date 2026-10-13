@@ -11,7 +11,7 @@ import { approvePaidOperation, handleUiPaidApproval } from './paidApprovalPolicy
 import type { PaidApprovalDecision, PaidApprovalRequest } from '../../../../src/core/application-control/paidApproval'
 
 export interface LocalHostTransport { send(channel: string, payload: unknown): void }
-type Pending = { callerId: string; rendererEpoch: string; committed: boolean; allowPaid: boolean; paidRequest?: PaidApprovalRequest; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
+type Pending = { callerId: string; rendererEpoch: string; committed: boolean; waiting: boolean; allowPaid: boolean; paidRequest?: PaidApprovalRequest; resolve(value: Record<string, unknown>): void; reject(error: Error): void; cleanup(): void }
 
 class ApplicationHostDisconnectedError extends Error {}
 
@@ -102,6 +102,7 @@ export class ApplicationHostBridge {
     for (const [id, pending] of this.pending) if (pending.callerId === callerId) {
       pending.cleanup()
       pending.reject(new Error('调用已结束，请通过原操作标识查询结果。'))
+      pending.waiting = false
       if (!pending.committed) {
         this.host?.transport.send('application:host:cancel', id)
         this.pending.delete(id)
@@ -134,6 +135,7 @@ export class ApplicationHostBridge {
       this.operations?.complete(reply)
       // Release the network/model waiter while retaining invocation ownership for revoke/disconnect.
       pending.cleanup()
+      pending.waiting = false
       if (reply.progress.phase === 'awaiting_user_confirmation') pending.resolve({ ok: false, executionState: reply.progress.phase, confirmation: reply.progress.confirmation })
       return
     }
@@ -177,12 +179,14 @@ export class ApplicationHostBridge {
       if (!this.ready || !this.host) throw new ApplicationHostNotReadyError()
     }
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
-    if (this.pending.size >= 8) return Promise.reject(new Error('应用正忙，请稍后重试。'))
+    if ([...this.pending.values()].filter(pending => pending.waiting).length >= 8) return Promise.reject(new Error('应用正忙，请稍后重试。'))
     const host = this.host
     const requestId = randomUUID()
     return new Promise((resolve, reject) => {
       const cancel = (): void => {
         this.pending.get(requestId)?.cleanup()
+        const pending = this.pending.get(requestId)
+        if (pending) pending.waiting = false
         // 等待者退出不取消已派发修改；保留执行关联以处理宿主断开和迟到回执。
         if (!options.operation) {
           host.transport.send('application:host:cancel', requestId)
@@ -192,7 +196,7 @@ export class ApplicationHostBridge {
       }
       const timer = setTimeout(cancel, Math.max(30_000, (BUILTIN_APPLICATION_CAPABILITIES.find(item => item.id === capabilityId)?.timeoutMs ?? 0) + 1_000))
       signal.addEventListener('abort', cancel, { once: true })
-      this.pending.set(requestId, { callerId, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), allowPaid: options.allowPaid === true, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
+      this.pending.set(requestId, { callerId, rendererEpoch: host.registration.rendererEpoch, committed: Boolean(options.operation), waiting: true, allowPaid: options.allowPaid === true, resolve, reject, cleanup: () => { clearTimeout(timer); signal.removeEventListener('abort', cancel) } })
       try {
         this.assertAuthorized(callerId)
         if (options.operation) this.operations?.dispatched(options.operation, requestId, host.registration.rendererEpoch)

@@ -447,6 +447,11 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
     if (!supported) return undefined
     const undoRef = this.createOpaqueRef('undo')
     this.undoRecords.set(undoRef, { steps, results })
+    while (this.undoRecords.size > 256) {
+      const oldest = this.undoRecords.keys().next().value
+      if (oldest === undefined) break
+      this.undoRecords.delete(oldest)
+    }
     return undoRef
   }
 
