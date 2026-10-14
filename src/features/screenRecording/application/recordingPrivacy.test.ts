@@ -12,8 +12,8 @@ import { analyzeRecordingPrivacy } from './recordingPrivacyService'
 import { UNDERSTANDING_PROPERTY } from './recordingUnderstandingFields'
 beforeEach(() => installHarnessNativeStorage())
 afterEach(() => { vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
-async function setup() {
-  const id = crypto.randomUUID(), content = createRecordingDocument(); content.sessionId = id; content.status = 'stopped'
+async function setup(status: 'stopped' | 'interrupted' = 'stopped') {
+  const id = crypto.randomUUID(), content = createRecordingDocument(); content.sessionId = id; content.status = status
   content.media = [{ id: 'screen', kind: 'screen', path: resolve(sep, 'fixture', 'screen.mp4'), monoUs: 3000000, durationUs: 1000000 }]
   await getPlatform().documents.createDocument({ id, kind: 'screen_recording', container: { kind: 'user' }, name: '隐私候选测试', content })
   const candidate = privacyCandidateSchema.parse({ id: 'private', mediaId: 'screen', kind: 'email', hint: '••••', fingerprint: 'a'.repeat(64), startUs: 3000000, endUs: 3500000, status: 'pending', samples: [{ monoUs: 3000000, box: [.1, .2, .4, .1], confidence: .99 }] })
@@ -22,22 +22,27 @@ async function setup() {
   vi.spyOn(getPlatform().screenRecording, 'capture').mockResolvedValue({ events: [], nextOffset: null })
   return { id, sessionRef: { kind: 'screen_recording.session', id }, ref: { kind: 'screen_recording.understanding', id } }
 }
-it.each(['fast', 'precise'] as const)('正式发现/分析→读回→批量确认→撤销→过期基线拒绝（%s 档）', async quality => {
-  const { id, sessionRef, ref } = await setup(), app = createApplicationHarness()
+it.each(['stopped', 'interrupted'] as const)('内置默认OCR正式发现/分析→读回→批量确认→撤销→过期基线拒绝（%s 会话）', async status => {
+  const { id, sessionRef, ref } = await setup(status), app = createApplicationHarness()
   try {
     expect(app.session.list().some(d => d.id === 'detect_screen_recording_sensitive_text')).toBe(true)
-    const generated = await app.requireResult('detect_screen_recording_sensitive_text', { sessionRef, quality })
+    const generated = await app.requireResult('detect_screen_recording_sensitive_text', { sessionRef })
     expect(generated).toMatchObject({ verified: true, candidates: 1, undoRef: expect.any(String) })
-    expect(getPlatform().smartRegions.detectSensitiveText).toHaveBeenCalledWith(expect.objectContaining({ quality }))
+    expect(getPlatform().smartRegions.detectSensitiveText).toHaveBeenCalledWith({ requestId: expect.any(String), source: resolve(sep, 'fixture', 'screen.mp4'), mediaId: 'screen', startUs: 0, endUs: 1000000, originUs: 3000000 })
     expect((harnessDocumentStore().stored(id)?.content as ReturnType<typeof createRecordingDocument>).understanding.privacy.candidates).toMatchObject([{ id: 'private', status: 'pending' }])
     const read = await app.read(ref, [UNDERSTANDING_PROPERTY]), value = structuredClone((await readRecordingUnderstanding(id)).content.understanding)
     value.privacy.candidates[0].status = 'accepted'
     const input = { summary: '确认打码', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { [UNDERSTANDING_PROPERTY]: value } }] }
     const changed = await app.requireResult('change_application_entities', input, read.revisions as Record<string, number>)
     expect((await readRecordingUnderstanding(id)).content.understanding.privacy.candidates[0].status).toBe('accepted')
-    expect((await app.call('change_application_entities', input, read.revisions as Record<string, number>)).ok).toBe(false)
+    const beforeStale = await readRecordingUnderstanding(id)
+    expect(await app.call('change_application_entities', input, read.revisions as Record<string, number>)).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+    expect(await readRecordingUnderstanding(id)).toEqual(beforeStale)
     await app.requireResult('undo_application_changes', { undoRef: changed.undoRef })
     expect((await readRecordingUnderstanding(id)).content.understanding.privacy.candidates[0].status).toBe('pending')
+    const afterUndo = await readRecordingUnderstanding(id)
+    expect(await app.call('change_application_entities', input, read.revisions as Record<string, number>)).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+    expect(await readRecordingUnderstanding(id)).toEqual(afterUndo)
   } finally { app.dispose() }
 })
 it('分析期间并发修改、取消和保存失败不覆盖原理解', async () => {

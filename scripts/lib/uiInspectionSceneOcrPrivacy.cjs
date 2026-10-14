@@ -13,21 +13,17 @@ const { confirmVideoEditExport } = require('./uiInspectionVideoEditExportDialog.
 function createOcrPrivacyScene() {
   return { id: 'ocr-privacy', surface: '剪辑', name: 'OCR-真实录制识别确认与滚动打码导出', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      assert(process.env.HENJI_OCR_MODELS, 'HENJI_OCR_MODELS must point to isolated official v6 weights')
       const root = path.resolve('.ui-tour/ocr-privacy'); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
       const evidence = {}; let fixtureId; let client
       const save = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       try {
         const dirs = await page.evaluate(() => window.henjiNative.paths.appDirectories())
-        assert(dirs.userRoot.includes('henji-electron-test-'), 'Refuse to seed weights in real user data')
-        const manifest = require('../check-persistence-compat.cjs').loadTypeScript('electron/main/services/local-models/manifest.ts').LOCAL_MODEL_MANIFEST
-        for (const model of manifest.filter(m => ['text_detection_ppocr', 'text_recognition_ppocr'].includes(m.id))) {
-          for (const locale of ['zh', 'en']) {
-            const target = path.join(dirs.userRoot, locale === 'zh' ? '模型' : 'Models', model.folderName[locale]); fs.mkdirSync(target, { recursive: true })
-            for (const file of model.files) fs.copyFileSync(path.join(process.env.HENJI_OCR_MODELS, file.name), path.join(target, file.name))
-          }
-        }
+        assert(dirs.userRoot.includes('henji-electron-test-'), 'Refuse to inspect OCR using real user data')
+        const modelIds = await page.evaluate(async () => (await window.henjiNative.localModels.getState()).models.map(model => model.id))
+        assert(modelIds.every(id => !id.includes('ppocr')), 'Bundled OCR must not be exposed in the downloadable-model directory')
+        evidence.downloadableModelIds = modelIds; save()
+        // Exercise shipped resources from a clean profile: never seed a user download cache.
         // This test window contains only made-up credentials. No desktop or other application is captured.
         const fixture = await app.evaluate(async ({ BrowserWindow, screen }) => {
           const display = screen.getDisplayNearestPoint({ x: 2561, y: 1 })

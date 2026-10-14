@@ -28,7 +28,7 @@ export async function executeVideoEditPrivacy(raw: unknown, context: CapabilityE
   logger.info('开始寻找敏感文字', { event: 'video_edit.privacy.start', context: { documentId: baseline.id, clipId: clip.id } })
   try {
     context.signal.throwIfAborted()
-    const result = await api.detectSensitiveText({ requestId, quality: input.quality, source: media.path, mediaId: media.id, startUs: Math.max(0, Math.floor(range.from * 1e6)), endUs: Math.ceil(range.to * 1e6), originUs: 0 })
+    const result = await api.detectSensitiveText({ requestId, source: media.path, mediaId: media.id, startUs: Math.max(0, Math.floor(range.from * 1e6)), endUs: Math.ceil(range.to * 1e6), originUs: 0 })
     context.signal.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, version)) throw new Error('CONFLICT:识别期间剪辑已修改，请重新识别。')
     const effects = recordingPrivacySchema.parse(result.privacy).candidates.map(c => privacyCandidateEffect(c, 0, false))

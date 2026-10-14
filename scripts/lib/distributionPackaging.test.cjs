@@ -110,6 +110,7 @@ function windowsLayout() {
   const appOutDir = path.join(dir, 'win-unpacked')
   const sourceDir = path.join(dir, 'source')
   const bundled = path.join(appOutDir, 'resources', 'resources')
+  fs.cpSync(path.resolve(__dirname, '../../resources/local-models'), path.join(bundled, 'local-models'), { recursive: true })
   const sources = []
   for (const name of ['henji-video-decoder.exe', 'avcodec-63.dll', 'ffmpeg.exe', 'ffprobe.exe']) {
     writeFile(path.join(sourceDir, name), `bytes:${name}`)
@@ -136,6 +137,13 @@ test('打包核对：完整 Windows 布局通过，各类偏差逐项报出', ()
       appOutDir: layout.appOutDir, platform: 'win32', videoDecoderSources: layout.sources, ffmpegVersion: FFMPEG_BUILD.version, listAsar: () => asarEntries,
     })
     assert.deepEqual(verify(), [])
+    const bundledModel = path.join(layout.bundled, 'local-models/text_recognition_ppocr/pp-ocrv6_tiny_rec_int8.onnx')
+    const originalModel = fs.readFileSync(bundledModel)
+    fs.writeFileSync(bundledModel, 'corrupt')
+    assert.match(verify().join('\n'), /内置模型.*与构建来源不一致/)
+    fs.unlinkSync(bundledModel)
+    assert.match(verify().join('\n'), /缺少内置模型/)
+    fs.writeFileSync(bundledModel, originalModel)
     // 本平台二进制包不算混入（@esbuild/win32-x64、clipboard-win32-x64-msvc）
     assert.deepEqual(verify(['/node_modules/@esbuild/win32-x64/esbuild.exe', '\\node_modules\\@mariozechner\\clipboard-win32-x64-msvc\\c.node']), [])
 
@@ -167,12 +175,16 @@ test('静态 CRT：Windows 追加 +crt-static 并保留已有 rustflags，其他
   assert.equal(dynamicMsvcRuntimeOf(Buffer.from('KERNEL32.dll\0api-ms-win-crt-heap-l1-1-0.dll\0')), null)
 })
 
-test('打包核对：非 Windows 只要求通用许可文件', () => {
+test('打包核对：macOS 同样要求 asar 外内置模型及通用许可文件', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-packaged-mac-'))
   try {
     const licenses = path.join(dir, '痕迹AI.app', 'Contents', 'Resources', 'resources', 'licenses')
+    const bundledModels = path.join(path.dirname(licenses), 'local-models')
+    fs.cpSync(path.resolve(__dirname, '../../resources/local-models'), bundledModels, { recursive: true })
     for (const file of expectedLicenseFiles('darwin')) writeFile(path.join(licenses, file), 'text')
     assert.deepEqual(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }), [])
+    fs.unlinkSync(path.join(bundledModels, 'text_detection_ppocr/pp-ocrv6_tiny_det.onnx'))
+    assert.match(verifyPackagedResources({ appOutDir: dir, platform: 'darwin', productFilename: '痕迹AI' }).join('\n'), /缺少内置模型/)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }

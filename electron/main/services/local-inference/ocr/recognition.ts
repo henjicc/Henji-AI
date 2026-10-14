@@ -6,7 +6,7 @@ export interface RecognizedText { text: string; confidence: number }
 export interface PixelCrop { x: number; y: number; width: number; height: number; tensorWidth: number }
 export interface RecognitionBatchPolicy { widthMultiple: number; pixelBudget: number }
 // 32/64 padding was faster but dropped a narrow 'I' in the real capture regression. Keep 128's context.
-export const RECOGNITION_BATCH_POLICY: RecognitionBatchPolicy = { widthMultiple: 128, pixelBudget: 4096 }
+export const RECOGNITION_BATCH_POLICY: RecognitionBatchPolicy = { widthMultiple: 128, pixelBudget: 3072 }
 export type CropRecognizer = (rgb: Uint8Array, width: number, crops: readonly PixelCrop[], signal: AbortSignal) => Promise<RecognizedText[]>
 export function recognitionCrop(width: number, height: number, box: PrivacyBox): PixelCrop {
   const x = Math.max(0, Math.min(width - 1, Math.floor(box[0] * width)))
@@ -36,9 +36,9 @@ function resizeAxis(source: number, target: number): Array<{ start: number; weig
   })
 }
 /** Scale-aware separable bilinear filter: downsampling must integrate thin strokes, not point-sample them away. */
-function resizeCrop(rgb: Uint8Array, sourceWidth: number, crop: PixelCrop): Float32Array {
+function resizeCropIntoBatch(rgb: Uint8Array, sourceWidth: number, crop: PixelCrop, data: Float32Array, offset: number, width: number, normalization: RecognitionNormalization): void {
   const xs = resizeAxis(crop.width, crop.tensorWidth), ys = resizeAxis(crop.height, 48), stride = crop.tensorWidth * 3
-  const horizontal = new Float32Array(crop.height * stride), result = new Float32Array(48 * stride)
+  const horizontal = new Float32Array(crop.height * stride)
   for (let y = 0; y < crop.height; y++) for (let x = 0; x < crop.tensorWidth; x++) {
     const axis = xs[x], source = ((crop.y + y) * sourceWidth + crop.x + axis.start) * 3, target = y * stride + x * 3
     let red = 0, green = 0, blue = 0
@@ -48,32 +48,29 @@ function resizeCrop(rgb: Uint8Array, sourceWidth: number, crop: PixelCrop): Floa
     }
     horizontal[target] = red; horizontal[target + 1] = green; horizontal[target + 2] = blue
   }
+  const plane = width * 48, first = normalization === 'rgb-half' ? 0 : 2, last = 2 - first
+  const divisor = normalization === 'rgb-half' ? 255 : 127.5, bias = normalization === 'rgb-half' ? 0.5 : 1
   for (let y = 0; y < 48; y++) {
     const axis = ys[y]
-    for (let x = 0; x < stride; x++) {
-      let value = 0
-      for (let tap = 0; tap < axis.weights.length; tap++) value += horizontal[(axis.start + tap) * stride + x] * axis.weights[tap]
-      result[y * stride + x] = Math.round(value)
+    for (let x = 0; x < crop.tensorWidth; x++) {
+      let red = 0, green = 0, blue = 0
+      for (let tap = 0; tap < axis.weights.length; tap++) {
+        const source = (axis.start + tap) * stride + x * 3, weight = axis.weights[tap]
+        red += horizontal[source] * weight; green += horizontal[source + 1] * weight; blue += horizontal[source + 2] * weight
+      }
+      const target = offset + y * width + x
+      data[target + first * plane] = Math.round(red) / divisor - bias
+      data[target + plane] = Math.round(green) / divisor - bias
+      data[target + last * plane] = Math.round(blue) / divisor - bias
     }
   }
-  return result
 }
 /** Resample directly from the original RGB frame into a batched tensor; no per-line Sharp decode/copy. */
 export function recognitionBatchInput(rgb: Uint8Array, sourceWidth: number, crops: readonly PixelCrop[], normalization: RecognitionNormalization = 'rgb-half', policy = RECOGNITION_BATCH_POLICY): { data: Float32Array; width: number } {
   const width = Math.ceil(Math.max(...crops.map(c => c.tensorWidth)) / policy.widthMultiple) * policy.widthMultiple
   const plane = width * 48, data = new Float32Array(crops.length * 3 * plane).fill(normalization === 'rgb-half' ? 0.5 : 1)
   for (let n = 0; n < crops.length; n++) {
-    const crop = crops[n], resized = resizeCrop(rgb, sourceWidth, crop)
-    const offset = n * 3 * plane, first = normalization === 'rgb-half' ? 0 : 2, last = 2 - first
-    const divisor = normalization === 'rgb-half' ? 255 : 127.5, bias = normalization === 'rgb-half' ? 0.5 : 1
-    for (let y = 0; y < 48; y++) {
-      for (let x = 0; x < crop.tensorWidth; x++) {
-        const source = (y * crop.tensorWidth + x) * 3, target = offset + y * width + x
-        data[target] = resized[source + first] / divisor - bias
-        data[target + plane] = resized[source + 1] / divisor - bias
-        data[target + 2 * plane] = resized[source + last] / divisor - bias
-      }
-    }
+    resizeCropIntoBatch(rgb, sourceWidth, crops[n], data, n * 3 * plane, width, normalization)
   }
   return { data, width }
 }

@@ -5,7 +5,8 @@ import { getProgramStoreDir } from '../appPaths'
 import { createMainLogger } from '../logging'
 import { createContentDiskCache } from '../media/content-disk-cache'
 import { identifyMediaContent } from '../media/content-identity'
-import { ensureLocalModel } from '../local-models/runtime'
+import { ensureBundledOcrModel, ensureLocalModel } from '../local-models/runtime'
+import { isBundledOcrModel } from '../local-models/bundledOcr'
 import { LocalInferenceHost, type LocalInferenceChild } from '../local-inference/host'
 import { executionProviderOrder } from '../local-inference/providers'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
@@ -34,7 +35,7 @@ let privacyService: OcrPrivacyService | undefined
 export function getOcrPrivacyService(): OcrPrivacyService {
   if (privacyService) return privacyService
   const created = new OcrPrivacyService({ identity: identifyMediaContent, probe: async source => probeSmartRegionSource(await loadFfprobePath(), source),
-    ensureModel: async (id, role = 'model') => { const model = await ensureLocalModel(id); const file = model.files.find(v => v.role === role); if (!file) throw new Error('本地文字模型文件缺失。'); return file.path },
+    ensureModel: ensureBundledOcrModel,
     ffmpegPath: loadFfmpegPath, providers: executionProviderOrder(process.platform),
     infer: (job, progress) => getLocalInferenceHost().ocrPrivacy(job, progress), cancel: id => getLocalInferenceHost().cancel(id),
     emit: event => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(SMART_REGIONS_IPC_CHANNELS.privacyProgress, event) },
@@ -65,6 +66,7 @@ export function getSmartRegionService(): SmartRegionService {
     identity: identifyMediaContent,
     probe: async source => probeSmartRegionSource(await loadFfprobePath(), source),
     ensureModel: async id => {
+      if (isBundledOcrModel(id)) return ensureBundledOcrModel(id)
       const model = await ensureLocalModel(id)
       const file = model.files.find(entry => entry.role === 'model')
       if (!file) throw new Error(`模型 ${id} 缺少模型文件。`)

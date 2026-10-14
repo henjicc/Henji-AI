@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import type { BundledOcrModelId } from '../local-models/bundledOcr'
 import type { LocalModelId } from '../../../../src/platform/contracts/localModels'
 import {
   normalizeSmartRegionRange, smartRegionRequestKey,
@@ -30,7 +31,7 @@ export interface SmartRegionSourceProbe {
 export interface SmartRegionServiceDependencies {
   identity(source: string): Promise<{ path: string; identity: string }>
   probe(source: string): Promise<SmartRegionSourceProbe>
-  ensureModel(id: LocalModelId): Promise<string>
+  ensureModel(id: LocalModelId | BundledOcrModelId): Promise<string>
   ffmpegPath(): Promise<string>
   segments: ContentDiskCache
   indexes: ContentDiskCache
@@ -48,7 +49,7 @@ interface Job { id: string; request: SmartRegionRequest; status: SmartRegionStat
 /** 各分析的帧率上限：人物要跟住边缘，按素材帧率（最多 60）；人脸 30 帧（播放时按轨迹插值）；文字变化慢，10 帧。 */
 export const SMART_REGION_FPS_LIMITS: Readonly<Record<SmartRegionAnalysisKind, number>> = { face: 30, person: 60, text: 10 }
 
-const MODELS: Readonly<Record<SmartRegionAnalysisKind, Array<{ id: LocalModelId; name: LocalInferenceModelFile['name'] }>>> = {
+const MODELS: Readonly<Record<SmartRegionAnalysisKind, Array<{ id: LocalModelId | BundledOcrModelId; name: LocalInferenceModelFile['name'] }>>> = {
   face: [{ id: 'face_detection_yunet', name: 'yunet' }],
   person: [{ id: 'person_matting_rvm', name: 'rvm' }, { id: 'selfie_segmentation', name: 'selfie' }],
   text: [{ id: 'text_detection_ppocr', name: 'ppocr' }],

@@ -1,6 +1,20 @@
 import { expect, it, vi } from 'vitest'
-import { FrameOcr } from './frameOcr'
+import { FrameOcr, withOcrImageBudget } from './frameOcr'
+import sharp from 'sharp'
 import type { LocalModelRunner } from '../analysis'
+it('OCR 独占任务限额在成功与失败后恢复，不改变后续字幕或修图任务的 Sharp 预算', async () => {
+  const initial = sharp.concurrency()
+  try {
+    sharp.concurrency(6)
+    expect(await withOcrImageBudget(async () => sharp.concurrency())).toBe(2)
+    expect(sharp.concurrency()).toBe(6)
+    await expect(withOcrImageBudget(async () => { throw new Error('cancelled') })).rejects.toThrow('cancelled')
+    expect(sharp.concurrency()).toBe(6)
+    sharp.concurrency(1)
+    expect(await withOcrImageBudget(async () => sharp.concurrency())).toBe(1)
+    expect(sharp.concurrency()).toBe(1)
+  } finally { sharp.concurrency(initial) }
+})
 it('变化块外的行直接复用，相同裁片哈希命中；改字和取消不返回旧识别', async () => {
   let right = 300
   const detector: LocalModelRunner = { provider: 'cpu', run: async feeds => {

@@ -1,11 +1,11 @@
 import type { OcrPrivacyRequest, OcrPrivacyResponse, OcrPrivacyProgress } from '../../../../src/platform/contracts/ocrPrivacy'
 import { recordingPrivacySchema } from '../../../../src/core/screenRecording/privacy'
-import type { LocalModelId } from '../../../../src/platform/contracts/localModels'
+import type { BundledOcrModelId } from '../local-models/bundledOcr'
 import type { OcrPrivacyJob } from '../local-inference/ocr/protocol'
 import type { SmartRegionServiceDependencies } from './service'
 
 export interface PrivacyServiceDependencies extends Pick<SmartRegionServiceDependencies, 'identity' | 'probe' | 'ffmpegPath' | 'providers' | 'log'> {
-  ensureModel(id: LocalModelId, role?: 'model' | 'dict'): Promise<string>
+  ensureModel(id: BundledOcrModelId, role?: 'model' | 'dict'): Promise<string>
   infer(job: OcrPrivacyJob, progress: (done: number, total: number) => void): Promise<OcrPrivacyResponse>
   cancel(id: string): void
   emit(event: OcrPrivacyProgress): void
@@ -23,7 +23,7 @@ export class OcrPrivacyService {
     this.deps.log('info', '开始敏感信息识别', 'privacy.detect.start', { requestId: request.requestId, mediaId: request.mediaId })
     try {
       const identity = await this.deps.identity(request.source); check()
-      const recognitionId = request.quality === 'precise' ? 'text_recognition_ppocr_precise' : 'text_recognition_ppocr'
+      const recognitionId = 'text_recognition_ppocr'
       const models: OcrPrivacyJob['models'] = []
       for (const [id, name] of [['text_detection_ppocr', 'ppocr'], [recognitionId, 'ppocr_rec']] as const) { models.push({ name, path: await this.deps.ensureModel(id) }); check() }
       const dictionaryPath = await this.deps.ensureModel(recognitionId, 'dict'); check()
@@ -32,7 +32,7 @@ export class OcrPrivacyService {
       const startUs = Math.max(request.startUs, containerStartUs)
       if (request.endUs <= startUs || probe.width <= 0 || probe.height <= 0) throw new Error('识别范围没有可读取的画面。')
       const ffmpegPath = await this.deps.ffmpegPath(); check()
-      const result = await this.deps.infer({ id: request.requestId, source: identity.path, ffmpegPath, models, dictionaryPath, normalization: request.quality === 'precise' ? 'bgr-unit' : 'rgb-half', cursor: request.cursor, providers: this.deps.providers,
+      const result = await this.deps.infer({ id: request.requestId, source: identity.path, ffmpegPath, models, dictionaryPath, normalization: 'rgb-half', cursor: request.cursor, providers: this.deps.providers,
         seekSeconds: (startUs - containerStartUs) / 1e6, durationSeconds: (request.endUs - startUs) / 1e6,
         startUs: request.originUs + startUs, endUs: request.originUs + request.endUs, mediaId: request.mediaId,
         fps: Math.max(1, Math.min(10, probe.fps || 10)), display: probe,

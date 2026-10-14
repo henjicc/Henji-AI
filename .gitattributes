@@ -1,2 +1,4 @@
 # Persistence goldens are byte contracts; line endings must not alter source hashes.
 tests/fixtures/persistence/** -text
+# Bundled model weights and dictionaries are SHA-256 byte contracts on every platform.
+resources/local-models/** -text

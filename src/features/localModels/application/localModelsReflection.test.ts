@@ -89,6 +89,13 @@ it('暂不可下载的模型拒绝写入并说明原因，不调用下载', asyn
   expect(fake.calls).toEqual([])
 })
 
+it.each(['text_detection_ppocr', 'text_recognition_ppocr', 'text_recognition_ppocr_precise'])('OCR资源%s不再属于公共模型实体，不能读写或触发下载', async id => {
+  const ref = { kind: 'local_model.item', id }
+  await expect(applicationReflectionHandlers.readEntity({ ref, propertyIds: ['local_model.item.status'] }, context())).rejects.toThrow()
+  await expect(change(ref, { 'local_model.item.downloaded': true })).rejects.toThrow()
+  expect(fake.calls).toEqual([])
+})
+
 it('通用 read 返回已知下载进度与失败事实；100% 仍在下载，未知进度与清空原因不冒充成功', async () => {
   const read = async () => (await applicationReflectionHandlers.readEntity({ ref: yunet, propertyIds: ['local_model.item.status', 'local_model.item.progress_percent', 'local_model.item.last_failure'] }, context())).properties
   fake.modelDetails = { status: 'downloading', progress: { receivedBytes: 123, totalBytes: 500 }, lastFailure: null }

@@ -47,7 +47,7 @@ beforeEach(() => {
     models: [
       model('face_detection_yunet', '人脸检测 YuNet', 'not_downloaded'),
       model('person_matting_rvm', '人物抠像 RVM', 'ready'),
-      model('text_detection_ppocr', '文字检测 PP-OCR', 'not_downloaded', { lastFailure: 'network' }),
+      model('object_tracking_vittrack', '物体跟踪 VitTrack', 'not_downloaded', { lastFailure: 'network' }),
       model('object_tracking_efficienttam', '任意物体跟踪 EfficientTAM', 'unavailable', { sizeBytes: 0 }),
     ],
   }

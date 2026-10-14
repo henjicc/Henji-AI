@@ -8,16 +8,16 @@ import { readRecognitionDictionary, type RecognitionNormalization } from './reco
 import { sensitiveTextMatches } from '../../../../../src/core/screenRecording/privacy'
 import { ppocrInput, ppocrInputSize, TEXT_DETECTION_PRESETS, textBoxesFromMap } from '../analyzers/textDetection'
 
-/** Explicit real-weight suite: HENJI_OCR_MODELS=<isolated weights> npx vitest run <this file> --pool=forks --maxWorkers=1 */
-const models = process.env.HENJI_OCR_MODELS
-describe.skipIf(!models)('PP-OCRv6 真实权重', () => {
+/** Explicit real-weight suite: HENJI_OCR_NATIVE=1 npx vitest run <this file> --pool=forks --maxWorkers=1 */
+const enabled = process.env.HENJI_OCR_NATIVE === '1'
+describe.skipIf(!enabled)('PP-OCRv6 真实权重', () => {
   let sessions: LocalModelSessions
   afterAll(async () => { await sessions?.dispose() })
-  async function engine(tier: string, normalization: RecognitionNormalization, threads: number): Promise<FrameOcr> {
+  async function engine(normalization: RecognitionNormalization, threads: number): Promise<FrameOcr> {
     sessions ??= new LocalModelSessions(await loadOnnxRuntime(), () => undefined)
-    const detector = await sessions.open({ name: 'ppocr', path: path.join(models!, 'pp-ocrv6_tiny_det.onnx') }, ['cpu'], 'dynamic', { intraOpNumThreads: threads })
-    const recognizer = await sessions.open({ name: 'ppocr_rec', path: path.join(models!, `pp-ocrv6_${tier}_rec.onnx`) }, ['cpu'], 'dynamic', { intraOpNumThreads: threads })
-    const alphabet = readRecognitionDictionary(await fs.readFile(path.join(models!, tier === 'tiny' ? 'ppocrv6_tiny_dict.txt' : 'ppocrv6_dict.txt'), 'utf8'))
+    const detector = await sessions.open({ name: 'ppocr', path: path.resolve('resources/local-models/text_detection_ppocr/pp-ocrv6_tiny_det.onnx') }, ['cpu'], 'dynamic', { intraOpNumThreads: threads })
+    const recognizer = await sessions.open({ name: 'ppocr_rec', path: path.resolve('resources/local-models/text_recognition_ppocr/pp-ocrv6_tiny_rec_int8.onnx') }, ['cpu'], 'dynamic', { intraOpNumThreads: threads })
+    const alphabet = readRecognitionDictionary(await fs.readFile(path.resolve('resources/local-models/text_recognition_ppocr/ppocrv6_tiny_dict.txt'), 'utf8'))
     return new FrameOcr(detector, recognizer, alphabet, normalization)
   }
   it('原图裁片、行召回、CER、框 IoU 与假邮箱/密钥召回', async () => {
@@ -25,15 +25,15 @@ describe.skipIf(!models)('PP-OCRv6 真实权重', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160"><rect width="3840" height="2160" fill="white"/>${texts.map((text, i) => `<text x="160" y="${200 + i * 160}" font-family="Microsoft YaHei" font-size="48" fill="black">${text}</text>`).join('')}</svg>`
     const rgb = await sharp(Buffer.from(svg)).removeAlpha().raw().toBuffer()
     const reports = []
-    for (const tier of ['tiny', 'small']) for (const normalization of ['rgb-half', 'bgr-unit'] as const) {
-      const ocr = await engine(tier, normalization, 4), result = await ocr.run(rgb, 3840, 2160, new AbortController().signal)
+    for (const normalization of ['rgb-half', 'bgr-unit'] as const) {
+      const ocr = await engine(normalization, 4), result = await ocr.run(rgb, 3840, 2160, new AbortController().signal)
       const lines = result.lines.filter(l => l.confidence >= 0.5)
       const pairs = texts.map((text, i) => ({ text, line: lines.find(l => Math.abs((l.box[1] + l.box[3] / 2) * 2160 - (180 + i * 160)) < 50) }))
       const errors = pairs.reduce((sum, p) => sum + editDistance(p.text.replaceAll(' ', ''), (p.line?.text ?? '').replaceAll(' ', '')), 0)
       const cer = errors / texts.join('').replaceAll(' ', '').length
       const sensitive = lines.flatMap(l => sensitiveTextMatches(l.text)).map(m => m.kind)
-      reports.push({ tier, normalization, cer, recall: pairs.filter(p => p.line).length / texts.length, sensitive, ...result, lines })
-      if (tier === 'tiny' && normalization === 'rgb-half') {
+      reports.push({ normalization, cer, recall: pairs.filter(p => p.line).length / texts.length, sensitive, ...result, lines })
+      if (normalization === 'rgb-half') {
         expect(pairs.every(p => p.line)).toBe(true)
         expect(cer).toBeLessThanOrEqual(0.05)
         expect(sensitive).toEqual(expect.arrayContaining(['email', 'secret']))
@@ -55,19 +55,19 @@ describe.skipIf(!models)('PP-OCRv6 真实权重', () => {
   it.skipIf(!process.env.HENJI_OCR_DENSE)('4K 稠密页热态基准（禁用缓存，每次都识别所有行）', async () => {
     const { data, info } = await sharp(process.env.HENJI_OCR_DENSE!).removeAlpha().raw().toBuffer({ resolveWithObject: true })
     const reports = []
-    for (const tier of ['tiny', 'small']) for (const threads of [2, 4, 6]) {
+    for (const threads of [2, 4, 6]) {
       const rows = []
       for (let i = 0; i < 4; i++) {
         // A new job cache with the same resident sessions measures actual inference, never cache hits.
-        const ocr = await engine(tier, 'rgb-half', threads), started = performance.now()
+        const ocr = await engine('rgb-half', threads), started = performance.now()
         const result = await ocr.run(data, info.width, info.height, new AbortController().signal)
         rows.push({ ms: performance.now() - started, det: result.detectionMs, rec: result.recognitionMs, lines: result.lines.length })
       }
-      reports.push({ tier, threads, rows })
+      reports.push({ threads, rows })
     }
     await fs.mkdir('.tmp/ocr', { recursive: true })
     await fs.writeFile('.tmp/ocr/dense.json', JSON.stringify(reports, null, 2))
-    const hot = reports.find(r => r.tier === 'tiny' && r.threads === 4)!.rows.slice(1)
+    const hot = reports.find(r => r.threads === 4)!.rows.slice(1)
     expect(Math.max(...hot.map(r => r.ms))).toBeLessThanOrEqual(400)
     // eslint-disable-next-line no-console -- Explicit native benchmark evidence.
     console.log(JSON.stringify(reports))
@@ -76,8 +76,8 @@ describe.skipIf(!models)('PP-OCRv6 真实权重', () => {
     const { data, info } = await sharp(process.env.HENJI_OCR_SCREEN!).removeAlpha().raw().toBuffer({ resolveWithObject: true })
     const truth = ['FlashOCR截图识别验收测试', 'Rust+ONNXRuntime最小可验证项目MVP', 'Detection+Recognition+CTCDecode', '小字号文本测试：疾风知劲草board1234567890', 'fnmain(){letx=vec![1,2,3];}', 'ifscore>=0.6{accept(line);}', '第二栏：多栏布局测试', 'Englishmixed中文mixed12345', '符号测试!@#$%^&*()_+-=[]{};:,.<>/?', '底部一行文字0123456789']
     const reports = []
-    for (const tier of ['tiny', 'small']) for (const normalization of ['rgb-half', 'bgr-unit'] as const) {
-      const ocr = await engine(tier, normalization, 4)
+    for (const normalization of ['rgb-half', 'bgr-unit'] as const) {
+      const ocr = await engine(normalization, 4)
       const result = await ocr.run(data, info.width, info.height, new AbortController().signal)
       const remaining = result.lines.filter(l => l.confidence >= .5).map(l => l.text.replaceAll(' ', ''))
       let errors = 0
@@ -86,14 +86,14 @@ describe.skipIf(!models)('PP-OCRv6 真实权重', () => {
         errors += index >= 0 ? distances[index] : text.length
         if (index >= 0) remaining.splice(index, 1)
       }
-      reports.push({ tier, normalization, cer: errors / truth.join('').length, ...result })
+      reports.push({ normalization, cer: errors / truth.join('').length, ...result })
     }
     const size = ppocrInputSize(info.width, info.height), scaled = await sharp(data, { raw: { ...info, channels: 3 } }).resize(size.width, size.height, { kernel: 'linear' }).raw().toBuffer()
     const feeds = { x: { type: 'float32' as const, data: ppocrInput(scaled, size.width, size.height), dims: [1, 3, size.height, size.width] } }
     const backends = []
     for (const provider of process.platform === 'win32' ? ['cpu', 'dml'] as const : ['cpu'] as const) {
       const started = performance.now()
-      const runner = await sessions.open({ name: 'ppocr', path: path.join(models!, 'pp-ocrv6_tiny_det.onnx') }, [provider], `${size.width}x${size.height}`, { intraOpNumThreads: 4 })
+      const runner = await sessions.open({ name: 'ppocr', path: path.resolve('resources/local-models/text_detection_ppocr/pp-ocrv6_tiny_det.onnx') }, [provider], `${size.width}x${size.height}`, { intraOpNumThreads: 4 })
       const loadMs = performance.now() - started, rows = []
       for (let n = 0; n < 4; n++) {
         const t = performance.now(), output = Object.values(await runner.run(feeds))[0]
@@ -111,12 +111,12 @@ describe.skipIf(!models)('PP-OCRv6 真实权重', () => {
     const { data, info } = await sharp(process.env.HENJI_OCR_CAPTURE!).removeAlpha().raw().toBuffer({ resolveWithObject: true })
     expect([info.width, info.height]).toEqual([3840, 2160])
     const reports = []
-    for (const tier of ['tiny', 'small']) {
-      const ocr = await engine(tier, tier === 'tiny' ? 'rgb-half' : 'bgr-unit', 4)
+    {
+      const ocr = await engine('rgb-half', 4)
       const result = await ocr.run(data, info.width, info.height, new AbortController().signal)
       const texts = result.lines.map(l => l.text)
       expect(texts).toEqual(expect.arrayContaining(['demo@example.com', 'sk-testABCDEFGHIJKLMNOP1234']))
-      reports.push({ tier, ...result })
+      reports.push(result)
     }
     await fs.mkdir('.tmp/ocr', { recursive: true })
     await fs.writeFile('.tmp/ocr/capture.json', JSON.stringify(reports, null, 2))
@@ -125,7 +125,7 @@ describe.skipIf(!models)('PP-OCRv6 真实权重', () => {
     const reports = []
     for (const second of [0.5, 2.8]) {
       const { data, info } = await sharp(path.join(process.env.HENJI_OCR_EXPORT!, `export-${second}.png`)).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-      const result = await (await engine('tiny', 'rgb-half', 4)).run(data, info.width, info.height, new AbortController().signal)
+      const result = await (await engine('rgb-half', 4)).run(data, info.width, info.height, new AbortController().signal)
       expect(result.lines.flatMap(l => sensitiveTextMatches(l.text))).toEqual([])
       const ordinary = result.lines.find(l => l.text === 'Normal text stays visible')
       expect(ordinary).toBeDefined()

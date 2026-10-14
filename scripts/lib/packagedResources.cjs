@@ -64,6 +64,20 @@ function verifyPackagedResources({ appOutDir, platform, productFilename, videoDe
   const resourcesDir = resourcesDirOf({ appOutDir, platform, productFilename })
   const bundledDir = path.join(resourcesDir, 'resources')
 
+  // OCR must work on the first offline launch on every platform, outside app.asar.
+  const modelSource = path.resolve(__dirname, '../../resources/local-models')
+  const modelTarget = path.join(bundledDir, 'local-models')
+  const modelFiles = listFilesRecursive(modelSource)
+  if (!modelFiles.length) problems.push('构建来源缺少内置 OCR 模型')
+  for (const file of modelFiles) {
+    const target = path.join(modelTarget, file)
+    if (!fs.existsSync(target)) problems.push(`缺少内置模型 local-models/${file}`)
+    else if (sha256(target) !== sha256(path.join(modelSource, file))) problems.push(`内置模型 local-models/${file} 与构建来源不一致`)
+  }
+  for (const file of listFilesRecursive(modelTarget)) {
+    if (!modelFiles.includes(file)) problems.push(`内置模型目录混入未登记文件：${file}`)
+  }
+
   const licensesDir = path.join(bundledDir, 'licenses')
   const licenseFiles = new Set(listFilesRecursive(licensesDir))
   for (const file of expectedLicenseFiles(platform)) {

@@ -7,6 +7,8 @@ files:
   - out/**
   - package.json
 extraResources:
+  - from: resources/local-models
+    to: resources/local-models
   - from: resources/progress-seeds.json
     to: resources/progress-seeds.json
   - from: resources/camera-stage

@@ -1,7 +1,7 @@
 /*
- * 本地模型（任务 4.11）：抠像、检测、跟踪这类必须逐帧在本机跑的小模型，第一次用到时下载。
+ * 可下载本地模型：抠像、检测、跟踪模型第一次用到时下载；内置OCR不属于此公开目录。
  *
- * 文件放在作品目录的“模型/<模型名>/”下，每个文件按清单里写死的 SHA-256 校验；下载源在国内
+ * 文件放在作品目录的“模型/<模型名>/”下，均按清单的 SHA-256 校验；下载源在国内
  * （ModelScope）与国外（Hugging Face / GitHub）之间自动选择，失败自动换源。
  * 主进程实现在 `electron/main/services/local-models/`，渲染层经 `src/commands/localModels.ts` 调用。
  */
@@ -11,9 +11,6 @@ export const LOCAL_MODEL_IDS = [
   'face_detection_yunet',
   'person_matting_rvm',
   'selfie_segmentation',
-  'text_detection_ppocr',
-  'text_recognition_ppocr',
-  'text_recognition_ppocr_precise',
   'object_tracking_vittrack',
   'object_tracking_efficienttam',
   'image_inpainting_migan',
@@ -30,7 +27,7 @@ export function isLocalModelId(value: unknown): value is LocalModelId {
  * - `not_downloaded`：还没下载（或已删除）
  * - `downloading`：正在下载或校验
  * - `ready`：文件齐全且校验通过
- * - `corrupt`：文件存在但大小或校验值不对（被改动、下载中断残留），需要重新下载
+ * - `corrupt`：文件存在但大小或校验值不对，需要重新下载
  * - `unavailable`：暂时没有可下载的文件（如需要另行导出的模型）
  */
 export type LocalModelStatus = 'not_downloaded' | 'downloading' | 'ready' | 'corrupt' | 'unavailable'

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { isLocalModelId, LOCAL_MODEL_IDS } from '../../../../src/platform/contracts/localModels'
 import { LOCAL_MODEL_MANIFEST } from './manifest'
+import { BUNDLED_OCR_MODELS } from './bundledOcr'
 
 describe('图片修补模型的固定下载契约', () => {
   it('闭合 ID 与清单一致，新模型经现有实体列表自动被发现', () => {
@@ -21,16 +25,24 @@ describe('图片修补模型的固定下载契约', () => {
   })
 })
 
-it('OCR v6 使用官方 fp32 文件与独立字典，固定哈希、不虚构自有镜像', () => {
-  for (const id of ['text_detection_ppocr', 'text_recognition_ppocr']) {
-    const model = LOCAL_MODEL_MANIFEST.find(m => m.id === id)!
-    expect(model.license.spdx).toBe('Apache-2.0')
-    for (const file of model.files) {
+it('OCR只有内置tiny；公共下载目录不存在OCR，资源逐字节符合固定清单', () => {
+  expect(Object.keys(BUNDLED_OCR_MODELS)).toEqual(['text_detection_ppocr', 'text_recognition_ppocr'])
+  for (const [id, files] of Object.entries(BUNDLED_OCR_MODELS)) {
+    expect(isLocalModelId(id)).toBe(false)
+    for (const file of files) {
       expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
-      expect(file.name).not.toContain('int8')
-      expect(file.sources.every(s => s.url.includes('oar-ocr'))).toBe(true)
-      expect(file.sources.find(s => s.region === 'global')?.url).toContain('/v0.7.0/')
+      expect(file).not.toHaveProperty('sources')
+      const bytes = fs.readFileSync(path.resolve('resources/local-models', id, file.name))
+      expect(bytes.length).toBe(file.sizeBytes)
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256)
     }
   }
-  expect(LOCAL_MODEL_MANIFEST.find(m => m.id === 'text_recognition_ppocr')!.files.map(f => f.role)).toEqual(['model', 'dict'])
+  expect(BUNDLED_OCR_MODELS.text_recognition_ppocr.map(f => f.role)).toEqual(['model', 'dict'])
+  expect(isLocalModelId('text_recognition_ppocr_precise')).toBe(false)
+  expect(LOCAL_MODEL_MANIFEST.flatMap(model => model.files).some(file => /ppocr|pp-ocr/.test(file.name))).toBe(false)
+  const resourceRoot = path.resolve('resources/local-models')
+  const actual = fs.readdirSync(resourceRoot, { recursive: true }).map(String).filter(file => fs.statSync(path.join(resourceRoot, file)).isFile()).map(file => file.split(path.sep).join('/')).sort()
+  const expected = Object.entries(BUNDLED_OCR_MODELS).flatMap(([id, files]) => files.map(file => `${id}/${file.name}`)).sort()
+  expect(actual).toEqual(expected)
+  expect(fs.readFileSync('electron-builder.yml', 'utf8')).toMatch(/extraResources:\s+- from: resources\/local-models\s+to: resources\/local-models/)
 })
