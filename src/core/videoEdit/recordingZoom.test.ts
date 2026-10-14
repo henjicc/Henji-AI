@@ -19,33 +19,34 @@ describe('录屏自动缩放区间', () => {
     expect(videoEditBuiltinEffectInstanceSchema.safeParse({ id: 'recording_zoom', params: {}, regions: [region(0, 1)] }).success).toBe(true)
     expect(videoEditEffectSchema.safeParse({ id: 'e', name: '模糊', enabled: true, amount: 1, builtin: { id: 'mosaic', params: {}, regions: [region(0, 1)] } }).success).toBe(false)
   })
-  it('区间内保持放大，区间外过渡在区间之外完成，视野始终在画面内', () => {
+  it('缩放块就是动的范围：块开始时开始放大、块结束时缩小完成，中间保持；视野始终在画面内', () => {
     const regions = [region(2_000_000, 4_000_000, { depth: 4, focus: { x: 0.95, y: 0.05 } })]
     const at = (us: number) => evaluateRecordingZoom(regions, us, smooth, none)
     expect(at(0)).toEqual({ scale: 1, centerX: 0.5, centerY: 0.5 })
-    expect(at(800_000)).toEqual({ scale: 1, centerX: 0.5, centerY: 0.5 })
+    expect(at(1_999_000)).toEqual({ scale: 1, centerX: 0.5, centerY: 0.5 })
     const held = at(3_000_000)
     expect(held.scale).toBe(RECORDING_ZOOM_SCALES[3])
     // 固定焦点在角落：夹到视野不出画面
     expect(held.centerX).toBeCloseTo(1 - 0.5 / 2.2); expect(held.centerY).toBeCloseTo(0.5 / 2.2)
-    const ramp = at(1_400_000)
+    const ramp = at(2_400_000)
     expect(ramp.scale).toBeGreaterThan(1); expect(ramp.scale).toBeLessThan(2.2)
     for (let us = 700_000; us <= 5_000_000; us += 50_000) {
       const view = at(us); const half = 0.5 / view.scale
       expect(view.centerX - half).toBeGreaterThanOrEqual(-1e-9); expect(view.centerX + half).toBeLessThanOrEqual(1 + 1e-9)
       expect(view.centerY - half).toBeGreaterThanOrEqual(-1e-9); expect(view.centerY + half).toBeLessThanOrEqual(1 + 1e-9)
     }
-    expect(at(4_000_000)).toEqual(held)
+    expect(at(3_200_000)).toEqual(held)
+    expect(at(4_000_000)).toEqual({ scale: 1, centerX: 0.5, centerY: 0.5 })
     expect(at(4_900_000)).toEqual({ scale: 1, centerX: 0.5, centerY: 0.5 })
-    // 快速过渡更短
-    expect(evaluateRecordingZoom(regions, 1_400_000, { connect: true, transition: 'quick' }, none).scale).toBe(1)
+    // 快速过渡更短：同一时刻已经放大到位
+    expect(evaluateRecordingZoom(regions, 2_600_000, { connect: true, transition: 'quick' }, none).scale).toBe(2.2)
   })
   it('相邻区间开启衔接时直接平移不回到原画面，关闭时在间隔里先回原画面', () => {
     const regions = [region(1_000_000, 2_000_000, { focus: { x: 0.2, y: 0.5 } }), region(3_000_000, 4_000_000, { id: 'b', focus: { x: 0.8, y: 0.5 } })]
     const connected = Array.from({ length: 21 }, (_, i) => evaluateRecordingZoom(regions, 2_000_000 + i * 50_000, smooth, none))
     expect(connected.every(view => view.scale === 1.8)).toBe(true)
     expect(connected[0].centerX).toBeLessThan(connected[20].centerX)
-    // 间隔放不下完整过渡：缩小与放大按比例压缩，在中途相接时正好回到原画面
+    // 不衔接：前一块结束时已回到原画面，间隔里保持原画面
     expect(evaluateRecordingZoom(regions, 2_000_000 + 900_000_000 / 2_100, { connect: false, transition: 'smooth' }, none).scale).toBeCloseTo(1, 6)
     // 平移连续：相邻采样没有跳变
     for (let i = 1; i < connected.length; i++) expect(Math.abs(connected[i].centerX - connected[i - 1].centerX)).toBeLessThan(0.1)
@@ -62,8 +63,8 @@ describe('录屏自动缩放区间', () => {
     evaluateRecordingZoom(regions, 1_000_000, smooth, pointer)
     expect(evaluateRecordingZoom(regions, 5_500_000, smooth, pointer)).toEqual(later)
     expect(evaluateRecordingZoom(regions, 3_000_000, smooth, none)).toEqual({ scale: 1.8, centerX: 0.5, centerY: 0.5 })
-    expect(recordingZoomPointerSpans(regions, 3_000_000, smooth)).toEqual([{ fromUs: -200_000, toUs: 3_000_000 }])
-    expect(recordingZoomPointerSpans([region(1_000_000, 2_000_000)], 1_500_000, smooth)).toEqual([])
+    expect(recordingZoomPointerSpans(regions, 3_000_000, smooth)).toEqual([{ fromUs: 1_000_000, toUs: 3_000_000 }])
+    expect(recordingZoomPointerSpans([region(1_000_000, 2_000_000)], 2_500_000, smooth)).toEqual([])
   })
   it('事件日志折算指针：静止很久仍给出位置，按源画面归一化', async () => {
     const { pages, source } = await recordingCursorFixture(); const events = pages.flatMap(page => page.entries)
@@ -71,7 +72,7 @@ describe('录屏自动缩放区间', () => {
     expect(recordingZoomPointerFromEvents(events, 60_000_000, source)!.x).toBeCloseTo(499.991 / 1920, 3)
     expect(recordingZoomPointerFromEvents([], 0, source)).toBeNull()
   })
-  it('按点击自动生成：2.5 秒内的点击成组，前后各留 0.5 秒，跳过与已有区间重叠的组，双击或打字用第 4 档', async () => {
+  it('按点击自动生成：2.5 秒内的点击成组，组前留 1 秒、组后留 1.3 秒，跳过与已有区间重叠的组，双击或打字用第 4 档', async () => {
     const { pages } = await recordingCursorFixture(); const base = pages[0].entries.find(event => event.kind === 'click')!
     const click = (us: number): CaptureEvent => ({ ...base, recordingUs: us + 10_000_000 }) as CaptureEvent
     const key = (us: number): CaptureEvent => ({ ...base, kind: 'key', category: 'typing', recordingUs: us + 10_000_000 }) as unknown as CaptureEvent
@@ -79,11 +80,11 @@ describe('录屏自动缩放区间', () => {
     let id = 0
     const regions = suggestRecordingZoomRegions(events, { recordingStartUs: 10_000_000, durationUs: 30_000_000, createId: () => `s${++id}` })
     expect(regions.map(value => [value.startUs, value.endUs, value.depth, value.focus, value.origin])).toEqual([
-      [500_000, 3_500_000, 3, 'cursor', 'auto'], [8_500_000, 9_800_000, 4, 'cursor', 'auto'], [19_500_000, 20_500_000, 4, 'cursor', 'auto'], [29_400_000, 30_000_000, 3, 'cursor', 'auto'],
+      [0, 4_300_000, 3, 'cursor', 'auto'], [8_000_000, 10_600_000, 4, 'cursor', 'auto'], [19_000_000, 21_300_000, 4, 'cursor', 'auto'], [28_900_000, 30_000_000, 3, 'cursor', 'auto'],
     ])
     const kept = suggestRecordingZoomRegions(events, { recordingStartUs: 10_000_000, durationUs: 30_000_000, existing: [region(9_000_000, 12_000_000, { id: 'mine' })] })
     expect(kept.map(value => value.id)).toContain('mine')
-    expect(kept.some(value => value.origin === 'auto' && value.startUs === 8_500_000)).toBe(false)
+    expect(kept.some(value => value.origin === 'auto' && value.startUs === 8_000_000)).toBe(false)
     expect(recordingZoomRegionsSchema.safeParse(kept).success).toBe(true)
   })
   it('时间线换算跟随修剪、拆分、变速与倒放', () => {

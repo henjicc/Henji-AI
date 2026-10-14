@@ -8,7 +8,6 @@ import { appendVideoEditSequence, createVideoEditProject, makeRecordingClipEffec
 import type { CaptureEvent } from '@/core/captureLog/events'
 import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
 import { RECORDING_ZOOM_EFFECT } from '@/core/videoEdit/recordingZoom'
-import { RECORDING_FRAME_EFFECT } from '@/core/videoEdit/recordingFrame'
 import { openApplicationSurface } from '@/features/navigation'
 import type { RecordingDestination } from './recordingService'
 import { recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
@@ -36,9 +35,10 @@ export function placeRecordingMedia(document: VideoEditDocument, recording: Reco
       const duration = Math.floor((end - start) * fps / 1e6 + 1e-6)
       if (duration < 1) continue
       const clip = makeVideoEditItemClip(document, item.id, sequence.id, { frame: (target.frame ?? 0) + Math.round((start - origin) * fps / 1e6), track: trackIndices.get(source.kind), duration, sourceInUs: start - source.monoUs, sourceOutUs: end - source.monoUs, ...(source.kind === 'screen' || source.kind === 'camera' ? { sourceComponent: 'video' as const } : {}) })
-      // A screen clip with its pointer log is a recording clip: it arrives already finished the way Recordly does it —
-      // redrawn pointer, zoom on the clicks, and a framed picture — and every part stays editable.
-      if (source.kind === 'screen' && imported.recordingCursor) clip.effects = [makeRecordingClipEffect(RECORDING_CURSOR_EFFECT), makeRecordingClipEffect(RECORDING_ZOOM_EFFECT, suggestRecordingClipZoom(imported, imported.recordingCursor, events)), makeRecordingClipEffect(RECORDING_FRAME_EFFECT)]
+      // A screen clip with its pointer log is a recording clip: the pointer is redrawn exactly where and how it was
+      // (the person's own size and colour, no smoothing that would lag behind fast moves) and zooms in on the clicks.
+      // The frame stays off until asked for: the picture keeps its full size.
+      if (source.kind === 'screen' && imported.recordingCursor) clip.effects = [makeRecordingClipEffect(RECORDING_CURSOR_EFFECT, undefined, { smoothing: 0, ...recording.source?.cursor }), makeRecordingClipEffect(RECORDING_ZOOM_EFFECT, suggestRecordingClipZoom(imported, imported.recordingCursor, events))]
       sequence.clips.push({ ...clip, linkId })
     }
   }

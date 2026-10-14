@@ -29,8 +29,8 @@ export function recordingClipSource(document: VideoEditDocument, clip: VideoEdit
 }
 export function recordingClipEffect(clip: VideoEditClip, id: RecordingClipEffect): VideoEditEffect | undefined { return clip.effects?.find(effect => effect.builtin?.id === id) }
 
-export function makeRecordingClipEffect(id: RecordingClipEffect, regions?: readonly RecordingZoomRegion[]): VideoEditEffect {
-  return { id: crypto.randomUUID(), name: NAMES[id], enabled: true, amount: 1, builtin: { id, params: {}, ...(id === RECORDING_ZOOM_EFFECT ? { regions: sortRecordingZoomRegions(regions ?? []) } : {}) } }
+export function makeRecordingClipEffect(id: RecordingClipEffect, regions?: readonly RecordingZoomRegion[], params: Record<string, number | string | boolean> = {}): VideoEditEffect {
+  return { id: crypto.randomUUID(), name: NAMES[id], enabled: true, amount: 1, builtin: { id, params, ...(id === RECORDING_ZOOM_EFFECT ? { regions: sortRecordingZoomRegions(regions ?? []) } : {}) } }
 }
 /** Recording effects first, in their fixed order; every other effect keeps its place after them. */
 export function orderRecordingClipEffects(effects: readonly VideoEditEffect[]): VideoEditEffect[] {

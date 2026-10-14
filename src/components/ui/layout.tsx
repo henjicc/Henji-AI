@@ -26,6 +26,7 @@ import {
   UI_DIVIDER_CLASS,
   UI_FORM_ROW_MIN_HEIGHT_CLASS,
   UI_GROUP_SIBLING_GAP_CLASS,
+  UI_GROUP_SIBLING_GAP_COMPACT_CLASS,
   UI_SECTION_STACK_CLASS,
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_ROW_GAP_CLASS,
@@ -240,7 +241,7 @@ export function UiGroup({
   return (
     <div
       data-ui-group
-      className={`${UI_GROUP_SIBLING_GAP_CLASS} ${divided ? `${UI_DIVIDER_CLASS} ${titleTone === 'compact' ? 'pt-3' : 'pt-4'}` : ''} ${className}`}
+      className={`${titleTone === 'compact' ? UI_GROUP_SIBLING_GAP_COMPACT_CLASS : UI_GROUP_SIBLING_GAP_CLASS} ${divided ? `${UI_DIVIDER_CLASS} ${titleTone === 'compact' ? 'pt-3' : 'pt-4'}` : ''} ${className}`}
       {...props}
     >
       {hasHeader && (

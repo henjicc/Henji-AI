@@ -3,12 +3,12 @@ import { screen } from 'electron'
 import { EventType } from 'uiohook-napi'
 import { CaptureLogCollector } from '../../../../src/core/captureLog/collector'
 import { captureBounds, capturePoint, type CaptureGeometry, type CaptureRect } from '../../../../src/core/captureLog/coordinates'
-import type { CapabilityCapture } from '../../../../src/core/captureLog/events'
+import type { CapabilityCapture, CaptureEvent } from '../../../../src/core/captureLog/events'
 import type { CaptureLogPage } from '../../../../src/core/captureLog/events'
 import type { ApplicationRef } from '../../../../src/core/application-control/identifiers'
 import { createMainLogger } from '../logging'
 import { RecordingEventStore } from './event-store'
-import { startDesktopInput } from './input-events'
+import { MOUSE_DRAGGED, startDesktopInput } from './input-events'
 import { createWindowsEventFacts, type DesktopNativeFacts } from './windows-events'
 import type { RecordingControlBackend } from './control'
 
@@ -35,6 +35,10 @@ export class RecordingEventSession {
   private timer?: ReturnType<typeof setTimeout>
   private facts?: DesktopNativeFacts
   private previousWindow = ''
+  /** Pointer moves arrive from the input hook as they happen; the poll fills in shape and still moments. */
+  private lastCursorUs = -Infinity
+  private lastShape: Extract<CaptureEvent, { kind: 'cursor' }>['shape'] = 'arrow'
+  private cursorExcluded = false
   private accepting = false
   private failure: unknown
   constructor(private readonly options: RecordingEventOptions) {
@@ -69,6 +73,17 @@ export class RecordingEventSession {
       this.disposeInput = startDesktopInput(payload => {
         if (!this.accepting) return
         try {
+          if (payload.kind === 'mouse' && (payload.event.type === EventType.EVENT_MOUSE_MOVED || payload.event.type === MOUSE_DRAGGED)) {
+            // A timer poll on Windows runs at the system tick (about 64 Hz), which trails fast motion; the hook
+            // reports every move at the moment it happens. Keep up to 250 per second.
+            const at = this.options.nowUs()
+            if (this.cursorExcluded || at - this.lastCursorUs < 4000) return
+            const desktopPoint = this.dipPoint(payload.event)
+            if (this.excludedPoint(desktopPoint)) return
+            const point = capturePoint(desktopPoint, this.options.geometry())
+            this.collector.record(at, { kind: 'cursor', point, shape: this.lastShape }); this.lastCursorUs = at
+            return
+          }
           if (this.excluded()) return
           const at = this.options.nowUs()
           if (payload.kind !== 'mouse') { this.collector.record(at, payload); return }
@@ -90,7 +105,9 @@ export class RecordingEventSession {
           const desktopPoint = screen.getCursorScreenPoint()
           const excluded = foreground.windowId !== null && this.options.excludedWindowIds?.includes(foreground.windowId)
           const cursorExcluded = excluded || this.excludedPoint(desktopPoint)
-          this.collector.record(at, { kind: 'cursor', point: cursorExcluded ? null : capturePoint(desktopPoint, geometry), shape: cursorExcluded ? 'hidden' : this.facts!.cursor() })
+          this.cursorExcluded = cursorExcluded
+          if (!cursorExcluded) this.lastShape = this.facts!.cursor()
+          this.collector.record(at, { kind: 'cursor', point: cursorExcluded ? null : capturePoint(desktopPoint, geometry), shape: cursorExcluded ? 'hidden' : this.lastShape }); this.lastCursorUs = at
           const fact = excluded ? { windowId: null, bounds: null, available: false } : { ...foreground, bounds: foreground.bounds ? captureBounds(this.dipBounds(foreground.bounds), geometry) : null }
           const key = JSON.stringify(fact)
           if (key !== this.previousWindow) { this.collector.record(at, { kind: 'window', ...fact }); this.previousWindow = key }

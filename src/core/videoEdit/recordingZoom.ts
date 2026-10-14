@@ -19,7 +19,7 @@ export const RECORDING_ZOOM_DEFAULT_DEPTH = 3
 export const RECORDING_ZOOM_CONNECT_GAP_US = 1_500_000
 /** 跟随镜头按固定源时间网格推进（全局网格，跨区间、跨帧复用同一组指针采样）。 */
 export const RECORDING_ZOOM_FOLLOW_STEP_US = 50_000
-const TRANSITIONS = { smooth: { inUs: 1_200_000, outUs: 900_000 }, quick: { inUs: 500_000, outUs: 400_000 } } as const
+const TRANSITIONS = { smooth: { inUs: 1_000_000, outUs: 800_000 }, quick: { inUs: 500_000, outUs: 400_000 } } as const
 /** 指针离开视野中央这部分（相对半视野）才推动镜头。 */
 const DEAD_ZONE = 0.6
 /** 镜头追赶目标的时间常数：越大越稳。 */
@@ -82,22 +82,24 @@ function between(from: RecordingZoomTransform, to: RecordingZoomTransform, t: nu
 interface Span { region: RecordingZoomRegion; scale: number; activeStart: number; activeEnd: number; inStart: number; outEnd: number; linkedPrev: boolean; linkedNext: boolean }
 /** 区间的时间布局：每个区间的活动范围（含过渡）、与前后区间是平移衔接还是先缩小再放大。 */
 function layout(regions: readonly RecordingZoomRegion[], params: RecordingZoomParams): { spans: Span[]; pans: Array<{ from: number; to: number }> } {
-  const sorted = sortRecordingZoomRegions(regions); const { inUs, outUs } = TRANSITIONS[params.transition]
-  const spans: Span[] = sorted.map(region => ({ region, scale: recordingZoomScale(region.depth), activeStart: region.startUs - inUs, activeEnd: region.endUs + outUs, inStart: region.startUs - inUs, outEnd: region.endUs + outUs, linkedPrev: false, linkedNext: false }))
+  const { inUs, outUs } = TRANSITIONS[params.transition]
+  // A block on the zoom lane is exactly the stretch that moves: zooming in starts at its start and zooming out
+  // ends at its end. The held part sits inside; short blocks shrink both transitions to fit.
+  const spans: Span[] = sortRecordingZoomRegions(regions).map(outer => {
+    const fit = Math.min(1, (outer.endUs - outer.startUs) * 0.8 / (inUs + outUs))
+    const region = { ...outer, startUs: outer.startUs + Math.round(inUs * fit), endUs: outer.endUs - Math.round(outUs * fit) }
+    return { region, scale: recordingZoomScale(outer.depth), activeStart: outer.startUs, activeEnd: outer.endUs, inStart: outer.startUs, outEnd: outer.endUs, linkedPrev: false, linkedNext: false }
+  })
   const pans: Array<{ from: number; to: number }> = []
   for (let i = 0; i + 1 < spans.length; i++) {
-    const a = spans[i]; const b = spans[i + 1]; const gap = b.region.startUs - a.region.endUs
-    // 紧挨着的区间没有时间先缩小再放大，总是直接平移。
+    const a = spans[i]; const b = spans[i + 1]; const gap = b.inStart - a.outEnd
+    // 紧挨着的区间没有时间先缩小再放大，总是直接平移；平移占用两段相接处的过渡时间。
     if (gap <= 0 || params.connect && gap <= RECORDING_ZOOM_CONNECT_GAP_US) {
-      const middle = (a.region.endUs + b.region.startUs) / 2; const half = Math.max(gap, outUs) / 2
-      const pan = { from: Math.max((a.region.startUs + a.region.endUs) / 2, middle - half), to: Math.min((b.region.startUs + b.region.endUs) / 2, middle + half) }
+      const pan = { from: a.region.endUs, to: b.region.startUs }
       pans.push(pan); a.linkedNext = true; b.linkedPrev = true; a.activeEnd = pan.to; b.activeStart = pan.from
       continue
     }
     pans.push({ from: NaN, to: NaN })
-    // 过渡放不下时按比例压缩：缩小与放大在间隔中点相接，那一刻正好回到原画面。
-    if (gap < outUs + inUs) { a.outEnd = a.region.endUs + gap * outUs / (outUs + inUs); b.inStart = a.outEnd }
-    a.activeEnd = a.outEnd; b.activeStart = b.inStart
   }
   return { spans, pans }
 }
@@ -175,9 +177,10 @@ export function recordingZoomPointerFromEvents(events: readonly CaptureEvent[], 
 }
 
 /** 自动生成用到的聚类参数（与 Recordly 一致）。 */
-export const RECORDING_ZOOM_SUGGEST = { clusterGapUs: 2_500_000, paddingUs: 500_000 } as const
+/** The zoom-in plays inside the block, so the block starts early enough to be zoomed in by the first click. */
+export const RECORDING_ZOOM_SUGGEST = { clusterGapUs: 2_500_000, beforeUs: 1_000_000, afterUs: 1_300_000 } as const
 /**
- * 按点击自动生成缩放区间（纯函数）：只用明确的按下事件；相邻点击间隔不超过 2.5 秒归为一组，每组前后各留 0.5 秒，
+ * 按点击自动生成缩放区间（纯函数）：只用明确的按下事件；相邻点击间隔不超过 2.5 秒归为一组，组前留 1 秒、组后留 1.3 秒（放大与缩小都在区间内进行），
  * 夹到素材范围内；焦点跟随指针、第 3 档（1.8 倍）。组内出现双击（0.5 秒内两次按下）或点击后 2 秒内打字时用第 4 档（2.2 倍），
  * 方便看清被编辑的细节。`existing` 里已有的区间（通常是用户手动调过的）保留，与之重叠的新区间跳过。
  * 时间换算：素材源时间 = 事件 recordingUs − recordingStartUs。
@@ -191,8 +194,8 @@ export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], opt
   const existing = sortRecordingZoomRegions(options.existing ?? [])
   const created: RecordingZoomRegion[] = []
   for (const cluster of clusters) {
-    const startUs = Math.max(0, Math.round(cluster[0] - RECORDING_ZOOM_SUGGEST.paddingUs))
-    const endUs = Math.min(Math.round(options.durationUs), Math.round(cluster.at(-1)! + RECORDING_ZOOM_SUGGEST.paddingUs))
+    const startUs = Math.max(0, Math.round(cluster[0] - RECORDING_ZOOM_SUGGEST.beforeUs))
+    const endUs = Math.min(Math.round(options.durationUs), Math.round(cluster.at(-1)! + RECORDING_ZOOM_SUGGEST.afterUs))
     if (endUs <= startUs) continue
     const occupied = [...existing, ...created]
     if (occupied.some(region => region.startUs < endUs && region.endUs > startUs)) continue

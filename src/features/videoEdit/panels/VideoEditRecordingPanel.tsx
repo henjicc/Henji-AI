@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Dropdown, UiButton, UiDisclosurePanel, UiFormRow, UiGroup, UiIconButton, UiSegmented, UiSwitch } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
@@ -28,10 +28,11 @@ function EffectRows({ target, effect, keys, more, onError }: { target: VideoEdit
   const shown = keys.filter(key => key !== 'color' || values.background === 'solid')
   return <>
     <VideoEditBuiltinParamRows params={pick(shown)} values={values} gesture={gesture} />
-    {more?.length ? <>
-      <div><UiButton size="sm" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown /> : <ChevronRight />}更多</UiButton></div>
+    {/* One block, so a folded "更多" adds no row gap of its own. */}
+    {more?.length ? <div>
+      <UiButton size="sm" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? <ChevronDown /> : <ChevronRight />}更多</UiButton>
       <UiDisclosurePanel open={open}><VideoEditBuiltinParamRows params={pick(more)} values={values} gesture={gesture} /></UiDisclosurePanel>
-    </> : null}
+    </div> : null}
   </>
 }
 
@@ -78,10 +79,30 @@ function ZoomAtPlayhead({ instance, sequence, clip, target, regions, onError }: 
 export function VideoEditRecordingPanel({ instance, sequence, clip, onError }: { instance: VideoEditInstance; sequence: VideoEditSequence; clip: VideoEditClip; onError: (reason: unknown) => void }): React.ReactElement | null {
   const source = recordingClipSource(instance.document, clip)
   const [busy, setBusy] = useState(false)
+  const [spacer, setSpacer] = useState(0)
   const controller = useRef<AbortController>()
+  const anchor = useRef<{ element: HTMLElement; top: number; scroller: HTMLElement } | null>(null)
   useEffect(() => () => controller.current?.abort(), [clip.id])
+  useLayoutEffect(() => {
+    const pinned = anchor.current
+    if (!pinned) return
+    const { scroller } = pinned
+    const wanted = scroller.scrollTop + pinned.element.getBoundingClientRect().top - pinned.top
+    const room = wanted - (scroller.scrollHeight - scroller.clientHeight)
+    // Too short to scroll the switch back into place: add room below, and finish on the next render.
+    if (room > 0.5) { setSpacer(value => value + Math.ceil(room)); return }
+    anchor.current = null
+    scroller.scrollTop = wanted
+  }, [clip.effects, spacer])
   if (!source) return null
   const target = { projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }
+  // A switch stays where the pointer is: rows appearing or disappearing below it (or the panel's scroll
+  // clamping when it gets shorter) must not slide the switch away from under the cursor.
+  const pin = (event?: { currentTarget: Element }): void => {
+    const element = event?.currentTarget as HTMLElement | undefined
+    const scroller = element?.closest<HTMLElement>('[data-video-edit-panel="effects"]')
+    if (element && scroller) anchor.current = { element, top: element.getBoundingClientRect().top, scroller }
+  }
   const toggle = (id: RecordingClipEffect, on: boolean): void => { try { setRecordingClipEffect(target, id, on) } catch (error) { onError(error) } }
   const cursor = recordingClipEffect(clip, RECORDING_CURSOR_EFFECT) as VideoEditBuiltinEffect | undefined
   const zoom = recordingClipEffect(clip, RECORDING_ZOOM_EFFECT) as VideoEditBuiltinEffect | undefined
@@ -93,15 +114,15 @@ export function VideoEditRecordingPanel({ instance, sequence, clip, onError }: {
     try { await regenerateRecordingClipZoom(target, current.signal) } catch (error) { if (!current.signal.aborted) onError(error) }
     finally { if (controller.current === current) { controller.current = undefined; setBusy(false) } }
   }
-  return <div className="flex flex-col gap-3" data-video-edit-recording-panel={clip.id}>
+  return <div className="flex flex-col" data-video-edit-recording-panel={clip.id}>
     <UiGroup title="鼠标" titleTone="compact" labelWidth={72} divided>
-      <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示鼠标" checked={Boolean(cursor)} onCheckedChange={on => toggle(RECORDING_CURSOR_EFFECT, on)} /></UiFormRow>
+      <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示鼠标" checked={Boolean(cursor)} onClickCapture={pin} onCheckedChange={on => toggle(RECORDING_CURSOR_EFFECT, on)} /></UiFormRow>
       {cursor && (source.cursorBakedIn
         ? <EffectRows target={target} effect={cursor} keys={['click_style', 'size']} onError={onError} />
         : <EffectRows target={target} effect={cursor} keys={['style', 'size', 'click_style']} more={['smoothing', 'hide_after', 'distinguish_buttons']} onError={onError} />)}
     </UiGroup>
     <UiGroup title="缩放" titleTone="compact" labelWidth={72} divided>
-      <UiFormRow label="自动缩放" density="compact" info="按录制时的点击放大到正在操作的地方，可在时间线的缩放轨上拖动调整。"><UiSwitch aria-label="自动缩放" checked={Boolean(zoom)} disabled={busy} onCheckedChange={on => { if (on) void regenerate(); else toggle(RECORDING_ZOOM_EFFECT, false) }} /></UiFormRow>
+      <UiFormRow label="自动缩放" density="compact" info="按录制时的点击放大到正在操作的地方，可在时间线的缩放轨上拖动调整。"><UiSwitch aria-label="自动缩放" checked={Boolean(zoom)} disabled={busy} onClickCapture={pin} onCheckedChange={on => { if (on) void regenerate(); else toggle(RECORDING_ZOOM_EFFECT, false) }} /></UiFormRow>
       {zoom && <>
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 text-xs text-text2" data-video-edit-recording-zoom-count={regions.length}>{regions.length ? `${regions.length} 段缩放` : '还没有缩放段'}</span>
@@ -112,8 +133,9 @@ export function VideoEditRecordingPanel({ instance, sequence, clip, onError }: {
       </>}
     </UiGroup>
     <UiGroup title="画框" titleTone="compact" labelWidth={72} divided>
-      <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示画框" checked={Boolean(frame)} onCheckedChange={on => toggle(RECORDING_FRAME_EFFECT, on)} /></UiFormRow>
+      <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示画框" checked={Boolean(frame)} onClickCapture={pin} onCheckedChange={on => toggle(RECORDING_FRAME_EFFECT, on)} /></UiFormRow>
       {frame && <EffectRows target={target} effect={frame} keys={['background', 'color', 'padding']} more={['radius', 'shadow']} onError={onError} />}
     </UiGroup>
+    {spacer > 0 && <div aria-hidden="true" style={{ height: spacer }} />}
   </div>
 }

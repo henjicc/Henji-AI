@@ -196,6 +196,8 @@ export const UI_DIVIDER_CLASS = 'border-t border-line/60';
 export const UI_SECTION_STACK_CLASS = UI_STACK_CLASS.region;
 /** 相邻分组按同一 32px 分区档留白；比父级行间距优先，首组不增空白。 */
 export const UI_GROUP_SIBLING_GAP_CLASS = '[&+[data-ui-group]]:mt-8';
+/** Narrow docked panels (compact titles): the divider already separates groups, so siblings sit closer. */
+export const UI_GROUP_SIBLING_GAP_COMPACT_CLASS = '[&+[data-ui-group]]:mt-3';
 
 export const UI_PANEL_SURFACE_CLASS =
   'bg-panel border border-line text-text1 shadow-panel';

@@ -22,7 +22,11 @@ export const recordingDocumentSchema = z.object({
   /** Paused stretches on the session clock: from the pause press until every track was capturing again. No track keeps anything inside them. */
   pauses: z.array(z.object({ startUs: z.number().int().nonnegative(), endUs: z.number().int().nonnegative() }).strict().refine(value => value.endUs >= value.startUs, '暂停结束早于开始')).optional(),
   status: z.enum(['empty', 'prepared', 'recording', 'paused', 'stopped', 'interrupted']),
-  source: z.object({ name: z.string(), options: captureOptionsSchema, cursorEmbedded: z.boolean() }).strict().nullable(),
+  source: z.object({
+    name: z.string(), options: captureOptionsSchema, cursorEmbedded: z.boolean(),
+    /** The person's own pointer when recording: arrow height as % of the picture height, and light or black. The redrawn pointer starts out like it. */
+    cursor: z.object({ size: z.number().positive().max(20), style: z.enum(['light', 'dark']) }).strict().optional(),
+  }).strict().nullable(),
   devices: recordingTrackOptionsSchema,
   media: z.array(recordingMediaSchema),
   tracks: recordingTracksSchema.nullable(),

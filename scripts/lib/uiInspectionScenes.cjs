@@ -100,6 +100,7 @@ const { createRecordingSessionScene } = require('./uiInspectionSceneRecordingSes
 const { createRecordingMovieScene } = require('./uiInspectionSceneRecordingMovie.cjs')
 const { createRecordingQuickScene } = require('./uiInspectionSceneRecordingQuick.cjs')
 const { createRecordingSyncScene } = require('./uiInspectionSceneRecordingSync.cjs')
+const { createRecordingOverlayScene } = require('./uiInspectionSceneRecordingOverlay.cjs')
 const { createRecordingProductsScene } = require('./uiInspectionSceneRecordingProducts.cjs')
 const { createScreenCaptureScene } = require('./uiInspectionSceneScreenCapture.cjs')
 const { createMcpScenes } = require('./uiInspectionSceneMcp.cjs')
@@ -265,6 +266,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createRecordingMovieScene(),
     createRecordingQuickScene(),
     createRecordingSyncScene(),
+    createRecordingOverlayScene(),
     require('./uiInspectionSceneRecordingReplay.cjs').createRecordingReplayScene(),
     require('./uiInspectionSceneRecordingDirector.cjs').createRecordingDirectorScene(),
     createOcrPrivacyScene(),

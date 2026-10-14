@@ -21,9 +21,9 @@ export class RecordingSessionDocument {
   private queue: Promise<void> = Promise.resolve()
   private constructor(readonly content: RecordingDocument, private meta: DocumentMeta, readonly directory: string) {}
 
-  static async create(id: string, originUs: number, options: RecordingSessionOptions, sourceName: string, capture: CaptureManifest, directory: string): Promise<RecordingSessionDocument> {
+  static async create(id: string, originUs: number, options: RecordingSessionOptions, sourceName: string, capture: CaptureManifest, directory: string, cursor?: NonNullable<RecordingDocument['source']>['cursor']): Promise<RecordingSessionDocument> {
     const content = createRecordingDocument()
-    Object.assign(content, { sessionId: id, originUs, status: 'prepared', source: { name: sourceName, options: capture.options, cursorEmbedded: capture.cursorEmbedded }, devices: options.tracks })
+    Object.assign(content, { sessionId: id, originUs, status: 'prepared', source: { name: sourceName, options: capture.options, cursorEmbedded: capture.cursorEmbedded, ...(cursor ? { cursor } : {}) }, devices: options.tracks })
     logger.info('创建录制会话', { event: 'recording.document.create.start', context: { sessionId: id } })
     const read = await getDocumentService().createDocument({ id, kind: 'screen_recording', name: options.name, draft: false,
       container: options.projectId ? { kind: 'project', projectId: options.projectId } : { kind: 'user' }, content })

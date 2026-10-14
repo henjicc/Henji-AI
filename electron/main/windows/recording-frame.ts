@@ -39,17 +39,25 @@ export function createRecordingFrameWindow(bounds: () => CaptureRect | undefined
   win.setAlwaysOnTop(true, 'screen-saver')
   installRendererNavigationGuards(win.webContents, 'recording-frame')
   let last = rounded(initial)
+  // Windows can drop the capture exclusion of this transparent window once it is shown or moved (seen on a
+  // secondary display), and then the frame is recorded into the video. Re-assert it after every show and move;
+  // a frame that still cannot be excluded is hidden rather than recorded.
+  const show = (): void => {
+    win.setContentProtection(true)
+    if (!win.isContentProtected()) { if (win.isVisible()) win.hide(); return }
+    if (!win.isVisible()) { win.showInactive(); win.setContentProtection(true); if (!win.isContentProtected()) win.hide() }
+  }
   const follow = setInterval(() => {
     if (win.isDestroyed()) return
     const next = bounds()
     if (!next || next.width < MIN_VISIBLE_SIZE || next.height < MIN_VISIBLE_SIZE) { if (win.isVisible()) win.hide(); return }
     const target = rounded(next)
     if (target.x !== last.x || target.y !== last.y || target.width !== last.width || target.height !== last.height) { win.setBounds(target); last = target }
-    if (!win.isVisible()) win.showInactive()
+    if (!win.isVisible() || !win.isContentProtected()) show()
   }, FOLLOW_INTERVAL_MS)
   follow.unref?.()
   win.once('closed', () => clearInterval(follow))
-  win.once('ready-to-show', () => { if (!win.isDestroyed()) win.showInactive() })
+  win.once('ready-to-show', () => { if (!win.isDestroyed()) show() })
   const query = { ...resolveSecondaryWindowLaunchQuery(), view: 'recording-frame' }
   const developmentUrl = process.env.ELECTRON_RENDERER_URL ? new URL(process.env.ELECTRON_RENDERER_URL) : null
   if (developmentUrl) for (const [key, value] of Object.entries(query)) developmentUrl.searchParams.set(key, value)

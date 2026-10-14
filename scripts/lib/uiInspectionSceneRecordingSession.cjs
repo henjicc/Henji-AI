@@ -83,6 +83,7 @@ function createRecordingSessionScene() {
           fs.writeFileSync(path.join(output, `${name}.json`), JSON.stringify(result, null, 2))
           assert.equal(result.content.status, 'stopped')
           assert(Number.isInteger(result.content.startUs) && result.content.endUs > result.content.startUs, '会话没有记下正式开始与结束')
+          if (process.platform === 'win32' && !result.content.source.cursorEmbedded) assert(result.content.source.cursor?.size > 0, '会话没有记下系统光标大小')
           assert(result.content.media.some(media => media.kind === 'screen' && media.durationUs > 0))
           assert(result.content.media.some(media => media.kind === 'microphone' && media.durationUs > 0))
           assert(result.content.eventPages.length > 0)
@@ -122,8 +123,11 @@ function createRecordingSessionScene() {
         assert.equal(toolbox.sequence.width, 1920); assert.equal(toolbox.sequence.frameRate.numerator, 60)
         // A recording clip is special in the editor: its own panel (pointer, zoom, frame) and the Z1 zoom lane.
         const screenClip = toolbox.sequence.clips.find(clip => clip.effects?.some(effect => effect.builtin?.id === 'recording_cursor'))
-        assert.deepEqual(screenClip.effects.map(effect => effect.builtin?.id), ['recording_cursor', 'recording_zoom', 'recording_frame'], '录屏片段没有默认的光标、缩放、画框')
-        await page.locator(`[data-video-edit-clip="${screenClip.id}"]`).first().click()
+        assert.deepEqual(screenClip.effects.map(effect => effect.builtin?.id), ['recording_cursor', 'recording_zoom'], '录屏片段默认应只有光标与缩放（画框默认关闭）')
+        // The small tour window shows the clip partly under the pinned caption and zoom rows: click its visible lower edge.
+        const clipBlock = page.locator(`[data-video-edit-clip="${screenClip.id}"]`).first()
+        const clipBox = await clipBlock.boundingBox()
+        await clipBlock.click({ position: { x: 40, y: Math.max(2, clipBox.height - 4) } })
         const recordingPanel = page.locator(`[data-video-edit-recording-panel="${screenClip.id}"]`)
         await recordingPanel.waitFor({ state: 'visible', timeout: 15000 })
         await page.locator('[data-video-edit-zoom-track]').waitFor({ state: 'visible' })

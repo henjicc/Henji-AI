@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, type WebContents } from 'electron'
+import { BrowserWindow, screen, shell, type WebContents } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import path from 'node:path'
@@ -9,6 +9,7 @@ import { createMainLogger } from '../../logging'
 import { openRecordingControl, closeRecordingControl, minimizeOwnerWhileRecording, recordingControl } from '../runtime'
 import { CaptureStorage, recoverCapture } from './storage'
 import { GfxCaptureBackend } from './gfxcapture'
+import { systemCursorLook } from './cursor-look'
 import { resolveNativeCaptureSource } from './source'
 import { createCaptureBounds, createCaptureGeometry } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
@@ -88,7 +89,10 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       const geometry = request.session ? createCaptureGeometry(source, request.options) : undefined
       geometry?.()
       if (request.session) {
-        document = await RecordingSessionDocument.create(request.sessionId, session.originUs, request.session, source.name, manifest, storage.directory)
+        const bounds = createCaptureBounds(source, request.options)()
+        const scale = bounds ? screen.getDisplayMatching({ x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.max(1, Math.round(bounds.width)), height: Math.max(1, Math.round(bounds.height)) }).scaleFactor : 1
+        const cursor = bounds && manifest.cursorEmbedded === false ? await systemCursorLook(bounds.height * scale, scale).catch(() => undefined) : undefined
+        document = await RecordingSessionDocument.create(request.sessionId, session.originUs, request.session, source.name, manifest, storage.directory, cursor)
         session.document = document
       }
       session.backend = backend === 'gfxcapture' ? new GfxCaptureBackend(request.options, nativeSource!, storage, { nowUs: () => now() - session.originUs, failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) } }, request.cursor === 'embed') : {

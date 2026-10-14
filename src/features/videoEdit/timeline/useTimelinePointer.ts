@@ -242,10 +242,18 @@ export function useTimelinePointer(options: Options) {
   const down = (event: React.PointerEvent<HTMLDivElement>): void => {
     // 浮窗中的目标属于子窗口 realm，不能用 instanceof Element 判定。
     const target = elementOfEventTarget(event.target)
-    if (event.button !== 0 || !target) return
+    // Holding the wheel button drags the timeline like the hand tool (content follows the pointer). Taking the
+    // pointer down here also stops the browser's own middle-click autoscroll, which moves the opposite way.
+    const middle = event.button === 1
+    if (event.button !== 0 && !middle || !target) return
     const { instance, sequence, pixels, onError } = current.current; const layout = current.current.layout.current
     const rows = layout.rows
     if (target.closest('[data-video-edit-track-header]') || target.closest('[data-video-edit-timeline-chrome]')) return
+    if (middle) {
+      event.preventDefault(); event.stopPropagation()
+      const host = viewport.current!; const region = timelineRegionAt(layout, point({ x: event.clientX, y: event.clientY }).y)
+      capture({ ...base(event), kind: 'hand', origin: { x: event.clientX, y: event.clientY }, left: host.scrollLeft, last: event.clientY, ...(region ? { region } : {}) }); return
+    }
     selectVideoEditSubtitle(instance.document.id, sequence.id, null)
     event.preventDefault(); event.stopPropagation()
     viewport.current?.focus({ preventScroll: true })

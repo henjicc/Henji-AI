@@ -139,7 +139,7 @@ replaySequence.id = 'golden-replay-sequence'; replayBaseline.sequences.push(repl
 const replayOperation = { target: { kind: 'video_edit.sequence', id: 'golden-replay:golden-replay-sequence' }, properties: { 'video_edit.sequence.name': '演示序列' } }
 const values: Record<string, unknown> = {
   'document.screen_recording': { ...createRecordingDocument(), sessionId: '00000000-0000-4000-8000-000000000005', originUs: 1000000, startUs: 3000000, endUs: 13000000, pauses: [{ startUs: 6000000, endUs: 7000000 }], status: 'stopped',
-    source: { name: '合成显示器', options: { sourceId: 'screen:1:0', backend: 'auto', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }, cursorEmbedded: false },
+    source: { name: '合成显示器', options: { sourceId: 'screen:1:0', backend: 'auto', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }, cursorEmbedded: false, cursor: { size: 1.4, style: 'light' } },
     media: [{ id: 'screen-0', kind: 'screen', path: '/persistence-project/素材/screen.mp4', monoUs: 3000000, durationUs: 10000000 }],
     eventPages: [{ path: `/persistence-project/素材/0000000000000000-${'a'.repeat(64)}.capture.json`, firstSequence: 0, lastSequence: 2 }], markers: [{ id: 'golden-mark', monoUs: 4000000, note: '重点' }],
     scriptCapture: { baselines: [{ documentId: replayBaseline.id, content: replayBaseline }], calls: [{ callId: '00000000-0000-4000-8000-000000000006', operations: [replayOperation] }] },

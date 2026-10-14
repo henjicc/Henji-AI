@@ -482,23 +482,24 @@ it('自动缩放沿原片源时钟求值：跟随区间按块读取指针日志�
   const boundary = boundaries(document)
   const center = (draw: { sample: number[] }): number => draw.sample[0] * 0.5 + draw.sample[1] * 0.5 + draw.sample[4]
   try {
-    // 90 + 15 帧、两倍速：源时间 1 秒，区间开始时已放大到 5 倍；指针在 x≈200px，视野夹在画面左侧。
-    const zoom = (await boundary.sources.prepare(document, [clip], 105, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    // 90 + 45 帧：源时间 2 秒，已在区间内放大到位（5 倍）；指针在 x≈200px，视野夹在画面左侧。
+    const zoom = (await boundary.sources.prepare(document, [clip], 135, () => true)).effects.get(clip.id)![0].builtin!.zoom!
     expect(zoom).toBeDefined()
-    expect(center(zoom)).toBeGreaterThanOrEqual(0.1 - 1e-6); expect(center(zoom)).toBeLessThan(0.2)
+    // The camera has started following the pointer to the left (it eases in, so it is not there yet).
+    expect(center(zoom)).toBeGreaterThanOrEqual(0.1 - 1e-6); expect(center(zoom)).toBeLessThan(0.45)
     expect(fetcher).toHaveBeenCalled()
     await boundary.sources.prepare(document, [clip], 140, () => true)
-    const again = (await boundary.sources.prepare(document, [clip], 105, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    const again = (await boundary.sources.prepare(document, [clip], 135, () => true)).effects.get(clip.id)![0].builtin!.zoom!
     expect(again.sample.map(value => value.toFixed(9))).toEqual(zoom.sample.map(value => value.toFixed(9)))
-    // 源时间 0.5 秒：放大过渡在区间开始之前进行，视野比区间内宽
-    const ramp = (await boundary.sources.prepare(document, [clip], 90, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    // 源时间 1.4 秒：区间开头的放大过渡还在进行，视野比放大到位时宽
+    const ramp = (await boundary.sources.prepare(document, [clip], 117, () => true)).effects.get(clip.id)![0].builtin!.zoom!
     expect(Math.abs(ramp.sample[0])).toBeGreaterThan(Math.abs(zoom.sample[0]))
   } finally { fetcher.mockRestore(); await boundary.sources.dispose() }
   const fixed = { ...clip, effects: [zoomEffect({ x: 0.5, y: 0.5 })] }
   const quiet = vi.spyOn(globalThis, 'fetch')
   const fixedDocument = { ...document, clips: [fixed] }; const second = boundaries(fixedDocument)
   try {
-    const zoom = (await second.sources.prepare(fixedDocument, [fixed], 105, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    const zoom = (await second.sources.prepare(fixedDocument, [fixed], 135, () => true)).effects.get(clip.id)![0].builtin!.zoom!
     expect(center(zoom)).toBeCloseTo(0.5)
     expect(quiet).not.toHaveBeenCalled()
   } finally { quiet.mockRestore(); await second.sources.dispose() }
