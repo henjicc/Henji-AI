@@ -286,23 +286,22 @@ export function useAssistantPanelInteraction({
     if (!sameSize(layout.size, size)) onCommitSize(layout.size)
   }, [onCommitPosition, onCommitSize, position, size])
 
+  // 视口夹紧只用于显示，不回写保存的布局；只有用户拖动或调整尺寸时才提交。
   useLayoutEffect(() => {
     if (disposeRef.current) return
-    const next = normalizeLayout(mode, { position, size }, currentViewport())
-    applyCommittedLayout(next)
-    commitLayout(next)
-  }, [applyCommittedLayout, commitLayout, mode, position, size])
+    applyCommittedLayout(normalizeLayout(mode, { position, size }, currentViewport()))
+  }, [applyCommittedLayout, mode, position, size])
 
   useEffect(() => {
+    // 窗口尺寸变化只夹紧显示，从用户保存的布局重新计算且不回写：
+    // 窗口缩小再放大后，面板恢复原来的位置和尺寸。
     const onViewportResize = (): void => {
       if (disposeRef.current) return
-      const next = normalizeLayout(mode, layoutRef.current, currentViewport())
-      applyCommittedLayout(next)
-      commitLayout(next)
+      applyCommittedLayout(normalizeLayout(mode, { position, size }, currentViewport()))
     }
     window.addEventListener('resize', onViewportResize)
     return () => window.removeEventListener('resize', onViewportResize)
-  }, [applyCommittedLayout, commitLayout, mode])
+  }, [applyCommittedLayout, mode, position, size])
 
   useEffect(() => () => {
     disposeRef.current?.()

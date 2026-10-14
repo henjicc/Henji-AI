@@ -35,8 +35,10 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
 
   useEffect(() => {
     setDraftWidth(clampWidthToViewport(persistedWidth));
+    // 从用户保存的宽度重新夹紧，窗口缩小再放大后恢复原宽度。
     const handleViewportResize = () => {
-      setDraftWidth((previous) => clampWidthToViewport(previous));
+      if (resizeActiveRef.current) return;
+      setDraftWidth(clampWidthToViewport(persistedWidth));
     };
     window.addEventListener('resize', handleViewportResize);
     return () => window.removeEventListener('resize', handleViewportResize);

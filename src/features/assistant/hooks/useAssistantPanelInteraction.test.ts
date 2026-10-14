@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest'
+/** @vitest-environment jsdom */
+
+import { act, renderHook } from '@testing-library/react'
+import { createRef } from 'react'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
+  useAssistantPanelInteraction,
   clampAssistantFloatingPosition,
   clampAssistantPanelSize,
   dockEdgeForLayout,
@@ -80,5 +85,38 @@ describe('assistant panel interaction geometry', () => {
     expect(getAssistantWorkspaceInsets('left', 480)).toEqual({ left: 480, right: 0 })
     expect(getAssistantWorkspaceInsets('right', 520)).toEqual({ left: 0, right: 520 })
     expect(getAssistantWorkspaceInsets('floating', 600)).toEqual({ left: 0, right: 0 })
+  })
+})
+
+describe('assistant panel viewport resize', () => {
+  it('窗口缩小再放大后恢复面板尺寸，且不回写被夹紧的布局', () => {
+    const setViewport = (width: number, height: number): void => {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: width })
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: height })
+    }
+    setViewport(1920, 1080)
+    const onCommitPosition = vi.fn()
+    const onCommitSize = vi.fn()
+    const { result } = renderHook(() => useAssistantPanelInteraction({
+      enabled: true,
+      mode: 'right',
+      position: { x: 0, y: 0 },
+      size: { width: 900, height: 600 },
+      workspaceRef: createRef<HTMLDivElement>(),
+      onCommitPosition,
+      onCommitSize,
+      onCommitMode: vi.fn(),
+    }))
+    const panel = document.createElement('div')
+    act(() => result.current.panelRef(panel))
+    expect(panel.style.width).toBe('900px')
+
+    act(() => { setViewport(1000, 700); window.dispatchEvent(new Event('resize')) })
+    expect(Number.parseInt(panel.style.width, 10)).toBeLessThan(900)
+
+    act(() => { setViewport(1920, 1080); window.dispatchEvent(new Event('resize')) })
+    expect(panel.style.width).toBe('900px')
+    expect(onCommitSize).not.toHaveBeenCalled()
+    expect(onCommitPosition).not.toHaveBeenCalled()
   })
 })
