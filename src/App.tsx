@@ -113,6 +113,8 @@ const App: React.FC = () => {
   useRecordingShortcuts()
   useEffect(() => {
     if (!(import.meta.env.DEV || import.meta.env.MODE === 'development')) return
+    // 只在巡检自动化注入了测试夹具桥时加载；普通开发实例与单测不加载巡检夹具。
+    if (!(window as unknown as { henjiNative?: { testFixtures?: unknown } }).henjiNative?.testFixtures) return
     void import('@/features/screenRecording/tracks/tourFixture').then(module => module.installRecordingTracksTourFixture())
   }, [])
   useApplyUiScale()
