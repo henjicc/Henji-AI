@@ -28,6 +28,7 @@ import { videoEditTextTranscriptionSchema } from './textTranscript'
 import { videoEditMulticamSchema } from './multicamSchema'
 import { styleKitSchema } from './styleKit'
 import { creativeIntentsSchema } from '../creativeIntent/persistence'
+import { recordingCursorSourceSchema, RECORDING_CURSOR_EFFECT } from './recordingCursor'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
 
 const frame = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
@@ -37,6 +38,7 @@ export const videoEditIntrinsicSectionSchema = z.enum(['motion', 'opacity', 'aud
 export type VideoEditIntrinsicSection = z.infer<typeof videoEditIntrinsicSectionSchema>
 const sourceRemainder = z.object({ numerator: z.number().int().nonnegative().max(1_000_000), denominator: z.number().int().positive().max(1_000_000) }).strict().refine(value => value.numerator < value.denominator, '源时间分数必须小于一微秒。')
 export const videoEditMediaSchema = z.object({
+  recordingCursor: recordingCursorSourceSchema.optional(),
   id: identifier, name, path: z.string().min(1).max(32768).regex(/^(?:[A-Za-z]:[\\/]|\\\\|\/)/, '素材必须引用本地绝对路径。'),
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
     codeImageGeneration: videoEditCodeImageGenerationSchema.optional(),
@@ -220,12 +222,13 @@ export const videoEditDocumentSchema = z.object({
       if (clip.kind === 'graphic' ? !clip.graphic : Boolean(clip.graphic)) issue('只有图形片段可以且必须保存结构化图形。')
       if (clip.kind === 'adjustment' ? !clip.adjustment : Boolean(clip.adjustment)) issue('只有调整图层可以且必须保存作用范围。')
       for (const effect of clip.effects ?? []) {
+        if (effect.builtin?.id === RECORDING_CURSOR_EFFECT && (clip.kind !== 'video' || !media?.recordingCursor)) issue('录制光标只能添加到绑定事件日志的屏幕视频片段，请从录制会话创建片段。')
         if (effect.builtin?.id === 'color_grade') for (const key of ['input_lut', 'look_lut']) {
           const refs = [effect.builtin.params[key], ...(effect.builtin.curves?.[key] ?? []).map(point => point.value)]
             if (refs.some(ref => ref && !lutsById.has(String(ref)))) issue('全能调色 LUT引用不属于本项目，请选择已导入的LUT。')
         }
-        const media = videoEditEffectMedia(effect)
-        if (!videoEditEffectAccepts(media, clip)) { issue(media === 'audio' ? '音频效果只能加到声音片段。' : '画面效果不能附加到声音片段。'); break }
+        const effectMedia = videoEditEffectMedia(effect)
+        if (!videoEditEffectAccepts(effectMedia, clip)) { issue(effectMedia === 'audio' ? '音频效果只能加到声音片段。' : '画面效果不能附加到声音片段。'); break }
       }
       for (const code of videoEditEffectCodes(clip.effects)) if (!definitionsById.get(code.definitionId)?.versions.some(version => version.id === code.versionId)) issue('附加效果的固定源码版本不存在。')
       if (!track || track.kind !== (clip.kind === 'audio' ? 'audio' : 'video')) issue(`片段 ${clip.name} 的轨道类型不匹配。`)

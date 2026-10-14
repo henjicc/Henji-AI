@@ -84,17 +84,20 @@ export class VideoEditRenderSession {
     if (additions.length || removed || changed) this.fontPresentationRevision++
   }
   private async authorizeLuts(document: VideoEditComposition): Promise<void> {
-    for (const asset of document.colorLuts ?? []) {
-      if (this.lutRoots.has(asset.path)) continue
+    for (const asset of [...(document.colorLuts ?? []), ...document.media.flatMap(media => media.recordingCursor?.pages ?? [])]) {
+      // Capture logs may contain thousands of pages under one authorized directory.
+      const normalized = asset.path.replace(/\\/g, '/')
+      const directoryKey = normalized.slice(0, normalized.lastIndexOf('/'))
+      if (this.lutRoots.has(directoryKey)) continue
       const platform = getPlatform()
       await platform.media.allowRoot(await platform.system.paths.dirname(asset.path))
-      this.lutRoots.add(asset.path)
+      this.lutRoots.add(directoryKey)
     }
   }
   private proxies: Record<string, VideoProxyResult> = {}
   private async selectProxies(original = false): Promise<void> { this.proxies = this.proxyProjectId && !original ? await verifiedVideoEditProxySources(this.proxyProjectId, this.exportProxies) : {} }
   private proxySources(): Record<string, VideoProxyResult> { return Object.fromEntries(Object.entries(this.proxies).map(([id, result]) => [id, { ...result, path: toFetchableMediaUrl(result.path) }])) }
-  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path), ...(this.proxies[media.id] ? { sourceRevision: `${media.sourceRevision ?? ''}:proxy:${this.proxies[media.id].key}` } : {}) })), ...(document.colorLuts ? { colorLuts: document.colorLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
+  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path), ...(media.recordingCursor ? { recordingCursor: { ...media.recordingCursor, pages: media.recordingCursor.pages.map(page => ({ ...page, path: toFetchableMediaUrl(page.path) })) } } : {}), ...(this.proxies[media.id] ? { sourceRevision: `${media.sourceRevision ?? ''}:proxy:${this.proxies[media.id].key}` } : {}) })), ...(document.colorLuts ? { colorLuts: document.colorLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
   /** The native decoder reads original local files; the worker only sees fetchable URLs, so it gets this map too. */
   private localPaths(document: VideoEditComposition): Record<string, string> {
     return Object.fromEntries([...Object.values(this.proxies).map(result => [toFetchableMediaUrl(result.path), result.path]), ...document.media.filter(media => media.kind !== 'image' && isLikelyLocalImagePath(media.path)).map(media => [toFetchableMediaUrl(media.path), media.path])])

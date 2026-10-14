@@ -1,4 +1,5 @@
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
+import path from 'node:path'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from '@/core/videoEdit/shaderGraph/effects'
 import { SHADER_GRAPH_TRANSITION_PRESETS } from '@/core/videoEdit/shaderGraph/transitions'
 // @vitest-environment jsdom
@@ -32,6 +33,34 @@ async function project() {
   const sequence = getActiveVideoEditSequence(owner)
   return { owner, id, sequenceId: sequence.id, clipIds: sequence.clips.map(clip => clip.id) }
 }
+
+it('录制光标通过正式通用实体创建、修改、回读和撤销；烤入状态可发现，拒绝无日志片段', async () => {
+  const { owner, id, sequenceId, clipIds } = await project()
+  expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [clipIds[0]], 'recording_cursor')).toThrow('事件日志')
+  editVideoProject(id, document => ({ ...document, media: [...document.media, { id: 'screen', name: '屏幕原片', kind: 'video', path: path.resolve(path.sep, 'fixture', 'screen.mp4'), durationSeconds: 4, width: 1920, height: 1080, recordingCursor: {
+    ownerRef: { kind: 'recording_session', id: 'recording' }, sourceDigest: `sha256:${'a'.repeat(64)}`, cursorBakedIn: true, recordingStartUs: 0, width: 1920, height: 1080,
+    pages: [{ path: path.resolve(path.sep, 'fixture', 'events.capture.json'), sha256: 'b'.repeat(64), recordingSpanUs: [0, 4_000_000], seqSpan: [0, 255] }],
+  } }] }))
+  appendVideoEditClip(id, 'screen', { frame: 300, track: 1 })
+  const clip = getActiveVideoEditSequence(owner).clips.at(-1)!
+  const app = createApplicationHarness()
+  try {
+    const mode = await app.read({ kind: 'video_edit.media', id: `${id}:screen` }, ['video_edit.media.recording_cursor_mode'])
+    expect(mode.properties).toMatchObject({ 'video_edit.media.recording_cursor_mode': 'clicks' })
+    const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:recording_cursor` }, ['video_edit.builtin_effect.params'])
+    expect(catalog.properties).toMatchObject({ 'video_edit.builtin_effect.params': expect.arrayContaining([expect.objectContaining({ key: 'smoothing' }), expect.objectContaining({ key: 'click_style' })]) })
+    const ref = { kind: 'video_edit.clip', id: `${id}:${clip.id}` }; const baseline = await app.read(ref)
+    const created = await app.call('change_application_entities', { summary: '显示录制点击', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: ref, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:recording_cursor', 'video_edit.effect.parameters': { click_style: 'highlight' } } }] }] }, baseline.revisions as Record<string, number>)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    const effect = getActiveVideoEditSequence(owner).clips.at(-1)!.effects![0]
+    const effectRef = { kind: 'video_edit.effect', id: `${id}:${effect.id}` }
+    expect(await app.change(effectRef, { 'video_edit.effect.parameters': { click_style: 'none', size: 5 } })).toMatchObject({ ok: true })
+    expect((await app.read(effectRef, ['video_edit.effect.parameters'])).properties).toMatchObject({ 'video_edit.effect.parameters': { click_style: 'none', size: 5 } })
+    undoVideoEdit(id)
+    expect(getActiveVideoEditSequence(owner).clips.at(-1)!.effects![0].builtin!.params).toEqual({ click_style: 'highlight' })
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.at(-1)!.effects ?? []).toEqual([])
+  } finally { app.dispose() }
+})
 
 it('60 parameter moves preserve unrelated branches, defer full validation/save/history, then commit one undo step', async () => {
   const { owner, id, sequenceId, clipIds } = await project()

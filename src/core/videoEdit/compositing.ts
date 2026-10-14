@@ -1,3 +1,4 @@
+import { RECORDING_CURSOR_EFFECT } from './recordingCursor'
 import { z } from 'zod'
 import { codeMaterialInstanceSchema } from './codeMaterialPersistence'
 import type { VideoEditSequence, VideoEditClip } from './document'
@@ -23,6 +24,7 @@ export const videoEditEffectSchema = z.object({
   code: codeMaterialInstanceSchema.optional(), builtin: videoEditBuiltinEffectInstanceSchema.optional(), mask: videoEditEffectMaskSchema.optional(),
 }).strict().superRefine((effect, ctx) => {
   if (Boolean(effect.code) === Boolean(effect.builtin)) ctx.addIssue({ code: 'custom', message: '效果必须是代码滤镜或内置效果其中之一。' })
+  if (effect.mask && effect.builtin?.id === RECORDING_CURSOR_EFFECT) ctx.addIssue({ code: 'custom', message: '录制光标层不支持作用区域，请直接调整大小或点击样式。' })
   const issue = effect.builtin && videoEditBuiltinEffectIssue(effect.builtin)
   if (issue) ctx.addIssue({ code: 'custom', message: issue })
   if (effect.builtin) try { assertVideoEditBuiltinCurves(effect.builtin) } catch (error) { ctx.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '效果关键帧无效。' }) }

@@ -7,15 +7,17 @@
  * 视频过渡（`tr_*`）：`source` 是前一段、`original` 是后一段，`c` = (进度 0..1, 前一段为空, 后一段为空, 备用)；
  * 单侧过渡空着的一侧按透明处理（与交叉溶解的单侧语义一致）。
  */
+import { RECORDING_CURSOR_WGSL } from './videoEditRecordingCursorShader'
 import { ADJUSTMENT_PASSES_WGSL } from '@/core/imaging/effects/wgsl/adjustmentPasses'
 import { GLOW_PRO_ENTRIES, GLOW_PRO_WGSL } from './glowPro'
 import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
 const LEGACY_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_basic', 'color_grade_creative', 'color_grade_curve', 'color_grade_wheel', 'color_grade_vignette', 'color_grade_hue_curve', 'color_grade_lut'] as const
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_PRO_ENTRIES] as const
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_PRO_ENTRIES] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
 ${ADJUSTMENT_PASSES_WGSL}
+${RECORDING_CURSOR_WGSL}
 ${GAUSSIAN_WGSL}
 @fragment fn gaussian_linear(v: Vertex) -> @location(0) vec4f {
  let c = textureLoad(source, vec2i(v.position.xy), 0);

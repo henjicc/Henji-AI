@@ -55,6 +55,15 @@ sequence.markers = [{ id: 'golden-marker', frame: 20, name: '审查点' }, { id:
 document.exportHistory = [{ id: 'golden-export', taskId: 'golden-render', sequenceId: sequence.id, name: '黄金导出', presetName: '自定义导出', rangeSource: 'explicit',
   path: '/persistence-project/导出/黄金.mp4', completedAt: Date.parse(timestamp), settings: VIDEO_EDIT_EXPORT_PRESETS[0].settings,
   range: { startFrame: 0, endFrame: 30 }, assetRef: { kind: 'asset', id: 'golden-export-asset' } }]
+document.media.push({ id: 'golden-screen', name: '屏幕原片', path: '/persistence-project/素材/screen.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 3, recordingCursor: {
+  ownerRef: { kind: 'recording_session', id: 'golden-recording' }, sourceDigest: `sha256:${'a'.repeat(64)}`, cursorBakedIn: false, recordingStartUs: 0, width: 1920, height: 1080,
+  pages: [{ path: '/persistence-project/素材/events.capture.json', sha256: 'b'.repeat(64), recordingSpanUs: [0, 3000000], seqSpan: [0, 255] }],
+} })
+document.items.push({ id: 'golden-screen-item', name: '屏幕原片', kind: 'video', mediaId: 'golden-screen' })
+const cursorClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 90, duration: 90 })
+cursorClip.id = 'golden-cursor-clip'
+cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { size: 3, smoothing: 40, click_style: 'ripple' } } }]
+sequence.clips.push(cursorClip)
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()

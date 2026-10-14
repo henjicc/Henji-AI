@@ -1,3 +1,5 @@
+import { planRecordingCursor, type RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
+import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
@@ -81,9 +83,10 @@ export function videoEditGrainSeed(frame: number): number { return (Math.max(0, 
  */
 export function resolveVideoGaussianPlan(parameters: GaussianParameters, context: EffectEvaluationContext): ResolvedGaussianPlan { return GAUSSIAN_EFFECT.resolve(parameters, context) }
 
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize }): VideoEditBuiltinPlan {
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize }): VideoEditBuiltinPlan {
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
+  if (instance.id === RECORDING_CURSOR_EFFECT) return planRecordingCursor(instance.cursorDraws ?? [], width, height)
   const params = resolveVideoEditBuiltinParams(instance)
   if (instance.id === 'glow_pro') return planGlowPro(params, width, height)
   const plan = new Planner(width, height)

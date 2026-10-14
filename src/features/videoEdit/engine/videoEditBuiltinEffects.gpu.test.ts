@@ -4,6 +4,7 @@ import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
+import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
 
 // 任务 4.7b 真实设备专项：内置效果的正式 WGSL 与工序在 Dawn 上编译并逐像素核对关键结果。npm run test:gpu 无条件执行。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -53,10 +54,43 @@ async function run(id: string, params: Record<string, unknown> = {}, frame = 0):
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.subarray((y * W + x) * 4, (y * W + x) * 4 + 4)]
 
 describe('剪辑内置效果（真实设备）', () => {
+  it('录制光标矢量轮廓、移动、按键颜色、隐藏和半透明原片的像素一致', async () => {
+    const source = input(); const target = output()
+    const draw: RecordingCursorDraw = { point: [0.25, 0.25], size: 0.5, shape: 0, rotation: 0, opacity: 1, style: 0, button: 0 }
+    const render = async (cursorDraws: RecordingCursorDraw[]): Promise<Uint8Array> => {
+      await effects.render({ id: 'recording_cursor', params: {}, cursorDraws }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+      return read(target)
+    }
+    try {
+      const original = await read(source)
+      expect(await render([])).toEqual(original)
+      const first = await render([draw])
+      expect(pixel(first, 18, 14)[0]).toBeGreaterThan(200)
+      expect(pixel(first, 50, 30)).toEqual(pixel(original, 50, 30))
+      const moved = await render([{ ...draw, point: [0.6, 0.25] }])
+      expect(pixel(moved, 18, 14)).toEqual(pixel(original, 18, 14))
+      expect(pixel(moved, 40, 14)[0]).toBeGreaterThan(200)
+      expect(await render([{ ...draw, opacity: 0 }])).toEqual(original)
+      const ring = { ...draw, point: [0.5, 0.5] as [number, number], shape: -1, size: 0.25 }
+      const left = await render([ring]); const right = await render([{ ...ring, button: 1 }])
+      expect(pixel(left, 40, 18)[2]).toBeGreaterThan(pixel(left, 40, 18)[0])
+      expect(pixel(right, 40, 18)[0]).toBeGreaterThan(pixel(right, 40, 18)[2])
+      // All captured shapes compile and produce output; hidden is excluded by the sampler.
+      for (const shape of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]) expect(await render([{ ...draw, point: [0.5, 0.5], shape }])).not.toEqual(original)
+      // Premultiplied alpha is preserved: fading a clip cannot leave a bright floating cursor.
+      device.queue.writeTexture({ texture: source as never }, new Uint8Array(W * H * 4), { bytesPerRow: W * 4 }, [W, H])
+      expect((await render([ring, draw])).every(value => value === 0)).toBe(true)
+      const faded = new Uint8Array(W * H * 4); for (let i = 0; i < faded.length; i += 4) faded.set([64, 64, 64, 128], i)
+      device.queue.writeTexture({ texture: source as never }, faded, { bytesPerRow: W * 4 }, [W, H])
+      const overlay = await render([ring, draw])
+      expect(overlay.every((value, index) => index % 4 === 3 ? value === 128 : value <= 128)).toBe(true)
+    } finally { source.destroy(); target.destroy() }
+  })
   it('24个多工序模糊复用中间纹理，24份不同调色曲线跨帧不重复上传或编译', async () => {
     let allocations = 0; let compiles = 0; let scratchAllocations = 0
     const counted = new Proxy(device, { get: (target, key) => {
       if (key === 'createTexture') return (descriptor: Parameters<Device['createTexture']>[0]) => { allocations++; return target.createTexture(descriptor) }
+      if (key === 'createRenderPipelineAsync') return (descriptor: Parameters<Device['createRenderPipelineAsync']>[0]) => { compiles++; return target.createRenderPipelineAsync(descriptor) }
       if (key === 'createRenderPipeline') return (descriptor: Parameters<Device['createRenderPipeline']>[0]) => { compiles++; return target.createRenderPipeline(descriptor) }
       const value = Reflect.get(target, key) as unknown
       return value instanceof Function ? value.bind(target) : value

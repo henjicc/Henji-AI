@@ -61,6 +61,7 @@ const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   // 内置效果目录（4.7a，只读）：助手据此选效果、按参数语义取值，再用 video_edit.effect 加到片段上。
   'video_edit.builtin_effect': { name: text, group: text, description: text, params: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]))).max(Math.max(16, ...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.params.length))) },
 }
+schemas['video_edit.media'].recordingCursorMode = z.enum(['unavailable', 'redraw', 'clicks'])
 schemas['video_edit.clip'].multicamCameraId = z.string().max(100)
 schemas['video_edit.sequence'].styleKitId = z.string().max(100)
 schemas['video_edit.sequence'].captionTrackEnabled = videoEditSequenceSchema.shape.captionTrackEnabled.unwrap()
@@ -195,6 +196,7 @@ const descriptions: Record<string, string> = {
   'video_edit.clip.speed_percent': '片段速度百分比，1–10000，100 为原速（视频、音频、嵌套序列与代码素材片段可改）。改速度时开头的内容不动，时长按速度换算（200% 时长减半）；变长时后面有片段则只用到空白为止。要按实际时长原子波纹调整后续片段，请用 ripple_video_edit_clip_speed；普通属性写入的链接音画请两段都写。',
   'video_edit.clip.reverse': '倒放：用到的源内容不变，播放方向反过来（画面与声音都倒放）。',
   'video_edit.clip.preserve_pitch': '变速时保持音调（时间伸缩，速度不是 100% 时生效）；关闭时声音随速度变高或变低。',
+  'video_edit.media.recording_cursor_mode': '录制光标可用方式（只读）：redraw 可重绘光标与点击；clicks 原片已经包含光标，只能添加点击提示；unavailable 没有事件日志。redraw/clicks 可在该素材的视频片段下用通用集合创建 video_edit.effect，definition_id=effect:recording_cursor，参数见内置效果目录。日志由录制会话提供，不能手写路径。',
   'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（画面效果如 effect:gaussian_blur 只能加到画面片段；音频效果如 effect:noise_reduction、effect:parametric_eq 只能加到声音片段；全部内置效果、适用片段及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID（只用于画面片段）。',
   'video_edit.document.color_luts': '项目已导入LUT的id与名称，只读；在效果parameters的input_lut/look_lut写该id，强度为0–100。',
   'video_edit.effect.parameters': '效果参数。内置效果：键与范围见 video_edit.builtin_effect 的 params（强度多为 0–100，空间量按画面高度比例，与分辨率无关）；写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；越界或未知键会报错并列出可用范围。代码滤镜：按固定源码版本声明校验。',

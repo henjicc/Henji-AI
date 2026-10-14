@@ -12,6 +12,7 @@ import { VIDEO_EDIT_COLOR_GRADE } from './colorGrade'
 import { parseColorGradeCurve } from './colorGradeCurves'
 import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
+import { RECORDING_CURSOR_DEFINITION } from './recordingCursorDefinition'
 import { GAUSSIAN_EFFECT } from '../imaging/effects/gaussian'
 
 export type { ImagingParamValue as VideoEditBuiltinParamValue, ImagingParams as VideoEditBuiltinParams, ImagingUnit as VideoEditBuiltinUnit, ImagingParam as VideoEditBuiltinParam } from '../imaging/parameterDefinition'
@@ -121,6 +122,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
       strength('spill', '溢色抑制', 50, '去掉主体边缘反射的背景色', '0 不处理；50 默认；100 强力去除主体上的绿色/蓝色反光。'),
     ] },
   VIDEO_EDIT_COLOR_GRADE,
+  RECORDING_CURSOR_DEFINITION,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
 export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, GLOW_PRO_EFFECT_DEFINITION, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]

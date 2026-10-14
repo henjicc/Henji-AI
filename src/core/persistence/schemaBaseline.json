@@ -2,9 +2,9 @@
   "releasedCompatibility": false,
   "formats": {
     "document.video_edit": {
-      "version": 4,
-      "fingerprint": "1556823f2557f135a0bf7a1794b3eb2ec48248a914afd7a28e3fa96d84c656e0",
-      "supportedFrom": 2
+      "version": 5,
+      "fingerprint": "b032a41c978bedf1a500f833d621e4b94d2449ab9271316f86dae2dc6363973b",
+      "supportedFrom": 5
     },
     "document.canvas": {
       "version": 1,
@@ -1364,6 +1364,15 @@
       "reason": "屏幕录制1.1新增全局录制快捷键，开发期只读取新版设置，不保留旧开发设置迁移",
       "previousFingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
       "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T02:02:38.663Z",
+      "format": "document.video_edit",
+      "version": 5,
+      "reason": "开发期剪辑内容升级至v5，新增录制光标事件日志引用与内置效果，旧格式不迁移",
+      "previousFingerprint": "1556823f2557f135a0bf7a1794b3eb2ec48248a914afd7a28e3fa96d84c656e0",
+      "fingerprint": "b032a41c978bedf1a500f833d621e4b94d2449ab9271316f86dae2dc6363973b",
       "waivedFixtureVersions": []
     }
   ],

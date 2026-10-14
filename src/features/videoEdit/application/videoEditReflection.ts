@@ -81,7 +81,12 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): Vi
   const found = videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).find(item => item.id === childId)
   if (!found) throw new Error('NOT_FOUND：目标不属于此剪辑或已删除。')
   const data = JSON.parse(JSON.stringify(found)) as VideoEditFieldData
-  if (ref.kind === 'video_edit.media') data.proxyState = { ...readVideoEditProxyState(projectId, childId) }
+  if (ref.kind === 'video_edit.media') {
+    data.proxyState = { ...readVideoEditProxyState(projectId, childId) }
+    const source = instance.document.media.find(media => media.id === childId)?.recordingCursor
+    data.recordingCursorMode = source ? source.cursorBakedIn ? 'clicks' : 'redraw' : 'unavailable'
+    delete data.recordingCursor
+  }
   if (ref.kind === 'video_edit.sequence') {
     data.captionTrackEnabled ??= true
     data.captionTrackLocked ??= false
