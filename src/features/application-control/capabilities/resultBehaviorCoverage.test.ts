@@ -12,6 +12,10 @@ type Scenario = { file: string; title: string }
 
 /** 每条登记都必须在对应测试里从正式状态源断言结果，不能只看 completed/evidence。 */
 const RESULT_SCENARIOS: Record<string, Scenario[]> = {
+  screen_recording: [
+    { file: 'src/features/screenRecording/application/recordingUnderstanding.test.ts', title: '正式能力生成→读回→人工校正→通用撤销；生成也在同一事务撤销' },
+    { file: 'src/features/screenRecording/application/recordingUnderstanding.test.ts', title: '取消、保存失败与分析期间修改不覆盖原结果，不启动转写' },
+  ],
   video_edit: [
     { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '公共修改与手动编辑共用历史并可保存重开' },
     { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '保存失败保留助手修改且恢复不会重放编辑' },
@@ -63,6 +67,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
 }
 
 const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = {
+  screen_recording: 2,
   video_edit: 2,
   memory: 2,
   settings: 2,

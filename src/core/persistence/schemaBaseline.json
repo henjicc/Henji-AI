@@ -237,9 +237,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 1,
-      "fingerprint": "37c71a0834aaa96c072a4bbff152ccd26ff6e297aa258f4f221a2a15e5547244",
-      "supportedFrom": 1
+      "version": 2,
+      "fingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
+      "supportedFrom": 2
     }
   },
   "devBreaks": [
@@ -1414,6 +1414,15 @@
       "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
       "previousFingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
       "fingerprint": "01bcce87c26ef3685d037398498a56905885505cd9a8cfe4c2c393491cd24673",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T03:47:40.910Z",
+      "format": "document.screen_recording",
+      "version": 2,
+      "reason": "录制理解升级为带时间戳的文字稿步骤章节与可审阅候选，开发期不保留旧占位格式",
+      "previousFingerprint": "37c71a0834aaa96c072a4bbff152ccd26ff6e297aa258f4f221a2a15e5547244",
+      "fingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
       "waivedFixtureVersions": []
     }
   ],

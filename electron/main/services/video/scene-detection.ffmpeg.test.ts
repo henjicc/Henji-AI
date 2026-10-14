@@ -9,6 +9,21 @@ import { detectScenesFfmpeg, SceneDetectionService } from './scene-detection'
 
 const directories: string[] = []
 afterEach(async () => { await Promise.all(directories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true }))) })
+it('静止证据来自真实解码，尾段闭合且非零起点保持源时间', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-stillness-')); directories.push(directory)
+  const source = path.join(directory, 'still.mkv'), binary = await loadFfmpegPath(), signal = new AbortController().signal
+  await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', 'color=blue:s=128x72:r=30:d=5', '-c:v', 'ffv1', source], signal, binary)
+  const cache = createContentDiskCache({ directory: () => path.join(directory, 'cache'), extension: '.json' })
+  const service = new SceneDetectionService(cache, (request, signal, progress, _binary, onStillness) => detectScenesFfmpeg(request, signal, progress, binary, onStillness))
+  const request = { requestId: 'stillness', source, startSeconds: 1, endSeconds: 5, sensitivity: 50, includeStillness: true }
+  const result = await service.detect(request, signal, () => undefined)
+  expect(result.cutsSeconds).toEqual([])
+  expect(result.stillness).toEqual([{ startSeconds: 1, endSeconds: 5 }])
+  expect(await service.detect({ ...request, requestId: 'cached' }, signal, () => undefined)).toEqual(result)
+  expect((await service.detect({ ...request, includeStillness: false }, signal, () => undefined)).stillness).toBeUndefined()
+  const shorter = await service.detect({ ...request, endSeconds: 7 }, signal, () => undefined)
+  expect(shorter.stillness).toEqual([{ startSeconds: 1, endSeconds: 5 }])
+}, 20000)
 it.each(['30', '30000/1001'])('%s fps：纯色/测试图案硬切误差不超过一帧，非零源范围与持久缓存命中', async rate => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-scenes-')); directories.push(directory)
   const source = path.join(directory, 'cuts.mkv'); const binary = await loadFfmpegPath()

@@ -68,6 +68,10 @@ export async function readRecordingEvents(documentId: string, offset: number, li
   const events: CaptureEvent[] = []
   let index = 0
   for (const reference of content.eventPages) {
+    // Full-event offsets count all entries. Skip preceding pages without repeatedly decoding
+    // an entire long recording; marker-only offsets still require reading/filtering each page.
+    const count = reference.lastSequence - reference.firstSequence + 1
+    if (!markersOnly && index + count <= offset) { index += count; continue }
     // Paths come only from the authoritative document, never from caller input.
     const text = await readFile(reference.path, 'utf8')
     const expected = /-([a-f0-9]{64})\.capture\.json$/.exec(path.basename(reference.path))?.[1]

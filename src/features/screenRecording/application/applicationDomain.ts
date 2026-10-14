@@ -10,15 +10,20 @@ import { captureOptionsSchema } from '@/core/screenRecording/capture'
 import { controlRecording, readRecordingDocument, recordingEvents, recordingView, recoverRecording, showRecordingDocument, startRecording } from './recordingService'
 import { importRecordingToVideo } from './recordingVideoImport'
 import { recordingRegistrations } from './recordingReflection'
+import { recordingUnderstandingRegistration } from './recordingUnderstandingFields'
+import { RecordingUnderstandingMutation } from './recordingUnderstandingMutation'
+import { executeRecordingUnderstanding } from './recordingUnderstandingCapability'
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
-  id: 'screen_recording', entities: recordingRegistrations, registerExecutors() {},
+  id: 'screen_recording', entities: () => [...recordingRegistrations(), recordingUnderstandingRegistration()],
+  registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()) },
   registerCapabilities(registrar) {
     registerDocumentOpener('screen_recording', async document => { await showRecordingDocument(document.id); openApplicationSurface('tool.screen_recording') })
     registerDocumentBusyCheck('screen_recording', id => recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
     registerDocumentCoverProvider('screen_recording', read => { const first = recordingDocumentSchema.parse(read.content).media.find(media => media.kind === 'screen' && media.durationUs > 0); return first ? [{ source: first.path, sourceKind: 'video', atSeconds: 0 }] : null })
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {
       context.signal.throwIfAborted()
+      if (definition.id === 'understand_screen_recording') return executeRecordingUnderstanding(input, context)
       if (definition.id === 'start_screen_recording') {
         const parsed = startRecordingInputSchema.parse(input)
         if (parsed.destination && context.callerGrant && !context.callerGrant.permissions.includes('video_edit:write')) throw new Error('PERMISSION_DENIED:录制到剪辑还需要 video_edit:write 权限')
