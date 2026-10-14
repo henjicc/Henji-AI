@@ -47,7 +47,7 @@ beforeEach(() => {
     models: [
       model('face_detection_yunet', '人脸检测 YuNet', 'not_downloaded'),
       model('person_matting_rvm', '人物抠像 RVM', 'ready'),
-      model('text_detection_ppocr', '文字检测 PP-OCR', 'not_downloaded', { lastFailure: 'network' }),
+      model('text_recognition_ppocr_precise', '文字识别精确', 'not_downloaded', { lastFailure: 'network' }),
       model('object_tracking_efficienttam', '任意物体跟踪 EfficientTAM', 'unavailable', { sizeBytes: 0 }),
     ],
   }
@@ -55,6 +55,13 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('设置 › 本地模型', () => {
+  it('内置模型不提供删除或下载，损坏时明确指引重新安装', async () => {
+    mocks.state.models = [model('text_detection_ppocr', '文字检测', 'ready'), model('text_recognition_ppocr', '文字识别', 'corrupt')]
+    render(<LocalModelsSection />)
+    expect(await screen.findByText('已内置')).toBeTruthy()
+    expect(screen.getByText('内置模型缺失或损坏，请重新安装应用')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /下载|删除|重试/ })).toBeNull()
+  })
   it('列出模型的大小、许可证与状态，按状态给出对应动作', async () => {
     render(<LocalModelsSection />)
     expect(await screen.findByText('人脸检测 YuNet')).toBeTruthy()

@@ -7,6 +7,14 @@ import { recognitionCrop, recognizeCrops, type CropRecognizer, type RecognizedTe
 
 export interface OcrLine extends RecognizedText { box: PrivacyBox }
 export interface FrameOcrResult { lines: OcrLine[]; detectionMs: number; recognitionMs: number; recognizedLines: number; reusedLines: number }
+
+/** Only the serialized inference host may own this process-global Sharp setting; restore before its next job. */
+export async function withOcrImageBudget<T>(run: () => Promise<T>): Promise<T> {
+  const previous = sharp.concurrency()
+  sharp.concurrency(Math.min(previous, 2))
+  try { return await run() }
+  finally { sharp.concurrency(previous) }
+}
 /** All OCR consumers use the same detector and batch recognizer. State never survives a job. */
 export class FrameOcr {
   private readonly cache = new Map<string, RecognizedText>()

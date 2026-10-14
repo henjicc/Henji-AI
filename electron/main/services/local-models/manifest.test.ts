@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { isLocalModelId, LOCAL_MODEL_IDS } from '../../../../src/platform/contracts/localModels'
+import fs from 'node:fs'
+import path from 'node:path'
+import { createHash } from 'node:crypto'
+import { isBundledLocalModel, isLocalModelId, LOCAL_MODEL_IDS } from '../../../../src/platform/contracts/localModels'
 import { LOCAL_MODEL_MANIFEST } from './manifest'
 
 describe('图片修补模型的固定下载契约', () => {
@@ -21,16 +24,22 @@ describe('图片修补模型的固定下载契约', () => {
   })
 })
 
-it('OCR v6 使用官方 fp32 文件与独立字典，固定哈希、不虚构自有镜像', () => {
-  for (const id of ['text_detection_ppocr', 'text_recognition_ppocr']) {
-    const model = LOCAL_MODEL_MANIFEST.find(m => m.id === id)!
+it('OCR 默认档随包、精确档按需下载，文件逐字节符合固定清单', () => {
+  for (const model of LOCAL_MODEL_MANIFEST.filter(m => isBundledLocalModel(m.id))) {
     expect(model.license.spdx).toBe('Apache-2.0')
     for (const file of model.files) {
       expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
-      expect(file.name).not.toContain('int8')
-      expect(file.sources.every(s => s.url.includes('oar-ocr'))).toBe(true)
-      expect(file.sources.find(s => s.region === 'global')?.url).toContain('/v0.7.0/')
+      expect(file.sources).toEqual([])
+      const bytes = fs.readFileSync(path.resolve('resources/local-models', model.id, file.name))
+      expect(bytes.length).toBe(file.sizeBytes)
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256)
     }
   }
   expect(LOCAL_MODEL_MANIFEST.find(m => m.id === 'text_recognition_ppocr')!.files.map(f => f.role)).toEqual(['model', 'dict'])
+  expect(LOCAL_MODEL_MANIFEST.find(m => m.id === 'text_recognition_ppocr')!.files[0].name).toBe('pp-ocrv6_tiny_rec_int8.onnx')
+  for (const file of LOCAL_MODEL_MANIFEST.find(m => m.id === 'text_recognition_ppocr_precise')!.files) {
+    expect(file.name).not.toContain('int8')
+    expect(file.sources.find(s => s.region === 'global')?.url).toContain('/v0.7.0/')
+  }
+  expect(fs.readFileSync('electron-builder.yml', 'utf8')).toMatch(/extraResources:\s+- from: resources\/local-models\s+to: resources\/local-models/)
 })

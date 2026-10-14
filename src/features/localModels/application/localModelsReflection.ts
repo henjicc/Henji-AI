@@ -23,6 +23,7 @@ import {
 } from '@/commands/localModels'
 import {
   isLocalModelId,
+  isBundledLocalModel,
   LOCAL_MODEL_DOWNLOAD_SOURCES,
   type LocalModelDownloadSource,
   type LocalModelId,
@@ -218,11 +219,12 @@ export function createLocalModelRegistrations(): ApplicationEntityRegistration[]
           return propertyIds.map((propertyId) => {
             const field = modelFields.find((item) => item.propertyId === propertyId)
             if (!field) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}，可用的有 ${modelFields.map((item) => item.propertyId).join('、')}`)
-            const unavailable = field.writer !== undefined && model.status === 'unavailable'
+            const bundled = isBundledLocalModel(model.id)
+            const unavailable = field.writer !== undefined && (model.status === 'unavailable' || bundled)
             const writable = field.writer !== undefined && !unavailable
             return {
               propertyId, readable: true, writable,
-              reasons: writable ? [] : [unavailable ? '这个模型暂时没有可下载的文件。' : field.descriptor.readOnlyReason ?? READ_ONLY],
+              reasons: writable ? [] : [unavailable ? (bundled ? '内置模型随应用提供，无需下载，也不能单独删除；文件损坏时请重新安装应用。' : '这个模型暂时没有可下载的文件。') : field.descriptor.readOnlyReason ?? READ_ONLY],
               requiredPermissions: PERMISSIONS.write, revisions: revisions(state),
             }
           })

@@ -1,7 +1,7 @@
 /*
- * 本地模型（任务 4.11）：抠像、检测、跟踪这类必须逐帧在本机跑的小模型，第一次用到时下载。
+ * 本地模型：基础 OCR 随应用提供，其余抠像、检测、跟踪模型第一次用到时下载。
  *
- * 文件放在作品目录的“模型/<模型名>/”下，每个文件按清单里写死的 SHA-256 校验；下载源在国内
+ * 内置文件放在应用资源目录，其余文件放在作品目录的“模型/<模型名>/”下，均按清单的 SHA-256 校验；下载源在国内
  * （ModelScope）与国外（Hugging Face / GitHub）之间自动选择，失败自动换源。
  * 主进程实现在 `electron/main/services/local-models/`，渲染层经 `src/commands/localModels.ts` 调用。
  */
@@ -22,6 +22,11 @@ export const LOCAL_MODEL_IDS = [
 
 export type LocalModelId = (typeof LOCAL_MODEL_IDS)[number]
 
+/** Application-owned resources: available offline and never removable as downloaded user files. */
+export function isBundledLocalModel(id: string): boolean {
+  return id === 'text_detection_ppocr' || id === 'text_recognition_ppocr'
+}
+
 export function isLocalModelId(value: unknown): value is LocalModelId {
   return typeof value === 'string' && (LOCAL_MODEL_IDS as readonly string[]).includes(value)
 }
@@ -30,7 +35,7 @@ export function isLocalModelId(value: unknown): value is LocalModelId {
  * - `not_downloaded`：还没下载（或已删除）
  * - `downloading`：正在下载或校验
  * - `ready`：文件齐全且校验通过
- * - `corrupt`：文件存在但大小或校验值不对（被改动、下载中断残留），需要重新下载
+ * - `corrupt`：文件存在但大小或校验值不对；下载模型重新下载，内置模型重新安装应用
  * - `unavailable`：暂时没有可下载的文件（如需要另行导出的模型）
  */
 export type LocalModelStatus = 'not_downloaded' | 'downloading' | 'ready' | 'corrupt' | 'unavailable'

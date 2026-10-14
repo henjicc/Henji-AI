@@ -176,14 +176,11 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
     homepage: 'https://github.com/PaddlePaddle/PaddleOCR',
     license: { spdx: 'Apache-2.0', url: 'https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE' },
     availability: 'available',
-    // Official PaddleOCR v6 ONNX, redistributed unchanged by oar-ocr v0.7.0.
+    // Bundled unchanged PaddleOCR v6 detector from oar-ocr v0.7.0; no network fallback.
     files: [
       { name: 'pp-ocrv6_tiny_det.onnx', role: 'model', sizeBytes: 1780590,
         sha256: '193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8',
-        sources: [
-          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'pp-ocrv6_tiny_det.onnx') },
-          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/pp-ocrv6_tiny_det.onnx' },
-        ],
+        sources: [],
       },
     ],
   },
@@ -215,21 +212,15 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
     homepage: 'https://github.com/PaddlePaddle/PaddleOCR',
     license: { spdx: 'Apache-2.0', url: 'https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE' },
     availability: 'available',
-    // Official PaddleOCR v6 ONNX, redistributed unchanged by oar-ocr v0.7.0.
+    // Bundled derivative: Henji AI / author quantized only MatMul/Gemm to int8 (Apache-2.0 §4).
     files: [
-      { name: 'pp-ocrv6_tiny_rec.onnx', role: 'model', sizeBytes: 4462639,
-        sha256: '9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6',
-        sources: [
-          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'pp-ocrv6_tiny_rec.onnx') },
-          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/pp-ocrv6_tiny_rec.onnx' },
-        ],
+      { name: 'pp-ocrv6_tiny_rec_int8.onnx', role: 'model', sizeBytes: 2768469,
+        sha256: 'e90b3609f24020955ff236f73d95982466b6fe934c80a90d7f8e6dfaaa61d02b',
+        sources: [],
       },
       { name: 'ppocrv6_tiny_dict.txt', role: 'dict', sizeBytes: 27156,
         sha256: 'c5cbe34ef40c29c4df07ed012bf96569cb69a2d2a01a07027e9f13cb832bd9cd',
-        sources: [
-          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'ppocrv6_tiny_dict.txt') },
-          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/ppocrv6_tiny_dict.txt' },
-        ],
+        sources: [],
       },
     ],
   },

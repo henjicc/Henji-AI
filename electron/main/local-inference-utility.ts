@@ -16,6 +16,7 @@ import { runOcrPrivacy } from './services/local-inference/ocr/pipeline'
 import { readRecognitionDictionary } from './services/local-inference/ocr/recognition'
 import { OcrRecognitionPool } from './services/local-inference/ocr/recognitionPool'
 import { screenOcrFrames } from './services/local-inference/ocr/screenFrames'
+import { withOcrImageBudget } from './services/local-inference/ocr/frameOcr'
 import type { PrivacyBox } from '../../src/core/screenRecording/privacy'
 
 /*
@@ -175,15 +176,16 @@ async function runPrivacy(job: OcrPrivacyJob): Promise<void> {
     sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
     const pool = await sessions
     recognition = new OcrRecognitionPool(rec.path, alphabet, job.normalization)
+    const recognize = recognition.recognize
     let changes: readonly PrivacyBox[] = []
     const progress = (done: number, total: number): void => { const now = Date.now(); if (done < total && now - lastProgress < 200) return; lastProgress = now; post({ type: 'progress', id: job.id, done, total }) }
-    const result = await runOcrPrivacy(job, { alphabet, signal: controller.signal,
-      recognize: recognition.recognize,
+    const result = await withOcrImageBudget(() => runOcrPrivacy(job, { alphabet, signal: controller.signal,
+      recognize,
       changes: () => changes,
       openModel: (model, providers, shape, options) => pool.open(model, providers, shape, options),
       frames: () => screenOcrFrames(job, controller.signal, (done, total) => progress(done, total * 2), value => { changes = value }),
       progress: (done, total) => progress(total + done, total * 2),
-    })
+    }))
     post({ type: 'done', id: job.id, result })
   } catch (error) { post({ type: 'failed', id: job.id, code: controller.signal.aborted ? 'cancelled' : 'inference', message: error instanceof Error ? error.message.slice(0, 500) : '敏感信息识别失败。' }) }
   finally { await recognition?.dispose(); controllers.delete(job.id) }

@@ -1,7 +1,7 @@
 import { Worker } from 'node:worker_threads'
 import { availableParallelism } from 'node:os'
 import path from 'node:path'
-import { recognitionBatches, type CropRecognizer, type RecognizedText, type RecognitionNormalization } from './recognition'
+import { recognitionBatches, RECOGNITION_BATCH_POLICY, type RecognitionBatchPolicy, type CropRecognizer, type RecognizedText, type RecognitionNormalization } from './recognition'
 
 /** ORT's Node binding runs synchronously inside setImmediate. Actual batch concurrency needs worker threads. */
 export class OcrRecognitionPool {
@@ -9,7 +9,7 @@ export class OcrRecognitionPool {
   private shared?: SharedArrayBuffer
   private closed = false
   private running = false
-  constructor(readonly modelPath: string, private readonly alphabet: readonly string[], private readonly normalization: RecognitionNormalization = 'rgb-half', private readonly workerPath = path.join(__dirname, 'ocr-recognition-worker.cjs'), private readonly count = Math.min(3, Math.max(1, Math.floor(availableParallelism() / 2)))) {}
+  constructor(readonly modelPath: string, private readonly alphabet: readonly string[], private readonly normalization: RecognitionNormalization = 'rgb-half', private readonly workerPath = path.join(__dirname, 'ocr-recognition-worker.cjs'), private readonly count = Math.min(3, Math.max(1, Math.floor(availableParallelism() / 2))), private readonly threads = Math.min(3, Math.max(1, Math.floor(availableParallelism() / count))), private readonly policy: RecognitionBatchPolicy = RECOGNITION_BATCH_POLICY) {}
   readonly recognize: CropRecognizer = async (rgb, width, crops, signal) => {
     signal.throwIfAborted()
     if (!crops.length) return []
@@ -20,7 +20,7 @@ export class OcrRecognitionPool {
     try {
       const count = crops.length < 12 ? 1 : this.count
       while (this.workers.length < count) {
-        const worker = new Worker(this.workerPath, { workerData: { modelPath: this.modelPath, alphabet: this.alphabet, normalization: this.normalization, threads: 2 }, name: 'henji-ocr-recognition' })
+        const worker = new Worker(this.workerPath, { workerData: { modelPath: this.modelPath, alphabet: this.alphabet, normalization: this.normalization, threads: this.threads, policy: this.policy }, name: 'henji-ocr-recognition' })
         // Keep an idle startup/runtime failure observable and make the whole pool fail closed.
         worker.on('error', () => { void this.dispose() })
         this.workers.push(worker)
@@ -28,7 +28,7 @@ export class OcrRecognitionPool {
       if (this.shared?.byteLength !== rgb.byteLength) this.shared = new SharedArrayBuffer(rgb.byteLength)
       new Uint8Array(this.shared).set(rgb)
       const groups = Array.from({ length: count }, () => [] as number[]), loads = new Array<number>(count).fill(0)
-      for (const batch of recognitionBatches(crops).reverse()) {
+      for (const batch of recognitionBatches(crops, this.policy).reverse()) {
         const target = loads.indexOf(Math.min(...loads))
         groups[target].push(...batch); loads[target] += batch.length * Math.max(...batch.map(i => crops[i].tensorWidth))
       }

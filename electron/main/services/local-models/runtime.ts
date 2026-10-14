@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 
 import {
   LOCAL_MODEL_DOWNLOAD_SOURCES,
@@ -14,7 +14,7 @@ import { createMainLogger } from '../logging'
 import { getSettingsStore } from '../settings/store'
 import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
 import { LOCAL_MODEL_MANIFEST, LOCAL_MODEL_SOURCE_PROBES } from './manifest'
-import { LocalModelService } from './service'
+import { bundledModelsDirectory, LocalModelService } from './service'
 
 /*
  * 本地模型服务的进程内单例：注入真实网络、设置表、作品目录与窗口广播。
@@ -49,6 +49,7 @@ export function getLocalModelService(): LocalModelService {
   const created = new LocalModelService({
     manifest: LOCAL_MODEL_MANIFEST,
     modelsLocation: getUserModelsLocation,
+    bundledModelsDirectory: bundledModelsDirectory({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, mainDirectory: __dirname }),
     selector,
     fetch: (url, init) => fetch(url, init),
     readPreference,
