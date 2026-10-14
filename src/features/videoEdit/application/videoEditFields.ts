@@ -144,6 +144,7 @@ Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静�
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）', mask: '作用区域', regionStatus: '作用区域分析状态' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', speedPercent: '速度百分比', reverse: '倒放', preservePitch: '变速时保持音调' })
 labels.audioRole = '声音类型'
+labels.recordingCursorMode = '录制光标可用方式'
 Object.assign(labels, { snapToBeat: '吸附到节拍', type: '标记类型', strength: '重音强度' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', takes: '可切回的镜头版本（替换镜头后记下的原素材，新的在前；用 restore_video_edit_clip_take 切回）' })
 /** 个别属性的说明比通用模板更具体（助手据此取值）。 */

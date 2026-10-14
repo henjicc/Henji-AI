@@ -20,6 +20,7 @@ import { llmStoredConfigSchema } from './llmSchemas'
 import { mcpConnectionStorageSchema } from './mcpConnectionSchema'
 import { persistedCanvasNodeDataSchema, persistedStageSettingsSchema } from './businessSchemas'
 import { createDefaultLlmConfig } from '../llm/defaults'
+import type { VideoEditDocumentContent } from '../documents/kinds/videoEdit'
 
 describe('持久格式逐版本链', () => {
   const schema = z.object({ label: z.string(), count: z.number() }).strict()
@@ -122,6 +123,22 @@ describe('Schema结构指纹', () => {
 })
 
 describe('所有登记格式的黄金样本', () => {
+  it('剪辑 v2–v5 按完整链升至 v6，旧原稿、曲线、字幕与归档不丢失，读取不修改输入', () => {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+    expect(baseline.formats['document.video_edit'].supportedFrom).toBe(2)
+    for (const version of [2, 3, 4, 5]) {
+      const raw = parseDocumentEnvelope(JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.video_edit/v${version}.json`, 'utf8')))
+      const before = structuredClone(raw.content) as VideoEditDocumentContent
+      const upgraded = upgradePersistenceContent(format, raw.content, version) as VideoEditDocumentContent
+      expect(raw.content).toEqual(before)
+      expect(upgraded.creativeIntents).toEqual(before.creativeIntents)
+      expect(upgraded.codeMaterials).toEqual(before.codeMaterials)
+      expect(upgraded.sequences[0].clips).toEqual(before.sequences[0].clips)
+      expect(upgraded.sequences[0].captions).toEqual(before.sequences[0].captions)
+      if (version < 4) expect(upgraded.sequences[0]).toMatchObject({ captionTrackEnabled: true, captionTrackLocked: false })
+      if (version === 2) expect(upgraded.exportHistory?.[0]).toMatchObject({ presetName: '已完成导出', rangeSource: 'content' })
+    }
+  })
   for (const format of PERSISTENCE_FORMATS) {
     const directory = path.resolve('tests/fixtures/persistence', format.id)
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {

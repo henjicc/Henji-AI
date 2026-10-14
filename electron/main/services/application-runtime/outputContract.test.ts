@@ -152,6 +152,20 @@ const successData: Record<string, Record<string, unknown>> = {
   prepare_image_edit_outpaint: { documentRef: imageDocumentRef, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'image', options: {} }, message },
   insert_video_edit_style_component: { resultRef: documentRef, clipRefs: [clipRef], itemRefs: [ref('video_edit.item')], definitionRefs: [ref('video_edit.code_material')], versionRefs: [ref('video_edit.code_version')], trackRefs: [ref('video_edit.track')], styleRef: ref('video_edit.style_kit'), sequenceRef, styleEffect: 'create', ...verified },
 }
+
+// 录制服务的会话控制、事件分页、理解/隐私、导入与成片回执；与各领域结果测试保持同形。
+const recordingRef = ref('screen_recording.session', '3e8b1d7c-6a2f-4c95-9d40-7f1e5a3c8b26')
+const understandingRef = ref('screen_recording.understanding', recordingRef.id)
+for (const action of ['start', 'pause', 'resume', 'mark', 'stop', 'cancel', 'recover']) {
+  successData[`${action}_screen_recording`] = { resultRef: recordingRef, ...verified, ...revisions }
+}
+successData.read_screen_recording_events = { events: [{ kind: 'control', action: 'stop', eventId: 'stop', monoUs: 13000000, recordingUs: 10000000, seq: 1, timeline: null, clockSegmentRef: 'clock', unavailableReason: 'static' }], nextOffset: null, message, ...revisions }
+successData.import_screen_recording = { resultRef: documentRef, itemIds: ['screen', 'mic'], ...verified, ...revisions }
+successData.understand_screen_recording = { resultRef: understandingRef, steps: 1, candidates: 2, audioUpdates: [{ ref: audioDocumentRef, created: true, transcribed: true }], undoRef: 'understanding-undo', ...verified, ...revisions }
+successData.detect_screen_recording_sensitive_text = { resultRef: understandingRef, candidates: 1, undoRef: 'privacy-undo', ...verified, ...revisions }
+successData.generate_screen_recording_movie = { documentRef, resultRef: sequenceRef, sequenceRefs: [sequenceRef], warnings: [], verified: true }
+successData.generate_video_edit_screen_attention = { documentRef, resultRef: sequenceRef, clipRefs: [clipRef], created: false, quietFrames: 30, impreciseCapabilities: 1, ...verified }
+successData.detect_video_edit_sensitive_text = { resultRef: clipRef, effectRefs: [ref('video_edit.effect', 'document:clip:privacy')], ...verified }
 const taskObservation = { taskRef: ref('camera_stage.render_task', 'task'), status: 'completed', revisions: { camera_stage: 1 }, phase: null, progress: 1, outputKind: 'image', message, resultRefs: [nodeRef], recovery: null, ...revisions }
 successData.get_camera_stage_render_task = taskObservation
 successData.wait_camera_stage_render_task = { ...taskObservation, waitReason: 'terminal' }

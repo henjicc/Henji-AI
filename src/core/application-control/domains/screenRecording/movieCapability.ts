@@ -5,7 +5,7 @@ const documentRef = z.object({ kind: z.literal('video_edit.document'), id: z.str
 const sequenceRef = z.object({ kind: z.literal('video_edit.sequence'), id: z.string().min(1) }).strict()
 export const generateRecordingMovieCapability = defineApplicationCapability({
   id: 'generate_screen_recording_movie', version: 1, domain: 'screen_recording', title: '生成录制成片',
-  description: '把已停止或恢复的录制会话生成到指定剪辑文档。默认生成新横版序列，可同时选择竖版和方版；sequenceRef 只接受该文档内未锁定的空序列作为首个输出，其余版本新建。配方控制剪停顿、语气词、等待加速、注意力推近、光标、字幕、步骤标题、章节、摄像头、画框及响度。保留原片与暂停空档，失误只剪人工 accepted 候选；隐私打码仅对 privacy.candidates 中 accepted 的候选默认启用，pending/rejected 不生成；使用已有理解结果，没有时本地免费分析、不转写不付费。所有时间线元素可编辑，整批生成可在目标剪辑一步撤销。字幕需要已有文字稿，可先 understand_screen_recording 开启转写。camera person 使用本地人物模型，可能需要先下载；circle 无需模型。返回序列稳定引用供读取、修改和导出。不切页。需要 screen_recording:read 与 video_edit:write。',
+  description: '将已停止或恢复的会话生成到指定剪辑：默认新横版，可同时选竖版/方版。sequenceRef 须为目标文档内未锁定的空序列，仅接首个版本。recipe 控制剪停顿/语气词、等待加速、推近、光标、字幕、标题、章节、摄像头、画框与响度。保留原片及暂停空档；失误仅剪 accepted 候选，隐私仅生成 accepted 打码。复用理解结果，缺失时免费本地分析、不转写；字幕须已有文字稿，可先 understand_screen_recording 开启转写。camera person 可能须下载本地人物模型，circle 无需模型。返回可读改/导出的序列引用，整批一步撤销，不切页。需要录制读取与剪辑写入权限。',
   aliases: ['生成成片', '录屏自动剪辑', '录屏教程', 'recording movie'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write',
   idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: true, requiredScopes: [], concurrencyKey: 'video_edit',
   inputSchema: z.object({ sessionRef: z.object({ kind: z.literal('screen_recording.session'), id: z.string().uuid() }).strict(), documentRef, sequenceRef: sequenceRef.optional(), recipe: recordingMovieRecipeSchema.default(recordingMovieRecipeSchema.parse({})) }).strict(),
