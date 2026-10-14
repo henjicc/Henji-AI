@@ -48,7 +48,7 @@ function unchanged(owner: VideoEditInstance, contentVersion: number): void {
 async function measureClip(composition: VideoEditComposition, clip: VideoEditClip, signal?: AbortSignal): Promise<VideoEditLoudnessMeasurement> {
   // Solo the explicit clip, preserve its mapping, speed, effects and fades; exclude neighbours' transitions.
   const media = videoEditClipMedia(composition, clip)!
-  const isolated = { ...composition, clips: [clip], transitions: [], media: [media], items: composition.items.filter(item => item.id === clip.itemId), tracks: composition.tracks.map(track => ({ ...track, enabled: true, muted: false, solo: false })) }
+  const isolated = { ...composition, clips: [clip], transitions: [], sequences: [], media: [media], items: composition.items.filter(item => item.id === clip.itemId), tracks: composition.tracks.map(track => ({ ...track, enabled: true, muted: false, solo: false })) }
   const api = getPlatform().audioEdit.loudness
   const id = await spoolVideoEditAudio(isolated, { startFrame: clip.start, endFrame: clip.start + clip.duration }, signal)
   const abort = (): void => { void api.close(id).catch(() => undefined) }
@@ -72,20 +72,32 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
   signal?.throwIfAborted()
   logger.info('开始调整片段增益', { event: 'video_edit.loudness.gain.start', context: { projectId: target.projectId, mode, clips: clips.length } })
   try {
+    const results = await prepareVideoEditAudioGain(composition, clips, mode, value, signal, () => unchanged(owner, contentVersion))
+    signal?.throwIfAborted(); unchanged(owner, contentVersion)
+    editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id !== target.sequenceId ? sequence : { ...sequence, clips: sequence.clips.map(clip => { const result = results.find(result => result.clipId === clip.id); return result ? { ...clip, volume: result.volume } : clip }) }) }))
+    logger.info('片段增益调整完成', { event: 'video_edit.loudness.gain.completed', context: { projectId: target.projectId, mode, clips: results.length } }); return results
+  } catch (error) { logger.error('片段增益调整失败', error, { event: 'video_edit.loudness.gain.failed' }); throw error }
+}
+
+/** Prepare on an immutable draft; callers own the single commit and stale-result guard. */
+export async function prepareVideoEditAudioGain(composition: VideoEditComposition, clips: VideoEditClip[], mode: VideoEditGainMode, value: number, signal?: AbortSignal, assertCurrent: () => void = () => {}, retainSilence = false): Promise<{ clipId: string; volume: number; measurement?: VideoEditLoudnessMeasurement }[]> {
     // A muted clip is measured at unity so normalization can explicitly make it audible again.
     const bases = clips.map(clip => clip.volume || 1)
     const measurements: VideoEditLoudnessMeasurement[] = []
     if (mode !== 'set' && mode !== 'adjust') for (let index = 0; index < clips.length; index++) {
-      measurements.push(await measureClip(composition, { ...clips[index], volume: bases[index] }, signal)); unchanged(owner, contentVersion)
+      measurements.push(await measureClip(composition, { ...clips[index], volume: bases[index] }, signal)); assertCurrent()
     }
-    const volumes = videoEditGainVolumes(mode, value, mode === 'set' || mode === 'adjust' ? clips.map(clip => clip.volume) : bases, measurements)
+    const volumes = retainSilence && mode === 'loudness'
+      ? bases.map((base, index) => measurements[index].integratedLufs === null ? clips[index].volume : videoEditGainVolumes(mode, value, [base], [measurements[index]])[0])
+      : videoEditGainVolumes(mode, value, mode === 'set' || mode === 'adjust' ? clips.map(clip => clip.volume) : bases, measurements)
     const results = clips.map((clip, index) => ({ clipId: clip.id, volume: volumes[index], measurement: measurements[index] }))
     if (mode === 'loudness' || mode === 'peak_all') for (let index = 0; index < clips.length; index++) {
+      if (retainSilence && mode === 'loudness' && measurements[index].integratedLufs === null) continue
       // Volume precedes nonlinear effects. Re-render instead of assuming that LUFS changes linearly.
       let verified = false
       for (let attempt = 0; attempt < 4; attempt++) {
         const measured = await measureClip(composition, { ...clips[index], volume: results[index].volume }, signal)
-        unchanged(owner, contentVersion); results[index].measurement = measured
+        assertCurrent(); results[index].measurement = measured
         const level = mode === 'loudness' ? measured.integratedLufs : measured.samplePeakDbfs
         if (level === null) throw new Error('声音低于测量门限，无法标准化。')
         if (Math.abs(level - value) <= (mode === 'loudness' ? .5 : .1)) { verified = true; break }
@@ -97,7 +109,7 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
       let verified = false
       for (let attempt = 0; attempt < 4; attempt++) {
         const measured = []
-        for (let index = 0; index < clips.length; index++) { measured.push(await measureClip(composition, { ...clips[index], volume: results[index].volume }, signal)); unchanged(owner, contentVersion); results[index].measurement = measured[index] }
+        for (let index = 0; index < clips.length; index++) { measured.push(await measureClip(composition, { ...clips[index], volume: results[index].volume }, signal)); assertCurrent(); results[index].measurement = measured[index] }
         const levels = measured.map(result => result.samplePeakDbfs)
         if (levels.some(level => level === null)) throw new Error('声音为静音，无法标准化峰值。')
         if (Math.abs(Math.max(...levels as number[]) - value) <= .1) { verified = true; break }
@@ -106,8 +118,6 @@ export async function applyVideoEditAudioGain(target: VideoEditGainTarget, mode:
       }
       if (!verified) throw new Error('片段效果限制了峰值，请调整效果后重试。')
     }
-    signal?.throwIfAborted(); unchanged(owner, contentVersion)
-    editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id !== target.sequenceId ? sequence : { ...sequence, clips: sequence.clips.map(clip => { const result = results.find(result => result.clipId === clip.id); return result ? { ...clip, volume: result.volume } : clip }) }) }))
-    logger.info('片段增益调整完成', { event: 'video_edit.loudness.gain.completed', context: { projectId: target.projectId, mode, clips: results.length } }); return results
-  } catch (error) { logger.error('片段增益调整失败', error, { event: 'video_edit.loudness.gain.failed' }); throw error }
+  signal?.throwIfAborted(); assertCurrent()
+  return results
 }

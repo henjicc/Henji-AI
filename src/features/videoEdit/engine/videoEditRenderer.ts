@@ -41,8 +41,6 @@ interface PlaybackStream {
   /** Initial contiguous pictures already owned by the bounded seek cache. */
   cachedUntilFrame: number
   samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
-  /** The first pull is started at build time so every scheduled decoder is created before mid-playback cuts. */
-  primed?: Promise<IteratorResult<VideoEditDecodedPicture | null, void>>
   /** Serializes pulls; one file never serves two clips at the same frame. */
   tail: Promise<unknown>
 }
@@ -285,7 +283,17 @@ export class VideoEditRenderer {
     const ordered = [...groups.values()].map(group => ({ ...group, clips: group.clips.sort((a, b) => a.start - b.start) }))
       .filter(group => group.clips.every((clip, index) => index === 0 || group.clips[index - 1].start + group.clips[index - 1].duration <= clip.start))
       .sort((a, b) => a.clips[0].start - b.clips[0].start).slice(0, PLAYBACK_SCHEDULE_FILES)
-    for (const group of ordered) {
+    // A source reused after a timeline gap must not retain its prefetched native frames through that gap.
+    const runs = ordered.flatMap(group => {
+      const chunks: VideoEditClip[][] = []
+      for (const clip of group.clips) {
+        const previous = chunks.at(-1)?.at(-1)
+        if (!previous || previous.start + previous.duration < clip.start) chunks.push([])
+        chunks.at(-1)!.push(clip)
+      }
+      return chunks.map(clips => ({ media: group.media, clips }))
+    })
+    for (const group of runs) {
       const entries: PlaybackStream['entries'] = []; const timestamps: number[] = []
       for (const clip of group.clips) for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) {
         entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
@@ -302,19 +310,18 @@ export class VideoEditRenderer {
       const cachedUntilFrame = frame + cachedFrames
       if (cachedFrames) { entries.splice(0, cachedFrames); timestamps.splice(0, cachedFrames) }
       const demux = this.frames.open(group.media)
+      // Observe early open failures; the first actual pull still awaits and reports the same rejected promise.
+      void demux.ready.catch(() => undefined)
       const abort = new AbortController()
       const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps, abort.signal) })(demux.ready)
-      const primed = samples.next(); primed.catch(() => undefined)
-      const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, cachedUntilFrame, samples, primed, tail: Promise.resolve() }
+      const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, cachedUntilFrame, samples, tail: Promise.resolve() }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
     this.playback = { document, endFrame, streams, byClip }
   }
-  /**
-   * Builds the forward playback schedule at the paused frame before play is pressed: the decoder positions on the GOP
-   * and decodes up to the playhead while the user is not waiting, so the first played frame is already decoded. Kept
-   * while the same paused frame is re-presented; any other frame or document drops it like a seek.
-   */
+  /** Prepare the schedule metadata while paused. Pull only on playback demand: a primed generator
+   * retains the native pool (including future cuts) indefinitely when the user stays paused.
+   * Already rendered pictures remain in the owned, bounded seek cache. */
   async armPlayback(frame: number): Promise<void> {
     if (this.disposed || !this.previewWidth) return
     if (this.playback && this.armedFrame === frame && this.playback.document === this.document) return
@@ -330,14 +337,12 @@ export class VideoEditRenderer {
     for (const stream of playback.streams) stream.abort.abort()
     await Promise.allSettled(playback.streams.map(async stream => {
       await stream.tail.catch(() => undefined)
-      const primed = stream.primed; stream.primed = undefined
-      if (primed) (await primed.catch(() => undefined))?.value?.close()
       await stream.samples.return(); this.release(stream)
     }))
   }
   /** The scheduled picture for exactly this frame and clip, or undefined to use the regular path. */
   private takeScheduled(stream: PlaybackStream, frame: number, clipId: string): Promise<VideoEditDecodedPicture | undefined> {
-    const pull = (): Promise<IteratorResult<VideoEditDecodedPicture | null, void>> => { const primed = stream.primed; stream.primed = undefined; return primed ?? stream.samples.next() }
+    const pull = (): Promise<IteratorResult<VideoEditDecodedPicture | null, void>> => { return stream.samples.next() }
     const next = stream.tail.catch(() => undefined).then(async () => {
       while (stream.cursor < stream.entries.length && stream.entries[stream.cursor].frame < frame) {
         stream.cursor++; const skipped = await pull(); skipped.value?.close()
@@ -346,6 +351,8 @@ export class VideoEditRenderer {
       if (!entry || entry.frame !== frame || entry.clipId !== clipId) return undefined
       stream.cursor++
       const result = await pull()
+      // Finish the generator before the timeline leaves this contiguous run; its last picture belongs to the caller.
+      if (stream.cursor === stream.entries.length) await stream.samples.return()
       return result.done || !result.value ? undefined : result.value
     })
     stream.tail = next

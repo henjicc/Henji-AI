@@ -563,7 +563,7 @@ it('正向播放从第一帧起按文件建立一条解码计划：同文件剪�
     expect(boundary.scheduled[1].timestamps[0]).toBe(videoEditPictureSeconds(1 + 40 / 60))
   } finally { await renderer.dispose() }
 })
-it('暂停时预热起播：计划在按下播放前定位到播放头，重画同一暂停帧保留，起播直接取用，换位置即释放', async () => {
+it('暂停只准备排程不借帧，实际起播才取帧；重画保留计划，换位置释放', async () => {
   boundary.scheduled = []
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
@@ -573,10 +573,10 @@ it('暂停时预热起播：计划在按下播放前定位到播放头，重画�
   try {
     await (await renderer.render(30, false)).completion
     await renderer.armPlayback(30)
-    expect(boundary.scheduled).toHaveLength(1); expect(boundary.scheduled[0].timestamps[0]).toBe(videoEditPictureSeconds(30 / 60))
+    expect(boundary.scheduled).toHaveLength(0)
     // The paused frame drawn again (an overlay or region update) keeps the armed schedule; arming again is a no-op.
     await (await renderer.render(30, false)).completion; await renderer.armPlayback(30)
-    expect(internals.playback).toBeDefined(); expect(boundary.scheduled).toHaveLength(1)
+    expect(internals.playback).toBeDefined(); expect(boundary.scheduled).toHaveLength(0)
     // Play takes the armed schedule from its first frame, no second positioning.
     for (let frame = 30; frame <= 33; frame++) {
       const result = await renderer.render(frame, true); await result.completion
@@ -584,7 +584,7 @@ it('暂停时预热起播：计划在按下播放前定位到播放头，重画�
     }
     expect(boundary.scheduled).toHaveLength(1)
     // Seeking elsewhere drops an armed schedule like any playback schedule.
-    await renderer.armPlayback(70); expect(boundary.scheduled).toHaveLength(2)
+    await renderer.armPlayback(70); expect(boundary.scheduled).toHaveLength(1)
     await (await renderer.render(10, false)).completion
     expect(internals.playback).toBeUndefined()
   } finally { await renderer.dispose() }
@@ -955,8 +955,7 @@ it('拖动缓存可立即起播，原计划从缓存末尾准备；准确交接�
   const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path)
   try {
     await renderer.armPlayback(15)
-    await vi.waitFor(() => expect(boundary.scheduled).toHaveLength(1))
-    expect(boundary.scheduled[0].timestamps[0]).toBe(videoEditPictureSeconds(45 / 60))
+    expect(boundary.scheduled).toHaveLength(0)
     for (let frame = 15; frame < 45; frame++) {
       const picture = await renderer.render(frame, true)
       expect(picture.cacheHits).toBe(1); expect(picture.sourceTimestamps).toEqual([frame / 60])
@@ -964,6 +963,7 @@ it('拖动缓存可立即起播，原计划从缓存末尾准备；准确交接�
     }
     ready()
     const handoff = await renderer.render(45, true)
+    expect(boundary.scheduled[0].timestamps[0]).toBe(videoEditPictureSeconds(45 / 60))
     expect(handoff.cacheHits).toBe(0); expect(handoff.sourceTimestamps).toEqual([45 / 60])
     expect(boundary.scheduled).toHaveLength(1)
   } finally { ready(); await renderer.dispose() }
@@ -977,14 +977,42 @@ it('缓存起播前被驱逐时精确取回当前画面；零散短缓存不跳�
     const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path, count)
     try {
       await renderer.armPlayback(15)
-      await vi.waitFor(() => expect(boundary.scheduled).toHaveLength(1))
-      expect(boundary.scheduled[0].timestamps[0]).toBe(videoEditPictureSeconds((count === 14 ? 15 : 45) / 60))
+      expect(boundary.scheduled).toHaveLength(0)
       if (count === 30) renderer.setRenderDivisor(2); else cache.clear()
       const picture = await renderer.render(15, true)
       expect(picture.sourceTimestamps).toEqual([15 / 60]); expect(picture.cacheHits).toBe(0)
-      expect(boundary.scheduled).toHaveLength(count === 30 ? 2 : 1)
+      expect(boundary.scheduled).toHaveLength(1)
       expect(boundary.scheduled.at(-1)!.timestamps[0]).toBe(videoEditPictureSeconds(15 / 60))
     } finally { await renderer.dispose() }
     expect(released()).toBe(count)
   }
+})
+
+it('未来剪辑不提前借用原生帧池，到该素材首个实际播放帧才开始解码', async () => {
+  boundary.scheduled = []
+  const document = fixture()
+  document.clips = [{ ...document.clips[0], duration: 30 }, { ...document.clips[0], id: 'future', itemId: 'item-B', start: 300, duration: 30 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    await renderer.render(0, true)
+    expect(boundary.scheduled.map(v => v.path)).toEqual([document.media[0].path])
+    await renderer.render(300, true)
+    expect(boundary.scheduled.at(-1)?.path).toBe(document.media[1].path)
+  } finally { await renderer.dispose() }
+})
+
+it('同一原片在时间线空档后复用时分开排程，不在空档中扣留下一段的帧', async () => {
+  boundary.scheduled = []
+  const document = fixture(), clip = document.clips[0]
+  document.clips = [{ ...clip, duration: 1 }, { ...clip, id: 'later', start: 90, duration: 2 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    await renderer.render(0, true)
+    expect(boundary.scheduled).toHaveLength(1)
+    expect(boundary.scheduled[0].timestamps).toHaveLength(1)
+    await renderer.render(1, true)
+    expect(boundary.scheduled).toHaveLength(1)
+    await renderer.render(90, true)
+    expect(boundary.scheduled).toHaveLength(2)
+  } finally { await renderer.dispose() }
 })

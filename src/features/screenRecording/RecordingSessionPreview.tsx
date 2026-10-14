@@ -5,11 +5,12 @@ import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal'
 import type { VideoViewerSeek, VideoViewerTimeline } from '@/components/mediaViewer/useVideoViewerTimeline'
 import type { RecordingDocument, RecordingMedia } from '@/core/screenRecording/document'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
+import { RecordingSessionPrivacy } from './RecordingSessionPrivacy'
 import { recordingTimeline } from './application/recordingTimeline'
 
 const keepOpen = (): void => {}
 
-export function RecordingSessionPreview({ recording }: { recording: RecordingDocument }): React.ReactElement {
+export function RecordingSessionPreview({ recording, disabled = false, onPrivacyBusyChange = keepOpen }: { recording: RecordingDocument; disabled?: boolean; onPrivacyBusyChange?: (value: boolean) => void }): React.ReactElement {
   const { t } = useTranslation('ui')
   const [kind, setKind] = useState<RecordingMedia['kind']>('screen')
   const [seekRequest, setSeekRequest] = useState<VideoViewerSeek>({ seconds: 0, request: 0 })
@@ -26,6 +27,8 @@ export function RecordingSessionPreview({ recording }: { recording: RecordingDoc
       </UiFormRow>
       <VideoViewerModal open presentation="inline" videoUrl={timeline.segments[0].videoUrl} filePath={timeline.segments[0].filePath} timeline={timeline} seekRequest={seekRequest} onClose={keepOpen} mediaTestId="recording-preview" />
     </> : <UiEmpty title={t('recording.noMedia')} />}
+    <RecordingSessionPrivacy recording={recording} originUs={session.originUs} disabled={disabled} onBusyChange={onPrivacyBusyChange}
+      onSeek={candidate => { setKind('screen'); setSeekRequest(previous => ({ seconds: Math.max(0, (candidate.startUs - session.originUs) / 1e6), request: previous.request + 1 })) }} />
     <UiGroup title={t('recording.markers')}>
       {recording.markers.map(marker => <div key={marker.id} className="border-b border-line py-2">
         <UiOptionButton variant="menu" className="w-full min-w-0 gap-3" disabled={!current} disabledReason={t('recording.noMedia')} onClick={() => setSeekRequest(previous => ({ seconds: Math.max(0, (marker.monoUs - session.originUs) / 1e6), request: previous.request + 1 }))}>
@@ -34,5 +37,14 @@ export function RecordingSessionPreview({ recording }: { recording: RecordingDoc
         </UiOptionButton>
       </div>)}
     </UiGroup>
+    {recording.understanding.steps.length > 0 && <UiGroup title={t('recording.steps')}>
+      {recording.understanding.steps.map(step => <div key={step.id} className="border-b border-line py-2">
+        <UiOptionButton variant="menu" className="w-full min-w-0 gap-3" disabled={!current} disabledReason={t('recording.noMedia')} onClick={() => setSeekRequest(previous => ({ seconds: Math.max(0, (step.startUs - session.originUs) / 1e6), request: previous.request + 1 }))}>
+          <span className="shrink-0 text-13 tabular-nums">{(Math.max(0, step.startUs - session.originUs) / 1e6).toFixed(1)} s</span>
+          <span className="min-w-0 text-13">{step.title}</span>
+        </UiOptionButton>
+        {step.description && <p className="text-xs text-text2">{step.description}</p>}
+      </div>)}
+    </UiGroup>}
   </>
 }

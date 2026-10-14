@@ -1,4 +1,5 @@
 import { APPLICATION_DOMAINS, initializeApplicationDomainBindings } from '../applicationDomains'
+import { registerUiCapabilityExecutor } from '../uiCapabilityExecution'
 
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 
@@ -125,7 +126,9 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
         invocation.expectedRevisions = expected
         if (context.signal.aborted) throw new Error('ABORTED')
       } catch (error) { throw new ApplicationPreflightFailure(error) }
-    } else if (!(context.callerGrant && invocation.id === 'change_application_entities')) {
+    } else if (invocation.id !== 'change_application_entities') {
+      // Generic writes (UI included) carry entity revisions, checked by the transaction engine under its lock.
+      // They are not host-context counters; comparing these different clocks rejects valid document writes.
       const before = createHostContextSnapshot()
       for (const [scope, expected] of Object.entries(invocation.expectedRevisions ?? {})) {
         if (before.scopeRevisions[scope] !== expected) throw new Error(`CONFLICT:请调用 read_application_entity 读取原目标 ${JSON.stringify(definition.resolveOperationTargets?.(input) ?? [])}（propertyIds=[]）取得新 baselineId 后提交。`)
@@ -393,3 +396,5 @@ export function listRendererApplicationCapabilityIds(): string[] {
 export function assertRendererApplicationWriteChannels(): void {
   registry.assertWriteChannels()
 }
+
+registerUiCapabilityExecutor(executeApplicationCapabilityResult)

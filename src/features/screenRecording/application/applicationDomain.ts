@@ -13,6 +13,9 @@ import { recordingRegistrations } from './recordingReflection'
 import { recordingUnderstandingRegistration } from './recordingUnderstandingFields'
 import { RecordingUnderstandingMutation } from './recordingUnderstandingMutation'
 import { executeRecordingUnderstanding } from './recordingUnderstandingCapability'
+import { generateRecordingMovieCapability } from '@/core/application-control/domains/screenRecording/movieCapability'
+import { generateRecordingMovie } from './recordingMovieService'
+import { openVideoEditDocument } from '@/features/videoEdit'
 import { executeRecordingPrivacy } from './recordingPrivacyCapability'
 import { recordingPrivacyBusy } from './recordingPrivacyService'
 
@@ -26,6 +29,17 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {
       context.signal.throwIfAborted()
       if (definition.id === 'understand_screen_recording') return executeRecordingUnderstanding(input, context)
+      if (definition.id === generateRecordingMovieCapability.id) {
+        const parsed = generateRecordingMovieCapability.inputSchema.parse(input)
+        if (context.callerGrant && !context.callerGrant.permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:生成成片需要 screen_recording:read 权限。')
+        const prefix = `${parsed.documentRef.id}:`
+        if (parsed.sequenceRef && !parsed.sequenceRef.id.startsWith(prefix)) throw new Error('sequenceRef 必须属于 documentRef。')
+        const owner = await openVideoEditDocument({ id: parsed.documentRef.id }, { focus: false })
+        const generate = () => generateRecordingMovie(parsed.sessionRef.id, { documentId: parsed.documentRef.id, sequenceId: parsed.sequenceRef?.id.slice(prefix.length), recipe: parsed.recipe }, context.signal)
+        const result = context.execution ? await context.execution.atomic(() => owner.contentVersion, generate) : await generate()
+        const sequenceRefs = result.sequenceIds.map(id => ({ kind: 'video_edit.sequence' as const, id: `${result.documentId}:${id}` }))
+        return { documentRef: parsed.documentRef, resultRef: sequenceRefs[0], sequenceRefs, warnings: result.warnings, verified: result.verified }
+      }
       if (definition.id === 'detect_screen_recording_sensitive_text') return executeRecordingPrivacy(input, context)
       if (definition.id === 'start_screen_recording') {
         const parsed = startRecordingInputSchema.parse(input)

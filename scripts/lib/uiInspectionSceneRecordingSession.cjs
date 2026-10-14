@@ -85,7 +85,7 @@ function createRecordingSessionScene() {
           await page.waitForFunction(() => document.querySelector('[data-testid="recording-preview"]')?.readyState >= 1)
           assert.equal(await viewer.evaluate(video => video.controls), false, '会话仍使用浏览器原生控制条')
           assert(Math.abs(Number(await viewer.getAttribute('data-viewer-duration')) - duration) < 1e-6, '预览时长未覆盖全部分片')
-          assert.equal(await button('生成成片').count(), 0, '未接通的成片入口仍在界面')
+          assert.equal(await button('生成成片').count(), 1, '成片入口未显示')
           assert.equal((await page.getByLabel('预览轨道').textContent()).trim(), '屏幕')
           await viewer.evaluate(video => { video.__tourPlayedSources = []; video.addEventListener('playing', () => video.__tourPlayedSources.push(video.getAttribute('src'))) })
           await button('播放/暂停').click()

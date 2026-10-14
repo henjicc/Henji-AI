@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { resolve, sep } from 'node:path'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { executeUiApplicationCapability } from '@/features/application-control'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createRecordingDocument } from '@/core/screenRecording/document'
 import { privacyCandidateSchema } from '@/core/screenRecording/privacy'
@@ -63,5 +64,22 @@ it('重新生成步骤保留已确认隐私；越界候选无法写入', async (
     expect((await readRecordingUnderstanding(id)).content.understanding.privacy).toEqual(original.privacy)
     const invalid = structuredClone((await readRecordingUnderstanding(id)).content.understanding); invalid.privacy.candidates[0].endUs = 6000000
     expect((await app.change(ref, { [UNDERSTANDING_PROPERTY]: invalid })).ok).toBe(false)
+  } finally { app.dispose() }
+})
+
+it('真实 UI 执行入口按录制文档版本确认和撤销，拒绝旧版本而不比较宿主计数', async () => {
+  const { id, sessionRef, ref } = await setup(), app = createApplicationHarness(), signal = new AbortController().signal
+  try {
+    expect(await executeUiApplicationCapability({ id: 'detect_screen_recording_sensitive_text', version: 1, input: { sessionRef } }, signal)).toMatchObject({ ok: true })
+    const before = await readRecordingUnderstanding(id), value = structuredClone(before.content.understanding)
+    value.privacy.candidates[0].status = 'accepted'
+    const invocation = { id: 'change_application_entities', version: 2, expectedRevisions: { screen_recording: before.meta.revision }, input: { summary: '界面确认打码', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { [UNDERSTANDING_PROPERTY]: value } }] } }
+    const result = await executeUiApplicationCapability(invocation, signal)
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
+    expect((await readRecordingUnderstanding(id)).content.understanding.privacy.candidates[0].status).toBe('accepted')
+    expect(await executeUiApplicationCapability(invocation, signal)).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+    if (!result.ok) throw new Error(result.error.message)
+    expect(await executeUiApplicationCapability({ id: 'undo_application_changes', version: 1, input: { undoRef: result.data.undoRef } }, signal)).toMatchObject({ ok: true })
+    expect((await readRecordingUnderstanding(id)).content.understanding.privacy.candidates[0].status).toBe('pending')
   } finally { app.dispose() }
 })
