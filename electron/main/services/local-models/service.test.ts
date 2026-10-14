@@ -259,7 +259,10 @@ describe('本地模型清单', () => {
         // 我们自己导出的模型（官方没有 ONNX）只放在自有 ModelScope 仓库，国外用户同样从这里下载
         const selfExported = file.sources.every((source) => source.label === 'own-modelscope')
         expect(selfExported || file.sources.some((source) => source.region === 'global')).toBe(true)
-        expect(file.sources[0]!.label).toBe('own-modelscope')
+        // 官方原样 ONNX（如 PP-OCRv6 经 oar-ocr 原样分发）可直接用其国内外官方镜像；其余文件首选自有仓库。
+        const officialUnchanged = !file.sources.some((source) => source.label === 'own-modelscope')
+          && file.sources.some((source) => source.region === 'domestic') && file.sources.some((source) => source.region === 'global')
+        if (!officialUnchanged) expect(file.sources[0]!.label).toBe('own-modelscope')
       }
     }
   })

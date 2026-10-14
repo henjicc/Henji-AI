@@ -332,10 +332,10 @@ export function buildApplicationContract(input: {
     domains: full.domains,
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
     workflows: [
-      '发现：按域 describe_application_entities；list_application_entities 分页/where 定位；read_application_entity 读属性与 baselineId。完整工具清单、排除理由与弃用策略：describe_application_contract(detail="full")；可用工具：tools/list。',
-      '写入：客户端生成 UUID operationId。同一 ID 重传返回原事实；普通修改/新增可省略 baselineIds（共享记忆须带），删除必须读取目标及集合父对象后提供。勿传 expectedRevisions。默认修订仅相关域；includeRevisions=true 获取全表，includeEvidence=true 获取验证明细。',
-      '恢复：unknown 用原 operationId 查 get_application_operation，禁止换 ID 重放；partial 按登记的恢复入口仅重试保存。前置拒绝用 describe_application_entities(refs) 查可用条件。',
-      '结果：生成用 wait_generation_task 等终态；看图用 read_application_media(mode="image")，其他媒体分块读到 eof。无需通知扩展。技能按 skills 适用条件用 load_assistant_skill 按需读主文件和单份参考。',
+      '发现：describe_application_entities 按域查属性；list_application_entities 用分页/where 定位；read_application_entity 读属性与 baselineId。tools/list 查工具，契约 detail="full" 查排除与弃用。',
+      '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 普通修改/新增可省略，共享记忆和删除须读基线；删除先读目标及集合父对象。勿传 expectedRevisions。includeRevisions/includeEvidence=true 展开修订/证据。',
+      '恢复：unknown 查 get_application_operation，沿原 operationId，禁止重放；partial 仅恢复保存。前置拒绝用 describe_application_entities(refs) 查条件。',
+      '结果：wait_generation_task 等生成终态；read_application_media(mode="image") 看图，其他媒体读至 eof。load_assistant_skill 按适用条件读主文件和单份参考。',
       confirmationGuidance,
     ],
   }

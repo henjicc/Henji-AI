@@ -18,6 +18,8 @@ import { harnessDocumentStore, installHarnessNativeStorage, registerHarnessAudio
 import { createApplicationHarness } from './applicationHarness';
 import { closeVideoEditProject } from '@/features/videoEdit/application/videoEditService';
 import { savedVideoEdit } from '@/features/videoEdit/application/videoEditDocumentTestKit';
+import { createRecordingDocument } from '@/core/screenRecording/document';
+import { UNDERSTANDING_PROPERTY } from '@/features/screenRecording/application/recordingUnderstandingFields';
 
 beforeAll(async () => { installHarnessNativeStorage(); await loadRealModelsIntoRegistry() })
 afterAll(() => uninstallHarnessNativeStorage())
@@ -58,6 +60,10 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     const video = await createVideoEditProject()
     // 作品文档（存储底座 2.5）：只替换 henjiNative.documents 背后的文件夹
     const documentMeta = harnessDocumentStore().seed({ kind: 'canvas', name: '公共文档回环', content: { nodes: [], edges: [] } })
+    const recordingId = crypto.randomUUID()
+    const recordingContent = { ...createRecordingDocument(), sessionId: recordingId, status: 'stopped' as const }
+    harnessDocumentStore().seed({ id: recordingId, kind: 'screen_recording', name: '公共录制回环', content: recordingContent })
+    const understanding = { ...recordingContent.understanding, warnings: ['公共录制校正已保存'] }
     const first = async (entityType: string): Promise<ApplicationRef> => {
       const result = await app.requireResult('list_application_entities', { entityType })
       const refs = result.refs as ApplicationRef[]
@@ -77,6 +83,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       // 剪辑名就是文件名（3.1，改名走 documents.document.name）；剪辑写域以序列名验证内容写入与持久化
       { domain: 'video_edit', ref: { kind: 'video_edit.sequence', id: `${video.document.id}:${video.activeSequenceId}` }, property: 'video_edit.sequence.name', value: '公共剪辑已改名' },
       { domain: 'documents', ref: { kind: 'documents.document', id: documentMeta.id }, property: 'documents.document.name', value: '公共文档已改名' },
+      { domain: 'screen_recording', ref: { kind: 'screen_recording.understanding', id: recordingId }, property: UNDERSTANDING_PROPERTY, value: understanding },
     ]
     const registry = getApplicationReflectionRegistry()
     const engine = getApplicationControlExecutionEngine() as unknown as {
@@ -110,6 +117,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     expect(savedVideoEdit(video).sequences[0].name).toBe('公共剪辑已改名')
     expect((harnessDocumentStore().stored('audio-loop')?.content as { referenceScript: string }).referenceScript).toBe('公共口播参考稿')
     expect(harnessDocumentStore().stored(documentMeta.id)?.meta.name).toBe('公共文档已改名')
+    expect((harnessDocumentStore().stored(recordingId)?.content as typeof recordingContent).understanding).toEqual(understanding)
     await closeVideoEditProject(video.document.id)
   } finally { vi.restoreAllMocks(); dispose(); app.dispose(); useSettingsStore.getState().setThemeContrast(originalContrast) }
 })
