@@ -35,7 +35,6 @@ import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/co
 import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
-import { withDefaultVideoEditStyle } from './videoEditDefaultStyle'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -432,9 +431,13 @@ export function editVideoSequence(projectId: string, sequenceId: string, update:
   if (gesture) { if (gesture.projectId !== projectId) throw new Error('字体预览不属于此剪辑。'); return updateVideoEditGesture(gesture, change) }
   return editVideoProject(projectId, change)
 }
+type NewSequenceStyle = (document: VideoEditDocument, sequence: VideoEditSequence) => { document: VideoEditDocument; sequence: VideoEditSequence }
+let newSequenceStyle: NewSequenceStyle = (document, sequence) => ({ document, sequence })
+/** The preset layer installs the default-style binding here, so the service does not depend on the preset libraries. */
+export function setVideoEditNewSequenceStyle(apply: NewSequenceStyle): void { newSequenceStyle = apply }
 export function appendVideoEditSequence(projectId: string, settings: Partial<Omit<VideoEditSequence, 'id' | 'clips' | 'annotations' | 'tracks'>> = {}): string {
   const created = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...useSettingsStore.getState().videoEditSequenceDefaults, ...settings }
-  editVideoProject(projectId, document => { const styled = withDefaultVideoEditStyle(document, created); return { ...styled.document, sequences: [...document.sequences, styled.sequence] } })
+  editVideoProject(projectId, document => { const styled = newSequenceStyle(document, created); return { ...styled.document, sequences: [...document.sequences, styled.sequence] } })
   return created.id
 }
 export function duplicateVideoEditSequence(projectId: string, sequenceId: string): string {

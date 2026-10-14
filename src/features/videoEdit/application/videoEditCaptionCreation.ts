@@ -3,7 +3,7 @@ import { videoEditCaptionSchema, type VideoEditCaption } from '@/core/videoEdit/
 import { styleKitSubtitleStyle, videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { resolveVideoEditStyleKit, type StyleKit } from '@/core/videoEdit/styleKit'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
-import { listVideoEditSubtitlePresets } from './videoEditSubtitlePresets'
+import { listVideoEditSubtitlePresets } from './videoEditSubtitlePresetList'
 
 /** Every creation path shares parsing, nearest styled peer inheritance and defaults. */
 export function prepareVideoEditCaption(sequence: Pick<VideoEditSequence, 'captions' | 'styleKitId'>, values: unknown, document?: { styleKits?: StyleKit[] }): VideoEditCaption {

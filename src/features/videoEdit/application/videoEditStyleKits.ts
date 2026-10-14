@@ -136,3 +136,5 @@ export async function extractVideoEditWorkStyle(projectId: string, sequenceId: s
 }
 export function styleKitFromContent(name: string, content: StyleKitContent): StyleKit { return styleKitSchema.parse({ id: crypto.randomUUID(), name, ...content, revision: 0 }) }
 export function saveStyleKitToLibrary(kit: StyleKit): StyleKit { return videoEditStyleKitLibrary.save(styleKitSchema.parse({ ...kit, ...styleKitContent(kit) })) }
+/** Host context reads preset preferences next to the style summary, through this already-public module. */
+export { videoEditPresetHostSummary } from './videoEditPresetCatalog'

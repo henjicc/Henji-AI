@@ -12,6 +12,8 @@ import { listVideoEditSubtitlePresets, STYLE_SUBTITLE_PRESET_ID, type VideoEditS
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
 import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
+// Defaults are applied where sequences are created; loading the catalog installs that hook.
+import './videoEditDefaultStyle'
 
 const logger = createLogger('features.videoEdit.presetCatalog')
 /** What a preset previews and applies with; one resolver for the panel, the assistant entity and export. */

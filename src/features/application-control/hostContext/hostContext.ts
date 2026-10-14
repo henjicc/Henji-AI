@@ -3,8 +3,7 @@ import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
 import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementSummary'
-import { styleKitHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
-import { videoEditPresetHostSummary } from '@/features/videoEdit/application/videoEditPresetCatalog'
+import { styleKitHostSummary, videoEditPresetHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
   HOST_ANNOTATION_PREVIEW_CHARACTERS,

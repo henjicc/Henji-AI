@@ -3,6 +3,7 @@ import { styleKitContent, styleKitSchema, type StyleKit } from '@/core/videoEdit
 import { availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
 import { videoEditStyleKitLibrary } from './videoEditStyleKitLibrary'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
+import { setVideoEditNewSequenceStyle } from './videoEditService'
 
 /**
  * A new sequence starts from the user's default style (preset panel “设为默认”). The project receives its own
@@ -26,3 +27,4 @@ export function withDefaultVideoEditStyle<D extends { styleKits?: StyleKit[] }, 
   const binding = defaultVideoEditStyleBinding(document, sequence)
   return binding ? { document: { ...document, styleKits: binding.styleKits }, sequence: { ...sequence, styleKitId: binding.styleKitId } } : { document, sequence }
 }
+setVideoEditNewSequenceStyle(withDefaultVideoEditStyle)

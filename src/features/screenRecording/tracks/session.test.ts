@@ -9,7 +9,7 @@ import type { TrackOutput } from './output'
 
 const platform = vi.hoisted(() => ({ mkdir: vi.fn(async () => {}), write: vi.fn(async (_path: string, _text: string) => {}), status: vi.fn(async (_id: string, _status: { warnings: string[] }) => {}) }))
 vi.mock('@/platform', () => ({ getPlatform: () => ({ system: { fs: { mkdir: platform.mkdir, writeTextFile: platform.write }, paths: { join: async (...parts: string[]) => parts.join('/') } }, screenRecording: { trackStatus: platform.status, permissions: async () => [] } }) }))
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.clearAllMocks() })
 
 function setup(options: { silentRisk?: boolean; failWrite?: boolean; gate?: Promise<void>; camera?: boolean } = {}) {

@@ -2,7 +2,7 @@ import { it, expect, vi } from 'vitest'
 import { ChromiumCaptureBackend, type CaptureSink, type ChromiumDependencies } from './chromium'
 import { captureOptionsSchema } from '@/core/screenRecording/capture'
 vi.mock('@/features/videoEdit/engine/videoEditExportEncoder', () => ({ selectVideoEditExportEncoder: vi.fn(), videoEditExportVideoOptions: vi.fn() }))
-vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 const options = captureOptionsSchema.parse({ sourceId: 'screen:0:0', width: 1920, height: 1080, fps: 60, bitrate: 12_000_000 })
 it('closes late streams after cancellation and never leaves device tracks live', async () => {
   let resolve!: (value: MediaStream) => void

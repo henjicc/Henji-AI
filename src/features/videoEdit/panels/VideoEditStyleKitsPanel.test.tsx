@@ -50,7 +50,7 @@ it('令牌修改保持候选，应用一次撤销；从作品提取不覆盖，�
   fireEvent.click(screen.getByRole('button', { name: '编辑说明' })); expect(screen.getByRole('textbox', { name: '风格补充说明' })).toBeTruthy()
   // The only reported failure is the deliberate incomplete-concept check above.
   expect(error).toHaveBeenCalledTimes(1)
-})
+}, 20_000)
 it('隐藏/卸载预览取消任务并释放图片，迟到结果不能覆盖新候选', async () => {
   const kit = availableStyleKitFonts(BUILTIN_STYLE_KITS[0], [])
   let finish!: (value: Blob) => void

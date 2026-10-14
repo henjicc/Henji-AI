@@ -54,6 +54,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     // 3.1c（移除 OCR 档位参数）与 4.1（操作脚本与重录）各自登记了 2.13.0，合并后的目录为新版本。
     fingerprints['2.14.0'] = '14adceea5ccf8c82af575b95974367a4d4027918a1737dedc0b096a08e244b99'
     fingerprints['2.15.0'] = '6a7cc980f8cb632d673dd3607f03f3449cfb67440b9119c8f93516de1094dd37'
+    // t97：预设实体、标题模板可省略模板、就地生成套用风格。
+    fingerprints['2.16.0'] = 'ec894040fc50ae2b242156c34bf86b023ad29c29b9b376c2ee6941fc9e77dc2b'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
