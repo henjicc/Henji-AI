@@ -1,9 +1,21 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { bindApplicationConfirmation, withApplicationConfirmation, USER_CONFIRMATION_TIMEOUT_MS } from './userConfirmation'
+import { bindApplicationConfirmation, inheritApplicationConfirmation, hasApplicationConfirmation, withApplicationConfirmation, USER_CONFIRMATION_TIMEOUT_MS } from './userConfirmation'
 import { ApplicationPreflightFailure } from './execution/transactionFailure'
 
 afterEach(() => { vi.useRealTimers() })
 const request = { title: '确认费用', message: '按模型计费', confirmLabel: '继续' }
+
+it('可取消子任务继承正式确认通道，释放后不污染父调用或其他调用', async () => {
+  const parent = new AbortController(), child = new AbortController(), other = new AbortController()
+  const sink = vi.fn().mockResolvedValue(undefined), unbind = bindApplicationConfirmation(parent.signal, sink)
+  const release = inheritApplicationConfirmation(parent.signal, child.signal)
+  expect(hasApplicationConfirmation(child.signal)).toBe(true)
+  expect(hasApplicationConfirmation(other.signal)).toBe(false)
+  await withApplicationConfirmation(child.signal, request, async () => true)
+  expect(sink).toHaveBeenCalledTimes(2)
+  release(); expect(hasApplicationConfirmation(child.signal)).toBe(false)
+  expect(hasApplicationConfirmation(parent.signal)).toBe(true); unbind()
+})
 
 it('等待状态先持久确认，点击后执行状态也先持久确认；信号隔离 UI 与并行调用', async () => {
   const controller = new AbortController()

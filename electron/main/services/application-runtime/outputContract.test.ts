@@ -156,6 +156,10 @@ const successData: Record<string, Record<string, unknown>> = {
 // 录制服务的会话控制、事件分页、理解/隐私、导入与成片回执；与各领域结果测试保持同形。
 const recordingRef = ref('screen_recording.session', '3e8b1d7c-6a2f-4c95-9d40-7f1e5a3c8b26')
 const understandingRef = ref('screen_recording.understanding', recordingRef.id)
+successData.plan_screen_recording_director = { resultRef: recordingRef, verified: true }
+successData.start_screen_recording_director = { resultRef: documentRef, sessionRef: recordingRef, sequenceRefs: [sequenceRef], verified: true }
+successData.cancel_screen_recording_director = { resultRef: recordingRef, verified: true }
+successData.redub_screen_recording_sentence = { resultRef: clipRef, verified: true, undoSteps: 1 }
 for (const action of ['start', 'pause', 'resume', 'mark', 'stop', 'cancel', 'recover']) {
   successData[`${action}_screen_recording`] = { resultRef: recordingRef, ...verified, ...revisions }
 }

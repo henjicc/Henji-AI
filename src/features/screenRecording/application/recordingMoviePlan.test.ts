@@ -31,8 +31,9 @@ it('配方映射多轨、加速、删停顿、字幕/章节/标题、画框及�
   const sequence = document.sequences.find(v => v.id === result.sequenceIds[0])!
   const screen = document.sequences.find(v => v.id === result.screenSequenceIds[0])!
   expect(screen.clips.map(v => [v.start, v.duration, v.sourceInUs, v.speed])).toEqual([[0, 120, 0, { numerator: 1, denominator: 1 }], [120, 30, 4_000_000, { numerator: 4, denominator: 1 }], [150, 30, 9_000_000, { numerator: 1, denominator: 1 }]])
-  expect(sequence.clips.filter(v => v.kind === 'audio').map(v => [v.start, v.duration, v.sourceInUs])).toEqual([[30, 90, 0], [120, 30, 3_000_000]])
+  expect(sequence.clips.filter(v => v.kind === 'audio').map(v => [v.start, v.duration, v.sourceInUs])).toEqual([[30, 30, 0], [60, 60, 1_000_000], [120, 30, 3_000_000]])
   expect(sequence.captions).toMatchObject([{ start: 30, duration: 30, text: '打开画布' }])
+  expect(sequence.captions?.[0].style).toMatchObject({ strokes: [{ enabled: true, position: 'outside', width: 2 }] })
   expect(sequence.markers).toMatchObject([{ frame: 0, name: '准备' }])
   expect(sequence.clips.some(v => v.name === '打开画布' && v.kind === 'graphic')).toBe(true)
   expect(sequence.clips.find(v => v.name === 'camera')?.effects?.[0].mask?.regionId).toBe('shapes')

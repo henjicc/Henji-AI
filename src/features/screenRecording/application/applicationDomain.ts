@@ -1,3 +1,6 @@
+import { planRecordingDirector, startRecordingDirector, cancelRecordingDirector, recordingDirectorBusy } from './recordingDirectorService'
+import { planRecordingDirectorCapability, startRecordingDirectorCapability, cancelRecordingDirectorCapability, redubRecordingCapability } from '@/core/application-control/domains/screenRecording/directorCapability'
+import { redubRecordingSentence } from './recordingRedubService'
 import { z } from 'zod'
 import type { ApplicationDomainModule } from '@/features/application-control'
 import { RECORDING_CAPABILITIES, recordingDestinationSchema, recordingRefSchema, startRecordingInputSchema } from '@/core/application-control/domains/screenRecording/recordingCapabilities'
@@ -29,10 +32,31 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
   registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()) },
   registerCapabilities(registrar) {
     registerDocumentOpener('screen_recording', async document => { await showRecordingDocument(document.id); openApplicationSurface('tool.screen_recording') })
-    registerDocumentBusyCheck('screen_recording', id => recordingReplayBusy() ? '请先等待重放完成或取消' : recordingProductBusy(id) ? '请先等待产物导出完成或取消' : recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
+    registerDocumentBusyCheck('screen_recording', id => recordingDirectorBusy(id) ? '请先等待导演录制完成或取消' : recordingReplayBusy() ? '请先等待重放完成或取消' : recordingProductBusy(id) ? '请先等待产物导出完成或取消' : recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
     registerDocumentCoverProvider('screen_recording', read => { const first = recordingDocumentSchema.parse(read.content).media.find(media => media.kind === 'screen' && media.durationUs > 0); return first ? [{ source: first.path, sourceKind: 'video', atSeconds: 0 }] : null })
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {
       context.signal.throwIfAborted()
+      if (definition.id === redubRecordingCapability.id) {
+        const parsed = redubRecordingCapability.inputSchema.parse(input)
+        for (const permission of ['screen_recording:read', 'video_edit:write', 'generation:create', 'documents:write', ...(parsed.rerecord ? ['application:write', 'settings:write', 'navigation:write'] : [])]) if (context.callerGrant && !context.callerGrant.permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:旁白补录需要 ${permission}。`)
+        const [documentId, clipId, extra] = parsed.clipRef.id.split(':')
+        if (!documentId || !clipId || extra) throw new Error('请选择有效的旁白片段引用。')
+        const result = await redubRecordingSentence(parsed.sessionRef.id, { documentId, clipId, text: parsed.text, voice: parsed.voice, rerecord: parsed.rerecord }, context)
+        return { resultRef: parsed.clipRef, verified: result.verified, undoSteps: result.undoSteps }
+      }
+      if ([planRecordingDirectorCapability.id, startRecordingDirectorCapability.id, cancelRecordingDirectorCapability.id].includes(definition.id)) {
+        const required = definition.id === cancelRecordingDirectorCapability.id ? ['screen_recording:read'] : definition.id === planRecordingDirectorCapability.id ? ['documents:write', 'video_edit:read'] : ['screen_recording:read', 'documents:write', 'video_edit:write', 'generation:create', 'application:write', 'settings:write', 'navigation:write']
+        for (const permission of required) if (context.callerGrant && !context.callerGrant.permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:导演录制需要 ${permission}。`)
+        if (definition.id === planRecordingDirectorCapability.id) return { resultRef: { kind: 'screen_recording.session', id: await planRecordingDirector(planRecordingDirectorCapability.inputSchema.parse(input), context) }, verified: true }
+        if (definition.id === cancelRecordingDirectorCapability.id) {
+          const parsed = cancelRecordingDirectorCapability.inputSchema.parse(input)
+          cancelRecordingDirector(parsed.sessionRef.id)
+          return { resultRef: parsed.sessionRef, verified: true }
+        }
+        const parsed = startRecordingDirectorCapability.inputSchema.parse(input)
+        const result = await startRecordingDirector(parsed.sessionRef.id, parsed.documentRef.id, context)
+        return { resultRef: parsed.documentRef, sessionRef: { kind: 'screen_recording.session', id: result.sessionId }, sequenceRefs: result.sequenceIds.map(id => ({ kind: 'video_edit.sequence', id: `${parsed.documentRef.id}:${id}` })), verified: result.verified }
+      }
       if ([generateRecordingScriptCapability.id, replayRecordingCapability.id, rerecordRecordingCapability.id].includes(definition.id)) {
         const permissions = context.callerGrant?.permissions
         for (const permission of ['screen_recording:read', ...(definition.id === generateRecordingScriptCapability.id ? [] : ['video_edit:write', 'documents:write'])]) if (permissions && !permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:此操作还需要 ${permission}。`)

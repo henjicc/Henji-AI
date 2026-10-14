@@ -161,6 +161,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
             return (
               <UiOptionButton
                 key={sample.id}
+                data-recording-theme={sample.id}
                 type="button"
                 variant="tile"
                 role="radio"

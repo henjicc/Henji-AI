@@ -31,6 +31,11 @@ export function hasApplicationPaidApproval(signal: AbortSignal, category: PaidAp
   return !signal.aborted && !!paidApprovals.get(signal)?.has(category)
 }
 export function hasApplicationConfirmation(signal?: AbortSignal): boolean { return !!signal && scopes.has(signal) }
+/** A cancellable domain subtask keeps its parent's trusted approval sink, never a UI fallback. */
+export function inheritApplicationConfirmation(parent: AbortSignal, child: AbortSignal): () => void {
+  const sink = scopes.get(parent)
+  return sink ? bindApplicationConfirmation(child, sink) : () => undefined
+}
 export async function requestApplicationPaidApproval(signal: AbortSignal, request: PaidApprovalRequest, consent?: 'once' | 'project'): Promise<PaidApprovalDecision> {
   signal.throwIfAborted()
   const sink = scopes.get(signal)

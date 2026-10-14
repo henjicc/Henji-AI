@@ -19,6 +19,8 @@ vi.mock('@/platform', () => ({ getPlatform: () => ({ screenRecording: { sources:
 vi.mock('./RecordingSessionPrivacy', () => ({ RecordingSessionPrivacy: () => <div /> }))
 // 脚本面板有独立测试（4.1）；这里只验会话页聚合、跳转与成片入口。
 vi.mock('./RecordingScriptPanel', () => ({ RecordingScriptPanel: () => <div /> }))
+vi.mock('./RecordingRedubPanel', () => ({ RecordingRedubPanel: () => <div /> }))
+vi.mock('./RecordingDirectorPanel', () => ({ RecordingDirectorPanel: () => <div /> }))
 vi.mock('./tracks/devices', () => ({ recordingDevices: async () => [] }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: (props: VideoViewerModalProps) => { fixture.viewer(props); return <div data-testid="shared-viewer" /> } }))

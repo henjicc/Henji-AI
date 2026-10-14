@@ -10,4 +10,5 @@ export { openVideoEditDocument, saveVideoEdit, holdVideoEditActivity, createVide
 export { requireVideoEditInstance, verifyVideoEditSaved } from './application/videoEditService'
 export { closeVideoEditProject, videoEditDocumentContent, activeVideoEditInstance, setVideoEditView } from './application/videoEditService'
 export { analyzeVideoEditScreenAttentionOffThread } from './application/videoEditScreenAttentionWorkerClient'
-export { prepareVideoEditAudioGain } from './application/videoEditLoudness'
+export { observeVideoEditFrame } from './application/videoEditFrameObservation'
+export { prepareVideoEditAudioGain, measureVideoEditClips } from './application/videoEditLoudness'

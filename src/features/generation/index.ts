@@ -3,3 +3,4 @@ export { generationApplicationService } from './application/generationApplicatio
 export type { GenerationModelFilterType } from './domain/generationDraft';
 export { waitForGenerationCompletion } from './application/waitForGenerationCompletion';
 export { readGenerationResultTimings } from './application/generationResultTimings';
+export { readGenerationResultMedia } from './application/generationResultSource';
