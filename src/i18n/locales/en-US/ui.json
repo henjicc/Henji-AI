@@ -1,5 +1,7 @@
 {
   "screenRecording": {
+    "cameraPreview": "Camera preview",
+    "trackWarning": { "system-audio-silent": "No system sound detected. Check audio permissions or play some sound.", "system-audio-unavailable": "System audio is unavailable. Select the recording source again.", "device-disconnected": "A recording device was interrupted. Capture continues after recovery, preserving the gap." },
     "title": "Recording controls", "ready": "Ready", "countdown": "Starting in {{seconds}} seconds", "recording": "Recording", "paused": "Paused", "stopping": "Saving recording", "stopped": "Recording stopped", "failed": "Recording incomplete", "preparing": "Preparing recording",
     "start": "Start recording", "resume": "Resume recording", "pause": "Pause recording", "mark": "Add marker", "stop": "Stop recording", "microphoneLevel": "Microphone level", "microphoneInactive": "Microphone inactive",
     "readFailed": "Cannot read recording status. Stop recording from the main window.", "operationFailed": "Recording action failed. Please retry.", "shortcutConflict": "Some shortcuts are in use. Change them in Settings or use these controls.", "toggleUnavailable": "Wait for the recording state to finish changing", "markUnavailable": "Markers are available while recording", "stopUnavailable": "There is no active recording"

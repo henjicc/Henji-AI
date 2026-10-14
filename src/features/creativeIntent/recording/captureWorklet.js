@@ -1,8 +1,9 @@
 /* global currentFrame */
 class ExplanationCaptureProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super()
-    this.samples = new Float32Array(4096)
+    this.channels = options?.processorOptions?.channels ?? 1
+    this.samples = new Float32Array(4096 * this.channels)
     this.used = 0
     this.firstFrame = 0
     this.stopped = false
@@ -24,10 +25,10 @@ class ExplanationCaptureProcessor extends AudioWorkletProcessor {
     if (this.stopped) return false
     const input = inputs[0]?.[0]
     if (!input) { this.send(); return true }
-    if (this.used && currentFrame !== this.firstFrame + this.used) this.send()
+    if (this.used && currentFrame !== this.firstFrame + this.used / this.channels) this.send()
     for (let i = 0; i < input.length; i++) {
       if (!this.used) this.firstFrame = currentFrame + i
-      this.samples[this.used++] = input[i]
+      for (let channel = 0; channel < this.channels; channel++) this.samples[this.used++] = (inputs[0][channel] ?? input)[i]
       if (this.used === this.samples.length) this.send()
     }
     return true

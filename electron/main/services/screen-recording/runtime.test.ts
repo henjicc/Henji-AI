@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { WebContents } from 'electron'
-import { closeRecordingControl, openRecordingControl, recordRecordingCapability } from './runtime'
+import { closeRecordingControl, openRecordingControl, recordRecordingCapability, updateRecordingTracks } from './runtime'
 
 const hooks = vi.hoisted(() => ({ capture: vi.fn(), options: vi.fn(), revoke: vi.fn() }))
 vi.mock('electron', () => ({ globalShortcut: { register: () => true, unregister: vi.fn() } }))
@@ -20,6 +20,10 @@ it('能力记录只接受归属宿主及当前会话；控制条区域和原生�
   const owner = contents(); const backend = { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), mark: vi.fn(), stop: vi.fn(), cancel: vi.fn() }
   const options = { ownerRef: { kind: 'screen_recording.session', id: 'live' }, sourceDigest: `sha256:${'a'.repeat(64)}`, directory: 'unused', originUs: 0, nowUs: () => 0, geometry: () => ({ bounds: { x: 0, y: 0, width: 1000, height: 800 }, pixels: { width: 1000, height: 800 } }), onFailure: vi.fn() }
   openRecordingControl(owner, 'live', backend, options)
+  const status = { microphoneLevel: null, cameraPreview: null, warnings: [] }
+  expect(() => updateRecordingTracks(contents(), 'live', status)).toThrow('不属于')
+  expect(() => updateRecordingTracks(owner, 'old', status)).toThrow('不属于')
+  updateRecordingTracks(owner, 'live', status)
   const fact = { callId: 'call', capability: 'read_application_entity', targets: [], phase: 'completed' as const }
   recordRecordingCapability(contents(), 'live', fact); recordRecordingCapability(owner, 'old', fact)
   expect(hooks.capture).not.toHaveBeenCalled()

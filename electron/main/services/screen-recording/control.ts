@@ -1,5 +1,6 @@
 import type { RecordingAction, RecordingControlSnapshot, RecordingShortcuts } from '../../../../src/core/screenRecording/contracts'
 import { DEFAULT_RECORDING_SHORTCUTS, recordingActions, recordingShortcutsSchema } from '../../../../src/core/screenRecording/contracts'
+import type { RecordingTrackStatus } from '../../../../src/core/screenRecording/contracts'
 
 /** 1.2/1.3 的采集协调器实现此接口。Promise 完成代表实际采集状态已切换。 */
 export interface RecordingControlBackend {
@@ -53,7 +54,7 @@ export class RecordingControlService {
     const active = this.active
     if (!active) return null
     const elapsedMs = active.elapsed + (active.snapshot.phase === 'recording' ? Math.max(0, this.deps.now() - active.startedAt) : 0)
-    return { ...active.snapshot, elapsedMs, shortcutConflicts: [...active.snapshot.shortcutConflicts] }
+    return { ...active.snapshot, elapsedMs, cameraPreview: active.snapshot.phase === 'recording' ? active.snapshot.cameraPreview : null, shortcutConflicts: [...active.snapshot.shortcutConflicts], trackWarnings: [...active.snapshot.trackWarnings ?? []] }
   }
 
   configureShortcuts(input: RecordingShortcuts): RecordingAction[] {
@@ -143,6 +144,14 @@ export class RecordingControlService {
   setMicrophoneLevel(sessionId: string, level: number | null): void {
     if (!this.active || this.active.snapshot.sessionId !== sessionId) return
     this.active.snapshot.microphoneLevel = this.active.snapshot.phase === 'recording' && level !== null && Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : null
+  }
+
+  setTrackStatus(sessionId: string, status: RecordingTrackStatus): void {
+    if (!this.active || this.active.snapshot.sessionId !== sessionId || ['stopped', 'failed', 'stopping'].includes(this.active.snapshot.phase)) return
+    this.setMicrophoneLevel(sessionId, status.microphoneLevel)
+    this.active.snapshot.cameraPreview = this.active.snapshot.phase === 'recording' ? status.cameraPreview : null
+    this.active.snapshot.trackWarnings = [...status.warnings]
+    this.publish()
   }
 
   /** Capture/storage failures terminate native resources immediately, including an in-flight start. */

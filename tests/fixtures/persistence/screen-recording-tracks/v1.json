@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "sessionId": "00000000-0000-4000-8000-000000000000",
+  "originUs": 10000000,
+  "tracks": [
+    {
+      "kind": "microphone",
+      "segments": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "file": "00000000-0000-4000-8000-000000000001.wav",
+          "monoSpanUs": [
+            100000,
+            1100000
+          ],
+          "sampleRate": 48000,
+          "channels": 1,
+          "units": 48000,
+          "latencyCompensationUs": 20000,
+          "sourceClockOffsetUs": 100000,
+          "anchors": [
+            {
+              "monoUs": 100000,
+              "audioSample": 0,
+              "audioSegmentRef": "00000000-0000-4000-8000-000000000001",
+              "audioRate": 48000,
+              "presentedFrame": null,
+              "requestedFrame": null,
+              "sequenceRef": null,
+              "visitRef": null,
+              "playbackDirection": 0,
+              "playbackRate": 1,
+              "playing": false,
+              "epoch": 0,
+              "uncertaintyUs": 2000
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        {
+          "monoSpanUs": [
+            1100000,
+            2100000
+          ],
+          "reason": "pause"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "kind": "systemAudio",
+      "segments": [
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "file": "00000000-0000-4000-8000-000000000002.wav",
+          "monoSpanUs": [
+            110000,
+            1110000
+          ],
+          "sampleRate": 48000,
+          "channels": 2,
+          "units": 48000,
+          "latencyCompensationUs": 20000,
+          "sourceClockOffsetUs": 100000,
+          "anchors": [
+            {
+              "monoUs": 110000,
+              "audioSample": 0,
+              "audioSegmentRef": "00000000-0000-4000-8000-000000000002",
+              "audioRate": 48000,
+              "presentedFrame": null,
+              "requestedFrame": null,
+              "sequenceRef": null,
+              "visitRef": null,
+              "playbackDirection": 0,
+              "playbackRate": 1,
+              "playing": false,
+              "epoch": 0,
+              "uncertaintyUs": 2000
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        {
+          "monoSpanUs": [
+            1110000,
+            2110000
+          ],
+          "reason": "pause"
+        }
+      ],
+      "warnings": [
+        "system-audio-silent"
+      ]
+    },
+    {
+      "kind": "camera",
+      "segments": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "file": "00000000-0000-4000-8000-000000000003.mp4",
+          "monoSpanUs": [
+            120000,
+            1120000
+          ],
+          "width": 640,
+          "height": 480,
+          "units": 30,
+          "latencyCompensationUs": 0,
+          "sourceClockOffsetUs": 100000,
+          "anchors": [
+            {
+              "monoUs": 120000,
+              "presentedFrame": null,
+              "requestedFrame": null,
+              "sequenceRef": null,
+              "visitRef": null,
+              "playbackDirection": 0,
+              "playbackRate": 1,
+              "playing": false,
+              "epoch": 0,
+              "uncertaintyUs": 2000
+            }
+          ]
+        }
+      ],
+      "gaps": [
+        {
+          "monoSpanUs": [
+            1120000,
+            2120000
+          ],
+          "reason": "pause"
+        }
+      ],
+      "warnings": []
+    }
+  ]
+}

@@ -111,6 +111,10 @@ const prefetchSettingsModal = (): void => {
 const App: React.FC = () => {
   useApplyRuntimeTheme()
   useRecordingShortcuts()
+  useEffect(() => {
+    if (!(import.meta.env.DEV || import.meta.env.MODE === 'development')) return
+    void import('@/features/screenRecording/tracks/tourFixture').then(module => module.installRecordingTracksTourFixture())
+  }, [])
   useApplyUiScale()
   useDevToolsShortcut()
   useLogWindowShortcut()

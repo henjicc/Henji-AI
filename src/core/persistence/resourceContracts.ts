@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { captureLogPageSchema } from '../captureLog/events'
+import { recordingTracksSchema } from '../screenRecording/tracks'
 import { creativeIntentPageSchema } from '../creativeIntent/pageSchema'
 import { storedMotionCandidateSchema } from '../creativeIntent/persistence'
 import { imageLayoutPageSchema, imageLayoutCandidateSchema } from '../imageEdit/v3/layoutDraft'
@@ -8,6 +9,7 @@ import { upgradePersistenceContent } from './migrations'
 import type { PersistenceFormat } from './formats'
 
 const resourceSchemas = {
+  'screen-recording-tracks': recordingTracksSchema,
   'capture-log-page': captureLogPageSchema,
   'creative-intent-page': creativeIntentPageSchema,
   'creative-intent-candidate': storedMotionCandidateSchema,
@@ -16,6 +18,7 @@ const resourceSchemas = {
 }
 export type PersistenceResourceId = keyof typeof resourceSchemas
 const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
+  'screen-recording-tracks': 1,
   'capture-log-page': 1,
   'creative-intent-page': 1,
   'creative-intent-candidate': 1,
@@ -25,7 +28,7 @@ const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
 
 function createResourceContract(id: PersistenceResourceId): PersistenceFormat {
   const schema = resourceSchemas[id]
-  return { id, name: id.startsWith('image-layout') ? '随手摆原稿' : '创作意图原稿', version: resourceVersions[id],
+  return { id, name: id === 'screen-recording-tracks' ? '录制声音与摄像头轨道' : id.startsWith('image-layout') ? '随手摆原稿' : '创作意图原稿', version: resourceVersions[id],
     schema, schemas: { content: schema }, migrations: formatMigrations(id), storage: 'file',
     versionSource: 'resource.version', readEntry: 'src/core/persistence/resourceContracts.ts::decodePersistenceResource',
     migrationEntry: 'src/core/persistence/formatMigrations.ts' }

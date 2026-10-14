@@ -45,7 +45,11 @@ export interface RecordingControlSnapshot {
   busy: boolean
   error: string | null
   shortcutConflicts: RecordingAction[]
+  cameraPreview?: string | null
+  trackWarnings?: Array<'system-audio-silent' | 'system-audio-unavailable' | 'device-disconnected'>
 }
+export const recordingTrackStatusSchema = z.object({ microphoneLevel: z.number().finite().min(0).max(1).nullable(), cameraPreview: z.string().max(100_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/).nullable(), warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable', 'device-disconnected'])).max(3) }).strict()
+export type RecordingTrackStatus = z.infer<typeof recordingTrackStatusSchema>
 const sessionId = z.string().uuid()
 export const captureSelectionSchema = z.object({
   sourceId: z.string().regex(/^(screen|window):\d+:\d+$/),
@@ -53,6 +57,8 @@ export const captureSelectionSchema = z.object({
 }).strict()
 export type CaptureSelection = z.infer<typeof captureSelectionSchema>
 export const screenRecordingRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('clock') }).strict(),
+  z.object({ action: z.literal('track-status'), sessionId, status: recordingTrackStatusSchema }).strict(),
   z.object({ action: z.literal('capability'), sessionId: z.string().uuid(), fact: capabilityCaptureSchema }).strict(),
   z.object({ action: z.literal('sources'), excludedSourceIds: z.array(z.string()).max(256).default([]) }).strict(),
   z.object({ action: z.literal('permissions') }).strict(),
