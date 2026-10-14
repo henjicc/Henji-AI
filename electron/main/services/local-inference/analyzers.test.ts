@@ -103,7 +103,7 @@ describe('本地推理：预处理与后处理', () => {
 
   it('FFmpeg 取帧参数：视频精确定位并按固定帧率输出原始帧，静态图片只取一帧；字节流按帧切分', async () => {
     const video = analysisFfmpegArgs({ source: '/m/a.mp4', seekSeconds: 1.5, durationSeconds: 2, fps: 30 }, { width: 512, height: 288 })
-    expect(video.join(' ')).toContain('-ss 1.500000 -i /m/a.mp4 -t 2.000000')
+    expect(video.join(' ')).toContain('-ss 1.500000 -t 2.000000 -i /m/a.mp4')
     expect(video.join(' ')).toContain('-vf fps=fps=30:round=near,scale=512:288:flags=area')
     expect(video.slice(-5)).toEqual(['-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1'])
     const still = analysisFfmpegArgs({ source: '/m/a.png', seekSeconds: 0, durationSeconds: null, fps: 1 }, { width: 256, height: 256 })

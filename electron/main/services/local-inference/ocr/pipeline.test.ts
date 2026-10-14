@@ -39,12 +39,12 @@ it('取消、模型失败和解码错误拒绝整个候选集合', async () => {
   const third = fixture(); third.deps.frames = async function* () { yield new Uint8Array(1) }
   await expect(runOcrPrivacy(job, third.deps)).rejects.toThrow('大小')
 })
-it('识别固定一个 CPU 动态会话，检测保留后端回退顺序', async () => {
+it('识别固定一个 CPU 动态会话，稀疏读屏检测选 CPU；其他智能区域不受影响', async () => {
   const { deps } = fixture(), open = vi.spyOn(deps, 'openModel')
   await runOcrPrivacy({ ...job, providers: ['dml', 'cpu'] }, deps)
   expect(open).toHaveBeenCalledTimes(2)
   expect(open).toHaveBeenCalledWith(job.models[1], ['cpu'], 'dynamic', { intraOpNumThreads: 4 })
-  expect(open).toHaveBeenCalledWith(job.models[0], ['dml', 'cpu'], expect.any(String), { intraOpNumThreads: 4 })
+  expect(open).toHaveBeenCalledWith(job.models[0], ['cpu'], expect.any(String), { intraOpNumThreads: 4, allowSpinning: false })
 })
 it('频繁光标移动不触发逐帧推理，屏蔽区域每秒重新检查', async () => {
   const { deps, detect } = fixture()

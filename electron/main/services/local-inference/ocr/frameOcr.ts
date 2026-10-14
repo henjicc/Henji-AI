@@ -3,7 +3,7 @@ import type { PrivacyBox } from '../../../../../src/core/screenRecording/privacy
 import type { LocalModelRunner } from '../analysis'
 import { ppocrInput, ppocrInputSize, textBoxesFromMap, TEXT_DETECTION_PRESETS } from '../analyzers/textDetection'
 import { cropHash, intersects } from './frameChanges'
-import { recognitionCrop, recognizeCrops, type RecognizedText, type RecognitionNormalization } from './recognition'
+import { recognitionCrop, recognizeCrops, type CropRecognizer, type RecognizedText, type RecognitionNormalization } from './recognition'
 
 export interface OcrLine extends RecognizedText { box: PrivacyBox }
 export interface FrameOcrResult { lines: OcrLine[]; detectionMs: number; recognitionMs: number; recognizedLines: number; reusedLines: number }
@@ -11,7 +11,7 @@ export interface FrameOcrResult { lines: OcrLine[]; detectionMs: number; recogni
 export class FrameOcr {
   private readonly cache = new Map<string, RecognizedText>()
   private previous: OcrLine[] = []
-  constructor(private readonly detector: LocalModelRunner, private readonly recognizer: LocalModelRunner, private readonly alphabet: readonly string[], private readonly normalization: RecognitionNormalization = 'rgb-half') {}
+  constructor(private readonly detector: LocalModelRunner, private readonly recognizer: LocalModelRunner | CropRecognizer, private readonly alphabet: readonly string[], private readonly normalization: RecognitionNormalization = 'rgb-half') {}
   async run(rgb: Uint8Array, width: number, height: number, signal: AbortSignal, changes: readonly PrivacyBox[] = [[0, 0, 1, 1]]): Promise<FrameOcrResult> {
     signal.throwIfAborted()
     const started = performance.now(), size = ppocrInputSize(width, height)
@@ -27,7 +27,7 @@ export class FrameOcr {
     const detectionMs = performance.now() - started, recStarted = performance.now()
     const crops = changed.map(box => recognitionCrop(width, height, box)), hashes = crops.map(crop => cropHash(rgb, width, crop))
     const results = hashes.map(hash => this.cache.get(hash)), missing = results.flatMap((v, i) => v ? [] : [i])
-    const fresh = await recognizeCrops(rgb, width, missing.map(i => crops[i]), this.recognizer, this.alphabet, signal, this.normalization)
+    const fresh = await (typeof this.recognizer === 'function' ? this.recognizer(rgb, width, missing.map(i => crops[i]), signal) : recognizeCrops(rgb, width, missing.map(i => crops[i]), this.recognizer, this.alphabet, signal, this.normalization))
     missing.forEach((i, n) => { results[i] = fresh[n]; this.cache.delete(hashes[i]); this.cache.set(hashes[i], fresh[n]) })
     while (this.cache.size > 1024) this.cache.delete(this.cache.keys().next().value!)
     const lines = [...unchanged, ...changed.map((box, i) => ({ box, ...results[i]! }))]

@@ -22,7 +22,7 @@ export interface LocalModelRunner {
 }
 
 export interface FrameRequest { width: number; height: number }
-export interface LocalSessionOptions { intraOpNumThreads?: number }
+export interface LocalSessionOptions { intraOpNumThreads?: number; allowSpinning?: boolean }
 
 export interface SmartRegionAnalysisDependencies {
   /** 打开（或复用）模型会话；`shape` 是固定的输入尺寸，DirectML 按固定尺寸编译最快。运行失败的回退由会话自己负责。 */

@@ -3,8 +3,9 @@ import { recognitionCrop, recognitionBatchInput, recognitionBatches, decodeRecog
 it('原分辨率RGB归一化、48高、128对齐白色填充与每批CTC独立折叠', () => {
   const rgb = Uint8Array.of(255, 0, 0, 0, 255, 0)
   const crop = recognitionCrop(2, 1, [0, 0, 1, 1])
+  crop.tensorWidth = 90
   const input = recognitionBatchInput(rgb, 2, [crop])
-  expect(input.width).toBe(128); expect(input.data[0]).toBe(0.5); expect(input.data[128 * 48 * 2]).toBe(-0.5); expect(input.data[100]).toBe(0.5)
+  expect(input.width).toBe(128); expect(input.data[0]).toBe(0.5); expect(input.data[128 * 48 * 2]).toBe(-0.5); expect(input.data[95]).toBe(0.5)
   const ids = [1, 1, 0, 1, 2, 2, 0], data = new Float32Array(2 * ids.length * 4)
   ids.forEach((id, i) => { data[i * 4 + id] = .99; data[(ids.length + i) * 4 + (id === 1 ? 2 : id === 2 ? 1 : 0)] = .98 })
   expect(decodeRecognitionBatch({ data, dims: [2, ids.length, 4] }, ['a', 'b'])).toEqual([{ text: 'aab', confidence: expect.closeTo(.99) }, { text: 'bba', confidence: expect.closeTo(.98) }])

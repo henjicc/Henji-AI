@@ -83,6 +83,7 @@ export class VideoEditRenderer {
   private lastForwardFrame?: number
   /** The paused frame a playback schedule was built for ahead of play (see `armPlayback`). */
   private armedFrame?: number
+  private armedExpiry?: ReturnType<typeof setTimeout>
   private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean }>()
   private imageLoads = 0
   private readonly imageQueue: Array<() => void> = []
@@ -321,9 +322,13 @@ export class VideoEditRenderer {
     if (this.playback) await this.disposePlayback()
     this.buildPlayback(this.document, frame, videoEditVisibleTracks(this.document))
     this.armedFrame = frame; this.lastForwardFrame = frame - 1
+    // Pre-roll borrows native pool slots. A paused editor must not hold the queued frames indefinitely
+    // while OCR, a dialog or the user is working. Keep a short launch window, then return the entire plan.
+    this.armedExpiry = setTimeout(() => { void this.disposePlayback() }, 500)
     this.warmShaderGraphs()
   }
   private async disposePlayback(): Promise<void> {
+    clearTimeout(this.armedExpiry); this.armedExpiry = undefined
     this.armedFrame = undefined
     const playback = this.playback; this.playback = undefined
     if (!playback) return
@@ -387,6 +392,7 @@ export class VideoEditRenderer {
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
     const visible = videoEditVisibleTracks(document)
     if (this.previewWidth && sequential) {
+      clearTimeout(this.armedExpiry); this.armedExpiry = undefined
       const forward = this.lastForwardFrame === frame - 1
       // Resolution changes and cache pressure can remove a prefix after arming. Rebuild the
       // same playback plan at this frame instead of opening a second reader for the missing prefix.

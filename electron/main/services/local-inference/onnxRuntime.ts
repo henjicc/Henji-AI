@@ -31,7 +31,7 @@ function sessionOptions(provider: LocalExecutionProvider): InferenceSession.Sess
 /** 模型来源：普通模型按路径载入；要补图输出的（EfficientTAM 解码器候选）读进内存改好后从缓冲区载入。 */
 type SessionFactory = (provider: LocalExecutionProvider) => Promise<InferenceSession>
 function sessionFactory(runtime: OnnxRuntime, model: LocalInferenceModelFile, shape: string, options: LocalSessionOptions): SessionFactory {
-  const config = (provider: LocalExecutionProvider): InferenceSession.SessionOptions => ({ ...sessionOptions(provider), ...options, ...(shape === 'dynamic' ? { enableMemPattern: false } : {}) })
+  const config = (provider: LocalExecutionProvider): InferenceSession.SessionOptions => ({ ...sessionOptions(provider), intraOpNumThreads: options.intraOpNumThreads, ...(options.allowSpinning === undefined ? {} : { extra: { session: { intra_op: { allow_spinning: options.allowSpinning ? '1' : '0' } } } }), ...(shape === 'dynamic' ? { enableMemPattern: false } : {}) })
   if (!model.extraOutputs?.length) return provider => runtime.InferenceSession.create(model.path, config(provider))
   let bytes: Promise<Uint8Array> | undefined
   return async provider => {
@@ -70,7 +70,7 @@ export class LocalModelSessions {
   private readonly sessions = new Map<string, Promise<Runner>>()
   constructor(private readonly runtime: OnnxRuntime, private readonly log: LocalInferenceLog, private readonly limit = 8) {}
   open(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string, options: LocalSessionOptions = {}): Promise<LocalModelRunner> {
-    const key = `${model.path}\u0000${shape}\u0000${providers.join(',')}\u0000${JSON.stringify(model.extraOutputs ?? [])}\u0000${options.intraOpNumThreads ?? 0}`
+    const key = `${model.path}\u0000${shape}\u0000${providers.join(',')}\u0000${JSON.stringify(model.extraOutputs ?? [])}\u0000${options.intraOpNumThreads ?? 0}\u0000${options.allowSpinning ?? true}`
     let pending = this.sessions.get(key)
     if (pending) { this.sessions.delete(key); this.sessions.set(key, pending); return pending }
     const create = sessionFactory(this.runtime, model, shape, options)

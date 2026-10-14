@@ -116,14 +116,20 @@ function createOcrPrivacyScene() {
         // Optional 600-second encoded stream of the same real recording: deterministic scroll/idle benchmark.
         if (process.env.HENJI_OCR_LONG === '1') {
           evidence.phase = 'benchmark'; save()
-          const long = path.join(root, 'loop-600s.mp4')
-          execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '600', '-c', 'copy', long], { windowsHide: true })
-          await page.evaluate(root => window.henjiNative.media.allowRoot(root), root)
+          const long = process.env.HENJI_OCR_LONG_SOURCE ? path.resolve(process.env.HENJI_OCR_LONG_SOURCE) : path.join(root, 'loop-600s.mp4')
+          if (!process.env.HENJI_OCR_LONG_SOURCE) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '600', '-c', 'copy', long], { windowsHide: true })
+          const cursor = process.env.HENJI_OCR_LONG_CURSOR ? JSON.parse(fs.readFileSync(process.env.HENJI_OCR_LONG_CURSOR, 'utf8')) : undefined
+          await page.evaluate(root => window.henjiNative.media.allowRoot(root), path.dirname(long))
           let finished = false; const samples = []; const started = Date.now()
-          const pending = page.evaluate(async source => window.henjiNative.smartRegions.detectSensitiveText({ requestId: crypto.randomUUID(), source, mediaId: 'benchmark', startUs: 0, endUs: 600000000, originUs: 0 }), long).finally(() => { finished = true })
+          const pending = page.evaluate(async ({ source, cursor }) => window.henjiNative.smartRegions.detectSensitiveText({ requestId: crypto.randomUUID(), source, mediaId: 'benchmark', startUs: 0, endUs: 600000000, originUs: 0, ...(cursor ? { cursor } : {}) }), { source: long, cursor }).finally(() => { finished = true })
           while (!finished) { samples.push(await app.evaluate(({ app }) => app.getAppMetrics().filter(m => m.name === '痕迹AI本地推理').map(m => ({ pid: m.pid, workingSetKiB: m.memory.workingSetSize })))); await page.waitForTimeout(1000) }
           const result = await pending
-          evidence.benchmark = { input: '600s loop of real capture, not ten-minute live recording', durationMs: Date.now() - started, frames: result.frames, inferredFrames: result.inferredFrames, inferenceRatio: result.inferredFrames / result.frames, samples }; save()
+          evidence.benchmark = { input: process.env.HENJI_OCR_LONG_SOURCE ? '600s deterministic cursor/scroll fixture, not ten-minute live recording' : '600s loop of real capture, not ten-minute live recording', durationMs: Date.now() - started, frames: result.frames, inferredFrames: result.inferredFrames, inferenceRatio: result.inferredFrames / result.frames, samples }; save()
+          if (process.env.HENJI_OCR_LONG_SOURCE) {
+            assert(result.inferredFrames / result.frames <= .2, 'Typical recording must infer at most 20% of sampled frames')
+            assert(evidence.benchmark.durationMs <= 120000, 'Ten-minute fixture must finish within two minutes')
+            assert(result.privacy.candidates.some(c => c.kind === 'email' && c.startUs === 18000000), 'The newly scrolled email must be detected at 18s')
+          }
         }
         await leaveVideoEditProject(page)
         evidence.phase = 'completed'; save()

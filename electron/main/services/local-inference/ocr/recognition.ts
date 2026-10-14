@@ -4,6 +4,10 @@ import type { LocalModelRunner, LocalTensorOutput } from '../analysis'
 export type RecognitionNormalization = 'rgb-half' | 'bgr-unit'
 export interface RecognizedText { text: string; confidence: number }
 export interface PixelCrop { x: number; y: number; width: number; height: number; tensorWidth: number }
+export interface RecognitionBatchPolicy { widthMultiple: number; pixelBudget: number }
+// 32/64 padding was faster but dropped a narrow 'I' in the real capture regression. Keep 128's context.
+export const RECOGNITION_BATCH_POLICY: RecognitionBatchPolicy = { widthMultiple: 128, pixelBudget: 4096 }
+export type CropRecognizer = (rgb: Uint8Array, width: number, crops: readonly PixelCrop[], signal: AbortSignal) => Promise<RecognizedText[]>
 export function recognitionCrop(width: number, height: number, box: PrivacyBox): PixelCrop {
   const x = Math.max(0, Math.min(width - 1, Math.floor(box[0] * width)))
   const y = Math.max(0, Math.min(height - 1, Math.floor(box[1] * height)))
@@ -11,12 +15,12 @@ export function recognitionCrop(width: number, height: number, box: PrivacyBox):
   const h = Math.max(1, Math.min(height - y, Math.ceil(box[3] * height)))
   return { x, y, width: w, height: h, tensorWidth: Math.min(1920, Math.max(1, Math.round(48 * w / h))) }
 }
-export function recognitionBatches(crops: readonly PixelCrop[]): number[][] {
+export function recognitionBatches(crops: readonly PixelCrop[], policy = RECOGNITION_BATCH_POLICY): number[][] {
   const sorted = crops.map((_, i) => i).sort((a, b) => crops[a].tensorWidth - crops[b].tensorWidth)
   const batches: number[][] = []
   for (const index of sorted) {
-    const last = batches.at(-1), padded = Math.ceil(crops[index].tensorWidth / 128) * 128
-    if (!last || last.length >= 32 || (last.length + 1) * padded > 4096) batches.push([index])
+    const last = batches.at(-1), padded = Math.ceil(crops[index].tensorWidth / policy.widthMultiple) * policy.widthMultiple
+    if (!last || last.length >= 32 || (last.length + 1) * padded > policy.pixelBudget) batches.push([index])
     else last.push(index)
   }
   return batches
@@ -37,7 +41,12 @@ function resizeCrop(rgb: Uint8Array, sourceWidth: number, crop: PixelCrop): Floa
   const horizontal = new Float32Array(crop.height * stride), result = new Float32Array(48 * stride)
   for (let y = 0; y < crop.height; y++) for (let x = 0; x < crop.tensorWidth; x++) {
     const axis = xs[x], source = ((crop.y + y) * sourceWidth + crop.x + axis.start) * 3, target = y * stride + x * 3
-    for (let tap = 0; tap < axis.weights.length; tap++) for (let c = 0; c < 3; c++) horizontal[target + c] += rgb[source + tap * 3 + c] * axis.weights[tap]
+    let red = 0, green = 0, blue = 0
+    for (let tap = 0; tap < axis.weights.length; tap++) {
+      const offset = source + tap * 3, weight = axis.weights[tap]
+      red += rgb[offset] * weight; green += rgb[offset + 1] * weight; blue += rgb[offset + 2] * weight
+    }
+    horizontal[target] = red; horizontal[target + 1] = green; horizontal[target + 2] = blue
   }
   for (let y = 0; y < 48; y++) {
     const axis = ys[y]
@@ -50,18 +59,19 @@ function resizeCrop(rgb: Uint8Array, sourceWidth: number, crop: PixelCrop): Floa
   return result
 }
 /** Resample directly from the original RGB frame into a batched tensor; no per-line Sharp decode/copy. */
-export function recognitionBatchInput(rgb: Uint8Array, sourceWidth: number, crops: readonly PixelCrop[], normalization: RecognitionNormalization = 'rgb-half'): { data: Float32Array; width: number } {
-  const width = Math.ceil(Math.max(...crops.map(c => c.tensorWidth)) / 128) * 128
+export function recognitionBatchInput(rgb: Uint8Array, sourceWidth: number, crops: readonly PixelCrop[], normalization: RecognitionNormalization = 'rgb-half', policy = RECOGNITION_BATCH_POLICY): { data: Float32Array; width: number } {
+  const width = Math.ceil(Math.max(...crops.map(c => c.tensorWidth)) / policy.widthMultiple) * policy.widthMultiple
   const plane = width * 48, data = new Float32Array(crops.length * 3 * plane).fill(normalization === 'rgb-half' ? 0.5 : 1)
   for (let n = 0; n < crops.length; n++) {
     const crop = crops[n], resized = resizeCrop(rgb, sourceWidth, crop)
+    const offset = n * 3 * plane, first = normalization === 'rgb-half' ? 0 : 2, last = 2 - first
+    const divisor = normalization === 'rgb-half' ? 255 : 127.5, bias = normalization === 'rgb-half' ? 0.5 : 1
     for (let y = 0; y < 48; y++) {
       for (let x = 0; x < crop.tensorWidth; x++) {
-        for (let c = 0; c < 3; c++) {
-          const channel = normalization === 'rgb-half' ? c : 2 - c
-          const value = resized[(y * crop.tensorWidth + x) * 3 + channel]
-          data[n * 3 * plane + c * plane + y * width + x] = normalization === 'rgb-half' ? value / 255 - 0.5 : value / 127.5 - 1
-        }
+        const source = (y * crop.tensorWidth + x) * 3, target = offset + y * width + x
+        data[target] = resized[source + first] / divisor - bias
+        data[target + plane] = resized[source + 1] / divisor - bias
+        data[target + 2 * plane] = resized[source + last] / divisor - bias
       }
     }
   }
@@ -92,11 +102,11 @@ export function decodeRecognitionBatch(output: LocalTensorOutput, alphabet: read
   }
   return results
 }
-export async function recognizeCrops(rgb: Uint8Array, width: number, crops: readonly PixelCrop[], runner: LocalModelRunner, alphabet: readonly string[], signal: AbortSignal, normalization: RecognitionNormalization = 'rgb-half'): Promise<RecognizedText[]> {
+export async function recognizeCrops(rgb: Uint8Array, width: number, crops: readonly PixelCrop[], runner: LocalModelRunner, alphabet: readonly string[], signal: AbortSignal, normalization: RecognitionNormalization = 'rgb-half', policy = RECOGNITION_BATCH_POLICY): Promise<RecognizedText[]> {
   const results: RecognizedText[] = new Array(crops.length)
-  for (const batch of recognitionBatches(crops)) {
+  for (const batch of recognitionBatches(crops, policy)) {
     signal.throwIfAborted()
-    const input = recognitionBatchInput(rgb, width, batch.map(i => crops[i]), normalization)
+    const input = recognitionBatchInput(rgb, width, batch.map(i => crops[i]), normalization, policy)
     const output = Object.values(await runner.run({ x: { type: 'float32', data: input.data, dims: [batch.length, 3, 48, input.width] } }))[0]
     if (!output) throw new Error('文字识别模型没有输出。')
     const decoded = decodeRecognitionBatch(output, alphabet)

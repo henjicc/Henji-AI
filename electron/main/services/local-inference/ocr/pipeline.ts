@@ -5,15 +5,17 @@ import { ppocrInputSize } from '../analyzers/textDetection'
 import { FrameOcr } from './frameOcr'
 import { changedTiles } from './frameChanges'
 import type { OcrPrivacyJob, OcrPrivacyResult } from './protocol'
+import type { CropRecognizer } from './recognition'
 
-export interface OcrPrivacyDependencies extends Pick<SmartRegionAnalysisDependencies, 'openModel' | 'frames' | 'signal' | 'progress'> { alphabet: readonly string[] }
+export interface OcrPrivacyDependencies extends Pick<SmartRegionAnalysisDependencies, 'openModel' | 'frames' | 'signal' | 'progress'> { alphabet: readonly string[]; recognize?: CropRecognizer; changes?: () => readonly PrivacyBox[] }
 export async function runOcrPrivacy(job: OcrPrivacyJob, deps: OcrPrivacyDependencies): Promise<OcrPrivacyResult> {
   deps.signal.throwIfAborted()
   const size = job.display, detSize = ppocrInputSize(size.width, size.height)
   const det = job.models.find(m => m.name === 'ppocr'), rec = job.models.find(m => m.name === 'ppocr_rec')
   if (!det || !rec) throw new Error('请下载文字检测和文字识别模型后重试。')
-  const detector = await deps.openModel(det, job.providers, `${detSize.width}x${detSize.height}`, { intraOpNumThreads: 4 })
-  const recognizer = await deps.openModel(rec, ['cpu'], 'dynamic', { intraOpNumThreads: 4 })
+  // Sparse screen analysis spends most time decoding; CPU avoids DML's cold start and retained GPU arena.
+  const detector = await deps.openModel(det, ['cpu'], `${detSize.width}x${detSize.height}`, { intraOpNumThreads: 4, allowSpinning: false })
+  const recognizer = deps.recognize ?? await deps.openModel(rec, ['cpu'], 'dynamic', { intraOpNumThreads: 4 })
   const ocr = new FrameOcr(detector, recognizer, deps.alphabet, job.normalization)
   const candidates: PrivacyCandidate[] = []
   let previous: Uint8Array | undefined, active: PrivacyCandidate[] = [], frames = 0, inferredFrames = 0
@@ -28,9 +30,9 @@ export async function runOcrPrivacy(job: OcrPrivacyJob, deps: OcrPrivacyDependen
     const endUs = Math.min(job.endUs, monoUs + stepUs)
     while (cursorIndex + 1 < cursor.length && cursor[cursorIndex + 1].monoUs <= monoUs) cursorIndex++
     const point = cursorIndex >= 0 ? cursor[cursorIndex].point : null
-    const changes = changedTiles(previous, rgb, size.width, size.height, [previousCursor, point].filter((p): p is [number, number] => p !== null))
+    const changes = [...(deps.changes?.() ?? changedTiles(previous, rgb, size.width, size.height, [previousCursor, point].filter((p): p is [number, number] => p !== null)))]
     // Revisit masked pixels every second: typing beneath a stationary pointer must not remain hidden.
-    if (cursor.length && frames % Math.max(1, Math.round(job.fps)) === 0) changes.push([0, 0, 1, 1])
+    if (!deps.changes && cursor.length && frames % Math.max(1, Math.round(job.fps)) === 0) changes.push([0, 0, 1, 1])
     if (!changes.length) active.forEach(c => { c.endUs = endUs })
     else {
       inferredFrames++

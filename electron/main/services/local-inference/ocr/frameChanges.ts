@@ -5,7 +5,7 @@ import type { PixelCrop } from './recognition'
 export interface CursorSample { monoUs: number; point: [number, number] | null }
 const TILE = 64
 /** Compare complete pixels, not sparse probes (a single changed glyph must not disappear between probes). */
-export function changedTiles(previous: Uint8Array | undefined, rgb: Uint8Array, width: number, height: number, cursors: readonly (readonly [number, number])[] = []): PrivacyBox[] {
+export function changedTiles(previous: Uint8Array | undefined, rgb: Uint8Array, width: number, height: number, cursors: readonly (readonly [number, number])[] = [], options: { noiseTolerance?: number; cursorScale?: number } = {}): PrivacyBox[] {
   if (!previous) return [[0, 0, 1, 1]]
   // Native comparisons skip equal rows without visiting 8.3 million pixels in JS on every 4K frame.
   // They preserve exact equality: no sampling or color threshold can hide a changed glyph.
@@ -18,6 +18,7 @@ export function changedTiles(previous: Uint8Array | undefined, rgb: Uint8Array, 
     dirtyRows[y] = Number(before.compare(current, start, end, start, end) !== 0)
   }
   const changed: PrivacyBox[] = []
+  const tolerance = options.noiseTolerance ?? 0, scale = options.cursorScale ?? 1
   for (let top = 0; top < height; top += TILE) for (let left = 0; left < width; left += TILE) {
     const right = Math.min(width, left + TILE), bottom = Math.min(height, top + TILE)
     let dirty = false
@@ -26,8 +27,9 @@ export function changedTiles(previous: Uint8Array | undefined, rgb: Uint8Array, 
       for (let x = left; x < right; x++) {
         const i = (y * width + x) * 3
         if (rgb[i] === previous[i] && rgb[i + 1] === previous[i + 1] && rgb[i + 2] === previous[i + 2]) continue
+        if (tolerance && Math.abs(rgb[i] - previous[i]) <= tolerance && Math.abs(rgb[i + 1] - previous[i + 1]) <= tolerance && Math.abs(rgb[i + 2] - previous[i + 2]) <= tolerance) continue
         // The capture log is in encoded pixels. Mask only the cursor footprint, never its entire tile.
-        if (cursors.some(p => x >= p[0] - 8 && x < p[0] + 48 && y >= p[1] - 8 && y < p[1] + 48)) continue
+        if (cursors.some(p => x >= p[0] - 8 * scale && x < p[0] + 48 * scale && y >= p[1] - 8 * scale && y < p[1] + 48 * scale)) continue
         dirty = true; break
       }
     }
