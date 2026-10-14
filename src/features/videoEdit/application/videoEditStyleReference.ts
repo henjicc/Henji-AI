@@ -49,7 +49,7 @@ export async function extractVideoEditReferenceStyle(reference: StyleReference, 
     const surface = new OffscreenCanvas(width, height); const context = surface.getContext('2d', { willReadFrequently: true }); if (!context) throw new Error('无法读取参考配色。')
     context.drawImage(bitmap, 0, 0, width, height)
     const clusters = await quantizeInWorker(context.getImageData(0, 0, width, height).data, signal); signal?.throwIfAborted()
-    const result = styleKitSchema.parse({ ...base, id: crypto.randomUUID(), revision: 0, name, tokens: { ...base.tokens, palette: stylePaletteFromClusters(clusters) }, rules: `${base.rules}\n\n## 参考提取\n配色按可见面积与对比度分配；字体、动效和气质未由图片自动断言。助手可读取参考图补充建议，确认后再应用。` })
+    const result = styleKitSchema.parse({ ...base, id: crypto.randomUUID(), revision: 0, name, tokens: { ...base.tokens, palette: stylePaletteFromClusters(clusters) }, notes: `${base.notes}\n\n## 参考提取\n配色按可见面积与对比度分配；字体、动效和气质未由图片自动断言。助手可读取参考图补充建议，确认后再应用。` })
     logger.info('style_kit.extract_reference.completed', '参考风格候选已生成'); return result
   } catch (error) { logger.error('style_kit.extract_reference.failed', '参考配色提取失败', { error }); throw error }
   finally { bitmap?.close() }

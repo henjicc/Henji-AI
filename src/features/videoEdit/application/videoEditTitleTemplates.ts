@@ -1,3 +1,4 @@
+import { resolveVideoEditStyleKit } from '@/core/videoEdit/styleKit'
 import { z } from 'zod'
 import { captureTitleTemplate, instantiateTitleTemplate, type TitleTemplate, type TitleTemplateParameters } from '@/core/videoEdit/titleTemplates'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -27,7 +28,7 @@ function placeTitleTemplate(projectId: string, sequenceId: string, template: Tit
   editVideoProject(projectId, document => {
     const sequence = document.sequences.find(sequence => sequence.id === sequenceId)
     if (!sequence) throw new Error('原标题落点序列不存在。')
-    const snapshots = instantiateTitleTemplate(value, parameters, sequence)
+    const snapshots = instantiateTitleTemplate(value, parameters, sequence, resolveVideoEditStyleKit(document, sequence))
     const frame = placement?.frame ?? (owner.activeSequenceId === sequenceId ? owner.frame : 0)
     const track = placement?.track ?? sequence.tracks.filter(track => track.kind === 'video' && !track.locked && track.enabled).sort((a, b) => b.index - a.index)[0]?.index
     const added = placement?.newTrack === 'video' ? videoEditEdgeTracks(sequence, 'video', new Set(snapshots.map(clip => clip.track)).size) : []

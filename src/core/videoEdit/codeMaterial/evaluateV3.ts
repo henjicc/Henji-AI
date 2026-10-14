@@ -149,7 +149,7 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           case 'smoothstep': { if (a() >= b()) throw new CodeMaterialError('TYPE', 'smoothstep 边界必须递增。'); const t = Math.min(1, Math.max(0, (c() - a()) / (b() - a()))); return t * t * (3 - 2 * t) }
           case 'progress': return codeProgress(a(), b(), c())
           case 'stagger': return n(a() * b())
-          case 'tween': charge(64); return mix(args[3], args[4], codeEase(string(args[5]), codeProgress(a(), b(), c())))
+          case 'tween': charge(64); return mix(args[3], args[4], easeCodeParameter(args[5], codeProgress(a(), b(), c())))
           case 'cubicBezier': charge(64); return codeCubicBezier(a(), b(), c(), n(args[3]), n(args[4]))
           case 'noise': charge(64); return codeNoise(a(), args[1] === undefined ? 0 : b(), args[2] === undefined ? 0 : c(), context.seed ?? program.seed)
           case 'chars': return Array.from(string(args[0])); case 'words': return string(args[0]).trim().split(/\s+/u).filter(Boolean)

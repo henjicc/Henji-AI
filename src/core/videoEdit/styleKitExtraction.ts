@@ -1,5 +1,5 @@
 import quantize from 'quantize'
-import { DEFAULT_STYLE_TOKENS, styleKitSchema, type StyleKit, type StyleTokens } from './styleKit'
+import { DEFAULT_STYLE_TOKENS, styleEasingOvershoots, styleKitSchema, type StyleEasing, type StyleKit, type StyleTokens } from './styleKit'
 import type { CodeColor, CodeParameterValues } from './codeMaterial/contract'
 import { CODE_EASE_NAMES } from './codeMaterial/motion'
 
@@ -71,9 +71,9 @@ export function extractStyleFromWork(observations: readonly StyleWorkObservation
   tokens.motion.exitDuration = median([...observations.flatMap(value => value.exitSeconds ? [value.exitSeconds] : []), ...numberParams('exitDuration')], tokens.motion.exitDuration)
   tokens.motion.stagger = median(numberParams('stagger'), tokens.motion.stagger)
   const eases = observations.flatMap(value => [value.ease, value.parameters?.enterEase].filter((ease): ease is string => typeof ease === 'string' && CODE_EASE_NAMES.includes(ease)))
-  tokens.motion.enterEase = most(eases, tokens.motion.enterEase)
-  tokens.motion.allowOvershoot ||= ['backOut', 'elasticOut', 'bounceOut'].includes(tokens.motion.enterEase)
+  tokens.motion.enterEase = most<StyleEasing>(eases, tokens.motion.enterEase)
+  tokens.motion.allowOvershoot ||= styleEasingOvershoots(tokens.motion.enterEase)
   tokens.shape.radius = Math.min(1, median(observations.flatMap(value => value.radius ? [value.radius / value.height] : []), tokens.shape.radius))
   tokens.shape.strokeWidth = Math.min(1, median(observations.flatMap(value => value.strokeWidth ? [value.strokeWidth / value.height] : []), tokens.shape.strokeWidth))
-  return styleKitSchema.parse({ ...base, id: crypto.randomUUID(), revision: 0, name, tokens, rules: `${base.rules}\n\n## 当前作品提取\n字体、颜色与动效从当前序列聚合得到；先预览并确认角色分配。助手可补充气质和做/不做，未经确认不覆盖作品。` })
+  return styleKitSchema.parse({ ...base, id: crypto.randomUUID(), revision: 0, name, tokens, notes: `${base.notes}\n\n## 当前作品提取\n字体、颜色与动效从当前序列聚合得到；先预览并确认角色分配。助手可补充气质和做/不做，未经确认不覆盖作品。` })
 }

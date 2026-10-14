@@ -185,7 +185,7 @@ for (const name of ['change_application_entities', 'undo_application_changes']) 
 for (const name of ['apply_camera_stage_camera_move', 'place_camera_stage_object']) successData[name] = { ...transaction }
 const generationPlan = { action: 'generate_shot', sequenceRef, startSeconds: 1, durationSeconds: 5, trackRef: null, placement: 'add', references: [] }
 successData.generate_video_edit_in_place = { documentRef, taskRef: ref('generation.task', 'task'), plan: generationPlan, status: 'submitted', verified: true, message }
-successData.prepare_video_edit_in_place_generation = { documentRef, plan: generationPlan, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'video', options: {} }, message }
+successData.prepare_video_edit_in_place_generation = { documentRef, plan: generationPlan, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'video', options: {} }, stylePrompt: '', message }
 for (const name of ['export_video_edit', 'query_video_edit_export', 'cancel_video_edit_export']) {
   successData[name] = { resultRef: documentRef, message, verification: verification(), queue: [], task: { id: 'export', state: 'completed', progress: 1, revision: 29, startFrame: 0, endFrame: 60 } }
 }

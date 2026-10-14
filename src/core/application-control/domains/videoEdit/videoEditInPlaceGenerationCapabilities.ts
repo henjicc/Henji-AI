@@ -45,6 +45,7 @@ export const videoEditInPlaceInputSchema = z.object({
   params: z.record(z.string(), z.unknown()).optional().describe('模型参数（取自 get_model_schema）；时长与画面比例已按落点和序列自动换算，一般不用传。'),
   useReferenceFrames: z.boolean().optional().describe('是否带入参考帧（默认 true）：生成镜头带前一镜头尾帧与后一镜头首帧，替换带原镜头首帧，延长带原镜头尾帧；超过模型可接受的图片数量时只带前面的。'),
   referenceRoles: z.array(z.enum(['previous_tail', 'next_head', 'replaced_head', 'extended_tail'])).max(4).optional().describe('逐项选择参考来源，省略沿用落点自动参考；[] 取消全部自动参考。previous_tail 前一片段尾帧；next_head 后一片段首帧；replaced_head 被替换片段首帧；extended_tail 被延长片段尾帧。仅可选本次规划提供的来源，prepare 返回实际使用项。'),
+  applyStyle: z.boolean().optional().describe('是否把序列绑定风格的定位、概念与配色并入画面提示词；省略按风格自身设置（默认注入），false 本次不注入。用户明确要求不同画风时传 false 或在 prompt 写明；声音生成不注入。'),
   referenceTimeSeconds: seconds.optional().describe('额外使用目标序列指定时间的节目画面（秒，按序列帧率取最近一帧，含合成效果）。省略取消这张参考；只用指定时间帧时同时传 referenceRoles=[]。自动参考排在前面，指定帧排在后面，受模型图片数量限制；声音生成不接受参考帧。'),
 }).strict().superRefine((input, context) => {
   if (input.useReferenceFrames === false && ((input.referenceRoles?.length ?? 0) > 0 || input.referenceTimeSeconds !== undefined)) {
@@ -61,6 +62,7 @@ const planOutput = z.object({
 const prepareOutput = z.object({
   documentRef, plan: planOutput,
   preparation: z.object({ prepared: z.literal(true), modelId: z.string().min(1), providerId: z.string().min(1), mediaType: z.enum(['image', 'video', 'audio']), options: z.record(z.string(), z.unknown()) }).passthrough(),
+  stylePrompt: z.string().describe('实际并入提示词的风格描述；空表示未注入。'),
   message: z.string(),
 }).strict()
 export const prepareVideoEditInPlaceGenerationCapability = defineApplicationCapability({

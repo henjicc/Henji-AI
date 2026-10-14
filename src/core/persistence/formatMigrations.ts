@@ -1,6 +1,7 @@
 import type { PersistenceMigrations } from './migrations'
 import { migrateThemePayloadV1 } from '../theme/themeMigration'
 import { migrateMcpConnectionStorageV1 } from './mcpConnectionSchema'
+import { migrateStyleKitV1 } from '../videoEdit/styleKit'
 
 /** Add N → N+1 here for non-document formats. Document kinds own their own chain. */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
@@ -14,5 +15,7 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   'subtitle-manifest': { 3: content => content && typeof content === 'object' && !Array.isArray(content) ? { ...content, version: 4 } : content },
   // 1 → 2：外部连接改为永久有效，去掉到期时间与提醒记录。
   'mcp-connections': { 1: migrateMcpConnectionStorageV1 },
+  // 1 → 2（t97）：旧 Markdown 规则移入 notes，新增理念、节奏、结构化规则、生成注入与扩展动效由默认值补齐。
+  'style-kits': { 1: content => Array.isArray(content) ? content.map(migrateStyleKitV1) : content },
 }
 export function formatMigrations(id: string): PersistenceMigrations { return FORMAT_MIGRATIONS[id] ?? {} }

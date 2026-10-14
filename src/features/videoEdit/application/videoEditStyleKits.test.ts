@@ -88,19 +88,20 @@ it('组件真实编译/求值、试绘、绑定与落位一次发布；失败不
   const ids = await insertVideoEditStyleSample(owner.document.id, owner.activeSequenceId, available(), 'title')
   expect(ids).toHaveLength(1); expect(owner.past).toHaveLength(history + 1)
   expect(trial.documents.every(document => document.styleKitId && document.styleKits?.length)).toBe(true)
-  const captured = captureVideoEditStyleSample(owner.document.id, owner.activeSequenceId, available()); expect(captured.samples).toHaveLength(4)
+  const captured = captureVideoEditStyleSample(owner.document.id, owner.activeSequenceId, available()); expect(captured.samples).toHaveLength(available().samples.length + 1)
   undoVideoEdit(owner.document.id); expect(owner.document.items).toEqual(before.items); expect(owner.document.styleKits).toEqual(before.styleKits)
 })
 it('通用实体创建/绑定/改内容、候选提取和插入能力通过正式注册、保存与回执', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; const app = createApplicationHarness()
   try {
-    expect((await app.requireResult('list_application_entities', { entityType: 'video_edit.style_preset', limit: 20 })).refs).toHaveLength(6)
+    expect((await app.requireResult('list_application_entities', { entityType: 'video_edit.style_preset', limit: 20 })).refs).toHaveLength(3)
     const content = styleKitContent(available())
     await app.requireResult('change_application_entities', { summary: '创建风格', changes: [{ kind: 'create_items', entityType: 'video_edit.style_kit', parent: { kind: 'video_edit.document', id }, items: [{ properties: { 'video_edit.style_kit.name': '新风格', 'video_edit.style_kit.content': content } }] }] })
     const kit = owner.document.styleKits![0]; const ref = { kind: 'video_edit.style_kit', id: `${id}:${kit.id}` }; const seqRef = { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }
     expect((await app.change(seqRef, { 'video_edit.sequence.style_kit_id': kit.id })).ok).toBe(true)
-    expect((await app.change(ref, { 'video_edit.style_kit.content': { ...content, rules: '标题不用衬线体' } })).ok).toBe(true)
-    expect(owner.document.styleKits![0].rules).toBe('标题不用衬线体')
+    expect((await app.change(ref, { 'video_edit.style_kit.content': { ...content, rules: [{ id: 'r1', kind: 'dont', text: '标题用衬线体', strength: 'must' }] } })).ok).toBe(true)
+    expect(owner.document.styleKits![0].rules).toEqual([{ id: 'r1', kind: 'dont', text: '标题用衬线体', strength: 'must', scope: '' }])
+    expect(((await app.read(ref, ['video_edit.style_kit.keyframe_curves'])) as { properties: Record<string, unknown> }).properties['video_edit.style_kit.keyframe_curves']).toMatchObject({ enter: { interpolation: 'bezier', durationSeconds: content.tokens.motion.enterDuration } })
     const snapshot = owner.document
     const candidate = await app.requireResult('extract_video_edit_work_style', { documentRef: { kind: 'video_edit.document', id }, sequenceRef: seqRef })
     expect(candidate).toHaveProperty('content.tokens'); expect(owner.document).toBe(snapshot)
@@ -120,7 +121,8 @@ it('作品提取是候选，取消不写；无效样例在编译/求值时阻断
   const value = await extractVideoEditWorkStyle(owner.document.id, owner.activeSequenceId, '候选')
   expect(value.name).toBe('候选'); expect(owner.document).toBe(before)
   await expect(extractVideoEditWorkStyle(owner.document.id, owner.activeSequenceId, '取消', AbortSignal.abort())).rejects.toThrow()
-  const sample = available().samples[0]; const invalid = { ...available(), samples: [{ ...sample, source: testFilesSource(sample.source).replace('s.typeScale.xl * ctx.height', '1 / ctx.time') }] }
+  const sample = available().samples.find(value => value.kind === 'data')!; const broken = testFilesSource(sample.source).replace('fill: s.palette.surface', 'fill: 1 / ctx.time'); expect(broken).not.toBe(testFilesSource(sample.source))
+  const invalid = { ...available(), samples: [{ ...sample, source: broken }] }
   await expect(checkStyleKit(invalid)).rejects.toThrow()
   editVideoProject(owner.document.id, document => ({ ...document, name: '候选不会改这份工程' }))
 })

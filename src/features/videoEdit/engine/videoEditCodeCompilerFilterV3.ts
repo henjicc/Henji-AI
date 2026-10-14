@@ -66,11 +66,15 @@ export function emitCodeV3FilterCall(expression: Extract<CodeExpression, { kind:
     case 'stagger': return { code: `(${code[0]}*${code[1]})`, bounds: multiply(scalar(args[0]), scalar(args[1])) }
     case 'tween': {
       const ease = args[5].text
-      if (!ease || !CODE_EASE_NAMES.includes(ease) || scalar(args[2]).min <= 0) throw new CodeMaterialError('TYPE', 'tween 需要静态缓动名称与正 duration。')
-      const amount = `codeEase(${CODE_EASE_NAMES.indexOf(ease)}u,clamp((${code[0]}-${code[1]})/${code[2]},0.0,1.0),1.70158)`
+      // Style curves bind to a static Bézier literal; any non-constant curve is rejected like a dynamic name.
+      const bezier = !ease && Array.isArray(args[5].bounds) && args[5].bounds.length === 4 && args[5].bounds.every(bound => bound.min === bound.max) ? args[5].bounds.map(bound => bound.min) : undefined
+      if (!ease && !bezier || ease && !CODE_EASE_NAMES.includes(ease) || scalar(args[2]).min <= 0) throw new CodeMaterialError('TYPE', 'tween 需要静态缓动名称或贝塞尔曲线与正 duration。')
+      if (bezier && (bezier[0] < 0 || bezier[0] > 1 || bezier[2] < 0 || bezier[2] > 1 || [bezier[1], bezier[3]].some(y => y < 0 || y > 1))) throw new CodeMaterialError('TYPE', '滤镜 tween 的贝塞尔曲线须在 0–1 内；回弹曲线请展开并显式 clamp。')
+      const progress = `clamp((${code[0]}-${code[1]})/${code[2]},0.0,1.0)`
+      const amount = bezier ? `codeBezier(${bezier.map(value => `${value}`.includes('.') || `${value}`.includes('e') ? `${value}` : `${value}.0`).join(',')},${progress})` : `codeEase(${CODE_EASE_NAMES.indexOf(ease!)}u,${progress},1.70158)`
       const a = args[3]; const b = args[4]
       const bounds = expression.type === 'color' ? colors(a).map((v, i) => union(v, colors(b)[i])) : union(scalar(a), scalar(b))
-      if (['backOut', 'elasticOut'].includes(ease)) throw new CodeMaterialError('TYPE', '滤镜 tween 的过冲缓动请展开并显式 clamp。')
+      if (ease && ['backOut', 'elasticOut'].includes(ease)) throw new CodeMaterialError('TYPE', '滤镜 tween 的过冲缓动请展开并显式 clamp。')
       return { code: `${expression.type === 'color' ? 'codeMixColor' : 'codeMix'}(${code[3]},${code[4]},${amount})`, bounds }
     }
     case 'cubicBezier': {

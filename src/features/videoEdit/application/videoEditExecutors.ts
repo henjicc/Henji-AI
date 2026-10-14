@@ -1,3 +1,4 @@
+import { resolveVideoEditStyleKit } from '@/core/videoEdit/styleKit'
 import { withVideoEditCurrentMetadata, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { codeFilesFromInput } from '@/core/videoEdit/codeMaterial/sources'
@@ -35,6 +36,7 @@ import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tra
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 import { prepareVideoEditCaption } from './videoEditCaptionCreation'
 import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
+import { defaultVideoEditStyleBinding } from './videoEditDefaultStyle'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting; proxyPreference: VideoEditProxyPreference }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
@@ -342,14 +344,14 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             refs.push({ kind: this.entityType, id: `${before.id}:${created}` }); continue
           }
           switch (this.entityType) {
-            case 'video_edit.sequence': document.sequences.push({ ...createVideoEditSequence(), ...useSettingsStore.getState().videoEditSequenceDefaults, ...values, id } as ReturnType<typeof createVideoEditSequence>); break
+            case 'video_edit.sequence': { const binding = defaultVideoEditStyleBinding(document, values as { styleKitId?: string }); if (binding) document.styleKits = binding.styleKits; document.sequences.push({ ...createVideoEditSequence(), ...useSettingsStore.getState().videoEditSequenceDefaults, ...(binding ? { styleKitId: binding.styleKitId } : {}), ...values, id } as ReturnType<typeof createVideoEditSequence>); break }
             case 'video_edit.bin': document.bins.push(videoEditBinSchema.parse({ id, ...values })); break
             case 'video_edit.item': {
               if (values.kind === 'graphic') {
                 const kind = values.graphicKind
                 if (!['solid', 'rect', 'ellipse', 'text'].includes(String(kind))) throw new Error('创建图形素材项需要graphic_kind。')
                 const dimensions = document.sequences.find(sequence => sequence.id === instance.activeSequenceId)!
-                const made = makeVideoEditGraphicItem({ kind: kind as 'solid' | 'rect' | 'ellipse' | 'text', name: String(values.name), ...(values.graphicWidth != null ? { width: Number(values.graphicWidth) } : {}), ...(values.graphicHeight != null ? { height: Number(values.graphicHeight) } : {}), ...(values.binId ? { binId: String(values.binId) } : {}) }, dimensions)
+                const made = makeVideoEditGraphicItem({ kind: kind as 'solid' | 'rect' | 'ellipse' | 'text', name: String(values.name), ...(values.graphicWidth != null ? { width: Number(values.graphicWidth) } : {}), ...(values.graphicHeight != null ? { height: Number(values.graphicHeight) } : {}), ...(values.binId ? { binId: String(values.binId) } : {}) }, dimensions, resolveVideoEditStyleKit(document, dimensions))
                 document.items.push({ ...made, id })
               } else {
                 if (['graphicKind', 'graphicWidth', 'graphicHeight'].some(key => key in values)) throw new Error('图形创建属性只适用于graphic素材项。')
@@ -379,7 +381,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             }
             case 'video_edit.marker': (sequence!.markers ??= []).push(videoEditMarkerSchema.parse({ id, ...values })); break
             case 'video_edit.caption': {
-              (sequence!.captions ??= []).push(prepareVideoEditCaption(sequence!, { id, ...values })); break
+              (sequence!.captions ??= []).push(prepareVideoEditCaption(sequence!, { id, ...values }, document)); break
             }
             case 'video_edit.track': {
               // 新轨道与 PR 拖到轨道外一样：视频轨加在最上面，音频轨加在最下面；编号由序列分配，不接受指定。

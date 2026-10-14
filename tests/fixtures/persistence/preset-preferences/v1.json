@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "content": [
+    {
+      "category": "style",
+      "id": "golden-kit",
+      "rating": 5,
+      "isDefault": true
+    },
+    {
+      "category": "transition",
+      "id": "cross_dissolve",
+      "rating": 3,
+      "isDefault": false
+    }
+  ]
+}

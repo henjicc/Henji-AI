@@ -8,15 +8,9 @@ import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPres
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry, type VideoEditEffectsRegistryEntry } from '@/core/videoEdit/effectsRegistry'
 
+import { videoEditEffectPresetNameSchema as nameSchema, videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 const logger = createLogger('features.videoEdit.presets')
-const nameSchema = z.string().trim().min(1, '请填写预设名称。').max(200, '预设名称最多 200 字。')
-export const videoEditEffectPresetSchema = z.object({
-  id: z.string().min(1).max(100), name: nameSchema, media: z.enum(['video', 'audio']),
-  effects: z.array(videoEditEffectSchema).min(1),
-}).strict().superRefine((preset, context) => {
-  if (preset.effects.some(effect => !effect.builtin || videoEditEffectMedia(effect) !== preset.media || effect.mask?.regionId === 'tracker' || effect.mask?.regionId === 'shapes' && effect.mask.shapes.some(shape => shape.follow))) context.addIssue({ code: 'custom', message: '预设只保存同媒介的内置效果，不能保存原片段的跟踪绑定；代码滤镜请保存为代码素材。' })
-})
-export type VideoEditEffectPreset = z.infer<typeof videoEditEffectPresetSchema>
+export { videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 interface LibraryData { favorites: string[]; presets: VideoEditEffectPreset[] }
 interface LibraryState extends LibraryData {
   revision: number
@@ -24,6 +18,8 @@ interface LibraryState extends LibraryData {
   savePreset(name: string, effects: readonly VideoEditEffect[], includeShapes?: boolean): VideoEditEffectPreset
   renamePreset(id: string, name: string): void
   deletePreset(id: string): void
+  /** Imported presets always get fresh ids so a re-import never overwrites. */
+  importPresets(presets: readonly VideoEditEffectPreset[]): VideoEditEffectPreset[]
   toggleFavorite(id: string): void
 }
 export const VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY = 'video-edit-effects-library'
@@ -78,6 +74,7 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage)
         return structuredClone(preset)
       },
       renamePreset(id, name) { requirePreset(id); const nextName = nameSchema.parse(name); publish('rename', { favorites: get().favorites, presets: get().presets.map(preset => preset.id === id ? { ...preset, name: nextName } : preset) }) },
+      importPresets(values) { const added = values.map(value => videoEditEffectPresetSchema.parse({ ...structuredClone(value), id: crypto.randomUUID() })); publish('import', { favorites: get().favorites, presets: [...get().presets, ...added] }); return added },
       deletePreset(id) { requirePreset(id); publish('delete', { favorites: get().favorites.filter(ref => ref !== `preset:${id}`), presets: get().presets.filter(preset => preset.id !== id) }) },
       toggleFavorite(id) {
         if (!videoEditEffectsRegistry().some(entry => entry.id === id) && !get().presets.some(preset => `preset:${preset.id}` === id)) throw new Error('这个效果或过渡已不可用。')

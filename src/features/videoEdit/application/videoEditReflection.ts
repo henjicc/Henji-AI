@@ -19,6 +19,7 @@ import { readVideoEditSource } from './videoEditSource'
 import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 import { createVideoEditEffectPresetRegistration } from './videoEditEffectPresetReflection'
+import { createVideoEditPresetRegistration } from './videoEditPresetReflection'
 import { createVideoEditSubtitlePresetRegistration } from './videoEditSubtitlePresetReflection'
 import { createVideoEditExportPresetRegistration } from './videoEditExportPresetReflection'
 import { createTitleTemplateRegistration } from './videoEditTitleTemplateReflection'
@@ -215,5 +216,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createTitleTemplateRegistration(), createFontRegistration(), createStyleKitRegistration(STYLE_KIT_ENTITY), createStyleKitRegistration(STYLE_PRESET_ENTITY)]
+  })), createVideoEditExplanationRegistration(), createCodeComponentRegistration(), createVideoEditTextPresetRegistration(), createVideoEditEffectPresetRegistration(), createVideoEditPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration(), createTitleTemplateRegistration(), createFontRegistration(), createStyleKitRegistration(STYLE_KIT_ENTITY), createStyleKitRegistration(STYLE_PRESET_ENTITY)]
 }

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
-import { styleKitSchema } from '../../videoEdit/styleKit'
+import { migrateStyleKitV1, styleKitSchema } from '../../videoEdit/styleKit'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
 import { VIDEO_EDIT_CONTENT_VERSION } from '../../persistence/schemaVersions'
@@ -127,6 +127,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     5: content => content,
     // 6 → 7：内置效果新增可选缩放区间 regions（自动缩放）与录屏画框效果，已有效果不需要补值。
     6: content => content,
+    // 7 → 8（t97）：工程风格包快照的旧 Markdown 规则移入 notes，其余新字段由默认值补齐。
+    7: migrateVideoEditContentV7,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,
@@ -151,4 +153,11 @@ function migrateVideoEditContentV3(content: unknown): unknown {
   return { ...record, sequences: record.sequences.map(sequence => sequence && typeof sequence === 'object' && !Array.isArray(sequence)
     ? { ...(sequence as Record<string, unknown>), captionTrackEnabled: true, captionTrackLocked: false }
     : sequence) }
+}
+
+/** 7 → 8：只迁移工程内嵌风格快照，其他内容原样保留。 */
+function migrateVideoEditContentV7(content: unknown): unknown {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
+  const record = content as Record<string, unknown>
+  return Array.isArray(record.styleKits) ? { ...record, styleKits: record.styleKits.map(migrateStyleKitV1) } : content
 }

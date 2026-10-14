@@ -1,0 +1,306 @@
+{
+  "format": "henji-video-presets",
+  "version": 1,
+  "items": [
+    {
+      "category": "style",
+      "preset": {
+        "profile": {
+          "summary": "少而精：留白、精确对齐与粗细对比，单一强调色，落地即静止。",
+          "scenarios": [
+            "品牌片",
+            "产品发布",
+            "高端访谈"
+          ],
+          "concepts": [
+            {
+              "id": "concept-1",
+              "name": "留白",
+              "meaning": "画面不满，主体有呼吸空间。",
+              "criteria": [
+                "同屏只有一个视觉焦点",
+                "文字与图形合计不超过画面 35%",
+                "元素与画边的距离不小于安全边距"
+              ],
+              "tendencies": "入场用慢档强减速；错峰 0.08 秒以上；字号拉开层级而不是加装饰。",
+              "positive": "大面积底色上一行左对齐标题，下方一行小字说明。",
+              "negative": "满屏信息卡、多处强调色同时出现。",
+              "strength": "must",
+              "exceptions": ""
+            },
+            {
+              "id": "concept-2",
+              "name": "克制",
+              "meaning": "动作少、幅度小，靠节奏而不是特效取胜。",
+              "criteria": [
+                "同一时刻运动的元素不超过两个",
+                "没有回弹和持续漂浮",
+                "位移不超过画高 4%"
+              ],
+              "tendencies": "位移幅度 3% 画高；强调只用颜色或字重变化。",
+              "positive": "标题从下方 3% 处淡入落定后完全静止。",
+              "negative": "标题弹跳入场后仍在缓慢浮动。",
+              "strength": "must",
+              "exceptions": ""
+            }
+          ]
+        },
+        "tokens": {
+          "palette": {
+            "bg": [
+              0.043137254901960784,
+              0.050980392156862744,
+              0.07058823529411765,
+              1
+            ],
+            "surface": [
+              0.09411764705882353,
+              0.10980392156862745,
+              0.13725490196078433,
+              1
+            ],
+            "fg": [
+              0.9490196078431372,
+              0.9568627450980393,
+              0.9686274509803922,
+              1
+            ],
+            "muted": [
+              0.6235294117647059,
+              0.6627450980392157,
+              0.7137254901960784,
+              1
+            ],
+            "accent": [
+              0.6392156862745098,
+              0.7529411764705882,
+              0.8627450980392157,
+              1
+            ],
+            "accent2": [
+              0.8,
+              0.7215686274509804,
+              0.5764705882352941,
+              1
+            ],
+            "positive": [
+              0.1803921568627451,
+              0.5372549019607843,
+              0.4235294117647059,
+              1
+            ],
+            "negative": [
+              0.7725490196078432,
+              0.26666666666666666,
+              0.28627450980392155,
+              1
+            ]
+          },
+          "fonts": {
+            "display": {
+              "family": "Source Han Sans SC",
+              "weight": 600
+            },
+            "body": {
+              "family": "Source Han Sans SC",
+              "weight": 400
+            },
+            "mono": {
+              "family": "JetBrains Mono",
+              "weight": 500
+            }
+          },
+          "typeScale": {
+            "baseSize": 0.03333333333333333,
+            "ratio": 1.333
+          },
+          "shape": {
+            "radius": 0.018,
+            "strokeWidth": 0.002,
+            "spacing1": 0.012,
+            "spacing2": 0.024,
+            "spacing3": 0.04
+          },
+          "motion": {
+            "enterDuration": 0.7,
+            "exitDuration": 0.45,
+            "emphasisDuration": 0.4,
+            "transitionDuration": 0.6,
+            "stagger": 0.08,
+            "enterEase": "expoOut",
+            "exitEase": "cubicIn",
+            "moveEase": "cubicInOut",
+            "emphasisEase": "quartOut",
+            "transitionEase": "cubicInOut",
+            "allowOvershoot": false,
+            "travel": 0.03,
+            "settle": true,
+            "readingSpeed": 5,
+            "minHold": 1.5,
+            "sync": "speech"
+          },
+          "texture": {
+            "grain": 0.02,
+            "vignette": 0,
+            "glowIntensity": 0
+          },
+          "layout": {
+            "safeMargin": 0.08,
+            "grid": 12
+          }
+        },
+        "rhythm": {
+          "shotSeconds": {
+            "min": 2,
+            "max": 4
+          },
+          "cutOn": "speech",
+          "transition": "match",
+          "sfx": "none",
+          "musicDucking": "on",
+          "notes": ""
+        },
+        "rules": [
+          {
+            "id": "rule-1",
+            "kind": "keep",
+            "text": "强调色只用于一个焦点。",
+            "strength": "must",
+            "scope": ""
+          },
+          {
+            "id": "rule-2",
+            "kind": "dont",
+            "text": "不使用回弹、弹性或跳动曲线。",
+            "strength": "must",
+            "scope": ""
+          },
+          {
+            "id": "rule-3",
+            "kind": "do",
+            "text": "标题与正文用粗细和字号对比区分，不靠换颜色。",
+            "strength": "prefer",
+            "scope": ""
+          },
+          {
+            "id": "rule-4",
+            "kind": "vary",
+            "text": "运动方向随语义变化，时长可在 ±20% 内浮动。",
+            "strength": "flexible",
+            "scope": ""
+          }
+        ],
+        "notes": "推荐标题 Source Han Sans SC 粗细对照，或宋体主标题；投影极轻。\n\n字体均为常见开源可商用字体；使用实际安装样式，缺失时回退可用中文字体或 sans-serif，数字回退 monospace。参数参考 frameflow design/styles、color、type、motion/timing。",
+        "generation": {
+          "inject": true,
+          "prompt": ""
+        },
+        "samples": [
+          {
+            "id": "title",
+            "name": "标题",
+            "kind": "title",
+            "source": "export default { apiVersion: 1, languageVersion: 3, name: \"title\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 5, seed: 42,\n  parameters: { title: { type: \"text\", title: \"标题\", default: \"让创作保持一致\", maxLength: 160 }, subtitle: { type: \"text\", title: \"说明\", default: \"一个想法，一种表达\", maxLength: 200 } },\n  render(ctx) {\n    const s = ctx.style;\n    const inset = s.shape.spacing2 * ctx.height;\n    const p = tween(ctx.time, 0.15, s.motion.enterDuration, 0, 1, s.motion.enterEase);\n    const out = tween(ctx.time, 4.2, s.motion.exitDuration, 1, 0, s.motion.exitEase);\n    const alpha = clamp(p, 0, 1) * clamp(out, 0, 1);\n    const size = s.typeScale.xl * ctx.height;\n    return [group({ id: \"component\", x: ctx.width * 0.12, y: ctx.height * 0.32 + (1 - p) * s.motion.travel * ctx.height, opacity: alpha }, [\n      rect({ id: \"plate\", x: 0, y: 0, width: ctx.width * 0.72, height: ctx.height * .32, fill: s.palette.surface, radius: s.shape.radius * ctx.height }),\n      rect({ id: \"accent\", x: 0, y: 0, width: s.shape.strokeWidth * ctx.height * 2, height: ctx.height * .32, fill: s.palette.accent }),\n      text({ id: \"title\", x: inset, y: inset, text: ctx.params.title, fontFamily: s.fonts.display.family, fontWeight: s.fonts.display.weight, fontSize: size, color: s.palette.fg, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 }),\n      text({ id: \"subtitle\", x: inset, y: inset + size * 1.25, text: ctx.params.subtitle, fontFamily: s.fonts.body.family, fontWeight: s.fonts.body.weight, fontSize: s.typeScale.sm * ctx.height, color: s.palette.muted, baseline: \"top\", maxWidth: ctx.width * 0.72 - inset * 2, wrap: true, maxLines: 1 })\n    ])];\n  }\n}"
+          }
+        ],
+        "id": "golden-kit",
+        "name": "黄金风格",
+        "revision": 0
+      }
+    },
+    {
+      "category": "title",
+      "preset": {
+        "kind": "lower_third",
+        "parameters": {
+          "text": "姓名",
+          "subtitle": "身份 / 职务",
+          "color": "#007eff",
+          "textStyle": {
+            "fontFamily": "sans-serif",
+            "fontWeight": 400,
+            "fontStyle": "normal",
+            "fontSize": 60,
+            "fauxBold": false,
+            "fauxItalic": false,
+            "allCaps": false,
+            "smallCaps": false,
+            "superscript": false,
+            "subscript": false,
+            "underline": false,
+            "align": "center",
+            "verticalAlign": "middle",
+            "tracking": 0,
+            "kerning": "auto",
+            "leading": 0,
+            "baselineShift": 0,
+            "tsume": 0,
+            "fill": {
+              "enabled": true,
+              "color": "#ffffff"
+            },
+            "strokes": [],
+            "background": {
+              "enabled": false,
+              "color": "#000000",
+              "opacity": 0.7,
+              "padding": 12,
+              "radius": 0
+            },
+            "shadows": [],
+            "boxWidth": 0,
+            "boxHeight": 0
+          },
+          "durationSeconds": 5,
+          "entrance": "left",
+          "countFrom": 0,
+          "countTo": 100
+        },
+        "id": "golden-template",
+        "name": "黄金标题"
+      }
+    },
+    {
+      "category": "text",
+      "preset": {
+        "id": "golden-text",
+        "name": "黄金字型",
+        "style": {
+          "fontFamily": "sans-serif",
+          "fontWeight": 400,
+          "fontStyle": "normal",
+          "fontSize": 72,
+          "fauxBold": false,
+          "fauxItalic": false,
+          "allCaps": false,
+          "smallCaps": false,
+          "superscript": false,
+          "subscript": false,
+          "underline": false,
+          "align": "center",
+          "verticalAlign": "middle",
+          "tracking": 0,
+          "kerning": "auto",
+          "leading": 0,
+          "baselineShift": 0,
+          "tsume": 0,
+          "fill": {
+            "enabled": true,
+            "color": "#ffffff"
+          },
+          "strokes": [],
+          "background": {
+            "enabled": false,
+            "color": "#000000",
+            "opacity": 0.7,
+            "padding": 12,
+            "radius": 0
+          },
+          "shadows": [],
+          "boxWidth": 0,
+          "boxHeight": 0
+        }
+      }
+    }
+  ]
+}

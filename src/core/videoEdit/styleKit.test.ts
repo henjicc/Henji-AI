@@ -1,6 +1,6 @@
 import { testFilesSource } from './codeMaterial/sourceTestFixtures'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_STYLE_TOKENS, styleKitSchema, styleTokensSchema, styleKitRenderKey, resolveVideoEditStyleKit, recommendedStyleKitText, resolveStyleTypeScale } from './styleKit'
+import { DEFAULT_STYLE_TOKENS, styleKitSchema, styleTokensSchema, styleKitRenderKey, resolveVideoEditStyleKit, styleKitTextDefaults, resolveStyleTypeScale } from './styleKit'
 import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from './styleKitPresets'
 import { compileCodeMaterial } from './codeMaterial/compiler'
 import { evaluateCodeMaterial } from './codeMaterial/evaluate'
@@ -35,8 +35,8 @@ describe('风格包契约与真实作者语言', () => {
     expect(styleTokensSchema.parse({ layout: { grid: 2000 } }).layout.grid).toBe(2000)
     expect(() => styleKitSchema.parse({ ...BUILTIN_STYLE_KITS[0], samples: [BUILTIN_STYLE_KITS[0].samples[0], BUILTIN_STYLE_KITS[0].samples[0]] })).toThrow()
   })
-  it('六档十八个样例编译并确定求值，在横竖画幅保持令牌颜色和字体', () => {
-    expect(BUILTIN_STYLE_KITS).toHaveLength(6)
+  it('三套内置风格的统一样张编译并确定求值，在横竖画幅保持令牌颜色和字体', () => {
+    expect(BUILTIN_STYLE_KITS).toHaveLength(3)
     for (const kit of BUILTIN_STYLE_KITS) for (const sample of kit.samples) {
       const program = compileCodeMaterial(sample.source)
       for (const size of [{ width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
@@ -44,13 +44,14 @@ describe('风格包契约与真实作者语言', () => {
         const commands = evaluateCodeMaterial(program, frame, {}, { measureText })
         expect(commands.length).toBeGreaterThan(0)
         expect(evaluateCodeMaterial(program, frame, {}, { measureText })).toEqual(commands)
-        expect(JSON.stringify(commands)).toContain(kit.tokens.fonts.body.family)
-        expect(commands[0]).toMatchObject({ children: [expect.objectContaining({ fill: kit.tokens.palette.surface }), expect.anything(), expect.anything(), expect.anything()] })
+        // Signature parts (opener, lower third, emphasis) choose their own roles; every sample still reads the kit's fonts.
+        expect(Object.values(kit.tokens.fonts).some(font => JSON.stringify(commands).includes(font.family))).toBe(true)
+        if (sample.kind === 'data') expect(commands[0]).toMatchObject({ children: [expect.objectContaining({ fill: kit.tokens.palette.surface }), expect.anything(), expect.anything(), expect.anything()] })
       }
     }
   })
   it('ctx.style别名和缓动真实注入，默认缺省有效，属性写入与原型越界被拒绝', () => {
-    const source = BUILTIN_STYLE_KITS[0].samples[0].source
+    const source = BUILTIN_STYLE_KITS[0].samples.find(sample => sample.kind === 'data')!.source
     const program = compileCodeMaterial(source)
     const tokens = structuredClone(DEFAULT_STYLE_TOKENS); tokens.palette.surface = [.2, .3, .4, .5]
     const commands = evaluateCodeMaterial(program, { ...context, style: tokens }, {}, { measureText })
@@ -81,7 +82,7 @@ describe('风格包契约与真实作者语言', () => {
     expect(() => videoEditDocumentSchema.parse({ ...document, styleKits: [a, b, { ...a, id: document.sequences[0].id }] })).toThrow()
     expect(styleKitRenderKey(a)).not.toBe(styleKitRenderKey({ ...a, revision: a.revision + 1 }))
     expect(styleKitRenderKey(a)).not.toBe(styleKitRenderKey({ ...a, tokens: b.tokens }))
-    expect(recommendedStyleKitText(a, 1080).fill).toEqual({ enabled: true, color: expect.any(String) })
+    expect(styleKitTextDefaults(a, 1080).fill).toEqual({ enabled: true, color: expect.any(String) })
     expect(availableStyleKitFonts(a, []).tokens.fonts.body.family).toBe('sans-serif')
   })
 })

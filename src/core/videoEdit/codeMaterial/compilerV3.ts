@@ -341,7 +341,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       type(node, args[0], 'color'); if (args[1]) type(node, args[1], 'number'); resultType = op === 'luma' ? 'number' : 'color'; charge(node, 32, 32)
     } else if (op === 'keyframes') { type(node, args[0], 'number'); type(node, args[1], 'array'); charge(node, 256, 256) }
     else if (op === 'tween') {
-      args.slice(0, 3).forEach(arg => type(node, arg, 'number')); type(node, args[3], ['number', 'color']); type(node, args[4], args[3].type); type(node, args[5], 'string'); resultType = args[3].type; charge(node, 64, 64)
+      args.slice(0, 3).forEach(arg => type(node, arg, 'number')); type(node, args[3], ['number', 'color']); type(node, args[4], args[3].type); type(node, args[5], ['string', 'array', 'color']); resultType = args[3].type; charge(node, 64, 64)
     } else if (['mix', 'clamp'].includes(op)) { resultType = args[0].type; type(node, args[0], ['number', 'color']); type(node, args[1], op === 'mix' ? resultType : 'number'); type(node, args[2], 'number') }
     else { args.forEach(arg => type(node, arg, 'number')); if (['rgba', 'hsv', 'hsl'].includes(op)) resultType = 'color' }
     if (CODE_BUILTINS.includes(op as CodeBuiltin)) {

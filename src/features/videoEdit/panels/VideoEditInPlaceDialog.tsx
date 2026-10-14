@@ -1,6 +1,7 @@
 import { UiSegmented } from '@/components/ui'
 import { useEffect, useMemo, useState } from 'react'
-import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiGroup, UiInput, UiLoading, UiModal } from '@/components/ui'
+import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiGroup, UiInput, UiLoading, UiModal, UiSwitch } from '@/components/ui'
+import { resolveVideoEditStyleKit, styleKitPromptHint } from '@/core/videoEdit/styleKit'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -64,6 +65,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   const [useSpecifiedFrame, setUseSpecifiedFrame] = useState(initial?.referenceFrame !== undefined)
   const [referenceTimecode, setReferenceTimecode] = useState(() => videoEditFrameTimecode(initial?.referenceFrame ?? requireVideoEditInstance(projectId).frame, plan?.fps ?? 30))
   const [busy, setBusy] = useState(false)
+  const [applyStyle, setApplyStyle] = useState(true)
   const [error, setError] = useState('')
   // 模型面板的筛选是这个面板自己的；收藏与生成页共用
   const [filterProvider, setFilterProvider] = useState('all')
@@ -103,6 +105,10 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   const usedImages = wanted.slice(0, referenceLimit).map((_, index) => `reference-${index + 1}`)
   const mismatch = plan && modelId ? videoEditInPlaceModelMismatch(plan, modelId) : null
   const text = toPromptPlainText(prompt).trim()
+  // Picture generation follows the sequence style unless the style opts out; the switch only turns it off for this request.
+  const styleDocument = requireVideoEditInstance(projectId).document; const styleSequence = styleDocument.sequences.find(value => value.id === sequenceId)
+  const styleKit = plan && plan.mediaType !== 'audio' && styleSequence ? resolveVideoEditStyleKit(styleDocument, styleSequence) : undefined
+  const styleHint = styleKit?.generation.inject ? styleKitPromptHint(styleKit) : ''
   const model = modelId ? getModelInfo(modelId) ?? undefined : undefined
   const providerId = modelId ? registry.getModel(modelId)?.meta.provider ?? '' : ''
   const provider = getAvailableProviders().find(value => value.id === providerId)
@@ -114,6 +120,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
       await startVideoEditInPlaceGeneration({ projectId, sequenceId, intent: effectiveIntent, prompt: text, modelId, params,
         referenceRoles: wanted.flatMap(reference => reference.role === 'specified_time' ? [] : [reference.role]),
         ...(referenceFrame !== null && referenceFrame !== undefined ? { referenceFrame } : {}),
+        ...(styleHint && !applyStyle ? { applyStyle: false } : {}),
       }, replacesJobId ? { replacesJobId } : {})
       onClose()
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } finally { setBusy(false) }
@@ -160,6 +167,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
             {selected.error && <UiError message={selected.error} />}
           </div>
         </UiFormRow>}
+        {styleHint && <UiFormRow label={`套用风格：${styleKit!.name}`} info={styleHint} inline><UiSwitch aria-label="套用风格" checked={applyStyle} onCheckedChange={setApplyStyle} /></UiFormRow>}
         <UiFieldLayoutContext.Provider value="toolbar">
           {modelId ? <ParameterPanel currentModel={model} selectedModel={modelId} uploadedImages={usedImages} uploadedVideos={[]} values={params as DynamicValueMap}
             onChange={(id, value) => setParams(current => ({ ...current, [id]: value }))} onChanges={changes => setParams(current => ({ ...current, ...changes }))} toolbarLeading={modelTrigger} />

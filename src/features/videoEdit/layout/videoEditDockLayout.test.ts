@@ -47,7 +47,7 @@ describe('剪辑面板布局', () => {
     expect(api.getPanel('timeline')).toBe(timeline)
     expect(created.program).toBe(1)
     expect(disposed.program).toBeUndefined()
-    expect(api.totalPanels).toBe(7)
+    expect(api.totalPanels).toBe(8)
     expect(api.groups).toHaveLength(4)
     expect(api.getPanel('style_kits')!.group).toBe(api.getPanel('effects')!.group)
   })
@@ -74,7 +74,7 @@ describe('剪辑面板布局', () => {
     expect(api.totalPanels).toBe(1)
   })
 
-  it.each(['annotations', 'content', 'tracking', 'color_grade', 'title_templates', 'effects_library', 'style_kits'] as const)('%s 打开、重开及浮动贴回都作为检查器标签，不增加默认分组', id => {
+  it.each(['annotations', 'content', 'tracking', 'color_grade', 'title_templates', 'effects_library', 'presets', 'style_kits'] as const)('%s 打开、重开及浮动贴回都作为检查器标签，不增加默认分组', id => {
     resetVideoEditLayout(api)
     const effects = api.getPanel('effects')!
     const assertGrouped = (): void => {
@@ -154,7 +154,7 @@ describe('剪辑面板布局', () => {
     expect(() => parseVideoEditLayout(JSON.stringify(popout))).toThrow('不支持')
     localStorage.setItem(VIDEO_EDIT_LAYOUT_STORAGE_KEY, '{broken')
     restoreVideoEditLayout(api)
-    expect(api.totalPanels).toBe(7)
+    expect(api.totalPanels).toBe(8)
     expect(api.groups).toHaveLength(4)
     expect(created.program).toBe(1)
   })

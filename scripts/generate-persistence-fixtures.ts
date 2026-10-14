@@ -72,6 +72,10 @@ cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true
   { id: 'golden-frame', name: '录屏画框', enabled: true, amount: 1, builtin: { id: 'recording_frame', params: { background: 'solid', color: RECORDING_FRAME_SOLID_DEFAULT_HEX, padding: 6, radius: 2.5, shadow: 50 } } }]
 cursorClip.curves = { scale: [{ time: 0, value: 1, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 0, value: 1, interpolation: 'linear' } }, { time: 45, value: 1.8, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 45, value: 1.8, interpolation: 'linear' } }] }
 sequence.clips.push(cursorClip)
+// v8：工程风格快照带理念、结构化规则、节奏与扩展动效；序列绑定它。
+const goldenKit = { ...BUILTIN_STYLE_KITS[0], id: 'golden-kit', name: '黄金风格', samples: BUILTIN_STYLE_KITS[0].samples.slice(0, 1) }
+document.styleKits = [goldenKit]
+sequence.styleKitId = goldenKit.id
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()
@@ -167,10 +171,12 @@ const values: Record<string, unknown> = {
   'image-working-copy': working,
   settings: { providerKeyStatus: { kie: false }, uploadProvider: 'kie', uploadFallbackEnabled: false, canvasLodLevel: 'balanced', videoEditBinsFirst: true },
   theme: { theme: 'dark' },
-  'style-kits': [{ ...BUILTIN_STYLE_KITS[0], id: 'golden-kit', name: '黄金风格' }],
+  'style-kits': [goldenKit],
   'title-templates': [{ ...BUILTIN_TITLE_TEMPLATES[0], id: 'golden-template', name: '黄金标题' }],
   'text-presets': [{ id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) }],
   'export-presets': [{ ...VIDEO_EDIT_EXPORT_PRESETS[0], id: 'golden-export', name: '黄金导出' }],
+  'preset-preferences': [{ category: 'style', id: 'golden-kit', rating: 5, isDefault: true }, { category: 'transition', id: 'cross_dissolve', rating: 3, isDefault: false }],
+  'video-preset-package': { format: 'henji-video-presets', version: 1, items: [{ category: 'style', preset: goldenKit }, { category: 'title', preset: { ...BUILTIN_TITLE_TEMPLATES[0], id: 'golden-template', name: '黄金标题' } }, { category: 'text', preset: { id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) } }] },
   'voice-library': [{ voiceId: 'golden-voice', voiceName: '黄金音色', providerId: 'kie', createdAt: timestamp, updatedAt: timestamp, status: 'ready', activated: true }],
   'preset-export': { version: '1.0', name: '黄金生成预设', description: null, modelId: null, params: { prompt: '黄金样本' } },
   'theme-payload': createThemePayloadV2({ seed: DEFAULT_THEME_SEED }),

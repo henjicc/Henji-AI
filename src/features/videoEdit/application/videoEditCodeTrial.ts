@@ -55,7 +55,8 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
 let tail: Promise<void> = Promise.resolve()
 /** One serial queue for creation, source candidates and explicit version binds.
  * Every trial uses the production full-composition worker and releases it. */
-export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false): Promise<ImageBitmap | undefined> {
+/** `collect` receives every presented frame (caller owns and closes them); used for short animated previews. */
+export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[]): Promise<ImageBitmap | undefined> {
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
   const previous = tail; let release!: () => void
@@ -91,6 +92,7 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
       bitmap?.close(); bitmap = result.bitmap
       if (result.effectErrors?.length) throw new Error(result.effectErrors.join('\n'))
       if (!result.presented || !bitmap) throw new Error('源码候选没有生成可用画面。')
+      if (collect) { collect.push(bitmap); bitmap = undefined }
     }
     signal.throwIfAborted()
     // Keep ownership until teardown succeeds; a failed teardown must close the candidate too.

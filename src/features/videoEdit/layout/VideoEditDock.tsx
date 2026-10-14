@@ -1,6 +1,7 @@
 import { focusVideoEditPanelElement } from './videoEditPanelFocus'
 import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
 import { VideoEditStyleKitsPanel } from '../panels/VideoEditStyleKitsPanel'
+import { VideoEditPresetsPanel } from '../panels/VideoEditPresetsPanel'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
@@ -57,7 +58,8 @@ function ColorGradeBody({ visible }: { visible: boolean }): React.ReactElement {
 function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="title_templates"><VideoEditTitleTemplatesPanel {...useDock(visible)} visible={visible} /></div> }
 function AnnotationsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="annotations"><VideoEditAnnotationsPanel {...useDock(visible)} visible={visible} /></div> }
 function StyleKitsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="style_kits"><VideoEditStyleKitsPanel {...useDock(visible)} visible={visible} /></div> }
-const BODIES: Record<VideoEditPanelId, PanelBody> = { style_kits: StyleKitsBody, annotations: AnnotationsBody, title_templates: TitleTemplatesBody, color_grade: ColorGradeBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
+function PresetsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="presets"><VideoEditPresetsPanel {...useDock(visible)} visible={visible} /></div> }
+const BODIES: Record<VideoEditPanelId, PanelBody> = { presets: PresetsBody, style_kits: StyleKitsBody, annotations: AnnotationsBody, title_templates: TitleTemplatesBody, color_grade: ColorGradeBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
     const [visible, setVisible] = useState(api.isVisible)

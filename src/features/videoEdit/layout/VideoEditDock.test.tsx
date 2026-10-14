@@ -180,7 +180,7 @@ const makeInstance = (name: string): VideoEditInstance => {
 }
 const savedPopouts = (): unknown => JSON.parse(localStorage.getItem(VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY) ?? 'null')
 
-it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'content', 'tracking', 'color_grade'] as const)('聚焦片段后点击 %s：活动标签、always 内容与分组矩形一致，视图更新不抢回标签', async id => {
+it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'presets', 'content', 'tracking', 'color_grade'] as const)('聚焦片段后点击 %s：活动标签、always 内容与分组矩形一致，视图更新不抢回标签', async id => {
   installHarnessNativeStorage()
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0))
   vi.stubGlobal('cancelAnimationFrame', (handle: number) => window.clearTimeout(handle))
@@ -222,7 +222,7 @@ it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'con
     await waitFor(checkContent)
     // Dock 的观察回写不应变成新的“打开面板”命令，也不能在后续视图发布时重放。
     expect(instance.panelFocusVersion).toBe(version)
-    if (id !== 'effects_library') expect(instance.activePanel).toBe(id)
+    if (id !== 'effects_library' && id !== 'presets') expect(instance.activePanel).toBe(id)
     act(() => setVideoEditView(instance.document.id, { frame: 1 }))
     expect(dock.getPanel(id)!.group.activePanel?.id).toBe(id)
     // 重开与贴回仍通过同一 always renderer，首次激活就绑定当前分组。

@@ -19,6 +19,7 @@ import { resolveVideoEditDropMode, type VideoEditDropMode } from '@/core/videoEd
 import { ensureVideoEditSequenceItem } from '@/core/videoEdit/nestedSequences'
 import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
 import { applyTitleTemplate, TITLE_TEMPLATE_DRAG_MIME, titleTemplateDragSchema } from './videoEditTitleTemplates'
+import { withDefaultVideoEditStyle } from './videoEditDefaultStyle'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
 const logger = createLogger('features.videoEdit.drop')
@@ -155,7 +156,8 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
       const settings = first?.kind === 'audio' ? { ...defaults, ...options.sequenceSettings } : { pixelAspectRatio: defaults.pixelAspectRatio, sampleRate: defaults.sampleRate, channels: defaults.channels, ...options.sequenceSettings }
       const sequence = makeVideoEditItemSequence(source, ids, settings, readVideoEditCodeMetadata(owner, source))
       sequenceId = sequence.id; selectedClip = sequence.clips.at(-1)?.id
-      return { ...source, sequences: [sequence] }
+      const styled = withDefaultVideoEditStyle(source, sequence)
+      return { ...styled.document, sequences: [styled.sequence] }
     }
     // A preceding queued drop may have created the first sequence while this request was waiting.
     if (createSequence) sequenceId = owner.activeSequenceId

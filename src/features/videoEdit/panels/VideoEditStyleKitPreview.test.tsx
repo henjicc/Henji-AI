@@ -23,18 +23,18 @@ it('预览隐藏中止后重新可见即启动，等值kit重建不重启，迟�
   view.rerender(<VideoEditStyleKitPreview kit={kit} width={1920} height={1080} visible={false} />)
   expect(signal.aborted).toBe(true)
   view.rerender(<VideoEditStyleKitPreview kit={kit} width={1920} height={1080} />); await flush()
-  expect(screen.getAllByRole('img')).toHaveLength(3)
+  expect(screen.getAllByRole('img')).toHaveLength(6)
   expect(vi.mocked(renderStyleKitPreview).mock.calls.at(-1)![2]).toEqual({ width: 960, height: 540 })
-  await act(async () => { finish(new Blob(['late'])) }); expect(URL.createObjectURL).toHaveBeenCalledTimes(3)
-  view.unmount(); expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3)
+  await act(async () => { finish(new Blob(['late'])) }); expect(URL.createObjectURL).toHaveBeenCalledTimes(6)
+  view.unmount(); expect(URL.revokeObjectURL).toHaveBeenCalledTimes(6)
 })
 it('单个风格样例失败后继续生成其余预览并显示可重试错误，重试成功', async () => {
   vi.mocked(renderStyleKitPreview).mockRejectedValueOnce(new Error('风格预览等待过久，请重试。'))
   render(<VideoEditStyleKitPreview kit={BUILTIN_STYLE_KITS[1]} width={1920} height={1080} />); await flush()
-  expect(screen.getAllByRole('img')).toHaveLength(2)
+  expect(screen.getAllByRole('img')).toHaveLength(5)
   expect(screen.getByRole('alert').textContent).toContain('等待过久')
   fireEvent.click(screen.getByRole('button')); await flush()
-  expect(screen.getAllByRole('img')).toHaveLength(3); expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getAllByRole('img')).toHaveLength(6); expect(screen.queryByRole('alert')).toBeNull()
 })
 it('出画内容变化中止原任务并生成新候选', async () => {
   let finish!: (blob: Blob) => void
@@ -44,6 +44,17 @@ it('出画内容变化中止原任务并生成新候选', async () => {
   const signal = vi.mocked(renderStyleKitPreview).mock.calls[0][3]
   const next = structuredClone(kit); next.tokens.motion.enterDuration = 1
   view.rerender(<VideoEditStyleKitPreview kit={next} width={1920} height={1080} />); await flush()
-  expect(signal.aborted).toBe(true); expect(screen.getAllByRole('img')).toHaveLength(3)
-  await act(async () => { finish(new Blob(['late'])) }); expect(URL.createObjectURL).toHaveBeenCalledTimes(3)
+  expect(signal.aborted).toBe(true); expect(screen.getAllByRole('img')).toHaveLength(6)
+  await act(async () => { finish(new Blob(['late'])) }); expect(URL.createObjectURL).toHaveBeenCalledTimes(6)
+})
+it('六个统一样张；悬停按入场时段取帧播放，离开即停止并释放帧', async () => {
+  const kit = BUILTIN_STYLE_KITS[1]
+  render(<VideoEditStyleKitPreview kit={kit} width={1920} height={1080} />); await flush()
+  expect(screen.getAllByRole('img').map(image => image.getAttribute('alt'))).toEqual(['标题预览', '人名条预览', '章节卡预览', '强调字预览', '数据卡预览', '字幕预览'])
+  vi.mocked(renderStyleKitPreview).mockClear(); vi.mocked(URL.revokeObjectURL).mockClear()
+  fireEvent.pointerEnter(screen.getByAltText('标题预览').parentElement!); await flush()
+  const seconds = vi.mocked(renderStyleKitPreview).mock.calls.map(call => call[4])
+  expect(seconds).toHaveLength(12); expect(seconds[0]).toBe(0); expect(seconds.at(-1)).toBeCloseTo(.15 + kit.tokens.motion.enterDuration + .25)
+  fireEvent.pointerLeave(screen.getByAltText('标题预览').parentElement!); await flush()
+  expect(URL.revokeObjectURL).toHaveBeenCalledTimes(12)
 })

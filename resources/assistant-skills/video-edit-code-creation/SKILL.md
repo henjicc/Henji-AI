@@ -15,9 +15,9 @@ description: 在剪辑里设计、编写或修改代码素材（动态图形、�
 - 文字、配色、节奏、构图、强度开放参数，画面从参数推导；改动优先改参数。
 - 字体、颜色、间距、圆角、曲线性格与时长共用规则，局部变化有语义。
 - 新作先做主停留帧、取帧读图、确认方向再扩全片。已授权“不用停／直接做完”自主选并说明；改字换色不重做提案。
-- 开工复用相关偏好；当前要求和品牌约束优先，自己选的风格不算用户口味。
+- 按风格模板做并自查，复用偏好；当前要求和品牌约束优先，自己选的风格不算用户口味。
 - 改已有作品先用 `read_application_entity` 读素材、参数、曲线、覆盖与位置并看原画面；保留满意内容，源码改动新增版本重绑，核对共享实例及邻接缝。
-- 每组修改后 `observe_video_edit_frame` 取受影响画面、`read_application_media` 真读图。交付区分回读、已看帧与未验项，导出／收录按用户要求，不自动增加付费或权限。
+- 每组修改后 `observe_video_edit_frame` 取受影响画面、`read_application_media` 真读图。交付分清回读、已看帧与未验项，导出／收录听用户，不自动增加付费或权限。
 
 ## 按任务分流
 
@@ -26,7 +26,7 @@ description: 在剪辑里设计、编写或修改代码素材（动态图形、�
 | 任务 | 参考 |
 | --- | --- |
 | 简报、概念、拆参考 | [简报与概念](references/brief-concept.md) |
-| 风格／构图／字体／颜色 | [风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
+| 风格模板、风格／构图／字体／颜色 | [风格模板](references/style-kit.md)、[风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
 | 质感选型、实现边界、试一帧 | [定做法](references/approach.md) |
 | 时长曲线、错峰、因果、转场 | [运动](references/motion.md) |
 | 全片节奏、讲解、声画 | [结构](references/structure.md) |
@@ -55,7 +55,7 @@ description: 在剪辑里设计、编写或修改代码素材（动态图形、�
 
 | 阶段 | 产出 | 按需读reference |
 | --- | --- | --- |
-| 想清楚 | 五问简报、目标序列、规格与交付 | preferences、brief-concept、timeline-check |
+| 想清楚 | 五问简报、目标序列、规格与交付 | style-kit、preferences、brief-concept、timeline-check |
 | 找概念 | 母题与一到三个方向、参考和风险 | brief-concept、styles |
 | 定做法 | 选实现、查组件与效果、试一帧 | approach、author-shaders、recipes-3d |
 | 定样子 | 主停留帧与版式字体配色，确认方向 | layout、type、color-texture、author-api |

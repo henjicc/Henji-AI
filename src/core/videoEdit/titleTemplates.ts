@@ -5,6 +5,8 @@ import { videoEditClipSchema, type VideoEditClip, type VideoEditSequence } from 
 import { createVideoEditGraphic, videoEditGraphicSchema, type VideoEditGraphicObject } from './graphics'
 import type { CodeColor } from './codeMaterial/contract'
 import type { CodeMaterialKeyframe } from './codeMaterialAnimation'
+import { resolveStyleTypeScale, styleColorHex, styleInkOn, styleKeyframeCurves, type StyleKit } from './styleKit'
+import type { VideoEditBezier } from './keyframeInterpolation'
 
 export const TITLE_TEMPLATE_KINDS = ['lower_third', 'title_card', 'chapter', 'credits', 'counter', 'callout'] as const
 export const titleTemplateParametersSchema = z.object({
@@ -32,8 +34,10 @@ export const titleTemplateSchema = definition.extend({ id: z.string().min(1).max
 export type TitleTemplate = z.infer<typeof titleTemplateSchema>
 export const BUILTIN_TITLE_TEMPLATES: readonly TitleTemplate[] = TITLE_TEMPLATE_KINDS.map((kind, index) => titleTemplateSchema.parse({ id: `title:${kind}`, kind, name: ['下三分之一人名条', '标题卡', '章节标题', '片尾字幕滚动', '数字计数', '强调标注框'][index], parameters: { text: ['姓名', '影片标题', '第一章', '导演\n摄影\n剪辑', '累计', '重点'][index], subtitle: kind === 'lower_third' ? '身份 / 职务' : '', durationSeconds: kind === 'credits' ? 12 : 5 } }))
 export function titleColor(hex: string): CodeColor { return [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16) / 255).concat(1) as CodeColor }
-function point(seconds: number, value: CodeMaterialKeyframe['value'], interpolation: CodeMaterialKeyframe['interpolation'] = 'ease'): CodeMaterialKeyframe { return { id: crypto.randomUUID(), sourceInUs: Math.round(seconds * 1e6), sourceRemainder: { numerator: 0, denominator: 1 }, value, interpolation } }
-function builtinGraphic(template: TitleTemplate, p: TitleTemplateParameters, width: number, height: number, duration: number): ReturnType<typeof videoEditGraphicSchema.parse> {
+function point(seconds: number, value: CodeMaterialKeyframe['value'], interpolation: CodeMaterialKeyframe['interpolation'] = 'ease', bezier?: VideoEditBezier): CodeMaterialKeyframe { return { id: crypto.randomUUID(), sourceInUs: Math.round(seconds * 1e6), sourceRemainder: { numerator: 0, denominator: 1 }, value, interpolation, ...(bezier ? { bezier } : {}) } }
+/** Motion of built-in templates: the bound style's enter/exit curves and travel, else the original eased fade. */
+interface TitleMotion { enter: number; exit: number; enterCurve?: VideoEditBezier; exitCurve?: VideoEditBezier; distance?: number }
+function builtinGraphic(template: TitleTemplate, p: TitleTemplateParameters, width: number, height: number, duration: number, motion?: TitleMotion): ReturnType<typeof videoEditGraphicSchema.parse> {
   const objects: VideoEditGraphicObject[] = []
   const object = (kind: 'text' | 'rect', parameters: VideoEditGraphicObject['parameters']): VideoEditGraphicObject => { const value = createVideoEditGraphic(kind, width, height).objects[0]; Object.assign(value.parameters, parameters); objects.push(value); return value }
   const credits = template.kind === 'credits'; const lower = template.kind === 'lower_third'; const callout = template.kind === 'callout'
@@ -52,12 +56,13 @@ function builtinGraphic(template: TitleTemplate, p: TitleTemplateParameters, wid
     if (credits) value.curves = { y: [point(0, value.parameters.y as number, 'linear'), point(duration, -height * .15 - (lines.length - index) * height * .1, 'linear')] }
     if (template.kind === 'counter' && index === 0) value.curves = { text: Array.from({ length: 101 }, (_, i) => point(duration * i / 100, `${p.text} ${Math.round(p.countFrom + (p.countTo - p.countFrom) * i / 100)}`, 'hold')) }
   })
-  const edge = Math.min(.6, duration / 4)
+  const enter = Math.min(motion?.enter ?? .6, duration / 4); const exit = Math.min(motion?.exit ?? .6, duration / 4)
+  const curve = (bezier?: VideoEditBezier): [CodeMaterialKeyframe['interpolation'], VideoEditBezier?] => bezier ? ['bezier', bezier] : ['ease']
   for (const value of objects) {
-    value.curves = { ...value.curves, opacity: [point(0, 0), point(edge, 1), point(duration - edge, 1), point(duration, 0)] }
+    value.curves = { ...value.curves, opacity: [point(0, 0, ...curve(motion?.enterCurve)), point(enter, 1), point(duration - exit, 1, ...curve(motion?.exitCurve)), point(duration, 0)] }
     if (!credits && p.entrance !== 'fade') {
-      const key = p.entrance === 'left' ? 'x' : 'y'; const home = value.parameters[key] as number; const distance = p.entrance === 'left' ? width * .2 : height * .15
-      value.curves[key] = [point(0, home - distance), point(edge, home), point(duration - edge, home), point(duration, home + distance)]
+      const key = p.entrance === 'left' ? 'x' : 'y'; const home = value.parameters[key] as number; const distance = motion?.distance ?? (p.entrance === 'left' ? width * .2 : height * .15)
+      value.curves[key] = [point(0, home - distance, ...curve(motion?.enterCurve)), point(enter, home), point(duration - exit, home, ...curve(motion?.exitCurve)), point(duration, home + distance)]
     }
   }
   return videoEditGraphicSchema.parse({ width, height, objects })
@@ -70,10 +75,19 @@ export function captureTitleTemplate(name: string, sequence: VideoEditSequence, 
   return titleTemplateSchema.parse({ id: crypto.randomUUID(), name, content: { width: sequence.width, height: sequence.height, fps, clips: clips.map(clip => ({ ...structuredClone(clip), start: clip.start - start, track: clip.track - track })) }, parameters: { durationSeconds, textStyle: style ? scaleVideoEditTextStyle(style, 1080 / sequence.height) : undefined, text: clips.find(clip => clip.kind === 'text')?.text ?? (clips.flatMap(clip => clip.graphic?.objects ?? []).find(object => object.kind === 'text')?.parameters.text || '标题') } })
 }
 /** Regenerate object IDs and retime rational source curves; the library never owns live instances. */
-export function instantiateTitleTemplate(template: TitleTemplate, parameters: Partial<TitleTemplateParameters>, sequence: VideoEditSequence): Array<z.infer<typeof contentClipSchema>> {
-  const checked = titleTemplateSchema.parse(template); const p = titleTemplateParametersSchema.parse({ ...checked.parameters, ...parameters }); const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
+/** Built-in kinds follow a bound style for colour, type and motion unless the caller set them explicitly; captured designs keep their own look. */
+function styledTitleParameters(kind: TitleTemplate['kind'], p: TitleTemplateParameters, parameters: Partial<TitleTemplateParameters>, kit?: StyleKit): TitleTemplateParameters {
+  if (!kit) return p
+  const tokens = resolveStyleTypeScale(kit.tokens); const accent = tokens.palette.accent
+  const plated = kind === 'lower_third' || kind === 'title_card' || kind === 'chapter'
+  return { ...p, ...(parameters.color === undefined ? { color: styleColorHex(accent) } : {}), ...(parameters.textStyle === undefined ? { textStyle: { ...p.textStyle, fontFamily: tokens.fonts.display.family, fontWeight: tokens.fonts.display.weight, fontSize: Math.round(1080 * tokens.typeScale.xl), fill: { ...p.textStyle.fill, enabled: true, color: styleColorHex(plated ? styleInkOn(tokens, accent) : tokens.palette.fg) } } } : {}) }
+}
+export function instantiateTitleTemplate(template: TitleTemplate, parameters: Partial<TitleTemplateParameters>, sequence: VideoEditSequence, kit?: StyleKit): Array<z.infer<typeof contentClipSchema>> {
+  const checked = titleTemplateSchema.parse(template); const p = styledTitleParameters(checked.kind, titleTemplateParametersSchema.parse({ ...checked.parameters, ...parameters }), parameters, checked.kind ? kit : undefined); const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
   const frames = Math.max(2, Math.round(p.durationSeconds * fps)); const seconds = (frames - 1) / fps
-  if (checked.kind) return [{ name: checked.name, kind: 'graphic', graphic: builtinGraphic(checked, p, sequence.width, sequence.height, seconds), track: 0, start: 0, duration: frames, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }]
+  const curves = kit && styleKeyframeCurves(kit.tokens)
+  const motion = curves ? { enter: curves.enter.durationSeconds, exit: curves.exit.durationSeconds, enterCurve: curves.enter.bezier, exitCurve: curves.exit.bezier, distance: kit.tokens.motion.travel * sequence.height * (p.entrance === 'left' ? 2 : 1) } : undefined
+  if (checked.kind) return [{ name: checked.name, kind: 'graphic', graphic: builtinGraphic(checked, p, sequence.width, sequence.height, seconds, motion), track: 0, start: 0, duration: frames, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }]
   const content = checked.content!; const total = Math.max(...content.clips.map(clip => clip.start + clip.duration)); const factor = frames / total
   const sy = sequence.height / content.height; let textIndex = 0
   const textValue = (): string | undefined => { const index = textIndex++; return index === 0 ? parameters.text : index === 1 ? parameters.subtitle : undefined }

@@ -4,10 +4,11 @@ import { assertPersistenceVersion, PersistenceError, upgradePersistenceContent, 
 
 export interface VersionedPersistenceJson { version: number; content: unknown }
 export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: string; version: number }>> = {
-  'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 1 },
+  'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 2 },
   'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 3 },
   'video-edit-text-presets': { id: 'text-presets', name: '本机文字和字幕预设', version: 1 },
   'video-edit-export-presets': { id: 'export-presets', name: '本机导出预设', version: 1 },
+  'video-edit-preset-preferences': { id: 'preset-preferences', name: '预设评分与默认', version: 1 },
   'voice_library_records': { id: 'voice-library', name: '克隆音色库', version: 1 },
   'henji-canvas-node-parameter-defaults-v1': { id: 'node-defaults', name: '画布默认参数', version: 1 },
   'henji-recording-setup': { id: 'recording-setup', name: '录制设置', version: 1 },

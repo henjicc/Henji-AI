@@ -7,6 +7,7 @@ export { videoCreativeIntentProvider } from './videoEditCreativeIntentReflection
 import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
 import { VideoEditStyleKitCollectionExecutor, VideoEditStyleKitMutationExecutor, STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY } from './videoEditStyleKitReflection'
 import { handleVideoEditStyleKitCapability } from './videoEditStyleKitCapabilities'
+import { VideoEditPresetMutationExecutor } from './videoEditPresetReflection'
 import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability'
 import { handleTitleTemplateCapability } from './videoEditTitleTemplateCapability'
 import { TitleTemplateCollectionExecutor, TitleTemplateMutationExecutor } from './videoEditTitleTemplateReflection'
@@ -98,6 +99,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     engine.registerCollectionExecutor(new CodeComponentCollectionExecutor())
     for (const type of [STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY] as const) { engine.registerCollectionExecutor(new VideoEditStyleKitCollectionExecutor(type)); engine.registerMutationExecutor(new VideoEditStyleKitMutationExecutor(type)) }
     engine.registerCollectionExecutor(new VideoEditTextPresetExecutor())
+    engine.registerMutationExecutor(new VideoEditPresetMutationExecutor())
     engine.registerMutationExecutor(new VideoEditTextPresetMutationExecutor())
     engine.registerCollectionExecutor(new TitleTemplateCollectionExecutor())
     engine.registerMutationExecutor(new TitleTemplateMutationExecutor())
@@ -294,7 +296,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     }))
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.title_template', 'video_edit.style_preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template', 'video_edit.text_preset', 'video_edit.style_preset'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.title_template', 'video_edit.style_preset', 'video_edit.preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template', 'video_edit.text_preset', 'video_edit.style_preset'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)

@@ -3,6 +3,7 @@ import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/vid
 import type { VideoEditGraphicObject } from '@/core/videoEdit/graphics'
 import { editVideoSequence, requireVideoEditInstance, type VideoEditGesture } from './videoEditService'
 import type { VideoEditTextStyle } from '@/core/videoEdit/text'
+import { resolveVideoEditStyleKit, styledVideoEditTextStyle } from '@/core/videoEdit/styleKit'
 import type { VideoEditGraphicTarget } from './videoEditCodeParameters'
 
 export type VideoEditGraphicClipTarget = Omit<VideoEditGraphicTarget, 'objectId'>
@@ -28,8 +29,9 @@ export function updateVideoEditGraphicObject(target: VideoEditGraphicTarget, pat
   }, gesture)
 }
 export function createVideoEditGraphicObject(target: VideoEditGraphicClipTarget, input: { kind: 'rect' | 'ellipse' | 'text'; name?: string }): string {
-  const value = graphic(target)
-  const object = createVideoEditGraphic(input.kind, value.width, value.height).objects[0]
+  const value = graphic(target); const document = requireVideoEditInstance(target.projectId).document
+  const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)!
+  const object = createVideoEditGraphic(input.kind, value.width, value.height, styledVideoEditTextStyle(resolveVideoEditStyleKit(document, sequence, sequence.clips.find(clip => clip.id === target.clipId)), value.height)).objects[0]
   if (input.name !== undefined) object.name = input.name
   edit(target, objects => [...objects, object]); return object.id
 }

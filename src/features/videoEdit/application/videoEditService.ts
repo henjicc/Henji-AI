@@ -35,6 +35,7 @@ import { videoEditInPlaceRecordsSchema, type VideoEditInPlaceRecord } from '@/co
 import { VIDEO_EDIT_FOCUSABLE_PANELS, type VideoEditFocusablePanel } from '@/core/videoEdit/panels'
 
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
+import { withDefaultVideoEditStyle } from './videoEditDefaultStyle'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -432,9 +433,9 @@ export function editVideoSequence(projectId: string, sequenceId: string, update:
   return editVideoProject(projectId, change)
 }
 export function appendVideoEditSequence(projectId: string, settings: Partial<Omit<VideoEditSequence, 'id' | 'clips' | 'annotations' | 'tracks'>> = {}): string {
-  const sequence = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...useSettingsStore.getState().videoEditSequenceDefaults, ...settings }
-  editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] }))
-  return sequence.id
+  const created = { ...createVideoEditSequence(`序列 ${requireVideoEditInstance(projectId).document.sequences.length + 1}`), ...useSettingsStore.getState().videoEditSequenceDefaults, ...settings }
+  editVideoProject(projectId, document => { const styled = withDefaultVideoEditStyle(document, created); return { ...styled.document, sequences: [...document.sequences, styled.sequence] } })
+  return created.id
 }
 export function duplicateVideoEditSequence(projectId: string, sequenceId: string): string {
   const source = requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === sequenceId)

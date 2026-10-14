@@ -52,6 +52,7 @@ function toRequest(input: VideoEditInPlaceCapabilityInput): VideoEditInPlaceRequ
   return { projectId, sequenceId, intent, prompt: input.prompt, ...(input.modelId ? { modelId: input.modelId } : {}), ...(input.params ? { params: input.params } : {}),
     ...(input.useReferenceFrames === false ? { referenceRoles: [] } : input.referenceRoles !== undefined ? { referenceRoles: input.referenceRoles } : {}),
     ...(input.referenceTimeSeconds !== undefined ? { referenceFrame: Math.round(input.referenceTimeSeconds * fps) } : {}),
+    ...(input.applyStyle !== undefined ? { applyStyle: input.applyStyle } : {}),
   }
 }
 function planSummary(projectId: string, plan: VideoEditInPlacePlan, references: string[]) {
@@ -69,7 +70,7 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
     if (input.replacesTaskRef) await assertVideoEditInPlaceRegeneration(requireVideoEditFailedGeneration(input.documentRef.id, input.replacesTaskRef.id))
     const prepared = await prepareVideoEditInPlace(toRequest(input))
     const references = prepared.references.map(reference => videoEditInPlaceReferenceLabel(reference, prepared.plan.fps))
-    return { documentRef: input.documentRef, plan: planSummary(input.documentRef.id, prepared.plan, references), preparation: prepared.preparation,
+    return { documentRef: input.documentRef, plan: planSummary(input.documentRef.id, prepared.plan, references), preparation: prepared.preparation, stylePrompt: prepared.stylePrompt,
       message: `${videoEditInPlaceActionLabel(prepared.plan.action)}：${(prepared.plan.frame / prepared.plan.fps).toFixed(2)} 秒起约 ${(prepared.plan.duration / prepared.plan.fps).toFixed(1)} 秒，模型 ${prepared.modelId}${references.length ? `，参考 ${references.join('、')}` : '，不带参考帧'}。` }
   }
   if (id === generateVideoEditInPlaceCapability.id) {

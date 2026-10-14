@@ -100,9 +100,10 @@ export function evaluateVideoEditGraphic(prepared: PreparedVideoEditGraphic, tim
   })
 }
 
-export function createVideoEditGraphic(kind: 'solid' | 'rect' | 'ellipse' | 'text', width: number, height: number): VideoEditGraphic {
+/** `textStyle` lets style-bound callers start text objects from the sequence style instead of the plain default. */
+export function createVideoEditGraphic(kind: 'solid' | 'rect' | 'ellipse' | 'text', width: number, height: number, textStyle?: VideoEditTextStyle): VideoEditGraphic {
   const dimensions = dimensionsSchema.parse({ width, height })
-  const object: VideoEditGraphicObject = { id: crypto.randomUUID(), name: { solid: '纯色', rect: '矩形', ellipse: '椭圆', text: '文字' }[kind], kind: kind === 'solid' ? 'rect' : kind, parameters: {}, visible: true, ...(kind === 'text' ? { textStyle: defaultVideoEditTextStyle(height) } : {}) }
+  const object: VideoEditGraphicObject = { id: crypto.randomUUID(), name: { solid: '纯色', rect: '矩形', ellipse: '椭圆', text: '文字' }[kind], kind: kind === 'solid' ? 'rect' : kind, parameters: {}, visible: true, ...(kind === 'text' ? { textStyle: textStyle ?? defaultVideoEditTextStyle(height) } : {}) }
   const graphic: VideoEditGraphic = { ...dimensions, objects: [object] }
   object.parameters = prepareCodeMaterialParameters(videoEditGraphicObjectMetadata(graphic, object), object).values
   if (kind === 'solid') Object.assign(object.parameters, { x: 0, y: 0, width, height, fill: [0, 0, 0, 1] })

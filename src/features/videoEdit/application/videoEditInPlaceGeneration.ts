@@ -19,6 +19,7 @@ import { prepareVideoEditCreativeResult } from './videoEditCreativeSources'
 import { placeVideoEditFileInProject } from './videoEditResultTarget'
 import { importVideoEditSources } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, saveVideoEdit, subscribeVideoEdit, updateVideoEditInPlaceMetadata } from './videoEditService'
+import { resolveVideoEditStyleKit, styleKitPromptHint } from '@/core/videoEdit/styleKit'
 
 /*
  * 原地生成（4.12）的执行：规划 → 放占位 → 取参考帧 → 走正式生成链路提交 → 等待 → 结果复制进项目并收录 → 一步编辑落进时间线。
@@ -43,6 +44,8 @@ export interface VideoEditInPlaceRequest {
   referenceRoles?: VideoEditReferenceRole[]
   /** 指定目标序列的节目帧；省略时不带入，和自动参考来源独立选择。 */
   referenceFrame?: number
+  /** 是否把序列绑定风格并入画面提示词；省略时按风格自身的 generation.inject。声音生成不注入。 */
+  applyStyle?: boolean
 }
 export type VideoEditInPlaceStatus = 'preparing' | 'generating' | 'placing' | 'failed' | 'placed' | 'cancelled'
 export interface VideoEditInPlaceJob {
@@ -67,6 +70,8 @@ export interface VideoEditInPlacePreparation {
   references: VideoEditInPlaceSelectedReference[]
   params: Record<string, unknown>
   preparation: Record<string, unknown>
+  /** 实际并入提示词的风格描述；空表示未注入。 */
+  stylePrompt: string
 }
 
 const ACTION_LABELS = { generate_shot: '生成镜头', replace_shot: '替换镜头', extend_shot: '延长镜头', generate_audio: '配音 / 配乐' } as const
@@ -268,6 +273,15 @@ export function selectedVideoEditInPlaceReferences(plan: VideoEditInPlacePlan, r
   return wanted.slice(0, videoEditInPlaceReferenceLimit(modelId, params, wanted.length))
 }
 
+/** The bound style's prompt addition for picture generation; never for audio, never when the caller opts out. */
+export function videoEditInPlaceStylePrompt(request: Pick<VideoEditInPlaceRequest, 'projectId' | 'sequenceId' | 'applyStyle'>, mediaType: VideoEditInPlacePreparation['mediaType']): string {
+  if (mediaType === 'audio' || request.applyStyle === false) return ''
+  const document = requireVideoEditInstance(request.projectId).document; const sequence = document.sequences.find(value => value.id === request.sequenceId)
+  const kit = sequence ? resolveVideoEditStyleKit(document, sequence) : undefined
+  if (!kit || request.applyStyle === undefined && !kit.generation.inject) return ''
+  return styleKitPromptHint({ ...kit, generation: { ...kit.generation, inject: true } })
+}
+function styledPrompt(prompt: string, style: string): string { return style ? `${prompt}\n\n画面风格：${style}` : prompt }
 /** 提交前的完整检查（不取帧、不付费）：落点、模型、参数、参考帧数量与预估费用。界面、助手与提交共用。 */
 export async function prepareVideoEditInPlace(request: VideoEditInPlaceRequest): Promise<VideoEditInPlacePreparation> {
   const plan = planVideoEditInPlace(request.projectId, request.sequenceId, request.intent)
@@ -279,8 +293,9 @@ export async function prepareVideoEditInPlace(request: VideoEditInPlaceRequest):
   const params = { ...videoEditInPlaceDefaultParams(modelId, plan), ...(request.params ?? {}) }
   const references = selectedVideoEditInPlaceReferences(plan, request, modelId, params)
   const images = references.map((_, index) => placeholder(index))
-  const preparation = generationApplicationService.prepare({ modelId, prompt: request.prompt, mediaType, options: { ...params, ...(images.length ? { images, uploadedFilePaths: images } : {}) } })
-  return { plan, modelId, providerId: model.meta.provider, mediaType, references, params, preparation }
+  const stylePrompt = videoEditInPlaceStylePrompt(request, mediaType)
+  const preparation = generationApplicationService.prepare({ modelId, prompt: styledPrompt(request.prompt, stylePrompt), mediaType, options: { ...params, ...(images.length ? { images, uploadedFilePaths: images } : {}) } })
+  return { plan, modelId, providerId: model.meta.provider, mediaType, references, params, preparation, stylePrompt }
 }
 
 // ---- 执行 ----
@@ -339,7 +354,7 @@ async function run(job: VideoEditInPlaceJob, preparation: VideoEditInPlacePrepar
     const paths = await referenceFiles(job, preparation.references, signal)
     signal.throwIfAborted()
     const options = { ...preparation.params, ...(paths.length ? { images: paths.map(toFetchableMediaUrl), uploadedFilePaths: paths } : {}) }
-    const submittedTask = await generationApplicationService.submit({ modelId: job.modelId, prompt: job.request.prompt, mediaType: preparation.mediaType, options }, taskId)
+    const submittedTask = await generationApplicationService.submit({ modelId: job.modelId, prompt: styledPrompt(job.request.prompt, preparation.stylePrompt), mediaType: preparation.mediaType, options }, taskId)
     submittedId = submittedTask.taskId
     signal.throwIfAborted()
     update(job.id, { status: 'generating', taskId: submittedTask.taskId })

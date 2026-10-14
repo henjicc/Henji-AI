@@ -1,6 +1,7 @@
 import type { JsonValue } from '@/core/application-control'
 import { videoEditClipMedia, videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditTextStyleSchema } from '@/core/videoEdit/text'
+import { resolveVideoEditStyleKit, styledVideoEditTextStyle } from '@/core/videoEdit/styleKit'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectAccepts, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
 import { videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, resizeVideoEditTransition, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
@@ -149,7 +150,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     assertTransitionEndpoints(sequence, transition)
     ;(sequence.transitions ??= []).push(transition); return transition.id
   }
-  const { clip } = clipOwner(document, parentId)
+  const { clip, sequence: owner } = clipOwner(document, parentId)
   if (type === 'video_edit.tracker') {
     const tracker = putVideoEditTracker(document, clip, { id: crypto.randomUUID(), ...values })
     return videoEditTrackerEntityId(clip.id, tracker.id)
@@ -157,7 +158,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
   if (type === 'video_edit.graphic_object') {
     if (!clip.graphic) throw new Error('请选择结构化图形片段。')
     if (!['rect', 'ellipse', 'text'].includes(String(values.kind))) throw new Error('图形对象需要矩形、椭圆或文字类型。')
-    const object = createVideoEditGraphic(values.kind as 'rect' | 'ellipse' | 'text', clip.graphic.width, clip.graphic.height).objects[0]
+    const object = createVideoEditGraphic(values.kind as 'rect' | 'ellipse' | 'text', clip.graphic.width, clip.graphic.height, styledVideoEditTextStyle(resolveVideoEditStyleKit(document, owner, clip), clip.graphic.height)).objects[0]
     if (values.name !== undefined) object.name = String(values.name)
     if (values.textStyle !== undefined) object.textStyle = values.textStyle === null ? undefined : videoEditTextStyleSchema.parse(values.textStyle)
     if (values.visible !== undefined) { if (typeof values.visible !== 'boolean') throw new Error('visible须为布尔值。'); object.visible = values.visible }

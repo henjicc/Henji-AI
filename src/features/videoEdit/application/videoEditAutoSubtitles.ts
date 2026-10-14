@@ -125,7 +125,7 @@ export function appendAutoSubtitles(projectId: string, sequenceId: string, capti
   const owner = requireVideoEditInstance(projectId)
   const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('原序列已移除，请重新选择。')
-  const parsed = prepareVideoEditCaptions(sequence, captions)
+  const parsed = prepareVideoEditCaptions(sequence, captions, owner.document)
   if (!parsed.length) throw new Error('没有可用字幕，请检查识别结果。')
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...(textTranscription ? { textTranscription: mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription) } : {}), captions: [...(sequence.captions ?? []), ...parsed] }))
   return parsed.map(caption => caption.id)
@@ -177,7 +177,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     const fps = current(projectId, sequenceId).fps
     const pauses = !manifest.captions && audio.document.transcript.some(block => block.granularity !== 'word')
       ? (await readSourceEnergyPauses(audio.document.source.sourcePath, signal)).map(pause => ({ startMs: pause.startMs + manifest.startFrame / fps * 1000, endMs: pause.endMs + manifest.startFrame / fps * 1000 })) : []
-    const captions = manifest.captions ?? prepareVideoEditCaptions(current(projectId, sequenceId), buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses))
+    const captions = manifest.captions ?? prepareVideoEditCaptions(current(projectId, sequenceId), buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses), requireVideoEditInstance(projectId).document)
     if (!captions.length) throw new Error('识别结果没有可用字幕。')
     // Record planned IDs before committing, so a lost save acknowledgement cannot create a duplicate batch.
     await platform.system.fs.writeTextFile(path, JSON.stringify({ ...manifest, captions }))

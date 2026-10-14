@@ -4,6 +4,7 @@ import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } 
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
 import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementSummary'
 import { styleKitHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
+import { videoEditPresetHostSummary } from '@/features/videoEdit/application/videoEditPresetCatalog'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
   HOST_ANNOTATION_PREVIEW_CHARACTERS,
@@ -336,6 +337,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       selectedCodeElement: videoEditSelectedCodeElementContext(videoEdit),
       elementOverrides: videoEditCodeElementHostSummary(videoEdit.document.id),
       currentStyleKit: styleKitHostSummary(videoEdit.document.id, videoEdit.activeSequenceId),
+      presetPreferences: videoEditPresetHostSummary(),
       targetTrackRefs: videoEdit.targetTrackIds.slice(0, 32).map(id => `video_edit.track:${videoEdit.document.id}:${id}`),
     } } : {}),
     assets: {

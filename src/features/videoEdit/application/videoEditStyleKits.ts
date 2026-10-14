@@ -1,5 +1,5 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
-import { styleKitSchema, styleKitContent, resolveVideoEditStyleKit, type StyleKit, type StyleKitContent } from '@/core/videoEdit/styleKit'
+import { styleKitSchema, styleKitContent, resolveVideoEditStyleKit, type StyleKit, type StyleKitContent, type StyleRule } from '@/core/videoEdit/styleKit'
 import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
 import { extractStyleFromWork, type StyleWorkObservation } from '@/core/videoEdit/styleKitExtraction'
 import { styleColorFromHex } from '@/core/videoEdit/styleKit'
@@ -67,7 +67,10 @@ function applyVideoEditStyleKit(projectId: string, sequenceId: string, kit: Styl
     logger.info('style_kit.apply.completed', '序列风格已应用', { context: { projectId, sequenceId, styleKitId: value.id } }); return value
   } catch (error) { logger.error('style_kit.apply.failed', '序列风格应用失败', { error, context: { projectId, sequenceId } }); throw error }
 }
-export function appendStyleKitRule(kit: StyleKit, preference: string): StyleKit { const text = preference.trim(); if (!text) throw new Error('请填写要记住的偏好。'); return styleKitSchema.parse({ ...kit, rules: `${kit.rules}\n\n## 长期偏好\n${text}` }) }
+export function appendStyleKitRule(kit: StyleKit, text: string, kind: StyleRule['kind'] = 'do', strength: StyleRule['strength'] = 'prefer', scope = ''): StyleKit {
+  const value = text.trim(); if (!value) throw new Error('请填写要记住的偏好。')
+  return styleKitSchema.parse({ ...kit, rules: [...kit.rules, { id: crypto.randomUUID(), kind, text: value, strength, scope: scope.trim() }] })
+}
 /** Capture an existing checked code component; keep source authoring in the sole code editor. */
 export function captureVideoEditStyleSample(projectId: string, sequenceId: string, kit: StyleKit): StyleKit {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
@@ -77,12 +80,22 @@ export function captureVideoEditStyleSample(projectId: string, sequenceId: strin
   if (program.kind !== 'generator' || program.languageVersion !== 3) throw new Error('风格组件需要 v3 生成器。')
   return styleKitSchema.parse({ ...kit, samples: [...kit.samples, { id: crypto.randomUUID(), name: clip.name, kind: 'chapter', source: portableCodeComponentFiles(codeMaterialSource(owner.document, clip.code).compilation) }] })
 }
+const RULE_LABELS: Record<StyleRule['kind'], string> = { do: '做', dont: '不做', keep: '统一', vary: '可变' }
+/** Bounded host summary: identity, intent and must-rules; full content is read through the entity. */
+export function styleKitBriefing(kit: StyleKit): string {
+  const must = kit.rules.filter(rule => rule.strength === 'must').map(rule => `${RULE_LABELS[rule.kind]}：${rule.text}`)
+  const concepts = kit.profile.concepts.map(concept => `${concept.name}${concept.strength === 'must' ? '（必须）' : ''}`)
+  return [kit.profile.summary && `定位：${kit.profile.summary}`, kit.profile.scenarios.length && `适用：${kit.profile.scenarios.join('、')}`, concepts.length && `概念：${concepts.join('、')}`, must.length && `必须：${must.join('；')}`, `标题 ${kit.tokens.fonts.display.family}，正文 ${kit.tokens.fonts.body.family}`].filter(Boolean).join('。')
+}
 export function styleKitHostSummary(projectId: string, sequenceId: string): { ref: string | null; name: string; summary: string } {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) return { ref: null, name: '', summary: '写代码前选择并读取风格包；未绑定时使用默认令牌。' }
   const selected = sequence.clips.find(clip => clip.id === owner.selection)
   const kit = resolveVideoEditStyleKit(owner.document, sequence, selected)
-  return kit ? { ref: `video_edit.style_kit:${projectId}:${kit.id}`, name: kit.name, summary: `AI 写新代码前先 read_application_entity 读取此风格包的 content（tokens、rules、samples），按 rules 做/不做并引用 ctx.style；标题 ${kit.tokens.fonts.display.family}，正文 ${kit.tokens.fonts.body.family}。` } : { ref: null, name: '', summary: '未绑定风格；ctx.style 使用默认令牌。可先列出 video_edit.style_preset，复制 content 创建 video_edit.style_kit，再写 sequence.style_kit_id。' }
+  if (kit) return { ref: `video_edit.style_kit:${projectId}:${kit.id}`, name: kit.name, summary: `${styleKitBriefing(kit)}。新建代码画面、文字、标题、字幕或关键帧前先 read_application_entity 读取完整 content（profile、tokens、rhythm、rules），按规则强度执行并在交付时自查；代码引用 ctx.style，关键帧曲线读 keyframe_curves。用户本次明确要求优先于风格。` }
+  const personal = videoEditStyleKitLibrary.custom()
+  const listed = personal.slice(0, 8).map(value => value.profile.scenarios.length ? `${value.name}（${value.profile.scenarios.join('、')}）` : value.name)
+  return { ref: null, name: '', summary: `未绑定风格；ctx.style 使用默认令牌。${listed.length ? `本机个人风格 ${personal.length} 套：${listed.join('、')}${personal.length > listed.length ? ' 等' : ''}。按任务场景推荐一套并询问用户，用户不需要时按其输入自由发挥。` : ''}使用时列出 video_edit.style_preset，复制 content 创建 video_edit.style_kit，再写 sequence.style_kit_id。` }
 }
 export async function extractVideoEditWorkStyle(projectId: string, sequenceId: string, name: string, signal?: AbortSignal): Promise<StyleKit> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion; const sequence = baseline.sequences.find(value => value.id === sequenceId)

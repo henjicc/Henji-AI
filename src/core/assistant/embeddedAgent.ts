@@ -25,7 +25,7 @@ export function buildEmbeddedPromptContext(snapshot: HostContextSnapshot): strin
     }
   }
   if (serialized.length > EMBEDDED_CONTEXT_MAX_CHARACTERS && context.videoEdit) {
-    delete context.videoEdit.selectedCodeElement; delete context.videoEdit.elementOverrides; delete context.videoEdit.currentStyleKit
+    delete context.videoEdit.selectedCodeElement; delete context.videoEdit.elementOverrides; delete context.videoEdit.currentStyleKit; delete context.videoEdit.presetPreferences
     context.truncated = true; serialized = JSON.stringify(context)
   }
   if (serialized.length > EMBEDDED_CONTEXT_MAX_CHARACTERS) throw new Error('当前界面摘要过长，请缩小选区后重试。')

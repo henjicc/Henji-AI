@@ -9,11 +9,12 @@ import { createLogger } from '@/core/logging'
 import { resizeCodeMaterialCanvas } from '@/core/videoEdit/codeElementBake'
 import { runVideoEditPreviewTask } from './videoEditPreviewTask'
 const logger = createLogger('features.videoEdit.styleKits')
-export async function renderStyleKitPreview(kit: StyleKit, sampleId: string, size: { width: number; height: number }, signal: AbortSignal): Promise<Blob> {
-  const context = { kitId: kit.id, sampleId, ...size }; const started = performance.now()
+/** `seconds` picks the sample time; omitted, the settled frame right after the entrance. */
+export async function renderStyleKitPreview(kit: StyleKit, sampleId: string, size: { width: number; height: number }, signal: AbortSignal, seconds?: number): Promise<Blob> {
+  const context = { kitId: kit.id, sampleId, ...size, seconds }; const started = performance.now()
   logger.debug('风格预览开始', { event: 'style_kit.preview.start', context })
   try {
-    const blob = await runVideoEditPreviewTask(signal, '风格预览等待过久，请重试。', active => render(kit, sampleId, size, active))
+    const blob = await runVideoEditPreviewTask(signal, '风格预览等待过久，请重试。', active => render(kit, sampleId, size, active, seconds))
     logger.debug('风格预览完成', { event: 'style_kit.preview.completed', context: { ...context, durationMs: performance.now() - started } })
     return blob
   } catch (error) {
@@ -21,7 +22,7 @@ export async function renderStyleKitPreview(kit: StyleKit, sampleId: string, siz
     throw error
   }
 }
-async function render(kit: StyleKit, sampleId: string, size: { width: number; height: number }, signal: AbortSignal): Promise<Blob> {
+async function render(kit: StyleKit, sampleId: string, size: { width: number; height: number }, signal: AbortSignal, seconds?: number): Promise<Blob> {
   const sample = kit.samples.find(value => value.id === sampleId); if (!sample) throw new Error('风格组件不存在。')
   const files = normalizeCodeMaterialFiles(sample.source)
   const source = { ...files, files: { ...files.files, [files.entry]: resizeCodeMaterialCanvas(files.files[files.entry], size) } }
@@ -33,7 +34,7 @@ async function render(kit: StyleKit, sampleId: string, size: { width: number; he
   const code = { definitionId, versionId, parameters: {} }
   const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: crypto.randomUUID(), name: '风格预览', revision: 0, media: [], bins: [], items: [{ id: itemId, name: sample.name, kind: 'code', code }], sequences: [sequence], styleKits: [kit], codeMaterials: [{ id: definitionId, name: sample.name, defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 1, languageVersion: 3 }] }] }
   sequence.clips = [makeVideoEditItemClip(document, itemId, sequence.id, { frame: 0 }, () => program)]
-  const frame = Math.min(sequence.clips[0].duration - 1, Math.round(Math.min(program.durationSeconds / 2, .15 + kit.tokens.motion.enterDuration) * sequence.frameRate.numerator / sequence.frameRate.denominator))
+  const frame = Math.min(sequence.clips[0].duration - 1, Math.round(Math.max(0, seconds ?? Math.min(program.durationSeconds / 2, .15 + kit.tokens.motion.enterDuration)) * sequence.frameRate.numerator / sequence.frameRate.denominator))
   const bitmap = await trialVideoEditCodeFrames([{ document: videoEditComposition(document, sequence.id), frame }], signal, true)
   if (!bitmap) throw new Error('风格预览没有返回画面。')
   let canvas: OffscreenCanvas
