@@ -41,6 +41,8 @@ interface PlaybackStream {
   /** Initial contiguous pictures already owned by the bounded seek cache. */
   cachedUntilFrame: number
   samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
+  /** Only the run containing the playhead is primed; future cuts remain demand driven. */
+  primed?: Promise<IteratorResult<VideoEditDecodedPicture | null, void>>
   /** Serializes pulls; one file never serves two clips at the same frame. */
   tail: Promise<unknown>
 }
@@ -59,6 +61,7 @@ const AUDIO_STREAM_KEY = '\u0000'
 const PLAYBACK_SCHEDULE_FILES = 4
 // Bound per-frame timestamp allocation independently of sequence duration. Rebuild as playback crosses this rolling window.
 const PLAYBACK_SCHEDULE_SECONDS = 30
+const PLAYBACK_ARM_IDLE_MS = 2500
 interface VideoSource {
   /** Key of the shared opened source this clip's own readers read from. */
   demux: string
@@ -81,6 +84,7 @@ export class VideoEditRenderer {
   private lastForwardFrame?: number
   /** The paused frame a playback schedule was built for ahead of play (see `armPlayback`). */
   private armedFrame?: number
+  private armExpiry?: ReturnType<typeof setTimeout>
   private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean }>()
   private imageLoads = 0
   private readonly imageQueue: Array<() => void> = []
@@ -315,34 +319,49 @@ export class VideoEditRenderer {
       const abort = new AbortController()
       const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps, abort.signal) })(demux.ready)
       const stream: PlaybackStream = { demux: demux.key, abort, entries, cursor: 0, cachedUntilFrame, samples, tail: Promise.resolve() }
+      if (group.clips.some(clip => clip.start <= frame && frame < clip.start + clip.duration)) {
+        stream.primed = samples.next()
+        void stream.primed.catch(() => undefined)
+      }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
     this.playback = { document, endFrame, streams, byClip }
   }
-  /** Prepare the schedule metadata while paused. Pull only on playback demand: a primed generator
-   * retains the native pool (including future cuts) indefinitely when the user stays paused.
-   * Already rendered pictures remain in the owned, bounded seek cache. */
+  /** Briefly position the active decoder ahead of play, including the handoff after the scrub cache.
+   * Expiry retires the entire armed schedule; a long pause and future runs hold no borrowed frames. */
   async armPlayback(frame: number): Promise<void> {
     if (this.disposed || !this.previewWidth) return
     if (this.playback && this.armedFrame === frame && this.playback.document === this.document) return
     if (this.playback) await this.disposePlayback()
     this.buildPlayback(this.document, frame, videoEditVisibleTracks(this.document))
     this.armedFrame = frame; this.lastForwardFrame = frame - 1
+    const playback = this.playback
+    this.armExpiry = setTimeout(() => {
+      if (this.playback === playback && this.armedFrame !== undefined) void this.disposePlayback().catch(error => {
+        logger.debug('起播预热释放失败', { event: 'video_edit.preview.arm_release_failed', error })
+      })
+    }, PLAYBACK_ARM_IDLE_MS)
     this.warmShaderGraphs()
   }
   private async disposePlayback(): Promise<void> {
+    clearTimeout(this.armExpiry); this.armExpiry = undefined
     this.armedFrame = undefined
     const playback = this.playback; this.playback = undefined
     if (!playback) return
     for (const stream of playback.streams) stream.abort.abort()
     await Promise.allSettled(playback.streams.map(async stream => {
       await stream.tail.catch(() => undefined)
+      const primed = stream.primed; stream.primed = undefined
+      if (primed) (await primed.catch(() => undefined))?.value?.close()
       await stream.samples.return(); this.release(stream)
     }))
   }
   /** The scheduled picture for exactly this frame and clip, or undefined to use the regular path. */
   private takeScheduled(stream: PlaybackStream, frame: number, clipId: string): Promise<VideoEditDecodedPicture | undefined> {
-    const pull = (): Promise<IteratorResult<VideoEditDecodedPicture | null, void>> => { return stream.samples.next() }
+    const pull = (): Promise<IteratorResult<VideoEditDecodedPicture | null, void>> => {
+      const primed = stream.primed; stream.primed = undefined
+      return primed ?? stream.samples.next()
+    }
     const next = stream.tail.catch(() => undefined).then(async () => {
       while (stream.cursor < stream.entries.length && stream.entries[stream.cursor].frame < frame) {
         stream.cursor++; const skipped = await pull(); skipped.value?.close()
@@ -394,6 +413,7 @@ export class VideoEditRenderer {
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
     const visible = videoEditVisibleTracks(document)
     if (this.previewWidth && sequential) {
+      clearTimeout(this.armExpiry); this.armExpiry = undefined
       const forward = this.lastForwardFrame === frame - 1
       // Resolution changes and cache pressure can remove a prefix after arming. Rebuild the
       // same playback plan at this frame instead of opening a second reader for the missing prefix.
