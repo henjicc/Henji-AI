@@ -1,2 +1,3 @@
-/** Shared encoding policy used by export and live capture; implementation remains in the existing encoder. */
-export { videoEditExportVideoOptions, videoEditExportVideoEncoderConfig } from './engine/videoEditExportEncoderConfig'
+/** Shared encoding policy for export and live capture. */
+export { selectVideoEditExportEncoder, videoEditExportVideoOptions } from './engine/videoEditExportEncoder'
+export { videoEditExportVideoEncoderConfig } from './engine/videoEditExportEncoderConfig'

@@ -185,7 +185,7 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
  */
 const ASSISTANT_BLIND_FEATURES = {
-  screenRecording: '屏幕录制1.1只提供权限/控制底座与受控辅助窗口，不开放创建录制会话入口；'
+  screenRecording: '屏幕录制1.1/1.2提供权限、控制与内部采集后端，不开放用户创建录制会话入口；'
     + '快捷键已由 settings.registry 的 screen_recording.shortcuts 与 settingsStoreLedger 覆盖。'
     + '会话实体、控制属性与控制条 Surface 观察统一由屏幕录制1.5接入，不以空反射冒充可调用采集。',
   creativeIntent: '跨工作区共用的纯 props 呈现组件，不持有业务实体、文档或 Store；'

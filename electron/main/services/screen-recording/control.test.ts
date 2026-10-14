@@ -22,6 +22,15 @@ describe('录制控制权威状态', () => {
     await service.command('stop'); service.setTrackStatus('live', status); expect(service.snapshot()?.cameraPreview).toBeNull()
     await service.dispose()
   })
+  it('异步设备失败不会被迟到启动回执覆盖，停止后销毁仍经过释放屏障', async () => {
+    const { service, backend } = fixture(); let finish!: () => void
+    backend.start.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    service.create('session', backend); await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    service.fail('session', '磁盘空间不足'); finish(); await vi.advanceTimersByTimeAsync(0)
+    expect(service.snapshot()).toMatchObject({ phase: 'failed', error: '磁盘空间不足' })
+    await service.command('stop'); await service.dispose()
+    expect(backend.cancel).toHaveBeenCalledOnce()
+  })
   it('采集失败终止钩子/媒体资源；启动迟到完成不覆盖失败状态；标记备注走同一后端', async () => {
     const { service, backend } = fixture(); let finish!: () => void
     backend.start.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))

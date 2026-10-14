@@ -12,6 +12,7 @@ import type { CaptureEvent } from '../../../src/core/captureLog/events'
 import { z } from 'zod'
 import { assertTrustedApplicationSender } from './application-control'
 import { closeRecordingControl, openRecordingControl, recordingControl } from '../services/screen-recording/runtime'
+import { getUserFolderDir } from '../services/appPaths'
 
 /*
  * 测试夹具通道（存储底座 2.3）：真实性测试脚本需要核对或清理、但正式界面没有入口的记录，
@@ -58,7 +59,7 @@ export function registerTestFixturesIpc(): void {
       events = { count, cursorCount, cursorShapes: [...shapes], facts, gaps, inputListeners: uIOhook.listenerCount('input'), ...(eventFailure ? { failure: eventFailure } : {}) }
     }
     const win = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('view=recording-control'))
-    return { snapshot: recordingControl.snapshot(), calls: { ...calls }, protected: win?.isContentProtected() ?? false, sourceId: BrowserWindow.fromWebContents(event.sender)?.getMediaSourceId() ?? '', ...(events ? { events } : {}), ...(tracksDirectory ? { tracksDirectory, originUs: tracksOriginUs } : {}) }
+    return { snapshot: recordingControl.snapshot(), calls: { ...calls }, protected: win?.isContentProtected() ?? false, sourceId: BrowserWindow.fromWebContents(event.sender)?.getMediaSourceId() ?? '', uploads: getUserFolderDir('uploads'), ...(events ? { events } : {}), ...(tracksDirectory ? { tracksDirectory, originUs: tracksOriginUs } : {}) }
   }, assertTrustedApplicationSender)
   registerIpcHandler('testFixtures:generationSubmission:inspect', (input) => ({ requestId: parseStringField(input, 'requestId') }),
     ({ requestId }) => inspectGenerationSubmission(requestId))

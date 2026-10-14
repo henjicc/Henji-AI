@@ -119,6 +119,7 @@ export class RecordingControlService {
     this.publish()
     const task = Promise.resolve().then(() => operation === 'mark' ? active.backend.mark(active.abort.signal, note) : active.backend[operation](active.abort.signal)).then(() => {
       if (this.active !== active || active.abort.signal.aborted) return
+      if (active.snapshot.phase === 'failed' && operation !== 'stop') return
       if (operation === 'pause') { active.elapsed += Math.max(0, this.deps.now() - active.startedAt); active.snapshot.phase = 'paused'; active.snapshot.microphoneLevel = null }
       if (operation === 'start' || operation === 'resume') { active.startedAt = this.deps.now(); active.snapshot.phase = 'recording' }
       if (operation === 'stop') { active.snapshot.phase = 'stopped'; active.snapshot.microphoneLevel = null; this.releaseResources() }
@@ -154,14 +155,22 @@ export class RecordingControlService {
     this.publish()
   }
 
+  /** Device/process failures arrive outside a control command. Preserve the failed result for readback. */
+  fail(sessionId: string, message: string): void {
+    const active = this.active
+    if (!active || active.snapshot.sessionId !== sessionId) return
+    if (active.snapshot.phase === 'recording') active.elapsed += Math.max(0, this.deps.now() - active.startedAt)
+    active.snapshot.phase = 'failed'; active.snapshot.error = message; active.snapshot.microphoneLevel = null
+    this.releaseResources(); this.publish()
+  }
+
   /** Capture/storage failures terminate native resources immediately, including an in-flight start. */
   async captureFailed(sessionId: string, error: unknown): Promise<void> {
     const active = this.active
     if (!active || active.snapshot.sessionId !== sessionId || active.snapshot.phase === 'stopped') return
-    if (active.snapshot.phase === 'recording') active.elapsed += Math.max(0, this.deps.now() - active.startedAt)
-    active.abort.abort(); active.snapshot.phase = 'failed'; active.snapshot.microphoneLevel = null
-    active.snapshot.error = '录制操作未完成，请停止录制后重新准备。'
-    this.releaseResources(); this.deps.log('recording.control.capture.failed', error); this.publish()
+    active.abort.abort()
+    this.fail(sessionId, '录制操作未完成，请停止录制后重新准备。')
+    this.deps.log('recording.control.capture.failed', error)
     await active.backend.cancel()
   }
 
@@ -171,7 +180,7 @@ export class RecordingControlService {
     active?.abort.abort()
     this.active = null; this.pending = null
     this.releaseResources(); this.publish()
-    if (active && active.snapshot.phase !== 'stopped') {
+    if (active) {
       try { await active.backend.cancel() } catch (error) { this.deps.log('recording.control.cancel.failed', error); throw error }
     }
   }

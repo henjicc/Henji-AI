@@ -19,6 +19,7 @@ export function registerScreenRecordingIpc(): void {
       switch (request.action) {
         case 'clock': return Number(process.hrtime.bigint() / 1000n)
         case 'track-status': return updateRecordingTracks(event.sender, request.sessionId, request.status)
+        case 'capture': return await (await import('../services/screen-recording/capture/service')).handleCaptureRequest(event.sender, request.request)
         case 'capability': return recordRecordingCapability(event.sender, request.sessionId, request.fact)
         case 'sources': return await mediaPermissions.sources(request.excludedSourceIds)
         case 'permissions': return mediaPermissions.statuses()
@@ -29,7 +30,9 @@ export function registerScreenRecordingIpc(): void {
           mediaPermissions.grant(event.sender, request.sessionId, request.kinds, request.selection)
           return
         }
-        case 'revoke': return mediaPermissions.revoke(event.sender, request.sessionId)
+        case 'revoke':
+          mediaPermissions.revoke(event.sender, request.sessionId)
+          return await (await import('../services/screen-recording/capture/service')).revokeCaptureSession(event.sender, request.sessionId)
         case 'settings': return await mediaPermissions.openSettings(request.kind)
         case 'snapshot': return recordingControl.snapshot()
         case 'shortcuts': return recordingControl.configureShortcuts(request.shortcuts)
