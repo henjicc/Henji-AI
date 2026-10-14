@@ -235,6 +235,11 @@
       "version": 1,
       "fingerprint": "4e9e82dfecd4a349f4b2409ab6351352e72cf633f109280a060fdafac86ee8b2",
       "supportedFrom": 1
+    },
+    "document.screen_recording": {
+      "version": 1,
+      "fingerprint": "37c71a0834aaa96c072a4bbff152ccd26ff6e297aa258f4f221a2a15e5547244",
+      "supportedFrom": 1
     }
   },
   "devBreaks": [

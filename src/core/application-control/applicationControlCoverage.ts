@@ -31,6 +31,7 @@ interface DomainPlan extends ApplicationDomainCoverage {
 }
 
 const domainPlans: Readonly<Record<string, DomainPlan>> = {
+  screen_recording: domainPlan('screen_recording', '1.5', 'src/features/screenRecording/application/recordingService.ts', ['screen_recording.session', 'screen_recording.source', 'screen_recording.device'], ['src/features/screenRecording/application/recordingReflection.ts'], 'src/core/application-control/domains/screenRecording/recordingCapabilities.ts', 'read_application_entity', ['start_screen_recording', 'pause_screen_recording', 'resume_screen_recording', 'mark_screen_recording', 'stop_screen_recording', 'cancel_screen_recording', 'recover_screen_recording', 'import_screen_recording'], 'operation'),
   video_edit: domainPlan('video_edit', '7.2', 'src/features/videoEdit/application/videoEditService.ts', ['video_edit.document', 'video_edit.clip', 'video_edit.annotation', 'video_edit.media', 'video_edit.code_material', 'video_edit.code_version'], ['src/features/videoEdit/application/videoEditFields.ts'], 'videoEditApplicationCapabilities.ts', 'read_application_entity', ['change_application_entities', 'split_video_edit', 'export_video_edit'], 'operation'),
   application: domainPlan('application', '2.2', 'src/core/application-control/', ['application.context'], ['src/core/application-control/reflection.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'application.observe', ['application.observe'], 'query'),
   navigation: domainPlan('navigation', '5.1', 'src/features/navigation/application/', ['application.surface'], ['surfaceCatalog.ts'], 'src/core/application-control/builtinApplicationCapabilities.ts', 'surface.observe', ['surface.open', 'surface.close', 'surface.focus'], 'operation'),
@@ -91,6 +92,7 @@ function surfacesForDomain(domain: string): string[] {
     audio_edit: ['tool.audio_edit'],
     video_edit: ['workspace.video_edit'],
     toolbox: ['workspace.tools'],
+    screen_recording: ['tool.screen_recording'],
   }
   return mappings[domain] ?? []
 }

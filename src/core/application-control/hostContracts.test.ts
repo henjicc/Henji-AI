@@ -6,8 +6,13 @@ import {
 } from './hostContracts'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from './builtinApplicationCapabilityRegistry'
 import { VIDEO_EDIT_FOCUSABLE_PANELS } from '../videoEdit/panels'
+import { TOOL_DESCRIPTORS } from '../toolbox/toolCatalog'
 
 describe('application host contracts', () => {
+  it('全部正式工具共享宿主枚举，打开新工具不会中断上下文发布', () => {
+    for (const tool of TOOL_DESCRIPTORS) expect(hostContextSnapshotSchema.shape.workspace.parse({ id: 'tools', activeToolId: tool.id }).activeToolId).toBe(tool.id)
+    expect(hostContextSnapshotSchema.shape.workspace.safeParse({ id: 'tools', activeToolId: 'missing' }).success).toBe(false)
+  })
   it('剪辑任一可聚焦面板都能通过宿主上下文校验（曾漏 ColorGrade / 标题模板 / 跟踪，导致助手读取全部失败）', () => {
     const videoEdit = hostContextSnapshotSchema.shape.videoEdit.unwrap()
     for (const focusedPanel of VIDEO_EDIT_FOCUSABLE_PANELS) {

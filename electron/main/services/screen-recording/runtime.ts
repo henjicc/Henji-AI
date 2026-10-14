@@ -41,7 +41,7 @@ export function isRecordingControlSender(contents: WebContents): boolean {
 }
 
 /** 正式采集协调器准备完资源后调用；UI/Pi/MCP 不各建状态机。1.5 负责公开会话实体。 */
-export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend, events?: RecordingEventOptions): RecordingControlSnapshot {
+export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend, events?: RecordingEventOptions, settled?: () => Promise<void>): RecordingControlSnapshot {
   if (!isTrustedMainRendererUrl(ownerContents.getURL())) throw new Error('录制宿主来源不可信')
   if (owner) throw new Error('已有录制会话，请先关闭当前录制')
   owner = ownerContents
@@ -52,7 +52,12 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
     events.onFailure(error)
   } }) : null
   let snapshot: RecordingControlSnapshot
-  try { snapshot = recordingControl.create(sessionId, eventSession ? eventSession.wrap(backend) : backend) } catch (error) { owner = null; eventSession = null; throw error }
+  const wrapped = eventSession ? eventSession.wrap(backend) : backend
+  const coordinated = settled ? { ...wrapped,
+    stop: async (signal: AbortSignal) => { await wrapped.stop(signal); await settled() },
+    cancel: async () => { try { await wrapped.cancel() } finally { await settled() } },
+  } : wrapped
+  try { snapshot = recordingControl.create(sessionId, coordinated) } catch (error) { owner = null; eventSession = null; throw error }
   const capture = eventSession
   if (capture) detachCapabilitySink = bindCaptureCapabilitySink(fact => capture.capability(fact))
   try {

@@ -1,4 +1,5 @@
 import { mcpConnectionStorageSchema } from '../src/core/persistence/mcpConnectionSchema'
+import { createRecordingDocument } from '../src/core/screenRecording/document'
 import { llmStoredConfigSchema } from '../src/core/persistence/llmSchemas'
 import { compileCodeMaterial } from '../src/core/videoEdit/codeMaterial/compiler'
 import fs from 'node:fs'
@@ -116,6 +117,10 @@ const historyBytes=Buffer.from(JSON.stringify(goldenHistoryPage)),historyId=gold
 const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSION, documentId: image.id, revision:goldenBody.revision, createdAt: timestamp, updatedAt: timestamp, document:goldenBody,
   historyCheckpoint:{format:'henji-image-history',version:2,documentId:image.id,headRevision:goldenBody.revision,snapshotVersion:2,position:1,total:1,pages:[{resourceId:historyId,byteSize:historyBytes.byteLength,start:0,count:1}],resources:[]},resourceRefs:[...image.creativeIntents.resources.map(r=>r.resourceId),historyId].sort() }
 const values: Record<string, unknown> = {
+  'document.screen_recording': { ...createRecordingDocument(), sessionId: '00000000-0000-4000-8000-000000000005', originUs: 1000000, status: 'stopped',
+    source: { name: '合成显示器', options: { sourceId: 'screen:1:0', backend: 'auto', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }, cursorEmbedded: false },
+    media: [{ id: 'screen-0', kind: 'screen', path: '/persistence-project/素材/screen.mp4', monoUs: 3000000, durationUs: 10000000 }],
+    eventPages: [{ path: `/persistence-project/素材/0000000000000000-${'a'.repeat(64)}.capture.json`, firstSequence: 0, lastSequence: 2 }], markers: [{ id: 'golden-mark', monoUs: 4000000, note: '重点' }] },
   'image-layout-page':layoutPage,
   'image-layout-candidate':layoutCandidate,
   'creative-intent-page': (() => { const { draft, samples } = createMotionFixture('S01').input; return { version: 1, kind: 'samples', ownerRef: draft.ownerRef, sourceDigest: draft.sourceDigest, monoSpanUs: [samples[0].monoUs, samples[samples.length - 1].monoUs], seqSpan: [samples[0].seq, samples[samples.length - 1].seq], count: samples.length, entries: samples } })(),

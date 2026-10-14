@@ -40,8 +40,10 @@ import { applyImageEditSelectionCapability } from './domains/imageEdit/imageEdit
 import { IMAGE_EDIT_REPAIR_CAPABILITIES } from './domains/imageEdit/imageEditRepairCapabilities'
 import { IMAGE_EDIT_OUTPAINT_CAPABILITIES } from './domains/imageEdit/imageEditOutpaintCapabilities'
 import { DOCUMENTS_APPLICATION_CAPABILITIES } from './domains/documents/documentsApplicationCapabilities'
+import { RECORDING_CAPABILITIES } from './domains/screenRecording/recordingCapabilities'
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  ...RECORDING_CAPABILITIES,
   ...CREATIVE_INTENT_CAPABILITIES,
   getCurrentApplicationContextCapability,
   observeApplicationSurfaceCapability,

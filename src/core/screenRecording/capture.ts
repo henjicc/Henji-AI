@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { recordingSessionOptionsSchema } from './sessionOptions'
+import { recordingTracksSchema } from './tracks'
 
 export const captureOptionsSchema = z.object({
   sourceId: z.string().regex(/^(screen|window):\d+:\d+$/),
@@ -38,10 +40,13 @@ export const captureManifestSchema = z.object({
 export type CaptureManifest = z.infer<typeof captureManifestSchema>
 export type CaptureSpan = z.infer<typeof captureSpanSchema>
 /** Pass this exact main-process monotonic origin to event and audio/camera capture. */
-export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions }
+export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions; directory?: string }
 const sessionId = z.string().uuid()
 export const captureRequestSchema = z.discriminatedUnion('operation', [
-  z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema }).strict(),
+  z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema, session: recordingSessionOptionsSchema.optional() }).strict(),
+  z.object({ operation: z.literal('tracks'), sessionId, tracks: recordingTracksSchema }).strict(),
+  z.object({ operation: z.literal('recover-session'), sessionId }).strict(),
+  z.object({ operation: z.literal('events'), sessionId, offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(256), markersOnly: z.boolean().default(false) }).strict(),
   z.object({ operation: z.literal('read'), sessionId }).strict(),
   z.object({ operation: z.literal('clock'), sessionId }).strict(),
   z.object({ operation: z.literal('anchor'), sessionId, index: z.number().int().nonnegative(), monoUs: z.number().int().nonnegative() }).strict(),

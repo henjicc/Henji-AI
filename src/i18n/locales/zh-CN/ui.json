@@ -1,4 +1,49 @@
 {
+  "recording": {
+    "title": "屏幕录制",
+    "record": "录制",
+    "back": "返回",
+    "start": "开始录制",
+    "stop": "停止并保存",
+    "new": "新建录制",
+    "pause": "暂停",
+    "resume": "继续",
+    "countdown": "{{count}} 秒后开始",
+    "saving": "正在保存录制…",
+    "inProgress": "录制进行中",
+    "marker": "标记备注",
+    "mark": "打标记",
+    "markDuringRecording": "开始录制后可打标记",
+    "cancel": "中止录制",
+    "preview": "录制结果",
+    "track": "预览轨道",
+    "noMedia": "暂无可播放片段",
+    "recover": "恢复已保存片段",
+    "cursorEmbedded": "兼容录制已包含系统光标，后续成片不会再叠加光标。",
+    "createLater": "自动生成成片将在下一阶段提供",
+    "createMovie": "生成成片",
+    "markers": "重点标记",
+    "selectSource": "选择录制来源",
+    "refresh": "刷新来源",
+    "noSources": "没有可录制的来源",
+    "options": "录制设置",
+    "name": "会话名称",
+    "screen": "屏幕",
+    "microphone": "麦克风",
+    "systemAudio": "系统声音",
+    "camera": "摄像头",
+    "microphoneDevice": "麦克风设备",
+    "cameraDevice": "摄像头设备",
+    "defaultDevice": "默认设备",
+    "region": "只录制显示器区域",
+    "region_x": "区域左边距（%）",
+    "region_y": "区域上边距（%）",
+    "region_width": "区域宽度（%）",
+    "region_height": "区域高度（%）",
+    "insert": "放到当前序列播放头处",
+    "import": "送入新剪辑项目",
+    "openEditor": "返回剪辑"
+  },
   "screenRecording": {
     "cameraPreview": "摄像头预览",
     "trackWarning": { "system-audio-silent": "未听到系统声音，请检查声音权限或播放一段声音。", "system-audio-unavailable": "系统声音不可用，请重新选择录制来源。", "device-disconnected": "录制设备已中断，恢复后继续采集；中断期间保留空档。" },
@@ -115,6 +160,10 @@
     "cancel": "取消"
   },
   "toolbox": {
+    "screenRecording": {
+      "title": "屏幕录制",
+      "description": "录制屏幕、声音和摄像头，标记重点并送入剪辑。"
+    },
     "audioEdit": {
       "title": "口播剪辑",
       "description": "按逐字稿剪口播：删掉停顿和语气词，保留想要的句子，导出成片或交给剪辑"
@@ -1580,6 +1629,7 @@
   },
   "documentLibrary": {
     "kinds": {
+      "screen_recording": "录制会话",
       "video_edit": "剪辑",
       "canvas": "画布",
       "audio_edit": "口播",

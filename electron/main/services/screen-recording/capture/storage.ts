@@ -18,7 +18,7 @@ export class CaptureStorage {
   private writer: { index: number; handle: fs.FileHandle; size: number } | null = null
   private tail: Promise<unknown> = Promise.resolve()
   private saves: Promise<void> = Promise.resolve()
-  constructor(readonly directory: string, readonly manifest: CaptureManifest) {}
+  constructor(readonly directory: string, readonly manifest: CaptureManifest, private readonly published?: (manifest: CaptureManifest) => Promise<void>) {}
   async prepare(): Promise<void> {
     await fs.mkdir(this.directory, { recursive: true })
     await assertCaptureDiskSpace(this.directory)
@@ -27,7 +27,7 @@ export class CaptureStorage {
   }
   save(): Promise<void> {
     const content = JSON.stringify(captureManifestSchema.parse(this.manifest))
-    const task = this.saves.then(() => writeBufferAtomically(path.join(this.directory, 'capture.json'), Buffer.from(content)))
+    const task = this.saves.then(async () => { await writeBufferAtomically(path.join(this.directory, 'capture.json'), Buffer.from(content)); await this.published?.(captureManifestSchema.parse(JSON.parse(content))) })
     this.saves = task.catch(() => undefined)
     return task
   }

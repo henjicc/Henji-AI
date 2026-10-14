@@ -16,7 +16,7 @@ export interface CaptureSink {
 interface CaptureReader { read(): Promise<ReadableStreamReadResult<VideoFrame>>; cancel(): Promise<void>; releaseLock(): void }
 export interface CaptureMuxer { add(frame: VideoFrame, timeSeconds: number): Promise<void>; finish(): Promise<void>; cancel(): Promise<void> }
 export interface ChromiumDependencies {
-  stream(options: ScreenCaptureOptions): Promise<MediaStream>
+  stream(options: ScreenCaptureOptions, audio?: boolean): Promise<MediaStream>
   reader(track: MediaStreamTrack): CaptureReader
   mux(options: ScreenCaptureOptions, span: CaptureSpan, sink: CaptureSink): Promise<CaptureMuxer>
 }
@@ -55,7 +55,7 @@ async function createMux(options: ScreenCaptureOptions, span: CaptureSpan, sink:
   }
 }
 const browserDependencies: ChromiumDependencies = {
-  stream: options => navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: options.fps, max: options.fps } }, audio: false }),
+  stream: (options, audio = false) => navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: options.fps, max: options.fps } }, audio }),
   reader: track => {
     const Processor = (globalThis as unknown as { MediaStreamTrackProcessor?: new (input: { track: MediaStreamTrack; maxBufferSize: number }) => { readable: ReadableStream<VideoFrame> } }).MediaStreamTrackProcessor
     if (!Processor) throw new Error('当前环境无法读取屏幕帧，请更新应用后重试')
@@ -75,9 +75,15 @@ export class ChromiumCaptureBackend implements ScreenCaptureBackend {
   private cancelled = false
   private running = false
   private durationUs = 0
-  constructor(private readonly options: ScreenCaptureOptions, private readonly sink: CaptureSink, private readonly deps: ChromiumDependencies = browserDependencies) {}
+  constructor(private readonly options: ScreenCaptureOptions, private readonly sink: CaptureSink, private readonly deps: ChromiumDependencies = browserDependencies, private readonly systemAudio = false) {}
+  async cloneAudio(): Promise<MediaStream> {
+    await this.preparing
+    const tracks = this.stream?.getAudioTracks() ?? []
+    if (!tracks.length) throw new Error('当前来源没有提供系统声音，请检查权限或关闭系统声音后重试')
+    return new MediaStream(tracks.map(track => { const clone = track.clone(); clone.enabled = true; return clone }))
+  }
   prepare(): Promise<void> {
-    this.preparing = this.deps.stream(this.options).then(stream => {
+    this.preparing = this.deps.stream(this.options, this.systemAudio).then(stream => {
       if (this.cancelled) { stream.getTracks().forEach(track => track.stop()); throw new Error('录制已取消') }
       if (!stream.getVideoTracks().length) { stream.getTracks().forEach(track => track.stop()); throw new Error('没有可录制的屏幕画面') }
       this.stream = stream

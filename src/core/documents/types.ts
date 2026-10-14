@@ -10,7 +10,7 @@
  * 所有路径在接口里都是绝对路径（内存形态），相对写法只出现在磁盘与数据库里。
  */
 
-export const DOCUMENT_KIND_IDS = ['video_edit', 'canvas', 'audio_edit', 'camera_stage', 'image_document'] as const
+export const DOCUMENT_KIND_IDS = ['video_edit', 'canvas', 'audio_edit', 'camera_stage', 'image_document', 'screen_recording'] as const
 export type DocumentKindId = (typeof DOCUMENT_KIND_IDS)[number]
 
 export function isDocumentKindId(value: unknown): value is DocumentKindId {

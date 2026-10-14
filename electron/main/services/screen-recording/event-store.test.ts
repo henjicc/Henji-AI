@@ -12,7 +12,7 @@ afterEach(async () => { for (const directory of directories.splice(0)) await rm(
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'henji-capture-test-')); directories.push(directory)
   const store = new RecordingEventStore(directory); let id = 0
-  const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id: 's' }, sourceDigest: `sha256:${'b'.repeat(64)}`, originUs: 0, id: () => `${id++}` }, page => store.write(page), () => {})
+  const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id: 's' }, sourceDigest: `sha256:${'b'.repeat(64)}`, originUs: 0, id: () => `${id++}` }, async page => { await store.write(page) }, () => {})
   return { directory, store, collector }
 }
 it('恢复已同步完整页；崩溃留下的半页不进入索引；恢复只读，不重演能力', async () => {

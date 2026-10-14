@@ -1,6 +1,6 @@
 import { countVideoEditTiming } from './engine/videoEditFirstFrameTiming'
 import { retainVideoEditProgramWarmup } from './engine/videoEditProgramPool'
-import { UI_ICON_SIZE } from '@/core/theme/icons'
+import { ICON_TOOL_SCREEN_RECORDING, UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationText } from '@/i18n/notifications'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
@@ -31,7 +31,7 @@ import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { openDialog } from '@/platform/desktopApi'
-import { getDocumentOperations } from '@/features/documents/documentOperations'
+import { getDocumentOperations } from '@/features/documents'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { closeVideoEditAudioDialog, useVideoEditAudioDialog } from './application/videoEditAudioDialogs'
 import { VideoEditAudioGainDialog } from './panels/VideoEditAudioGainDialog'
@@ -78,6 +78,12 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
     <UiIconButton aria-label="重做" tooltip={redo.tooltip} disabledReason={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2  /></UiIconButton>
     <VideoEditLayoutMenu api={api} />
     <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
+    <UiButton onClick={() => run(async () => {
+      const { setRecordingDestination } = await import('@/features/screenRecording')
+      const { openApplicationSurface } = await import('@/features/navigation')
+      setRecordingDestination({ documentId: projectId, ...(sequence ? { sequenceId: sequence.id, frame: instance.frame } : {}) })
+      openApplicationSurface('tool.screen_recording')
+    })}><ICON_TOOL_SCREEN_RECORDING />{t('recording.record')}</UiButton>
     {task?.state === 'completed' && task.output && <UiButton loading={collecting} disabled={collecting} onClick={() => run(async () => {
       setCollecting(true)
       try {

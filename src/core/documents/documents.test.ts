@@ -109,7 +109,7 @@ describe('项目说明', () => {
 })
 
 describe('文档类型登记', () => {
-  it('五种类型的扩展名、独立存放文件夹与存储方式', () => {
+  it('文档类型的扩展名、独立存放文件夹与存储方式', () => {
     const rows = DOCUMENT_KINDS.map((kind) => [kind.id, kind.extension, kind.standaloneFolderNames, kind.storage, kind.version])
     expect(rows).toEqual([
       ['video_edit', '.henji-video', null, 'json', VIDEO_EDIT_CONTENT_VERSION],
@@ -117,6 +117,7 @@ describe('文档类型登记', () => {
       ['audio_edit', '.henji-audio', { zh: '口播', en: 'Voiceovers' }, 'json', 1],
       ['camera_stage', '.henji-stage', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
       ['image_document', '.henjiimg', { zh: '图片文档', en: 'Image Documents' }, 'package', 1],
+      ['screen_recording', '.henji-recording', { zh: '录制会话', en: 'Recordings' }, 'json', 1],
     ])
     expect(documentKindRegistry.forFileName('a.HenjiImg')?.id).toBe('image_document')
     expect(documentKindRegistry.forFileName('a.json')).toBeUndefined()
