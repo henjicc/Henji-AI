@@ -12,6 +12,7 @@ import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
 import { probeSmartRegionSource } from './probe'
 import { SmartRegionService } from './service'
+import { OcrPrivacyService } from './privacyService'
 
 /*
  * 智能区域与本地推理的进程内单例：真实的后台进程、FFmpeg、缓存目录、模型下载与窗口广播。
@@ -28,6 +29,20 @@ function broadcast(event: SmartRegionProgressEvent): void {
 
 let host: LocalInferenceHost | undefined
 let service: SmartRegionService | undefined
+let privacyService: OcrPrivacyService | undefined
+
+export function getOcrPrivacyService(): OcrPrivacyService {
+  if (privacyService) return privacyService
+  const created = new OcrPrivacyService({ identity: identifyMediaContent, probe: async source => probeSmartRegionSource(await loadFfprobePath(), source),
+    ensureModel: async id => { const model = await ensureLocalModel(id); const file = model.files.find(v => v.role === 'model'); if (!file) throw new Error('本地文字模型文件缺失。'); return file.path },
+    ffmpegPath: loadFfmpegPath, providers: executionProviderOrder(process.platform),
+    infer: (job, progress) => getLocalInferenceHost().ocrPrivacy(job, progress), cancel: id => getLocalInferenceHost().cancel(id),
+    emit: event => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(SMART_REGIONS_IPC_CHANNELS.privacyProgress, event) },
+    log: (level, message, event, context) => logger[level](message, { event, context }),
+  })
+  registerWorkRootBusyProbe('ocr_privacy_analysis', { reason: '还有敏感信息正在识别', isBusy: () => created.hasActiveJobs() })
+  return privacyService = created
+}
 
 export function getLocalInferenceHost(): LocalInferenceHost {
   return host ??= new LocalInferenceHost({
@@ -72,6 +87,7 @@ export function getSmartRegionService(): SmartRegionService {
 }
 
 export function disposeSmartRegions(): void {
+  privacyService?.dispose()
   service?.dispose()
   host?.dispose()
 }

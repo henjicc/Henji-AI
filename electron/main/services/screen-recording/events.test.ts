@@ -22,6 +22,17 @@ function fixture() {
   return { session, onFailure, backend, wrapped: session.wrap(backend), signal: new AbortController() }
 }
 const pages = (): CaptureLogPage[] => hooks.write.mock.calls.map(([page]) => page as CaptureLogPage)
+it('密码框几何按源/DPI归一化，准备/暂停/排除窗口不采集，也不接受原文', async () => {
+  const f = fixture(), regions = [{ id: 'dom', bounds: { x: -300, y: 100, width: 100, height: 30 } }]
+  f.session.sensitive(regions)
+  await f.wrapped.start(f.signal.signal); f.session.sensitive(regions)
+  await f.wrapped.pause(f.signal.signal); f.session.sensitive(regions)
+  await f.wrapped.resume(f.signal.signal); hooks.foreground.mockReturnValue({ windowId: 'excluded', bounds: null, available: true }); f.session.sensitive(regions)
+  await f.wrapped.stop(f.signal.signal)
+  const events = pages().flatMap(page => page.entries).filter(event => event.kind === 'sensitive')
+  expect(events).toHaveLength(1); expect(events[0]).toMatchObject({ regions: [{ id: 'dom', box: [.25, 1 / 3, .25, .1] }] })
+  expect(pages().every(page => page.version === 2)).toBe(true)
+})
 it('只在后端开始之后挂钩；120Hz真实采样，暂停卸载、恢复重挂；标记备注和能力事实可回读', async () => {
   const f = fixture(); expect(hooks.attach).not.toHaveBeenCalled()
   await f.wrapped.start(f.signal.signal); await vi.advanceTimersByTimeAsync(1000)

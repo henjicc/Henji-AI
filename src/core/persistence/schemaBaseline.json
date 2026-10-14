@@ -222,9 +222,9 @@
       "supportedFrom": 1
     },
     "capture-log-page": {
-      "version": 1,
-      "fingerprint": "9c5b96598110855efe69b671a8694915b603b7e6cab524ac63152d5a0d91aa37",
-      "supportedFrom": 1
+      "version": 2,
+      "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
+      "supportedFrom": 2
     },
     "screen-recording-tracks": {
       "version": 1,
@@ -237,9 +237,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 2,
-      "fingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
-      "supportedFrom": 2
+      "version": 3,
+      "fingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
+      "supportedFrom": 3
     }
   },
   "devBreaks": [
@@ -1423,6 +1423,24 @@
       "reason": "录制理解升级为带时间戳的文字稿步骤章节与可审阅候选，开发期不保留旧占位格式",
       "previousFingerprint": "37c71a0834aaa96c072a4bbff152ccd26ff6e297aa258f4f221a2a15e5547244",
       "fingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T04:48:45.394Z",
+      "format": "capture-log-page",
+      "version": 2,
+      "reason": "录制隐私候选与密码框几何升级开发期会话和共享事件页，不保留旧开发格式",
+      "previousFingerprint": "9c5b96598110855efe69b671a8694915b603b7e6cab524ac63152d5a0d91aa37",
+      "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T04:48:45.396Z",
+      "format": "document.screen_recording",
+      "version": 3,
+      "reason": "录制隐私候选与密码框几何升级开发期会话和共享事件页，不保留旧开发格式",
+      "previousFingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
+      "fingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
       "waivedFixtureVersions": []
     }
   ],

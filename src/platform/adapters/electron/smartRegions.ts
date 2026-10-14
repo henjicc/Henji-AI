@@ -13,6 +13,9 @@ function getNativeSmartRegions(): SmartRegionsPlatform {
 /** 智能区域分析（任务 4.7d）：preload 桥已按 SmartRegionsPlatform 实现，这里只做可用性检查与转发。 */
 export function createElectronSmartRegions(): SmartRegionsPlatform {
   return {
+    detectSensitiveText: request => getNativeSmartRegions().detectSensitiveText(request),
+    cancelSensitiveText: requestId => getNativeSmartRegions().cancelSensitiveText(requestId),
+    onPrivacyProgress: handler => getNativeSmartRegions().onPrivacyProgress(handler),
     ensure: (request) => getNativeSmartRegions().ensure(request),
     cancel: (request) => getNativeSmartRegions().cancel(request),
     onProgress: (handler) => getNativeSmartRegions().onProgress(handler),

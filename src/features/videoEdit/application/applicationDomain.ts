@@ -1,4 +1,5 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { executeVideoEditPrivacy } from './videoEditPrivacyCapability'
 import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
 import { videoEditStaggerCapability } from '@/core/application-control/domains/videoEdit/videoEditStaggerCapability'
 import { staggerVideoMotion } from './videoEditMotionDraft'
@@ -164,6 +165,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         return { ...result, resultRef: input.clipRef, message: '已分析自动校色建议，可写入全能调色参数后观察并微调。' }
       }
       if (definition.id === measureVideoEditLoudnessCapability.id) return executeVideoEditLoudnessCapability(measureVideoEditLoudnessCapability.inputSchema.parse(raw), false, context.signal)
+      if (definition.id === 'detect_video_edit_sensitive_text') return executeVideoEditPrivacy(raw, context)
       if (definition.id === normalizeVideoEditLoudnessCapability.id) return executeVideoEditLoudnessCapability(normalizeVideoEditLoudnessCapability.inputSchema.parse(raw), true, context.signal)
       const exporting = await handleVideoEditExportCapability(definition.id, raw, context)
       if (exporting) return exporting

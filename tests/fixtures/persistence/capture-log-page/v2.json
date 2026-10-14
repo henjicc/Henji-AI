@@ -1,0 +1,76 @@
+{
+  "version": 2,
+  "ownerRef": {
+    "kind": "screen_recording.session",
+    "id": "golden-session"
+  },
+  "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "monoSpanUs": [
+    0,
+    1000
+  ],
+  "seqSpan": [
+    0,
+    2
+  ],
+  "count": 3,
+  "kind": "events",
+  "entries": [
+    {
+      "seq": 0,
+      "monoUs": 0,
+      "timeline": null,
+      "clockSegmentRef": "golden-0",
+      "unavailableReason": "static",
+      "eventId": "golden-1",
+      "recordingUs": 0,
+      "kind": "control",
+      "action": "start"
+    },
+    {
+      "seq": 1,
+      "monoUs": 100,
+      "timeline": null,
+      "clockSegmentRef": "golden-0",
+      "unavailableReason": "static",
+      "eventId": "golden-2",
+      "recordingUs": 100,
+      "kind": "sensitive",
+      "regions": [
+        {
+          "id": "golden-password",
+          "box": [
+            0.1,
+            0.2,
+            0.4,
+            0.1
+          ]
+        }
+      ]
+    },
+    {
+      "seq": 2,
+      "monoUs": 1000,
+      "timeline": null,
+      "clockSegmentRef": "golden-0",
+      "unavailableReason": "static",
+      "eventId": "golden-3",
+      "recordingUs": 1000,
+      "kind": "control",
+      "action": "stop"
+    }
+  ],
+  "clockSegments": [
+    {
+      "id": "golden-0",
+      "monoSpanUs": [
+        0,
+        1001
+      ],
+      "mode": "hold",
+      "start": null,
+      "end": null,
+      "anchors": []
+    }
+  ]
+}

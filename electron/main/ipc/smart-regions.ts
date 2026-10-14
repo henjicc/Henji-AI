@@ -1,4 +1,7 @@
 import fs from 'node:fs/promises'
+import { z } from 'zod'
+import { ocrPrivacyRequestSchema } from '../../../src/platform/contracts/ocrPrivacy'
+import { getOcrPrivacyService } from '../services/smart-regions/runtime'
 import path from 'node:path'
 import { SMART_REGIONS_IPC_CHANNELS, type SmartRegionRequest } from '../../../src/platform/contracts/smartRegions'
 import { SMART_REGION_ANALYSIS_KINDS, type SmartRegionAnalysisKind } from '../../../src/core/videoEdit/smartRegions'
@@ -38,6 +41,21 @@ async function authorized(request: SmartRegionRequest): Promise<SmartRegionReque
 
 export function registerSmartRegionsIpc(): void {
   const c = SMART_REGIONS_IPC_CHANNELS
+  const owners = new Map<string, { senderId: number; cancelled: boolean }>()
+  registerIpcHandler(c.detectSensitiveText, raw => ocrPrivacyRequestSchema.parse(raw), async (request, event) => {
+    if (owners.has(request.requestId)) throw new Error('敏感信息识别请求重复。')
+    const owner = { senderId: event.sender.id, cancelled: false }; owners.set(request.requestId, owner)
+    const closed = (): void => { owner.cancelled = true; getOcrPrivacyService().cancel(request.requestId) }
+    event.sender.once('destroyed', closed)
+    try { const checked = await authorized({ source: request.source, kind: 'text', startUs: request.startUs, endUs: request.endUs, still: false }); if (owner.cancelled || event.sender.isDestroyed()) throw new Error('敏感信息识别已取消。'); return await getOcrPrivacyService().detect({ ...request, source: checked.source }) }
+    finally { owners.delete(request.requestId); event.sender.removeListener('destroyed', closed) }
+  })
+  registerIpcHandler(c.cancelSensitiveText, raw => z.object({ requestId: z.string().uuid() }).strict().parse(raw), (request, event) => {
+    const owner = owners.get(request.requestId)
+    if (owner && owner.senderId !== event.sender.id) throw new Error('不能取消其他窗口的识别任务。')
+    if (owner) owner.cancelled = true
+    getOcrPrivacyService().cancel(request.requestId)
+  })
   registerIpcHandler(c.ensure, parseSmartRegionRequest, async request => getSmartRegionService().ensure(await authorized(request)))
   registerIpcHandler(c.cancel, parseSmartRegionRequest, async request => getSmartRegionService().cancel(await authorized(request)))
 }

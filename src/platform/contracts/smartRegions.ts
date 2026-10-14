@@ -1,4 +1,5 @@
 import type { SmartRegionAnalysisKind, SmartRegionSummary } from '../../core/videoEdit/smartRegions'
+import type { OcrPrivacyProgress, OcrPrivacyRequest, OcrPrivacyResponse } from './ocrPrivacy'
 
 /*
  * 智能区域分析（任务 4.7d）：对一段素材在后台逐帧分析一次（人脸 / 人物 / 文字），结果缓存在程序目录，
@@ -56,12 +57,16 @@ export function normalizeSmartRegionRange(startUs: number, endUs: number, still:
 }
 
 export const SMART_REGIONS_IPC_CHANNELS = {
+  detectSensitiveText: 'smartRegions:detectSensitiveText', cancelSensitiveText: 'smartRegions:cancelSensitiveText', privacyProgress: 'smartRegions:privacyProgress',
   ensure: 'smartRegions:ensure',
   cancel: 'smartRegions:cancel',
   progress: 'smartRegions:progress',
 } as const
 
 export interface SmartRegionsPlatform {
+  detectSensitiveText(request: OcrPrivacyRequest): Promise<OcrPrivacyResponse>
+  cancelSensitiveText(requestId: string): Promise<void>
+  onPrivacyProgress(handler: (event: OcrPrivacyProgress) => void): () => void
   /** 已有缓存直接返回；否则开始（或加入进行中的）后台分析并返回当前进度，不等待完成。 */
   ensure(request: SmartRegionRequest): Promise<SmartRegionStatus>
   cancel(request: SmartRegionRequest): Promise<void>

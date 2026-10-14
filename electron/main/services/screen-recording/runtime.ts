@@ -1,4 +1,4 @@
-import { globalShortcut, type WebContents } from 'electron'
+import { BrowserWindow, globalShortcut, type WebContents } from 'electron'
 import type { RecordingControlSnapshot } from '../../../../src/core/screenRecording/contracts'
 import { RecordingControlService, type RecordingControlBackend } from './control'
 import { createMainLogger } from '../logging'
@@ -7,6 +7,7 @@ import { createRecordingControlWindow } from '../../windows/recording-control'
 import { isTrustedMainRendererUrl } from '../../security/main-renderer-url'
 import { RecordingEventSession, type RecordingEventOptions } from './events'
 import type { CapabilityCapture } from '../../../../src/core/captureLog/events'
+import type { RecordingSensitiveDom } from '../../../../src/core/screenRecording/contracts'
 import { bindCaptureCapabilitySink } from '../../../../src/core/captureLog/capability'
 import type { RecordingTrackStatus } from '../../../../src/core/screenRecording/contracts'
 
@@ -92,6 +93,16 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
 export function recordRecordingCapability(contents: WebContents, sessionId: string, fact: CapabilityCapture): void {
   if (owner !== contents || recordingControl.snapshot()?.sessionId !== sessionId) return
   eventSession?.capability(fact)
+}
+export function recordRecordingSensitiveDom(contents: WebContents, sessionId: string, regions: RecordingSensitiveDom): void {
+  if (owner !== contents || recordingControl.snapshot()?.sessionId !== sessionId) return
+  const window = BrowserWindow.fromWebContents(contents)
+  if (!window || window.isDestroyed() || !window.isVisible()) return
+  const bounds = window.getContentBounds(), zoom = contents.getZoomFactor()
+  eventSession?.sensitive(regions.flatMap(rect => {
+    const x = rect.x * zoom, y = rect.y * zoom, width = Math.min(bounds.width - x, rect.width * zoom), height = Math.min(bounds.height - y, rect.height * zoom)
+    return width > 0 && height > 0 ? [{ id: rect.id, bounds: { x: bounds.x + x, y: bounds.y + y, width, height } }] : []
+  }))
 }
 
 export function updateRecordingTracks(contents: WebContents, sessionId: string, status: RecordingTrackStatus): void {

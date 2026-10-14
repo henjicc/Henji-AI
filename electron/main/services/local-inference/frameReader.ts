@@ -39,7 +39,7 @@ export async function* rawFrames(stream: AsyncIterable<Buffer | Uint8Array>, fra
 
 const STDERR_LIMIT = 2048
 
-export async function* ffmpegFrames(ffmpegPath: string, job: SmartRegionAnalysisJob, request: FrameRequest, signal: AbortSignal): AsyncGenerator<Uint8Array> {
+export async function* ffmpegFrames(ffmpegPath: string, job: Pick<SmartRegionAnalysisJob, 'source' | 'seekSeconds' | 'durationSeconds' | 'fps'>, request: FrameRequest, signal: AbortSignal): AsyncGenerator<Uint8Array> {
   const child: ChildProcessByStdio<null, Readable, Readable> = spawn(ffmpegPath, analysisFfmpegArgs(job, request), { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
   let stderr = ''
   child.stderr.on('data', (chunk: Buffer) => { if (stderr.length < STDERR_LIMIT) stderr += chunk.toString('utf8').slice(0, STDERR_LIMIT - stderr.length) })

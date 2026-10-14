@@ -132,7 +132,7 @@ const values: Record<string, unknown> = {
     source: { name: '合成显示器', options: { sourceId: 'screen:1:0', backend: 'auto', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }, cursorEmbedded: false },
     media: [{ id: 'screen-0', kind: 'screen', path: '/persistence-project/素材/screen.mp4', monoUs: 3000000, durationUs: 10000000 }],
     eventPages: [{ path: `/persistence-project/素材/0000000000000000-${'a'.repeat(64)}.capture.json`, firstSequence: 0, lastSequence: 2 }], markers: [{ id: 'golden-mark', monoUs: 4000000, note: '重点' }],
-    understanding: { transcript: [{ id: 'word', startUs: 3000000, endUs: 4000000, text: '打开编辑器', granularity: 'word', audioDocumentId: 'audio', mediaId: 'mic', protected: false }],
+    understanding: { privacy: { candidates: [{ id: 'privacy', mediaId: 'screen-0', kind: 'email', hint: '••••', fingerprint: 'a'.repeat(64), startUs: 3000000, endUs: 5000000, status: 'accepted', samples: [{ monoUs: 3000000, box: [.1, .2, .4, .1], confidence: .99 }, { monoUs: 4000000, box: [.1, .3, .4, .1], confidence: .98 }] }], warnings: [] }, transcript: [{ id: 'word', startUs: 3000000, endUs: 4000000, text: '打开编辑器', granularity: 'word', audioDocumentId: 'audio', mediaId: 'mic', protected: false }],
       steps: [{ id: 'step', startUs: 3000000, endUs: 13000000, title: '打开编辑器', description: '进入编辑器', signal: 'capability', eventIds: ['event'] }],
       candidates: [{ id: 'wait', startUs: 5000000, endUs: 9000000, kind: 'wait', reason: '画面静止、无输入、无旁白', status: 'pending', eventIds: [] }],
       chapters: [{ id: 'chapter', title: '编辑', stepIds: ['step'] }], warnings: [] } },

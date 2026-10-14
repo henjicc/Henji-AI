@@ -18,6 +18,7 @@ export async function verifyVideoEditContentSaved(owner: VideoEditInstance, expe
 // 仅这些操作的业务产物是同一不可变文档的原子提交；分析缓存不构成剪辑写入。
 // 付费生成、文件导入、代理、导出、跨工作区写入不能依赖此守卫判断执行事实。
 const ATOMIC_DOCUMENT_ALGORITHMS = new Set([
+  'detect_video_edit_sensitive_text',
   'stagger_video_edit_motion',
   'analyze_video_edit_beats',
   'generate_video_edit_screen_attention', 'auto_reframe_video_edit', 'apply_video_edit_title_template', 'generate_video_edit_audio_ducking',

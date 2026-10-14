@@ -53,12 +53,15 @@ export interface RecordingControlSnapshot {
 export const recordingTrackStatusSchema = z.object({ microphoneLevel: z.number().finite().min(0).max(1).nullable(), cameraPreview: z.string().max(100_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/).nullable(), warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable', 'device-disconnected'])).max(3) }).strict()
 export type RecordingTrackStatus = z.infer<typeof recordingTrackStatusSchema>
 const sessionId = z.string().uuid()
+export const recordingSensitiveDomSchema = z.array(z.object({ id: z.string().uuid(), x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(), width: z.number().finite().positive(), height: z.number().finite().positive() }).strict()).max(256)
+export type RecordingSensitiveDom = z.infer<typeof recordingSensitiveDomSchema>
 export const captureSelectionSchema = z.object({
   sourceId: z.string().regex(/^(screen|window):\d+:\d+$/),
   excludedSourceIds: z.array(z.string().regex(/^window:\d+:\d+$/)).max(256).default([]),
 }).strict()
 export type CaptureSelection = z.infer<typeof captureSelectionSchema>
 export const screenRecordingRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('dom-privacy'), sessionId, regions: recordingSensitiveDomSchema }).strict(),
   z.object({ action: z.literal('clock') }).strict(),
   z.object({ action: z.literal('track-status'), sessionId, status: recordingTrackStatusSchema }).strict(),
   z.object({ action: z.literal('capture'), request: captureRequestSchema }).strict(),

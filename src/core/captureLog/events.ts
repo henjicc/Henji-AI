@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { privacyBoxSchema } from '../screenRecording/privacy'
 import { applicationRefSchema } from '../application-control/identifiers'
 import { clockEventIssue, clockSegmentsSchema, dualClockShape, finiteSchema, idSchema, pointSchema, safeClockSchema } from './clock'
 import { capturePageEnvelope, validateCapturePage } from './page'
@@ -13,6 +14,7 @@ export const capabilityCaptureSchema = z.object({
 }).strict()
 export type CapabilityCapture = z.infer<typeof capabilityCaptureSchema>
 export const captureEventSchema = z.discriminatedUnion('kind', [
+  z.object({ ...base, kind: z.literal('sensitive'), regions: z.array(z.object({ id: idSchema, box: privacyBoxSchema }).strict()).max(256) }).strict(),
   z.object({ ...base, kind: z.literal('cursor'), point: pointSchema.nullable(), shape: z.enum(cursorShapes) }).strict(),
   z.object({ ...base, kind: z.literal('click'), point: pointSchema, button: z.enum(['left', 'middle', 'right', 'other']), phase: z.enum(['down', 'up']) }).strict(),
   z.object({ ...base, kind: z.literal('scroll'), point: pointSchema, axis: z.enum(['horizontal', 'vertical']), amount: finiteSchema }).strict(),
@@ -25,7 +27,7 @@ export const captureEventSchema = z.discriminatedUnion('kind', [
 export type CaptureEvent = z.infer<typeof captureEventSchema>
 export type CapturePayload = CaptureEvent extends infer E ? E extends CaptureEvent ? Omit<E, keyof typeof base> : never : never
 export const captureLogPageSchema = z.object({
-  ...capturePageEnvelope, kind: z.literal('events'), entries: z.array(captureEventSchema), clockSegments: clockSegmentsSchema,
+  ...capturePageEnvelope, version: z.literal(2), kind: z.literal('events'), entries: z.array(captureEventSchema), clockSegments: clockSegmentsSchema,
 }).strict().superRefine((page, ctx) => {
   validateCapturePage(page, ctx)
   for (const [index, event] of page.entries.entries()) {
