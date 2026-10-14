@@ -21,16 +21,30 @@ import { recordingPrivacyBusy } from './recordingPrivacyService'
 import { recordingProductInputSchema, recordingExportRefSchema } from '@/core/application-control/domains/screenRecording/productCapability'
 import { exportRecordingProduct, cancelRecordingProductExport, recordingProductBusy } from './recordingProductService'
 import { resolveConfiguredDestination } from '@/features/canvas'
+import { generateSessionScript, replaySession, recordingReplayBusy } from './recordingReplayService'
+import { generateRecordingScriptCapability, replayRecordingCapability, rerecordRecordingCapability } from '@/core/application-control/domains/screenRecording/scriptCapability'
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
   id: 'screen_recording', entities: () => [...recordingRegistrations(), recordingUnderstandingRegistration()],
   registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()) },
   registerCapabilities(registrar) {
     registerDocumentOpener('screen_recording', async document => { await showRecordingDocument(document.id); openApplicationSurface('tool.screen_recording') })
-    registerDocumentBusyCheck('screen_recording', id => recordingProductBusy(id) ? '请先等待产物导出完成或取消' : recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
+    registerDocumentBusyCheck('screen_recording', id => recordingReplayBusy() ? '请先等待重放完成或取消' : recordingProductBusy(id) ? '请先等待产物导出完成或取消' : recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
     registerDocumentCoverProvider('screen_recording', read => { const first = recordingDocumentSchema.parse(read.content).media.find(media => media.kind === 'screen' && media.durationUs > 0); return first ? [{ source: first.path, sourceKind: 'video', atSeconds: 0 }] : null })
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {
       context.signal.throwIfAborted()
+      if ([generateRecordingScriptCapability.id, replayRecordingCapability.id, rerecordRecordingCapability.id].includes(definition.id)) {
+        const permissions = context.callerGrant?.permissions
+        for (const permission of ['screen_recording:read', ...(definition.id === generateRecordingScriptCapability.id ? [] : ['video_edit:write', 'documents:write'])]) if (permissions && !permissions.includes(permission)) throw new Error(`PERMISSION_DENIED:此操作还需要 ${permission}。`)
+        if (definition.id === generateRecordingScriptCapability.id) return generateSessionScript(generateRecordingScriptCapability.inputSchema.parse(input).sessionRef.id, context)
+        if (recordingReplayBusy()) throw new Error('请等待当前重放结束。')
+        if (definition.id === rerecordRecordingCapability.id) {
+          const parsed = rerecordRecordingCapability.inputSchema.parse(input)
+          return { resultRef: parsed.documentRef, ...await replaySession(parsed.sessionRef.id, { stepId: parsed.stepId, destinationId: parsed.documentRef.id, sourceId: parsed.sourceRef.id }, context) }
+        }
+        const parsed = replayRecordingCapability.inputSchema.parse(input)
+        return { resultRef: { kind: 'screen_recording.understanding', id: parsed.sessionRef.id }, ...await replaySession(parsed.sessionRef.id, { stepId: parsed.stepId }, context) }
+      }
       if (definition.id === 'understand_screen_recording') return executeRecordingUnderstanding(input, context)
       if (definition.id === 'export_screen_recording_product') {
         const parsed = recordingProductInputSchema.parse(input)

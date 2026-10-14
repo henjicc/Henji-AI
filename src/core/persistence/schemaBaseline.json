@@ -255,9 +255,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 3,
-      "fingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
-      "supportedFrom": 3
+      "version": 4,
+      "fingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
+      "supportedFrom": 4
     }
   },
   "devBreaks": [
@@ -1459,6 +1459,15 @@
       "reason": "录制隐私候选与密码框几何升级开发期会话和共享事件页，不保留旧开发格式",
       "previousFingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
       "fingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T09:43:48.937Z",
+      "format": "document.screen_recording",
+      "version": 4,
+      "reason": "录制脚本新增受限输入快照与可编辑步骤，开发期不兼容旧会话",
+      "previousFingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
+      "fingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
       "waivedFixtureVersions": []
     }
   ],

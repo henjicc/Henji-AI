@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { recordingSessionOptionsSchema } from './sessionOptions'
 import { recordingTracksSchema } from './tracks'
+import { recordingBaselineSchema, recordingCallSchema } from './script'
 
 export const captureOptionsSchema = z.object({
   sourceId: z.string().regex(/^(screen|window):\d+:\d+$/),
@@ -43,6 +44,8 @@ export type CaptureSpan = z.infer<typeof captureSpanSchema>
 export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions; directory?: string }
 const sessionId = z.string().uuid()
 export const captureRequestSchema = z.discriminatedUnion('operation', [
+  z.object({ operation: z.literal('application-source'), sessionId }).strict(),
+  z.object({ operation: z.literal('script-call'), sessionId, call: recordingCallSchema, baselines: z.array(recordingBaselineSchema).max(16) }).strict(),
   z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema, session: recordingSessionOptionsSchema.optional() }).strict(),
   z.object({ operation: z.literal('tracks'), sessionId, tracks: recordingTracksSchema }).strict(),
   z.object({ operation: z.literal('recover-session'), sessionId }).strict(),

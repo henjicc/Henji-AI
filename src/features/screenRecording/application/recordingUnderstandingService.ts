@@ -10,6 +10,7 @@ import type { DocumentReadResult } from '@/core/documents/types'
 import { defaultDocumentOperationChanges } from '@/features/documents'
 import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit } from '@/features/audioEdit'
 import { recordingEvents } from './recordingService'
+import { recordedScriptSource, assertRecordedScriptEdits, recordingScriptIgnoredCapabilities } from './recordingScriptSource'
 
 const logger = createLogger('features.screenRecording.understanding')
 export function assertRecordingEditable(content: RecordingDocument): void {
@@ -26,6 +27,7 @@ export async function saveRecordingUnderstanding(id: string, value: RecordingUnd
   assertRecordingEditable(read.content)
   if (read.meta.revision !== expectedRevision) throw new Error('CONFLICT:录制会话已修改，请重新读取理解结果。')
   const understanding = recordingUnderstandingSchema.parse(value)
+  if (understanding.operationScript.steps.length) assertRecordedScriptEdits(understanding.operationScript, await recordedScriptSource(id, { ...read.content, understanding }))
   const active = read.content.media.filter(v => v.kind === 'screen').map(v => ({ startUs: v.monoUs, endUs: v.monoUs + v.durationUs }))
   for (const range of [...understanding.transcript, ...understanding.steps, ...understanding.candidates]) {
     if (subtractRecordingRanges([range], active).length) throw new Error('理解结果超出已保存的屏幕片段，不能跨越暂停或缺片空档。')
@@ -58,12 +60,13 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
     if (!screen.length) throw new Error('会话没有已保存的屏幕片段，请先恢复录制。')
     const active = screen.map(v => ({ startUs: v.monoUs, endUs: v.monoUs + v.durationUs }))
     const events: CaptureEvent[] = []
+    const ignoredCapabilities = recordingScriptIgnoredCapabilities()
     let offset: number | null = 0
     while (offset !== null) {
       signal.throwIfAborted()
       const page = await recordingEvents(id, offset, 256)
       // 120Hz cursor samples have no segmentation semantics; do not retain a 60-minute trace.
-      events.push(...page.events.filter(event => event.kind !== 'cursor'))
+      events.push(...page.events.filter(event => event.kind !== 'cursor' && (event.kind !== 'capability' || !ignoredCapabilities.has(event.capability))))
       if (page.nextOffset !== null && page.nextOffset <= offset) throw new Error('事件分页没有推进，请恢复会话后重试。')
       offset = page.nextOffset
     }

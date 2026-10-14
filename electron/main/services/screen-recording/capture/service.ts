@@ -41,6 +41,7 @@ async function fail(session: Active, error: Error): Promise<void> {
 }
 
 export async function handleCaptureRequest(owner: WebContents, request: CaptureRequest): Promise<unknown> {
+  if (request.operation === 'application-source') return BrowserWindow.fromWebContents(owner)?.getMediaSourceId() ?? null
   if (request.operation === 'events') return readRecordingEvents(request.sessionId, request.offset, request.limit, request.markersOnly)
   if (request.operation === 'recover-session') {
     if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先关闭当前录制，再恢复会话')
@@ -127,6 +128,10 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
   if (!session || session.owner !== owner || session.storage.manifest.sessionId !== request.sessionId) throw new Error('录制会话不存在或不属于当前窗口')
   const { storage } = session
   switch (request.operation) {
+    case 'script-call': {
+      if (!session.document || recordingControl.snapshot()?.phase !== 'recording') throw new Error('仅录制期间可保存操作输入')
+      return session.document.scriptCall(request.call, request.baselines)
+    }
     case 'tracks': {
       if (!session.document) throw new Error('录制会话未创建')
       return session.document.tracks(request.tracks)

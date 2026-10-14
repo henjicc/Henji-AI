@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { createVideoEditDocument } from '../../../../src/core/videoEdit/document'
 import { captureOptionsSchema, type CaptureManifest } from '../../../../src/core/screenRecording/capture'
 import type { DocumentMeta } from '../../../../src/core/documents/types'
 import type { RecordingDocument } from '../../../../src/core/screenRecording/document'
@@ -76,4 +77,14 @@ it('跨页读取跳过已消费页，目标页仍校验；标记分页不按全�
   await expect(readRecordingEvents(id, 255, 10, true)).rejects.toThrow('校验')
   await writeFile(state.saved!.content.eventPages[1].path, '{}')
   await expect(readRecordingEvents(id, 256, 10, false)).rejects.toThrow('校验')
+})
+
+it('脚本调用落盘串行保留第一次快照，重复调用拒绝', async () => {
+  const document = await setup(), baseline = createVideoEditDocument('第一次快照')
+  const call = { callId: randomUUID(), operations: [{ target: { kind: 'video_edit.sequence' as const, id: `${baseline.id}:sequence` }, properties: { 'video_edit.sequence.name': '演示' } }] }
+  await document.scriptCall(call, [{ documentId: baseline.id, content: baseline }])
+  await document.scriptCall({ ...call, callId: randomUUID() }, [{ documentId: baseline.id, content: { ...baseline, name: '后续快照' } }])
+  expect(state.saved!.content.scriptCapture.calls).toHaveLength(2)
+  expect(state.saved!.content.scriptCapture.baselines).toEqual([{ documentId: baseline.id, content: baseline }])
+  expect(() => document.scriptCall(call, [])).toThrow('重复')
 })

@@ -16,6 +16,7 @@ import { RecordingMovieOptions } from './RecordingMovieOptions'
 import { showRecordingDocument } from './application/recordingService'
 import { executeUiApplicationCapability } from '@/features/application-control'
 import { RecordingProductOptions } from './RecordingProductOptions'
+import { RecordingScriptPanel } from './RecordingScriptPanel'
 
 function RecordingSourceOption({ source, active, onSelect }: { source: CaptureSource; active: boolean; onSelect: () => void }): React.ReactElement {
   const { t } = useTranslation('ui')
@@ -140,7 +141,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
           {state.content && <RecordingSessionPreview key={state.content.sessionId} recording={state.content} disabled={productBusy || Boolean(moviePhase)} onPrivacyBusyChange={setPrivacyBusy} />}
           {state.content?.status !== 'stopped' && <UiButton onClick={() => run(() => recoverRecording(state.documentId!))}><RefreshCw />{t('recording.recover')}</UiButton>}
           {state.content?.source?.cursorEmbedded && <p className="text-xs text-text2">{t('recording.cursorEmbedded')}</p>}
-        </UiGroup>{state.documentId && state.content && <RecordingProductOptions key={state.documentId} sessionId={state.documentId} recording={state.content} disabled={state.busy || privacyBusy || productBusy || Boolean(moviePhase)} onBusyChange={setProductBusy} />}</> : <div className="grid gap-6 lg:grid-cols-2">
+        </UiGroup>{state.documentId && state.content && <><RecordingScriptPanel key={`script:${state.documentId}`} sessionId={state.documentId} recording={state.content} disabled={state.busy || privacyBusy || productBusy || Boolean(moviePhase)} /><RecordingProductOptions key={state.documentId} sessionId={state.documentId} recording={state.content} disabled={state.busy || privacyBusy || productBusy || Boolean(moviePhase)} onBusyChange={setProductBusy} /></>}</> : <div className="grid gap-6 lg:grid-cols-2">
           <UiGroup title={t('recording.selectSource')} actions={<UiButton disabled={loading} disabledReason={t('recording.refreshing')} onClick={() => run(refresh)}><RefreshCw />{t('recording.refresh')}</UiButton>}>
             {loading ? <UiLoading /> : sources.length ? <div className="grid grid-cols-2 gap-2">{sources.map(source => <RecordingSourceOption key={source.id} source={source} active={source.id === sourceId} onSelect={() => setSourceId(source.id)} />)}</div> : <UiEmpty title={t('recording.noSources')} />}
           </UiGroup>

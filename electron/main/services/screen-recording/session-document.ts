@@ -12,6 +12,7 @@ import { getDocumentService } from '../documents/runtime'
 import { createMainLogger } from '../logging'
 import { RecordingEventStore } from './event-store'
 import { recoverCapture } from './capture/storage'
+import type { RecordingScriptCapture } from '../../../../src/core/screenRecording/script'
 
 const logger = createMainLogger('main.screen_recording.document')
 
@@ -38,6 +39,14 @@ export class RecordingSessionDocument {
     })
     this.queue = task.catch(error => { logger.error('录制会话保存失败', { event: 'recording.document.save.failed', error, context: { sessionId: this.meta.id } }) })
     return task
+  }
+  scriptCall(call: RecordingScriptCapture['calls'][number], baselines: RecordingScriptCapture['baselines']): Promise<void> {
+    const capture = this.content.scriptCapture
+    if (capture.calls.some(value => value.callId === call.callId)) throw new Error('操作记录不可重复')
+    if (capture.calls.length >= 20000 || new Set([...capture.baselines, ...baselines].map(value => value.documentId)).size > 16) throw new Error('此会话的操作脚本已达上限，后续操作仍录制画面。')
+    for (const baseline of baselines) if (!capture.baselines.some(value => value.documentId === baseline.documentId)) capture.baselines.push(baseline)
+    capture.calls.push(call)
+    return this.save()
   }
   capture(manifest: CaptureManifest): Promise<void> {
     this.content.status = manifest.status === 'failed' ? 'interrupted' : manifest.status

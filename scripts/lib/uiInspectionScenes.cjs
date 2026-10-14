@@ -261,6 +261,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createRecordingTracksScene(),
     createRecordingSessionScene(),
     createRecordingMovieScene(),
+    require('./uiInspectionSceneRecordingReplay.cjs').createRecordingReplayScene(),
     createOcrPrivacyScene(),
     createRecordingProductsScene(),
   ])
