@@ -6,6 +6,7 @@ import { ensureVideoEditSequenceItem, nestVideoEditClips, videoEditNestedFrame }
 import { assertVideoEditSequenceGraph } from './sequenceGraph'
 import { videoEditMatchFrameTarget } from './matchFrame'
 import { videoEditAnnotationSchema } from './annotations'
+import { videoEditTextMediaIdentity, videoEditTranscriptWords } from './textTranscript'
 
 function fixture() {
   const document = createVideoEditDocument('嵌套'); const sequence = document.sequences[0]
@@ -15,6 +16,22 @@ function fixture() {
   sequence.clips = [{ ...makeVideoEditItemClip(document, 'item', sequence.id, { frame: 30, duration: 60, track }), id: 'a' }]
   return document
 }
+it('嵌套保存所选素材的词源，源微秒不平移；子序列单独读取与保存重开结果一致', () => {
+  const document = fixture(), parent = document.sequences[0]
+  parent.clips.push({ ...parent.clips[0], id: 'outside', itemId: 'other', start: 120 })
+  document.items.push({ ...document.items[0], id: 'other' })
+  const composition = videoEditComposition(document, parent.id)
+  parent.textTranscription = { audioDocumentId: 'recognition', sources: ['item', 'other'].map(itemId => ({ itemId,
+    mediaIdentity: videoEditTextMediaIdentity(composition, itemId), silences: [{ startFrame: 1_500_000, endFrame: 1_700_000 }],
+    blocks: [{ id: 'word', text: '保留', startFrame: 0, endFrame: 1_000_000, included: true, locked: false, granularity: 'word' }],
+  })) }
+  const result = nestVideoEditClips(document, parent.id, ['a'], '子序列')
+  expect(result.sequence.textTranscription?.sources).toEqual([parent.textTranscription.sources[0]])
+  const reopened = videoEditDocumentSchema.parse(JSON.parse(JSON.stringify(result.document)))
+  expect(videoEditTranscriptWords(videoEditComposition(reopened, result.sequence.id))).toMatchObject([{ text: '保留', from: 0, to: 30 }])
+  expect(videoEditTranscriptWords(videoEditComposition(reopened, parent.id))).toMatchObject([{ text: '保留', from: 30, to: 60 }, { text: '保留', from: 120, to: 150 }])
+  expect(parent.textTranscription.sources).toHaveLength(2)
+})
 it.each(['range', 'point'] as const)('嵌套同步平移 %s 标注的两端与目标', kind => {
   const document = fixture(); const parent = document.sequences[0]
   parent.annotations = [videoEditAnnotationSchema.parse({ id: 'note', clipId: 'a', frame: 40, endFrame: 70, space: 'composition-normalized',
@@ -43,9 +60,11 @@ it('旧文件无需序列素材字段；嵌套保持源时钟与锚点，仅在�
   parent.clips[0].speed = { numerator: 2, denominator: 1 }; parent.clips[0].reverse = true
   parent.markers = [{ id: 'marker', clipId: 'a', frame: 40, name: '重点' }]
   parent.captions = [{ id: 'caption', clipId: 'a', start: 40, duration: 10, text: '对白' }]
+  parent.captionTrackEnabled = false
   const result = nestVideoEditClips(document, parent.id, ['a'], '子序列')
   expect(result.sequence.clips[0]).toMatchObject({ id: 'a', start: 0, sourceInUs: 5_000_000, reverse: true, speed: { numerator: 2, denominator: 1 } })
   expect(result.sequence.markers?.[0].frame).toBe(10); expect(result.sequence.captions?.[0].start).toBe(10)
+  expect(result.sequence.captionTrackEnabled).toBe(false)
   expect(result.document.sequences[0].clips).toEqual([result.clip])
   expect(result.clip).toMatchObject({ kind: 'sequence', start: 30, duration: 60, sourceInUs: 0 })
   expect(document.sequences[0].clips[0].id).toBe('a')

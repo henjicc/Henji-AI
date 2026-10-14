@@ -3,7 +3,7 @@ import { createVideoEditDocument, createVideoEditSequence } from '@/core/videoEd
 import { createRecordingDocument } from '@/core/screenRecording/document'
 vi.mock('@/platform', () => ({ getPlatform: vi.fn() }))
 vi.mock('@/features/videoEdit/application/videoEditMedia', () => ({ importVideoEditSources: vi.fn() }))
-vi.mock('@/features/videoEdit/application/videoEditService', () => ({ openVideoEditDocument: vi.fn(), saveVideoEdit: vi.fn() }))
+vi.mock('@/features/videoEdit/application/videoEditService', () => ({ openVideoEditDocument: vi.fn(), saveVideoEdit: vi.fn(), subscribeVideoEditDomain: vi.fn(() => () => undefined) }))
 import { placeRecordingMedia, importRecordingToVideo } from './recordingVideoImport'
 import { getPlatform } from '@/platform'
 import { importVideoEditSources } from '@/features/videoEdit'

@@ -94,6 +94,11 @@ function createVideoEditPlayStartScene() {
         console.log('[play-start]', JSON.stringify(run))
       }
       await capture('play-start')
+      // Paused arming is a short lease: after it expires, no native picture may remain borrowed.
+      await page.waitForTimeout(4500)
+      evidence.longPauseNative = await page.evaluate(() => window.henjiNative.videoFrames.stats())
+      assert.equal(evidence.longPauseNative.unreleasedImports, 0, '长时间暂停必须归还全部预热帧')
+      assert.equal(evidence.longPauseNative.orphanHandles, 0)
       await button(page, '关闭项目').click()
       // Workspace owns one idle program session; leaving the workspace must retire it too.
       await button(page, '生成').click(); await waitReleased(page)

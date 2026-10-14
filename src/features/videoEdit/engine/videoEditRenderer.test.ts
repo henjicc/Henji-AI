@@ -563,7 +563,7 @@ it('正向播放从第一帧起按文件建立一条解码计划：同文件剪�
     expect(boundary.scheduled[1].timestamps[0]).toBe(videoEditPictureSeconds(1 + 40 / 60))
   } finally { await renderer.dispose() }
 })
-it('暂停只准备排程不借帧，实际起播才取帧；重画保留计划，换位置释放', async () => {
+it('暂停短时预拉当前位置，实际起播复用；重画保留计划，换位置释放', async () => {
   boundary.scheduled = []
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
@@ -573,10 +573,10 @@ it('暂停只准备排程不借帧，实际起播才取帧；重画保留计划�
   try {
     await (await renderer.render(30, false)).completion
     await renderer.armPlayback(30)
-    expect(boundary.scheduled).toHaveLength(0)
+    expect(boundary.scheduled).toHaveLength(1)
     // The paused frame drawn again (an overlay or region update) keeps the armed schedule; arming again is a no-op.
     await (await renderer.render(30, false)).completion; await renderer.armPlayback(30)
-    expect(internals.playback).toBeDefined(); expect(boundary.scheduled).toHaveLength(0)
+    expect(internals.playback).toBeDefined(); expect(boundary.scheduled).toHaveLength(1)
     // Play takes the armed schedule from its first frame, no second positioning.
     for (let frame = 30; frame <= 33; frame++) {
       const result = await renderer.render(frame, true); await result.completion
@@ -584,7 +584,7 @@ it('暂停只准备排程不借帧，实际起播才取帧；重画保留计划�
     }
     expect(boundary.scheduled).toHaveLength(1)
     // Seeking elsewhere drops an armed schedule like any playback schedule.
-    await renderer.armPlayback(70); expect(boundary.scheduled).toHaveLength(1)
+    await renderer.armPlayback(70); expect(boundary.scheduled).toHaveLength(2)
     await (await renderer.render(10, false)).completion
     expect(internals.playback).toBeUndefined()
   } finally { await renderer.dispose() }
@@ -955,7 +955,7 @@ it('拖动缓存可立即起播，原计划从缓存末尾准备；准确交接�
   const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path)
   try {
     await renderer.armPlayback(15)
-    expect(boundary.scheduled).toHaveLength(0)
+    await vi.waitFor(() => expect(boundary.scheduled).toHaveLength(1))
     for (let frame = 15; frame < 45; frame++) {
       const picture = await renderer.render(frame, true)
       expect(picture.cacheHits).toBe(1); expect(picture.sourceTimestamps).toEqual([frame / 60])
@@ -977,11 +977,11 @@ it('缓存起播前被驱逐时精确取回当前画面；零散短缓存不跳�
     const { cache, released } = cachePlaybackPrefix(renderer, document.media[0].path, count)
     try {
       await renderer.armPlayback(15)
-      expect(boundary.scheduled).toHaveLength(0)
+      await vi.waitFor(() => expect(boundary.scheduled).toHaveLength(1))
       if (count === 30) renderer.setRenderDivisor(2); else cache.clear()
       const picture = await renderer.render(15, true)
       expect(picture.sourceTimestamps).toEqual([15 / 60]); expect(picture.cacheHits).toBe(0)
-      expect(boundary.scheduled).toHaveLength(1)
+      expect(boundary.scheduled).toHaveLength(count === 30 ? 2 : 1)
       expect(boundary.scheduled.at(-1)!.timestamps[0]).toBe(videoEditPictureSeconds(15 / 60))
     } finally { await renderer.dispose() }
     expect(released()).toBe(count)
@@ -999,6 +999,60 @@ it('未来剪辑不提前借用原生帧池，到该素材首个实际播放帧�
     await renderer.render(300, true)
     expect(boundary.scheduled.at(-1)?.path).toBe(document.media[1].path)
   } finally { await renderer.dispose() }
+})
+
+it.each([false, true])('预热租期到期释放借帧与排程；已起播=%s 时取消到期释放', async playing => {
+  vi.useFakeTimers()
+  let opened = 0, closed = 0, returned = 0, released = 0
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ frameAt: async () => null, async *frames() {} }), clipAudio: () => undefined,
+      async *schedule(timestamps) {
+        opened++
+        try { for (const timestamp of timestamps) yield { timestamp, duration: 1 / 60, format: 'NV12', close: () => { returned++ } } as unknown as VideoSample }
+        finally { closed++ }
+      },
+    }) }),
+    release: () => { released++ }, seeker: () => { throw new Error('预热测试不走定位解码。') },
+  }
+  const document = fixture()
+  document.clips = [{ ...document.clips[0], duration: 120 }, { ...document.clips[0], id: 'future', start: 300, duration: 30 }]
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await renderer.armPlayback(30)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(opened).toBe(1); expect(returned).toBe(0)
+    if (playing) await renderer.render(30, true)
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(closed).toBe(playing ? 0 : 1)
+    expect(returned).toBe(1)
+    if (!playing) {
+      expect((renderer as unknown as { playback?: unknown }).playback).toBeUndefined()
+      expect(released).toBe(2)
+      // Re-arming starts a fresh active run; the future run has never borrowed a picture.
+      await renderer.armPlayback(30); await vi.advanceTimersByTimeAsync(0)
+      expect(opened).toBe(2)
+    }
+  } finally { await renderer.dispose(); vi.useRealTimers() }
+  expect(closed).toBe(opened)
+})
+
+it('预热解码尚未返回时超时取消，未交付帧也不会遗留排程', async () => {
+  vi.useFakeTimers()
+  let aborted = false, released = 0
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => undefined, clipAudio: () => undefined,
+      async *schedule(_timestamps, signal) {
+        await new Promise<void>(resolve => signal!.addEventListener('abort', () => { aborted = true; resolve() }, { once: true }))
+        yield* []
+      },
+    }) }), release: () => { released++ }, seeker: () => { throw new Error('预热测试不走定位解码。') },
+  }
+  const renderer = new VideoEditRenderer(fixture(), 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await renderer.armPlayback(0); await vi.advanceTimersByTimeAsync(2500)
+    expect(aborted).toBe(true); expect(released).toBeGreaterThan(0)
+    expect((renderer as unknown as { playback?: unknown }).playback).toBeUndefined()
+  } finally { await renderer.dispose(); vi.useRealTimers() }
 })
 
 it('同一原片在时间线空档后复用时分开排程，不在空档中扣留下一段的帧', async () => {
