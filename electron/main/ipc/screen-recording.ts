@@ -5,6 +5,7 @@ import { mediaPermissions } from '../services/media-permissions'
 import { isRecordingControlSender, recordingControl, recordRecordingCapability, updateRecordingTracks } from '../services/screen-recording/runtime'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { createMainLogger } from '../services/logging'
+import { recordRecordingSensitiveDom } from '../services/screen-recording/runtime'
 
 export function registerScreenRecordingIpc(): void {
   const logger = createMainLogger('main.screen_recording.ipc')
@@ -17,6 +18,7 @@ export function registerScreenRecordingIpc(): void {
     if (request.action === 'control' && recordingControl.snapshot()?.sessionId !== request.sessionId) throw new Error('录制会话已改变，请刷新后重试')
     try {
       switch (request.action) {
+        case 'dom-privacy': return recordRecordingSensitiveDom(event.sender, request.sessionId, request.regions)
         case 'clock': return Number(process.hrtime.bigint() / 1000n)
         case 'track-status': return updateRecordingTracks(event.sender, request.sessionId, request.status)
         case 'capture': return await (await import('../services/screen-recording/capture/service')).handleCaptureRequest(event.sender, request.request)

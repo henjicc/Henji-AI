@@ -63,7 +63,7 @@ export class CaptureLogCollector {
   private seal(): void {
     if (!this.pending.length) return
     const entries = this.pending; this.pending = []
-    const page = captureLogPageSchema.parse({ version: 1, kind: 'events', ownerRef: this.context.ownerRef, sourceDigest: this.context.sourceDigest, entries, count: entries.length, monoSpanUs: [entries[0].monoUs, entries.at(-1)!.monoUs], seqSpan: [entries[0].seq, entries.at(-1)!.seq], clockSegments: structuredClone(this.clocks) })
+    const page = captureLogPageSchema.parse({ version: 2, kind: 'events', ownerRef: this.context.ownerRef, sourceDigest: this.context.sourceDigest, entries, count: entries.length, monoSpanUs: [entries[0].monoUs, entries.at(-1)!.monoUs], seqSpan: [entries[0].seq, entries.at(-1)!.seq], clockSegments: structuredClone(this.clocks) })
     // Keep only the current segment. Sealed pages retain complete facts for crash recovery.
     this.clocks = [this.clocks.at(-1)!]
     this.outstanding++

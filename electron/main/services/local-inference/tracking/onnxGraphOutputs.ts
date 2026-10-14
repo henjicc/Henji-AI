@@ -29,6 +29,34 @@ function concat(parts: ReadonlyArray<Uint8Array | number[]>): Uint8Array {
 const lengthField = (field: number, payload: Uint8Array): Uint8Array => concat([varint(field * 8 + 2), varint(payload.length), payload])
 const varintField = (field: number, value: number): Uint8Array => concat([varint(field * 8), varint(value)])
 
+/** Reads ModelProto.metadata_props (14) without loading weights into another runtime. */
+export function readOnnxCharacterMetadata(model: Uint8Array): string[] {
+  const fields = (bytes: Uint8Array): Array<{ field: number; data: Uint8Array }> => {
+    const result: Array<{ field: number; data: Uint8Array }> = []; let offset = 0
+    while (offset < bytes.length) {
+      let key: number; [key, offset] = readVarint(bytes, offset)
+      const wire = key & 7
+      if (wire === 0) [, offset] = readVarint(bytes, offset)
+      else if (wire === 1) offset += 8
+      else if (wire === 5) offset += 4
+      else if (wire === 2) { let length: number; [length, offset] = readVarint(bytes, offset); result.push({ field: Math.floor(key / 8), data: bytes.subarray(offset, offset + length) }); offset += length }
+      else throw new Error('模型元数据字段类型无效。')
+      if (offset > bytes.length) throw new Error('模型元数据不完整。')
+    }
+    return result
+  }
+  const decoder = new TextDecoder()
+  for (const entry of fields(model).filter(v => v.field === 14)) {
+    const pair = fields(entry.data), key = pair.find(v => v.field === 1), value = pair.find(v => v.field === 2)
+    if (key && value && decoder.decode(key.data) === 'character') {
+      const alphabet = decoder.decode(value.data).split('\n')
+      if (!alphabet.length || alphabet.some(v => !v.length)) throw new Error('文字识别字典无效。')
+      return alphabet
+    }
+  }
+  throw new Error('文字识别模型缺少内置字典，请重新下载官方模型。')
+}
+
 /** ONNX TensorProto.DataType：FLOAT = 1，FLOAT16 = 10。 */
 export interface OnnxExtraOutput { name: string; elementType: 1 | 10; dims: readonly number[] }
 

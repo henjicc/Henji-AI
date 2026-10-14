@@ -1,4 +1,5 @@
 import type { ImageSubjectSelectionJob, ImageSubjectSelectionResult } from './subject-selection/protocol'
+import type { OcrPrivacyJob, OcrPrivacyResult } from './ocr/protocol'
 import type { LocalInferenceEvent, LocalInferenceFailureCode, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 import { assertTrackingFrames, type TrackingFrameProvider } from '../../../../src/platform/contracts/tracking'
@@ -89,6 +90,7 @@ export class LocalInferenceHost {
   analyze(job: SmartRegionAnalysisJob, progress: (done: number, total: number) => void = () => undefined): Promise<SmartRegionAnalysisResult> {
     return this.send<SmartRegionAnalysisResult>({ type: 'analyze', job }, job.id, progress)
   }
+  ocrPrivacy(job: OcrPrivacyJob, progress: (done: number, total: number) => void = () => undefined): Promise<OcrPrivacyResult> { return this.send<OcrPrivacyResult>({ type: 'ocr-privacy', job }, job.id, progress) }
 
   selectImageRegion(job: ImageSubjectSelectionJob, progress: (done: number, total: number) => void = () => undefined): Promise<ImageSubjectSelectionResult> {
     return this.send<ImageSubjectSelectionResult>({ type: 'select-image-region', job }, job.id, progress)

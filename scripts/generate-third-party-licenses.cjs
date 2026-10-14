@@ -276,6 +276,13 @@ function generate(options) {
       'Rebuild with node-gyp from the source tarball; replace the unpacked uiohook-napi.node binding. LGPL permits modification and reverse engineering for debugging those modifications.'],
     textIds: [textTable.add(hookLicense)], textOrigin: 'package' })
 
+  // Models are downloaded on demand, but their attribution is also visible in the shared About/notices list.
+  const ppocrLicense = readTextIfExists(path.join(REFERENCE_DIR, 'PP-OCR-Apache-2.0.txt'))
+  if (!ppocrLicense) missing.push('PP-OCR：缺少 Apache-2.0 模型许可全文')
+  else runtime.push({ id: 'runtime:ppocr-v4-mobile', name: 'PP-OCRv4 mobile (RapidOCR ONNX detection and recognition)', version: 'PP-OCRv4', license: 'Apache-2.0', ecosystem: 'runtime',
+    homepage: 'https://github.com/RapidAI/RapidOCR', sources: ['https://github.com/PaddlePaddle/PaddleOCR', 'https://github.com/RapidAI/RapidOCR/blob/main/python/rapidocr/default_models.yaml',
+      'https://huggingface.co/SWHL/RapidOCR/tree/main/PP-OCRv4 (on-demand model files; retain copyright and Apache-2.0 license; no modified upstream code)'],
+    textIds: [textTable.add(ppocrLicense)], textOrigin: 'reference' })
   const notices = buildNotices({
     project: {
       name: PRODUCT_NAME,

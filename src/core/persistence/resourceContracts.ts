@@ -19,7 +19,7 @@ const resourceSchemas = {
 export type PersistenceResourceId = keyof typeof resourceSchemas
 const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
   'screen-recording-tracks': 1,
-  'capture-log-page': 1,
+  'capture-log-page': 2,
   'creative-intent-page': 1,
   'creative-intent-candidate': MOTION_CANDIDATE_VERSION,
   'image-layout-page': 1,

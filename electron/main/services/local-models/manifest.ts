@@ -210,6 +210,23 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
     }],
   },
   {
+    id: 'text_recognition_ppocr',
+    title: { zh: '文字识别 PP-OCR', en: 'Text Recognition (PP-OCR)' },
+    purpose: { zh: '本机读取中英文文字，用于敏感信息候选打码', en: 'Reads Chinese and English text locally for sensitive-text redaction candidates' },
+    folderName: { zh: '文字识别 PP-OCR', en: 'Text Recognition PP-OCR' },
+    homepage: 'https://github.com/RapidAI/RapidOCR',
+    license: { spdx: 'Apache-2.0', url: 'https://github.com/RapidAI/RapidOCR/blob/main/LICENSE' },
+    availability: 'available',
+    files: [{ name: 'ch_PP-OCRv4_rec_mobile.onnx', role: 'model', sizeBytes: 10_857_958,
+      sha256: '48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b',
+      sources: [
+        { region: 'domestic', label: 'own-modelscope', url: ownUrl('text_recognition_ppocr/ch_PP-OCRv4_rec_mobile.onnx') },
+        { region: 'domestic', label: 'modelscope-rapidocr', url: 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.onnx' },
+        { region: 'global', label: 'huggingface-rapidocr', url: huggingFaceUrl('SWHL/RapidOCR', 'PP-OCRv4/ch_PP-OCRv4_rec_infer.onnx') },
+      ],
+    }],
+  },
+  {
     id: 'object_tracking_efficienttam',
     title: { zh: '任意物体跟踪 EfficientTAM', en: 'Object Tracking (EfficientTAM)' },
     purpose: { zh: '点选或框选任意物体后整段跟踪', en: 'Tracks any clicked or boxed object through a clip' },
