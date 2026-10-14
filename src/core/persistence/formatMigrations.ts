@@ -6,10 +6,7 @@ import { migrateMcpConnectionStorageV1 } from './mcpConnectionSchema'
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
   // Reuse the existing theme migration; t94 does not invent migrations for old development projects.
   'theme-payload': { 1: content => migrateThemePayloadV1(content) },
-  // 1 → 2（t187）：字幕回填记录新增可选 sourceText，旧记录原样可读。
-  'subtitle-manifest': { 1: content => content && typeof content === 'object' && !Array.isArray(content) ? { ...content, version: 2 } : content },
-  // 1 → 2（f6）：文字样式说明补充“未提供字段使用默认值”，存储内容不变，原样升级。
-  'title-templates': { 1: content => content },
+  // 录屏注意力共享曲线契约：subtitle-manifest/title-templates v3 已登记 dev-break，不保留旧开发格式迁移。
   // 1 → 2：外部连接改为永久有效，去掉到期时间与提醒记录。
   'mcp-connections': { 1: migrateMcpConnectionStorageV1 },
 }

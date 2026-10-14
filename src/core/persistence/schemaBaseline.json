@@ -2,9 +2,9 @@
   "releasedCompatibility": false,
   "formats": {
     "document.video_edit": {
-      "version": 5,
-      "fingerprint": "b032a41c978bedf1a500f833d621e4b94d2449ab9271316f86dae2dc6363973b",
-      "supportedFrom": 5
+      "version": 6,
+      "fingerprint": "5677bf7aab1004cc5a4517c0e4d6e42499c795896090980146780728b02ef781",
+      "supportedFrom": 6
     },
     "document.canvas": {
       "version": 1,
@@ -82,9 +82,9 @@
       "supportedFrom": 1
     },
     "title-templates": {
-      "version": 2,
-      "fingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9",
-      "supportedFrom": 1
+      "version": 3,
+      "fingerprint": "8939641fa6dde690d899eba43966872d4fbef9d8cc2ff7c912fcb71b5a320700",
+      "supportedFrom": 3
     },
     "text-presets": {
       "version": 1,
@@ -172,9 +172,9 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 2,
-      "fingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
-      "supportedFrom": 1
+      "version": 3,
+      "fingerprint": "01bcce87c26ef3685d037398498a56905885505cd9a8cfe4c2c393491cd24673",
+      "supportedFrom": 3
     },
     "storyboard-metadata": {
       "version": 1,
@@ -192,9 +192,9 @@
       "supportedFrom": 1
     },
     "creative-intent-candidate": {
-      "version": 1,
-      "fingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152",
-      "supportedFrom": 1
+      "version": 2,
+      "fingerprint": "a902a12e001aaff8d583069fa423c75ab121f299338822d787f0632962600f87",
+      "supportedFrom": 2
     },
     "image-layout-page": {
       "version": 1,
@@ -1378,6 +1378,42 @@
       "reason": "开发期剪辑内容升级至v5，新增录制光标事件日志引用与内置效果，旧格式不迁移",
       "previousFingerprint": "1556823f2557f135a0bf7a1794b3eb2ec48248a914afd7a28e3fa96d84c656e0",
       "fingerprint": "b032a41c978bedf1a500f833d621e4b94d2449ab9271316f86dae2dc6363973b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T02:54:04.922Z",
+      "format": "creative-intent-candidate",
+      "version": 2,
+      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
+      "previousFingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152",
+      "fingerprint": "a902a12e001aaff8d583069fa423c75ab121f299338822d787f0632962600f87",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T02:54:04.923Z",
+      "format": "document.video_edit",
+      "version": 6,
+      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
+      "previousFingerprint": "b032a41c978bedf1a500f833d621e4b94d2449ab9271316f86dae2dc6363973b",
+      "fingerprint": "5677bf7aab1004cc5a4517c0e4d6e42499c795896090980146780728b02ef781",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T02:54:04.923Z",
+      "format": "title-templates",
+      "version": 3,
+      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
+      "previousFingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9",
+      "fingerprint": "8939641fa6dde690d899eba43966872d4fbef9d8cc2ff7c912fcb71b5a320700",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T02:54:04.923Z",
+      "format": "subtitle-manifest",
+      "version": 3,
+      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
+      "previousFingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
+      "fingerprint": "01bcce87c26ef3685d037398498a56905885505cd9a8cfe4c2c393491cd24673",
       "waivedFixtureVersions": []
     }
   ],

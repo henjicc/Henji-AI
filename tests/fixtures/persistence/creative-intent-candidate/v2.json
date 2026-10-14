@@ -1,0 +1,70 @@
+{
+  "version": 2,
+  "id": "faithful",
+  "label": "保留原姿态与节奏",
+  "identity": {
+    "sourceDraftDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "algorithmVersion": "p2-annotation-relative/1",
+    "requestKey": "{\"fidelity\":0,\"takes\":null,\"intent\":{\"kind\":\"move_line\",\"from\":[0.15,0.5],\"to\":[0.75,0.5]},\"annotations\":[],\"relative\":null,\"mappings\":[[\"take0\",{\"clipStart\":0,\"positionToNative\":[1,0,0,1,0,0],\"pivotToNative\":[1,0,0,1,0,0],\"scaleFactor\":1,\"rotationOffsetDegrees\":0}]]}",
+    "ownerRef": {
+      "kind": "document.video_edit",
+      "id": "fixture:doc"
+    },
+    "targetBases": [
+      {
+        "targetRef": {
+          "kind": "video_edit.clip",
+          "id": "fixture:doc:clip"
+        },
+        "baseDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "geometryDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "motions": [
+    {
+      "takeId": "take0",
+      "curves": {
+        "x": [
+          {
+            "value": 0.15,
+            "interpolation": "bezier",
+            "bezier": [
+              0.3333333333333333,
+              0.3333333333333343,
+              0.6666666666666666,
+              0.6666666666666649
+            ],
+            "time": 0
+          },
+          {
+            "value": 0.75,
+            "interpolation": "linear",
+            "time": 120
+          }
+        ],
+        "y": [
+          {
+            "value": 0.5,
+            "interpolation": "hold",
+            "time": 0
+          },
+          {
+            "value": 0.5,
+            "interpolation": "linear",
+            "time": 120
+          }
+        ]
+      },
+      "range": [
+        0,
+        120
+      ],
+      "keyCount": 2,
+      "maxErrors": {
+        "x": 1.7881393810093016e-8,
+        "y": 0
+      }
+    }
+  ]
+}

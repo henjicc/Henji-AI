@@ -7,8 +7,17 @@ import type { VideoEditClip } from './document'
 import type { VideoEditEffect } from './compositing'
 
 /** Same value/interpolation contract as source curves; clip-relative integer frames replace source microseconds. */
-export const videoEditKeyframeSchema = codeMaterialKeyframeSchema.omit({ id: true, sourceInUs: true, sourceRemainder: true }).extend({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), source: z.enum(['ducking', 'reframe']).optional(), reframeOrigin: z.object({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), value: z.number().finite(), interpolation: z.enum(['linear', 'hold']) }).strict().optional(), duckingOrigin: z.object({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), value: z.number().finite().min(0).max(2) }).strict().optional(), easeValues: z.tuple([codeMaterialKeyframeSchema.shape.value, codeMaterialKeyframeSchema.shape.value]).optional(), easeRange: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]).refine(([a, b]) => b > a, '缓动区间终点须大于起点。').optional() })
-export const videoEditKeyframesSchema = z.array(videoEditKeyframeSchema).superRefine((points, ctx) => {
+export const videoEditKeyframeSchema = codeMaterialKeyframeSchema.omit({ id: true, sourceInUs: true, sourceRemainder: true }).extend({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), source: z.enum(['ducking', 'reframe', 'screen_attention']).optional(), reframeOrigin: z.object({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), value: z.number().finite(), interpolation: z.enum(['linear', 'hold']) }).strict().optional(), duckingOrigin: z.object({ time: z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES), value: z.number().finite().min(0).max(2) }).strict().optional(), easeValues: z.tuple([codeMaterialKeyframeSchema.shape.value, codeMaterialKeyframeSchema.shape.value]).optional(), easeRange: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]).refine(([a, b]) => b > a, '缓动区间终点须大于起点。').optional() })
+export const videoEditKeyframesSchema = z.array(videoEditKeyframeSchema.overwrite(point => {
+  // Public validation and document writes use the same canonical ownership. Stale provenance is a manual point.
+  const motion = point.source === 'screen_attention'
+  const origin = point.reframeOrigin
+  if (motion && (!origin || point.time !== origin.time || point.value !== origin.value || point.interpolation !== origin.interpolation || point.easeRange || point.bezier || point.easeValues)) {
+    const { source: _source, reframeOrigin: _origin, ...manual } = point
+    return manual
+  }
+  return point
+})).superRefine((points, ctx) => {
   points.forEach((point, index) => {
     if (point.interpolation === 'bezier' && point.easeRange && !point.easeValues) ctx.addIssue({ code: 'custom', path: [index, 'easeValues'], message: '修剪后的贝塞尔曲线必须保留 easeValues 原值锚点。' })
     if (point.easeValues && (point.interpolation !== 'bezier' || !point.easeRange)) ctx.addIssue({ code: 'custom', path: [index, 'easeValues'], message: 'easeValues 只能用于带 easeRange 的贝塞尔曲线。' })
@@ -49,10 +58,13 @@ export function isVideoEditDuckingKeyframe(point: VideoEditKeyframe): boolean {
   return point.source === 'ducking' && (!point.duckingOrigin || point.time === point.duckingOrigin.time && point.value === point.duckingOrigin.value && point.interpolation === 'linear' && !point.easeRange && !point.bezier && !point.easeValues)
 }
 export function isVideoEditReframeKeyframe(point: VideoEditKeyframe): boolean {
-  return point.source === 'reframe' && Boolean(point.reframeOrigin && point.time === point.reframeOrigin.time && point.value === point.reframeOrigin.value && point.interpolation === point.reframeOrigin.interpolation && !point.easeRange && !point.bezier && !point.easeValues)
+  return isVideoEditMotionKeyframe(point, 'reframe')
 }
-function remapVideoEditReframeOrigin(point: VideoEditKeyframe, time: number, value: VideoEditKeyframe['value'] = point.value): Partial<VideoEditKeyframe> {
-  return isVideoEditReframeKeyframe(point) ? { source: 'reframe', reframeOrigin: { time, value: value as number, interpolation: point.interpolation as 'linear' | 'hold' } } : {}
+export function isVideoEditMotionKeyframe(point: VideoEditKeyframe, source: 'reframe' | 'screen_attention'): boolean {
+  return point.source === source && Boolean(point.reframeOrigin && point.time === point.reframeOrigin.time && point.value === point.reframeOrigin.value && point.interpolation === point.reframeOrigin.interpolation && !point.easeRange && !point.bezier && !point.easeValues)
+}
+function remapVideoEditMotionOrigin(point: VideoEditKeyframe, time: number, value: VideoEditKeyframe['value'] = point.value): Partial<VideoEditKeyframe> {
+  return (isVideoEditReframeKeyframe(point) || isVideoEditMotionKeyframe(point, 'screen_attention')) ? { source: point.source, reframeOrigin: { time, value: value as number, interpolation: point.interpolation as 'linear' | 'hold' } } : {}
 }
 /** Once a generated point is hand edited it belongs to the user, including interpolation edits. */
 export function claimVideoEditManualKeyframes(points: VideoEditKeyframes, previous: VideoEditKeyframes | undefined): VideoEditKeyframes {
@@ -124,10 +136,10 @@ export function sliceVideoEditCurves(curves: VideoEditCurves | undefined, offset
     const at = (time: number): VideoEditKeyframe => {
       const left = [...points].reverse().find(point => point.time <= time) ?? points[0]
       const value = clamp(key, evaluateVideoEditKeyframes(points, time, points[0].value))
-      return { time: time - offset, value, interpolation: left.interpolation, ...remapVideoEditReframeOrigin(left, time - offset, value), ...(isVideoEditDuckingKeyframe(left) ? { source: 'ducking' as const, duckingOrigin: { time: time - offset, value: value as number } } : {}) }
+      return { time: time - offset, value, interpolation: left.interpolation, ...remapVideoEditMotionOrigin(left, time - offset, value), ...(isVideoEditDuckingKeyframe(left) ? { source: 'ducking' as const, duckingOrigin: { time: time - offset, value: value as number } } : {}) }
     }
     const end = offset + duration - 1
-    const sliced = points.filter(point => point.time >= offset && point.time <= end).map(point => ({ ...point, time: point.time - offset, ...remapVideoEditReframeOrigin(point, point.time - offset), ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time: point.time - offset, value: point.value as number } } : {}) }))
+    const sliced = points.filter(point => point.time >= offset && point.time <= end).map(point => ({ ...point, time: point.time - offset, ...remapVideoEditMotionOrigin(point, point.time - offset), ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time: point.time - offset, value: point.value as number } } : {}) }))
     if (points[0].time < offset && !sliced.some(point => point.time === 0)) sliced.unshift(at(offset))
     if (points[points.length - 1].time > end && !sliced.some(point => point.time === duration - 1)) sliced.push(at(end))
     if (!sliced.length) sliced.push(at(offset))
@@ -159,7 +171,7 @@ export function sliceVideoEditClipKeyframes(clip: VideoEditClip, offset: number,
 }
 export function rescaleVideoEditClipKeyframes(clip: VideoEditClip, convert: (time: number) => number, duration: number): VideoEditClip {
   const map = (curves: VideoEditCurves | undefined): VideoEditCurves | undefined => curves && Object.fromEntries(Object.entries(curves).map(([key, points]) => {
-    const unique = new Map(points.map(point => { const time = Math.max(0, Math.min(duration - 1, convert(point.time))); return [time, { ...point, time, ...remapVideoEditReframeOrigin(point, time), ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time, value: point.value as number } } : {}) }] }))
+    const unique = new Map(points.map(point => { const time = Math.max(0, Math.min(duration - 1, convert(point.time))); return [time, { ...point, time, ...remapVideoEditMotionOrigin(point, time), ...(isVideoEditDuckingKeyframe(point) ? { duckingOrigin: { time, value: point.value as number } } : {}) }] }))
     return [key, [...unique.values()].sort((a, b) => a.time - b.time)]
   }))
   return { ...clip, ...(clip.curves ? { curves: map(clip.curves) } : {}), ...(clip.effects ? { effects: clip.effects.map(effect => effect.builtin?.curves ? { ...effect, builtin: { ...effect.builtin, curves: map(effect.builtin.curves) } } : effect) } : {}) }

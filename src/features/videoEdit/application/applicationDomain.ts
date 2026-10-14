@@ -10,6 +10,8 @@ import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability
 import { handleTitleTemplateCapability } from './videoEditTitleTemplateCapability'
 import { TitleTemplateCollectionExecutor, TitleTemplateMutationExecutor } from './videoEditTitleTemplateReflection'
 import { handleVideoEditProxyCapability } from './videoEditProxyCapability'
+import { screenAttentionVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditScreenAttentionCapability'
+import { executeVideoEditScreenAttentionCapability } from './videoEditScreenAttentionCapability'
 import { reframeVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditReframeCapability'
 import { handleVideoEditTextCapability } from './videoEditTextCapability'
 import { executeVideoEditReframeCapability } from './videoEditReframeCapability'
@@ -149,6 +151,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (proxy) return proxy
       const scenes = await handleVideoEditSceneCapability(definition.id, raw, context)
       if (scenes) return scenes
+      if (definition.id === screenAttentionVideoEditCapability.id) return executeVideoEditScreenAttentionCapability(screenAttentionVideoEditCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === reframeVideoEditCapability.id) return executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse(raw), context.signal, context.callerGrant?.permissions)
       if (definition.id === generateVideoEditAudioDuckingCapability.id) return executeVideoEditAudioDuckingCapability(generateVideoEditAudioDuckingCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === analyzeVideoEditColorGradeCapability.id) {

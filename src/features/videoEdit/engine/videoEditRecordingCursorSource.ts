@@ -31,6 +31,11 @@ export class VideoEditRecordingCursorSource {
   async window(source: RecordingCursorSource, timeUs: number, hideAfterSeconds: number, signal: AbortSignal): Promise<CaptureEvent[]> {
     const from = timeUs - Math.max(600_000, hideAfterSeconds * 1_000_000 + CURSOR_LOOKAHEAD_US)
     const to = timeUs + CURSOR_LOOKAHEAD_US
+    return this.range(source, from, to, signal)
+  }
+  /** Attention analysis reads bounded time chunks through the same integrity/owner checks and cache. */
+  async range(source: RecordingCursorSource, from: number, to: number, signal: AbortSignal): Promise<CaptureEvent[]> {
+    signal.throwIfAborted()
     let lo = 0; let hi = source.pages.length
     while (lo < hi) { const mid = (lo + hi) >>> 1; if (source.pages[mid].recordingSpanUs[1] < from) lo = mid + 1; else hi = mid }
     const events: CaptureEvent[] = []

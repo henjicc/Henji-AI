@@ -14,23 +14,25 @@ vi.mock('../../features/videoEdit/application/videoEditService', () => ({ requir
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 const ids: PersistenceResourceId[] = ['screen-recording-tracks', 'capture-log-page', 'creative-intent-page', 'creative-intent-candidate', 'image-layout-page', 'image-layout-candidate']
-const fixture = (id: PersistenceResourceId): Record<string, unknown> => JSON.parse(fs.readFileSync(path.resolve('tests/fixtures/persistence', id, 'v1.json'), 'utf8')) as Record<string, unknown>
+const fixtureVersions = Object.fromEntries(ids.map(id => [id, resourcePersistenceContract(id).version]))
+const fixture = (id: PersistenceResourceId): Record<string, unknown> => JSON.parse(fs.readFileSync(path.resolve('tests/fixtures/persistence', id, `v${fixtureVersions[id]}.json`), 'utf8')) as Record<string, unknown>
 
 describe('不可变资源统一解码', () => {
   it.each(ids)('%s 预检版本、完整迁移链和最终schema，不修改原值', id => {
     const raw = fixture(id)
     expect(decodePersistenceResource(id, raw)).toEqual(raw)
-    expect(() => decodePersistenceResource(id, { ...raw, version: 2 })).toThrowError(expect.objectContaining({ code: 'newer-version' }))
+    const current = Number(raw.version), next = current + 1
+    expect(() => decodePersistenceResource(id, { ...raw, version: next })).toThrowError(expect.objectContaining({ code: 'newer-version' }))
     expect(() => decodePersistenceResource(id, { ...raw, version: undefined })).toThrowError(expect.objectContaining({ code: 'invalid-content' }))
     const contract = resourcePersistenceContract(id), original = { ...contract }
-    const step = vi.fn((value: unknown) => ({ ...(value as object), version: 2, migrated: true }))
-    Object.assign(contract, { version: 2, schema: z.looseObject({ version: z.literal(2), migrated: z.literal(true) }), migrations: {} })
+    const step = vi.fn((value: unknown) => ({ ...(value as object), version: next, migrated: true }))
+    Object.assign(contract, { version: next, schema: z.looseObject({ version: z.literal(next), migrated: z.literal(true) }), migrations: {} })
     try {
       expect(() => decodePersistenceResource(id, raw)).toThrowError(expect.objectContaining({ code: 'unsupported-version' }))
-      Object.assign(contract, { migrations: { 1: step } })
-      expect(decodePersistenceResource(id, raw)).toMatchObject({ version: 2, migrated: true })
+      Object.assign(contract, { migrations: { [current]: step } })
+      expect(decodePersistenceResource(id, raw)).toMatchObject({ version: next, migrated: true })
       expect(raw).toEqual(fixture(id))
-      Object.assign(contract, { migrations: { 1: () => ({ version: 2 }) } })
+      Object.assign(contract, { migrations: { [current]: () => ({ version: next }) } })
       expect(() => decodePersistenceResource(id, raw)).toThrowError(expect.objectContaining({ code: 'migration-failed', fields: ['migrated'] }))
     } finally { Object.assign(contract, original) }
   })

@@ -1,3 +1,4 @@
+import { MOTION_CANDIDATE_VERSION } from '../src/core/creativeIntent/persistence'
 import { mcpConnectionStorageSchema } from '../src/core/persistence/mcpConnectionSchema'
 import { createRecordingDocument } from '../src/core/screenRecording/document'
 import { llmStoredConfigSchema } from '../src/core/persistence/llmSchemas'
@@ -64,6 +65,7 @@ document.items.push({ id: 'golden-screen-item', name: '屏幕原片', kind: 'vid
 const cursorClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 90, duration: 90 })
 cursorClip.id = 'golden-cursor-clip'
 cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { size: 3, smoothing: 40, click_style: 'ripple' } } }]
+cursorClip.curves = { scale: [{ time: 0, value: 1, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 0, value: 1, interpolation: 'linear' } }, { time: 45, value: 1.8, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 45, value: 1.8, interpolation: 'linear' } }] }
 sequence.clips.push(cursorClip)
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
@@ -133,7 +135,7 @@ const values: Record<string, unknown> = {
   'image-layout-page':layoutPage,
   'image-layout-candidate':layoutCandidate,
   'creative-intent-page': (() => { const { draft, samples } = createMotionFixture('S01').input; return { version: 1, kind: 'samples', ownerRef: draft.ownerRef, sourceDigest: draft.sourceDigest, monoSpanUs: [samples[0].monoUs, samples[samples.length - 1].monoUs], seqSpan: [samples[0].seq, samples[samples.length - 1].seq], count: samples.length, entries: samples } })(),
-  'creative-intent-candidate': { version: 1, ...optimizeMotionDraft(createMotionFixture('S01').input).candidates[0] },
+  'creative-intent-candidate': { version: MOTION_CANDIDATE_VERSION, ...optimizeMotionDraft(createMotionFixture('S01').input).candidates[0] },
   'document.video_edit': videoContent,
   'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } }], edges: [] },
   'document.audio_edit': { source: { mediaType: 'audio', sourcePath: '/persistence-project/素材/voice.wav', audioPath: '/persistence-project/素材/voice.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '参考稿', transcript: [{ id: 'word', text: '你好', startFrame: 0, endFrame: 24000, included: true, locked: false, granularity: 'word' }], suggestions: [], vstEnabled: false, cuts: [{ id: 'cut', startFrame: 24000, endFrame: 48000, reason: 'manual', enabled: true }], processorChain: [] },

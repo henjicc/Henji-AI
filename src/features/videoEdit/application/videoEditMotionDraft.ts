@@ -5,7 +5,7 @@ import { createLogger } from '@/core/logging'
 import { motionDraftSchema, refKey, type MotionDraft, type MotionProperty, type MotionSample, type Pose, type Timeline, type ClockSegment } from '@/core/creativeIntent/contracts'
 import { assertCandidateCurrent, motionCandidateIdentity, type MotionCandidate, type OptimizeMotionInput } from '@/core/creativeIntent/candidates'
 import { type MotionIntent } from '@/core/creativeIntent/recipe'
-import { type CreativeIntents, type StoredCreativeIntentResource, creativeIntentLiveResources } from '@/core/creativeIntent/persistence'
+import { MOTION_CANDIDATE_VERSION, type CreativeIntents, type StoredCreativeIntentResource, creativeIntentLiveResources } from '@/core/creativeIntent/persistence'
 import { mergeMotionClipCurves, motionClipBase, motionClipGeometry, motionClipPose } from '@/core/videoEdit/motionDraft'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
@@ -457,8 +457,8 @@ export async function optimizeVideoMotion(id: string): Promise<void> {
     }
     const current = await inputFor(state)
     for (const candidate of result.candidates) assertCandidateCurrent(candidate, motionCandidateIdentity(state.draft, current))
-    for (const candidate of result.candidates) { controller.signal.throwIfAborted(); resources.push(await storeMotionResource(id, { version: 1, ...candidate }, 'candidate')) }
-    const originalRef = original ? await storeMotionResource(id, { version: 1, ...original }, 'candidate') : undefined
+    for (const candidate of result.candidates) { controller.signal.throwIfAborted(); resources.push(await storeMotionResource(id, { version: MOTION_CANDIDATE_VERSION, ...candidate }, 'candidate')) }
+    const originalRef = original ? await storeMotionResource(id, { version: MOTION_CANDIDATE_VERSION, ...original }, 'candidate') : undefined
     if (originalRef) resources.push(originalRef)
     controller.signal.throwIfAborted()
     const fresh = await inputFor(state); for (const candidate of result.candidates) assertCandidateCurrent(candidate, motionCandidateIdentity(state.draft, fresh)); controller.signal.throwIfAborted()
