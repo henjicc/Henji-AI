@@ -58,6 +58,8 @@ export default defineConfig({
       // 不显式登记时 Vite 会等用户第一次切到对应 Tab 才现场预构建依赖，
       // 表现就是「切个 Tab 卡十几秒、还可能整页刷新」。登记后在 dev server 起来时一次性预构建。
       include: [
+        // 剪辑降噪只在拖动/播放带声音的片段时才加载；不登记会在第一次用到时整页刷新。
+        '@shiguredo/rnnoise-wasm',
         '@tiptap/core',
         '@tiptap/extension-document',
         '@tiptap/extension-hard-break',

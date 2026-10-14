@@ -89,7 +89,9 @@ function createRecordingSessionScene() {
           const media = result.content.media.filter(media => media.durationUs > 0)
           const screen = media.filter(media => media.kind === 'screen').sort((a, b) => a.monoUs - b.monoUs)
           assert(screen.length > 1, '验收录制未形成多个屏幕分片')
-          const origin = Math.min(...media.map(media => media.monoUs))
+          // The session clock starts at the first picture; sound opened during the countdown is not shown as blank lead-in.
+          const screenStarts = media.filter(media => media.kind === 'screen').map(media => media.monoUs)
+          const origin = Math.min(...(screenStarts.length ? screenStarts : media.map(media => media.monoUs)))
           const duration = (Math.max(...media.map(media => media.monoUs + media.durationUs), ...result.content.markers.map(marker => marker.monoUs)) - origin) / 1e6
           const viewer = page.getByTestId('recording-preview')
           // A track may begin after another one; the initial empty interval is intentionally blank.

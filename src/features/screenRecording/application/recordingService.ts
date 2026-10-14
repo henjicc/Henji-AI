@@ -101,7 +101,7 @@ export async function startRecording(options: ScreenCaptureOptions, session: Rec
     const kinds: CaptureKind[] = ['screen', ...(session.tracks.microphone ? ['microphone' as const] : []), ...(session.tracks.systemAudio ? ['systemAudio' as const] : []), ...(session.tracks.camera ? ['camera' as const] : [])]
     await api.grant({ sessionId: id, userReceipt: crypto.randomUUID(), kinds, selection: { sourceId: options.sourceId, excludedSourceIds: [] } })
     signal?.throwIfAborted()
-    capture = await prepareScreenCapture(id, options, { ...session, ...(projectId ? { projectId } : {}) })
+    capture = await prepareScreenCapture(id, options, { ...session, ...(projectId ? { projectId } : {}) }, quick ? 'embed' : undefined)
     publish({ documentId: id, content: await readRecordingDocument(id), snapshot: await api.snapshot() })
     defaultDocumentOperationChanges.changed()
     detach = api.onChanged(snapshot => {

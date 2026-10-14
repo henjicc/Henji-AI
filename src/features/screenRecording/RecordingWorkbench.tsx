@@ -39,10 +39,11 @@ export function RecordingWorkbench({ sessionId, recording, recipe, onRecipeChang
   const [analyzing, setAnalyzing] = useState(false), [error, setError] = useState('')
   const visual = session.tracks.filter(track => track.kind === 'screen' || track.kind === 'camera')
   const track = visual.find(item => item.kind === kind) ?? visual[0]
-  const timeline = useMemo<VideoViewerTimeline>(() => ({ duration: session.durationUs / 1e6, segments: track?.spans.map(span => ({
-    videoUrl: resolveImageDisplayUrl(span.media.path), filePath: span.media.path,
-    start: (span.startUs - session.originUs) / 1e6, end: (span.endUs - session.originUs) / 1e6, sourceStart: (span.startUs - span.media.monoUs) / 1e6,
-  })) ?? [] }), [track, session.durationUs, session.originUs])
+  const timeline = useMemo<VideoViewerTimeline>(() => ({ duration: session.durationUs / 1e6, segments: track?.spans.filter(span => span.endUs > session.originUs).map(span => {
+    const startUs = Math.max(span.startUs, session.originUs)
+    return { videoUrl: resolveImageDisplayUrl(span.media.path), filePath: span.media.path,
+      start: (startUs - session.originUs) / 1e6, end: (span.endUs - session.originUs) / 1e6, sourceStart: (startUs - span.media.monoUs) / 1e6 }
+  }) ?? [] }), [track, session.durationUs, session.originUs])
   const seek = useCallback((seconds: number): void => setSeekRequest(previous => ({ seconds: Math.max(0, seconds), request: previous.request + 1 })), [])
   const open = (lane: RecordingLaneKind, id: string): void => {
     if (lane === 'privacy') { setKind('screen'); setFocused(id); setTab('privacy') }

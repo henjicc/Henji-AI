@@ -30,7 +30,7 @@ describe('快速模式保存视频', () => {
     expect(quickExportAudioGraph([], windows, 1)).toBeNull()
   })
 
-  const binaries = (() => { try { return createRequire(import.meta.url)(path.resolve('scripts/lib/mediaBinaries.cjs')) as { ffmpegPath: string; ffprobePath: string } } catch { return null } })()
+  const binaries = (() => { try { return createRequire(path.resolve('package.json'))(path.resolve('scripts/lib/mediaBinaries.cjs')) as { ffmpegPath: string; ffprobePath: string } } catch { return null } })()
   const root = mkdtempSync(path.join(tmpdir(), 'quick-export-'))
   afterAll(() => rmSync(root, { recursive: true, force: true }))
   it.skipIf(!binaries)('真实 ffmpeg：两段画面拼接、声音混入、事件写进文件后仍是普通视频且能读回', async () => {

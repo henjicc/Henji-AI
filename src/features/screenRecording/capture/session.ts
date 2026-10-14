@@ -12,9 +12,9 @@ export interface ScreenCaptureSession {
   close(): Promise<void>
 }
 /** The host grants a selected source first. 1.5 UI/Pi/MCP then share this service and the 1.1 control. */
-export async function prepareScreenCapture(sessionId: string, options: ScreenCaptureOptions, session?: RecordingSessionOptions): Promise<ScreenCaptureSession> {
+export async function prepareScreenCapture(sessionId: string, options: ScreenCaptureOptions, session?: RecordingSessionOptions, cursor?: 'redraw' | 'embed'): Promise<ScreenCaptureSession> {
   const api = getPlatform().screenRecording
-  const prepared = await api.capture({ operation: 'prepare', sessionId, options, ...(session ? { session } : {}) }) as CapturePrepared
+  const prepared = await api.capture({ operation: 'prepare', sessionId, options, ...(session ? { session } : {}), ...(cursor ? { cursor } : {}) }) as CapturePrepared
   let browser: ChromiumCaptureBackend | undefined
   let tracks: RecordingTracksSession | undefined
   const controller = new AbortController()

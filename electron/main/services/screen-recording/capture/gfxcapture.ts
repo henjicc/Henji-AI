@@ -9,10 +9,10 @@ import { spawnCaptureProcess } from './process'
 
 const logger = createMainLogger('main.screen_recording.capture')
 export interface NativeCaptureSource { selector: 'hwnd' | 'hmonitor'; handle: string; width: number; height: number }
-export function buildGfxCaptureArgs(options: ScreenCaptureOptions, source: NativeCaptureSource, encoder: VideoEncoderProfile, output: string): string[] {
+export function buildGfxCaptureArgs(options: ScreenCaptureOptions, source: NativeCaptureSource, encoder: VideoEncoderProfile, output: string, embedCursor = false): string[] {
   if (!/^\d+$/.test(source.handle) || source.handle === '0') throw new Error('录制来源已失效，请重新选择')
   const crop = captureCrop(options.region, source.width, source.height)
-  const filter = `gfxcapture=${source.selector}=${source.handle}:capture_cursor=${options.cursor === 'embed' ? 1 : 0}:capture_border=1:max_framerate=${options.fps}:width=${options.width}:height=${options.height}:resize_mode=scale_aspect`
+  const filter = `gfxcapture=${source.selector}=${source.handle}:capture_cursor=${embedCursor ? 1 : 0}:capture_border=1:max_framerate=${options.fps}:width=${options.width}:height=${options.height}:resize_mode=scale_aspect`
     + (options.region ? `:crop_left=${crop.x}:crop_top=${crop.y}:crop_right=${source.width - crop.x - crop.width}:crop_bottom=${source.height - crop.y - crop.height}` : '')
     + (encoder.id === 'cpu' ? ',hwdownload,format=bgra,format=yuv420p' : '')
   const kbps = Math.round(options.bitrate / 1000)
@@ -37,7 +37,7 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
   private pending: Promise<void> = Promise.resolve()
   private watchdog: ReturnType<typeof setInterval> | undefined
   private readonly deps: GfxDependencies
-  constructor(private readonly options: ScreenCaptureOptions, private readonly source: NativeCaptureSource, private readonly storage: CaptureStorage, deps: Partial<GfxDependencies> & Pick<GfxDependencies, 'nowUs' | 'failed'>) {
+  constructor(private readonly options: ScreenCaptureOptions, private readonly source: NativeCaptureSource, private readonly storage: CaptureStorage, deps: Partial<GfxDependencies> & Pick<GfxDependencies, 'nowUs' | 'failed'>, private readonly embedCursor = false) {
     this.deps = { binary: loadFfmpegPath, encoder: getPreferredEncoder, spawn: spawnCaptureProcess, ...deps }
   }
   async prepare(): Promise<void> { this.binary = await this.deps.binary(); this.encoder = await this.deps.encoder() }
@@ -64,7 +64,7 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
   private async launch(encoder: VideoEncoderProfile, signal: AbortSignal): Promise<void> {
     const span = await this.storage.openSpan(this.deps.nowUs(), true)
     signal.throwIfAborted(); if (this.cancelled) throw new Error('录制已取消')
-    const child = this.deps.spawn(this.binary, buildGfxCaptureArgs(this.options, this.source, encoder, this.storage.file(span)))
+    const child = this.deps.spawn(this.binary, buildGfxCaptureArgs(this.options, this.source, encoder, this.storage.file(span), this.embedCursor))
     let readyResolve!: () => void, readyReject!: (error: Error) => void
     const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject })
     let closeResolve!: () => void

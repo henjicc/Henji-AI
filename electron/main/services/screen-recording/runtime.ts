@@ -17,6 +17,7 @@ const logger = createMainLogger('main.screen_recording')
 let owner: WebContents | null = null
 let controlWindow: ReturnType<typeof createRecordingControlWindow> | null = null
 let frameWindow: BrowserWindow | null = null
+let restoreOwnerWindow: (() => void) | null = null
 let closing: Promise<void> | null = null
 let eventSession: RecordingEventSession | null = null
 let detachCapabilitySink: (() => void) | undefined
@@ -100,6 +101,16 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
   return snapshot
 }
 
+/**
+ * Get the app out of the way while it records something else: minimize the owner window now,
+ * and bring it back when the session closes. Recording the app's own window keeps it visible.
+ */
+export function minimizeOwnerWhileRecording(window: BrowserWindow | null): void {
+  if (!window || window.isDestroyed() || window.isMinimized()) return
+  window.minimize()
+  restoreOwnerWindow = () => { if (!window.isDestroyed()) { window.restore(); window.focus() } }
+}
+
 /** Existing request channel, owner-bound, no raw input or output payload accepted. */
 export function recordRecordingCapability(contents: WebContents, sessionId: string, fact: CapabilityCapture): void {
   if (owner !== contents || recordingControl.snapshot()?.sessionId !== sessionId) return
@@ -132,6 +143,7 @@ export function closeRecordingControl(): Promise<void> {
       if (controlWindow && !controlWindow.isDestroyed()) controlWindow.destroy()
       if (frameWindow && !frameWindow.isDestroyed()) frameWindow.destroy()
       controlWindow = null; frameWindow = null; owner = null; eventSession = null
+      restoreOwnerWindow?.(); restoreOwnerWindow = null
     }
   }).finally(() => { closing = null })
   return closing

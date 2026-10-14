@@ -10,8 +10,6 @@ export const captureOptionsSchema = z.object({
   height: z.number().int().min(2).max(2160).multipleOf(2),
   fps: z.union([z.literal(30), z.literal(60)]),
   bitrate: z.number().int().min(1_000_000).max(100_000_000),
-  /** `embed` records the system pointer into the picture (quick mode); absent means it is redrawn later. */
-  cursor: z.enum(['redraw', 'embed']).optional(),
   /** Normalized coordinates in the selected display; independent of desktop DIP and monitor order. */
   region: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).strict().optional(),
 }).strict().superRefine((value, ctx) => {
@@ -48,7 +46,8 @@ const sessionId = z.string().uuid()
 export const captureRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('application-source'), sessionId }).strict(),
   z.object({ operation: z.literal('script-call'), sessionId, call: recordingCallSchema, baselines: z.array(recordingBaselineSchema).max(16) }).strict(),
-  z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema, session: recordingSessionOptionsSchema.optional() }).strict(),
+  /** `cursor: 'embed'` records the system pointer into the picture (quick mode); the outcome is kept as manifest.cursorEmbedded. */
+  z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema, session: recordingSessionOptionsSchema.optional(), cursor: z.enum(['redraw', 'embed']).optional() }).strict(),
   z.object({ operation: z.literal('tracks'), sessionId, tracks: recordingTracksSchema }).strict(),
   z.object({ operation: z.literal('recover-session'), sessionId }).strict(),
   /** Quick mode: join spans, mix sound and write pointer facts into one MP4 in the chosen folder. */

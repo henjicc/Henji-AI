@@ -6,7 +6,7 @@ import type { CaptureBackendKind, CaptureCommand, CaptureManifest, CaptureOperat
 import { getUserFolderDir } from '../../appPaths'
 import { mediaPermissions } from '../../media-permissions'
 import { createMainLogger } from '../../logging'
-import { openRecordingControl, closeRecordingControl, recordingControl } from '../runtime'
+import { openRecordingControl, closeRecordingControl, minimizeOwnerWhileRecording, recordingControl } from '../runtime'
 import { CaptureStorage, recoverCapture } from './storage'
 import { GfxCaptureBackend } from './gfxcapture'
 import { resolveNativeCaptureSource } from './source'
@@ -80,7 +80,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         }
       }
       if (request.options.backend === 'gfxcapture' && !wgc) throw new Error('当前系统不支持无光标采集，请使用兼容录制')
-      const manifest: CaptureManifest = { version: 1, sessionId: request.sessionId, options: request.options, backend, cursorEmbedded: backend === 'chromium' || request.options.cursor === 'embed', status: 'prepared', spans: [] }
+      const manifest: CaptureManifest = { version: 1, sessionId: request.sessionId, options: request.options, backend, cursorEmbedded: backend === 'chromium' || request.cursor === 'embed', status: 'prepared', spans: [] }
       let document: RecordingSessionDocument | undefined
       const storage = new CaptureStorage(path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId), manifest, async value => { await document?.capture(value) })
       await storage.prepare()
@@ -91,7 +91,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         document = await RecordingSessionDocument.create(request.sessionId, session.originUs, request.session, source.name, manifest, storage.directory)
         session.document = document
       }
-      session.backend = backend === 'gfxcapture' ? new GfxCaptureBackend(request.options, nativeSource!, storage, { nowUs: () => now() - session.originUs, failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) } }) : {
+      session.backend = backend === 'gfxcapture' ? new GfxCaptureBackend(request.options, nativeSource!, storage, { nowUs: () => now() - session.originUs, failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) } }, request.cursor === 'embed') : {
         prepare: async () => undefined,
         start: () => remote(session, 'start'), pause: () => remote(session, 'pause'), resume: () => remote(session, 'resume'), stop: () => remote(session, 'stop'),
         cancel: async () => { for (const pending of session.rpc.values()) pending.reject(new Error('录制已取消')); session.rpc.clear(); if (!owner.isDestroyed()) await remote(session, 'cancel') },
@@ -110,6 +110,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
             if (manifest.status !== 'failed') { manifest.status = status; await storage.save() }
           } catch (error) { await fail(session, error instanceof Error ? error : new Error(String(error))); throw error }
         }
+        if (request.session && source.id !== BrowserWindow.fromWebContents(owner)?.getMediaSourceId()) minimizeOwnerWhileRecording(BrowserWindow.fromWebContents(owner))
         openRecordingControl(owner, request.sessionId, {
           start: signal => transition('start', 'recording', signal), pause: signal => transition('pause', 'paused', signal), resume: signal => transition('resume', 'recording', signal), stop: signal => transition('stop', 'stopped', signal),
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.

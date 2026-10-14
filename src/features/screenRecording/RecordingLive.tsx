@@ -7,7 +7,7 @@ import type { RecordingControlSnapshot } from '@/core/screenRecording/contracts'
 import { recordingTimeLabel } from './useRecordingControlSnapshot'
 
 /** The in-app view of a running session: what is happening and the one thing worth doing here (marking). */
-export function RecordingLive({ snapshot, onMark }: { snapshot: RecordingControlSnapshot; onMark(note: string): Promise<void> }): React.ReactElement {
+export function RecordingLive({ snapshot, saving, onMark }: { snapshot: RecordingControlSnapshot; saving: boolean; onMark(note: string): Promise<void> }): React.ReactElement {
   const { t } = useTranslation('ui')
   const [note, setNote] = useState('')
   const [marks, setMarks] = useState<Array<{ at: number; note: string }>>([])
@@ -22,7 +22,7 @@ export function RecordingLive({ snapshot, onMark }: { snapshot: RecordingControl
   const dot = recording ? 'bg-danger-solid' : snapshot.phase === 'paused' ? 'bg-warning-solid' : 'bg-text3'
   return <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-6" data-recording-live={snapshot.phase}>
     <div className="flex flex-col items-center gap-3">
-      <span className="flex items-center gap-2 text-sm text-text2"><span className={`h-2.5 w-2.5 rounded-full ${dot}`} aria-hidden />{t(`screenRecording.${snapshot.phase}`, { seconds: snapshot.countdown })}</span>
+      <span className="flex items-center gap-2 text-sm text-text2"><span className={`h-2.5 w-2.5 rounded-full ${dot}`} aria-hidden />{t(saving ? 'recording.saving' : `screenRecording.${snapshot.phase}`, { seconds: snapshot.countdown })}</span>
       <span className={`${UI_TEXT_TIMECODE_CLASS} text-display font-light text-text1`}>{snapshot.phase === 'countdown' && snapshot.countdown > 0 ? snapshot.countdown : recordingTimeLabel(snapshot.elapsedMs)}</span>
     </div>
     <div className="flex items-center gap-6">

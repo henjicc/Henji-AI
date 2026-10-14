@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ChevronLeft, Download, Pause, Play, RefreshCw, Square } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { UiButton, UiError, UiIconButton, UiLoading, UiModal, UiSegmented, UiToolbar } from '@/components/ui'
+import { UiButton, UiError, UiIconButton, UiModal, UiSegmented, UiToolbar } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { ICON_TOOL_SCREEN_RECORDING } from '@/core/theme/icons'
 import { getPlatform } from '@/platform'
@@ -99,7 +99,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const begin = async (): Promise<void> => {
     const useRegion = mode === 'region' && selected?.kind === 'screen' && (region.width < 1 || region.height < 1)
     const quick = setup.mode === 'quick'
-    const options = captureOptionsSchema.parse({ sourceId, ...recordingOutput(setup), ...(useRegion ? { region } : {}), ...(quick ? { cursor: 'embed' } : {}) })
+    const options = captureOptionsSchema.parse({ sourceId, ...recordingOutput(setup), ...(useRegion ? { region } : {}) })
     const destination = state.destination ? { documentId: state.destination.documentId, ...(setup.insert ? { sequenceId: state.destination.sequenceId, frame: state.destination.frame } : {}) } : null
     await startRecording(options, { name: setup.name.trim() || `${t('recording.title')} ${new Date().toLocaleString().replace(/[/:]/g, '-')}`, tracks: { systemAudio: setup.systemAudio, ...(setup.microphone ? { microphone: setup.microphoneId ? { deviceId: setup.microphoneId } : {} } : {}), ...(setup.camera && !quick ? { camera: { ...(setup.cameraId ? { deviceId: setup.cameraId } : {}), width: 1280, height: 720, frameRate: 30 } } : {}) } }, destination, undefined, quick ? { ...(setup.saveDirectory ? { directory: setup.saveDirectory } : {}) } : undefined)
   }
@@ -151,7 +151,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
     </>
   } else {
     center = <UiSegmented ariaLabel={t('recording.recordMode')} value={director ? 'director' : 'self'} onChange={value => setDirector(value === 'director')} options={[{ value: 'self', label: t('recording.mode_self') }, { value: 'director', label: t('recording.mode_director') }]} />
-    trailing = director ? null : <UiButton variant="primary" disabled={!sourceId || state.busy} disabledReason={state.busy ? t('recording.saving') : t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
+    trailing = director ? null : <UiButton variant="primary" loading={state.busy} disabled={!sourceId} disabledReason={t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>
   }
 
   return <div className="flex h-full min-h-0 flex-col" data-application-surface="tool.screen_recording" data-testid="screen-recording-page">
@@ -159,9 +159,8 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       <UiIconButton aria-label={t('recording.back')} onClick={back}><ChevronLeft /></UiIconButton>{leading}
     </UiToolbar>
     {(error || state.error || snapshot?.error) && <div className="px-4 pt-3"><UiError message={error || state.error || snapshot?.error || ''} /></div>}
-    {state.busy && !active && <UiLoading message={t('recording.saving')} />}
     {planned && state.documentId && content ? <RecordingDirectorScript sessionId={state.documentId} recording={content} />
-      : active && snapshot ? <RecordingLive snapshot={snapshot} onMark={note => controlRecording(snapshot.sessionId, 'mark', note)} />
+      : active && snapshot ? <RecordingLive snapshot={snapshot} saving={state.busy} onMark={note => controlRecording(snapshot.sessionId, 'mark', note)} />
       : quickResult && state.documentId ? <RecordingQuickResult result={quickResult} onReveal={() => run(() => revealQuickRecording(state.documentId!))} onRetry={() => run(() => saveQuickRecording(state.documentId!, quickResult.directory))} onOpenWorkbench={() => setWorkbenchFor(state.documentId)} />
       : finished && state.documentId && content ? <RecordingWorkbench sessionId={state.documentId} recording={content} recipe={recipe} onRecipeChange={setRecipe} busy={state.busy || productBusy} moviePhase={moviePhase} onBusyChange={(_, value) => setPrivacyBusy(value)} />
       : director ? <RecordingDirectorGoal />

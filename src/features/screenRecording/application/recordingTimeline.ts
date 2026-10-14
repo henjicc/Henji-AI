@@ -16,7 +16,10 @@ export function recordingMediaSpans(recording: RecordingDocument, media: Recordi
 
 export function recordingTimeline(recording: RecordingDocument): { originUs: number; durationUs: number; tracks: Array<{ kind: RecordingMedia['kind']; spans: RecordingSpan[] }> } {
   const media = recording.media.filter(item => item.durationUs > 0)
-  const originUs = media.length ? Math.min(...media.map(item => item.monoUs)) : 0
+  // The picture starts the session: sound and camera may open a moment earlier while the countdown runs,
+  // and anchoring there would show a blank first frame.
+  const screens = media.filter(item => item.kind === 'screen')
+  const originUs = media.length ? Math.min(...(screens.length ? screens : media).map(item => item.monoUs)) : 0
   const endUs = Math.max(originUs, ...media.map(item => item.monoUs + item.durationUs), ...recording.markers.map(marker => marker.monoUs))
   const tracks = (['screen', 'camera', 'microphone', 'systemAudio'] as const).flatMap(kind => {
     const spans = media.filter(item => item.kind === kind).flatMap(item => recordingMediaSpans(recording, item)).sort((a, b) => a.startUs - b.startUs)
