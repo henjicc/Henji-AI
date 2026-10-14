@@ -8,6 +8,7 @@ import { isTrustedMainRendererUrl } from '../../security/main-renderer-url'
 import { RecordingEventSession, type RecordingEventOptions } from './events'
 import type { CapabilityCapture } from '../../../../src/core/captureLog/events'
 import { bindCaptureCapabilitySink } from '../../../../src/core/captureLog/capability'
+import type { RecordingTrackStatus } from '../../../../src/core/screenRecording/contracts'
 
 const logger = createMainLogger('main.screen_recording')
 let owner: WebContents | null = null
@@ -86,6 +87,11 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
 export function recordRecordingCapability(contents: WebContents, sessionId: string, fact: CapabilityCapture): void {
   if (owner !== contents || recordingControl.snapshot()?.sessionId !== sessionId) return
   eventSession?.capability(fact)
+}
+
+export function updateRecordingTracks(contents: WebContents, sessionId: string, status: RecordingTrackStatus): void {
+  if (owner !== contents || recordingControl.snapshot()?.sessionId !== sessionId) throw new Error('录制轨道不属于当前宿主')
+  recordingControl.setTrackStatus(sessionId, status)
 }
 
 export function closeRecordingControl(): Promise<void> {

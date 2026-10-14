@@ -12,6 +12,16 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(0) })
 afterEach(() => { vi.useRealTimers() })
 
 describe('录制控制权威状态', () => {
+  it('摄像头预览/设备提醒与电平跟随会话；暂停与终态清除预览，旧会话不能写新会话', async () => {
+    const { service, backend } = fixture()
+    service.create('live', backend); await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    const status = { cameraPreview: 'data:image/jpeg;base64,YWJj', microphoneLevel: .4, warnings: ['system-audio-silent' as const] }
+    service.setTrackStatus('old', status); expect(service.snapshot()?.cameraPreview).toBeUndefined()
+    service.setTrackStatus('live', status); expect(service.snapshot()).toMatchObject({ cameraPreview: status.cameraPreview, microphoneLevel: .4, trackWarnings: status.warnings })
+    await service.command('toggle'); expect(service.snapshot()?.cameraPreview).toBeNull()
+    await service.command('stop'); service.setTrackStatus('live', status); expect(service.snapshot()?.cameraPreview).toBeNull()
+    await service.dispose()
+  })
   it('异步设备失败不会被迟到启动回执覆盖，停止后销毁仍经过释放屏障', async () => {
     const { service, backend } = fixture(); let finish!: () => void
     backend.start.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))

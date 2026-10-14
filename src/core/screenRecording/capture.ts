@@ -37,7 +37,8 @@ export const captureManifestSchema = z.object({
 }).strict()
 export type CaptureManifest = z.infer<typeof captureManifestSchema>
 export type CaptureSpan = z.infer<typeof captureSpanSchema>
-export interface CapturePrepared { sessionId: string; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions }
+/** Pass this exact main-process monotonic origin to event and audio/camera capture. */
+export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions }
 const sessionId = z.string().uuid()
 export const captureRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema }).strict(),

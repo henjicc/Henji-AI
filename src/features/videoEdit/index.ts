@@ -1,2 +1,3 @@
-/** Shared encoding contract for media-producing workspaces; editor internals stay private. */
+/** Shared encoding policy for export and live capture. */
 export { selectVideoEditExportEncoder, videoEditExportVideoOptions } from './engine/videoEditExportEncoder'
+export { videoEditExportVideoEncoderConfig } from './engine/videoEditExportEncoderConfig'

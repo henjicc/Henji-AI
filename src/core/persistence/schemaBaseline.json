@@ -226,6 +226,11 @@
       "fingerprint": "9c5b96598110855efe69b671a8694915b603b7e6cab524ac63152d5a0d91aa37",
       "supportedFrom": 1
     },
+    "screen-recording-tracks": {
+      "version": 1,
+      "fingerprint": "7c0538485a22c4b46d5b972c36473428b3f7d4160ba7b9f920887a784df86456",
+      "supportedFrom": 1
+    },
     "screen-capture": {
       "version": 1,
       "fingerprint": "4e9e82dfecd4a349f4b2409ab6351352e72cf633f109280a060fdafac86ee8b2",

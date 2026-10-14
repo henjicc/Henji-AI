@@ -1,4 +1,4 @@
-import { RECORDING_CLOCK_RECALIBRATION_SECONDS } from '../audioEdit/recordingClock'
+import { RECORDING_CLOCK_RECALIBRATION_SECONDS } from '../captureLog/clockSync'
 
 /** Correlation uses the common session clock. Transport latency is not physical acquisition latency. */
 export class CaptureFrameClock {

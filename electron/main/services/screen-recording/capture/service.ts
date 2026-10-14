@@ -91,7 +91,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         throw error
       }
       logger.info('屏幕采集准备完成', { event: 'recording.capture.prepare.completed', context: { backend, sessionId: request.sessionId } })
-      return { sessionId: request.sessionId, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options } satisfies CapturePrepared
+      return { sessionId: request.sessionId, originUs: session.originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options } satisfies CapturePrepared
     } finally { preparing = false }
   }
   const session = active

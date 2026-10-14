@@ -6,6 +6,7 @@ function native(): ScreenRecordingPlatform {
 }
 export function createElectronScreenRecording(): ScreenRecordingPlatform {
   return {
+    clock: () => native().clock(), trackStatus: (sessionId, status) => native().trackStatus(sessionId, status),
     capture: request => native().capture(request), onCaptureCommand: listener => native().onCaptureCommand(listener),
     recordCapability: (id, fact) => native().recordCapability(id, fact),
     sources: ids => native().sources(ids), permissions: () => native().permissions(),

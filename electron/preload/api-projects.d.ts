@@ -52,7 +52,7 @@ export interface HenjiDiagnosticsApi {
 
 /** 测试夹具（只在自动化 / 隔离测试模式下存在）：核对或清理正式界面没有入口的记录。 */
 export interface HenjiTestFixturesApi {
-  recordingControl(action: 'setup' | 'setup-events' | 'read' | 'events' | 'cleanup'): Promise<{ snapshot: import('../../src/core/screenRecording/contracts').RecordingControlSnapshot | null; calls: Record<string, number>; protected: boolean; sourceId: string; uploads?: string; events?: { count: number; cursorCount: number; cursorShapes: string[]; facts: import('../../src/core/captureLog/events').CaptureEvent[]; gaps: number; inputListeners: number; failure?: string } }>
+  recordingControl(action: 'setup' | 'setup-events' | 'setup-tracks' | 'read' | 'events' | 'cleanup'): Promise<{ snapshot: import('../../src/core/screenRecording/contracts').RecordingControlSnapshot | null; calls: Record<string, number>; protected: boolean; sourceId: string; uploads?: string; tracksDirectory?: string; originUs?: number; events?: { count: number; cursorCount: number; cursorShapes: string[]; facts: import('../../src/core/captureLog/events').CaptureEvent[]; gaps: number; inputListeners: number; failure?: string } }>
   inspectGenerationSubmission(requestId: string): Promise<{ phase: string; createdAt: number; hasResponse: boolean } | null>
   deleteGenerationSubmission(requestId: string): Promise<boolean>
   /** 读画布文档（内容 + 视口 / 撤销会话状态）；不存在返回 null。经正式文档接口，见 canvas-test-fixtures.ts。 */

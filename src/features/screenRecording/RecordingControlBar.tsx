@@ -36,6 +36,7 @@ export default function RecordingControlBar(): React.ReactElement {
   const toggleLabel = t(`screenRecording.${phase === 'ready' ? 'start' : phase === 'paused' ? 'resume' : 'pause'}`)
   const phaseLabel = t(`screenRecording.${phase ?? 'preparing'}`, { seconds: snapshot?.countdown })
   const level = snapshot?.microphoneLevel
+  const trackWarning = snapshot?.trackWarnings?.includes('device-disconnected') ? 'device-disconnected' : snapshot?.trackWarnings?.[0]
   return <UiPanel className="flex h-full flex-col p-2" role="region" aria-label={t('screenRecording.title')}>
     <div className="flex items-center justify-between gap-2 text-xs text-text2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
       <span aria-live="polite">{phaseLabel}</span>
@@ -43,10 +44,12 @@ export default function RecordingControlBar(): React.ReactElement {
       <span className="flex items-center gap-1" aria-label={t('screenRecording.microphoneLevel')}><Mic className={UI_ICON_SIZE_CLASS.sm} />{level === null || level === undefined ? t('screenRecording.microphoneInactive') : `${Math.round(level * 100)}%`}</span>
     </div>
     <UiToolbar gap="group" className="justify-center">
+      {snapshot?.cameraPreview && <img src={snapshot.cameraPreview} alt={t('screenRecording.cameraPreview')} className="w-16 aspect-video object-contain rounded-control" />}
       <UiButton size="sm" variant={phase === 'ready' ? 'primary' : 'quiet'} disabled={!snapshot || snapshot.busy || !['ready', 'recording', 'paused'].includes(phase ?? '')} disabledReason={t('screenRecording.toggleUnavailable')} onClick={() => { void command('toggle') }}>{running ? <Pause /> : <Play />}{toggleLabel}</UiButton>
       <UiButton size="sm" disabled={!running || snapshot?.busy} disabledReason={t('screenRecording.markUnavailable')} onClick={() => { void command('mark') }}><Flag />{t('screenRecording.mark')}</UiButton>
       <UiButton size="sm" variant="danger" disabled={!snapshot || phase === 'stopped'} disabledReason={t('screenRecording.stopUnavailable')} onClick={() => { void command('stop') }}><Square />{t('screenRecording.stop')}</UiButton>
     </UiToolbar>
     {(error || snapshot?.error) ? <UiError size="xs" align="start" title={error ?? snapshot?.error ?? ''} message="" /> : Boolean(snapshot?.shortcutConflicts.length) && <span className="text-xs text-danger-text">{t('screenRecording.shortcutConflict')}</span>}
+    {trackWarning && (phase === 'recording' || phase === 'paused') && <span className="text-xs text-danger-text" role="status">{t(`screenRecording.trackWarning.${trackWarning}`)}</span>}
   </UiPanel>
 }

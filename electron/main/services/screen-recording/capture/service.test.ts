@@ -5,7 +5,8 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type { RecordingControlBackend } from '../control'
-import { captureOptionsSchema } from '../../../../../src/core/screenRecording/capture'
+import { captureOptionsSchema, type CapturePrepared } from '../../../../../src/core/screenRecording/capture'
+import { captureClockCorrelation } from '../../../../../src/core/captureLog/clockSync'
 
 const state = vi.hoisted(() => ({ root: '', backend: null as RecordingControlBackend | null, assert: vi.fn(), grant: vi.fn(), revoke: vi.fn(), failed: vi.fn(), open: vi.fn() }))
 vi.mock('../../appPaths', () => ({ getUserFolderDir: () => state.root }))
@@ -52,6 +53,25 @@ it('waits for matching renderer completion before changing recording state', asy
   await handleCaptureRequest(owner, { operation: 'ack', sessionId: id, requestId: command.requestId })
   await start
   expect(await handleCaptureRequest(owner, { operation: 'read', sessionId: id })).toMatchObject({ status: 'recording' })
+})
+it('exposes the screen epoch for shared event and audio/camera clocks without rebasing after pause', async () => {
+  const prepared = await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options }) as CapturePrepared
+  expect(Number.isSafeInteger(prepared.originUs)).toBe(true)
+  expect(prepared.originUs).toBeGreaterThan(0)
+  const before = Number(process.hrtime.bigint() / 1000n)
+  const screenUs = await handleCaptureRequest(owner, { operation: 'clock', sessionId: id }) as number
+  const after = Number(process.hrtime.bigint() / 1000n)
+  expect(screenUs).toBeGreaterThanOrEqual(before - prepared.originUs)
+  expect(screenUs).toBeLessThanOrEqual(after - prepared.originUs)
+  const correlation = captureClockCorrelation({ beforeMs: 100, afterMs: 100, mainUs: prepared.originUs + screenUs }, prepared.originUs)
+  expect(Math.round((100 - correlation.originMs) * 1000)).toBe(screenUs)
+  const pause = state.backend!.pause(new AbortController().signal)
+  await vi.waitFor(() => expect(owner.send).toHaveBeenCalledWith('screenRecording:captureCommand', expect.objectContaining({ operation: 'pause' })))
+  const command = vi.mocked(owner.send).mock.calls.at(-1)![1] as { requestId: string }
+  await handleCaptureRequest(owner, { operation: 'ack', sessionId: id, requestId: command.requestId })
+  await pause
+  const resumedUs = await handleCaptureRequest(owner, { operation: 'clock', sessionId: id }) as number
+  expect(resumedUs).toBeGreaterThanOrEqual(screenUs)
 })
 it('rechecks the selected-source grant at actual start after the countdown', async () => {
   await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options })

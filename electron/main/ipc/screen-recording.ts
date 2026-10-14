@@ -2,7 +2,7 @@ import { screenRecordingRequestSchema } from '../../../src/core/screenRecording/
 import { assertTrustedApplicationSender } from './application-control'
 import { registerIpcHandler } from './registry'
 import { mediaPermissions } from '../services/media-permissions'
-import { isRecordingControlSender, recordingControl, recordRecordingCapability } from '../services/screen-recording/runtime'
+import { isRecordingControlSender, recordingControl, recordRecordingCapability, updateRecordingTracks } from '../services/screen-recording/runtime'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { createMainLogger } from '../services/logging'
 
@@ -17,6 +17,8 @@ export function registerScreenRecordingIpc(): void {
     if (request.action === 'control' && recordingControl.snapshot()?.sessionId !== request.sessionId) throw new Error('录制会话已改变，请刷新后重试')
     try {
       switch (request.action) {
+        case 'clock': return Number(process.hrtime.bigint() / 1000n)
+        case 'track-status': return updateRecordingTracks(event.sender, request.sessionId, request.status)
         case 'capture': return await (await import('../services/screen-recording/capture/service')).handleCaptureRequest(event.sender, request.request)
         case 'capability': return recordRecordingCapability(event.sender, request.sessionId, request.fact)
         case 'sources': return await mediaPermissions.sources(request.excludedSourceIds)
