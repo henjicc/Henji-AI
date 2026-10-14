@@ -3,6 +3,7 @@ import { captureOptionsSchema } from './capture'
 import { recordingTrackOptionsSchema, recordingTracksSchema } from './tracks'
 import { recordingUnderstandingSchema, emptyRecordingUnderstanding } from './understanding'
 import { recordingScriptCaptureSchema } from './script'
+import { recordingDirectorRunSchema } from './director'
 
 export const recordingMediaSchema = z.object({
   id: z.string().min(1), kind: z.enum(['screen', 'microphone', 'systemAudio', 'camera']),
@@ -12,6 +13,7 @@ export const recordingPageReferenceSchema = z.object({
   path: z.string().min(1), firstSequence: z.number().int().nonnegative(), lastSequence: z.number().int().nonnegative(),
 }).strict()
 export const recordingDocumentSchema = z.object({
+  directorRun: recordingDirectorRunSchema.optional(),
   sessionId: z.string().uuid().nullable(), originUs: z.number().int().nonnegative(),
   status: z.enum(['empty', 'prepared', 'recording', 'paused', 'stopped', 'interrupted']),
   source: z.object({ name: z.string(), options: captureOptionsSchema, cursorEmbedded: z.boolean() }).strict().nullable(),

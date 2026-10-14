@@ -98,6 +98,23 @@ it('显式转写复用付费审批，拒绝后零识别派发并保留口播恢�
   expect(audio).toHaveLength(1)
   expect((await readRecordingUnderstanding(id)).content.understanding.steps).toHaveLength(0)
 })
+it('导演会话重新理解保留已知旁白和确认脚本，不为 TTS 再付费转写或伪造音频文档', async () => {
+  const { id } = await fixture(), read = await readRecordingUnderstanding(id), path = resolve(sep, 'fixture', 'tts.wav')
+  const content = read.content
+  content.media.push({ id: 'mic', kind: 'microphone', path, monoUs: 3000000, durationUs: 2000000 })
+  content.understanding.director = { goal: '演示设置', confirmed: true, voice: { modelId: 'mock', options: {} }, narration: [{ stepId: 's', text: '打开设置。', picture: '设置界面' }] }
+  content.understanding.transcript = [{ id: 's', text: '打开设置。', startUs: 3000000, endUs: 5000000, granularity: 'segment', mediaId: 'mic' }]
+  content.understanding.steps = [{ id: 's', title: '打开设置', description: '', startUs: 3000000, endUs: 13000000, signal: 'capability', eventIds: [] }]
+  content.understanding.operationScript = { steps: [{ id: 's', title: '打开设置', startUs: 3000000, endUs: 13000000, narrationIds: ['s'], operations: [{ target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_preset': 'paper' } }], wait: { kind: 'capability_completed', settleMs: 700 }, blockedReason: null }] }
+  await getPlatform().documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content })
+  vi.spyOn(getPlatform().audioEdit, 'probeSource').mockResolvedValue({ mediaType: 'audio', sourcePath: path, audioPath: path, durationFrames: 96000, sampleRate: 48000, channels: 1 })
+  vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockResolvedValue({ revision: 0, suggestions: [] })
+  const asr = vi.spyOn(getPlatform().audioEdit, 'transcribe'), gate = vi.spyOn(paidApproval, 'withPaidOperation')
+  const result = await analyzeRecording(id, { transcribe: true, detectVisuals: false }, new AbortController().signal)
+  expect(result.understanding).toMatchObject({ director: content.understanding.director, operationScript: content.understanding.operationScript, transcript: content.understanding.transcript, steps: content.understanding.steps })
+  expect(asr).not.toHaveBeenCalled(); expect(gate).not.toHaveBeenCalled()
+  expect(result.audioUpdates).toEqual([])
+})
 it('取消、保存失败与分析期间修改不覆盖原结果，不启动转写', async () => {
   const { id, sessionRef } = await fixture(), api = app()
   const asr = vi.spyOn(getPlatform().audioEdit, 'transcribe')

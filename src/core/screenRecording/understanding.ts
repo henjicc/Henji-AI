@@ -1,13 +1,14 @@
 import { z } from 'zod'
 import { emptyRecordingPrivacy, recordingPrivacySchema } from './privacy'
 import { recordingScriptSchema } from './script'
+import { recordingDirectorSchema } from './director'
 
 const time = z.number().int().nonnegative().safe()
 export const recordingRangeSchema = z.object({ startUs: time, endUs: time }).strict().refine(v => v.endUs > v.startUs, '结束时间必须晚于开始时间')
 const range = { startUs: time, endUs: time }
 export const recordingTranscriptSchema = z.object({
   id: z.string().min(1), ...range, text: z.string().max(20000), granularity: z.enum(['word', 'segment']),
-  audioDocumentId: z.string().min(1), mediaId: z.string().min(1),
+  audioDocumentId: z.string().min(1).optional(), mediaId: z.string().min(1),
   protected: z.boolean().optional(),
 }).strict().refine(v => v.endUs > v.startUs)
 export const recordingStepSchema = z.object({
@@ -21,6 +22,7 @@ export const recordingCandidateSchema = z.object({
   eventIds: z.array(z.string()).max(100),
 }).strict().refine(v => v.endUs > v.startUs)
 export const recordingUnderstandingSchema = z.object({
+  director: recordingDirectorSchema.optional(),
   operationScript: recordingScriptSchema,
   privacy: recordingPrivacySchema,
   transcript: z.array(recordingTranscriptSchema).max(100000),

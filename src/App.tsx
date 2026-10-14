@@ -1,4 +1,5 @@
 import { GenerationLifecycleProvider } from '@/features/generation/application/GenerationLifecycleProvider'
+import { RecordingDirectorCursor } from '@/features/screenRecording/RecordingDirectorCursor'
 import { createLogger } from '@/core/logging'
 import React, { Suspense, lazy, useState, useEffect } from 'react'
 import { SettingsModalPlaceholder } from '@/components/Settings/SettingsModalFrame'
@@ -116,6 +117,7 @@ const App: React.FC = () => {
     // 只在巡检自动化注入了测试夹具桥时加载；普通开发实例与单测不加载巡检夹具。
     if (!(window as unknown as { henjiNative?: { testFixtures?: unknown } }).henjiNative?.testFixtures) return
     void import('@/features/screenRecording/tracks/tourFixture').then(module => module.installRecordingTracksTourFixture())
+    void import('@/features/screenRecording/application/directorTourFixture').then(module => module.installDirectorTourFixture())
   }, [])
   useApplyUiScale()
   useDevToolsShortcut()
@@ -344,6 +346,7 @@ const App: React.FC = () => {
         </Suspense>
         <LargeUploadChoiceDialog />
         <GlobalAlertDialog />
+        <RecordingDirectorCursor />
         <DocumentSessionDialogs />
         <OnboardingHints />
         <OnboardingModal />

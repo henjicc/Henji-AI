@@ -255,9 +255,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 4,
-      "fingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
-      "supportedFrom": 4
+      "version": 5,
+      "fingerprint": "88543a4f90b66eff15998d917e5fc115fb532a6e29e9a0b8c1cc04960957b9be",
+      "supportedFrom": 5
     }
   },
   "devBreaks": [
@@ -1468,6 +1468,15 @@
       "reason": "录制脚本新增受限输入快照与可编辑步骤，开发期不兼容旧会话",
       "previousFingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
       "fingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-14T11:36:04.032Z",
+      "format": "document.screen_recording",
+      "version": 5,
+      "reason": "4.23 导演脚本、配音回执与可选真实 ASR 文档引用，开发期升至 v5",
+      "previousFingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
+      "fingerprint": "88543a4f90b66eff15998d917e5fc115fb532a6e29e9a0b8c1cc04960957b9be",
       "waivedFixtureVersions": []
     }
   ],

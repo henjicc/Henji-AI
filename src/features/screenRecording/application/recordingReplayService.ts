@@ -1,7 +1,9 @@
+import { waitRecordingStep } from './recordingWait'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
-import { replayRecordingSteps, recordingScriptSchema, type RecordingOperation, type RecordingScript } from '@/core/screenRecording/script'
+import { replayRecordingSteps, recordingScriptSchema, type RecordingOperation, type RecordingScript, type RecordingReplayHost } from '@/core/screenRecording/script'
 import { replaceRecordingSteps } from '@/core/screenRecording/replacement'
 import { videoEditDocumentSchema } from '@/core/videoEdit/document'
 import type { CapabilityExecutionContext } from '@/features/application-control'
@@ -29,15 +31,12 @@ export async function generateSessionScript(id: string, context: CapabilityExecu
   const committed = await context.commitProperties(ref, { [UNDERSTANDING_PROPERTY]: understanding }, { screen_recording: read.meta.revision }, '生成录制操作脚本')
   return { resultRef: ref, steps: operationScript.steps.length, blocked: operationScript.steps.filter(v => v.blockedReason).length, ...(committed.undoRef ? { undoRef: committed.undoRef } : {}), verified: JSON.stringify((await readRecordingUnderstanding(id)).content.understanding.operationScript) === JSON.stringify(operationScript) }
 }
-function wait(ms: number, signal: AbortSignal): Promise<void> {
-  signal.throwIfAborted()
-  return new Promise((resolve, reject) => {
-    const abort = (): void => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason ?? new Error('重放已取消')) }
-    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve() }, ms)
-    signal.addEventListener('abort', abort, { once: true })
-  })
+const wait = waitRecordingStep
+export interface ReplayOptions {
+  stepId?: string; destinationId?: string; sourceId?: string
+  /** Internal director hooks reuse the same isolated replay and its cleanup. Not tool input. */
+  director?: Pick<RecordingReplayHost, 'beforeStep' | 'afterStep' | 'wait'> & { point(operation: RecordingOperation): Promise<void> }
 }
-export interface ReplayOptions { stepId?: string; destinationId?: string; sourceId?: string }
 /** Replay only in owned temporary documents; all writes still use the public transaction executor. */
 export async function replaySession(id: string, options: ReplayOptions, context: CapabilityExecutionContext): Promise<{ completedSteps: string[]; replaced: number; verified: boolean }> {
   if (running || recordingView().snapshot || recordingView().busy) throw new Error('请先结束当前录制或重放。')
@@ -46,14 +45,15 @@ export async function replaySession(id: string, options: ReplayOptions, context:
   const read = await readRecordingUnderstanding(id), recording = read.content
   assertRecordingEditable(recording)
   const script = recordingScriptSchema.parse(recording.understanding.operationScript)
-  assertRecordedScriptEdits(script, await recordedScriptSource(id, recording, signal))
+  if (!recording.understanding.director) assertRecordedScriptEdits(script, await recordedScriptSource(id, recording, signal))
+  else if (!recording.understanding.director.confirmed) throw new Error('请先确认导演脚本。')
   const through = options.stepId ? script.steps.findIndex(v => v.id === options.stepId) : script.steps.length - 1
   if (through < 0) throw new Error('请先生成脚本并选择存在的步骤。')
   const planned = script.steps.slice(0, through + 1)
   for (const step of planned) if (step.blockedReason || !step.operations.length) throw new Error(`步骤“${step.title}”不能重放：${step.blockedReason ?? '缺少操作'}`)
   const selected = options.stepId ? planned.filter(v => v.id === options.stepId) : planned
   if (selected.some(step => recording.understanding.privacy.candidates.some(v => v.status === 'accepted' && v.startUs < step.endUs && v.endUs > step.startUs))) throw new Error('目标步骤已有隐私打码，请先复核重录后的隐私位置；当前不自动替换这些步骤。')
-  const docIds = [...new Set(planned.flatMap(step => step.operations.map(operation => operation.target.id.split(':')[0])))]
+  const docIds = [...new Set(planned.flatMap(step => step.operations.filter(v => v.target.kind !== 'settings.registry').map(operation => operation.target.id.split(':')[0])))]
   const baselines = docIds.map(documentId => {
     const baseline = recording.scriptCapture.baselines.find(v => v.documentId === documentId)
     if (!baseline) throw new Error('操作缺少开始前的快照，请重新录制。')
@@ -64,6 +64,9 @@ export async function replaySession(id: string, options: ReplayOptions, context:
   running = true
   const mapping = new Map<string, string>(), opened: string[] = [], captured: Array<{ step: RecordingScript['steps'][number]; sessionId: string }> = []
   const previous = activeVideoEditInstance()?.document.id
+  const originalPreset = useSettingsStore.getState().themeSelection.preset
+  let demonstratedPreset: string | undefined
+  let settingsOpened = false
   let result: { completedSteps: string[]; replaced: number; verified: boolean } | undefined
   let cleanupFailure: Error | undefined
   let projectId: string | undefined, activeCapture: string | undefined, release: (() => void) | undefined
@@ -79,17 +82,18 @@ export async function replaySession(id: string, options: ReplayOptions, context:
       if ((await readRecordingUnderstanding(id)).meta.revision !== read.meta.revision) throw new Error('重录期间脚本已改变，请重新读取。')
     }
     await current()
-    projectId = (await api.createProject({ name: `重放临时-${crypto.randomUUID().slice(0, 8)}`, draft: false })).id
+    if (baselines.length) projectId = (await api.createProject({ name: `重放临时-${crypto.randomUUID().slice(0, 8)}`, draft: false })).id
     for (const baseline of baselines) {
       const content = videoEditDocumentContent(structuredClone(baseline.content))
       // A replay snapshot has no live generation/recording jobs or explanation ownership.
       delete content.inPlaceGenerations; delete content.creativeIntents; delete content.exportHistory
-      const created = await api.createDocument({ kind: 'video_edit', name: `重放-${mapping.size + 1}`, container: { kind: 'project', projectId }, content, draft: false })
+      const created = await api.createDocument({ kind: 'video_edit', name: `重放-${mapping.size + 1}`, container: { kind: 'project', projectId: projectId! }, content, draft: false })
       mapping.set(baseline.documentId, created.meta.id)
       await openVideoEditDocument({ id: created.meta.id }); opened.push(created.meta.id)
     }
-    openApplicationSurface('workspace.video_edit')
+    if (baselines.length) openApplicationSurface('workspace.video_edit')
     const focus = async (operation: RecordingOperation): Promise<void> => {
+      if (operation.target.kind === 'settings.registry') { settingsOpened = true; openApplicationSurface('settings.general'); return }
       const [oldId, localId] = operation.target.id.split(':'), target = mapping.get(oldId)
       if (!target || !localId) throw new Error('步骤目标不属于隔离快照。')
       const instance = await openVideoEditDocument({ id: target })
@@ -102,6 +106,7 @@ export async function replaySession(id: string, options: ReplayOptions, context:
     const execute = async (operations: RecordingOperation[]): Promise<void> => {
       await current()
       const changes = operations.map(operation => {
+        if (operation.target.kind === 'settings.registry') return { kind: 'set_properties', entityType: operation.target.kind, target: operation.target, properties: operation.properties }
         const [oldId, ...rest] = operation.target.id.split(':'), newId = mapping.get(oldId)
         if (!newId || !rest.length) throw new Error('步骤目标不属于隔离快照。')
         return { kind: 'set_properties', entityType: operation.target.kind, target: { kind: operation.target.kind, id: `${newId}:${rest.join(':')}` }, properties: operation.properties }
@@ -109,11 +114,16 @@ export async function replaySession(id: string, options: ReplayOptions, context:
       // No user identity or fee approval can be supplied by the script.
       for (const [index, change] of changes.entries()) {
         await focus(operations[index])
-        await context.invokeCapability!('change_application_entities', { summary: '在临时副本重放录制操作', changes: [change] }, signal)
+        await options.director?.point(operations[index])
+        await context.invokeCapability!('change_application_entities', { summary: '在隔离演示中重放录制操作', changes: [change] }, signal)
+        if (change.entityType === 'settings.registry') {
+          demonstratedPreset = String(change.properties['interface.theme_preset'])
+        }
       }
     }
-    const completedSteps = await replayRecordingSteps(script, options.stepId, { execute, wait,
+    const completedSteps = await replayRecordingSteps(script, options.stepId, { execute, wait: options.director?.wait ?? wait,
       beforeStep: async step => {
+        await options.director?.beforeStep?.(step)
         await focus(step.operations[0])
         await wait(300, signal)
         if (!options.destinationId || !selected.some(v => v.id === step.id)) return
@@ -127,6 +137,7 @@ export async function replaySession(id: string, options: ReplayOptions, context:
         await wait(300, signal)
       },
       afterStep: async step => {
+        await options.director?.afterStep?.(step)
         if (!activeCapture) return
         const sessionId = activeCapture
         await controlRecording(sessionId, 'stop'); activeCapture = undefined
@@ -163,6 +174,11 @@ export async function replaySession(id: string, options: ReplayOptions, context:
       const errors: unknown[] = []
       const cleanup = async (work: () => Promise<unknown>): Promise<void> => { try { await work() } catch (error) { errors.push(error) } }
       if (activeCapture) await cleanup(() => controlRecording(activeCapture!, 'cancel'))
+      if (demonstratedPreset !== undefined) await cleanup(async () => {
+        if (useSettingsStore.getState().themeSelection.preset !== demonstratedPreset) throw new Error('用户已接管主题设置，保留当前选择。')
+        await context.invokeCapability!('change_application_entities', { summary: '恢复演示前的主题', changes: [{ kind: 'set_properties', entityType: 'settings.registry', target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_preset': originalPreset } }] }, new AbortController().signal)
+      })
+      if (settingsOpened) await cleanup(() => context.invokeCapability!('close_application_surface', { surfaceId: 'settings.general' }, new AbortController().signal))
       for (const temporaryId of opened) await cleanup(() => closeVideoEditProject(temporaryId))
       if (projectId) await cleanup(() => api.trashProject(projectId!))
       if (previous) await cleanup(() => openVideoEditDocument({ id: previous }))

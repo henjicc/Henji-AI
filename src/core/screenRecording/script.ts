@@ -5,7 +5,7 @@ import type { RecordingUnderstanding } from './understanding'
 
 // A deliberately finite vocabulary: no code, paths, arbitrary properties or paid operations.
 export const recordingOperationSchema = z.object({
-  target: z.object({ kind: z.enum(['video_edit.clip', 'video_edit.sequence']), id: z.string().min(1) }).strict(),
+  target: z.object({ kind: z.enum(['video_edit.clip', 'video_edit.sequence', 'settings.registry']), id: z.string().min(1) }).strict(),
   properties: z.object({
     'video_edit.clip.x': z.number().finite().optional(), 'video_edit.clip.y': z.number().finite().optional(),
     'video_edit.clip.scale': z.number().positive().optional(), 'video_edit.clip.rotation': z.number().finite().optional(),
@@ -13,8 +13,9 @@ export const recordingOperationSchema = z.object({
     'video_edit.sequence.name': z.string().min(1).max(120).optional(),
     'video_edit.sequence.width': z.number().int().min(2).max(8192).optional(),
     'video_edit.sequence.height': z.number().int().min(2).max(8192).optional(),
+    'interface.theme_preset': z.enum(['graphite', 'ocean', 'film', 'paper']).optional(),
   }).strict().refine(v => Object.keys(v).length > 0),
-}).strict().refine(v => Object.keys(v.properties).every(key => key.startsWith(`${v.target.kind}.`)))
+}).strict().refine(v => Object.keys(v.properties).every(key => v.target.kind === 'settings.registry' ? v.target.id === 'singleton' && key === 'interface.theme_preset' : key.startsWith(`${v.target.kind}.`)))
 export type RecordingOperation = z.infer<typeof recordingOperationSchema>
 export const recordingCallSchema = z.object({ callId: z.string().uuid(), operations: z.array(recordingOperationSchema).min(1).max(64) }).strict()
 export const recordingBaselineSchema = z.object({ documentId: z.string().min(1), content: videoEditDocumentSchema }).strict().refine(v => v.documentId === v.content.id, '快照归属不符')
@@ -40,7 +41,8 @@ export function captureRecordingOperations(capabilityId: string, input: unknown)
   const parsed = z.object({ changes: z.array(z.object({ kind: z.literal('set_properties'), target: recordingOperationSchema.shape.target.extend({ label: z.string().optional(), revision: z.number().int().nonnegative().optional() }), entityType: z.string().optional(), properties: recordingOperationSchema.shape.properties }).strict()).min(1).max(32), summary: z.string().optional(), expectedRevisions: z.record(z.string(), z.number().int().nonnegative()).optional() }).strict().safeParse(input)
   if (!parsed.success) return null
   const operations = z.array(recordingOperationSchema).safeParse(parsed.data.changes.map(({ target, properties }) => ({ target: { kind: target.kind, id: target.id }, properties })))
-  return operations.success ? operations.data : null
+  // Settings demonstrations are explicitly planned and restored by the director, not captured as document snapshots.
+  return operations.success && operations.data.every(v => v.target.kind !== 'settings.registry') ? operations.data : null
 }
 export function generateRecordingScript(understanding: RecordingUnderstanding, events: CaptureEvent[], capture: RecordingScriptCapture, ignored: ReadonlySet<string> = new Set()): RecordingScript {
   const baselineIds = new Set(capture.baselines.map(v => v.documentId))

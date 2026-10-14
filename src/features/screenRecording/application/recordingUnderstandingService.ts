@@ -11,6 +11,7 @@ import { defaultDocumentOperationChanges } from '@/features/documents'
 import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, transcribeAudioEdit } from '@/features/audioEdit'
 import { recordingEvents } from './recordingService'
 import { recordedScriptSource, assertRecordedScriptEdits, recordingScriptIgnoredCapabilities } from './recordingScriptSource'
+import { directorPlanIdentity, recordingDirectorPlanSchema, assertDirectorTargets } from '@/core/screenRecording/director'
 
 const logger = createLogger('features.screenRecording.understanding')
 export function assertRecordingEditable(content: RecordingDocument): void {
@@ -27,7 +28,15 @@ export async function saveRecordingUnderstanding(id: string, value: RecordingUnd
   assertRecordingEditable(read.content)
   if (read.meta.revision !== expectedRevision) throw new Error('CONFLICT:录制会话已修改，请重新读取理解结果。')
   const understanding = recordingUnderstandingSchema.parse(value)
-  if (understanding.operationScript.steps.length) assertRecordedScriptEdits(understanding.operationScript, await recordedScriptSource(id, { ...read.content, understanding }))
+  if (understanding.director) {
+    const plan = recordingDirectorPlanSchema.parse({ director: understanding.director, operationScript: understanding.operationScript })
+    const prior = read.content.understanding
+    if (!prior.director) throw new Error('请通过规划导演录制创建脚本。')
+    assertDirectorTargets(plan, read.content.scriptCapture)
+    if ((read.content.sessionId || read.content.directorRun?.recordingId) && directorPlanIdentity(plan) !== directorPlanIdentity({ director: prior.director, operationScript: prior.operationScript })) throw new Error('此脚本已形成录制，请在成片中补录旁白，或重新规划一份教程。')
+    if (plan.director.confirmed && directorPlanIdentity(plan) !== directorPlanIdentity({ director: prior.director, operationScript: prior.operationScript })) throw new Error('脚本有修改，请先以未确认状态保存，再确认最新脚本。')
+  } else if (read.content.understanding.director) throw new Error('不能移除导演脚本归属。')
+  else if (understanding.operationScript.steps.length) assertRecordedScriptEdits(understanding.operationScript, await recordedScriptSource(id, { ...read.content, understanding }))
   const active = read.content.media.filter(v => v.kind === 'screen').map(v => ({ startUs: v.monoUs, endUs: v.monoUs + v.durationUs }))
   for (const range of [...understanding.transcript, ...understanding.steps, ...understanding.candidates]) {
     if (subtractRecordingRanges([range], active).length) throw new Error('理解结果超出已保存的屏幕片段，不能跨越暂停或缺片空档。')
@@ -73,7 +82,8 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
     const warnings: string[] = []
     if (!content.eventPages.length) warnings.push('没有操作日志，仅使用声音和画面证据切分；等待段不作无输入判断。')
     const audioMedia = content.media.filter(v => ['microphone', 'systemAudio'].includes(v.kind) && v.durationUs > 0)
-    const transcript: RecordingTranscript[] = []
+    const directed = Boolean(content.understanding.director)
+    const transcript: RecordingTranscript[] = directed ? structuredClone(content.understanding.transcript) : []
     const audioUpdates: RecordingAudioUpdate[] = []
     // Unknown/missing audio intervals are not silence. For overlaps, every recorded audio track must be silent.
     let silence = audioMedia.length ? active : content.devices.microphone || content.devices.systemAudio ? [] : active
@@ -96,13 +106,13 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
       try {
         const source = audio?.document.source ?? await getPlatform().audioEdit.probeSource(media.path, requestId)
         signal.throwIfAborted()
-        if (options.transcribe && !audio) {
+        if (options.transcribe && !directed && !audio) {
           audio = await createAudioEditDraft(source, read.meta.container)
           const update = { id: audio.document.id, created: true, transcribed: false }
           audioUpdates.push(update); onAudioWrite?.(update)
           await flushAudioEditProject(audio.document.id)
         }
-        if (options.transcribe && audio && !audio.document.transcript.length) {
+        if (options.transcribe && !directed && audio && !audio.document.transcript.length) {
           await transcribeAudioEdit({ projectId: audio.document.id, requestId }, signal, id)
           const update = audioUpdates.find(v => v.id === audio!.document.id) ?? { id: audio.document.id, created: false, transcribed: false }
           if (!audioUpdates.includes(update)) audioUpdates.push(update)
@@ -110,7 +120,7 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
         }
         signal.throwIfAborted()
         const map = (start: number, end: number): RecordingRange => ({ startUs: media.monoUs + Math.round(start * 1e6 / source.sampleRate), endUs: Math.min(media.monoUs + media.durationUs, media.monoUs + Math.round(end * 1e6 / source.sampleRate)) })
-        for (const block of audio?.document.transcript ?? []) {
+        for (const block of directed ? [] : audio?.document.transcript ?? []) {
           const range = map(block.startFrame, block.endFrame)
           if (block.included && range.endUs > range.startUs) transcript.push({ id: `${media.id}:${block.id}`, ...range, text: block.text, granularity: block.granularity, audioDocumentId: audio!.document.id, mediaId: media.id, protected: block.locked })
         }
@@ -142,6 +152,7 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
     if ((await readRecordingUnderstanding(id)).meta.revision !== read.meta.revision) throw new Error('CONFLICT:分析期间会话已修改，保留已有结果，请重新分析。')
     const understanding = segmentRecording({ active, events, transcript, silence, stillness: content.eventPages.length ? stillness : [], sceneCutsUs, warnings })
     understanding.privacy = content.understanding.privacy
+    if (directed) Object.assign(understanding, { director: content.understanding.director, operationScript: content.understanding.operationScript, steps: content.understanding.steps, chapters: content.understanding.chapters })
     logger.info('录制理解完成', { event: 'recording.understanding.analyze.completed', context: { documentId: id, steps: understanding.steps.length, candidates: understanding.candidates.length } })
     return { understanding, revision: read.meta.revision, audioUpdates }
   } catch (error) { logger.error('录制理解失败', { event: 'recording.understanding.analyze.failed', error, context: { documentId: id } }); throw error }

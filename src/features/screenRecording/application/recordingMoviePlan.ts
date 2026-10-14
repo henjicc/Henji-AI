@@ -13,6 +13,7 @@ import { mapRecordingMovieRange, recordingMovieSpans, type RecordingMovieRecipe 
 import { confirmedRecordingPrivacyFragments } from '@/core/screenRecording/privacyEffects'
 import { recordingMediaSpans } from './recordingTimeline'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
+import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 
 export function recordingMovieEffect(id: string, name: string, params: Record<string, number | boolean | string> = {}, mask?: VideoEditEffectMask): VideoEditEffect {
   return { id: crypto.randomUUID(), name, enabled: true, amount: 1, builtin: { id, params }, ...(mask ? { mask } : {}) }
@@ -55,11 +56,12 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
       const media = document.media.find(v => v.path.replaceAll('\\', '/') === source.path.replaceAll('\\', '/'))
       const item = document.items.find(v => v.mediaId === media?.id)
       if (!media || !item) throw new Error('录制原片导入不完整。')
+      const narrationRanges = understanding.director ? understanding.transcript.filter(v => v.mediaId === source.id) : buildAudioEditCaptionGroups(understanding.transcript.filter(v => v.mediaId === source.id).map(v => ({ id: v.id, text: v.text, startFrame: v.startUs, endFrame: v.endUs, included: true, locked: false, granularity: v.granularity })), 1e6).map(v => ({ id: v.id, text: v.text, startUs: v.startFrame, endUs: v.endFrame }))
       const lane = source.kind === 'screen' ? screen : sequence
       const track = { microphone: 0, systemAudio: 1, screen: 0, camera: 4 }[source.kind]
       for (const active of recordingMediaSpans(recording, source, Math.round(media.durationSeconds * 1e6))) for (const span of mapRecordingMovieRange(spans, active)) {
         // Confirmed masks stay source-anchored across cuts and speed changes.
-        const bounds = [...new Set([span.startUs, span.endUs, ...(source.kind === 'screen' ? redactions.filter(v => v.mediaId === source.id).flatMap(v => [v.startUs, v.endUs]).filter(v => v > span.startUs && v < span.endUs) : [])])].sort((a, b) => a - b)
+        const bounds = [...new Set([span.startUs, span.endUs, ...((source.kind === 'microphone') ? narrationRanges.flatMap(v => [v.startUs, v.endUs]).filter(v => v > span.startUs && v < span.endUs) : []), ...(source.kind === 'screen' ? redactions.filter(v => v.mediaId === source.id).flatMap(v => [v.startUs, v.endUs]).filter(v => v > span.startUs && v < span.endUs) : [])])].sort((a, b) => a - b)
         for (let i = 0; i + 1 < bounds.length; i++) {
           const startUs = bounds[i], endUs = bounds[i + 1], outputUs = span.outputStartUs + (startUs - span.startUs) / span.speed
           const start = frame(outputUs), duration = Math.min(frame(span.outputStartUs + (endUs - span.startUs) / span.speed) - start, Math.floor((endUs - startUs) * fps / (1e6 * span.speed) + 1e-7))
@@ -69,6 +71,13 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
           const linkKey = `${start}:${duration}`; if (!linkIds.has(linkKey)) linkIds.set(linkKey, crypto.randomUUID())
           // Nested screen sequence owns its picture; audio/camera links stay within their own sequence.
           if (source.kind !== 'screen') clip.linkId = linkIds.get(linkKey)
+          const narration = narrationRanges.find(v => v.startUs === startUs && v.endUs === endUs)
+          if (narration && source.kind === 'microphone' && span.speed === 1 && media.creativeSource?.type === 'document') {
+            clip.text = narration.text
+            clip.creativeSource = { ...media.creativeSource, part: `recording-narration:${narration.id}` }
+            clip.fadeInFrames = Math.max(1, Math.min(Math.round(fps * .03), Math.floor(clip.duration / 2)))
+            clip.fadeOutFrames = clip.fadeInFrames
+          }
           if (source.kind === 'screen') {
             if (recipe.cursor && media.recordingCursor) clip.effects = [recordingMovieEffect('recording_cursor', '录制光标')]
             for (const candidate of redactions.filter(v => v.mediaId === source.id && v.startUs < endUs && v.endUs > startUs)) {
@@ -104,7 +113,10 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
         // A sentence spanning a cut/speed boundary is still one sentence, never repeated per fragment.
         return mapped.length ? [{ id: crypto.randomUUID(), text: text.text, startFrame: frame(mapped[0].outputStartUs), endFrame: frame(mapped.at(-1)!.outputEndUs), included: true, locked: false, granularity: text.granularity }] : []
       }).filter(v => v.endFrame > v.startFrame && v.text.trim()).sort((a, b) => a.startFrame - b.startFrame)
-      for (const group of buildAudioEditCaptionGroups(blocks, fps)) sequence.captions.push({ id: group.id, start: group.startFrame, duration: group.endFrame - group.startFrame, text: group.text.slice(0, 2000) })
+      for (const group of buildAudioEditCaptionGroups(blocks, fps)) {
+        const clip = sequence.clips.find(v => v.kind === 'audio' && v.text === group.text && v.start === group.startFrame && Math.abs(v.duration - (group.endFrame - group.startFrame)) <= 1)
+        sequence.captions.push({ id: group.id, ...(clip ? { clipId: clip.id } : {}), start: group.startFrame, duration: clip?.duration ?? group.endFrame - group.startFrame, text: group.text.slice(0, 2000), style: videoEditSubtitleStyleSchema.parse({}) })
+      }
     }
     if (recipe.steps) for (const step of understanding.steps) {
       const mapped = mapRecordingMovieRange(spans, step)[0]
