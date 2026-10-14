@@ -18,12 +18,22 @@ vi.mock('../services/video/ops', () => ({ generateVideoThumbnailBytes: mock.byte
 vi.mock('../services/video/preview-cache', () => ({ clearLegacyVideoPreviewCache: vi.fn() }))
 vi.mock('../services/video/frame-export', () => ({ appendVideoFrameExport: vi.fn(), cancelVideoFrameExport: vi.fn(), finishVideoFrameExport: vi.fn(), startVideoFrameExport: vi.fn() }))
 import { registerVideoIpc } from './video'
+import { startVideoFrameExport } from '../services/video/frame-export'
 function sender(id: number): { event: IpcMainInvokeEvent; destroy: () => void } {
   const value = Object.assign(new EventEmitter(), { id })
   return { event: { sender: value } as unknown as IpcMainInvokeEvent, destroy: () => { value.emit('destroyed') } }
 }
 function invoke(id: string, input: unknown, event: IpcMainInvokeEvent): Promise<unknown> { return Promise.resolve().then(() => mock.handlers.get(id)!(input, event)) }
 beforeEach(() => { vi.resetAllMocks(); mock.handlers.clear(); registerVideoIpc(); mock.stat.mockResolvedValue({ mtimeMs: 42 }) })
+
+it('帧导出格式与方向经过正式 IPC 校验；默认 MP4 调用保留原契约', async () => {
+  const owner = sender(49), payload = { frameCount: 10, fps: 10, width: 640, height: 360, fileNameStem: 'step' }
+  await invoke('video:startFrameExport', payload, owner.event)
+  expect(startVideoFrameExport).toHaveBeenCalledWith(payload, expect.any(Function))
+  await invoke('video:startFrameExport', { ...payload, format: 'gif', orientation: 'top-down' }, owner.event)
+  expect(startVideoFrameExport).toHaveBeenLastCalledWith({ ...payload, format: 'gif', orientation: 'top-down' }, expect.any(Function))
+  for (const invalid of [{ format: 'webp' }, { format: null }, { orientation: 'sideways' }, { orientation: null }]) await expect(invoke('video:startFrameExport', { ...payload, ...invalid }, owner.event)).rejects.toThrow()
+})
 
 it('视频处理取消按请求和宿主隔离，重复标识及非法标识不覆盖原任务', async () => {
   const owner = sender(43); const other = sender(44)

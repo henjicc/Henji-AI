@@ -1,10 +1,10 @@
 import { getPlatform } from '@/platform'
-import { captureLogPageSchema } from '@/core/captureLog/events'
+import { captureLogPageSchema, type CaptureEvent } from '@/core/captureLog/events'
 import { recordingCursorPageReference, recordingCursorSourceSchema, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
 import type { RecordingDocument } from '@/core/screenRecording/document'
 
 /** Keep immutable page references and pause offsets only, not an hour of 120 Hz samples. */
-export async function recordingMovieCursorSources(recording: RecordingDocument, signal: AbortSignal): Promise<Map<string, RecordingCursorSource>> {
+export async function recordingMovieCursorSources(recording: RecordingDocument, signal: AbortSignal, onEvent?: (event: CaptureEvent) => void): Promise<Map<string, RecordingCursorSource>> {
   const result = new Map<string, RecordingCursorSource>()
   if (!recording.eventPages.length || !recording.source) return result
   const pages: RecordingCursorSource['pages'] = [], offsets: Array<{ monoUs: number; offset: number }> = []
@@ -20,6 +20,7 @@ export async function recordingMovieCursorSources(recording: RecordingDocument, 
     owner = page.ownerRef; sourceDigest = page.sourceDigest; lastMono = page.monoSpanUs[1]
     pages.push(recordingCursorPageReference(page, ref.path, hash))
     for (const event of page.entries) {
+      onEvent?.(event)
       const offset = event.monoUs - event.recordingUs
       if (offsets.at(-1)?.offset !== offset) offsets.push({ monoUs: event.monoUs, offset })
     }

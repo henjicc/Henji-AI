@@ -1,4 +1,4 @@
-import type { WebContents } from 'electron'
+import { BrowserWindow, type WebContents } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import path from 'node:path'
@@ -119,7 +119,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         try { if (backend === 'gfxcapture') await session.backend.cancel() } finally { await storage.release(); active = null }
         throw error
       }
-      logger.info('屏幕采集准备完成', { event: 'recording.capture.prepare.completed', context: { backend, sessionId: request.sessionId } })
+      logger.info('屏幕采集准备完成', { event: 'recording.capture.prepare.completed', context: { backend, sessionId: request.sessionId, monoUs: now() - session.originUs, capturesApplication: source.id === BrowserWindow.fromWebContents(owner)?.getMediaSourceId() } })
       return { sessionId: request.sessionId, originUs: session.originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(document ? { directory: storage.directory } : {}) } satisfies CapturePrepared
     } finally { preparing = false }
   }

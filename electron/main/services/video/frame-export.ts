@@ -22,6 +22,7 @@ import type {
 } from './types'
 
 interface VideoFrameExportSession {
+  format: 'mp4' | 'gif'
   id: string
   dir: string
   outputPath: string
@@ -66,13 +67,14 @@ export async function startVideoFrameExport(
   await cleanupStagedVideoArtifactsOnce()
   const sessionId = crypto.randomUUID()
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'henji-camera-stage-export-'))
-  const outputPath = path.join(dir, 'output.mp4')
+  const format = payload.format ?? 'mp4'
+  const outputPath = path.join(dir, `output.${format}`)
   const ffmpegPath = await loadFfmpegPath()
-  const encoder = await getPreferredEncoder()
+  const encoder = format === 'mp4' ? await getPreferredEncoder() : null
   const bitrateKbps = estimateVideoBitrateKbps(payload.width, payload.height, payload.fps)
   const maxrateKbps = Math.round(bitrateKbps * 1.35)
   const bufsizeKbps = Math.round(bitrateKbps * 2)
-  const encodeArgs = encoder.id === 'cpu'
+  const encodeArgs = !encoder || encoder.id === 'cpu'
     ? ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20']
     : encoder.buildEncodeArgs(bitrateKbps, maxrateKbps, bufsizeKbps)
   const child = spawn(ffmpegPath, [
@@ -89,17 +91,16 @@ export async function startVideoFrameExport(
     '-color_trc', 'iec61966-2-1',
     '-i', 'pipe:0',
     '-frames:v', String(payload.frameCount),
-    '-vf', 'vflip,scale=in_range=full:out_range=limited:out_color_matrix=bt709,format=yuv420p',
-    ...encodeArgs,
+    ...videoFrameExportFilterArgs(payload, encodeArgs),
     '-r', String(payload.fps),
-    '-color_range', 'tv',
+    ...(format === 'mp4' ? ['-color_range', 'tv',
     '-colorspace', 'bt709',
     '-color_primaries', 'bt709',
     // WebGL 离屏帧已经按 sRGB 传递函数编码；这里只做 RGB -> YUV 与全范围 -> 有限范围转换，
     // 没有执行 sRGB -> BT.709 的传递函数变换，因此输出必须继续声明为 sRGB。
     // 若误标成 BT.709，播放器会用错误的曲线解码中间调，导致画布节点中的成片整体偏亮。
     '-color_trc', 'iec61966-2-1',
-    '-movflags', '+faststart',
+    '-movflags', '+faststart'] : ['-loop', '0']),
     outputPath,
   ])
   let stderr = ''
@@ -138,6 +139,7 @@ export async function startVideoFrameExport(
   void completion.catch(() => undefined)
 
   sessions.set(sessionId, {
+    format,
     id: sessionId,
     dir,
     outputPath,
@@ -152,7 +154,7 @@ export async function startVideoFrameExport(
     child,
     completion,
     onEncodingProgress: onEncodingProgress ?? null,
-    encoderLabel: encoder.label,
+    encoderLabel: encoder?.label ?? 'GIF',
   })
   logger.info('流式视频导出会话已创建', {
     event: 'video_frame_export.session.started',
@@ -162,7 +164,7 @@ export async function startVideoFrameExport(
       fps: payload.fps,
       width: payload.width,
       height: payload.height,
-      encoder: encoder.label,
+      encoder: encoder?.label ?? 'GIF',
       inputFormat: 'raw-rgba-pipe',
     },
   })
@@ -204,10 +206,10 @@ export async function finishVideoFrameExport(
     session.lastActivity = Date.now()
     session.child.stdin.end()
     await session.completion
-    const mediaPath = path.join(getUploadsDir(), `${session.fileNameStem}-${session.id}.mp4`)
+    const mediaPath = path.join(getUploadsDir(), `${session.fileNameStem}-${session.id}.${session.format}`)
     await moveCompletedOutputToUploads(session.outputPath, mediaPath, session.id)
     const savedPath = payload.targetPath
-      ? await copyToTarget(mediaPath, payload.targetPath)
+      ? await copyToTarget(mediaPath, payload.targetPath, session.format)
       : mediaPath
 
     logger.info('流式视频导出完成', {
@@ -383,11 +385,19 @@ function cleanupStagedVideoArtifactsOnce(): Promise<void> {
   return stagedArtifactsCleanupPromise
 }
 
-async function copyToTarget(mediaPath: string, targetPath: string): Promise<string> {
-  const normalized = ensureOutputPathWithExtension(targetPath, 'mp4')
+async function copyToTarget(mediaPath: string, targetPath: string, format: 'mp4' | 'gif'): Promise<string> {
+  const normalized = ensureOutputPathWithExtension(targetPath, format)
   await fs.promises.mkdir(path.dirname(normalized), { recursive: true })
-  await fs.promises.copyFile(mediaPath, normalized)
+  await fs.promises.copyFile(mediaPath, normalized, format === 'gif' ? fs.constants.COPYFILE_EXCL : 0)
   return normalized
+}
+
+/** Per-frame palettes keep the raw pipe bounded; a whole-movie palette would retain all frames. */
+export function videoFrameExportFilterArgs(payload: Pick<StartVideoFrameExportPayloadDto, 'format' | 'orientation'>, encodeArgs: string[]): string[] {
+  const flip = payload.orientation === 'top-down' ? '' : 'vflip,'
+  return payload.format === 'gif'
+    ? ['-filter_complex', `${flip}split[a][b];[a]palettegen=stats_mode=single[p];[b][p]paletteuse=new=1`, '-c:v', 'gif']
+    : ['-vf', `${flip}scale=in_range=full:out_range=limited:out_color_matrix=bt709,format=yuv420p`, ...encodeArgs]
 }
 
 async function cleanupSessionDir(dir: string): Promise<void> {

@@ -37,6 +37,8 @@ export interface GenerateVideoThumbnailResultDto {
 }
 
 export interface StartVideoFrameExportPayloadDto {
+  format?: 'mp4' | 'gif'
+  orientation?: 'bottom-up' | 'top-down'
   frameCount: number
   fps: number
   width: number

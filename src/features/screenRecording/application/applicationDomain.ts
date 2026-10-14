@@ -18,17 +18,32 @@ import { generateRecordingMovie } from './recordingMovieService'
 import { openVideoEditDocument } from '@/features/videoEdit'
 import { executeRecordingPrivacy } from './recordingPrivacyCapability'
 import { recordingPrivacyBusy } from './recordingPrivacyService'
+import { recordingProductInputSchema, recordingExportRefSchema } from '@/core/application-control/domains/screenRecording/productCapability'
+import { exportRecordingProduct, cancelRecordingProductExport, recordingProductBusy } from './recordingProductService'
+import { resolveConfiguredDestination } from '@/features/canvas'
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
   id: 'screen_recording', entities: () => [...recordingRegistrations(), recordingUnderstandingRegistration()],
   registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()) },
   registerCapabilities(registrar) {
     registerDocumentOpener('screen_recording', async document => { await showRecordingDocument(document.id); openApplicationSurface('tool.screen_recording') })
-    registerDocumentBusyCheck('screen_recording', id => recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
+    registerDocumentBusyCheck('screen_recording', id => recordingProductBusy(id) ? '请先等待产物导出完成或取消' : recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
     registerDocumentCoverProvider('screen_recording', read => { const first = recordingDocumentSchema.parse(read.content).media.find(media => media.kind === 'screen' && media.durationUs > 0); return first ? [{ source: first.path, sourceKind: 'video', atSeconds: 0 }] : null })
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {
       context.signal.throwIfAborted()
       if (definition.id === 'understand_screen_recording') return executeRecordingUnderstanding(input, context)
+      if (definition.id === 'export_screen_recording_product') {
+        const parsed = recordingProductInputSchema.parse(input)
+        if (context.callerGrant && !context.callerGrant.permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:导出需要 screen_recording:read 权限。')
+        if (parsed.product === 'image_document' && context.callerGrant && !context.callerGrant.permissions.includes('documents:write')) throw new Error('PERMISSION_DENIED:创建图片文档还需要 documents:write 权限。')
+        const result = await exportRecordingProduct(parsed.sessionRef.id, { product: parsed.product, stepIds: parsed.stepIds, ...(parsed.destination ? { directory: await resolveConfiguredDestination(parsed.destination) } : {}) }, context.signal)
+        return { resultRef: { kind: 'screen_recording.export', id: result.id }, state: result.state, files: result.files, documentRefs: result.documentRefs, warnings: result.warnings, verified: result.verified }
+      }
+      if (definition.id === 'cancel_screen_recording_export') {
+        const parsed = z.object({ exportRef: recordingExportRefSchema }).strict().parse(input)
+        await cancelRecordingProductExport(parsed.exportRef.id)
+        return { resultRef: parsed.exportRef, verified: true }
+      }
       if (definition.id === generateRecordingMovieCapability.id) {
         const parsed = generateRecordingMovieCapability.inputSchema.parse(input)
         if (context.callerGrant && !context.callerGrant.permissions.includes('screen_recording:read')) throw new Error('PERMISSION_DENIED:生成成片需要 screen_recording:read 权限。')

@@ -5,9 +5,11 @@ import { getPlatform } from '@/platform'
 import { recordingDevices } from '../tracks/devices'
 import { recordingDocumentSchema } from '@/core/screenRecording/document'
 import { recordingTrackOptionsSchema } from '@/core/screenRecording/tracks'
+import { recordingProductExports, recordingProductExport } from './recordingProductService'
 
-const types = ['screen_recording.session', 'screen_recording.source', 'screen_recording.device'] as const
+const types = ['screen_recording.session', 'screen_recording.source', 'screen_recording.device', 'screen_recording.export'] as const
 const reason = '采集事实由统一录制服务维护；开始、暂停、恢复、标记、停止和恢复使用录制语义操作，文档改名与删除走 documents.document。'
+const exportReason = '导出状态由 export_screen_recording_product 与 cancel_screen_recording_export 维护，运行期结果不可直接修改；标准文件和正式图片文档永久保留。'
 function schemaRef(kind: 'entity' | 'property', id: string) {
   const seed = [...id].reduce((hash, char) => (hash * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
   return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: `sha256:${seed.padEnd(64, seed).slice(0, 64)}` } as const
@@ -18,21 +20,26 @@ const detailsSchema = z.object({
   markers: z.number().int().nonnegative().optional(), events: z.number().int().nonnegative().optional(),
   deviceKind: z.string().optional(), sourceKind: z.string().optional(),
   devices: recordingTrackOptionsSchema.optional(), deviceId: z.string().optional(),
+  product: z.string().optional(), sessionId: z.string().optional(), files: z.array(z.string()).optional(),
+  documentRefs: z.array(z.object({ kind: z.literal('documents.document'), id: z.string() }).strict()).optional(),
+  steps: z.array(z.object({ id: z.string(), title: z.string(), startUs: z.number(), endUs: z.number() }).strict()).optional(),
+  completedSteps: z.number().optional(), warnings: z.array(z.string()).optional(), verified: z.boolean().optional(), error: z.string().optional(),
 }).strict()
 function properties(type: string): ApplicationPropertyDescriptor[] {
+  const readOnlyReason = type === 'screen_recording.export' ? exportReason : reason
   return [
     ['name', '名称', { kind: 'string' }], ['phase', '录制状态', { kind: 'string' }], ['elapsed_ms', '已录制毫秒', { kind: 'number' }],
     ['details', '轨道与事件摘要', { kind: 'json', schemaRef: schemaRef('property', `${type}.details.value`) }],
   ].map(([suffix, title, value]) => ({ id: `${type}.${suffix}`, entityType: type, version: 1, title: title as string, description: title as string,
     value: value as ApplicationPropertyDescriptor['value'], nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['screen_recording:read'], write: [] },
-    revisionScopes: ['screen_recording'], schemaRef: schemaRef('property', `${type}.${suffix}`), readOnlyReason: reason }))
+    revisionScopes: ['screen_recording'], schemaRef: schemaRef('property', `${type}.${suffix}`), readOnlyReason }))
 }
 class RecordingProvider implements ApplicationEntityProvider {
   constructor(readonly entityType: typeof types[number]) {}
   async listEntities(request: { cursor?: string; limit: number }) {
     const offset = Number(request.cursor ?? 0)
     if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('分页位置无效')
-    const items = this.entityType === 'screen_recording.session' ? (await getPlatform().documents.listDocuments({ kind: 'screen_recording', includeMissing: false })).map(item => ({ id: item.id, name: item.name }))
+    const items = this.entityType === 'screen_recording.export' ? recordingProductExports().map(item => ({ id: item.id, name: item.product })) : this.entityType === 'screen_recording.session' ? (await getPlatform().documents.listDocuments({ kind: 'screen_recording', includeMissing: false })).map(item => ({ id: item.id, name: item.name }))
       : this.entityType === 'screen_recording.source' ? await getPlatform().screenRecording.sources()
         : (await recordingDevices()).filter(item => item.id).map(item => ({ id: `${item.kind}:${item.id}`, name: item.label || item.kind }))
     return { refs: items.slice(offset, offset + request.limit).map(item => ({ kind: this.entityType, id: item.id, label: item.name })), nextCursor: offset + request.limit < items.length ? String(offset + request.limit) : null, revisions: { screen_recording: 0 } }
@@ -41,7 +48,10 @@ class RecordingProvider implements ApplicationEntityProvider {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
     let values: Record<string, JsonValue>
     let revision = 0
-    if (this.entityType === 'screen_recording.session') {
+    if (this.entityType === 'screen_recording.export') {
+      const { id: _id, state, ...details } = recordingProductExport(ref.id)
+      values = { name: details.product, phase: state, elapsed_ms: 0, details: { ...details } }
+    } else if (this.entityType === 'screen_recording.session') {
       const read = await getPlatform().documents.readDocument({ id: ref.id })
       if (read.meta.kind !== 'screen_recording') throw new Error('请选择录制会话')
       const content = recordingDocumentSchema.parse(read.content), meta = read.meta
@@ -66,14 +76,14 @@ class RecordingProvider implements ApplicationEntityProvider {
     const snapshot = await this.readEntity(ref, {})
     return ids.map(propertyId => {
       if (!properties(this.entityType).some(property => property.id === propertyId)) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
-      return { propertyId, readable: true, writable: false, reasons: [reason], requiredPermissions: ['screen_recording:read'], revisions: snapshot.revisions }
+      return { propertyId, readable: true, writable: false, reasons: [this.entityType === 'screen_recording.export' ? exportReason : reason], requiredPermissions: ['screen_recording:read'], revisions: snapshot.revisions }
     })
   }
   async getCollectionAvailability(parent: ApplicationRef) { return unrestrictedCollectionAvailability(this.entityType, parent, { screen_recording: 0 }, []) }
 }
 export function recordingRegistrations(): ApplicationEntityRegistration[] {
-  return types.map(type => ({ entity: { id: type, domain: 'screen_recording', version: 1, title: { 'screen_recording.session': '录制会话', 'screen_recording.source': '可录制来源', 'screen_recording.device': '录制设备' }[type],
-    description: reason, refKind: type, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['screen_recording'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', type), writeExclusion: { reason } },
+  return types.map(type => ({ entity: { id: type, domain: 'screen_recording', version: 1, title: { 'screen_recording.session': '录制会话', 'screen_recording.source': '可录制来源', 'screen_recording.device': '录制设备', 'screen_recording.export': '录制产物导出' }[type],
+    description: type === 'screen_recording.export' ? exportReason : reason, refKind: type, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['screen_recording'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', type), writeExclusion: { reason: type === 'screen_recording.export' ? exportReason : reason } },
     properties: properties(type), provider: new RecordingProvider(type), schemaDocuments: [{ ref: schemaRef('property', `${type}.details.value`), value: z.toJSONSchema(detailsSchema) as JsonValue }],
   }))
 }
