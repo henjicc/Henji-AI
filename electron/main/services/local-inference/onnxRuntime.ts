@@ -1,5 +1,5 @@
 import type { InferenceSession } from 'onnxruntime-node'
-import type { LocalModelRunner, LocalTensorInput, LocalTensorOutput } from './analysis'
+import type { LocalModelRunner, LocalSessionOptions, LocalTensorInput, LocalTensorOutput } from './analysis'
 import type { LocalInferenceModelFile } from './protocol'
 import { createSessionWithFallback, type LocalExecutionProvider, type LocalInferenceLog } from './providers'
 import { addOnnxGraphOutputs } from './tracking/onnxGraphOutputs'
@@ -30,12 +30,13 @@ function sessionOptions(provider: LocalExecutionProvider): InferenceSession.Sess
 
 /** 模型来源：普通模型按路径载入；要补图输出的（EfficientTAM 解码器候选）读进内存改好后从缓冲区载入。 */
 type SessionFactory = (provider: LocalExecutionProvider) => Promise<InferenceSession>
-function sessionFactory(runtime: OnnxRuntime, model: LocalInferenceModelFile): SessionFactory {
-  if (!model.extraOutputs?.length) return provider => runtime.InferenceSession.create(model.path, sessionOptions(provider))
+function sessionFactory(runtime: OnnxRuntime, model: LocalInferenceModelFile, shape: string, options: LocalSessionOptions): SessionFactory {
+  const config = (provider: LocalExecutionProvider): InferenceSession.SessionOptions => ({ ...sessionOptions(provider), ...options, ...(shape === 'dynamic' ? { enableMemPattern: false } : {}) })
+  if (!model.extraOutputs?.length) return provider => runtime.InferenceSession.create(model.path, config(provider))
   let bytes: Promise<Uint8Array> | undefined
   return async provider => {
     bytes ??= readFile(model.path).then(buffer => addOnnxGraphOutputs(new Uint8Array(buffer), model.extraOutputs!))
-    return runtime.InferenceSession.create(await bytes, sessionOptions(provider))
+    return runtime.InferenceSession.create(await bytes, config(provider))
   }
 }
 
@@ -68,11 +69,11 @@ class Runner implements LocalModelRunner {
 export class LocalModelSessions {
   private readonly sessions = new Map<string, Promise<Runner>>()
   constructor(private readonly runtime: OnnxRuntime, private readonly log: LocalInferenceLog, private readonly limit = 8) {}
-  open(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string): Promise<LocalModelRunner> {
-    const key = `${model.path}\u0000${shape}\u0000${providers.join(',')}\u0000${JSON.stringify(model.extraOutputs ?? [])}`
+  open(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string, options: LocalSessionOptions = {}): Promise<LocalModelRunner> {
+    const key = `${model.path}\u0000${shape}\u0000${providers.join(',')}\u0000${JSON.stringify(model.extraOutputs ?? [])}\u0000${options.intraOpNumThreads ?? 0}`
     let pending = this.sessions.get(key)
     if (pending) { this.sessions.delete(key); this.sessions.set(key, pending); return pending }
-    const create = sessionFactory(this.runtime, model)
+    const create = sessionFactory(this.runtime, model, shape, options)
     pending = createSessionWithFallback(providers, create, this.log, model.name)
       .then(({ session, provider, remaining }) => new Runner(this.runtime, session, provider, remaining, model, this.log, create))
     this.sessions.set(key, pending)

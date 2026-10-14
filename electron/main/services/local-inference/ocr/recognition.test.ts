@@ -1,18 +1,26 @@
 import { expect, it } from 'vitest'
-import { recognitionInput, decodeRecognition } from './recognition'
-import { readOnnxCharacterMetadata } from '../tracking/onnxGraphOutputs'
-it('BGR归一化、48高、按比例填充与CTC重复/blank折叠', async () => {
+import { recognitionCrop, recognitionBatchInput, recognitionBatches, decodeRecognitionBatch, readRecognitionDictionary } from './recognition'
+it('原分辨率RGB归一化、48高、128对齐白色填充与每批CTC独立折叠', () => {
   const rgb = Uint8Array.of(255, 0, 0, 0, 255, 0)
-  const input = await recognitionInput(rgb, 2, 1, [0, 0, 1, 1])
-  expect(input.width).toBe(320); expect(input.data[0]).toBe(-1); expect(input.data[320 * 48 * 2]).toBe(1); expect(input.data[100]).toBe(0)
-  const ids = [1, 1, 0, 1, 2, 2, 0], data = new Float32Array(ids.length * 4)
-  ids.forEach((id, i) => { data[i * 4 + id] = .99 })
-  expect(decodeRecognition({ data, dims: [1, ids.length, 4] }, ['a', 'b'])).toMatchObject({ text: 'aab', confidence: expect.closeTo(.99) })
-  expect(() => decodeRecognition({ data, dims: [1, ids.length, 5] }, ['a', 'b'])).toThrow('字典')
+  const crop = recognitionCrop(2, 1, [0, 0, 1, 1])
+  const input = recognitionBatchInput(rgb, 2, [crop])
+  expect(input.width).toBe(128); expect(input.data[0]).toBe(0.5); expect(input.data[128 * 48 * 2]).toBe(-0.5); expect(input.data[100]).toBe(0.5)
+  const ids = [1, 1, 0, 1, 2, 2, 0], data = new Float32Array(2 * ids.length * 4)
+  ids.forEach((id, i) => { data[i * 4 + id] = .99; data[(ids.length + i) * 4 + (id === 1 ? 2 : id === 2 ? 1 : 0)] = .98 })
+  expect(decodeRecognitionBatch({ data, dims: [2, ids.length, 4] }, ['a', 'b'])).toEqual([{ text: 'aab', confidence: expect.closeTo(.99) }, { text: 'bba', confidence: expect.closeTo(.98) }])
+  expect(() => decodeRecognitionBatch({ data, dims: [1, ids.length, 5] }, ['a', 'b'])).toThrow('字典')
 })
-it('从官方ONNX内置metadata读取字典，缺字典不静默猜测', () => {
-  const key = new TextEncoder().encode('character'), value = new TextEncoder().encode('a\n中')
-  const pair = Uint8Array.from([10, key.length, ...key, 18, value.length, ...value])
-  const model = Uint8Array.from([114, pair.length, ...pair])
-  expect(readOnnxCharacterMetadata(model)).toEqual(['a', '中']); expect(() => readOnnxCharacterMetadata(Uint8Array.of(8, 1))).toThrow('字典')
+it('独立txt字典保留空格、清理换行；批宽预算和32行/1920上限', () => {
+  expect(readRecognitionDictionary('a\r\n中\r\n \r\n')).toEqual(['a', '中', ' '])
+  expect(() => readRecognitionDictionary('')).toThrow('字典')
+  const crops = Array.from({ length: 100 }, (_, i) => recognitionCrop(3840, 2160, [0, 0, (i + 1) / 100, 0.01]))
+  const batches = recognitionBatches(crops)
+  expect(batches.flat().sort((a, b) => a - b)).toEqual(crops.map((_, i) => i))
+  for (const batch of batches) { const width = Math.ceil(Math.max(...batch.map(i => crops[i].tensorWidth)) / 128) * 128; expect(width).toBeLessThanOrEqual(1920); expect(batch.length).toBeLessThanOrEqual(32); expect(batch.length * width).toBeLessThanOrEqual(4096) }
+})
+it('缩小裁片保留落在采样点之间的窄笔画，防止假密钥中的 I 消失', () => {
+  const rgb = new Uint8Array(144 * 144 * 3).fill(255)
+  for (let y = 0; y < 144; y++) rgb.fill(0, (y * 144 + 6) * 3, (y * 144 + 7) * 3)
+  const input = recognitionBatchInput(rgb, 144, [recognitionCrop(144, 144, [0, 0, 1, 1])])
+  expect(input.data[24 * input.width + 2]).toBeCloseTo(198 / 255 - .5, 5)
 })

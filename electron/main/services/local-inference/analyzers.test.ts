@@ -86,7 +86,7 @@ describe('本地推理：预处理与后处理', () => {
   })
 
   it('文字检测：尺寸按 32 对齐；连通域成框并外扩，低分区域丢弃；相邻帧并集去闪烁', () => {
-    expect(ppocrInputSize(1920, 1080)).toEqual({ width: 736, height: 416 })
+    expect(ppocrInputSize(1920, 1080)).toEqual({ width: 960, height: 544 })
     const width = 40; const height = 20
     const map = new Float32Array(width * height)
     for (let y = 8; y < 12; y++) for (let x = 5; x < 25; x++) map[y * width + x] = 0.9

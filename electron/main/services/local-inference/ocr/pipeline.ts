@@ -1,25 +1,24 @@
 import { createHash } from 'node:crypto'
-import sharp from 'sharp'
 import { sensitiveTextMatches, type PrivacyCandidate, type PrivacyBox } from '../../../../../src/core/screenRecording/privacy'
-import type { SmartRegionAnalysisDependencies, LocalTensorOutput } from '../analysis'
-import { ppocrInput, textBoxesFromMap } from '../analyzers/textDetection'
-import { decodeRecognition, recognitionInput } from './recognition'
+import type { SmartRegionAnalysisDependencies } from '../analysis'
+import { ppocrInputSize } from '../analyzers/textDetection'
+import { FrameOcr } from './frameOcr'
+import { changedTiles } from './frameChanges'
 import type { OcrPrivacyJob, OcrPrivacyResult } from './protocol'
 
 export interface OcrPrivacyDependencies extends Pick<SmartRegionAnalysisDependencies, 'openModel' | 'frames' | 'signal' | 'progress'> { alphabet: readonly string[] }
-function equalFrame(a: Uint8Array | undefined, b: Uint8Array): boolean { return Boolean(a && a.length === b.length && a.every((v, i) => v === b[i])) }
-function tensor(outputs: Record<string, LocalTensorOutput>): LocalTensorOutput { const out = Object.values(outputs)[0]; if (!out) throw new Error('文字识别模型没有输出。'); return out }
 export async function runOcrPrivacy(job: OcrPrivacyJob, deps: OcrPrivacyDependencies): Promise<OcrPrivacyResult> {
   deps.signal.throwIfAborted()
-  const scale = Math.min(1, 1920 / Math.max(job.display.width, job.display.height))
-  const size = { width: Math.max(1, Math.round(job.display.width * scale)), height: Math.max(1, Math.round(job.display.height * scale)) }
-  const ds = 1280 / Math.max(size.width, size.height), align = (v: number): number => Math.max(32, Math.round(v * ds / 32) * 32)
-  const detSize = { width: align(size.width), height: align(size.height) }
+  const size = job.display, detSize = ppocrInputSize(size.width, size.height)
   const det = job.models.find(m => m.name === 'ppocr'), rec = job.models.find(m => m.name === 'ppocr_rec')
   if (!det || !rec) throw new Error('请下载文字检测和文字识别模型后重试。')
-  const detector = await deps.openModel(det, job.providers, `${detSize.width}x${detSize.height}`)
+  const detector = await deps.openModel(det, job.providers, `${detSize.width}x${detSize.height}`, { intraOpNumThreads: 4 })
+  const recognizer = await deps.openModel(rec, ['cpu'], 'dynamic', { intraOpNumThreads: 4 })
+  const ocr = new FrameOcr(detector, recognizer, deps.alphabet, job.normalization)
   const candidates: PrivacyCandidate[] = []
   let previous: Uint8Array | undefined, active: PrivacyCandidate[] = [], frames = 0, inferredFrames = 0
+  let cursorIndex = -1, previousCursor: [number, number] | null = null
+  const cursor = job.cursor ?? []
   const total = Math.ceil(job.durationSeconds * job.fps), stepUs = Math.round(1e6 / job.fps)
   for await (const rgb of deps.frames(size)) {
     deps.signal.throwIfAborted()
@@ -27,18 +26,18 @@ export async function runOcrPrivacy(job: OcrPrivacyJob, deps: OcrPrivacyDependen
     const monoUs = job.startUs + Math.round(frames * 1e6 / job.fps)
     if (monoUs >= job.endUs) break
     const endUs = Math.min(job.endUs, monoUs + stepUs)
-    if (equalFrame(previous, rgb)) active.forEach(c => { c.endUs = endUs })
+    while (cursorIndex + 1 < cursor.length && cursor[cursorIndex + 1].monoUs <= monoUs) cursorIndex++
+    const point = cursorIndex >= 0 ? cursor[cursorIndex].point : null
+    const changes = changedTiles(previous, rgb, size.width, size.height, [previousCursor, point].filter((p): p is [number, number] => p !== null))
+    // Revisit masked pixels every second: typing beneath a stationary pointer must not remain hidden.
+    if (cursor.length && frames % Math.max(1, Math.round(job.fps)) === 0) changes.push([0, 0, 1, 1])
+    if (!changes.length) active.forEach(c => { c.endUs = endUs })
     else {
       inferredFrames++
-      const resized = await sharp(rgb, { raw: { ...size, channels: 3 } }).resize(detSize.width, detSize.height, { fit: 'fill', kernel: 'linear' }).raw().toBuffer()
-      const output = tensor(await detector.run({ x: { type: 'float32', data: ppocrInput(resized, detSize.width, detSize.height), dims: [1, 3, detSize.height, detSize.width] } }))
-      if (!(output.data instanceof Float32Array) || output.data.length !== detSize.width * detSize.height) throw new Error('文字检测输出大小不符。')
+      const result = await ocr.run(rgb, size.width, size.height, deps.signal, changes)
       const next: PrivacyCandidate[] = []
-      for (const detected of textBoxesFromMap(output.data, detSize.width, detSize.height)) {
-        deps.signal.throwIfAborted()
-        const box = detected.slice(0, 4) as PrivacyBox, input = await recognitionInput(rgb, size.width, size.height, box)
-        const recognizer = await deps.openModel(rec, job.providers, `${input.width}x48`)
-        const recognized = decodeRecognition(tensor(await recognizer.run({ x: { type: 'float32', data: input.data, dims: [1, 3, 48, input.width] } })), deps.alphabet)
+      for (const recognized of result.lines) {
+        const box: PrivacyBox = recognized.box
         deps.signal.throwIfAborted()
         if (recognized.confidence < 0.5) continue
         for (const match of sensitiveTextMatches(recognized.text)) {
@@ -61,7 +60,7 @@ export async function runOcrPrivacy(job: OcrPrivacyJob, deps: OcrPrivacyDependen
       }
       active = next
     }
-    previous = rgb; frames++; deps.progress(Math.min(total, frames), total)
+    previous = rgb; previousCursor = point; frames++; deps.progress(Math.min(total, frames), total)
   }
   deps.signal.throwIfAborted()
   if (!frames) throw new Error('录制没有可识别的画面。')

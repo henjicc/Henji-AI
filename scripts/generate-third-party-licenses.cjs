@@ -279,9 +279,9 @@ function generate(options) {
   // Models are downloaded on demand, but their attribution is also visible in the shared About/notices list.
   const ppocrLicense = readTextIfExists(path.join(REFERENCE_DIR, 'PP-OCR-Apache-2.0.txt'))
   if (!ppocrLicense) missing.push('PP-OCR：缺少 Apache-2.0 模型许可全文')
-  else runtime.push({ id: 'runtime:ppocr-v4-mobile', name: 'PP-OCRv4 mobile (RapidOCR ONNX detection and recognition)', version: 'PP-OCRv4', license: 'Apache-2.0', ecosystem: 'runtime',
-    homepage: 'https://github.com/RapidAI/RapidOCR', sources: ['https://github.com/PaddlePaddle/PaddleOCR', 'https://github.com/RapidAI/RapidOCR/blob/main/python/rapidocr/default_models.yaml',
-      'https://huggingface.co/SWHL/RapidOCR/tree/main/PP-OCRv4 (on-demand model files; retain copyright and Apache-2.0 license; no modified upstream code)'],
+  else runtime.push({ id: 'runtime:ppocr-v6', name: 'PP-OCRv6 tiny detection and tiny/small recognition (PaddleOCR / oar-ocr ONNX)', version: 'PP-OCRv6', license: 'Apache-2.0', ecosystem: 'runtime',
+    homepage: 'https://github.com/PaddlePaddle/PaddleOCR', sources: ['https://github.com/PaddlePaddle/PaddleOCR', 'https://github.com/GreatV/oar-ocr/releases/tag/v0.7.0',
+      'https://github.com/GreatV/oar-ocr/blob/main/docs/models.md (on-demand model files; retain copyright and Apache-2.0 license; no modified upstream code)'],
     textIds: [textTable.add(ppocrLicense)], textOrigin: 'reference' })
   const notices = buildNotices({
     project: {

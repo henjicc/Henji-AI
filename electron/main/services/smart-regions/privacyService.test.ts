@@ -17,3 +17,13 @@ it('下载期间取消不派发推理，原片变化拒绝迟到结果', async (
   const other = setup(); vi.mocked(other.deps.identity).mockResolvedValueOnce({ path: 'source', identity: 'a' }).mockResolvedValueOnce({ path: 'source', identity: 'b' })
   await expect(other.service.detect(other.request)).rejects.toThrow('已变化'); expect(other.service.hasActiveJobs()).toBe(false)
 })
+it('精确档读取 small 权重和独立字典并透传光标；默认档读取 tiny', async () => {
+  const { deps, service, request } = setup()
+  const cursor = [{ monoUs: 4000000, point: [30, 40] as [number, number] }]
+  await service.detect({ ...request, quality: 'precise', cursor })
+  expect(deps.ensureModel).toHaveBeenCalledWith('text_recognition_ppocr_precise', 'dict')
+  expect(deps.infer).toHaveBeenCalledWith(expect.objectContaining({ dictionaryPath: 'text_recognition_ppocr_precise', normalization: 'bgr-unit', cursor }), expect.any(Function))
+  await service.detect(request)
+  expect(deps.ensureModel).toHaveBeenCalledWith('text_recognition_ppocr', 'dict')
+  expect(deps.infer).toHaveBeenLastCalledWith(expect.objectContaining({ normalization: 'rgb-half' }), expect.any(Function))
+})

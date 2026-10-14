@@ -13,7 +13,7 @@ import { ImageInpaintError, runImageInpaint } from './services/local-inference/i
 import type { ImageInpaintJob } from './services/local-inference/inpainting/protocol'
 import type { OcrPrivacyJob } from './services/local-inference/ocr/protocol'
 import { runOcrPrivacy } from './services/local-inference/ocr/pipeline'
-import { readOnnxCharacterMetadata } from './services/local-inference/tracking/onnxGraphOutputs'
+import { readRecognitionDictionary } from './services/local-inference/ocr/recognition'
 
 /*
  * 本地推理后台进程（重要记录 003、任务 4.7d）：onnxruntime-node 原生推理与取帧都在这里，主进程只协调。
@@ -116,7 +116,7 @@ async function run(job: SmartRegionAnalysisJob): Promise<void> {
     sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
     const pool = await sessions
     const result = await runSmartRegionAnalysis(job, {
-      openModel: (model, providers, shape) => pool.open(model, providers, shape),
+      openModel: (model, providers, shape, options) => pool.open(model, providers, shape, options),
       frames: request => ffmpegFrames(job.ffmpegPath, job, request, controller.signal),
       deflate: bytes => deflateRawSync(bytes, { level: 6 }),
       writeFile: (file, bytes) => fs.writeFile(file, bytes),
@@ -167,11 +167,11 @@ async function runPrivacy(job: OcrPrivacyJob): Promise<void> {
   try {
     const rec = job.models.find(m => m.name === 'ppocr_rec')
     if (!rec) throw new Error('文字识别模型未准备好。')
-    const alphabet = readOnnxCharacterMetadata(await fs.readFile(rec.path))
+    const alphabet = readRecognitionDictionary(await fs.readFile(job.dictionaryPath, 'utf8'))
     sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
     const pool = await sessions
     const result = await runOcrPrivacy(job, { alphabet, signal: controller.signal,
-      openModel: (model, providers, shape) => pool.open(model, providers, shape),
+      openModel: (model, providers, shape, options) => pool.open(model, providers, shape, options),
       frames: size => ffmpegFrames(job.ffmpegPath, job, size, controller.signal),
       progress: (done, total) => { const now = Date.now(); if (done < total && now - lastProgress < 200) return; lastProgress = now; post({ type: 'progress', id: job.id, done, total }) },
     })

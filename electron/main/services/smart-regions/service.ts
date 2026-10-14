@@ -56,7 +56,7 @@ const MODELS: Readonly<Record<SmartRegionAnalysisKind, Array<{ id: LocalModelId;
 
 function digest(parts: readonly unknown[]): string { return createHash('sha256').update(JSON.stringify(parts)).digest('hex') }
 /** 取帧时钟算法版本：丢弃修正容器起点前生成的错位缓存，文件容器格式不变。 */
-const ANALYSIS_CACHE_VERSION = 2
+const ANALYSIS_CACHE_VERSION = 3
 
 class SmartRegionFailure extends Error { constructor(readonly reason: SmartRegionFailureReason, message: string) { super(message) } }
 
