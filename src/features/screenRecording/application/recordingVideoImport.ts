@@ -6,6 +6,7 @@ import { getPlatform } from '@/platform'
 import { importVideoEditSources } from '@/features/videoEdit'
 import { openVideoEditDocument, saveVideoEdit } from '@/features/videoEdit'
 import type { RecordingDestination } from './recordingService'
+import { recordingMediaSpans } from './recordingTimeline'
 
 /** Real mono-time intervals share one origin. Pause/device gaps remain empty; audio latency is already compensated. */
 export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination): VideoEditDocument {
@@ -25,14 +26,7 @@ export function placeRecordingMedia(document: VideoEditDocument, recording: Reco
     const item = document.items.find(item => item.id === itemIds[index])
     const imported = document.media.find(value => value.id === item?.mediaId)
     if (!item || !imported) throw new Error('录制素材导入结果不完整')
-    let spans: Array<[number, number]> = [[source.monoUs, source.monoUs + Math.min(source.durationUs, Math.round(imported.durationSeconds * 1e6))]]
-    for (const gap of recording.tracks?.tracks.find(track => track.kind === source.kind)?.gaps ?? []) {
-      spans = spans.flatMap(([start, end]) => gap.monoSpanUs[1] <= start || gap.monoSpanUs[0] >= end ? [[start, end] as [number, number]] : [
-        ...(gap.monoSpanUs[0] > start ? [[start, gap.monoSpanUs[0]] as [number, number]] : []),
-        ...(gap.monoSpanUs[1] < end ? [[gap.monoSpanUs[1], end] as [number, number]] : []),
-      ])
-    }
-    for (const [start, end] of spans) {
+    for (const { startUs: start, endUs: end } of recordingMediaSpans(recording, source, Math.round(imported.durationSeconds * 1e6))) {
       const duration = Math.floor((end - start) * fps / 1e6 + 1e-6)
       if (duration < 1) continue
       const clip = makeVideoEditItemClip(document, item.id, sequence.id, { frame: (target.frame ?? 0) + Math.round((start - origin) * fps / 1e6), track: trackIndices.get(source.kind), duration, sourceInUs: start - source.monoUs, sourceOutUs: end - source.monoUs, ...(source.kind === 'screen' || source.kind === 'camera' ? { sourceComponent: 'video' as const } : {}) })

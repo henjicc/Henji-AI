@@ -12,6 +12,7 @@ function createRecordingSessionScene() {
       const button = name => page.getByRole('button', { name, exact: true })
       const list = kind => page.evaluate(kind => window.henjiNative.documents.listDocuments({ kind, includeDrafts: true, includeMissing: false }), kind)
       const read = id => page.evaluate(id => window.henjiNative.documents.readDocument({ id }), id)
+      const previews = []
       let client
       try {
         await button('工具').click()
@@ -28,6 +29,17 @@ function createRecordingSessionScene() {
           await page.getByRole('button', { name: source.name, exact: true }).click()
           await page.getByLabel('会话名称', { exact: true }).fill(name)
           if (name === '工具箱录制验收') {
+            await page.getByRole('switch', { name: '麦克风', exact: true }).click()
+            assert.equal(await page.getByLabel('麦克风设备', { exact: true }).count(), 0, '关闭麦克风后仍出现设备选择')
+            await page.screenshot({ path: path.join(output, 'preparation-microphone-off.png') })
+            await capture('recording-session-microphone-off')
+            await page.getByRole('switch', { name: '麦克风', exact: true }).click()
+            const captions = await page.evaluate(() => [...document.querySelectorAll('[data-recording-source-caption]')].map(caption => {
+              const card = caption.closest('button').getBoundingClientRect(), rect = caption.getBoundingClientRect()
+              const image = caption.parentElement.querySelector('img')?.getBoundingClientRect()
+              return { contained: rect.left >= card.left && rect.right <= card.right && rect.top >= card.top && rect.bottom <= card.bottom, belowImage: !image || rect.top >= image.bottom }
+            }))
+            assert(captions.length && captions.every(caption => caption.contained && caption.belowImage), '来源标题溢出卡片或与缩略图重叠')
             await page.screenshot({ path: path.join(output, 'preparation.png') })
             await capture('recording-session-preparation')
           }
@@ -37,19 +49,21 @@ function createRecordingSessionScene() {
           await page.waitForTimeout(5000)
           await page.getByLabel('标记备注', { exact: true }).fill('重点演示')
           await button('打标记').click()
+          if (name === '工具箱录制验收') {
+            await page.screenshot({ path: path.join(output, 'recording.png') })
+            await capture('recording-session-recording')
+          }
           await button('暂停').click()
           await page.waitForTimeout(600)
           await button('继续').click()
           await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === '暂停' && !button.disabled))
           await page.waitForTimeout(5000)
+          await page.getByLabel('标记备注', { exact: true }).fill('末段定位')
+          await button('打标记').click()
           assert((await page.evaluate(() => window.henjiNative.screenRecording.snapshot())).elapsedMs >= 10000, '未录满十秒')
           await button('停止并保存').click()
           await button('新建录制').waitFor({ state: 'visible', timeout: 30000 })
           await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === '新建录制' && !button.disabled), null, { timeout: 30000 })
-          await page.waitForFunction(() => document.querySelector('[data-testid="recording-preview"]')?.readyState >= 1)
-          await page.getByTestId('recording-preview').evaluate(video => video.play())
-          await page.waitForFunction(() => { const video = document.querySelector('[data-testid="recording-preview"]'); return video && video.currentTime > 0.3 && video.readyState >= 2 && !video.error }, null, { timeout: 15000 })
-          await page.getByTestId('recording-preview').evaluate(video => video.pause())
           const meta = (await list('screen_recording')).find(document => document.name === name)
           assert(meta, '会话未进入文档列表')
           const result = await read(meta.id)
@@ -60,6 +74,39 @@ function createRecordingSessionScene() {
           assert(result.content.eventPages.length > 0)
           assert(result.content.markers.some(marker => marker.note === '重点演示'))
           assert(result.content.tracks.tracks.find(track => track.kind === 'microphone').gaps.some(gap => gap.reason === 'pause'))
+          const media = result.content.media.filter(media => media.durationUs > 0)
+          const screen = media.filter(media => media.kind === 'screen').sort((a, b) => a.monoUs - b.monoUs)
+          assert(screen.length > 1, '验收录制未形成多个屏幕分片')
+          const origin = Math.min(...media.map(media => media.monoUs))
+          const duration = (Math.max(...media.map(media => media.monoUs + media.durationUs), ...result.content.markers.map(marker => marker.monoUs)) - origin) / 1e6
+          const viewer = page.getByTestId('recording-preview')
+          // A track may begin after another one; the initial empty interval is intentionally blank.
+          await viewer.waitFor({ state: 'attached' })
+          await page.waitForFunction(() => document.querySelector('[data-testid="recording-preview"]')?.readyState >= 1)
+          assert.equal(await viewer.evaluate(video => video.controls), false, '会话仍使用浏览器原生控制条')
+          assert(Math.abs(Number(await viewer.getAttribute('data-viewer-duration')) - duration) < 1e-6, '预览时长未覆盖全部分片')
+          assert.equal(await button('生成成片').count(), 0, '未接通的成片入口仍在界面')
+          assert.equal((await page.getByLabel('预览轨道').textContent()).trim(), '屏幕')
+          await viewer.evaluate(video => { video.__tourPlayedSources = []; video.addEventListener('playing', () => video.__tourPlayedSources.push(video.getAttribute('src'))) })
+          await button('播放/暂停').click()
+          await page.waitForFunction(duration => {
+            const video = document.querySelector('[data-testid="recording-preview"]')
+            return video && Number(video.dataset.viewerTime) >= duration && !video.error
+          }, duration, { timeout: Math.ceil(duration * 1000) + 20000 })
+          const crossed = await viewer.evaluate(video => ({ time: Number(video.dataset.viewerTime), playedSources: video.__tourPlayedSources }))
+          for (const segment of screen) assert(crossed.playedSources.some(source => source.includes(path.basename(segment.path))), `自动播放跳过分片：${path.basename(segment.path)}`)
+          const marker = result.content.markers.find(marker => marker.note === '末段定位')
+          const markerTime = (marker.monoUs - origin) / 1e6
+          await page.getByRole('button', { name: /末段定位/ }).click()
+          await page.waitForFunction(target => {
+            const video = document.querySelector('[data-testid="recording-preview"]')
+            return video && Math.abs(Number(video.dataset.viewerTime) - target) < 0.001 && video.readyState >= 2 && !video.seeking && !video.error
+          }, markerTime, { timeout: 15000 })
+          const located = await viewer.evaluate(video => ({ time: Number(video.dataset.viewerTime), sourceTime: video.currentTime, source: video.getAttribute('src') }))
+          const segment = screen.find(media => media.monoUs <= marker.monoUs && marker.monoUs < media.monoUs + media.durationUs)
+          assert(segment && located.source.includes(path.basename(segment.path)), '末段标记未定位到正确文件')
+          assert(Math.abs(located.sourceTime - (marker.monoUs - segment.monoUs) / 1e6) <= 1 / 30, '标记定位误差超过一帧')
+          previews.push({ name, duration, screenSegments: screen.length, crossed, located, markerTime })
           return result
         }
         const toolbox = await record('工具箱录制验收')
@@ -106,7 +153,7 @@ function createRecordingSessionScene() {
         assert(stopped.result.data.verified, 'MCP 停止没有持久化证据')
         const completed = await callTool(client, 'read_application_entity', { ref: sessionRef })
         assert.equal(completed.data.properties['screen_recording.session.phase'], 'stopped')
-        fs.writeFileSync(path.join(output, 'evidence.json'), JSON.stringify({ toolbox: toolbox.meta, editing: editing.meta, media: editing.content.media, events: editing.content.eventPages.length, clips: added, mcp: { started, stopped, completed }, devices: 'Chromium virtual default microphone', backend: editing.content.source.cursorEmbedded ? 'chromium' : 'gfxcapture' }, null, 2))
+        fs.writeFileSync(path.join(output, 'evidence.json'), JSON.stringify({ toolbox: toolbox.meta, editing: editing.meta, media: editing.content.media, events: editing.content.eventPages.length, clips: added, previews, mcp: { started, stopped, completed }, devices: 'Chromium virtual default microphone', backend: editing.content.source.cursorEmbedded ? 'chromium' : 'gfxcapture' }, null, 2))
       } finally {
         await client?.close().catch(() => {})
         await disableMcp(page).catch(() => {})

@@ -4,7 +4,24 @@ import { createRecordingDocument } from '@/core/screenRecording/document'
 vi.mock('@/platform', () => ({ getPlatform: vi.fn() }))
 vi.mock('@/features/videoEdit/application/videoEditMedia', () => ({ importVideoEditSources: vi.fn() }))
 vi.mock('@/features/videoEdit/application/videoEditService', () => ({ openVideoEditDocument: vi.fn(), saveVideoEdit: vi.fn() }))
-import { placeRecordingMedia } from './recordingVideoImport'
+import { placeRecordingMedia, importRecordingToVideo } from './recordingVideoImport'
+import { getPlatform } from '@/platform'
+import { importVideoEditSources } from '@/features/videoEdit'
+
+it('工具箱送入剪辑与停止自动导入的共享入口保留所有原片，不只取首片', async () => {
+  const recording = createRecordingDocument()
+  recording.status = 'stopped'
+  recording.media = [
+    { id: 'first', kind: 'screen', path: '/first.mp4', monoUs: 0, durationUs: 5000000 },
+    { id: 'mic', kind: 'microphone', path: '/mic.wav', monoUs: 0, durationUs: 11000000 },
+    { id: 'last', kind: 'screen', path: '/last.mp4', monoUs: 6000000, durationUs: 5000000 },
+  ]
+  vi.mocked(getPlatform).mockReturnValue({ documents: { readDocument: async () => ({ meta: { kind: 'screen_recording' }, content: recording }) } } as unknown as ReturnType<typeof getPlatform>)
+  vi.mocked(importVideoEditSources).mockResolvedValue(['first', 'mic', 'last'])
+  const ids = await importRecordingToVideo('recording', { documentId: 'editing' })
+  expect(ids).toEqual(['first', 'mic', 'last'])
+  expect(vi.mocked(importVideoEditSources).mock.calls.at(-1)?.[1]).toEqual(recording.media.map(media => ({ path: media.path })))
+})
 
 it('以实际时间对齐音画，暂停/缺帧留空，不重复补偿音频延迟；摄像头位于屏幕上方', () => {
   const document = createVideoEditDocument('剪辑'), sequence = createVideoEditSequence('课程')

@@ -8,6 +8,7 @@ import { createLogger } from '@/core/logging'
 import { readVideoInfo } from '@/commands/video'
 import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
+import { useVideoViewerTimeline, type VideoViewerTimeline, type VideoViewerSeek } from './useVideoViewerTimeline'
 import { UiViewerShell, useUiViewerShell } from '@/components/ui';
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
@@ -30,13 +31,19 @@ export interface VideoViewerModalProps {
   /** 若视频有关联的裁剪选区，自动从 start 开始播放并在 end 处跳回——
    *  进度条仍显示完整时长，满足"看起来是完整视频，但只播放选中段"的体验要求 */
   trimRange?: { start: number; end: number }
+  /** Inline hosts reuse the same playback and controls without claiming a modal layer. */
+  presentation?: 'modal' | 'inline'
+  timeline?: VideoViewerTimeline
+  seekRequest?: VideoViewerSeek
+  mediaTestId?: string
 }
 
-export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange }: VideoViewerModalProps): JSX.Element | null {
+export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange, presentation = 'modal', timeline, seekRequest, mediaTestId }: VideoViewerModalProps): JSX.Element | null {
   const { t } = useI18n()
-  const viewer = useUiViewerShell(open, onClose, { enterKey: videoUrl })
-  const isVisible = viewer.shouldRender
-  const overlayOpacity = viewer.opacity
+  const inline = presentation === 'inline'
+  const viewer = useUiViewerShell(open && !inline, onClose, { enterKey: videoUrl })
+  const isVisible = inline ? open : viewer.shouldRender
+  const overlayOpacity = inline ? 1 : viewer.opacity
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoViewportRef = useRef<HTMLDivElement>(null)
   const progressBarRef = useRef<HTMLDivElement>(null)
@@ -57,7 +64,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const [isBuffering, setIsBuffering] = useState(false)
   // 视频文件被移动或删除时不留空黑画面与一直转圈的缓冲，显示可理解的失败提示（任务 5.8，与图片查看器同源）
   const [failedVideo, setFailedVideo] = useState<string | null>(null)
-  const videoFailed = Boolean(videoUrl) && failedVideo === videoUrl
   const [isControlsVisible, setIsControlsVisible] = useState(true)
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false)
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false)
@@ -69,6 +75,13 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     width: 0,
     height: 0,
   })
+  const timelinePlayer = useVideoViewerTimeline(timeline, videoRef, open, playbackRate, loop, seekRequest)
+  const sourceUrl = timelinePlayer.segment?.videoUrl ?? videoUrl
+  const sourcePath = timelinePlayer.segment?.filePath ?? filePath
+  const videoFailed = Boolean(sourceUrl) && failedVideo === sourceUrl
+  const displayedTime = timeline ? timelinePlayer.currentTime : currentTime
+  const displayedDuration = timeline?.duration ?? videoDuration
+  const displayedPlaying = timeline ? timelinePlayer.playing : isVideoPlaying
   const controlsHideTimer = useRef<number | null>(null)
   const volumeIndicatorTimer = useRef<number | null>(null)
 
@@ -91,7 +104,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     if (!open) return
     let cancelled = false
     setHasAudio(null)
-    void readVideoInfo(filePath ?? videoUrl).then(
+    void readVideoInfo(sourcePath ?? sourceUrl).then(
       (info) => {
         if (cancelled) return
         setHasAudio(info.hasAudio)
@@ -101,7 +114,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       },
     )
     return () => { cancelled = true }
-  }, [filePath, open, videoUrl])
+  }, [sourcePath, open, sourceUrl])
 
   useEffect(() => {
     if (open) return
@@ -112,8 +125,14 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   }, [open, isVisible])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || inline) return
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable=true], button'))) return
+      if (timeline) {
+        if (e.key === ' ') { e.preventDefault(); timelinePlayer.togglePlay() }
+        else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); timelinePlayer.seek(displayedTime + (e.key === 'ArrowLeft' ? -1 : 1)) }
+        return
+      }
       if (e.key === ' ') {
         e.preventDefault()
         if (videoRef.current) {
@@ -139,7 +158,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, isVideoPlaying])
+  }, [open, inline, isVideoPlaying, timeline, timelinePlayer, displayedTime])
 
   useEffect(() => {
     if (!open) return
@@ -184,29 +203,29 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   useEffect(() => {
     if (!open) return
-    if (!videoDuration) {
+    if (!displayedDuration) {
       if (progressFillRef.current) progressFillRef.current.style.width = '0%'
       return
     }
-    const percent = Math.min(1, Math.max(0, currentTime / videoDuration))
+    const percent = Math.min(1, Math.max(0, displayedTime / displayedDuration))
     if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%`
-  }, [currentTime, videoDuration, open])
+  }, [displayedTime, displayedDuration, open])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume
-  }, [volume, isVisible, videoUrl])
+  }, [volume, isVisible, sourceUrl])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted
-  }, [muted, isVisible, videoUrl])
+  }, [muted, isVisible, sourceUrl])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = playbackRate
-  }, [playbackRate, isVisible, videoUrl])
+  }, [playbackRate, isVisible, sourceUrl])
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.loop = loop
-  }, [loop, isVisible, videoUrl])
+    if (videoRef.current) videoRef.current.loop = timeline ? false : loop
+  }, [loop, isVisible, sourceUrl, timeline])
 
   const showVolumeHud = useCallback((): void => {
     setShowVolumeIndicator(true)
@@ -271,6 +290,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   }, [])
 
   const togglePlay = () => {
+    if (timeline) { timelinePlayer.togglePlay(); return }
     if (!videoRef.current) return
     if (isVideoPlaying) {
       videoRef.current.pause()
@@ -295,16 +315,18 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   const handleProgressAt = useCallback((clientX: number): void => {
     const el = progressBarRef.current
-    if (!el || !videoDuration) return
+    if (!el || !displayedDuration) return
     const rect = el.getBoundingClientRect()
     const percent = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-    const t = percent * videoDuration
+    const t = percent * displayedDuration
+    if (timeline) { timelinePlayer.seek(t); return }
     setCurrentTime(t)
     if (videoRef.current) videoRef.current.currentTime = t
     if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%`
-  }, [videoDuration])
+  }, [displayedDuration, timeline, timelinePlayer])
 
   const handleViewportClick = useCallback((e: React.MouseEvent<HTMLDivElement>): void => {
+    if (inline) return
     const viewport = videoViewportRef.current
     if (!viewport) return
 
@@ -321,7 +343,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     if (!isInsideRenderedVideo) {
       onClose()
     }
-  }, [onClose, renderedVideoRect])
+  }, [inline, onClose, renderedVideoRect])
 
   useEffect(() => {
     if (!isVisible) return
@@ -349,7 +371,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     }
   }, [isVisible, updateRenderedVideoRect])
 
-  const isOverlayControlsVisible = isSpeedMenuOpen || isControlsVisible
+  const isOverlayControlsVisible = inline || isSpeedMenuOpen || isControlsVisible
 
   // 画面上滚轮调音量并拦住页面滚动：React onWheel 是被动的，走非被动原生监听
   useNonPassiveWheel(videoRef, (e) => {
@@ -361,10 +383,8 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   if (!isVisible) return null
 
-  return createPortal(
-    <UiViewerShell viewer={viewer} presentation="centered" aria-label={t('viewer.videoAlt', '视频')}>
-      <div
-        className="relative isolate w-[92vw] h-[90vh] flex items-center justify-center"
+  const content = <div
+        className={inline ? "relative isolate aspect-video w-full bg-media flex items-center justify-center" : "relative isolate w-[92vw] h-[90vh] flex items-center justify-center"}
         onMouseEnter={() => {
           setIsControlsVisible(true)
           scheduleHideControls()
@@ -405,10 +425,18 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
           <video
             ref={videoRef}
-            src={videoUrl}
-            className="w-full h-full object-contain"
+            src={sourceUrl}
+            data-testid={mediaTestId}
+            data-viewer-time={timeline ? displayedTime : undefined}
+            data-viewer-duration={timeline?.duration}
+            data-viewer-gap={timelinePlayer.gap || undefined}
+            data-observation-sensitive
+            preload="auto"
+            playsInline
+            className={`w-full h-full object-contain ${timeline && timelinePlayer.gap ? "invisible" : ""}`}
             style={{ opacity: viewerOpacity * overlayOpacity, transition: uiTransition(['opacity'], UI_DURATION.viewer) }}
             onLoadedMetadata={() => {
+              if (timeline) { timelinePlayer.loaded(); updateRenderedVideoRect(); return }
               if (videoRef.current) {
                 setVideoDuration(videoRef.current.duration || 0)
                 updateRenderedVideoRect()
@@ -424,6 +452,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               }
             }}
             onTimeUpdate={() => {
+              if (timeline) return
               const v = videoRef.current
               if (!v) return
               setCurrentTime(v.currentTime || 0)
@@ -434,17 +463,20 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
                 v.currentTime = trimRange.start
               }
             }}
+            onEnded={() => { if (timeline) timelinePlayer.ended() }}
             onPlaying={() => {
+              if (timeline) { timelinePlayer.setBuffering(false); return }
               setIsBuffering(false)
               setIsVideoPlaying(true)
             }}
-            onPause={() => setIsVideoPlaying(false)}
-            onWaiting={() => setIsBuffering(true)}
-            onStalled={() => setIsBuffering(true)}
+            onPause={() => { if (!timeline) setIsVideoPlaying(false) }}
+            onWaiting={() => { if (timeline) timelinePlayer.setBuffering(true); else setIsBuffering(true) }}
+            onStalled={() => { if (timeline) timelinePlayer.setBuffering(true); else setIsBuffering(true) }}
             onError={() => {
               logger.warn('video_viewer.load_failed', { reason: 'video_load_failed' })
               setIsBuffering(false)
-              setFailedVideo(videoUrl)
+              timelinePlayer.failed()
+              setFailedVideo(sourceUrl)
             }}
             onClick={togglePlay}
             controls={false}
@@ -457,7 +489,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               </div>
             </div>
           )}
-          <div
+          {!inline && <div
             className="absolute z-raised pointer-events-none"
             style={{
               left: renderedVideoRect.left,
@@ -475,22 +507,22 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             >
               <X  />
             </UiIconButton>
-          </div>
+          </div>}
         </div>
         <VideoViewerControls
           controlsContainerRef={controlsContainerRef}
           progressBarRef={progressBarRef}
           progressFillRef={progressFillRef}
-          isControlsVisible={isControlsVisible}
+          isControlsVisible={isOverlayControlsVisible}
           isSpeedMenuOpen={isSpeedMenuOpen}
           setIsSpeedMenuOpen={setIsSpeedMenuOpen}
           isDraggingProgress={isDraggingProgress}
           setIsDraggingProgress={setIsDraggingProgress}
           handleProgressAt={handleProgressAt}
-          isVideoPlaying={isVideoPlaying}
+          isVideoPlaying={displayedPlaying}
           togglePlay={togglePlay}
-          currentTime={currentTime}
-          videoDuration={videoDuration}
+          currentTime={displayedTime}
+          videoDuration={displayedDuration}
           muted={muted}
           volume={volume}
           hasAudio={hasAudio}
@@ -502,11 +534,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           setLoop={setLoop}
           onDownload={onDownload}
           filePath={filePath}
-          isBuffering={isBuffering}
+          isBuffering={timeline ? timelinePlayer.buffering : isBuffering}
           trimRange={trimRange}
         />
       </div>
-    </UiViewerShell>,
-    document.body,
-  )
+  return inline ? content : createPortal(<UiViewerShell viewer={viewer} presentation="centered" aria-label={t('viewer.videoAlt', '视频')}>{content}</UiViewerShell>, document.body)
 }
