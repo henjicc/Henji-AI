@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { captureRequestSchema } from './capture'
 
 export const captureKinds = ['microphone', 'camera', 'screen', 'systemAudio'] as const
 export type CaptureKind = typeof captureKinds[number]
@@ -52,6 +53,7 @@ export const captureSelectionSchema = z.object({
 }).strict()
 export type CaptureSelection = z.infer<typeof captureSelectionSchema>
 export const screenRecordingRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('capture'), request: captureRequestSchema }).strict(),
   z.object({ action: z.literal('sources'), excludedSourceIds: z.array(z.string()).max(256).default([]) }).strict(),
   z.object({ action: z.literal('permissions') }).strict(),
   z.object({ action: z.literal('grant'), sessionId, userReceipt: z.string().uuid(), kinds: z.array(z.enum(captureKinds)).min(1).max(4), selection: captureSelectionSchema.optional() }).strict(),

@@ -21,6 +21,16 @@ function fixture(): { service: MediaPermissionService; target: Session; contents
 beforeEach(() => { vi.clearAllMocks(); mocks.sources.mockResolvedValue([{ id: 'window:42:0', name: '编辑器', display_id: '' }, { id: 'screen:0:0', name: '屏幕', display_id: '1' }]); mocks.status.mockReturnValue('granted') })
 
 describe('统一媒体权限', () => {
+  it('原生采集必须匹配窗口、会话和预选源；撤销后不能绕过 Chromium 继续采集', () => {
+    const { service, contents } = fixture()
+    expect(() => service.assertSelection(contents, 'capture', 'screen:0:0')).toThrow('授权已失效')
+    service.grant(contents, 'capture', ['screen'], { sourceId: 'screen:0:0', excludedSourceIds: [] })
+    expect(() => service.assertSelection(contents, 'capture', 'screen:0:0')).not.toThrow()
+    expect(() => service.assertSelection(contents, 'different', 'screen:0:0')).toThrow('授权已失效')
+    expect(() => service.assertSelection(contents, 'capture', 'window:42:0')).toThrow('授权已失效')
+    service.revoke(contents, 'capture')
+    expect(() => service.assertSelection(contents, 'capture', 'screen:0:0')).toThrow('授权已失效')
+  })
   it('未登记拒绝、会话类型最小放行、撤销隔离且不覆盖已安装处理器', () => {
     const { service, target, contents, hooks } = fixture()
     const check = (kind: 'audio' | 'video'): boolean => hooks.check(contents, 'media', '', { mediaType: kind, securityOrigin: 'app://henji', isMainFrame: true })

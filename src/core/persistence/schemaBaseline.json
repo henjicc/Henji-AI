@@ -220,6 +220,11 @@
       "version": 2,
       "fingerprint": "f6e809a60ecfcb39ddd70f0d4f3d6529f7d0834ba79bc5c24e6f8fb2b79bc9ee",
       "supportedFrom": 1
+    },
+    "screen-capture": {
+      "version": 1,
+      "fingerprint": "4e9e82dfecd4a349f4b2409ab6351352e72cf633f109280a060fdafac86ee8b2",
+      "supportedFrom": 1
     }
   },
   "devBreaks": [

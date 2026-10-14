@@ -1,6 +1,9 @@
 import type { CaptureKind, CapturePermissionStatus, CaptureSelection, CaptureSource, RecordingAction, RecordingControlSnapshot, RecordingShortcuts } from '../../core/screenRecording/contracts'
+import type { CaptureCommand, CaptureRequest } from '../../core/screenRecording/capture'
 
 export interface ScreenRecordingPlatform {
+  capture(request: CaptureRequest): Promise<unknown>
+  onCaptureCommand(listener: (command: CaptureCommand) => void): () => void
   sources(excludedSourceIds?: string[]): Promise<CaptureSource[]>
   permissions(): Promise<CapturePermissionStatus[]>
   grant(input: { sessionId: string; userReceipt: string; kinds: CaptureKind[]; selection?: CaptureSelection }): Promise<void>

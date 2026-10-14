@@ -117,6 +117,7 @@ export class RecordingControlService {
     this.publish()
     const task = Promise.resolve().then(() => active.backend[operation](active.abort.signal)).then(() => {
       if (this.active !== active) return
+      if (active.snapshot.phase === 'failed' && operation !== 'stop') return
       if (operation === 'pause') { active.elapsed += Math.max(0, this.deps.now() - active.startedAt); active.snapshot.phase = 'paused'; active.snapshot.microphoneLevel = null }
       if (operation === 'start' || operation === 'resume') { active.startedAt = this.deps.now(); active.snapshot.phase = 'recording' }
       if (operation === 'stop') { active.snapshot.phase = 'stopped'; active.snapshot.microphoneLevel = null; this.releaseResources() }
@@ -144,13 +145,22 @@ export class RecordingControlService {
     this.active.snapshot.microphoneLevel = this.active.snapshot.phase === 'recording' && level !== null && Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : null
   }
 
+  /** Device/process failures arrive outside a control command. Preserve the failed result for readback. */
+  fail(sessionId: string, message: string): void {
+    const active = this.active
+    if (!active || active.snapshot.sessionId !== sessionId) return
+    if (active.snapshot.phase === 'recording') active.elapsed += Math.max(0, this.deps.now() - active.startedAt)
+    active.snapshot.phase = 'failed'; active.snapshot.error = message; active.snapshot.microphoneLevel = null
+    this.releaseResources(); this.publish()
+  }
+
   /** 失去宿主时立即释放权限/快捷键，并通知后端取消；旧 Promise 不得污染新会话。 */
   async dispose(): Promise<void> {
     const active = this.active
     active?.abort.abort()
     this.active = null; this.pending = null
     this.releaseResources(); this.publish()
-    if (active && active.snapshot.phase !== 'stopped') {
+    if (active) {
       try { await active.backend.cancel() } catch (error) { this.deps.log('recording.control.cancel.failed', error); throw error }
     }
   }

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "sessionId": "00000000-0000-4000-8000-000000000001",
+  "options": {
+    "sourceId": "screen:0:0",
+    "backend": "auto",
+    "width": 1920,
+    "height": 1080,
+    "fps": 60,
+    "bitrate": 12000000
+  },
+  "backend": "gfxcapture",
+  "cursorEmbedded": false,
+  "status": "stopped",
+  "spans": [
+    {
+      "index": 0,
+      "file": "screen-000000.mp4",
+      "monoUs": 500000,
+      "durationUs": 30000000,
+      "finalized": true
+    }
+  ]
+}

@@ -17,6 +17,7 @@ export function registerScreenRecordingIpc(): void {
     if (request.action === 'control' && recordingControl.snapshot()?.sessionId !== request.sessionId) throw new Error('录制会话已改变，请刷新后重试')
     try {
       switch (request.action) {
+        case 'capture': return await (await import('../services/screen-recording/capture/service')).handleCaptureRequest(event.sender, request.request)
         case 'sources': return await mediaPermissions.sources(request.excludedSourceIds)
         case 'permissions': return mediaPermissions.statuses()
         case 'grant': {
@@ -26,7 +27,9 @@ export function registerScreenRecordingIpc(): void {
           mediaPermissions.grant(event.sender, request.sessionId, request.kinds, request.selection)
           return
         }
-        case 'revoke': return mediaPermissions.revoke(event.sender, request.sessionId)
+        case 'revoke':
+          mediaPermissions.revoke(event.sender, request.sessionId)
+          return await (await import('../services/screen-recording/capture/service')).revokeCaptureSession(event.sender, request.sessionId)
         case 'settings': return await mediaPermissions.openSettings(request.kind)
         case 'snapshot': return recordingControl.snapshot()
         case 'shortcuts': return recordingControl.configureShortcuts(request.shortcuts)
