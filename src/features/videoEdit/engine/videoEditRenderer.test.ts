@@ -590,6 +590,21 @@ it('暂停短时预拉当前位置，实际起播复用；重画保留计划，�
   } finally { await renderer.dispose() }
 })
 
+it('暂停预热短租期结束归还排程，长时间做 OCR 不占住原生帧池；真正播放接管租期', async () => {
+  vi.useFakeTimers()
+  const renderer = new VideoEditRenderer(fixture(), 3840)
+  const internals = renderer as unknown as { playback?: unknown }
+  try {
+    await renderer.armPlayback(0)
+    expect(internals.playback).toBeDefined()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(internals.playback).toBeUndefined()
+    await renderer.armPlayback(0)
+    await (await renderer.render(0, true)).completion
+    await vi.advanceTimersByTimeAsync(3500)
+    expect(internals.playback).toBeDefined()
+  } finally { await renderer.dispose(); vi.useRealTimers() }
+})
 it('源文件缺失时给出可操作的提示，失败不缓存；重新定位到同一素材后立即恢复画面', async () => {
   const base = fixture()
   const missing = { ...base, media: base.media.map(media => media.id === 'A' ? { ...media, path: 'D:/missing.mp4' } : media) }

@@ -22,10 +22,11 @@ export interface LocalModelRunner {
 }
 
 export interface FrameRequest { width: number; height: number }
+export interface LocalSessionOptions { intraOpNumThreads?: number; allowSpinning?: boolean }
 
 export interface SmartRegionAnalysisDependencies {
   /** 打开（或复用）模型会话；`shape` 是固定的输入尺寸，DirectML 按固定尺寸编译最快。运行失败的回退由会话自己负责。 */
-  openModel(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string): Promise<LocalModelRunner>
+  openModel(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string, options?: LocalSessionOptions): Promise<LocalModelRunner>
   /** 按尺寸解码出 RGB24 帧（拉伸到给定宽高）。 */
   frames(request: FrameRequest): AsyncIterable<Uint8Array>
   deflate(bytes: Uint8Array): Uint8Array

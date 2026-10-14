@@ -1,3 +1,4 @@
+const { createOcrPrivacyScene } = require('./uiInspectionSceneOcrPrivacy.cjs')
 const { createScreenAttentionScene } = require('./uiInspectionSceneScreenAttention.cjs')
 const { createRecordingCursorScene } = require('./uiInspectionSceneRecordingCursor.cjs')
 const { createVideoEditFirstFrameScene } = require('./uiInspectionSceneVideoEditFirstFrame.cjs')
@@ -259,6 +260,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createRecordingTracksScene(),
     createRecordingSessionScene(),
     createRecordingMovieScene(),
+    createOcrPrivacyScene(),
   ])
 }
 

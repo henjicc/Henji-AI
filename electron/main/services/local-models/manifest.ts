@@ -39,7 +39,7 @@ export interface LocalModelSource {
 export interface LocalModelFileSpec {
   /** 存到本地的文件名。 */
   name: string
-  role: 'model'
+  role: 'model' | 'dict'
   sizeBytes: number
   sha256: string
   sources: readonly LocalModelSource[]
@@ -170,24 +170,22 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
   },
   {
     id: 'text_detection_ppocr',
-    title: { zh: '文字检测 PP-OCR', en: 'Text Detection (PP-OCR)' },
+    title: { zh: '文字检测 PP-OCR', en: 'Text Detection PP-OCR' },
     purpose: { zh: '找出画面中的文字区域，用于擦字幕与文字打码', en: 'Finds text regions for subtitle removal and text blur' },
     folderName: { zh: '文字检测 PP-OCR', en: 'Text Detection PP-OCR' },
-    // PaddleOCR 官方只发布 Paddle 格式；ONNX 由 RapidOCR 项目转换发布（Apache-2.0），其主仓库在 ModelScope。
-    homepage: 'https://github.com/RapidAI/RapidOCR',
-    license: { spdx: 'Apache-2.0', url: 'https://github.com/RapidAI/RapidOCR/blob/main/LICENSE' },
+    homepage: 'https://github.com/PaddlePaddle/PaddleOCR',
+    license: { spdx: 'Apache-2.0', url: 'https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE' },
     availability: 'available',
-    files: [{
-      name: 'ch_PP-OCRv4_det_mobile.onnx',
-      role: 'model',
-      sizeBytes: 4_745_517,
-      sha256: 'd2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9',
-      sources: [
-        { region: 'domestic', label: 'own-modelscope', url: ownUrl('text_detection_ppocr/ch_PP-OCRv4_det_mobile.onnx') },
-        { region: 'domestic', label: 'modelscope-rapidocr', url: modelScopeUrl('RapidAI/RapidOCR', 'onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx') },
-        { region: 'global', label: 'huggingface-rapidocr', url: huggingFaceUrl('SWHL/RapidOCR', 'PP-OCRv4/ch_PP-OCRv4_det_infer.onnx') },
-      ],
-    }],
+    // Official PaddleOCR v6 ONNX, redistributed unchanged by oar-ocr v0.7.0.
+    files: [
+      { name: 'pp-ocrv6_tiny_det.onnx', role: 'model', sizeBytes: 1780590,
+        sha256: '193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8',
+        sources: [
+          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'pp-ocrv6_tiny_det.onnx') },
+          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/pp-ocrv6_tiny_det.onnx' },
+        ],
+      },
+    ],
   },
   {
     id: 'object_tracking_vittrack',
@@ -211,20 +209,55 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
   },
   {
     id: 'text_recognition_ppocr',
-    title: { zh: '文字识别 PP-OCR', en: 'Text Recognition (PP-OCR)' },
-    purpose: { zh: '本机读取中英文文字，用于敏感信息候选打码', en: 'Reads Chinese and English text locally for sensitive-text redaction candidates' },
+    title: { zh: '文字识别 PP-OCR', en: 'Text Recognition PP-OCR' },
+    purpose: { zh: '本机快速读取中英文，用于敏感信息候选打码', en: 'Reads Chinese and English locally for sensitive-text candidates' },
     folderName: { zh: '文字识别 PP-OCR', en: 'Text Recognition PP-OCR' },
-    homepage: 'https://github.com/RapidAI/RapidOCR',
-    license: { spdx: 'Apache-2.0', url: 'https://github.com/RapidAI/RapidOCR/blob/main/LICENSE' },
+    homepage: 'https://github.com/PaddlePaddle/PaddleOCR',
+    license: { spdx: 'Apache-2.0', url: 'https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE' },
     availability: 'available',
-    files: [{ name: 'ch_PP-OCRv4_rec_mobile.onnx', role: 'model', sizeBytes: 10_857_958,
-      sha256: '48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b',
-      sources: [
-        { region: 'domestic', label: 'own-modelscope', url: ownUrl('text_recognition_ppocr/ch_PP-OCRv4_rec_mobile.onnx') },
-        { region: 'domestic', label: 'modelscope-rapidocr', url: 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.onnx' },
-        { region: 'global', label: 'huggingface-rapidocr', url: huggingFaceUrl('SWHL/RapidOCR', 'PP-OCRv4/ch_PP-OCRv4_rec_infer.onnx') },
-      ],
-    }],
+    // Official PaddleOCR v6 ONNX, redistributed unchanged by oar-ocr v0.7.0.
+    files: [
+      { name: 'pp-ocrv6_tiny_rec.onnx', role: 'model', sizeBytes: 4462639,
+        sha256: '9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6',
+        sources: [
+          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'pp-ocrv6_tiny_rec.onnx') },
+          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/pp-ocrv6_tiny_rec.onnx' },
+        ],
+      },
+      { name: 'ppocrv6_tiny_dict.txt', role: 'dict', sizeBytes: 27156,
+        sha256: 'c5cbe34ef40c29c4df07ed012bf96569cb69a2d2a01a07027e9f13cb832bd9cd',
+        sources: [
+          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'ppocrv6_tiny_dict.txt') },
+          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/ppocrv6_tiny_dict.txt' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'text_recognition_ppocr_precise',
+    title: { zh: '文字识别 PP-OCR 精确', en: 'Text Recognition PP-OCR Precise' },
+    purpose: { zh: '本机精确读取中英文，用于敏感信息候选打码', en: 'Reads Chinese and English locally for sensitive-text candidates' },
+    folderName: { zh: '文字识别 PP-OCR 精确', en: 'Text Recognition PP-OCR Precise' },
+    homepage: 'https://github.com/PaddlePaddle/PaddleOCR',
+    license: { spdx: 'Apache-2.0', url: 'https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE' },
+    availability: 'available',
+    // Official PaddleOCR v6 ONNX, redistributed unchanged by oar-ocr v0.7.0.
+    files: [
+      { name: 'pp-ocrv6_small_rec.onnx', role: 'model', sizeBytes: 21159378,
+        sha256: '5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634',
+        sources: [
+          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'pp-ocrv6_small_rec.onnx') },
+          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/pp-ocrv6_small_rec.onnx' },
+        ],
+      },
+      { name: 'ppocrv6_dict.txt', role: 'dict', sizeBytes: 74947,
+        sha256: 'b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d',
+        sources: [
+          { region: 'domestic', label: 'modelscope-oar-ocr', url: modelScopeUrl('greatv/oar-ocr', 'ppocrv6_dict.txt') },
+          { region: 'global', label: 'github-oar-ocr', url: 'https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/ppocrv6_dict.txt' },
+        ],
+      },
+    ],
   },
   {
     id: 'object_tracking_efficienttam',

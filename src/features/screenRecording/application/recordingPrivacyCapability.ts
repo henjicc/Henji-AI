@@ -11,7 +11,7 @@ export async function executeRecordingPrivacy(raw: unknown, context: CapabilityE
   if (context.callerGrant) { const access = applicationCallerAccess(context.callerGrant, context.requestId ?? crypto.randomUUID(), context.signal); if (!access.permissions.has('screen_recording:read')) throw new Error('PERMISSION_DENIED:隐私分析还需要 screen_recording:read。') }
   const before = await readRecordingUnderstanding(input.sessionRef.id)
   if (context.expectedRevisions?.screen_recording !== undefined && before.meta.revision !== context.expectedRevisions.screen_recording) throw new Error('CONFLICT:会话已改变，请重新读取。')
-  const result = await analyzeRecordingPrivacy(input.sessionRef.id, context.signal)
+  const result = await analyzeRecordingPrivacy(input.sessionRef.id, context.signal, undefined, input.quality)
   if (result.revision !== before.meta.revision) throw new Error('CONFLICT:会话已变化，请重新识别。')
   context.signal.throwIfAborted()
   if (context.callerGrant) applicationCallerAccess(context.callerGrant, context.requestId ?? crypto.randomUUID(), context.signal)

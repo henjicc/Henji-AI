@@ -20,3 +20,17 @@ describe('图片修补模型的固定下载契约', () => {
     expect(model.files[0].sources.find(source => source.region === 'global')?.url).toContain(`/resolve/${revision}/`)
   })
 })
+
+it('OCR v6 使用官方 fp32 文件与独立字典，固定哈希、不虚构自有镜像', () => {
+  for (const id of ['text_detection_ppocr', 'text_recognition_ppocr']) {
+    const model = LOCAL_MODEL_MANIFEST.find(m => m.id === id)!
+    expect(model.license.spdx).toBe('Apache-2.0')
+    for (const file of model.files) {
+      expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
+      expect(file.name).not.toContain('int8')
+      expect(file.sources.every(s => s.url.includes('oar-ocr'))).toBe(true)
+      expect(file.sources.find(s => s.region === 'global')?.url).toContain('/v0.7.0/')
+    }
+  }
+  expect(LOCAL_MODEL_MANIFEST.find(m => m.id === 'text_recognition_ppocr')!.files.map(f => f.role)).toEqual(['model', 'dict'])
+})

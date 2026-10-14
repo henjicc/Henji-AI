@@ -13,6 +13,7 @@ export const LOCAL_MODEL_IDS = [
   'selfie_segmentation',
   'text_detection_ppocr',
   'text_recognition_ppocr',
+  'text_recognition_ppocr_precise',
   'object_tracking_vittrack',
   'object_tracking_efficienttam',
   'image_inpainting_migan',

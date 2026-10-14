@@ -34,7 +34,7 @@ let privacyService: OcrPrivacyService | undefined
 export function getOcrPrivacyService(): OcrPrivacyService {
   if (privacyService) return privacyService
   const created = new OcrPrivacyService({ identity: identifyMediaContent, probe: async source => probeSmartRegionSource(await loadFfprobePath(), source),
-    ensureModel: async id => { const model = await ensureLocalModel(id); const file = model.files.find(v => v.role === 'model'); if (!file) throw new Error('本地文字模型文件缺失。'); return file.path },
+    ensureModel: async (id, role = 'model') => { const model = await ensureLocalModel(id); const file = model.files.find(v => v.role === role); if (!file) throw new Error('本地文字模型文件缺失。'); return file.path },
     ffmpegPath: loadFfmpegPath, providers: executionProviderOrder(process.platform),
     infer: (job, progress) => getLocalInferenceHost().ocrPrivacy(job, progress), cancel: id => getLocalInferenceHost().cancel(id),
     emit: event => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send(SMART_REGIONS_IPC_CHANNELS.privacyProgress, event) },
