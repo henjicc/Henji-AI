@@ -92,6 +92,7 @@ const { createImageEditCompositeScene } = require('./uiInspectionSceneImageEditC
 const { createGpuAnnotationScenes } = require('./uiInspectionSceneCatalogGpuAnnotation.cjs')
 const { createSupportScenes } = require('./uiInspectionSceneCatalogSupport.cjs')
 const { createRecordingControlScene, createRecordingEventsScene } = require('./uiInspectionSceneRecordingControl.cjs')
+const { createScreenCaptureScene } = require('./uiInspectionSceneScreenCapture.cjs')
 const { createMcpScenes } = require('./uiInspectionSceneMcp.cjs')
 const { createMcpExpiryScene } = require('./uiInspectionSceneMcpExpiry.cjs')
 const { createEmbeddedAgentScenes } = require('./uiInspectionSceneEmbeddedAgent.cjs')
@@ -246,6 +247,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createGpuAnnotationScenes(context),
     ...createSupportScenes(context),
     createRecordingControlScene(),
+    createScreenCaptureScene(),
     createRecordingEventsScene(context),
   ])
 }

@@ -99,6 +99,11 @@ export class MediaPermissionService {
   }
 
   revokeWindow(contents: WebContents): void { this.grants.get(contents.session ?? session.defaultSession)?.delete(contents.id) }
+  /** Native WGC must obey the same session-scoped grant as getDisplayMedia. */
+  assertSelection(contents: WebContents, sessionId: string, sourceId: string): void {
+    const grant = this.grants.get(contents.session ?? session.defaultSession)?.get(contents.id)?.get(sessionId)
+    if (contents.isDestroyed() || !isTrustedMainRendererUrl(contents.getURL()) || !grant?.kinds.has('screen') || grant.selection?.sourceId !== sourceId || this.protectedSourceIds.has(sourceId)) throw new Error('屏幕采集授权已失效，请重新选择并确认录制来源')
+  }
   private has(contents: WebContents, kind: CaptureKind): boolean {
     return [...(this.grants.get(contents.session ?? session.defaultSession)?.get(contents.id)?.values() ?? [])].some(grant => grant.kinds.has(kind))
   }
