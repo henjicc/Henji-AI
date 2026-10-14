@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { videoEditSequenceSizeSchema } from './sequenceSize'
 import type { VideoEditClip } from './document'
 import type { VideoEditSize } from './clipGeometry'
-import { evaluateVideoEditKeyframes, isVideoEditReframeKeyframe, writeVideoEditClipKeyframes, type VideoEditKeyframe } from './keyframes'
+import { evaluateVideoEditKeyframes, isVideoEditMotionKeyframe, writeVideoEditClipKeyframes, type VideoEditKeyframe } from './keyframes'
 
 export const videoEditReframeSettingsSchema = z.object({
   motion: z.enum(['slow', 'default', 'fast']).default('default'),
@@ -14,6 +14,12 @@ export const videoEditReframeSizeSchema = videoEditSequenceSizeSchema
 /** Normalized source-picture bounds. null means no subject detected in this frame. */
 export interface VideoEditAttentionBox { x: number; y: number; width: number; height: number }
 export interface VideoEditReframeSample { x: number; y: number; scale: number }
+/** Screen recording shares the same EMA/reduction; only its desired zoom and framing policy differ. */
+export interface VideoEditReframeMotion {
+  source: 'screen_attention'
+  zoom: readonly number[]
+  transitionSeconds: number
+}
 const clamp = (value: number, low: number, high: number): number => Math.max(low, Math.min(high, value))
 
 export function videoEditReframeViewport(picture: VideoEditSize, target: VideoEditSize): VideoEditReframeSample & { width: number; height: number } {
@@ -34,26 +40,36 @@ function bounds(box: VideoEditAttentionBox | null, size: number, axis: 'x' | 'y'
   return [low, Math.max(low, high)]
 }
 /** EMA is restarted at each cut; project every sample onto subject + no-black-edge constraints. */
-export function smoothVideoEditAttention(boxes: readonly (VideoEditAttentionBox | null)[], picture: VideoEditSize, target: VideoEditSize, fps: number, motion: VideoEditReframeSettings['motion'], cuts: readonly number[] = []): VideoEditReframeSample[] {
+export function smoothVideoEditAttention(boxes: readonly (VideoEditAttentionBox | null)[], picture: VideoEditSize, target: VideoEditSize, fps: number, motion: VideoEditReframeSettings['motion'], cuts: readonly number[] = [], dynamic?: VideoEditReframeMotion): VideoEditReframeSample[] {
   const viewport = videoEditReframeViewport(picture, target)
-  const alpha = 1 - Math.exp(-1 / (fps * ({ slow: 0.8, default: 0.35, fast: 0.1 }[motion])))
-  const cutSet = new Set(cuts); let cx = 0.5; let cy = 0.5
+  if (dynamic && (dynamic.zoom.length !== boxes.length || dynamic.zoom.some(value => !Number.isFinite(value) || value < 1 || value > 4) || !Number.isFinite(dynamic.transitionSeconds) || dynamic.transitionSeconds <= 0)) throw new Error('推近帧数、力度或过渡时长无效。')
+  const alpha = 1 - Math.exp(-1 / (fps * (dynamic?.transitionSeconds ?? { slow: 0.8, default: 0.35, fast: 0.1 }[motion])))
+  const cutSet = new Set(cuts); let cx = 0.5; let cy = 0.5; let scale = viewport.scale
   return boxes.map((box, frame) => {
     const reset = frame === 0 || cutSet.has(frame)
-    const desiredX = box ? box.x + box.width / 2 : reset ? 0.5 : cx; const desiredY = box ? box.y + box.height / 2 : reset ? 0.5 : cy
-    const bx = bounds(box, viewport.width, 'x'); const by = bounds(box, viewport.height, 'y')
-    cx = clamp(reset ? desiredX : cx + alpha * (desiredX - cx), ...bx)
-    cy = clamp(reset ? desiredY : cy + alpha * (desiredY - cy), ...by)
-    return { x: (0.5 - cx) / viewport.width, y: (0.5 - cy) / viewport.height, scale: viewport.scale }
+    const desiredX = box ? box.x + box.width / 2 : reset || dynamic ? 0.5 : cx; const desiredY = box ? box.y + box.height / 2 : reset || dynamic ? 0.5 : cy
+    if (dynamic) {
+      // A new clip starts wide; no abrupt jump on its first event. Large target aspect ratios cap zoom at the existing 4x limit.
+      if (reset) { cx = 0.5; cy = 0.5; scale = viewport.scale }
+      const desiredScale = Math.min(4, viewport.scale * dynamic.zoom[frame])
+      scale += alpha * (desiredScale - scale)
+    }
+    const width = viewport.width * viewport.scale / scale; const height = viewport.height * viewport.scale / scale
+    // During an attention transition, ease toward the region rather than forcing it inside the crop immediately.
+    const bx = bounds(dynamic ? null : box, width, 'x'); const by = bounds(dynamic ? null : box, height, 'y')
+    cx = clamp(reset && !dynamic ? desiredX : cx + alpha * (desiredX - cx), ...bx)
+    cy = clamp(reset && !dynamic ? desiredY : cy + alpha * (desiredY - cy), ...by)
+    return { x: (0.5 - cx) / width, y: (0.5 - cy) / height, scale }
   })
 }
 /** Piecewise linear reduction is checked against every source frame, including cut-adjacent frames. */
-export function generateVideoEditReframeKeyframes(clip: VideoEditClip, boxes: readonly (VideoEditAttentionBox | null)[], picture: VideoEditSize, target: VideoEditSize, fps: number, settings: VideoEditReframeSettings, cuts: readonly number[] = []): VideoEditClip {
+export function generateVideoEditReframeKeyframes(clip: VideoEditClip, boxes: readonly (VideoEditAttentionBox | null)[], picture: VideoEditSize, target: VideoEditSize, fps: number, settings: VideoEditReframeSettings, cuts: readonly number[] = [], dynamic?: VideoEditReframeMotion): VideoEditClip {
   if (boxes.length !== clip.duration) throw new Error('关注区域帧数与片段长度不一致，请重新分析。')
   if (clip.follow || clip.rotation !== 0 || clip.curves?.rotation?.some(point => point.value !== 0)) throw new Error('请先取消片段跟随并重置旋转，再自动重构画幅；现有运动设置已保留。')
   const viewport = videoEditReframeViewport(picture, target)
   const anchor = (axis: 'anchorX' | 'anchorY', time: number): number => evaluateVideoEditKeyframes(clip.curves?.[axis], time, clip[axis] ?? 0.5)
-  const samples = smoothVideoEditAttention(boxes, picture, target, fps, settings.motion, cuts).map((sample, time) => ({ ...sample, x: sample.x + (anchor('anchorX', time) - 0.5) / viewport.width, y: sample.y + (anchor('anchorY', time) - 0.5) / viewport.height }))
+  const source = dynamic?.source ?? 'reframe'
+  const samples = smoothVideoEditAttention(boxes, picture, target, fps, settings.motion, cuts, dynamic).map((sample, time) => ({ ...sample, x: sample.x + (anchor('anchorX', time) - 0.5) * sample.scale / (viewport.width * viewport.scale), y: sample.y + (anchor('anchorY', time) - 0.5) * sample.scale / (viewport.height * viewport.scale) }))
   const validCuts = cuts.filter(time => Number.isInteger(time) && time > 0 && time < clip.duration)
   const times = new Set([0, clip.duration - 1, ...validCuts.flatMap(time => [time - 1, time])])
   const segments = [...times].sort((a, b) => a - b); const stack = segments.slice(1).map((end, i) => [segments[i], end])
@@ -62,10 +78,12 @@ export function generateVideoEditReframeKeyframes(clip: VideoEditClip, boxes: re
     for (let frame = start + 1; frame < end; frame++) {
       const t = (frame - start) / (end - start)
       const x = samples[start].x + (samples[end].x - samples[start].x) * t; const y = samples[start].y + (samples[end].y - samples[start].y) * t
-      const cx = anchor('anchorX', frame) - x * viewport.width; const cy = anchor('anchorY', frame) - y * viewport.height
-      const bx = bounds(boxes[frame], viewport.width, 'x'); const by = bounds(boxes[frame], viewport.height, 'y')
+      const scale = samples[start].scale + (samples[end].scale - samples[start].scale) * t
+      const width = viewport.width * viewport.scale / scale; const height = viewport.height * viewport.scale / scale
+      const cx = anchor('anchorX', frame) - x * width; const cy = anchor('anchorY', frame) - y * height
+      const bx = bounds(dynamic ? null : boxes[frame], width, 'x'); const by = bounds(dynamic ? null : boxes[frame], height, 'y')
       const violation = Math.max(bx[0] - cx, cx - bx[1], by[0] - cy, cy - by[1], 0)
-      const error = Math.max(Math.abs(x - samples[frame].x), Math.abs(y - samples[frame].y))
+      const error = Math.max(Math.abs(x - samples[frame].x), Math.abs(y - samples[frame].y), Math.abs(scale - samples[frame].scale))
       const score = violation > 1e-8 ? 1 + violation : error / 0.0005
       if (score > worst && score > 1) { worst = score; index = frame }
     }
@@ -73,13 +91,15 @@ export function generateVideoEditReframeKeyframes(clip: VideoEditClip, boxes: re
   }
   let result = clip; const sorted = [...times].sort((a, b) => a - b)
   for (const key of ['x', 'y', 'scale'] as const) {
-    const manual = (clip.curves?.[key] ?? []).filter(point => !isVideoEditReframeKeyframe(point))
+    const manual = (clip.curves?.[key] ?? []).filter(point => !isVideoEditMotionKeyframe(point, source))
     const generated = sorted.filter(time => !manual.some(point => point.time === time)).map((time): VideoEditKeyframe => {
       const value = samples[time][key]; const interpolation = validCuts.includes(time + 1) ? 'hold' as const : 'linear' as const
-      return { time, value, interpolation, source: 'reframe', reframeOrigin: { time, value, interpolation } }
+      return { time, value, interpolation, source, reframeOrigin: { time, value, interpolation } }
     })
     result = writeVideoEditClipKeyframes(result, key, [...manual, ...generated].sort((a, b) => a.time - b.time), false)
   }
+  // Attention drafts never override or reject user framing. Existing auto-reframe keeps its strict subject contract.
+  if (dynamic) return result
   // Hand-authored keys and anchors remain untouched. Reject the whole operation if they violate framing.
   for (let time = 0; time < clip.duration; time++) {
     const value = (key: 'x' | 'y' | 'scale' | 'anchorX' | 'anchorY'): number => evaluateVideoEditKeyframes(result.curves?.[key], time, result[key] ?? 0.5)

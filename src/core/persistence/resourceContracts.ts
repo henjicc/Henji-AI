@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { captureLogPageSchema } from '../captureLog/events'
 import { recordingTracksSchema } from '../screenRecording/tracks'
 import { creativeIntentPageSchema } from '../creativeIntent/pageSchema'
-import { storedMotionCandidateSchema } from '../creativeIntent/persistence'
+import { storedMotionCandidateSchema, MOTION_CANDIDATE_VERSION } from '../creativeIntent/persistence'
 import { imageLayoutPageSchema, imageLayoutCandidateSchema } from '../imageEdit/v3/layoutDraft'
 import { formatMigrations } from './formatMigrations'
 import { upgradePersistenceContent } from './migrations'
@@ -21,7 +21,7 @@ const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
   'screen-recording-tracks': 1,
   'capture-log-page': 1,
   'creative-intent-page': 1,
-  'creative-intent-candidate': 1,
+  'creative-intent-candidate': MOTION_CANDIDATE_VERSION,
   'image-layout-page': 1,
   'image-layout-candidate': 1,
 }

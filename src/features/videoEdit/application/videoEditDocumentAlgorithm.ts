@@ -20,7 +20,7 @@ export async function verifyVideoEditContentSaved(owner: VideoEditInstance, expe
 const ATOMIC_DOCUMENT_ALGORITHMS = new Set([
   'stagger_video_edit_motion',
   'analyze_video_edit_beats',
-  'auto_reframe_video_edit', 'apply_video_edit_title_template', 'generate_video_edit_audio_ducking',
+  'generate_video_edit_screen_attention', 'auto_reframe_video_edit', 'apply_video_edit_title_template', 'generate_video_edit_audio_ducking',
   'normalize_video_edit_loudness', 'trim_video_edit_clip', 'ripple_video_edit_clip_speed',
   'nest_video_edit_clips', 'create_video_edit_multicam', 'auto_switch_video_edit_multicam',
   'apply_video_edit_scenes', 'segment_video_edit_subtitles',

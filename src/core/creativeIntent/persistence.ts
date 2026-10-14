@@ -12,8 +12,9 @@ export const creativeIntentResourceSchema = resourceRefSchema.extend({
   sourceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
 }).strict()
 export type StoredCreativeIntentResource = z.infer<typeof creativeIntentResourceSchema>
+export const MOTION_CANDIDATE_VERSION = 2
 export const storedMotionCandidateSchema = z.object({
-  version: z.literal(1), id: z.string().min(1), label: z.string(), identity: candidateIdentitySchema,
+  version: z.literal(MOTION_CANDIDATE_VERSION), id: z.string().min(1), label: z.string(), identity: candidateIdentitySchema,
   motions: z.array(z.object({ takeId: z.string().min(1), curves: videoEditClipCurvesSchema,
     range: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]), keyCount: z.number().int().nonnegative(),
     maxErrors: z.partialRecord(z.enum(['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY']), z.number().finite().nonnegative()),
