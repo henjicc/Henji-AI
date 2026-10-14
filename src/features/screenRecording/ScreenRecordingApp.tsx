@@ -11,6 +11,10 @@ import { recordingDevices } from './tracks/devices'
 import { controlRecording, recordingView, recoverRecording, setRecordingDestination, startRecording, subscribeRecording } from './application/recordingService'
 import { RecordingSessionPreview } from './RecordingSessionPreview'
 import { openApplicationSurface } from '@/features/navigation'
+import { RECORDING_MOVIE_RECIPES, type RecordingMovieRecipe } from '@/core/screenRecording/movie'
+import { RecordingMovieOptions } from './RecordingMovieOptions'
+import { showRecordingDocument } from './application/recordingService'
+import { executeUiApplicationCapability } from '@/features/application-control'
 
 function RecordingSourceOption({ source, active, onSelect }: { source: CaptureSource; active: boolean; onSelect: () => void }): React.ReactElement {
   const { t } = useTranslation('ui')
@@ -54,6 +58,35 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [note, setNote] = useState('')
+  const [recipe, setRecipe] = useState<RecordingMovieRecipe>(RECORDING_MOVIE_RECIPES.tutorial)
+  const [moviePhase, setMoviePhase] = useState('')
+  const movieController = useRef<AbortController | null>(null)
+  const movieTarget = useRef<{ sessionId: string; documentId: string } | null>(null)
+  useEffect(() => () => movieController.current?.abort(), [])
+  const generateMovie = async (): Promise<void> => {
+    if (!state.documentId || movieController.current) return
+    const controller = new AbortController(); movieController.current = controller
+    try {
+      setMoviePhase('analyzing')
+      // Understanding is its own existing, undoable preparation step; generation is one subsequent timeline transaction.
+      if (!state.content?.understanding.steps.length) {
+        const analyzed = await executeUiApplicationCapability({ id: 'understand_screen_recording', version: 1, input: { sessionRef: { kind: 'screen_recording.session', id: state.documentId }, transcribe: false, detectVisuals: true } }, controller.signal)
+        if (!analyzed.ok) throw new Error(analyzed.error.message)
+        await showRecordingDocument(state.documentId)
+      }
+      controller.signal.throwIfAborted()
+      const editor = await import('@/features/videoEdit')
+      const documentId = state.destination?.documentId ?? (movieTarget.current?.sessionId === state.documentId ? movieTarget.current.documentId : (await editor.createVideoEditProject()).document.id)
+      movieTarget.current = { sessionId: state.documentId, documentId }
+      const { generateRecordingMovie } = await import('./application/recordingMovieService')
+      const result = await generateRecordingMovie(state.documentId, { documentId, recipe }, controller.signal, setMoviePhase)
+      controller.signal.throwIfAborted()
+      if (!result.verified) throw new Error(t('recording.movieUnverified'))
+      await editor.openVideoEditDocument({ id: documentId })
+      editor.switchVideoEditSequence(documentId, result.sequenceIds[0], { fromStart: true })
+      openApplicationSurface('workspace.video_edit')
+    } finally { movieController.current = null; setMoviePhase('') }
+  }
   const run = (work: () => Promise<unknown>): void => { setError(''); void work().catch(error => setError(error instanceof Error ? error.message : String(error))) }
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -86,8 +119,10 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       <UiButton variant="danger" disabled={state.busy} disabledReason={t('screenRecording.toggleUnavailable')} onClick={() => run(() => controlRecording(state.snapshot!.sessionId, 'cancel'))}>{t('recording.cancel')}</UiButton>
       <UiButton variant="primary" disabled={state.busy} disabledReason={t('recording.saving')} onClick={() => run(() => controlRecording(state.snapshot!.sessionId, state.snapshot!.phase === 'failed' ? 'cancel' : 'stop'))}><Square />{t('recording.stop')}</UiButton>
     </> : finished ? <>
-      <UiButton disabled={!media.length || state.busy} disabledReason={state.busy ? t('recording.saving') : t('recording.noMedia')} onClick={() => run(sendToEditor)}>{t('recording.import')}</UiButton>
-      <UiButton variant="primary" disabled={state.busy} disabledReason={t('recording.saving')} onClick={() => { setRecordingDestination(state.destination); setName('') }}>{t('recording.new')}</UiButton></> : <UiButton variant="primary" disabled={!sourceId || state.busy} disabledReason={state.busy ? t('recording.saving') : t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>}>
+      <UiButton disabled={!media.length || state.busy || Boolean(moviePhase)} disabledReason={t('recording.movieBusy')} onClick={() => run(sendToEditor)}>{t('recording.import')}</UiButton>
+      <UiButton disabled={state.busy || Boolean(moviePhase)} disabledReason={t('recording.movieBusy')} onClick={() => { setRecordingDestination(state.destination); setName('') }}>{t('recording.new')}</UiButton>
+      {moviePhase ? <UiButton onClick={() => movieController.current?.abort()}>{t('recording.cancelMovie')}</UiButton> : null}
+      <UiButton variant="primary" disabled={!media.length || state.busy || Boolean(moviePhase)} disabledReason={moviePhase ? t('recording.movieBusy') : t('recording.noMedia')} onClick={() => run(generateMovie)}>{t('recording.createMovie')}</UiButton></> : <UiButton variant="primary" disabled={!sourceId || state.busy} disabledReason={state.busy ? t('recording.saving') : t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>}>
       <UiIconButton aria-label={t('recording.back')} onClick={back}><ChevronLeft /></UiIconButton><span className="text-sm font-medium">{t('recording.title')}</span>
       {state.snapshot && <span className="text-xs tabular-nums text-text2">{state.snapshot.phase === 'countdown' ? t('recording.countdown', { count: state.snapshot.countdown }) : `${Math.floor(state.snapshot.elapsedMs / 1000)} s`}</span>}
     </UiToolbar>
@@ -95,13 +130,14 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       <UiRegion maxWidthClassName="max-w-5xl" className="mx-auto px-3 py-6">
         {(error || state.error || state.snapshot?.error) && <UiError message={error || state.error || state.snapshot?.error || ''} />}
         {state.busy && <UiLoading message={t('recording.saving')} />}
+        {moviePhase && <UiLoading message={t(`recording.movie_${moviePhase}`)} />}
         {active ? <UiGroup title={t('recording.inProgress')} labelWidth={120}>
           <UiFormRow label={t('recording.marker')}><div className="flex min-w-0 items-center gap-2"><UiInput size="sm" className="min-w-0 flex-1" value={note} onChange={event => setNote(event.target.value)} maxLength={4000} /><UiButton size="sm" disabled={state.snapshot?.phase !== 'recording' || state.snapshot?.busy} disabledReason={t('recording.markDuringRecording')} onClick={() => run(async () => { await controlRecording(state.snapshot!.sessionId, 'mark', note); setNote('') })}><Flag />{t('recording.mark')}</UiButton></div></UiFormRow>
-        </UiGroup> : finished ? <UiGroup title={t('recording.preview')}>
+        </UiGroup> : finished ? <><RecordingMovieOptions value={recipe} onChange={setRecipe} disabled={Boolean(moviePhase)} /><UiGroup title={t('recording.preview')}>
           {state.content && <RecordingSessionPreview key={state.content.sessionId} recording={state.content} />}
           {state.content?.status !== 'stopped' && <UiButton onClick={() => run(() => recoverRecording(state.documentId!))}><RefreshCw />{t('recording.recover')}</UiButton>}
           {state.content?.source?.cursorEmbedded && <p className="text-xs text-text2">{t('recording.cursorEmbedded')}</p>}
-        </UiGroup> : <div className="grid gap-6 lg:grid-cols-2">
+        </UiGroup></> : <div className="grid gap-6 lg:grid-cols-2">
           <UiGroup title={t('recording.selectSource')} actions={<UiButton disabled={loading} disabledReason={t('recording.refreshing')} onClick={() => run(refresh)}><RefreshCw />{t('recording.refresh')}</UiButton>}>
             {loading ? <UiLoading /> : sources.length ? <div className="grid grid-cols-2 gap-2">{sources.map(source => <RecordingSourceOption key={source.id} source={source} active={source.id === sourceId} onSelect={() => setSourceId(source.id)} />)}</div> : <UiEmpty title={t('recording.noSources')} />}
           </UiGroup>

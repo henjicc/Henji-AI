@@ -3,3 +3,6 @@ export { selectVideoEditExportEncoder, videoEditExportVideoOptions } from './eng
 export { videoEditExportVideoEncoderConfig } from './engine/videoEditExportEncoderConfig'
 export { importVideoEditSources } from './application/videoEditMedia'
 export { openVideoEditDocument, saveVideoEdit, holdVideoEditActivity, createVideoEditProject, appendVideoEditSequence, switchVideoEditSequence } from './application/videoEditService'
+export { requireVideoEditInstance, verifyVideoEditSaved } from './application/videoEditService'
+export { analyzeVideoEditScreenAttentionOffThread } from './application/videoEditScreenAttentionWorkerClient'
+export { prepareVideoEditAudioGain } from './application/videoEditLoudness'

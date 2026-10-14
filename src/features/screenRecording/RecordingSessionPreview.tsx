@@ -34,5 +34,14 @@ export function RecordingSessionPreview({ recording }: { recording: RecordingDoc
         </UiOptionButton>
       </div>)}
     </UiGroup>
+    {recording.understanding.steps.length > 0 && <UiGroup title={t('recording.steps')}>
+      {recording.understanding.steps.map(step => <div key={step.id} className="border-b border-line py-2">
+        <UiOptionButton variant="menu" className="w-full min-w-0 gap-3" disabled={!current} disabledReason={t('recording.noMedia')} onClick={() => setSeekRequest(previous => ({ seconds: Math.max(0, (step.startUs - session.originUs) / 1e6), request: previous.request + 1 }))}>
+          <span className="shrink-0 text-13 tabular-nums">{(Math.max(0, step.startUs - session.originUs) / 1e6).toFixed(1)} s</span>
+          <span className="min-w-0 text-13">{step.title}</span>
+        </UiOptionButton>
+        {step.description && <p className="text-xs text-text2">{step.description}</p>}
+      </div>)}
+    </UiGroup>}
   </>
 }

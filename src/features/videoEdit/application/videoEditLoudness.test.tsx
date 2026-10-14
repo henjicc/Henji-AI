@@ -9,11 +9,12 @@ import { getPlatform } from '@/platform/runtime'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
-import type { VideoEditComposition } from '@/core/videoEdit/document'
+import { videoEditComposition, type VideoEditComposition } from '@/core/videoEdit/document'
+import { assertVideoEditSequenceGraph } from '@/core/videoEdit/sequenceGraph'
 import type { VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, videoEditExportRange, requireVideoEditInstance, listVideoEditInstances, undoVideoEdit } from './videoEditService'
-import { applyVideoEditAudioGain, measureVideoEditClips } from './videoEditLoudness'
+import { applyVideoEditAudioGain, measureVideoEditClips, prepareVideoEditAudioGain } from './videoEditLoudness'
 import { VideoEditAudioGainDialog } from '../panels/VideoEditAudioGainDialog'
 import { cancelVideoEditExport, exportVideoEdit as exportWithSettings, videoEditExportTask } from './videoEditExport'
 
@@ -28,7 +29,7 @@ vi.mock('mediabunny', () => ({
   CanvasSource: class { async add() {} }, AudioBufferSource: class { async add(buffer: AudioBuffer) { boundary.encoded.push(buffer.getChannelData(0)[0]) } },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
-  canvas = {}; constructor(private composition: VideoEditComposition) {}
+  canvas = {}; constructor(private composition: VideoEditComposition) { assertVideoEditSequenceGraph({ items: composition.items, sequences: composition.sequences ?? [] }) }
   setSmartRegions() {} setTracks() {} async dispose() {}
   async render() { return { singleFrameReads: 0 } }
   async mixAudio(_start: number, duration: number) {
@@ -159,6 +160,24 @@ it('标准化期间取消不会写出导出文件，释放后台声音并解除�
   cancelVideoEditExport(id); reject(new Error('取消'))
   expect(await operation).toBeNull(); expect(owner.busy).toBe(false); expect(videoEditExportTask(id)?.state).toBe('cancelled')
   expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled(); expect(pcm.size).toBe(0)
+})
+it('成片草稿保留不可测量静音，不影响显式响度调整的失败契约', async () => {
+  const { owner, target } = await project()
+  vi.mocked(getPlatform().audioEdit.loudness.measure).mockResolvedValue(peak(0))
+  const composition = videoEditComposition(owner.document, target.sequenceId), history = owner.past.length
+  const prepared = await prepareVideoEditAudioGain(composition, composition.clips, 'loudness', -16, undefined, undefined, true)
+  expect(prepared.map(v => v.volume)).toEqual(composition.clips.map(v => v.volume))
+  expect(owner.past).toHaveLength(history)
+  await expect(applyVideoEditAudioGain(target, 'loudness', -16)).rejects.toThrow()
+  expect(owner.past).toHaveLength(history)
+})
+it('含嵌套序列的工程测量独立声音时，不携带已被裁剪素材引用的无关序列', async () => {
+  const { owner, target } = await project(), composition = structuredClone(videoEditComposition(owner.document, target.sequenceId))
+  composition.items.push({ id: 'nested-item', name: '嵌套', kind: 'sequence', sequenceId: composition.id })
+  composition.sequences = [{ ...composition, id: 'parent', clips: [{ ...composition.clips[0], id: 'nested-clip', kind: 'sequence', itemId: 'nested-item' }] }, { ...composition }]
+  assertVideoEditSequenceGraph({ items: composition.items, sequences: composition.sequences })
+  const gains = await prepareVideoEditAudioGain(composition, composition.clips, 'loudness', -16)
+  expect(gains.every(value => Math.abs(value.measurement!.integratedLufs! + 16) <= .5)).toBe(true)
 })
 it.each(['peak_max', 'peak_all'] as const)('%s：最大峰值共同缩放保持相对关系，所有峰值分别对齐，重新测量后一次提交', async mode => {
   const { owner, target, id } = await project()

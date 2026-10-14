@@ -281,6 +281,9 @@ export function createVideoEditDocument(name: string): VideoEditDocument {
 export function videoEditComposition(document: VideoEditDocument, sequenceId: string): VideoEditComposition {
   const sequence = document.sequences.find(item => item.id === sequenceId)
   if (!sequence) throw new Error('目标序列不存在。')
+  return composeVideoEditSequence(document, sequence)
+}
+function composeVideoEditSequence(document: Pick<VideoEditComposition, 'media' | 'items' | 'sequences' | 'styleKits' | 'colorLuts' | 'codeMaterials' | 'revision'>, sequence: VideoEditSequence): VideoEditComposition {
   return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styleKits ? { styleKits: document.styleKits } : {}), ...(document.colorLuts ? { colorLuts: document.colorLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
 }
 export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' | 'items'>, clip: VideoEditClip): VideoEditMedia | undefined {
@@ -293,7 +296,7 @@ export function videoEditNestedComposition(document: VideoEditComposition, clip:
   const item = document.items.find(item => item.id === clip.itemId)
   const sequence = document.sequences?.find(sequence => sequence.id === item?.sequenceId)
   if (!sequence) throw new Error('嵌套序列已移除或未包含在渲染快照中。')
-  const composition = { ...document, ...sequence, multicam: sequence.multicam, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), fps: videoEditFps(sequence.frameRate) }
+  const composition = composeVideoEditSequence(document, sequence)
   if (!sequence.multicam) return composition
   const camera = sequence.multicam.cameras.find(camera => camera.id === (clip.multicamCameraId ?? sequence.multicam!.cameras[0].id))
   if (!camera) throw new Error('片段所选机位已移除。')

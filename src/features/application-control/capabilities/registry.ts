@@ -1,4 +1,5 @@
 import { APPLICATION_DOMAINS, initializeApplicationDomainBindings } from '../applicationDomains'
+import { registerUiCapabilityExecutor } from '../uiCapabilityExecution'
 
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 
@@ -393,3 +394,5 @@ export function listRendererApplicationCapabilityIds(): string[] {
 export function assertRendererApplicationWriteChannels(): void {
   registry.assertWriteChannels()
 }
+
+registerUiCapabilityExecutor(executeApplicationCapabilityResult)

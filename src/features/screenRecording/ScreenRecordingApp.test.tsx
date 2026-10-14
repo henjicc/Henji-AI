@@ -38,7 +38,7 @@ it('来源缩略图与标题分栏，设置固定左侧标签列，关闭设备�
   const title = source.querySelector('[data-recording-source-title]')!
   expect(image.parentElement).not.toBe(title.parentElement)
   expect(title.classList.contains('truncate')).toBe(true)
-  expect(source.getAttribute('aria-describedby')).toBeTruthy()
+  await waitFor(() => expect(source.getAttribute('aria-describedby')).toBeTruthy())
   expect(screen.getByRole('button', { name: '屏幕 1' }).getAttribute('aria-describedby')).toBeNull()
   const mic = screen.getByRole('switch', { name: '麦克风' })
   expect(mic.closest('[data-ui-form-row]')?.getAttribute('data-ui-form-row')).toBe('panel')
@@ -50,7 +50,7 @@ it('来源缩略图与标题分栏，设置固定左侧标签列，关闭设备�
   fireEvent.click(screen.getByRole('switch', { name: '摄像头' }))
   expect(screen.getByLabelText('摄像头设备')).toBeTruthy()
 })
-it('会话按轨道聚合完整分片，标记跳转末段，未接通的成片入口不出现', async () => {
+it('会话按轨道聚合完整分片，标记与步骤跳转，成片入口可用', async () => {
   const document = createRecordingDocument()
   document.sessionId = '00000000-0000-4000-8000-000000000001'; document.status = 'stopped'
   document.media = [
@@ -59,6 +59,7 @@ it('会话按轨道聚合完整分片，标记跳转末段，未接通的成片�
     { id: 's5', kind: 'screen', path: '/last.mp4', monoUs: 6100000, durationUs: 5000000 },
   ]
   document.markers = [{ id: 'marker', monoUs: 9800000, note: '重点演示' }]
+  document.understanding.steps = [{ id: 'step', startUs: 6100000, endUs: 11100000, title: '完成设置', description: '', signal: 'marker', eventIds: [] }]
   fixture.view = { ...fixture.view, documentId: document.sessionId, content: document }
   render(<ScreenRecordingApp onBack={vi.fn()} />)
   await waitFor(() => expect(fixture.viewer).toHaveBeenCalled())
@@ -68,9 +69,11 @@ it('会话按轨道聚合完整分片，标记跳转末段，未接通的成片�
   expect(latest().timeline?.segments).toHaveLength(2)
   expect(screen.getByLabelText('预览轨道').textContent).toContain('屏幕')
   expect(screen.queryByText('屏幕 5')).toBeNull()
-  expect(screen.queryByRole('button', { name: '生成成片' })).toBeNull()
+  expect((screen.getByRole('button', { name: '生成成片' }) as HTMLButtonElement).disabled).toBe(false)
   expect(screen.queryByText(/下一阶段|第二阶段/)).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /9.7 s.*重点演示/ }))
   expect(latest().seekRequest).toEqual({ seconds: 9.7, request: 1 })
+  fireEvent.click(screen.getByRole('button', { name: /完成设置/ }))
+  expect(latest().seekRequest).toEqual({ seconds: 6, request: 2 })
   await act(async () => {})
 })
