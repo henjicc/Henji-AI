@@ -47,7 +47,7 @@ export default function RecordingControlBar(): React.ReactElement {
       {snapshot?.cameraPreview && <img src={snapshot.cameraPreview} alt={t('screenRecording.cameraPreview')} className="w-16 aspect-video object-contain rounded-control" />}
       <UiButton size="sm" variant={phase === 'ready' ? 'primary' : 'quiet'} disabled={!snapshot || snapshot.busy || !['ready', 'recording', 'paused'].includes(phase ?? '')} disabledReason={t('screenRecording.toggleUnavailable')} onClick={() => { void command('toggle') }}>{running ? <Pause /> : <Play />}{toggleLabel}</UiButton>
       <UiButton size="sm" disabled={!running || snapshot?.busy} disabledReason={t('screenRecording.markUnavailable')} onClick={() => { void command('mark') }}><Flag />{t('screenRecording.mark')}</UiButton>
-      <UiButton size="sm" variant="danger" disabled={!snapshot || phase === 'stopped'} disabledReason={t('screenRecording.stopUnavailable')} onClick={() => { void command('stop') }}><Square />{t('screenRecording.stop')}</UiButton>
+      <UiButton size="sm" variant={phase === 'ready' ? 'quiet' : 'primary'} disabled={!snapshot || phase === 'stopped'} disabledReason={t('screenRecording.stopUnavailable')} onClick={() => { void command('stop') }}><Square />{t('screenRecording.stop')}</UiButton>
     </UiToolbar>
     {(error || snapshot?.error) ? <UiError size="xs" align="start" title={error ?? snapshot?.error ?? ''} message="" /> : Boolean(snapshot?.shortcutConflicts.length) && <span className="text-xs text-danger-text">{t('screenRecording.shortcutConflict')}</span>}
     {trackWarning && (phase === 'recording' || phase === 'paused') && <span className="text-xs text-danger-text" role="status">{t(`screenRecording.trackWarning.${trackWarning}`)}</span>}
