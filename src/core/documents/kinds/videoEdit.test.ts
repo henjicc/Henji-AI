@@ -2,6 +2,7 @@ import { createVideoEditSequence } from '../../videoEdit/document'
 import { describe, expect, it } from 'vitest'
 
 import { videoEditDocumentKind } from './videoEdit'
+import { upgradePersistenceContent } from '../../persistence/migrations'
 
 /*
  * 剪辑类型登记（3.1）：真实内容 schema、空内容判断与列表摘要。
@@ -13,6 +14,14 @@ function content() {
 }
 
 describe('剪辑类型登记', () => {
+  it.each([4, 5])('v%s 内容可升级到当前版本，保留嵌套字段且不改原输入', (version) => {
+    const before = { ...content(), sequences: [{ ...createVideoEditSequence(), captions: [{ id: 'caption', start: 0, duration: 30, text: '保留字幕' }], futureField: { keep: true } }] }
+    const snapshot = structuredClone(before)
+    const migrated = upgradePersistenceContent({ id: 'document.video_edit', name: '剪辑', version: videoEditDocumentKind.version, schema: videoEditDocumentKind.contentSchema, migrations: videoEditDocumentKind.migrations }, before, version)
+    expect(migrated).toEqual(before)
+    expect(before).toEqual(snapshot)
+    expect(migrated).not.toBe(before)
+  })
   it('3 → 4 迁移保留字幕与其他内容并初始化可见、未锁定，不改原输入', () => {
     const before = { ...content(), sequences: [{ ...createVideoEditSequence(), captions: [{ id: 'caption', start: 0, duration: 30, text: '保留字幕' }] }] }
     const migrated = videoEditDocumentKind.migrations![3](before)

@@ -3,6 +3,8 @@ import type { CaptureLogPage } from '../../../../src/core/captureLog/events'
 import { RecordingEventSession } from './events'
 
 const hooks = vi.hoisted(() => ({ attach: vi.fn(), detach: vi.fn(), write: vi.fn(), cursor: vi.fn(), point: vi.fn(), foreground: vi.fn() }))
+// 枚举也会触发原生绑定初始化；普通单测必须完全隔离 OS 输入钩子。
+vi.mock('uiohook-napi', () => ({ EventType: { EVENT_MOUSE_PRESSED: 7, EVENT_MOUSE_RELEASED: 8, EVENT_MOUSE_WHEEL: 11 } }))
 vi.mock('electron', () => ({ screen: { getCursorScreenPoint: hooks.point, screenToDipPoint: (point: { x: number; y: number }) => ({ x: point.x / 2, y: point.y / 2 }) } }))
 vi.mock('./input-events', () => ({ startDesktopInput: hooks.attach }))
 vi.mock('./windows-events', () => ({ createWindowsEventFacts: () => ({ cursor: hooks.cursor, foreground: hooks.foreground }) }))
