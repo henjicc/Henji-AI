@@ -38,6 +38,8 @@ export default {
       15: ['15px', { lineHeight: '22px' }],
       base: ['16px', { lineHeight: '24px' }],
       xl: ['20px', { lineHeight: '28px' }],
+      // 大读数（录制计时、倒计时）专用，不用于标题或正文。
+      display: ['40px', { lineHeight: '48px' }],
     },
     // 浮层阴影唯一档位。内容区一律不用阴影，层次靠间距与排版建立。
     // 几何取值与 Tailwind shadow-2xl 一致；颜色走主题 shade 令牌（深色下仍是黑 25%，像素不变）。

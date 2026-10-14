@@ -8,7 +8,7 @@ export function RecordingVoiceControls({ modelId, options, onModelChange, onOpti
   const { t, i18n } = useTranslation('ui')
   const models = registry.listAllModels().filter(model => model.meta.type === 'audio' && model.params.some(param => 'panel' in param && param.panel === 'voice-selector'))
   return <>
-    <UiFormRow label={t('recording.directorVoice')}><Dropdown value={modelId} options={models.map(model => ({ value: model.meta.id, label: getI18nText(model.meta.name, i18n.language) || model.meta.id }))} onSelect={id => { onModelChange(id); onOptionsChange(registry.getDefaultValues(id)) }} /></UiFormRow>
-    <UiFormRow label=""><ParameterPanel currentModel={modelId} selectedModel={modelId} uploadedImages={[]} uploadedVideos={[]} values={options} onChange={(key, value) => onOptionsChange({ ...options, [key]: value })} onChanges={changes => onOptionsChange({ ...options, ...changes })} /></UiFormRow>
+    <UiFormRow label={t('recording.directorVoiceShort')} density="compact"><Dropdown size="sm" value={modelId} options={models.map(model => ({ value: model.meta.id, label: getI18nText(model.meta.name, i18n.language) || model.meta.id }))} onSelect={id => { onModelChange(id); onOptionsChange(registry.getDefaultValues(id)) }} /></UiFormRow>
+    <UiFormRow label="" density="compact"><ParameterPanel currentModel={modelId} selectedModel={modelId} uploadedImages={[]} uploadedVideos={[]} values={options} onChange={(key, value) => onOptionsChange({ ...options, [key]: value })} onChanges={changes => onOptionsChange({ ...options, ...changes })} /></UiFormRow>
   </>
 }

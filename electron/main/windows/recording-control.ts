@@ -2,7 +2,6 @@ import { BrowserWindow, screen, type WebContents } from 'electron'
 import path from 'node:path'
 import type { RecordingControlSnapshot } from '../../../src/core/screenRecording/contracts'
 import { installRendererNavigationGuards } from '../security/main-renderer-url'
-import { windowAppearance } from '../services/window-appearance'
 import { createMainLogger } from '../services/logging'
 import { mediaPermissions } from '../services/media-permissions'
 import { resolveSecondaryWindowLaunchQuery } from '../development-launch'
@@ -11,12 +10,12 @@ import { resolveSecondaryWindowLaunchQuery } from '../development-launch'
 export function createRecordingControlWindow(owner: WebContents, snapshot: () => RecordingControlSnapshot | null, stop: () => Promise<void>): BrowserWindow {
   const parent = BrowserWindow.fromWebContents(owner)
   const display = screen.getDisplayMatching(parent?.getBounds() ?? screen.getPrimaryDisplay().workArea)
-  const size = { width: 560, height: 116 }
+  // The window is exactly the pill drawn by RecordingControlBar; transparent corners keep it a floating capsule.
+  const size = { width: 440, height: 44 }
   const win = new BrowserWindow({
-    ...size, x: Math.round(display.workArea.x + (display.workArea.width - size.width) / 2), y: display.workArea.y + 24,
-    frame: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    ...size, x: Math.round(display.workArea.x + (display.workArea.width - size.width) / 2), y: display.workArea.y + 16,
+    frame: false, transparent: true, hasShadow: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
     show: false, alwaysOnTop: true, skipTaskbar: true, title: '录制控制',
-    backgroundColor: windowAppearance.getBackgroundColor(),
     webPreferences: { preload: path.join(__dirname, '../preload/index.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false },
   })
   const logger = createMainLogger('main.recording_control_window')

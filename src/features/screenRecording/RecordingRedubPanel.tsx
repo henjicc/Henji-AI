@@ -43,14 +43,17 @@ export function RecordingRedubPanel({ sessionId, recording }: { sessionId: strin
     } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
     finally { setBusy(false); controller.current = undefined }
   }
-  return <UiGroup title={t('recording.redubTitle')} labelWidth={120}>
+  return <UiGroup title={t('recording.redubTitle')} titleTone="compact" labelWidth={72} info={t('recording.redubHint')}>
     {error && <UiError message={error} />}{busy && <UiLoading message={t('recording.redubBusy')} />}
-    <UiFormRow label={t('recording.scriptDestination')}><Dropdown value={documentId} options={documents} onSelect={setDocumentId} /></UiFormRow>
-    <UiFormRow label={t('recording.redubSentence')}><Dropdown value={clipId} options={sentences} onSelect={id => { setClipId(id); setText(sentences.find(v => v.value === id)!.label) }} /></UiFormRow>
-    <UiFormRow label={t('recording.directorNarration')}><UiTextArea height="short" value={text} maxLength={2000} disabled={busy} onChange={e => setText(e.target.value)} /></UiFormRow>
-    <RecordingVoiceControls modelId={modelId} options={options} onModelChange={setModelId} onOptionsChange={setOptions} />
-    <UiFormRow label={t('recording.redubRerecord')}><UiSwitch checked={rerecord} onCheckedChange={setRerecord} /></UiFormRow>
-    <p className="text-xs text-text2">{t('recording.redubHint')}</p>
-    <UiFormRow label=""><div className="flex gap-2"><UiButton disabled={busy || !clipId || !text.trim()} disabledReason={t('recording.redubChoose')} onClick={() => { void run() }}>{t('recording.redubRun')}</UiButton>{busy && <UiButton onClick={() => controller.current?.abort()}>{t('recording.cancel')}</UiButton>}</div></UiFormRow>
+    <UiFormRow label={t('recording.scriptDestination')} density="compact"><Dropdown size="sm" value={documentId} display={documentId ? undefined : t('recording.redubChooseDocument')} emptyLabel={t('recording.redubNoDocument')} options={documents} onSelect={setDocumentId} /></UiFormRow>
+    {documentId && <>
+      <UiFormRow label={t('recording.redubSentence')} density="compact"><Dropdown size="sm" value={clipId} display={clipId ? undefined : t('recording.redubChooseSentence')} emptyLabel={t('recording.redubNoSentence')} options={sentences} onSelect={id => { setClipId(id); setText(sentences.find(v => v.value === id)!.label) }} /></UiFormRow>
+      {clipId && <>
+        <UiFormRow label={t('recording.directorNarration')} density="compact"><UiTextArea height="short" value={text} maxLength={2000} disabled={busy} onChange={e => setText(e.target.value)} /></UiFormRow>
+        <RecordingVoiceControls modelId={modelId} options={options} onModelChange={setModelId} onOptionsChange={setOptions} />
+        <UiFormRow label={t('recording.redubRerecordShort')} density="compact"><UiSwitch checked={rerecord} onCheckedChange={setRerecord} /></UiFormRow>
+        <UiFormRow label="" density="compact"><div className="flex gap-2"><UiButton variant="secondary" size="sm" disabled={busy || !text.trim()} disabledReason={t('recording.redubChoose')} onClick={() => { void run() }}>{t('recording.redubRun')}</UiButton>{busy && <UiButton size="sm" onClick={() => controller.current?.abort()}>{t('recording.cancel')}</UiButton>}</div></UiFormRow>
+      </>}
+    </>}
   </UiGroup>
 }

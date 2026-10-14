@@ -7,8 +7,8 @@ import { readRecordingUnderstanding } from './application/recordingUnderstanding
 import { UNDERSTANDING_ENTITY, UNDERSTANDING_PROPERTY } from './application/recordingUnderstandingFields'
 import { showRecordingDocument } from './application/recordingService'
 
-export function RecordingSessionPrivacy({ recording, originUs, disabled, onBusyChange, onSeek }: {
-  recording: RecordingDocument; originUs: number; disabled: boolean; onBusyChange(value: boolean): void; onSeek(candidate: PrivacyCandidate): void
+export function RecordingSessionPrivacy({ recording, originUs, disabled, focusedId, onBusyChange, onSeek }: {
+  recording: RecordingDocument; originUs: number; disabled: boolean; focusedId?: string; onBusyChange(value: boolean): void; onSeek(candidate: PrivacyCandidate): void
 }): JSX.Element {
   const controller = useRef<AbortController | null>(null)
   const [busy, setBusy] = useState(false)
@@ -33,6 +33,6 @@ export function RecordingSessionPrivacy({ recording, originUs, disabled, onBusyC
     } catch (failure) { if (!operation.signal.aborted) setError(failure instanceof Error ? failure.message : String(failure)) }
     finally { controller.current = null; setBusy(false); onBusyChange(false) }
   }
-  return <RecordingPrivacyPanel privacy={recording.understanding.privacy} originUs={originUs} busy={busy} disabled={disabled} error={error}
+  return <RecordingPrivacyPanel privacy={recording.understanding.privacy} originUs={originUs} busy={busy} disabled={disabled} error={error} focusedId={focusedId}
     onAnalyze={() => { void run() }} onCancel={() => controller.current?.abort()} onChange={value => { void run(value) }} onSeek={onSeek} />
 }

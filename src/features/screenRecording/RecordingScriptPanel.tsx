@@ -37,27 +37,27 @@ export function RecordingScriptPanel({ sessionId, recording, disabled }: { sessi
     await showRecordingDocument(sessionId)
   }
   const sessionRef = { kind: 'screen_recording.session', id: sessionId }
-  return <UiGroup title={t('recording.scriptTitle')} labelWidth={120} actions={<UiButton disabled={disabled || busy} disabledReason={t('recording.movieBusy')} onClick={() => run(async () => {
+  return <UiGroup title={t('recording.scriptTitle')} titleTone="compact" labelWidth={96} info={t('recording.scriptScope')} actions={<UiButton size="sm" disabled={disabled || busy} disabledReason={t('recording.movieBusy')} onClick={() => run(async () => {
     if (!recording.understanding.steps.length) await invoke('understand_screen_recording', { sessionRef, transcribe: false, detectVisuals: false })
     await invoke('generate_screen_recording_script', { sessionRef }); await showRecordingDocument(sessionId)
   })}>{t('recording.scriptGenerate')}</UiButton>}>
     {error && <UiError message={error} />}{busy && <UiLoading message={t('recording.scriptBusy')} />}
-    <p className="text-xs text-text2">{t('recording.scriptScope')}</p>
+    {!script.steps.length && !busy && <p className="text-xs text-text3">{t('recording.scriptEmpty')}</p>}
     {script.steps.length > 0 && <>
-      <UiFormRow label={t('recording.scriptStep')}><Dropdown size="sm" value={stepId} options={[{ value: '', label: t('recording.scriptAll') }, ...script.steps.map((v, i) => ({ value: v.id, label: `${i + 1}. ${v.title}` }))]} onSelect={setStepId} /></UiFormRow>
+      <UiFormRow label={t('recording.scriptStep')} density="compact"><Dropdown size="sm" value={stepId} options={[{ value: '', label: t('recording.scriptAll') }, ...script.steps.map((v, i) => ({ value: v.id, label: `${i + 1}. ${v.title}` }))]} onSelect={setStepId} /></UiFormRow>
       {selected && <>
-        <UiFormRow label={t('recording.scriptStepTitle')}><UiInput size="sm" value={selected.title} onChange={event => update({ title: event.target.value })} maxLength={120} /></UiFormRow>
-        <UiFormRow label={t('recording.scriptWait')}><NumberInput size="sm" value={selected.wait.settleMs / 1000} min={.1} max={10} step={.1} onChange={value => update({ wait: { kind: 'capability_completed', settleMs: Math.round(value * 1000) } })} /></UiFormRow>
-        {selected.operations.flatMap((operation, index) => Object.entries(operation.properties).map(([key, value]) => <UiFormRow key={`${index}:${key}`} label={t(`recording.scriptProperty_${key.split('.').at(-1)}`)}>
+        <UiFormRow label={t('recording.scriptStepTitle')} density="compact"><UiInput size="sm" value={selected.title} onChange={event => update({ title: event.target.value })} maxLength={120} /></UiFormRow>
+        <UiFormRow label={t('recording.scriptWait')} density="compact"><NumberInput size="sm" value={selected.wait.settleMs / 1000} min={.1} max={10} step={.1} onChange={value => update({ wait: { kind: 'capability_completed', settleMs: Math.round(value * 1000) } })} /></UiFormRow>
+        {selected.operations.flatMap((operation, index) => Object.entries(operation.properties).map(([key, value]) => <UiFormRow key={`${index}:${key}`} label={t(`recording.scriptProperty_${key.split('.').at(-1)}`)} density="compact">
           {typeof value === 'number' ? <NumberInput size="sm" value={value} step={.1} onChange={next => update({ operations: selected.operations.map((item, i) => i === index ? { ...item, properties: { ...item.properties, [key]: next } } : item) })} /> : <UiInput size="sm" value={String(value)} onChange={event => update({ operations: selected.operations.map((item, i) => i === index ? { ...item, properties: { ...item.properties, [key]: event.target.value } } : item) })} />}
         </UiFormRow>))}
         {selected.blockedReason && <p className="text-xs text-text2">{selected.blockedReason}</p>}
       </>}
-      <UiFormRow label={t('recording.scriptDestination')}><Dropdown size="sm" value={target} options={[{ value: '', label: t('recording.scriptChooseDestination') }, ...documents]} onSelect={setTarget} /></UiFormRow>
-      <UiFormRow label=""><div className="flex flex-wrap gap-2">
-        <UiButton disabled={disabled || busy} disabledReason={t('recording.movieBusy')} onClick={() => run(save)}>{t('recording.scriptSave')}</UiButton>
-        <UiButton disabled={disabled || busy} disabledReason={t('recording.movieBusy')} onClick={() => run(async () => { await save(); await invoke('replay_screen_recording_script', { sessionRef, ...(stepId ? { stepId } : {}) }) })}>{t('recording.scriptReplay')}</UiButton>
-        <UiButton disabled={disabled || busy || !target} disabledReason={t('recording.scriptChooseDestination')} onClick={() => run(async () => {
+      <UiFormRow label={t('recording.scriptDestination')} density="compact"><Dropdown size="sm" value={target} options={[{ value: '', label: t('recording.scriptChooseDestination') }, ...documents]} onSelect={setTarget} /></UiFormRow>
+      <UiFormRow label="" density="compact"><div className="flex flex-wrap gap-2">
+        <UiButton size="sm" disabled={disabled || busy} disabledReason={t('recording.movieBusy')} onClick={() => run(save)}>{t('recording.scriptSave')}</UiButton>
+        <UiButton size="sm" disabled={disabled || busy} disabledReason={t('recording.movieBusy')} onClick={() => run(async () => { await save(); await invoke('replay_screen_recording_script', { sessionRef, ...(stepId ? { stepId } : {}) }) })}>{t('recording.scriptReplay')}</UiButton>
+        <UiButton size="sm" disabled={disabled || busy || !target} disabledReason={t('recording.scriptChooseDestination')} onClick={() => run(async () => {
           await save()
           const sourceId = await getPlatform().screenRecording.capture({ operation: 'application-source', sessionId })
           await invoke('rerecord_screen_recording_steps', { sessionRef, documentRef: { kind: 'video_edit.document', id: target }, sourceRef: { kind: 'screen_recording.source', id: sourceId }, ...(stepId ? { stepId } : {}) })

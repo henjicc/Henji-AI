@@ -7,7 +7,7 @@ type Check = NonNullable<Parameters<Session['setPermissionCheckHandler']>[0]>
 type Request = NonNullable<Parameters<Session['setPermissionRequestHandler']>[0]>
 type Display = NonNullable<Parameters<Session['setDisplayMediaRequestHandler']>[0]>
 const mocks = vi.hoisted(() => ({ sources: vi.fn(), status: vi.fn(), ask: vi.fn(), fromFrame: vi.fn(), open: vi.fn() }))
-vi.mock('electron', () => ({ desktopCapturer: { getSources: mocks.sources }, systemPreferences: { getMediaAccessStatus: mocks.status, askForMediaAccess: mocks.ask }, shell: { openExternal: mocks.open }, webContents: { fromFrame: mocks.fromFrame }, session: {} }))
+vi.mock('electron', () => ({ desktopCapturer: { getSources: mocks.sources }, systemPreferences: { getMediaAccessStatus: mocks.status, askForMediaAccess: mocks.ask }, shell: { openExternal: mocks.open }, webContents: { fromFrame: mocks.fromFrame }, session: {}, screen: { getPrimaryDisplay: () => ({ id: 1 }), getAllDisplays: () => [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 }] } }))
 vi.mock('../security/main-renderer-url', () => ({ isTrustedMainRendererUrl: (url: string) => url === 'app://henji' }))
 vi.mock('./logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn() }) }))
 
@@ -121,7 +121,7 @@ describe('统一媒体权限', () => {
     expect(await new Promise(resolve => hooks.display(request, resolve))).toEqual({})
     expect(() => service.grant(contents, 'screen', ['screen'], { sourceId: 'window:42:0', excludedSourceIds: ['window:42:0'] })).toThrow('已被排除')
     expect(() => service.grant(contents, 'screen', ['screen'], { sourceId: 'screen:0:0', excludedSourceIds: ['window:42:0'] })).toThrow('整屏录制无法隐藏')
-    expect(await service.sources(['window:42:0'])).toEqual([{ id: 'screen:0:0', name: '屏幕', kind: 'screen', displayId: '1' }])
+    expect(await service.sources(['window:42:0'])).toEqual([{ id: 'screen:0:0', name: '屏幕', kind: 'screen', displayId: '1', display: { x: 0, y: 0, width: 1920, height: 1080, scaleFactor: 1, primary: true } }])
     mocks.sources.mockRejectedValueOnce(new Error('device gone'))
     expect(await new Promise(resolve => hooks.display(request, resolve))).toEqual({})
   })

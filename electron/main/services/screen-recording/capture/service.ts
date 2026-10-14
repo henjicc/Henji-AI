@@ -1,4 +1,4 @@
-import { BrowserWindow, type WebContents } from 'electron'
+import { BrowserWindow, shell, type WebContents } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import path from 'node:path'
@@ -10,8 +10,9 @@ import { openRecordingControl, closeRecordingControl, recordingControl } from '.
 import { CaptureStorage, recoverCapture } from './storage'
 import { GfxCaptureBackend } from './gfxcapture'
 import { resolveNativeCaptureSource } from './source'
-import { createCaptureGeometry } from './geometry'
+import { createCaptureBounds, createCaptureGeometry } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
+import { exportQuickRecording, quickExportPath } from '../quick-export'
 
 const logger = createMainLogger('main.screen_recording.capture')
 interface Active {
@@ -43,6 +44,15 @@ async function fail(session: Active, error: Error): Promise<void> {
 export async function handleCaptureRequest(owner: WebContents, request: CaptureRequest): Promise<unknown> {
   if (request.operation === 'application-source') return BrowserWindow.fromWebContents(owner)?.getMediaSourceId() ?? null
   if (request.operation === 'events') return readRecordingEvents(request.sessionId, request.offset, request.limit, request.markersOnly)
+  if (request.operation === 'quick-export') {
+    if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先结束当前录制，再保存视频')
+    return exportQuickRecording(request.sessionId, request.directory)
+  }
+  if (request.operation === 'reveal-export') {
+    const file = quickExportPath(request.sessionId)
+    if (!file) throw new Error('视频文件已移动或删除')
+    shell.showItemInFolder(file); return
+  }
   if (request.operation === 'recover-session') {
     if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先关闭当前录制，再恢复会话')
     return recoverRecordingSession(request.sessionId, path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId))
@@ -70,7 +80,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         }
       }
       if (request.options.backend === 'gfxcapture' && !wgc) throw new Error('当前系统不支持无光标采集，请使用兼容录制')
-      const manifest: CaptureManifest = { version: 1, sessionId: request.sessionId, options: request.options, backend, cursorEmbedded: backend === 'chromium', status: 'prepared', spans: [] }
+      const manifest: CaptureManifest = { version: 1, sessionId: request.sessionId, options: request.options, backend, cursorEmbedded: backend === 'chromium' || request.options.cursor === 'embed', status: 'prepared', spans: [] }
       let document: RecordingSessionDocument | undefined
       const storage = new CaptureStorage(path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId), manifest, async value => { await document?.capture(value) })
       await storage.prepare()
@@ -115,7 +125,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           directory: storage.directory, originUs: session.originUs, nowUs: now, geometry,
           onPage: (page, file) => document!.page(page, file),
           onFailure: error => logger.error('录制事件失败', { event: 'recording.session.events.failed', error }),
-        } : undefined, document ? () => document!.capture(manifest) : undefined)
+        } : undefined, document ? () => document!.capture(manifest) : undefined, createCaptureBounds(source, request.options))
       } catch (error) {
         try { if (backend === 'gfxcapture') await session.backend.cancel() } finally { await storage.release(); active = null }
         throw error

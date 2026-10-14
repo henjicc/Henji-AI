@@ -4,6 +4,8 @@ import { RecordingControlService, type RecordingControlBackend } from './control
 import { createMainLogger } from '../logging'
 import { mediaPermissions } from '../media-permissions'
 import { createRecordingControlWindow } from '../../windows/recording-control'
+import { createRecordingFrameWindow } from '../../windows/recording-frame'
+import type { CaptureRect } from '../../../../src/core/captureLog/coordinates'
 import { isTrustedMainRendererUrl } from '../../security/main-renderer-url'
 import { RecordingEventSession, type RecordingEventOptions } from './events'
 import type { CapabilityCapture } from '../../../../src/core/captureLog/events'
@@ -14,13 +16,14 @@ import type { RecordingTrackStatus } from '../../../../src/core/screenRecording/
 const logger = createMainLogger('main.screen_recording')
 let owner: WebContents | null = null
 let controlWindow: ReturnType<typeof createRecordingControlWindow> | null = null
+let frameWindow: BrowserWindow | null = null
 let closing: Promise<void> | null = null
 let eventSession: RecordingEventSession | null = null
 let detachCapabilitySink: (() => void) | undefined
 const watched = new WeakSet<WebContents>()
 
 function broadcast(snapshot: RecordingControlSnapshot | null): void {
-  for (const contents of [owner, controlWindow?.webContents]) {
+  for (const contents of [owner, controlWindow?.webContents, frameWindow?.webContents]) {
     if (contents && !contents.isDestroyed()) contents.send('screenRecording:changed', snapshot)
   }
 }
@@ -40,9 +43,13 @@ export const recordingControl = new RecordingControlService({
 export function isRecordingControlSender(contents: WebContents): boolean {
   return contents === owner || contents === controlWindow?.webContents
 }
+/** The range frame only reads the snapshot; it can never control the session. */
+export function isRecordingFrameSender(contents: WebContents): boolean {
+  return Boolean(frameWindow) && contents === frameWindow?.webContents
+}
 
 /** 正式采集协调器准备完资源后调用；UI/Pi/MCP 不各建状态机。1.5 负责公开会话实体。 */
-export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend, events?: RecordingEventOptions, settled?: () => Promise<void>): RecordingControlSnapshot {
+export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend, events?: RecordingEventOptions, settled?: () => Promise<void>, frameBounds?: () => CaptureRect | undefined): RecordingControlSnapshot {
   if (!isTrustedMainRendererUrl(ownerContents.getURL())) throw new Error('录制宿主来源不可信')
   if (owner) throw new Error('已有录制会话，请先关闭当前录制')
   owner = ownerContents
@@ -76,6 +83,10 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
       void closeRecordingControl().catch(error => logger.error('控制条关闭后清理失败', { event: 'recording.control.closed_cleanup.failed', error }))
     })
   } catch (error) { void closeRecordingControl().catch(failure => logger.error('录制控制清理失败', { event: 'recording.control.cleanup.failed', error: failure })); throw error }
+  if (frameBounds) {
+    // A missing frame is only a lost visual cue; recording continues without it.
+    try { frameWindow = createRecordingFrameWindow(frameBounds) } catch (error) { logger.warn('录制范围提示创建失败', { event: 'recording.frame.create.failed', error }) }
+  }
   if (!watched.has(ownerContents)) {
     watched.add(ownerContents)
     const lost = (): void => {
@@ -119,7 +130,8 @@ export function closeRecordingControl(): Promise<void> {
     try { await recordingControl.dispose() } finally {
       detachCapabilitySink?.(); detachCapabilitySink = undefined
       if (controlWindow && !controlWindow.isDestroyed()) controlWindow.destroy()
-      controlWindow = null; owner = null; eventSession = null
+      if (frameWindow && !frameWindow.isDestroyed()) frameWindow.destroy()
+      controlWindow = null; frameWindow = null; owner = null; eventSession = null
     }
   }).finally(() => { closing = null })
   return closing

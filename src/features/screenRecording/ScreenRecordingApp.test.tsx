@@ -20,7 +20,7 @@ vi.mock('./RecordingSessionPrivacy', () => ({ RecordingSessionPrivacy: () => <di
 // 脚本面板有独立测试（4.1）；这里只验会话页聚合、跳转与成片入口。
 vi.mock('./RecordingScriptPanel', () => ({ RecordingScriptPanel: () => <div /> }))
 vi.mock('./RecordingRedubPanel', () => ({ RecordingRedubPanel: () => <div /> }))
-vi.mock('./RecordingDirectorPanel', () => ({ RecordingDirectorPanel: () => <div /> }))
+vi.mock('./RecordingDirectorPanel', () => ({ RecordingDirectorGoal: () => <div />, RecordingDirectorScript: () => <div /> }))
 vi.mock('./tracks/devices', () => ({ recordingDevices: async () => [] }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: (props: VideoViewerModalProps) => { fixture.viewer(props); return <div data-testid="shared-viewer" /> } }))
@@ -36,19 +36,20 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(100)
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
-it('来源缩略图与标题分栏，设置固定左侧标签列，关闭设备即隐藏选择', async () => {
+it('先选录制范围：屏幕按位置排布、窗口单独成网格，设置在右侧固定标签列，关闭设备即隐藏选择', async () => {
   render(<NotificationProvider><ScreenRecordingApp onBack={vi.fn()} /></NotificationProvider>)
-  await screen.findByRole('button', { name: '屏幕 1' })
-  const source = screen.getByRole('button', { name: '很长的窗口标题 · 痕迹AI' })
+  const display = await screen.findByRole('button', { name: '屏幕 1' })
+  expect(display.closest('[data-recording-source-picker]')?.getAttribute('data-recording-source-picker')).toBe('screen')
+  expect(screen.queryByRole('button', { name: '很长的窗口标题 · 痕迹AI' })).toBeNull()
+  fireEvent.click(screen.getByRole('radio', { name: '单个窗口' }))
+  const source = await screen.findByRole('button', { name: '很长的窗口标题 · 痕迹AI' })
   const image = source.querySelector('img')!
   const title = source.querySelector('[data-recording-source-title]')!
   expect(image.parentElement).not.toBe(title.parentElement)
   expect(title.classList.contains('truncate')).toBe(true)
-  await waitFor(() => expect(source.getAttribute('aria-describedby')).toBeTruthy())
-  expect(screen.getByRole('button', { name: '屏幕 1' }).getAttribute('aria-describedby')).toBeNull()
   const mic = screen.getByRole('switch', { name: '麦克风' })
   expect(mic.closest('[data-ui-form-row]')?.getAttribute('data-ui-form-row')).toBe('panel')
-  expect(mic.closest('[data-ui-form-row]')?.getAttribute('data-label-width')).toBe('120')
+  expect(mic.closest('[data-ui-form-row]')?.getAttribute('data-label-width')).toBe('72')
   expect(screen.getByLabelText('麦克风设备')).toBeTruthy()
   fireEvent.click(mic)
   expect(screen.queryByLabelText('麦克风设备')).toBeNull()
@@ -56,7 +57,7 @@ it('来源缩略图与标题分栏，设置固定左侧标签列，关闭设备�
   fireEvent.click(screen.getByRole('switch', { name: '摄像头' }))
   expect(screen.getByLabelText('摄像头设备')).toBeTruthy()
 })
-it('会话按轨道聚合完整分片，标记与步骤跳转，成片入口可用', async () => {
+it('会话工作台按轨道聚合完整分片，时间条上的标记与步骤跳转，成片入口可用', async () => {
   const document = createRecordingDocument()
   document.sessionId = '00000000-0000-4000-8000-000000000001'; document.status = 'stopped'
   document.media = [
@@ -73,11 +74,12 @@ it('会话按轨道聚合完整分片，标记与步骤跳转，成片入口可�
   expect(latest().presentation).toBe('inline')
   expect(latest().timeline?.duration).toBe(11)
   expect(latest().timeline?.segments).toHaveLength(2)
-  expect(screen.getByLabelText('预览轨道').textContent).toContain('屏幕')
+  // Only one picture track: no track switch is offered.
+  expect(screen.queryByLabelText('预览轨道')).toBeNull()
   expect(screen.queryByText('屏幕 5')).toBeNull()
   expect((screen.getByRole('button', { name: '生成成片' }) as HTMLButtonElement).disabled).toBe(false)
   expect(screen.queryByText(/下一阶段|第二阶段/)).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: /9.7 s.*重点演示/ }))
+  fireEvent.click(screen.getByRole('button', { name: /0:09 重点演示/ }))
   expect(latest().seekRequest).toEqual({ seconds: 9.7, request: 1 })
   fireEvent.click(screen.getByRole('button', { name: /完成设置/ }))
   expect(latest().seekRequest).toEqual({ seconds: 6, request: 2 })

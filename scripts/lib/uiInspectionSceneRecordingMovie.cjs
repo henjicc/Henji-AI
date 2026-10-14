@@ -21,6 +21,7 @@ function createRecordingMovieScene() {
         const sourceId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('view=')).getMediaSourceId())
         const source = (await page.evaluate(() => window.henjiNative.screenRecording.sources())).find(value => value.id === sourceId)
         assert(source, '隔离应用窗口必须可采集')
+        await page.getByRole('radio', { name: '单个窗口', exact: true }).click()
         await button(source.name).click(); await page.getByLabel('会话名称', { exact: true }).fill('一分钟成片验收')
         await page.getByRole('switch', { name: '摄像头', exact: true }).click()
         await button('开始录制').click(); await button('暂停').waitFor({ timeout: 30000 })
@@ -68,6 +69,7 @@ function createRecordingMovieScene() {
         client = await connectMcpClient((await authorizeMcpConnection(page, { name: '成片隔离验收', allowWrites: true, allowDestructive: true })).config)
         const read = (ref, propertyIds = []) => callTool(client, 'read_application_entity', { ref, propertyIds })
         await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
+        await page.getByRole('tab', { name: /^隐私/ }).click()
         await button('确认').first().click()
         // 页面其他区域也会出现“已确认”字样，不能据此判断写入完成；以落盘状态或错误提示为准。
         let confirmed

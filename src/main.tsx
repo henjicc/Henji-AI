@@ -46,6 +46,8 @@ window.addEventListener('unhandledrejection', (event) => {
 const isLogsView = new URLSearchParams(window.location.search).get('view') === 'logs'
 const isRecordingControlView = new URLSearchParams(window.location.search).get('view') === 'recording-control'
 const RecordingControlBar = React.lazy(() => import('./features/screenRecording/RecordingControlBar'))
+const isRecordingFrameView = new URLSearchParams(window.location.search).get('view') === 'recording-frame'
+const RecordingFrame = React.lazy(() => import('./features/screenRecording/RecordingFrame'))
 const isCameraStageRenderView = new URLSearchParams(window.location.search).get('view') === 'camera-stage-render'
 
 // 日志窗口与三维渲染窗口都只在各自的 `?view=` 分流下挂载，主窗口永远用不到。
@@ -59,6 +61,8 @@ const CameraStageRenderWorker = React.lazy(
 ReactDOM.createRoot(document.getElementById('root')!).render(
     isRecordingControlView ? (
         <React.Suspense fallback={null}><RecordingControlBar /></React.Suspense>
+    ) : isRecordingFrameView ? (
+        <React.Suspense fallback={null}><RecordingFrame /></React.Suspense>
     ) : isCameraStageRenderView ? (
         <React.Suspense fallback={null}>
             <CameraStageRenderWorker />

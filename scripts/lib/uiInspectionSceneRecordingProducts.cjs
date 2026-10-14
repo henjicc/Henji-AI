@@ -20,6 +20,7 @@ function createRecordingProductsScene() {
         const sourceId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('view=')).getMediaSourceId())
         const source = (await page.evaluate(() => window.henjiNative.screenRecording.sources())).find(source => source.id === sourceId)
         assert(source, '必须录制隔离应用本身')
+        await page.getByRole('radio', { name: '单个窗口', exact: true }).click()
         await button(source.name).click(); await page.getByLabel('会话名称', { exact: true }).fill('多产物真实采集验收')
         await page.getByRole('switch', { name: '麦克风', exact: true }).click()
         await button('开始录制').click(); await button('暂停').waitFor({ timeout: 30000 })
@@ -58,7 +59,9 @@ function createRecordingProductsScene() {
         await page.evaluate(async ({ id, revision, content }) => window.henjiNative.documents.saveDocument({ target: { id }, expectedRevision: revision, content }), { id: session.id, revision: recorded.meta.revision, content })
         client = await connectMcpClient((await authorizeMcpConnection(page, { name: '多产物隔离验收', allowWrites: true, allowDestructive: true })).config)
         await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
-        await button('导出所选产物').scrollIntoViewIfNeeded(); await capture('recording-products-options')
+        // Products live behind the command band's Export button, in a dialog.
+        const openExport = async () => { if (!await button('导出所选产物').isVisible()) await button('导出').click(); await button('导出所选产物').waitFor({ state: 'visible' }) }
+        await openExport(); await capture('recording-products-options')
         // Only the trusted native chooser is replaced. Real UI/service/renderer/fs remain unchanged.
         const selected = path.join(root, 'chosen'); fs.mkdirSync(selected, { recursive: true })
         await app.evaluate(({ dialog }, selected) => { global.__recordingProductsChooser = dialog.showOpenDialog; dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] }) }, selected)
@@ -122,7 +125,7 @@ function createRecordingProductsScene() {
         }
         // Full terminal audit belongs to this task's recording surface; the existing editor was captured above.
         await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
-        await button('导出所选产物').scrollIntoViewIfNeeded()
+        await openExport()
         evidence.completed = true; writeEvidence()
       } finally { writeEvidence(); if (client) await client.close().catch(() => undefined); await disableMcp(page).catch(() => undefined) }
     },

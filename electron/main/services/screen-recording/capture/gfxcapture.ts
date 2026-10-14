@@ -12,7 +12,7 @@ export interface NativeCaptureSource { selector: 'hwnd' | 'hmonitor'; handle: st
 export function buildGfxCaptureArgs(options: ScreenCaptureOptions, source: NativeCaptureSource, encoder: VideoEncoderProfile, output: string): string[] {
   if (!/^\d+$/.test(source.handle) || source.handle === '0') throw new Error('录制来源已失效，请重新选择')
   const crop = captureCrop(options.region, source.width, source.height)
-  const filter = `gfxcapture=${source.selector}=${source.handle}:capture_cursor=0:capture_border=1:max_framerate=${options.fps}:width=${options.width}:height=${options.height}:resize_mode=scale_aspect`
+  const filter = `gfxcapture=${source.selector}=${source.handle}:capture_cursor=${options.cursor === 'embed' ? 1 : 0}:capture_border=1:max_framerate=${options.fps}:width=${options.width}:height=${options.height}:resize_mode=scale_aspect`
     + (options.region ? `:crop_left=${crop.x}:crop_top=${crop.y}:crop_right=${source.width - crop.x - crop.width}:crop_bottom=${source.height - crop.y - crop.height}` : '')
     + (encoder.id === 'cpu' ? ',hwdownload,format=bgra,format=yuv420p' : '')
   const kbps = Math.round(options.bitrate / 1000)

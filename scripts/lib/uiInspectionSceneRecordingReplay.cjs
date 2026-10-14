@@ -71,6 +71,7 @@ function createRecordingReplayScene() {
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         const showScript = async () => {
           await invoke('open_document', { documentId: sessionRef.id })
+          await page.getByRole('tab', { name: '步骤', exact: true }).click()
           await page.getByText('操作脚本', { exact: true }).waitFor()
           await page.getByText('操作脚本', { exact: true }).scrollIntoViewIfNeeded()
           await page.getByRole('button', { name: /^重录步骤 / }).click()

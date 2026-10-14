@@ -14,7 +14,7 @@ vi.mock('../../appPaths', () => ({ getUserFolderDir: () => state.root }))
 vi.mock('../../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('../../media-permissions', () => ({ mediaPermissions: { assertSelection: state.assert, sources: async () => [{ id: 'screen:0:0', kind: 'screen', displayId: '1' }] } }))
 vi.mock('../runtime', () => ({ recordingControl: { snapshot: () => null, captureFailed: async (_id: string, error: Error) => { state.failed(error); await state.backend?.cancel(); state.backend = null } }, openRecordingControl: (_owner: unknown, _id: string, backend: RecordingControlBackend) => { state.backend = backend; state.open() }, closeRecordingControl: async () => { await state.backend?.cancel(); state.backend = null } }))
-vi.mock('./geometry', () => ({ createCaptureGeometry: vi.fn() }))
+vi.mock('./geometry', () => ({ createCaptureGeometry: vi.fn(), createCaptureBounds: vi.fn(() => () => undefined) }))
 vi.mock('../session-document', () => ({ RecordingSessionDocument: {}, readRecordingEvents: vi.fn(), recoverRecordingSession: vi.fn() }))
 vi.mock('./source', () => ({ resolveNativeCaptureSource: vi.fn() }))
 import { handleCaptureRequest } from './service'

@@ -47,7 +47,7 @@
 
 ## 行高、条带与面板
 
-字号/行高固定配对：3xs 10/14、2xs 11/16、xs 12/16、13 13/20、sm 14/20、15 15/22、base 16/24、xl 20/28。`text-14` 已并入 `text-sm`；默认字号、阴影、圆角由 Tailwind 覆盖式登记，未登记档不生成 CSS。
+字号/行高固定配对：3xs 10/14、2xs 11/16、xs 12/16、13 13/20、sm 14/20、15 15/22、base 16/24、xl 20/28、display 40/48（只给录制计时、倒计时这类大读数，不作标题）。`text-14` 已并入 `text-sm`；默认字号、阴影、圆角由 Tailwind 覆盖式登记，未登记档不生成 CSS。
 
 | 场景 | 唯一入口与档位 |
 |---|---|
@@ -80,7 +80,7 @@ unusedToken 检查 styleTokens 导出的真实 AST 消费、CSS --ui 变量和 T
 | 维度 | 实际配置值域 | 自动门禁 |
 |---|---|---|
 | 颜色令牌 | gap / window / canvas / panel / raised / segment-selected / control / hover / selected / selected-accent / line / edge / media / scrim / text1 / text2 / text3 / text / accent / danger / success / warning / on / clip / wave | ESLint 固定灰色板/字面量；check:colors（旧别名与未定义类） |
-| 字号/行高 | 13: 13px/20px；15: 15px/22px；3xs: 10px/14px；2xs: 11px/16px；xs: 12px/16px；sm: 14px/20px；base: 16px/24px；xl: 20px/28px | ESLint 字号任意值；check:ui-residue |
+| 字号/行高 | 13: 13px/20px；15: 15px/22px；3xs: 10px/14px；2xs: 11px/16px；xs: 12px/16px；sm: 14px/20px；base: 16px/24px；xl: 20px/28px；display: 40px/48px | ESLint 字号任意值；check:ui-residue |
 | 圆角 | none: 0；full: 9999px；control: var(--radius-control)；field: var(--radius-field)；overlay: var(--radius-overlay)；md: var(--radius-control)；lg: var(--radius-field)；xl: var(--radius-overlay)；hairline: 1px | ESLint rounded 任意值；check:ui-residue（嵌套层级只由 DOM oversizedRadius） |
 | 阴影 | none / panel / node-selected / node-error / thumb / thumb-ring / thumb-sm | ESLint shadow 任意值；check:ui-residue（使用位置只由 DOM shadowOutsideOverlay） |
 | 层级 | base: 0；raised: 10；sticky: 20；dropdown: 30；panel: 40；modal: 50；viewer: 60；toast: 70；popover: 75；tooltip: 80；drag: 90；titlebar: 100 | ESLint z 任意值/数字类；check:ui-residue |

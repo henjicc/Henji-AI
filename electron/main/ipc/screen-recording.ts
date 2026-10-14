@@ -2,7 +2,7 @@ import { screenRecordingRequestSchema } from '../../../src/core/screenRecording/
 import { assertTrustedApplicationSender } from './application-control'
 import { registerIpcHandler } from './registry'
 import { mediaPermissions } from '../services/media-permissions'
-import { isRecordingControlSender, recordingControl, recordRecordingCapability, updateRecordingTracks } from '../services/screen-recording/runtime'
+import { isRecordingControlSender, isRecordingFrameSender, recordingControl, recordRecordingCapability, updateRecordingTracks } from '../services/screen-recording/runtime'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { createMainLogger } from '../services/logging'
 import { recordRecordingSensitiveDom } from '../services/screen-recording/runtime'
@@ -11,7 +11,7 @@ export function registerScreenRecordingIpc(): void {
   const logger = createMainLogger('main.screen_recording.ipc')
   registerIpcHandler('screenRecording:request', raw => screenRecordingRequestSchema.parse(raw), async (request, event) => {
     if (request.action !== 'snapshot' && request.action !== 'control') assertTrustedApplicationSender(event)
-    else if (!isRecordingControlSender(event.sender)) {
+    else if (!isRecordingControlSender(event.sender) && !(request.action === 'snapshot' && isRecordingFrameSender(event.sender))) {
       // 主窗口可以查询空会话；辅助窗口不能控制别人的会话。
       assertTrustedApplicationSender(event)
     }

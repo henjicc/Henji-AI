@@ -27,6 +27,13 @@
         }
       })()
     </script>
+    <script>
+      // 录制控制条与录制范围框是透明窗口：首帧起就不能铺窗口底色。
+      (function () {
+        var view = new URLSearchParams(window.location.search).get('view')
+        if (view === 'recording-control' || view === 'recording-frame') document.documentElement.setAttribute('data-transparent-window', '')
+      })()
+    </script>
     <style>
       /* 首帧底色 = 主题 window 令牌；样式表加载前取不到变量时回落到石墨推导值（与 APP_WINDOW_BACKGROUND_HEX 一致，有单测） */
       body {
@@ -37,6 +44,10 @@
       #root {
         background-color: var(--window, #1B1B1B);
         min-height: 100vh;
+      }
+      html[data-transparent-window] body,
+      html[data-transparent-window] #root {
+        background-color: transparent;
       }
     </style>
   </head>

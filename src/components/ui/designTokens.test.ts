@@ -210,7 +210,7 @@ describe('设计令牌：尺寸、圆角、动效、层级', () => {
 
 describe('设计令牌：字体与字号', () => {
   it('实际生成的正文及辅助字号均固定行高，不继承父级绝对行高', async () => {
-    const sizes = { '2xs': [11, 16], xs: [12, 16], 13: [13, 20], sm: [14, 20], 15: [15, 22], base: [16, 24], xl: [20, 28] }
+    const sizes = { '2xs': [11, 16], xs: [12, 16], 13: [13, 20], sm: [14, 20], 15: [15, 22], base: [16, 24], xl: [20, 28], display: [40, 48] }
     const result = await postcss([tailwindcss({ ...(config as Config), content: [{ raw: Object.keys(sizes).map(key => `text-${key}`).join(' ') }] })]).process('@tailwind utilities;', { from: undefined })
     for (const [key, [size, lineHeight]] of Object.entries(sizes)) {
       const declarations = new Map<string, string>()

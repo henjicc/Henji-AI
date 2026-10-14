@@ -30,12 +30,12 @@ export function RecordingProductOptions({ sessionId, recording, disabled, onBusy
     } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
     finally { controller.current = null; setBusy(false); onBusyChange(false) }
   }
-  return <UiGroup title={t('recording.productsTitle')}>
+  return <UiGroup labelWidth={96}>
     <UiFormRow label={t('recording.productType')}><Dropdown size="sm" value={product} options={(['steps', 'gif', 'bug_report', 'image_document'] as const).map(value => ({ value, label: t(`recording.product_${value}`) }))} onSelect={value => setProduct(value as RecordingProductKind)} disabled={disabled || busy} /></UiFormRow>
     <UiFormRow label={t('recording.productSteps')}><Dropdown size="sm" value={step} options={[{ value: '', label: t('recording.allSteps') }, ...recording.understanding.steps.map(step => ({ value: step.id, label: step.title }))]} onSelect={setStep} disabled={disabled || busy} /></UiFormRow>
     <p className="text-xs text-text2">{t(product === 'gif' ? 'recording.gifLimit' : product === 'image_document' ? 'recording.imageDocumentHint' : 'recording.productHint')}</p>
     {error && <UiError message={error} />}
-    {busy ? <><UiLoading message={t('recording.productProgress', { count: completed })} /><UiButton onClick={() => controller.current?.abort()}>{t('recording.cancelProduct')}</UiButton></> : <UiButton disabled={disabled || !recording.understanding.steps.length} disabledReason={t('recording.productNeedsSteps')} onClick={() => { void run() }}>{t('recording.exportProduct')}</UiButton>}
+    {busy ? <><UiLoading message={t('recording.productProgress', { count: completed })} /><UiButton onClick={() => controller.current?.abort()}>{t('recording.cancelProduct')}</UiButton></> : <div><UiButton variant="primary" disabled={disabled || !recording.understanding.steps.length} disabledReason={t('recording.productNeedsSteps')} onClick={() => { void run() }}>{t('recording.exportProduct')}</UiButton></div>}
     {result && <>
       <p className="text-13 text-text2">{t(result.state === 'completed' ? 'recording.productCompleted' : 'recording.productCancelled', { count: result.completedSteps })}</p>
       {result.warnings.map((warning, index) => <p key={index} className="text-xs text-text2">{warning}</p>)}

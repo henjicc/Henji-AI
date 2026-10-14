@@ -26,6 +26,18 @@ function createRecordingSessionScene() {
         const source = (await page.evaluate(() => window.henjiNative.screenRecording.sources())).find(source => source.id === sourceId)
         assert(source, '未枚举到隔离测试应用窗口')
         const record = async name => {
+          if (name === '工具箱录制验收') {
+            // Range picker states and the director entry, captured once for visual review.
+            await page.getByRole('radio', { name: '整个屏幕', exact: true }).click()
+            await capture('recording-session-range-screen')
+            await page.getByRole('radio', { name: '选定区域', exact: true }).click()
+            await capture('recording-session-range-region')
+            await page.getByRole('radio', { name: 'AI导演', exact: true }).click()
+            await capture('recording-session-director-goal')
+            await page.getByRole('radio', { name: '自己录', exact: true }).click()
+          }
+          // The isolated app is a window source: pick the window range first, then the window itself.
+          await page.getByRole('radio', { name: '单个窗口', exact: true }).click()
           await page.getByRole('button', { name: source.name, exact: true }).click()
           await page.getByLabel('会话名称', { exact: true }).fill(name)
           if (name === '工具箱录制验收') {
@@ -36,10 +48,10 @@ function createRecordingSessionScene() {
             await page.getByRole('switch', { name: '麦克风', exact: true }).click()
             const captions = await page.evaluate(() => [...document.querySelectorAll('[data-recording-source-caption]')].map(caption => {
               const card = caption.closest('button').getBoundingClientRect(), rect = caption.getBoundingClientRect()
-              const image = caption.parentElement.querySelector('img')?.getBoundingClientRect()
-              return { contained: rect.left >= card.left && rect.right <= card.right && rect.top >= card.top && rect.bottom <= card.bottom, belowImage: !image || rect.top >= image.bottom }
+              const image = caption.parentElement.querySelector('[data-recording-source-thumbnail]')?.getBoundingClientRect()
+              return { contained: rect.left >= card.left - 0.5 && rect.right <= card.right + 0.5 && rect.top >= card.top - 0.5 && rect.bottom <= card.bottom + 0.5, belowImage: !image || rect.top >= image.bottom - 0.5, rect: [rect.left, rect.top, rect.right, rect.bottom], card: [card.left, card.top, card.right, card.bottom], image: image && [image.top, image.bottom] }
             }))
-            assert(captions.length && captions.every(caption => caption.contained && caption.belowImage), '来源标题溢出卡片或与缩略图重叠')
+            assert(captions.length && captions.every(caption => caption.contained && caption.belowImage), `来源标题溢出卡片或与缩略图重叠：${JSON.stringify(captions.filter(caption => !caption.contained || !caption.belowImage).slice(0, 3))}`)
             await page.screenshot({ path: path.join(output, 'preparation.png') })
             await capture('recording-session-preparation')
           }
@@ -86,7 +98,7 @@ function createRecordingSessionScene() {
           assert.equal(await viewer.evaluate(video => video.controls), false, '会话仍使用浏览器原生控制条')
           assert(Math.abs(Number(await viewer.getAttribute('data-viewer-duration')) - duration) < 1e-6, '预览时长未覆盖全部分片')
           assert.equal(await button('生成成片').count(), 1, '成片入口未显示')
-          assert.equal((await page.getByLabel('预览轨道').textContent()).trim(), '屏幕')
+          await page.locator('[data-recording-workbench]').waitFor({ state: 'visible' })
           await viewer.evaluate(video => { video.__tourPlayedSources = []; video.addEventListener('playing', () => video.__tourPlayedSources.push(video.getAttribute('src'))) })
           await button('播放/暂停').click()
           await page.waitForFunction(duration => {

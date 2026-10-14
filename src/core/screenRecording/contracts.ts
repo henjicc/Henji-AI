@@ -31,6 +31,10 @@ export interface CaptureSource {
   kind: 'screen' | 'window'
   displayId: string
   thumbnailUrl?: string
+  /** Window sources only: the owning application's icon, used to tell same-titled windows apart. */
+  iconUrl?: string
+  /** Screen sources only: desktop arrangement in DIP, used to draw the monitor layout picker. */
+  display?: { x: number; y: number; width: number; height: number; scaleFactor: number; primary: boolean }
 }
 export interface CapturePermissionStatus {
   kind: CaptureKind

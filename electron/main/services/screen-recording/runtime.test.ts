@@ -14,6 +14,7 @@ vi.mock('./events', () => ({ RecordingEventSession: class {
   wrap(backend: unknown) { return backend }
 } }))
 vi.mock('../../windows/recording-control', () => ({ createRecordingControlWindow: () => Object.assign(new EventEmitter(), { webContents: { isDestroyed: () => false, send: vi.fn() }, getBounds: () => ({ x: 100, y: 100, width: 200, height: 50 }), getNativeWindowHandle: () => Buffer.from([99, 0, 0, 0]), isDestroyed: () => false, destroy: vi.fn() }) }))
+vi.mock('../../windows/recording-frame', () => ({ createRecordingFrameWindow: () => null }))
 afterEach(async () => { await closeRecordingControl(); vi.clearAllMocks() })
 function contents(url = 'app://henji'): WebContents { return Object.assign(new EventEmitter(), { getURL: () => url, isDestroyed: () => false, send: vi.fn() }) as unknown as WebContents }
 it('能力记录只接受归属宿主及当前会话；控制条区域和原生句柄纳入排除', async () => {

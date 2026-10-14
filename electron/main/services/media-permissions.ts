@@ -1,4 +1,4 @@
-import { desktopCapturer, session, shell, systemPreferences, webContents, type Session, type WebContents } from 'electron'
+import { desktopCapturer, screen, session, shell, systemPreferences, webContents, type Session, type WebContents } from 'electron'
 import { release } from 'node:os'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import type { CaptureKind, CapturePermissionStatus, CaptureSelection, CaptureSource } from '../../../src/core/screenRecording/contracts'
@@ -126,8 +126,22 @@ export class MediaPermissionService {
   }
 
   async sources(excludedSourceIds: readonly string[] = []): Promise<CaptureSource[]> {
-    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false })
-    return sources.filter(source => !this.protectedSourceIds.has(source.id) && !excludedSourceIds.includes(source.id)).map(source => ({ id: source.id, name: source.name, kind: source.id.startsWith('screen:') ? 'screen' : 'window', displayId: source.display_id, ...(source.thumbnail && !source.thumbnail.isEmpty() ? { thumbnailUrl: source.thumbnail.toDataURL() } : {}) }))
+    // Screens fill the large range picker, so they get sharper thumbnails; the many windows stay small.
+    const [screens, windows] = await Promise.all([
+      desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } }),
+      desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 480, height: 270 }, fetchWindowIcons: true }),
+    ])
+    const sources = [...screens.filter(source => source.id.startsWith('screen:')), ...windows.filter(source => source.id.startsWith('window:'))]
+    const primary = screen.getPrimaryDisplay().id
+    const displays = new Map(screen.getAllDisplays().map(display => [String(display.id), { ...display.bounds, scaleFactor: display.scaleFactor, primary: display.id === primary }]))
+    return sources.filter(source => !this.protectedSourceIds.has(source.id) && !excludedSourceIds.includes(source.id)).map(source => {
+      const kind = source.id.startsWith('screen:') ? 'screen' as const : 'window' as const
+      const display = kind === 'screen' ? displays.get(source.display_id) : undefined
+      return { id: source.id, name: source.name, kind, displayId: source.display_id,
+        ...(source.thumbnail && !source.thumbnail.isEmpty() ? { thumbnailUrl: source.thumbnail.toDataURL() } : {}),
+        ...(kind === 'window' && source.appIcon && !source.appIcon.isEmpty() ? { iconUrl: source.appIcon.resize({ width: 32, height: 32 }).toDataURL() } : {}),
+        ...(display ? { display } : {}) }
+    })
   }
 
   statuses(platform: NodeJS.Platform = process.platform, systemRelease: string = release()): CapturePermissionStatus[] {
