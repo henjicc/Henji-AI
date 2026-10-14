@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { captureOptionsSchema } from './capture'
 import { recordingTrackOptionsSchema, recordingTracksSchema } from './tracks'
+import { recordingUnderstandingSchema, emptyRecordingUnderstanding } from './understanding'
 
 export const recordingMediaSchema = z.object({
   id: z.string().min(1), kind: z.enum(['screen', 'microphone', 'systemAudio', 'camera']),
@@ -18,11 +19,11 @@ export const recordingDocumentSchema = z.object({
   tracks: recordingTracksSchema.nullable(),
   eventPages: z.array(recordingPageReferenceSchema),
   markers: z.array(z.object({ id: z.string(), monoUs: z.number().int().nonnegative(), note: z.string().max(4000) }).strict()),
-  understanding: z.object({ transcript: z.string().nullable(), steps: z.array(z.object({ title: z.string(), startUs: z.number().int().nonnegative(), endUs: z.number().int().nonnegative() }).strict()) }).strict(),
+  understanding: recordingUnderstandingSchema,
   compositions: z.array(z.object({ documentId: z.string(), compositionId: z.string() }).strict()),
 }).strict()
 export type RecordingDocument = z.infer<typeof recordingDocumentSchema>
 export type RecordingMedia = z.infer<typeof recordingMediaSchema>
 export function createRecordingDocument(): RecordingDocument {
-  return recordingDocumentSchema.parse({ sessionId: null, originUs: 0, status: 'empty', source: null, devices: { systemAudio: false }, media: [], tracks: null, eventPages: [], markers: [], understanding: { transcript: null, steps: [] }, compositions: [] })
+  return recordingDocumentSchema.parse({ sessionId: null, originUs: 0, status: 'empty', source: null, devices: { systemAudio: false }, media: [], tracks: null, eventPages: [], markers: [], understanding: emptyRecordingUnderstanding(), compositions: [] })
 }

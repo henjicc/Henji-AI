@@ -6,18 +6,20 @@ import type { ContentDiskCache } from '../media/content-disk-cache'
 import { loadFfmpegPath } from './ffmpeg-loader'
 
 /** Streaming metadata only. Decode, scale and scene scoring run outside Electron's event loop. */
-export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal: AbortSignal, progress: (value: number) => void, binary?: string): Promise<number[]> {
+export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal: AbortSignal, progress: (value: number) => void, binary?: string, onStillness?: (ranges: NonNullable<SceneDetectionResult['stillness']>) => void): Promise<number[]> {
   signal.throwIfAborted()
   const executable = binary ?? await loadFfmpegPath()
   signal.throwIfAborted()
   // Input seeking keeps original frame cadence; timestamps are reset, then shifted back to source time.
   const args = ['-hide_banner', '-nostdin', '-nostats', '-ss', String(request.startSeconds), '-threads', '2', '-i', request.source,
     '-t', String(request.endSeconds - request.startSeconds), '-map', '0:v:0', '-an', '-sn', '-dn',
-    '-vf', `setpts=PTS-STARTPTS,scale=512:-2,scdet=t=${sceneDetectionThreshold(request.sensitivity)}`,
+    '-vf', `setpts=PTS-STARTPTS,scale=512:-2,scdet=t=${sceneDetectionThreshold(request.sensitivity)}${request.includeStillness ? ',freezedetect=n=0.001:d=2' : ''}`,
     '-threads', '2', '-filter_threads', '2', '-progress', 'pipe:1', '-f', 'null', '-']
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     const cuts: number[] = []; let stderr = ''; let stdout = ''
+    const stillness: NonNullable<SceneDetectionResult['stillness']> = []; let freezeStart: number | undefined
+    let decodedSeconds = 0
     const abort = (): void => { child.kill() }
     signal.addEventListener('abort', abort, { once: true })
     if (signal.aborted) abort()
@@ -25,6 +27,12 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
       stderr += String(chunk)
       const lines = stderr.split(/\r?\n/); stderr = lines.pop()!.slice(-8192)
       for (const line of lines) {
+        const freeze = line.match(/lavfi\.freezedetect\.freeze_(start|end):\s*([\d.]+)/)
+        if (freeze) {
+          const time = Math.min(request.endSeconds, request.startSeconds + Number(freeze[2]))
+          if (freeze[1] === 'start') freezeStart = Math.max(request.startSeconds, time)
+          else if (freezeStart !== undefined) { if (time > freezeStart) stillness.push({ startSeconds: freezeStart, endSeconds: time }); freezeStart = undefined }
+        }
         const match = line.match(/lavfi\.scd\.time:\s*([\d.]+)/)
         if (!match) continue
         const time = request.startSeconds + Number(match[1])
@@ -37,7 +45,7 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
       const lines = stdout.split(/\r?\n/); stdout = lines.pop()!.slice(-8192)
       for (const line of lines) if (line.startsWith('out_time_us=')) {
         const time = Number(line.slice(12)) / 1e6
-        if (Number.isFinite(time)) progress(Math.min(.99, Math.max(0, time / (request.endSeconds - request.startSeconds))))
+        if (Number.isFinite(time)) { decodedSeconds = Math.max(decodedSeconds, time); progress(Math.min(.99, Math.max(0, time / (request.endSeconds - request.startSeconds)))) }
       }
     })
     child.once('error', error => { signal.removeEventListener('abort', abort); reject(error) })
@@ -45,7 +53,11 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
       signal.removeEventListener('abort', abort)
       if (signal.aborted) reject(signal.reason ?? new Error('场景检测已取消。'))
       else if (code !== 0) reject(new Error('场景检测失败，请确认原视频可读取后重试。'))
-      else { progress(1); resolve(cuts) }
+      else {
+        const decodedEnd = Math.min(request.endSeconds, request.startSeconds + decodedSeconds)
+        if (freezeStart !== undefined && decodedEnd > freezeStart) stillness.push({ startSeconds: freezeStart, endSeconds: decodedEnd })
+        onStillness?.(stillness); progress(1); resolve(cuts)
+      }
     })
   })
 }
@@ -58,12 +70,13 @@ export class SceneDetectionService {
     const request = sceneDetectionRequestSchema.parse(raw)
     signal.throwIfAborted()
     const content = await identifyMediaContent(request.source)
-    const key = createHash('sha256').update(JSON.stringify(['scdet-512-v1', content.identity, request.startSeconds, request.endSeconds, request.sensitivity])).digest('hex')
+    const key = createHash('sha256').update(JSON.stringify(['scdet-512-v2', content.identity, request.startSeconds, request.endSeconds, request.sensitivity, request.includeStillness === true])).digest('hex')
     const bytes = await this.cache.read(key)
     if (bytes) {
       try {
         const result = sceneDetectionResultSchema.parse(JSON.parse(Buffer.from(bytes).toString('utf8')))
         if (result.contentIdentity !== content.identity || result.cutsSeconds.some((time, index, all) => time <= request.startSeconds || time >= request.endSeconds || index > 0 && time <= all[index - 1])) throw new Error('检测缓存无效。')
+        if (request.includeStillness && (!result.stillness || result.stillness.some((range, i, all) => range.startSeconds < request.startSeconds || range.endSeconds > request.endSeconds || i > 0 && range.startSeconds < all[i - 1].endSeconds))) throw new Error('静止检测缓存无效。')
         signal.throwIfAborted(); progress(1); return result
       } catch (error) { if (signal.aborted) throw error; await this.cache.remove(key) }
     }
@@ -75,10 +88,12 @@ export class SceneDetectionService {
       this.active++
       const controller = new AbortController(); const listeners = new Set<(value: number) => void>()
       const promise = (async (): Promise<SceneDetectionResult> => {
-        const cutsSeconds = await this.run({ ...request, source: content.path }, controller.signal, value => { for (const listener of listeners) listener(value) })
+        let stillness: SceneDetectionResult['stillness']
+        const cutsSeconds = await this.run({ ...request, source: content.path }, controller.signal, value => { for (const listener of listeners) listener(value) }, undefined, ranges => { stillness = ranges })
         controller.signal.throwIfAborted()
         if ((await identifyMediaContent(content.path)).identity !== content.identity) throw new Error('检测期间原视频已改变，请重新检测。')
-        const result = sceneDetectionResultSchema.parse({ cutsSeconds, contentIdentity: content.identity })
+        if (request.includeStillness && !stillness) throw new Error('静止检测未返回证据。')
+        const result = sceneDetectionResultSchema.parse({ cutsSeconds, contentIdentity: content.identity, ...(request.includeStillness ? { stillness } : {}) })
         await this.cache.write(key, Buffer.from(JSON.stringify(result)))
         controller.signal.throwIfAborted(); return result
       })().finally(() => { this.active--; this.flights.delete(key) })
