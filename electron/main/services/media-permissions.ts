@@ -109,8 +109,8 @@ export class MediaPermissionService {
   }
 
   async sources(excludedSourceIds: readonly string[] = []): Promise<CaptureSource[]> {
-    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 0, height: 0 }, fetchWindowIcons: false })
-    return sources.filter(source => !this.protectedSourceIds.has(source.id) && !excludedSourceIds.includes(source.id)).map(source => ({ id: source.id, name: source.name, kind: source.id.startsWith('screen:') ? 'screen' : 'window', displayId: source.display_id }))
+    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false })
+    return sources.filter(source => !this.protectedSourceIds.has(source.id) && !excludedSourceIds.includes(source.id)).map(source => ({ id: source.id, name: source.name, kind: source.id.startsWith('screen:') ? 'screen' : 'window', displayId: source.display_id, ...(source.thumbnail && !source.thumbnail.isEmpty() ? { thumbnailUrl: source.thumbnail.toDataURL() } : {}) }))
   }
 
   statuses(platform: NodeJS.Platform = process.platform, systemRelease: string = release()): CapturePermissionStatus[] {

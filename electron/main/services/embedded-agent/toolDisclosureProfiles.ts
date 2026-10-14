@@ -25,11 +25,13 @@ export function disclosureSurface(context: string): string {
     if (value?.workspace?.activeToolId === 'cameraStage') return 'tool.camera_stage'
     if (value?.workspace?.activeToolId === 'imageMark') return 'tool.image_edit'
     if (value?.workspace?.activeToolId === 'audioEdit') return 'tool.audio_edit'
+    if (value?.workspace?.activeToolId === 'screenRecording') return 'tool.screen_recording'
     return value?.workspace?.id === 'nodes' ? 'workspace.canvas' : `workspace.${value?.workspace?.id ?? 'unknown'}`
   } catch { return 'workspace.unknown' }
 }
 
 export function surfaceProfile(surface: string): { tools: string[]; guidance: string } {
+  if (surface === 'tool.screen_recording') return { tools: ['start_screen_recording', 'stop_screen_recording', 'read_screen_recording_events'], guidance: '当前为屏幕录制。先列出 screen_recording.source 与 screen_recording.device，开始后保留返回的 session 引用。通用实体读取 phase/elapsed_ms/details；暂停、继续、标记、中止、恢复和导入剪辑按名称加载对应操作。停止会等待媒体与会话保存，再分页读事件；不会自动回放操作。会话是正式文档，可通过通用文档能力列出、改名、移动和删除。' }
   if (surface === 'workspace.canvas') return { tools: ['get_canvas_document'],
     guidance: '当前为画布。已有通用实体读写与画布读取；已有画布和选择摘要无需再查。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；三维和生成页工具按需加载。' }
   if (surface === 'workspace.generation') return { tools: ['search_models'], guidance: '当前为生成页。生成任务加载 task=generation；模型参数按所选模型读取。' }

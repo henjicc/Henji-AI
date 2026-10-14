@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 
 import {
   ICON_TOOL_AUDIO_EDIT,
+  ICON_TOOL_SCREEN_RECORDING,
   ICON_TOOL_CAMERA_STAGE,
   ICON_TOOL_IMAGE_EDIT,
   ICON_WORKSPACE_CANVAS,
@@ -22,6 +23,7 @@ export interface DocumentKindPresentation {
 }
 
 const PRESENTATIONS: Readonly<Record<DocumentKindId, DocumentKindPresentation>> = {
+  screen_recording: { nameKey: 'documentLibrary.kinds.screen_recording', icon: ICON_TOOL_SCREEN_RECORDING },
   video_edit: { nameKey: 'documentLibrary.kinds.video_edit', icon: ICON_WORKSPACE_VIDEO_EDIT },
   canvas: { nameKey: 'documentLibrary.kinds.canvas', icon: ICON_WORKSPACE_CANVAS },
   audio_edit: { nameKey: 'documentLibrary.kinds.audio_edit', icon: ICON_TOOL_AUDIO_EDIT },

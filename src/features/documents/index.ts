@@ -39,6 +39,7 @@ export {
   isDocumentNameConflict,
   registerDocumentCreator,
   registerDocumentOpener,
+  registerDocumentBusyCheck,
   registerDocumentReleaser,
   type CreateNamedDocumentRequest,
   type DocumentCreateOptions,
@@ -67,3 +68,5 @@ export {
 export { DocumentLibraryPage, type DocumentLibraryPageProps } from './DocumentLibraryPage'
 export { MoveToProjectDialog, type MoveToProjectChoice } from './MoveToProjectDialog'
 export { getEmbeddedHost, returnFromEmbedded, setEmbeddedHost, useEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'
+export { registerDocumentCoverProvider } from './documentCovers'
+export { defaultDocumentOperationChanges, markSessionDocumentOpened } from './documentOperationChanges'

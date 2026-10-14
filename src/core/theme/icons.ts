@@ -22,6 +22,7 @@ import {
   ListChecks,
   MessageCircle,
   Music,
+  MonitorDot,
   Orbit,
   ScanSearch,
   Shapes,
@@ -79,6 +80,8 @@ export const ICON_TOOL_IMAGE_EDIT: LucideIcon = SquarePen
 export const ICON_TOOL_CAMERA_STAGE: LucideIcon = Clapperboard
 /** 口播剪辑 */
 export const ICON_TOOL_AUDIO_EDIT: LucideIcon = AudioWaveform
+/** 屏幕录制与录制会话。 */
+export const ICON_TOOL_SCREEN_RECORDING: LucideIcon = MonitorDot
 /** 图片编辑中的多级 GPU 辉光。 */
 export const ICON_IMAGE_GLOW_PRO: LucideIcon = SunMedium
 

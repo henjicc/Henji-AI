@@ -30,6 +30,7 @@ export interface CaptureSource {
   name: string
   kind: 'screen' | 'window'
   displayId: string
+  thumbnailUrl?: string
 }
 export interface CapturePermissionStatus {
   kind: CaptureKind

@@ -5,6 +5,7 @@ import { imageEditApplicationDomain, imageCreativeIntentProvider } from '@/featu
 import { generationApplicationDomain } from '@/features/generation/application/applicationDomain'
 import { settingsApplicationDomain } from '@/features/settings/application-control/applicationDomain'
 import { toolboxApplicationDomain } from '@/features/toolbox/application/applicationDomain'
+import { screenRecordingApplicationDomain } from '@/features/screenRecording'
 import { memoryApplicationDomain } from '@/features/assistant/application/applicationDomain'
 import { navigationApplicationDomain } from '@/features/navigation/application/applicationDomain'
 import { audioEditApplicationDomain } from '@/features/audioEdit/application/applicationDomain'
@@ -25,6 +26,7 @@ export function initializeApplicationDomainBindings(): void {
 }
 
 export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
+  screenRecordingApplicationDomain,
   canvasApplicationDomain,
   cameraStageApplicationDomain,
   assetsApplicationDomain,

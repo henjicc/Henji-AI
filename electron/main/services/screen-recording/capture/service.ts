@@ -1,5 +1,5 @@
 import type { WebContents } from 'electron'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import path from 'node:path'
 import type { CaptureBackendKind, CaptureCommand, CaptureManifest, CaptureOperation, CapturePrepared, CaptureRequest, ScreenCaptureBackend } from '../../../../../src/core/screenRecording/capture'
@@ -10,11 +10,14 @@ import { openRecordingControl, closeRecordingControl, recordingControl } from '.
 import { CaptureStorage, recoverCapture } from './storage'
 import { GfxCaptureBackend } from './gfxcapture'
 import { resolveNativeCaptureSource } from './source'
+import { createCaptureGeometry } from './geometry'
+import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
 
 const logger = createMainLogger('main.screen_recording.capture')
 interface Active {
   owner: WebContents; storage: CaptureStorage; backend: ScreenCaptureBackend; originUs: number
   rpc: Map<string, { resolve(): void; reject(error: Error): void }>
+  document?: RecordingSessionDocument
 }
 let active: Active | null = null
 let preparing = false
@@ -34,11 +37,16 @@ async function fail(session: Active, error: Error): Promise<void> {
   if (active !== session || session.storage.manifest.status === 'failed') return
   session.storage.manifest.status = 'failed'
   logger.error('屏幕录制失败', { event: 'recording.capture.failed', error })
-  recordingControl.fail(session.storage.manifest.sessionId, error.message.includes('磁盘空间不足') ? '磁盘空间不足，已停止录制。请释放空间后重试，已保存的片段可以恢复。' : '录制已中断，已保存的片段可以恢复。请停止后重新准备录制。')
-  try { await session.backend.cancel() } finally { await session.storage.release(); await session.storage.save() }
+  await recordingControl.captureFailed(session.storage.manifest.sessionId, error)
 }
 
 export async function handleCaptureRequest(owner: WebContents, request: CaptureRequest): Promise<unknown> {
+  if (request.operation === 'events') return readRecordingEvents(request.sessionId, request.offset, request.limit, request.markersOnly)
+  if (request.operation === 'recover-session') {
+    if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先关闭当前录制，再恢复会话')
+    return recoverRecordingSession(request.sessionId, path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId))
+  }
+  if (request.operation === 'close' && recordingControl.snapshot()?.sessionId === request.sessionId && !active) return closeRecordingControl()
   if (request.operation === 'recover') {
     if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先关闭采集会话，再恢复片段')
     return recoverCapture(path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId))
@@ -62,9 +70,16 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       }
       if (request.options.backend === 'gfxcapture' && !wgc) throw new Error('当前系统不支持无光标采集，请使用兼容录制')
       const manifest: CaptureManifest = { version: 1, sessionId: request.sessionId, options: request.options, backend, cursorEmbedded: backend === 'chromium', status: 'prepared', spans: [] }
-      const storage = new CaptureStorage(path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId), manifest)
+      let document: RecordingSessionDocument | undefined
+      const storage = new CaptureStorage(path.join(getUserFolderDir('uploads'), 'screen-recordings', request.sessionId), manifest, async value => { await document?.capture(value) })
       await storage.prepare()
       const session: Active = { owner, storage, originUs: now(), rpc: new Map(), backend: null! }
+      const geometry = request.session ? createCaptureGeometry(source, request.options) : undefined
+      geometry?.()
+      if (request.session) {
+        document = await RecordingSessionDocument.create(request.sessionId, session.originUs, request.session, source.name, manifest, storage.directory)
+        session.document = document
+      }
       session.backend = backend === 'gfxcapture' ? new GfxCaptureBackend(request.options, nativeSource!, storage, { nowUs: () => now() - session.originUs, failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) } }) : {
         prepare: async () => undefined,
         start: () => remote(session, 'start'), pause: () => remote(session, 'pause'), resume: () => remote(session, 'resume'), stop: () => remote(session, 'stop'),
@@ -77,27 +92,45 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         const transition = async (operation: Exclude<CaptureOperation, 'cancel'>, status: CaptureManifest['status'], signal: AbortSignal): Promise<void> => {
           try {
             if (operation === 'start' || operation === 'resume') mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId)
-            await session.backend[operation](signal)
+            // Both capture paths cross the renderer barrier: native screen capture must also control audio/camera.
+            const results = await Promise.allSettled([session.backend[operation](signal), ...(request.session && backend !== 'chromium' ? [remote(session, operation)] : [])])
+            const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+            if (failure) throw failure.reason
             if (manifest.status !== 'failed') { manifest.status = status; await storage.save() }
           } catch (error) { await fail(session, error instanceof Error ? error : new Error(String(error))); throw error }
         }
         openRecordingControl(owner, request.sessionId, {
           start: signal => transition('start', 'recording', signal), pause: signal => transition('pause', 'paused', signal), resume: signal => transition('resume', 'recording', signal), stop: signal => transition('stop', 'stopped', signal),
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.
-          cancel: async () => { try { await session.backend.cancel() } finally { await storage.release(); if (manifest.status !== 'stopped') manifest.status = 'failed'; await storage.save(); if (active === session) active = null } },
-        })
+          cancel: async () => {
+            try {
+              const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : [])])
+              const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+              if (failure) throw failure.reason
+            } finally { await storage.release(); if (manifest.status !== 'stopped') manifest.status = 'failed'; await storage.save(); if (active === session) active = null }
+          },
+        }, document && geometry ? {
+          ownerRef: { kind: 'screen_recording.session', id: request.sessionId }, sourceDigest: `sha256:${createHash('sha256').update(JSON.stringify(request.options)).digest('hex')}`,
+          directory: storage.directory, originUs: session.originUs, nowUs: now, geometry,
+          onPage: (page, file) => document!.page(page, file),
+          onFailure: error => logger.error('录制事件失败', { event: 'recording.session.events.failed', error }),
+        } : undefined, document ? () => document!.capture(manifest) : undefined)
       } catch (error) {
         try { if (backend === 'gfxcapture') await session.backend.cancel() } finally { await storage.release(); active = null }
         throw error
       }
       logger.info('屏幕采集准备完成', { event: 'recording.capture.prepare.completed', context: { backend, sessionId: request.sessionId } })
-      return { sessionId: request.sessionId, originUs: session.originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options } satisfies CapturePrepared
+      return { sessionId: request.sessionId, originUs: session.originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(document ? { directory: storage.directory } : {}) } satisfies CapturePrepared
     } finally { preparing = false }
   }
   const session = active
   if (!session || session.owner !== owner || session.storage.manifest.sessionId !== request.sessionId) throw new Error('录制会话不存在或不属于当前窗口')
   const { storage } = session
   switch (request.operation) {
+    case 'tracks': {
+      if (!session.document) throw new Error('录制会话未创建')
+      return session.document.tracks(request.tracks)
+    }
     case 'read': return structuredClone(storage.manifest)
     case 'clock': return now() - session.originUs
     case 'close': await closeRecordingControl(); return

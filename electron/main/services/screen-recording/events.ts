@@ -4,6 +4,7 @@ import { EventType } from 'uiohook-napi'
 import { CaptureLogCollector } from '../../../../src/core/captureLog/collector'
 import { captureBounds, capturePoint, type CaptureGeometry, type CaptureRect } from '../../../../src/core/captureLog/coordinates'
 import type { CapabilityCapture } from '../../../../src/core/captureLog/events'
+import type { CaptureLogPage } from '../../../../src/core/captureLog/events'
 import type { ApplicationRef } from '../../../../src/core/application-control/identifiers'
 import { createMainLogger } from '../logging'
 import { RecordingEventStore } from './event-store'
@@ -24,6 +25,7 @@ export interface RecordingEventOptions {
   excludedWindowIds?: readonly string[]
   excludedRegions?(): readonly CaptureRect[]
   onFailure(error: unknown): void
+  onPage?(page: CaptureLogPage, path: string): Promise<void>
 }
 
 /** Event capture follows the actual backend barriers, not UI timers or countdown states. */
@@ -37,7 +39,7 @@ export class RecordingEventSession {
   private failure: unknown
   constructor(private readonly options: RecordingEventOptions) {
     const store = new RecordingEventStore(options.directory)
-    this.collector = new CaptureLogCollector({ ...options, id: randomUUID }, page => store.write(page), error => this.fail(error))
+    this.collector = new CaptureLogCollector({ ...options, id: randomUUID }, async page => { const path = await store.write(page); await options.onPage?.(page, path) }, error => this.fail(error))
   }
   private fail(error: unknown): void {
     if (this.failure) return

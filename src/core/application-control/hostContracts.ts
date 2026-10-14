@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { toolboxToolIdSchema } from '../toolbox/toolCatalog'
 import { VIDEO_EDIT_FOCUSABLE_PANELS } from '../videoEdit/panels'
 import { videoEditSelectedCodeElementContextSchema } from '../videoEdit/codeElementSelection'
 
@@ -33,7 +34,7 @@ export const hostContextSnapshotSchema = z.object({
   }).strict().optional(),
   workspace: z.object({
     id: z.enum(['generation', 'nodes', 'videoEdit', 'tools', 'assets']),
-    activeToolId: z.enum(['audioEdit', 'cameraStage', 'imageMark']).nullable(),
+    activeToolId: toolboxToolIdSchema.nullable(),
   }),
   /** 当前打开的画布文档（id 即画布文档 ID）与画布选择；不是装文档的“项目”。 */
   canvas: z.object({

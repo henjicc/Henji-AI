@@ -9,12 +9,13 @@ import { writeBufferAtomically } from '../fs/atomic-file'
 /** Recording assets, not diagnostic logs. Every sealed page is fsynced before exclusive publication. */
 export class RecordingEventStore {
   constructor(private readonly directory: string) {}
-  async write(page: CaptureLogPage): Promise<void> {
+  async write(page: CaptureLogPage): Promise<string> {
     const parsed = captureLogPageSchema.parse(page)
     const text = JSON.stringify(parsed)
     const hash = createHash('sha256').update(text).digest('hex')
     const name = `${String(parsed.seqSpan[0]).padStart(16, '0')}-${hash}.capture.json`
     await writeBufferAtomically(join(this.directory, name), Buffer.from(text, 'utf8'), undefined, { exclusive: true })
+    return join(this.directory, name)
   }
   /** Ignore unfinished writes; reject corruption, swapped ownership and overlaps instead of rebuilding empty logs. */
   async *recover(): AsyncGenerator<CaptureLogPage> {

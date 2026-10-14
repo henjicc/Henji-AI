@@ -17,6 +17,12 @@ export interface ToolDescriptor {
 
 export const TOOL_DESCRIPTORS = [
   {
+    id: 'screenRecording', surfaceId: 'tool.screen_recording', entryId: 'screenRecording',
+    titleKey: 'ui:toolbox.screenRecording.title', descriptionKey: 'ui:toolbox.screenRecording.description',
+    icon: 'ICON_TOOL_SCREEN_RECORDING', actions: ['open', 'recent_files'], recentFiles: { documentKind: 'screen_recording' },
+    acceptedRefKinds: ['screen_recording.session'], capabilities: ['record', 'pause', 'mark', 'preview', 'video_edit_import'],
+  },
+  {
     id: 'audioEdit', surfaceId: 'tool.audio_edit', entryId: 'audioEdit',
     titleKey: 'ui:toolbox.audioEdit.title', descriptionKey: 'ui:toolbox.audioEdit.description',
     icon: 'ICON_TOOL_AUDIO_EDIT', actions: ['open', 'recent_files'],

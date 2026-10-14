@@ -1,4 +1,49 @@
 {
+  "recording": {
+    "title": "Screen recording",
+    "record": "Record",
+    "back": "Back",
+    "start": "Start recording",
+    "stop": "Stop and save",
+    "new": "New recording",
+    "pause": "Pause",
+    "resume": "Resume",
+    "countdown": "Starting in {{count}} seconds",
+    "saving": "Saving recording…",
+    "inProgress": "Recording in progress",
+    "marker": "Marker note",
+    "mark": "Add marker",
+    "markDuringRecording": "Markers are available while recording",
+    "cancel": "End recording",
+    "preview": "Recording results",
+    "track": "Preview track",
+    "noMedia": "No playable segments yet",
+    "recover": "Recover saved segments",
+    "cursorEmbedded": "Compatibility capture includes the system cursor. No additional cursor will be drawn.",
+    "createLater": "Automatic movie creation is coming in the next phase",
+    "createMovie": "Create movie",
+    "markers": "Highlights",
+    "selectSource": "Choose a source",
+    "refresh": "Refresh sources",
+    "noSources": "No recording sources available",
+    "options": "Recording settings",
+    "name": "Session name",
+    "screen": "Screen",
+    "microphone": "Microphone",
+    "systemAudio": "System audio",
+    "camera": "Camera",
+    "microphoneDevice": "Microphone device",
+    "cameraDevice": "Camera device",
+    "defaultDevice": "Default device",
+    "region": "Record a display region",
+    "region_x": "Left margin (%)",
+    "region_y": "Top margin (%)",
+    "region_width": "Region width (%)",
+    "region_height": "Region height (%)",
+    "insert": "Insert at the sequence playhead",
+    "import": "Send to a new editing project",
+    "openEditor": "Back to editor"
+  },
   "screenRecording": {
     "cameraPreview": "Camera preview",
     "trackWarning": { "system-audio-silent": "No system sound detected. Check audio permissions or play some sound.", "system-audio-unavailable": "System audio is unavailable. Select the recording source again.", "device-disconnected": "A recording device was interrupted. Capture continues after recovery, preserving the gap." },
@@ -115,6 +160,10 @@
     "cancel": "Cancel"
   },
   "toolbox": {
+    "screenRecording": {
+      "title": "Screen recording",
+      "description": "Record your screen, audio and camera, mark highlights and edit."
+    },
     "audioEdit": {
       "title": "Speech editing",
       "description": "Edit speech by transcript: remove pauses and fillers, keep the sentences you want, then export or send to video editing"
@@ -1580,6 +1629,7 @@
   },
   "documentLibrary": {
     "kinds": {
+      "screen_recording": "Recording",
       "video_edit": "Edit",
       "canvas": "Canvas",
       "audio_edit": "Voiceover",

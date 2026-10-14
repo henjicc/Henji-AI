@@ -3,7 +3,7 @@ import type { CaptureRect } from '../../../../src/core/captureLog/coordinates'
 import type { cursorShapes } from '../../../../src/core/captureLog/events'
 
 export interface DesktopWindowFact { windowId: string | null; bounds: CaptureRect | null; available: boolean }
-export interface DesktopNativeFacts { cursor(): typeof cursorShapes[number]; foreground(): DesktopWindowFact }
+export interface DesktopNativeFacts { cursor(): typeof cursorShapes[number]; foreground(): DesktopWindowFact; bounds?(windowId: string): CaptureRect | null }
 /** No titles, process command lines or key contents are requested from the OS. */
 export function createWindowsEventFacts(): DesktopNativeFacts {
   if (process.platform !== 'win32') return { cursor: () => 'unknown', foreground: () => ({ windowId: null, bounds: null, available: false }) }
@@ -15,12 +15,19 @@ export function createWindowsEventFacts(): DesktopNativeFacts {
   const loadCursor = lib.func('__stdcall', 'LoadCursorW', 'void *', ['void *', 'uintptr_t'])
   const getWindow = lib.func('__stdcall', 'GetForegroundWindow', 'void *', [])
   const getRect = lib.func('__stdcall', 'GetWindowRect', 'int', ['void *', koffi.out(koffi.pointer(rect))])
+  // WGC captures the visible extended frame. GetWindowRect includes invisible resize borders.
+  const getFrame = koffi.load('dwmapi.dll').func('__stdcall', 'DwmGetWindowAttribute', 'int32', ['void *', 'uint32', koffi.out(koffi.pointer(rect)), 'uint32'])
   const shapes = new Map<string, typeof cursorShapes[number]>()
   for (const [id, shape] of [[32512, 'arrow'], [32513, 'text'], [32514, 'wait'], [32515, 'crosshair'], [32649, 'hand'], [32650, 'progress'], [32644, 'resize-horizontal'], [32645, 'resize-vertical'], [32642, 'resize-diagonal'], [32643, 'resize-diagonal'], [32646, 'move'], [32648, 'forbidden']] as const) {
     const handle: unknown = loadCursor(null, id)
     if (handle !== null) shapes.set(String(handle), shape)
   }
   return {
+    bounds: windowId => {
+      const value = { left: 0, top: 0, right: 0, bottom: 0 }
+      if (!/^\d+$/.test(windowId) || getFrame(BigInt(windowId), 9, value, koffi.sizeof(rect)) !== 0 || value.right <= value.left || value.bottom <= value.top) return null
+      return { x: value.left, y: value.top, width: value.right - value.left, height: value.bottom - value.top }
+    },
     cursor: () => {
       const value = { cbSize: koffi.sizeof(info), flags: 0, hCursor: null as unknown, ptScreenPos: { x: 0, y: 0 } }
       if (!getCursor(value)) return 'unknown'
