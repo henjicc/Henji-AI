@@ -1,6 +1,5 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { isBundledLocalModel } from '../../../../src/platform/contracts/localModels'
 
 import type {
   LocalModelDownloadSource,
@@ -33,7 +32,6 @@ import { localModelSizeBytes, type LocalModelFileSpec, type LocalModelSource, ty
 export interface LocalModelServiceDeps {
   manifest: readonly LocalModelSpec[]
   modelsLocation: () => { dir: string; locale: 'zh' | 'en' }
-  bundledModelsDirectory?: string
   selector: DownloadSourceSelector
   fetch: DownloadFetch
   readPreference: () => LocalModelDownloadSource
@@ -63,12 +61,6 @@ interface ActiveDownload {
 const DESCRIPTION_FILE_NAMES = { zh: '说明.txt', en: 'README.txt' } as const
 const ATTEMPTS_PER_SOURCE = 2
 
-/** main is emitted to out/main in both development launch modes; packaged apps never consult it. */
-export function bundledModelsDirectory(context: { isPackaged: boolean; resourcesPath: string; mainDirectory: string }): string {
-  const root = context.isPackaged ? context.resourcesPath : path.resolve(context.mainDirectory, '../..')
-  return path.join(root, 'resources', 'local-models')
-}
-
 export class LocalModelService {
   private readonly active = new Map<LocalModelId, ActiveDownload>()
   private readonly removing = new Map<LocalModelId, Promise<void>>()
@@ -89,10 +81,6 @@ export class LocalModelService {
   }
 
   private modelDir(spec: LocalModelSpec): { dir: string; locale: 'zh' | 'en' } {
-    if (isBundledLocalModel(spec.id)) {
-      if (!this.deps.bundledModelsDirectory) throw new LocalModelError('disk', '应用内置模型目录未配置，请重新安装应用。')
-      return { dir: path.join(this.deps.bundledModelsDirectory, spec.id), locale: 'en' }
-    }
     const location = this.deps.modelsLocation()
     return { dir: path.join(location.dir, spec.folderName[location.locale]), locale: location.locale }
   }
@@ -179,19 +167,6 @@ export class LocalModelService {
   /** 已就绪直接返回位置；否则下载并校验。同一模型的并发调用共用一次下载。 */
   async ensure(id: LocalModelId): Promise<LocalModelEnsureResult> {
     const spec = this.spec(id)
-    if (isBundledLocalModel(id)) {
-      this.deps.logger.debug('开始校验内置模型', { event: 'local_models.bundled.start', modelId: id })
-      try {
-        if (await this.diskStatus(spec) !== 'ready') throw new LocalModelError('checksum', '应用内置模型缺失或损坏，请重新安装应用。')
-        this.failures.delete(id)
-        this.deps.logger.debug('内置模型已就绪', { event: 'local_models.bundled.completed', modelId: id })
-        return this.location(spec)
-      } catch (error) {
-        this.failures.set(id, error instanceof LocalModelError ? error.code : 'disk')
-        this.deps.logger.error('内置模型校验失败', { event: 'local_models.bundled.failed', modelId: id, error })
-        throw error
-      }
-    }
     if (spec.availability === 'pending' || spec.files.length === 0) {
       throw new LocalModelError('unavailable', `${spec.title.zh} 暂时没有可下载的文件`)
     }
@@ -378,7 +353,6 @@ export class LocalModelService {
 
   /** 删除本地文件；正在下载时先取消并等它结束。 */
   async remove(id: LocalModelId): Promise<void> {
-    if (isBundledLocalModel(id)) throw new LocalModelError('unavailable', '内置模型随应用提供，无需下载，也不能单独删除。')
     const pending = this.removing.get(id)
     if (pending) return pending
     const spec = this.spec(id)
@@ -409,11 +383,6 @@ export class LocalModelService {
 
   /** 打开模型文件夹；模型还没下载时打开“模型”总文件夹。 */
   async openFolder(id: LocalModelId | null): Promise<void> {
-    if (id && isBundledLocalModel(id)) {
-      const message = await this.deps.openPath(this.modelDir(this.spec(id)).dir)
-      if (message) throw new LocalModelError('disk', message)
-      return
-    }
     const root = this.deps.modelsLocation().dir
     let target = root
     if (id) {

@@ -14,7 +14,8 @@ import { createMainLogger } from '../logging'
 import { getSettingsStore } from '../settings/store'
 import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
 import { LOCAL_MODEL_MANIFEST, LOCAL_MODEL_SOURCE_PROBES } from './manifest'
-import { bundledModelsDirectory, LocalModelService } from './service'
+import { LocalModelService } from './service'
+import { bundledModelsDirectory, resolveBundledOcrModel, type BundledOcrModelId } from './bundledOcr'
 
 /*
  * 本地模型服务的进程内单例：注入真实网络、设置表、作品目录与窗口广播。
@@ -49,7 +50,6 @@ export function getLocalModelService(): LocalModelService {
   const created = new LocalModelService({
     manifest: LOCAL_MODEL_MANIFEST,
     modelsLocation: getUserModelsLocation,
-    bundledModelsDirectory: bundledModelsDirectory({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, mainDirectory: __dirname }),
     selector,
     fetch: (url, init) => fetch(url, init),
     readPreference,
@@ -67,6 +67,20 @@ export function getLocalModelService(): LocalModelService {
 /** 给后续功能用：模型就绪时直接返回位置，否则下载并校验（进度会推送给所有窗口）。 */
 export function ensureLocalModel(id: LocalModelId): Promise<LocalModelEnsureResult> {
   return getLocalModelService().ensure(id)
+}
+
+/** Internal bundled resources are deliberately absent from the downloadable-model IPC and entity list. */
+export async function ensureBundledOcrModel(id: BundledOcrModelId, role: 'model' | 'dict' = 'model'): Promise<string> {
+  logger.debug('开始校验内置文字模型', { event: 'local_models.bundled.start', modelId: id })
+  try {
+    const directory = bundledModelsDirectory({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, mainDirectory: __dirname })
+    const file = await resolveBundledOcrModel(directory, id, role)
+    logger.debug('内置文字模型已就绪', { event: 'local_models.bundled.completed', modelId: id })
+    return file
+  } catch (error) {
+    logger.error('内置文字模型校验失败', { event: 'local_models.bundled.failed', modelId: id, error })
+    throw error
+  }
 }
 
 export function disposeLocalModels(): void {

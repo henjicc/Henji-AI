@@ -28,7 +28,6 @@ function state(): LocalModelsState {
       model('object_tracking_efficienttam', 'unavailable'),
       model('image_inpainting_migan', fake.ready.has('image_inpainting_migan') ? 'ready' : 'not_downloaded'),
       model('image_inpainting_lama', fake.ready.has('image_inpainting_lama') ? 'ready' : 'not_downloaded'),
-      model('text_recognition_ppocr', 'ready'),
     ],
   }
 }
@@ -90,10 +89,10 @@ it('暂不可下载的模型拒绝写入并说明原因，不调用下载', asyn
   expect(fake.calls).toEqual([])
 })
 
-it('内置模型经公共读入口就绪，通用删除在执行前拒绝', async () => {
-  const ref = { kind: 'local_model.item', id: 'text_recognition_ppocr' }
-  expect((await applicationReflectionHandlers.readEntity({ ref, propertyIds: ['local_model.item.status'] }, context())).properties).toEqual({ 'local_model.item.status': 'ready' })
-  await expect(change(ref, { 'local_model.item.downloaded': false })).rejects.toThrow('内置')
+it.each(['text_detection_ppocr', 'text_recognition_ppocr', 'text_recognition_ppocr_precise'])('OCR资源%s不再属于公共模型实体，不能读写或触发下载', async id => {
+  const ref = { kind: 'local_model.item', id }
+  await expect(applicationReflectionHandlers.readEntity({ ref, propertyIds: ['local_model.item.status'] }, context())).rejects.toThrow()
+  await expect(change(ref, { 'local_model.item.downloaded': true })).rejects.toThrow()
   expect(fake.calls).toEqual([])
 })
 

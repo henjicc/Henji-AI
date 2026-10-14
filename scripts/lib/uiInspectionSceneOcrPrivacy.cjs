@@ -19,7 +19,10 @@ function createOcrPrivacyScene() {
       const save = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       try {
         const dirs = await page.evaluate(() => window.henjiNative.paths.appDirectories())
-        assert(dirs.userRoot.includes('henji-electron-test-'), 'Refuse to seed weights in real user data')
+        assert(dirs.userRoot.includes('henji-electron-test-'), 'Refuse to inspect OCR using real user data')
+        const modelIds = await page.evaluate(async () => (await window.henjiNative.localModels.getState()).models.map(model => model.id))
+        assert(modelIds.every(id => !id.includes('ppocr')), 'Bundled OCR must not be exposed in the downloadable-model directory')
+        evidence.downloadableModelIds = modelIds; save()
         // Exercise shipped resources from a clean profile: never seed a user download cache.
         // This test window contains only made-up credentials. No desktop or other application is captured.
         const fixture = await app.evaluate(async ({ BrowserWindow, screen }) => {

@@ -19,8 +19,8 @@ describe.skipIf(!models || !worker)('OCR 实模并发与编码录屏调度', () 
   afterAll(async () => { await sessions?.dispose() })
   async function prepare() {
     sessions ??= new LocalModelSessions(await loadOnnxRuntime(), () => undefined)
-    const alphabet = readRecognitionDictionary(await fs.readFile(path.join(models!, 'ppocrv6_tiny_dict.txt'), 'utf8'))
-    const detector = await sessions.open({ name: 'ppocr', path: path.join(models!, 'pp-ocrv6_tiny_det.onnx') }, ['cpu'], 'dynamic', { intraOpNumThreads: 4, allowSpinning: false })
+    const alphabet = readRecognitionDictionary(await fs.readFile(path.resolve('resources/local-models/text_recognition_ppocr/ppocrv6_tiny_dict.txt'), 'utf8'))
+    const detector = await sessions.open({ name: 'ppocr', path: path.resolve('resources/local-models/text_detection_ppocr/pp-ocrv6_tiny_det.onnx') }, ['cpu'], 'dynamic', { intraOpNumThreads: 4, allowSpinning: false })
     return { alphabet, detector }
   }
   it.skipIf(!process.env.HENJI_OCR_DENSE || !process.env.HENJI_OCR_CAPTURE)('正式三线程池稠密页实测、fp32/int8 文本差异和真实凭据逐字回归', async () => {
@@ -89,7 +89,7 @@ describe.skipIf(!models || !worker)('OCR 实模并发与编码录屏调度', () 
   }, 120000)
   it.skipIf(!process.env.HENJI_OCR_VIDEO || !process.env.HENJI_OCR_FFMPEG || !process.env.HENJI_OCR_CURSOR)('带编码噪声与移动光标的原片，滚动后新邮箱不漏检，取消可中断扫描', async () => {
     const { alphabet } = await prepare(), cursor = JSON.parse(await fs.readFile(process.env.HENJI_OCR_CURSOR!, 'utf8')) as NonNullable<OcrPrivacyJob['cursor']>
-    const job: OcrPrivacyJob = { id: 'native-scheduling', models: [{ name: 'ppocr', path: path.resolve('resources/local-models/text_detection_ppocr/pp-ocrv6_tiny_det.onnx') }, { name: 'ppocr_rec', path: path.resolve('resources/local-models/text_recognition_ppocr/pp-ocrv6_tiny_rec_int8.onnx') }], providers: ['cpu'], dictionaryPath: path.join(models!, 'ppocrv6_tiny_dict.txt'), source: process.env.HENJI_OCR_VIDEO!, ffmpegPath: process.env.HENJI_OCR_FFMPEG!, mediaId: 'fixture', seekSeconds: 0, durationSeconds: 30, startUs: 0, endUs: 30000000, fps: 10, display: { width: 3840, height: 2160 }, cursor }
+    const job: OcrPrivacyJob = { id: 'native-scheduling', models: [{ name: 'ppocr', path: path.resolve('resources/local-models/text_detection_ppocr/pp-ocrv6_tiny_det.onnx') }, { name: 'ppocr_rec', path: path.resolve('resources/local-models/text_recognition_ppocr/pp-ocrv6_tiny_rec_int8.onnx') }], providers: ['cpu'], dictionaryPath: path.resolve('resources/local-models/text_recognition_ppocr/ppocrv6_tiny_dict.txt'), source: process.env.HENJI_OCR_VIDEO!, ffmpegPath: process.env.HENJI_OCR_FFMPEG!, mediaId: 'fixture', seekSeconds: 0, durationSeconds: 30, startUs: 0, endUs: 30000000, fps: 10, display: { width: 3840, height: 2160 }, cursor }
     const pool = new OcrRecognitionPool(job.models[1].path, alphabet, 'rgb-half', worker)
     const controller = new AbortController(); let changes: readonly PrivacyBox[] = []
     try {

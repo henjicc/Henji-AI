@@ -276,12 +276,12 @@ function generate(options) {
       'Rebuild with node-gyp from the source tarball; replace the unpacked uiohook-napi.node binding. LGPL permits modification and reverse engineering for debugging those modifications.'],
     textIds: [textTable.add(hookLicense)], textOrigin: 'package' })
 
-  // Bundled tiny detector/int8 recognizer and on-demand small recognizer share About/distribution attribution.
+  // Bundled tiny detector/int8 recognizer and dictionary share About/distribution attribution.
   const ppocrLicense = readTextIfExists(path.join(REFERENCE_DIR, 'PP-OCR-Apache-2.0.txt'))
   if (!ppocrLicense) missing.push('PP-OCR：缺少 Apache-2.0 模型许可全文')
-  else runtime.push({ id: 'runtime:ppocr-v6', name: 'PP-OCRv6 tiny detection and tiny/small recognition (PaddleOCR / oar-ocr ONNX)', version: 'PP-OCRv6', license: 'Apache-2.0', ecosystem: 'runtime',
+  else runtime.push({ id: 'runtime:ppocr-v6', name: 'PP-OCRv6 tiny detection and tiny int8 recognition (PaddleOCR / oar-ocr ONNX)', version: 'PP-OCRv6', license: 'Apache-2.0', ecosystem: 'runtime',
     homepage: 'https://github.com/PaddlePaddle/PaddleOCR', sources: ['https://github.com/PaddlePaddle/PaddleOCR', 'https://github.com/GreatV/oar-ocr/releases/tag/v0.7.0',
-      'https://github.com/GreatV/oar-ocr/blob/main/docs/models.md (tiny detection and dictionary bundled unchanged; small recognition downloaded on demand)',
+      'https://github.com/GreatV/oar-ocr/blob/main/docs/models.md (tiny detection and dictionary bundled unchanged; tiny int8 recognition bundled, no downloadable OCR models)',
       'pp-ocrv6_tiny_rec_int8.onnx: 由痕迹AI/作者量化修改 (quantized by Henji AI / author from PP-OCRv6 tiny recognition; MatMul/Gemm only, int8). Apache-2.0 Section 4 modification notice; upstream copyright and license retained.'],
     textIds: [textTable.add(ppocrLicense)], textOrigin: 'reference' })
   const notices = buildNotices({

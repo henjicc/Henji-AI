@@ -10,20 +10,17 @@ it('容器起点只用于seek，录制时钟和进度保留；主进程只委托
   expect(deps.infer).toHaveBeenCalledWith(expect.objectContaining({ seekSeconds: 1, startUs: 4000000, endUs: 5000000, fps: 10, models: [{ name: 'ppocr', path: 'text_detection_ppocr' }, { name: 'ppocr_rec', path: 'text_recognition_ppocr' }] }), expect.any(Function))
   expect(service.hasActiveJobs()).toBe(false); expect(deps.emit).toHaveBeenCalledWith({ requestId: 'request', progress: 1 })
 })
-it('下载期间取消不派发推理，原片变化拒绝迟到结果', async () => {
+it('资源校验期间取消不派发推理，原片变化拒绝迟到结果', async () => {
   const { deps, service, request } = setup()
   vi.mocked(deps.ensureModel).mockImplementationOnce(async () => { service.cancel(request.requestId); return 'model' })
   await expect(service.detect(request)).rejects.toThrow('取消'); expect(deps.infer).not.toHaveBeenCalled()
   const other = setup(); vi.mocked(other.deps.identity).mockResolvedValueOnce({ path: 'source', identity: 'a' }).mockResolvedValueOnce({ path: 'source', identity: 'b' })
   await expect(other.service.detect(other.request)).rejects.toThrow('已变化'); expect(other.service.hasActiveJobs()).toBe(false)
 })
-it('精确档读取 small 权重和独立字典并透传光标；默认档读取 tiny', async () => {
+it('唯一内置 tiny 档读取字典、保留快速归一化并透传光标', async () => {
   const { deps, service, request } = setup()
   const cursor = [{ monoUs: 4000000, point: [30, 40] as [number, number] }]
-  await service.detect({ ...request, quality: 'precise', cursor })
-  expect(deps.ensureModel).toHaveBeenCalledWith('text_recognition_ppocr_precise', 'dict')
-  expect(deps.infer).toHaveBeenCalledWith(expect.objectContaining({ dictionaryPath: 'text_recognition_ppocr_precise', normalization: 'bgr-unit', cursor }), expect.any(Function))
-  await service.detect(request)
+  await service.detect({ ...request, cursor })
   expect(deps.ensureModel).toHaveBeenCalledWith('text_recognition_ppocr', 'dict')
-  expect(deps.infer).toHaveBeenLastCalledWith(expect.objectContaining({ normalization: 'rgb-half' }), expect.any(Function))
+  expect(deps.infer).toHaveBeenLastCalledWith(expect.objectContaining({ dictionaryPath: 'text_recognition_ppocr', normalization: 'rgb-half', cursor }), expect.any(Function))
 })

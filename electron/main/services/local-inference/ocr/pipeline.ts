@@ -12,7 +12,7 @@ export async function runOcrPrivacy(job: OcrPrivacyJob, deps: OcrPrivacyDependen
   deps.signal.throwIfAborted()
   const size = job.display, detSize = ppocrInputSize(size.width, size.height)
   const det = job.models.find(m => m.name === 'ppocr'), rec = job.models.find(m => m.name === 'ppocr_rec')
-  if (!det || !rec) throw new Error('请下载文字检测和文字识别模型后重试。')
+  if (!det || !rec) throw new Error('应用内置文字模型未准备好，请重新安装应用后重试。')
   // Sparse screen analysis spends most time decoding; CPU avoids DML's cold start and retained GPU arena.
   const detector = await deps.openModel(det, ['cpu'], `${detSize.width}x${detSize.height}`, { intraOpNumThreads: 4, allowSpinning: false })
   const recognizer = deps.recognize ?? await deps.openModel(rec, ['cpu'], 'dynamic', { intraOpNumThreads: 4 })

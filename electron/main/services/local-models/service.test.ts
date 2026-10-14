@@ -5,11 +5,10 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { LocalModelDownloadSource, LocalModelProgressEvent } from '../../../../src/platform/contracts/localModels'
-import { isBundledLocalModel } from '../../../../src/platform/contracts/localModels'
 import type { DownloadSourceSelector } from '../download/sourceSelector'
 import type { DownloadFetch } from '../download/verifiedDownload'
 import { LOCAL_MODEL_MANIFEST, type LocalModelSpec } from './manifest'
-import { bundledModelsDirectory, LocalModelError, LocalModelService } from './service'
+import { LocalModelError, LocalModelService } from './service'
 
 const bytes = Buffer.from(Array.from({ length: 3000 }, (_, index) => (index * 7) % 256))
 const sha256 = createHash('sha256').update(bytes).digest('hex')
@@ -54,10 +53,9 @@ const fetch: DownloadFetch = async (url) => {
   return respond()
 }
 
-function service(manifest: readonly LocalModelSpec[] = [yunet, pending]): LocalModelService {
+function service(): LocalModelService {
   return new LocalModelService({
-    manifest,
-    bundledModelsDirectory: path.join(root, 'bundled'),
+    manifest: [yunet, pending],
     modelsLocation: () => ({ dir: path.join(root, '模型'), locale: 'zh' }),
     selector, fetch,
     readPreference: () => preference,
@@ -84,35 +82,6 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }) })
 
 describe('本地模型服务', () => {
-  it('开发入口从 out/main 定位资源，安装包只使用 resourcesPath（含 macOS Contents/Resources）', () => {
-    const mainDirectory = path.join(root, 'repo/out/main')
-    expect(bundledModelsDirectory({ isPackaged: false, resourcesPath: path.join(root, 'electron'), mainDirectory })).toBe(path.join(root, 'repo/resources/local-models'))
-    for (const resource of ['install/resources', 'App.app/Contents/Resources']) {
-      const resourcesPath = path.join(root, resource)
-      expect(bundledModelsDirectory({ isPackaged: true, resourcesPath, mainDirectory })).toBe(path.join(resourcesPath, 'resources/local-models'))
-    }
-  })
-  it('内置模型离线校验并直接返回资源路径，删除被拒；损坏也不转下载或写入资源', async () => {
-    const spec: LocalModelSpec = { ...yunet, id: 'text_recognition_ppocr', files: yunet.files.map(f => ({ ...f, sources: [] })) }
-    const dir = path.join(root, 'bundled', spec.id), file = path.join(dir, spec.files[0].name)
-    fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, bytes)
-    const models = service([spec])
-    expect((await models.info(spec.id)).status).toBe('ready')
-    const results = await Promise.all([models.ensure(spec.id), models.ensure(spec.id)])
-    expect(results[0].files[0].path).toBe(file)
-    expect(results[1]).toEqual(results[0])
-    await expect(models.remove(spec.id)).rejects.toThrow('不能单独删除')
-    expect(fs.readFileSync(file)).toEqual(bytes)
-    expect(await models.cancel(spec.id)).toBe(false)
-    fs.writeFileSync(file, Buffer.from('corrupt'))
-    expect((await models.info(spec.id)).status).toBe('corrupt')
-    await expect(models.ensure(spec.id)).rejects.toThrow('重新安装')
-    fs.unlinkSync(file)
-    await expect(models.ensure(spec.id)).rejects.toThrow('重新安装')
-    expect(requested).toEqual([])
-    expect(fs.existsSync(path.join(root, '模型'))).toBe(false)
-    expect(models.hasActiveDownloads()).toBe(false)
-  })
   it('ensure 正在校验磁盘时插入删除，也不会越过删除屏障开始下载', async () => {
     responses['https://ms/own/yunet.onnx'] = ok
     const models = service()
@@ -286,12 +255,11 @@ describe('本地模型清单', () => {
       for (const file of spec.files) {
         expect(file.sha256).toMatch(/^[0-9a-f]{64}$/)
         expect(file.sizeBytes).toBeGreaterThan(0)
-        if (isBundledLocalModel(spec.id)) { expect(file.sources).toEqual([]); continue }
         expect(file.sources.some((source) => source.region === 'domestic')).toBe(true)
         // 我们自己导出的模型（官方没有 ONNX）只放在自有 ModelScope 仓库，国外用户同样从这里下载
         const selfExported = file.sources.every((source) => source.label === 'own-modelscope')
         expect(selfExported || file.sources.some((source) => source.region === 'global')).toBe(true)
-        expect(file.sources[0]!.label).toBe(spec.id === 'text_recognition_ppocr_precise' ? 'modelscope-oar-ocr' : 'own-modelscope')
+        expect(file.sources[0]!.label).toBe('own-modelscope')
       }
     }
   })

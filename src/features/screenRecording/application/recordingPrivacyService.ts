@@ -3,7 +3,6 @@ import { createLogger } from '@/core/logging'
 import { recordingPrivacySchema, type RecordingPrivacy } from '@/core/screenRecording/privacy'
 import { assertRecordingEditable, readRecordingUnderstanding } from './recordingUnderstandingService'
 import { recordingDomPrivacyCandidates } from '@/core/screenRecording/domPrivacy'
-import type { OcrPrivacyRequest } from '@/platform/contracts/ocrPrivacy'
 import type { CaptureEvent } from '@/core/captureLog/events'
 import { recordingEvents } from './recordingService'
 import { recordingPrivacyCursor } from './recordingPrivacyCursor'
@@ -12,7 +11,7 @@ const logger = createLogger('features.screenRecording.privacy')
 const running = new Set<string>()
 export function recordingPrivacyBusy(id: string): boolean { return running.has(id) }
 /** Sequential analysis retains at most one decoded stream. Cancel/conflict never publish a partial candidate set. */
-export async function analyzeRecordingPrivacy(id: string, signal: AbortSignal, progress: (value: number) => void = () => undefined, quality?: OcrPrivacyRequest['quality']): Promise<{ privacy: RecordingPrivacy; revision: number }> {
+export async function analyzeRecordingPrivacy(id: string, signal: AbortSignal, progress: (value: number) => void = () => undefined): Promise<{ privacy: RecordingPrivacy; revision: number }> {
   if (running.has(id)) throw new Error('此会话正在识别敏感信息，请等待或取消。')
   running.add(id)
   logger.info('开始录制隐私分析', { event: 'recording.privacy.start', context: { documentId: id } })
@@ -42,7 +41,7 @@ export async function analyzeRecordingPrivacy(id: string, signal: AbortSignal, p
       const unsubscribe = api.onPrivacyProgress(event => { if (event.requestId === requestId) progress((done + event.progress * source.durationUs) / total) })
       signal.addEventListener('abort', cancel, { once: true })
       try {
-        const detected = await api.detectSensitiveText({ requestId, quality, source: source.path, mediaId: source.id, startUs: 0, endUs: source.durationUs, originUs: source.monoUs, ...(cursor.length ? { cursor: cursor.filter(c => c.monoUs >= source.monoUs - 100000 && c.monoUs < source.monoUs + source.durationUs) } : {}) })
+        const detected = await api.detectSensitiveText({ requestId, source: source.path, mediaId: source.id, startUs: 0, endUs: source.durationUs, originUs: source.monoUs, ...(cursor.length ? { cursor: cursor.filter(c => c.monoUs >= source.monoUs - 100000 && c.monoUs < source.monoUs + source.durationUs) } : {}) })
         signal.throwIfAborted()
         result.candidates.push(...detected.privacy.candidates); result.warnings.push(...detected.privacy.warnings)
         done += source.durationUs; progress(done / total)

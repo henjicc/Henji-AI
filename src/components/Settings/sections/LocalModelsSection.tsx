@@ -5,7 +5,7 @@ import { FolderOpen, Trash2 } from 'lucide-react'
 import { UI_TEXT_META_CLASS, UiButton, UiError, UiFormRow, UiIconButton } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { useI18n } from '@/hooks/useI18n'
-import { isBundledLocalModel, LOCAL_MODEL_DOWNLOAD_SOURCES, type LocalModelInfo } from '@/platform/contracts/localModels'
+import { LOCAL_MODEL_DOWNLOAD_SOURCES, type LocalModelInfo } from '@/platform/contracts/localModels'
 import SettingsSegmented from '../components/SettingsSegmented'
 import { formatLocalModelSize, useLocalModels, type LocalModelsView } from '../hooks/useLocalModels'
 
@@ -61,7 +61,7 @@ const LocalModelRow: React.FC<{ model: LocalModelInfo; view: LocalModelsView }> 
         <div className="truncate text-xs text-text3">{purpose}</div>
         <div className={UI_TEXT_META_CLASS}>{meta}</div>
         {model.status === 'downloading' ? <ProgressBar appearance="hairline" progress={percent} className="mt-1.5" /> : null}
-        {!isBundledLocalModel(model.id) && model.lastFailure && model.status !== 'downloading' && model.lastFailure !== 'cancelled' ? (
+        {model.lastFailure && model.status !== 'downloading' && model.lastFailure !== 'cancelled' ? (
           <UiInlineStatus className="mt-0.5">{t(`sections.localModels.failure.${model.lastFailure}`)}</UiInlineStatus>
         ) : null}
       </div>
@@ -74,11 +74,6 @@ const LocalModelRow: React.FC<{ model: LocalModelInfo; view: LocalModelsView }> 
 
 const LocalModelActions: React.FC<{ model: LocalModelInfo; view: LocalModelsView; percent: number; title: string }> = ({ model, view, percent, title }) => {
   const { t } = useI18n('settings')
-  if (isBundledLocalModel(model.id)) {
-    return model.status === 'ready'
-      ? <span className={UI_TEXT_META_CLASS}>{t('sections.localModels.bundled')}</span>
-      : <UiInlineStatus>{t('sections.localModels.bundledRepair')}</UiInlineStatus>
-  }
   switch (model.status) {
     case 'downloading':
       return (

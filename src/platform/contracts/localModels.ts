@@ -1,7 +1,7 @@
 /*
- * 本地模型：基础 OCR 随应用提供，其余抠像、检测、跟踪模型第一次用到时下载。
+ * 可下载本地模型：抠像、检测、跟踪模型第一次用到时下载；内置OCR不属于此公开目录。
  *
- * 内置文件放在应用资源目录，其余文件放在作品目录的“模型/<模型名>/”下，均按清单的 SHA-256 校验；下载源在国内
+ * 文件放在作品目录的“模型/<模型名>/”下，均按清单的 SHA-256 校验；下载源在国内
  * （ModelScope）与国外（Hugging Face / GitHub）之间自动选择，失败自动换源。
  * 主进程实现在 `electron/main/services/local-models/`，渲染层经 `src/commands/localModels.ts` 调用。
  */
@@ -11,9 +11,6 @@ export const LOCAL_MODEL_IDS = [
   'face_detection_yunet',
   'person_matting_rvm',
   'selfie_segmentation',
-  'text_detection_ppocr',
-  'text_recognition_ppocr',
-  'text_recognition_ppocr_precise',
   'object_tracking_vittrack',
   'object_tracking_efficienttam',
   'image_inpainting_migan',
@@ -21,11 +18,6 @@ export const LOCAL_MODEL_IDS = [
 ] as const
 
 export type LocalModelId = (typeof LOCAL_MODEL_IDS)[number]
-
-/** Application-owned resources: available offline and never removable as downloaded user files. */
-export function isBundledLocalModel(id: string): boolean {
-  return id === 'text_detection_ppocr' || id === 'text_recognition_ppocr'
-}
 
 export function isLocalModelId(value: unknown): value is LocalModelId {
   return typeof value === 'string' && (LOCAL_MODEL_IDS as readonly string[]).includes(value)
@@ -35,7 +27,7 @@ export function isLocalModelId(value: unknown): value is LocalModelId {
  * - `not_downloaded`：还没下载（或已删除）
  * - `downloading`：正在下载或校验
  * - `ready`：文件齐全且校验通过
- * - `corrupt`：文件存在但大小或校验值不对；下载模型重新下载，内置模型重新安装应用
+ * - `corrupt`：文件存在但大小或校验值不对，需要重新下载
  * - `unavailable`：暂时没有可下载的文件（如需要另行导出的模型）
  */
 export type LocalModelStatus = 'not_downloaded' | 'downloading' | 'ready' | 'corrupt' | 'unavailable'

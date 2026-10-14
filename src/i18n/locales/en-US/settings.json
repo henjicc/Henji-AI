@@ -389,9 +389,7 @@
         "global": "Global"
       },
       "listLabel": "Local models",
-      "listHint": "Small models that run locally. Basic text detection and recognition are included; other models download on first use and can be downloaded or removed here",
-      "bundled": "Included",
-      "bundledRepair": "Included model missing or damaged. Reinstall the app",
+      "listHint": "Small models that run on this computer for matting, faces, text regions and object tracking. They download automatically when first needed; you can download or delete them here",
       "loadFailed": "Couldn't read local model status",
       "download": "Download",
       "redownload": "Download again",
