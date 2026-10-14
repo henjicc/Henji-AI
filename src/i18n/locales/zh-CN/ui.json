@@ -8,6 +8,7 @@
     "status": { "pending": "待确认", "accepted": "已确认", "rejected": "已忽略" }
   },
   "recording": {
+    "openingEditor": "正在打开剪辑…",
     "movieTitle": "一键成片", "movieIntro": "自动剪掉等待和停顿、推近到正在操作的地方、加上鼠标点击效果，结果在剪辑里打开，还能继续改。", "movieStyle": "风格", "movieStyle_tutorial": "教程", "movieStyle_concise": "快节奏", "movieStyle_original": "原样", "movieStyleHint_tutorial": "等待加速 4 倍，适度推近操作位置，适合讲解教程。", "movieStyleHint_concise": "等待加速 8 倍，推近更积极，适合产品演示。", "movieStyleHint_original": "保持原来的节奏，不剪不推近。", "movieMore": "画幅、摄像头和画框",
     "modeGroup": "录制模式", "mode_full": "完整", "mode_quick": "快速", "modeHint_full": "录完可以分析步骤、自动推近、重画鼠标，再一键生成成片。", "modeHint_quick": "鼠标直接录进画面，停止后几秒内保存成一个视频文件，不用再处理。", "saveTo": "保存到", "saveToDefault": "导出文件夹 / 屏幕录制", "chooseFolder": "更改", "quickSaving": "正在保存视频…", "quickResult": "保存结果", "quickSaved": "已保存为视频", "revealFile": "在文件夹中显示", "quickDataHint": "鼠标位置、点击、滚动和标记已一并写进这个视频文件。", "quickWorkbenchHint": "这段录制也保留在会话里，可以到工作台分析或生成成片；鼠标已录进画面，样式不能再改。", "openWorkbench": "在工作台中打开",
     "exportTitle": "导出图文、动图或报告",
@@ -161,6 +162,10 @@
   },
   "promptProfileFields": {"provider": "供应商", "model": "模型"},
   "notifications": {
+    "recordingVideoSaved": "已保存视频：{{name}}",
+    "recordingVideoFailed": "视频没有保存成功：{{error}}",
+    "recordingReveal": "在文件夹中显示",
+    "recordingEditFailed": "录制已保存，但没能打开剪辑：{{error}}",
     "filesImported": "已导入 {{imported}} 个文件，跳过 {{skipped}} 个",
     "copied": "已复制",
     "saved": "已保存",

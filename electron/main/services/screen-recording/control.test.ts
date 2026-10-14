@@ -71,6 +71,15 @@ describe('录制控制权威状态', () => {
     expect(order).toEqual(['began', 'ending', 'stop']); expect(service.snapshot()?.phase).toBe('stopped')
     await service.dispose()
   })
+  it('暂停先记下按下时刻再停采集，继续在各轨都恢复后才记下结束时刻', async () => {
+    const { service, backend } = fixture(); const order: string[] = []
+    backend.pause.mockImplementation(async () => { order.push('pause') }); backend.resume.mockImplementation(async () => { order.push('resume') })
+    service.create('session', { ...backend, pausing: async () => { order.push('pausing') }, resumed: async () => { order.push('resumed') } })
+    await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    await service.command('toggle'); await service.command('toggle')
+    expect(order).toEqual(['pausing', 'pause', 'resume', 'resumed']); expect(service.snapshot()?.phase).toBe('recording')
+    await service.dispose()
+  })
   it('采集预热慢于倒计时：零时显示准备中而非开始计时，就绪那一刻才开始；开始时刻只记一次', async () => {
     const { service, backend } = fixture(); let finish!: () => void
     backend.start.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))

@@ -114,7 +114,10 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         openRecordingControl(owner, request.sessionId, {
           start: signal => transition('start', 'recording', signal), pause: signal => transition('pause', 'paused', signal), resume: signal => transition('resume', 'recording', signal), stop: signal => transition('stop', 'stopped', signal),
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.
-          ...(document ? { began: () => document!.range('startUs', now() - session.originUs), ending: () => document!.range('endUs', now() - session.originUs) } : {}),
+          ...(document ? {
+            began: () => document!.range('startUs', now() - session.originUs), ending: () => document!.range('endUs', now() - session.originUs),
+            pausing: () => document!.pause(now() - session.originUs), resumed: () => document!.resume(now() - session.originUs),
+          } : {}),
           cancel: async () => {
             try {
               const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : [])])

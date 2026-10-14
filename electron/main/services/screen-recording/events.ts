@@ -153,6 +153,8 @@ export class RecordingEventSession {
       // Events keep flowing through the countdown; consumers cut everything before the recorded start.
       ...(backend.began ? { began: () => backend.began!() } : {}),
       ...(backend.ending ? { ending: () => backend.ending!() } : {}),
+      ...(backend.pausing ? { pausing: () => backend.pausing!() } : {}),
+      ...(backend.resumed ? { resumed: () => backend.resumed!() } : {}),
       mark: async (signal, note) => {
         try { await backend.mark(signal, note); this.mark(note) }
         catch (error) { return releaseOnFailure(error) }

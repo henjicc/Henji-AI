@@ -4,6 +4,8 @@ import { createRecordingDocument } from '@/core/screenRecording/document'
 vi.mock('@/platform', () => ({ getPlatform: vi.fn() }))
 vi.mock('@/features/videoEdit/application/videoEditMedia', () => ({ importVideoEditSources: vi.fn() }))
 vi.mock('@/features/videoEdit/application/videoEditService', () => ({ openVideoEditDocument: vi.fn(), saveVideoEdit: vi.fn(), subscribeVideoEditDomain: vi.fn(() => () => undefined) }))
+vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
+vi.mock('./recordingMovieSources', () => ({ recordingMovieCursorSources: vi.fn(async () => new Map()) }))
 import { placeRecordingMedia, importRecordingToVideo } from './recordingVideoImport'
 import { getPlatform } from '@/platform'
 import { importVideoEditSources } from '@/features/videoEdit'
@@ -51,7 +53,7 @@ it('以第一帧画面为起点对齐音画（早开的麦克风被裁掉），�
   expect(camera[0].duration).toBe(57)
 })
 
-it('送入剪辑：倒计时预热段与停止后的编码尾巴都不进时间线，画面和声音同帧开始、同帧结束', () => {
+it('送入剪辑：倒计时预热段与停止后的编码尾巴都不进时间线，画面和声音同帧开始、同帧结束；有光标日志的屏幕片段默认重绘光标', () => {
   const document = createVideoEditDocument('剪辑'), sequence = createVideoEditSequence('课程')
   document.sequences.push(sequence)
   const recording = { ...createRecordingDocument(), startUs: 3_000_000, endUs: 9_000_000 }
@@ -64,7 +66,10 @@ it('送入剪辑：倒计时预热段与停止后的编码尾巴都不进时间�
     document.media.push({ id: source.id, path: source.path, name: source.id, kind, durationSeconds: source.durationUs / 1e6, width: 1920, height: 1080, hasAudio: kind === 'audio' })
     document.items.push({ id: source.id, name: source.id, kind, mediaId: source.id })
   }
+  document.media.find(media => media.id === 'screen')!.recordingCursor = { pages: [] } as unknown as NonNullable<typeof document.media[number]['recordingCursor']>
   placeRecordingMedia(document, recording, recording.media, recording.media.map(media => media.id), { documentId: document.id, sequenceId: sequence.id, frame: 0 })
+  expect(sequence.clips.find(clip => clip.itemId === 'screen')?.effects?.map(effect => effect.builtin?.id)).toEqual(['recording_cursor'])
+  expect(sequence.clips.find(clip => clip.itemId === 'microphone')?.effects).toBeUndefined()
   const clips = sequence.clips.map(clip => ({ item: clip.itemId, start: clip.start, end: clip.start + clip.duration, sourceInUs: clip.sourceInUs }))
   expect(clips).toEqual(expect.arrayContaining([{ item: 'microphone', start: 0, end: 180, sourceInUs: 2_500_000 }, { item: 'screen', start: 0, end: 180, sourceInUs: 1_700_000 }]))
 })

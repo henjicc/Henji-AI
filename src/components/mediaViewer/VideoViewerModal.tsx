@@ -36,11 +36,9 @@ export interface VideoViewerModalProps {
   timeline?: VideoViewerTimeline
   seekRequest?: VideoViewerSeek
   mediaTestId?: string
-  /** Inline hosts that draw their own time ruler follow the displayed playback position. */
-  onTimeChange?: (seconds: number) => void
 }
 
-export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange, presentation = 'modal', timeline, seekRequest, mediaTestId, onTimeChange }: VideoViewerModalProps): JSX.Element | null {
+export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange, presentation = 'modal', timeline, seekRequest, mediaTestId }: VideoViewerModalProps): JSX.Element | null {
   const { t } = useI18n()
   const inline = presentation === 'inline'
   const viewer = useUiViewerShell(open && !inline, onClose, { enterKey: videoUrl })
@@ -82,7 +80,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const sourcePath = timelinePlayer.segment?.filePath ?? filePath
   const videoFailed = Boolean(sourceUrl) && failedVideo === sourceUrl
   const displayedTime = timeline ? timelinePlayer.currentTime : currentTime
-  useEffect(() => { onTimeChange?.(displayedTime) }, [displayedTime, onTimeChange])
   const displayedDuration = timeline?.duration ?? videoDuration
   const displayedPlaying = timeline ? timelinePlayer.playing : isVideoPlaying
   const controlsHideTimer = useRef<number | null>(null)

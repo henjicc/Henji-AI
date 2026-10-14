@@ -9,27 +9,35 @@ vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: vi.fn() }))
 vi.mock('../appPaths', () => ({ getUserFolderDir: vi.fn() }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('./session-document', () => ({ readRecordingEvents: vi.fn() }))
-import { quickExportArgs, quickExportAudioGraph, quickExportOutputUs, quickExportWindows } from './quick-export'
+import { quickExportArgs, quickExportAudioGraph, quickExportList, quickExportOutputUs, quickExportWindows } from './quick-export'
 import { appendRecordingEventsBox, readRecordingEventsBox, type EmbeddedRecordingEvents } from './embedded-events'
 
 const media = (id: string, kind: 'screen' | 'microphone', monoUs: number, durationUs: number, file = `${id}.mp4`) => ({ id, kind, path: file, monoUs, durationUs })
+type Session = Parameters<typeof quickExportWindows>[0]
+const session = (items: Session['media'], extra: Partial<Session> = {}): Session => ({ media: items, tracks: null, ...extra })
 
 describe('快速模式保存视频', () => {
   it('画面分段首尾相接，暂停期间的事件不进入视频时间', () => {
-    const { windows } = quickExportWindows([media('b', 'screen', 5_000_000, 1_000_000), media('a', 'screen', 1_000_000, 2_000_000), media('m', 'microphone', 1_000_000, 5_000_000)])
+    const { windows } = quickExportWindows(session([media('b', 'screen', 5_000_000, 1_000_000), media('a', 'screen', 1_000_000, 2_000_000), media('m', 'microphone', 1_000_000, 5_000_000)]))
     expect(windows).toEqual([{ startUs: 1_000_000, endUs: 3_000_000, outputUs: 0 }, { startUs: 5_000_000, endUs: 6_000_000, outputUs: 2_000_000 }])
     expect(quickExportOutputUs(windows, 5_500_000)).toBe(2_500_000)
     expect(quickExportOutputUs(windows, 4_000_000)).toBeNull()
   })
   it('倒计时预热段与停止后的尾巴不进文件：从共享起点在拼接后的画面里定位，声音同起点', () => {
-    const { windows, seekUs } = quickExportWindows([media('a', 'screen', 1_000_000, 2_000_000), media('b', 'screen', 5_000_000, 2_000_000)], { startUs: 2_500_000, endUs: 6_000_000 })
+    const { windows, seekUs, files } = quickExportWindows(session([media('a', 'screen', 1_000_000, 2_000_000), media('b', 'screen', 5_000_000, 2_000_000)], { startUs: 2_500_000, endUs: 6_000_000 }))
     expect(seekUs).toBe(1_500_000)
     expect(windows).toEqual([{ startUs: 2_500_000, endUs: 3_000_000, outputUs: 0 }, { startUs: 5_000_000, endUs: 6_000_000, outputUs: 500_000 }])
+    expect(quickExportList(files)).toBe("file 'a.mp4'\nfile 'b.mp4'\noutpoint 1.000000")
     expect(quickExportAudioGraph([media('m', 'microphone', 0, 8_000_000, 'm.wav')], windows, 1)!.graph).toContain('[1:a]atrim=start=2.500000:duration=0.500000,asetpts=PTS-STARTPTS,adelay=0:all=1[a0]')
     expect(quickExportArgs('list.txt', [], null, 'out.mp4', seekUs, 1_500_000).slice(0, 8)).toEqual(['-v', 'error', '-y', '-ss', '1.500000', '-f', 'concat', '-safe'])
   })
+  it('暂停：按下暂停后的画面截掉（文件尾精确），继续后从新文件开头接上，声音按同一时间放置', () => {
+    const { windows, files } = quickExportWindows(session([media('a', 'screen', 1_000_000, 3_000_000), media('b', 'screen', 5_200_000, 2_000_000)], { startUs: 1_000_000, endUs: 7_200_000, pauses: [{ startUs: 3_500_000, endUs: 5_300_000 }] }))
+    expect(files).toEqual([{ path: 'a.mp4', outpointUs: 2_500_000 }, { path: 'b.mp4' }])
+    expect(windows).toEqual([{ startUs: 1_000_000, endUs: 3_500_000, outputUs: 0 }, { startUs: 5_200_000, endUs: 7_200_000, outputUs: 2_500_000 }])
+  })
   it('声音只取与画面重叠的部分，并放到对应的视频时间', () => {
-    const { windows } = quickExportWindows([media('a', 'screen', 1_000_000, 2_000_000), media('b', 'screen', 5_000_000, 1_000_000)])
+    const { windows } = quickExportWindows(session([media('a', 'screen', 1_000_000, 2_000_000), media('b', 'screen', 5_000_000, 1_000_000)]))
     const mix = quickExportAudioGraph([media('m', 'microphone', 0, 6_000_000, 'm.wav')], windows, 1)!
     expect(mix.graph).toContain('[1:a]atrim=start=1.000000:duration=2.000000,asetpts=PTS-STARTPTS,adelay=0:all=1[a0]')
     expect(mix.graph).toContain('[1:a]atrim=start=5.000000:duration=1.000000,asetpts=PTS-STARTPTS,adelay=2000:all=1[a1]')
@@ -47,9 +55,9 @@ describe('快速模式保存视频', () => {
     const wav = path.join(root, 'mic.wav')
     execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', wav], { windowsHide: true })
     const list = path.join(root, 'list.txt')
-    writeFileSync(list, spans.map(file => `file '${file.replace(/\\/g, '/')}'`).join('\n'))
     // The range starts half a second into the first span (mid-GOP): playback must still begin exactly there.
-    const { windows, seekUs } = quickExportWindows([media('a', 'screen', 0, 1_000_000, spans[0]), media('b', 'screen', 2_000_000, 1_000_000, spans[1])], { startUs: 500_000, endUs: 3_000_000 })
+    const { windows, seekUs, files } = quickExportWindows(session([media('a', 'screen', 0, 1_000_000, spans[0]), media('b', 'screen', 2_000_000, 1_000_000, spans[1])], { startUs: 500_000, endUs: 3_000_000 }))
+    writeFileSync(list, quickExportList(files))
     const output = path.join(root, 'out.mp4')
     execFileSync(ffmpegPath, quickExportArgs(list, [wav], quickExportAudioGraph([media('m', 'microphone', 0, 3_000_000, wav)], windows, 1), output, seekUs, 1_500_000), { windowsHide: true })
     const payload: EmbeddedRecordingEvents = { format: 'henji.recording-events', version: 1, video: { width: 320, height: 180, fps: 30, durationMs: 2000 }, cursorEmbedded: true,

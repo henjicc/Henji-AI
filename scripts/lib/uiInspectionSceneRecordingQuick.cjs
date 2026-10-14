@@ -26,10 +26,15 @@ function createRecordingQuickScene() {
       await page.waitForTimeout(1500)
       const stopped = Date.now()
       await button('停止并保存').click()
-      await page.getByText('已保存为视频', { exact: true }).waitFor({ timeout: 60000 })
+      // No result page: a toast names the saved file and offers to show it in its folder.
+      const toast = page.getByRole('status').filter({ hasText: '已保存视频' })
+      await toast.waitFor({ timeout: 60000 })
+      assert.equal(await toast.getByRole('button', { name: '在文件夹中显示', exact: true }).count(), 1, '提示里没有“在文件夹中显示”')
+      await capture('recording-quick-toast')
       const savedMs = Date.now() - stopped
-      const [name, folder] = await page.evaluate(() => [...document.querySelectorAll('[data-recording-quick-result] aside [data-observation-sensitive]')].map(node => node.textContent))
-      const file = path.join(folder, name)
+      const saved = await page.evaluate(async () => (await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), level: 'info', keyword: 'recording.quick_export.completed', limit: 1 })).events[0])
+      const file = saved?.context?.file
+      assert(file && (await toast.textContent()).includes(path.basename(file)), `提示里的文件名与保存的文件不符：${file}`)
       assert(fs.existsSync(file), `快速模式视频不存在：${file}`)
       const probe = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true }).toString())
       assert(probe.streams.some(stream => stream.codec_type === 'video'), '缺少画面')

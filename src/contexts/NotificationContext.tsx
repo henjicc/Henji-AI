@@ -19,8 +19,8 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 
 const notificationEvents = new EventTarget()
 /** Domain services use the existing root toast without mounting another provider. */
-export function notifyUser(message: NotificationMessage): void {
-    notificationEvents.dispatchEvent(new CustomEvent<NotificationMessage>('notification', { detail: message }))
+export function notifyUser(message: NotificationMessage, type: UiToastTone = 'success', action?: UiToastAction): void {
+    notificationEvents.dispatchEvent(new CustomEvent<NotificationState>('notification', { detail: { message, type, ...(action ? { action } : {}) } }))
 }
 
 export const useNotification = () => {
@@ -42,7 +42,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }, [show])
 
     useEffect(() => {
-        const receive = (event: Event): void => showNotification((event as CustomEvent<NotificationMessage>).detail)
+        const receive = (event: Event): void => { const { message, type, action } = (event as CustomEvent<NotificationState>).detail; showNotification(message, type, action) }
         notificationEvents.addEventListener('notification', receive)
         return () => notificationEvents.removeEventListener('notification', receive)
     }, [showNotification])

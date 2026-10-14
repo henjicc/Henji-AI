@@ -39,9 +39,13 @@ function createRecordingSyncScene() {
       const clock = await app.evaluate(() => ({ hrUs: Number(process.hrtime.bigint() / 1000n), dateMs: Date.now() }))
       await page.evaluate(() => document.querySelector('body > div[style*="2147483647"]')?.remove())
       await button('停止并保存').click()
-      await page.getByText('已保存为视频', { exact: true }).waitFor({ timeout: 60000 })
-      const [name, folder] = await page.evaluate(() => [...document.querySelectorAll('[data-recording-quick-result] aside [data-observation-sensitive]')].map(node => node.textContent))
-      const file = path.join(folder, name)
+      // No result page: a toast names the saved file and offers to show it in its folder.
+      const toast = page.getByRole('status').filter({ hasText: '已保存视频' })
+      await toast.waitFor({ timeout: 60000 })
+      assert.equal(await toast.getByRole('button', { name: '在文件夹中显示', exact: true }).count(), 1, '提示里没有“在文件夹中显示”')
+      const saved = await page.evaluate(async () => (await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), level: 'info', keyword: 'recording.quick_export.completed', limit: 1 })).events[0])
+      const file = saved?.context?.file
+      assert(file && (await toast.textContent()).includes(path.basename(file)), `提示里的文件名与保存的文件不符：${file}`)
       const recording = (await page.evaluate(() => window.henjiNative.documents.listDocuments({ kind: 'screen_recording', includeDrafts: true }))).find(value => value.name === '画面时间验收')
       const { content } = await page.evaluate(id => window.henjiNative.documents.readDocument({ id }), recording.id)
       assert(Number.isInteger(content.startUs) && Number.isInteger(content.endUs), '会话必须记下正式开始与结束时刻')

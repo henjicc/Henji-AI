@@ -67,6 +67,17 @@ export class RecordingSessionDocument {
     this.content[edge] = Math.max(0, Math.round(monoUs))
     return this.save()
   }
+  pause(monoUs: number): Promise<void> {
+    const at = Math.max(0, Math.round(monoUs))
+    ;(this.content.pauses ??= []).push({ startUs: at, endUs: at })
+    return this.save()
+  }
+  resume(monoUs: number): Promise<void> {
+    const open = this.content.pauses?.at(-1)
+    if (!open || open.endUs !== open.startUs) return Promise.resolve()
+    open.endUs = Math.max(open.startUs, Math.round(monoUs))
+    return this.save()
+  }
   page(page: CaptureLogPage, file: string): Promise<void> {
     this.content.eventPages.push({ path: file, firstSequence: page.seqSpan[0], lastSequence: page.seqSpan[1] })
     for (const entry of page.entries) if (entry.kind === 'mark') this.content.markers.push({ id: entry.eventId, monoUs: entry.monoUs, note: entry.note ?? '' })

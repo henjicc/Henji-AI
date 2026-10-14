@@ -27,3 +27,11 @@ describe('录制共享区间', () => {
     expect(document.media.flatMap(media => recordingMediaSpans(document, media))).toEqual([])
   })
 })
+
+it('暂停区间对所有轨道一起生效：继续时声音比画面早开、暂停时画面比声音晚停的部分都不保留', () => {
+  const document = { ...recording(), startUs: 1_300_000, endUs: 9_000_000, pauses: [{ startUs: 4_000_000, endUs: 5_200_000 }] }
+  expect(document.media.map(media => recordingMediaSpans(document, media).map(span => [span.startUs, span.endUs]))).toEqual([
+    [[1_300_000, 4_000_000], [5_200_000, 9_000_000]],
+    [[1_300_000, 4_000_000], [5_200_000, 9_000_000]],
+  ])
+})

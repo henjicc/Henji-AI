@@ -15,6 +15,9 @@ export interface RecordingControlBackend {
   began?(): Promise<void>
   /** 用户按下停止的时刻，在 stop 之前调用；各轨都以此为共同结尾。 */
   ending?(): Promise<void>
+  /** 按下暂停的时刻（pause 之前）与各轨都恢复采集的时刻（resume 之后）；其间各轨内容都不进入成品。 */
+  pausing?(): Promise<void>
+  resumed?(): Promise<void>
 }
 interface ControlDependencies {
   now(): number
@@ -128,6 +131,8 @@ export class RecordingControlService {
     this.publish()
     const task = Promise.resolve().then(async () => {
       if (operation === 'mark') return active.backend.mark(active.abort.signal, note)
+      if (operation === 'pause') await active.backend.pausing?.()
+      if (operation === 'resume') { await active.backend.resume(active.abort.signal); return active.backend.resumed?.() }
       if (operation === 'stop') {
         // Stopped before the countdown ended: an empty range, so nothing warmed up leaks into the result.
         if (!active.began && active.backend.began) { active.began = true; await active.backend.began() }

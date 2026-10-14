@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { getDocumentService } from '../documents/runtime'
 import { recordingDocumentSchema, type RecordingDocument, type RecordingMedia } from '../../../../src/core/screenRecording/document'
-import { recordingRange } from '../../../../src/core/screenRecording/range'
+import { recordingMediaSpans } from '../../../../src/core/screenRecording/range'
 import type { CaptureEvent } from '../../../../src/core/captureLog/events'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { getUserFolderDir } from '../appPaths'
@@ -18,22 +18,31 @@ const exported = new Map<string, string>()
 
 interface Window { startUs: number; endUs: number; outputUs: number }
 
+export interface QuickExportFile { path: string; outpointUs?: number }
 /**
- * Screen spans back to back, cut to the recorded range: pauses, the countdown warm-up and the encoder's
- * tail after stop are left out. `seekUs` is where the range starts in the joined files.
+ * Screen files back to back, cut by the shared range and pauses: the countdown warm-up, paused stretches and
+ * the encoder's tail after stop are left out. With stream copy only two cuts are exact: the very start (a seek
+ * on the joined input) and every file's end (`outpoint`); a resumed file therefore keeps its first few frames,
+ * and the windows say so, which keeps the sound aligned with what is really in the file.
  */
-export function quickExportWindows(media: readonly RecordingMedia[], range: { startUs: number; endUs: number } = { startUs: 0, endUs: Number.MAX_SAFE_INTEGER }): { windows: Window[]; seekUs: number } {
+export function quickExportWindows(recording: Pick<RecordingDocument, 'media' | 'startUs' | 'endUs' | 'pauses' | 'tracks'>): { windows: Window[]; seekUs: number; files: QuickExportFile[] } {
   let joinedUs = 0, outputUs = 0, seekUs = 0
-  const windows: Window[] = []
-  for (const item of media.filter(item => item.kind === 'screen' && item.durationUs > 0).sort((a, b) => a.monoUs - b.monoUs)) {
-    const startUs = Math.max(range.startUs, item.monoUs), endUs = Math.min(range.endUs, item.monoUs + item.durationUs)
-    if (endUs > startUs) {
+  const windows: Window[] = [], files: QuickExportFile[] = []
+  for (const item of recording.media.filter(item => item.kind === 'screen' && item.durationUs > 0).sort((a, b) => a.monoUs - b.monoUs)) {
+    const spans = recordingMediaSpans(recording, item)
+    if (spans.length) {
+      const startUs = windows.length ? item.monoUs : spans[0].startUs, endUs = spans.at(-1)!.endUs
       if (!windows.length) seekUs = joinedUs + startUs - item.monoUs
       windows.push({ startUs, endUs, outputUs }); outputUs += endUs - startUs
+      files.push({ path: item.path, ...(endUs < item.monoUs + item.durationUs ? { outpointUs: endUs - item.monoUs } : {}) })
+      joinedUs += endUs - item.monoUs
     }
-    joinedUs += item.durationUs
   }
-  return { windows, seekUs }
+  return { windows, seekUs, files }
+}
+/** Concat demuxer list; paths are quoted for the demuxer's own escaping rules. */
+export function quickExportList(files: readonly QuickExportFile[]): string {
+  return files.map(file => [`file '${file.path.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`, ...(file.outpointUs !== undefined ? [`outpoint ${(file.outpointUs / 1e6).toFixed(6)}`] : [])].join('\n')).join('\n')
 }
 
 export function quickExportOutputUs(windows: readonly Window[], monoUs: number): number | null {
@@ -110,16 +119,15 @@ export async function exportQuickRecording(sessionId: string, directory?: string
   const read = await getDocumentService().readDocument({ id: sessionId })
   if (read.meta.kind !== 'screen_recording') throw new Error('请选择录制会话')
   const content: RecordingDocument = recordingDocumentSchema.parse(read.content)
-  const { windows, seekUs } = quickExportWindows(content.media, recordingRange(content))
+  const { windows, seekUs, files } = quickExportWindows(content)
   if (!windows.length || !content.source) throw new Error('这段录制没有可保存的画面')
   const target = directory ?? path.join(getUserFolderDir('exports'), '屏幕录制')
   await mkdir(target, { recursive: true })
   if (!statSync(target).isDirectory()) throw new Error('保存位置不是文件夹')
   const output = availableName(target, read.meta.name)
-  const screens = content.media.filter(item => item.kind === 'screen' && item.durationUs > 0).sort((a, b) => a.monoUs - b.monoUs)
   const audio = content.media.filter(item => (item.kind === 'microphone' || item.kind === 'systemAudio') && item.durationUs > 0)
-  const list = path.join(path.dirname(screens[0].path), `quick-export-${process.pid}.txt`)
-  await writeFile(list, screens.map(item => `file '${item.path.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`).join('\n'), 'utf8')
+  const list = path.join(path.dirname(files[0].path), `quick-export-${process.pid}.txt`)
+  await writeFile(list, quickExportList(files), 'utf8')
   const ffmpeg = await loadFfmpegPath()
   const mix = quickExportAudioGraph(audio, windows, 1)
   const started = Date.now()
@@ -136,7 +144,7 @@ export async function exportQuickRecording(sessionId: string, directory?: string
   const options = content.source.options
   await appendRecordingEventsBox(output, { format: 'henji.recording-events', version: 1, video: { width: options.width, height: options.height, fps: options.fps, durationMs: Math.round(durationUs / 1000) }, cursorEmbedded: content.source.cursorEmbedded, events: rows })
   exported.set(sessionId, output)
-  logger.info('快速录制已保存为视频', { event: 'recording.quick_export.completed', context: { sessionId, durationMs: Math.round(durationUs / 1000), events: rows.length, elapsedMs: Date.now() - started } })
+  logger.info('快速录制已保存为视频', { event: 'recording.quick_export.completed', context: { sessionId, file: output, durationMs: Math.round(durationUs / 1000), events: rows.length, elapsedMs: Date.now() - started } })
   return { path: output, durationUs, events: rows.length }
 }
 

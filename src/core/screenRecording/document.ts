@@ -19,6 +19,8 @@ export const recordingDocumentSchema = z.object({
   startUs: z.number().int().nonnegative().optional(),
   /** Session clock when the person pressed stop; every track ends here even if an encoder flushes a moment longer. */
   endUs: z.number().int().nonnegative().optional(),
+  /** Paused stretches on the session clock: from the pause press until every track was capturing again. No track keeps anything inside them. */
+  pauses: z.array(z.object({ startUs: z.number().int().nonnegative(), endUs: z.number().int().nonnegative() }).strict().refine(value => value.endUs >= value.startUs, '暂停结束早于开始')).optional(),
   status: z.enum(['empty', 'prepared', 'recording', 'paused', 'stopped', 'interrupted']),
   source: z.object({ name: z.string(), options: captureOptionsSchema, cursorEmbedded: z.boolean() }).strict().nullable(),
   devices: recordingTrackOptionsSchema,

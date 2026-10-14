@@ -5,17 +5,21 @@ import type { RecordingSessionOptions } from '@/core/screenRecording/sessionOpti
 import type { ScreenCaptureOptions } from '@/core/screenRecording/capture'
 import type { CaptureKind, RecordingControlSnapshot } from '@/core/screenRecording/contracts'
 import type { CaptureEvent } from '@/core/captureLog/events'
+import { recordingRange } from '@/core/screenRecording/range'
 import { prepareScreenCapture, type ScreenCaptureSession } from '../capture/session'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { defaultDocumentOperationChanges, markSessionDocumentOpened } from '@/features/documents'
+import { notifyUser } from '@/contexts/NotificationContext'
+import { notificationMessage, notificationText } from '@/i18n/notifications'
 
 const logger = createLogger('features.screenRecording.session')
 export interface RecordingDestination { documentId: string; sequenceId?: string; frame?: number }
-/** Quick mode result: the session becomes one MP4 in the chosen folder right after it stops. */
-export interface RecordingQuickExport { sessionId: string; status: 'saving' | 'saved' | 'failed'; path?: string; durationUs?: number; error?: string; directory?: string }
-interface View { documentId: string | null; snapshot: RecordingControlSnapshot | null; content: RecordingDocument | null; busy: boolean; error: string | null; destination: RecordingDestination | null; quick: RecordingQuickExport | null }
-let view: View = { documentId: null, snapshot: null, content: null, busy: false, error: null, destination: null, quick: null }
+/** `opening` covers the moment between stop and the edit appearing, so the page never flashes the setup. */
+interface View { documentId: string | null; snapshot: RecordingControlSnapshot | null; content: RecordingDocument | null; busy: boolean; opening: boolean; error: string | null; destination: RecordingDestination | null }
+let view: View = { documentId: null, snapshot: null, content: null, busy: false, opening: false, error: null, destination: null }
 const quickSessions = new Map<string, { directory?: string }>()
+/** Sessions started from the recording page: when they stop, the person is taken to the result. */
+const handoffSessions = new Set<string>()
 let capture: ScreenCaptureSession | undefined
 let detach: (() => void) | undefined
 let finishing: Promise<void> | undefined
@@ -26,21 +30,28 @@ export function subscribeRecording(listener: () => void): () => void { listeners
 function publish(change: Partial<View>): void { view = { ...view, ...change }; for (const listener of listeners) listener() }
 export function setRecordingDestination(destination: RecordingDestination | null): void {
   if (capture || view.busy) throw new Error('请先结束当前录制')
-  publish({ destination, documentId: null, content: null, error: null, quick: null })
+  publish({ destination, documentId: null, content: null, error: null })
 }
-/** Joins the stopped session into one MP4; retried from the result view if the first attempt fails. */
-export async function saveQuickRecording(sessionId: string, directory?: string): Promise<void> {
-  publish({ quick: { sessionId, status: 'saving', directory } })
+/** Quick mode ends as one MP4 in the chosen folder; a toast says where, with a way to show it. */
+export async function saveQuickRecording(sessionId: string, directory?: string): Promise<string> {
   try {
     const result = await getPlatform().screenRecording.capture({ operation: 'quick-export', sessionId, ...(directory ? { directory } : {}) }) as { path: string; durationUs: number }
-    if (view.quick?.sessionId === sessionId) publish({ quick: { sessionId, status: 'saved', path: result.path, durationUs: result.durationUs, directory } })
+    const reveal = (): void => { void revealQuickRecording(sessionId).catch(error => logger.warn('显示视频文件失败', { event: 'recording.quick_export.reveal_failed', error })) }
+    notifyUser(notificationMessage('recordingVideoSaved', { name: result.path.split(/[\\/]/).at(-1) ?? '' }), 'success', { label: notificationText('recordingReveal'), onClick: reveal })
+    return result.path
   } catch (error) {
     logger.error('快速录制保存视频失败', { event: 'recording.quick_export.failed', error, context: { sessionId } })
-    if (view.quick?.sessionId === sessionId) publish({ quick: { sessionId, status: 'failed', error: error instanceof Error ? error.message : String(error), directory } })
+    notifyUser(notificationMessage('recordingVideoFailed', { error: error instanceof Error ? error.message : String(error) }), 'error')
+    throw error
   }
 }
 export async function revealQuickRecording(sessionId: string): Promise<void> {
   await getPlatform().screenRecording.capture({ operation: 'reveal-export', sessionId })
+}
+/** Stopping inside the countdown leaves nothing recorded; there is nothing to save or edit then. */
+function recordingHasPicture(content: RecordingDocument): boolean {
+  const range = recordingRange(content)
+  return range.endUs > range.startUs && content.media.some(media => media.kind === 'screen' && media.durationUs > 0)
 }
 export async function readRecordingDocument(id: string): Promise<RecordingDocument> {
   const read = await getPlatform().documents.readDocument({ id })
@@ -65,28 +76,38 @@ async function finish(id: string, importResult: boolean): Promise<void> {
       try { await current.close() } catch (error) { closeFailure = error }
       finally { if (capture === current) capture = undefined; detach?.(); detach = undefined }
       const content = await readRecordingDocument(id)
-      publish({ documentId: id, content, snapshot: null })
+      const handoff = handoffSessions.delete(id)
+      // From the recording page the view goes straight back to setup: the result lives in the editor or the saved
+      // file. Assistant and director runs keep reading the stopped session from here.
+      publish(handoff ? { documentId: null, content: null, snapshot: null, opening: importResult && !quickSessions.has(id) } : { documentId: id, content, snapshot: null })
       if (closeFailure) throw closeFailure
       const quick = quickSessions.get(id)
       quickSessions.delete(id)
-      if (importResult && quick && content.media.some(media => media.kind === 'screen' && media.durationUs > 0)) void saveQuickRecording(id, quick.directory)
-      if (importResult && destination && content.media.some(media => media.durationUs > 0)) {
+      const recorded = recordingHasPicture(content)
+      if (importResult && recorded && quick) void saveQuickRecording(id, quick.directory).catch(() => undefined)
+      else if (importResult && recorded && handoff) {
+        const { openRecordingInEditor } = await import('./recordingVideoImport')
+        try { await openRecordingInEditor(id, destination) }
+        catch (error) { notifyUser(notificationMessage('recordingEditFailed', { error: error instanceof Error ? error.message : String(error) }), 'error'); throw error }
+      } else if (importResult && recorded && destination) {
+        // Assistant and director runs keep control of what happens next; they only fill the edit they named.
         const { importRecordingToVideo } = await import('./recordingVideoImport')
         await importRecordingToVideo(id, destination)
       }
       defaultDocumentOperationChanges.changed()
       logger.info('录制会话已封存', { event: 'recording.session.finish.completed', context: { sessionId: id } })
     } catch (error) { publish({ error: String(error) }); logger.error('录制会话收尾失败', { event: 'recording.session.finish.failed', error }); throw error }
-    finally { releaseTarget?.(); releaseTarget = undefined; publish({ busy: false }); finishing = undefined }
+    finally { releaseTarget?.(); releaseTarget = undefined; publish({ busy: false, opening: false }); finishing = undefined }
   })()
   return finishing
 }
-export async function startRecording(options: ScreenCaptureOptions, session: RecordingSessionOptions, destination: RecordingDestination | null = null, signal?: AbortSignal, quick?: { directory?: string }): Promise<string> {
+export async function startRecording(options: ScreenCaptureOptions, session: RecordingSessionOptions, destination: RecordingDestination | null = null, signal?: AbortSignal, quick?: { directory?: string }, handoff = false): Promise<string> {
   if (capture || view.busy) throw new Error('请先停止或取消当前录制')
   const id = crypto.randomUUID()
   const api = getPlatform().screenRecording
   if (quick) quickSessions.set(id, quick)
-  publish({ busy: true, error: null, destination, documentId: id, quick: null })
+  if (handoff) handoffSessions.add(id)
+  publish({ busy: true, error: null, destination, documentId: id })
   logger.info('准备录制会话', { event: 'recording.session.start.start', context: { sessionId: id } })
   try {
     signal?.throwIfAborted()
@@ -114,7 +135,7 @@ export async function startRecording(options: ScreenCaptureOptions, session: Rec
     logger.info('录制会话已准备', { event: 'recording.session.start.completed', context: { sessionId: id } })
     return id
   } catch (error) {
-    quickSessions.delete(id)
+    quickSessions.delete(id); handoffSessions.delete(id)
     try { await capture?.close() } finally { capture = undefined; detach?.(); detach = undefined; releaseTarget?.(); releaseTarget = undefined; await api.revoke(id) }
     publish({ error: String(error) }); logger.error('准备录制失败', { event: 'recording.session.start.failed', error }); throw error
   } finally { publish({ busy: false }) }

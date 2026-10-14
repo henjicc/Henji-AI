@@ -16,14 +16,19 @@ export function recordingRange(recording: Pick<RecordingDocument, 'media' | 'sta
   return { startUs, endUs: Math.max(startUs, endUs) }
 }
 
-/** Real intervals of one file inside the recorded range, minus pause/device gaps; nothing is ever filled in. */
-export function recordingMediaSpans(recording: Pick<RecordingDocument, 'media' | 'startUs' | 'endUs' | 'tracks'>, media: RecordingMedia, durationUs = media.durationUs): RecordingSpan[] {
+/**
+ * Real intervals of one file inside the recorded range, minus the session's pauses and the track's own
+ * pause/device gaps; nothing is ever filled in. Session pauses cut every track at the same moments: the
+ * picture restarts a moment after the sound on resume, and neither may run alone.
+ */
+export function recordingMediaSpans(recording: Pick<RecordingDocument, 'media' | 'startUs' | 'endUs' | 'pauses' | 'tracks'>, media: RecordingMedia, durationUs = media.durationUs): RecordingSpan[] {
   const range = recordingRange(recording)
   let spans: Array<[number, number]> = [[Math.max(range.startUs, media.monoUs), Math.min(range.endUs, media.monoUs + Math.min(media.durationUs, durationUs))]]
-  for (const gap of recording.tracks?.tracks.find(track => track.kind === media.kind)?.gaps ?? []) {
-    spans = spans.flatMap(([start, end]) => gap.monoSpanUs[1] <= start || gap.monoSpanUs[0] >= end ? [[start, end] as [number, number]] : [
-      ...(gap.monoSpanUs[0] > start ? [[start, gap.monoSpanUs[0]] as [number, number]] : []),
-      ...(gap.monoSpanUs[1] < end ? [[gap.monoSpanUs[1], end] as [number, number]] : []),
+  const cuts = [...(recording.pauses ?? []).map(pause => [pause.startUs, pause.endUs]), ...(recording.tracks?.tracks.find(track => track.kind === media.kind)?.gaps ?? []).map(gap => gap.monoSpanUs)]
+  for (const [cutStart, cutEnd] of cuts) {
+    spans = spans.flatMap(([start, end]) => cutEnd <= start || cutStart >= end ? [[start, end] as [number, number]] : [
+      ...(cutStart > start ? [[start, cutStart] as [number, number]] : []),
+      ...(cutEnd < end ? [[cutEnd, end] as [number, number]] : []),
     ])
   }
   return spans.filter(([start, end]) => end > start).map(([startUs, endUs]) => ({ media, startUs, endUs }))

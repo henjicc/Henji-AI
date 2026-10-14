@@ -4,9 +4,12 @@ import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/d
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform'
 import { importVideoEditSources } from '@/features/videoEdit'
-import { openVideoEditDocument, saveVideoEdit } from '@/features/videoEdit'
+import { appendVideoEditSequence, createVideoEditProject, openVideoEditDocument, saveVideoEdit, switchVideoEditSequence } from '@/features/videoEdit'
+import { openApplicationSurface } from '@/features/navigation'
 import type { RecordingDestination } from './recordingService'
 import { recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
+import { recordingMovieCursorSources } from './recordingMovieSources'
+import { recordingMovieEffect } from './recordingMoviePlan'
 
 /** Every track is cut to the shared recorded range and placed from its start. Pause/device gaps remain empty; audio latency is already compensated. */
 export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination): VideoEditDocument {
@@ -30,6 +33,8 @@ export function placeRecordingMedia(document: VideoEditDocument, recording: Reco
       const duration = Math.floor((end - start) * fps / 1e6 + 1e-6)
       if (duration < 1) continue
       const clip = makeVideoEditItemClip(document, item.id, sequence.id, { frame: (target.frame ?? 0) + Math.round((start - origin) * fps / 1e6), track: trackIndices.get(source.kind), duration, sourceInUs: start - source.monoUs, sourceOutUs: end - source.monoUs, ...(source.kind === 'screen' || source.kind === 'camera' ? { sourceComponent: 'video' as const } : {}) })
+      // A screen clip with its pointer log is a recording clip: the pointer is redrawn and stays editable.
+      if (source.kind === 'screen' && imported.recordingCursor) clip.effects = [recordingMovieEffect('recording_cursor', '录制光标')]
       sequence.clips.push({ ...clip, linkId })
     }
   }
@@ -42,9 +47,62 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
   if (!['stopped', 'interrupted'].includes(recording.status)) throw new Error('请先停止录制或恢复已中断会话')
   const media = recording.media.filter(media => media.durationUs > 0)
   if (!media.length) throw new Error('会话没有已保存的录制片段')
+  const cursors = await recordingMovieCursorSources(recording, signal ?? new AbortController().signal)
   await openVideoEditDocument({ id: target.documentId }, { focus: false })
   const items = await importVideoEditSources(target.documentId, media.map(item => ({ path: item.path })), undefined, signal,
-    (document, ids) => placeRecordingMedia(document, recording, media, ids, target))
+    (document, ids) => {
+      for (const [index, source] of media.entries()) {
+        const cursor = cursors.get(source.id)
+        const imported = document.media.find(value => value.id === document.items.find(item => item.id === ids[index])?.mediaId)
+        if (cursor && imported) imported.recordingCursor = cursor
+      }
+      return placeRecordingMedia(document, recording, media, ids, target)
+    })
   await saveVideoEdit(target.documentId)
+  if (target.sequenceId) await rememberEditTarget(id, target.documentId, target.sequenceId)
   return items
+}
+
+/** The session remembers where it went, so opening the recording again opens that edit. */
+async function rememberEditTarget(id: string, documentId: string, sequenceId: string): Promise<void> {
+  const read = await getPlatform().documents.readDocument({ id })
+  const content = recordingDocumentSchema.parse(read.content)
+  if (content.compositions.some(value => value.documentId === documentId && value.compositionId === sequenceId)) return
+  content.compositions.push({ documentId, compositionId: sequenceId })
+  await getPlatform().documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content })
+}
+
+/**
+ * Recording ends in the editor: a new project sized like the recording (or the edit it was started from),
+ * with the pointer already redrawn on the screen clip. Reopening a recording returns to that edit.
+ */
+export async function openRecordingInEditor(id: string, destination: RecordingDestination | null = null, signal?: AbortSignal): Promise<{ documentId: string; sequenceId?: string }> {
+  const read = await getPlatform().documents.readDocument({ id })
+  if (read.meta.kind !== 'screen_recording') throw new Error('请选择录制会话')
+  const recording = recordingDocumentSchema.parse(read.content)
+  let target: RecordingDestination | null = null
+  if (destination) {
+    target = destination
+    await importRecordingToVideo(id, target, signal)
+  } else {
+    const movie = recording.directorRun?.movie
+    const previous = recording.compositions.at(-1) ?? (movie?.sequenceIds[0] ? { documentId: movie.documentId, compositionId: movie.sequenceIds[0] } : undefined)
+    if (previous) {
+      try { await openVideoEditDocument({ id: previous.documentId }, { focus: false }); target = { documentId: previous.documentId, sequenceId: previous.compositionId } }
+      catch { target = null } // That edit was deleted: start a fresh one.
+    }
+    if (!target) {
+      const instance = await createVideoEditProject()
+      const options = recording.source?.options
+      const sequenceId = appendVideoEditSequence(instance.document.id, { name: read.meta.name, ...(options ? { width: options.width, height: options.height, frameRate: { numerator: options.fps, denominator: 1 } } : {}) })
+      target = { documentId: instance.document.id, sequenceId, frame: 0 }
+      await importRecordingToVideo(id, target, signal)
+    }
+  }
+  await openVideoEditDocument({ id: target.documentId })
+  if (target.sequenceId) {
+    try { switchVideoEditSequence(target.documentId, target.sequenceId, { fromStart: true }) } catch { /* The sequence was removed; the edit still opens. */ }
+  }
+  openApplicationSurface('workspace.video_edit')
+  return target
 }
