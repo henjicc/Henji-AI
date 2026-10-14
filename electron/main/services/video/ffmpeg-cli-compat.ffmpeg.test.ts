@@ -34,6 +34,8 @@ const FILE_EXCEPTIONS: Record<string, Record<string, string>> = {
   'electron/main/services/video/hwaccel.ts': { allow_sw: 'h264_videotoolbox 私有选项，只在 macOS 构建中存在' },
   'electron/main/services/video/ffmpeg-loader.ts': { filter_complex_script: '只对仍声明该选项的 6.1.2 使用（按选项列表判定）' },
   'electron/main/services/video/ffmpeg-loader.test.ts': { filter_complex_script: '旧写法分支的精确测试' },
+  'electron/main/services/screen-recording/capture/process.ts': { e: 'Node 采集看护进程的脚本参数，不传给 FFmpeg' },
+  'scripts/lib/uiInspectionSceneScreenCapture.cjs': { EncodedCommand: 'PowerShell 性能采样脚本参数，不传给 FFmpeg' },
 }
 
 const SCAN_ROOTS = ['electron', 'scripts', 'src', 'native/video-decoder/src']

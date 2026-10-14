@@ -106,7 +106,9 @@ test('CI 对每层执行明确命令，初始化失败不能自动跳过，发�
   assert.equal(scripts['test:assistant-persistence'], 'node scripts/test-assistant-persistence.cjs')
   const nativeJob = workflowJob('native-tests')
   assert.ok(nativeJob, '原生 SQLite 需要独立 Electron ABI job')
-  assert.match(nativeJob, /npm run electron:rebuild/)
+  assert.match(nativeJob, /npm run electron:rebuild -- --only better-sqlite3/)
+  // 保留开发/打包默认重建范围；只在隔离 SQLite job 排除桌面原生钩子。
+  assert.equal(scripts['electron:rebuild'], 'electron-rebuild -f -w better-sqlite3')
   assert.match(nativeJob, /node --test scripts\/lib\/nativePersistenceRunner\.test\.cjs/)
   assert.match(nativeJob, /npm run test:assistant-persistence/)
   assert.ok(nativeJob.indexOf('npm run electron:rebuild') < nativeJob.indexOf('npm run test:assistant-persistence'))

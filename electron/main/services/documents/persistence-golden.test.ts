@@ -12,7 +12,8 @@ import { readImageDocumentPackageHeader } from '../image-editor-v3/image-documen
 import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSchemas'
 import { readStoryboardMetadataFromPng } from '../image/png-metadata'
 import { compileCodeMaterial } from '../../../../src/core/videoEdit/codeMaterial/compiler'
-import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION } from '../../../../src/core/persistence/schemaVersions'
+import { videoEditDocumentSchema } from '../../../../src/core/videoEdit/document'
+import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, VIDEO_EDIT_DOCUMENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
 import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
 
@@ -93,6 +94,8 @@ describe('正式读入口打开黄金归档与源码', () => {
     if (imported.type !== 'project') throw new Error('应为项目包')
     const document = environment.catalog.listDocuments({ projectId: imported.project.id, kind: 'video_edit' })[0]
     const read = await environment.services.service.readDocument({ id: document.id })
+    // 归档可读还必须能进入剪辑的完整 schema，不能只通过主进程的外层校验。
+    videoEditDocumentSchema.parse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: read.meta.id, name: read.meta.name, revision: read.meta.revision, ...(read.content as object) })
     expect(read.content).toMatchObject({ sequences: [{ clips: [{ effects: [{ builtin: { id: 'color_grade' } }, { builtin: { id: 'gaussian_blur' } }] }], captions: [{ translation: 'Golden caption' }] }] })
     const code = read.content as { codeMaterials: { versions: { files: { location: string; hash: string }[] }[] }[] }
     const file = code.codeMaterials[0].versions[0].files[0]

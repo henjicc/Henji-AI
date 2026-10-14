@@ -80,9 +80,11 @@ describe('工具箱登记 → 派生入口', () => {
 
   it('缺失加载器或最近文件打开器、重复登记当场拒绝', () => {
     expect(() => createToolboxRuntime(TOOL_DESCRIPTORS, {})).toThrow('缺少渲染入口')
-    expect(() => createToolboxRuntime([TOOL_DESCRIPTORS[0]], {
-      './toolboxTools/audioEdit/entry.ts': { default: { loadComponent: async () => ({ default: () => null }) } },
-    })).toThrow('缺少最近文件打开器')
+    for (const tool of TOOL_DESCRIPTORS.filter((entry) => entry.actions.includes('recent_files'))) {
+      expect(() => createToolboxRuntime([tool], {
+        [`./toolboxTools/${tool.entryId}/entry.ts`]: { default: { loadComponent: async () => ({ default: () => null }) } },
+      })).toThrow('缺少最近文件打开器')
+    }
     expect(() => createToolCatalog([...TOOL_DESCRIPTORS, TOOL_DESCRIPTORS[0]])).toThrow('重复')
   })
 })
