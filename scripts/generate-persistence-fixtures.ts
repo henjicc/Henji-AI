@@ -31,7 +31,7 @@ import { embedImageEditRasterV3 } from '../src/core/imageEdit/v3/smartContent/co
 import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
 import { createThemePayloadV2 } from '../src/core/theme/themeMigration'
 import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
-import { BLACK_HEX, DEFAULT_THEME_COLOR_SCHEME_HEX, SETTINGS_ACCENT_HEX } from '../src/core/theme/colorTokens'
+import { BLACK_HEX, DEFAULT_THEME_COLOR_SCHEME_HEX, RECORDING_FRAME_SOLID_DEFAULT_HEX, SETTINGS_ACCENT_HEX } from '../src/core/theme/colorTokens'
 
 const timestamp = '2026-10-09T00:00:00.000Z'
 const source = "export default { apiVersion: 1, languageVersion: 3, name: \"黄金代码\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 4, seed: 1, parameters: { label: { type: \"text\", title: \"标题\", default: \"黄金样本\", maxLength: 200 }, size: { type: \"number\", title: \"字号\", default: 24, min: 1, max: 72, step: 1, unit: \"px\" } }, render(ctx) { return [rect({ id: \"golden-box\", x: 0, y: 0, width: 100, height: 100, fill: [0, 0, 0, 1] })]; } };\n"
@@ -64,7 +64,12 @@ document.media.push({ id: 'golden-screen', name: '屏幕原片', path: '/persist
 document.items.push({ id: 'golden-screen-item', name: '屏幕原片', kind: 'video', mediaId: 'golden-screen' })
 const cursorClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 90, duration: 90 })
 cursorClip.id = 'golden-cursor-clip'
-cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { size: 3, smoothing: 40, click_style: 'ripple' } } }]
+cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { size: 3, smoothing: 40, click_style: 'ripple' } } },
+  { id: 'golden-zoom', name: '自动缩放', enabled: true, amount: 1, builtin: { id: 'recording_zoom', params: { connect: true, transition: 'smooth' }, regions: [
+    { id: 'golden-zoom-follow', startUs: 500000, endUs: 1500000, depth: 3, focus: 'cursor', origin: 'auto' },
+    { id: 'golden-zoom-fixed', startUs: 2000000, endUs: 2800000, depth: 5, focus: { x: 0.8, y: 0.2 }, origin: 'manual' },
+  ] } },
+  { id: 'golden-frame', name: '录屏画框', enabled: true, amount: 1, builtin: { id: 'recording_frame', params: { background: 'solid', color: RECORDING_FRAME_SOLID_DEFAULT_HEX, padding: 6, radius: 2.5, shadow: 50 } } }]
 cursorClip.curves = { scale: [{ time: 0, value: 1, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 0, value: 1, interpolation: 'linear' } }, { time: 45, value: 1.8, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 45, value: 1.8, interpolation: 'linear' } }] }
 sequence.clips.push(cursorClip)
 videoEditDocumentSchema.parse(document)

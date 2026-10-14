@@ -6,6 +6,8 @@ import { VIDEO_EDIT_TRACK_HEIGHT_MIN } from '@/core/videoEdit/timelineNavigation
 export const TIMELINE_HEADER_WIDTH = 232
 export const TIMELINE_RULER_HEIGHT = 28
 export const TIMELINE_CAPTION_HEIGHT = VIDEO_EDIT_TRACK_HEIGHT_MIN
+/** 缩放轨 Z1：序列里有录屏片段开启自动缩放时，钉在字幕轨下面。 */
+export const TIMELINE_ZOOM_HEIGHT = 24
 /** 视频区与音频区之间的分隔条高度（可拖动调整两区比例）。 */
 export const TIMELINE_TRACK_SECTION_GAP = 8
 /** 视频区最上轨之上、音频区最下轨之下始终留出的空白：把片段拖到这里新建轨道（PR）。 */
@@ -20,8 +22,8 @@ export type TimelineRegionKind = 'video' | 'audio'
 export interface TimelineTrackRow { track: VideoEditSequence['tracks'][number]; top: number; height: number; region: TimelineRegionKind; clipTop: number; clipBottom: number }
 /** 一个区：可见范围、内容高度与滚动量。视频区的滚动从底部（V1 贴着分隔条）往上算，音频区从顶部（A1 贴着分隔条）往下算。 */
 export interface TimelineRegion { kind: TimelineRegionKind; top: number; height: number; content: number; scroll: number; maxScroll: number }
-export interface TimelineLayoutInput { viewportHeight: number; split: number; scroll: Record<TimelineRegionKind, number> }
-export interface TimelineLayout { rows: TimelineTrackRow[]; caption: Pick<TimelineTrackRow, 'top' | 'height' | 'clipTop' | 'clipBottom'>; regions: Record<TimelineRegionKind, TimelineRegion>; divider: number }
+export interface TimelineLayoutInput { viewportHeight: number; split: number; scroll: Record<TimelineRegionKind, number>; zoomRow?: boolean }
+export interface TimelineLayout { rows: TimelineTrackRow[]; caption: Pick<TimelineTrackRow, 'top' | 'height' | 'clipTop' | 'clipBottom'>; zoom: Pick<TimelineTrackRow, 'top' | 'height' | 'clipTop' | 'clipBottom'> | null; regions: Record<TimelineRegionKind, TimelineRegion>; divider: number }
 export interface TimelineViewport { left: number; top: number; width: number; height: number }
 export const TIMELINE_DEFAULT_SPLIT = 0.5
 /**
@@ -31,13 +33,15 @@ export const TIMELINE_DEFAULT_SPLIT = 0.5
  */
 export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, input: TimelineLayoutInput, resized?: { trackId: string; height: number } | null): TimelineLayout {
   const trackTop = TIMELINE_RULER_HEIGHT
+  // Rows pinned to the top of the video area: captions, then the zoom lane when there is one.
+  const sticky = TIMELINE_CAPTION_HEIGHT + (input.zoomRow ? TIMELINE_ZOOM_HEIGHT : 0)
   const area = Math.max(0, input.viewportHeight - trackTop - TIMELINE_TRACK_SECTION_GAP)
   const min = Math.min(TIMELINE_REGION_MIN, area / 2)
   const videoHeight = Math.round(Math.max(min, Math.min(area - min, area * input.split)))
   const height = (track: VideoEditSequence['tracks'][number]): number => resized?.trackId === track.id ? resized.height : track.height ?? 32
   const tracks = { video: sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index), audio: sequence.tracks.filter(track => track.kind === 'audio').sort((a, b) => a.index - b.index) }
   const region = (kind: TimelineRegionKind, top: number, regionHeight: number): TimelineRegion => {
-    const content = tracks[kind].reduce((sum, track) => sum + height(track), 0) + TIMELINE_NEW_TRACK_ZONE + (kind === 'video' ? TIMELINE_CAPTION_HEIGHT : 0)
+    const content = tracks[kind].reduce((sum, track) => sum + height(track), 0) + TIMELINE_NEW_TRACK_ZONE + (kind === 'video' ? sticky : 0)
     const maxScroll = Math.max(0, content - regionHeight)
     return { kind, top, height: regionHeight, content, scroll: Math.max(0, Math.min(maxScroll, input.scroll[kind] || 0)), maxScroll }
   }
@@ -45,15 +49,18 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   const audio = region('audio', trackTop + videoHeight + TIMELINE_TRACK_SECTION_GAP, area - videoHeight)
   const rows: TimelineTrackRow[] = []
   let bottom = video.top + video.height + video.scroll
-  const videoClipTop = Math.min(video.top + video.height, video.top + TIMELINE_CAPTION_HEIGHT)
+  const videoClipTop = Math.min(video.top + video.height, video.top + sticky)
   // V1 在最下：从 V1 往上排，显示时最上面的合成层在前。
   for (const track of tracks.video) { const value = height(track); bottom -= value; rows.push({ track, top: bottom, height: value, region: 'video', clipTop: videoClipTop, clipBottom: video.top + video.height }) }
   rows.reverse()
   const caption = { top: video.top, height: TIMELINE_CAPTION_HEIGHT, clipTop: video.top, clipBottom: video.top + video.height }
+  const zoom = input.zoomRow ? { top: video.top + TIMELINE_CAPTION_HEIGHT, height: TIMELINE_ZOOM_HEIGHT, clipTop: video.top, clipBottom: video.top + video.height } : null
   let top = audio.top - audio.scroll
   for (const track of tracks.audio) { const value = height(track); rows.push({ track, top, height: value, region: 'audio', clipTop: audio.top, clipBottom: audio.top + audio.height }); top += value }
-  return { rows, caption, regions: { video, audio }, divider: video.top + video.height + TIMELINE_TRACK_SECTION_GAP / 2 }
+  return { rows, caption, zoom, regions: { video, audio }, divider: video.top + video.height + TIMELINE_TRACK_SECTION_GAP / 2 }
 }
+/** Bottom edge of the rows pinned above the video tracks (captions, and the zoom lane when shown). */
+export function timelineStickyBottom(layout: TimelineLayout): number { return layout.zoom ? layout.zoom.top + layout.zoom.height : layout.caption.top + layout.caption.height }
 /** 光标所在的区（分隔条上半归视频区）；标尺上不属于任何区。 */
 export function timelineRegionAt(layout: TimelineLayout, y: number): TimelineRegionKind | undefined {
   if (y < layout.regions.video.top) return undefined
@@ -65,7 +72,7 @@ export function timelineNewTrackZone(layout: TimelineLayout, y: number): Timelin
   const audioRows = layout.rows.filter(row => row.region === 'audio')
   const firstVideo = layout.rows.find(row => row.region === 'video')
   const videoTracksTop = firstVideo ? firstVideo.top : video.top + video.height
-  if (y >= layout.caption.top + layout.caption.height && y < video.top + video.height && y < videoTracksTop) return 'video'
+  if (y >= timelineStickyBottom(layout) && y < video.top + video.height && y < videoTracksTop) return 'video'
   const last = audioRows.at(-1)
   if (y >= audio.top && y < audio.top + audio.height && y >= (last ? last.top + last.height : audio.top)) return 'audio'
   return undefined

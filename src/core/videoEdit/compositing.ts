@@ -1,4 +1,5 @@
 import { RECORDING_CURSOR_EFFECT } from './recordingCursor'
+import { RECORDING_ZOOM_EFFECT, recordingZoomRegionsSchema } from './recordingZoom'
 import { z } from 'zod'
 import { codeMaterialInstanceSchema } from './codeMaterialPersistence'
 import type { VideoEditSequence, VideoEditClip } from './document'
@@ -11,6 +12,8 @@ import { videoEditCurvesSchema, assertVideoEditBuiltinCurves } from './keyframes
 export const videoEditBuiltinEffectInstanceSchema = z.object({
   id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(4096)])),
   curves: videoEditCurvesSchema.optional(),
+  /** 自动缩放（`recording_zoom`）的缩放区间，源时间微秒；只属于这一个效果，其他效果不得携带。 */
+  regions: recordingZoomRegionsSchema.optional(),
 }).strict()
 export type VideoEditBuiltinEffectInstance = z.infer<typeof videoEditBuiltinEffectInstanceSchema>
 /**
@@ -25,6 +28,8 @@ export const videoEditEffectSchema = z.object({
 }).strict().superRefine((effect, ctx) => {
   if (Boolean(effect.code) === Boolean(effect.builtin)) ctx.addIssue({ code: 'custom', message: '效果必须是代码滤镜或内置效果其中之一。' })
   if (effect.mask && effect.builtin?.id === RECORDING_CURSOR_EFFECT) ctx.addIssue({ code: 'custom', message: '录制光标层不支持作用区域，请直接调整大小或点击样式。' })
+  if (effect.mask && effect.builtin?.id === RECORDING_ZOOM_EFFECT) ctx.addIssue({ code: 'custom', message: '自动缩放作用于整个片段画面，不支持作用区域；请用缩放区间的焦点控制放大位置。' })
+  if (effect.builtin?.regions && effect.builtin.id !== RECORDING_ZOOM_EFFECT) ctx.addIssue({ code: 'custom', path: ['builtin', 'regions'], message: '只有自动缩放效果可以保存缩放区间。' })
   const issue = effect.builtin && videoEditBuiltinEffectIssue(effect.builtin)
   if (issue) ctx.addIssue({ code: 'custom', message: issue })
   if (effect.builtin) try { assertVideoEditBuiltinCurves(effect.builtin) } catch (error) { ctx.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '效果关键帧无效。' }) }

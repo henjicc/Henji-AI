@@ -18,6 +18,7 @@ import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
 import { VideoEditBuiltinEffectControls } from './VideoEditBuiltinEffectControls'
 import { VideoEditEffectPresetDialog } from './VideoEditEffectPresetDialog'
+import { isRecordingClipEffect, recordingClipSource } from '../application/videoEditRecordingClip'
 type CompositeAction = ReturnType<typeof useVideoEditCompositeAction>
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; clip: VideoEditClip; onError: (reason: unknown) => void }
 
@@ -39,7 +40,10 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const projectId = document.id; const sequenceId = sequence.id; const clipId = clip.id
   const target = { projectId, sequenceId, clipId }
   const action = useVideoEditCompositeAction(instance, JSON.stringify([projectId, sequenceId, clipId]), onError)
-  const effects = useMemo(() => clip.effects ?? [], [clip.effects])
+  // A recording clip's pointer, zoom and frame live in the recording panel above; listing them here too would give one setting two places.
+  const recording = useMemo(() => Boolean(recordingClipSource(document, clip)), [document, clip])
+  const effects = useMemo(() => (clip.effects ?? []).filter(effect => !recording || !isRecordingClipEffect(effect)), [clip.effects, recording])
+  const fixed = useMemo(() => (clip.effects ?? []).filter(effect => recording && isRecordingClipEffect(effect)).map(effect => effect.id), [clip.effects, recording])
   /** 声音片段的效果链只放音频内置效果（4.7c），没有代码滤镜。 */
   const sound = clip.kind === 'audio'
   const [selectedId, setSelectedId] = useState('')
@@ -67,8 +71,8 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const ids = useMemo(() => effects.map(effect => effect.id), [effects])
   const reorder = useCallback((from: number, to: number): void => {
     const order = ids.slice(); const [moved] = order.splice(from, 1); order.splice(to, 0, moved)
-    void action.run(signal => reorderVideoEditEffects({ projectId, sequenceId, clipId }, order, signal), undefined, false)
-  }, [ids, action, projectId, sequenceId, clipId])
+    void action.run(signal => reorderVideoEditEffects({ projectId, sequenceId, clipId }, [...fixed, ...order], signal), undefined, false)
+  }, [ids, fixed, action, projectId, sequenceId, clipId])
   const { dragState, itemRefs, handleMouseDown } = useReorderDrag({ disabled: action.busy, isCustomDragging: false, files: ids, layout: 'vertical', onReorder: reorder, dragBoundaryRef: chain, dragThreshold: 4 })
   const toggle = (id: string): void => setCollapsed(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const remove = (effect: VideoEditEffect): void => {

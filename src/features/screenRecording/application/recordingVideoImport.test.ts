@@ -68,7 +68,7 @@ it('送入剪辑：倒计时预热段与停止后的编码尾巴都不进时间�
   }
   document.media.find(media => media.id === 'screen')!.recordingCursor = { pages: [] } as unknown as NonNullable<typeof document.media[number]['recordingCursor']>
   placeRecordingMedia(document, recording, recording.media, recording.media.map(media => media.id), { documentId: document.id, sequenceId: sequence.id, frame: 0 })
-  expect(sequence.clips.find(clip => clip.itemId === 'screen')?.effects?.map(effect => effect.builtin?.id)).toEqual(['recording_cursor'])
+  expect(sequence.clips.find(clip => clip.itemId === 'screen')?.effects?.map(effect => effect.builtin?.id)).toEqual(['recording_cursor', 'recording_zoom', 'recording_frame'])
   expect(sequence.clips.find(clip => clip.itemId === 'microphone')?.effects).toBeUndefined()
   const clips = sequence.clips.map(clip => ({ item: clip.itemId, start: clip.start, end: clip.start + clip.duration, sourceInUs: clip.sourceInUs }))
   expect(clips).toEqual(expect.arrayContaining([{ item: 'microphone', start: 0, end: 180, sourceInUs: 2_500_000 }, { item: 'screen', start: 0, end: 180, sourceInUs: 1_700_000 }]))

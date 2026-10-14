@@ -468,3 +468,38 @@ it('录制光标用原片源时钟：移位、裁切与两倍速后点击同帧�
     await expect(boundary.sources.prepare(changed, [clip], 105, () => true)).rejects.toThrow('校验')
   } finally { fetcher.mockRestore(); await boundary.sources.dispose() }
 })
+
+it('自动缩放沿原片源时钟求值：跟随区间按块读取指针日志、定位顺序不影响结果，固定焦点不读日志', async () => {
+  const log = await recordingCursorFixture()
+  const document = fixture()
+  document.width = 1920; document.height = 1080; document.frameRate = { numerator: 60, denominator: 1 }
+  document.items = [{ id: 'screen', name: '录屏', kind: 'video', mediaId: 'screen' }]
+  document.media = [{ id: 'screen', name: '录屏', kind: 'video', path: '/screen.mp4', durationSeconds: 4, width: 1920, height: 1080, recordingCursor: log.source }]
+  const zoomEffect = (focus: 'cursor' | { x: number; y: number }) => ({ id: 'zoom', name: '自动缩放', enabled: true, amount: 1, builtin: { id: 'recording_zoom', params: {}, regions: [{ id: 'a', startUs: 1_000_000, endUs: 3_000_000, depth: 6, focus, origin: 'manual' as const }] } })
+  const clip: VideoEditClip = { ...document.clips[0], kind: 'video', itemId: 'screen', code: undefined, start: 90, sourceInUs: 500000, speed: { numerator: 2, denominator: 1 }, effects: [zoomEffect('cursor')] }
+  document.clips = [clip]
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => new Response(Uint8Array.from(log.bytes.get(String(input))!)))
+  const boundary = boundaries(document)
+  const center = (draw: { sample: number[] }): number => draw.sample[0] * 0.5 + draw.sample[1] * 0.5 + draw.sample[4]
+  try {
+    // 90 + 15 帧、两倍速：源时间 1 秒，区间开始时已放大到 5 倍；指针在 x≈200px，视野夹在画面左侧。
+    const zoom = (await boundary.sources.prepare(document, [clip], 105, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    expect(zoom).toBeDefined()
+    expect(center(zoom)).toBeGreaterThanOrEqual(0.1 - 1e-6); expect(center(zoom)).toBeLessThan(0.2)
+    expect(fetcher).toHaveBeenCalled()
+    await boundary.sources.prepare(document, [clip], 140, () => true)
+    const again = (await boundary.sources.prepare(document, [clip], 105, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    expect(again.sample.map(value => value.toFixed(9))).toEqual(zoom.sample.map(value => value.toFixed(9)))
+    // 源时间 0.5 秒：放大过渡在区间开始之前进行，视野比区间内宽
+    const ramp = (await boundary.sources.prepare(document, [clip], 90, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    expect(Math.abs(ramp.sample[0])).toBeGreaterThan(Math.abs(zoom.sample[0]))
+  } finally { fetcher.mockRestore(); await boundary.sources.dispose() }
+  const fixed = { ...clip, effects: [zoomEffect({ x: 0.5, y: 0.5 })] }
+  const quiet = vi.spyOn(globalThis, 'fetch')
+  const fixedDocument = { ...document, clips: [fixed] }; const second = boundaries(fixedDocument)
+  try {
+    const zoom = (await second.sources.prepare(fixedDocument, [fixed], 105, () => true)).effects.get(clip.id)![0].builtin!.zoom!
+    expect(center(zoom)).toBeCloseTo(0.5)
+    expect(quiet).not.toHaveBeenCalled()
+  } finally { quiet.mockRestore(); await second.sources.dispose() }
+})

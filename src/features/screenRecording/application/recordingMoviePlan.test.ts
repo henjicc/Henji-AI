@@ -37,6 +37,11 @@ it('配方映射多轨、加速、删停顿、字幕/章节/标题、画框及�
   expect(sequence.markers).toMatchObject([{ frame: 0, name: '准备' }])
   expect(sequence.clips.some(v => v.name === '打开画布' && v.kind === 'graphic')).toBe(true)
   expect(sequence.clips.find(v => v.name === 'camera')?.effects?.[0].mask?.regionId).toBe('shapes')
+  // 画框是嵌套画面上的一个可编辑效果，不再缩放片段、叠反向圆角遮罩和单独的背景图形片段。
+  const picture = sequence.clips.find(v => v.kind === 'sequence')!
+  expect(picture.scale).toBe(1)
+  expect(picture.effects?.map(v => v.builtin?.id)).toEqual(['recording_frame'])
+  expect(sequence.clips.some(v => v.kind === 'graphic' && v.name === '背景')).toBe(false)
   expect(videoEditDocumentSchema.safeParse(document)).toMatchObject({ success: true })
 })
 it('保留原节奏、拒绝的候选和未确认失误均不剪；句级语气词与旁白等待受到保护', () => {

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { isShaderGraphEffect } from '@/core/videoEdit/shaderGraph/effects'
 import { isShaderGraphTransition } from '@/core/videoEdit/shaderGraph/transitions'
-import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '@/core/theme/colorTokens'
+import { RECORDING_FRAME_SOLID_DEFAULT_HEX, VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '@/core/theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { planVideoEditBuiltinEffect, planVideoEditBuiltinTransition, videoEditGrainSeed, type VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
 import { resolveVideoEditTransitionParams, VIDEO_EDIT_BUILTIN_TRANSITION_KINDS } from '@/core/videoEdit/transitionParams'
 import { VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES, VIDEO_EDIT_BUILTIN_EFFECT_SHADER } from './videoEditBuiltinEffectShaders'
+import { recordingZoomDraw } from './videoEditRecordingZoomPlan'
 
 const plan = (id: string, params: Record<string, unknown>, width = 1920, height = 1080, frame = 0): VideoEditBuiltinPlan => planVideoEditBuiltinEffect({ id, params: params as Record<string, number> }, { width, height, frame })
 /** 一道工序的全尺寸像素 sigma：降采样倍数 × 低分辨率 sigma。 */
@@ -92,5 +93,35 @@ describe('内置效果工序与参数打包', () => {
     expect(wipe(1080)[6]).toBeCloseTo(0.1 * 1080)
     expect([...wipe(1080).slice(12, 15)]).toEqual([0.5, 0, 1])
     expect(() => planVideoEditBuiltinTransition({ kind: 'wipe', params: {}, progress: 2 }, { width: 4, height: 4 })).toThrow('进度')
+  })
+})
+
+describe('录屏自动缩放与画框工序', () => {
+  it('自动缩放：没有放大时直接复制；放大时一道双三次取样，取样仿射把视野放大到片段范围', () => {
+    expect(planVideoEditBuiltinEffect({ id: 'recording_zoom', params: {} }, { width: 1920, height: 1080, frame: 0 }).passes.map(pass => pass.entry)).toEqual(['copy'])
+    const clip = { x: 0, y: 0, scale: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5, kind: 'video' as const, itemId: 'item' }
+    const document = { width: 1920, height: 1080, media: [{ id: 'm', width: 1920, height: 1080 }], items: [{ id: 'item', mediaId: 'm' }], sequences: [] } as unknown as Parameters<typeof recordingZoomDraw>[2]
+    const draw = recordingZoomDraw({ scale: 2, centerX: 0.75, centerY: 0.25 }, clip as unknown as Parameters<typeof recordingZoomDraw>[1], document)!
+    const result = planVideoEditBuiltinEffect({ id: 'recording_zoom', params: {}, zoom: draw }, { width: 1920, height: 1080, frame: 0 })
+    expect(result.passes.map(pass => pass.entry)).toEqual(['recording_zoom'])
+    const u = result.passes[0].uniforms
+    // 输出左上角取样视野左上角（0.5, 0），输出中心取样视野中心
+    expect(u[8]).toBeCloseTo(0.5); expect(u[9]).toBeCloseTo(0)
+    expect(u[4] * 0.5 + u[5] * 0.5 + u[8]).toBeCloseTo(0.75); expect(u[6] * 0.5 + u[7] * 0.5 + u[9]).toBeCloseTo(0.25)
+    expect(recordingZoomDraw({ scale: 1, centerX: 0.5, centerY: 0.5 }, clip as unknown as Parameters<typeof recordingZoomDraw>[1], document)).toBeUndefined()
+  })
+  it('录屏画框：内容按边距等比缩小居中，投影走高斯模糊，最后合成不透明背景；纯色背景用指定颜色', () => {
+    const result = planVideoEditBuiltinEffect({ id: 'recording_frame', params: { padding: 10, radius: 2, shadow: 50 } }, { width: 1920, height: 1080, frame: 0 })
+    expect(result.passes[0].entry).toBe('recording_frame_content')
+    expect(result.passes.at(-1)!.entry).toBe('recording_frame_compose')
+    expect(result.passes.some(pass => pass.entry === 'blur')).toBe(true)
+    const content = result.passes[0].uniforms
+    // 上下各留 10% 画面高度，宽度按比例缩小同样倍数
+    expect(content[5]).toBeCloseTo(0.1); expect(content[7]).toBeCloseTo(0.9); expect(content[6] - content[4]).toBeCloseTo(0.8)
+    expect(content[12]).toBeCloseTo(0.02 * 1080)
+    const flat = planVideoEditBuiltinEffect({ id: 'recording_frame', params: { background: 'solid', color: RECORDING_FRAME_SOLID_DEFAULT_HEX, shadow: 0 }, frameContent: [0.25, 0, 0.75, 1] }, { width: 1920, height: 1080, frame: 0 })
+    expect(flat.passes.map(pass => pass.entry)).toEqual(['recording_frame_content', 'recording_frame_compose'])
+    expect([...flat.passes[1].uniforms.slice(4, 7)].map(v => Math.round(v * 255))).toEqual([1, 3, 5].map(index => parseInt(RECORDING_FRAME_SOLID_DEFAULT_HEX.slice(index, index + 2), 16)))
+    expect([...flat.passes[0].uniforms.slice(8, 12)]).toEqual([0.25, 0, 0.75, 1])
   })
 })

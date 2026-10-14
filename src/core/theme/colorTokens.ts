@@ -16,6 +16,12 @@ export const WHITE_HEX = '#ffffff';
 export const HEX_COLOR_EXAMPLE = '#FFCC00';
 /** 剪辑内置效果“色度抠像”的默认抠像颜色（画面内容色，纯绿）。 */
 export const VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX = '#00ff00';
+/** 剪辑内置效果“录屏画框”的背景预设（画面内容色，不随主题）：[渐变起点, 渐变终点]，左上到右下。 */
+export const RECORDING_FRAME_BACKGROUND_HEX = {
+  graphite: ['#2b2f36', '#121417'], mist: ['#eef1f5', '#c9d2dd'], ocean: ['#1f6fb2', '#0b2545'], sunset: ['#f6a05a', '#c2416b'],
+} as const;
+/** “录屏画框”纯色背景的默认颜色（画面内容色）。 */
+export const RECORDING_FRAME_SOLID_DEFAULT_HEX = '#1b1d22';
 export const BLACK_HEX = '#000000';
 export const TEXT_LIGHT_HEX = '#E5E5E5';
 

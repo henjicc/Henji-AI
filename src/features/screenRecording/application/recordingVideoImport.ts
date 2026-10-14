@@ -4,15 +4,18 @@ import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/d
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform'
 import { importVideoEditSources } from '@/features/videoEdit'
-import { appendVideoEditSequence, createVideoEditProject, openVideoEditDocument, saveVideoEdit, switchVideoEditSequence } from '@/features/videoEdit'
+import { appendVideoEditSequence, createVideoEditProject, makeRecordingClipEffect, openVideoEditDocument, saveVideoEdit, suggestRecordingClipZoom, switchVideoEditSequence } from '@/features/videoEdit'
+import type { CaptureEvent } from '@/core/captureLog/events'
+import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
+import { RECORDING_ZOOM_EFFECT } from '@/core/videoEdit/recordingZoom'
+import { RECORDING_FRAME_EFFECT } from '@/core/videoEdit/recordingFrame'
 import { openApplicationSurface } from '@/features/navigation'
 import type { RecordingDestination } from './recordingService'
 import { recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
 import { recordingMovieCursorSources } from './recordingMovieSources'
-import { recordingMovieEffect } from './recordingMoviePlan'
 
 /** Every track is cut to the shared recorded range and placed from its start. Pause/device gaps remain empty; audio latency is already compensated. */
-export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination): VideoEditDocument {
+export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination, events: readonly CaptureEvent[] = []): VideoEditDocument {
   if (!target.sequenceId) return document
   const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
   if (!sequence) throw new Error('录制期间目标序列已移除，素材尚未导入；请选择其他序列重试')
@@ -33,8 +36,9 @@ export function placeRecordingMedia(document: VideoEditDocument, recording: Reco
       const duration = Math.floor((end - start) * fps / 1e6 + 1e-6)
       if (duration < 1) continue
       const clip = makeVideoEditItemClip(document, item.id, sequence.id, { frame: (target.frame ?? 0) + Math.round((start - origin) * fps / 1e6), track: trackIndices.get(source.kind), duration, sourceInUs: start - source.monoUs, sourceOutUs: end - source.monoUs, ...(source.kind === 'screen' || source.kind === 'camera' ? { sourceComponent: 'video' as const } : {}) })
-      // A screen clip with its pointer log is a recording clip: the pointer is redrawn and stays editable.
-      if (source.kind === 'screen' && imported.recordingCursor) clip.effects = [recordingMovieEffect('recording_cursor', '录制光标')]
+      // A screen clip with its pointer log is a recording clip: it arrives already finished the way Recordly does it —
+      // redrawn pointer, zoom on the clicks, and a framed picture — and every part stays editable.
+      if (source.kind === 'screen' && imported.recordingCursor) clip.effects = [makeRecordingClipEffect(RECORDING_CURSOR_EFFECT), makeRecordingClipEffect(RECORDING_ZOOM_EFFECT, suggestRecordingClipZoom(imported, imported.recordingCursor, events)), makeRecordingClipEffect(RECORDING_FRAME_EFFECT)]
       sequence.clips.push({ ...clip, linkId })
     }
   }
@@ -47,16 +51,22 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
   if (!['stopped', 'interrupted'].includes(recording.status)) throw new Error('请先停止录制或恢复已中断会话')
   const media = recording.media.filter(media => media.durationUs > 0)
   if (!media.length) throw new Error('会话没有已保存的录制片段')
-  const cursors = await recordingMovieCursorSources(recording, signal ?? new AbortController().signal)
+  const events: CaptureEvent[] = []
+  const cursors = await recordingMovieCursorSources(recording, signal ?? new AbortController().signal, event => { if (event.kind === 'click' || event.kind === 'key') events.push(event) })
   await openVideoEditDocument({ id: target.documentId }, { focus: false })
   const items = await importVideoEditSources(target.documentId, media.map(item => ({ path: item.path })), undefined, signal,
     (document, ids) => {
+      const counts = new Map<RecordingMedia['kind'], number>()
       for (const [index, source] of media.entries()) {
         const cursor = cursors.get(source.id)
-        const imported = document.media.find(value => value.id === document.items.find(item => item.id === ids[index])?.mediaId)
+        const item = document.items.find(item => item.id === ids[index])
+        const imported = document.media.find(value => value.id === item?.mediaId)
         if (cursor && imported) imported.recordingCursor = cursor
+        // Recorded files are named by ids on disk; in the editor they read as what they are.
+        const count = (counts.get(source.kind) ?? 0) + 1; counts.set(source.kind, count)
+        if (item) item.name = `${{ screen: '屏幕', microphone: '麦克风', systemAudio: '系统声音', camera: '摄像头' }[source.kind]} ${count}`
       }
-      return placeRecordingMedia(document, recording, media, ids, target)
+      return placeRecordingMedia(document, recording, media, ids, target, events)
     })
   await saveVideoEdit(target.documentId)
   if (target.sequenceId) await rememberEditTarget(id, target.documentId, target.sequenceId)

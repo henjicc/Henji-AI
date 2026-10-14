@@ -8,13 +8,14 @@ import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { validateVideoEditTransitionParams } from '@/core/videoEdit/transitionParams'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { makeVideoEditBuiltinEffect, makeVideoEditEffect } from './videoEditCompositing'
+import { makeVideoEditBuiltinEffect, makeVideoEditEffect, withVideoEditZoomRegions } from './videoEditCompositing'
 import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { videoEditSmartRegionStatusText } from './videoEditSmartRegions'
 import { assertVideoEditMaskTrackers, putVideoEditTracker } from './videoEditTrackingEdits'
 import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 import { isSmartRegionMask, type VideoEditEffectMask } from '@/core/videoEdit/effectMasks'
 import { videoEditCurvesSchema, sliceVideoEditClipKeyframes } from '@/core/videoEdit/keyframes'
+import type { RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
 
 export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition', 'video_edit.tracker'] as const
 export type VideoEditCompositeEntityType = typeof VIDEO_EDIT_COMPOSITE_TYPES[number]
@@ -83,8 +84,9 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
     // 内置效果：definition_id 读出 `effect:<ID>`，parameters 是存下的意图量纲参数（缺的键按默认值渲染）；没有源码版本与关键帧。
     // 作用区域（4.7d）：mask 为空表示整个画面；region_status 是后台分析的当前状态。
     const region = { mask: owner.effect.mask ?? null, regionStatus: videoEditSmartRegionStatusText(document, owner.sequence.frameRate, owner.clip, owner.effect) }
-    if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {}, frameCurves: builtin.curves ?? {} })) as Data
-    return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {} })) as Data
+    // 缩放区间（自动缩放）：其他效果读出空数组。
+    if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {}, frameCurves: builtin.curves ?? {}, regions: builtin.regions ?? [] })) as Data
+    return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {}, regions: [] })) as Data
   }
   // 过渡参数：没有存参数时读出空对象（全部按默认值）；种类与参数见 video_edit.builtin_effect 的 transition:<种类>。
   return JSON.parse(JSON.stringify({ ...common, ...owner.transition, parameters: owner.transition.parameters ?? {}, frameCurves: owner.transition.frameCurves ?? {} })) as Data
@@ -108,10 +110,12 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       // 删除跟踪器后引用可落空；只在实际写入作用区域时校验，改名称等属性仍可进行。
       if (JSON.stringify(mask) !== JSON.stringify(owner.effect.mask)) assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
       const curves = videoEditCurvesSchema.parse(data.frameCurves ?? {})
-      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params, ...(Object.keys(curves).length ? { curves } : {}) }, ...(mask ? { mask } : {}) })
+      const zoom = withVideoEditZoomRegions<{ id: string; regions?: RecordingZoomRegion[] }>({ id: builtin.id }, data.regions)
+      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params, ...(Object.keys(curves).length ? { curves } : {}), ...(zoom.regions ? { regions: zoom.regions } : {}) }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)
     } else {
       if (data.frameCurves && typeof data.frameCurves === 'object' && Object.keys(data.frameCurves).length) throw new Error('代码滤镜请使用 curves 源时间曲线；frame_curves 只用于内置效果。')
+      if (Array.isArray(data.regions) && data.regions.length) throw new Error('只有自动缩放效果可以设置缩放区间。')
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code!.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves }, ...(data.mask ? { mask: data.mask } : {}) })
       Object.assign(owner.effect, next)
     }
@@ -172,6 +176,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
     if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
     if (values.frameCurves !== undefined) effect.builtin!.curves = videoEditCurvesSchema.parse(values.frameCurves)
+    if (values.regions !== undefined) effect.builtin = withVideoEditZoomRegions(effect.builtin!, values.regions)
     Object.assign(effect, videoEditEffectSchema.parse(effect))
     if (values.mask) {
       assertMaskClip(document, clip, values.mask as VideoEditEffectMask)
@@ -179,6 +184,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     }
     (clip.effects ??= []).push(effect); return effect.id
   }
+  if (Array.isArray(values.regions) && values.regions.length) throw new Error('只有自动缩放效果可以设置缩放区间。')
   const effect = makeVideoEditEffect(document, { definitionId: values.definitionId, ...(values.versionId !== undefined ? { versionId: String(values.versionId) } : {}), ...(values.name !== undefined ? { name: String(values.name) } : {}), ...(values.parameters !== undefined ? { parameters: codeMaterialInstanceSchema.shape.parameters.parse(values.parameters) } : {}) }, read)
   if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
   if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)

@@ -1,6 +1,10 @@
 import { VideoEditRecordingCursorSource } from './videoEditRecordingCursorSource'
 import { RECORDING_CURSOR_EFFECT, sampleRecordingCursor } from '@/core/videoEdit/recordingCursor'
 import { recordingCursorDraws, type RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
+import { evaluateRecordingZoom, RECORDING_ZOOM_EFFECT, recordingZoomParams, recordingZoomPointerSpans } from '@/core/videoEdit/recordingZoom'
+import { RECORDING_FRAME_EFFECT } from '@/core/videoEdit/recordingFrame'
+import { recordingFrameContent, recordingZoomDraw, type RecordingEffectsRenderInput } from './videoEditRecordingZoomPlan'
+import { VideoEditRecordingZoomPointers } from './videoEditRecordingZoomSource'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
 import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { expandPinnedCodeComponents } from '@/core/videoEdit/codeMaterial/components'
@@ -46,7 +50,7 @@ interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: n
 interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
-export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput; mask?: VideoEditSmartRegionMask }
+export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
 export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void }
@@ -62,6 +66,7 @@ function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
 /** Visible-code session only. Programs stay in memory; source remains the document truth. */
 export class VideoEditCodeSources {
   private readonly cursorSources = new VideoEditRecordingCursorSource()
+  private readonly zoomPointers = new VideoEditRecordingZoomPointers(this.cursorSources)
   private readonly known = new Map<string, KnownVersion>()
   private knownBytes = 0
   private readonly programs = new Map<string, CachedProgram>()
@@ -100,7 +105,7 @@ export class VideoEditCodeSources {
     if (this.disposed) throw new Error('代码素材源会话已关闭。')
     // 节目渲染器在序列间切换时沿用同一会话：代码素材定义与版本是项目级、不可变的，编译结果按版本缓存可直接复用；
     // 片段级的静态画面在下一次渲染时由 releaseUnused 按实际用到的键释放。
-    this.checkVersions(document); this.cancel(); this.cursorSources.clear(); this.document = document
+    this.checkVersions(document); this.cancel(); this.cursorSources.clear(); this.zoomPointers.clear(); this.document = document
   }
   /** The caller has established that immutable code versions and media did not change. */
   updateParameters(document: VideoEditComposition): void { this.cancel(); this.document = document }
@@ -164,6 +169,20 @@ export class VideoEditCodeSources {
             chain.push({ effect, builtin: { ...effect.builtin, cursorDraws: recordingCursorDraws(sample, source, clip, document, params) } })
             continue
           }
+          if (effect.builtin?.id === RECORDING_ZOOM_EFFECT) {
+            // 区间按源时间求值（与光标同一时间基准）；跟随区间的指针按全局网格分块读取，没有日志时镜头停在画面中央。
+            const source = videoEditClipMedia(document, clip)?.recordingCursor
+            const params = recordingZoomParams(resolveVideoEditBuiltinParams(evaluateVideoEditEffect(effect, frame - clip.start).builtin!))
+            const regions = effect.builtin.regions ?? []
+            const sourceUs = videoEditSourceSeconds(videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))) * 1_000_000
+            const spans = recordingZoomPointerSpans(regions, sourceUs, params)
+            const pointer = source && spans.length ? await this.zoomPointers.pointer(source, spans, controller.signal) : () => null
+            assertCurrent()
+            const zoom = recordingZoomDraw(evaluateRecordingZoom(regions, sourceUs, params, pointer), clip, document)
+            chain.push({ effect, builtin: { ...effect.builtin, ...(zoom ? { zoom } : {}) } })
+            continue
+          }
+          if (effect.builtin?.id === RECORDING_FRAME_EFFECT) { chain.push({ effect, builtin: { ...effect.builtin, frameContent: recordingFrameContent(clip, document) } }); continue }
           if (effect.builtin) {
             if (!effect.mask) { chain.push({ effect, builtin: effect.builtin }); continue }
             // 作用区域（4.7d 智能区域、4.10 手绘遮罩）：智能区域还没分析好时先不画这个效果；导出前会等分析完成。
@@ -263,7 +282,7 @@ export class VideoEditCodeSources {
   diagnostics() { return { programs: this.programs.size, programBytes: this.programBytes, staticPictures: this.staticPictures.size, seenVersions: this.known.size, seenManifestBytes: this.knownBytes, compiler: this.compiler.diagnostics?.() } }
   async dispose(): Promise<void> {
     if (this.disposed) return
-    this.disposed = true; this.cursorSources.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()
+    this.disposed = true; this.cursorSources.clear(); this.zoomPointers.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()
     await Promise.allSettled([this.gpuWork])
     try { this.runtime?.releaseUnused(new Set()) }
     finally { for (const picture of this.staticPictures.values()) if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.programs.clear(); this.programBytes = 0; this.staticPictures.clear(); this.known.clear(); this.knownBytes = 0 }

@@ -13,6 +13,8 @@ import { parseColorGradeCurve } from './colorGradeCurves'
 import { GLOW_PRO_EFFECT_DEFINITION } from './glowPro'
 import { SHADER_GRAPH_EFFECT_DEFINITIONS } from './shaderGraph/effects'
 import { RECORDING_CURSOR_DEFINITION } from './recordingCursorDefinition'
+import { RECORDING_ZOOM_DEFINITION } from './recordingZoomDefinition'
+import { RECORDING_FRAME_DEFINITION } from './recordingFrame'
 import { GAUSSIAN_EFFECT } from '../imaging/effects/gaussian'
 
 export type { ImagingParamValue as VideoEditBuiltinParamValue, ImagingParams as VideoEditBuiltinParams, ImagingUnit as VideoEditBuiltinUnit, ImagingParam as VideoEditBuiltinParam } from '../imaging/parameterDefinition'
@@ -123,6 +125,8 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
     ] },
   VIDEO_EDIT_COLOR_GRADE,
   RECORDING_CURSOR_DEFINITION,
+  RECORDING_ZOOM_DEFINITION,
+  RECORDING_FRAME_DEFINITION,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
 export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, GLOW_PRO_EFFECT_DEFINITION, ...SHADER_GRAPH_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]

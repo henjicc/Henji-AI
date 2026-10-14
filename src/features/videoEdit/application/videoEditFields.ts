@@ -3,6 +3,7 @@ import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { videoEditSelectedCodeElementContextSchema } from '@/core/videoEdit/codeElementSelection'
 import { videoEditTrackerSchema } from '@/core/videoEdit/tracking'
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
+import { recordingZoomRegionsSchema } from '@/core/videoEdit/recordingZoom'
 import { VIDEO_EDIT_TEXT_STYLE_DESCRIPTION, videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { z } from 'zod'
 import { type ApplicationFieldDefinition, type JsonValue, type ApplicationSchemaRef } from '@/core/application-control'
@@ -34,7 +35,7 @@ export const VIDEO_EDIT_TIME_CASCADES = [
 ] as const
 export const VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE = { declarationId: 'video_edit.clip_keyframe_time', effect: 'update' as const, entityType: 'video_edit.clip', propertyIds: VIDEO_EDIT_ANIMATABLE_KEYS.map(key => `video_edit.clip.${videoEditPropertyKey(key)}.keyframes`), revisionScopes: ['video_edit'] }
 export const VIDEO_EDIT_CLIP_CONTENT_CASCADES = (['create', 'update', 'delete'] as const).flatMap(effect => (['marker', 'caption'] as const).map(kind => ({ declarationId: `video_edit.clip_${kind}_${effect}`, effect, entityType: `video_edit.${kind}`, propertyIds: effect === 'update' ? kind === 'marker' ? ['video_edit.marker.frame', 'video_edit.marker.clip_id'] : ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.clip_id'] : [], revisionScopes: ['video_edit'] })))
-const compositeUpdateKeys = { 'video_edit.tracker': ['name', 'method', 'prompts'], 'video_edit.graphic_object': ['name', 'parameters', 'curves', 'text_style', 'visible'], 'video_edit.effect': ['name', 'enabled', 'amount', 'version_id', 'parameters', 'curves', 'frame_curves', 'mask'], 'video_edit.transition': ['kind', 'duration_frames', 'alignment', 'frames_before_cut', 'parameters', 'frame_curves'] }
+const compositeUpdateKeys = { 'video_edit.tracker': ['name', 'method', 'prompts'], 'video_edit.graphic_object': ['name', 'parameters', 'curves', 'text_style', 'visible'], 'video_edit.effect': ['name', 'enabled', 'amount', 'version_id', 'parameters', 'curves', 'frame_curves', 'mask', 'regions'], 'video_edit.transition': ['kind', 'duration_frames', 'alignment', 'frames_before_cut', 'parameters', 'frame_curves'] }
 export const VIDEO_EDIT_COMPOSITE_CASCADES = (['create', 'update', 'delete'] as const).flatMap(effect => VIDEO_EDIT_COMPOSITE_TYPES.map(entityType => ({ declarationId: `${entityType}_${effect}`, effect, entityType, propertyIds: effect === 'update' ? compositeUpdateKeys[entityType].map(key => `${entityType}.${key}`) : [], revisionScopes: ['video_edit'] })))
 export const VIDEO_EDIT_SOURCE_PROGRAM_CASCADE = { declarationId: 'video_edit.source_foreground_program_pause', effect: 'update' as const, entityType: 'video_edit.document', propertyIds: ['video_edit.document.program_playback'], revisionScopes: ['video_edit'] }
 export const VIDEO_EDIT_PROGRAM_SOURCE_CASCADE = { declarationId: 'video_edit.program_foreground_source_pause', effect: 'update' as const, entityType: 'video_edit.source', propertyIds: ['video_edit.source.playing'], revisionScopes: ['video_edit'] }
@@ -77,6 +78,8 @@ schemas['video_edit.sequence'].transcript = z.array(z.object({ index: z.number()
 schemas['video_edit.sequence'].textSilences = z.array(z.object({ from: z.number().int().nonnegative(), to: z.number().int().positive() }).strict()).max(100000)
 for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) schemas['video_edit.clip'][`${key}.keyframes`] = videoEditKeyframesSchema
 // 内置效果的参数关键帧合在一个属性里（参数多达数百个，逐参数登记会让每次修改的回执列出全部属性）。
+// 自动缩放的缩放区间（源时间微秒，整体替换）；其他效果读出空数组且只能写空数组。
+schemas['video_edit.effect'].regions = recordingZoomRegionsSchema
 schemas['video_edit.effect'].frameCurves = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), videoEditKeyframesSchema.refine(points => points.length > 0, '要关闭某个参数的动画，整体写入时省略它，不写空数组。'))
 schemas['video_edit.transition'].frameCurves = schemas['video_edit.effect'].frameCurves
 for (const key of ['anchorX', 'anchorY'] as const) schemas['video_edit.clip'][key] = videoEditClipSchema.shape[key].unwrap()
@@ -141,7 +144,7 @@ Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静�
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', label: '颜色标签（空为按类型默认）', graphic: '图形对象结构', effects: '效果链', adjustment: '调整图层范围', transitions: '序列转场' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', colorLuts: '项目 LUT', graphicObjectIds: '图形对象顺序（从下到上）', effectIds: '效果执行顺序', adjustmentFromTrack: '调整起始轨道', graphicKind: '创建图形类型', graphicWidth: '图形宽度', graphicHeight: '图形高度', parameters: '实例参数', curves: '参数关键帧', versionId: '固定源码版本', definitionId: '滤镜源码定义', sequenceId: '所属序列', leftClipId: '左侧片段', rightClipId: '右侧片段', durationFrames: '转场时长帧' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', alignment: '过渡对齐（center 中心切点、start 起点切点即整段在切点后、end 终点切点即整段在切点前、custom 自定义起点）', framesBeforeCut: '过渡在切点之前的帧数（对齐为 custom 时生效）', fadeInFrames: '淡入帧数（0 为不淡入；画面从透明渐显，声音按恒定功率渐强）', fadeOutFrames: '淡出帧数（0 为不淡出）' })
-Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）', mask: '作用区域', regionStatus: '作用区域分析状态' })
+Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）', mask: '作用区域', regions: '缩放区间', regionStatus: '作用区域分析状态' })
 Object.assign(labels, { transcript: '转录稿', textSilences: '检测到的静音段', speedPercent: '速度百分比', reverse: '倒放', preservePitch: '变速时保持音调' })
 labels.audioRole = '声音类型'
 labels.recordingCursorMode = '录制光标可用方式'
@@ -197,10 +200,11 @@ const descriptions: Record<string, string> = {
   'video_edit.clip.speed_percent': '片段速度百分比，1–10000，100 为原速（视频、音频、嵌套序列与代码素材片段可改）。改速度时开头的内容不动，时长按速度换算（200% 时长减半）；变长时后面有片段则只用到空白为止。要按实际时长原子波纹调整后续片段，请用 ripple_video_edit_clip_speed；普通属性写入的链接音画请两段都写。',
   'video_edit.clip.reverse': '倒放：用到的源内容不变，播放方向反过来（画面与声音都倒放）。',
   'video_edit.clip.preserve_pitch': '变速时保持音调（时间伸缩，速度不是 100% 时生效）；关闭时声音随速度变高或变低。',
-  'video_edit.media.recording_cursor_mode': '录制光标可用方式（只读）：redraw 可重绘光标与点击；clicks 原片已经包含光标，只能添加点击提示；unavailable 没有事件日志。redraw/clicks 可在该素材的视频片段下用通用集合创建 video_edit.effect，definition_id=effect:recording_cursor，参数见内置效果目录。日志由录制会话提供，不能手写路径。',
+  'video_edit.media.recording_cursor_mode': '录制光标可用方式（只读）：redraw 可重绘光标与点击；clicks 原片已经包含光标，只能添加点击提示；unavailable 没有事件日志。redraw/clicks 可在该素材的视频片段下用通用集合创建 video_edit.effect，definition_id=effect:recording_cursor，参数见内置效果目录；同样可创建 effect:recording_zoom（自动缩放，在 regions 写缩放区间）。日志由录制会话提供，不能手写路径。',
   'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（画面效果如 effect:gaussian_blur 只能加到画面片段；音频效果如 effect:noise_reduction、effect:parametric_eq 只能加到声音片段；全部内置效果、适用片段及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID（只用于画面片段）。',
   'video_edit.document.color_luts': '项目已导入LUT的id与名称，只读；在效果parameters的input_lut/look_lut写该id，强度为0–100。',
   'video_edit.effect.parameters': '效果参数。内置效果：键与范围见 video_edit.builtin_effect 的 params（强度多为 0–100，空间量按画面高度比例，与分辨率无关）；写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；越界或未知键会报错并列出可用范围。代码滤镜：按固定源码版本声明校验。',
+  'video_edit.effect.regions': '自动缩放（effect:recording_zoom）的缩放区间，整体替换：先读出，再改动后完整写回；[] 清空。每项 {id,startUs,endUs,depth,focus,origin}：startUs<endUs 为片段素材源时间微秒（与修剪、拆分、变速、倒放无关，内容在哪区间就在哪；时间线帧换算先读片段 source_in_us、速度与倒放），区间之间不能重叠、数量不限；depth 1–6 档 = 1.25/1.5/1.8/2.2/3.5/5 倍，默认 3；focus "cursor" 跟随鼠标（平滑，靠近视野边缘才平移），或 {x,y} 相对源画面 0–1 的固定位置（如 {x:0.8,y:0.1} 右上角）；origin 自动生成写 auto，按用户意图新建或修改写 manual。区间开始前平滑放大、结束后平滑缩小，间隔≤1.5秒的相邻区间按 parameters.connect 直接平移。其他效果读出 [] 且不可写入。',
   'video_edit.effect.amount': '效果与原画面（音频效果为原声）的混合比例 0–1：1 完全应用，0.5 一半强度；停用效果请写 enabled。',
   'video_edit.effect.version_id': '代码滤镜的固定源码版本；内置效果为空字符串且不可写。',
   'video_edit.effect.mask': '作用区域仅用于内置画面效果，null 为整个画面。智能区域 {regionId:face|person|background|text,feather?,expand?,invert?} 仅用于视频图片；写入自动分析，region_status 读状态，导出等待。feather 0–100、expand -100–100，100 约为画面高度10%。手绘 {regionId:shapes,shapes:[{id,kind,points,mode?,feather?,expand?,opacity?,invert?,follow?,pathAnimation?}]} 用于任何画面片段，数量不限、id 唯一。kind rect/ellipse/path 仅标记创建来源；闭合 points:[[x,y,入柄dx,dy,出柄dx,dy],…] 至少3点，坐标相对片段画面归一化。mode add/subtract/intersect，默认add；首项subtract从整画面挖掉。默认feather5、expand0、opacity100（0–100）。路径动画 pathAnimation:{pointIds:[稳定点标识,…],keys:[{sourceTimeUs,points,interpolation}]}，点标识与每帧points按序对应，静态points点数也须相同；禁止增删点、换序、绕向翻转或中间退化，孔洞用独立subtract形状。sourceTimeUs为片段连续源时刻（微秒，可有小数），严格递增，速度/倒放/修剪沿原源时间；interpolation仅linear或hold。先求路径动画再跟踪，清除pathAnimation恢复静态。跟踪区域 {regionId:tracker,trackerId,feather?,expand?,invert?}，trackerId用本片段跟踪器id；手绘follow:{trackerId,reference:[x,y,宽,高]}采用绑定帧跟踪框，复用后台结果。先完整读取mask再修改，保留其它形状。',

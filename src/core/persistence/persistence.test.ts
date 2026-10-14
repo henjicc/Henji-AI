@@ -123,10 +123,10 @@ describe('Schema结构指纹', () => {
 })
 
 describe('所有登记格式的黄金样本', () => {
-  it('剪辑 v2–v5 按完整链升至 v6，旧原稿、曲线、字幕与归档不丢失，读取不修改输入', () => {
+  it('剪辑 v2–v6 按完整链升至当前版本，旧原稿、曲线、字幕与归档不丢失，读取不修改输入', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
     expect(baseline.formats['document.video_edit'].supportedFrom).toBe(2)
-    for (const version of [2, 3, 4, 5]) {
+    for (const version of [2, 3, 4, 5, 6]) {
       const raw = parseDocumentEnvelope(JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.video_edit/v${version}.json`, 'utf8')))
       const before = structuredClone(raw.content) as VideoEditDocumentContent
       const upgraded = upgradePersistenceContent(format, raw.content, version) as VideoEditDocumentContent
@@ -176,6 +176,13 @@ describe('所有登记格式的黄金样本', () => {
           expect(clip.curves?.opacity?.[1].value).toBe(1)
           expect(document.sequences[0].captions?.[0].translation).toBe('Golden caption')
           expect(document.sequences[0].transitions?.[0].rightClipId).toBe(clip.id)
+          // v7：自动缩放的缩放区间（源时间、档位、跟随/固定焦点）与录屏画框参数原样读回。
+          if (version >= 7) {
+            const effects = document.sequences[0].clips.find(value => value.id === 'golden-cursor-clip')?.effects ?? []
+            expect(effects.map(effect => effect.builtin?.id)).toEqual(['recording_cursor', 'recording_zoom', 'recording_frame'])
+            expect(effects[1].builtin?.regions?.map(region => [region.startUs, region.endUs, region.depth, region.focus])).toEqual([[500000, 1500000, 3, 'cursor'], [2000000, 2800000, 5, { x: 0.8, y: 0.2 }]])
+            expect(effects[2].builtin?.params).toMatchObject({ background: 'solid', padding: 6 })
+          }
         }
         if (format.id === 'code-asset') expect(decodeCodeAsset(encodeCodeAsset(format.schema.parse(upgraded) as ReturnType<typeof decodeCodeAsset>)).sourceVersion.files[0].hash).toHaveLength(64)
         if (format.id === 'image-working-copy' || format.id === 'image-package') {

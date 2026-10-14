@@ -20,8 +20,8 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 6,
-      "fingerprint": "5677bf7aab1004cc5a4517c0e4d6e42499c795896090980146780728b02ef781",
+      "version": 7,
+      "fingerprint": "122a366f496449542b62a7e8158ae5f17387b78413b2805bfcde7d12195cae42",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -190,8 +190,8 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 3,
-      "fingerprint": "01bcce87c26ef3685d037398498a56905885505cd9a8cfe4c2c393491cd24673",
+      "version": 4,
+      "fingerprint": "38618c45da621e83e3f83c955811f4cdc8bd6862c8f8a9c66806ed048a73d4d3",
       "supportedFrom": 3
     },
     "storyboard-metadata": {
@@ -255,8 +255,8 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 7,
-      "fingerprint": "72abac7657710544fd12f4ac93576d33d11e1117a57147f6de1677eb6c425882",
+      "version": 8,
+      "fingerprint": "e2553ac2e46e6f68f43a7bd8990c48dd53e227210c851c27df875827743e1a06",
       "supportedFrom": 5
     },
     "recording-setup": {

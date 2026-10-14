@@ -37,8 +37,8 @@ export function replaceRecordingSteps(draft: VideoEditDocument, recording: Recor
         const item = draft.items.find(v => v.mediaId === media.id)
         if (!item) throw new Error('重录素材未完整导入。')
         const replacement = { ...clip, itemId: item.id, sourceInUs, speed: videoEditSpeedRatio((sourceOutUs - sourceInUs) * fps / (1e6 * clip.duration)), sourceRemainder: { numerator: 0, denominator: 1 },
-          // Old cursor events have a different source and timebase; never apply them to the new capture.
-          effects: clip.effects?.filter(effect => effect.builtin?.id !== 'recording_cursor') }
+          // Old cursor events and zoom regions use a different source timebase; never apply them to the new capture.
+          effects: clip.effects?.filter(effect => effect.builtin?.id !== 'recording_cursor' && effect.builtin?.id !== 'recording_zoom') }
         sequence.clips = sequence.clips.map(v => v === clip ? replacement : v)
         stepReplaced++
       }

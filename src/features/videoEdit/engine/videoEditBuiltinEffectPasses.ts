@@ -1,5 +1,8 @@
 import { planRecordingCursor, type RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
 import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
+import { RECORDING_ZOOM_EFFECT } from '@/core/videoEdit/recordingZoom'
+import { RECORDING_FRAME_EFFECT, recordingFrameBackground } from '@/core/videoEdit/recordingFrame'
+import { planRecordingZoom, type RecordingEffectsRenderInput } from './videoEditRecordingZoomPlan'
 import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
@@ -83,10 +86,11 @@ export function videoEditGrainSeed(frame: number): number { return (Math.max(0, 
  */
 export function resolveVideoGaussianPlan(parameters: GaussianParameters, context: EffectEvaluationContext): ResolvedGaussianPlan { return GAUSSIAN_EFFECT.resolve(parameters, context) }
 
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize }): VideoEditBuiltinPlan {
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput & RecordingEffectsRenderInput, frame: { width: number; height: number; frame: number; renderScale?: number; quality?: EffectQuality; referenceSize?: EffectSize }): VideoEditBuiltinPlan {
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
   if (instance.id === RECORDING_CURSOR_EFFECT) return planRecordingCursor(instance.cursorDraws ?? [], width, height)
+  if (instance.id === RECORDING_ZOOM_EFFECT) return planRecordingZoom(instance.zoom, width, height)
   const params = resolveVideoEditBuiltinParams(instance)
   if (instance.id === 'glow_pro') return planGlowPro(params, width, height)
   const plan = new Planner(width, height)
@@ -188,6 +192,21 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
     case 'crop': {
       const feather = Math.max(1, number(params, 'feather') / 100 * 0.05 * H)
       plan.pass('crop', 'input', 'output', [number(params, 'left') / 100, number(params, 'top') / 100, 1 - number(params, 'right') / 100, 1 - number(params, 'bottom') / 100], [feather / width, feather / height, 0, 0])
+      break
+    }
+    case RECORDING_FRAME_EFFECT: {
+      // 内容（片段在画面中的外接矩形，缺省整幅）按边距等比放进画面中央；投影是内容透明度的高斯模糊，背景不透明。
+      const [x0, y0, x1, y1] = instance.frameContent ?? [0, 0, 1, 1]
+      const pad = number(params, 'padding') / 100 * H; const contentWidth = (x1 - x0) * width; const contentHeight = (y1 - y0) * H
+      const fit = contentWidth >= 1 && contentHeight >= 1 ? Math.max(0, Math.min((width - 2 * pad) / contentWidth, (H - 2 * pad) / contentHeight)) : 0
+      const placedWidth = contentWidth * fit / width; const placedHeight = contentHeight * fit / H
+      const content = plan.alloc()
+      plan.pass('recording_frame_content', 'input', content, [0.5 - placedWidth / 2, 0.5 - placedHeight / 2, 0.5 + placedWidth / 2, 0.5 + placedHeight / 2], [x0, y0, x1, y1], undefined, [number(params, 'radius') / 100 * H, fit > 0 ? 1 / fit : 1, 0, 0])
+      const strength = number(params, 'shadow') / 100
+      let shadow: VideoEditBuiltinTexture = content
+      if (strength > 0 && fit > 0) { shadow = plan.alloc(); const sigma = (0.008 + 0.032 * strength) * H; plan.gaussian(content, shadow, sigma, sigma, false) }
+      const [from, to] = recordingFrameBackground(params)
+      plan.pass('recording_frame_compose', shadow, 'output', [...from, 0.65 * strength], [...to, 0.018 * strength], content, [Math.SQRT1_2, Math.SQRT1_2, 0, 0])
       break
     }
     case 'flip': plan.pass('flip', 'input', 'output', [params.axis !== 'vertical' ? 1 : 0, params.axis !== 'horizontal' ? 1 : 0, 0, 0]); break

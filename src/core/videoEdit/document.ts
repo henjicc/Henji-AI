@@ -29,6 +29,7 @@ import { videoEditMulticamSchema } from './multicamSchema'
 import { styleKitSchema } from './styleKit'
 import { creativeIntentsSchema } from '../creativeIntent/persistence'
 import { recordingCursorSourceSchema, RECORDING_CURSOR_EFFECT } from './recordingCursor'
+import { RECORDING_ZOOM_EFFECT } from './recordingZoom'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
 
 const frame = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
@@ -223,6 +224,7 @@ export const videoEditDocumentSchema = z.object({
       if (clip.kind === 'adjustment' ? !clip.adjustment : Boolean(clip.adjustment)) issue('只有调整图层可以且必须保存作用范围。')
       for (const effect of clip.effects ?? []) {
         if (effect.builtin?.id === RECORDING_CURSOR_EFFECT && (clip.kind !== 'video' || !media?.recordingCursor)) issue('录制光标只能添加到绑定事件日志的屏幕视频片段，请从录制会话创建片段。')
+        if (effect.builtin?.id === RECORDING_ZOOM_EFFECT && (clip.kind !== 'video' || !media?.recordingCursor)) issue('自动缩放只能添加到绑定事件日志的屏幕视频片段，请从录制会话创建片段。')
         if (effect.builtin?.id === 'color_grade') for (const key of ['input_lut', 'look_lut']) {
           const refs = [effect.builtin.params[key], ...(effect.builtin.curves?.[key] ?? []).map(point => point.value)]
             if (refs.some(ref => ref && !lutsById.has(String(ref)))) issue('全能调色 LUT引用不属于本项目，请选择已导入的LUT。')

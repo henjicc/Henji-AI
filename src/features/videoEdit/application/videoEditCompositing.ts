@@ -6,6 +6,7 @@ import { videoEditIntroducesCodeEffects, videoEditEffectAccepts, videoEditEffect
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
 import { assertVideoEditMaskTrackers } from './videoEditTrackingEdits'
 import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
+import { recordingZoomRegionsSchema, sortRecordingZoomRegions, RECORDING_ZOOM_EFFECT, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, resizeVideoEditTransition, type VideoEditTransition } from '@/core/videoEdit/transitions'
@@ -152,7 +153,8 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
   return [...created]
 }
 /** `mask`：作用区域（4.7d），null 回到整个画面。 */
-export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolean; amount?: number; params?: Readonly<Record<string, unknown>>; curves?: VideoEditCurves; mask?: VideoEditEffectMask | null }
+/** `regions`：自动缩放的缩放区间（整体替换，按开始时间排序后保存；null 或空数组清空）。 */
+export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolean; amount?: number; params?: Readonly<Record<string, unknown>>; curves?: VideoEditCurves; mask?: VideoEditEffectMask | null; regions?: readonly RecordingZoomRegion[] | null }
 /**
  * 改内置效果的参数、强度或开关。带手势时只预览（拖动中实时出画面），由 `finishVideoEditGesture` 提交成一步撤销。
  * 数值先夹进登记的范围（界面拖动、步进产生不了非法值）；未知参数与错类型仍报错。
@@ -183,6 +185,7 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
       }
       effect.builtin = { ...builtin, params, ...(Object.keys(curves).length ? { curves } : {}) }
     }
+    if (changes.regions !== undefined) effect.builtin = withVideoEditZoomRegions(effect.builtin, changes.regions)
     assertVideoEditKeyframeTimes(effect.builtin.curves, clip.duration, effect.name)
     if (changes.mask === null) delete effect.mask
     else if (changes.mask) {
@@ -191,6 +194,15 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
       effect.mask = changes.mask
     }
   }, gesture)
+}
+/** 写入缩放区间（界面拖动、助手整体写入共用）：只允许自动缩放效果，校验后按开始时间排序；空列表去掉字段。 */
+export function withVideoEditZoomRegions<T extends { id: string; regions?: RecordingZoomRegion[] }>(builtin: T, regions: unknown): T {
+  const next = { ...builtin }
+  const parsed = regions === null || regions === undefined ? [] : recordingZoomRegionsSchema.parse(regions)
+  if (!parsed.length) { delete next.regions; return next }
+  if (builtin.id !== RECORDING_ZOOM_EFFECT) throw new Error('只有自动缩放效果可以设置缩放区间。')
+  next.regions = sortRecordingZoomRegions(parsed)
+  return next
 }
 export async function reorderVideoEditEffects(target: VideoEditCompositeTarget, ids: string[], signal?: AbortSignal): Promise<void> {
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {

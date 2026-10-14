@@ -16,6 +16,7 @@ import { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGestu
 import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
 import { VideoEditBasicSoundPanel } from './VideoEditBasicSoundPanel'
 import { VideoEditCodeElementsPanel } from './VideoEditCodeElementsPanel'
+import { VideoEditRecordingPanel } from './VideoEditRecordingPanel'
 
 /** 片段名称一行（PR 效果控件顶部的“主要 * 片段名”）：确认是哪个片段，铅笔改名，回车或失焦提交一次。 */
 function ClipNameHeader({ clip, onRename }: { clip: VideoEditClip; onRename: (name: string) => void }): React.ReactElement {
@@ -56,6 +57,7 @@ function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { i
     {visible && selected?.kind === 'code' && selected.code && <CodeParameterPanel key={JSON.stringify(['source-code', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
     {visible && selected?.kind === 'code' && selected.code && <VideoEditCodeElementsPanel instance={instance} clipId={selected.id} onError={reportError} />}
     {visible && selected?.kind === 'graphic' && selected.graphic && <VideoEditGraphicPanel key={JSON.stringify(['graphic', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
+    {visible && selected && <VideoEditRecordingPanel key={JSON.stringify(['recording', projectId, sequence.id, selected.id])} instance={instance} sequence={sequence} clip={selected} onError={reportError} />}
     {visible && selected && <VideoEditEffectChainPanel key={JSON.stringify(['effects', projectId, sequence.id, selected.id])} instance={instance} sequence={sequence} clip={selected} onError={reportError} />}
     {visible && <VideoEditTransitionPanel key={JSON.stringify(['transition', projectId, sequence.id])} instance={instance} sequence={sequence} clip={selected} onError={reportError} />}
     {sequence.annotations.length > 0 && <UiGroup title="标注" titleTone="compact" divided>

@@ -1,12 +1,9 @@
 import { createVideoEditSequence, videoEditDuration, type VideoEditDocument, type VideoEditSequence, type VideoEditClip } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditSpeedRatio } from '@/core/videoEdit/clipSpeed'
-import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { BUILTIN_TITLE_TEMPLATES, instantiateTitleTemplate } from '@/core/videoEdit/titleTemplates'
 import { createVideoEditMaskShape, type VideoEditEffectMask } from '@/core/videoEdit/effectMasks'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
-import { APP_WINDOW_BACKGROUND_HEX } from '@/core/theme/colorTokens'
-import { titleColor } from '@/core/videoEdit/titleTemplates'
 import type { RecordingDocument } from '@/core/screenRecording/document'
 import type { RecordingUnderstanding } from '@/core/screenRecording/understanding'
 import { mapRecordingMovieRange, recordingMovieSpans, type RecordingMovieRecipe } from '@/core/screenRecording/movie'
@@ -17,13 +14,6 @@ import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 
 export function recordingMovieEffect(id: string, name: string, params: Record<string, number | boolean | string> = {}, mask?: VideoEditEffectMask): VideoEditEffect {
   return { id: crypto.randomUUID(), name, enabled: true, amount: 1, builtin: { id, params }, ...(mask ? { mask } : {}) }
-}
-function roundFrameMask(width: number, height: number): VideoEditEffectMask {
-  const rx = .025 * height / width, ry = .025, k = .5522847498
-  return { regionId: 'shapes', shapes: [{ id: crypto.randomUUID(), kind: 'path', invert: true, feather: 0, points: [
-    [rx, 0, -rx * k, 0, 0, 0], [1 - rx, 0, 0, 0, rx * k, 0], [1, ry, 0, -ry * k, 0, 0], [1, 1 - ry, 0, 0, 0, ry * k],
-    [1 - rx, 1, rx * k, 0, 0, 0], [rx, 1, 0, 0, -rx * k, 0], [0, 1 - ry, 0, ry * k, 0, 0], [0, ry, 0, 0, 0, -ry * k],
-  ] }] }
 }
 function shapeClip(document: VideoEditDocument, sequence: VideoEditSequence, name: string, graphic: NonNullable<VideoEditClip['graphic']>, start: number, duration: number, track: number): VideoEditClip {
   const itemId = crypto.randomUUID()
@@ -95,18 +85,13 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
         }
       }
     }
-    const duration = Math.max(videoEditDuration(screen), videoEditDuration(sequence))
     if (!screen.clips.length) throw new Error('配方没有保留可播放的屏幕片段。')
     const nestedItem = { id: crypto.randomUUID(), name: '屏幕画面', kind: 'sequence' as const, sequenceId: screen.id }
     document.items.push(nestedItem)
     const picture = makeVideoEditItemClip(document, nestedItem.id, sequence.id, { frame: 0, duration: videoEditDuration(screen), track: 3 })
-    if (recipe.frame) { picture.scale = .92; picture.effects = [recordingMovieEffect('crop', '圆角画框', { left: 100 }, roundFrameMask(size.width, size.height))] }
+    // One editable frame effect on the nested picture: padding, rounded corners, shadow and background in a single pass.
+    if (recipe.frame) picture.effects = [recordingMovieEffect('recording_frame', '录屏画框')]
     sequence.clips.push(picture)
-    if (recipe.frame) {
-      const graphic = createVideoEditGraphic('rect', size.width, size.height)
-      Object.assign(graphic.objects[0].parameters, { x: 0, y: 0, width: size.width, height: size.height, fill: titleColor(APP_WINDOW_BACKGROUND_HEX) })
-      sequence.clips.push(shapeClip(document, sequence, '背景', graphic, 0, duration, 2))
-    }
     if (recipe.captions) {
       const blocks = understanding.transcript.flatMap(text => {
         const mapped = mapRecordingMovieRange(spans, text)

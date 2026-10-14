@@ -125,6 +125,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     4: content => content,
     // 5 → 6：新增可选 screen_attention 关键帧归属，已有关键帧语义不变。
     5: content => content,
+    // 6 → 7：内置效果新增可选缩放区间 regions（自动缩放）与录屏画框效果，已有效果不需要补值。
+    6: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

@@ -17,7 +17,8 @@ it('共享读取预检版本与当前内容；放弃兼容的旧版、未来版�
   boundary.text = JSON.stringify({ ...manifest, version: SUBTITLE_MANIFEST_VERSION + 1 })
   await expect(readVideoEditSubtitleManifest(path)).rejects.toThrow()
   expect(boundary.mkdir).not.toHaveBeenCalled()
-  boundary.text = JSON.stringify({ ...manifest, version: SUBTITLE_MANIFEST_VERSION - 1 })
+  // v3 之前已登记放弃兼容；v3 → v4 只新增可选缩放区间，可升级。
+  boundary.text = JSON.stringify({ ...manifest, version: 2 })
   await expect(readVideoEditSubtitleManifest(path)).rejects.toMatchObject({ code: 'unsupported-version' })
   expect(boundary.mkdir).not.toHaveBeenCalled()
   boundary.text = JSON.stringify(manifest)
@@ -27,4 +28,7 @@ it('共享读取预检版本与当前内容；放弃兼容的旧版、未来版�
   expect(boundary.text).toBe(snapshot)
   boundary.text = JSON.stringify({ ...manifest, version: SUBTITLE_MANIFEST_VERSION, endFrame: 'invalid' })
   await expect(readVideoEditSubtitleManifest(path)).rejects.toThrow()
+  boundary.text = JSON.stringify({ ...manifest, version: 3 })
+  expect(await readVideoEditSubtitleManifest(path)).toMatchObject({ ...manifest, version: SUBTITLE_MANIFEST_VERSION })
+  expect(boundary.backups.size).toBe(1)
 })

@@ -59,6 +59,20 @@ it('录制光标通过正式通用实体创建、修改、回读和撤销；烤�
     undoVideoEdit(id)
     expect(getActiveVideoEditSequence(owner).clips.at(-1)!.effects![0].builtin!.params).toEqual({ click_style: 'highlight' })
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.at(-1)!.effects ?? []).toEqual([])
+    // 自动缩放：缩放区间走同一条通用效果实体路径（regions 属性，整体写入、按开始时间排序、一步撤销）。
+    expect(() => applyVideoEditBuiltinEffect(id, sequenceId, [clipIds[0]], 'recording_zoom')).toThrow('事件日志')
+    const zoomRegions = [{ id: 'late', startUs: 2_000_000, endUs: 3_000_000, depth: 5, focus: { x: 0.8, y: 0.2 }, origin: 'manual' }, { id: 'early', startUs: 0, endUs: 1_000_000, depth: 3, focus: 'cursor', origin: 'auto' }]
+    const zoomBase = await app.read(ref)
+    const zoomed = await app.call('change_application_entities', { summary: '放大操作区域', changes: [{ kind: 'create_items', entityType: 'video_edit.effect', parent: ref, items: [{ properties: { 'video_edit.effect.definition_id': 'effect:recording_zoom', 'video_edit.effect.regions': zoomRegions } }] }] }, zoomBase.revisions as Record<string, number>)
+    expect(zoomed, JSON.stringify(zoomed)).toMatchObject({ ok: true })
+    const zoom = getActiveVideoEditSequence(owner).clips.at(-1)!.effects![0]
+    expect(zoom.builtin!.regions!.map(region => region.id)).toEqual(['early', 'late'])
+    const zoomRef = { kind: 'video_edit.effect', id: `${id}:${zoom.id}` }
+    expect((await app.read(zoomRef, ['video_edit.effect.regions'])).properties).toEqual({ 'video_edit.effect.regions': [zoomRegions[1], zoomRegions[0]] })
+    expect(await app.change(zoomRef, { 'video_edit.effect.regions': [{ ...zoomRegions[1], endUs: 2_500_000 }, zoomRegions[0]] })).toMatchObject({ ok: false })
+    expect(await app.change(zoomRef, { 'video_edit.effect.regions': [] })).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips.at(-1)!.effects![0].builtin!.regions).toBeUndefined()
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.at(-1)!.effects![0].builtin!.regions).toHaveLength(2)
   } finally { app.dispose() }
 })
 

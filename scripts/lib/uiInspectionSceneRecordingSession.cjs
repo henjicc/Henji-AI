@@ -120,6 +120,18 @@ function createRecordingSessionScene() {
         }
         const toolbox = await record('工具箱录制验收')
         assert.equal(toolbox.sequence.width, 1920); assert.equal(toolbox.sequence.frameRate.numerator, 60)
+        // A recording clip is special in the editor: its own panel (pointer, zoom, frame) and the Z1 zoom lane.
+        const screenClip = toolbox.sequence.clips.find(clip => clip.effects?.some(effect => effect.builtin?.id === 'recording_cursor'))
+        assert.deepEqual(screenClip.effects.map(effect => effect.builtin?.id), ['recording_cursor', 'recording_zoom', 'recording_frame'], '录屏片段没有默认的光标、缩放、画框')
+        await page.locator(`[data-video-edit-clip="${screenClip.id}"]`).first().click()
+        const recordingPanel = page.locator(`[data-video-edit-recording-panel="${screenClip.id}"]`)
+        await recordingPanel.waitFor({ state: 'visible', timeout: 15000 })
+        await page.locator('[data-video-edit-zoom-track]').waitFor({ state: 'visible' })
+        await recordingPanel.getByRole('button', { name: '在播放头处添加缩放', exact: true }).click()
+        await page.locator('[data-video-edit-zoom-region]').first().waitFor({ state: 'visible', timeout: 10000 })
+        await recordingPanel.getByLabel('缩放程度').waitFor({ state: 'visible' })
+        await page.waitForTimeout(800)
+        await capture('recording-session-editor')
         await page.screenshot({ path: path.join(output, 'toolbox.png') })
         await capture('recording-session-toolbox')
         // Start the next recording from inside this edit: it comes back into the same project and sequence.

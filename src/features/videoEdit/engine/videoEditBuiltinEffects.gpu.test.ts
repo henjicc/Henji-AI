@@ -5,6 +5,7 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import type { RecordingCursorDraw } from './videoEditRecordingCursorPlan'
+import { RECORDING_FRAME_SOLID_DEFAULT_HEX } from '@/core/theme/colorTokens'
 
 // 任务 4.7b 真实设备专项：内置效果的正式 WGSL 与工序在 Dawn 上编译并逐像素核对关键结果。npm run test:gpu 无条件执行。
 const TEXTURE_COPY_SRC = 0x01; const TEXTURE_COPY_DST = 0x02; const TEXTURE_BINDING = 0x04; const RENDER_ATTACHMENT = 0x10
@@ -84,6 +85,29 @@ describe('剪辑内置效果（真实设备）', () => {
       device.queue.writeTexture({ texture: source as never }, faded, { bytesPerRow: W * 4 }, [W, H])
       const overlay = await render([ring, draw])
       expect(overlay.every((value, index) => index % 4 === 3 ? value === 128 : value <= 128)).toBe(true)
+    } finally { source.destroy(); target.destroy() }
+  })
+  it('自动缩放双三次放大视野、片段外透明；录屏画框缩小居中、四周铺不透明背景', async () => {
+    const source = input(); const target = output()
+    try {
+      // 整幅片段、2 倍、视野中心 (0.75, 0.5)：输出左边缘取样输入水平中点，灰阶仍是直线（双三次对线性渐变无误差）。
+      const zoom = { sample: [0.5, 0, 0, 0.5, 0.5, 0.25] as [number, number, number, number, number, number], clip: [1, 0, 0, 1, 0, 0] as [number, number, number, number, number, number] }
+      await effects.render({ id: 'recording_zoom', params: {}, zoom }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+      const zoomed = await read(target)
+      const expected = (x: number): number => (0.5 + (x + 0.5) / W * 0.5) * W - 0.5
+      for (const x of [4, 20, 40, 58]) expect(Math.abs(pixel(zoomed, x, 18)[1] - expected(x) / (W - 1) * 255)).toBeLessThan(2)
+      expect(pixel(zoomed, 30, 18)[3]).toBe(255)
+      // 片段只占左半幅：右半幅保持透明
+      await effects.render({ id: 'recording_zoom', params: {}, zoom: { ...zoom, clip: [2, 0, 0, 1, 0, 0] } }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+      const half = await read(target)
+      expect(pixel(half, 50, 18)[3]).toBe(0); expect(pixel(half, 10, 18)[3]).toBe(255)
+      const background = [1, 3, 5].map(index => parseInt(RECORDING_FRAME_SOLID_DEFAULT_HEX.slice(index, index + 2), 16))
+      await effects.render({ id: 'recording_frame', params: { background: 'solid', padding: 20, radius: 0, shadow: 0 } }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+      const framed = await read(target)
+      expect(pixel(framed, 0, 0)).toEqual([...background, 255]); expect(pixel(framed, W / 2, 2)).toEqual([...background, 255])
+      expect(Math.abs(pixel(framed, W / 2, H / 2)[1] - 128)).toBeLessThan(8)
+      await effects.render({ id: 'recording_frame', params: {} }, { texture: source, width: W, height: H, format: 'rgba8unorm' }, target, 0)
+      expect((await read(target)).every((value, index) => index % 4 !== 3 || value === 255)).toBe(true)
     } finally { source.destroy(); target.destroy() }
   })
   it('24个多工序模糊复用中间纹理，24份不同调色曲线跨帧不重复上传或编译', async () => {

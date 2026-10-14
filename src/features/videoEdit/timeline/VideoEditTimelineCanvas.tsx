@@ -10,6 +10,8 @@ import { placeVideoEditDrop, readActiveVideoEditItemDrag } from '../application/
 import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { Diamond } from 'lucide-react'
 import { VideoEditCaptionTrack } from './VideoEditCaptionTrack'
+import { VideoEditZoomTrack } from './VideoEditZoomTrack'
+import { sequenceHasRecordingZoom } from '../application/videoEditRecordingClip'
 import { selectVideoEditSubtitle } from '../application/videoEditSubtitleSelection'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton } from '@/components/ui'
@@ -46,7 +48,7 @@ import type { VideoEditSceneTarget } from '../application/videoEditSceneDetectio
 import { closeVideoEditSpeedDialog, useVideoEditSpeedDialogRequest } from '../application/videoEditSpeedDialog'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineStickyBottom, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
 import { VideoEditTimelineZoomBar } from './VideoEditTimelineZoomBar'
@@ -99,7 +101,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const [focusedTrackId, setFocusedTrackId] = useState<string | null>(null)
   const [wheelHeights, setWheelHeights] = useState<ReadonlyMap<string, number> | null>(null)
   const heightsOf = (value: VideoEditSequence): VideoEditSequence => wheelHeights ? { ...value, tracks: value.tracks.map(track => wheelHeights.has(track.id) ? { ...track, height: wheelHeights.get(track.id)! } : track) } : value
-  const layoutInput = { viewportHeight: view.height, split, scroll: regionScroll }
+  const layoutInput = { viewportHeight: view.height, split, scroll: regionScroll, zoomRow: sequenceHasRecordingZoom(sequence) }
   const latestLayout = useRef(timelineLayout(sequence, layoutInput))
   /** 滚动一个区（dy > 0 显示更下面的内容）；视频区的滚动量从底部算起。返回是否滚动了。 */
   const scrollRegion = useCallback((kind: TimelineRegionKind, dy: number): boolean => {
@@ -400,7 +402,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   /** 落点提示的纵向位置：命中轨道上，或新建轨道的空白里贴着最外侧轨道。 */
   const hintTop = (at: VideoEditDropPlacement): number => {
     const { video, audio } = layout.regions
-    if (at.newTrack === 'video') { const first = rows.find(row => row.region === 'video'); return Math.max(layout.caption.top + layout.caption.height + 2, (first ? first.top : video.top + video.height) - 26) }
+    if (at.newTrack === 'video') { const first = rows.find(row => row.region === 'video'); return Math.max(timelineStickyBottom(layout) + 2, (first ? first.top : video.top + video.height) - 26) }
     if (at.newTrack === 'audio') { const last = rows.filter(row => row.region === 'audio').at(-1); return Math.min(audio.top + audio.height - 26, last ? last.top + last.height + 2 : audio.top + 2) }
     return (rows.find(row => row.track.index === at.track)?.top ?? 0) + 2
   }
@@ -522,6 +524,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             <VideoEditInPlacePlaceholders projectId={projectId} sequence={displayed} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} onReopen={inPlace.reopen} onError={onError} />
             {/* 字幕轨置顶：放在本区最后并压在滚上来的视频轨之上 */}
             {kind === 'video' && <VideoEditCaptionTrack instance={instance} sequence={sequence} geometry={layout.caption} pixels={pixels} view={view} viewport={pointer.viewport} onError={onError} />}
+            {kind === 'video' && layout.zoom && <VideoEditZoomTrack instance={instance} sequence={sequence} geometry={layout.zoom} pixels={pixels} view={view} viewport={pointer.viewport} onError={onError} />}
           </div>
         })}
         <div role="separator" aria-label="画面与声音轨道分界" aria-orientation="horizontal" aria-valuemin={10} aria-valuemax={90} aria-valuenow={Math.round(split * 100)} tabIndex={0} data-video-edit-track-divider data-video-edit-timeline-chrome

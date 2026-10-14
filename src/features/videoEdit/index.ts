@@ -9,6 +9,7 @@ export { waitVideoEditTracking, videoEditTrackResults } from './application/vide
 export { openVideoEditDocument, saveVideoEdit, holdVideoEditActivity, createVideoEditProject, appendVideoEditSequence, switchVideoEditSequence } from './application/videoEditService'
 export { requireVideoEditInstance, verifyVideoEditSaved } from './application/videoEditService'
 export { closeVideoEditProject, videoEditDocumentContent, activeVideoEditInstance, setVideoEditView } from './application/videoEditService'
+export { makeRecordingClipEffect, suggestRecordingClipZoom } from './application/videoEditRecordingClip'
 export { analyzeVideoEditScreenAttentionOffThread } from './application/videoEditScreenAttentionWorkerClient'
 export { observeVideoEditFrame } from './application/videoEditFrameObservation'
 export { prepareVideoEditAudioGain, measureVideoEditClips } from './application/videoEditLoudness'
