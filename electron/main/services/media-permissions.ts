@@ -14,6 +14,15 @@ export class MediaPermissionService {
   private readonly installed = new WeakSet<Session>()
   private readonly watched = new WeakSet<WebContents>()
   private readonly protectedSourceIds = new Set<string>()
+  /** 登记时记下会话与 id：窗口销毁后再读 contents.session / contents.id 会抛 “Object has been destroyed”。 */
+  private readonly identities = new WeakMap<WebContents, { target: Session; id: number }>()
+
+  private identityOf(contents: WebContents): { target: Session; id: number } | undefined {
+    const known = this.identities.get(contents)
+    if (known) return known
+    if (contents.isDestroyed()) return undefined
+    return { target: contents.session ?? session.defaultSession, id: contents.id }
+  }
 
   protectSource(id: string): () => void {
     this.protectedSourceIds.add(id)
@@ -82,6 +91,7 @@ export class MediaPermissionService {
     const leases = windows.get(contents.id) ?? new Map<string, CaptureGrant>()
     leases.set(captureSession, { kinds: new Set(kinds), ...(selection ? { selection: structuredClone(selection) } : {}) })
     windows.set(contents.id, leases); this.grants.set(target, windows)
+    this.identities.set(contents, { target, id: contents.id })
     if (!this.watched.has(contents)) {
       this.watched.add(contents)
       contents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame !== false) this.revokeWindow(contents) })
@@ -92,20 +102,27 @@ export class MediaPermissionService {
   }
 
   revoke(contents: WebContents, captureSession: string): void {
-    const windows = this.grants.get(contents.session ?? session.defaultSession)
-    windows?.get(contents.id)?.delete(captureSession)
-    if (!windows?.get(contents.id)?.size) windows?.delete(contents.id)
+    const identity = this.identityOf(contents)
+    if (!identity) return
+    const windows = this.grants.get(identity.target)
+    windows?.get(identity.id)?.delete(captureSession)
+    if (!windows?.get(identity.id)?.size) windows?.delete(identity.id)
     logger.info('采集会话权限已撤销', { event: 'media.permission.revoked' })
   }
 
-  revokeWindow(contents: WebContents): void { this.grants.get(contents.session ?? session.defaultSession)?.delete(contents.id) }
+  revokeWindow(contents: WebContents): void {
+    const identity = this.identityOf(contents)
+    if (identity) this.grants.get(identity.target)?.delete(identity.id)
+  }
   /** Native WGC must obey the same session-scoped grant as getDisplayMedia. */
   assertSelection(contents: WebContents, sessionId: string, sourceId: string): void {
-    const grant = this.grants.get(contents.session ?? session.defaultSession)?.get(contents.id)?.get(sessionId)
-    if (contents.isDestroyed() || !isTrustedMainRendererUrl(contents.getURL()) || !grant?.kinds.has('screen') || grant.selection?.sourceId !== sourceId || this.protectedSourceIds.has(sourceId)) throw new Error('屏幕采集授权已失效，请重新选择并确认录制来源')
+    const identity = contents.isDestroyed() ? undefined : this.identityOf(contents)
+    const grant = identity ? this.grants.get(identity.target)?.get(identity.id)?.get(sessionId) : undefined
+    if (!identity || !isTrustedMainRendererUrl(contents.getURL()) || !grant?.kinds.has('screen') || grant.selection?.sourceId !== sourceId || this.protectedSourceIds.has(sourceId)) throw new Error('屏幕采集授权已失效，请重新选择并确认录制来源')
   }
   private has(contents: WebContents, kind: CaptureKind): boolean {
-    return [...(this.grants.get(contents.session ?? session.defaultSession)?.get(contents.id)?.values() ?? [])].some(grant => grant.kinds.has(kind))
+    const identity = this.identityOf(contents)
+    return identity ? [...(this.grants.get(identity.target)?.get(identity.id)?.values() ?? [])].some(grant => grant.kinds.has(kind)) : false
   }
 
   async sources(excludedSourceIds: readonly string[] = []): Promise<CaptureSource[]> {

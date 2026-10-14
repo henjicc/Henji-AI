@@ -13,7 +13,7 @@ vi.mock('../services/logging',()=>({createMainLogger:()=>({warn:vi.fn(),info:vi.
 vi.mock('../services/audio-edit/explanation-audio',()=>({explanationAudioService:{cleanupExpired:vi.fn(async()=>{}),cancel:hooks.cancel,release:hooks.release,erase:hooks.erase}}))
 beforeEach(()=>{vi.clearAllMocks();registerExplanationAudioHandlers()})
 it('知情arming仅允许可信主frame麦克风；摄像头/混合请求/非应用frame都拒绝',async()=>{
-  const handlers=new Map<string,()=>void>();const contents={id:1,getURL:()=> 'app://henji',on:(key:string,fn:()=>void)=>handlers.set(key,fn),once:(key:string,fn:()=>void)=>handlers.set(key,fn),removeListener:(key:string)=>handlers.delete(key)} as unknown as WebContents
+  const handlers=new Map<string,()=>void>();const contents={id:1,getURL:()=> 'app://henji',isDestroyed:()=>false,on:(key:string,fn:()=>void)=>handlers.set(key,fn),once:(key:string,fn:()=>void)=>handlers.set(key,fn),removeListener:(key:string)=>handlers.delete(key)} as unknown as WebContents
   const event={sender:contents} as IpcMainInvokeEvent
   const details={mediaType:'audio'} as PermissionCheckHandlerHandlerDetails
   expect(hooks.check!(contents,'media','',details)).toBe(false)

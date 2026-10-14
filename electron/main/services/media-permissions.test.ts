@@ -21,6 +21,20 @@ function fixture(): { service: MediaPermissionService; target: Session; contents
 beforeEach(() => { vi.clearAllMocks(); mocks.sources.mockResolvedValue([{ id: 'window:42:0', name: '编辑器', display_id: '' }, { id: 'screen:0:0', name: '屏幕', display_id: '1' }]); mocks.status.mockReturnValue('granted') })
 
 describe('统一媒体权限', () => {
+  it('窗口销毁后撤销不再读取已销毁对象（Electron 抛 Object has been destroyed），授权随窗口清除', () => {
+    const { service, target, hooks } = fixture()
+    let destroyed = false
+    const guard = <T,>(value: T): T => { if (destroyed) throw new TypeError('Object has been destroyed'); return value }
+    const contents = Object.assign(new EventEmitter(), { getURL: () => 'app://henji', isDestroyed: () => destroyed }) as unknown as WebContents
+    Object.defineProperty(contents, 'id', { get: () => guard(7) })
+    Object.defineProperty(contents, 'session', { get: () => guard(target) })
+    service.grant(contents, 'mic', ['microphone'])
+    destroyed = true
+    expect(() => contents.emit('destroyed')).not.toThrow()
+    expect(() => service.revoke(contents, 'mic')).not.toThrow()
+    destroyed = false
+    expect(hooks.check(contents, 'media', '', { mediaType: 'audio', securityOrigin: 'app://henji', isMainFrame: true })).toBe(false)
+  })
   it('原生采集必须匹配窗口、会话和预选源；撤销后不能绕过 Chromium 继续采集', () => {
     const { service, contents } = fixture()
     expect(() => service.assertSelection(contents, 'capture', 'screen:0:0')).toThrow('授权已失效')
