@@ -252,7 +252,11 @@ function readOptionalNumber(record: Record<string, unknown>, field: string): num
 
 function parseStartFrameExportPayload(input: unknown): StartVideoFrameExportPayloadDto {
   const record = parseRecord(input)
+  if (record.format !== undefined && record.format !== 'mp4' && record.format !== 'gif') throw new Error('format 必须是 mp4 或 gif')
+  if (record.orientation !== undefined && record.orientation !== 'bottom-up' && record.orientation !== 'top-down') throw new Error('orientation 必须是 bottom-up 或 top-down')
   return {
+    ...(record.format ? { format: record.format } : {}),
+    ...(record.orientation ? { orientation: record.orientation } : {}),
     frameCount: readPositiveInteger(record, 'frameCount'),
     fps: readBoundedNumber(record, 'fps', 1, 120),
     width: readPositiveInteger(record, 'width'),

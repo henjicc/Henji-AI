@@ -274,6 +274,8 @@ export interface HenjiVideoCompressVideoToFitResult {
 }
 
 export interface HenjiVideoStartFrameExportPayload {
+  format?: 'mp4' | 'gif'
+  orientation?: 'bottom-up' | 'top-down'
   frameCount: number
   fps: number
   width: number

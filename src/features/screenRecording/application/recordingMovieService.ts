@@ -1,12 +1,12 @@
 import { createLogger } from '@/core/logging'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { videoEditComposition, videoEditDocumentSchema } from '@/core/videoEdit/document'
-import { screenAttentionSettingsSchema } from '@/core/videoEdit/screenAttention'
 import { recordingMovieRecipeSchema, type RecordingMovieRecipe } from '@/core/screenRecording/movie'
-import { importVideoEditSources, openVideoEditDocument, saveVideoEdit, requireVideoEditInstance, verifyVideoEditSaved, holdVideoEditActivity, analyzeVideoEditScreenAttentionOffThread, prepareVideoEditAudioGain } from '@/features/videoEdit'
+import { importVideoEditSources, openVideoEditDocument, saveVideoEdit, requireVideoEditInstance, verifyVideoEditSaved, holdVideoEditActivity, prepareVideoEditAudioGain } from '@/features/videoEdit'
 import { analyzeRecording, readRecordingUnderstanding, assertRecordingEditable } from './recordingUnderstandingService'
 import { recordingMovieCursorSources } from './recordingMovieSources'
 import { buildRecordingMoviePlan, type RecordingMoviePlan } from './recordingMoviePlan'
+import { applyRecordingMovieAttention } from './recordingMovieAttention'
 
 const logger = createLogger('features.screenRecording.movie')
 const running = new Set<string>()
@@ -46,19 +46,7 @@ export async function generateRecordingMovie(sessionId: string, options: Recordi
       plan = buildRecordingMoviePlan(draft, recording, understanding, recipe, read.meta.name, options.sequenceId)
       if (recipe.attention !== 'off' && cursors.size) {
         progress?.('attention')
-        for (const id of plan.screenSequenceIds) {
-          const sequence = draft.sequences.find(v => v.id === id)!
-          for (let index = 0; index < sequence.clips.length; index++) {
-            current()
-            const clip = sequence.clips[index]
-            const composition = videoEditComposition(draft, id)
-            composition.clips = [clip]
-            composition.media = composition.media.filter(media => draft.items.some(item => item.id === clip.itemId && item.mediaId === media.id))
-            composition.sequences = []
-            const analyzed = await analyzeVideoEditScreenAttentionOffThread({ composition, clipId: clip.id, target: { width: sequence.width, height: sequence.height }, settings: screenAttentionSettingsSchema.parse({ strength: recipe.attention }) }, signal)
-            sequence.clips[index] = analyzed.clip
-          }
-        }
+        await applyRecordingMovieAttention(draft, plan.screenSequenceIds, recipe.attention, signal, current)
       }
       if (recipe.normalizeAudio) {
         progress?.('audio')

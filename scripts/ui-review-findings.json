@@ -1,5 +1,15 @@
 [
   {
+    "id": "rec32-image-editor-handles-toolbar",
+    "source": "5.8",
+    "status": "deferred",
+    "owner": "总管理者（图片编辑器既有界面）",
+    "guard": ["scene:image-edit-document-size", "rule:smallTargets", "rule:rowHeightMismatch"],
+    "conclusion": "3.2 多产物导出目视时，未修改的图片编辑器变换层有 9 个 12×12 手柄命中 smallTargets，命令带的吸附开关 24 与其他 32 控件命中高度差；属于既有图片编辑器，不在本任务改动范围。产物四图层、黑色标题说明、实际图片与打码均呈现正确。",
+    "evidence": ".ui-tour/rec32-products-visual/audit.json 终态：9 smallTargets、1 rowHeightMismatch，0 对比度/运行时错误；node_modules/.cache/recording-products/run-1791965215505/image-document.png 已目视。本任务最终完整审计回到录制导出页，图片编辑器的上述完整原始命中不豁免、不删除。",
+    "nextStep": "由总管理者在图片编辑器界面任务中复验并修复变换手柄命中范围与吸附控件高度，再按相关宿主场景核对；不调整审计阈值。"
+  },
+  {
     "id": "u7-K03",
     "source": "u7",
     "status": "closed",
