@@ -81,6 +81,7 @@ const windowApi: HenjiWindowApi = {
   close: () => nativeInvoke('window:close'),
   isMaximized: () => nativeInvoke('window:isMaximized'),
   getContentSize: () => nativeInvoke('window:getContentSize'),
+  getDisplayWorkArea: () => nativeInvoke('window:getDisplayWorkArea'),
   setZoomFactor: (factor) => nativeInvoke('window:setZoomFactor', { factor }),
   setAppearance: (appearance) => nativeInvoke('window:setAppearance', { windowBackground: appearance.windowBackground, colorScheme: appearance.colorScheme }),
   toggleDevTools: () => nativeInvoke('window:toggleDevTools'),

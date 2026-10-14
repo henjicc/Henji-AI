@@ -1,4 +1,4 @@
-import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { BrowserWindow, screen, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { isUiScaleFactor, type UiScaleFactor } from '../../../src/core/theme/uiScale'
 import { parseWindowAppearance, windowAppearance } from '../services/window-appearance'
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
@@ -11,6 +11,7 @@ const WINDOW_TOGGLE_MAXIMIZE = 'window:toggleMaximize'
 const WINDOW_CLOSE = 'window:close'
 const WINDOW_IS_MAXIMIZED = 'window:isMaximized'
 const WINDOW_GET_CONTENT_SIZE = 'window:getContentSize'
+const WINDOW_GET_DISPLAY_WORK_AREA = 'window:getDisplayWorkArea'
 const WINDOW_SET_ZOOM_FACTOR = 'window:setZoomFactor'
 const WINDOW_SET_APPEARANCE = 'window:setAppearance'
 const WINDOW_TOGGLE_DEVTOOLS = 'window:toggleDevTools'
@@ -70,6 +71,8 @@ export function bindWindowStateBroadcast(win: BrowserWindow): void {
   win.on('maximize', emit)
   win.on('unmaximize', emit)
   win.on('resize', emit)
+  // 拖到另一块显示器后，自动界面缩放需要按新显示器重新判断。
+  win.on('moved', emit)
   win.on('enter-full-screen', emit)
   win.on('leave-full-screen', emit)
 }
@@ -117,6 +120,11 @@ export function registerWindowIpc(): void {
 
   registerIpcHandler(WINDOW_GET_CONTENT_SIZE, parseVoid, (_input, event) => {
     const [width, height] = getEventWindow(event).getContentSize()
+    return { width, height }
+  })
+
+  registerIpcHandler(WINDOW_GET_DISPLAY_WORK_AREA, parseVoid, (_input, event) => {
+    const { width, height } = screen.getDisplayMatching(getEventWindow(event).getBounds()).workAreaSize
     return { width, height }
   })
 

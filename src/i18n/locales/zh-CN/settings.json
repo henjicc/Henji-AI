@@ -475,7 +475,7 @@
       "collapseDelayHint": "鼠标离开面板后等多久再收起。",
       "startupTitle": "启动",
       "uiScaleLabel": "界面缩放",
-      "uiScaleHint": "自动模式会根据窗口可用空间调整界面大小，小屏幕优先显示更多完整内容。",
+      "uiScaleHint": "自动模式会根据当前显示器的可用空间选择界面大小，小屏幕优先显示更多完整内容；调整窗口大小不会改变界面比例。",
       "uiScaleOptions": {
         "auto": "自动",
         "90": "90%",

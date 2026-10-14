@@ -108,7 +108,7 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   }, () => useSettingsStore.getState().videoEditSelectionFollowsPlayhead,
   (value) => useSettingsStore.getState().setVideoEditSelectionFollowsPlayhead(value)),
   storeSetting({
-    id: 'interface.scale', title: '界面缩放', description: '调整整个应用界面的显示大小，自动模式会根据窗口可用空间选择合适比例。',
+    id: 'interface.scale', title: '界面缩放', description: '调整整个应用界面的显示大小，自动模式按当前显示器的可用空间选择合适比例，调整窗口大小不会改变比例。',
     aliases: ['界面大小', '显示缩放', 'UI 缩放', 'scale', 'zoom'], schema: z.enum(UI_SCALE_MODES), defaultValue: DEFAULT_UI_SCALE_MODE,
     target: { tab: 'general', sectionId: 'general-appearance' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().uiScaleMode,

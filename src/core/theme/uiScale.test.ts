@@ -7,13 +7,13 @@ import {
 } from './uiScale'
 
 describe('uiScale', () => {
-  it('自动模式按未缩放的窗口逻辑尺寸选择 90% 或 100%', () => {
+  it('自动模式按显示器工作区逻辑尺寸选择 90% 或 100%', () => {
     expect(resolveUiScaleFactor('auto', { width: 1439, height: 1200 })).toBe(0.9)
     expect(resolveUiScaleFactor('auto', { width: 1600, height: 999 })).toBe(0.9)
     expect(resolveUiScaleFactor('auto', { width: 1440, height: 1000 })).toBe(1)
   })
 
-  it('手动模式不受窗口尺寸影响', () => {
+  it('手动模式不受显示器尺寸影响', () => {
     expect(resolveUiScaleFactor('90', { width: 3000, height: 2000 })).toBe(0.9)
     expect(resolveUiScaleFactor('100', { width: 960, height: 640 })).toBe(1)
     expect(resolveUiScaleFactor('110', { width: 960, height: 640 })).toBe(1.1)

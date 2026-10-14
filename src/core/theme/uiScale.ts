@@ -23,9 +23,13 @@ export function isUiScaleFactor(value: unknown): value is UiScaleFactor {
   return value === 0.9 || value === 1 || value === 1.1 || value === 1.25 || value === 1.5
 }
 
+/**
+ * 自动模式按窗口所在显示器的工作区判断，而不是窗口当前大小：
+ * 同一块显示器上拖动、还原或最大化窗口时，界面比例保持不变。
+ */
 export function resolveUiScaleFactor(
   mode: unknown,
-  contentSize: WindowContentSize,
+  displayWorkArea: WindowContentSize,
 ): UiScaleFactor {
   const normalizedMode = normalizeUiScaleMode(mode)
   if (normalizedMode === '90') return 0.9
@@ -34,7 +38,7 @@ export function resolveUiScaleFactor(
   if (normalizedMode === '125') return 1.25
   if (normalizedMode === '150') return 1.5
 
-  const { width, height } = contentSize
+  const { width, height } = displayWorkArea
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return 1
   }

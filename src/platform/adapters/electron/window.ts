@@ -13,6 +13,7 @@ interface ElectronWindowApi {
   close(): Promise<void>
   isMaximized(): Promise<boolean>
   getContentSize(): Promise<WindowContentSize>
+  getDisplayWorkArea(): Promise<WindowContentSize>
   setZoomFactor(factor: UiScaleFactor): Promise<void>
   setAppearance(appearance: WindowAppearance): Promise<void>
   onStateChanged(handler: (state: ElectronWindowState) => void): () => void
@@ -50,6 +51,9 @@ export function createElectronWindow(): WindowPlatform {
     },
     async getContentSize() {
       return await getWindowApi().getContentSize()
+    },
+    async getDisplayWorkArea() {
+      return await getWindowApi().getDisplayWorkArea()
     },
     async setZoomFactor(factor) {
       await getWindowApi().setZoomFactor(factor)

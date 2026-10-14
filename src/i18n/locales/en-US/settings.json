@@ -475,7 +475,7 @@
       "collapseDelayHint": "How long to wait after the pointer leaves the panel.",
       "startupTitle": "Startup",
       "uiScaleLabel": "Interface scale",
-      "uiScaleHint": "Auto adjusts the interface to the available window space so smaller screens can show more complete content.",
+      "uiScaleHint": "Auto picks the interface size from the current display's available space so smaller screens show more complete content. Resizing the window does not change the scale.",
       "uiScaleOptions": {
         "auto": "Auto",
         "90": "90%",

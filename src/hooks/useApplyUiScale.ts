@@ -26,10 +26,10 @@ export function useApplyUiScale(): void {
     const applyScale = async (): Promise<void> => {
       const sequence = ++requestSequence
       try {
-        const contentSize = await windowPlatform.getContentSize()
+        const displayWorkArea = await windowPlatform.getDisplayWorkArea()
         if (disposed || sequence !== requestSequence) return
 
-        const factor = resolveUiScaleFactor(mode, contentSize)
+        const factor = resolveUiScaleFactor(mode, displayWorkArea)
         if (appliedFactorRef.current !== factor) {
           await windowPlatform.setZoomFactor(factor)
           if (disposed || sequence !== requestSequence) return

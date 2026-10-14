@@ -25,6 +25,8 @@ export interface HenjiWindowApi {
   close(): Promise<void>
   isMaximized(): Promise<boolean>
   getContentSize(): Promise<HenjiWindowContentSize>
+  /** 窗口所在显示器的工作区逻辑尺寸（不含任务栏） */
+  getDisplayWorkArea(): Promise<HenjiWindowContentSize>
   setZoomFactor(factor: import('../../src/core/theme/uiScale').UiScaleFactor): Promise<void>
   /** 同步主题窗口底色与 color-scheme 到主进程（窗口创建与缩放露底用） */
   setAppearance(appearance: { windowBackground: string; colorScheme: 'dark' | 'light' }): Promise<void>
