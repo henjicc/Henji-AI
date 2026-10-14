@@ -597,7 +597,8 @@ it('暂停预热短租期结束归还排程，长时间做 OCR 不占住原生�
   try {
     await renderer.armPlayback(0)
     expect(internals.playback).toBeDefined()
-    await vi.advanceTimersByTimeAsync(500)
+    // 租期与起播实测一致（fix-24：2.5s 内起播不退化，超时归还原生帧池）。
+    await vi.advanceTimersByTimeAsync(2500)
     expect(internals.playback).toBeUndefined()
     await renderer.armPlayback(0)
     await (await renderer.render(0, true)).completion
