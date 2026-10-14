@@ -99,11 +99,11 @@ describe('智能区域分析流程', () => {
   })
 
   it('文字：按 32 对齐的尺寸解码，概率图成框', async () => {
-    const map = new Float32Array(736 * 416)
-    for (let y = 300; y < 330; y++) for (let x = 200; x < 500; x++) map[y * 736 + x] = 0.95
-    const test = harness('text', { ppocr: { run: async () => ({ out: { data: map, dims: [1, 1, 416, 736] } }) } })
+    const map = new Float32Array(960 * 544)
+    for (let y = 300; y < 330; y++) for (let x = 200; x < 500; x++) map[y * 960 + x] = 0.95
+    const test = harness('text', { ppocr: { run: async () => ({ out: { data: map, dims: [1, 1, 544, 960] } }) } })
     const result = await test.run()
-    expect(test.requests).toEqual([{ width: 736, height: 416 }])
+    expect(test.requests).toEqual([{ width: 960, height: 544 }])
     expect(result.summary).toEqual({ value: 1, peak: 1 })
   })
 

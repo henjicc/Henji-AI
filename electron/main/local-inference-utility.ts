@@ -13,7 +13,10 @@ import { ImageInpaintError, runImageInpaint } from './services/local-inference/i
 import type { ImageInpaintJob } from './services/local-inference/inpainting/protocol'
 import type { OcrPrivacyJob } from './services/local-inference/ocr/protocol'
 import { runOcrPrivacy } from './services/local-inference/ocr/pipeline'
-import { readOnnxCharacterMetadata } from './services/local-inference/tracking/onnxGraphOutputs'
+import { readRecognitionDictionary } from './services/local-inference/ocr/recognition'
+import { OcrRecognitionPool } from './services/local-inference/ocr/recognitionPool'
+import { screenOcrFrames } from './services/local-inference/ocr/screenFrames'
+import type { PrivacyBox } from '../../src/core/screenRecording/privacy'
 
 /*
  * 本地推理后台进程（重要记录 003、任务 4.7d）：onnxruntime-node 原生推理与取帧都在这里，主进程只协调。
@@ -116,7 +119,7 @@ async function run(job: SmartRegionAnalysisJob): Promise<void> {
     sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
     const pool = await sessions
     const result = await runSmartRegionAnalysis(job, {
-      openModel: (model, providers, shape) => pool.open(model, providers, shape),
+      openModel: (model, providers, shape, options) => pool.open(model, providers, shape, options),
       frames: request => ffmpegFrames(job.ffmpegPath, job, request, controller.signal),
       deflate: bytes => deflateRawSync(bytes, { level: 6 }),
       writeFile: (file, bytes) => fs.writeFile(file, bytes),
@@ -164,18 +167,24 @@ port.on('message', (event) => {
 async function runPrivacy(job: OcrPrivacyJob): Promise<void> {
   const controller = new AbortController(); controllers.set(job.id, controller)
   let lastProgress = 0
+  let recognition: OcrRecognitionPool | undefined
   try {
     const rec = job.models.find(m => m.name === 'ppocr_rec')
     if (!rec) throw new Error('文字识别模型未准备好。')
-    const alphabet = readOnnxCharacterMetadata(await fs.readFile(rec.path))
+    const alphabet = readRecognitionDictionary(await fs.readFile(job.dictionaryPath, 'utf8'))
     sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
     const pool = await sessions
+    recognition = new OcrRecognitionPool(rec.path, alphabet, job.normalization)
+    let changes: readonly PrivacyBox[] = []
+    const progress = (done: number, total: number): void => { const now = Date.now(); if (done < total && now - lastProgress < 200) return; lastProgress = now; post({ type: 'progress', id: job.id, done, total }) }
     const result = await runOcrPrivacy(job, { alphabet, signal: controller.signal,
-      openModel: (model, providers, shape) => pool.open(model, providers, shape),
-      frames: size => ffmpegFrames(job.ffmpegPath, job, size, controller.signal),
-      progress: (done, total) => { const now = Date.now(); if (done < total && now - lastProgress < 200) return; lastProgress = now; post({ type: 'progress', id: job.id, done, total }) },
+      recognize: recognition.recognize,
+      changes: () => changes,
+      openModel: (model, providers, shape, options) => pool.open(model, providers, shape, options),
+      frames: () => screenOcrFrames(job, controller.signal, (done, total) => progress(done, total * 2), value => { changes = value }),
+      progress: (done, total) => progress(total + done, total * 2),
     })
     post({ type: 'done', id: job.id, result })
   } catch (error) { post({ type: 'failed', id: job.id, code: controller.signal.aborted ? 'cancelled' : 'inference', message: error instanceof Error ? error.message.slice(0, 500) : '敏感信息识别失败。' }) }
-  finally { controllers.delete(job.id) }
+  finally { await recognition?.dispose(); controllers.delete(job.id) }
 }

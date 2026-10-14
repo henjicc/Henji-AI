@@ -27,6 +27,8 @@ export interface CompressVideoToFitResult {
 }
 
 export interface StartVideoFrameExportPayload {
+  format?: 'mp4' | 'gif'
+  orientation?: 'bottom-up' | 'top-down'
   frameCount: number
   fps: number
   width: number

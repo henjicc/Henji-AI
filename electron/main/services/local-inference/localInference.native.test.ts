@@ -20,7 +20,7 @@ import { probeSmartRegionSource } from '../smart-regions/probe'
 const MODELS = process.env.HENJI_LOCAL_INFERENCE_MODELS
 const SAMPLE = process.env.HENJI_LOCAL_INFERENCE_SAMPLE
 const FILES: Partial<Record<LocalInferenceModelFile['name'], string>> = {
-  yunet: 'face_detection_yunet_2023mar.onnx', rvm: 'rvm_mobilenetv3_fp16.onnx', selfie: 'mediapipe_selfie_segmentation_fp16.onnx', ppocr: 'ch_PP-OCRv4_det_mobile.onnx',
+  yunet: 'face_detection_yunet_2023mar.onnx', rvm: 'rvm_mobilenetv3_fp16.onnx', selfie: 'mediapipe_selfie_segmentation_fp16.onnx', ppocr: 'pp-ocrv6_tiny_det.onnx',
 }
 const KIND_MODELS: Record<SmartRegionAnalysisKind, Array<LocalInferenceModelFile['name']>> = { face: ['yunet'], person: ['rvm', 'selfie'], text: ['ppocr'] }
 

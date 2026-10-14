@@ -86,4 +86,9 @@ it('C 剪辑属性标题均为中文，单位说明只跟随对应属性，对�
   const style = registry.getProperty('video_edit.caption.style')!
   if (style.value.kind !== 'json') throw new Error('样式应为对象属性')
   expect(JSON.stringify(registry.resolveSchema(style.value.schemaRef, access))).toContain('"x-value-format":"hex-color"')
+  const recording = await app.requireResult('describe_application_entities', { domains: ['screen_recording'], detail: 'full' })
+  const recordingProperties = recording.properties as Array<{ id: string; title: string }>
+  expect(recordingProperties.length).toBeGreaterThan(0)
+  expect(recordingProperties.filter(field => !/[\u3400-\u9fff]/.test(field.title)).map(field => field.id)).toEqual([])
+  expect(recordingProperties.map(field => field.id)).toContain('screen_recording.export.details')
 })

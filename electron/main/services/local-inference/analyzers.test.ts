@@ -86,7 +86,7 @@ describe('本地推理：预处理与后处理', () => {
   })
 
   it('文字检测：尺寸按 32 对齐；连通域成框并外扩，低分区域丢弃；相邻帧并集去闪烁', () => {
-    expect(ppocrInputSize(1920, 1080)).toEqual({ width: 736, height: 416 })
+    expect(ppocrInputSize(1920, 1080)).toEqual({ width: 960, height: 544 })
     const width = 40; const height = 20
     const map = new Float32Array(width * height)
     for (let y = 8; y < 12; y++) for (let x = 5; x < 25; x++) map[y * width + x] = 0.9
@@ -103,7 +103,7 @@ describe('本地推理：预处理与后处理', () => {
 
   it('FFmpeg 取帧参数：视频精确定位并按固定帧率输出原始帧，静态图片只取一帧；字节流按帧切分', async () => {
     const video = analysisFfmpegArgs({ source: '/m/a.mp4', seekSeconds: 1.5, durationSeconds: 2, fps: 30 }, { width: 512, height: 288 })
-    expect(video.join(' ')).toContain('-ss 1.500000 -i /m/a.mp4 -t 2.000000')
+    expect(video.join(' ')).toContain('-ss 1.500000 -t 2.000000 -i /m/a.mp4')
     expect(video.join(' ')).toContain('-vf fps=fps=30:round=near,scale=512:288:flags=area')
     expect(video.slice(-5)).toEqual(['-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1'])
     const still = analysisFfmpegArgs({ source: '/m/a.png', seekSeconds: 0, durationSeconds: null, fps: 1 }, { width: 256, height: 256 })

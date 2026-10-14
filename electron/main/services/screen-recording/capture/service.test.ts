@@ -9,6 +9,7 @@ import { captureOptionsSchema, type CapturePrepared } from '../../../../../src/c
 import { captureClockCorrelation } from '../../../../../src/core/captureLog/clockSync'
 
 const state = vi.hoisted(() => ({ root: '', backend: null as RecordingControlBackend | null, assert: vi.fn(), grant: vi.fn(), revoke: vi.fn(), failed: vi.fn(), open: vi.fn() }))
+vi.mock('electron', () => ({ BrowserWindow: { fromWebContents: () => null } }))
 vi.mock('../../appPaths', () => ({ getUserFolderDir: () => state.root }))
 vi.mock('../../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('../../media-permissions', () => ({ mediaPermissions: { assertSelection: state.assert, sources: async () => [{ id: 'screen:0:0', kind: 'screen', displayId: '1' }] } }))
