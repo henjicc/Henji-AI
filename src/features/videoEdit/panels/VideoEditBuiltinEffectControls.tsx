@@ -1,3 +1,5 @@
+import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
+import { videoEditClipMedia } from '@/core/videoEdit/document'
 import { useEffect, useRef } from 'react'
 import { requireVideoEditBuiltinEffect, resolveVideoEditBuiltinParams, type VideoEditBuiltinParam } from '@/core/videoEdit/builtinEffects'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
@@ -28,10 +30,14 @@ export function VideoEditBuiltinEffectControls({ target, effect, onError }: { ta
   try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">暂不支持此效果，已保留原设置。</span> }
   const owner = requireVideoEditInstance(target.projectId)
   const clip = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips.find(clip => clip.id === target.clipId)!
+  const cursorSource = effect.builtin.id === RECORDING_CURSOR_EFFECT ? videoEditClipMedia(owner.document, clip)?.recordingCursor : undefined
+  const cursorEffect = effect.builtin.id === RECORDING_CURSOR_EFFECT
+  const params = cursorEffect && cursorSource?.cursorBakedIn ? definition.params.filter(param => ['size', 'click_style', 'distinguish_buttons'].includes(param.key)).map(param => param.key === 'size' ? { ...param, name: '点击提示大小' } : param) : definition.params
   const values = resolveVideoEditBuiltinParams(evaluateVideoEditEffect(effect, owner.frame - clip.start).builtin!)
   return <div className="flex flex-col" data-video-edit-builtin-effect={effect.builtin.id}>
-    <VideoEditBuiltinParamRows params={definition.params} values={values} gesture={gesture} animation={{ target, effect, start: clip.start, duration: clip.duration, frame: owner.frame }} />
-    {definition.media !== 'audio' && <VideoEditSmartRegionControls target={target} effect={effect} gesture={gesture} />}
+    {cursorEffect && <p className="text-xs text-text3">{!cursorSource ? '此素材没有光标事件日志，请从录制会话创建屏幕片段。' : cursorSource.cursorBakedIn ? '原片已包含光标，仅可调整点击提示。' : '光标与点击提示跟随屏幕片段的剪切、移动和变速。'}</p>}
+    <VideoEditBuiltinParamRows params={params} values={values} gesture={gesture} animation={{ target, effect, start: clip.start, duration: clip.duration, frame: owner.frame }} />
+    {!cursorEffect && definition.media !== 'audio' && <VideoEditSmartRegionControls target={target} effect={effect} gesture={gesture} />}
     <ParamList key={gesture.identity} fields={[{ source: 'builtin', bindingKeys: ['amount'], key: 'amount', title: '效果强度', tooltip: definition.media === 'audio' ? '与原声混合的比例，100% 为完全应用' : '与原画面混合的比例，100% 为完全应用', type: 'number', min: 0, max: 100, step: 1, unit: '%', control: 'input', default: 100, animatable: false }]} values={{ amount: effect.amount * 100 }}
       onReset={() => gesture.commit({ amount: 1 })} resetDisabled={(_, value) => value === 100}
       renderControl={(field, value) => <ParamField field={field} value={value} gesture={{ begin: gesture.begin, finish: gesture.finish, cancel: gesture.cancel, active: gesture.active, write: next => gesture.commit({ amount: Number(next) / 100 }), atomic: next => gesture.commit({ amount: Number(next) / 100 }) }} />} />

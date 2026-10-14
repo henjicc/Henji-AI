@@ -1,3 +1,4 @@
+import type { RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
@@ -63,12 +64,14 @@ export class VideoEditBuiltinEffectsGpu {
     if (!pending) {
       pending = (async () => {
         this.device.pushErrorScope('validation')
-        let pipeline: GpuRenderPipeline
+        let compiled: Promise<GpuRenderPipeline>
         try {
           this.module ??= this.device.createShaderModule({ code: VIDEO_EDIT_BUILTIN_EFFECT_SHADER })
-          pipeline = this.device.createRenderPipeline({ layout: this.pipelineLayout(entry.startsWith('gaussian_')), vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+          const descriptor = { layout: this.pipelineLayout(entry.startsWith('gaussian_')), vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format }] }, primitive: { topology: 'triangle-list' } }
+          compiled = this.device.createRenderPipelineAsync ? this.device.createRenderPipelineAsync(descriptor) : Promise.resolve(this.device.createRenderPipeline(descriptor))
         } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
-        const error = await this.device.popErrorScope()
+        // Pop before yielding: parallel preparation must not steal another pipeline's error scope.
+        const [pipeline, error] = await Promise.all([compiled, this.device.popErrorScope()])
         if (error) throw new Error(`内置效果管线编译失败：${error.message}`)
         return pipeline
       })()
@@ -89,7 +92,7 @@ export class VideoEditBuiltinEffectsGpu {
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
-  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize): Promise<void> {
+  async render(instance: VideoEditBuiltinEffectInstance & VideoEditShaderClock & RecordingCursorRenderInput, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1, luts: readonly ColorLutAsset[] = [], quality: EffectQuality = 'interactive', referenceSize?: EffectSize): Promise<void> {
     await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale, quality, referenceSize }), input.format, input.texture, output, undefined, luts)
   }
   /**

@@ -1,3 +1,8 @@
+import { VideoEditRecordingCursorSource } from './videoEditRecordingCursorSource'
+import { RECORDING_CURSOR_EFFECT, sampleRecordingCursor } from '@/core/videoEdit/recordingCursor'
+import { recordingCursorDraws, type RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
+import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
+import { resolveVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { expandPinnedCodeComponents } from '@/core/videoEdit/codeMaterial/components'
 import { codeMaterialFilesKey, codeVersionContentKey, documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { documentFontRevision } from '@/platform/fontFaces'
@@ -41,7 +46,7 @@ interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: n
 interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
-export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance; mask?: VideoEditSmartRegionMask }
+export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput; mask?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
 export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void }
@@ -56,6 +61,7 @@ function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
 }
 /** Visible-code session only. Programs stay in memory; source remains the document truth. */
 export class VideoEditCodeSources {
+  private readonly cursorSources = new VideoEditRecordingCursorSource()
   private readonly known = new Map<string, KnownVersion>()
   private knownBytes = 0
   private readonly programs = new Map<string, CachedProgram>()
@@ -94,7 +100,7 @@ export class VideoEditCodeSources {
     if (this.disposed) throw new Error('代码素材源会话已关闭。')
     // 节目渲染器在序列间切换时沿用同一会话：代码素材定义与版本是项目级、不可变的，编译结果按版本缓存可直接复用；
     // 片段级的静态画面在下一次渲染时由 releaseUnused 按实际用到的键释放。
-    this.checkVersions(document); this.cancel(); this.document = document
+    this.checkVersions(document); this.cancel(); this.cursorSources.clear(); this.document = document
   }
   /** The caller has established that immutable code versions and media did not change. */
   updateParameters(document: VideoEditComposition): void { this.cancel(); this.document = document }
@@ -148,6 +154,16 @@ export class VideoEditCodeSources {
         assertCurrent()
         const chain: PreparedVideoEditEffect[] = []
         for (const effect of activeVideoEditEffects(clip)) {
+          if (effect.builtin?.id === RECORDING_CURSOR_EFFECT) {
+            const source = videoEditClipMedia(document, clip)?.recordingCursor
+            if (!source) throw new Error('此素材没有光标事件日志，请从录制会话创建屏幕片段。')
+            const params = resolveVideoEditBuiltinParams(evaluateVideoEditEffect(effect, frame - clip.start).builtin!)
+            const timeUs = videoEditSourceSeconds(videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))) * 1_000_000 + source.recordingStartUs
+            const events = await this.cursorSources.window(source, timeUs, Number(params.hide_after), controller.signal); assertCurrent()
+            const sample = sampleRecordingCursor(events, timeUs, { smoothing: Number(params.smoothing), hideAfterSeconds: Number(params.hide_after), cursorBakedIn: source.cursorBakedIn })
+            chain.push({ effect, builtin: { ...effect.builtin, cursorDraws: recordingCursorDraws(sample, source, clip, document, params) } })
+            continue
+          }
           if (effect.builtin) {
             if (!effect.mask) { chain.push({ effect, builtin: effect.builtin }); continue }
             // 作用区域（4.7d 智能区域、4.10 手绘遮罩）：智能区域还没分析好时先不画这个效果；导出前会等分析完成。
@@ -247,7 +263,7 @@ export class VideoEditCodeSources {
   diagnostics() { return { programs: this.programs.size, programBytes: this.programBytes, staticPictures: this.staticPictures.size, seenVersions: this.known.size, seenManifestBytes: this.knownBytes, compiler: this.compiler.diagnostics?.() } }
   async dispose(): Promise<void> {
     if (this.disposed) return
-    this.disposed = true; this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()
+    this.disposed = true; this.cursorSources.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()
     await Promise.allSettled([this.gpuWork])
     try { this.runtime?.releaseUnused(new Set()) }
     finally { for (const picture of this.staticPictures.values()) if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.programs.clear(); this.programBytes = 0; this.staticPictures.clear(); this.known.clear(); this.knownBytes = 0 }

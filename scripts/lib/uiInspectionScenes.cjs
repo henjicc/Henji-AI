@@ -1,3 +1,4 @@
+const { createRecordingCursorScene } = require('./uiInspectionSceneRecordingCursor.cjs')
 const { createVideoEditFirstFrameScene } = require('./uiInspectionSceneVideoEditFirstFrame.cjs')
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
 const { createImageEditDocumentSizeScene } = require('./uiInspectionSceneImageEditDocumentSize.cjs')
@@ -144,6 +145,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditProbeScene(),
     createVideoEditScrubScene(),
     createVideoEditFirstFrameScene(),
+    createRecordingCursorScene(),
     createVideoEditPlayStartScene(),
     createVideoEditFilmstripScene(),
     createVideoEditTimelineScene(),

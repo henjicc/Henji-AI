@@ -1,3 +1,4 @@
+import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
 import { testCodeSource, testSetCodeSource } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
@@ -435,4 +436,35 @@ describe('失效、身份与资源上限', () => {
       expect(boundary.generator).toHaveBeenCalledTimes(16)
     } finally { await boundary.sources.dispose() }
   })
+})
+
+
+it('录制光标用原片源时钟：移位、裁切与两倍速后点击同帧；几何推近和损坏日志沿正式效果准备链路', async () => {
+  const log = await recordingCursorFixture()
+  const document = fixture()
+  document.width = 1920; document.height = 1080; document.frameRate = { numerator: 60, denominator: 1 }
+  document.items = [{ id: 'screen', name: '录屏', kind: 'video', mediaId: 'screen' }]
+  document.media = [{ id: 'screen', name: '录屏', kind: 'video', path: '/screen.mp4', durationSeconds: 4, width: 1920, height: 1080, recordingCursor: log.source }]
+  const clip: VideoEditClip = { ...document.clips[0], kind: 'video', itemId: 'screen', code: undefined, start: 90, sourceInUs: 500000, speed: { numerator: 2, denominator: 1 },
+    effects: [{ id: 'cursor', name: '光标', enabled: true, amount: 1, builtin: { id: 'recording_cursor', params: { smoothing: 0 } } }] }
+  document.clips = [clip]
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => new Response(Uint8Array.from(log.bytes.get(String(input))!)))
+  const boundary = boundaries(document)
+  try {
+    // 60 fps timeline: 90 + 15 frames at 2x, source 0.5 + 0.5 seconds.
+    const prepared = await boundary.sources.prepare(document, [clip], 105, () => true)
+    const draws = prepared.effects.get(clip.id)![0].builtin!.cursorDraws!
+    expect(draws).toHaveLength(2)
+    expect(draws[0].shape).toBe(-1)
+    expect(draws[1].point[0]).toBeCloseTo(200 / 1920, 6)
+    expect(draws[1].point[1]).toBeCloseTo(300 / 1080, 6)
+    const zoom = { ...clip, scale: 2, x: 0.25 }
+    const zoomed = (await boundary.sources.prepare(document, [zoom], 105, () => true)).effects.get(clip.id)![0].builtin!.cursorDraws!
+    expect(zoomed[1].size).toBeCloseTo(draws[1].size * 2)
+    expect(zoomed[1].point[0]).toBeCloseTo(0.5 + 0.25 + (200 / 1920 - 0.5) * 2)
+    expect(boundary.compiler.compile).not.toHaveBeenCalled()
+    const changed = { ...document, revision: document.revision + 1 }; boundary.sources.updateDocument(changed)
+    fetcher.mockResolvedValue(new Response('{}'))
+    await expect(boundary.sources.prepare(changed, [clip], 105, () => true)).rejects.toThrow('校验')
+  } finally { fetcher.mockRestore(); await boundary.sources.dispose() }
 })

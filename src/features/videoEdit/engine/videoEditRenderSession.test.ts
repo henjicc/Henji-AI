@@ -1,3 +1,5 @@
+import path from 'node:path'
+import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
@@ -252,4 +254,22 @@ it('切换预打开在普通文档更新前发送，只包含首帧可见的直�
   expect(messages[0].message).toMatchObject({ media: [{ id: 'pro', path: `url:${document.media[0].path}` }] })
   expect(workers[0].messages.some(value => value.message.kind === 'update')).toBe(false)
   await session.dispose()
+})
+
+
+it('录制日志在会话边界授权和转换，预览与导出共用原始时钟引用，原文档不写入临时地址', async () => {
+  const log = await recordingCursorFixture()
+  const document = composition()
+  const file = path.resolve(path.sep, 'capture', 'events.json')
+  document.media[0].recordingCursor = { ...log.source, pages: log.source.pages.map(page => ({ ...page, path: file })) }
+  const session = new VideoEditRenderSession(document)
+  try {
+    await session.present(0)
+    const init = workers[0].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
+    expect(init.document.media[0].recordingCursor!.pages[0].path).toBe(`url:${file}`)
+    expect(init.document.media[0].recordingCursor!.recordingStartUs).toBe(0)
+    expect(document.media[0].recordingCursor!.pages[0].path).toBe(file)
+    await session.render(60, true)
+    expect(workers[0].messages.at(-1)!.message).toMatchObject({ kind: 'render', quality: 'final' })
+  } finally { await session.dispose() }
 })
