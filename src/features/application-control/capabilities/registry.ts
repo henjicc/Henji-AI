@@ -149,6 +149,7 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
     try {
     const result = await handler(input, {
       ...context,
+      invokeCapability: (id, nestedInput, signal) => this.execute({ id, version: this.definitions.get(id)?.version ?? 1, input: nestedInput }, { callerGrant: context.callerGrant, signal, requestId: crypto.randomUUID() }),
       getExecutionEngine: getApplicationControlExecutionEngine,
       commitProperties: (target, properties, revisions, summary) => applicationReflectionHandlers.changeEntities({ summary, changes: [{ kind: 'set_properties', target, entityType: target.kind, properties }] }, { ...context, expectedRevisions: revisions }),
       expectedRevisions: invocation.expectedRevisions,

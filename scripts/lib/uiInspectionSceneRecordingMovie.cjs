@@ -57,6 +57,7 @@ function createRecordingMovieScene() {
           return { path: file, firstSequence: value.seqSpan[0], lastSequence: value.seqSpan[1] }
         })
         content.understanding = {
+          operationScript: { steps: [] },
           transcript: [{ id: 'spoken', startUs: origin + 1000000, endUs: origin + 4000000, text: '一分钟录制，自动生成可编辑成片。', granularity: 'segment', audioDocumentId: 'fixture-transcript', mediaId: content.media.find(value => value.kind === 'microphone').id }],
           steps: [{ id: 'step', startUs: origin, endUs: end, title: '录制与生成', description: '测试步骤导航与正式标题素材', signal: 'start', eventIds: [] }],
           candidates: [{ id: 'wait', startUs: origin + 5000000, endUs: end - 3000000, kind: 'wait', status: 'accepted', reason: '巡检夹具：演示等待加速', eventIds: [] }],

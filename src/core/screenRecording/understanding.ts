@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { emptyRecordingPrivacy, recordingPrivacySchema } from './privacy'
+import { recordingScriptSchema } from './script'
 
 const time = z.number().int().nonnegative().safe()
 export const recordingRangeSchema = z.object({ startUs: time, endUs: time }).strict().refine(v => v.endUs > v.startUs, '结束时间必须晚于开始时间')
@@ -20,6 +21,7 @@ export const recordingCandidateSchema = z.object({
   eventIds: z.array(z.string()).max(100),
 }).strict().refine(v => v.endUs > v.startUs)
 export const recordingUnderstandingSchema = z.object({
+  operationScript: recordingScriptSchema,
   privacy: recordingPrivacySchema,
   transcript: z.array(recordingTranscriptSchema).max(100000),
   steps: z.array(recordingStepSchema).max(20000),
@@ -41,4 +43,4 @@ export const recordingUnderstandingSchema = z.object({
 export type RecordingUnderstanding = z.infer<typeof recordingUnderstandingSchema>
 export type RecordingRange = z.infer<typeof recordingRangeSchema>
 export type RecordingTranscript = z.infer<typeof recordingTranscriptSchema>
-export function emptyRecordingUnderstanding(): RecordingUnderstanding { return { privacy: emptyRecordingPrivacy(), transcript: [], steps: [], candidates: [], chapters: [], warnings: [] } }
+export function emptyRecordingUnderstanding(): RecordingUnderstanding { return { operationScript: { steps: [] }, privacy: emptyRecordingPrivacy(), transcript: [], steps: [], candidates: [], chapters: [], warnings: [] } }

@@ -127,12 +127,18 @@ const goldenHistoryPage=[...splitImageEditHistoryPagesV3(goldenHistory.createSna
 const historyBytes=Buffer.from(JSON.stringify(goldenHistoryPage)),historyId=goldenDigest(goldenHistoryPage)
 const working = { format: 'henji-image-edit', formatVersion: IMAGE_WORKING_VERSION, documentId: image.id, revision:goldenBody.revision, createdAt: timestamp, updatedAt: timestamp, document:goldenBody,
   historyCheckpoint:{format:'henji-image-history',version:2,documentId:image.id,headRevision:goldenBody.revision,snapshotVersion:2,position:1,total:1,pages:[{resourceId:historyId,byteSize:historyBytes.byteLength,start:0,count:1}],resources:[]},resourceRefs:[...image.creativeIntents.resources.map(r=>r.resourceId),historyId].sort() }
+const replayBaseline = createVideoEditDocument('重放起点')
+replayBaseline.id = 'golden-replay'
+const replaySequence = createVideoEditSequence('原始序列')
+replaySequence.id = 'golden-replay-sequence'; replayBaseline.sequences.push(replaySequence)
+const replayOperation = { target: { kind: 'video_edit.sequence', id: 'golden-replay:golden-replay-sequence' }, properties: { 'video_edit.sequence.name': '演示序列' } }
 const values: Record<string, unknown> = {
   'document.screen_recording': { ...createRecordingDocument(), sessionId: '00000000-0000-4000-8000-000000000005', originUs: 1000000, status: 'stopped',
     source: { name: '合成显示器', options: { sourceId: 'screen:1:0', backend: 'auto', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }, cursorEmbedded: false },
     media: [{ id: 'screen-0', kind: 'screen', path: '/persistence-project/素材/screen.mp4', monoUs: 3000000, durationUs: 10000000 }],
     eventPages: [{ path: `/persistence-project/素材/0000000000000000-${'a'.repeat(64)}.capture.json`, firstSequence: 0, lastSequence: 2 }], markers: [{ id: 'golden-mark', monoUs: 4000000, note: '重点' }],
-    understanding: { privacy: { candidates: [{ id: 'privacy', mediaId: 'screen-0', kind: 'email', hint: '••••', fingerprint: 'a'.repeat(64), startUs: 3000000, endUs: 5000000, status: 'accepted', samples: [{ monoUs: 3000000, box: [.1, .2, .4, .1], confidence: .99 }, { monoUs: 4000000, box: [.1, .3, .4, .1], confidence: .98 }] }], warnings: [] }, transcript: [{ id: 'word', startUs: 3000000, endUs: 4000000, text: '打开编辑器', granularity: 'word', audioDocumentId: 'audio', mediaId: 'mic', protected: false }],
+    scriptCapture: { baselines: [{ documentId: replayBaseline.id, content: replayBaseline }], calls: [{ callId: '00000000-0000-4000-8000-000000000006', operations: [replayOperation] }] },
+    understanding: { operationScript: { steps: [{ id: 'step', title: '打开编辑器', startUs: 3000000, endUs: 13000000, operations: [replayOperation], narrationIds: ['word'], wait: { kind: 'capability_completed', settleMs: 700 }, blockedReason: null }] }, privacy: { candidates: [{ id: 'privacy', mediaId: 'screen-0', kind: 'email', hint: '••••', fingerprint: 'a'.repeat(64), startUs: 3000000, endUs: 5000000, status: 'accepted', samples: [{ monoUs: 3000000, box: [.1, .2, .4, .1], confidence: .99 }, { monoUs: 4000000, box: [.1, .3, .4, .1], confidence: .98 }] }], warnings: [] }, transcript: [{ id: 'word', startUs: 3000000, endUs: 4000000, text: '打开编辑器', granularity: 'word', audioDocumentId: 'audio', mediaId: 'mic', protected: false }],
       steps: [{ id: 'step', startUs: 3000000, endUs: 13000000, title: '打开编辑器', description: '进入编辑器', signal: 'capability', eventIds: ['event'] }],
       candidates: [{ id: 'wait', startUs: 5000000, endUs: 9000000, kind: 'wait', reason: '画面静止、无输入、无旁白', status: 'pending', eventIds: [] }],
       chapters: [{ id: 'chapter', title: '编辑', stepIds: ['step'] }], warnings: [] } },

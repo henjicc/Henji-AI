@@ -1,4 +1,18 @@
 [
+{
+  "id": "rec41-video-editor-trim-toolbar",
+  "source": "5.8",
+  "status": "deferred",
+  "owner": "总管理者（剪辑既有界面）",
+  "guard": [
+    "scene:recording-replay",
+    "rule:smallTargets",
+    "rule:rowHeightMismatch"
+  ],
+  "conclusion": "4.1 真实重录替换与撤销完成，嵌套屏幕序列终态审计命中 2 个 8×26.5 裁剪手柄和 3 处既有剪辑工具栏高度差。未修改这些剪辑 UI，不纳入本次脚本实现夹带修复；原始命中不豁免、不删除。",
+  "evidence": ".ui-tour/rec-4.1-final/audit.json：5 个命中，场景业务断言全部通过，日志错误/警告与浏览器错误均 0，对比度 0。node_modules/.cache/recording-replay/replaced.png 已目视第二段新画面与前后原片。新增脚本面板另作终态完整审计。",
+  "nextStep": "总管理者在剪辑界面任务中复验裁剪手柄命中范围及命令带、节目监视器、时间线工具栏档位；保持现有审计阈值。"
+},
   {
     "id": "rec32-image-editor-handles-toolbar",
     "source": "5.8",

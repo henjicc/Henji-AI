@@ -12,6 +12,7 @@ function fixture() {
     { id: 'camera', kind: 'camera', path: '/camera.mp4', monoUs: 2_000_000, durationUs: 8_000_000 },
   ]
   recording.understanding = {
+    operationScript: { steps: [] },
     steps: [{ id: 'step', startUs: 1_000_000, endUs: 11_000_000, title: '打开画布', description: '', signal: 'start', eventIds: [] }],
     transcript: [{ id: 'words', startUs: 2_000_000, endUs: 3_000_000, text: '打开画布', granularity: 'word', audioDocumentId: 'voice', mediaId: 'mic' }],
     candidates: [{ id: 'wait', kind: 'wait', status: 'pending', startUs: 5_000_000, endUs: 9_000_000, reason: '等待', eventIds: [] }, { id: 'pause', kind: 'pause', status: 'accepted', startUs: 9_000_000, endUs: 10_000_000, reason: '停顿', eventIds: [] }],

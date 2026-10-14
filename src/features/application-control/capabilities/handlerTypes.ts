@@ -3,6 +3,8 @@ import type { ApplicationCallerGrant } from '@/core/application-control/callerCo
 import type { ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 
 export interface CapabilityExecutionContext {
+  /** Trusted registry injection for bounded domain composition; caller authorization is preserved. */
+  invokeCapability?: (id: string, input: unknown, signal: AbortSignal) => Promise<Record<string, unknown>>
   /** 写能力由唯一注册器注入；只读调用与直接领域测试不携带。 */
   execution?: ApplicationWriteExecution
   /** 装配层注入同一事务引擎，领域适配器不回引组合根。 */
