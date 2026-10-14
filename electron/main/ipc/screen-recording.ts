@@ -2,7 +2,7 @@ import { screenRecordingRequestSchema } from '../../../src/core/screenRecording/
 import { assertTrustedApplicationSender } from './application-control'
 import { registerIpcHandler } from './registry'
 import { mediaPermissions } from '../services/media-permissions'
-import { isRecordingControlSender, recordingControl } from '../services/screen-recording/runtime'
+import { isRecordingControlSender, recordingControl, recordRecordingCapability } from '../services/screen-recording/runtime'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { createMainLogger } from '../services/logging'
 
@@ -18,6 +18,7 @@ export function registerScreenRecordingIpc(): void {
     try {
       switch (request.action) {
         case 'capture': return await (await import('../services/screen-recording/capture/service')).handleCaptureRequest(event.sender, request.request)
+        case 'capability': return recordRecordingCapability(event.sender, request.sessionId, request.fact)
         case 'sources': return await mediaPermissions.sources(request.excludedSourceIds)
         case 'permissions': return mediaPermissions.statuses()
         case 'grant': {
@@ -33,7 +34,7 @@ export function registerScreenRecordingIpc(): void {
         case 'settings': return await mediaPermissions.openSettings(request.kind)
         case 'snapshot': return recordingControl.snapshot()
         case 'shortcuts': return recordingControl.configureShortcuts(request.shortcuts)
-        case 'control': await recordingControl.command(request.command); return recordingControl.snapshot()
+        case 'control': await (request.note === undefined ? recordingControl.command(request.command) : recordingControl.command(request.command, request.note)); return recordingControl.snapshot()
       }
     } catch (error) { logger.warn('录制请求未完成', { event: 'recording.request.failed', context: { action: request.action }, error }); throw error }
   }, event => {

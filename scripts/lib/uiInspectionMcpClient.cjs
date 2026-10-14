@@ -10,6 +10,17 @@ const { randomUUID } = require('node:crypto')
 const { Client } = require('@modelcontextprotocol/client')
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/client')
 
+/** mcp:config's official result is connection instructions containing one JSON configuration block. */
+function parseMcpConnectionInstructions(instructions) {
+  const block = /^```json\s*\r?\n([\s\S]*?)\r?\n```/m.exec(instructions)
+  if (!block) throw new Error('连接说明缺少 JSON 配置块')
+  let raw
+  try { raw = JSON.parse(block[1]) } catch { throw new Error('连接说明中的 JSON 配置无法解析') }
+  const config = raw?.mcpServers?.henji
+  if (config?.type !== 'http' || typeof config.url !== 'string' || typeof config.headers?.Authorization !== 'string') throw new Error('连接说明缺少 henji HTTP 地址或授权头')
+  return config
+}
+
 async function waitMcpReady(page, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -27,11 +38,13 @@ async function authorizeMcpConnection(page, { name, allowWrites = false, allowDe
     const connection = await window.henjiNative.mcp.authorize(input)
     const raw = await window.henjiNative.mcp.connectionConfig({ id: connection.id })
     return { id: connection.id, allowWrites: connection.allowWrites === true, allowDestructive: connection.allowDestructive === true,
-      allowPaid: connection.allowPaid === true, config: JSON.parse(raw.match(/```json\s*([\s\S]*?)```/)?.[1] ?? raw).mcpServers.henji }
+      allowPaid: connection.allowPaid === true, instructions: raw }
   }, { name, allowWrites, allowDestructive, allowPaid })
   assert.equal(identity.allowWrites, allowWrites, `连接 ${name} 的修改授权与请求不一致`)
   assert.equal(identity.allowDestructive, allowDestructive, `连接 ${name} 的删除授权与请求不一致`)
   assert.equal(identity.allowPaid, allowPaid, `连接 ${name} 的付费授权与请求不一致`)
+  identity.config = parseMcpConnectionInstructions(identity.instructions)
+  delete identity.instructions
   await waitMcpReady(page)
   return identity
 }
@@ -106,4 +119,4 @@ function operationEnvelope(baselines, extra = {}) {
   return { operationId: randomUUID(), baselineIds: baselines.map((item) => item.baselineId), ...extra }
 }
 
-module.exports = { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, readAllMedia, waitMcpReady }
+module.exports = { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, parseMcpConnectionInstructions, readAllMedia, waitMcpReady }

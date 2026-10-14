@@ -5,11 +5,16 @@ import { createMainLogger } from '../logging'
 import { mediaPermissions } from '../media-permissions'
 import { createRecordingControlWindow } from '../../windows/recording-control'
 import { isTrustedMainRendererUrl } from '../../security/main-renderer-url'
+import { RecordingEventSession, type RecordingEventOptions } from './events'
+import type { CapabilityCapture } from '../../../../src/core/captureLog/events'
+import { bindCaptureCapabilitySink } from '../../../../src/core/captureLog/capability'
 
 const logger = createMainLogger('main.screen_recording')
 let owner: WebContents | null = null
 let controlWindow: ReturnType<typeof createRecordingControlWindow> | null = null
 let closing: Promise<void> | null = null
+let eventSession: RecordingEventSession | null = null
+let detachCapabilitySink: (() => void) | undefined
 const watched = new WeakSet<WebContents>()
 
 function broadcast(snapshot: RecordingControlSnapshot | null): void {
@@ -35,18 +40,30 @@ export function isRecordingControlSender(contents: WebContents): boolean {
 }
 
 /** 正式采集协调器准备完资源后调用；UI/Pi/MCP 不各建状态机。1.5 负责公开会话实体。 */
-export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend): RecordingControlSnapshot {
+export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend, events?: RecordingEventOptions): RecordingControlSnapshot {
   if (!isTrustedMainRendererUrl(ownerContents.getURL())) throw new Error('录制宿主来源不可信')
   if (owner) throw new Error('已有录制会话，请先关闭当前录制')
   owner = ownerContents
+  const excludedWindowIds = [...events?.excludedWindowIds ?? []]
+  eventSession = events ? new RecordingEventSession({ ...events, excludedWindowIds,
+    excludedRegions: () => [...events.excludedRegions?.() ?? [], ...(controlWindow && !controlWindow.isDestroyed() ? [controlWindow.getBounds()] : [])], onFailure: error => {
+    void recordingControl.captureFailed(sessionId, error).catch(cleanup => logger.error('采集失败后清理失败', { event: 'recording.events.cancel.failed', error: cleanup }))
+    events.onFailure(error)
+  } }) : null
   let snapshot: RecordingControlSnapshot
-  try { snapshot = recordingControl.create(sessionId, backend) } catch (error) { owner = null; throw error }
+  try { snapshot = recordingControl.create(sessionId, eventSession ? eventSession.wrap(backend) : backend) } catch (error) { owner = null; eventSession = null; throw error }
+  const capture = eventSession
+  if (capture) detachCapabilitySink = bindCaptureCapabilitySink(fact => capture.capability(fact))
   try {
     controlWindow = createRecordingControlWindow(ownerContents, () => recordingControl.snapshot(), async () => {
       await recordingControl.command('stop')
       await closeRecordingControl()
     })
     const opened = controlWindow
+    if (process.platform === 'win32') {
+      const handle = opened.getNativeWindowHandle()
+      excludedWindowIds.push(String(handle.length >= 8 ? handle.readBigUInt64LE() : handle.readUInt32LE()))
+    }
     opened.once('closed', () => {
       if (controlWindow !== opened || !owner) return
       void closeRecordingControl().catch(error => logger.error('控制条关闭后清理失败', { event: 'recording.control.closed_cleanup.failed', error }))
@@ -65,6 +82,12 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
   return snapshot
 }
 
+/** Existing request channel, owner-bound, no raw input or output payload accepted. */
+export function recordRecordingCapability(contents: WebContents, sessionId: string, fact: CapabilityCapture): void {
+  if (owner !== contents || recordingControl.snapshot()?.sessionId !== sessionId) return
+  eventSession?.capability(fact)
+}
+
 export function closeRecordingControl(): Promise<void> {
   if (closing) return closing
   closing = Promise.resolve().then(async () => {
@@ -72,8 +95,9 @@ export function closeRecordingControl(): Promise<void> {
     const previousSession = recordingControl.snapshot()?.sessionId
     if (previousOwner && previousSession) mediaPermissions.revoke(previousOwner, previousSession)
     try { await recordingControl.dispose() } finally {
+      detachCapabilitySink?.(); detachCapabilitySink = undefined
       if (controlWindow && !controlWindow.isDestroyed()) controlWindow.destroy()
-      controlWindow = null; owner = null
+      controlWindow = null; owner = null; eventSession = null
     }
   }).finally(() => { closing = null })
   return closing

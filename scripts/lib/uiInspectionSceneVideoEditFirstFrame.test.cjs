@@ -7,7 +7,7 @@ test('巡检读取正式连接说明内的 JSON 配置，不把整段说明当 J
   global.window = { henjiNative: { mcp: {
     status: async () => ({ enabled: true, ready: true }),
     authorize: async input => ({ id: 'fixture', ...input }),
-    connectionConfig: async () => '连接说明\n```json\n{"mcpServers":{"henji":{"type":"http","url":"http://127.0.0.1:3000/mcp"}}}\n```',
+    connectionConfig: async () => '连接说明\n```json\n{"mcpServers":{"henji":{"type":"http","url":"http://127.0.0.1:3000/mcp","headers":{"Authorization":"Bearer fixture"}}}}\n```',
   } } }
   try {
     const identity = await authorizeMcpConnection({ evaluate: (fn, input) => fn(input) }, { name: 'fixture', allowWrites: true })

@@ -13,7 +13,7 @@ vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { fs: { rea
 vi.mock('../../features/videoEdit/application/videoEditService', () => ({ requireVideoEditInstance: vi.fn() }))
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-const ids: PersistenceResourceId[] = ['creative-intent-page', 'creative-intent-candidate', 'image-layout-page', 'image-layout-candidate']
+const ids: PersistenceResourceId[] = ['capture-log-page', 'creative-intent-page', 'creative-intent-candidate', 'image-layout-page', 'image-layout-candidate']
 const fixture = (id: PersistenceResourceId): Record<string, unknown> => JSON.parse(fs.readFileSync(path.resolve('tests/fixtures/persistence', id, 'v1.json'), 'utf8')) as Record<string, unknown>
 
 describe('不可变资源统一解码', () => {

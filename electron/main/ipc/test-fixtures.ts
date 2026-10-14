@@ -1,8 +1,14 @@
 import { deleteGenerationSubmission, inspectGenerationSubmission } from '../services/ai-runtime/generation-submissions'
 import { isAutomationTestMode } from '../services/automationMode'
 import { parseStringField, registerIpcHandler } from './registry'
-import { BrowserWindow } from 'electron'
-import { randomUUID } from 'node:crypto'
+import { BrowserWindow, screen } from 'electron'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { uIOhook } from 'uiohook-napi'
+import { RecordingEventStore } from '../services/screen-recording/event-store'
+import type { CaptureEvent } from '../../../src/core/captureLog/events'
 import { z } from 'zod'
 import { assertTrustedApplicationSender } from './application-control'
 import { closeRecordingControl, openRecordingControl, recordingControl } from '../services/screen-recording/runtime'
@@ -15,15 +21,39 @@ import { getUserFolderDir } from '../services/appPaths'
 export function registerTestFixturesIpc(): void {
   if (!isAutomationTestMode()) return
   const calls: Record<string, number> = {}
-  registerIpcHandler('testFixtures:recordingControl', input => z.enum(['setup', 'read', 'cleanup']).parse(input), async (action, event) => {
-    if (action === 'cleanup') { await closeRecordingControl(); return { snapshot: null, calls: { ...calls }, protected: false, sourceId: '' } }
-    if (action === 'setup') {
+  let eventDirectory: string | undefined
+  let eventFailure: string | undefined
+  registerIpcHandler('testFixtures:recordingControl', input => z.enum(['setup', 'setup-events', 'read', 'events', 'cleanup']).parse(input), async (action, event) => {
+    if (action === 'cleanup') {
+      try { await closeRecordingControl() } finally { if (eventDirectory) await rm(eventDirectory, { recursive: true, force: true }); eventDirectory = undefined }
+      return { snapshot: null, calls: { ...calls }, protected: false, sourceId: '' }
+    }
+    if (action === 'setup' || action === 'setup-events') {
       for (const key of Object.keys(calls)) delete calls[key]
       const operation = (name: string) => async (): Promise<void> => { calls[name] = (calls[name] ?? 0) + 1 }
-      openRecordingControl(event.sender, randomUUID(), { start: operation('start'), pause: operation('pause'), resume: operation('resume'), mark: operation('mark'), stop: operation('stop'), cancel: operation('cancel') })
+      const sessionId = randomUUID()
+      const owner = BrowserWindow.fromWebContents(event.sender)
+      if (!owner) throw new Error('录制巡检没有主窗口')
+      const nowUs = () => Number(process.hrtime.bigint() / 1000n)
+      const geometry = () => { const bounds = owner.getContentBounds(); const scale = screen.getDisplayMatching(bounds).scaleFactor; return { bounds, pixels: { width: Math.round(bounds.width * scale), height: Math.round(bounds.height * scale) } } }
+      eventFailure = undefined
+      if (action === 'setup-events') eventDirectory = await mkdtemp(join(tmpdir(), 'henji-recording-events-tour-'))
+      openRecordingControl(event.sender, sessionId, { start: operation('start'), pause: operation('pause'), resume: operation('resume'), mark: operation('mark'), stop: operation('stop'), cancel: operation('cancel') }, action === 'setup-events' ? {
+        ownerRef: { kind: 'screen_recording.session', id: sessionId }, sourceDigest: `sha256:${createHash('sha256').update(JSON.stringify(geometry())).digest('hex')}`,
+        directory: eventDirectory!, originUs: nowUs(), nowUs, geometry, onFailure: error => { eventFailure = String(error) },
+      } : undefined)
+    }
+    let events: { count: number; cursorCount: number; cursorShapes: string[]; facts: CaptureEvent[]; gaps: number; inputListeners: number; failure?: string } | undefined
+    if (action === 'events' && eventDirectory) {
+      let count = 0; let cursorCount = 0; let gaps = 0; const shapes = new Set<string>(); const facts: CaptureEvent[] = []
+      for await (const page of new RecordingEventStore(eventDirectory).recover()) {
+        count += page.count; gaps += page.clockSegments.filter(segment => segment.mode === 'gap').length
+        for (const fact of page.entries) { if (fact.kind === 'cursor') { cursorCount++; shapes.add(fact.shape) } else facts.push(fact) }
+      }
+      events = { count, cursorCount, cursorShapes: [...shapes], facts, gaps, inputListeners: uIOhook.listenerCount('input'), ...(eventFailure ? { failure: eventFailure } : {}) }
     }
     const win = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('view=recording-control'))
-    return { snapshot: recordingControl.snapshot(), calls: { ...calls }, protected: win?.isContentProtected() ?? false, sourceId: BrowserWindow.fromWebContents(event.sender)?.getMediaSourceId() ?? '', uploads: getUserFolderDir('uploads') }
+    return { snapshot: recordingControl.snapshot(), calls: { ...calls }, protected: win?.isContentProtected() ?? false, sourceId: BrowserWindow.fromWebContents(event.sender)?.getMediaSourceId() ?? '', uploads: getUserFolderDir('uploads'), ...(events ? { events } : {}) }
   }, assertTrustedApplicationSender)
   registerIpcHandler('testFixtures:generationSubmission:inspect', (input) => ({ requestId: parseStringField(input, 'requestId') }),
     ({ requestId }) => inspectGenerationSubmission(requestId))

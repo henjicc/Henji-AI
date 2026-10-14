@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { captureRequestSchema } from './capture'
+import { capabilityCaptureSchema } from '../captureLog/events'
 
 export const captureKinds = ['microphone', 'camera', 'screen', 'systemAudio'] as const
 export type CaptureKind = typeof captureKinds[number]
@@ -54,13 +55,14 @@ export const captureSelectionSchema = z.object({
 export type CaptureSelection = z.infer<typeof captureSelectionSchema>
 export const screenRecordingRequestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('capture'), request: captureRequestSchema }).strict(),
+  z.object({ action: z.literal('capability'), sessionId: z.string().uuid(), fact: capabilityCaptureSchema }).strict(),
   z.object({ action: z.literal('sources'), excludedSourceIds: z.array(z.string()).max(256).default([]) }).strict(),
   z.object({ action: z.literal('permissions') }).strict(),
   z.object({ action: z.literal('grant'), sessionId, userReceipt: z.string().uuid(), kinds: z.array(z.enum(captureKinds)).min(1).max(4), selection: captureSelectionSchema.optional() }).strict(),
   z.object({ action: z.literal('revoke'), sessionId }).strict(),
   z.object({ action: z.literal('settings'), kind: z.enum(['microphone', 'camera', 'screen', 'systemAudio']) }).strict(),
   z.object({ action: z.literal('snapshot') }).strict(),
-  z.object({ action: z.literal('control'), sessionId, command: z.enum(recordingActions) }).strict(),
+  z.object({ action: z.literal('control'), sessionId, command: z.enum(recordingActions), note: z.string().max(4000).optional() }).strict(),
   z.object({ action: z.literal('shortcuts'), shortcuts: recordingShortcutsSchema }).strict(),
 ])
 export type ScreenRecordingRequest = z.infer<typeof screenRecordingRequestSchema>
