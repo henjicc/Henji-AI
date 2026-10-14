@@ -17,10 +17,13 @@ vi.mock('@/platform', () => ({ getPlatform: () => ({ screenRecording: { sources:
   { id: 'window:2:0', name: '很长的窗口标题 · 痕迹AI', kind: 'window', thumbnailUrl: 'data:image/png;base64,AA==' },
 ] } }) }))
 vi.mock('./RecordingSessionPrivacy', () => ({ RecordingSessionPrivacy: () => <div /> }))
+// 脚本面板有独立测试（4.1）；这里只验会话页聚合、跳转与成片入口。
+vi.mock('./RecordingScriptPanel', () => ({ RecordingScriptPanel: () => <div /> }))
 vi.mock('./tracks/devices', () => ({ recordingDevices: async () => [] }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: (props: VideoViewerModalProps) => { fixture.viewer(props); return <div data-testid="shared-viewer" /> } }))
 import ScreenRecordingApp from './ScreenRecordingApp'
+import { NotificationProvider } from '@/contexts/NotificationContext'
 
 beforeAll(async () => { await i18n.changeLanguage('zh-CN') })
 beforeEach(() => {
@@ -32,7 +35,7 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 it('来源缩略图与标题分栏，设置固定左侧标签列，关闭设备即隐藏选择', async () => {
-  render(<ScreenRecordingApp onBack={vi.fn()} />)
+  render(<NotificationProvider><ScreenRecordingApp onBack={vi.fn()} /></NotificationProvider>)
   await screen.findByRole('button', { name: '屏幕 1' })
   const source = screen.getByRole('button', { name: '很长的窗口标题 · 痕迹AI' })
   const image = source.querySelector('img')!
@@ -62,7 +65,7 @@ it('会话按轨道聚合完整分片，标记与步骤跳转，成片入口可�
   document.markers = [{ id: 'marker', monoUs: 9800000, note: '重点演示' }]
   document.understanding.steps = [{ id: 'step', startUs: 6100000, endUs: 11100000, title: '完成设置', description: '', signal: 'marker', eventIds: [] }]
   fixture.view = { ...fixture.view, documentId: document.sessionId, content: document }
-  render(<ScreenRecordingApp onBack={vi.fn()} />)
+  render(<NotificationProvider><ScreenRecordingApp onBack={vi.fn()} /></NotificationProvider>)
   await waitFor(() => expect(fixture.viewer).toHaveBeenCalled())
   const latest = (): VideoViewerModalProps => fixture.viewer.mock.calls.at(-1)![0]
   expect(latest().presentation).toBe('inline')
