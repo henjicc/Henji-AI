@@ -109,6 +109,18 @@ export class RecordingEventSession {
     if (!this.accepting) return
     try { this.collector.record(this.options.nowUs(), { kind: 'capability', ...fact }) } catch (error) { this.fail(error) }
   }
+  sensitive(regions: Array<{ id: string; bounds: CaptureRect }>): void {
+    if (!this.accepting || this.excluded()) return
+    try {
+      const geometry = this.options.geometry()
+      const found = regions.flatMap(region => {
+        if (this.excludedPoint(region.bounds)) return []
+        const box = captureBounds(region.bounds, geometry)
+        return box ? [{ id: region.id, box: [box.x / geometry.pixels.width, box.y / geometry.pixels.height, box.width / geometry.pixels.width, box.height / geometry.pixels.height] as [number, number, number, number] }] : []
+      })
+      this.collector.record(this.options.nowUs(), { kind: 'sensitive', regions: found })
+    } catch (error) { this.fail(error) }
+  }
   mark(note?: string): void {
     if (!this.accepting) return
     this.collector.record(this.options.nowUs(), { kind: 'mark', ...(note === undefined ? {} : { note }) })

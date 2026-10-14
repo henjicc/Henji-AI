@@ -59,6 +59,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const [loading, setLoading] = useState(false)
   const [note, setNote] = useState('')
   const [recipe, setRecipe] = useState<RecordingMovieRecipe>(RECORDING_MOVIE_RECIPES.tutorial)
+  const [privacyBusy, setPrivacyBusy] = useState(false)
   const [moviePhase, setMoviePhase] = useState('')
   const movieController = useRef<AbortController | null>(null)
   const movieTarget = useRef<{ sessionId: string; documentId: string } | null>(null)
@@ -119,10 +120,10 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       <UiButton variant="danger" disabled={state.busy} disabledReason={t('screenRecording.toggleUnavailable')} onClick={() => run(() => controlRecording(state.snapshot!.sessionId, 'cancel'))}>{t('recording.cancel')}</UiButton>
       <UiButton variant="primary" disabled={state.busy} disabledReason={t('recording.saving')} onClick={() => run(() => controlRecording(state.snapshot!.sessionId, state.snapshot!.phase === 'failed' ? 'cancel' : 'stop'))}><Square />{t('recording.stop')}</UiButton>
     </> : finished ? <>
-      <UiButton disabled={!media.length || state.busy || Boolean(moviePhase)} disabledReason={t('recording.movieBusy')} onClick={() => run(sendToEditor)}>{t('recording.import')}</UiButton>
-      <UiButton disabled={state.busy || Boolean(moviePhase)} disabledReason={t('recording.movieBusy')} onClick={() => { setRecordingDestination(state.destination); setName('') }}>{t('recording.new')}</UiButton>
+      <UiButton disabled={!media.length || state.busy || privacyBusy || Boolean(moviePhase)} disabledReason={t('recording.movieBusy')} onClick={() => run(sendToEditor)}>{t('recording.import')}</UiButton>
+      <UiButton disabled={state.busy || privacyBusy || Boolean(moviePhase)} disabledReason={t('recording.movieBusy')} onClick={() => { setRecordingDestination(state.destination); setName('') }}>{t('recording.new')}</UiButton>
       {moviePhase ? <UiButton onClick={() => movieController.current?.abort()}>{t('recording.cancelMovie')}</UiButton> : null}
-      <UiButton variant="primary" disabled={!media.length || state.busy || Boolean(moviePhase)} disabledReason={moviePhase ? t('recording.movieBusy') : t('recording.noMedia')} onClick={() => run(generateMovie)}>{t('recording.createMovie')}</UiButton></> : <UiButton variant="primary" disabled={!sourceId || state.busy} disabledReason={state.busy ? t('recording.saving') : t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>}>
+      <UiButton variant="primary" disabled={!media.length || state.busy || privacyBusy || Boolean(moviePhase)} disabledReason={moviePhase ? t('recording.movieBusy') : t('recording.noMedia')} onClick={() => run(generateMovie)}>{t('recording.createMovie')}</UiButton></> : <UiButton variant="primary" disabled={!sourceId || state.busy} disabledReason={state.busy ? t('recording.saving') : t('recording.selectSource')} onClick={() => run(begin)}><ICON_TOOL_SCREEN_RECORDING />{t('recording.start')}</UiButton>}>
       <UiIconButton aria-label={t('recording.back')} onClick={back}><ChevronLeft /></UiIconButton><span className="text-sm font-medium">{t('recording.title')}</span>
       {state.snapshot && <span className="text-xs tabular-nums text-text2">{state.snapshot.phase === 'countdown' ? t('recording.countdown', { count: state.snapshot.countdown }) : `${Math.floor(state.snapshot.elapsedMs / 1000)} s`}</span>}
     </UiToolbar>
@@ -134,7 +135,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
         {active ? <UiGroup title={t('recording.inProgress')} labelWidth={120}>
           <UiFormRow label={t('recording.marker')}><div className="flex min-w-0 items-center gap-2"><UiInput size="sm" className="min-w-0 flex-1" value={note} onChange={event => setNote(event.target.value)} maxLength={4000} /><UiButton size="sm" disabled={state.snapshot?.phase !== 'recording' || state.snapshot?.busy} disabledReason={t('recording.markDuringRecording')} onClick={() => run(async () => { await controlRecording(state.snapshot!.sessionId, 'mark', note); setNote('') })}><Flag />{t('recording.mark')}</UiButton></div></UiFormRow>
         </UiGroup> : finished ? <><RecordingMovieOptions value={recipe} onChange={setRecipe} disabled={Boolean(moviePhase)} /><UiGroup title={t('recording.preview')}>
-          {state.content && <RecordingSessionPreview key={state.content.sessionId} recording={state.content} />}
+          {state.content && <RecordingSessionPreview key={state.content.sessionId} recording={state.content} disabled={Boolean(moviePhase)} onPrivacyBusyChange={setPrivacyBusy} />}
           {state.content?.status !== 'stopped' && <UiButton onClick={() => run(() => recoverRecording(state.documentId!))}><RefreshCw />{t('recording.recover')}</UiButton>}
           {state.content?.source?.cursorEmbedded && <p className="text-xs text-text2">{t('recording.cursorEmbedded')}</p>}
         </UiGroup></> : <div className="grid gap-6 lg:grid-cols-2">

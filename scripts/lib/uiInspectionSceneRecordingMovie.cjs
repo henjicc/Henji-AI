@@ -38,8 +38,8 @@ function createRecordingMovieScene() {
         assert(recorded.content.media.some(value => value.kind === 'camera'))
         assert(recorded.content.media.some(value => value.kind === 'microphone'))
         // Preserve actual media and original logs above; deterministic annotations make visual assertions repeatable.
-        const content = recorded.content, origin = Math.min(...content.media.map(value => value.monoUs))
-        const end = Math.max(...content.media.map(value => value.monoUs + value.durationUs))
+        const content = recorded.content, screenSource = content.media.find(value => value.kind === 'screen')
+        const origin = screenSource.monoUs, end = origin + screenSource.durationUs
         const { CaptureLogCollector } = require('../check-persistence-compat.cjs').loadTypeScript('src/core/captureLog/collector.ts')
         const pages = []
         const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id: session.id }, sourceDigest: `sha256:${'c'.repeat(64)}`, originUs: 0, id: randomUUID }, async page => { pages.push(page) }, error => { throw error })
@@ -60,12 +60,19 @@ function createRecordingMovieScene() {
           transcript: [{ id: 'spoken', startUs: origin + 1000000, endUs: origin + 4000000, text: '一分钟录制，自动生成可编辑成片。', granularity: 'segment', audioDocumentId: 'fixture-transcript', mediaId: content.media.find(value => value.kind === 'microphone').id }],
           steps: [{ id: 'step', startUs: origin, endUs: end, title: '录制与生成', description: '测试步骤导航与正式标题素材', signal: 'start', eventIds: [] }],
           candidates: [{ id: 'wait', startUs: origin + 5000000, endUs: end - 3000000, kind: 'wait', status: 'accepted', reason: '巡检夹具：演示等待加速', eventIds: [] }],
+          privacy: { warnings: [], candidates: ['confirm-me', 'leave-pending'].map(id => ({ id, mediaId: content.media.find(v => v.kind === 'screen').id, kind: 'email', hint: '邮箱', fingerprint: 'a'.repeat(64), startUs: origin + 1000000, endUs: origin + 4000000, status: 'pending', samples: [{ monoUs: origin + 1000000, box: [.05, .05, .8, .15], confidence: 1 }] })) },
           chapters: [{ id: 'chapter', title: '演示', stepIds: ['step'] }], warnings: [],
         }
         await page.evaluate(async ({ id, revision, content }) => window.henjiNative.documents.saveDocument({ target: { id }, expectedRevision: revision, content }), { id: session.id, revision: recorded.meta.revision, content })
         client = await connectMcpClient((await authorizeMcpConnection(page, { name: '成片隔离验收', allowWrites: true, allowDestructive: true })).config)
         const read = (ref, propertyIds = []) => callTool(client, 'read_application_entity', { ref, propertyIds })
         await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
+        await button('确认').first().click()
+        await page.waitForFunction(() => document.body.textContent.includes('已确认') || [...document.querySelectorAll('[role="alert"]')].some(node => node.textContent.trim()))
+        assert(!(await page.getByRole('alert').allTextContents()).some(text => text.trim()), (await page.getByRole('alert').allTextContents()).join('\n'))
+        const confirmed = await readDocument(session.id)
+        assert.deepEqual(confirmed.content.understanding.privacy.candidates.map(c => c.status), ['accepted', 'pending'])
+        await button('查看画面').first().click()
         await page.screenshot({ path: path.join(root, 'recipe.png') }); await capture('recording-movie-recipe')
         await page.getByRole('button', { name: /录制与生成/ }).click()
         await button('生成成片').click()
@@ -77,6 +84,9 @@ function createRecordingMovieScene() {
         fs.writeFileSync(path.join(root, 'generated.json'), JSON.stringify(generated, null, 2)); store()
         const sequence = generated.content.sequences.find(value => value.name.endsWith('横版'))
         const screen = generated.content.sequences.find(value => value.name.endsWith('屏幕画面'))
+        const masks = screen.clips.flatMap(c => c.effects ?? []).filter(e => e.builtin?.id === 'mosaic')
+        assert(masks.length > 0); assert(masks.every(e => e.enabled && e.mask.shapes[0].id === 'confirm-me'))
+        evidence.confirmedPrivacy = true
         assert(sequence && screen); assert(sequence.captions.length); assert(sequence.markers.length)
         assert(screen.clips.some(value => value.effects?.some(effect => effect.builtin?.id === 'recording_cursor')))
         assert(screen.clips.some(value => value.curves?.scale?.some(key => key.value > 1)))
@@ -94,6 +104,8 @@ function createRecordingMovieScene() {
         await setPlayback(60, true)
         await page.waitForFunction(() => Number(document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame) > 75, null, { timeout: 15000 })
         await setPlayback(90); evidence.played = true
+        // Hold beyond the native reference warning threshold: paused prefetch must not borrow pool slots.
+        await page.waitForTimeout(4500)
         const submitted = await callTool(client, 'export_video_edit', operationEnvelope([await read(documentRef)], { documentRef, settings: { format: 'mp4', width: 1280, height: 720, fps: 30, videoBitrateMbps: 6, audioBitrateKbps: 192, fit: 'fit', loudness: null, captionMode: 'burn', addToLibrary: false } }))
         assert.equal(submitted.executionState, 'completed', JSON.stringify(submitted))
         const jobId = submitted.result.data.queue[0].id
@@ -116,6 +128,10 @@ function createRecordingMovieScene() {
         // Finish on this task's UI for the full surface audit. The unchanged editor toolbar is recorded separately.
         await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
         await button('生成成片').waitFor({ state: 'visible' })
+      } catch (error) {
+        evidence.failure = { message: String(error), alerts: await page.getByRole('alert').allTextContents().catch(() => []) }
+        await page.screenshot({ path: path.join(root, 'failure.png') }).catch(() => {})
+        throw error
       } finally {
         store(); await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         await page.evaluate(async () => { const state = await window.henjiNative.screenRecording.snapshot(); if (state) await window.henjiNative.screenRecording.capture({ operation: 'close', sessionId: state.sessionId }) }).catch(() => {})

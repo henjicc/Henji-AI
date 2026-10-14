@@ -4,6 +4,7 @@ import type { CaptureCommand } from '../../src/core/screenRecording/capture'
 
 export function createScreenRecordingApi(invoke: <T>(channel: string, payload?: unknown) => Promise<T>, subscribe: (channel: string, listener: (payload: unknown) => void) => () => void): ScreenRecordingPlatform {
   return {
+    recordSensitiveDom: (sessionId, regions) => invoke('screenRecording:request', { action: 'dom-privacy', sessionId, regions }),
     clock: () => invoke('screenRecording:request', { action: 'clock' }),
     trackStatus: (sessionId, status) => invoke('screenRecording:request', { action: 'track-status', sessionId, status }),
     capture: request => invoke('screenRecording:request', { action: 'capture', request }),

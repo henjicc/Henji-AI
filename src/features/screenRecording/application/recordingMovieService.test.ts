@@ -17,6 +17,7 @@ async function fixture() {
   content.sessionId = id; content.status = 'stopped'
   content.media = [{ id: 'screen', kind: 'screen', path, monoUs: 3000000, durationUs: 10000000 }]
   content.understanding.steps = [{ id: 'step', title: '打开编辑器', description: '', signal: 'start', startUs: 3000000, endUs: 13000000, eventIds: [] }]
+  content.understanding.privacy.candidates = [{ id: 'private', mediaId: 'screen', kind: 'email', hint: '邮箱', fingerprint: 'a'.repeat(64), status: 'accepted', startUs: 4000000, endUs: 5000000, samples: [{ monoUs: 4000000, box: [.1, .2, .3, .1], confidence: 1 }] }]
   await getPlatform().documents.createDocument({ id, kind: 'screen_recording', name: '成片测试', container: { kind: 'user' }, content })
   const owner = await createVideoEditTestProject(), documentId = owner.document.id
   editVideoProject(documentId, draft => {
@@ -33,6 +34,7 @@ it('正式公开能力生成并保存，返回序列可读；一次撤销恢复�
     const before = structuredClone(owner.document), history = owner.past.length
     const result = await api.requireResult('generate_screen_recording_movie', { ...input, recipe: { ...input.recipe, formats: ['landscape', 'portrait'] } })
     expect(result).toMatchObject({ verified: true, sequenceRefs: expect.any(Array) })
+    expect(owner.document.sequences.flatMap(s => s.clips).flatMap(c => c.effects ?? []).filter(e => e.builtin?.id === 'mosaic')).toMatchObject([{ enabled: true }, { enabled: true }])
     expect(owner.past).toHaveLength(history + 1)
     expect(owner.document.sequences).toHaveLength(before.sequences.length + 4)
     expect(savedVideoEdit(options.documentId).sequences).toEqual(owner.document.sequences)

@@ -30,6 +30,10 @@ export async function saveRecordingUnderstanding(id: string, value: RecordingUnd
   for (const range of [...understanding.transcript, ...understanding.steps, ...understanding.candidates]) {
     if (subtractRecordingRanges([range], active).length) throw new Error('理解结果超出已保存的屏幕片段，不能跨越暂停或缺片空档。')
   }
+  for (const candidate of understanding.privacy.candidates) {
+    const source = read.content.media.find(v => v.id === candidate.mediaId && v.kind === 'screen')
+    if (!source || candidate.startUs < source.monoUs || candidate.endUs > source.monoUs + source.durationUs) throw new Error('打码候选超出其屏幕原片范围。')
+  }
   logger.info('保存录制理解', { event: 'recording.understanding.save.start', context: { documentId: id } })
   try {
     const saved = await getPlatform().documents.saveDocument({ target: { id }, expectedRevision, content: { ...read.content, understanding } })
@@ -134,6 +138,7 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
     signal.throwIfAborted()
     if ((await readRecordingUnderstanding(id)).meta.revision !== read.meta.revision) throw new Error('CONFLICT:分析期间会话已修改，保留已有结果，请重新分析。')
     const understanding = segmentRecording({ active, events, transcript, silence, stillness: content.eventPages.length ? stillness : [], sceneCutsUs, warnings })
+    understanding.privacy = content.understanding.privacy
     logger.info('录制理解完成', { event: 'recording.understanding.analyze.completed', context: { documentId: id, steps: understanding.steps.length, candidates: understanding.candidates.length } })
     return { understanding, revision: read.meta.revision, audioUpdates }
   } catch (error) { logger.error('录制理解失败', { event: 'recording.understanding.analyze.failed', error, context: { documentId: id } }); throw error }

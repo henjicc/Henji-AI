@@ -17,8 +17,6 @@ export const RECORDING_MOVIE_RECIPES = {
   concise: recordingMovieRecipeSchema.parse({ waitSpeed: 8, attention: 'strong' }),
   original: recordingMovieRecipeSchema.parse({ trimPauses: false, trimFillers: false, waitSpeed: 1, attention: 'off', frame: false }),
 }
-/** 3.1 supplies capture-frame normalized boxes in the same mono clock as understanding. Never enabled automatically. */
-export interface RecordingRedactionCandidate extends RecordingRange { id: string; box: [number, number, number, number] }
 export interface RecordingMovieSpan extends RecordingRange { outputStartUs: number; outputEndUs: number; speed: number }
 function overlaps(ranges: readonly RecordingRange[]): (range: RecordingRange) => boolean {
   const sorted = [...ranges].sort((a, b) => a.startUs - b.startUs), ends: number[] = []

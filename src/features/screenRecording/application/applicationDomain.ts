@@ -16,13 +16,15 @@ import { executeRecordingUnderstanding } from './recordingUnderstandingCapabilit
 import { generateRecordingMovieCapability } from '@/core/application-control/domains/screenRecording/movieCapability'
 import { generateRecordingMovie } from './recordingMovieService'
 import { openVideoEditDocument } from '@/features/videoEdit'
+import { executeRecordingPrivacy } from './recordingPrivacyCapability'
+import { recordingPrivacyBusy } from './recordingPrivacyService'
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
   id: 'screen_recording', entities: () => [...recordingRegistrations(), recordingUnderstandingRegistration()],
   registerExecutors(engine) { engine.registerMutationExecutor(new RecordingUnderstandingMutation()) },
   registerCapabilities(registrar) {
     registerDocumentOpener('screen_recording', async document => { await showRecordingDocument(document.id); openApplicationSurface('tool.screen_recording') })
-    registerDocumentBusyCheck('screen_recording', id => recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
+    registerDocumentBusyCheck('screen_recording', id => recordingPrivacyBusy(id) ? '请先等待敏感信息识别完成或取消' : recordingView().snapshot?.sessionId === id || recordingView().busy && recordingView().documentId === id ? '请先停止录制并等待保存' : null)
     registerDocumentCoverProvider('screen_recording', read => { const first = recordingDocumentSchema.parse(read.content).media.find(media => media.kind === 'screen' && media.durationUs > 0); return first ? [{ source: first.path, sourceKind: 'video', atSeconds: 0 }] : null })
     for (const definition of RECORDING_CAPABILITIES) registrar.registerHandler(definition.id, async (input, context) => {
       context.signal.throwIfAborted()
@@ -38,6 +40,7 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         const sequenceRefs = result.sequenceIds.map(id => ({ kind: 'video_edit.sequence' as const, id: `${result.documentId}:${id}` }))
         return { documentRef: parsed.documentRef, resultRef: sequenceRefs[0], sequenceRefs, warnings: result.warnings, verified: result.verified }
       }
+      if (definition.id === 'detect_screen_recording_sensitive_text') return executeRecordingPrivacy(input, context)
       if (definition.id === 'start_screen_recording') {
         const parsed = startRecordingInputSchema.parse(input)
         if (parsed.destination && context.callerGrant && !context.callerGrant.permissions.includes('video_edit:write')) throw new Error('PERMISSION_DENIED:录制到剪辑还需要 video_edit:write 权限')

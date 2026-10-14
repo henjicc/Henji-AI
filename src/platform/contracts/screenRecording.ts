@@ -2,8 +2,10 @@ import type { CaptureKind, CapturePermissionStatus, CaptureSelection, CaptureSou
 import type { CaptureCommand, CaptureRequest } from '../../core/screenRecording/capture'
 import type { CapabilityCapture } from '../../core/captureLog/events'
 import type { RecordingTrackStatus } from '../../core/screenRecording/contracts'
+import type { RecordingSensitiveDom } from '../../core/screenRecording/contracts'
 
 export interface ScreenRecordingPlatform {
+  recordSensitiveDom(sessionId: string, regions: RecordingSensitiveDom): Promise<void>
   clock(): Promise<number>
   trackStatus(sessionId: string, status: RecordingTrackStatus): Promise<void>
   capture(request: CaptureRequest): Promise<unknown>

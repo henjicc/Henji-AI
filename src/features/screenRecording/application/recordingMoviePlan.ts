@@ -9,7 +9,8 @@ import { APP_WINDOW_BACKGROUND_HEX } from '@/core/theme/colorTokens'
 import { titleColor } from '@/core/videoEdit/titleTemplates'
 import type { RecordingDocument } from '@/core/screenRecording/document'
 import type { RecordingUnderstanding } from '@/core/screenRecording/understanding'
-import { mapRecordingMovieRange, recordingMovieSpans, type RecordingMovieRecipe, type RecordingRedactionCandidate } from '@/core/screenRecording/movie'
+import { mapRecordingMovieRange, recordingMovieSpans, type RecordingMovieRecipe } from '@/core/screenRecording/movie'
+import { confirmedRecordingPrivacyFragments } from '@/core/screenRecording/privacyEffects'
 import { recordingMediaSpans } from './recordingTimeline'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 
@@ -30,8 +31,8 @@ function shapeClip(document: VideoEditDocument, sequence: VideoEditSequence, nam
 }
 export interface RecordingMoviePlan { sequenceIds: string[]; screenSequenceIds: string[]; warnings: string[] }
 /** Mutates only the importer's detached draft. The import service owns the single history commit. */
-export function buildRecordingMoviePlan(document: VideoEditDocument, recording: RecordingDocument, understanding: RecordingUnderstanding, recipe: RecordingMovieRecipe, name: string, targetSequenceId?: string, redactions: readonly RecordingRedactionCandidate[] = []): RecordingMoviePlan {
-  if (redactions.some(v => !v.id || !Number.isSafeInteger(v.startUs) || !Number.isSafeInteger(v.endUs) || v.startUs < 0 || v.endUs <= v.startUs || v.box.length !== 4 || v.box.some(n => !Number.isFinite(n) || n < 0 || n > 1) || v.box[2] <= 0 || v.box[3] <= 0 || v.box[0] + v.box[2] > 1 || v.box[1] + v.box[3] > 1)) throw new Error('候选打码范围无效。')
+export function buildRecordingMoviePlan(document: VideoEditDocument, recording: RecordingDocument, understanding: RecordingUnderstanding, recipe: RecordingMovieRecipe, name: string, targetSequenceId?: string): RecordingMoviePlan {
+  const redactions = confirmedRecordingPrivacyFragments(recording.understanding.privacy.candidates, recording.media)
   const spans = recordingMovieSpans(recording, understanding, recipe), result: RecordingMoviePlan = { sequenceIds: [], screenSequenceIds: [], warnings: [] }
   const target = targetSequenceId ? document.sequences.find(v => v.id === targetSequenceId) : undefined
   if (targetSequenceId && !target) throw new Error('目标序列不存在，请重新选择。')
@@ -57,8 +58,8 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
       const lane = source.kind === 'screen' ? screen : sequence
       const track = { microphone: 0, systemAudio: 1, screen: 0, camera: 4 }[source.kind]
       for (const active of recordingMediaSpans(recording, source, Math.round(media.durationSeconds * 1e6))) for (const span of mapRecordingMovieRange(spans, active)) {
-        // Split at redaction boundaries so each candidate is a normal disabled effect on the right source range.
-        const bounds = [...new Set([span.startUs, span.endUs, ...(source.kind === 'screen' ? redactions.flatMap(v => [v.startUs, v.endUs]).filter(v => v > span.startUs && v < span.endUs) : [])])].sort((a, b) => a - b)
+        // Confirmed masks stay source-anchored across cuts and speed changes.
+        const bounds = [...new Set([span.startUs, span.endUs, ...(source.kind === 'screen' ? redactions.filter(v => v.mediaId === source.id).flatMap(v => [v.startUs, v.endUs]).filter(v => v > span.startUs && v < span.endUs) : [])])].sort((a, b) => a - b)
         for (let i = 0; i + 1 < bounds.length; i++) {
           const startUs = bounds[i], endUs = bounds[i + 1], outputUs = span.outputStartUs + (startUs - span.startUs) / span.speed
           const start = frame(outputUs), duration = Math.min(frame(span.outputStartUs + (endUs - span.startUs) / span.speed) - start, Math.floor((endUs - startUs) * fps / (1e6 * span.speed) + 1e-7))
@@ -70,10 +71,8 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
           if (source.kind !== 'screen') clip.linkId = linkIds.get(linkKey)
           if (source.kind === 'screen') {
             if (recipe.cursor && media.recordingCursor) clip.effects = [recordingMovieEffect('recording_cursor', '录制光标')]
-            for (const candidate of redactions.filter(v => v.startUs < endUs && v.endUs > startUs)) {
-              const [x, y, width, height] = candidate.box
-              const mask: VideoEditEffectMask = { regionId: 'shapes', shapes: [{ id: crypto.randomUUID(), kind: 'rect', points: [[x, y, 0, 0, 0, 0], [x + width, y, 0, 0, 0, 0], [x + width, y + height, 0, 0, 0, 0], [x, y + height, 0, 0, 0, 0]], feather: 0 }] }
-              clip.effects = [...clip.effects ?? [], { ...recordingMovieEffect('mosaic', '候选打码（待确认）', { block_size: 35 }, mask), enabled: false }]
+            for (const candidate of redactions.filter(v => v.mediaId === source.id && v.startUs < endUs && v.endUs > startUs)) {
+              clip.effects = [...clip.effects ?? [], { ...structuredClone(candidate.effect), id: crypto.randomUUID() }]
             }
           }
           if (source.kind === 'camera') {

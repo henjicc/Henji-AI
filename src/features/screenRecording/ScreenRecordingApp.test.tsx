@@ -16,6 +16,7 @@ vi.mock('@/platform', () => ({ getPlatform: () => ({ screenRecording: { sources:
   { id: 'screen:1:0', name: '屏幕 1', kind: 'screen', thumbnailUrl: 'data:image/png;base64,AA==' },
   { id: 'window:2:0', name: '很长的窗口标题 · 痕迹AI', kind: 'window', thumbnailUrl: 'data:image/png;base64,AA==' },
 ] } }) }))
+vi.mock('./RecordingSessionPrivacy', () => ({ RecordingSessionPrivacy: () => <div /> }))
 vi.mock('./tracks/devices', () => ({ recordingDevices: async () => [] }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: (props: VideoViewerModalProps) => { fixture.viewer(props); return <div data-testid="shared-viewer" /> } }))

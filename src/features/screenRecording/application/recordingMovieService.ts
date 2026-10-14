@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { videoEditComposition, videoEditDocumentSchema } from '@/core/videoEdit/document'
 import { screenAttentionSettingsSchema } from '@/core/videoEdit/screenAttention'
-import { recordingMovieRecipeSchema, type RecordingMovieRecipe, type RecordingRedactionCandidate } from '@/core/screenRecording/movie'
+import { recordingMovieRecipeSchema, type RecordingMovieRecipe } from '@/core/screenRecording/movie'
 import { importVideoEditSources, openVideoEditDocument, saveVideoEdit, requireVideoEditInstance, verifyVideoEditSaved, holdVideoEditActivity, analyzeVideoEditScreenAttentionOffThread, prepareVideoEditAudioGain } from '@/features/videoEdit'
 import { analyzeRecording, readRecordingUnderstanding, assertRecordingEditable } from './recordingUnderstandingService'
 import { recordingMovieCursorSources } from './recordingMovieSources'
@@ -10,7 +10,7 @@ import { buildRecordingMoviePlan, type RecordingMoviePlan } from './recordingMov
 
 const logger = createLogger('features.screenRecording.movie')
 const running = new Set<string>()
-export interface RecordingMovieOptions { documentId: string; sequenceId?: string; recipe: RecordingMovieRecipe; redactions?: readonly RecordingRedactionCandidate[] }
+export interface RecordingMovieOptions { documentId: string; sequenceId?: string; recipe: RecordingMovieRecipe }
 export interface RecordingMovieResult { documentId: string; sequenceIds: string[]; warnings: string[]; verified: boolean }
 /** UI and public capabilities share this service. Everything is prepared on the import draft, then committed once. */
 export async function generateRecordingMovie(sessionId: string, options: RecordingMovieOptions, signal: AbortSignal, progress?: (phase: 'analyzing' | 'preparing' | 'attention' | 'audio' | 'saving') => void): Promise<RecordingMovieResult> {
@@ -43,7 +43,7 @@ export async function generateRecordingMovie(sessionId: string, options: Recordi
         if (cursor && media) media.recordingCursor = cursor
         if (media) media.creativeSource = { type: 'document', docRef: { docId: sessionId, path: read.meta.path }, revision: read.meta.revision }
       }
-      plan = buildRecordingMoviePlan(draft, recording, understanding, recipe, read.meta.name, options.sequenceId, options.redactions)
+      plan = buildRecordingMoviePlan(draft, recording, understanding, recipe, read.meta.name, options.sequenceId)
       if (recipe.attention !== 'off' && cursors.size) {
         progress?.('attention')
         for (const id of plan.screenSequenceIds) {

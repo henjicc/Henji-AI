@@ -11,6 +11,9 @@ import type { TrackingCandidatesJob, TrackingJob } from './services/local-infere
 import { RenderedTrackingFrames } from './services/local-inference/tracking/renderedFrames'
 import { ImageInpaintError, runImageInpaint } from './services/local-inference/inpainting/inpaint'
 import type { ImageInpaintJob } from './services/local-inference/inpainting/protocol'
+import type { OcrPrivacyJob } from './services/local-inference/ocr/protocol'
+import { runOcrPrivacy } from './services/local-inference/ocr/pipeline'
+import { readOnnxCharacterMetadata } from './services/local-inference/tracking/onnxGraphOutputs'
 
 /*
  * 本地推理后台进程（重要记录 003、任务 4.7d）：onnxruntime-node 原生推理与取帧都在这里，主进程只协调。
@@ -24,7 +27,7 @@ const log = (level: 'info' | 'warn', message: string, event: string, context: Re
 const renderedFrames = new RenderedTrackingFrames((id, requestId, request) => post({ type: 'frames', id, requestId, request }))
 
 let sessions: Promise<LocalModelSessions> | undefined
-type QueuedJob = { type: 'select-image-region'; job: ImageSubjectSelectionJob } | { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob }
+type QueuedJob = { type: 'ocr-privacy'; job: OcrPrivacyJob } | { type: 'select-image-region'; job: ImageSubjectSelectionJob } | { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob }
 const queue: QueuedJob[] = []
 const controllers = new Map<string, AbortController>()
 let running = false
@@ -139,6 +142,7 @@ async function drain(): Promise<void> {
   try {
     for (let entry = queue.shift(); entry; entry = queue.shift()) {
       if (entry.type === 'analyze') await run(entry.job)
+      else if (entry.type === 'ocr-privacy') await runPrivacy(entry.job)
       else if (entry.type === 'select-image-region') await runSelectImageRegion(entry.job)
       else if (entry.type === 'inpaint') await runInpaint(entry.job)
       else await runTrack(entry)
@@ -149,10 +153,29 @@ async function drain(): Promise<void> {
 port.on('message', (event) => {
   const request = event.data as LocalInferenceRequest
   if (request.type === 'frames') { renderedFrames.reply(request.id, request.reply); return }
-  if (request.type === 'select-image-region' || request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint') { queue.push(request); void drain() }
+  if (request.type === 'ocr-privacy' || request.type === 'select-image-region' || request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint') { queue.push(request); void drain() }
   else if (request.type === 'cancel') {
     const index = queue.findIndex(entry => entry.job.id === request.id)
     if (index >= 0) { const [entry] = queue.splice(index, 1); post({ type: 'failed', id: entry.job.id, code: 'cancelled', message: '分析已取消。' }) }
     controllers.get(request.id)?.abort()
   }
 })
+
+async function runPrivacy(job: OcrPrivacyJob): Promise<void> {
+  const controller = new AbortController(); controllers.set(job.id, controller)
+  let lastProgress = 0
+  try {
+    const rec = job.models.find(m => m.name === 'ppocr_rec')
+    if (!rec) throw new Error('文字识别模型未准备好。')
+    const alphabet = readOnnxCharacterMetadata(await fs.readFile(rec.path))
+    sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
+    const pool = await sessions
+    const result = await runOcrPrivacy(job, { alphabet, signal: controller.signal,
+      openModel: (model, providers, shape) => pool.open(model, providers, shape),
+      frames: size => ffmpegFrames(job.ffmpegPath, job, size, controller.signal),
+      progress: (done, total) => { const now = Date.now(); if (done < total && now - lastProgress < 200) return; lastProgress = now; post({ type: 'progress', id: job.id, done, total }) },
+    })
+    post({ type: 'done', id: job.id, result })
+  } catch (error) { post({ type: 'failed', id: job.id, code: controller.signal.aborted ? 'cancelled' : 'inference', message: error instanceof Error ? error.message.slice(0, 500) : '敏感信息识别失败。' }) }
+  finally { controllers.delete(job.id) }
+}

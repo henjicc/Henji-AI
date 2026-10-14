@@ -1,4 +1,11 @@
 {
+  "recordingPrivacy": {
+    "analyzing": "Detecting sensitive information…",
+    "title": "Sensitive information", "analyze": "Find sensitive text", "cancel": "Cancel analysis", "acceptAll": "Confirm all", "accept": "Confirm", "reject": "Ignore", "locate": "View frame",
+    "noPending": "No candidates to change", "busy": "Wait for analysis to finish", "progress": "Finding sensitive information · {{percent}}%", "review": "Redaction starts after confirmation. Review fast scrolling, brief appearances, rotated text and low-resolution footage.", "empty": "No sensitive information candidates yet",
+    "kind": { "email": "Email address", "phone": "Phone number", "identity": "Identity number", "bank_card": "Bank card number", "secret": "Secret key", "url_token": "Link credential", "password": "Password field" },
+    "status": { "pending": "Awaiting confirmation", "accepted": "Confirmed", "rejected": "Ignored" }
+  },
   "recording": {
     "title": "Screen recording",
     "record": "Record",

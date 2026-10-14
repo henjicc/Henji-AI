@@ -1,4 +1,5 @@
 import type { ImageSubjectSelectionJob, ImageSubjectSelectionResult } from './subject-selection/protocol'
+import type { OcrPrivacyJob, OcrPrivacyResult } from './ocr/protocol'
 import type { SmartRegionAnalysisKind, SmartRegionSummary } from '../../../../src/core/videoEdit/smartRegions'
 import type { LocalExecutionProvider } from './providers'
 import type { OnnxExtraOutput } from './tracking/onnxGraphOutputs'
@@ -11,7 +12,7 @@ import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
  * 后台进程负责解码取帧、推理、写结果文件；进度、日志、结果都回传主进程，由主进程写结构化日志。
  */
 
-export type LocalInferenceModelName = 'yunet' | 'rvm' | 'selfie' | 'ppocr'
+export type LocalInferenceModelName = 'yunet' | 'rvm' | 'selfie' | 'ppocr' | 'ppocr_rec'
   | 'etam_image_encoder' | 'etam_mask_decoder' | 'etam_memory_encoder' | 'etam_memory_attention' | 'etam_mask_downsample' | 'vittrack'
   | 'migan' | 'lama'
 
@@ -47,6 +48,7 @@ export interface SmartRegionAnalysisJob {
 export type LocalInferenceFailureCode = 'decode' | 'inference' | 'output' | 'cancelled'
 
 export type LocalInferenceRequest =
+  | { type: 'ocr-privacy'; job: OcrPrivacyJob }
   | { type: 'analyze'; job: SmartRegionAnalysisJob }
   | { type: 'select-image-region'; job: ImageSubjectSelectionJob }
   | { type: 'inpaint'; job: ImageInpaintJob }
@@ -69,6 +71,6 @@ export interface SmartRegionAnalysisResult {
 export type LocalInferenceEvent =
   | { type: 'frames'; id: string; requestId: string; request: TrackingFrameRequest }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult }
+  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult | OcrPrivacyResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }
   | { type: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }

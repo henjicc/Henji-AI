@@ -1,4 +1,11 @@
 {
+  "recordingPrivacy": {
+    "analyzing": "正在识别敏感信息…",
+    "title": "敏感信息", "analyze": "查找敏感信息", "cancel": "取消查找", "acceptAll": "全部确认", "accept": "确认", "reject": "忽略", "locate": "查看画面",
+    "noPending": "没有可修改的候选", "busy": "请等待当前识别结束", "progress": "正在查找敏感信息 · {{percent}}%", "review": "确认后才启用打码。请复核快速滚动、短暂闪现、旋转文字和低清画面。", "empty": "尚无敏感信息候选",
+    "kind": { "email": "邮箱", "phone": "手机号", "identity": "身份证号", "bank_card": "银行卡号", "secret": "密钥", "url_token": "链接凭据", "password": "密码输入框" },
+    "status": { "pending": "待确认", "accepted": "已确认", "rejected": "已忽略" }
+  },
   "recording": {
     "title": "屏幕录制",
     "record": "录制",
