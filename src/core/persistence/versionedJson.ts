@@ -10,6 +10,7 @@ export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: 
   'video-edit-export-presets': { id: 'export-presets', name: '本机导出预设', version: 1 },
   'voice_library_records': { id: 'voice-library', name: '克隆音色库', version: 1 },
   'henji-canvas-node-parameter-defaults-v1': { id: 'node-defaults', name: '画布默认参数', version: 1 },
+  'henji-recording-setup': { id: 'recording-setup', name: '录制设置', version: 1 },
 }
 export function localLibraryContract(key: string, schema: z.ZodType): PersistenceContract {
   const value = LOCAL_LIBRARY_FORMATS[key] ?? { id: key, name: '本机创作库', version: 1 }

@@ -65,7 +65,7 @@ export class MediaPermissionService {
       if (candidates.length !== 1 || !request.videoRequested) { callback({}); return }
       const grant = candidates[0]
       if (request.audioRequested && !grant.kinds.has('systemAudio')) { callback({}); return }
-      void this.sources(grant.selection!.excludedSourceIds).then(sources => {
+      void this.sources(grant.selection!.excludedSourceIds, false, grant.selection!.sourceId.startsWith('screen:') ? 'screen' : 'window').then(sources => {
         const stillOwned = [...(this.grants.get(target)?.get(contents.id)?.values() ?? [])].includes(grant)
         const source = sources.find(item => item.id === grant.selection!.sourceId)
         if (!stillOwned || contents.isDestroyed() || frame.isDestroyed() || !isTrustedMainRendererUrl(frame.url) || !source) { callback({}); return }
@@ -125,11 +125,15 @@ export class MediaPermissionService {
     return identity ? [...(this.grants.get(identity.target)?.get(identity.id)?.values() ?? [])].some(grant => grant.kinds.has(kind)) : false
   }
 
-  async sources(excludedSourceIds: readonly string[] = []): Promise<CaptureSource[]> {
+  /**
+   * `previews: false` skips thumbnails and icons, and `only` skips enumerating the other kind: rendering previews
+   * for every window takes seconds and only the picker shows them.
+   */
+  async sources(excludedSourceIds: readonly string[] = [], previews = true, only?: 'screen' | 'window'): Promise<CaptureSource[]> {
     // Screens fill the large range picker, so they get sharper thumbnails; the many windows stay small.
     const [screens, windows] = await Promise.all([
-      desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } }),
-      desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 480, height: 270 }, fetchWindowIcons: true }),
+      only === 'window' ? [] : desktopCapturer.getSources({ types: ['screen'], thumbnailSize: previews ? { width: 1280, height: 720 } : { width: 0, height: 0 } }),
+      only === 'screen' ? [] : desktopCapturer.getSources({ types: ['window'], thumbnailSize: previews ? { width: 480, height: 270 } : { width: 0, height: 0 }, fetchWindowIcons: previews }),
     ])
     const sources = [...screens.filter(source => source.id.startsWith('screen:')), ...windows.filter(source => source.id.startsWith('window:'))]
     const primary = screen.getPrimaryDisplay().id

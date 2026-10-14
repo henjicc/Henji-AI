@@ -16,13 +16,20 @@ const media = (id: string, kind: 'screen' | 'microphone', monoUs: number, durati
 
 describe('快速模式保存视频', () => {
   it('画面分段首尾相接，暂停期间的事件不进入视频时间', () => {
-    const windows = quickExportWindows([media('b', 'screen', 5_000_000, 1_000_000), media('a', 'screen', 1_000_000, 2_000_000), media('m', 'microphone', 1_000_000, 5_000_000)])
+    const { windows } = quickExportWindows([media('b', 'screen', 5_000_000, 1_000_000), media('a', 'screen', 1_000_000, 2_000_000), media('m', 'microphone', 1_000_000, 5_000_000)])
     expect(windows).toEqual([{ startUs: 1_000_000, endUs: 3_000_000, outputUs: 0 }, { startUs: 5_000_000, endUs: 6_000_000, outputUs: 2_000_000 }])
     expect(quickExportOutputUs(windows, 5_500_000)).toBe(2_500_000)
     expect(quickExportOutputUs(windows, 4_000_000)).toBeNull()
   })
+  it('倒计时预热段与停止后的尾巴不进文件：从共享起点在拼接后的画面里定位，声音同起点', () => {
+    const { windows, seekUs } = quickExportWindows([media('a', 'screen', 1_000_000, 2_000_000), media('b', 'screen', 5_000_000, 2_000_000)], { startUs: 2_500_000, endUs: 6_000_000 })
+    expect(seekUs).toBe(1_500_000)
+    expect(windows).toEqual([{ startUs: 2_500_000, endUs: 3_000_000, outputUs: 0 }, { startUs: 5_000_000, endUs: 6_000_000, outputUs: 500_000 }])
+    expect(quickExportAudioGraph([media('m', 'microphone', 0, 8_000_000, 'm.wav')], windows, 1)!.graph).toContain('[1:a]atrim=start=2.500000:duration=0.500000,asetpts=PTS-STARTPTS,adelay=0:all=1[a0]')
+    expect(quickExportArgs('list.txt', [], null, 'out.mp4', seekUs, 1_500_000).slice(0, 8)).toEqual(['-v', 'error', '-y', '-ss', '1.500000', '-f', 'concat', '-safe'])
+  })
   it('声音只取与画面重叠的部分，并放到对应的视频时间', () => {
-    const windows = quickExportWindows([media('a', 'screen', 1_000_000, 2_000_000), media('b', 'screen', 5_000_000, 1_000_000)])
+    const { windows } = quickExportWindows([media('a', 'screen', 1_000_000, 2_000_000), media('b', 'screen', 5_000_000, 1_000_000)])
     const mix = quickExportAudioGraph([media('m', 'microphone', 0, 6_000_000, 'm.wav')], windows, 1)!
     expect(mix.graph).toContain('[1:a]atrim=start=1.000000:duration=2.000000,asetpts=PTS-STARTPTS,adelay=0:all=1[a0]')
     expect(mix.graph).toContain('[1:a]atrim=start=5.000000:duration=1.000000,asetpts=PTS-STARTPTS,adelay=2000:all=1[a1]')
@@ -41,14 +48,17 @@ describe('快速模式保存视频', () => {
     execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', wav], { windowsHide: true })
     const list = path.join(root, 'list.txt')
     writeFileSync(list, spans.map(file => `file '${file.replace(/\\/g, '/')}'`).join('\n'))
-    const windows = quickExportWindows([media('a', 'screen', 0, 1_000_000, spans[0]), media('b', 'screen', 2_000_000, 1_000_000, spans[1])])
+    // The range starts half a second into the first span (mid-GOP): playback must still begin exactly there.
+    const { windows, seekUs } = quickExportWindows([media('a', 'screen', 0, 1_000_000, spans[0]), media('b', 'screen', 2_000_000, 1_000_000, spans[1])], { startUs: 500_000, endUs: 3_000_000 })
     const output = path.join(root, 'out.mp4')
-    execFileSync(ffmpegPath, quickExportArgs(list, [wav], quickExportAudioGraph([media('m', 'microphone', 0, 3_000_000, wav)], windows, 1), output), { windowsHide: true })
+    execFileSync(ffmpegPath, quickExportArgs(list, [wav], quickExportAudioGraph([media('m', 'microphone', 0, 3_000_000, wav)], windows, 1), output, seekUs, 1_500_000), { windowsHide: true })
     const payload: EmbeddedRecordingEvents = { format: 'henji.recording-events', version: 1, video: { width: 320, height: 180, fps: 30, durationMs: 2000 }, cursorEmbedded: true,
       events: [[0, 'cursor', 10, 20, 'arrow'], [500, 'click', 10, 20, 'left', 'down'], [1500, 'mark', '重点']] }
     await appendRecordingEventsBox(output, payload)
     const probe = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { windowsHide: true }).toString())
-    expect(Math.abs(Number(probe.format.duration) - 2)).toBeLessThan(0.1)
+    expect(Math.abs(Number(probe.format.duration) - 1.5)).toBeLessThan(0.1)
+    const decoded = execFileSync(ffmpegPath, ['-v', 'error', '-i', output, '-map', '0:v', '-f', 'framemd5', '-'], { windowsHide: true }).toString().split('\n').filter(line => /^0,/.test(line)).length
+    expect(Math.abs(decoded - 45)).toBeLessThanOrEqual(1)
     expect(probe.streams.map((stream: { codec_type: string }) => stream.codec_type).sort()).toEqual(['audio', 'video'])
     expect(await readRecordingEventsBox(output)).toEqual(payload)
     expect(await readRecordingEventsBox(spans[0])).toBeNull()

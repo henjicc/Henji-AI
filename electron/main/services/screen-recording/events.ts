@@ -150,6 +150,9 @@ export class RecordingEventSession {
         try { await backend.resume(signal); if (signal.aborted) throw new Error('录制已取消'); this.collector.resume(this.options.nowUs()); this.attach() }
         catch (error) { return releaseOnFailure(error) }
       },
+      // Events keep flowing through the countdown; consumers cut everything before the recorded start.
+      ...(backend.began ? { began: () => backend.began!() } : {}),
+      ...(backend.ending ? { ending: () => backend.ending!() } : {}),
       mark: async (signal, note) => {
         try { await backend.mark(signal, note); this.mark(note) }
         catch (error) { return releaseOnFailure(error) }

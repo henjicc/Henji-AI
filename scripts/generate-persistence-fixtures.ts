@@ -133,7 +133,7 @@ const replaySequence = createVideoEditSequence('原始序列')
 replaySequence.id = 'golden-replay-sequence'; replayBaseline.sequences.push(replaySequence)
 const replayOperation = { target: { kind: 'video_edit.sequence', id: 'golden-replay:golden-replay-sequence' }, properties: { 'video_edit.sequence.name': '演示序列' } }
 const values: Record<string, unknown> = {
-  'document.screen_recording': { ...createRecordingDocument(), sessionId: '00000000-0000-4000-8000-000000000005', originUs: 1000000, status: 'stopped',
+  'document.screen_recording': { ...createRecordingDocument(), sessionId: '00000000-0000-4000-8000-000000000005', originUs: 1000000, startUs: 3000000, endUs: 13000000, status: 'stopped',
     source: { name: '合成显示器', options: { sourceId: 'screen:1:0', backend: 'auto', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }, cursorEmbedded: false },
     media: [{ id: 'screen-0', kind: 'screen', path: '/persistence-project/素材/screen.mp4', monoUs: 3000000, durationUs: 10000000 }],
     eventPages: [{ path: `/persistence-project/素材/0000000000000000-${'a'.repeat(64)}.capture.json`, firstSequence: 0, lastSequence: 2 }], markers: [{ id: 'golden-mark', monoUs: 4000000, note: '重点' }],
@@ -177,6 +177,7 @@ const values: Record<string, unknown> = {
   'document-envelope': buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'golden-envelope', name: '外壳样本', createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content: { nodes: [], edges: [] } }),
   'llm-config-journal': { version: 1, configBefore: null },
   'node-defaults': { imageGen: { modelId: 'golden-model', params: { quality: 'high' } } },
+  'recording-setup': { range: 'region', sourceId: 'screen:1:0', region: { x: .1, y: .1, width: .5, height: .5 }, mode: 'quick', saveDirectory: 'D:/录屏', microphone: true, microphoneId: 'mic', systemAudio: true, camera: false, cameraId: '', quality: '1440p', fps: 60, insert: true },
   'model-defaults': modelDefaultsSchema.parse({ version: MODEL_DEFAULTS_VERSION, providerId: 'kie', models: { image: '', video: '', audio: '', transcription: 'groq.speech-recognition.whisper-large-v3-turbo' } }),
   onboarding: { version: 2, status: 'in_progress', entryReason: 'fresh_install', activeStepId: 'provider', completedStepIds: ['welcome'], configuredProviders: [], verifiedProviders: [], shownHintIds: [], firstTaskPrepared: false, firstTaskCompleted: false, startedAt: timestamp, completedAt: null },
   'subtitle-manifest': { version: SUBTITLE_MANIFEST_VERSION, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [soundClip], soundIdentities: { 'golden-sound-clip': 'golden-sound-identity' }, captions: sequence.captions, committed: true },

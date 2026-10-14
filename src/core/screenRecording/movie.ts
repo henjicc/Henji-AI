@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { RecordingDocument } from './document'
+import { recordingRange } from './range'
 import type { RecordingRange, RecordingUnderstanding } from './understanding'
 
 export const recordingMovieRecipeSchema = z.object({
@@ -30,9 +31,8 @@ function overlaps(ranges: readonly RecordingRange[]): (range: RecordingRange) =>
 
 /** One global edit map drives every sound/picture/text lane. Gaps remain gaps, never fabricated footage. */
 export function recordingMovieSpans(recording: RecordingDocument, understanding: RecordingUnderstanding, recipe: RecordingMovieRecipe): RecordingMovieSpan[] {
-  const media = recording.media.filter(v => v.durationUs > 0)
-  if (!media.length) throw new Error('会话没有可生成的原片。')
-  const origin = Math.min(...media.map(v => v.monoUs)), end = Math.max(...media.map(v => v.monoUs + v.durationUs))
+  if (!recording.media.some(v => v.durationUs > 0)) throw new Error('会话没有可生成的原片。')
+  const { startUs: origin, endUs: end } = recordingRange(recording)
   const speech = overlaps(understanding.transcript), protectedWords = overlaps(understanding.transcript.filter(t => t.protected || t.granularity !== 'word'))
   const changes = understanding.candidates.flatMap(candidate => {
     if (candidate.status === 'rejected') return []

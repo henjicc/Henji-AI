@@ -83,7 +83,11 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
           const time = Number(line.slice(12))
           if (Number.isFinite(time) && time > 0) {
             run.durationUs = time
-            if (!started) { started = true; clearTimeout(timeout); span.monoUs = Math.max(0, this.deps.nowUs() - time); readyResolve() }
+            // Each report arrives some encoder/pipe delay after its frames were captured, so every
+            // `now - out_time` is a late guess at the first frame; the earliest one is the closest.
+            const estimate = Math.max(0, this.deps.nowUs() - time)
+            if (!started) { started = true; clearTimeout(timeout); span.monoUs = estimate; readyResolve() }
+            else if (estimate < span.monoUs && !span.finalized) span.monoUs = estimate
           }
         }
       }

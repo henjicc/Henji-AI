@@ -6,15 +6,15 @@ import { getPlatform } from '@/platform'
 import { importVideoEditSources } from '@/features/videoEdit'
 import { openVideoEditDocument, saveVideoEdit } from '@/features/videoEdit'
 import type { RecordingDestination } from './recordingService'
-import { recordingMediaSpans } from './recordingTimeline'
+import { recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
 
-/** Real mono-time intervals share one origin. Pause/device gaps remain empty; audio latency is already compensated. */
+/** Every track is cut to the shared recorded range and placed from its start. Pause/device gaps remain empty; audio latency is already compensated. */
 export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination): VideoEditDocument {
   if (!target.sequenceId) return document
   const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
   if (!sequence) throw new Error('录制期间目标序列已移除，素材尚未导入；请选择其他序列重试')
   const fps = videoEditComposition(document, sequence.id).fps
-  const origin = Math.min(...media.map(item => item.monoUs))
+  const origin = recordingRange(recording).startUs
   const trackIndices = new Map<string, number>()
   for (const kind of (['microphone', 'systemAudio', 'screen', 'camera'] as const).filter(kind => media.some(item => item.kind === kind))) {
     const index = Math.max(-1, ...sequence.tracks.map(track => track.index)) + 1

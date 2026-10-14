@@ -15,6 +15,10 @@ export const recordingPageReferenceSchema = z.object({
 export const recordingDocumentSchema = z.object({
   directorRun: recordingDirectorRunSchema.optional(),
   sessionId: z.string().uuid().nullable(), originUs: z.number().int().nonnegative(),
+  /** Session clock when the countdown ended and the recording really began; capture warmed up before it is not part of the result. */
+  startUs: z.number().int().nonnegative().optional(),
+  /** Session clock when the person pressed stop; every track ends here even if an encoder flushes a moment longer. */
+  endUs: z.number().int().nonnegative().optional(),
   status: z.enum(['empty', 'prepared', 'recording', 'paused', 'stopped', 'interrupted']),
   source: z.object({ name: z.string(), options: captureOptionsSchema, cursorEmbedded: z.boolean() }).strict().nullable(),
   devices: recordingTrackOptionsSchema,

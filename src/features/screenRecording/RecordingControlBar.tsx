@@ -43,7 +43,7 @@ export default function RecordingControlBar(): React.ReactElement {
     {problem
       ? <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-warning-text" role="status"><AlertTriangle className={`${UI_ICON_SIZE_CLASS.sm} shrink-0`} aria-hidden /><span className="truncate">{problem}</span></span>
       : <span className="flex min-w-0 flex-1 items-center gap-3">
-        <span className={`${UI_TEXT_TIMECODE_CLASS} text-sm font-medium text-text1`}>{phase === 'countdown' ? t('screenRecording.countdown', { seconds: snapshot?.countdown }) : recordingTimeLabel(snapshot?.elapsedMs ?? 0)}</span>
+        <span className={`${UI_TEXT_TIMECODE_CLASS} text-sm font-medium text-text1`}>{phase === 'countdown' ? snapshot?.countdown ? t('screenRecording.countdown', { seconds: snapshot.countdown }) : t('screenRecording.preparing') : recordingTimeLabel(snapshot?.elapsedMs ?? 0)}</span>
         <span className="flex items-center gap-1.5 text-text2" aria-label={t('screenRecording.microphoneLevel')} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level === null || level === undefined ? 0 : Math.round(level * 100)}>
           {level === null || level === undefined ? <MicOff className={UI_ICON_SIZE_CLASS.sm} aria-label={t('screenRecording.microphoneInactive')} /> : <>
             <Mic className={UI_ICON_SIZE_CLASS.sm} aria-hidden />

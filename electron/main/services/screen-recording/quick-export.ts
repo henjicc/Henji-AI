@@ -4,6 +4,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { getDocumentService } from '../documents/runtime'
 import { recordingDocumentSchema, type RecordingDocument, type RecordingMedia } from '../../../../src/core/screenRecording/document'
+import { recordingRange } from '../../../../src/core/screenRecording/range'
 import type { CaptureEvent } from '../../../../src/core/captureLog/events'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { getUserFolderDir } from '../appPaths'
@@ -17,14 +18,22 @@ const exported = new Map<string, string>()
 
 interface Window { startUs: number; endUs: number; outputUs: number }
 
-/** Screen spans back to back: pauses and gaps are simply left out of the file. */
-export function quickExportWindows(media: readonly RecordingMedia[]): Window[] {
-  let outputUs = 0
-  return media.filter(item => item.kind === 'screen' && item.durationUs > 0).sort((a, b) => a.monoUs - b.monoUs).map(item => {
-    const window = { startUs: item.monoUs, endUs: item.monoUs + item.durationUs, outputUs }
-    outputUs += item.durationUs
-    return window
-  })
+/**
+ * Screen spans back to back, cut to the recorded range: pauses, the countdown warm-up and the encoder's
+ * tail after stop are left out. `seekUs` is where the range starts in the joined files.
+ */
+export function quickExportWindows(media: readonly RecordingMedia[], range: { startUs: number; endUs: number } = { startUs: 0, endUs: Number.MAX_SAFE_INTEGER }): { windows: Window[]; seekUs: number } {
+  let joinedUs = 0, outputUs = 0, seekUs = 0
+  const windows: Window[] = []
+  for (const item of media.filter(item => item.kind === 'screen' && item.durationUs > 0).sort((a, b) => a.monoUs - b.monoUs)) {
+    const startUs = Math.max(range.startUs, item.monoUs), endUs = Math.min(range.endUs, item.monoUs + item.durationUs)
+    if (endUs > startUs) {
+      if (!windows.length) seekUs = joinedUs + startUs - item.monoUs
+      windows.push({ startUs, endUs, outputUs }); outputUs += endUs - startUs
+    }
+    joinedUs += item.durationUs
+  }
+  return { windows, seekUs }
 }
 
 export function quickExportOutputUs(windows: readonly Window[], monoUs: number): number | null {
@@ -64,9 +73,13 @@ function compactEvents(events: readonly CaptureEvent[], windows: readonly Window
   return rows
 }
 
-/** Video is stream-copied; only the mixed sound is encoded. */
-export function quickExportArgs(list: string, audio: readonly string[], mix: { graph: string; label: string } | null, output: string): string[] {
-  return ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, ...audio.flatMap(file => ['-i', file]),
+/**
+ * Video is stream-copied; only the mixed sound is encoded. Seeking the joined input with stream copy keeps the
+ * keyframe before the start and writes an edit list, so playback still begins on the exact frame.
+ */
+export function quickExportArgs(list: string, audio: readonly string[], mix: { graph: string; label: string } | null, output: string, seekUs = 0, durationUs?: number): string[] {
+  return ['-v', 'error', '-y', ...(seekUs > 0 ? ['-ss', (seekUs / 1e6).toFixed(6)] : []), '-f', 'concat', '-safe', '0', '-i', list, ...audio.flatMap(file => ['-i', file]),
+    ...(durationUs !== undefined ? ['-t', (durationUs / 1e6).toFixed(6)] : []),
     ...(mix ? ['-filter_complex', mix.graph, '-map', '0:v:0', '-map', mix.label, '-c:a', 'aac', '-b:a', '192k'] : ['-map', '0:v:0', '-an']),
     '-c:v', 'copy', '-movflags', '+faststart', output]
 }
@@ -97,7 +110,7 @@ export async function exportQuickRecording(sessionId: string, directory?: string
   const read = await getDocumentService().readDocument({ id: sessionId })
   if (read.meta.kind !== 'screen_recording') throw new Error('请选择录制会话')
   const content: RecordingDocument = recordingDocumentSchema.parse(read.content)
-  const windows = quickExportWindows(content.media)
+  const { windows, seekUs } = quickExportWindows(content.media, recordingRange(content))
   if (!windows.length || !content.source) throw new Error('这段录制没有可保存的画面')
   const target = directory ?? path.join(getUserFolderDir('exports'), '屏幕录制')
   await mkdir(target, { recursive: true })
@@ -110,15 +123,15 @@ export async function exportQuickRecording(sessionId: string, directory?: string
   const ffmpeg = await loadFfmpegPath()
   const mix = quickExportAudioGraph(audio, windows, 1)
   const started = Date.now()
+  const durationUs = windows.reduce((sum, window) => sum + window.endUs - window.startUs, 0)
   try {
-    await run(ffmpeg, quickExportArgs(list, audio.map(item => item.path), mix, output))
+    await run(ffmpeg, quickExportArgs(list, audio.map(item => item.path), mix, output, seekUs, durationUs))
   } catch (error) { await rm(output, { force: true }); throw error } finally { await rm(list, { force: true }) }
   const events: CaptureEvent[] = []
   for (let offset: number | null = 0; offset !== null;) {
     const page = await readRecordingEvents(sessionId, offset, 4096, false)
     events.push(...page.events); offset = page.nextOffset
   }
-  const durationUs = windows.reduce((sum, window) => sum + window.endUs - window.startUs, 0)
   const rows = compactEvents(events, windows)
   const options = content.source.options
   await appendRecordingEventsBox(output, { format: 'henji.recording-events', version: 1, video: { width: options.width, height: options.height, fps: options.fps, durationMs: Math.round(durationUs / 1000) }, cursorEmbedded: content.source.cursorEmbedded, events: rows })

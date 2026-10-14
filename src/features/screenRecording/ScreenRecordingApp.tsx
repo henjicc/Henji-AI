@@ -15,7 +15,7 @@ import { controlRecording, recordingView, recoverRecording, revealQuickRecording
 import { RecordingQuickResult } from './RecordingQuickResult'
 import { recordingTimeline } from './application/recordingTimeline'
 import { RecordingSourcePicker } from './RecordingSourcePicker'
-import { DEFAULT_RECORDING_SETUP, FULL_REGION, formatRecordingTime, orderedScreens, recordingOutput, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
+import { formatRecordingTime, loadRecordingSetup, orderedScreens, recordingOutput, saveRecordingSetup, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
 import { RecordingSetupPanel } from './RecordingSetupPanel'
 import { RecordingLive } from './RecordingLive'
 import { RecordingWorkbench } from './RecordingWorkbench'
@@ -23,18 +23,17 @@ import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirec
 import { RecordingProductOptions } from './RecordingProductOptions'
 import { recordingTimeLabel } from './useRecordingControlSnapshot'
 
-/** Kept for the app session so the next recording starts from the same range and devices. */
-let rememberedSetup: { mode: RecordingRangeMode; sourceId: string; region: RecordingRegion; setup: RecordingSetup } | null = null
 
 export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): React.ReactElement {
   const { t } = useTranslation('ui')
   const state = useSyncExternalStore(subscribeRecording, recordingView)
   const [sources, setSources] = useState<CaptureSource[]>([])
   const [devices, setDevices] = useState<Awaited<ReturnType<typeof recordingDevices>>>([])
-  const [mode, setMode] = useState<RecordingRangeMode>(rememberedSetup?.mode ?? 'screen')
-  const [sourceId, setSourceId] = useState(rememberedSetup?.sourceId ?? '')
-  const [region, setRegion] = useState<RecordingRegion>(rememberedSetup?.region ?? FULL_REGION)
-  const [setup, setSetup] = useState<RecordingSetup>(rememberedSetup?.setup ?? DEFAULT_RECORDING_SETUP)
+  const [remembered] = useState(() => loadRecordingSetup())
+  const [mode, setMode] = useState<RecordingRangeMode>(remembered.range)
+  const [sourceId, setSourceId] = useState(remembered.sourceId)
+  const [region, setRegion] = useState<RecordingRegion>(remembered.region)
+  const [setup, setSetup] = useState<RecordingSetup>(remembered.setup)
   const [director, setDirector] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -47,7 +46,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
   const movieController = useRef<AbortController | null>(null)
   const movieTarget = useRef<{ sessionId: string; documentId: string } | null>(null)
   useEffect(() => () => movieController.current?.abort(), [])
-  useEffect(() => { rememberedSetup = { mode, sourceId, region, setup } }, [mode, sourceId, region, setup])
+  useEffect(() => { saveRecordingSetup({ range: mode, sourceId, region, setup }) }, [mode, sourceId, region, setup])
   const generateMovie = async (): Promise<void> => {
     if (!state.documentId || movieController.current) return
     const controller = new AbortController(); movieController.current = controller
@@ -79,7 +78,12 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
       const values = await getPlatform().screenRecording.sources()
       setSources(values)
       // Keep the remembered source when it still exists; otherwise start from the primary monitor.
-      setSourceId(current => values.some(item => item.id === current) ? current : (values.find(item => item.display?.primary) ?? orderedScreens(values)[0] ?? values[0])?.id ?? '')
+      setSourceId(current => {
+        if (values.some(item => item.id === current)) return current
+        // The remembered window has closed: fall back to the main screen, and show the screen range with it.
+        setMode(range => range === 'window' ? 'screen' : range)
+        return (values.find(item => item.display?.primary) ?? orderedScreens(values)[0] ?? values[0])?.id ?? ''
+      })
       setDevices(await recordingDevices())
     } finally { setLoading(false) }
   }, [])
@@ -127,7 +131,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
     trailing = <UiButton onClick={newRecording}>{t('recording.new')}</UiButton>
   }
   else if (active && snapshot) {
-    leading = <span className="flex items-center gap-2 text-sm font-medium">{t('recording.title')}<span className={`${UI_TEXT_TIMECODE_CLASS} text-xs text-text2`}>{snapshot.phase === 'countdown' ? t('recording.countdown', { count: snapshot.countdown }) : recordingTimeLabel(snapshot.elapsedMs)}</span></span>
+    leading = <span className="flex items-center gap-2 text-sm font-medium">{t('recording.title')}<span className={`${UI_TEXT_TIMECODE_CLASS} text-xs text-text2`}>{snapshot.phase === 'countdown' ? snapshot.countdown ? t('recording.countdown', { count: snapshot.countdown }) : t('screenRecording.preparing') : recordingTimeLabel(snapshot.elapsedMs)}</span></span>
     trailing = <>
       <UiButton variant="danger" disabled={state.busy} disabledReason={t('screenRecording.toggleUnavailable')} onClick={() => run(() => controlRecording(snapshot.sessionId, 'cancel'))}>{t('recording.cancel')}</UiButton>
       {snapshot.phase === 'recording' || snapshot.phase === 'paused' ? <UiButton disabled={snapshot.busy} disabledReason={t('screenRecording.toggleUnavailable')} onClick={() => run(() => controlRecording(snapshot.sessionId, snapshot.phase === 'paused' ? 'resume' : 'pause'))}>{snapshot.phase === 'paused' ? <Play /> : <Pause />}{t(snapshot.phase === 'paused' ? 'recording.resume' : 'recording.pause')}</UiButton> : null}

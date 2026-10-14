@@ -43,13 +43,14 @@ describe('录制控制权威状态', () => {
     await expect(service.command('toggle', '错误备注')).rejects.toThrow('备注只能')
     await service.dispose()
   })
-  it('无会话不注册；倒计时后才实际启动、暂停不累计时长，标记与停止走同一后端', async () => {
+  it('无会话不注册；倒计时内预热采集、数到零才算开始，暂停不累计时长，标记与停止走同一后端', async () => {
     const { service, backend, register, unregister, released } = fixture()
     service.configureShortcuts(DEFAULT_RECORDING_SHORTCUTS); expect(register).not.toHaveBeenCalled()
     service.create('session', backend); expect(register).toHaveBeenCalledTimes(3)
     await expect(service.command('mark')).rejects.toThrow('录制过程中')
-    await service.command('toggle'); expect(service.snapshot()?.phase).toBe('countdown'); expect(backend.start).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(3000); expect(backend.start).toHaveBeenCalledTimes(1); expect(service.snapshot()?.phase).toBe('recording')
+    await service.command('toggle'); expect(service.snapshot()).toMatchObject({ phase: 'countdown', countdown: 3 }); await vi.advanceTimersByTimeAsync(0); expect(backend.start).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2000); expect(service.snapshot()).toMatchObject({ phase: 'countdown', countdown: 1, elapsedMs: 0 })
+    await vi.advanceTimersByTimeAsync(1000); expect(backend.start).toHaveBeenCalledTimes(1); expect(service.snapshot()?.phase).toBe('recording')
     await vi.advanceTimersByTimeAsync(2100); service.setMicrophoneLevel('session', .4)
     expect(service.snapshot()?.microphoneLevel).toBe(.4)
     await service.command('toggle'); expect(service.snapshot()?.phase).toBe('paused'); expect(service.snapshot()?.elapsedMs).toBe(2100)
@@ -61,10 +62,25 @@ describe('录制控制权威状态', () => {
     await service.command('stop'); expect(backend.stop).toHaveBeenCalledTimes(1)
     await service.dispose()
   })
-  it('倒计时可停止，后端启动不被调用；不存在迟到的启动', async () => {
-    const { service, backend } = fixture(); service.create('session', backend)
+  it('倒计时内停止：预热的采集收尾为空区间，不会在之后迟到开始', async () => {
+    const { service, backend } = fixture(); const order: string[] = []
+    const hooks = { ...backend, began: vi.fn(async () => { order.push('began') }), ending: vi.fn(async () => { order.push('ending') }) }
+    backend.stop.mockImplementation(async () => { order.push('stop') })
+    service.create('session', hooks)
     await service.command('toggle'); await vi.advanceTimersByTimeAsync(1000); await service.command('stop'); await vi.advanceTimersByTimeAsync(10000)
-    expect(backend.start).not.toHaveBeenCalled(); expect(service.snapshot()?.phase).toBe('stopped')
+    expect(order).toEqual(['began', 'ending', 'stop']); expect(service.snapshot()?.phase).toBe('stopped')
+    await service.dispose()
+  })
+  it('采集预热慢于倒计时：零时显示准备中而非开始计时，就绪那一刻才开始；开始时刻只记一次', async () => {
+    const { service, backend } = fixture(); let finish!: () => void
+    backend.start.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const began = vi.fn(async () => {}); service.create('session', { ...backend, began })
+    await service.command('toggle'); await vi.advanceTimersByTimeAsync(4000)
+    expect(service.snapshot()).toMatchObject({ phase: 'countdown', countdown: 0, elapsedMs: 0 }); expect(began).not.toHaveBeenCalled()
+    finish(); await vi.advanceTimersByTimeAsync(0)
+    expect(service.snapshot()?.phase).toBe('recording'); expect(began).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1500); expect(service.snapshot()?.elapsedMs).toBe(1500)
+    await service.command('toggle'); await service.command('toggle'); expect(began).toHaveBeenCalledTimes(1)
     await service.dispose()
   })
   it('后端启动失败不显示录制；停止失败可重试、错误不吞掉', async () => {

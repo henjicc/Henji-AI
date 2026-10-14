@@ -255,9 +255,14 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 5,
-      "fingerprint": "88543a4f90b66eff15998d917e5fc115fb532a6e29e9a0b8c1cc04960957b9be",
+      "version": 6,
+      "fingerprint": "0198b29dd5fc5e6e5755b6507bf21aba654ebfd5ce6ced57b53a70075608d853",
       "supportedFrom": 5
+    },
+    "recording-setup": {
+      "version": 1,
+      "fingerprint": "7510476937e9eebed84177d8a0b0622e67023fbb988ff929ba79792d22d9caf4",
+      "supportedFrom": 1
     }
   },
   "devBreaks": [

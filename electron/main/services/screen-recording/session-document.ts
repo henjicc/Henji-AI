@@ -63,6 +63,10 @@ export class RecordingSessionDocument {
     })))]
     return this.save()
   }
+  range(edge: 'startUs' | 'endUs', monoUs: number): Promise<void> {
+    this.content[edge] = Math.max(0, Math.round(monoUs))
+    return this.save()
+  }
   page(page: CaptureLogPage, file: string): Promise<void> {
     this.content.eventPages.push({ path: file, firstSequence: page.seqSpan[0], lastSequence: page.seqSpan[1] })
     for (const entry of page.entries) if (entry.kind === 'mark') this.content.markers.push({ id: entry.eventId, monoUs: entry.monoUs, note: entry.note ?? '' })

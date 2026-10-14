@@ -11,6 +11,10 @@ export interface RecordingControlBackend {
   stop(signal: AbortSignal): Promise<void>
   /** 取消是资源释放屏障；完成后任何旧的异步启动都不得重新开启采集。 */
   cancel(): Promise<void>
+  /** 倒计时结束、正式开始录制的时刻，只调用一次；采集在倒计时内已预热，此前录到的内容不进入成品。 */
+  began?(): Promise<void>
+  /** 用户按下停止的时刻，在 stop 之前调用；各轨都以此为共同结尾。 */
+  ending?(): Promise<void>
 }
 interface ControlDependencies {
   now(): number
@@ -26,6 +30,9 @@ interface ActiveRecording {
   elapsed: number
   startedAt: number
   abort: AbortController
+  /** Capture finished warming up while the countdown was still running. */
+  warmed?: boolean
+  began?: boolean
 }
 
 /** 一个运行实例、一套状态；控制条、快捷键和后续应用能力都委托这里。 */
@@ -89,17 +96,19 @@ export class RecordingControlService {
       return this.command('stop')
     }
     if (action === 'toggle' && active.snapshot.phase === 'ready') {
+      // The countdown is shown at once while capture warms up underneath it, so recording begins exactly at zero.
       active.snapshot.phase = 'countdown'; active.snapshot.countdown = 3
       this.countdownTimer = setInterval(() => {
         if (this.active !== active) return
         active.snapshot.countdown -= 1
         if (active.snapshot.countdown === 0) {
           this.clearCountdown()
-          void this.execute('start', active).catch(error => this.deps.log('recording.control.start.failed', error))
+          if (active.warmed) this.begin(active); else this.publish()
         } else this.publish()
       }, 1000)
       this.countdownTimer.unref?.()
-      this.publish(); return
+      void this.execute('start', active).catch(error => this.deps.log('recording.control.start.failed', error))
+      return
     }
     if (action === 'stop' && active.snapshot.phase === 'countdown') this.clearCountdown()
     if (action === 'stop' && active.snapshot.phase === 'stopped') return
@@ -117,11 +126,20 @@ export class RecordingControlService {
     }
     this.deps.log(`recording.control.${operation}.start`)
     this.publish()
-    const task = Promise.resolve().then(() => operation === 'mark' ? active.backend.mark(active.abort.signal, note) : active.backend[operation](active.abort.signal)).then(() => {
+    const task = Promise.resolve().then(async () => {
+      if (operation === 'mark') return active.backend.mark(active.abort.signal, note)
+      if (operation === 'stop') {
+        // Stopped before the countdown ended: an empty range, so nothing warmed up leaks into the result.
+        if (!active.began && active.backend.began) { active.began = true; await active.backend.began() }
+        await active.backend.ending?.()
+      }
+      return active.backend[operation](active.abort.signal)
+    }).then(() => {
       if (this.active !== active || active.abort.signal.aborted) return
       if (active.snapshot.phase === 'failed' && operation !== 'stop') return
       if (operation === 'pause') { active.elapsed += Math.max(0, this.deps.now() - active.startedAt); active.snapshot.phase = 'paused'; active.snapshot.microphoneLevel = null }
-      if (operation === 'start' || operation === 'resume') { active.startedAt = this.deps.now(); active.snapshot.phase = 'recording' }
+      if (operation === 'start') { if (active.snapshot.phase === 'countdown' && active.snapshot.countdown > 0) active.warmed = true; else this.begin(active, false) }
+      if (operation === 'resume') { active.startedAt = this.deps.now(); active.snapshot.phase = 'recording' }
       if (operation === 'stop') { active.snapshot.phase = 'stopped'; active.snapshot.microphoneLevel = null; this.releaseResources() }
       this.deps.log(`recording.control.${operation}.completed`)
     }).catch(error => {
@@ -183,6 +201,12 @@ export class RecordingControlService {
     if (active) {
       try { await active.backend.cancel() } catch (error) { this.deps.log('recording.control.cancel.failed', error); throw error }
     }
+  }
+  private begin(active: ActiveRecording, publish = true): void {
+    if (active.began || active.snapshot.phase === 'failed' || active.snapshot.phase === 'stopping' || active.snapshot.phase === 'stopped') return
+    active.began = true; active.startedAt = this.deps.now(); active.snapshot.phase = 'recording'
+    if (publish) this.publish()
+    void Promise.resolve(active.backend.began?.()).catch(error => this.deps.log('recording.control.began.failed', error))
   }
   private clearCountdown(): void { clearInterval(this.countdownTimer); this.countdownTimer = undefined }
   private unregisterShortcuts(): void { for (const accelerator of this.registered.values()) this.deps.unregister(accelerator); this.registered.clear() }

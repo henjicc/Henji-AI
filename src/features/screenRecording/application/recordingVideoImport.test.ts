@@ -23,7 +23,7 @@ it('工具箱送入剪辑与停止自动导入的共享入口保留所有原片�
   expect(vi.mocked(importVideoEditSources).mock.calls.at(-1)?.[1]).toEqual(recording.media.map(media => ({ path: media.path })))
 })
 
-it('以实际时间对齐音画，暂停/缺帧留空，不重复补偿音频延迟；摄像头位于屏幕上方', () => {
+it('以第一帧画面为起点对齐音画（早开的麦克风被裁掉），暂停/缺帧留空，不重复补偿音频延迟；摄像头位于屏幕上方', () => {
   const document = createVideoEditDocument('剪辑'), sequence = createVideoEditSequence('课程')
   document.sequences.push(sequence)
   const recording = createRecordingDocument()
@@ -41,12 +41,30 @@ it('以实际时间对齐音画，暂停/缺帧留空，不重复补偿音频延
   }
   placeRecordingMedia(document, recording, recording.media, recording.media.map(media => media.id), { documentId: document.id, sequenceId: sequence.id, frame: 30 })
   const mic = sequence.clips.find(clip => clip.itemId === 'microphone')!, screen = sequence.clips.find(clip => clip.itemId === 'screen')!, second = sequence.clips.find(clip => clip.itemId === 'screen2')!
-  expect(mic.start).toBe(30); expect(screen.start).toBe(32); expect(second.start).toBe(122)
+  expect(mic.start).toBe(30); expect(mic.sourceInUs).toBe(50000); expect(screen.start).toBe(30); expect(second.start).toBe(120)
   const camera = sequence.clips.filter(clip => clip.itemId === 'camera')
   expect(camera).toHaveLength(2)
-  expect(camera[1].start).toBe(122)
+  expect(camera[1].start).toBe(120)
   expect(camera[0].track).toBeGreaterThan(screen.track)
   expect(new Set(sequence.clips.map(clip => clip.linkId)).size).toBe(1)
   expect(camera[1].sourceInUs).toBe(2900000)
   expect(camera[0].duration).toBe(57)
+})
+
+it('送入剪辑：倒计时预热段与停止后的编码尾巴都不进时间线，画面和声音同帧开始、同帧结束', () => {
+  const document = createVideoEditDocument('剪辑'), sequence = createVideoEditSequence('课程')
+  document.sequences.push(sequence)
+  const recording = { ...createRecordingDocument(), startUs: 3_000_000, endUs: 9_000_000 }
+  recording.media = [
+    { id: 'microphone', kind: 'microphone', path: '/mic.wav', monoUs: 500_000, durationUs: 8_600_000 },
+    { id: 'screen', kind: 'screen', path: '/screen.mp4', monoUs: 1_300_000, durationUs: 8_200_000 },
+  ]
+  for (const source of recording.media) {
+    const kind = source.kind === 'microphone' ? 'audio' : 'video'
+    document.media.push({ id: source.id, path: source.path, name: source.id, kind, durationSeconds: source.durationUs / 1e6, width: 1920, height: 1080, hasAudio: kind === 'audio' })
+    document.items.push({ id: source.id, name: source.id, kind, mediaId: source.id })
+  }
+  placeRecordingMedia(document, recording, recording.media, recording.media.map(media => media.id), { documentId: document.id, sequenceId: sequence.id, frame: 0 })
+  const clips = sequence.clips.map(clip => ({ item: clip.itemId, start: clip.start, end: clip.start + clip.duration, sourceInUs: clip.sourceInUs }))
+  expect(clips).toEqual(expect.arrayContaining([{ item: 'microphone', start: 0, end: 180, sourceInUs: 2_500_000 }, { item: 'screen', start: 0, end: 180, sourceInUs: 1_700_000 }]))
 })

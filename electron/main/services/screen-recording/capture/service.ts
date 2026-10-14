@@ -67,7 +67,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
     preparing = true
     try {
       mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId)
-      const source = (await mediaPermissions.sources()).find(item => item.id === request.options.sourceId)
+      const source = (await mediaPermissions.sources([], false, request.options.sourceId.startsWith('screen:') ? 'screen' : 'window')).find(item => item.id === request.options.sourceId)
       if (!source) throw new Error('录制来源已关闭，请重新选择')
       const wgc = process.platform === 'win32' && Number(release().split('.')[2]) >= 18362
       let backend: CaptureBackendKind = request.options.backend === 'chromium' || !wgc ? 'chromium' : 'gfxcapture'
@@ -114,6 +114,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         openRecordingControl(owner, request.sessionId, {
           start: signal => transition('start', 'recording', signal), pause: signal => transition('pause', 'paused', signal), resume: signal => transition('resume', 'recording', signal), stop: signal => transition('stop', 'stopped', signal),
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.
+          ...(document ? { began: () => document!.range('startUs', now() - session.originUs), ending: () => document!.range('endUs', now() - session.originUs) } : {}),
           cancel: async () => {
             try {
               const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : [])])

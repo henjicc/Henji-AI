@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest'
 import { createRecordingDocument } from '@/core/screenRecording/document'
-import { recordingMediaSpans, recordingTimeline } from './recordingTimeline'
+import { recordingTimeline } from './recordingTimeline'
+import { recordingMediaSpans } from '@/core/screenRecording/range'
 
 it('轨道按任务名称聚合全部分片，总时长与末段标记采用同一原点', () => {
   const document = createRecordingDocument()

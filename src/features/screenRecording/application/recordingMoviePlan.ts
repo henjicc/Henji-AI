@@ -11,7 +11,7 @@ import type { RecordingDocument } from '@/core/screenRecording/document'
 import type { RecordingUnderstanding } from '@/core/screenRecording/understanding'
 import { mapRecordingMovieRange, recordingMovieSpans, type RecordingMovieRecipe } from '@/core/screenRecording/movie'
 import { confirmedRecordingPrivacyFragments } from '@/core/screenRecording/privacyEffects'
-import { recordingMediaSpans } from './recordingTimeline'
+import { recordingMediaSpans } from '@/core/screenRecording/range'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 
