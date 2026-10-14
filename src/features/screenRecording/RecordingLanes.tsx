@@ -54,9 +54,9 @@ export function RecordingLanes({ recording, originUs, durationUs, currentSeconds
               onClick={() => { onSeek((item.startUs - originUs) / 1e6); onOpen(lane.kind, item.id) }}>{item.label}</UiTextToken>)}
         </div>
       </div>)}
-      {lanes.length > 0 && <div className="pointer-events-none absolute inset-0 ml-24 mr-4" aria-hidden>
+      {lanes.length > 0 && <div className="pointer-events-none absolute inset-0 flex" aria-hidden><span className="w-24 shrink-0" /><div className="relative mr-4 flex-1">
         <span className="absolute bottom-0 top-0 w-px bg-accent" style={{ left: `${Math.min(100, currentSeconds / duration * 100)}%` }} />
-      </div>}
+      </div></div>}
     </div>
   </div>
 }

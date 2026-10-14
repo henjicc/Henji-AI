@@ -35,7 +35,7 @@ function DirectorStages({ stage }: { stage: Stage }): React.ReactElement {
 export function RecordingDirectorGoal(): React.ReactElement {
   const { t } = useTranslation('ui')
   const [goal, setGoal] = useState('')
-  return <div className="flex min-h-0 flex-1 justify-center overflow-auto px-6 py-10" data-recording-director="goal">
+  return <div className="flex min-h-0 flex-1 justify-center overflow-auto px-6 py-8" data-recording-director="goal">
     <div className="flex w-full max-w-2xl flex-col gap-6">
       <DirectorStages stage="goal" />
       <div className="flex flex-col gap-2">
