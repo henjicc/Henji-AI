@@ -69,9 +69,15 @@ function createRecordingMovieScene() {
         const read = (ref, propertyIds = []) => callTool(client, 'read_application_entity', { ref, propertyIds })
         await callTool(client, 'open_document', operationEnvelope([], { documentId: session.id }))
         await button('确认').first().click()
-        await page.waitForFunction(() => document.body.textContent.includes('已确认') || [...document.querySelectorAll('[role="alert"]')].some(node => node.textContent.trim()))
+        // 页面其他区域也会出现“已确认”字样，不能据此判断写入完成；以落盘状态或错误提示为准。
+        let confirmed
+        for (let i = 0; i < 60; i++) {
+          if ((await page.getByRole('alert').allTextContents()).some(text => text.trim())) break
+          confirmed = await readDocument(session.id)
+          if (confirmed.content.understanding.privacy.candidates[0]?.status !== 'pending') break
+          await page.waitForTimeout(250)
+        }
         assert(!(await page.getByRole('alert').allTextContents()).some(text => text.trim()), (await page.getByRole('alert').allTextContents()).join('\n'))
-        const confirmed = await readDocument(session.id)
         assert.deepEqual(confirmed.content.understanding.privacy.candidates.map(c => c.status), ['accepted', 'pending'])
         await button('查看画面').first().click()
         await page.screenshot({ path: path.join(root, 'recipe.png') }); await capture('recording-movie-recipe')
