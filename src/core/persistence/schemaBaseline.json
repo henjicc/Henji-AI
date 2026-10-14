@@ -1,10 +1,28 @@
 {
   "releasedCompatibility": false,
+  "compatibilityRestorations": [
+    {
+      "at": "2026-10-14T08:05:00.000Z",
+      "format": "document.video_edit",
+      "version": 6,
+      "previousSupportedFrom": 6,
+      "supportedFrom": 2,
+      "reason": "修复CI契约漂移：v2→v3→v4→v5→v6已有完整迁移，录制光标与注意力只增加可选字段；恢复与真实项目包v1导入一致的支持下限，保留历史dev-break审计和黄金样本。"
+    },
+    {
+      "at": "2026-10-14T08:05:00.000Z",
+      "format": "creative-intent-candidate",
+      "version": 2,
+      "previousSupportedFrom": 2,
+      "supportedFrom": 1,
+      "reason": "补齐v1→v2迁移：共享曲线只新增可选screen_attention来源，旧曲线和候选身份语义不变；真实工程的原稿候选须可读回、复制和导入，原始资源不改写。"
+    }
+  ],
   "formats": {
     "document.video_edit": {
       "version": 6,
       "fingerprint": "5677bf7aab1004cc5a4517c0e4d6e42499c795896090980146780728b02ef781",
-      "supportedFrom": 6
+      "supportedFrom": 2
     },
     "document.canvas": {
       "version": 1,
@@ -194,7 +212,7 @@
     "creative-intent-candidate": {
       "version": 2,
       "fingerprint": "a902a12e001aaff8d583069fa423c75ab121f299338822d787f0632962600f87",
-      "supportedFrom": 2
+      "supportedFrom": 1
     },
     "image-layout-page": {
       "version": 1,

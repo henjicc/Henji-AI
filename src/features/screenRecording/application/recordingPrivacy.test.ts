@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { resolve, sep } from 'node:path'
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { harnessDocumentStore, installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { executeUiApplicationCapability } from '@/features/application-control'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createRecordingDocument } from '@/core/screenRecording/document'
@@ -22,12 +22,14 @@ async function setup() {
   vi.spyOn(getPlatform().screenRecording, 'capture').mockResolvedValue({ events: [], nextOffset: null })
   return { id, sessionRef: { kind: 'screen_recording.session', id }, ref: { kind: 'screen_recording.understanding', id } }
 }
-it('正式发现/分析→读回→批量确认→撤销→过期基线拒绝', async () => {
+it.each(['fast', 'precise'] as const)('正式发现/分析→读回→批量确认→撤销→过期基线拒绝（%s 档）', async quality => {
   const { id, sessionRef, ref } = await setup(), app = createApplicationHarness()
   try {
     expect(app.session.list().some(d => d.id === 'detect_screen_recording_sensitive_text')).toBe(true)
-    const generated = await app.requireResult('detect_screen_recording_sensitive_text', { sessionRef })
+    const generated = await app.requireResult('detect_screen_recording_sensitive_text', { sessionRef, quality })
     expect(generated).toMatchObject({ verified: true, candidates: 1, undoRef: expect.any(String) })
+    expect(getPlatform().smartRegions.detectSensitiveText).toHaveBeenCalledWith(expect.objectContaining({ quality }))
+    expect((harnessDocumentStore().stored(id)?.content as ReturnType<typeof createRecordingDocument>).understanding.privacy.candidates).toMatchObject([{ id: 'private', status: 'pending' }])
     const read = await app.read(ref, [UNDERSTANDING_PROPERTY]), value = structuredClone((await readRecordingUnderstanding(id)).content.understanding)
     value.privacy.candidates[0].status = 'accepted'
     const input = { summary: '确认打码', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { [UNDERSTANDING_PROPERTY]: value } }] }
