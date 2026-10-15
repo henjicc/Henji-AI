@@ -15,6 +15,8 @@ import { editVideoProject } from './videoEditService'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
+import { videoEditContactSheetLayout } from './videoEditContactSheet'
+import { videoEditComposition } from '@/core/videoEdit/document'
 
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.
@@ -27,17 +29,18 @@ vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOrigin
 }) }))
 vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: class { async getPrimaryVideoTrack() { return null } async getPrimaryAudioTrack() { return null } async computeDuration() { return 0 } dispose() {} } }))
 const assets = new Map<string, AssetRecord>(); const drawn: number[][] = []; const pixels = { labels: [] as string[], rectangles: [] as number[][] }
+let encodedSize = { width: 0, height: 0 }
 beforeEach(() => {
   installHarnessNativeStorage(); assets.clear(); render.calls = []; drawn.length = 0; pixels.labels = []; pixels.rectangles = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {}
     getContext() { return { imageSmoothingQuality: 'low', drawImage: (_image: unknown, ...args: number[]) => drawn.push(args), save: vi.fn(), restore: vi.fn(), setLineDash: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), stroke: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), strokeRect: (...args: number[]) => pixels.rectangles.push(args), fillRect: vi.fn(), measureText: (text: string) => ({ width: text.length * 14 }), fillText: (text: string) => pixels.labels.push(text) } }
-    async convertToBlob() { return new NativeBlob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } })
+    async convertToBlob() { encodedSize = { width: this.width, height: this.height }; return new NativeBlob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } })
   const platform = getPlatform(); let size = { width: 0, height: 0 }
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/observe.henji-video')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/managed')
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
-  vi.spyOn(platform.image, 'persistImageBinary').mockImplementation(async () => { size = { width: drawn.at(-1)!.at(-2)!, height: drawn.at(-1)!.at(-1)! }; return `D:/managed/observe-${drawn.length}.png` })
+  vi.spyOn(platform.image, 'persistImageBinary').mockImplementation(async () => { size = encodedSize; return `D:/managed/observe-${drawn.length}.png` })
   vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
     const value: AssetRecord = { id: `asset-${assets.size + 1}`, filePath: input.filePath, mediaType: 'image', displayName: input.displayName ?? '', displayUrl: '', source: input.source, mimeType: 'image/png', sizeBytes: 4, width: size.width, height: size.height, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1, contentIdentity: 'd'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] }
     assets.set(value.id, value); return value
@@ -45,6 +48,32 @@ beforeEach(() => {
   vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); useAssistantUiStore.getState().setPendingGoal(null); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+
+it('联系表经公共能力输出按时间顺序的网格和时间码，只发布一张资产，非法范围点名字段', async () => {
+  const owner = await createVideoEditProject(); const id = owner.document.id; const app = createApplicationHarness()
+  appendVideoEditMedia(id, { id: 'sheet-media', name: '原片', path: 'D:/sheet.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 10 })
+  appendVideoEditClip(id, 'sheet-media'); setVideoEditView(id, { frame: 7 })
+  const input = { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'contact_sheet', startFrame: 0, endFrame: 120, frameCount: 5 }, maxWidth: 960 }
+  try {
+    const result = await app.requireResult('observe_video_edit_frame', input)
+    expect(result).toMatchObject({ width: 960, height: 360, contactSheet: { frames: [0, 30, 60, 90, 120], columns: 3, rows: 2 }, resultRef: { kind: 'asset' } })
+    expect(render.calls.map(call => call.frame)).toEqual([0, 30, 60, 90, 120])
+    expect(drawn).toEqual([[0, 0, 320, 180], [320, 0, 320, 180], [640, 0, 320, 180], [0, 180, 320, 180], [320, 180, 320, 180]])
+    expect(pixels.labels).toEqual(['00:00:00:00', '00:00:01:00', '00:00:02:00', '00:00:03:00', '00:00:04:00'])
+    expect(assets.size).toBe(1); expect(owner.frame).toBe(7)
+    const composition = videoEditComposition(owner.document, owner.activeSequenceId)
+    const portrait = videoEditContactSheetLayout({ ...composition, width: 4320, height: 7680 }, { startFrame: 0, endFrame: 120, frameCount: 12 }, 3840)
+    expect(portrait.columns).toBe(4); expect(portrait.rows).toBe(3)
+    expect(portrait.width).toBeLessThanOrEqual(3840); expect(portrait.height).toBeLessThanOrEqual(3840)
+    for (const [field, value] of [['startFrame', -1], ['endFrame', 1000000], ['endFrame', 0], ['frameCount', 1], ['frameCount', 13]] as const) {
+      const failed = await app.call('observe_video_edit_frame', { ...input, target: { ...input.target, [field]: value } })
+      expect(failed.ok).toBe(false); expect(JSON.stringify(failed)).toContain(field)
+    }
+    const crowded = await app.call('observe_video_edit_frame', { ...input, target: { ...input.target, endFrame: 1, frameCount: 3 } })
+    expect(crowded.ok).toBe(false); expect(JSON.stringify(crowded)).toContain('frameCount')
+    expect(render.calls).toHaveLength(5)
+  } finally { app.dispose() }
+})
 
 it('重启后同一修订号的截帧具有不同 documentVersion；同一快照稳定，编辑后变化', async () => {
   const owner = await createVideoEditProject(); const id = owner.document.id

@@ -1,9 +1,9 @@
-import type { LlmModelConfig } from '@henjicc/ai-sdk'
+import type { LlmModelConfig, LlmReasoningConfig } from '@henjicc/ai-sdk'
 import type { EmbeddedAgentSnapshot, EmbeddedIntentRequest, EmbeddedSelectionSnapshot } from '../../../../src/core/assistant/embeddedAgent'
 import type { AgentAttachment } from '../../../../src/core/assistant/attachments'
 export interface PreparedEmbeddedAttachment { attachment: AgentAttachment; data: string }
 export interface EmbeddedTool { name: string; title?: string; description?: string; inputSchema: Record<string, unknown> }
-export interface EmbeddedModel { providerId: string; model: LlmModelConfig; baseUrl: string; api: 'openai-completions' | 'openai-responses' | 'anthropic-messages'; apiKey: string }
+export interface EmbeddedModel { providerId: string; model: LlmModelConfig; baseUrl: string; api: 'openai-completions' | 'openai-responses' | 'anthropic-messages'; apiKey: string; reasoning?: LlmReasoningConfig }
 export interface EngineConfiguration { directory: string; model: EmbeddedModel; tools: EmbeddedTool[]; instructions: string }
 export type EngineCommand =
   | { action: 'initialize'; input: string }

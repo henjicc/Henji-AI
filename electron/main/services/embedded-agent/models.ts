@@ -32,5 +32,5 @@ export async function resolveEmbeddedModel(selection: { providerId: string; mode
   const apiKey = getLlmProviderApiKey(identity.credentialId)
   if (!apiKey) throw new Error('所选供应商还没有 API Key，请到设置中填写。')
   return { providerId: config.providerId, model: entry.model, baseUrl: resolveModelStepBaseUrl(config),
-    api: resolveEmbeddedApi(config), apiKey }
+    api: resolveEmbeddedApi(config), apiKey, reasoning: config.reasoning }
 }

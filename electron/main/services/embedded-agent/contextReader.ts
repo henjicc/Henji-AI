@@ -2,26 +2,26 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import type { SessionManager, ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { embeddedSelectionSnapshotSchema, type EmbeddedSelectionSnapshot } from '../../../../src/core/assistant/embeddedAgent'
-import { estimateContextTokens, fitText, projectText } from './contextBudget'
+import { estimateContextTokens, fitText, projectText, isSkillResult, SKILL_RESULT_TOKEN_BUDGET } from './contextBudget'
 
 const groups = ['selectedRefs', 'selectedClipRefs', 'targetTrackRefs'] as const
 const selectionEntrySchema = z.object({ selectionId: z.string(), selectionSnapshot: embeddedSelectionSnapshotSchema })
 const pageSchema = z.object({ reference: z.string(), offset: z.number().int().nonnegative().default(0) }).strict()
-const archivedTextSchema = z.object({ resultId: z.string(), fullText: z.record(z.string(), z.string()) })
+const archivedTextSchema = z.object({ resultId: z.string(), fullText: z.record(z.string(), z.string()), skillContent: z.boolean().optional() })
 type ToolResult = Awaited<ReturnType<ToolDefinition['execute']>>
 
 /** 原文保存在 Pi 非模型记录中；图像归一化即使替换 details 也不丢失续读内容。 */
-export function archiveToolResult(manager: SessionManager, result: ToolResult): ToolResult {
+export function archiveToolResult(manager: SessionManager, result: ToolResult, skillContent = false): ToolResult {
   const id = randomUUID()
   const fullText: Record<string, string> = {}
   const content = result.content.map((part, index) => {
     if (part.type !== 'text') return part
-    const text = projectText(part.text, `tool:${id}:${index}`, 4000)
+    const text = projectText(part.text, `tool:${id}:${index}`, skillContent ? SKILL_RESULT_TOKEN_BUDGET : 4000)
     if (text !== part.text) fullText[String(index)] = part.text
     return { ...part, text }
   })
-  if (Object.keys(fullText).length) manager.appendCustomEntry('henji-tool-result', { resultId: id, fullText })
-  return { ...result, content, details: { resultId: id, originalDetails: result.details } }
+  if (Object.keys(fullText).length) manager.appendCustomEntry('henji-tool-result', { resultId: id, fullText, skillContent })
+  return { ...result, content, details: { resultId: id, skillContent, originalDetails: result.details } }
 }
 
 export function selectionSummary(id: string, snapshot: EmbeddedSelectionSnapshot): unknown {
@@ -41,11 +41,12 @@ export function contextReader(manager: SessionManager): ToolDefinition {
       signal?.throwIfAborted()
       const { reference, offset } = pageSchema.parse(args)
       let source: string | string[] | undefined
+      let skillContent = false
       for (const entry of manager.getBranch()) {
         if (entry.type === 'custom' && entry.customType === 'henji-tool-result') {
           const archived = archivedTextSchema.safeParse(entry.data)
           if (archived.success) for (const [index, text] of Object.entries(archived.data.fullText)) {
-            if (reference === `tool:${archived.data.resultId}:${index}`) source = text
+            if (reference === `tool:${archived.data.resultId}:${index}`) { source = text; skillContent = archived.data.skillContent === true }
           }
         }
         if (entry.type === 'custom_message' && entry.customType === 'henji-context') {
@@ -60,6 +61,7 @@ export function contextReader(manager: SessionManager): ToolDefinition {
           message.content.forEach((part, index) => {
             if (part.type === 'text' && reference === `tool:${archived.success ? archived.data.resultId : message.toolCallId}:${index}` && source === undefined) {
               source = part.text
+              skillContent = isSkillResult(message.toolName, message.details)
             }
           })
         }
@@ -70,7 +72,7 @@ export function contextReader(manager: SessionManager): ToolDefinition {
         nextOffset: offset + data.length, hasMore: offset + data.length < source!.length, data })
       let data: string | string[]
       if (typeof source === 'string') {
-        data = fitText(source.slice(offset), part => estimateContextTokens(JSON.stringify(envelope(part))) <= 2000)
+        data = fitText(source.slice(offset), part => estimateContextTokens(JSON.stringify(envelope(part))) <= (skillContent ? SKILL_RESULT_TOKEN_BUDGET : 2000))
       } else {
         data = []
         for (let index = offset; index < source.length; index++) {
@@ -80,7 +82,7 @@ export function contextReader(manager: SessionManager): ToolDefinition {
         }
       }
       if (!data.length && offset < source.length) throw new Error('单个选区引用超过分页预算，无法完整返回；请检查引用长度。')
-      return archiveToolResult(manager, { content: [{ type: 'text', text: JSON.stringify(envelope(data)) }], details: undefined })
+      return archiveToolResult(manager, { content: [{ type: 'text', text: JSON.stringify(envelope(data)) }], details: undefined }, skillContent)
     },
   }
 }

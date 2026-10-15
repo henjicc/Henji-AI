@@ -8,7 +8,7 @@ import {
   type LocalDomainSurface, type LocalTool,
 } from '../../../../src/core/application-control/localHostContracts'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/application-control/applicationCapabilities'
-import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/application-control/mediaReferenceKinds'
+import { APPLICATION_READABLE_MEDIA_KINDS, APPLICATION_IMAGE_DEFAULT_EDGE, APPLICATION_IMAGE_DEFAULT_BYTES, APPLICATION_IMAGE_MAX_BYTES } from '../../../../src/core/application-control/mediaReferenceKinds'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
@@ -79,8 +79,8 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'read_application_media', tier: 'any', readOnly: true,
     outputSchema: projectToolOutputSchema(z.toJSONSchema(publicMediaOutputSchema, { io: 'output' }), 'read_application_media'),
-    description: '按稳定结果引用读取已落盘媒体。图片默认返回 image（MCP 标准图片，无需拼接 base64），默认长边 1280、JPEG 至多 100 KiB；maxEdge/maxBytes 可缩小查看预算。mode="chunk" 用于读取原件字节；音视频默认分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
-    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], description: '图片默认 image 直接查看；chunk 读取原件字节，音视频默认 chunk。' }, maxEdge: { type: 'integer', minimum: 1, maximum: 3840, default: 1280, description: '图片预览的长边像素上限。' }, maxBytes: { type: 'integer', minimum: 1024, maximum: 262144, default: 102400, description: 'JPEG 字节上限，自动降低质量或尺寸；不改原件。' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
+    description: '按稳定结果引用读取已落盘媒体。图片默认返回 image（MCP 标准图片，无需拼接 base64），默认长边 1600、JPEG 至多 600 KiB；查看细字、颗粒、渐变时可传更大的 maxEdge / maxBytes，最高长边 3840、1.5 MiB。mode="chunk" 用于读取原件字节；音视频默认分块读取；image_edit.preview 是尚未保存的中间产物，不可直接读取，先 commit_image_edit 落盘。outputIndex 为结果或节点关联媒体（含输入、预览）去重后的顺序，从零开始。每块最多 256 KiB；不接受文件路径或网址。只支持文本的客户端可以只消费 totalBytes／eof／错误码。',
+    inputSchema: { type: 'object', properties: { ref: { type: 'object', properties: { kind: { type: 'string', enum: [...APPLICATION_READABLE_MEDIA_KINDS] }, id: { type: 'string' } }, required: ['kind', 'id'], additionalProperties: false }, mode: { type: 'string', enum: ['chunk', 'image'], description: '图片默认 image 直接查看；chunk 读取原件字节，音视频默认 chunk。' }, maxEdge: { type: 'integer', minimum: 1, maximum: 3840, default: APPLICATION_IMAGE_DEFAULT_EDGE, description: '图片预览的长边像素上限。' }, maxBytes: { type: 'integer', minimum: 1024, maximum: APPLICATION_IMAGE_MAX_BYTES, default: APPLICATION_IMAGE_DEFAULT_BYTES, description: 'JPEG 字节上限，自动降低质量或尺寸；不改原件。' }, outputIndex: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, length: { type: 'integer', minimum: 1, maximum: EXTERNAL_LIMITS.mediaChunkBytes } }, required: ['ref'], additionalProperties: false },
   },
   {
     name: 'get_application_operation', tier: 'write', readOnly: true, requiresOperations: true,
@@ -106,7 +106,7 @@ export const readMediaInputSchema = z.object({
   length: z.number().int().min(1).max(EXTERNAL_LIMITS.mediaChunkBytes).optional(),
   mode: z.enum(['chunk', 'image']).optional(),
   maxEdge: z.number().int().min(1).max(3840).optional(),
-  maxBytes: z.number().int().min(1024).max(EXTERNAL_LIMITS.mediaChunkBytes).optional(),
+  maxBytes: z.number().int().min(1024).max(APPLICATION_IMAGE_MAX_BYTES).optional(),
 }).strict()
 export const describeContractInputSchema = z.object({
   domains: z.array(z.string().min(1)).max(16).default([]),

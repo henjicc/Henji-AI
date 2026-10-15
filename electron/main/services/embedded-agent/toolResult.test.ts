@@ -24,9 +24,9 @@ describe('Pi media result boundary', () => {
     expect(result.content[1]).toEqual({ type: 'image', data: Buffer.from('abcdef').toString('base64'), mimeType: 'image/png' })
     expect(call.mock.calls[1][2]).toMatchObject({ ref: input.args.ref, offset: 3 })
   })
-  it('图片预览只调用一次并投影原生图片，非视觉模型不能读取', async () => {
-    const preview = { ...input, args: { ...input.args, mode: 'image' } }
-    const data = { mode: 'image', mimeType: 'image/jpeg', base64: 'aW1hZ2U=', width: 640, height: 360, byteLength: 5 }
+  it.each([undefined, 'image'])('图片预览 mode=%s 只调用一次并投影原生图片，非视觉模型不能读取', async mode => {
+    const preview = { ...input, args: { ...input.args, ...(mode ? { mode } : {}) } }
+    const data = { mode: 'image', mimeType: 'image/jpeg', base64: 'aW1hZ2U=', width: 1600, height: 900, byteLength: 5, totalBytes: 2000000, offset: 0, eof: true }
     const call = vi.fn().mockResolvedValue({ ok: true, data })
     const result = await executePiTool(preview, call)
     expect(result.content[1]).toEqual({ type: 'image', data: data.base64, mimeType: data.mimeType })

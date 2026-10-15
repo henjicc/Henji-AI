@@ -1,5 +1,13 @@
 import { z } from 'zod'
 
+/** 页面只提供软信号，不参与技能准入或任务触发过滤。 */
+export function assistantSkillSurfaceHints(context: unknown): string {
+  if (!context || typeof context !== 'object') return ''
+  const value = context as { surface?: { id?: string }; workspace?: { id?: string } }
+  return value.surface?.id === 'workspace.video_edit' || value.workspace?.id === 'videoEdit'
+    ? '技能目录提示：video-edit-code-creation、video-edit-workbench 当前界面相关。' : ''
+}
+
 /**
  * 智能助手技能（Skills）的唯一契约来源，渲染层与主进程共用。
  * 技能采用 Anthropic Agent Skills 标准结构：一个技能一个文件夹，含 `SKILL.md`

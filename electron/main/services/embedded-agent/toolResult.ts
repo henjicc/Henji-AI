@@ -8,6 +8,10 @@ type ToolResult = Awaited<ReturnType<ToolDefinition['execute']>>
 type CallTool = (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>
 const textResult = (text: string): ToolResult => ({ content: [{ type: 'text', text }], details: undefined })
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024
+function previewResult(value: unknown): ToolResult {
+  const data = z.object({ mode: z.literal('image'), base64: z.string(), mimeType: z.literal('image/jpeg') }).parse(value)
+  return { content: [{ type: 'text', text: '以下是该业务引用的缩放预览。' }, { type: 'image', data: data.base64, mimeType: data.mimeType }], details: undefined }
+}
 
 /** Pi 只消费公共应用结果，由适配器生成模型消息。 */
 function applicationResultText(result: unknown): string {
@@ -40,8 +44,7 @@ export async function executePiTool(input: { id: string; name: string; args: Rec
     const result = await call(input.id, input.name, input.args, input.signal)
     applicationResultText(result)
     input.signal?.throwIfAborted()
-    const { data } = z.object({ data: z.object({ mode: z.literal('image'), base64: z.string(), mimeType: z.literal('image/jpeg') }) }).parse(result)
-    return { content: [{ type: 'text', text: '以下是该业务引用的缩放预览。' }, { type: 'image', data: data.base64, mimeType: data.mimeType }], details: undefined }
+    return previewResult(z.object({ data: z.unknown() }).parse(result).data)
   }
   const chunks: Buffer[] = []
   let offset = 0
@@ -52,6 +55,9 @@ export async function executePiTool(input: { id: string; name: string; args: Rec
     const result = await call(`${input.id}:${offset}`, input.name, { ...input.args, offset, length: 256 * 1024 }, input.signal)
     const envelope = z.object({ ok: z.boolean(), data: z.unknown() }).passthrough().parse(result)
     if (!envelope.ok) applicationResultText(result)
+    input.signal?.throwIfAborted()
+    // 未指定 mode 的图片由正式媒体入口默认返回预览；预览字节数不等于原件 totalBytes。
+    if (z.object({ mode: z.literal('image') }).safeParse(envelope.data).success) return previewResult(envelope.data)
     const chunk = chunkSchema.parse(envelope.data)
     if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(chunk.mimeType)) return textResult('这份媒体的格式暂不支持直接理解。可以读取文字属性；若需要分析画面，请提供 PNG、JPEG、WebP 或 GIF 图片。视频和音频需要另行适配。')
     if (chunk.totalBytes > MAX_IMAGE_BYTES) return textResult('图片超过 16 MiB，请先缩小图片后再分析。')

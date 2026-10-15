@@ -13,11 +13,13 @@ import { requireVideoEditInstance } from './videoEditService'
 import { videoEditObservationVersion } from './videoEditObservationVersion'
 import { resolveVideoEditElementAnnotation, videoEditCodeElementFrames, videoEditCodeElementRegion } from './videoEditCodeElements'
 import { codeElementLabel } from '@/core/videoEdit/codeElementSelection'
+import { renderVideoEditContactSheet, type VideoEditContactSheetRange } from './videoEditContactSheet'
 
 const logger = createLogger('features.videoEdit.frameObservation')
 export type VideoEditFrameObservationTarget =
   | { kind: 'program'; sequenceId?: string; frame: number }
   | { kind: 'source'; itemId: string; timeUs: number }
+  | ({ kind: 'contact_sheet'; sequenceId?: string } & VideoEditContactSheetRange)
 export interface VideoEditFrameObservation {
   asset: AssetRecord
   width: number
@@ -30,6 +32,7 @@ export interface VideoEditFrameObservation {
   sequenceId?: string
   frame?: number
   timeUs?: number
+  contactSheet?: { frames: number[]; columns: number; rows: number }
 }
 export const VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH = 1920
 
@@ -61,16 +64,26 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const documentVersion = videoEditObservationVersion(owner, document.revision)
   const started = performance.now()
   let composition: VideoEditComposition; let frame = 0
-  if (target.kind === 'program') {
+  if (target.kind === 'program' || target.kind === 'contact_sheet') {
     const sequenceId = target.sequenceId ?? owner.activeSequenceId
     if (!document.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('目标序列不存在。')
     composition = snapshot ?? videoEditComposition(document, sequenceId)
     if (composition.id !== sequenceId || composition.revision !== document.revision) throw new Error('原片段版本已改变，请重新发送。')
-    if (!Number.isSafeInteger(target.frame) || target.frame < 0 || target.frame >= Math.floor(composition.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) throw new Error('请指定序列范围内的整数帧。')
-    frame = target.frame
+    if (target.kind === 'program') {
+      if (!Number.isSafeInteger(target.frame) || target.frame < 0 || target.frame >= Math.floor(composition.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) throw new Error('请指定序列范围内的整数帧。')
+      frame = target.frame
+    }
   } else composition = videoEditSourceComposition(document, target.itemId, target.timeUs)
   logger.info('剪辑指定画面观察开始', { event: 'video_edit.frame_observation.start', context: { projectId, kind: target.kind, revision: document.revision } })
   if (target.kind !== 'program' && (annotations.overlayAnnotations || annotations.annotationIds?.length || annotations.cropAnnotationId || annotations.highlightElement)) throw new Error('标注叠加、元素高亮与放大只用于序列合成帧。')
+  if (target.kind === 'contact_sheet') {
+    const sheet = await renderVideoEditContactSheet(composition, target, maxWidth ?? VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal)
+    if (owner.document !== document) throw new Error('联系表渲染期间剪辑已改变，请重新取帧。')
+    const asset = await publishObservationImage(sheet.bytes, sheet.width, sheet.height, `${document.name} · ${composition.name} · 联系表`, signal)
+    logger.info('剪辑联系表观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width: sheet.width, height: sheet.height, durationMs: Math.round(performance.now() - started) } })
+    return { asset, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
+      documentRevision: document.revision, documentVersion, sequenceId: composition.id, contactSheet: { frames: sheet.frames, columns: sheet.columns, rows: sheet.rows } }
+  }
   const marks = target.kind === 'program' ? composition.annotations.map(mark => resolveVideoEditElementAnnotation(owner, mark, composition.id, frame).mark) : composition.annotations
   const observation = prepareVideoEditAnnotationObservation(marks, frame, annotations)
   const highlight = annotations.highlightElement
@@ -102,14 +115,19 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
     }
     bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer())
   } finally { bitmap.close() }
+  const label = target.kind === 'program' ? `帧 ${frame}` : `源 ${(target.timeUs / 1e6).toFixed(3)} 秒`
+  const asset = await publishObservationImage(bytes, width, height, `${document.name} · ${composition.name} · ${label} 观察`, signal)
+  logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width, height, durationMs: Math.round(performance.now() - started) } })
+  return { asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+}
+
+async function publishObservationImage(bytes: Uint8Array, width: number, height: number, displayName: string, signal: AbortSignal): Promise<AssetRecord> {
   signal.throwIfAborted()
   const platform = getPlatform()
   const path = await platform.image.persistImageBinary(bytes, 'png')
   await platform.media.allowRoot(await platform.system.paths.dirname(path))
-  const label = target.kind === 'program' ? `帧 ${frame}` : `源 ${(target.timeUs / 1e6).toFixed(3)} 秒`
-  const created = await addMediaReferenceToLibrary({ filePath: path, mediaType: 'image', source: 'video-edit', displayName: `${document.name} · ${composition.name} · ${label} 观察` })
+  const created = await addMediaReferenceToLibrary({ filePath: path, mediaType: 'image', source: 'video-edit', displayName })
   const asset = await assetApplicationService.inspect(created.id)
   if (asset.inspectionStatus !== 'ready' || asset.width !== width || asset.height !== height) throw new Error('观察图片没有通过资产检查，请重试。')
-  logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width, height, durationMs: Math.round(performance.now() - started) } })
-  return { asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+  return asset
 }
