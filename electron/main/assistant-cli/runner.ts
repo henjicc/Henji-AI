@@ -12,7 +12,7 @@ export async function runAssistantCli(owner: WebContents, options: AssistantCliO
     const deadline = Date.now() + 30_000
     while (!host.ready || !host.getContext()?.uiReady) {
       if (owner.isDestroyed()) throw new Error('应用宿主已退出')
-      if (Date.now() >= deadline) throw new Error('等待应用宿主初始化超时')
+      if (Date.now() >= deadline) throw new Error(`等待应用宿主初始化超时（宿主${host.ready ? '已注册' : '未注册'}，界面上下文${host.getContext() ? (host.getContext()!.uiReady ? '已就绪' : '未就绪') : '未发布'}）`)
       await new Promise<void>(resolve => setTimeout(resolve, 100))
     }
     const context = host.getContext()!
