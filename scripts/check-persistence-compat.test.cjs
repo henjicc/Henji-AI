@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { validateCompatibility, updateBaseline } = require('./check-persistence-compat.cjs')
+const { validateCompatibility, updateBaseline, main } = require('./check-persistence-compat.cjs')
 const { emptyRelease, createReleaseSnapshot, validateReleasedCompatibility, validateReleaseHistory } = require('./lib/releasedCompatibility.cjs')
 
 const format = { id: 'test', name: '剪辑', version: 1, fingerprint: 'old', storage: 'file', migrations: {} }
@@ -90,4 +90,81 @@ test('框架首发登记保留支持下限与历史，不能重复或在发布�
   assert.equal(registered.frameworkAdoption.formats[0].previousFingerprint, 'old')
   assert.throws(() => updateBaseline([format], registered, options, () => [1]), /仅允许/)
   assert.throws(() => updateBaseline([format], { ...state, releasedCompatibility: true }, options, () => [1]), /仅允许/)
+})
+
+function restorationCase() {
+  const current = { ...format, version: 3, migrations: { 1: value => value, 2: value => value } }
+  const state = { ...baseline(), formats: { test: { version: 3, fingerprint: 'old', supportedFrom: 3 } },
+    devBreaks: [{ format: 'test', version: 3, reason: '历史中断', waivedFixtureVersions: [1, 2] }],
+    compatibilityRestorations: [{ at: '2026-10-14T00:00:00.000Z', format: 'retired-other', version: 2, previousSupportedFrom: 2, supportedFrom: 1, reason: '既有记录' }] }
+  const options = { restoreSupport: ['test:1'], reason: '补齐无损迁移恢复用户数据读取' }
+  return { current, state, options }
+}
+
+test('补迁移恢复支持保留历史和指纹，登记完整审计且普通刷新不重复登记', () => {
+  const { current, state, options } = restorationCase()
+  const original = structuredClone(state)
+  const next = updateBaseline([current], state, options, () => [1, 2, 3])
+  assert.deepEqual(state, original)
+  assert.deepEqual(next.devBreaks, state.devBreaks)
+  assert.equal(next.compatibilityRestorations.length, 2)
+  assert.deepEqual(next.compatibilityRestorations[0], state.compatibilityRestorations[0])
+  const audit = next.compatibilityRestorations[1]
+  assert.match(audit.at, /^\d{4}-/)
+  assert.deepEqual({ ...audit, at: undefined }, { at: undefined, format: 'test', version: 3,
+    previousSupportedFrom: 3, supportedFrom: 1, reason: options.reason,
+    previousFingerprint: 'old', fingerprint: 'old', migrationVersions: [1, 2] })
+  assert.equal(next.formats.test.supportedFrom, 1)
+  assert.deepEqual(validateCompatibility([current], next, () => [1, 2, 3]), [])
+  assert.deepEqual(updateBaseline([current], next, {}, () => [1, 2, 3]), next)
+  assert.throws(() => updateBaseline([current], next, options, () => [1, 2, 3]), /降低支持下限/)
+})
+
+test('恢复范围不能沿用样本豁免，缺步、非函数步骤和缺归档均拒绝且不改变原基线', () => {
+  const { current, state, options } = restorationCase()
+  const original = structuredClone(state)
+  for (const migrations of [{ 1: value => value }, { 1: value => value, 2: null }]) {
+    assert.throws(() => updateBaseline([{ ...current, migrations }], state, options, () => [1, 2, 3]), /缺少逐版本迁移/)
+  }
+  assert.throws(() => updateBaseline([current], state, options, () => [3]), /缺少必需黄金样本/)
+  const archive = { ...current, requiredFixtures: [{ extension: 'json' }, { extension: 'henjipack' }] }
+  assert.throws(() => updateBaseline([archive], state, options, (_id, ext) => ext === 'henjipack' ? [3] : [1, 2, 3]), /v1.henjipack/)
+  assert.deepEqual(state, original)
+})
+
+test('手改下限而不追加恢复审计会被检查和普通基线刷新拒绝', () => {
+  const { current, state } = restorationCase()
+  state.formats.test.supportedFrom = 1
+  assert.match(validateCompatibility([current], state, () => [1, 2, 3]).join(''), /支持下限与审计不一致/)
+  assert.throws(() => updateBaseline([current], state, {}, () => [1, 2, 3]), /支持下限与审计不一致/)
+})
+
+test('恢复登记拒绝错格式、错下限、空理由、重复项、破坏性混用及同版本结构变化', () => {
+  const { current, state, options } = restorationCase()
+  for (const spec of ['missing:1', 'test:0', 'test:-1', 'test:1.5', 'test:3', 'test:4', 'test:9007199254740992', 'test', 'test:1:2']) {
+    assert.throws(() => updateBaseline([current], state, { ...options, restoreSupport: [spec] }, () => [1, 2, 3]))
+  }
+  for (const extra of [{ reason: ' ' }, { devBreak: 'test' }, { waiveBefore: true }, { init: true }, { frameworkAdoption: true }, { restoreSupport: ['test:1', 'test:2'] }]) {
+    assert.throws(() => updateBaseline([current], state, { ...options, ...extra }, () => [1, 2, 3]))
+  }
+  for (const extra of [{ version: 4 }, { fingerprint: 'changed' }, { storage: 'sqlite-ledger' }]) {
+    assert.throws(() => updateBaseline([{ ...current, ...extra }], state, options, () => [1, 2, 3, 4]))
+  }
+  assert.throws(() => main(['--restore-support']), /缺少参数/)
+  assert.throws(() => main(['--restore-support', 'test:1', '--reason', '恢复']), /persistence:baseline/)
+})
+
+test('可一次恢复多个格式；正式发布后也允许扩大支持且不改写发布快照', () => {
+  const { current, state, options } = restorationCase()
+  state.releasedCompatibility = true
+  state.formats.other = { ...state.formats.test }
+  const formats = [current, { ...current, id: 'other' }]
+  const samples = () => ({ 'v3.json': 'immutable' })
+  const released = createReleaseSnapshot(formats, state, emptyRelease(), samples)
+  const original = structuredClone(released)
+  const next = updateBaseline(formats, state, { ...options, restoreSupport: ['test:1', 'other:2'] }, () => [1, 2, 3])
+  assert.equal(next.formats.test.supportedFrom, 1)
+  assert.equal(next.formats.other.supportedFrom, 2)
+  assert.deepEqual(validateReleasedCompatibility(formats, next, released, () => ({ ...samples(), 'v1.json': 'first', 'v2.json': 'second' })), [])
+  assert.deepEqual(released, original)
 })

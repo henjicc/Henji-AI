@@ -1,6 +1,16 @@
 import { z } from 'zod'
 export const NODE_DEFAULTS_VERSION = 1
 export const MODEL_DEFAULTS_VERSION = 2
+
+/** 1 → 2：空转写选择沿用自动解析，不替换用户已选的供应商和生成模型。 */
+export function migrateModelDefaultsV1(content: unknown): unknown {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
+  const record = content as Record<string, unknown>
+  if (!record.models || typeof record.models !== 'object' || Array.isArray(record.models)) return content
+  const models = record.models as Record<string, unknown>
+  return { ...record, version: 2, models: { ...models, transcription: models.transcription === undefined ? '' : models.transcription } }
+}
+
 export const ONBOARDING_VERSION = 2
 export const SUBTITLE_MANIFEST_VERSION = 6
 export const STORYBOARD_METADATA_VERSION = 1

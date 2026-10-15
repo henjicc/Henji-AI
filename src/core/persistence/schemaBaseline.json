@@ -16,6 +16,99 @@
       "previousSupportedFrom": 2,
       "supportedFrom": 1,
       "reason": "补齐v1→v2迁移：共享曲线只新增可选screen_attention来源，旧曲线和候选身份语义不变；真实工程的原稿候选须可读回、复制和导入，原始资源不改写。"
+    },
+    {
+      "at": "2026-10-15T11:11:20.741Z",
+      "format": "settings",
+      "version": 14,
+      "previousSupportedFrom": 14,
+      "supportedFrom": 13,
+      "reason": "补齐 settings 13→14 的默认录制快捷键与 model-defaults 1→2 的空转写选择，黄金样本及正式设置入口读后保存验证通过；保留其他用户设置与原件备份。",
+      "previousFingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
+      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
+      "migrationVersions": [
+        13
+      ]
+    },
+    {
+      "at": "2026-10-15T11:11:20.744Z",
+      "format": "model-defaults",
+      "version": 2,
+      "previousSupportedFrom": 2,
+      "supportedFrom": 1,
+      "reason": "补齐 settings 13→14 的默认录制快捷键与 model-defaults 1→2 的空转写选择，黄金样本及正式设置入口读后保存验证通过；保留其他用户设置与原件备份。",
+      "previousFingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+      "migrationVersions": [
+        1
+      ]
+    },
+    {
+      "at": "2026-10-15T11:11:31.766Z",
+      "format": "capture-log-page",
+      "version": 2,
+      "previousSupportedFrom": 2,
+      "supportedFrom": 1,
+      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
+      "previousFingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
+      "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
+      "migrationVersions": [
+        1
+      ]
+    },
+    {
+      "at": "2026-10-15T11:11:31.769Z",
+      "format": "document.screen_recording",
+      "version": 12,
+      "previousSupportedFrom": 5,
+      "supportedFrom": 2,
+      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
+      "previousFingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
+      "fingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
+      "migrationVersions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "at": "2026-10-15T11:11:31.769Z",
+      "format": "title-templates",
+      "version": 4,
+      "previousSupportedFrom": 3,
+      "supportedFrom": 1,
+      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
+      "previousFingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
+      "fingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
+      "migrationVersions": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "at": "2026-10-15T11:11:31.769Z",
+      "format": "subtitle-manifest",
+      "version": 6,
+      "previousSupportedFrom": 3,
+      "supportedFrom": 1,
+      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
+      "previousFingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
+      "fingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
+      "migrationVersions": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
     }
   ],
   "formats": {
@@ -87,7 +180,7 @@
     "settings": {
       "version": 14,
       "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
-      "supportedFrom": 14
+      "supportedFrom": 13
     },
     "theme": {
       "version": 1,
@@ -102,7 +195,7 @@
     "title-templates": {
       "version": 4,
       "fingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
-      "supportedFrom": 3
+      "supportedFrom": 1
     },
     "text-presets": {
       "version": 1,
@@ -182,7 +275,7 @@
     "model-defaults": {
       "version": 2,
       "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
-      "supportedFrom": 2
+      "supportedFrom": 1
     },
     "onboarding": {
       "version": 2,
@@ -192,7 +285,7 @@
     "subtitle-manifest": {
       "version": 6,
       "fingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
-      "supportedFrom": 3
+      "supportedFrom": 1
     },
     "storyboard-metadata": {
       "version": 1,
@@ -242,7 +335,7 @@
     "capture-log-page": {
       "version": 2,
       "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
-      "supportedFrom": 2
+      "supportedFrom": 1
     },
     "screen-recording-tracks": {
       "version": 1,
@@ -257,7 +350,7 @@
     "document.screen_recording": {
       "version": 12,
       "fingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
-      "supportedFrom": 5
+      "supportedFrom": 2
     },
     "recording-setup": {
       "version": 1,

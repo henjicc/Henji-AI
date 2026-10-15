@@ -38,6 +38,7 @@ function fixtureVersions(root, id, extension) {
 function validateCompatibility(formats, baseline, fixtures) {
   const errors = []
   if (typeof baseline.releasedCompatibility !== 'boolean' || !Array.isArray(baseline.devBreaks)) return ['持久格式基线无效']
+  if (baseline.compatibilityRestorations !== undefined && !Array.isArray(baseline.compatibilityRestorations)) return ['恢复支持审计必须为数组']
   const current = new Map(formats.map(format => [format.id, format]))
   for (const id of Object.keys(baseline.formats)) if (!current.has(id)) errors.push(`持久格式登记被删除：${id}；保留读取能力并显式登记退役。`)
   for (const format of formats) {
@@ -51,6 +52,19 @@ function validateCompatibility(formats, baseline, fixtures) {
     }
     // Grandfathered dev breaks reject historical versions even after release; new ones are forbidden.
     const breaks = baseline.devBreaks.filter(item => item.format === format.id)
+    // 支持下限必须与最后一次破坏/恢复审计一致，不能只手改 supportedFrom。
+    const restorations = (baseline.compatibilityRestorations ?? []).filter(item => item.format === format.id)
+    for (const item of restorations) {
+      if (!item.reason?.trim() || !Number.isFinite(Date.parse(item.at))
+        || !Number.isSafeInteger(item.supportedFrom) || item.supportedFrom < 1
+        || !Number.isSafeInteger(item.previousSupportedFrom) || item.supportedFrom >= item.previousSupportedFrom
+        || !Number.isSafeInteger(item.version) || item.previousSupportedFrom > item.version || item.version > format.version) errors.push(`恢复支持审计无效：${format.id}`)
+    }
+    const supportHistory = [
+      ...breaks.filter(item => Number.isSafeInteger(item.version)).map(item => ({ at: item.at ?? '', floor: item.version })),
+      ...restorations.map(item => ({ at: typeof item.at === 'string' ? item.at : '', floor: item.supportedFrom })),
+    ].sort((a, b) => a.at.localeCompare(b.at))
+    if (supportHistory.length && (previous.supportedFrom ?? 1) !== supportHistory.at(-1).floor) errors.push(`支持下限与审计不一致：${format.id}；请通过 --restore-support 补迁移恢复支持。`)
     const waived = new Set(breaks.flatMap(item => item.waivedFixtureVersions ?? []))
     for (let version = 1; version <= format.version; version++) {
       if (!fixtures(format.id).includes(version) && !(version < format.version && waived.has(version))) errors.push(`缺少黄金样本：${format.id}/v${version}.*`)
@@ -64,8 +78,9 @@ function validateCompatibility(formats, baseline, fixtures) {
       }
     }
     const floor = previous.supportedFrom ?? 1
+    if (!Number.isSafeInteger(floor) || floor < 1 || floor > format.version) errors.push(`持久格式支持下限无效：${format.id}`)
     if (format.storage !== 'sqlite-ledger') for (let version = floor; version < format.version; version++) {
-      if (!Object.hasOwn(format.migrations, version)) errors.push(`缺少逐版本迁移：${format.id} v${version} → v${version + 1}`)
+      if (!Object.hasOwn(format.migrations, version) || typeof format.migrations[version] !== 'function') errors.push(`缺少逐版本迁移：${format.id} v${version} → v${version + 1}`)
     }
   }
   return errors
@@ -73,6 +88,25 @@ function validateCompatibility(formats, baseline, fixtures) {
 function updateBaseline(formats, baseline, options, fixtures) {
   const next = structuredClone(baseline)
   const adoption = options.frameworkAdoption === true
+  const restorations = options.restoreSupport ?? []
+  if (!Array.isArray(restorations)) throw new Error('--restore-support 必须指定 格式id:最低版本')
+  if (restorations.length && (!options.reason?.trim() || options.devBreak || options.waiveBefore || options.init || adoption)) throw new Error('--restore-support 须提供非空 --reason，且不能混用 dev-break、样本豁免或初始化登记')
+  const restoredFloors = new Map()
+  if (baseline.compatibilityRestorations !== undefined && !Array.isArray(baseline.compatibilityRestorations)) throw new Error('恢复支持审计必须为数组')
+  for (const spec of restorations) {
+    const match = typeof spec === 'string' && /^([^:]+):([1-9]\d*)$/.exec(spec)
+    if (!match) throw new Error('--restore-support 必须指定 格式id:最低版本')
+    const [, id, version] = match
+    const floor = Number(version)
+    const previous = baseline.formats[id]
+    const format = formats.find(item => item.id === id)
+    if (!previous || !format) throw new Error(`恢复支持必须指定已登记且未退役的格式：${id}`)
+    if (restoredFloors.has(id)) throw new Error(`重复恢复支持：${id}`)
+    if (!Number.isSafeInteger(floor) || floor >= (previous.supportedFrom ?? 1)) throw new Error(`恢复支持必须降低支持下限：${id}`)
+    if (format.storage === 'sqlite-ledger') throw new Error(`SQLite 支持范围由 SQL 账本负责，不能使用 --restore-support：${id}`)
+    if (format.version !== previous.version || format.fingerprint !== previous.fingerprint) throw new Error(`恢复支持不能同时改变当前版本或结构：${id}`)
+    restoredFloors.set(id, floor)
+  }
   if (adoption && (baseline.releasedCompatibility || baseline.frameworkAdoption || !options.reason?.trim() || options.devBreak)) throw new Error('框架一次性登记仅允许首次发布前执行一次，须提供非空理由且不能混用 dev-break')
   const breaks = options.devBreak ? (Array.isArray(options.devBreak) ? options.devBreak : [options.devBreak]) : []
   if (breaks.length && baseline.releasedCompatibility) throw new Error('正式发布后禁止 --dev-break；请升版本并写迁移和黄金样本。')
@@ -84,8 +118,15 @@ function updateBaseline(formats, baseline, options, fixtures) {
     if (previous && format.version < previous.version) throw new Error(`持久格式版本不能回退：${format.id}`)
     if (previous && format.version === previous.version && previous.fingerprint !== format.fingerprint && !broken && !options.frameworkAdoption) throw new Error(`改了持久格式 ${format.id}，请升版本并写迁移；开发期须显式 --dev-break。`)
     const adoption = options.init && format.version > 1
-    const supportedFrom = broken || adoption ? format.version : previous?.supportedFrom ?? 1
+    const supportedFrom = restoredFloors.get(format.id) ?? (broken || adoption ? format.version : previous?.supportedFrom ?? 1)
     next.formats[format.id] = { version: format.version, fingerprint: format.fingerprint, supportedFrom }
+    if (restoredFloors.has(format.id)) {
+      next.compatibilityRestorations ??= []
+      next.compatibilityRestorations.push({ at: new Date().toISOString(), format: format.id, version: format.version,
+        previousSupportedFrom: previous.supportedFrom, supportedFrom, reason: options.reason.trim(),
+        previousFingerprint: previous.fingerprint, fingerprint: format.fingerprint,
+        migrationVersions: Array.from({ length: format.version - supportedFrom }, (_, index) => supportedFrom + index) })
+    }
     if (broken || adoption) next.devBreaks.push({ at: new Date().toISOString(), format: format.id, version: format.version, reason: options.reason.trim(), previousFingerprint: previous?.fingerprint ?? null, fingerprint: format.fingerprint,
       waivedFixtureVersions: options.waiveBefore || adoption ? Array.from({ length: format.version - 1 }, (_, i) => i + 1) : [] })
   }
@@ -100,17 +141,23 @@ function updateBaseline(formats, baseline, options, fixtures) {
   return next
 }
 function main(argv = process.argv.slice(2)) {
-  const flags = new Set(['--write', '--init', '--dev-break', '--reason', '--waive-before', '--release-snapshot', '--framework-adoption'])
+  const flags = new Set(['--write', '--init', '--dev-break', '--restore-support', '--reason', '--waive-before', '--release-snapshot', '--framework-adoption'])
   const options = {}
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]
     if (!flags.has(flag)) throw new Error(`未知参数：${flag}`)
-    if (flag === '--dev-break' || flag === '--reason') { if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`${flag} 缺少参数`); const value = argv[++i]; if (flag === '--dev-break') options.devBreak = [...(options.devBreak ?? []), value]; else options.reason = value }
+    if (flag === '--dev-break' || flag === '--restore-support' || flag === '--reason') {
+      if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`${flag} 缺少参数`)
+      const value = argv[++i]
+      if (flag === '--dev-break') options.devBreak = [...(options.devBreak ?? []), value]
+      else if (flag === '--restore-support') options.restoreSupport = [...(options.restoreSupport ?? []), value]
+      else options.reason = value
+    }
     else options[flag.slice(2)] = true
   }
   options.frameworkAdoption = options['framework-adoption']
   options.waiveBefore = options['waive-before']
-  if ((options.devBreak || options.reason || options.waiveBefore || options.init || options.frameworkAdoption) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
+  if ((options.devBreak || options.restoreSupport || options.reason || options.waiveBefore || options.init || options.frameworkAdoption) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
   if (options.waiveBefore && !options.devBreak) throw new Error('--waive-before 只允许和 --dev-break、--reason 一起使用。')
   const formats = snapshot()
   let baseline

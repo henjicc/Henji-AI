@@ -1,8 +1,16 @@
 import { z } from 'zod'
 import { videoEditSequenceDefaultsSchema } from '../videoEdit/sequenceDefaults'
-import { recordingShortcutsSchema } from '../screenRecording/contracts'
+import { DEFAULT_RECORDING_SHORTCUTS, recordingShortcutsSchema } from '../screenRecording/contracts'
 
 export const SETTINGS_STORAGE_VERSION = 14
+
+/** 13 → 14：只补新增录制快捷键；已有设置与扩展字段原样保留。 */
+export function migrateSettingsV13(content: unknown): unknown {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
+  const record = content as Record<string, unknown>
+  return { ...record, recordingShortcuts: record.recordingShortcuts === undefined ? { ...DEFAULT_RECORDING_SHORTCUTS } : record.recordingShortcuts }
+}
+
 // Existing merge normalizes partial settings; this schema describes accepted persisted fields.
 export const rendererSettingsSchema = z.object({
   recordingShortcuts: recordingShortcutsSchema.optional(),
