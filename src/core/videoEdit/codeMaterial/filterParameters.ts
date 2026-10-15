@@ -1,8 +1,9 @@
+import { CODE_FILTER_FRAME_SLOTS, codeLiftFrameExpression } from './filterFrameExpressions'
 import { CodeMaterialError } from './contract'
 import type { CodeExpression, CodeMaterialProgram, CodeParameterDeclaration, CodeParameterValues } from './contract'
 
 export const CODE_FILTER_PARAMETER_SLOTS = 64
-export const CODE_FILTER_UNIFORM_VEC4S = CODE_FILTER_PARAMETER_SLOTS + 3
+export const CODE_FILTER_UNIFORM_VEC4S = CODE_FILTER_PARAMETER_SLOTS + 3 + CODE_FILTER_FRAME_SLOTS
 export interface CodeFilterParameterReference { key: string; field?: string; parameter: CodeParameterDeclaration; projection: string[] }
 export interface CodeFilterParameterSlot { key: string; field?: string; parameter: CodeParameterDeclaration; index: number }
 export function codeFilterParameterReference(program: CodeMaterialProgram, input: CodeExpression): CodeFilterParameterReference | undefined {
@@ -35,6 +36,7 @@ export function codeFilterParameterSlots(program: CodeMaterialProgram): CodeFilt
   const visit = (value: CodeExpression): void => {
     if (visited.has(value)) return
     visited.add(value)
+    if (codeLiftFrameExpression(program, value)) return
     if (value.kind === 'v3call' && value.op === 'shaderFilter') return
     if (value.kind === 'v3call' && ['sampleGradient', 'sampleCurve', 'ease', 'formatNumber', 'formatTime', 'chars', 'words', 'measureText'].includes(value.op)) throw new CodeMaterialError('TYPE', `${value.op} 仅在 CPU 帧级表达式可用，不能用于逐像素 GPU 表达式；请放入 shaderFilter 属性，或使用自写 WGSL / shader 组件。`, value.sourceSpan)
     const reference = codeFilterParameterReference(program, value)

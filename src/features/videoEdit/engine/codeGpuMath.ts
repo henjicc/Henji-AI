@@ -3,6 +3,7 @@ import type { CodeMathBuiltin } from '@/core/videoEdit/codeMaterial/contract'
 import type { Range, Value } from './codeGpuFilter'
 
 interface Proof {
+  deferred?: boolean
   range(min: number, max?: number, integer?: boolean): Range
   scalar(value: Value): Range
   multiply(a: Range, b: Range): Range
@@ -17,7 +18,7 @@ export function emitCodeMath(op: CodeMathBuiltin, args: Value[], proof: Proof): 
   const codes = args.map(value => value.code)
   const a = (): Range => scalar(args[0]); const b = (): Range => scalar(args[1])
   const subtract = (a: Range, b: Range): Range => operationRange(a.min - b.max, a.max - b.min)
-  const requireDomain = (condition: boolean, reason: string): void => { if (!condition) throw new CodeMaterialError('NON_FINITE', `${op}：${reason}。`) }
+  const requireDomain = (condition: boolean, reason: string): void => { if (!condition && !proof.deferred) throw new CodeMaterialError('NON_FINITE', `${op}：${reason}。`) }
   const result = (code: string, bounds: Range): Value => ({ code, bounds })
   const vector = (value: Value): { code: string; bounds: Range[] } => {
     const bounds = value.items?.map(scalar) ?? (Array.isArray(value.bounds) ? value.bounds : undefined)
@@ -36,7 +37,7 @@ export function emitCodeMath(op: CodeMathBuiltin, args: Value[], proof: Proof): 
     if (op === 'normalize') {
       const length = magnitude(left.bounds)
       requireDomain(length.min > 1e-12 || length.max === 0, '逐像素向量长度必须可证明为零或大于 1e-12；帧级 normalize 支持任意零向量')
-      const code = length.max === 0 ? `vec${left.bounds.length}f(0.0)` : `normalize(${left.code})`
+      const code = `(${left.code}/max(length(${left.code}),1e-12))`
       const bounds = left.bounds.map(() => range(-1.00001, 1.00001, false))
       return { code, bounds, ...(left.bounds.length === 4 ? {} : { items: bounds.map((bound, i) => ({ code: `(${code})[${i}]`, bounds: bound })) }) }
     }
@@ -59,7 +60,8 @@ export function emitCodeMath(op: CodeMathBuiltin, args: Value[], proof: Proof): 
     const values = [base.min ** exponent.min, base.min ** exponent.max, base.max ** exponent.min, base.max ** exponent.max]
     if (base.min <= 0 && base.max >= 0 && exponent.min > 0) values.push(0)
     if (exponent.min <= 0 && exponent.max >= 0) values.push(1)
-    const output = integer && exponent.min === 0 ? '1.0' : integer && base.min < 0 ? `(pow(abs(${codes[0]}),${codes[1]})${Math.abs(exponent.min % 2) === 1 ? `*sign(${codes[0]})` : ''})` : `pow(${codes.join(',')})`
+    // Source remains identical when exact frame uniforms change the proof bounds.
+    const output = `codePow(${codes.join(',')})`
     return result(output, operationRange(Math.min(...values), Math.max(...values)))
   }
   if (op === 'mod') {

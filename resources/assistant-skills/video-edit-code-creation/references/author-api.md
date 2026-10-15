@@ -47,23 +47,33 @@ ctx：time 源秒、localTime 片段内秒、sequenceTime 序列秒、frame、fp
 | ellipse({...}) | x/y/width/height 为外接矩形；fill |
 | line({...}) | x1/y1/x2/y2；width、color；stroke/strokeWidth、lineCap/lineJoin、dash、trimStart/trimEnd |
 | path({...}) | d 或 points 二选一；closed、fill；描边与 trim 同 line |
-| group({...},children) | x/y 默认 0；children 数组/repeat；clip 为局部矩形 {x,y,width,height} |
+| group({...},children) | x/y 默认 0；children 数组/repeat；clip 为局部矩形 {x,y,width,height}；mask:{shape,mode?,invert?} |
 | image({...}) | source 为 image 参数；x/y/width/height；空参数不画 |
 | text({...}) | x/y/text/fontSize；排版见 author-text-motion |
 | shader({...}) | name+params 或 layers 图层树，time/x/y/width/height；见 author-shaders |
 
-公共字段：静态字符串 id；opacity 0–1；rotation 为度；scale 或 scaleX/scaleY（后者优先）；anchorX/anchorY 为局部像素锚点，默认 0。scale 可负以镜像；perChar.scale 必须非负。blend 为 normal/multiply/screen/overlay/add/lighten/darken。
+公共字段：静态字符串 id；opacity 0–1；rotation 为度；scale 或 scaleX/scaleY（后者优先）；anchorX/anchorY 为局部像素锚点，默认 0。scale 可负以镜像；perChar.scale 必须非负。skewX/skewY 为度，默认 0，范围 −89.9–89.9；矩阵依次缩放、倾斜、旋转，再按锚点与位置平移。blend 为 normal/multiply/screen/overlay/add/lighten/darken/difference/exclusion/soft-light/hard-light/color-dodge/color-burn/hue/saturation/color/luminosity。
 
-除 shader 自身外，可用 shadow:{x,y,blur,color}、glow:{radius,intensity,color}、blur。阴影偏移 ±1024，模糊/辉光半径 0–256，辉光强度 0–16。组 opacity 在整组完成后应用一次；clip 在局部图层完成效果后裁切，再做组变换。shader 可放组内接受组效果。
+除 shader 自身外，可用 shadow:{x,y,blur,color}、glow:{radius,intensity,color}、blur。阴影偏移 ±1024，模糊/辉光半径 0–256，辉光强度 0–16。组 opacity 在整组完成后应用一次；mask 在组效果后、clip 前应用；clip 在局部图层完成效果后裁切，再做组变换。shader 可放组内接受组效果。
 
 rect/ellipse/path/text 的 fill/stroke 接受 RGBA 或渐变，strokeWidth 控制描边。lineCap 为 butt/round/square，lineJoin 为 miter/round/bevel；dash 至多 32 项非负长度，非空时不能全零。line/path 的 trimStart/trimEnd 为 0–1，end 不小于 start，沿长度裁描边，不改变填充。SVG d 支持完整路径语法（含相对命令、H V S T A，见 author-api-expressions）；points 为 [[x,y],...]，closed 控制闭合。
 
 ```text
 linearGradient({x1,y1,x2,y2,stops:[[0,rgbaValue],[1,rgbaValue]]})
 radialGradient({cx,cy,r,stops:[[0,rgbaValue],[1,rgbaValue]]})
+conicGradient({cx,cy,angle:0,stops:[[0,rgbaValue],[1,rgbaValue]]})
 ```
 
-渐变坐标为图形/组局部画布坐标；stops 为 2–8 项静态数组，位置 0–1、非递减。线性两端不能重合，径向半径 >0。颜色用 [r,g,b,a] 或 rgba，各通道 0–1；过冲后用 clamp 收口。
+渐变坐标为图形/组局部画布坐标；stops 为 2–32 项静态数组，位置 0–1、非递减。线性两端不能重合，径向半径 >0。颜色用 [r,g,b,a] 或 rgba，各通道 0–1；过冲后用 clamp 收口。
+
+`conicGradient` 的 angle 默认 0 度，零度从中心向右，顺时针增加，绕中心一圈覆盖 stops 的 0–1。
+
+`group({mask:{shape,mode:"alpha",invert:false}}, children)`：shape 是一个图形调用，支持 rect/ellipse/line/path/text/image/shader，也可嵌套 group；使用组内局部坐标和同一帧上下文。mode 为 alpha（默认）或 luma，后者为预乘 RGB 的 `.2126*r + .7152*g + .0722*b`。invert 默认 false，true 时覆盖率为 `1-coverage`，包括图形之外的区域。空图片产生零覆盖；反转后全覆盖。矩形 clip 独立保留。
+
+```text
+group({mask:{shape:ellipse({x:ctx.time*20,y:0,width:200,height:200,fill:[1,1,1,1]}),mode:"alpha"}}, [rect({x:0,y:0,width:400,height:200,fill:[1,0,0,1]})])
+rect({x:0,y:0,width:100,height:100,skewX:15,skewY:5,blend:"difference",fill:[.8,.2,.3,1]})
+```
 
 ## 元素定位
 
@@ -79,10 +89,10 @@ radialGradient({cx,cy,r,stops:[[0,rgbaValue],[1,rgbaValue]]})
 | 绘制单元（逐字按字形）/ CPU 加权工作 | 4096 / 1000000 |
 | 参数 / 单字符串 / 每帧文字 | languageVersion 3 不限个数（v1/v2 为 32）/ 4096 / 8192 UTF-16 |
 | 滤镜采样 / 标量工作 | 64 / 4096 |
-| 单路径展平点 / 渐变 stops | 4096 / 2–8 |
+| 单路径展平点 / 渐变 stops | 4096 / 2–32 |
 | shader 图层 / shaderFilter 工序 | 32 / 8 |
 | 字号 / 字形纹理 / GPU 驻留 | 1–1024px / 宽≤8192且≤四百万像素 / 256 MiB |
 
-repeat、辅助函数、路径、字符动画按展开上界计费。以上是单帧保护，不限制工程素材/片段/序列数量，不承诺所有设备 60fps。
+repeat、辅助函数、路径、字符动画按展开上界计费。代码目标驻留数量按 256 MiB 纹理预算和分辨率计算，预留一半给图层与效果；超过驻留容量时按最近使用顺序回读位图并淘汰纹理，同帧合成保留结果，后续按需重建，没有固定 16 个目标限制。以上是单帧保护，不限制工程素材/片段/序列数量，不承诺所有设备 60fps。
 
 错误：SOURCE_LIMIT 源码超限；SYNTAX 禁止语法/结构；TYPE 字段/类型/索引；BUDGET 展开/资源；PARAMETERS 声明/实例/颜色/着色器参数；NON_FINITE 非有限数值/GPU 安全证明；CONTEXT 时间/尺寸/量字/GPU；COMPATIBILITY 不可变版本契约。可归属错误带 sourceSpan，按位置修正后提交新操作，不原样重试。缺字体报告 MISSING_FONT 并回退 sans-serif；回退能画不等于品牌字体已验收。

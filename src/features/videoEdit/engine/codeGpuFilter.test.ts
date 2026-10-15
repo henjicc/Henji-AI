@@ -19,10 +19,10 @@ describe('可信GPU滤镜白名单与预算', () => {
     expect(shader).toContain('color.rgb*color.a')
     expect(program.metrics.samples).toBe(1)
   })
-  it('拒绝可能除零、非有限中间值和未限制的越界颜色，失败不会被clamp掩盖', () => {
+  it('拒绝逐像素除零与非有限中间值，颜色在输出端夹取', () => {
     expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('return rgba(clamp(1/ctx.u,0,1),0,0,1);')))).toThrow('除数')
     expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('return rgba(clamp(1e18*1e18,0,1),0,0,1);')))).toThrow('范围')
-    expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('return rgba(ctx.time,0,0,1);')))).toThrow('输出')
+    expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('return rgba(ctx.time,0,0,1);')))).not.toThrow()
     expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('return rgba(smoothstep(ctx.u,ctx.v,0.5),0,0,1);')))).toThrow('边界')
   })
   it('嵌套余数保持线性源码和一次采样，使用JS舍入及余数语义', () => {
@@ -57,10 +57,10 @@ describe('可信GPU滤镜白名单与预算', () => {
   })
 })
 describe('贝塞尔曲线进入 v3 滤镜 tween', () => {
-  it('贝塞尔数组发射 codeBezier，缓动名发射 codeEase，回弹曲线明确拒绝', () => {
+  it('帧级贝塞尔与回弹缓动提升为 uniform', () => {
     const filter = (ease: string): string => `export default {apiVersion:1,languageVersion:3,name:"曲线滤镜",kind:"filter",mode:"dynamic",width:1920,height:1080,durationSeconds:5,seed:1,parameters:{},render(ctx){return mix(sample(ctx.u,ctx.v),[0.3,0.75,0.86,1],tween(ctx.localTime,0,0.6,0,1,${ease}));}}`
-    expect(emitCodeMaterialFilter(compileCodeMaterial(filter('[0.2,0,0.2,1]')))).toMatch(/codeBezier\(0\.2\d*,0\.0,0\.2\d*,1\.0,clamp/)
+    expect(emitCodeMaterialFilter(compileCodeMaterial(filter('[0.2,0,0.2,1]')))).toContain('p.frameValues[')
     expect(emitCodeMaterialFilter(compileCodeMaterial(filter('"expoOut"')))).toContain('codeEase(')
-    expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('[0.3,1.6,0.6,1]')))).toThrow('回弹')
+    expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('[0.3,1.6,0.6,1]')))).not.toThrow()
   })
 })

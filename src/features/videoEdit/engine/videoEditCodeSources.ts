@@ -41,7 +41,7 @@ import { videoEditTextResolution } from './videoEditTextSurface'
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'retainProgramVersions'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'retainProgramVersions' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'compile' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
@@ -70,6 +70,8 @@ export class VideoEditCodeSources {
   private readonly programs = new Map<string, CachedProgram>()
   private programBytes = 0
   private readonly staticPictures = new Map<string, VideoEditCodePicture | ImageBitmap>()
+  private readonly targetPictures = new Map<string, VideoEditCodePicture | ImageBitmap>()
+  private readonly spilledPictures = new Set<ImageBitmap>()
   private readonly parameters = new WeakMap<CodeMaterialInstance, { program: CodeMaterialProgram; prepared: PreparedCodeMaterialParameters }>()
   private readonly graphics = new WeakMap<VideoEditGraphic, PreparedVideoEditGraphic>()
   private runtime?: CodeRuntime
@@ -80,6 +82,7 @@ export class VideoEditCodeSources {
   private gpuWork: Promise<void> = Promise.resolve()
   private releaseUnused(keys: ReadonlySet<string>): void {
     this.runtime?.releaseUnused(keys)
+    for (const key of this.targetPictures.keys()) if (!keys.has(key)) this.targetPictures.delete(key)
     for (const [key, picture] of this.staticPictures) if (!keys.has(key)) { if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.staticPictures.delete(key) }
   }
   constructor(private document: VideoEditComposition, private readonly acquireRuntime: () => Promise<CodeRuntime>, private readonly compiler: Compiler = new VideoEditCodeCompiler()) { this.checkVersions(document) }
@@ -227,23 +230,34 @@ export class VideoEditCodeSources {
         keys.add(target)
         plans.push({ clip, key: target, static: program.mode === 'static', program, parameters, context, transitionHandles })
       }
-      if (plans.filter(plan => !plan.draws).length > 16) throw new CodeMaterialError('BUDGET', '代码素材同时最多16个渲染目标。')
       assertCurrent(); this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }
       // Serialize GPU mutations, including a generator whose readiness resolves after cancellation.
       const work = this.gpuWork.then(async () => {
         assertCurrent()
         if (plans.length || effects.size || keys.size) { this.runtime ??= await this.acquireRuntime(); assertCurrent() }
+        this.runtime?.resetFramePerformance?.()
         this.runtime?.retainProgramVersions?.(new Set([...this.programs.keys(), ...[...effects.values()].flatMap(chain => chain.flatMap(effect => effect.builtin ? [] : [effect.version]))]))
         const outcome = (await imageOutcome)?.[0]
         if (outcome?.status === 'rejected') throw outcome.reason
         const inputs = outcome?.status === 'fulfilled' ? outcome.value : undefined; assertCurrent()
         this.releaseUnused(keys)
+        for (const bitmap of this.spilledPictures) bitmap.close()
+        this.spilledPictures.clear()
+        const resident = this.targetPictures
+        const capacity = Math.min(...plans.map(plan => this.runtime?.generatorTargetCapacity?.(plan.context.width, plan.context.height) ?? Infinity))
         for (const plan of plans) {
           assertCurrent()
           let picture = plan.static ? this.staticPictures.get(plan.key) : undefined
           if (picture) result.cacheHits++
           else {
+            while (resident.size >= capacity && this.runtime?.spillGeneratorTarget) {
+              const [oldKey, oldPicture] = resident.entries().next().value!
+              const bitmap = await this.runtime.spillGeneratorTarget(oldKey)
+              this.spilledPictures.add(bitmap); resident.delete(oldKey); this.staticPictures.delete(oldKey)
+              for (const [id, value] of result.pictures) if (value === oldPicture) result.pictures.set(id, bitmap)
+              assertCurrent()
+            }
             if (plan.draws) {
               if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
               picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws, undefined, Math.min(document.width / plan.context.width, document.height / plan.context.height) * plan.clip.scale)
@@ -251,6 +265,7 @@ export class VideoEditCodeSources {
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)
           }
+          resident.delete(plan.key); resident.set(plan.key, picture)
           result.pictures.set(plan.clip.id, picture)
         }
       })
@@ -279,6 +294,7 @@ export class VideoEditCodeSources {
     if (this.disposed) return
     this.disposed = true; this.cursorSources.clear(); this.zoomPointers.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear()
     await Promise.allSettled([this.gpuWork])
+    this.spilledPictures.forEach(bitmap => bitmap.close()); this.spilledPictures.clear(); this.targetPictures.clear()
     try { this.runtime?.releaseUnused(new Set()) }
     finally { for (const picture of this.staticPictures.values()) if (typeof ImageBitmap !== 'undefined' && picture instanceof ImageBitmap) picture.close(); this.programs.clear(); this.programBytes = 0; this.staticPictures.clear(); this.known.clear(); this.knownBytes = 0 }
   }

@@ -98,7 +98,7 @@ describe('v3 作者封闭语言', () => {
   it.each([
     'return [path({d:"m 0 0 l 1"})];',
     'return [rect({x:0,y:0,width:1,height:1,fill:linearGradient({x1:0,y1:0,x2:1,y2:0,stops:[[0,[1,1,1,1]]]})})];',
-    'return [rect({x:0,y:0,width:1,height:1,fill:linearGradient({x1:0,y1:0,x2:1,y2:0,stops:[[0,[1,1,1,1]],[.1,[1,1,1,1]],[.2,[1,1,1,1]],[.3,[1,1,1,1]],[.4,[1,1,1,1]],[.5,[1,1,1,1]],[.6,[1,1,1,1]],[.7,[1,1,1,1]],[1,[1,1,1,1]]]})})];',
+    `return [rect({x:0,y:0,width:1,height:1,fill:linearGradient({x1:0,y1:0,x2:1,y2:0,stops:${JSON.stringify(Array.from({length:33},(_,i)=>[i/32,[1,1,1,1]]))}})})];`,
     'return repeat(1,i=>repeat(1,j=>repeat(1,k=>repeat(1,l=>repeat(1,m=>[])))));',
     'const f=(x)=>x+x;return [rect({x:0,y:0,width:f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(1)))))))))))))))))))),height:1})];',
     'return repeat(4096,i=>path({d:"M0 0 C1000 2000 3000 4000 5000 6000 C6000 7000 8000 9000 10000 11000"}));',

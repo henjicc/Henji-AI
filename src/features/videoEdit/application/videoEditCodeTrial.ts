@@ -1,3 +1,4 @@
+import { codePerformanceExceeded, type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditComposition, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
@@ -56,7 +57,7 @@ let tail: Promise<void> = Promise.resolve()
 /** One serial queue for creation, source candidates and explicit version binds.
  * Every trial uses the production full-composition worker and releases it. */
 /** `collect` receives every presented frame (caller owns and closes them); used for short animated previews. */
-export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[]): Promise<ImageBitmap | undefined> {
+export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[]): Promise<ImageBitmap | undefined> {
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
   const previous = tail; let release!: () => void
@@ -89,6 +90,9 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
         if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
         return result
       }), deadline])
+      const samples = result.codePerformance ?? []
+      if (samples.reduce((sum, value) => sum + value.cpuMs + value.gpuMs, 0) > 1000 / input.document.fps) measurements?.push(...samples.map(value => ({ ...value, frame: input.frame, budgetMs: 1000 / input.document.fps })))
+      else measurements?.push(...samples.filter(codePerformanceExceeded))
       bitmap?.close(); bitmap = result.bitmap
       if (result.effectErrors?.length) throw new Error(result.effectErrors.join('\n'))
       if (!result.presented || !bitmap) throw new Error('源码候选没有生成可用画面。')

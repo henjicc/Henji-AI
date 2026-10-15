@@ -64,3 +64,19 @@ opacity、perChar.opacity、HSV/HSL 的饱和度与明度、alpha 和最终颜�
 `path({d: "..."})` 支持 SVG 的 M/L/H/V/C/S/Q/T/A/Z 及其小写相对命令、隐式重复和科学计数法数字，例如 `path({d:"M0 0h10v10a5 5 0 0 1-5 5z"})`。曲线按长度和画幅自适应分为 4–256 段，最终总点数最多 4096，路径字符串最多 8192 单元；同一路径与画幅产生相同点列。
 
 数学也可用于逐像素滤镜，但仍受 GPU 的有限范围证明约束：除数不能可能为零，log 输入须为正，sqrt 输入须非负，asin/acos 输入须在 −1–1。逐像素 tan 须在 −π/2–π/2 内；normalize 长度须可证明为零或大于 1e-12，atan2 的两参数不能可能同时为零。帧级表达式使用 CPU 定义域检查。
+
+## 滤镜的帧级表达式与运行时反馈
+
+不依赖 u/v、sample/sampleOffset 或图层结果的数值、布尔、颜色子表达式，每帧在 CPU 求值后上传 f32 uniform；帧级求值共享绑定缓存与 1000000 工作预算。最多 512 个 vec4 帧级槽。`sin(ctx.time)`、`sampleGradient(ctx.params.ramp,ctx.time)` 等帧级计算无需逐像素范围证明；有限数值与函数定义域仍在运行时检查。逐像素计算仍检查除零、溢出和函数定义域；混合表达式按该帧实际 f32 uniform 重新检查。最终 RGBA 在片元输出夹到 0–1，不再要求输出的静态范围位于 0–1。
+
+```text
+return rgba(sin(ctx.time), 0, 0, 1);
+return blur(8 + sin(ctx.time) * 4);
+return glow(.2, 4 + ctx.time, 1);
+return mix(sample(ctx.u,ctx.v), rgba(1,0,0,1), tween(ctx.time,0,1,0,1,"backOut"));
+return average(repeat(ctx.params.count, i => sampleOffset(i,0)));
+```
+
+滤镜 repeat 的 count 可为 number 参数，须有不超过 64 的整数 max，运行值须为 1–max 的整数；GPU 按上界展开，average 只计入本帧有效项。tween 支持 backOut/elasticOut/bounceOut 和 y 控制点越过 0–1 的贝塞尔曲线；最终通道夹取。`rgba(1/(ctx.u-.5),0,0,1)` 等逐像素不安全表达式仍被拒绝。
+
+试渲染和 observe_video_edit_frame 的取帧结果在代码渲染超过序列实时预算 `1000/fps` 毫秒时提供 performance：frame、cpuMs、gpuMs、budgetMs，以及有源码计时数据时的 heaviest（kind、cpuMs、sourceSpan 文件与行列）。创建素材/版本通过既有 evidence 回报同一测量。gpuMs 是提交准备至队列完成的墙钟耗时，包含栅格与上传，不是硬件 timestamp。计时不改变帧内容、不拒绝素材；播放沿用既有降级预览。

@@ -6,7 +6,7 @@
 
 ## 逐字／逐词揭示
 
-- 普通标题用perChar：(i,n)给每字y/opacity/scale/rotation，不能写blur、颜色或fontSize。逐字间隔1–2帧，位移约0.3–0.6字号，透明度比位移先完成；定版后停止。
+- perChar：(i,n) 可返回 x/y/opacity/scale/rotation/skewX/fill/blur/glow；fill 接受颜色或渐变，不能写 fontSize。常见起点：逐字间隔 1–2 帧，位移约 0.3–0.6 字号，透明度比位移先完成。
 - 用stagger(i,each)得开始时刻，progress得可见进度、tween的expoOut求位移。错峰跨度为(n−1)×each；建议≤0.6秒，长标题分拍或压缩间隔，不删字。
 - chars按Unicode码点，不能保证复杂连字／组合字形的逐字shaping。words按空白拆词，不是中文分词；中文关键词先按语义明确分段，每段作为独立text参数／文字对象。
 - 逐词排连续短语时按measureText的完整段宽度摆各段并留间隔；多个词横向排不下则按语义换行。别拿单词长度×字号估计；受限源码没有split/reduce/join；字符串可以用 + 拼接与模板插值。

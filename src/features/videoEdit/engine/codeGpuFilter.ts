@@ -1,3 +1,4 @@
+import { CODE_FILTER_FRAME_SLOTS, codeFilterFrameExpressions, codeExpressionChildren } from '@/core/videoEdit/codeMaterial/filterFrameExpressions'
 import { emitCodeMath } from './codeGpuMath'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { CodeMaterialError, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
@@ -9,7 +10,7 @@ import type { CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/con
 
 export interface Range { min: number; max: number; integer: boolean }
 export type Bounds = Range | Range[] | null
-export interface Value { code: string; bounds: Bounds; items?: Value[]; text?: string; fields?: Record<string, Value> }
+export interface Value { code: string; bounds: Bounds; items?: Value[]; text?: string; fields?: Record<string, Value>; count?: string }
 const float = new Float32Array(1)
 const bits = new Uint32Array(float.buffer)
 const MIN_NORMAL = 1.1754943508222875e-38
@@ -64,7 +65,18 @@ const contextCode: Record<string, string> = { time: 'p.context0.x', localTime: '
 
 /** Emit only checked scalar/color IR. Conservative range analysis rejects unsafe
  * denominators and overflow before a pipeline reaches the GPU; no author WGSL. */
-export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionHandles = false): string {
+export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionHandles = false, frameValues?: readonly unknown[]): string {
+  const frameExpressions = codeFilterFrameExpressions(program)
+  const frameSlots = new Map(frameExpressions.map((expression, index) => [expression, index]))
+  const frameDependent = (value: CodeExpression): boolean => frameSlots.has(value) || value.kind === 'binding' && frameDependent(program.bindings[value.slot].expression) || codeExpressionChildren(value).some(frameDependent)
+  let deferred = false
+  // Compile-time checks still prove pixel-only expressions. Mixed expressions
+  // are checked again against actual f32 uniform values before every GPU frame.
+  const safe = (compute: () => Range): Range => { try { return compute() } catch (error) { if (deferred && error instanceof CodeMaterialError && error.code === 'NON_FINITE') return { min: -1e18, max: 1e18, integer: false }; throw error } }
+  const checkedRange = (min: number, max = min, integer = Number.isInteger(min) && min === max): Range => safe(() => range(min, max, integer))
+  const checkedOperation = (min: number, max: number, integer = false, ulps = 1): Range => safe(() => operationRange(min, max, integer, ulps))
+  const checkedMultiply = (a: Range, b: Range): Range => safe(() => multiply(a, b))
+  const checkedDivide = (a: Range, b: Range): Range => safe(() => divide(a, b))
   const shaders = codeShaderFilterPasses(program)
   const limits = program.languageVersion === 3 ? CODE_V3_LIMITS : CODE_MATERIAL_LIMITS
   if (program.kind !== 'filter' || ![1, 3].includes(program.languageVersion) || program.languageVersion === 1 && program.parameters.length > 32 || program.metrics.samples > limits.filterSamples || program.metrics.scalarOperations > limits.filterScalarOperations) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')
@@ -74,11 +86,11 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
     const slot = slots.get(codeFilterParameterSlotId(key, field))
     if (!slot) throw new CodeMaterialError('TYPE', `滤镜参数 ${key}${field ? '.' + field : ''} 缺少 GPU 槽位。`)
     const code = `p.parameters[${slot.index}]`
-    if (parameter.type === 'number' || parameter.type === 'angle') return { code: `${code}.x`, bounds: range(parameter.min, parameter.max) }
-    if (parameter.type === 'seed') return { code: `${code}.x`, bounds: range(0, 4294967295) }
+    if (parameter.type === 'number' || parameter.type === 'angle') return { code: `${code}.x`, bounds: checkedRange(parameter.min, parameter.max) }
+    if (parameter.type === 'seed') return { code: `${code}.x`, bounds: checkedRange(0, 4294967295) }
     if (parameter.type === 'boolean') return { code: `(${code}.x != 0.0)`, bounds: null }
-    if (parameter.type === 'color') return { code, bounds: [range(0, 1, false), range(0, 1, false), range(0, 1, false), parameter.alpha === false ? range(1) : range(0, 1, false)] }
-    const member = (channel: string, min: number, max: number): Value => ({ code: `${code}.${channel}`, bounds: range(min, max) })
+    if (parameter.type === 'color') return { code, bounds: [checkedRange(0, 1, false), checkedRange(0, 1, false), checkedRange(0, 1, false), parameter.alpha === false ? checkedRange(1) : checkedRange(0, 1, false)] }
+    const member = (channel: string, min: number, max: number): Value => ({ code: `${code}.${channel}`, bounds: checkedRange(min, max) })
     if (parameter.type === 'point') {
       const x = member('x', parameter.min.x, parameter.max.x); const y = member('y', parameter.min.y, parameter.max.y)
       return { code: `${code}.xy`, bounds: [scalar(x), scalar(y)], fields: { x, y } }
@@ -87,11 +99,26 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       const a = member('x', parameter.min, parameter.max); const b = member('y', parameter.min, parameter.max)
       return { code: `${code}.xy`, bounds: [scalar(a), scalar(b)], items: [a, b] }
     }
-    if (parameter.type === 'grade') return { code: `${code}.xyz`, bounds: [range(0, 360), range(0, 1), range(-1, 1)], fields: { hue: member('x', 0, 360), strength: member('y', 0, 1), luminance: member('z', -1, 1) } }
+    if (parameter.type === 'grade') return { code: `${code}.xyz`, bounds: [checkedRange(0, 360), checkedRange(0, 1), checkedRange(-1, 1)], fields: { hue: member('x', 0, 360), strength: member('y', 0, 1), luminance: member('z', -1, 1) } }
     throw new CodeMaterialError('TYPE', `参数 ${key}（${parameter.type}）不能用于逐像素 GPU 表达式。`)
   }
   const bindings: Value[] = []; const locals = new Map<number, Value>(); const passes = codeMaterialFilterPasses(program); let nodes = 0
   const emit = (expression: CodeExpression, depth = 0): Value => {
+    const previous = deferred; deferred = !frameValues && frameDependent(expression)
+    try {
+      const slot = frameSlots.get(expression)
+      if (slot !== undefined) {
+        const value = frameValues?.[slot]
+        const exact = (value: unknown): Range => { if (typeof value !== 'number' || !Number.isFinite(value)) throw new CodeMaterialError('NON_FINITE', '帧级滤镜表达式必须返回有限数值。', expression.sourceSpan); return range(value) }
+        const code = `p.frameValues[${slot}]`
+        if (expression.type === 'boolean') return { code: `(${code}.x != 0.0)`, bounds: null }
+        if (expression.type === 'color') return { code, bounds: frameValues ? (value as number[]).map(exact) : Array.from({ length: 4 }, () => range(-1e6, 1e6, false)) }
+        return { code: `${code}.x`, bounds: frameValues ? exact(value) : range(-1e6, 1e6, false) }
+      }
+      return emitNode(expression, depth)
+    } finally { deferred = previous }
+  }
+  const emitNode = (expression: CodeExpression, depth = 0): Value => {
     if (++nodes > limits.astNodes || depth > limits.depth) throw new CodeMaterialError('BUDGET', '滤镜表达式超出预算。')
     const next = (value: CodeExpression): Value => emit(value, depth + 1)
     if (expression.kind === 'field') {
@@ -101,7 +128,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         for (const key of reference.projection) {
           const member = result.fields?.[key]
           if (member) result = member
-          else if (key === 'length' && result.items) result = { code: `${result.items.length}.0`, bounds: range(result.items.length) }
+          else if (key === 'length' && result.items) result = { code: `${result.items.length}.0`, bounds: checkedRange(result.items.length) }
           else throw new CodeMaterialError('TYPE', `滤镜参数不存在字段 ${key}。`)
         }
         return result
@@ -112,7 +139,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         if (typeof expression.value === 'boolean') return { code: String(expression.value), bounds: null }
         if (typeof expression.value === 'string' && program.languageVersion === 3) return { code: '', bounds: null, text: expression.value }
         if (typeof expression.value !== 'number') throw new CodeMaterialError('TYPE', '滤镜不支持文字。')
-        const bounds = range(expression.value)
+        const bounds = checkedRange(expression.value)
         const value = Math.fround(expression.value)
         const code = Number.isInteger(value) ? `${value}.0f` : `${value}f`
         return { code, bounds }
@@ -122,11 +149,11 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       case 'array': return { code: '', bounds: null, items: expression.values.map(next) }
       case 'object': return { code: '', bounds: null, fields: Object.fromEntries(Object.entries(expression.properties).map(([key, value]) => [key, next(value)])) }
       case 'repeat': {
-        const count = scalar(next(expression.count))
-        if (count.min !== count.max || !count.integer || count.min < 1 || count.max > 64) throw new CodeMaterialError('BUDGET', '滤镜 repeat 次数须为 1–64 的编译期整数常量。')
+        const count = next(expression.count)
+        if (expression.max < 1 || expression.max > 64 || !Number.isInteger(expression.max)) throw new CodeMaterialError('BUDGET', '滤镜 repeat 需要不超过 64 的整数上界。')
         const items: Value[] = []
-        for (let i = 0; i < count.max; i++) { locals.set(expression.slot, { code: `${i}.0`, bounds: range(i) }); items.push(next(expression.body)) }
-        locals.delete(expression.slot); return { code: '', bounds: null, items }
+        for (let i = 0; i < expression.max; i++) { locals.set(expression.slot, { code: `${i}.0`, bounds: checkedRange(i) }); items.push(next(expression.body)) }
+        locals.delete(expression.slot); return { code: '', bounds: null, items, count: count.code }
       }
       case 'index': {
         const value = next(expression.value); const index = scalar(next(expression.index))
@@ -134,19 +161,19 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         if (!value.items || index.min !== index.max || !index.integer || index.min < 0 || index.max >= value.items.length) throw new CodeMaterialError('TYPE', '滤镜表索引须为预算内静态整数。')
         return value.items[index.min]
       }
-      case 'field': { const value = next(expression.value); if (value.fields?.[expression.key]) return value.fields[expression.key]; if (expression.key === 'length' && value.items) return { code: `${value.items.length}.0`, bounds: range(value.items.length) }; throw new CodeMaterialError('TYPE', '滤镜不支持此字段。') }
+      case 'field': { const value = next(expression.value); if (value.fields?.[expression.key]) return value.fields[expression.key]; if (expression.key === 'length' && value.items) return { code: `${value.items.length}.0`, bounds: checkedRange(value.items.length) }; throw new CodeMaterialError('TYPE', '滤镜不支持此字段。') }
       case 'v3call': {
         if (expression.op === 'shaderFilter') {
           const index = shaders.findIndex(pass => pass.expression === unwrapCodeShaderExpression(program, expression))
           if (index < 0) throw new CodeMaterialError('TYPE', '缺少可信着色器工序。', expression.sourceSpan)
-          return { code: `codeUnpremultiply(textureSampleLevel(codeShader${index},inputSampler,uv,0.0))`, bounds: Array.from({ length: 4 }, () => range(0, 1, false)) }
+          return { code: `codeUnpremultiply(textureSampleLevel(codeShader${index},inputSampler,uv,0.0))`, bounds: Array.from({ length: 4 }, () => checkedRange(0, 1, false)) }
         }
-        try { return emitCodeV3FilterCall(expression, expression.args.map(next), passes, { range, scalar, colors, union, multiply, divide, operationRange }) }
+        try { return emitCodeV3FilterCall(expression, expression.args.map(next), passes, { range: checkedRange, scalar, colors, union, multiply: checkedMultiply, divide: checkedDivide, operationRange: checkedOperation, deferred }) }
         catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan && expression.sourceSpan) throw new CodeMaterialError(error.code, error.message, expression.sourceSpan); throw error }
       }
       case 'context': {
         if (!contextRanges[expression.key]) throw new CodeMaterialError('TYPE', '未知滤镜时间字段。')
-        return { code: contextCode[expression.key], bounds: expression.key === 'localTime' && transitionHandles ? range(-VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false) : contextRanges[expression.key] }
+        return { code: contextCode[expression.key], bounds: expression.key === 'localTime' && transitionHandles ? checkedRange(-VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_SECONDS, false) : contextRanges[expression.key] }
       }
       case 'parameter': {
         const parameter = program.parameters.find(item => item.key === expression.key)
@@ -163,23 +190,23 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         const value = next(expression.value)
         if (expression.op === '!') return { code: `!(${value.code})`, bounds: null }
         const a = scalar(value)
-        return { code: expression.op === '+' ? value.code : `-(${value.code})`, bounds: expression.op === '+' ? a : range(-a.max, -a.min, a.integer) }
+        return { code: expression.op === '+' ? value.code : `-(${value.code})`, bounds: expression.op === '+' ? a : checkedRange(-a.max, -a.min, a.integer) }
       }
       case 'binary': {
         const a = next(expression.left); const b = next(expression.right)
-        if (expression.op === '**') return emitCodeMath('pow', [a, b], { range, scalar, multiply, divide, operationRange })
+        if (expression.op === '**') return emitCodeMath('pow', [a, b], { range: checkedRange, scalar, multiply: checkedMultiply, divide: checkedDivide, operationRange: checkedOperation, deferred })
         let bounds: Bounds = null
         if (expression.type === 'number') {
           const x = scalar(a); const y = scalar(b)
-          if (expression.op === '+') bounds = operationRange(x.min + y.min, x.max + y.max, x.integer && y.integer)
-          else if (expression.op === '-') bounds = operationRange(x.min - y.max, x.max - y.min, x.integer && y.integer)
-          else if (expression.op === '*') bounds = multiply(x, y)
+          if (expression.op === '+') bounds = checkedOperation(x.min + y.min, x.max + y.max, x.integer && y.integer)
+          else if (expression.op === '-') bounds = checkedOperation(x.min - y.max, x.max - y.min, x.integer && y.integer)
+          else if (expression.op === '*') bounds = checkedMultiply(x, y)
           else if (expression.op === '/' || expression.op === '%') {
-            const divided = divide(x, y)
+            const divided = checkedDivide(x, y)
             if (expression.op === '/') bounds = divided
             else {
-              const product = multiply(range(Math.trunc(divided.min), Math.trunc(divided.max), true), y)
-              bounds = operationRange(x.min - product.max, x.max - product.min, x.integer && y.integer)
+              const product = checkedMultiply(checkedRange(Math.trunc(divided.min), Math.trunc(divided.max), true), y)
+              bounds = checkedOperation(x.min - product.max, x.max - product.min, x.integer && y.integer)
             }
           } else throw new CodeMaterialError('TYPE', '未知滤镜数值操作。')
         }
@@ -198,54 +225,54 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
         const a = (): Range => scalar(args[0]); const b = (): Range => scalar(args[1]); const c = (): Range => scalar(args[2])
         let bounds: Bounds; let output = `${expression.op}(${code.join(',')})`
         switch (expression.op) {
-          case 'sample': return { code: `codeSample(vec2f(${code.join(',')}))`, bounds: Array.from({ length: 4 }, () => range(0, 1, false)) }
+          case 'sample': return { code: `codeSample(vec2f(${code.join(',')}))`, bounds: Array.from({ length: 4 }, () => checkedRange(0, 1, false)) }
           case 'rgba': return { code: `vec4f(${code.join(',')})`, bounds: args.map(scalar) }
           case 'sin': case 'cos': {
-            if (a().min < -Math.PI || a().max > Math.PI) throw new CodeMaterialError('NON_FINITE', '滤镜三角函数输入须可证明位于负π到π，避免未规定的GPU误差范围。')
-            bounds = range(-1 - 2 ** -11, 1 + 2 ** -11, false)
+            if (!deferred && (a().min < -Math.PI || a().max > Math.PI)) throw new CodeMaterialError('NON_FINITE', '滤镜三角函数输入须可证明位于负π到π，避免未规定的GPU误差范围。')
+            bounds = checkedRange(-1 - 2 ** -11, 1 + 2 ** -11, false)
             break
           }
-          case 'abs': bounds = range(a().min <= 0 && a().max >= 0 ? 0 : Math.min(Math.abs(a().min), Math.abs(a().max)), Math.max(Math.abs(a().min), Math.abs(a().max)), a().integer); break
+          case 'abs': bounds = checkedRange(a().min <= 0 && a().max >= 0 ? 0 : Math.min(Math.abs(a().min), Math.abs(a().max)), Math.max(Math.abs(a().min), Math.abs(a().max)), a().integer); break
           case 'floor': case 'ceil': case 'round': {
-            const input = expression.op === 'round' ? operationRange(a().min + .5, a().max + .5) : a()
+            const input = expression.op === 'round' ? checkedOperation(a().min + .5, a().max + .5) : a()
             const fn = expression.op === 'ceil' ? Math.ceil : Math.floor
-            bounds = range(fn(input.min), fn(input.max), true)
+            bounds = checkedRange(fn(input.min), fn(input.max), true)
             if (expression.op === 'round') output = `floor(${code[0]}+0.5)` // The f32 addition is included in the proof above.
             break
           }
-          case 'min': bounds = range(Math.min(a().min, b().min), Math.min(a().max, b().max), a().integer && b().integer); break
-          case 'max': bounds = range(Math.max(a().min, b().min), Math.max(a().max, b().max), a().integer && b().integer); break
+          case 'min': bounds = checkedRange(Math.min(a().min, b().min), Math.min(a().max, b().max), a().integer && b().integer); break
+          case 'max': bounds = checkedRange(Math.max(a().min, b().min), Math.max(a().max, b().max), a().integer && b().integer); break
           case 'random': {
-            if (!a().integer || a().min < 0 || a().max > 16777215) throw new CodeMaterialError('TYPE', '滤镜随机索引必须可证明为0到16777215的整数。')
-            output = `codeRandom(u32(${code[0]}))`; bounds = range(0, 1, false); break
+            if (!deferred && (!a().integer || a().min < 0 || a().max > 16777215)) throw new CodeMaterialError('TYPE', '滤镜随机索引必须可证明为0到16777215的整数。')
+            output = `codeRandom(u32(${code[0]}))`; bounds = checkedRange(0, 1, false); break
           }
           case 'clamp': {
-            if (b().max > c().min) throw new CodeMaterialError('TYPE', '滤镜clamp上下限可能颠倒。')
-            const limit = (x: Range): Range => range(Math.min(Math.max(x.min, b().min), c().min), Math.min(Math.max(x.max, b().max), c().max), false)
+            if (!deferred && b().max > c().min) throw new CodeMaterialError('TYPE', '滤镜clamp上下限可能颠倒。')
+            const limit = (x: Range): Range => checkedRange(Math.min(Math.max(x.min, b().min), c().min), Math.min(Math.max(x.max, b().max), c().max), false)
             bounds = expression.type === 'color' ? colors(args[0]).map(limit) : limit(a())
             if (expression.type === 'color') output = `clamp(${code[0]},vec4f(${code[1]}),vec4f(${code[2]}))`
             break
           }
           case 'mix': {
             const mix = (x: Range, y: Range): Range => {
-              const delta = operationRange(y.min - x.max, y.max - x.min, false); const product = multiply(delta, c())
-              const computed = operationRange(x.min + product.min, x.max + product.max, false)
+              const delta = checkedOperation(y.min - x.max, y.max - x.min, false); const product = checkedMultiply(delta, c())
+              const computed = checkedOperation(x.min + product.min, x.max + product.max, false)
               if (c().min < 0 || c().max > 1) return computed
               // Retain the convex mathematical bound plus accumulated f32 error.
               // The helper uses exactly subtraction, multiplication and addition.
               const magnitude = Math.max(Math.abs(x.min), Math.abs(x.max), Math.abs(y.min), Math.abs(y.max))
               const error = (adjacent(Math.fround(magnitude), true) - Math.fround(magnitude)) * 16
               const convex = union(x, y)
-              return operationRange(Math.max(computed.min, convex.min - error), Math.min(computed.max, convex.max + error), false)
+              return checkedOperation(Math.max(computed.min, convex.min - error), Math.min(computed.max, convex.max + error), false)
             }
             bounds = expression.type === 'color' ? colors(args[0]).map((x, index) => mix(x, colors(args[1])[index])) : mix(a(), b())
             output = `${expression.type === 'color' ? 'codeMixColor' : 'codeMix'}(${code.join(',')})`; break
           }
           case 'smoothstep': {
-            const denominator = operationRange(b().min - a().max, b().max - a().min)
-            if (denominator.min < 1e-12) throw new CodeMaterialError('TYPE', '滤镜smoothstep边界必须始终递增。')
-            divide(operationRange(c().min - a().max, c().max - a().min), denominator)
-            output = `codeSmooth(${code.join(',')})`; bounds = range(0, 1, false); break
+            const denominator = checkedOperation(b().min - a().max, b().max - a().min)
+            if (!deferred && denominator.min < 1e-12) throw new CodeMaterialError('TYPE', '滤镜smoothstep边界必须始终递增。')
+            checkedDivide(checkedOperation(c().min - a().max, c().max - a().min), denominator)
+            output = `codeSmooth(${code.join(',')})`; bounds = checkedRange(0, 1, false); break
           }
           default: throw new CodeMaterialError('TYPE', '滤镜函数不在白名单。')
         }
@@ -257,6 +284,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
   // Frame uniforms are evaluated on CPU. Do not range-prove/emit unused host-only bindings per pixel.
   const pixelBindings = new Set<number>()
   const pixelUse = (value: CodeExpression): void => {
+    if (frameSlots.has(value)) return
     if (value.kind === 'v3call' && value.op === 'shaderFilter') return
     if (value.kind === 'binding') { if (!pixelBindings.has(value.slot)) { pixelBindings.add(value.slot); pixelUse(program.bindings[value.slot].expression) } return }
     for (const item of Object.values(value)) {
@@ -269,9 +297,9 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
   const declarations: string[] = []
   for (const binding of program.bindings) { const value = pixelBindings.has(bindings.length) ? emit(binding.expression) : { code: '', bounds: null, text: '' }; if (!value.items && !value.fields && value.text === undefined) declarations.push(`let b${bindings.length} = ${value.code};`); bindings.push(value) }
   const result = emit(program.result)
-  if (colors(result).some(channel => channel.min < -1e-5 || channel.max > 1 + 1e-5)) throw new CodeMaterialError('PARAMETERS', '滤镜输出必须始终位于0到1；请在可能越界的颜色通道显式使用clamp。')
+  colors(result) // Output channels are clamped by the fragment epilogue.
   return `
-struct Params { context0:vec4f, context1:vec3f, seed:u32, parameters:array<vec4f,${CODE_FILTER_PARAMETER_SLOTS}>, flags:vec4f }
+struct Params { context0:vec4f, context1:vec3f, seed:u32, parameters:array<vec4f,${CODE_FILTER_PARAMETER_SLOTS}>, flags:vec4f, frameValues:array<vec4f,${CODE_FILTER_FRAME_SLOTS}> }
 @group(0) @binding(0) var inputTexture: texture_2d<f32>;
 @group(0) @binding(1) var inputSampler: sampler;
 @group(0) @binding(2) var<uniform> p: Params;

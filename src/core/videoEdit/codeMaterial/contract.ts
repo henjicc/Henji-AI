@@ -8,7 +8,10 @@ export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes
  * 1000000 admits this workload on purpose: the ceiling bounds runaway work, it does not decide
  * how rich a piece may be. Elapsed time is a runtime concern, not a compile-time limit (GPU excluded here).
  */
-export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 1000000, draws: 4096, shaderLayers: 32, shaderFilterPasses: 8, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
+export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 1000000, draws: 4096, shaderLayers: 32, shaderFilterPasses: 8, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, // 2026-10-15 headless WebGPU, 64² conic, warmup5 + 20 cached frames:
+  // 8/32 stops CPU 0.050/0.068ms, GPU submission-to-completion 0.310/0.416ms.
+  // Measures evaluator + cached raster upload/composite, not Chromium cold raster or presentation.
+  gradientStops: 32, textCharacters: 8192 })
 export type { CodeColor, CodeImageReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'font', 'image', 'easing', 'seed'] as const
@@ -35,8 +38,10 @@ export function codeBinaryCost(op: CodeBinaryOperator): number { return op === '
 export function codeConditionalCost(type: CodeValueType): number { return type === 'color' ? 4 : 1 }
 export type CodeDrawKind = 'rect' | 'ellipse' | 'line' | 'text' | 'image' | 'group' | 'path' | 'shader'
 export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
-export type CodeBlend = 'normal' | 'multiply' | 'screen' | 'overlay' | 'add' | 'lighten' | 'darken'
-export interface CodeGradient { kind: 'linearGradient' | 'radialGradient'; x1?: number; y1?: number; x2?: number; y2?: number; cx?: number; cy?: number; r?: number; stops: [number, CodeColor][] }
+export const CODE_BLEND_NAMES = ['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken', 'difference', 'exclusion', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'hue', 'saturation', 'color', 'luminosity'] as const
+export type CodeBlend = typeof CODE_BLEND_NAMES[number]
+export interface CodeGradient { kind: 'linearGradient' | 'radialGradient' | 'conicGradient'; x1?: number; y1?: number; x2?: number; y2?: number; cx?: number; cy?: number; r?: number; angle?: number; stops: [number, CodeColor][] }
+export interface CodeCharacterStyle { x: number; y: number; opacity: number; scale: number; rotation: number; skewX?: number; fill?: CodePaint; blur?: number; glow?: CodeDrawMetadata['glow'] }
 export type CodePaint = CodeColor | CodeGradient
 export type CodeMatrix = [number, number, number, number, number, number]
 export interface CodeTextLayout { width: number; height: number; lines: string[]; lineWidths?: number[]; baselineOffset?: number; fontSize: number; font: string; fontGeneration?: number; missingFont?: string; glyphs: { text: string; x: number; y: number; width: number }[] }
@@ -46,7 +51,7 @@ export interface CodeDrawMetadata {
   /** Host-only evaluated correction; never accepted by the author language. */
   elementTransform?: CodeMatrix; authorAnchor?: boolean; authorElementId?: string
   elementId?: string; sourceSpan?: CodeSourceSpan; elementPath?: string[]
-  opacity?: number; rotation?: number; scaleX?: number; scaleY?: number; anchorX?: number; anchorY?: number; blend?: CodeBlend
+  opacity?: number; rotation?: number; scaleX?: number; scaleY?: number; skewX?: number; skewY?: number; anchorX?: number; anchorY?: number; blend?: CodeBlend
   paint?: CodePaint; stroke?: CodePaint; strokeWidth?: number; lineCap?: 'butt' | 'round' | 'square'; lineJoin?: 'miter' | 'round' | 'bevel'; dash?: number[]; trimStart?: number; trimEnd?: number
   shadow?: { x: number; y: number; blur: number; color: CodeColor }; glow?: { radius: number; intensity: number; color: CodeColor }; blur?: number
 }
@@ -86,9 +91,9 @@ export type CodeDrawCommand = CodeDrawMetadata & (
   | { kind: 'rect'; x: number; y: number; width: number; height: number; fill: CodeColor; radius: number; radii?: number[] }
   | { kind: 'ellipse'; x: number; y: number; width: number; height: number; fill: CodeColor }
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; width: number; color: CodeColor }
-  | { kind: 'text'; x: number; y: number; text: string; fontSize: number; color: CodeColor; fontFamily: string; align: 'left' | 'center' | 'right'; fontWeight?: number; fontStyle?: string; baseline?: string; letterSpacing?: number; lineHeight?: number; maxWidth?: number; wrap?: boolean; maxLines?: number; layout?: CodeTextLayout; perChar?: { x: number; y: number; opacity: number; scale: number; rotation: number }[] }
+  | { kind: 'text'; x: number; y: number; text: string; fontSize: number; color: CodeColor; fontFamily: string; align: 'left' | 'center' | 'right'; fontWeight?: number; fontStyle?: string; baseline?: string; letterSpacing?: number; lineHeight?: number; maxWidth?: number; wrap?: boolean; maxLines?: number; layout?: CodeTextLayout; perChar?: CodeCharacterStyle[] }
   | { kind: 'image'; source: CodeImageReference; x: number; y: number; width: number; height: number; opacity: number }
-  | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; clip?: { x: number; y: number; width: number; height: number } }
+  | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; mask?: { shape: CodeDrawCommand | null; mode: 'alpha' | 'luma'; invert: boolean }; clip?: { x: number; y: number; width: number; height: number } }
   | { kind: 'path'; points: [number, number][][]; closed: boolean; fill: CodeColor }
   | { kind: 'shader'; graph: ShaderGraphSpec; time: number; x: number; y: number; width: number; height: number }
 )

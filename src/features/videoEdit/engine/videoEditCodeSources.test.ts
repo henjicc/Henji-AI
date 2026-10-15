@@ -424,7 +424,7 @@ describe('失效、身份与资源上限', () => {
       expect(counted.acquire).not.toHaveBeenCalled(); expect(sized.acquire).not.toHaveBeenCalled()
     } finally { await counted.sources.dispose(); await sized.sources.dispose() }
   })
-  it('完整帧保护集合不逐出同帧其他目标，第17个目标先于GPU分配拒绝', async () => {
+  it('完整帧保护集合保留同帧目标，17个目标不再被固定数量限制', async () => {
     const document = fixture(); const boundary = boundaries(document)
     try {
       const clips = Array.from({ length: 16 }, (_, index) => ({ ...document.clips[0], id: `clip${index}`, code: { ...document.clips[0].code!, parameters: { amount: index / 20 } } }))
@@ -432,8 +432,9 @@ describe('失效、身份与资源上限', () => {
       const protectedKeys = boundary.releaseUnused.mock.calls.at(-1)![0]
       expect(protectedKeys.size).toBe(16); expect(boundary.pictures.size).toBe(16)
       expect(boundary.generator.mock.calls.every(call => protectedKeys.has(call[0]))).toBe(true)
-      await expect(boundary.sources.prepare(document, [...clips, { ...clips[0], id: 'overflow', code: { ...clips[0].code, parameters: { amount: .9 } } }], 0, () => true)).rejects.toThrow('16个')
-      expect(boundary.generator).toHaveBeenCalledTimes(16)
+      const result = await boundary.sources.prepare(document, [...clips, { ...clips[0], id: 'overflow', code: { ...clips[0].code, parameters: { amount: .9 } } }], 0, () => true)
+      expect(result.pictures.size).toBe(17)
+      expect(boundary.generator).toHaveBeenCalledTimes(17)
     } finally { await boundary.sources.dispose() }
   })
 })
@@ -503,4 +504,25 @@ it('自动缩放沿原片源时钟求值：跟随区间按块读取指针日志�
     expect(center(zoom)).toBeCloseTo(0.5)
     expect(quiet).not.toHaveBeenCalled()
   } finally { quiet.mockRestore(); await second.sources.dispose() }
+})
+
+it('纹理预算容量2时LRU溢出为位图，同帧结果仍有效；下一帧重建并关闭旧位图', async () => {
+  const document = fixture(); const boundary = boundaries(document)
+  const runtime = await boundary.acquire(); const bitmaps: ImageBitmap[] = []
+  Object.assign(runtime, { generatorTargetCapacity: () => 2, spillGeneratorTarget: vi.fn(async (key: string) => {
+    boundary.pictures.delete(key)
+    const bitmap = { width: 3840, height: 2160, close: vi.fn() } as unknown as ImageBitmap
+    bitmaps.push(bitmap); return bitmap
+  }) })
+  const clips = Array.from({ length: 4 }, (_, index) => ({ ...document.clips[0], id: `budget${index}`, code: { ...document.clips[0].code!, parameters: { amount: index / 10 } } }))
+  try {
+    const first = await boundary.sources.prepare(document, clips, 0, () => true)
+    expect(first.pictures.size).toBe(4); expect(boundary.pictures.size).toBe(2)
+    expect(first.pictures.get('budget0')).toBe(bitmaps[0]); expect(first.pictures.get('budget1')).toBe(bitmaps[1])
+    const old = [...bitmaps]
+    await boundary.sources.prepare(document, clips, 1, () => true)
+    old.forEach(bitmap => expect(bitmap.close).toHaveBeenCalledOnce())
+    expect(boundary.generator).toHaveBeenCalledTimes(8); expect(boundary.pictures.size).toBe(2)
+  } finally { await boundary.sources.dispose() }
+  bitmaps.forEach(bitmap => expect(bitmap.close).toHaveBeenCalledOnce())
 })

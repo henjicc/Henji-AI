@@ -1,3 +1,4 @@
+import { codeFilterFrameExpressions } from './filterFrameExpressions'
 import { describe, expect, it } from 'vitest'
 import { compileCodeMaterial } from './compiler'
 import { evaluateCodeMaterial } from './evaluate'
@@ -6,7 +7,7 @@ import { CodeMaterialError } from './contract'
 import { validateCodeMaterialParameters, validateCodeMaterialParameterValue } from './parameters'
 import { codeParameterMetadata, parseCodeMaterialTypes } from './parameterTypes'
 import { easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
-import { codeFilterParameterSlots, packCodeFilterParameters } from './filterParameters'
+import { codeFilterParameterSlots } from './filterParameters'
 import { codeMaterialInstanceSchema } from '../codeMaterialPersistence'
 import { codeMaterialKeyframeSchema, evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '../codeMaterialAnimation'
 import { emitCodeMaterialFilter } from '../../../features/videoEdit/engine/codeGpuFilter'
@@ -155,29 +156,28 @@ describe('滤镜参数uniform契约', () => {
   it('基础类型与结构字段只按像素读取占槽，WGSL和打包顺序一致', () => {
     const parameters = { unused: basic.text, a: basic.angle, p: basic.point, r: basic.range, g: basic.grade, seed: basic.seed, flag: basic.boolean, lamp: { type: 'light', title: '灯', default: {} } }
     const program = compileCodeMaterial(source(parameters, 'const lamp=ctx.params.lamp; return rgba(clamp(lamp.power/10+ctx.params.p.x+ctx.params.r[0]/10,0,1),clamp(ctx.params.g.strength,0,1),clamp(ctx.params.a/180+ctx.params.seed/4294967295,0,1),ctx.params.flag?lamp.color.a:1);', { light }, 'filter'))
-    const slots = codeFilterParameterSlots(program)
-    expect(slots.map(slot => [slot.key, slot.field])).toEqual([['lamp', 'power'], ['p', undefined], ['r', undefined], ['g', undefined], ['a', undefined], ['seed', undefined], ['flag', undefined], ['lamp', 'color']])
-    const packed = packCodeFilterParameters(program, validateCodeMaterialParameters(program))
-    expect(packed).toHaveLength(256); expect([...packed.slice(0, 12)]).toEqual([2, 0, 0, 0, .25, .75, 0, 0, 2, 4, 0, 0])
-    expect([...packed.slice(12, 15)]).toEqual([30, Math.fround(.4), Math.fround(-.2)])
-    const wgsl = emitCodeMaterialFilter(program)
-    expect(wgsl).toContain('array<vec4f,64>'); expect(wgsl).toContain('p.parameters[1].x'); expect(wgsl).toContain('p.parameters[7]')
+    expect(codeFilterParameterSlots(program)).toEqual([])
+    const lifted = codeFilterFrameExpressions(program)
+    const colors = lifted.map(expression => evaluateCodeFrameExpression(program, expression, context, {}))
+    expect(colors.at(-1)).toEqual([.65, .4, 1, 1])
+    expect(emitCodeMaterialFilter(program, false, colors)).toContain('p.frameValues[')
   })
-  it('64个实际读取槽可用，第65槽明确说明GPU技术限制；未读取参数不计入', () => {
+  it('65个帧级参数先求值成一个uniform，不再消耗65个像素参数槽', () => {
     const parameters = Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`p${i}`, basic.number]))
     const sum = (names: string[]): string => names.length === 1 ? names[0] : `(${sum(names.slice(0, Math.floor(names.length / 2)))}+${sum(names.slice(Math.floor(names.length / 2)))})`
-    const body = (count: number) => `return rgba(clamp(${sum(Array.from({ length: count }, (_, i) => `ctx.params.p${i}`))}/1000,0,1),0,0,1);`
-    const program = compileCodeMaterial(source(parameters, body(64), {}, 'filter'))
-    expect(codeFilterParameterSlots(program)).toHaveLength(64); expect(emitCodeMaterialFilter(program)).toContain('p.parameters[63].x')
-    expect(packCodeFilterParameters(program, validateCodeMaterialParameters(program))[63 * 4]).toBe(2)
-    expect(() => compileCodeMaterial(source(parameters, body(65), {}, 'filter'))).toThrow('64 槽技术限制')
+    const body = `return rgba(${sum(Object.keys(parameters).map(key => `ctx.params.${key}`))}/1000,0,0,1);`
+    const program = compileCodeMaterial(source(parameters, body, {}, 'filter'))
+    expect(codeFilterParameterSlots(program)).toHaveLength(0)
+    expect(codeFilterFrameExpressions(program)).toHaveLength(1)
+    expect(evaluateCodeFrameExpression(program, codeFilterFrameExpressions(program)[0], context, {})).toEqual([.13,0,0,1])
   })
-  it('禁止类型/采样函数的像素读取编译期拒绝，含别名与字段投影；帧级全部可用', () => {
+  it('参数采样与类型判断可帧级求值，逐像素采样仍拒绝', () => {
     for (const [key, expression] of [['text', 'ctx.params.text==="x"?1:0'], ['font', 'ctx.params.font==="x"?1:0'], ['choice', 'ctx.params.choice==="soft"?1:0'], ['easing', 'ctx.params.easing[0]'], ['gradient', 'ctx.params.gradient[0].at'], ['curve', 'ctx.params.curve[0].y']] as const) {
-      expect(() => compileCodeMaterial(source({ [key]: basic[key] }, `const alias=${expression}; return rgba(alias,0,0,1);`, {}, 'filter'))).toThrow('逐像素')
+      expect(() => compileCodeMaterial(source({ [key]: basic[key] }, `const alias=${expression}; return rgba(alias,0,0,1);`, {}, 'filter'))).not.toThrow()
     }
-    for (const expression of ['sampleGradient(ctx.params.gradient,.5)', 'rgba(sampleCurve(ctx.params.curve,.5),0,0,1)', 'rgba(ease(ctx.params.easing,.5),0,0,1)']) expect(() => compileCodeMaterial(source(basicWithoutImage(), `return ${expression};`, {}, 'filter'))).toThrow('CPU 帧级')
-    expect(() => compileCodeMaterial(source({ p: { ...basic.point, space: 'pixels' } }, 'return rgba(clamp(ctx.params.p.x,0,1),0,0,1);', {}, 'filter'))).toThrow('frame 空间')
+    for (const expression of ['sampleGradient(ctx.params.gradient,.5)', 'rgba(sampleCurve(ctx.params.curve,.5),0,0,1)', 'rgba(ease(ctx.params.easing,.5),0,0,1)']) expect(() => compileCodeMaterial(source(basicWithoutImage(), `return ${expression};`, {}, 'filter'))).not.toThrow()
+    expect(() => compileCodeMaterial(source({ p: { ...basic.point, space: 'pixels' } }, 'return rgba(clamp(ctx.params.p.x,0,1),0,0,1);', {}, 'filter'))).not.toThrow()
+    expect(() => compileCodeMaterial(source(basicWithoutImage(), 'return sampleGradient(ctx.params.gradient,ctx.u);', {}, 'filter'))).toThrow('CPU 帧级')
     const program = compileCodeMaterial(source(basicWithoutImage(), 'const amount=(ctx.params.choice==="soft"?sampleCurve(ctx.params.curve,.75):ease(ctx.params.easing,.5)); return shaderFilter("pass",{amount:amount,color:sampleGradient(ctx.params.gradient,.5)});', {}, 'filter', 'shaders:{pass:{kind:"filter",props:{amount:{default:0},color:{type:"color",default:"white"}},wgsl:"return child;"}},'))
     expect(codeFilterParameterSlots(program)).toHaveLength(0); expect(emitCodeMaterialFilter(program)).toContain('codeShader0')
     if (program.result.kind !== 'v3call') throw new Error('需要 shaderFilter')

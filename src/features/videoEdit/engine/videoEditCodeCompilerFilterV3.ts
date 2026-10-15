@@ -1,9 +1,12 @@
+import { codeExpressionIsFrameOnly } from '@/core/videoEdit/codeMaterial/filterFrameExpressions'
+import { evaluateCodeFrameExpression } from '@/core/videoEdit/codeMaterial/evaluateV3'
 import { emitCodeMath } from './codeGpuMath'
 import { CODE_V3_MATH_BUILTINS, CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
-import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeExpression, CodeMaterialProgram, CodeMaterialContext } from '@/core/videoEdit/codeMaterial/contract'
 import { CODE_EASE_NAMES } from '@/core/videoEdit/codeMaterial/motion'
 import type { Range, Value } from './codeGpuFilter'
 interface Proof {
+  deferred?: boolean
   range(min: number, max?: number, integer?: boolean): Range; scalar(value: Value): Range; colors(value: Value): Range[]; union(a: Range, b: Range): Range; multiply(a: Range, b: Range): Range; divide(a: Range, b: Range): Range; operationRange(min: number, max: number): Range
 }
 export interface CodeFilterPass { radius: CodeExpression; threshold?: CodeExpression }
@@ -12,10 +15,10 @@ export function codeMaterialFilterPasses(program: CodeMaterialProgram): CodeFilt
   const walk = (expression: CodeExpression): void => {
     if (expression.kind === 'v3call' && ['blur', 'glow'].includes(expression.op)) {
       const radius = expression.args[expression.op === 'glow' ? 1 : 0]
-      const uniform = (value: CodeExpression): boolean => value.kind === 'literal' && typeof value.value === 'number' || value.kind === 'parameter' && value.type === 'number' || value.kind === 'binding' && uniform(program.bindings[value.slot].expression)
-      if (!uniform(radius)) throw new CodeMaterialError('TYPE', '滤镜 blur/glow 半径须为数值常量或数值参数。', expression.sourceSpan)
+      const uniform = (value: CodeExpression): boolean => value.type === 'number' && codeExpressionIsFrameOnly(program, value)
+      if (!uniform(radius)) throw new CodeMaterialError('TYPE', '滤镜 blur/glow 半径须为只依赖帧与参数的数值表达式。', expression.sourceSpan)
       const threshold = expression.op === 'glow' ? expression.args[0] : undefined
-      if (threshold && !uniform(threshold)) throw new CodeMaterialError('TYPE', '滤镜 glow 阈值须为数值常量或数值参数。', expression.sourceSpan)
+      if (threshold && !uniform(threshold)) throw new CodeMaterialError('TYPE', '滤镜 glow 阈值须为只依赖帧与参数的数值表达式。', expression.sourceSpan)
       const key = JSON.stringify([radius, threshold]); if (!seen.has(key)) { seen.add(key); passes.push({ radius, ...(threshold ? { threshold } : {}) }) }
     }
     for (const value of Object.values(expression)) {
@@ -25,25 +28,25 @@ export function codeMaterialFilterPasses(program: CodeMaterialProgram): CodeFilt
   }
   program.bindings.forEach(binding => walk(binding.expression)); walk(program.result); return passes
 }
-export function codeFilterRadius(program: CodeMaterialProgram, expression: CodeExpression, parameters: Readonly<Record<string, unknown>>): number {
-  const value = expression.kind === 'literal' ? expression.value : expression.kind === 'parameter' ? parameters[expression.key] : expression.kind === 'binding' ? codeFilterRadius(program, program.bindings[expression.slot].expression, parameters) : undefined
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 256) throw new CodeMaterialError('BUDGET', '可信滤镜半径须在 0–256 像素。')
+export function codeFilterRadius(program: CodeMaterialProgram, expression: CodeExpression, parameters: Readonly<Record<string, unknown>>, context: CodeMaterialContext): number {
+  const value = evaluateCodeFrameExpression(program, expression, context, parameters)
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 256) throw new CodeMaterialError('BUDGET', '可信滤镜半径须在 0–256 像素。', expression.sourceSpan)
   return value
 }
 export function emitCodeV3FilterCall(expression: Extract<CodeExpression, { kind: 'v3call' }>, args: Value[], passes: CodeFilterPass[], proof: Proof): Value {
   if (CODE_V3_MATH_BUILTINS.includes(expression.op as typeof CODE_V3_MATH_BUILTINS[number])) return emitCodeMath(expression.op as typeof CODE_V3_MATH_BUILTINS[number], args, proof)
-  const { range, scalar, colors, union, multiply, divide, operationRange } = proof
+  const { range, scalar, colors, multiply, divide, operationRange } = proof
   const code = args.map(value => value.code)
   const boundedColors = (value: Value): Range[] => {
     const channels = colors(value)
-    if (channels.some(channel => channel.min < -1e-5 || channel.max > 1 + 1e-5)) throw new CodeMaterialError('TYPE', '色彩原语输入必须可证明位于 0–1。')
+    if (!proof.deferred && channels.some(channel => channel.min < -1e-5 || channel.max > 1 + 1e-5)) throw new CodeMaterialError('TYPE', '色彩原语输入必须可证明位于 0–1。')
     return channels
   }
   const numberResult = (output: string, min: number, max: number): Value => ({ code: output, bounds: range(min, max, false) })
   const colorResult = (output: string): Value => ({ code: output, bounds: Array.from({ length: 4 }, () => range(0, 1, false)) })
   if (CODE_EASE_NAMES.includes(expression.op)) {
     const overshoot = expression.op === 'backOut' && args[1] ? scalar(args[1]) : range(1.70158)
-    if (overshoot.min < 0 || overshoot.max > 10) throw new CodeMaterialError('TYPE', 'backOut 过冲须在 0–10。')
+    if (!proof.deferred && (overshoot.min < 0 || overshoot.max > 10)) throw new CodeMaterialError('TYPE', 'backOut 过冲须在 0–10。')
     return numberResult(`codeEase(${CODE_EASE_NAMES.indexOf(expression.op)}u,${code[0]},${args[1] ? code[1] : '1.70158'})`, expression.op === 'backOut' ? -10 : 0, ['backOut', 'elasticOut'].includes(expression.op) ? 12 : 1)
   }
   switch (expression.op) {
@@ -57,34 +60,42 @@ export function emitCodeV3FilterCall(expression: Extract<CodeExpression, { kind:
     case 'average': {
       const items = args[0].items
       if (!items?.length || items.length > 64) throw new CodeMaterialError('BUDGET', 'average 需要 1–64 个颜色。')
-      const bounds = [0, 1, 2, 3].map(index => range(items.reduce((sum, value) => sum + colors(value)[index].min, 0) / items.length, items.reduce((sum, value) => sum + colors(value)[index].max, 0) / items.length, false))
-      return { code: `((${items.map(value => value.code).join('+')})/${items.length}.0)`, bounds }
+      const bounds = [0, 1, 2, 3].map(index => range(Math.min(...items.map(value => colors(value)[index].min)), Math.max(...items.map(value => colors(value)[index].max)), false))
+      const count = args[0].count
+      const terms = items.map((value, index) => count ? `select(vec4f(0),${value.code},${index}.0<${count})` : value.code)
+      return { code: `((${terms.join('+')})/${count ? `max(1.0,${count})` : `${items.length}.0`})`, bounds }
     }
     case 'progress': {
-      const duration = scalar(args[2]); if (duration.min <= 0) throw new CodeMaterialError('NON_FINITE', 'progress duration 必须可证明始终大于零。')
+      const duration = scalar(args[2]); if (!proof.deferred && duration.min <= 0) throw new CodeMaterialError('NON_FINITE', 'progress duration 必须可证明始终大于零。')
       divide(operationRange(scalar(args[0]).min - scalar(args[1]).max, scalar(args[0]).max - scalar(args[1]).min), duration)
       return numberResult(`clamp((${code[0]}-${code[1]})/${code[2]},0.0,1.0)`, 0, 1)
     }
     case 'stagger': return { code: `(${code[0]}*${code[1]})`, bounds: multiply(scalar(args[0]), scalar(args[1])) }
     case 'tween': {
       const ease = args[5].text
-      // Style curves bind to a static Bézier literal; any non-constant curve is rejected like a dynamic name.
-      const bezier = !ease && Array.isArray(args[5].bounds) && args[5].bounds.length === 4 && args[5].bounds.every(bound => bound.min === bound.max) ? args[5].bounds.map(bound => bound.min) : undefined
-      if (!ease && !bezier || ease && !CODE_EASE_NAMES.includes(ease) || scalar(args[2]).min <= 0) throw new CodeMaterialError('TYPE', 'tween 需要静态缓动名称或贝塞尔曲线与正 duration。')
-      if (bezier && (bezier[0] < 0 || bezier[0] > 1 || bezier[2] < 0 || bezier[2] > 1 || [bezier[1], bezier[3]].some(y => y < 0 || y > 1))) throw new CodeMaterialError('TYPE', '滤镜 tween 的贝塞尔曲线须在 0–1 内；回弹曲线请展开并显式 clamp。')
+      // Curve components may be lifted uniforms; emit their codes, never proof-bound constants.
+      const bezier = !ease && Array.isArray(args[5].bounds) && args[5].bounds.length === 4 ? args[5].bounds : undefined
+      if (!ease && !bezier || ease && !CODE_EASE_NAMES.includes(ease) || !proof.deferred && scalar(args[2]).min <= 0) throw new CodeMaterialError('TYPE', 'tween 需要静态缓动名称或贝塞尔曲线与正 duration。')
+      if (!proof.deferred && bezier && (bezier[0].min < 0 || bezier[0].max > 1 || bezier[2].min < 0 || bezier[2].max > 1)) throw new CodeMaterialError('TYPE', '滤镜 tween 的贝塞尔 x 控制点须在 0–1 内。')
       const progress = `clamp((${code[0]}-${code[1]})/${code[2]},0.0,1.0)`
-      const amount = bezier ? `codeBezier(${bezier.map(value => `${value}`.includes('.') || `${value}`.includes('e') ? `${value}` : `${value}.0`).join(',')},${progress})` : `codeEase(${CODE_EASE_NAMES.indexOf(ease!)}u,${progress},1.70158)`
+      const amount = bezier ? `codeBezier((${code[5]}).x,(${code[5]}).y,(${code[5]}).z,(${code[5]}).w,${progress})` : `codeEase(${CODE_EASE_NAMES.indexOf(ease!)}u,${progress},1.70158)`
       const a = args[3]; const b = args[4]
-      const bounds = expression.type === 'color' ? colors(a).map((v, i) => union(v, colors(b)[i])) : union(scalar(a), scalar(b))
-      if (ease && ['backOut', 'elasticOut'].includes(ease)) throw new CodeMaterialError('TYPE', '滤镜 tween 的过冲缓动请展开并显式 clamp。')
+      const overshoot = ease && ['backOut', 'elasticOut'].includes(ease)
+      const weight = range(bezier ? Math.min(0, bezier[1].min, bezier[3].min) : overshoot ? -10 : 0, bezier ? Math.max(1, bezier[1].max, bezier[3].max) : overshoot ? 12 : 1, false)
+      const mixed = (a: Range, b: Range): Range => {
+        const delta = operationRange(b.min - a.max, b.max - a.min)
+        const product = multiply(delta, weight)
+        return operationRange(a.min + product.min, a.max + product.max)
+      }
+      const bounds = expression.type === 'color' ? colors(a).map((v, i) => mixed(v, colors(b)[i])) : mixed(scalar(a), scalar(b))
       return { code: `${expression.type === 'color' ? 'codeMixColor' : 'codeMix'}(${code[3]},${code[4]},${amount})`, bounds }
     }
     case 'cubicBezier': {
-      if ([0, 2].some(i => scalar(args[i]).min < 0 || scalar(args[i]).max > 1)) throw new CodeMaterialError('TYPE', '贝塞尔 x 控制点须在 0–1。')
+      if (!proof.deferred && [0, 2].some(i => scalar(args[i]).min < 0 || scalar(args[i]).max > 1)) throw new CodeMaterialError('TYPE', '贝塞尔 x 控制点须在 0–1。')
       return numberResult(`codeBezier(${code.join(',')})`, Math.min(0, scalar(args[1]).min, scalar(args[3]).min), Math.max(1, scalar(args[1]).max, scalar(args[3]).max))
     }
     case 'noise': {
-      args.forEach(value => { if (Math.max(Math.abs(scalar(value).min), Math.abs(scalar(value).max)) > 1e6) throw new CodeMaterialError('NON_FINITE', '滤镜 noise 坐标须在正负一百万内。') })
+      args.forEach(value => { if (!proof.deferred && Math.max(Math.abs(scalar(value).min), Math.abs(scalar(value).max)) > 1e6) throw new CodeMaterialError('NON_FINITE', '滤镜 noise 坐标须在正负一百万内。') })
       return numberResult(`codeNoise(vec3f(${code[0]},${code[1] ?? '0.0'},${code[2] ?? '0.0'}))`, 0, 1)
     }
     case 'luma': boundedColors(args[0]); return numberResult(`dot((${code[0]}).rgb,vec3f(.2126,.7152,.0722))`, 0, 1)
@@ -107,6 +118,7 @@ export function emitCodeV3FilterCall(expression: Extract<CodeExpression, { kind:
   }
 }
 export const CODE_V3_FILTER_HELPERS = `
+fn codePow(a:f32,b:f32)->f32 { if(b==0.0) { return 1.0; } let v=pow(abs(a),b); return select(v,-v,a<0.0 && abs(codeRemainder(b,2.0))==1.0); }
 fn codeMod(a:f32,b:f32)->f32 { let r=codeRemainder(a,b); return select(r+b,r,r==0.0 || sign(r)==sign(b)); }
 fn codeUnpremultiply(c:vec4f)->vec4f { return vec4f(clamp(c.rgb/max(c.a,.000001),vec3f(0),vec3f(1)),c.a); }
 fn codeGlow(uv:vec2f,threshold:f32,intensity:f32,blurred:vec4f)->vec4f {

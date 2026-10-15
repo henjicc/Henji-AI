@@ -30,7 +30,7 @@ measureText({text,fontFamily,fontWeight,fontStyle,fontSize,
 
 ## 逐字错峰
 
-perChar: (i,n) => ({x,y,opacity,scale,rotation})：i 为零基字符索引，n 为数量；仅允许这五字段，默认 0/0/1/1/0。scale ≥0，opacity 0–1，rotation 为度。仍是封闭纯表达式，不赋值或访问宿主。按 Unicode 码点拆分，复杂连字不保证逐字 shaping，要看实际帧。
+perChar: (i,n) => ({x,y,opacity,scale,rotation,skewX,fill,blur,glow})：i 为零基字符索引，n 为数量；前五字段默认 0/0/1/1/0，skewX 默认 0 度。fill 接受颜色或三种渐变；blur 为 0–256；glow 为 {radius,intensity,color}，范围同图形。省略 fill/blur/glow 时继承 text 设置；每项可依赖 i/n 和帧上下文。例如 `perChar:(i,n)=>({fill:rgba(i/n,0,1,1),blur:i,skewX:15,glow:{radius:4,intensity:1,color:[1,1,1,1]}})`。scale ≥0，opacity 0–1，rotation 为度。仍是封闭纯表达式，不赋值或访问宿主。按 Unicode 码点拆分，复杂连字不保证逐字 shaping，要看实际帧。
 
 ```ts
 export default {
@@ -71,7 +71,7 @@ export default {
 
 进场之后留阅读停留，退场在片段结束前完成；核对 source_in_us、变速和接缝。函数 keyframes 是源码表达式，实例 code_curves 是可编辑参数轨道，不是同一存储。static 不读时间，但宿主可以把曲线求值结果作为参数传入。
 
-滤镜 tween/keyframes 拒绝过冲缓动；可用直接缓动函数、mix、显式 clamp，仍须通过 GPU 范围证明。CPU 双精度与 GPU f32 语义一致，不承诺逐位相同。
+滤镜 tween 接受过冲缓动，输出通道在片元末端夹取；帧级 keyframes 同样由 CPU 求值，逐像素 keyframes 仍要求无过冲缓动。逐像素计算保留有限范围证明。CPU 双精度与 GPU f32 语义一致，不承诺逐位相同。
 
 ## 数学、数字与色彩
 

@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { CODE_BLEND_NAMES, type CodeColor } from '@/core/videoEdit/codeMaterial/contract'
+import { codeCompositePixel, codeMaskCoverage } from '@/core/videoEdit/codeMaterial/compositing'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { initShaderGraphTestGpu } from './shaderEngines/shaderGraphGpu.testing'
 import type { Gpu } from 'vgpu/node'
 import sharp from 'sharp'
@@ -22,6 +24,19 @@ const escape = (text: string): string => text.replace(/&/g, '&amp;').replace(/</
 const color = (paint: number[]): string => `rgba(${paint[0] * 255},${paint[1] * 255},${paint[2] * 255},${paint[3]})`
 /** Native libvips SVG raster fixture isolates GPU compositing/effects; Canvas API/layout is tested separately. */
 async function rasterFixture(command: CodeDrawCommand, image: { x: number; y: number; width: number; height: number; resolution?: number }): Promise<OffscreenCanvas> {
+  if (command.paint && !Array.isArray(command.paint) && command.paint.kind === 'conicGradient') {
+    const gradient = command.paint; const width = image.width; const height = image.height; const pixels = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const px = image.x + x + .5; const py = image.y + y + .5
+      if (command.kind !== 'rect' || px < command.x || px > command.x + command.width || py < command.y || py > command.y + command.height) continue
+      const at = ((Math.atan2(py - gradient.cy!, px - gradient.cx!) / (Math.PI * 2) - (gradient.angle ?? 0) / 360) % 1 + 1) % 1
+      const right = gradient.stops.findIndex(stop => stop[0] > at)
+      const b = gradient.stops[right < 0 ? gradient.stops.length - 1 : right]; const a = gradient.stops[Math.max(0, right < 0 ? gradient.stops.length - 1 : right - 1)]
+      const amount = a[0] === b[0] ? 0 : (at - a[0]) / (b[0] - a[0]); const c = a[1].map((v, i) => v + (b[1][i] - v) * amount)
+      pixels.set([c[0] * c[3] * 255, c[1] * c[3] * 255, c[2] * c[3] * 255, c[3] * 255].map(Math.round), (y * width + x) * 4)
+    }
+    return { pixels, width, height } as unknown as OffscreenCanvas
+  }
   const definitions: string[] = []
   const paint = (value: CodePaint): string => {
     if (Array.isArray(value)) return color(value)
@@ -375,4 +390,108 @@ describe('作者语言着色器GPU接线（shaders 框架）', () => {
       const fs=await import('node:fs/promises');await fs.mkdir('node_modules/.cache/t74',{recursive:true});await fs.writeFile('node_modules/.cache/t74/performance.json',JSON.stringify(report,null,2))
     } finally{target.destroy()}
   },120000)
+})
+
+describe('t101 CPU/GPU 像素契约', () => {
+  it.each(CODE_BLEND_NAMES)('%s 混合的半透明像素与CPU内核一致', async mode => {
+    const b: CodeColor = [.24,.56,.16,.8]; const a: CodeColor = [.54,.12,.36,.6]
+    const pixels = await run(`return [rect({x:0,y:0,width:64,height:64,fill:[.3,.7,.2,.8]}),rect({x:0,y:0,width:64,height:64,fill:[.9,.2,.6,.6],blend:"${mode}"})];`)
+    const expected = codeCompositePixel(b, a, mode)
+    pixel(pixels,32,32).forEach((channel,i)=>expect(Math.abs(channel-expected[i]*255)).toBeLessThanOrEqual(2))
+  })
+  it('alpha/luma/invert 组合对任意遮罩图层与CPU逐像素结果一致，动画可寻帧', async () => {
+    const shapes = [
+      'rect({x:ctx.frame,y:8,width:30,height:35,fill:[.2,.8,.4,.5]})',
+      'path({d:"M8 8L52 8L32 52Z",fill:[.2,.8,.4,.5]})',
+      'text({x:10,y:32,text:"AI",fontSize:24,fill:[.2,.8,.4,.5]})',
+      'shader({name:"LinearGradient",params:{colorA:[.2,.8,.4,.5],colorB:[.8,.2,.4,.8]},x:8,y:8,width:40,height:40})',
+    ]
+    for (const shape of shapes) {
+      const mask = await run(`return [${shape}];`)
+      for (const mode of ['alpha','luma'] as const) for (const invert of [false,true]) {
+        const actual = await run(`return [group({mask:{shape:${shape},mode:"${mode}",invert:${invert}}},[rect({x:0,y:0,width:64,height:64,fill:[1,0,0,1]})])];`)
+        for (let i=0;i<actual.length;i+=4) {
+          const expected = codeMaskCoverage(Array.from(mask.slice(i,i+4),v=>v/255) as CodeColor,mode,invert)*255
+          expect(Math.abs(actual[i]-expected),`${shape} ${mode} ${invert} pixel ${i/4}`).toBeLessThanOrEqual(2)
+          expect(actual[i+3]).toBe(actual[i]); expect(actual[i+1]+actual[i+2]).toBe(0)
+        }
+      }
+    }
+    const animated = compileCodeMaterial(source('return [group({clip:{x:8,y:8,width:48,height:48},mask:{shape:rect({x:ctx.frame,y:0,width:16,height:64,fill:[1,1,1,1]}),mode:"alpha"}},[rect({x:0,y:0,width:64,height:64,fill:[1,0,0,1]})])];'))
+    const target=texture(); try {
+      const render=async(frame:number)=>{await runtime.render(target,W,H,evaluateCodeMaterial(animated,{...context,frame}));return read(target)}
+      const a=await render(8); const b=await render(32); expect(a).not.toEqual(b);expect(await render(8)).toEqual(a)
+      expect(pixel(a,12,4)[3]).toBe(0);expect(pixel(a,12,12)[3]).toBe(255)
+    } finally {target.destroy()}
+  },30000)
+  it('借用图片作luma遮罩不改变图片资源',async()=>{
+    const input=texture(); const target=texture();const data=new Uint8Array(W*H*4)
+    for(let i=0;i<data.length;i+=4)data.set([0,128,0,128],i)
+    device.queue.writeTexture({texture:input as never},data,{bytesPerRow:W*4},[W,H])
+    const program=compileCodeMaterial(source('return [group({mask:{shape:image({source:ctx.params.pic,x:0,y:0,width:64,height:64}),mode:"luma"}},[rect({x:0,y:0,width:64,height:64,fill:[1,0,0,1]})])];').replace('parameters:{}','parameters:{pic:{type:"image",title:"图片",default:null}}'))
+    try {
+      await runtime.render(target,W,H,evaluateCodeMaterial(program,context,{pic:{kind:'image',mediaId:'mask'}}),new Map([['mask',{texture:input,width:W,height:H,owner:wrapped,premultiplied:true}]]))
+      expect(pixel(await read(target),32,32)).toEqual([92,0,0,92]);expect(await read(input)).toEqual(data)
+    } finally {input.destroy();target.destroy()}
+  })
+  it('32色标锥形渐变CPU栅格与GPU呈现逐像素一致',async()=>{
+    const stops=Array.from({length:32},(_,i)=>[i/31,[i/31,1-i/31,.5,.8]])
+    const code=source(`return [rect({x:0,y:0,width:64,height:64,fill:conicGradient({cx:32,cy:32,angle:45,stops:${JSON.stringify(stops)}})})];`)
+    const commands=evaluateCodeMaterial(compileCodeMaterial(code),context)
+    const reference=await rasterFixture(commands[0],{x:0,y:0,width:W,height:H}) as unknown as {pixels:Uint8Array}
+    const target=texture();try {
+      await runtime.render(target,W,H,commands)
+      const actual=await read(target)
+      actual.forEach((value,i)=>expect(Math.abs(value-reference.pixels[i])).toBeLessThanOrEqual(1))
+    }finally{target.destroy()}
+  })
+  it('时间uniform、动态半径、回弹、参数repeat与负底数幂真实GPU运行并保留测量',async()=>{
+    const host=new VideoEditCodeGpu(wrapped);const input=await host.target('t101:in',W,H)
+    device.queue.writeTexture({texture:input.texture as never},new Uint8Array(W*H*4).fill(255),{bytesPerRow:W*4},[W,H])
+    try {
+      for(const [i,body] of ['return rgba(sin(ctx.time),0,0,1);','return blur(4+sin(ctx.time));','return mix(sample(ctx.u,ctx.v),rgba(0,0,0,1),tween(ctx.time,0,1,0,1,"backOut"));','return rgba(pow(ctx.u-.5,ctx.params.count),0,0,1);','return rgba(tween(ctx.u,0,1,0,1,[.2,-1,.8,2]),0,0,1);','return average(repeat(ctx.params.count,i=>sampleOffset(i,0)));'].entries()) {
+        const program=compileCodeMaterial(source(body,'filter').replace('parameters:{}','parameters:{count:{type:"number",title:"次数",default:2,min:1,max:4,step:1}}'))
+        for(const frame of [20,40]) {
+          device.pushErrorScope('validation');await host.filter('t101:out',`t101:${i}`,program,{...context,frame,time:frame/60},{},input);await device.queue.onSubmittedWorkDone();expect(await device.popErrorScope()).toBeNull()
+          expect(host.framePerformance()[0]).toMatchObject({frame,cpuMs:expect.any(Number),gpuMs:expect.any(Number)})
+        }
+      }
+    }finally{await host.dispose()}
+  })
+  it('8/32色标求值与GPU完成性能实测',async()=>{
+    const target=texture();const report:unknown[]=[]
+    try {for(const count of [8,32]) {
+      const program=compileCodeMaterial(source(`return [rect({x:0,y:0,width:64,height:64,fill:conicGradient({cx:32,cy:32,stops:${JSON.stringify(Array.from({length:count},(_,i)=>[i/(count-1),[i/(count-1),0,1,1]]))}})})];`))
+      const cpu:number[]=[];const completed:number[]=[]
+      for(let frame=0;frame<25;frame++) {const start=performance.now();const commands=evaluateCodeMaterial(program,context);const after=performance.now();await runtime.render(target,W,H,commands);await device.queue.onSubmittedWorkDone();if(frame>=5){cpu.push(after-start);completed.push(performance.now()-after)}}
+      report.push({stops:count,frames:20,cpuMeanMs:cpu.reduce((a,b)=>a+b)/20,gpuCompletedMeanMs:completed.reduce((a,b)=>a+b)/20})
+    }}finally{target.destroy()}
+    process.stdout.write(`T101_GRADIENT_BENCH ${JSON.stringify(report)}\n`)
+  })
+})
+
+it('GPU预算溢出真实回读处理行对齐与预乘，释放后可重建',async()=>{
+  const host=new VideoEditCodeGpu(wrapped); const width=67; const height=3
+  const captured:Uint8ClampedArray[]=[]
+  vi.stubGlobal('ImageData',class {constructor(readonly data:Uint8ClampedArray,readonly width:number,readonly height:number){captured.push(data)}})
+  vi.stubGlobal('createImageBitmap',vi.fn(async()=>({width,height,close:vi.fn()})))
+  try {
+    const target=await host.target('spill',width,height); const data=new Uint8Array(width*height*4)
+    for(let i=0;i<data.length;i+=4)data.set([64,32,0,128],i)
+    device.queue.writeTexture({texture:target.texture as never},data,{bytesPerRow:width*4},[width,height])
+    const before=host.diagnostics().residentBytes
+    const bitmap=await host.spillGeneratorTarget('spill')
+    expect(host.diagnostics().residentBytes).toBe(before-width*height*4)
+    for(let i=0;i<data.length;i+=4)expect([...captured[0].slice(i,i+4)]).toEqual([128,64,0,128])
+    expect((await host.target('spill',width,height)).texture).not.toBe(target.texture)
+    expect(host.generatorTargetCapacity(3840,2160)).toBe(4)
+    expect(host.generatorTargetCapacity(64,64)).toBeGreaterThan(16)
+    bitmap.close()
+  }finally{await host.dispose();vi.unstubAllGlobals()}
+})
+it('逐字颜色、倾斜、模糊与发光在组内保留，缺省字继承父级填充',async()=>{
+  const pixels=await run('return [group({x:4,y:4,skewY:5},[text({x:8,y:16,text:"AB",fontSize:24,fill:[0,1,0,1],perChar:(i,n)=>({fill:i===0?rgba(1,0,0,1):rgba(0,1,0,1),blur:i,skewX:i*15,glow:{radius:3,intensity:1,color:[0,0,1,1]}})})])];')
+  expect(pixels.some((v,i)=>i%4===0&&v>100)).toBe(true)
+  expect(pixels.some((v,i)=>i%4===1&&v>100)).toBe(true)
+  expect(pixels.some((v,i)=>i%4===2&&v>10)).toBe(true)
 })

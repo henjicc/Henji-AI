@@ -1,3 +1,4 @@
+import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { videoEditDuration, type VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
@@ -20,7 +21,7 @@ export function videoEditContactSheetLayout(composition: VideoEditComposition, r
 }
 
 /** 逐帧使用正式试渲染队列，及时释放位图；不移动播放头、不产生中间资产。 */
-export async function renderVideoEditContactSheet(composition: VideoEditComposition, range: VideoEditContactSheetRange, maxWidth: number, signal: AbortSignal): Promise<VideoEditContactSheetLayout & { bytes: Uint8Array }> {
+export async function renderVideoEditContactSheet(composition: VideoEditComposition, range: VideoEditContactSheetRange, maxWidth: number, signal: AbortSignal, measurements?: CodeFramePerformance[]): Promise<VideoEditContactSheetLayout & { bytes: Uint8Array }> {
   const layout = videoEditContactSheetLayout(composition, range, maxWidth)
   const canvas = new OffscreenCanvas(layout.width, layout.height); const context = canvas.getContext('2d')
   if (!context) throw new Error('无法生成联系表图片。')
@@ -28,7 +29,7 @@ export async function renderVideoEditContactSheet(composition: VideoEditComposit
   context.imageSmoothingQuality = 'high'
   for (const [index, frame] of layout.frames.entries()) {
     signal.throwIfAborted()
-    const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true)
+    const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements)
     if (!bitmap) throw new Error(`target 联系表帧 ${frame} 没有渲染结果。`)
     try {
       const x = index % layout.columns * layout.cellWidth; const y = Math.floor(index / layout.columns) * layout.cellHeight

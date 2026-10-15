@@ -20,10 +20,11 @@ import { videoEditComposition } from '@/core/videoEdit/document'
 
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.
-const render = vi.hoisted(() => ({ calls: [] as Array<{ document: VideoEditComposition; frame: number }> }))
+const render = vi.hoisted(() => ({ calls: [] as Array<{ document: VideoEditComposition; frame: number }>, performance: [] as import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] }))
 const hostIdentity = vi.hoisted(() => ({ epoch: 'renderer-before-restart' }))
 vi.mock('@/core/application-control/runtimeIdentity', () => ({ get rendererEpoch() { return hostIdentity.epoch } }))
-vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), trialVideoEditCodeFrames: vi.fn(async (frames: Array<{ document: VideoEditComposition; frame: number }>) => {
+vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), trialVideoEditCodeFrames: vi.fn(async (frames: Array<{ document: VideoEditComposition; frame: number }>, _signal?: AbortSignal, _keep?: boolean, _collect?: ImageBitmap[], measurements?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]) => {
+  measurements?.push(...render.performance)
   render.calls.push(...frames); const last = frames.at(-1)!
   return { width: last.document.width, height: last.document.height, close: vi.fn() }
 }) }))
@@ -31,7 +32,7 @@ vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: clas
 const assets = new Map<string, AssetRecord>(); const drawn: number[][] = []; const pixels = { labels: [] as string[], rectangles: [] as number[][] }
 let encodedSize = { width: 0, height: 0 }
 beforeEach(() => {
-  installHarnessNativeStorage(); assets.clear(); render.calls = []; drawn.length = 0; pixels.labels = []; pixels.rectangles = []
+  installHarnessNativeStorage(); assets.clear(); render.calls = []; render.performance = []; drawn.length = 0; pixels.labels = []; pixels.rectangles = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {}
     getContext() { return { imageSmoothingQuality: 'low', drawImage: (_image: unknown, ...args: number[]) => drawn.push(args), save: vi.fn(), restore: vi.fn(), setLineDash: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), stroke: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), strokeRect: (...args: number[]) => pixels.rectangles.push(args), fillRect: vi.fn(), measureText: (text: string) => ({ width: text.length * 14 }), fillText: (text: string) => pixels.labels.push(text) } }
     async convertToBlob() { encodedSize = { width: this.width, height: this.height }; return new NativeBlob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } })
@@ -196,5 +197,15 @@ it('公共观察高亮指定代码元素，绑定标注按指定动画帧跟随�
     expect(invalid.ok).toBe(false); expect(render.calls).toHaveLength(1)
     const sourceInvalid = await app.call('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id }, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${id}:code-item` }, timeUs: 0 }, highlightElement: { clipRef: { kind: 'video_edit.clip', id: `${id}:${clipId}` }, elementId: '标题底板' } })
     expect(sourceInvalid.ok).toBe(false)
+  } finally { app.dispose() }
+})
+
+it('超预算帧测量与最重源码结构经公共能力schema读回', async () => {
+  const owner = await createVideoEditProject(); const app = createApplicationHarness()
+  render.performance = [{ frame: 0, cpuMs: 25, gpuMs: 10, budgetMs: 1000/60, heaviest: { kind: 'repeat', cpuMs: 22, sourceSpan: { file: 'main.ts', start: 10, end: 30, startLine: 3, startColumn: 2, endLine: 3, endColumn: 22 } } }]
+  try {
+    const result = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, target: { kind: 'program', frame: 0 } })
+    expect(result.performance).toEqual(render.performance)
+    expect(result.resultRef).toMatchObject({kind:'asset'})
   } finally { app.dispose() }
 })
