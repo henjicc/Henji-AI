@@ -67,9 +67,10 @@ export class ApplicationHostBridge {
     if (input.attachmentSequence < this.attachmentSequence) return
     const registration = input
     this.attachmentSequence = registration.attachmentSequence
-    // 同一渲染进程内“未就绪→就绪”的切换会先发未就绪注册；它与上下文发布走不同通道，到达顺序不定。
-    // 只有换了渲染进程才清掉上下文，否则先到的新上下文会被清空，之后没有变化就不会再发布。
-    if (this.host?.registration.rendererEpoch !== registration.rendererEpoch) this.disconnect()
+    // 注册与上下文发布走不同通道、到达顺序不定：渲染进程异步加载宿主模块后才首次注册，冷启动时上下文常常先到。
+    // 页面导航与销毁已由 IPC 层断开并清空上下文，这里只在“已有另一渲染进程的宿主”时才清，
+    // 否则先到的新上下文会被清掉，之后界面没有变化就不会再发布，调用方一直等不到就绪。
+    if (this.host && this.host.registration.rendererEpoch !== registration.rendererEpoch) this.disconnect()
     else if (!registration.ready) this.cancelPending()
     this.host = { registration, transport }
     this.changed()

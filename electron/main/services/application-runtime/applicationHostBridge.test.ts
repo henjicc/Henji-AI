@@ -126,3 +126,11 @@ it('同一渲染进程从未就绪切到就绪时，先到的新上下文不会�
   bridge.register({ ...registration, rendererEpoch: 'next', attachmentSequence: 3, ready: true } as never, transport)
   expect(bridge.getContext()).toBeUndefined()
 })
+it('冷启动时上下文先于首次注册到达，注册不会清掉它', () => {
+  const bridge = new ApplicationHostBridge(() => undefined)
+  const transport = { send: vi.fn() } as unknown as Parameters<ApplicationHostBridge['register']>[1]
+  bridge.publishContext({ uiReady: true } as never)
+  bridge.register({ rendererEpoch: 'epoch', attachmentSequence: 1, ready: true, tools: [], domains: [] } as never, transport)
+  expect(bridge.ready).toBe(true)
+  expect(bridge.getContext()).toMatchObject({ uiReady: true })
+})

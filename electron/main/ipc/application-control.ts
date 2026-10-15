@@ -21,7 +21,8 @@ export function registerApplicationControlIpc(): void {
   registerIpcHandler('application:host:register', (value) => localHostRegistrationSchema.parse(value), (input, event) => {
     if (!watched.has(event.sender)) {
       watched.add(event.sender)
-      event.sender.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) host.disconnect() })
+      // 页内导航（pushState/hash）不换渲染进程，宿主与上下文仍然有效，只有整页导航才断开。
+      event.sender.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => { if (isMainFrame && !inPlace) host.disconnect() })
       event.sender.once('destroyed', () => host.disconnect())
     }
     host.register(input, { send: (channel, payload) => { if (!event.sender.isDestroyed()) event.sender.send(channel, payload) } })
