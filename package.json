@@ -158,6 +158,7 @@
     "remark-gfm": "^4.0.1",
     "shaders": "4.0.2",
     "sharp": "^0.35.2",
+    "svgpath": "2.6.0",
     "three": "^0.169.0",
     "three-stdlib": "^2.36.1",
     "typescript": "^5.0.2",

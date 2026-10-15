@@ -1,8 +1,14 @@
 import type { ShaderGraphCustomShader, ShaderGraphSpec } from '../shaderGraph/spec'
 /** Closed author languages. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
-/** Work ceilings for the explicit v3 language; resident pixels remain separately budgeted by the GPU host. */
-export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 200000, draws: 4096, shaderLayers: 32, shaderFilterPasses: 8, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
+/** Work ceilings for the explicit v3 language; resident pixels remain separately budgeted by the GPU host.
+ * 2026-10-15, local Windows/Node benchmark (expressions.test.ts, HENJI_CODE_BENCH=1):
+ * 4096 particles × 10 time-varying sin/cos calls = 966658 units; 50 warmup + 100 frames,
+ * full evaluateCodeMaterial median 17.911 ms, p95 19.662 ms, min 17.235 ms.
+ * 1000000 admits this workload. The requested 4 ms target is NOT met; a work-unit
+ * ceiling cannot guarantee elapsed time, and these numbers exclude GPU rendering.
+ */
+export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 1000000, draws: 4096, shaderLayers: 32, shaderFilterPasses: 8, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
 export type { CodeColor, CodeImageReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'font', 'image', 'easing', 'seed'] as const
@@ -12,6 +18,9 @@ export interface CodeMaterialContext { time: number; localTime: number; sequence
 export const CODE_CONTEXT_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps', 'u', 'v']
 export const CODE_TIME_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'frame', 'fps']
 export const CODE_BUILTINS = ['sin', 'cos', 'abs', 'floor', 'ceil', 'round', 'min', 'max', 'clamp', 'mix', 'smoothstep', 'random', 'rgba', 'sample'] as const
+export const CODE_V3_MATH_BUILTINS = ['sqrt', 'pow', 'exp', 'log', 'log2', 'tan', 'asin', 'acos', 'atan', 'atan2', 'hypot', 'sign', 'fract', 'mod', 'trunc', 'lerp', 'invLerp', 'remap', 'step', 'degrees', 'radians', 'length', 'distance', 'normalize'] as const
+export type CodeMathBuiltin = typeof CODE_V3_MATH_BUILTINS[number]
+export const CODE_CONSTANTS: Readonly<Record<string, number>> = Object.freeze({ PI: Math.PI, TAU: Math.PI * 2, E: Math.E })
 export type CodeBuiltin = typeof CODE_BUILTINS[number]
 /** Conservative work units, not elapsed time; transcendental calls are charged more CPU work. */
 export function codeBuiltinCost(op: CodeBuiltin, type: CodeValueType): { cpu: number; scalar: number } {
@@ -20,9 +29,9 @@ export function codeBuiltinCost(op: CodeBuiltin, type: CodeValueType): { cpu: nu
   const scalar = channels * (op === 'random' ? 12 : op === 'mix' ? 3 : op === 'smoothstep' ? 11 : op === 'clamp' || op === 'round' ? 2 : ['rgba', 'sample'].includes(op) ? 0 : 1)
   return { scalar, cpu: op === 'sin' || op === 'cos' ? 16 : Math.max(1, scalar) }
 }
-export type CodeBinaryOperator = '+' | '-' | '*' | '/' | '%' | '<' | '<=' | '>' | '>=' | '===' | '!==' | '&&' | '||'
+export type CodeBinaryOperator = '+' | '-' | '*' | '/' | '%' | '**' | '<' | '<=' | '>' | '>=' | '===' | '!==' | '&&' | '||'
 /** JS remainder lowers to divide, truncation, multiplication and subtraction on the GPU. */
-export function codeBinaryCost(op: CodeBinaryOperator): number { return op === '%' ? 4 : 1 }
+export function codeBinaryCost(op: CodeBinaryOperator): number { return op === '**' ? 24 : op === '%' ? 4 : 1 }
 export function codeConditionalCost(type: CodeValueType): number { return type === 'color' ? 4 : 1 }
 export type CodeDrawKind = 'rect' | 'ellipse' | 'line' | 'text' | 'image' | 'group' | 'path' | 'shader'
 export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
@@ -94,11 +103,11 @@ export function finiteCodeNumber(value: unknown, label: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new CodeMaterialError('NON_FINITE', `${label}必须是有限数值。`)
   return value
 }
-export function codeColor(value: unknown, label: string): CodeColor {
+export function codeColor(value: unknown, label: string, clamp = false): CodeColor {
   if (!Array.isArray(value) || value.length !== 4) throw new CodeMaterialError('PARAMETERS', `${label}必须是四通道 0 到 1 的 RGBA 颜色。`)
   const channels = [value[0], value[1], value[2], value[3]]
-  if (channels.some(channel => typeof channel !== 'number' || !Number.isFinite(channel) || channel < 0 || channel > 1)) throw new CodeMaterialError('PARAMETERS', `${label}必须是四通道 0 到 1 的 RGBA 颜色。`)
-  return channels as CodeColor
+  if (!clamp && channels.some(channel => typeof channel !== 'number' || !Number.isFinite(channel) || channel < 0 || channel > 1)) throw new CodeMaterialError('PARAMETERS', `${label}必须是四通道 0 到 1 的 RGBA 颜色。`)
+  return channels.map((channel, index) => Math.min(1, Math.max(0, finiteCodeNumber(channel, `${label}.${['r', 'g', 'b', 'a'][index]}`)))) as CodeColor
 }
 /** A reference is data only; filenames, getters, prototypes and extra capabilities never cross this boundary. */
 export function codeImageReference(value: unknown, label: string): CodeImageReference {

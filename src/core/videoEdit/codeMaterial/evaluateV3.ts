@@ -1,19 +1,23 @@
-import { CODE_V3_LIMITS, CodeMaterialError, codeColor, codeImageReference, finiteCodeNumber } from './contract'
+import { CODE_V3_LIMITS, codeBinaryCost, codeBuiltinCost, CodeMaterialError, codeColor as validateColor, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeColor, CodeDrawCommand, CodeDrawMetadata, CodeExpression, CodeGradient, CodeMaterialContext, CodeMaterialProgram, CodePaint, CodeTextMeasurer, CodeTextMeasureRequest } from './contract'
+import { codeNumericPlan, runCodeNumericPlan } from './numericPlan'
 import { validateCodeMaterialParameters } from './parameters'
 import { CODE_EASE_NAMES, codeCubicBezier, codeEase, codeNoise, codeProgress } from './motion'
+import { CODE_MATH_COSTS, codeString, codeStringPart, evaluateCodeMath, formatCodeNumber, formatCodeTime } from './expressions'
 import { parseCodePath } from './geometry'
 import { codeShaderGraph, codeShaderTime } from './shaders'
 import { CODE_PARAMETER_FUNCTION_COSTS, easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
 
+const codeColor = (value: unknown, label: string): CodeColor => validateColor(value, label, true)
 const n = (value: unknown): number => finiteCodeNumber(value, '表达式结果')
 const array = (value: unknown): unknown[] => { if (!Array.isArray(value)) throw new CodeMaterialError('TYPE', '需要数组。'); return value }
 const object = (value: unknown): Record<string, unknown> => { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CodeMaterialError('TYPE', '需要字段对象。'); return value as Record<string, unknown> }
 const string = (value: unknown): string => { if (typeof value !== 'string') throw new CodeMaterialError('TYPE', '需要字符串。'); return value }
 const channels = (value: unknown): CodeColor => { const values = array(value); if (values.length !== 4) throw new CodeMaterialError('TYPE', '颜色需要四个通道。'); return values.map(n) as CodeColor }
 const literalColors = new WeakMap<CodeExpression, CodeColor>()
-const bounded = (value: unknown, min: number, max: number, label: string): number => { const result = n(value); if (result < min || result > max) throw new CodeMaterialError('BUDGET', `${label} 超出技术范围 ${min}–${max}。`); return result }
-function keys(fields: Record<string, unknown>, allowed: string[]): void { for (const key of Object.keys(fields)) if (!allowed.includes(key)) throw new CodeMaterialError('TYPE', `未知字段：${key}`) }
+const bounded = (value: unknown, min: number, max: number, label: string): number => { const result = finiteCodeNumber(value, label); if (result < min || result > max) throw new CodeMaterialError('BUDGET', `${label} 超出技术范围 ${min}–${max}。`); return result }
+const saturated = (value: unknown, min: number, max: number, label: string): number => Math.min(max, Math.max(min, finiteCodeNumber(value, label)))
+function keys(fields: Record<string, unknown>, allowed: string[]): void { for (const key of Object.keys(fields)) if (!allowed.includes(key)) throw new CodeMaterialError('TYPE', `未知字段：${key}；可用字段：${allowed.join('、')}。`) }
 function paint(value: unknown): CodePaint {
   if (Array.isArray(value)) return codeColor(value, '颜色')
   const fields = object(value)
@@ -31,17 +35,17 @@ export function codeTextRequest(fields: Record<string, unknown>): CodeTextMeasur
   return { text: string(fields.text), fontFamily, fontWeight: bounded(fields.fontWeight ?? 400, 1, 1000, 'fontWeight'), fontStyle, fontSize: bounded(fields.fontSize ?? 48, 1, 1024, 'fontSize'), letterSpacing: bounded(fields.letterSpacing ?? 0, -1024, 1024, 'letterSpacing'), lineHeight: bounded(fields.lineHeight ?? 1.2, .1, 10, 'lineHeight'), maxWidth: bounded(fields.maxWidth ?? 0, 0, 8192, 'maxWidth'), wrap: fields.wrap === true || fields.wrap === undefined && !!fields.maxWidth, maxLines }
 }
 function metadata(fields: Record<string, unknown>): CodeDrawMetadata {
-  const value: CodeDrawMetadata = { opacity: bounded(fields.opacity ?? 1, 0, 1, 'opacity'), rotation: bounded(fields.rotation ?? 0, -32768, 32768, 'rotation'), scaleX: bounded(fields.scaleX ?? fields.scale ?? 1, -1024, 1024, 'scaleX'), scaleY: bounded(fields.scaleY ?? fields.scale ?? 1, -1024, 1024, 'scaleY'), anchorX: bounded(fields.anchorX ?? 0, -32768, 32768, 'anchorX'), anchorY: bounded(fields.anchorY ?? 0, -32768, 32768, 'anchorY') }
+  const value: CodeDrawMetadata = { opacity: saturated(fields.opacity ?? 1, 0, 1, 'opacity'), rotation: bounded(fields.rotation ?? 0, -32768, 32768, 'rotation'), scaleX: bounded(fields.scaleX ?? fields.scale ?? 1, -1024, 1024, 'scaleX'), scaleY: bounded(fields.scaleY ?? fields.scale ?? 1, -1024, 1024, 'scaleY'), anchorX: bounded(fields.anchorX ?? 0, -32768, 32768, 'anchorX'), anchorY: bounded(fields.anchorY ?? 0, -32768, 32768, 'anchorY') }
   value.authorAnchor = fields.anchorX !== undefined || fields.anchorY !== undefined
-  if (fields.blend !== undefined) { const blend = string(fields.blend); if (!['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken'].includes(blend)) throw new CodeMaterialError('TYPE', '未知 blend。'); value.blend = blend as CodeDrawMetadata['blend'] }
+  if (fields.blend !== undefined) { const blend = string(fields.blend); if (!['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken'].includes(blend)) throw new CodeMaterialError('TYPE', `未知 blend ${blend}；可用值：normal、multiply、screen、overlay、add、lighten、darken。`); value.blend = blend as CodeDrawMetadata['blend'] }
   if (fields.fill !== undefined) value.paint = paint(fields.fill)
   if (fields.stroke !== undefined) value.stroke = paint(fields.stroke)
   if (fields.strokeWidth !== undefined) value.strokeWidth = bounded(fields.strokeWidth, 0, 1024, 'strokeWidth')
-  if (fields.lineCap !== undefined) { const cap = string(fields.lineCap); if (!['round', 'butt', 'square'].includes(cap)) throw new CodeMaterialError('TYPE', '未知 lineCap。'); value.lineCap = cap as CodeDrawMetadata['lineCap'] }
-  if (fields.lineJoin !== undefined) { const join = string(fields.lineJoin); if (!['miter', 'round', 'bevel'].includes(join)) throw new CodeMaterialError('TYPE', '未知 lineJoin。'); value.lineJoin = join as CodeDrawMetadata['lineJoin'] }
+  if (fields.lineCap !== undefined) { const cap = string(fields.lineCap); if (!['round', 'butt', 'square'].includes(cap)) throw new CodeMaterialError('TYPE', `未知 lineCap ${cap}；可用值：butt、round、square。`); value.lineCap = cap as CodeDrawMetadata['lineCap'] }
+  if (fields.lineJoin !== undefined) { const join = string(fields.lineJoin); if (!['miter', 'round', 'bevel'].includes(join)) throw new CodeMaterialError('TYPE', `未知 lineJoin ${join}；可用值：miter、round、bevel。`); value.lineJoin = join as CodeDrawMetadata['lineJoin'] }
   if (fields.dash !== undefined) { value.dash = array(fields.dash).map(item => bounded(item, 0, 32768, 'dash')); if (value.dash.length > 32 || value.dash.length && value.dash.every(item => item === 0)) throw new CodeMaterialError('BUDGET', 'dash 须为 0–32 项且非全零。') }
-  if (fields.trimStart !== undefined) value.trimStart = bounded(fields.trimStart, 0, 1, 'trimStart')
-  if (fields.trimEnd !== undefined) value.trimEnd = bounded(fields.trimEnd, value.trimStart ?? 0, 1, 'trimEnd')
+  if (fields.trimStart !== undefined) value.trimStart = saturated(fields.trimStart, 0, 1, 'trimStart')
+  if (fields.trimEnd !== undefined) value.trimEnd = saturated(fields.trimEnd, value.trimStart ?? 0, 1, 'trimEnd')
   if (fields.blur !== undefined) value.blur = bounded(fields.blur, 0, 256, 'blur')
   if (fields.shadow !== undefined) {
     const shadow = object(fields.shadow); keys(shadow, ['x', 'y', 'blur', 'color'])
@@ -62,7 +66,7 @@ export interface CodeEvaluationOptions { measureText?: CodeTextMeasurer; onDiagn
 function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}, root?: CodeExpression): unknown {
   const parameters = validateCodeMaterialParameters(program, values); const bindings: unknown[] = []; const locals = new Map<number, unknown>()
   let operations = 0; let draws = 0; let characters = 0; const indices: number[] = []
-  const charge = (cost = 1): void => { operations += cost; if (operations > CODE_V3_LIMITS.cpuOperations) throw new CodeMaterialError('BUDGET', '本次求值超出 v3 CPU 操作预算。') }
+  const charge = (cost = 1): void => { operations += cost; if (operations > CODE_V3_LIMITS.cpuOperations) throw new CodeMaterialError('BUDGET', `CPU 工作量 ${operations} / ${CODE_V3_LIMITS.cpuOperations}，超出 ${operations - CODE_V3_LIMITS.cpuOperations}；当前结构见源码位置。`) }
   const measure = (fields: Record<string, unknown>): ReturnType<CodeTextMeasurer> => {
     if (!options.measureText) throw new CodeMaterialError('CONTEXT', 'v3 文字需要宿主提供与渲染共享的字体度量。')
     const request = codeTextRequest(fields); charge(request.text.length * (request.maxLines ? 32 : 2))
@@ -75,8 +79,14 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
     const left = channels(a); const right = channels(b)
     return channels([left[0] + (right[0] - left[0]) * t, left[1] + (right[1] - left[1]) * t, left[2] + (right[2] - left[2]) * t, left[3] + (right[3] - left[3]) * t])
   }
+  const numericFrame = { context, locals }
   const evaluate = (expression: CodeExpression, depth = 0): unknown => {
-    try { return evaluateNode(expression, depth) }
+    try {
+      if (expression.kind === 'literal') { charge(); return expression.value }
+      const plan = codeNumericPlan(expression)
+      if (plan) { if (depth + plan.height > CODE_V3_LIMITS.depth) throw new CodeMaterialError('BUDGET', 'IR 深度超出 64。'); charge(plan.cost); return runCodeNumericPlan(plan, numericFrame) }
+      return evaluateNode(expression, depth)
+    }
     catch (error) {
       const span = expression.sourceSpan
       if (span && error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, span)
@@ -110,12 +120,14 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
       }
       case 'unary': { const value = next(expression.value); if (expression.op === '!') { if (typeof value !== 'boolean') throw new CodeMaterialError('TYPE', '需要布尔值。'); return !value } return expression.op === '-' ? -n(value) : n(value) }
       case 'binary': {
+        charge(codeBinaryCost(expression.op) - 1)
         const a = next(expression.left)
         if (expression.op === '&&' || expression.op === '||') { if (typeof a !== 'boolean') throw new CodeMaterialError('TYPE', '需要布尔值。'); return expression.op === '&&' ? a && next(expression.right) : a || next(expression.right) }
         const b = next(expression.right)
         switch (expression.op) {
           case '===': return a === b; case '!==': return a !== b
-          case '+': return n(n(a) + n(b)); case '-': return n(n(a) - n(b)); case '*': return n(n(a) * n(b)); case '/': return n(n(a) / n(b)); case '%': return n(n(a) % n(b))
+          case '+': { if (typeof a === 'string' || typeof b === 'string') { const result = codeString(codeStringPart(a) + codeStringPart(b)); charge(result.length); return result } return n(n(a) + n(b)) }
+          case '**': return finiteCodeNumber(n(a) ** n(b), '** 结果'); case '-': return n(n(a) - n(b)); case '*': return n(n(a) * n(b)); case '/': return n(n(a) / n(b)); case '%': return n(n(a) % n(b))
           case '<': return n(a) < n(b); case '<=': return n(a) <= n(b); case '>': return n(a) > n(b); case '>=': return n(a) >= n(b)
         }
         break
@@ -132,13 +144,15 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
       case 'draws': return expression.values.flatMap(value => { const result = next(value); return result === null ? [] : Array.isArray(result) ? result : [result] })
       case 'call': case 'v3call': {
         const args = expression.args.map(next); const op = expression.op
+        if (op in CODE_MATH_COSTS) { charge(CODE_MATH_COSTS[op as keyof typeof CODE_MATH_COSTS]); return evaluateCodeMath(op as keyof typeof CODE_MATH_COSTS, args) }
+        if (expression.kind === 'call') charge(codeBuiltinCost(expression.op, expression.type).cpu)
         const a = (): number => n(args[0]); const b = (): number => n(args[1]); const c = (): number => n(args[2])
         if (CODE_EASE_NAMES.includes(op)) { charge(64); return codeEase(op, a(), args[1] === undefined ? undefined : b()) }
         switch (op) {
           case 'sampleGradient': charge(CODE_PARAMETER_FUNCTION_COSTS[op]); return sampleCodeGradient(args[0], b())
           case 'sampleCurve': charge(CODE_PARAMETER_FUNCTION_COSTS[op]); return sampleCodeCurve(args[0], b())
           case 'ease': charge(CODE_PARAMETER_FUNCTION_COSTS[op]); return easeCodeParameter(args[0], b())
-          case 'sin': charge(16); return Math.sin(a()); case 'cos': charge(16); return Math.cos(a()); case 'abs': return Math.abs(a()); case 'floor': return Math.floor(a()); case 'ceil': return Math.ceil(a()); case 'round': return Math.round(a())
+          case 'sin': return Math.sin(a()); case 'cos': return Math.cos(a()); case 'abs': return Math.abs(a()); case 'floor': return Math.floor(a()); case 'ceil': return Math.ceil(a()); case 'round': return Math.round(a())
           case 'min': return Math.min(a(), b()); case 'max': return Math.max(a(), b()); case 'rgba': return channels(args)
           case 'random': { const index = bounded(a(), 0, 4294967295, 'random'); if (!Number.isInteger(index)) throw new CodeMaterialError('TYPE', 'random 索引必须是整数。'); let hash = (context.seed ?? program.seed) ^ index; hash = Math.imul(hash ^ hash >>> 16, 0x7feb352d); hash = Math.imul(hash ^ hash >>> 15, 0x846ca68b); return ((hash ^ hash >>> 16) >>> 0) / 4294967296 }
           case 'mix': return mix(args[0], args[1], c())
@@ -149,7 +163,9 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           case 'tween': charge(64); return mix(args[3], args[4], easeCodeParameter(args[5], codeProgress(a(), b(), c())))
           case 'cubicBezier': charge(64); return codeCubicBezier(a(), b(), c(), n(args[3]), n(args[4]))
           case 'noise': charge(64); return codeNoise(a(), args[1] === undefined ? 0 : b(), args[2] === undefined ? 0 : c(), context.seed ?? program.seed)
-          case 'chars': return Array.from(string(args[0])); case 'words': return string(args[0]).trim().split(/\s+/u).filter(Boolean)
+          case 'chars': case 'words': { const text = codeString(string(args[0])); charge(text.length); return op === 'chars' ? Array.from(text) : text.trim().split(/\s+/u).filter(Boolean) }
+          case 'formatNumber': { const text = formatCodeNumber(args[0], args[1]); charge(64 + text.length); return text }
+          case 'formatTime': { const text = formatCodeTime(args[0], args[1]); charge(64 + text.length); return text }
           case 'measureText': { const fields = object(args[0]); keys(fields, ['text', 'fontFamily', 'fontStyle', 'fontWeight', 'fontSize', 'letterSpacing', 'lineHeight', 'maxWidth', 'wrap', 'maxLines']); return measure(fields) }
           case 'keyframes': {
             const frames = array(args[1]).map(array)
@@ -166,8 +182,8 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
             if (op === 'linearGradient') { const x1 = n(fields.x1); const y1 = n(fields.y1); const x2 = n(fields.x2); const y2 = n(fields.y2); if (x1 === x2 && y1 === y2) throw new CodeMaterialError('TYPE', '渐变起终点不能相同。'); return { kind: op, x1, y1, x2, y2, stops } }
             return { kind: op, cx: n(fields.cx), cy: n(fields.cy), r: bounded(fields.r, .000001, 32768, 'gradient.r'), stops }
           }
-          case 'hsv': return rgbaFromHsv(a(), bounded(args[1], 0, 1, 's'), bounded(args[2], 0, 1, 'v'), args[3] === undefined ? 1 : n(args[3]))
-          case 'hsl': { const light = bounded(args[2], 0, 1, 'l'); const saturation = bounded(args[1], 0, 1, 's'); const v = light + saturation * Math.min(light, 1 - light); return rgbaFromHsv(a(), v ? 2 * (1 - light / v) : 0, v, args[3] === undefined ? 1 : n(args[3])) }
+          case 'hsv': return rgbaFromHsv(a(), saturated(args[1], 0, 1, `${op}.s`), saturated(args[2], 0, 1, 'hsv.v'), args[3] === undefined ? 1 : saturated(args[3], 0, 1, `${op}.alpha`))
+          case 'hsl': { const light = saturated(args[2], 0, 1, 'hsl.l'); const saturation = saturated(args[1], 0, 1, `${op}.s`); const v = light + saturation * Math.min(light, 1 - light); return rgbaFromHsv(a(), v ? 2 * (1 - light / v) : 0, v, args[3] === undefined ? 1 : saturated(args[3], 0, 1, `${op}.alpha`)) }
           case 'toHsv': case 'toHsl': {
             const color = codeColor(args[0], op); const max = Math.max(...color.slice(0, 3)); const min = Math.min(...color.slice(0, 3)); const delta = max - min
             const h = delta === 0 ? 0 : ((max === color[0] ? (color[1] - color[2]) / delta : max === color[1] ? (color[2] - color[0]) / delta + 2 : (color[0] - color[1]) / delta + 4) / 6 + 1) % 1
@@ -187,10 +203,11 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           const fields: Record<string, unknown> = {}
           for (const key in expression.properties) if (key !== 'perChar') fields[key] = next(expression.properties[key])
           const elementId = string(fields.id ?? `call:${expression.sourceSpan?.file ?? 'main.ts'}:${expression.sourceSpan?.start ?? 0}`) + (indices.length ? `:${indices.join('.')}` : '')
-          const meta: CodeDrawMetadata = { ...metadata(fields), elementId, sourceSpan: expression.sourceSpan, elementPath: [] }
+          const meta = metadata(fields)
+          meta.elementId = elementId; meta.sourceSpan = expression.sourceSpan; meta.elementPath = []
           const coordinate = (key: string): number => bounded(fields[key] ?? 0, -32768, 32768, key)
           const size = (key: string): number => bounded(fields[key], 0, 32768, key)
-          const fill = fields.fill === undefined ? [0, 0, 0, 0] as CodeColor : Array.isArray(fields.fill) ? codeColor(fields.fill, 'fill') : [1, 1, 1, 1] as CodeColor
+          const fill = fields.fill === undefined ? [0, 0, 0, 0] as CodeColor : Array.isArray(meta.paint) ? meta.paint : [1, 1, 1, 1] as CodeColor
           if (expression.shape === 'shader') return { ...meta, kind: 'shader', graph: codeShaderGraph(program, { name: fields.name, params: fields.params, layers: fields.layers }, 'layer'), time: codeShaderTime(fields.time), x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height') }
           if (expression.shape === 'group') {
             let clip: { x: number; y: number; width: number; height: number } | undefined
@@ -199,7 +216,7 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
             return { ...meta, kind: 'group', x: coordinate('x'), y: coordinate('y'), children, ...(clip ? { clip } : {}) }
           }
           if (expression.shape === 'path') {
-            const points = fields.d === undefined ? [array(fields.points).map(item => { const pair = array(item); if (pair.length !== 2) throw new CodeMaterialError('TYPE', '路径点须为 [x,y]。'); return [bounded(pair[0], -32768, 32768, 'point.x'), bounded(pair[1], -32768, 32768, 'point.y')] as [number, number] })] : parseCodePath(string(fields.d))
+            const points = fields.d === undefined ? [array(fields.points).map(item => { const pair = array(item); if (pair.length !== 2) throw new CodeMaterialError('TYPE', '路径点须为 [x,y]。'); return [bounded(pair[0], -32768, 32768, 'point.x'), bounded(pair[1], -32768, 32768, 'point.y')] as [number, number] })] : parseCodePath(string(fields.d), context.width, context.height)
             const closed = fields.closed === true
             if (closed) points.forEach(path => { if (path.length && (path.at(-1)![0] !== path[0][0] || path.at(-1)![1] !== path[0][1])) path.push([...path[0]]) })
             const pointCount = points.reduce((sum, path) => sum + path.length, 0); charge(pointCount * 4)
@@ -209,7 +226,14 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           if (expression.shape === 'image') return fields.source === null ? null : { ...meta, kind: 'image', source: codeImageReference(fields.source, '图片'), x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height'), opacity: meta.opacity! }
           if (expression.shape === 'line') return { ...meta, kind: 'line', x1: coordinate('x1'), y1: coordinate('y1'), x2: coordinate('x2'), y2: coordinate('y2'), width: bounded(fields.width ?? fields.strokeWidth ?? 1, 0, 1024, 'line.width'), color: fields.color === undefined ? [1, 1, 1, 1] : codeColor(fields.color, 'color') }
           if (fields.radii && ![1, 2, 3, 4].includes(array(fields.radii).length)) throw new CodeMaterialError('TYPE', 'radii 需要 1–4 个半径。')
-          if (expression.shape === 'rect' || expression.shape === 'ellipse') return { ...meta, kind: expression.shape, x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height'), fill, ...(expression.shape === 'rect' ? { radius: bounded(fields.radius ?? 0, 0, 32768, 'radius'), ...(fields.radii ? { radii: array(fields.radii).map(value => bounded(value, 0, 32768, 'radii')) } : {}) } : {}) }
+          if (expression.shape === 'rect' || expression.shape === 'ellipse') {
+            const command = Object.assign(meta, { kind: expression.shape, x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height'), fill })
+            if (expression.shape === 'rect') {
+              Object.assign(command, { radius: bounded(fields.radius ?? 0, 0, 32768, 'radius') })
+              if (fields.radii) Object.assign(command, { radii: array(fields.radii).map(value => bounded(value, 0, 32768, 'radii')) })
+            }
+            return command
+          }
           const request = codeTextRequest(fields); characters += request.text.length
           if (characters > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', '本帧文本字符总数超过 8192。')
           const layout = measure(fields); const align = string(fields.align ?? 'left'); const baseline = string(fields.baseline ?? 'middle')
@@ -219,7 +243,7 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           if (animation?.kind === 'textAnimation') {
             perChar = layout.glyphs.map((_, index) => {
               locals.set(animation.slot, index); locals.set(animation.countSlot, layout.glyphs.length); const transform = object(next(animation.body)); keys(transform, ['x', 'y', 'opacity', 'scale', 'rotation'])
-              return { x: bounded(transform.x ?? 0, -32768, 32768, 'perChar.x'), y: bounded(transform.y ?? 0, -32768, 32768, 'perChar.y'), opacity: bounded(transform.opacity ?? 1, 0, 1, 'perChar.opacity'), scale: bounded(transform.scale ?? 1, 0, 1024, 'perChar.scale'), rotation: bounded(transform.rotation ?? 0, -32768, 32768, 'perChar.rotation') }
+              return { x: bounded(transform.x ?? 0, -32768, 32768, 'perChar.x'), y: bounded(transform.y ?? 0, -32768, 32768, 'perChar.y'), opacity: saturated(transform.opacity ?? 1, 0, 1, 'perChar.opacity'), scale: bounded(transform.scale ?? 1, 0, 1024, 'perChar.scale'), rotation: bounded(transform.rotation ?? 0, -32768, 32768, 'perChar.rotation') }
             })
             locals.delete(animation.slot); locals.delete(animation.countSlot)
           }
@@ -245,8 +269,14 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
     if (textCharacters > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', '本帧文本字符总数超过 8192。', command.sourceSpan)
     if (command.kind === 'group') assign(command.children, command.elementPath)
   })
-  // Aliases get independent metadata: no shared command is mutated through another occurrence.
-  const clone = (commands: CodeDrawCommand[]): CodeDrawCommand[] => commands.filter(Boolean).map(command => command.kind === 'group' ? { ...command, children: clone(command.children) } : { ...command })
+  // Fresh frame commands already belong to this evaluation. Only aliases need a
+  // copy before path assignment; no shared occurrence may mutate another's path.
+  const seen = new WeakSet<CodeDrawCommand>()
+  const clone = (commands: CodeDrawCommand[]): CodeDrawCommand[] => commands.filter(Boolean).map(command => {
+    const next = seen.has(command) ? { ...command } : command; seen.add(command); seen.add(next)
+    if (next.kind === 'group') next.children = clone(next.children)
+    return next
+  })
   const commands = clone(output); assign(commands, [])
   return commands
 }
