@@ -123,9 +123,4 @@ it('4096 粒子每粒十次三角运算纳入预算并可确定求值', () => {
   expect(program.metrics.cpuOperations).toBeLessThanOrEqual(CODE_V3_LIMITS.cpuOperations)
   const commands = evaluateCodeMaterial(program, context)
   expect(commands).toHaveLength(4096); expect(evaluateCodeMaterial(program, context)).toEqual(commands)
-  if (process.env.HENJI_CODE_BENCH === '1') {
-    for (let i = 0; i < 50; i++) evaluateCodeMaterial(program, { ...context, time: i / 60 })
-    const times = Array.from({ length: 100 }, (_, i) => { const start = performance.now(); evaluateCodeMaterial(program, { ...context, time: i / 60 }); return performance.now() - start }).sort((a, b) => a - b)
-    console.info('4096 particles / 10 trig calls:', { work: program.metrics.cpuOperations, medianMs: times[50], p95Ms: times[95], minMs: times[0] })
-  }
 })

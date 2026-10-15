@@ -2,7 +2,7 @@ import type { ShaderGraphCustomShader, ShaderGraphSpec } from '../shaderGraph/sp
 /** Closed author languages. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
 /** Work ceilings for the explicit v3 language; resident pixels remain separately budgeted by the GPU host.
- * 2026-10-15, local Windows/Node benchmark (expressions.test.ts, HENJI_CODE_BENCH=1):
+ * 2026-10-15, local Windows/Node benchmark (one-off benchmark of the expressions.test.ts particle source):
  * 4096 particles × 10 time-varying sin/cos calls = 966658 units; 50 warmup + 100 frames,
  * full evaluateCodeMaterial median 17.911 ms, p95 19.662 ms, min 17.235 ms.
  * 1000000 admits this workload on purpose: the ceiling bounds runaway work, it does not decide
