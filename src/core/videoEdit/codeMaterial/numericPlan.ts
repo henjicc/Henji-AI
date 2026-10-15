@@ -4,12 +4,11 @@ import type { CodeExpression, CodeMaterialContext } from './contract'
 interface NumericFrame { context: CodeMaterialContext; locals: Map<number, unknown> }
 interface NumericPlan { cost: number; height: number; locals: number[]; frameDependent: boolean; run(frame: NumericFrame): number }
 const plans = new WeakMap<CodeExpression, NumericPlan | null>()
-const indexedResults = new Map<NumericPlan, { values: Float64Array; valid: Uint8Array }>()
 const unaryMath: Readonly<Record<string, (value: number) => number>> = { sin: Math.sin, cos: Math.cos, abs: Math.abs, floor: Math.floor, ceil: Math.ceil, round: Math.round }
 
 /** Specialize the existing closed scalar IR once, without eval/Function or source
- * emission. The interpreter remains responsible for arrays, bindings and effects.
- * Costs are charged in one batch; every arithmetic result still checks finiteness.
+ * emission. executionPlan binds the remaining nodes and owns bounded frame/index
+ * caching. Costs are charged in one batch; arithmetic still checks finiteness.
  */
 export function codeNumericPlan(expression: CodeExpression, depth = 0): NumericPlan | null {
   if (depth > 64) throw new CodeMaterialError('BUDGET', 'IR 深度超出 64。', expression.sourceSpan)
@@ -42,21 +41,6 @@ export function codeNumericPlan(expression: CodeExpression, depth = 0): NumericP
     plan.run = frame => cached ?? (cached = run(frame))
   }
   plans.set(expression, plan); return plan
-}
-/** Only root scalar expressions cache by repeat index; 32 × 4096 entries globally
- * caps this optimization at 1.125 MiB. Frame/parameter/seed dependent IR never enters.
- */
-export function runCodeNumericPlan(plan: NumericPlan, frame: NumericFrame): number {
-  if (plan.frameDependent || plan.locals.length !== 1 || plan.height < 3) return plan.run(frame)
-  const index = frame.locals.get(plan.locals[0])
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= 4096) return plan.run(frame)
-  let cache = indexedResults.get(plan)
-  if (!cache) {
-    if (indexedResults.size >= 32) indexedResults.delete(indexedResults.keys().next().value!)
-    cache = { values: new Float64Array(4096), valid: new Uint8Array(4096) }; indexedResults.set(plan, cache)
-  }
-  if (!cache.valid[index]) { cache.values[index] = plan.run(frame); cache.valid[index] = 1 }
-  return cache.values[index]
 }
 export function numericOperator(op: string): ((a: number, b: number) => number) | undefined {
   switch (op) {

@@ -22,45 +22,49 @@ export function codeMathVector(value: unknown, label: string): number[] {
   if (!Array.isArray(value) || value.length < 2 || value.length > 4) throw new CodeMaterialError('TYPE', `${label} 需要 2–4 维数值数组。`)
   return value.map(item => finiteCodeNumber(item, label))
 }
-export function evaluateCodeMath(op: CodeMathBuiltin, args: unknown[]): number | number[] {
-  const n = (index: number): number => finiteCodeNumber(args[index], `${op} 参数 ${index + 1}`)
-  const vector = (index: number): number[] => codeMathVector(args[index], op)
-  let result: number
-  switch (op) {
-    case 'length': result = Math.hypot(...vector(0)); break
-    case 'distance': {
-      const a = vector(0); const b = vector(1)
-      if (a.length !== b.length) throw new CodeMaterialError('TYPE', 'distance 两个向量的维数必须相同。')
-      result = Math.hypot(...a.map((value, i) => value - b[i])); break
-    }
-    case 'normalize': {
-      const value = vector(0); const magnitude = finiteCodeNumber(Math.hypot(...value), 'normalize 长度')
-      return value.map(item => magnitude === 0 ? 0 : item / magnitude)
-    }
-    case 'sqrt': result = Math.sqrt(n(0)); break
-    case 'pow': result = Math.pow(n(0), n(1)); break
-    case 'exp': result = Math.exp(n(0)); break
-    case 'log': result = Math.log(n(0)); break
-    case 'log2': result = Math.log2(n(0)); break
-    case 'tan': result = Math.tan(n(0)); break
-    case 'asin': result = Math.asin(n(0)); break
-    case 'acos': result = Math.acos(n(0)); break
-    case 'atan': result = Math.atan(n(0)); break
-    case 'atan2': result = Math.atan2(n(0), n(1)); break
-    case 'hypot': result = Math.hypot(...args.map((_, i) => n(i))); break
-    case 'sign': result = Math.sign(n(0)); break
-    case 'fract': result = n(0) - Math.floor(n(0)); break
-    case 'mod': { const remainder = n(0) % n(1); result = remainder === 0 ? (n(1) < 0 ? -0 : 0) : Math.sign(remainder) === Math.sign(n(1)) ? remainder : remainder + n(1); break }
-    case 'trunc': result = Math.trunc(n(0)); break
-    case 'lerp': result = n(0) + (n(1) - n(0)) * n(2); break
-    case 'invLerp': result = (n(2) - n(0)) / (n(1) - n(0)); break
-    case 'remap': result = n(3) + (n(0) - n(1)) / (n(2) - n(1)) * (n(4) - n(3)); break
-    case 'step': result = n(1) < n(0) ? 0 : 1; break
-    case 'degrees': result = n(0) * (180 / Math.PI); break
-    case 'radians': result = n(0) * (Math.PI / 180); break
-  }
-  return finiteCodeNumber(result, `${op} 结果`)
+type MathOperation = (args: unknown[]) => number | number[]
+function scalarMath(op: CodeMathBuiltin, calculate: (n: (index: number) => number, args: unknown[]) => number): MathOperation {
+  return args => finiteCodeNumber(calculate(index => finiteCodeNumber(args[index], `${op} 参数 ${index + 1}`), args), `${op} 结果`)
 }
+const codeMathOperations: Record<CodeMathBuiltin, MathOperation> = {
+  length: args => finiteCodeNumber(Math.hypot(...codeMathVector(args[0], 'length')), 'length 结果'),
+  distance: args => {
+    const a = codeMathVector(args[0], 'distance'); const b = codeMathVector(args[1], 'distance')
+    if (a.length !== b.length) throw new CodeMaterialError('TYPE', 'distance 两个向量的维数必须相同。')
+    return finiteCodeNumber(Math.hypot(...a.map((value, i) => value - b[i])), 'distance 结果')
+  },
+  normalize: args => {
+    const value = codeMathVector(args[0], 'normalize'); const magnitude = finiteCodeNumber(Math.hypot(...value), 'normalize 长度')
+    return value.map(item => magnitude === 0 ? 0 : item / magnitude)
+  },
+  sqrt: scalarMath('sqrt', n => Math.sqrt(n(0))),
+  pow: scalarMath('pow', n => Math.pow(n(0), n(1))),
+  exp: scalarMath('exp', n => Math.exp(n(0))),
+  log: scalarMath('log', n => Math.log(n(0))),
+  log2: scalarMath('log2', n => Math.log2(n(0))),
+  tan: scalarMath('tan', n => Math.tan(n(0))),
+  asin: scalarMath('asin', n => Math.asin(n(0))),
+  acos: scalarMath('acos', n => Math.acos(n(0))),
+  atan: scalarMath('atan', n => Math.atan(n(0))),
+  atan2: scalarMath('atan2', n => Math.atan2(n(0), n(1))),
+  hypot: scalarMath('hypot', (n, args) => Math.hypot(...args.map((_, i) => n(i)))),
+  sign: scalarMath('sign', n => Math.sign(n(0))),
+  fract: scalarMath('fract', n => n(0) - Math.floor(n(0))),
+  mod: scalarMath('mod', n => {
+    const remainder = n(0) % n(1)
+    return remainder === 0 ? (n(1) < 0 ? -0 : 0) : Math.sign(remainder) === Math.sign(n(1)) ? remainder : remainder + n(1)
+  }),
+  trunc: scalarMath('trunc', n => Math.trunc(n(0))),
+  lerp: scalarMath('lerp', n => n(0) + (n(1) - n(0)) * n(2)),
+  invLerp: scalarMath('invLerp', n => (n(2) - n(0)) / (n(1) - n(0))),
+  remap: scalarMath('remap', n => n(3) + (n(0) - n(1)) / (n(2) - n(1)) * (n(4) - n(3))),
+  step: scalarMath('step', n => n(1) < n(0) ? 0 : 1),
+  degrees: scalarMath('degrees', n => n(0) * (180 / Math.PI)),
+  radians: scalarMath('radians', n => n(0) * (Math.PI / 180)),
+}
+/** Prebind the closed math operation once when compiling an expression. */
+export function codeMathOperation(op: CodeMathBuiltin): (args: unknown[]) => number | number[] { return codeMathOperations[op] }
+export function evaluateCodeMath(op: CodeMathBuiltin, args: unknown[]): number | number[] { return codeMathOperations[op](args) }
 
 export function codeString(value: string): string {
   if (value.length > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', `字符串长度 ${value.length} 超过文字字符预算 ${CODE_V3_LIMITS.textCharacters}（超出 ${value.length - CODE_V3_LIMITS.textCharacters}）。`)
