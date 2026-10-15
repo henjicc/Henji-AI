@@ -37,15 +37,15 @@ export default {
     const advance = ctx.params.travel * sineInOut(progress(ctx.time, .2, ctx.params.seconds));
     return [
       rect({id: "background", x: 0, y: 0, width: ctx.width, height: ctx.height,
-        fill: ctx.style.palette.bg}),
+        fill: [0.06, 0.07, 0.09, 1]}),
       repeat(3, i => group({id: "depthCard",
         x: ctx.width / 2 + xs[i] * 900 / (900 + z[i] - advance),
         y: ctx.height / 2 + ys[i] * 900 / (900 + z[i] - advance),
         scale: 900 / (900 + z[i] - advance), anchorX: 200, anchorY: 100}, [
         rect({id: "plate", x: 0, y: 0, width: 400, height: 200, radius: 24,
-          fill: ctx.params.accent, stroke: ctx.style.palette.muted, strokeWidth: 2}),
+          fill: ctx.params.accent, stroke: [0.62, 0.66, 0.71, 1], strokeWidth: 2}),
         text({id: "title", x: 200, y: 100, text: ctx.params.title, fontSize: 48,
-          align: "center", color: ctx.style.palette.fg})
+          align: "center", color: [0.95, 0.96, 0.97, 1]})
       ]))
     ];
   }

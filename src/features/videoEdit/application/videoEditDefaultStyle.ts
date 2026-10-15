@@ -1,6 +1,4 @@
-import { fontLibrarySnapshot } from '@/platform/fonts'
 import { styleKitContent, styleKitSchema, type StyleKit } from '@/core/videoEdit/styleKit'
-import { availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
 import { videoEditStyleKitLibrary } from './videoEditStyleKitLibrary'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
 import { setVideoEditNewSequenceStyle } from './videoEditService'
@@ -15,7 +13,7 @@ export function defaultVideoEditStyleBinding(document: { styleKits?: StyleKit[] 
   const id = videoEditPresetPreferences.defaultId('style')
   const kit = id ? videoEditStyleKitLibrary.list().find(value => value.id === id) : undefined
   if (!kit) return undefined
-  const copy = kit.id.startsWith('builtin:') ? availableStyleKitFonts(kit, fontLibrarySnapshot().faces) : kit
+  const copy = kit
   const content = JSON.stringify(styleKitContent(copy))
   const existing = document.styleKits?.find(value => value.name === copy.name && JSON.stringify(styleKitContent(value)) === content)
   if (existing) return { styleKits: document.styleKits!, styleKitId: existing.id }

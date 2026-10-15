@@ -33,7 +33,7 @@ export default {
         rect({id: "plate", x: 0, y: 0, width: width, height: box.height + 48,
           radius: 24, fill: ctx.params.accent}),
         text({id: "word", x: 24, y: 24, text: word, fontSize: 54,
-          baseline: "top", maxWidth: width - 48, wrap: true, color: ctx.style.palette.fg})
+          baseline: "top", maxWidth: width - 48, wrap: true, color: [0.95, 0.96, 0.97, 1]})
       ]);
     };
     return repeat(4, i => tile(i));

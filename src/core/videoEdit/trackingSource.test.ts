@@ -4,7 +4,6 @@ import { createVideoEditSequence, videoEditComposition, type VideoEditClip } fro
 import { makeVideoEditItemClip } from './projectItems'
 import { videoEditSequenceTrackingSource, videoEditTrackingSequenceFrame } from './trackingSource'
 import { videoEditClipSourceSecondsAt } from './clipSpeed'
-import { styleKitSchema } from './styleKit'
 
 function fixture() {
   const document = createVideoEditDocument('跟踪')
@@ -33,17 +32,6 @@ it.each([false, true])('完整文档和 composition 快照的嵌套签名一致�
   const changed = videoEditSequenceTrackingSource(document, clip)!
   expect(changed.source.signature).not.toBe(fromDocument.source.signature)
   expect(videoEditSequenceTrackingSource(videoEditComposition(document, document.sequences[0].id), clip)!.source).toEqual(changed.source)
-})
-it('签名投影保留风格包等渲染依赖，风格内容变化仍使缓存失效', () => {
-  const { document, child, clip } = fixture()
-  document.styleKits = [styleKitSchema.parse({ id: 'look', name: '风格', tokens: {} })]
-  child.styleKitId = 'look'
-  const first = videoEditSequenceTrackingSource(document, clip)!.source
-  expect(videoEditSequenceTrackingSource(videoEditComposition(document, document.sequences[0].id), clip)!.source).toEqual(first)
-  document.styleKits[0].tokens.typeScale.ratio = 1.4
-  const changed = videoEditSequenceTrackingSource(document, clip)!.source
-  expect(changed.signature).not.toBe(first.signature)
-  expect(videoEditSequenceTrackingSource(videoEditComposition(document, document.sequences[0].id), clip)!.source).toEqual(changed)
 })
 it('父层变速/倒放的源时钟换到子网格，60fps子序列按30fps跟踪采样', () => {
   const { document, clip } = fixture(); const { source } = videoEditSequenceTrackingSource(document, clip)!

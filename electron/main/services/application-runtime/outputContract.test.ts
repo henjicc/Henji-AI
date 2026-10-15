@@ -9,7 +9,6 @@ import { toMcpResult } from '../mcp/resultProjection'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { capabilityVerificationEnvelope } from '../../../../src/core/application-control/capabilityVerification'
 import { APPLICATION_WRITE_CAPABILITY_IDS, EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
-import { BUILTIN_STYLE_KITS } from '../../../../src/core/videoEdit/styleKitPresets'
 const contractLog = vi.hoisted(() => vi.fn())
 vi.mock('../logging', () => ({ createMainLogger: () => ({ error: contractLog, info: vi.fn(), warn: vi.fn() }) }))
 
@@ -150,7 +149,6 @@ const successData: Record<string, Record<string, unknown>> = {
   cancel_camera_stage_render_task: { taskRef: ref('camera_stage.render_task', 'task'), status: 'cancelled', resultRefs: [nodeRef], ...revisions },
   prepare_canvas_node_generation: { preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'image', options: {} }, submitInput: { documentId: 'canvas', nodeId: 'node' }, ...revisions },
   prepare_image_edit_outpaint: { documentRef: imageDocumentRef, preparation: { prepared: true, modelId: 'fixture-model', providerId: 'fixture', mediaType: 'image', options: {} }, message },
-  insert_video_edit_style_component: { resultRef: documentRef, clipRefs: [clipRef], itemRefs: [ref('video_edit.item')], definitionRefs: [ref('video_edit.code_material')], versionRefs: [ref('video_edit.code_version')], trackRefs: [ref('video_edit.track')], styleRef: ref('video_edit.style_kit'), sequenceRef, styleEffect: 'create', ...verified },
 }
 
 // 录制服务的会话控制、事件分页、理解/隐私、导入与成片回执；与各领域结果测试保持同形。
@@ -193,9 +191,6 @@ successData.query_video_edit_export = { resultRef: documentRef, message, verific
 
 for (const name of ['measure_video_edit_loudness', 'normalize_video_edit_loudness']) {
   successData[name] = { resultRef: documentRef, results: [{ clipRef, volume: 1, measurement: { integratedLufs: -16, shortTermLufs: -15, truePeakDbtp: -1, samplePeakDbfs: -2, durationSeconds: 5 } }], ...verified }
-}
-for (const name of ['extract_video_edit_work_style', 'extract_video_edit_reference_style']) {
-  successData[name] = { name: '作品风格', content: { tokens: BUILTIN_STYLE_KITS[0].tokens, rules: BUILTIN_STYLE_KITS[0].rules, samples: BUILTIN_STYLE_KITS[0].samples }, message }
 }
 for (const domain of ['image_edit', 'video_edit']) {
   for (const action of ['organize', 'interpret']) successData[`${action}_${domain}_intent`] = { resultRef: ref(`${domain}.intent_draft`), candidateRefs: [ref(`${domain}.intent_candidate`)], status: 'candidate', questions: [], ...revisions }

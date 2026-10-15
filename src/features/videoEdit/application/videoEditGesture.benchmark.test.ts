@@ -4,7 +4,6 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditClipSchema } from '@/core/videoEdit/document'
 import { createVideoEditMaskShape, editVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
-import { styleKitSchema, styleKitRenderKey } from '@/core/videoEdit/styleKit'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { openSeededVideoEdit, closeAllVideoEdits } from './videoEditDocumentTestKit'
 import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditGesture, updateVideoEditMaskGesture, updateVideoEditPicturePosition, subscribeVideoEditDomain } from './videoEditService'
@@ -33,7 +32,6 @@ it.skipIf(process.env.HENJI_GESTURE_BENCH !== '1')('service gestures with v3, fo
   sequence.width = 3840; sequence.height = 2160; sequence.frameRate = { numerator: 60, denominator: 1 }
   const source = `export default {apiVersion:1,languageVersion:3,name:"基准",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:7,parameters:{font:{type:"text",title:"字体",default:"sans-serif",maxLength:200}},render(ctx){return [${Array.from({ length: 48 }, (_, i) => `rect({id:"shape${i}",x:${i * 15},y:${i * 8},width:100,height:100,fill:[1,1,1,1]})`).join(',')}];}}`
   document.codeMaterials = [{ id: 'code', name: '基准', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, document), apiVersion: 1, languageVersion: 3 }] }]
-  document.styleKits = [styleKitSchema.parse({ id: 'kit', name: '基准风格' })]; sequence.styleKitId = 'kit'
   document.items = [{ id: 'item', kind: 'code', name: '代码', code: { definitionId: 'code', versionId: 'version', parameters: { font: 'sans-serif' } } }]
   sequence.clips = Array.from({ length: 120 }, (_, i) => videoEditClipSchema.parse({ id: `clip${i}`, itemId: 'item', kind: 'code', name: `代码${i}`, code: document.items[0].code, track: sequence.tracks.find(track => track.kind === 'video')!.index, start: Math.floor(i / 4) * 600, duration: 600, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', effects: [{ id: `effect${i}`, name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} } }], elementOverrides: { shape0: { fontFamily: 'sans-serif' } } }))
   sequence.annotations = Array.from({ length: 24 }, (_, i) => ({ id: `mark${i}`, frame: Math.floor(i / 4) * 600, clipId: `clip${i}`, space: 'composition-normalized' as const, target: { kind: 'element' as const, elementId: 'shape0' }, status: 'draft' as const, author: { kind: 'user' as const, name: '我' }, text: '检查位置', createdAt: '2026-10-08T00:00:00.000Z', thread: [] }))
@@ -76,8 +74,7 @@ it.skipIf(process.env.HENJI_GESTURE_BENCH !== '1')('service gestures with v3, fo
   const withoutFonts = measure('generic'); fontSpy.mockRestore()
   const timedSpy = vi.spyOn(timed, 'reconcileVideoEditTimedContent').mockImplementation((_before, next) => next)
   const withoutTimeMapping = measure('generic'); timedSpy.mockRestore()
-  const styleKey = sample(() => { for (let i = 0; i < 120; i++) styleKitRenderKey(owner.document.styleKits![0]) })
-  process.stdout.write(`${JSON.stringify({ clips: 120, visibleCodes: 4, elementsPerCode: 48, annotations: 24, ...results, withoutFonts, withoutTimeMapping, styleKey120: styleKey })}\n`)
+  process.stdout.write(`${JSON.stringify({ clips: 120, visibleCodes: 4, elementsPerCode: 48, annotations: 24, ...results, withoutFonts, withoutTimeMapping })}\n`)
   expect(owner.past.length).toBeGreaterThan(0)
 }, 60_000)
 

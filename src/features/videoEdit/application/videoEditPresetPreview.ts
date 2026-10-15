@@ -4,13 +4,10 @@ import { createVideoEditSequence, videoEditComposition, type VideoEditCompositio
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { resizeCodeMaterialCanvas } from '@/core/videoEdit/codeElementBake'
 import { instantiateTitleTemplate } from '@/core/videoEdit/titleTemplates'
-import { styleKitSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
-import type { StyleKit, StyleKitContent } from '@/core/videoEdit/styleKit'
+import type { StyleKit } from '@/core/videoEdit/styleKit'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
-import type { VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import { createLogger } from '@/core/logging'
 import { compileVideoEditCode } from './videoEditCodeState'
-import { STYLE_SUBTITLE_PRESET_ID } from './videoEditSubtitlePresets'
 import type { VideoEditPresetSource } from './videoEditPresetCatalog'
 import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 
@@ -40,10 +37,10 @@ interface Builder { document: VideoEditDocument; sequence: VideoEditSequence }
 const PREVIEW_DOCUMENT_ID = 'preset-preview'
 const PREVIEW_SEQUENCE_ID = 'preset-preview-sequence'
 let previewRevision = 0
-function start(size: { width: number; height: number }, kit?: StyleKit): Builder {
-  const sequence: VideoEditSequence = { ...createVideoEditSequence('预设预览'), id: PREVIEW_SEQUENCE_ID, ...size, ...(kit ? { styleKitId: kit.id } : {}) }
+function start(size: { width: number; height: number }): Builder {
+  const sequence: VideoEditSequence = { ...createVideoEditSequence('预设预览'), id: PREVIEW_SEQUENCE_ID, ...size }
   for (const index of [2, 3, 4, 5]) sequence.tracks.push({ id: `preview-track-${index}`, name: `视频 ${index}`, index, kind: 'video', locked: false, enabled: true, muted: false, solo: false })
-  const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: PREVIEW_DOCUMENT_ID, name: '预设预览', revision: ++previewRevision, media: [], bins: [], items: [], sequences: [sequence], codeMaterials: [], ...(kit ? { styleKits: [kit] } : {}) }
+  const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: PREVIEW_DOCUMENT_ID, name: '预设预览', revision: ++previewRevision, media: [], bins: [], items: [], sequences: [sequence], codeMaterials: [] }
   return { document, sequence }
 }
 async function codeClip(builder: Builder, source: Parameters<typeof normalizeCodeMaterialFiles>[0], parameters: CodeParameterValues, placement: { frame: number; track: number; seconds: number; sourceInSeconds?: number }, signal: AbortSignal): Promise<string> {
@@ -65,40 +62,24 @@ async function codeClip(builder: Builder, source: Parameters<typeof normalizeCod
   if (placement.sourceInSeconds) clip.sourceInUs = Math.round(placement.sourceInSeconds * 1e6)
   builder.sequence.clips.push(clip); return clip.id
 }
-const sample = (kit: StyleKit, kind: StyleKitContent['samples'][number]['kind']): StyleKitContent['samples'][number] | undefined => kit.samples.find(value => value.kind === kind)
-function accentGrade(kit: StyleKit): { hue: number; sat: number } {
-  const [r, g, b] = kit.tokens.palette.accent; const max = Math.max(r, g, b); const delta = max - Math.min(r, g, b)
-  const hue = delta === 0 ? .58 : ((max === r ? (g - b) / delta + 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) / 6) % 1
-  return { hue: Math.round(hue * 100) / 100, sat: Math.round(Math.min(2, .35 + (max ? delta / max : 0) * .9) * 100) / 100 }
-}
-const STYLE_TRANSITIONS: Record<StyleKit['rhythm']['transition'], VideoEditTransitionKind | null> = { auto: 'cross_dissolve', cut: null, dissolve: 'cross_dissolve', match: 'cross_dissolve', wipe: 'wipe', zoom: 'cross_zoom' }
+const EXAMPLE_SECONDS = 3
 /**
- * The style reel: one short packaged piece built only from the style's own parts — opener, lower third, captions,
- * its transition and its emphasis — so two styles differ in packaging, not just in colour.
+ * A style has no look of its own to render — it is a guide for the AI. What can be shown are its reference
+ * examples, played back to back over the shared footage, each for at most three seconds.
  */
-async function styleReel(kit: StyleKit, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
-  const builder = start(size, kit); const f = PRESET_PREVIEW_FPS
-  // The footage is graded toward the style's own accent, so the reel reads as one packaged piece.
-  const grade = accentGrade(kit)
-  const shotA = await codeClip(builder, BACKDROP, { hue: grade.hue, sat: grade.sat }, { frame: 0, track: 1, seconds: 4.5 }, signal)
-  const shotB = await codeClip(builder, BACKDROP, { hue: (grade.hue + .08) % 1, sat: grade.sat }, { frame: Math.round(4.5 * f), track: 1, seconds: 4, sourceInSeconds: 1 }, signal)
-  const transition = STYLE_TRANSITIONS[kit.rhythm.transition]
-  if (transition) builder.sequence.transitions = [{ id: 'preview-transition', kind: transition, leftClipId: shotA, rightClipId: shotB, durationFrames: Math.max(2, Math.round(kit.tokens.motion.transitionDuration * f)) }]
-  const opener = sample(kit, 'title'); const lower = sample(kit, 'lower_third'); const emphasis = sample(kit, 'emphasis')
-  // Each part exits on its own motion before its clip ends, instead of being cut off mid-hold.
-  const hold = (seconds: number): CodeParameterValues => ({ hold: Math.max(0.3, seconds - kit.tokens.motion.exitDuration - 0.1) })
-  if (opener) await codeClip(builder, opener.source, hold(2.4), { frame: 0, track: 2, seconds: 2.4 }, signal)
-  if (lower) await codeClip(builder, lower.source, hold(2.2), { frame: Math.round(2.5 * f), track: 2, seconds: 2.2 }, signal)
-  if (emphasis) await codeClip(builder, emphasis.source, hold(2.4), { frame: Math.round(5.6 * f), track: 2, seconds: 2.4 }, signal)
-  builder.sequence.captions = [
-    { id: 'preview-caption-1', start: Math.round(2.6 * f), duration: Math.round(1.8 * f), text: CAPTIONS[0], style: styleKitSubtitleStyle(kit) },
-    { id: 'preview-caption-2', start: Math.round(4.9 * f), duration: Math.round(3.4 * f), text: CAPTIONS[1], style: styleKitSubtitleStyle(kit) },
-  ]
+async function exampleReel(kit: StyleKit, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
+  const builder = start(size); const f = PRESET_PREVIEW_FPS; let frame = 0
+  const slots: Array<{ example: StyleKit['examples'][number]; frame: number; seconds: number }> = []
+  for (const example of kit.examples) { slots.push({ example, frame, seconds: EXAMPLE_SECONDS }); frame += EXAMPLE_SECONDS * f }
+  const total = Math.max(frame / f, 2)
+  await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: total }, signal)
+  // Examples that time their own exit read a hold parameter; others simply end with their slot.
+  for (const slot of slots) await codeClip(builder, slot.example.source, { hold: Math.max(.3, slot.seconds - .6) }, { frame: slot.frame, track: 2, seconds: slot.seconds }, signal)
   return builder
 }
-async function build(source: VideoEditPresetSource, size: { width: number; height: number }, kit: StyleKit | undefined, signal: AbortSignal): Promise<Builder> {
+async function build(source: VideoEditPresetSource, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
   switch (source.category) {
-    case 'style': return styleReel(source.kit, size, signal)
+    case 'style': return exampleReel(source.kit, size, signal)
     case 'title': {
       const builder = start(size)
       await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: 8 }, signal)
@@ -110,10 +91,9 @@ async function build(source: VideoEditPresetSource, size: { width: number; heigh
       return builder
     }
     case 'text': {
-      const follow = source.preset.id === STYLE_SUBTITLE_PRESET_ID && kit
-      const builder = start(size, follow ? kit : undefined)
+      const builder = start(size)
       await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: 8 }, signal)
-      builder.sequence.captions = [{ id: 'preview-caption', start: 0, duration: 8 * PRESET_PREVIEW_FPS, text: `${CAPTIONS[0]}，${CAPTIONS[1]}`, style: follow ? styleKitSubtitleStyle(kit) : structuredClone(source.preset.style) }]
+      builder.sequence.captions = [{ id: 'preview-caption', start: 0, duration: 8 * PRESET_PREVIEW_FPS, text: `${CAPTIONS[0]}，${CAPTIONS[1]}`, style: structuredClone(source.preset.style) }]
       return builder
     }
     case 'effect': {
@@ -146,11 +126,12 @@ function posterFrame(source: VideoEditPresetSource, frames: number): number {
 }
 const timelines = new Map<string, Promise<PresetPreviewTimeline>>()
 /** Built once per preset content and size; compiling the components is the only step that is not real time. */
-export function presetPreviewTimeline(source: VideoEditPresetSource, size: { width: number; height: number }, kit?: StyleKit): Promise<PresetPreviewTimeline> {
-  const key = JSON.stringify([source, size, source.category === 'text' && kit ? [kit.tokens, kit.caption] : null])
+export function presetPreviewTimeline(source: VideoEditPresetSource, size: { width: number; height: number }): Promise<PresetPreviewTimeline> {
+  // A style rebuilds only when its examples change, not while its guide text is being edited.
+  const key = JSON.stringify([source.category === 'style' ? { category: 'style', examples: source.kit.examples } : source, size])
   let value = timelines.get(key)
   if (!value) {
-    value = build(source, size, kit, new AbortController().signal).then(builder => {
+    value = build(source, size, new AbortController().signal).then(builder => {
       const composition = videoEditComposition(builder.document, builder.sequence.id)
       const frames = Math.max(1, ...builder.sequence.clips.map(clip => clip.start + clip.duration))
       return { composition, frames, poster: posterFrame(source, frames) }

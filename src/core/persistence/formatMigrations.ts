@@ -1,7 +1,6 @@
 import type { PersistenceMigrations } from './migrations'
 import { migrateThemePayloadV1 } from '../theme/themeMigration'
 import { migrateMcpConnectionStorageV1 } from './mcpConnectionSchema'
-import { migrateStyleKitV1 } from '../videoEdit/styleKit'
 
 /** Add N → N+1 here for non-document formats. Document kinds own their own chain. */
 export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> = {
@@ -12,10 +11,22 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   'theme-payload': { 1: content => migrateThemePayloadV1(content) },
   // 录屏注意力共享曲线契约：subtitle-manifest/title-templates v3 已登记 dev-break，不保留旧开发格式迁移。
   // 3 → 4：保存的声音片段的效果新增可选缩放区间 regions，已有片段原样保留，只更新版本号。
-  'subtitle-manifest': { 3: content => content && typeof content === 'object' && !Array.isArray(content) ? { ...content, version: 4 } : content },
+  'subtitle-manifest': {
+    3: content => content && typeof content === 'object' && !Array.isArray(content) ? { ...content, version: 4 } : content,
+    // 4 → 5（t97）：片段不再有风格覆盖，去掉回填声音片段上的 styleKitId。
+    4: content => {
+      if (!content || typeof content !== 'object' || Array.isArray(content)) return content
+      const record = content as Record<string, unknown>
+      const soundClips = Array.isArray(record.soundClips) ? record.soundClips.map(clip => { if (!clip || typeof clip !== 'object' || Array.isArray(clip)) return clip; const { styleKitId: _id, ...rest } = clip as Record<string, unknown>; return rest }) : record.soundClips
+      return { ...record, version: 5, ...(soundClips ? { soundClips } : {}) }
+    },
+  },
+  // 1 → 2（t97）：风格改为说明书，旧包里的参数式风格项丢弃，其余预设原样保留。
+  'video-preset-package': { 1: content => content && typeof content === 'object' && !Array.isArray(content) ? { ...content, version: 2, items: Array.isArray((content as { items?: unknown }).items) ? ((content as { items: Array<{ category?: unknown }> }).items).filter(item => item?.category !== 'style') : [] } : content },
   // 1 → 2：外部连接改为永久有效，去掉到期时间与提醒记录。
   'mcp-connections': { 1: migrateMcpConnectionStorageV1 },
   // 1 → 2（t97）：旧 Markdown 规则移入 notes，新增理念、节奏、结构化规则、生成注入与扩展动效由默认值补齐。
-  'style-kits': { 1: content => Array.isArray(content) ? content.map(migrateStyleKitV1) : content },
+  // t97：风格改为给 AI 的说明书，旧版个人风格不再适用，按开发期约定清空。
+  'style-kits': { 1: () => [], 2: () => [] },
 }
 export function formatMigrations(id: string): PersistenceMigrations { return FORMAT_MIGRATIONS[id] ?? {} }

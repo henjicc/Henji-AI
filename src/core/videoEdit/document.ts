@@ -59,7 +59,6 @@ export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './c
  * 可以随时切回。只记引用，不校验素材项是否还在（素材从项目移除后切回时如实拒绝），不参与渲染。
  */
 const videoEditClipStateSchema = z.object({
-  styleKitId: identifier.optional(),
   multicamCameraId: identifier.optional(),
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
@@ -139,7 +138,7 @@ export const videoEditDocumentSchema = z.object({
   const definitionsById = new Map(document.codeMaterials?.map(value => [value.id, value]))
   const styleIds = new Set(document.styleKits?.map(value => value.id))
   if (styleIds.size !== (document.styleKits?.length ?? 0)) issue('工程风格包标识不能重复。')
-  for (const sequence of document.sequences) for (const value of [sequence, ...sequence.clips]) if (value.styleKitId && !styleIds.has(value.styleKitId)) issue('序列或片段的风格包引用不存在。')
+  for (const sequence of document.sequences) if (sequence.styleKitId && !styleIds.has(sequence.styleKitId)) issue('序列的风格引用不存在。')
   const lutsById = new Set(document.colorLuts?.map(value => value.id))
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')
   const ids = new Set<string>()

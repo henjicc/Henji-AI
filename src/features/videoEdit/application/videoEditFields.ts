@@ -67,7 +67,6 @@ schemas['video_edit.clip'].multicamCameraId = z.string().max(100)
 schemas['video_edit.sequence'].styleKitId = z.string().max(100)
 schemas['video_edit.sequence'].captionTrackEnabled = videoEditSequenceSchema.shape.captionTrackEnabled.unwrap()
 schemas['video_edit.sequence'].captionTrackLocked = videoEditSequenceSchema.shape.captionTrackLocked.unwrap()
-schemas['video_edit.clip'].styleKitId = z.string().max(100)
 schemas['video_edit.sequence'].multicam = videoEditSequenceSchema.shape.multicam.unwrap().nullable()
 schemas['video_edit.clip'].effectsEnabled = videoEditClipSchema.shape.effectsEnabled.unwrap()
 schemas['video_edit.clip'].disabledIntrinsicSections = videoEditClipSchema.shape.disabledIntrinsicSections.unwrap()
@@ -228,9 +227,8 @@ Object.assign(labels, { target: '标注目标', endFrame: '标注结束帧', aut
 Object.assign(descriptions, { 'video_edit.annotation.target': '画面归一化目标：point位置、region矩形、stroke多笔画点列、element代码元素ID及可选源码字符范围/矩形、range包含两端的时间段及可选轨道/片段ID。element须指定clip_id；range的startFrame/endFrame须与frame/end_frame一致。', 'video_edit.annotation.status': 'draft待发送；open待处理；addressed已处理待用户审查（同一change_application_entities事务内修改内容、追加thread、写addressed；宿主自动关联撤销边界）；resolved仅用户通过，Agent不能写。重新处理前重开为open。', 'video_edit.annotation.thread': '按时间顺序的消息列表，消息包含id、author {kind:user/assistant/external,name}、createdAt ISO时间、text。Agent只能追加自己的处理回复，说明改了什么、怎么改、可撤销步骤；支持append（value为新增消息数组），不能覆盖已有回复。' })
 descriptions['video_edit.graphic_object.text_style'] = VIDEO_EDIT_TEXT_STYLE_DESCRIPTION + '空间量使用当前图形画幅像素。文字必须非null；形状必须null。位置、比例、锚点偏移、旋转、不透明度沿 parameters 和源时钟 curves；x/y、anchorX/Y为图形像素，scale等比倍数0.01–100，rotation角度-360–360，opacity比例0–1。'
 descriptions['video_edit.graphic_object.visible'] = '图层可见性；false隐藏，true显示。'
-labels.styleKitId = '风格包'
-descriptions['video_edit.sequence.style_kit_id'] = '当前序列风格包的工程内标识。先创建/读取 video_edit.style_kit，再填写其完整引用中的子 ID；空字符串恢复默认令牌。代码使用只读 ctx.style；新写代码前读取对应风格包 content 中的 tokens 与 rules。'
-descriptions['video_edit.clip.style_kit_id'] = '片段风格覆盖；填写同工程 style_kit 子 ID。空字符串清除覆盖并跟随所属序列风格。'
+labels.styleKitId = '风格'
+descriptions['video_edit.sequence.style_kit_id'] = '当前序列绑定的风格说明书（工程内标识）。先创建/读取 video_edit.style_kit，再填写其完整引用中的子 ID；空字符串解除绑定。绑定只决定助手按哪份说明书创作，不改时间线；在这个序列里新做内容前先读说明书。'
 labels.elementOverrides = '元素覆盖'
 descriptions['video_edit.item.element_overrides'] = '此代码素材项插入新片段时复制的初始元素覆盖；片段插入后独立编辑 clip.element_overrides。结构与片段元素覆盖相同，整体替换前先读取保留其它元素。'
 const codeKeys: Record<string, string> = { codeParameters: 'parameters', codeCurves: 'curves', codeVersionId: 'versionId' }
@@ -263,7 +261,7 @@ function defaultFieldDescription(key: string): string {
   if (['x', 'y', 'anchorX', 'anchorY'].includes(key)) return `${title}，相对画幅的归一化坐标。`
   return fieldDescriptions[key] ?? schemasDescription(key) ?? `${title}。`
 }
-Object.assign(labels, { amount: '效果强度', sourceText: '原句', source: '作者源码', files: '源码文件', entry: '源码入口', apiVersion: '代码接口版本', languageVersion: '代码语言版本', defaultVersionId: '默认源码版本', versionIds: '源码版本列表', types: '自定义参数类型', visible: '可见', anchorX: '水平锚点', anchorY: '垂直锚点', method: '跟踪方法', prompts: '跟踪提示', styleKitId: '风格套件', proxyPreference: '代理媒体偏好', proxyState: '代理媒体状态', follow: '跟随跟踪器', trackers: '跟踪器', sourceRange: '初始源范围', creativeSource: '生成来源', elementOverrides: '元素覆盖', color: '颜色', scaleX: '水平缩放', scaleY: '垂直缩放', flipX: '水平翻转', flipY: '垂直翻转', endFrame: '结束帧', author: '批注作者', createdAt: '创建时间', addressedBy: '处理操作', target: '批注目标', thread: '讨论记录', code: '代码实例' })
+Object.assign(labels, { amount: '效果强度', sourceText: '原句', source: '作者源码', files: '源码文件', entry: '源码入口', apiVersion: '代码接口版本', languageVersion: '代码语言版本', defaultVersionId: '默认源码版本', versionIds: '源码版本列表', types: '自定义参数类型', visible: '可见', anchorX: '水平锚点', anchorY: '垂直锚点', method: '跟踪方法', prompts: '跟踪提示', styleKitId: '风格', proxyPreference: '代理媒体偏好', proxyState: '代理媒体状态', follow: '跟随跟踪器', trackers: '跟踪器', sourceRange: '初始源范围', creativeSource: '生成来源', elementOverrides: '元素覆盖', color: '颜色', scaleX: '水平缩放', scaleY: '垂直缩放', flipX: '水平翻转', flipY: '垂直翻转', endFrame: '结束帧', author: '批注作者', createdAt: '创建时间', addressedBy: '处理操作', target: '批注目标', thread: '讨论记录', code: '代码实例' })
 export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityType => [entityType, Object.entries(schemas[entityType]).map(([key, schema]): ApplicationFieldDefinition<VideoEditFieldData, VideoEditFieldData> => {
   const id = `${entityType}.${videoEditPropertyKey(key)}`
   const controlled = VIDEO_EDIT_CONTROLLED_AGGREGATES.some(value => value === key)

@@ -3,7 +3,7 @@ import { FolderInput, FolderOutput, Star } from 'lucide-react'
 import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiModal, UiOptionButton, UiRecordItem, UiRecordList, UiSearchInput, UiSegmented, UiSwitch } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openDialog, readTextFile, saveDialog, writeTextFile } from '@/platform/desktopApi'
-import { resolveVideoEditStyleKit, type StyleKit } from '@/core/videoEdit/styleKit'
+import { parseStyleGuide } from '@/core/videoEdit/styleKit'
 import { VIDEO_EDIT_PRESET_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, VIDEO_EDIT_PRESET_PACKAGE_EXTENSION, type VideoEditPresetCategory } from '@/core/videoEdit/presetPackage'
 import { deleteVideoEditPreset, exportVideoEditPresetPackage, importVideoEditPresetPackage, listVideoEditPresets, setVideoEditPresetDefault, setVideoEditPresetRating, videoEditPresetExportable, videoEditPresetSource, type VideoEditPresetEntry } from '../application/videoEditPresetCatalog'
 import { applyVideoEditPreset } from '../application/videoEditPresetApply'
@@ -22,52 +22,30 @@ function status(entry: VideoEditPresetEntry): string[] {
 }
 
 /** Tiles and the dialog share one live player; audio-only effect presets have no picture to show. */
-function PresetPicture({ entry, kit, size, playing, label }: { entry: VideoEditPresetEntry; kit?: StyleKit; size: typeof TILE_SIZE; playing: boolean; label: string }): React.ReactElement {
+function PresetPicture({ entry, size, playing, label }: { entry: VideoEditPresetEntry; size: typeof TILE_SIZE; playing: boolean; label: string }): React.ReactElement {
   const source = useMemo(() => videoEditPresetSource(entry.category, entry.id), [entry.category, entry.id])
   if (source.category === 'effect' && source.preset.media === 'audio') return <span className="flex h-full w-full items-center justify-center text-xs text-text3">声音效果</span>
-  // Only "follow the style" captions depend on the sequence's style; other previews must not rebuild when it changes.
-  return <VideoEditPresetPlayer source={source} kit={source.category === 'text' ? kit : undefined} size={size} playing={playing} label={label} />
+  if (source.category === 'style' && !source.kit.examples.length) return <span className="flex h-full w-full items-center justify-center px-2 text-center text-xs text-text3">没有参考示例</span>
+  return <VideoEditPresetPlayer source={source} size={size} playing={playing} label={label} />
 }
-const RULE_LABEL = { do: '做', dont: '不做', keep: '统一', vary: '可变' } as const
-const STRENGTH_LABEL = { must: '必须', prefer: '倾向', flexible: '可破例' } as const
-/** A style is a packaging system: show its positioning, concepts and norms next to the reel. */
-function StyleNorms({ entry }: { entry: VideoEditPresetEntry }): React.ReactElement | null {
+/** A style is a guide for the AI: show it section by section, exactly as the assistant reads it. */
+function StyleGuide({ entry }: { entry: VideoEditPresetEntry }): React.ReactElement | null {
   const source = videoEditPresetSource(entry.category, entry.id)
   if (source.category !== 'style') return null
-  const { profile, rules } = source.kit
-  return <>
-    {profile.summary && <p className="text-sm text-text1">{profile.summary}</p>}
-    {profile.concepts.length > 0 && <UiGroup title="核心概念" titleTone="compact">
-      <UiRecordList>{profile.concepts.map((concept, index) => <UiRecordItem key={concept.id} index={index} density="compact" title={`${concept.name}（${STRENGTH_LABEL[concept.strength]}）`} meta={[concept.meaning]}><p className={UI_TEXT_META_CLASS}>{concept.criteria.join('；')}</p></UiRecordItem>)}</UiRecordList>
-    </UiGroup>}
-    {rules.length > 0 && <UiGroup title="创作规范" titleTone="compact">
-      <UiRecordList>{rules.map((rule, index) => <UiRecordItem key={rule.id} index={index} density="compact" title={rule.text} meta={[RULE_LABEL[rule.kind], STRENGTH_LABEL[rule.strength]]} />)}</UiRecordList>
-    </UiGroup>}
-  </>
+  return <>{parseStyleGuide(source.kit.guide).filter(section => section.body).map((section, index) => <UiGroup key={`${section.title}-${index}`} title={section.title || undefined} titleTone="compact">
+    <p className="whitespace-pre-wrap text-13 leading-6 text-text1">{section.body}</p>
+  </UiGroup>)}</>
 }
-
-const CAPTION_LABEL = { outline: '描边字', plate: '半透明底板', pop: '粗描边花字' } as const
-const TRANSITION_LABEL = { auto: '不限', cut: '硬切', dissolve: '叠化', match: '匹配切', wipe: '划像', zoom: '推拉' } as const
-const SFX_LABEL = { auto: '不限', none: '不用', sparse: '少量', rich: '丰富' } as const
-/** What the reel is made of, in the style's own terms: the packaging parts a sequence gets when it follows this style. */
-function StylePackaging({ entry }: { entry: VideoEditPresetEntry }): React.ReactElement | null {
+/** The reference examples the reel plays, with what each one demonstrates. */
+function StyleExamples({ entry }: { entry: VideoEditPresetEntry }): React.ReactElement | null {
   const source = videoEditPresetSource(entry.category, entry.id)
-  if (source.category !== 'style') return null
-  const { tokens, rhythm, caption } = source.kit; const shots = rhythm.shotSeconds
-  const rows: Array<[string, string]> = [
-    ['字体', [...new Set([tokens.fonts.display.family, tokens.fonts.body.family])].join(' / ')],
-    ['字幕', CAPTION_LABEL[caption.treatment]],
-    ['转场', TRANSITION_LABEL[rhythm.transition]],
-    ['镜头时长', shots ? `${shots.min}–${shots.max} 秒` : '不限'],
-    ['动效', `${tokens.motion.allowOvershoot ? '允许一次回弹' : '平稳落定'}，入场 ${tokens.motion.enterDuration} 秒`],
-    ['音效', SFX_LABEL[rhythm.sfx]],
-  ]
-  return <UiGroup title="包装" titleTone="compact" labelWidth={72}>
-    {rows.map(([label, value]) => <UiFormRow key={label} label={label} density="compact"><span className="flex h-7 items-center text-xs text-text1">{value}</span></UiFormRow>)}
+  if (source.category !== 'style' || !source.kit.examples.length) return null
+  return <UiGroup title="参考示例（样片按顺序播放，只示意手法）" titleTone="compact">
+    <UiRecordList>{source.kit.examples.map((example, index) => <UiRecordItem key={example.id} index={index} density="compact" title={example.title}>{example.note && <p className={UI_TEXT_META_CLASS}>{example.note}</p>}</UiRecordItem>)}</UiRecordList>
   </UiGroup>
 }
 
-function PresetDetail({ entry, instance, kit, onClose, onError }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; kit?: StyleKit; onClose: () => void; onError: (reason: unknown) => void }): React.ReactElement {
+function PresetDetail({ entry, instance, onClose, onError }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; onClose: () => void; onError: (reason: unknown) => void }): React.ReactElement {
   const { showNotification } = useNotification()
   const [busy, setBusy] = useState(false)
   const run = async (action: () => Promise<void> | void): Promise<void> => { setBusy(true); try { await action() } catch (reason) { onError(reason) } finally { setBusy(false) } }
@@ -83,8 +61,8 @@ function PresetDetail({ entry, instance, kit, onClose, onError }: { entry: Video
   </>}>
     <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]" data-video-edit-preset-detail={entry.category}>
       <div className="flex min-w-0 flex-col gap-4">
-        <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}><PresetPicture entry={entry} kit={kit} size={DETAIL_SIZE} playing label={`${entry.name}动态预览`} /></span>
-        <StylePackaging entry={entry} />
+        <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}><PresetPicture entry={entry} size={DETAIL_SIZE} playing label={`${entry.name}动态预览`} /></span>
+        <StyleExamples entry={entry} />
       </div>
       <div className="flex min-w-0 flex-col gap-4">
         <UiGroup labelWidth={96}>
@@ -95,19 +73,19 @@ function PresetDetail({ entry, instance, kit, onClose, onError }: { entry: Video
           </UiFormRow>
           {VIDEO_EDIT_PRESET_DEFAULTABLE.includes(entry.category) && <UiFormRow label="设为默认" density="compact" info={DEFAULT_HINT[entry.category]}><UiSwitch aria-label="设为默认" checked={entry.isDefault} disabled={busy || entry.category === 'transition' && entry.isDefault} onCheckedChange={value => { void run(() => setVideoEditPresetDefault(entry.category, value ? entry.id : null)) }} /></UiFormRow>}
         </UiGroup>
-        {entry.category === 'style' ? <StyleNorms entry={entry} /> : entry.meta && <p className={UI_TEXT_META_CLASS}>{entry.meta}</p>}
+        {entry.category === 'style' ? <StyleGuide entry={entry} /> : entry.meta && <p className={UI_TEXT_META_CLASS}>{entry.meta}</p>}
       </div>
     </div>
   </UiModal>
 }
 const DEFAULT_HINT: Partial<Record<VideoEditPresetCategory, string>> = {
-  style: '新建序列会自动套用这个风格。',
+  style: '新建序列自动绑定这个风格，助手在序列里按它创作。',
   title: '没有指定模板时（包括让助手加标题）使用它。',
   text: '新字幕没有可参照的样式时使用它。',
   transition: '快捷键添加的默认视频转场；同一时间只有一个。',
 }
 
-function PresetTile({ entry, instance, kit, onOpen, onApply }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; kit?: StyleKit; onOpen: () => void; onApply: () => void }): React.ReactElement {
+function PresetTile({ entry, instance, onOpen, onApply }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; onOpen: () => void; onApply: () => void }): React.ReactElement {
   const [hovered, setHovered] = useState(false)
   const drag = (event: React.DragEvent): void => {
     if (entry.category === 'title') writeTitleTemplateDrag(event.dataTransfer, entry.id)
@@ -118,7 +96,7 @@ function PresetTile({ entry, instance, kit, onOpen, onApply }: { entry: VideoEdi
   const draggable = entry.category === 'title' || entry.category === 'effect' || entry.category === 'transition'
   return <UiOptionButton variant="cover" className="w-full min-w-0" data-video-edit-preset={`${entry.category}:${entry.id}`} draggable={draggable} onDragStart={drag}
     onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} onClick={onOpen} onDoubleClick={onApply} aria-label={`${entry.name}，${[...status(entry), '单击查看，双击应用'].join('，')}`}>
-    <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}><PresetPicture entry={entry} kit={kit} size={TILE_SIZE} playing={hovered} label={`${entry.name}预览`} /></span>
+    <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}><PresetPicture entry={entry} size={TILE_SIZE} playing={hovered} label={`${entry.name}预览`} /></span>
     <span className="block w-full min-w-0 px-0.5">
       <span className="block truncate text-xs text-text1">{entry.name}</span>
       <span className={`block truncate ${UI_TEXT_META_CLASS}`}>{status(entry).join(' · ') || entry.meta}</span>
@@ -134,7 +112,6 @@ function Content({ instance, onError, visible = true }: { instance: VideoEditIns
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const sequence = instance.activeSequenceId ? getActiveVideoEditSequence(instance) : undefined
-  const kit = sequence ? resolveVideoEditStyleKit(instance.document, sequence) : undefined
   const entries = listVideoEditPresets(category).filter(entry => !query.trim() || `${entry.name} ${entry.meta}`.toLowerCase().includes(query.trim().toLowerCase()))
   const personal = listVideoEditPresets(category).filter(entry => !entry.builtin && videoEditPresetExportable(entry.category, entry.id))
   const detail = open ? listVideoEditPresets(category).find(entry => `${entry.category}:${entry.id}` === open) : undefined
@@ -164,11 +141,11 @@ function Content({ instance, onError, visible = true }: { instance: VideoEditIns
     <div className="min-h-0 flex-1 overflow-y-auto">
       {entries.length
         ? <div className="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-3" role="list" aria-label={`${VIDEO_EDIT_PRESET_CATEGORY_LABELS[category]}预设`}>
-          {visible && entries.map(entry => <div role="listitem" key={entry.id} className="min-w-0"><PresetTile entry={entry} instance={instance} kit={kit} onOpen={() => setOpen(`${entry.category}:${entry.id}`)} onApply={() => apply(entry)} /></div>)}
+          {visible && entries.map(entry => <div role="listitem" key={entry.id} className="min-w-0"><PresetTile entry={entry} instance={instance} onOpen={() => setOpen(`${entry.category}:${entry.id}`)} onApply={() => apply(entry)} /></div>)}
         </div>
         : <UiEmpty size="sm" title={query ? '没有匹配的预设' : category === 'effect' ? '还没有效果预设' : '还没有预设'} description={category === 'effect' && !query ? '在效果控件里把一组效果“保存为预设”，就会出现在这里。' : undefined} />}
     </div>
-    {detail && <PresetDetail entry={detail} instance={instance} kit={kit} onClose={() => setOpen(null)} onError={onError} />}
+    {detail && <PresetDetail entry={detail} instance={instance} onClose={() => setOpen(null)} onError={onError} />}
   </div>
 }
 export function VideoEditPresetsPanel(props: Parameters<typeof Content>[0]): React.ReactElement { return <Content {...props} /> }

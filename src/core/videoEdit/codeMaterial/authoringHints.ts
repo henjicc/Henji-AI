@@ -6,7 +6,7 @@
  * - 没有声明任何参数却画了文字或图形；
  * - 声明了但没有读到的参数；
  * - 文字元素里写死的文本（字面量）；
- * - 同一个字面量颜色在多个元素里重复出现（应改成颜色参数或风格令牌 ctx.style）。
+ * - 同一个字面量颜色在多个元素里重复出现（应改成颜色参数）。
  */
 import type { CodeExpression, CodeMaterialProgram } from './contract'
 
@@ -55,6 +55,6 @@ export function codeMaterialAuthoringHints(program: CodeMaterialProgram): CodeAu
   if (!program.parameters.length && draws) hints.push({ code: 'NO_PARAMETERS', message: '没有开放任何参数：用户或助手以后改文字、颜色、时长都只能改源码。把可能会改的量声明成参数（parameters），画面从参数推导。' })
   for (const parameter of program.parameters) if (!used.has(parameter.key)) hints.push({ code: 'UNUSED_PARAMETER', message: `参数 ${parameter.key}（${parameter.title}）声明了但源码没有读取，改它不会有任何效果；删掉或接到画面上。` })
   for (const { text, line } of texts.slice(0, 8)) hints.push({ code: 'LITERAL_TEXT', message: `文字“${text.length > 24 ? `${text.slice(0, 24)}…` : text}”写死在源码里${line ? `（第 ${line} 行）` : ''}；用户要改字时只能改源码，建议声明为 text 参数。`, ...(line ? { line } : {}) })
-  for (const [color, lines] of colors) if (lines.length >= 3) hints.push({ code: 'REPEATED_COLOR', message: `颜色 rgb(${color.split(',').slice(0, 3).join(', ')}) 在 ${lines.length} 个元素里写死（第 ${[...new Set(lines.filter(Boolean))].slice(0, 6).join('、')} 行）；改成颜色参数或风格令牌 ctx.style，换色只改一处。`, ...(lines[0] ? { line: lines[0] } : {}) })
+  for (const [color, lines] of colors) if (lines.length >= 3) hints.push({ code: 'REPEATED_COLOR', message: `颜色 rgb(${color.split(',').slice(0, 3).join(', ')}) 在 ${lines.length} 个元素里写死（第 ${[...new Set(lines.filter(Boolean))].slice(0, 6).join('、')} 行）；改成颜色参数或 render 开头的常量，换色只改一处。`, ...(lines[0] ? { line: lines[0] } : {}) })
   return hints
 }

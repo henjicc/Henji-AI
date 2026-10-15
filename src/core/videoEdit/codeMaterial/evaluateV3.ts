@@ -3,7 +3,6 @@ import type { CodeColor, CodeDrawCommand, CodeDrawMetadata, CodeExpression, Code
 import { validateCodeMaterialParameters } from './parameters'
 import { CODE_EASE_NAMES, codeCubicBezier, codeEase, codeNoise, codeProgress } from './motion'
 import { parseCodePath } from './geometry'
-import { readCodeStyleToken, validatedCodeStyle } from './style'
 import { codeShaderGraph, codeShaderTime } from './shaders'
 import { CODE_PARAMETER_FUNCTION_COSTS, easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
 
@@ -62,7 +61,6 @@ function rgbaFromHsv(h: number, s: number, v: number, alpha: number): CodeColor 
 export interface CodeEvaluationOptions { measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
 function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}, root?: CodeExpression): unknown {
   const parameters = validateCodeMaterialParameters(program, values); const bindings: unknown[] = []; const locals = new Map<number, unknown>()
-  const style = validatedCodeStyle(context.style)
   let operations = 0; let draws = 0; let characters = 0; const indices: number[] = []
   const charge = (cost = 1): void => { operations += cost; if (operations > CODE_V3_LIMITS.cpuOperations) throw new CodeMaterialError('BUDGET', '本次求值超出 v3 CPU 操作预算。') }
   const measure = (fields: Record<string, unknown>): ReturnType<CodeTextMeasurer> => {
@@ -101,7 +99,6 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
         if (expression.values.every(value => value.kind === 'literal')) literalColors.set(expression, color)
         return color
       }
-      case 'style': return readCodeStyleToken(style, expression.path)
       case 'array': return expression.values.map(next)
       case 'object': return Object.fromEntries(Object.entries(expression.properties).map(([key, value]) => [key, next(value)]))
       case 'component': return channels(next(expression.value))[expression.index]

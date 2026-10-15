@@ -59,11 +59,11 @@ export default {
         height: h, radius: min(s * .3, h / 2), fill: ctx.params.accent}),
       text({id: "name", x: pad, y: pad * .5, text: ctx.params.name,
         fontFamily: ctx.params.font, fontSize: s, fontWeight: 700, baseline: "top",
-        lineHeight: 1.2, maxWidth: limit, wrap: true, color: ctx.style.palette.fg,
+        lineHeight: 1.2, maxWidth: limit, wrap: true, color: [0.95, 0.96, 0.97, 1],
         opacity: progress(ctx.time, .15, .3)}),
       text({id: "role", x: pad, y: pad * .5 + a.height + s * .3, text: ctx.params.role,
         fontFamily: ctx.params.font, fontSize: s * .6, baseline: "top",
-        lineHeight: 1.2, maxWidth: limit, wrap: true, color: ctx.style.palette.fg,
+        lineHeight: 1.2, maxWidth: limit, wrap: true, color: [0.95, 0.96, 0.97, 1],
         opacity: hasRole ? progress(ctx.time, .25, .3) : 0})
     ])];
   }

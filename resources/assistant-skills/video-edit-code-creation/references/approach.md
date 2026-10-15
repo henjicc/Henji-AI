@@ -47,12 +47,12 @@ export default {
     return [
       shader({id: "texture", x: 0, y: 0, width: ctx.width, height: ctx.height,
         time: ctx.time, layers: [
-          {type: "SolidColor", props: {color: ctx.style.palette.bg}},
+          {type: "SolidColor", props: {color: [0.06, 0.07, 0.09, 1]}},
           {type: "Aurora", props: {speed: ctx.params.speed, intensity: 35}}
         ]}),
       text({id: "title", x: ctx.width * .08, y: ctx.height * .5,
         text: ctx.params.title, fontSize: ctx.height * .08,
-        fontFamily: ctx.style.fonts.display.family, fontWeight: 700,
+        fontFamily: "sans-serif", fontWeight: 700,
         maxWidth: ctx.width * .84, wrap: true, color: ctx.params.ink,
         opacity: progress(ctx.time, .15, ctx.params.enter * .5)})
     ];

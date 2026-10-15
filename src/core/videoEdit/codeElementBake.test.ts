@@ -8,8 +8,8 @@ import { codeElementBounds } from './codeMaterial/geometry'
 import { layoutCodeText } from './codeMaterial/textLayout'
 const source = (body: string): string => `export default {apiVersion:1,languageVersion:3,name:"写回",kind:"generator",mode:"static",width:1920,height:1080,durationSeconds:10,seed:1,parameters:{title:{type:"text",title:"文字",default:"A",maxLength:100,animatable:false}},render(ctx){${body}\n}}`
 const context = { time: 0, localTime: 0, sequenceTime: 0, width: 1920, height: 1080, frame: 0, fps: 30 }
-it('所有内置风格样例按目标画幅编译，空白、注释、顺序和引号变化不影响顶层尺寸替换', () => {
-  for (const kit of BUILTIN_STYLE_KITS) for (const sample of kit.samples) {
+it('所有内置风格参考示例按目标画幅编译，空白、注释、顺序和引号变化不影响顶层尺寸替换', () => {
+  for (const kit of BUILTIN_STYLE_KITS) for (const sample of kit.examples) {
     for (const dimensions of ['width: 1920, height: 1080', 'width:1920,\nheight:1080', '"height": /* h */ 1080, "width": /* w */ 1920']) {
       const original = testFilesSource(sample.source).replace('width: 1920, height: 1080', dimensions)
       const resized = resizeCodeMaterialCanvas(original, { width: 960, height: 540 })

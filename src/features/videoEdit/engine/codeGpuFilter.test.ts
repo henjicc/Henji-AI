@@ -56,15 +56,11 @@ describe('可信GPU滤镜白名单与预算', () => {
     expect(emitCodeMaterialFilter(compileCodeMaterial(filter('return rgba(clamp(sin(clamp(ctx.time,0,3)),0,1),0,0,1);')))).toContain('sin(clamp(')
   })
 })
-describe('风格曲线进入 v3 滤镜 tween', () => {
-  it('绑定后的贝塞尔曲线发射 codeBezier，回弹曲线明确拒绝', async () => {
-    const { bindCodeMaterialStyle } = await import('@/core/videoEdit/codeMaterial/style')
-    const { styleTokensSchema } = await import('@/core/videoEdit/styleKit')
-    const program = compileCodeMaterial('export default {apiVersion:1,languageVersion:3,name:"风格滤镜",kind:"filter",mode:"dynamic",width:1920,height:1080,durationSeconds:5,seed:1,parameters:{},render(ctx){return mix(sample(ctx.u,ctx.v),ctx.style.palette.accent,tween(ctx.localTime,0,ctx.style.motion.enterDuration,0,1,ctx.style.motion.enterEase));}}')
-    const smooth = styleTokensSchema.parse({ motion: { enterEase: [.2, 0, .2, 1] } })
-    expect(emitCodeMaterialFilter(bindCodeMaterialStyle(program, smooth))).toMatch(/codeBezier\(0\.2\d*,0\.0,0\.2\d*,1\.0,clamp/)
-    expect(emitCodeMaterialFilter(bindCodeMaterialStyle(program))).toContain('codeEase(')
-    const bouncy = styleTokensSchema.parse({ motion: { enterEase: [.3, 1.6, .6, 1], allowOvershoot: true } })
-    expect(() => emitCodeMaterialFilter(bindCodeMaterialStyle(program, bouncy))).toThrow('回弹')
+describe('贝塞尔曲线进入 v3 滤镜 tween', () => {
+  it('贝塞尔数组发射 codeBezier，缓动名发射 codeEase，回弹曲线明确拒绝', () => {
+    const filter = (ease: string): string => `export default {apiVersion:1,languageVersion:3,name:"曲线滤镜",kind:"filter",mode:"dynamic",width:1920,height:1080,durationSeconds:5,seed:1,parameters:{},render(ctx){return mix(sample(ctx.u,ctx.v),[0.3,0.75,0.86,1],tween(ctx.localTime,0,0.6,0,1,${ease}));}}`
+    expect(emitCodeMaterialFilter(compileCodeMaterial(filter('[0.2,0,0.2,1]')))).toMatch(/codeBezier\(0\.2\d*,0\.0,0\.2\d*,1\.0,clamp/)
+    expect(emitCodeMaterialFilter(compileCodeMaterial(filter('"expoOut"')))).toContain('codeEase(')
+    expect(() => emitCodeMaterialFilter(compileCodeMaterial(filter('[0.3,1.6,0.6,1]')))).toThrow('回弹')
   })
 })

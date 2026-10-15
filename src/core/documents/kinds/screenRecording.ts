@@ -1,9 +1,9 @@
 import type { DocumentKindDescriptor } from './registry'
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
-import { migrateStyleKitV1 } from '../../videoEdit/styleKit'
+import { dropVideoEditStyleKits } from './videoEdit'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 10,
+  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 11,
   migrations: {
     // 5 → 6：新增可选正式开始/结束时刻；旧会话没有预热段，原样保留。
     5: content => content,
@@ -13,8 +13,9 @@ export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocume
     7: content => content,
     // 8 → 9：来源新增可选的录制时系统光标大小与样式；旧会话没有，光标效果用原默认值。
     8: content => content,
-    // 9 → 10（t97）：脚本基线里嵌入的剪辑风格快照，旧 Markdown 规则移入 notes，其余由默认值补齐。
+    // 9 → 10 → 11（t97）：脚本基线里嵌入的剪辑内容丢弃旧风格快照与绑定。
     9: migrateRecordingContentV9,
+    10: migrateRecordingContentV9,
   },
   standaloneFolderNames: { zh: '录制会话', en: 'Recordings' },
   untitledNames: { zh: '未命名录制', en: 'Untitled Recording' },
@@ -29,6 +30,6 @@ function migrateRecordingContentV9(content: unknown): unknown {
   if (!capture || !Array.isArray(capture.baselines)) return content
   return { ...record, scriptCapture: { ...capture, baselines: capture.baselines.map(baseline => {
     const value = baseline as { content?: Record<string, unknown> }
-    return value?.content && Array.isArray(value.content.styleKits) ? { ...value, content: { ...value.content, styleKits: value.content.styleKits.map(migrateStyleKitV1) } } : baseline
+    return value?.content ? { ...value, content: dropVideoEditStyleKits(value.content) } : baseline
   }) } }
 }

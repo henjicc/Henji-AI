@@ -31,8 +31,6 @@ export function collectVideoEditFonts(document: VideoEditDocument | VideoEditCom
     }
   }
   const sequences = 'clips' in document ? [document, ...(document.sequences ?? [])] : document.sequences
-  const styleIds = new Set(sequences.flatMap(sequence => [sequence.styleKitId, ...sequence.clips.map(clip => clip.styleKitId)].filter((id): id is string => !!id)))
-  for (const kit of document.styleKits ?? []) if (styleIds.has(kit.id)) for (const [role, font] of Object.entries(kit.tokens.fonts)) add(font.family, `style:${kit.id}:${role}`, `风格：${kit.name}`)
   for (const sequence of sequences) {
     for (const clip of sequence.clips) {
       const owner = `${sequence.id}:clip:${clip.id}`

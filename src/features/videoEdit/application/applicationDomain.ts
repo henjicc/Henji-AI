@@ -6,7 +6,6 @@ import { staggerVideoMotion } from './videoEditMotionDraft'
 export { videoCreativeIntentProvider } from './videoEditCreativeIntentReflection'
 import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
 import { VideoEditStyleKitCollectionExecutor, VideoEditStyleKitMutationExecutor, STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY } from './videoEditStyleKitReflection'
-import { handleVideoEditStyleKitCapability } from './videoEditStyleKitCapabilities'
 import { VideoEditPresetMutationExecutor } from './videoEditPresetReflection'
 import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability'
 import { handleTitleTemplateCapability } from './videoEditTitleTemplateCapability'
@@ -140,8 +139,6 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       }
       if (definition.id === analyzeVideoEditBeatsCapability.id) return executeVideoEditBeatCapability(analyzeVideoEditBeatsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
-      const styleKit = await handleVideoEditStyleKitCapability(definition.id, raw, context)
-      if (styleKit !== undefined) return styleKit
       const title = await handleTitleTemplateCapability(definition.id, raw, context.signal)
       if (title !== undefined) return title
       const multicam = await handleVideoEditMulticamCapability(definition.id, raw, context.signal)

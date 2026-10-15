@@ -7,7 +7,6 @@ import { codeParameterShape, codeParameterValueType, type CodeParameterShape } f
 import { CODE_PARAMETER_FUNCTION_COSTS } from './parameterSampling'
 import { codeFilterParameterSlots } from './filterParameters'
 import { parseCodePath } from './geometry'
-import { CODE_STYLE_EXPRESSION, isCodeStyleExpression } from './style'
 import { codeShaderFilterPasses, codeShaderNameIssue, codeShaderPropIssue, codeShaderTime, codeShaderTypeIssue, staticCodeShaderValue, type CodeShaderRole } from './shaders'
 
 export function codeSourceSpan(node: ts.Node): CodeSourceSpan {
@@ -176,7 +175,6 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     if (ts.isPropertyAccessExpression(node) && !node.questionDotToken) {
       const key = node.name.text; assertCodeMaterialKey(key)
       if (ts.isIdentifier(node.expression) && node.expression.text === 'ctx') {
-        if (key === 'style') return CODE_STYLE_EXPRESSION
         if (!CODE_CONTEXT_KEYS.includes(key as CodeContextKey) || program.kind !== 'filter' && ['u', 'v'].includes(key) || program.mode === 'static' && CODE_TIME_KEYS.includes(key as CodeContextKey)) fail(node, `不允许 ctx.${key}。`)
         return { kind: 'context', type: 'number', key: key as CodeContextKey }
       }
@@ -193,11 +191,8 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       }
       if (key === 'length' && ['array', 'string', 'draws'].includes(value.type)) return { kind: 'field', type: 'number', value, key }
       type(node, value, 'object')
-      const raw = unwrap(value)
-      const member = raw.kind === 'object' ? raw.properties[key] : undefined
       const shape = shapeOf(value)
       if (!shape.fields?.[key]) fail(node, `未知对象字段：${key}；可用字段：${Object.keys(shape.fields ?? {}).join('、') || '无'}`, 'TYPE')
-      if (member && isCodeStyleExpression(member)) return member
       return { kind: 'field', type: shape.fields[key].type, value, key }
     }
     if (ts.isElementAccessExpression(node) && !node.questionDotToken && node.argumentExpression) {

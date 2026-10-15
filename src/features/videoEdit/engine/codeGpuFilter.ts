@@ -3,7 +3,6 @@ import { CodeMaterialError, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS } from '@/core/
 import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeV3FilterCall, CODE_V3_FILTER_HELPERS, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
 import { codeShaderFilterPasses, unwrapCodeShaderExpression } from '@/core/videoEdit/codeMaterial/shaders'
-import { bindCodeMaterialStyle } from '@/core/videoEdit/codeMaterial/style'
 import { CODE_FILTER_PARAMETER_SLOTS, codeFilterParameterReference, codeFilterParameterSlots, codeFilterParameterSlotId } from '@/core/videoEdit/codeMaterial/filterParameters'
 import type { CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
 
@@ -65,7 +64,6 @@ const contextCode: Record<string, string> = { time: 'p.context0.x', localTime: '
 /** Emit only checked scalar/color IR. Conservative range analysis rejects unsafe
  * denominators and overflow before a pipeline reaches the GPU; no author WGSL. */
 export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionHandles = false): string {
-  program = bindCodeMaterialStyle(program)
   const shaders = codeShaderFilterPasses(program)
   const limits = program.languageVersion === 3 ? CODE_V3_LIMITS : CODE_MATERIAL_LIMITS
   if (program.kind !== 'filter' || ![1, 3].includes(program.languageVersion) || program.languageVersion === 1 && program.parameters.length > 32 || program.metrics.samples > limits.filterSamples || program.metrics.scalarOperations > limits.filterScalarOperations) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')

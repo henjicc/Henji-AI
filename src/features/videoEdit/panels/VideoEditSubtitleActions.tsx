@@ -13,7 +13,6 @@ import { styleVideoEditSubtitles, segmentVideoEditSubtitles, type SubtitleScope 
 import { readSubtitleJob, subscribeSubtitleJobs, subtitleJobsRevision, runVideoEditSubtitleJob, cancelSubtitleJob, findRecoverableSubtitleAudio } from '../application/videoEditSubtitleJobs'
 import { subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
 import { listVideoEditSubtitlePresets } from '../application/videoEditSubtitlePresets'
-import { resolveVideoEditStyleKit } from '@/core/videoEdit/styleKit'
 import { confirmVideoEditBilingualSubtitles, type SubtitleTranslationLanguage } from '../application/videoEditBilingualSubtitles'
 import { useVideoEditFontPreview } from './useVideoEditFontPreview'
 import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
@@ -37,7 +36,7 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
   const [normalizing, setNormalizing] = useState(false)
   const normalization = useRef<AbortController>()
   const translation = useRef<AbortController>()
-  const presets = listVideoEditSubtitlePresets(resolveVideoEditStyleKit(instance.document, sequence))
+  const presets = listVideoEditSubtitlePresets()
   const [language, setLanguage] = useState<'zh' | 'en'>('zh')
   const currentCaption = selectedCaptionId ? sequence.captions?.find(cue => cue.id === selectedCaptionId) : sequence.captions?.[0]
   const [style, setStyle] = useState<VideoEditSubtitleStyle>(() => currentCaption?.style || videoEditSubtitleStyleSchema.parse({}))

@@ -4,64 +4,43 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditTestProject, closeAllVideoEdits } from '../application/videoEditDocumentTestKit'
 import { videoEditStyleKitLibrary } from '../application/videoEditStyleKitLibrary'
-import { applyStyleKitToSequence } from '../application/videoEditStyleKits'
-import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
+import { applyStyleKitToSequence, copyStyleKit } from '../application/videoEditStyleKits'
+import { BUILTIN_STYLE_KITS } from '@/core/videoEdit/styleKitPresets'
+import { styleGuideSection } from '@/core/videoEdit/styleKit'
 import { releaseVideoEditCodeCompiler } from '../application/videoEditCodeState'
 import { undoVideoEdit } from '../application/videoEditService'
 import { VideoEditStyleKitsPanel } from './VideoEditStyleKitsPanel'
-import { VideoEditStyleKitPreview } from './VideoEditStyleKitPreview'
-import { renderStyleKitPreview } from '../application/videoEditStylePreview'
-vi.mock('../application/videoEditStylePreview', () => ({ renderStyleKitPreview: vi.fn(async () => new Blob(['preview'], { type: 'image/png' })) }))
 vi.mock('../engine/videoEditCodeCompiler', async () => { const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler'); return { VideoEditCodeCompiler: class { async compile(source: string) { return compileCodeMaterial(source) } dispose() {} } } })
 beforeEach(() => {
   installHarnessNativeStorage(); videoEditStyleKitLibrary.replace([])
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { return { width: text.length * 20, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 20 } } } } })
-  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => `blob:preview-${Math.random()}`), revokeObjectURL: vi.fn() }))
 })
 afterEach(async () => { cleanup(); await closeAllVideoEdits(); releaseVideoEditCodeCompiler(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
-it('令牌修改保持候选，应用一次撤销；从作品提取不覆盖，规则与概念经完整性检查后应用，另存跨工程库', async () => {
-  const instance = await createVideoEditTestProject(); const kit = applyStyleKitToSequence(instance.document.id, instance.activeSequenceId, availableStyleKitFonts(BUILTIN_STYLE_KITS[0], [])); const error = vi.fn()
+it('按章节编辑说明书是候选，绑定一次撤销；缺必填章节被点名拒绝；另存跨工程库；示例可删除', async () => {
+  const instance = await createVideoEditTestProject(); const kit = applyStyleKitToSequence(instance.document.id, instance.activeSequenceId, copyStyleKit(BUILTIN_STYLE_KITS[0])); const error = vi.fn()
   const view = render(<VideoEditStyleKitsPanel instance={instance} onError={error} visible={false} />)
   const history = instance.past.length
+  // Every fixed section has its own editor, prefilled from the bound guide.
+  expect((screen.getByRole('textbox', { name: '说明书：定位' }) as HTMLTextAreaElement).value).toBe(styleGuideSection(kit.guide, '定位'))
   fireEvent.change(screen.getByRole('textbox', { name: '风格名称' }), { target: { value: '个人风格' } })
-  expect(instance.document.styleKits![0].name).toBe(kit.name); expect(instance.past).toHaveLength(history)
-  fireEvent.click(screen.getByRole('button', { name: '应用到序列' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '说明书：避免' }), { target: { value: '- 标题用衬线体' } })
+  expect(instance.document.styleKits![0]).toEqual(kit); expect(instance.past).toHaveLength(history)
+  fireEvent.click(screen.getByRole('button', { name: '绑定到序列' }))
   await waitFor(() => expect(instance.document.styleKits![0].name).toBe('个人风格'))
+  expect(styleGuideSection(instance.document.styleKits![0].guide, '避免')).toBe('- 标题用衬线体')
   expect(instance.past).toHaveLength(history + 1)
   undoVideoEdit(instance.document.id); expect(instance.document.styleKits![0]).toEqual(kit)
   view.rerender(<VideoEditStyleKitsPanel instance={instance} onError={error} visible={false} />)
-  fireEvent.click(screen.getByRole('button', { name: '从当前作品提取' }))
-  await waitFor(() => expect(screen.getByRole('textbox', { name: '风格名称' })).toHaveProperty('value', '作品风格'))
+  fireEvent.change(screen.getByRole('textbox', { name: '说明书：必须' }), { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: '绑定到序列' }))
+  await waitFor(() => expect(screen.getByText('说明书“必须”还没有写。')).toBeTruthy())
   expect(instance.document.styleKits![0]).toEqual(kit)
+  fireEvent.change(screen.getByRole('textbox', { name: '说明书：必须' }), { target: { value: '- 一个画面一个焦点' } })
+  fireEvent.click(screen.getByRole('button', { name: `删除示例“${kit.examples[0].title}”` }))
   fireEvent.click(screen.getByRole('button', { name: '另存到风格库' }))
   await waitFor(() => expect(videoEditStyleKitLibrary.custom()).toHaveLength(1))
-  fireEvent.change(screen.getByRole('textbox', { name: '新规则' }), { target: { value: '标题不用衬线体' } })
-  fireEvent.click(screen.getByRole('button', { name: '添加规则' }))
-  fireEvent.click(screen.getByRole('button', { name: '应用到序列' }))
-  await waitFor(() => expect(instance.document.styleKits!.some(value => value.rules.some(rule => rule.text === '标题不用衬线体' && rule.kind === 'do' && rule.strength === 'prefer'))).toBe(true))
-  fireEvent.click(screen.getByRole('button', { name: '添加概念' }))
-  fireEvent.click(screen.getByRole('button', { name: '应用到序列' }))
-  await waitFor(() => expect(screen.getByText('概念“新概念”需要含义和至少一条判据。')).toBeTruthy())
-  fireEvent.change(screen.getByRole('textbox', { name: '概念含义' }), { target: { value: '画面不满' } })
-  fireEvent.change(screen.getByRole('textbox', { name: '概念判据' }), { target: { value: '同屏一个焦点\n' } })
-  fireEvent.click(screen.getByRole('button', { name: '应用到序列' }))
-  await waitFor(() => expect(instance.document.styleKits!.some(value => value.profile.concepts.some(concept => concept.meaning === '画面不满' && concept.criteria.length === 1))).toBe(true))
-  expect(screen.queryByRole('textbox', { name: '风格补充说明' })).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: '编辑说明' })); expect(screen.getByRole('textbox', { name: '风格补充说明' })).toBeTruthy()
-  // The only reported failure is the deliberate incomplete-concept check above.
+  expect(videoEditStyleKitLibrary.custom()[0].examples).toHaveLength(kit.examples.length - 1)
+  expect(screen.getByRole('button', { name: '把所选代码片段加为示例' }).getAttribute('aria-disabled')).toBe('true')
+  // The only reported failure is the deliberate incomplete-guide check above.
   expect(error).toHaveBeenCalledTimes(1)
 }, 20_000)
-it('隐藏/卸载预览取消任务并释放图片，迟到结果不能覆盖新候选', async () => {
-  const kit = availableStyleKitFonts(BUILTIN_STYLE_KITS[0], [])
-  let finish!: (value: Blob) => void
-  vi.mocked(renderStyleKitPreview).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
-  const view = render(<VideoEditStyleKitPreview kit={kit} width={1920} height={1080} />)
-  await waitFor(() => expect(finish).toBeTypeOf('function'))
-  view.rerender(<VideoEditStyleKitPreview kit={kit} width={1920} height={1080} visible={false} />)
-  finish(new Blob(['late']))
-  await new Promise(resolve => setTimeout(resolve, 0))
-  expect(screen.queryByRole('img')).toBeNull()
-  view.rerender(<VideoEditStyleKitPreview kit={{ ...kit, name: '新候选' }} width={1920} height={1080} />)
-  await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(6))
-  view.unmount(); expect(URL.revokeObjectURL).toHaveBeenCalledTimes(6)
-})

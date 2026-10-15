@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { StyleKit } from '@/core/videoEdit/styleKit'
 import type { VideoEditPresetSource } from '../application/videoEditPresetCatalog'
 import { PRESET_PREVIEW_FPS, presetPreviewTimeline, renderPresetPreviewFrame, type PresetPreviewTimeline } from '../application/videoEditPresetPreview'
 
@@ -25,17 +24,17 @@ const nextFrame = (): Promise<void> => new Promise(resolve => requestAnimationFr
  * Live preset preview on the shared render session: a poster while idle, real-time playback (wall clock, looping)
  * while `playing`. Frames that take longer than a display frame are simply skipped, never queued.
  */
-export function VideoEditPresetPlayer({ source, kit, size, playing, label }: { source: VideoEditPresetSource; kit?: StyleKit; size: { width: number; height: number }; playing: boolean; label: string }): React.ReactElement {
+export function VideoEditPresetPlayer({ source, size, playing, label }: { source: VideoEditPresetSource; size: { width: number; height: number }; playing: boolean; label: string }): React.ReactElement {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [timeline, setTimeline] = useState<PresetPreviewTimeline>()
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
-  const key = useMemo(() => JSON.stringify([source, size, kit?.id ?? null, kit?.revision ?? null]), [source, size, kit?.id, kit?.revision])
+  const key = useMemo(() => JSON.stringify([source, size]), [source, size])
   useEffect(() => {
     let alive = true; setTimeline(undefined); setReady(false); setError('')
-    presetPreviewTimeline(source, size, kit).then(value => { if (alive) setTimeline(value) }, reason => { if (alive) setError(reason instanceof Error ? reason.message : '预览准备失败。') })
+    presetPreviewTimeline(source, size).then(value => { if (alive) setTimeline(value) }, reason => { if (alive) setError(reason instanceof Error ? reason.message : '预览准备失败。') })
     return () => { alive = false }
-  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps -- `key` encodes source, size and kit
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps -- `key` encodes source and size
   useEffect(() => {
     if (!timeline || playing) return
     let alive = true

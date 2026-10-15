@@ -1,6 +1,6 @@
 /**
- * Each built-in style has its own signature title, so the three styles differ in layout and motion language,
- * not only in colour. All values still come from ctx.style, so a personal copy edited in the panel follows.
+ * Reference examples of the three built-in styles: each style's own opener, lower third and emphasis. They read a
+ * local `s` table; styleKitPresets bakes each style's concrete values into it, so every example is self-contained.
  */
 const head = (name: string, seconds = 5): string => `export default { apiVersion: 1, languageVersion: 3, name: "${name}", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: ${seconds}, seed: 42,`
 export const SIGNATURE_TITLES = {

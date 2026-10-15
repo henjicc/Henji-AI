@@ -14,10 +14,10 @@ const CODE_AI_SOURCE = `export default {
     return [
       shader({id:"sky",x:0,y:0,width:ctx.width,height:ctx.height,layers:[{type:"SolidColor",props:{color:[.02,.03,.06,1]}},{type:"Aurora",props:{speed:2}}]}),
       group({id:"heading",x:960,y:540+(1-enter)*80,opacity:enter},[
-        rect({id:"plate",x:-600,y:-100,width:1200,height:200,radius:20,fill:ctx.style.palette.accent}),
-        text({id:"title",x:0,y:0,text:"title",fontFamily:ctx.style.fonts.display.family,
+        rect({id:"plate",x:-600,y:-100,width:1200,height:200,radius:20,fill:[0.33,0.82,0.88,1]}),
+        text({id:"title",x:0,y:0,text:"title",fontFamily:"sans-serif",
           fontSize:ctx.params.size,fontWeight:600,align:"center",baseline:"middle",maxWidth:1100,maxLines:1,wrap:false,
-          color:ctx.style.palette.fg,perChar:(i,n)=>({y:tween(ctx.time,stagger(i,.045),.6,48,0,"expoOut"),opacity:progress(ctx.time,stagger(i,.045),.28)})})
+          color:[0.95,0.96,0.97,1],perChar:(i,n)=>({y:tween(ctx.time,stagger(i,.045),.6,48,0,"expoOut"),opacity:progress(ctx.time,stagger(i,.045),.28)})})
       ])
     ];
   }
@@ -310,7 +310,7 @@ function createVideoEditCodeAiScene() {
           item.undone = await waitRead(textRef, property, value => JSON.stringify(value) === JSON.stringify(item.before), '一步撤销未恢复选择字体之前的文字样式')
           item.undoPresentation = await fresh(beforeUndo, 150)
         })
-        await step('07-style-kit', '切换内置风格并重渲染代码底板', async item => {
+        await step('07-style-kit', '为序列绑定内置风格说明书', async item => {
           await seek(25); await focus(ref('video_edit.clip', codeClip.id))
           const panel = page.locator('[data-video-edit-style-kits]')
           // 聚焦片段会异步把效果控件推到前台；切到风格后确认风格面板真的可见再操作。
@@ -321,17 +321,14 @@ function createVideoEditCodeAiScene() {
             styleKits: [...document.querySelectorAll('[data-video-edit-style-kits]')].map(el => ({ w: el.offsetWidth, h: el.offsetHeight, text: el.textContent?.slice(0, 120) })),
           }))
           await panel.waitFor({ state: 'visible' })
-          const before = await snapshot(); item.before = before
           await panel.getByRole('button', { name: '选择风格', exact: true }).click()
           await page.getByRole('option', { name: '科技信息', exact: true }).click()
-          await panel.getByRole('button', { name: '应用到序列', exact: true }).click()
+          await panel.getByRole('button', { name: '绑定到序列', exact: true }).click()
           const project = await saved(page, file, value => value.styleKits?.some(kit => kit.name === '科技信息') && value.sequences[0].styleKitId)
           const applied = project.styleKits.find(kit => kit.id === project.sequences[0].styleKitId)
           assert.equal(applied?.name, '科技信息', '科技信息预设没有绑定当前序列')
-          item.applied = { id: applied.id, name: applied.name, accent: applied.tokens.palette.accent }
-          item.after = await fresh(before.requestedAt, 25)
-          item.sourceUsesStyleAccent = CODE_AI_SOURCE.includes('fill:ctx.style.palette.accent')
-          assert.ok(item.sourceUsesStyleAccent, '底板未读取 ctx.style.palette.accent，不能验证风格失效重渲染')
+          item.applied = { id: applied.id, name: applied.name, sections: (applied.guide.match(/^## /gm) ?? []).length, examples: applied.examples.length }
+          assert.ok(item.applied.sections >= 9 && item.applied.examples > 0, '绑定的风格不是完整说明书')
         })
         await step('08-shader-effect', '效果库添加镜头色差并重渲染', async item => {
           await seek(130); await focus(ref('video_edit.clip', 'base')); await dock('效果')

@@ -1,7 +1,7 @@
 import { UiSegmented } from '@/components/ui'
 import { useEffect, useMemo, useState } from 'react'
 import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiGroup, UiInput, UiLoading, UiModal, UiSwitch } from '@/components/ui'
-import { resolveVideoEditStyleKit, styleKitPromptHint } from '@/core/videoEdit/styleKit'
+import { resolveVideoEditStyleKit, styleKitGenerationPrompt } from '@/core/videoEdit/styleKit'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -105,10 +105,10 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   const usedImages = wanted.slice(0, referenceLimit).map((_, index) => `reference-${index + 1}`)
   const mismatch = plan && modelId ? videoEditInPlaceModelMismatch(plan, modelId) : null
   const text = toPromptPlainText(prompt).trim()
-  // Picture generation follows the sequence style unless the style opts out; the switch only turns it off for this request.
+  // Picture generation adds the style's “画面生成提示” when it has one; the switch turns it off for this request.
   const styleDocument = requireVideoEditInstance(projectId).document; const styleSequence = styleDocument.sequences.find(value => value.id === sequenceId)
   const styleKit = plan && plan.mediaType !== 'audio' && styleSequence ? resolveVideoEditStyleKit(styleDocument, styleSequence) : undefined
-  const styleHint = styleKit?.generation.inject ? styleKitPromptHint(styleKit) : ''
+  const styleHint = styleKit ? styleKitGenerationPrompt(styleKit) : ''
   const model = modelId ? getModelInfo(modelId) ?? undefined : undefined
   const providerId = modelId ? registry.getModel(modelId)?.meta.provider ?? '' : ''
   const provider = getAvailableProviders().find(value => value.id === providerId)

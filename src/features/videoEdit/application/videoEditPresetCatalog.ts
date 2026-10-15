@@ -1,14 +1,14 @@
 import { createLogger } from '@/core/logging'
-import { fontLibrarySnapshot } from '@/platform/fonts'
-import { styleKitSchema, type StyleKit } from '@/core/videoEdit/styleKit'
-import { availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
+import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
+import { upgradePersistenceContent } from '@/core/persistence/migrations'
+import { styleKitSchema, styleKitSummary, type StyleKit } from '@/core/videoEdit/styleKit'
 import { titleTemplateSchema, type TitleTemplate } from '@/core/videoEdit/titleTemplates'
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import type { VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 import { VIDEO_EDIT_PRESET_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_PACKAGE_VERSION, videoEditPresetPackageSchema, type VideoEditPresetCategory, type VideoEditPresetPackageItem } from '@/core/videoEdit/presetPackage'
 import { videoEditStyleKitLibrary } from './videoEditStyleKitLibrary'
 import { listTitleTemplates, useTitleTemplateLibrary } from './videoEditTitleTemplateLibrary'
-import { listVideoEditSubtitlePresets, STYLE_SUBTITLE_PRESET_ID, type VideoEditSubtitlePreset } from './videoEditSubtitlePresets'
+import { listVideoEditSubtitlePresets, type VideoEditSubtitlePreset } from './videoEditSubtitlePresetList'
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
 import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
@@ -16,6 +16,7 @@ import { videoEditPresetPreferences } from './videoEditPresetPreferences'
 import './videoEditDefaultStyle'
 
 const logger = createLogger('features.videoEdit.presetCatalog')
+const PRESET_PACKAGE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-preset-package')!
 /** What a preset previews and applies with; one resolver for the panel, the assistant entity and export. */
 export type VideoEditPresetSource =
   | { category: 'style'; kit: StyleKit }
@@ -32,9 +33,9 @@ export interface VideoEditPresetEntry {
 interface Raw { id: string; name: string; meta: string; builtin: boolean }
 function raw(category: VideoEditPresetCategory): Raw[] {
   switch (category) {
-    case 'style': return videoEditStyleKitLibrary.list().map(kit => ({ id: kit.id, name: kit.name, meta: kit.profile.scenarios.join('、') || kit.profile.summary, builtin: kit.id.startsWith('builtin:') }))
+    case 'style': return videoEditStyleKitLibrary.list().map(kit => ({ id: kit.id, name: kit.name, meta: styleKitSummary(kit), builtin: kit.id.startsWith('builtin:') }))
     case 'title': return listTitleTemplates().map(template => ({ id: template.id, name: template.name, meta: template.content ? '自建组合' : '内置', builtin: template.id.startsWith('title:') }))
-    case 'text': return [{ id: STYLE_SUBTITLE_PRESET_ID, name: '跟随风格', meta: '按序列风格的字体与配色', builtin: true }, ...listVideoEditSubtitlePresets().map(preset => ({ id: preset.id, name: preset.name, meta: preset.id.startsWith('builtin:') ? '字幕' : '个人文字样式', builtin: preset.id.startsWith('builtin:') }))]
+    case 'text': return listVideoEditSubtitlePresets().map(preset => ({ id: preset.id, name: preset.name, meta: preset.id.startsWith('builtin:') ? '字幕' : '个人文字样式', builtin: preset.id.startsWith('builtin:') }))
     case 'effect': return useVideoEditEffectLibraryStore.getState().presets.map(preset => ({ id: preset.id, name: preset.name, meta: `${preset.media === 'video' ? '画面' : '声音'} · ${preset.effects.length} 个效果`, builtin: false }))
     case 'transition': return VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === 'video').map(preset => ({ id: preset.kind, name: preset.name, meta: preset.tooltip, builtin: true }))
   }
@@ -62,9 +63,9 @@ export function requireVideoEditPreset(category: VideoEditPresetCategory, id: st
 export function videoEditPresetSource(category: VideoEditPresetCategory, id: string): VideoEditPresetSource {
   requireVideoEditPreset(category, id)
   switch (category) {
-    case 'style': { const kit = videoEditStyleKitLibrary.list().find(value => value.id === id)!; return { category, kit: kit.id.startsWith('builtin:') ? availableStyleKitFonts(kit, fontLibrarySnapshot().faces) : kit } }
+    case 'style': { const kit = videoEditStyleKitLibrary.list().find(value => value.id === id)!; return { category, kit } }
     case 'title': return { category, template: listTitleTemplates().find(value => value.id === id)! }
-    case 'text': return { category, preset: id === STYLE_SUBTITLE_PRESET_ID ? { id, name: '跟随风格', style: listVideoEditSubtitlePresets()[0].style } : listVideoEditSubtitlePresets().find(value => value.id === id)! }
+    case 'text': return { category, preset: listVideoEditSubtitlePresets().find(value => value.id === id)! }
     case 'effect': return { category, preset: useVideoEditEffectLibraryStore.getState().presets.find(value => value.id === id)! }
     case 'transition': return { category, kind: id as VideoEditTransitionKind }
   }
@@ -88,12 +89,12 @@ function packageItem(category: VideoEditPresetCategory, id: string): VideoEditPr
   switch (source.category) {
     case 'style': return { category: 'style', preset: source.kit }
     case 'title': return { category: 'title', preset: source.template }
-    case 'text': if (source.preset.id === STYLE_SUBTITLE_PRESET_ID) throw new Error('“跟随风格”随序列风格变化，不能导出；请导出风格本身。'); { const { bottomMargin: _margin, ...style } = source.preset.style; return { category: 'text', preset: { id: source.preset.id, name: source.preset.name, style } } }
+    case 'text': { const { bottomMargin: _margin, ...style } = source.preset.style; return { category: 'text', preset: { id: source.preset.id, name: source.preset.name, style } } }
     case 'effect': return { category: 'effect', preset: source.preset }
     case 'transition': throw new Error('内置转场不需要导出。')
   }
 }
-export function videoEditPresetExportable(category: VideoEditPresetCategory, id: string): boolean { return category !== 'transition' && id !== STYLE_SUBTITLE_PRESET_ID }
+export function videoEditPresetExportable(category: VideoEditPresetCategory, _id: string): boolean { return category !== 'transition' }
 /** Serialized exchange file (pretty JSON) for one or more presets. */
 export function exportVideoEditPresetPackage(refs: ReadonlyArray<{ category: VideoEditPresetCategory; id: string }>): string {
   const value = videoEditPresetPackageSchema.parse({ format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: refs.map(ref => packageItem(ref.category, ref.id)) })
@@ -104,6 +105,9 @@ const unique = (name: string, taken: readonly string[]): string => { if (!taken.
 export function importVideoEditPresetPackage(text: string): Array<{ category: VideoEditPresetCategory; id: string; name: string }> {
   let parsed: unknown
   try { parsed = JSON.parse(text) } catch { throw new Error('这个文件不是可读取的预设文件。') }
+  // Older packages go through the registered migrations first (v1 drops the old parameter-style items).
+  const version = parsed && typeof parsed === 'object' && 'version' in parsed && typeof parsed.version === 'number' ? parsed.version : VIDEO_EDIT_PRESET_PACKAGE_VERSION
+  if (version < VIDEO_EDIT_PRESET_PACKAGE_VERSION && (parsed as { format?: unknown }).format === 'henji-video-presets') { try { parsed = upgradePersistenceContent(PRESET_PACKAGE_FORMAT, parsed, version) } catch { throw new Error('这个文件不是痕迹AI剪辑预设，或来自更新的版本。') } }
   const result = videoEditPresetPackageSchema.safeParse(parsed)
   if (!result.success) throw new Error('这个文件不是痕迹AI剪辑预设，或来自更新的版本。')
   logger.info('preset.import.start', '导入剪辑预设', { context: { count: result.data.items.length } })

@@ -15,8 +15,7 @@ import { appendVideoEditSequence, requireVideoEditInstance } from './videoEditSe
 import { createVideoEditCaption } from './videoEditTimedContent'
 import { presetPreviewTimeline } from './videoEditPresetPreview'
 import { releaseVideoEditCodeCompiler } from './videoEditCodeState'
-import { BUILTIN_STYLE_KITS, availableStyleKitFonts } from '@/core/videoEdit/styleKitPresets'
-import { styleKitSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
+import { BUILTIN_STYLE_KITS } from '@/core/videoEdit/styleKitPresets'
 import { BLACK_HEX } from '@/core/theme/colorTokens'
 
 const trial = vi.hoisted(() => ({ documents: [] as VideoEditComposition[], frames: [] as number[] }))
@@ -80,7 +79,7 @@ it('默认风格自动套到新建序列，默认文字样式用于新字幕', a
   expect(requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === first)!.captions!.find(cue => cue.id === caption)!.style).toMatchObject({ fontSize: 72 })
 })
 it('导出再导入得到新的个人预设；内置不能删除，删除个人预设同时清掉评分与默认', () => {
-  const kit = videoEditStyleKitLibrary.save({ ...availableStyleKitFonts(BUILTIN_STYLE_KITS[0], []), name: '我的风格' })
+  const kit = videoEditStyleKitLibrary.save({ ...BUILTIN_STYLE_KITS[0], id: 'mine', name: '我的风格' })
   const text = videoEditTextPresetLibrary.save('我的字幕', videoEditTextStyleSchema.parse({}))
   setVideoEditPresetRating('style', kit.id, 5); setVideoEditPresetDefault('style', kit.id)
   const file = exportVideoEditPresetPackage([{ category: 'style', id: kit.id }, { category: 'text', id: text.id }])
@@ -93,7 +92,7 @@ it('导出再导入得到新的个人预设；内置不能删除，删除个人�
   expect(() => deleteVideoEditPreset('style', BUILTIN_STYLE_KITS[0].id)).toThrow('内置预设不能删除')
   deleteVideoEditPreset('style', kit.id)
   expect(videoEditPresetPreferences.custom()).toEqual([]); expect(listVideoEditPresets('style').some(entry => entry.id === kit.id)).toBe(false)
-  expect(() => exportVideoEditPresetPackage([{ category: 'text', id: 'style:current' }])).toThrow('不能导出')
+  expect(() => exportVideoEditPresetPackage([{ category: 'transition', id: 'wipe' }])).toThrow('不需要导出')
 })
 it('通用实体读写评分与默认，可撤销；效果没有默认；省略模板时标题用默认模板', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; const app = createApplicationHarness()
@@ -111,12 +110,10 @@ it('通用实体读写评分与默认，可撤销；效果没有默认；省略�
     expect(listed.refs.some(value => value.id === 'transition:cross_dissolve')).toBe(true)
   } finally { app.dispose() }
 })
-it('预设预览时间线：风格样片由自己的开场、人名条、强调与字幕组成，转场两段相接', async () => {
+it('预设预览时间线：风格依次播放参考示例，转场两段相接', async () => {
   const style = await presetPreviewTimeline(videoEditPresetSource('style', BUILTIN_STYLE_KITS[2].id), { width: 320, height: 180 })
-  expect(style.composition.clips.filter(clip => clip.code).length).toBe(5); expect(style.composition.captions?.length).toBe(2); expect(style.frames).toBeGreaterThan(200)
-  // Captions are part of each style's packaging, not one shared look.
-  const captions = BUILTIN_STYLE_KITS.map(kit => styleKitSubtitleStyle(kit))
-  expect(captions.map(value => [value.background.enabled, value.shadows.length > 0, value.fontFamily])).toEqual([[false, true, BUILTIN_STYLE_KITS[0].tokens.fonts.body.family], [true, false, BUILTIN_STYLE_KITS[1].tokens.fonts.body.family], [false, true, BUILTIN_STYLE_KITS[2].tokens.fonts.display.family]])
+  // A style shows its reference examples back to back over the shared footage: three examples, three seconds each.
+  expect(style.composition.clips.filter(clip => clip.code).length).toBe(4); expect(style.composition.captions ?? []).toEqual([]); expect(style.frames).toBe(270)
   const transition = await presetPreviewTimeline(videoEditPresetSource('transition', 'push'), { width: 320, height: 180 })
   expect(transition.composition.transitions?.[0]).toMatchObject({ kind: 'push' })
 })

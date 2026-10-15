@@ -9,22 +9,21 @@ import { videoEditFadeOpacity } from '@/core/videoEdit/fades'
 import { videoEditClipPictureSize, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareCodeElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
 import type { CodeElementBounds } from '@/core/videoEdit/codeMaterial/geometry'
-import type { CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditAnnotation, VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
 import { measureCodeText } from '../videoEditGlyphMetrics'
 import { readVideoEditCodeProgram } from './videoEditCodeState'
 import { getActiveVideoEditSequence, setVideoEditView, type VideoEditInstance } from './videoEditService'
-import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit } from '@/core/videoEdit/styleKit'
 
 export interface VideoEditCodeElementFrame { clip: VideoEditClip; index: CodeElementIndex; picture: { width: number; height: number }; files: CodeMaterialFiles }
 interface FrameCache { document: object; sequenceId: string; frame: number; fontGeneration?: number; elements: Map<string, VideoEditCodeElementFrame> }
 const frames = new WeakMap<VideoEditInstance, FrameCache>()
 interface EvaluatedIndex {
   program: CodeMaterialProgram; code: NonNullable<VideoEditClip['code']>; overrides: VideoEditClip['elementOverrides']
-  style: CodeMaterialContext['style']; context: string; fontGeneration?: number; index: CodeElementIndex
+  context: string; fontGeneration?: number; index: CodeElementIndex
 }
 // Only keep the latest visible frame per instance. Placement/effects change presentation,
-// not author geometry; time, parameters, overrides, style and fonts invalidate it.
+// not author geometry; time, parameters, overrides and fonts invalidate it.
 const indices = new WeakMap<VideoEditInstance, Map<string, EvaluatedIndex>>()
 const fontGeneration = (): number | undefined => measureCodeText({ text: '', fontFamily: 'sans-serif', fontWeight: 400, fontStyle: 'normal', fontSize: 12, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, wrap: false, maxLines: 1 }).fontGeneration
 
@@ -43,17 +42,16 @@ export function videoEditCodeElementFrames(instance: VideoEditInstance, sequence
     if (program.languageVersion !== 3) continue
     if (!measuredGeneration) { generation = fontGeneration(); measuredGeneration = true }
     const context = codeMaterialContextForFrame(raw, frame, sequence.frameRate, program)
-    context.style = resolveVideoEditStyleKit(instance.document, sequence, raw)?.tokens ?? DEFAULT_STYLE_TOKENS
     const sourceTime = videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate)
     const key = JSON.stringify([context.time, context.localTime, context.sequenceTime, context.frame, context.fps, context.width, context.height, sourceTime.sourceInUs, sourceTime.sourceRemainder.numerator, sourceTime.sourceRemainder.denominator])
     const cached = previous?.get(raw.id)
     let index: CodeElementIndex
-    if (cached && cached.program === program && cached.code === raw.code && cached.overrides === raw.elementOverrides && cached.style === context.style && cached.context === key && cached.fontGeneration === generation) index = cached.index
+    if (cached && cached.program === program && cached.code === raw.code && cached.overrides === raw.elementOverrides && cached.context === key && cached.fontGeneration === generation) index = cached.index
     else {
       const parameters = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(program, raw.code), sourceTime)
       index = prepareCodeElementIndex(program, context, parameters, measureCodeText, { elementOverrides: raw.elementOverrides, sourceTime })
     }
-    evaluatedIndices.set(raw.id, { program, code: raw.code, overrides: raw.elementOverrides, style: context.style, context: key, fontGeneration: generation, index })
+    evaluatedIndices.set(raw.id, { program, code: raw.code, overrides: raw.elementOverrides, context: key, fontGeneration: generation, index })
     elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index, files: codeMaterialSource(instance.document, raw.code).contents })
   }
   indices.set(instance, evaluatedIndices)

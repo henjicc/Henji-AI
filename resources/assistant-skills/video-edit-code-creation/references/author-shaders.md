@@ -43,7 +43,7 @@ shader({id:"bg", x:0, y:0, width:ctx.width, height:ctx.height, layers:[
 
 - 属性名写组件原名（`colorA`）；剪辑效果参数的下划线写法（color_a）也认。
 - 数值按组件自己的量纲和范围（目录里的实体参数写了范围和含义），可用任意帧表达式：参数、时间、数学、缓动。
-- 颜色：作者 RGBA（`rgba(...)`、`[r,g,b,a]`、`ctx.style.palette.*`），也可以写 CSS 颜色串。组件内部按线性光混合。
+- 颜色：作者 RGBA（`rgba(...)`、`[r,g,b,a]`），也可以写 CSS 颜色串。组件内部按线性光混合。
 - 位置：`{x, y}` 或 `[x, y]`，0–1 画面比例，y 向下。剪辑效果实体里的位置参数是两个百分比（center_x、center_y），代码里不要照搬。
 - 选项写选项值（字符串）；开关写 true/false；渐变色标写 `[{color:..., position:0}, ...]`。
 - 属性里不能写网址；图片素材用 image 图层或参数。

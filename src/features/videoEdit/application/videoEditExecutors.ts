@@ -1,4 +1,3 @@
-import { resolveVideoEditStyleKit } from '@/core/videoEdit/styleKit'
 import { withVideoEditCurrentMetadata, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { codeFilesFromInput } from '@/core/videoEdit/codeMaterial/sources'
@@ -351,7 +350,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
                 const kind = values.graphicKind
                 if (!['solid', 'rect', 'ellipse', 'text'].includes(String(kind))) throw new Error('创建图形素材项需要graphic_kind。')
                 const dimensions = document.sequences.find(sequence => sequence.id === instance.activeSequenceId)!
-                const made = makeVideoEditGraphicItem({ kind: kind as 'solid' | 'rect' | 'ellipse' | 'text', name: String(values.name), ...(values.graphicWidth != null ? { width: Number(values.graphicWidth) } : {}), ...(values.graphicHeight != null ? { height: Number(values.graphicHeight) } : {}), ...(values.binId ? { binId: String(values.binId) } : {}) }, dimensions, resolveVideoEditStyleKit(document, dimensions))
+                const made = makeVideoEditGraphicItem({ kind: kind as 'solid' | 'rect' | 'ellipse' | 'text', name: String(values.name), ...(values.graphicWidth != null ? { width: Number(values.graphicWidth) } : {}), ...(values.graphicHeight != null ? { height: Number(values.graphicHeight) } : {}), ...(values.binId ? { binId: String(values.binId) } : {}) }, dimensions)
                 document.items.push({ ...made, id })
               } else {
                 if (['graphicKind', 'graphicWidth', 'graphicHeight'].some(key => key in values)) throw new Error('图形创建属性只适用于graphic素材项。')
@@ -381,7 +380,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             }
             case 'video_edit.marker': (sequence!.markers ??= []).push(videoEditMarkerSchema.parse({ id, ...values })); break
             case 'video_edit.caption': {
-              (sequence!.captions ??= []).push(prepareVideoEditCaption(sequence!, { id, ...values }, document)); break
+              (sequence!.captions ??= []).push(prepareVideoEditCaption(sequence!, { id, ...values })); break
             }
             case 'video_edit.track': {
               // 新轨道与 PR 拖到轨道外一样：视频轨加在最上面，音频轨加在最下面；编号由序列分配，不接受指定。

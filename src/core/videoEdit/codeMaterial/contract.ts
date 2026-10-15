@@ -1,4 +1,3 @@
-import type { StyleTokens } from '../styleKit'
 import type { ShaderGraphCustomShader, ShaderGraphSpec } from '../shaderGraph/spec'
 /** Closed author languages. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
@@ -9,7 +8,7 @@ import type { CodeColor, CodeImageReference, CodeParameterTypeDefinition, CodePa
 export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'font', 'image', 'easing', 'seed'] as const
 export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'draw' | 'draws' | 'array' | 'object' | 'paint'
 export type CodeContextKey = 'time' | 'localTime' | 'sequenceTime' | 'width' | 'height' | 'frame' | 'fps' | 'u' | 'v'
-export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; style?: StyleTokens }
+export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number }
 export const CODE_CONTEXT_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps', 'u', 'v']
 export const CODE_TIME_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'frame', 'fps']
 export const CODE_BUILTINS = ['sin', 'cos', 'abs', 'floor', 'ceil', 'round', 'min', 'max', 'clamp', 'mix', 'smoothstep', 'random', 'rgba', 'sample'] as const
@@ -46,7 +45,6 @@ export type CodeExpression = { type: CodeValueType; sourceSpan?: CodeSourceSpan 
   | { kind: 'literal'; value: number | boolean | string }
   | { kind: 'color'; values: CodeExpression[] }
   | { kind: 'context'; key: CodeContextKey }
-  | { kind: 'style'; path: string[] }
   | { kind: 'parameter'; key: string }
   | { kind: 'binding'; slot: number }
   | { kind: 'component'; value: CodeExpression; index: 0 | 1 | 2 | 3 }

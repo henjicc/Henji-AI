@@ -20,8 +20,8 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 8,
-      "fingerprint": "366b5b6daa21d1427e1978898a57a0dc620444b917543616e3cb548897da9514",
+      "version": 9,
+      "fingerprint": "7a65a4e14d0568cf187deaaddd09452bd18ec37b5456d2f9aef97597276f569d",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -95,8 +95,8 @@
       "supportedFrom": 1
     },
     "style-kits": {
-      "version": 2,
-      "fingerprint": "ac26b4d1f64a08ec0ce420d87f9ec109863d9e61344ce8e96e2bf1027e965877",
+      "version": 3,
+      "fingerprint": "81ce726cdb6722b1b501552f9a58ce949c3eb4dfd2efe32155bfff4ada636420",
       "supportedFrom": 1
     },
     "title-templates": {
@@ -190,8 +190,8 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 4,
-      "fingerprint": "38618c45da621e83e3f83c955811f4cdc8bd6862c8f8a9c66806ed048a73d4d3",
+      "version": 5,
+      "fingerprint": "91568915e10c97f456c926633e80fc9285a609fc55422d1f14e4f806a93b0054",
       "supportedFrom": 3
     },
     "storyboard-metadata": {
@@ -255,8 +255,8 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 10,
-      "fingerprint": "a67e745b0701d4b742706d0975c4d15d24515eb2b02f74a936805d121057e785",
+      "version": 11,
+      "fingerprint": "90e5bb9c2741bab0fd247458761556553364fb7bcb1048be29cbd3e5e3841f15",
       "supportedFrom": 5
     },
     "recording-setup": {
@@ -270,8 +270,8 @@
       "supportedFrom": 1
     },
     "video-preset-package": {
-      "version": 1,
-      "fingerprint": "c3025ae0370ea75ae75d7bd718963f581069ed524b972bddcce463bf16c88075",
+      "version": 2,
+      "fingerprint": "91a54a7c05cc609bc452a7b2ae3a253f32bb0e882ff3a77c3ae177a80855d1c9",
       "supportedFrom": 1
     }
   },

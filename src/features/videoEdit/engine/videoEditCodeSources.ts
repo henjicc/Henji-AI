@@ -35,8 +35,6 @@ import type { VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
 import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
 import { videoEditEffectMask } from './videoEditEffectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
-import { DEFAULT_STYLE_TOKENS, resolveVideoEditStyleKit, styleKitRenderKey } from '@/core/videoEdit/styleKit'
-import { bindCodeMaterialStyle } from '@/core/videoEdit/codeMaterial/style'
 import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
 import { videoEditTextResolution } from './videoEditTextSurface'
 
@@ -150,7 +148,6 @@ export class VideoEditCodeSources {
       if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation) }
       const window = transitionByClip.get(clip.id)
       const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window) : codeMaterialContextForFrame(clip, frame, document.frameRate, program)
-      context.style = resolveVideoEditStyleKit(document, document, clip)?.tokens ?? DEFAULT_STYLE_TOKENS
       const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
       return { context, parameters, transitionHandles: Boolean(window) }
     }
@@ -196,8 +193,7 @@ export class VideoEditCodeSources {
             const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
             if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
             const animation = animated(clip, effect.code, program)
-            const styleKey = styleKitRenderKey(resolveVideoEditStyleKit(document, document, clip))
-            chain.push({ effect, version: JSON.stringify([key, styleKey]), program: bindCodeMaterialStyle(program, animation.context.style), ...animation })
+            chain.push({ effect, version: key, program, ...animation })
           } catch (error) {
             assertCurrent()
             if (!options.onEffectError) throw error
@@ -225,10 +221,9 @@ export class VideoEditCodeSources {
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
         const { parameters, context, transitionHandles } = animated(clip, clip.code, program)
         const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && media.kind === 'image'); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
-        const styleKey = styleKitRenderKey(resolveVideoEditStyleKit(document, document, clip))
         const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
         const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
-        const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources, styleKey, documentFontRevision(), overrideValues])}` : `code:dynamic:${clip.id}`
+        const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues])}` : `code:dynamic:${clip.id}`
         keys.add(target)
         plans.push({ clip, key: target, static: program.mode === 'static', program, parameters, context, transitionHandles })
       }

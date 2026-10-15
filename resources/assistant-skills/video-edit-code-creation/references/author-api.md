@@ -16,7 +16,7 @@ export default {
     const p = smoothstep(0, 1, clamp(ctx.time, 0, 1));
     return [group({id: "card", x: 120, y: 120, opacity: p}, [
       rect({id: "plate", x: 0, y: 0, width: 680, height: 180,
-        radius: 16, fill: ctx.style.palette.surface}),
+        radius: 16, fill: [0.13, 0.15, 0.19, 1]}),
       line({id: "rule", x1: 32, y1: 144, x2: 648, y2: 144,
         width: 2, color: [.45, .7, .65, 1], trimEnd: p})
     ])];
@@ -34,7 +34,6 @@ name 为 1–160 个 UTF-16 单元；kind 为 generator/filter；可选 shaders 
 
 ctx：time 源秒、localTime 片段内秒、sequenceTime 序列秒、frame、fps、width/height；参数为 `ctx.params.key`。u/v 仅滤镜可用，表示当前输入归一化像素坐标。关键帧按 time，不把三种时间混用；frame 由宿主提供，不假定总等于源秒乘帧率。
 
-v3 还可读固定风格路径 ctx.style：palette 的 bg/surface/fg/muted/accent/accent2/positive/negative；fonts 的 display/body/mono 各有 family/weight；typeScale 的 baseSize、xs/sm/md/lg/xl/xxl/display 为画面高度比例（字号乘 ctx.height，横竖画幅一致），ratio 为阶梯倍率；shape 的 radius/strokeWidth/spacing1/spacing2/spacing3 也是比例；motion 有 enter/exit/emphasis/transitionDuration、stagger、minHold（秒），enter/exit/move/emphasis/transitionEase（名或贝塞尔，传给 tween/ease），allowOvershoot、travel（画高比例）、settle、readingSpeed（字/秒）、sync；texture 有 grain/vignette/glowIntensity；layout 有 safeMargin（比例）与 grid（网格数）。未绑定风格包时宿主给默认值，只能静态点路径读取，不能动态索引或写入 ctx.style。
 
 生成器 return 图形数组或 repeat 结果，嵌套数组展开。`repeat(count, i => expression)` 从零计数，可返回图形/数组/值；count 是非负整数常量或有非负 min、整数 max 的 number 参数，运行值也必须为整数。时间/随机数不能决定展开上界。辅助函数展开最多 16 层，repeat 嵌套最多 4 层。
 

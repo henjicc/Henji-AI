@@ -45,7 +45,7 @@ export default {
     return [
       shader({id: "lens", x: 0, y: 0, width: ctx.width, height: ctx.height,
         time: ctx.time, layers: [
-          {type: "SolidColor", props: {color: ctx.style.palette.bg}},
+          {type: "SolidColor", props: {color: [0.06, 0.07, 0.09, 1]}},
           {type: "Aurora", props: {speed: .25, intensity: 45}},
           {type: "Glass", props: {center: {x: .5, y: .5}, scale: 1,
             refraction: ctx.params.refract, blur: ctx.params.frost,

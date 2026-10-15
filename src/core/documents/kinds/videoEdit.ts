@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
-import { migrateStyleKitV1, styleKitSchema } from '../../videoEdit/styleKit'
+import { styleKitSchema } from '../../videoEdit/styleKit'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
 import { VIDEO_EDIT_CONTENT_VERSION } from '../../persistence/schemaVersions'
@@ -127,8 +127,9 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     5: content => content,
     // 6 → 7：内置效果新增可选缩放区间 regions（自动缩放）与录屏画框效果，已有效果不需要补值。
     6: content => content,
-    // 7 → 8（t97）：工程风格包快照的旧 Markdown 规则移入 notes，其余新字段由默认值补齐。
-    7: migrateVideoEditContentV7,
+    // 7 → 8 → 9（t97）：风格改为说明书，旧风格快照与绑定丢弃。
+    7: dropVideoEditStyleKits,
+    8: dropVideoEditStyleKits,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,
@@ -155,9 +156,13 @@ function migrateVideoEditContentV3(content: unknown): unknown {
     : sequence) }
 }
 
-/** 7 → 8：只迁移工程内嵌风格快照，其他内容原样保留。 */
-function migrateVideoEditContentV7(content: unknown): unknown {
+/**
+ * 7 → 8 → 9（t97）：风格从参数包改为给 AI 的说明书，旧风格快照不再适用，按开发期约定直接丢弃：
+ * 删除工程风格快照与序列/片段上的风格绑定，其他内容原样保留。
+ */
+export function dropVideoEditStyleKits(content: unknown): unknown {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return content
-  const record = content as Record<string, unknown>
-  return Array.isArray(record.styleKits) ? { ...record, styleKits: record.styleKits.map(migrateStyleKitV1) } : content
+  const { styleKits: _styleKits, ...record } = content as Record<string, unknown>
+  const unbind = (value: unknown): unknown => { if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const { styleKitId: _id, ...rest } = value as Record<string, unknown>; return rest }
+  return Array.isArray(record.sequences) ? { ...record, sequences: record.sequences.map(sequence => { const unbound = unbind(sequence) as Record<string, unknown>; return Array.isArray(unbound?.clips) ? { ...unbound, clips: unbound.clips.map(unbind) } : unbound }) } : record
 }

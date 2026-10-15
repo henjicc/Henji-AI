@@ -183,20 +183,17 @@ describe('所有登记格式的黄金样本', () => {
             expect(effects[1].builtin?.regions?.map(region => [region.startUs, region.endUs, region.depth, region.focus])).toEqual([[500000, 1500000, 3, 'cursor'], [2000000, 2800000, 5, { x: 0.8, y: 0.2 }]])
             expect(effects[2].builtin?.params).toMatchObject({ background: 'solid', padding: 6 })
           }
-          // v8：工程风格快照的理念、结构化规则与扩展动效原样读回，序列仍绑定它。
-          if (version >= 8) {
+          // v9：风格是说明书加参考示例，原样读回且序列仍绑定它；更早的参数式风格快照与绑定被丢弃。
+          if (version >= 9) {
             const kit = document.styleKits?.[0]
             expect(document.sequences[0].styleKitId).toBe('golden-kit')
-            expect(kit?.profile.concepts.map(concept => concept.name)).toEqual(['留白', '克制'])
-            expect(kit?.rules[0]).toMatchObject({ kind: 'keep', strength: 'must' })
-            expect(kit?.tokens.motion).toMatchObject({ emphasisEase: 'quartOut', readingSpeed: 5, settle: true })
+            expect(kit?.guide).toContain('## 必须'); expect(kit?.examples).toHaveLength(1)
+          } else {
+            expect(document.styleKits).toBeUndefined(); expect(document.sequences.every(sequence => sequence.styleKitId === undefined)).toBe(true)
           }
         }
-        // style-kits v1：旧 Markdown 规则移入补充说明，结构化规则为空，其余新字段取默认值。
-        if (format.id === 'style-kits' && version === 1) {
-          const [kit] = upgraded as Array<{ notes: string; rules: unknown[]; profile: { concepts: unknown[] }; tokens: { motion: { travel: number } } }>
-          expect(kit.notes).toContain('## 做'); expect(kit.rules).toEqual([]); expect(kit.profile.concepts).toEqual([]); expect(kit.tokens.motion.travel).toBe(.04)
-        }
+        // style-kits v1/v2：参数式风格不再适用，升级后清空。
+        if (format.id === 'style-kits' && version < 3) expect(upgraded).toEqual([])
         if (format.id === 'code-asset') expect(decodeCodeAsset(encodeCodeAsset(format.schema.parse(upgraded) as ReturnType<typeof decodeCodeAsset>)).sourceVersion.files[0].hash).toHaveLength(64)
         if (format.id === 'image-working-copy' || format.id === 'image-package') {
           const working = format.id === 'image-package' ? (upgraded as { document: unknown }).document : upgraded
