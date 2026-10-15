@@ -1,7 +1,7 @@
 import type { ListPage, ListPageRequest } from '../../core/documents/pagination'
 import type { CodeFileReference } from '../../core/videoEdit/codeMaterial/sources'
 import type { CodeComponent, CodeComponentVersion } from '../../core/videoEdit/codeMaterial/components'
-import type { WithdrawCodeComponentRequest, WriteCodeVersionRequest, PublishCodeComponentRequest } from '../../core/videoEdit/codeMaterial/storageContract'
+import type { DiscardCodeFilesRequest, WithdrawCodeComponentRequest, WriteCodeVersionRequest, PublishCodeComponentRequest } from '../../core/videoEdit/codeMaterial/storageContract'
 import type {
   CreateDocumentRequest,
   CreateProjectRequest,
@@ -53,6 +53,7 @@ import type {
 export type * from '../../core/documents/types'
 
 export interface DocumentsPlatform {
+  discardCodeFiles(request: DiscardCodeFilesRequest): Promise<void>
   /** 事务补偿：撤回可发现的发布，保留源码及固定引用，不删除文件。 */
   withdrawCodeComponent(request: WithdrawCodeComponentRequest): Promise<void>
   writeCodeVersion(request: WriteCodeVersionRequest): Promise<{ folder: string; files: CodeFileReference[] }>
@@ -128,6 +129,7 @@ export interface DocumentsPlatform {
 /** IPC 通道名与 DocumentsPlatform 方法一一对应（主进程注册与 preload 桥共用）。 */
 export const DOCUMENT_IPC_CHANNELS = {
   withdrawCodeComponent: 'documents:code:withdrawComponent',
+  discardCodeFiles: 'documents:code:discard',
   writeCodeVersion: 'documents:code:writeVersion',
   readCodeFile: 'documents:code:readFile',
   listCodeComponents: 'documents:code:listComponents',

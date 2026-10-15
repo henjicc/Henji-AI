@@ -1,4 +1,4 @@
-import { withdrawCodeComponentRequestSchema, writeCodeVersionRequestSchema, readCodeFileRequestSchema, publishCodeComponentRequestSchema } from '../../../src/core/videoEdit/codeMaterial/storageContract'
+import { discardCodeFilesRequestSchema, withdrawCodeComponentRequestSchema, writeCodeVersionRequestSchema, readCodeFileRequestSchema, publishCodeComponentRequestSchema } from '../../../src/core/videoEdit/codeMaterial/storageContract'
 import type { z } from 'zod'
 
 import {
@@ -47,6 +47,7 @@ export function registerDocumentsIpc(): void {
   const service = (): DocumentsPlatform => getDocumentService()
   const c = DOCUMENT_IPC_CHANNELS
   registerIpcHandler(c.withdrawCodeComponent, parseWith(withdrawCodeComponentRequestSchema), request => service().withdrawCodeComponent(request))
+  registerIpcHandler(c.discardCodeFiles, parseWith(discardCodeFilesRequestSchema), request => service().discardCodeFiles(request))
   registerIpcHandler(c.writeCodeVersion, parseWith(writeCodeVersionRequestSchema), request => service().writeCodeVersion(request))
   registerIpcHandler(c.readCodeFile, parseWith(readCodeFileRequestSchema), file => service().readCodeFile(file))
   registerIpcHandler(c.listCodeComponents, parseWith(documentTargetSchema), target => service().listCodeComponents(target))

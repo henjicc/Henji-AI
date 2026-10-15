@@ -70,6 +70,7 @@ export class DocumentService implements DocumentsPlatform {
   }) {}
 
   withdrawCodeComponent: DocumentsPlatform['withdrawCodeComponent'] = request => this.parts.codeFiles.withdraw(request)
+  discardCodeFiles: DocumentsPlatform['discardCodeFiles'] = request => this.parts.codeFiles.discard(request)
   writeCodeVersion: DocumentsPlatform['writeCodeVersion'] = request => this.parts.codeFiles.writeVersion(request)
   readCodeFile: DocumentsPlatform['readCodeFile'] = file => this.parts.codeFiles.read(file)
   listCodeComponents: DocumentsPlatform['listCodeComponents'] = target => this.parts.codeFiles.list(target)

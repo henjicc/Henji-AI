@@ -14,6 +14,7 @@ function getNativeDocuments(): DocumentsPlatform {
 export function createElectronDocuments(): DocumentsPlatform {
   return {
     withdrawCodeComponent: request => getNativeDocuments().withdrawCodeComponent(request),
+    discardCodeFiles: request => getNativeDocuments().discardCodeFiles(request),
     writeCodeVersion: (request) => getNativeDocuments().writeCodeVersion(request),
     readCodeFile: (file) => getNativeDocuments().readCodeFile(file),
     listCodeComponents: (target) => getNativeDocuments().listCodeComponents(target),

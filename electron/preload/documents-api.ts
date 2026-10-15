@@ -6,6 +6,7 @@ type NativeInvoke = <T>(channel: string, payload?: unknown) => Promise<T>
 export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
   const c = DOCUMENT_IPC_CHANNELS
   return {
+    discardCodeFiles: request => invoke(c.discardCodeFiles, request),
     withdrawCodeComponent: request => invoke(c.withdrawCodeComponent, request),
     writeCodeVersion: (request) => invoke(c.writeCodeVersion, request),
     readCodeFile: (file) => invoke(c.readCodeFile, file),

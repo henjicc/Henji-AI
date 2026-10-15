@@ -1,6 +1,6 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { getPlatform } from '@/platform/runtime'
-import { rememberCodeSource, loadCodeSourceReferences, addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
+import { rememberCodeSource, loadCodeSourceReferences, addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeFileReference, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { pinCodeComponentImports, expandPinnedCodeComponents, codeComponentExportNames, codeComponentNameSchema, componentSourceMetadata, rewriteCodeComponentImports, type CodeComponentVersion, type CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { assetCodeSourceResolver, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
@@ -21,13 +21,32 @@ export async function withdrawProjectCodeComponents(projectId: string, versions:
   for (const version of [...versions].reverse()) await getPlatform().documents.withdrawCodeComponent({ target: { id: projectId, path: owner.session.documentMeta.path }, location: version.location, hash: version.hash })
   publishVideoEdit(true)
 }
-export async function prepareCodeVersionPublication(projectId: string, files: CodeMaterialFiles, name?: string, pinnedImports?: CodeComponentPin[]): Promise<CodeVersionPublication> {
+export async function discardVideoEditCodeFiles(files: readonly CodeFileReference[]): Promise<void> {
+  if (!files.length) return
+  const retainedLocations: string[] = []
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') retainedLocations.push(value)
+    else if (Array.isArray(value)) value.forEach(visit)
+    else if (value && typeof value === 'object') Object.values(value).forEach(visit)
+  }
+  for (const owner of listVideoEditInstances()) { visit(owner.document); visit(owner.past); visit(owner.future) }
+  await getPlatform().documents.discardCodeFiles({ files: [...files], retainedLocations })
+}
+export async function discardProjectCodeComponents(versions: readonly CodeComponentPin[]): Promise<void> {
+  await discardVideoEditCodeFiles(versions.map(version => ({ path: version.name, location: version.location, hash: version.hash })))
+  publishVideoEdit(true)
+}
+export function codePublicationFiles(document: import('@/core/videoEdit/document').VideoEditDocument): CodeFileReference[] {
+  return (document.codeMaterials ?? []).flatMap(definition => definition.versions.flatMap(version => version.files))
+}
+export async function prepareCodeVersionPublication(projectId: string, files: CodeMaterialFiles, name?: string, pinnedImports?: CodeComponentPin[], created?: CodeFileReference[]): Promise<CodeVersionPublication> {
   const owner = requireVideoEditInstance(projectId); const target = { id: projectId, path: owner.session.documentMeta.path }
   const imports = pinnedImports ?? pinCodeComponentImports(files, await projectCodeComponents(projectId))
   initializeVideoEditCodeSourceRuntime()
   await loadCodeSourceReferences({ files: [], imports })
   return { imports, name, async write(definitionId, materialName, contents, folder) {
     const result = await getPlatform().documents.writeCodeVersion({ target, definitionId, name: materialName, contents, ...(folder ? { folder } : {}) })
+    created?.push(...result.files)
     for (const file of result.files) rememberCodeSource(file.hash, contents.files[file.path])
     return result
   } }
@@ -46,6 +65,8 @@ export async function publishProjectCodeComponent(projectId: string, input: { na
   signal?.throwIfAborted()
   if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('发布检查期间剪辑已改变，请重新发布。')
   const result = await getPlatform().documents.publishCodeComponent({ target: { id: projectId, path: owner.session.documentMeta.path }, name, source, description: input.description ?? '', exports, imports, keepBoth })
+  try { signal?.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('发布期间剪辑已改变。') }
+  catch (error) { await discardProjectCodeComponents([result]); throw error }
   rememberCodeSource(result.hash, result.source); publishVideoEdit(true)
   return result
 }
@@ -95,11 +116,11 @@ export async function importAssetCodeComponents(projectId: string, asset: CodeAs
     imported.set(key, result); return result
   }
   const imports: CodeComponentVersion[] = []
-  try { for (const pin of asset.sourceVersion.imports ?? []) imports.push(await visit(pin, [])) }
-  catch (error) { await withdrawProjectCodeComponents(projectId, [...imported.values()]); throw error }
+  try { for (const pin of asset.sourceVersion.imports ?? []) imports.push(await visit(pin, []))
   const contents = resolveCodeMaterialFiles(asset.sourceVersion, resolver)
   const files = Object.fromEntries(Object.entries(contents.files).map(([path, source]) => [path, rewriteCodeComponentImports(source, asset.sourceVersion.imports ?? [], imports)]))
   const addressed = await addressCodeMaterialFiles({ ...contents, files })
   const pin = (version: CodeComponentVersion): CodeComponentPin => ({ name: version.name, version: version.version, location: version.location, hash: version.hash, imports: version.imports })
   return { ...asset, sourceVersion: { ...asset.sourceVersion, entry: addressed.entry, files: addressed.files, imports: imports.map(pin) }, codeSources: [...addressed.codeSources, ...[...imported.values()].map(value => ({ hash: value.hash, source: value.source }))] }
+  } catch (error) { await discardProjectCodeComponents([...imported.values()]); throw error }
 }

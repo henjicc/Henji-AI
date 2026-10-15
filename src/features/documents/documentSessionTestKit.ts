@@ -133,6 +133,14 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     }
     return { folder, files }
   }
+  discardCodeFiles: DocumentsPlatform['discardCodeFiles'] = async request => {
+    for (const file of request.files) {
+      if (request.retainedLocations.includes(file.location) || [...this.documents.values()].some(document => JSON.stringify(document.content).includes(file.location))) continue
+      this.codeFiles.delete(file.location)
+      for (const components of this.codeComponents.values()) for (const component of components) component.versions = component.versions.filter(version => version.location !== file.location)
+    }
+    for (const [root, components] of this.codeComponents) this.codeComponents.set(root, components.filter(component => component.versions.length))
+  }
   readCodeFile: DocumentsPlatform['readCodeFile'] = async file => { const source = this.codeFiles.get(file.location); if (source === undefined) throw new Error(`${file.path} 的源码文件缺失。`); return source }
   withdrawCodeComponent: DocumentsPlatform['withdrawCodeComponent'] = async request => {
     const root = this.codeRoot(request.target.id); const components = this.codeComponents.get(root) ?? []

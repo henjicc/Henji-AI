@@ -554,12 +554,17 @@ export function editVideoEditImportGroup(group: VideoEditImportEditGroup, update
   notifyVideoEditContent(owner)
   return next
 }
+const compensationHistories = new Map<VideoEditDocument, { past: VideoEditDocument[]; future: VideoEditDocument[] }>()
 /** Used only by verified transaction receipts; a rollback restores the whole edit, including locks. */
-export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument, snapshot: VideoEditDocument): VideoEditDocument {
+export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument, snapshot: VideoEditDocument, compensation = false): VideoEditDocument {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id); assertVideoEditWritable(instance)
   if (gestures.has(instance) || !sameDocumentContent(instance.document, expected)) throw new Error('剪辑已有后续修改，请逐步撤销。')
-  return applyVideoEditDocument(instance, () => withVideoEditCurrentMetadata(snapshot, instance.document), true, true)
+  const history = compensation ? compensationHistories.get(expected) : undefined
+  const restored = applyVideoEditDocument(instance, () => withVideoEditCurrentMetadata(snapshot, instance.document), !compensation, true)
+  if (history) { instance.past = history.past; instance.future = history.future }
+  if (compensation) notifyVideoEditContent(instance)
+  return restored
 }
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   const requested = update(structuredClone(instance.document))
@@ -572,12 +577,19 @@ function applyVideoEditDocument(instance: VideoEditInstance, update: (document: 
   return publishVideoEditDocument(instance, next, recordHistory)
 }
 function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean, spatialOnly = false): VideoEditDocument {
+  const history = { past: instance.past, future: instance.future }
   const operationId = recordHistory ? crypto.randomUUID() : undefined
   if (operationId) historyOperations.set(instance.document, operationId)
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
   instance.document = { ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 }
+  if (recordHistory) {
+    compensationHistories.set(instance.document, history)
+    // Match the bounded public transaction receipts; weak keys with past arrays
+    // would indirectly keep every earlier history snapshot reachable.
+    while (compensationHistories.size > 100) compensationHistories.delete(compensationHistories.keys().next().value!)
+  }
   if (!spatialOnly) { rescaleSequenceViews(instance, before); reconcileSequenceView(instance) }
   instance.version++; instance.contentVersion++
   if (operationId) publishCommandFact(instance, { operationId, phase: 'committed', before, after: instance.document })

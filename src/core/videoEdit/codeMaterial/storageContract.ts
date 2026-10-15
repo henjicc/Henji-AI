@@ -11,3 +11,6 @@ export type PublishCodeComponentRequest = z.infer<typeof publishCodeComponentReq
 
 export const withdrawCodeComponentRequestSchema = z.object({ target: documentTargetSchema, location: z.string().min(1), hash: codeSourceHashSchema }).strict()
 export type WithdrawCodeComponentRequest = z.infer<typeof withdrawCodeComponentRequestSchema>
+
+export const discardCodeFilesRequestSchema = z.object({ files: z.array(readCodeFileRequestSchema), retainedLocations: z.array(z.string()) }).strict()
+export type DiscardCodeFilesRequest = z.infer<typeof discardCodeFilesRequestSchema>

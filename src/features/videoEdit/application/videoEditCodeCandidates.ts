@@ -1,8 +1,8 @@
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
-import { prepareCodeVersionPublication } from './videoEditCodeStorage'
-import { documentCodeSourceResolver, loadCodeSourceReferences, normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { prepareCodeVersionPublication, discardVideoEditCodeFiles } from './videoEditCodeStorage'
+import { documentCodeSourceResolver, loadCodeSourceReferences, normalizeCodeMaterialFiles, type CodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { appendCodeMaterialVersion } from '@/core/videoEdit/codeMaterialVersions'
 import { proposeCodeMaterialMigration, type CodeMaterialMigrationImpact } from '@/core/videoEdit/codeMaterialAnimation'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
@@ -48,6 +48,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   signal?.addEventListener('abort', cancel, { once: true })
   let candidate: VideoEditCodeCandidate | undefined; let newVersion: string | undefined; let bitmap: ImageBitmap | undefined
   let committed = false
+  const createdFiles: CodeFileReference[] = []
   const unsubscribe = subscribeVideoEditDomain(() => {
     if (!isVideoEditContentCurrent(owner, contentVersion)) {
       controller.abort(new Error('原剪辑已关闭或内容已改变，请重新检查候选。'))
@@ -58,12 +59,13 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     unsubscribe(); signal?.removeEventListener('abort', cancel)
     controller.abort(new Error('源码候选已释放。')); bitmap?.close(); bitmap = undefined
     if (candidate) { candidates.delete(candidate); active.get(owner)?.delete(candidate) }
+    if (!committed) void discardVideoEditCodeFiles(createdFiles).catch(error => logger.warn('源码候选回收失败', { event: 'video_edit.code.candidate.cleanup.failed', error }))
     if (!committed && newVersion && !baseline.codeMaterials?.some(definition => definition.versions.some(version => version.id === newVersion))) forgetVideoEditCodeMetadata(owner, newVersion)
   }
   logger.info('检查源码候选', { event: 'video_edit.code.candidate.start', context: { projectId: target.projectId, clipId: target.clipId, scope } })
   try {
     await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
-    const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source)))
+    const appended = await appendCodeMaterialVersion(definition, source, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(baseline), await prepareCodeVersionPublication(target.projectId, normalizeCodeMaterialFiles(source), undefined, undefined, createdFiles))
     controller.signal.throwIfAborted(); newVersion = appended.versionId
     const version = appended.definition.versions.find(version => version.id === newVersion)!
     rememberVideoEditCodeMetadata(owner, definition.id, version, appended.program)
@@ -106,7 +108,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const set = active.get(owner) ?? new Set(); set.add(candidate); active.set(owner, set)
     logger.info('源码候选已生成', { event: 'video_edit.code.candidate.ready', context: { projectId: target.projectId, count, impacts: impacts.length } })
     return candidate
-  } catch (error) { clean(); logger.debug('源码候选未完成', { event: 'video_edit.code.candidate.failed', error, context: { projectId: target.projectId } }); throw error }
+  } catch (error) { await discardVideoEditCodeFiles(createdFiles); createdFiles.length = 0; clean(); logger.debug('源码候选未完成', { event: 'video_edit.code.candidate.failed', error, context: { projectId: target.projectId } }); throw error }
   finally { preparing.set(owner, Math.max(0, (preparing.get(owner) ?? 1) - 1)) }
 }
 export function disposeVideoEditCodeCandidate(candidate: VideoEditCodeCandidate): void { candidates.get(candidate)?.clean() }

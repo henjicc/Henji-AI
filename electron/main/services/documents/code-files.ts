@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { DocumentTarget } from '../../../../src/core/documents/types'
 import { codeFilePathSchema, componentFileReferences, type CodeComponentPin, type CodeFileReference } from '../../../../src/core/videoEdit/codeMaterial/sources'
 import { componentSourceMetadata, packageComponentSource, type CodeComponent, type CodeComponentVersion } from '../../../../src/core/videoEdit/codeMaterial/components'
-import type { PublishCodeComponentRequest, WriteCodeVersionRequest, WithdrawCodeComponentRequest } from '../../../../src/core/videoEdit/codeMaterial/storageContract'
+import type { DiscardCodeFilesRequest, PublishCodeComponentRequest, WriteCodeVersionRequest, WithdrawCodeComponentRequest } from '../../../../src/core/videoEdit/codeMaterial/storageContract'
 import { isPathInside, type PathStyle } from '../../../../src/core/storage/pathSyntax'
 import { sameEntryName } from '../../../../src/core/documents/naming'
 import { createFileExclusively } from '../fs/no-overwrite'
@@ -19,7 +19,7 @@ export function codeFolderName(name: string): string {
   return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value) ? `_${value}` : value
 }
 /** Shared code path boundary for publication and container transfers. */
-export async function ensureCodeLocation(root: string, target: string, style: PathStyle, create = false): Promise<void> {
+export async function ensureCodeLocation(root: string, target: string, style: PathStyle, create = false, created?: string[]): Promise<void> {
   const codeRoot = path.join(root, '代码')
   if (!isPathInside(style, codeRoot, target) || target === codeRoot) throw new Error('代码文件位置越界，必须位于此文档所在项目的“代码”文件夹内。')
   // Check each existing ancestor before mkdir/open, including junctions and symbolic links.
@@ -28,7 +28,7 @@ export async function ensureCodeLocation(root: string, target: string, style: Pa
     current = path.join(current, part)
     const stat = await fsp.lstat(current).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error })
     if (stat?.isSymbolicLink()) throw new Error('代码文件位置包含链接，不能写入或读取项目之外的文件。')
-    if (!stat && create && current !== target) await fsp.mkdir(current)
+    if (!stat && create && current !== target) { await fsp.mkdir(current); created?.push(current) }
   }
   const realRoot = await fsp.realpath(root); const parent = await fsp.realpath(path.dirname(target)).catch(() => null)
   if (parent && !isPathInside(style, realRoot, parent)) throw new Error('代码文件真实位置越界，请移除指向项目外的链接。')
@@ -38,13 +38,80 @@ export async function ensureCodeLocation(root: string, target: string, style: Pa
 export class DocumentCodeFiles {
   private readonly cache = new Map<string, { source: string; bytes: number }>()
   private cacheBytes = 0
+  /** Only files created by this process can be compensated; never infer ownership from a path. */
+  private readonly pending = new Map<string, { root: string; files: CodeFileReference[]; owned: string[]; directory: string; directories: string[]; marker?: string }>()
+  async discard(request: DiscardCodeFilesRequest): Promise<void> {
+    const groups = [...new Set(request.files.map(file => this.pending.get(file.location)).filter(value => value !== undefined))]
+    if (!groups.length) return
+    const retained = new Set(request.retainedLocations.map(value => path.resolve(value).toLocaleLowerCase()))
+    const visit = (value: unknown): void => {
+      if (typeof value === 'string' && path.isAbsolute(value)) retained.add(path.resolve(value).toLocaleLowerCase())
+      else if (Array.isArray(value)) value.forEach(visit)
+      else if (value && typeof value === 'object') Object.values(value).forEach(visit)
+    }
+    // Fail closed if any saved document cannot be inspected, including documents in other projects.
+    for (const row of this.workspace.catalog.listDocuments({ includeDrafts: true, includeMissing: true })) visit((await this.repository.read({ id: row.id, path: row.path })).content)
+    for (const root of new Set(groups.map(group => group.root))) await this.exclusive(root, async () => {
+      const requested = new Set(request.files.map(file => file.location))
+      const libraryRoot = path.join(root, '代码', '组件库')
+      for (const directory of await fsp.readdir(libraryRoot, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error })) {
+        if (!directory.isDirectory() || directory.isSymbolicLink()) continue
+        for (const entry of await fsp.readdir(path.join(libraryRoot, directory.name))) {
+          const location = path.join(libraryRoot, directory.name, entry)
+          if (!entry.endsWith('.ts') || requested.has(location)) continue
+          await this.safe(root, location)
+          const { metadata } = componentSourceMetadata(await fsp.readFile(location, 'utf8'))
+          for (const group of groups) if (group.files.some(file => metadata.imports.some(pin => pin.hash === file.hash))) group.files.forEach(file => retained.add(path.resolve(file.location).toLocaleLowerCase()))
+        }
+      }
+      // A retained parent also protects dependencies included in this compensation batch.
+      for (let changed = true; changed;) {
+        changed = false
+        for (const group of groups) if (group.files.some(file => retained.has(path.resolve(file.location).toLocaleLowerCase()))) {
+          for (const file of group.files.filter(file => file.location.includes(`${path.sep}组件库${path.sep}`))) {
+            const { metadata } = componentSourceMetadata(await fsp.readFile(file.location, 'utf8'))
+            for (const child of groups) if (child.files.some(file => metadata.imports.some(pin => pin.hash === file.hash))) for (const file of child.files) {
+              const key = path.resolve(file.location).toLocaleLowerCase()
+              if (!retained.has(key)) { retained.add(key); changed = true }
+            }
+          }
+        }
+      }
+      const removed: typeof groups = []
+      for (const group of groups.filter(group => group.root === root)) {
+        if (!group.files.some(file => this.pending.get(file.location) === group)) continue
+        if (group.files.some(file => retained.has(path.resolve(file.location).toLocaleLowerCase()))) continue
+        if (group.files.some(file => !request.files.some(candidate => candidate.location === file.location && candidate.hash === file.hash))) continue
+        for (const file of group.files) await this.read(file)
+        await this.removeOwned(group)
+        group.files.forEach(file => this.pending.delete(file.location)); removed.push(group)
+      }
+      for (const group of removed) await this.removeOwned({ ...group, owned: [] })
+    })
+  }
+  private async removeOwned(group: { root: string; owned: string[]; directory: string; directories: string[]; marker?: string }): Promise<void> {
+    const parents = new Set(group.directories.filter(directory => directory !== path.join(group.root, '代码')))
+    if (group.marker) parents.add(path.dirname(group.marker))
+    for (const file of [...group.owned].reverse()) {
+      await this.safe(group.root, file)
+      await fsp.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error })
+    }
+    for (const directory of [...parents].sort((a, b) => b.length - a.length)) {
+      await this.safe(group.root, path.join(directory, '.probe'))
+      if (group.marker && path.dirname(group.marker) === directory) {
+        const entries = await fsp.readdir(directory).catch(error => { if (error.code === 'ENOENT') return []; throw error })
+        if (entries.length === 1 && entries[0] === '.definition') await fsp.unlink(group.marker)
+      }
+      await fsp.rmdir(directory).catch(error => { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error })
+    }
+  }
   constructor(private readonly workspace: DocumentWorkspace, private readonly repository: DocumentRepository, private readonly logger: MainLogger) {}
   private async root(target: DocumentTarget): Promise<string> {
     const read = await this.repository.read(target)
     return (await this.workspace.resolveContainer(read.meta.container)).root
   }
-  private async safe(root: string, target: string, create = false): Promise<void> {
-    await ensureCodeLocation(root, target, this.workspace.style, create)
+  private async safe(root: string, target: string, create = false, created?: string[]): Promise<void> {
+    await ensureCodeLocation(root, target, this.workspace.style, create, created)
   }
   async read(file: CodeFileReference): Promise<string> {
     const location = path.resolve(file.location)
@@ -76,6 +143,9 @@ export class DocumentCodeFiles {
   async writeVersion(request: WriteCodeVersionRequest): Promise<{ folder: string; files: CodeFileReference[] }> {
     const root = await this.root(request.target)
     return this.exclusive(root, async () => {
+      for (const file of Object.keys(request.contents.files)) codeFilePathSchema.parse(file)
+      const group = { root, files: [] as CodeFileReference[], owned: [] as string[], directory: '', directories: [] as string[], marker: undefined as string | undefined }
+      try {
       let folder = request.folder
       if (folder && (folder !== codeFolderName(folder) || folder === '组件库')) throw new Error('素材目录越界或名称无效。')
       if (!folder) {
@@ -83,9 +153,9 @@ export class DocumentCodeFiles {
         for (let suffix = 1; ; suffix++) {
           const candidate = suffix === 1 ? stem : `${stem} (${suffix})`
           const directory = path.join(root, '代码', candidate)
-          await this.safe(root, path.join(root, '代码', '.probe'), true)
+          await this.safe(root, path.join(root, '代码', '.probe'), true, group.directories)
           await this.safe(root, path.join(directory, '.definition'))
-          try { await fsp.mkdir(directory); folder = candidate; break } catch (error) {
+          try { await fsp.mkdir(directory); group.directories.push(directory); folder = candidate; break } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
             const owner = await fsp.readFile(path.join(directory, '.definition'), 'utf8').catch(() => '')
             if (owner === request.definitionId) { folder = candidate; break }
@@ -93,7 +163,8 @@ export class DocumentCodeFiles {
         }
       }
       const directory = path.join(root, '代码', folder)
-      await this.safe(root, path.join(directory, '.definition'), true)
+      group.directory = directory
+      await this.safe(root, path.join(directory, '.definition'), true, group.directories)
       const owner = await fsp.readFile(path.join(directory, '.definition'), 'utf8').catch(() => null)
       if (owner !== null && owner !== request.definitionId) throw new Error('素材目录属于另一份代码定义，请重新创建素材。')
       if (owner === null) {
@@ -101,18 +172,26 @@ export class DocumentCodeFiles {
         const content = document.content as { codeMaterials?: { id: string; folder?: string }[] }
         if (request.folder && !content.codeMaterials?.some(definition => definition.id === request.definitionId && definition.folder === folder)) throw new Error('素材目录不属于此代码定义。')
         await createFileExclusively(path.join(directory, '.definition'), Buffer.from(request.definitionId))
+        group.marker = path.join(directory, '.definition')
       }
       const entries = await fsp.readdir(directory); let ordinal = entries.reduce((max, entry) => Math.max(max, /^v\d+$/.test(entry) ? Number(entry.slice(1)) : 0), 0) + 1
       let versionRoot: string
-      for (;;) { versionRoot = path.join(directory, `v${ordinal}`); try { await fsp.mkdir(versionRoot); break } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; ordinal++ } }
-      const files: CodeFileReference[] = []
+      for (;;) { versionRoot = path.join(directory, `v${ordinal}`); try { await fsp.mkdir(versionRoot); group.directories.push(versionRoot); break } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; ordinal++ } }
+      group.directory = versionRoot
+      const files = group.files
       for (const [file, source] of Object.entries(request.contents.files)) {
         codeFilePathSchema.parse(file); const location = path.join(versionRoot, ...file.split('/'))
-        await this.safe(root, location, true)
+        await this.safe(root, location, true, group.directories)
         await createFileExclusively(location, Buffer.from(source, 'utf8'))
+        group.owned.push(location)
         files.push({ path: file, location, hash: digest(source) })
       }
+      for (const file of files) this.pending.set(file.location, group)
       return { folder, files }
+      } catch (error) {
+        await this.removeOwned(group)
+        throw error
+      }
     })
   }
   private async exclusive<T>(root: string, operation: () => Promise<T>): Promise<T> {
@@ -171,7 +250,9 @@ export class DocumentCodeFiles {
       for (const file of componentFileReferences(request.imports)) await this.read(file)
       const versions = library.find(component => component.name === name)?.versions ?? []; let version = (versions.at(-1)?.version ?? 0) + 1
       const directory = path.join(root, '代码', '组件库', name)
-      await this.safe(root, path.join(directory, '.probe'), true)
+      const group = { root, files: [] as CodeFileReference[], owned: [] as string[], directory, directories: [] as string[] }
+      try {
+      await this.safe(root, path.join(directory, '.probe'), true, group.directories)
       for (const entry of await fsp.readdir(directory)) {
         const match = /^v(\d+)\.ts(?:\.sha256)?$/.exec(entry)
         if (match) version = Math.max(version, Number(match[1]) + 1)
@@ -179,10 +260,15 @@ export class DocumentCodeFiles {
       const location = path.join(root, '代码', '组件库', name, `v${version}.ts`)
       const source = packageComponentSource(request.source, { name, version, exports: request.exports, description: request.description, imports: request.imports.map(({ name, version, hash }) => ({ name, version, hash })) })
       if (Buffer.byteLength(source, 'utf8') > 64 * 1024) throw new Error('项目组件含说明的源码文件超过64KiB，请拆分为多个组件。')
-      await this.safe(root, location, true)
+      await this.safe(root, location, true, group.directories)
       await createFileExclusively(`${location}.sha256`, Buffer.from(digest(source)))
+      group.owned.push(`${location}.sha256`)
       await createFileExclusively(location, Buffer.from(source, 'utf8'))
+      group.owned.push(location)
+      group.files.push({ path: path.basename(location), location, hash: digest(source) })
+      this.pending.set(location, group)
       return { name, version, location, hash: digest(source), imports: request.imports, source, exports: request.exports, description: request.description }
+      } catch (error) { await this.removeOwned(group); throw error }
     })
   }
   async withdraw(request: WithdrawCodeComponentRequest): Promise<void> {
