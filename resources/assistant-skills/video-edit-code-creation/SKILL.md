@@ -20,7 +20,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 ## 能用的手段
 
 - 代码图形与文字：形状、路径、渐变、阴影辉光模糊、逐字逐词动效、遮罩揭示、数字滚动。
-- 粒子与场：`repeat`＋`random`＋`noise` 按时间直接求值，可寻帧（见粒子配方）。
+- 粒子与场：`repeat`＋`random`＋`noise` 按时间直接求值，可寻帧（见 recipes-particles）。
 - 着色器：160 多个框架组件可叠成图层树；库里没有的效果直接写 WGSL，用作图层、滤镜或转场。
 - 空间：多层视差和投影倍率做伪3D；自写 WGSL 可做光线步进或 SDF 体积。
 - 素材与效果：就地生成图片或视频落到当前位置，调色、内置效果、转场与代码素材叠用。
@@ -54,6 +54,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 打字机、光标、数字滚动 | [终端与数字](references/recipes-text-data.md) |
 | 字幕实体、花字、关键词、人名条 | [字幕配方](references/recipes-captions.md) |
 | 玻璃、图标、线条、圆角卡片 | [玻璃与线条](references/recipes-glass-lines.md) |
+| 粒子、光尘、爆散、星轨 | [粒子与场](references/recipes-particles.md) |
 | 三维镜头参考、代码视差 | [空间配方](references/recipes-3d.md) |
 | 语法、图形、预算 | [作者接口](references/author-api.md)、[数学与字符串](references/author-api-expressions.md) |
 | text、measureText、perChar、缓动 | [文字动效接口](references/author-text-motion.md) |

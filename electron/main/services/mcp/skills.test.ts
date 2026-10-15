@@ -72,7 +72,7 @@ describe('外部 MCP 通过普通工具发现并读取运行时技能', () => {
       'references/author-text-motion.md', 'references/brief-concept.md', 'references/color-texture.md',
       'references/examples.md', 'references/layout.md', 'references/motion.md', 'references/multifile-components.md',
       'references/parameter-types.md', 'references/parameters-curves.md', 'references/parametric.md', 'references/preferences.md',
-      'references/recipes-3d.md', 'references/recipes-captions.md', 'references/recipes-glass-lines.md', 'references/recipes-text-data.md', 'references/recipes-text-words.md', 'references/recipes-text.md',
+      'references/recipes-3d.md', 'references/recipes-captions.md', 'references/recipes-glass-lines.md', 'references/recipes-particles.md', 'references/recipes-text-data.md', 'references/recipes-text-words.md', 'references/recipes-text.md',
       'references/review-ai.md', 'references/review.md',
       'references/shader-components-filters.md', 'references/shader-components-shapes-2.md', 'references/shader-components-shapes.md',
       'references/shader-components-stylize.md', 'references/shader-components-textures-2.md', 'references/shader-components-textures.md',
