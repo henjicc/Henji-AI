@@ -1,0 +1,86 @@
+const NODE = (i, t, c, w) => {
+  const nx = 96 + random(i * 5 + 1) * (w - 192);
+  const ny = 540 + (random(i * 5 + 2) - 0.5) * 640;
+  const amp = 36 * (1 - c) * (1 - c);
+  const x = lerp(nx, w / 2 + (nx - w / 2) * 0.955, c) + sin(i * 2.399 + t * 1.15) * amp;
+  const y = lerp(ny, 540, c) + sin(i * 1.717 - t * 1.63) * amp * 1.45;
+  return [x, y];
+};
+
+const STRAND = (i, j, t, c, w, tint) => {
+  const a = NODE(i, t, c, w);
+  const b = NODE(j, t, c, w);
+  const d = random(i * 9 + 4);
+  return line({id: "strand", x1: a[0], y1: a[1], x2: b[0], y2: b[1], width: 0.6 + d * 1.2, lineCap: "round", trimEnd: progress(t, 0.45 + i * 0.0016, 0.62), color: [tint.r, tint.g, tint.b, 0.1 + 0.34 * d]});
+};
+
+const DOT = (i, t, c, w, tint) => {
+  const a = NODE(i, t, c, w);
+  const d = random(i * 5 + 3);
+  const grow = progress(t, 0.12 + i * 0.0022, 0.55);
+  const s = (1.6 + d * d * 5.2) * (1 - 0.45 * c) * (0.5 + 0.5 * grow);
+  return ellipse({id: "dot", x: a[0] - s / 2, y: a[1] - s / 2, width: s, height: s, fill: [tint.r, tint.g, tint.b, (0.2 + d * 0.7) * grow]});
+};
+
+export default {
+  apiVersion: 1, languageVersion: 3,
+  name: "复杂到简单_片头", kind: "generator", mode: "dynamic",
+  width: 1920, height: 1080, durationSeconds: 6, seed: 20261015,
+  parameters: {
+    title: {type: "text", title: "主标题", maxLength: 24, default: "把复杂的事做简单"},
+    subtitle: {type: "text", title: "副标题", maxLength: 16, default: "痕迹 AI"},
+    count: {type: "number", title: "节点数（复杂度）", min: 40, max: 300, step: 1, default: 180},
+    collapseAt: {type: "number", title: "收束起点（秒）", min: 0.4, max: 2.4, step: 0.05, default: 1.4},
+    ink: {type: "color", title: "文字色", default: [0.94, 0.965, 0.98, 1]},
+    accent: {type: "color", title: "强调色", default: [0.42, 0.8, 1, 1]}
+  },
+  render(ctx) {
+    const t = ctx.time;
+    const w = ctx.width;
+    const c = cubicInOut(clamp((t - ctx.params.collapseAt) / 1.55, 0, 1));
+    const gone = smoothstep(0.68, 1, c);
+    const lineP = expoOut(progress(t, 2.9, 0.95));
+    const half = 442 * lineP;
+    const sweep = progress(t, 4.5, 1.05);
+    const t0 = 3;
+    const s0 = 4.35;
+    return [
+      rect({id: "sky", x: 0, y: 0, width: w, height: ctx.height,
+        fill: linearGradient({x1: 0, y1: 0, x2: 0, y2: ctx.height, stops: [[0, [0.043, 0.059, 0.086, 1]], [0.58, [0.022, 0.033, 0.052, 1]], [1, [0.011, 0.016, 0.028, 1]]]})}),
+      rect({id: "ambient", x: 0, y: 0, width: w, height: ctx.height,
+        fill: radialGradient({cx: w / 2, cy: 528, r: 1020, stops: [[0, [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0.03 + 0.07 * lineP + 0.01 * sin(t * 1.6)]], [0.5, [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0.011 + 0.026 * lineP]], [1, [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0]]]})}),
+      group({id: "tangle", opacity: 1 - gone}, [
+        repeat(ctx.params.count, i => STRAND(i, i + 1, t, c, w, ctx.params.accent)),
+        repeat(140, i => STRAND(i * 2, i * 2 + 13, t, c, w, ctx.params.accent)),
+        repeat(ctx.params.count, i => DOT(i, t, c, w, ctx.params.accent))
+      ]),
+      line({id: "ghost", x1: 58, y1: 540, x2: w - 58, y2: 540, width: 1.2, lineCap: "round",
+        color: [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 0.24 * c]}),
+      line({id: "rule", x1: w / 2 - half, y1: 540, x2: w / 2 + half, y2: 540, width: 2.4, lineCap: "round",
+        color: [ctx.params.ink.r, ctx.params.ink.g, ctx.params.ink.b, 0.92 * lineP],
+        glow: {radius: 18, intensity: 1.5, color: [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 1]}}),
+      line({id: "sweep", x1: w / 2 - 442 + 884 * sweep - 56, y1: 540, x2: w / 2 - 442 + 884 * sweep + 56, y2: 540,
+        width: 3, lineCap: "round", color: [1, 1, 1, 0.5 * sin(PI * sweep) * lineP],
+        glow: {radius: 14, intensity: 1.2, color: [1, 1, 1, 1]}}),
+      text({id: "title", x: w / 2, y: 452, text: ctx.params.title, fontSize: 104, fontWeight: 700,
+        fontFamily: "Noto Sans S Chinese", align: "center", baseline: "middle",
+        letterSpacing: mix(16, 6, expoOut(progress(t, t0, 1.15))),
+        color: [ctx.params.ink.r, ctx.params.ink.g, ctx.params.ink.b, 1],
+        glow: {radius: 12, intensity: 0.5, color: [ctx.params.accent.r, ctx.params.accent.g, ctx.params.accent.b, 1]},
+        perChar: (i, n) => ({
+          y: tween(t, t0 + stagger(i, 0.055), 0.85, 88, 0, "expoOut"),
+          opacity: progress(t, t0 + stagger(i, 0.055), 0.5),
+          blur: 16 * (1 - progress(t, t0 + stagger(i, 0.055), 0.5))
+        })}),
+      text({id: "subtitle", x: w / 2, y: 632, text: ctx.params.subtitle, fontSize: 38, fontWeight: 400,
+        fontFamily: "Noto Sans S Chinese", align: "center", baseline: "middle",
+        letterSpacing: mix(30, 12, expoOut(progress(t, s0, 1.05))),
+        color: [0.64, 0.74, 0.82, 1],
+        perChar: (i, n) => ({
+          y: tween(t, s0 + stagger(i, 0.07), 0.75, -96, 0, "expoOut"),
+          opacity: 0.95 * progress(t, s0 + stagger(i, 0.07), 0.55),
+          blur: 12 * (1 - progress(t, s0 + stagger(i, 0.07), 0.55))
+        })})
+    ];
+  }
+};
