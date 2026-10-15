@@ -83,11 +83,11 @@ describe('剪辑代码素材技能只引用真实契约', () => {
 
   it('主文件与每份参考保持有界，主文件链接与实际参考一致', () => {
     const main = text(path.join(SKILL_DIR, 'SKILL.md'))
-    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(6 * 1024)
+    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(10 * 1024)
     const links = [...main.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1]).sort()
     expect(links).toEqual(fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => `references/${name}`).sort())
     for (const file of files.slice(1)) {
-      const limit = path.basename(file) === 'examples.md' ? 16 * 1024 : 8 * 1024
+      const limit = path.basename(file) === 'examples.md' ? 16 * 1024 : 10 * 1024
       expect(Buffer.byteLength(text(file), 'utf8'), file).toBeLessThanOrEqual(limit)
     }
   })

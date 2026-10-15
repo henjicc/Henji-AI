@@ -39,7 +39,7 @@ maxCharacters/maxLines、minDurationSeconds/maxDurationSeconds、maxReadingSpeed
 - `translate_video_edit_subtitles` 给 documentRef、sequenceRef、targetLanguage，可选 captionRefs、providerId/modelId；可能计费，不能把免费整理和翻译混同。双语流程按现有声明先 maxLines=1 整理原文，再生成下方译文；重生成替换所选译文，失败后先查原状态，不能承诺失败批次重试免费。
 - 读 `video_edit.subtitle_preset` 的 style，再合并当前 `video_edit.caption.style`，同目的批量写入；字体从 `font` 实体查真实可用项，不编造字体名。
 - 1080p 字号44–56像素、安全边距约画面5%–10%可作阅读起点；竖版避开实际平台遮挡区域与人脸，纪录对白可更朴素，综艺可更突出，广告可用品牌样式。视角与终端尺寸优先，不固定字幕位置、字数或字体数量。
-- 花字、关键词动画和人名条若需代码素材，加载 video-edit-code-creation；字幕负责信息，花字负责强调，可并存也可按简报替代。不要把普通字幕全做成逐字弹跳。
+- 花字、关键词动画和人名条若需代码素材，加载 video-edit-code-creation；字幕负责信息，花字负责强调，可并存也可按简报替代。普通字幕默认稳定好读；需求或风格要逐字弹跳时照做，并确认读得完。
 
 ## 核对
 

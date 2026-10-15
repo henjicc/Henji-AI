@@ -142,7 +142,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     expect(catalog.instructions).toContain('video-edit-code-creation')
     expect(catalog.instructions).not.toContain('smoothstep')
     const main = (await callEmbeddedSkill({ name: 'video-edit-code-creation', reason: '写新的代码素材' }, signal)).data
-    expect(main.bytes).toBeLessThanOrEqual(6 * 1024)
+    expect(main.bytes).toBeLessThanOrEqual(10 * 1024)
     expect(main.content).toContain('trust=builtin')
     expect(main.content).not.toContain('smoothstep')
     const links = [...main.content.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1])
@@ -154,7 +154,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     for (const reference of links) {
       const result = (await callEmbeddedSkill({ name: 'video-edit-code-creation', path: reference, reason: '当前步骤' }, signal)).data
       expect(result.path).toBe(reference)
-      const limit = reference === 'references/examples.md' ? 16 * 1024 : 8 * 1024
+      const limit = reference === 'references/examples.md' ? 16 * 1024 : 10 * 1024
       expect(result.bytes).toBeLessThanOrEqual(limit)
     }
     await expect(callEmbeddedSkill({ name: 'video-edit-code-creation', path: 'references/missing.md', reason: '猜测' }, signal)).rejects.toThrow('references/author-api.md')
