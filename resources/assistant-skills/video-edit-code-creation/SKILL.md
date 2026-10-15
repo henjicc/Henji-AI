@@ -55,7 +55,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 字幕实体、花字、关键词、人名条 | [字幕配方](references/recipes-captions.md) |
 | 玻璃、图标、线条、圆角卡片 | [玻璃与线条](references/recipes-glass-lines.md) |
 | 三维镜头参考、代码视差 | [空间配方](references/recipes-3d.md) |
-| 语法、图形、预算 | [作者接口](references/author-api.md) |
+| 语法、图形、预算 | [作者接口](references/author-api.md)、[数学与字符串](references/author-api-expressions.md) |
 | text、measureText、perChar、缓动 | [文字动效接口](references/author-text-motion.md) |
 | 框架组件、图层树、自写 WGSL | [着色器接口](references/author-shaders.md) |
 | 查真实组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |

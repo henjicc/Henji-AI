@@ -75,7 +75,7 @@ export default {
 
 ## 数学、数字与色彩
 
-数学：sin/cos/abs/floor/ceil/round、min(a,b)/max(a,b)、clamp(x,min,max)、smoothstep(edge0,edge1,x)。smoothstep 边界递增，clamp 支持数字/RGBA。不支持字符串 + 拼接、数字转字符串、toFixed/toLocaleString 等方法。数字滚动用 round 得到数值，再用 chars("0123456789")、十进制位权表和 repeat 绘制各位字形（见 examples）；静态前缀/单位另画 text，不伪造转换函数。
+数学：sin/cos/abs/floor/ceil/round、min(a,b)/max(a,b)、clamp(x,min,max)、smoothstep(edge0,edge1,x)，以及 sqrt/pow/atan2 等完整数学函数、PI/TAU/E 与 `**`（见 author-api-expressions）。smoothstep 边界递增，clamp 支持数字/RGBA。字符串可用 `+` 拼接、模板插值、formatNumber/formatTime；没有 toFixed/toLocaleString 等方法。数字滚动可直接 `formatNumber(round(v), {thousands: true}) + "%"`；需要每位单独滚动时再用 chars("0123456789")、位权表和 repeat 绘制各位字形（见 examples）。
 
 rgba(r,g,b,a) 构造四通道；luma(color) 为 Rec.709 亮度；contrast(color,amount) 以 0.5 为中心调 RGB；saturate(color,amount) 按亮度调饱和度，后二者夹到 0–1。hsv(h,s,v,a?)/hsl(h,s,l,a?)：h 为周数，s/v/l 在 0–1，alpha 默认 1；toHsv/toHsl 返回 [h,s,v或l,a]，转换结果不能直接当 RGB 绘制。
 

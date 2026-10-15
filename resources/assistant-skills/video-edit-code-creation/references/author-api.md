@@ -56,7 +56,7 @@ ctx：time 源秒、localTime 片段内秒、sequenceTime 序列秒、frame、fp
 
 除 shader 自身外，可用 shadow:{x,y,blur,color}、glow:{radius,intensity,color}、blur。阴影偏移 ±1024，模糊/辉光半径 0–256，辉光强度 0–16。组 opacity 在整组完成后应用一次；clip 在局部图层完成效果后裁切，再做组变换。shader 可放组内接受组效果。
 
-rect/ellipse/path/text 的 fill/stroke 接受 RGBA 或渐变，strokeWidth 控制描边。lineCap 为 butt/round/square，lineJoin 为 miter/round/bevel；dash 至多 32 项非负长度，非空时不能全零。line/path 的 trimStart/trimEnd 为 0–1，end 不小于 start，沿长度裁描边，不改变填充。SVG d 仅绝对 M L C Q Z；points 为 [[x,y],...]，closed 控制闭合。
+rect/ellipse/path/text 的 fill/stroke 接受 RGBA 或渐变，strokeWidth 控制描边。lineCap 为 butt/round/square，lineJoin 为 miter/round/bevel；dash 至多 32 项非负长度，非空时不能全零。line/path 的 trimStart/trimEnd 为 0–1，end 不小于 start，沿长度裁描边，不改变填充。SVG d 支持完整路径语法（含相对命令、H V S T A，见 author-api-expressions）；points 为 [[x,y],...]，closed 控制闭合。
 
 ```text
 linearGradient({x1,y1,x2,y2,stops:[[0,rgbaValue],[1,rgbaValue]]})
@@ -76,7 +76,7 @@ radialGradient({cx,cy,r,stops:[[0,rgbaValue],[1,rgbaValue]]})
 | 单份源码/单帧技术保护 | 数值 |
 | --- | --- |
 | 源码 UTF-8 / AST / 深度 | 64 KiB / 16384 / 64 |
-| 绘制单元（逐字按字形）/ CPU 加权工作 | 4096 / 200000 |
+| 绘制单元（逐字按字形）/ CPU 加权工作 | 4096 / 1000000 |
 | 参数 / 单字符串 / 每帧文字 | languageVersion 3 不限个数（v1/v2 为 32）/ 4096 / 8192 UTF-16 |
 | 滤镜采样 / 标量工作 | 64 / 4096 |
 | 单路径展平点 / 渐变 stops | 4096 / 2–8 |

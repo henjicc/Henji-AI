@@ -22,7 +22,7 @@ Frost是冰霜生成材质，不是模糊现有画面的滤镜。代码shader的
 
 - path({d或points,stroke,strokeWidth,lineCap,trimStart,trimEnd})；line同样有trim字段，0–1按描边长度裁切，end≥start。只有描边生长，不改变fill。无填充轮廓省略fill；同时画了实体填充就会在描边未长完时显形。
 - 单向用trimEnd从0→1，双向用trimStart从.5→0、trimEnd从.5→1，.6–1.2秒expoOut；方向各异的多段图标可各段中间长出，形成统一性。
-- path.d只支持绝对M/L/C/Q/Z，不能直接粘贴带相对命令、弧线、滤镜的任意SVG，也没有SVG自动转图标工具。已有真实Logo走image参数；描边图标用已核对路径或项目组件，不手画近似Logo、不用emoji／符号字当图标。
+- path.d支持完整SVG路径语法，可直接粘贴图标的d字符串；SVG里的滤镜、渐变定义等其他元素不会生效，也没有SVG文件自动转图标工具。已有真实Logo走image参数；描边图标用已核对路径或项目组件，不手画近似Logo、不用emoji／符号字当图标。
 - 一套图标统一线宽、端点与风格。1080p主体图标可300–500px，小图标80–160px，线宽2–4px是起点，缩小帧看清楚再定。
 - 圆角卡片rect.radius或radii（1–4项CSS顺序）；圆角16–32px，线宽2–4px，按短边比例统一。文字驱动宽高用measureText，圆角≤高度一半，锚点决定向哪边长。
 

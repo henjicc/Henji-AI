@@ -85,8 +85,7 @@ describe('剪辑代码素材技能只引用真实契约', () => {
     const main = text(path.join(SKILL_DIR, 'SKILL.md'))
     expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(10 * 1024)
     const links = [...main.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1]).sort()
-    // The t100 reference is indexed now; Claude merges its SKILL.md route.
-    expect([...links, ...(links.includes('references/author-api-expressions.md') ? [] : ['references/author-api-expressions.md'])].sort()).toEqual(fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => `references/${name}`).sort())
+    expect(links).toEqual(fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => `references/${name}`).sort())
     for (const file of files.slice(1)) {
       const limit = path.basename(file) === 'examples.md' ? 16 * 1024 : 10 * 1024
       expect(Buffer.byteLength(text(file), 'utf8'), file).toBeLessThanOrEqual(limit)

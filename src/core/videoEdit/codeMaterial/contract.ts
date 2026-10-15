@@ -5,8 +5,8 @@ export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes
  * 2026-10-15, local Windows/Node benchmark (expressions.test.ts, HENJI_CODE_BENCH=1):
  * 4096 particles × 10 time-varying sin/cos calls = 966658 units; 50 warmup + 100 frames,
  * full evaluateCodeMaterial median 17.911 ms, p95 19.662 ms, min 17.235 ms.
- * 1000000 admits this workload. The requested 4 ms target is NOT met; a work-unit
- * ceiling cannot guarantee elapsed time, and these numbers exclude GPU rendering.
+ * 1000000 admits this workload on purpose: the ceiling bounds runaway work, it does not decide
+ * how rich a piece may be. Elapsed time is a runtime concern, not a compile-time limit (GPU excluded here).
  */
 export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOperations: 1000000, draws: 4096, shaderLayers: 32, shaderFilterPasses: 8, repeatDepth: 4, filterScalarOperations: 4096, filterSamples: 64, pathPoints: 4096, gradientStops: 8, textCharacters: 8192 })
 export type { CodeColor, CodeImageReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'

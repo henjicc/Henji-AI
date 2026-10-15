@@ -17,7 +17,7 @@
 | program | `{kind:"program", sequenceRef, frame}` | 序列整数帧，检查叠层、字幕与转场 |
 | source | `{kind:"source", itemRef, timeUs}` | 源素材整数微秒，盘点参考／原素材 |
 
-maxWidth 为 256–3840，默认 1920；整体可用 960，小屏用 360–720，细节用目标原宽或允许的最大宽。它不是联系表总宽，不虚构 region、times 或批量取帧参数。大于可取宽度的原件不能声称已原分辨率核验。
+maxWidth 为 256–3840，默认 1920；整体可用 960，小屏用 360–720，细节用目标原宽或允许的最大宽。看一段动作和节奏时用 `{kind:"contact_sheet", startFrame, endFrame, frameCount}`（2–12 帧排成带时间码的网格，maxWidth 为整张宽度）；不虚构 region、times 等其他参数。`read_application_media` 默认长边 1600，细字、颗粒、渐变可传更大的 maxEdge / maxBytes。大于可取宽度的原件不能声称已原分辨率核验。
 
 resultRef 交给 `read_application_media(mode="image")`，直接查看返回的图像；引用不算视觉证据。取帧不改变播放头。记录目标、时间、宽度与改动，避免误用旧帧；期间状态变化就重读受影响段。
 
@@ -77,4 +77,4 @@ resultRef 交给 `read_application_media(mode="image")`，直接查看返回的�
 
 眯眼看缩略帧辨焦点，再想象灰度检查明暗层级；小于约40px的字／线和玻璃边缘不要凭缩图判断。先全帧再局部：已有关联标注时用 cropAnnotationId，没有则先按正式字段创建有意义的 region 标注，不能伪造任意 crop 输入。原宽超过3840时诚实说明观察分辨率限制。
 
-参考 source 与成片 program 分别取帧后读图，按相同语义节点比较；工具没有 compareWith 或自动联系表，按段逐帧收集，不编造批量接口。落地位置对了还要看动作中间和相邻接缝；循环须查接缝两侧的方向与速度，不只首尾颜色。
+参考 source 与成片 program 分别取帧后读图，按相同语义节点比较；工具没有 compareWith；看一段节奏用联系表，接缝与细节再逐帧取。落地位置对了还要看动作中间和相邻接缝；循环须查接缝两侧的方向与速度，不只首尾颜色。
