@@ -30,6 +30,7 @@ export interface CodeImageGenerationJob {
   bindingValue: string | null
 }
 const jobs = new Map<string, CodeImageGenerationJob>()
+function bindingIdentity(value: unknown): string | null { return isCodeImageReference(value) ? JSON.stringify([value.kind, value.mediaId, value.time ?? null]) : null }
 const controllers = new Map<string, AbortController>()
 const listeners = new Set<() => void>()
 let revision = 0
@@ -97,7 +98,7 @@ async function land(job: CodeImageGenerationJob, signal: AbortSignal): Promise<v
     const media = document.media.find(media => document.items.some(item => ids.includes(item.id) && item.mediaId === media.id) && media.assetId === result.asset.id)
     if (!media) throw new Error('生成图片未能导入，请重试应用结果。')
     const current = targetCode(document, target)?.parameters[parameterKey]
-    const currentId = typeof current === 'object' && current && 'mediaId' in current ? current.mediaId : null
+    const currentId = bindingIdentity(current)
     if (currentId !== job.bindingValue) throw new Error('生成期间此参数已选择其他图片。完成图片已保留，可点击“应用完成图片”确认替换。')
     const { projectId: _projectId, ...scope } = target
     media.codeImageGeneration = { ...scope, parameterKey, prompt, modelId: job.modelId, taskId: job.taskId, outputIndex: 0 }
@@ -149,7 +150,7 @@ export async function startCodeImageGeneration(request: CodeImageGenerationReque
   if (code?.versionId !== request.target.versionId) throw new Error('原代码版本已改变，请重新生成。')
   const id = crypto.randomUUID()
   const value = code.parameters[request.parameterKey]
-  const bindingValue = isCodeImageReference(value) ? value.mediaId : null
+  const bindingValue = bindingIdentity(value)
   const job: CodeImageGenerationJob = { id, request: structuredClone({ ...request, prompt, params }), modelId, taskId: `code-image-${id}`, status: 'generating', progress: 0, bindingValue }
   jobs.set(id, job); publish()
   const controller = new AbortController(); controllers.set(id, controller)
@@ -171,7 +172,7 @@ export function retryCodeImageGenerationBinding(id: string): void {
   const job = jobs.get(id)
   if (!job || job.status !== 'failed' || !job.generated) throw new Error('此任务没有可重新应用的完成图片，请再次生成。')
   const current = targetCode(requireVideoEditInstance(job.request.target.projectId).document, job.request.target)?.parameters[job.request.parameterKey]
-  job.bindingValue = isCodeImageReference(current) ? current.mediaId : null
+  job.bindingValue = bindingIdentity(current)
   const controller = new AbortController(); controllers.set(id, controller)
   update(job, { status: 'placing', error: undefined }); void run(job, false, controller)
 }

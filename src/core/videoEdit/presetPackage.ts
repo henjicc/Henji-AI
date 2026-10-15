@@ -26,7 +26,7 @@ export const videoEditPresetPreferencesSchema = z.array(videoEditPresetPreferenc
 })
 
 /** One exchange file may carry presets of several kinds; ids are replaced on import. */
-export const VIDEO_EDIT_PRESET_PACKAGE_VERSION = 2
+export const VIDEO_EDIT_PRESET_PACKAGE_VERSION = 3
 export const videoEditPresetPackageItemSchema = z.discriminatedUnion('category', [
   z.object({ category: z.literal('style'), preset: styleKitSchema }).strict(),
   z.object({ category: z.literal('title'), preset: titleTemplateSchema }).strict(),

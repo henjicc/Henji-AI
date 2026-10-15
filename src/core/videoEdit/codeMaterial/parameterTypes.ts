@@ -32,14 +32,14 @@ function point(value: unknown, label: string): CodePoint {
 }
 const extras: Record<string, string[]> = {
   number: ['min', 'max', 'step', 'unit', 'control'], angle: ['min', 'max'], point: ['space', 'min', 'max'], range: ['min', 'max', 'step', 'unit'], color: ['alpha'],
-  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], font: [], image: [], easing: [], seed: [],
+  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], font: [], image: [], audio: [], easing: [], seed: [],
 }
 function declaration(key: string, raw: unknown, types: Record<string, CodeParameterTypeDefinition>, field = false): CodeParameterDeclaration {
   assertCodeMaterialKey(key)
   const item = object(raw, key); const type = text(item.type, `${key}.type`, 64)
   const custom = Object.prototype.hasOwnProperty.call(types, type) ? types[type] : undefined
   if (!Object.prototype.hasOwnProperty.call(extras, type) && !custom) fail(`${key}.type`, `基础类型或已声明自定义类型（${[...CODE_PARAMETER_TYPES, ...Object.keys(types)].join('、')}）`)
-  if (field && (type === 'image' || custom)) fail(`${key}.type`, '除 image 外的基础类型，不允许嵌套自定义类型')
+  if (field && (type === 'image' || type === 'audio' || custom)) fail(`${key}.type`, '除 image 外的基础类型，不允许嵌套自定义类型')
   fields(item, ['type', 'title', 'description', 'tooltip', 'default', 'animatable', ...(field ? [] : ['group', 'advanced', 'visibleWhen']), ...(extras[type] ?? [])], key)
   const base = { key, title: text(item.title, `${key}.title`, 80), description: text(item.description ?? '', `${key}.description`, 1000, true), animatable: bool(item.animatable ?? false, `${key}.animatable`),
     ...(item.tooltip === undefined ? {} : { tooltip: text(item.tooltip, `${key}.tooltip`, 200, true) }),
@@ -82,8 +82,8 @@ function declaration(key: string, raw: unknown, types: Record<string, CodeParame
   else if (type === 'seed') result = { ...base, type, default: number(item.default, `${key}.default`, 0, 4294967295, true) }
   else if (type === 'easing') result = { ...base, type, default: item.default as Extract<CodeBasicParameterDeclaration, { type: 'easing' }>['default'] }
   else {
-    if (item.default !== null || base.animatable) fail(key, '图片 default:null 且 animatable:false')
-    result = { ...base, type: 'image', default: null, animatable: false }
+    if (item.default !== null || base.animatable) fail(key, '媒体 default:null 且 animatable:false')
+    result = { ...base, type: type as 'image' | 'audio', default: null, animatable: false }
   }
   result.default = validateCodeMaterialV3ParameterValue(result, result.default) as typeof result.default
   return result
@@ -163,7 +163,7 @@ export function validateCodeMaterialV3ParameterValue(declaration: CodeParameterD
       const raw = object(value, key); fields(raw, Object.keys(declaration.fields), key)
       return Object.fromEntries(Object.entries(declaration.fields).map(([name, field]) => [name, validateCodeMaterialV3ParameterValue({ ...field, key: `${key}.${name}` }, raw[name]) as CodeBasicParameterValue]))
     }
-    case 'image': if (value === null) return null; fail(key, 'null；图片引用请走既有图片参数校验')
+    case 'audio': case 'image': if (value === null) return null; fail(key, 'null；图片引用请走既有图片参数校验')
   }
 }
 export function codeParameterValueType(parameter: CodeParameterDeclaration): CodeValueType {
@@ -172,7 +172,7 @@ export function codeParameterValueType(parameter: CodeParameterDeclaration): Cod
   if (['point', 'grade', 'custom'].includes(parameter.type)) return 'object'
   if (['range', 'gradient', 'curve'].includes(parameter.type)) return 'array'
   if (parameter.type === 'easing') return typeof parameter.default === 'string' ? 'string' : 'array'
-  return parameter.type as 'boolean' | 'color' | 'image'
+  return parameter.type as 'boolean' | 'color' | 'image' | 'audio'
 }
 export interface CodeParameterShape { type: CodeValueType; fields?: Record<string, CodeParameterShape>; element?: CodeParameterShape }
 export function codeParameterShape(parameter: CodeParameterDeclaration): CodeParameterShape {

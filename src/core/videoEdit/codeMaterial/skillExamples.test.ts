@@ -7,6 +7,9 @@ import { compileCodeMaterial } from './compiler'
 import type { CodeDrawCommand, CodeTextMeasurer } from './contract'
 import { evaluateCodeMaterial } from './evaluate'
 import { layoutCodeText } from './textLayout'
+import { codeFilterFrameExpressions } from './filterFrameExpressions'
+import { evaluateCodeFrameExpressions } from './evaluateV3'
+import { emitCodeMaterialFilter } from '@/features/videoEdit/engine/codeGpuFilter'
 
 const skillRoot = path.resolve('resources/assistant-skills/video-edit-code-creation')
 function markdownFiles(directory: string): string[] {
@@ -48,10 +51,18 @@ describe('剪辑创作 skill 的 Markdown 源码使用真实 v3 编译与求值'
   it.each(sources)('$name 在进场、停留和结束时可求值且随机寻帧确定', ({ source }) => {
     const program = compileCodeMaterial(source)
     expect(program.languageVersion).toBe(3)
-    expect(program.kind).toBe('generator')
     for (const seconds of [0, .25, program.durationSeconds / 2, program.durationSeconds - 1 / 30]) {
       const context = { time: seconds, localTime: seconds, sequenceTime: 4 + seconds,
         width: program.width, height: program.height, frame: Math.round((4 + seconds) * 30), fps: 30 }
+      if (program.kind === 'filter') {
+        expect(emitCodeMaterialFilter(program)).toContain('fn ')
+        const expressions = codeFilterFrameExpressions(program)
+        const uniforms = evaluateCodeFrameExpressions(program, expressions, context, {})
+        expect(evaluateCodeFrameExpressions(structuredClone(program), expressions, context, {})).toEqual(uniforms)
+        assertFinite(uniforms)
+        continue
+      }
+      expect(program.kind).toBe('generator')
       const commands = evaluateCodeMaterial(program, context, {}, { measureText })
       expect(commands.length).toBeGreaterThan(0)
       expect(evaluateCodeMaterial(structuredClone(program), context, {}, { measureText })).toEqual(commands)

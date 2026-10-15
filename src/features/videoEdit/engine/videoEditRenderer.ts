@@ -1,3 +1,7 @@
+import { codeMediaInputKey, codeMediaInputComposition } from './videoEditCodeMediaInput'
+import { isCodeImageReference, isCodeAudioReference } from '@/core/videoEdit/codeMaterial/contract'
+import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
+import { VideoEditContentAudio, codeAudioComposition } from './videoEditContentAudio'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { createLogger } from '@/core/logging'
 import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
@@ -95,10 +99,11 @@ export class VideoEditRenderer {
   private compositor?: VideoEditGpuCompositor
   private capturePresentation?: (pixels: Promise<ImageBitmap>) => void
   private codeSources?: VideoEditCodeSources
+  private readonly contentAudio = new VideoEditContentAudio(document => new VideoEditRenderer(document, 1, undefined, 1, this.frames))
   private presentationEpoch = 0
   private ensureCompositor(): VideoEditGpuCompositor {
     if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
-    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
     return this.compositor!
   }
   /** Only devices/pipelines: no project media, render targets or sound are opened during workspace warmup. */
@@ -463,17 +468,42 @@ export class VideoEditRenderer {
     }
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {
-      const media = document.media.find(media => media.id === id && media.kind === 'image')
+      const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind))
       if (!media) throw new Error('代码图片引用或图片片段的源素材不存在。')
       return media
-    })
+    }).filter(media => media.kind === 'image')
     if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > 256 * 1024 ** 2) throw new Error('可见图片超过32份或256MiB预算，请减少同时显示的图片。')
     for (const id of this.images.keys()) if (!imageIds.has(id)) this.releaseImage(id)
-    const imagesReady = Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)).then(images => this.compositor!.prepareImages(new Map(images), canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id))))
+    const imagesReady = (async () => {
+      const inputs = new Map(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)))
+      const owned: ImageBitmap[] = []
+      try {
+        for (const clip of active) for (const [key, value] of Object.entries(clip.code?.parameters ?? {})) {
+          if (!isCodeImageReference(value) || value.kind === 'image') continue
+          if (!canPresent()) throw new DOMException('视频取帧已取消。', 'AbortError')
+          const source = codeMediaInputComposition(document, clip, value, frame)
+          const renderer = new VideoEditRenderer(source.document, undefined, undefined, 1, this.frames, this)
+          let captured: Promise<ImageBitmap> | undefined
+          try {
+            const result = await renderer.render(source.frame, false, false, canPresent, undefined, undefined, quality, pixels => { captured = pixels.then(bitmap => { owned.push(bitmap); return bitmap }); void captured.catch(() => {}) })
+            await result.completion
+            if (!captured) throw new Error('视频图片输入没有返回画面。')
+            const bitmap = await captured; inputs.set(codeMediaInputKey(clip.id, key), bitmap)
+          } finally { if (captured) await Promise.allSettled([captured]); await renderer.dispose() }
+        }
+        return await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
+      } finally { owned.forEach(bitmap => bitmap.close()) }
+    })()
     const imagesSettled = Promise.allSettled([imagesReady])
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
-    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { transitions, surfaceKeys, onEffectError })
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { transitions, surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
+      if (!codeMaterialUsesAudio(program)) return {}
+      const reference = Object.values(parameters).find(isCodeAudioReference)
+      const source = codeAudioComposition(document, document.clips.find(value => value.id === clip.id) ?? clip, reference?.mediaId)
+      const audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)
+      return { audio, audioTime: (frame - clip.start) / document.fps }
+    } })
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
       const media = videoEditClipMedia(document, clip)
@@ -813,7 +843,7 @@ export class VideoEditRenderer {
     await Promise.allSettled([...this.seekers.values()].map(seeker => seeker.dispose())); this.seekers.clear(); this.frameCache.clear()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     for (const key of this.images.keys()) this.releaseImage(key)
-    this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
+    this.contentAudio.clear(); this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
     for (const chain of this.audioChains.values()) chain.dispose()
     this.audioChains.clear()
   }

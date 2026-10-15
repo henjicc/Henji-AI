@@ -26,7 +26,7 @@ import { createVideoEditCodeMaterials, createVideoEditCodeVersions } from './vid
 import { peekVideoEditCodeProgram, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { codeMaterialAuthoringHints } from '@/core/videoEdit/codeMaterial/authoringHints'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
-import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { assertVideoEditClipFollow } from './videoEditTrackingEdits'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, updateVideoEditCompositeEntity, createVideoEditCompositeEntity, removeVideoEditCompositeEntities, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
@@ -444,7 +444,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     if (this.entityType === 'video_edit.clip' && step.operation.kind === 'create') {
       const sequence = next.sequences.find(sequence => sequence.id === parsed.childId)!
       const added = new Set(refs.map(ref => splitVideoEditRef(ref).childId))
-      for (const clip of sequence.clips) if (added.has(clip.id) && clip.code && (codeMaterialImageIds(clip.code).size > 0 || next.items.find(item => item.id === clip.itemId)?.code?.versionId !== clip.code.versionId)) {
+      for (const clip of sequence.clips) if (added.has(clip.id) && clip.code && (codeMaterialMediaIds(clip.code).size > 0 || next.items.find(item => item.id === clip.itemId)?.code?.versionId !== clip.code.versionId)) {
         await trialVideoEditCodeDocument(instance, contentVersion, next, sequence.id, clip.start, context?.signal, [{ sequenceId: sequence.id, clipId: clip.id }])
       }
     }

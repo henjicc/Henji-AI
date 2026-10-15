@@ -1,5 +1,5 @@
 import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
-import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { getPlatform } from '@/platform/runtime'
 
 export function videoEditMediaContentKey(media: VideoEditMedia): string {
@@ -32,7 +32,7 @@ export class VideoEditMediaContentVerifier {
   private readonly controller = new AbortController()
   async check(document: VideoEditComposition, clips: readonly VideoEditClip[] = document.clips): Promise<void> {
     if (this.disposed) throw new Error('素材检查会话已关闭。')
-    const ids = new Set(clips.flatMap(clip => [videoEditClipMedia(document, clip)?.id, ...codeMaterialImageIds(clip.code), ...(clip.effects ?? []).flatMap(effect => [...codeMaterialImageIds(effect.code)])]))
+    const ids = new Set(clips.flatMap(clip => [videoEditClipMedia(document, clip)?.id, ...codeMaterialMediaIds(clip.code), ...(clip.effects ?? []).flatMap(effect => [...codeMaterialMediaIds(effect.code)])]))
     const media = document.media.filter(media => ids.has(media.id) && media.assetContent?.contentIdentity)
     const keys = new Set(media.map(videoEditMediaContentKey))
     for (const key of this.checks.keys()) if (!keys.has(key)) this.checks.delete(key)

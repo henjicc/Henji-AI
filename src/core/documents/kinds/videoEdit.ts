@@ -130,6 +130,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 7 → 8 → 9（t97）：风格改为说明书，旧风格快照与绑定丢弃。
     7: dropVideoEditStyleKits,
     8: dropVideoEditStyleKits,
+    // 9 → 10（t102）：代码素材新增音频参数与视频/下方画面引用，旧内容原样保留。
+    9: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

@@ -16,6 +16,7 @@ import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 
+const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, closed: 0 }))
 const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
@@ -65,7 +66,8 @@ vi.mock('./videoEditGpuCompositor', async () => {
   const owner = {} as import('@/core/imageEdit/worker/webgpuRuntimeSupport').GpuDevice
   const target = (width: number, height: number) => new VideoEditCodePicture({ createView: () => ({}), destroy: vi.fn() }, width, height, owner)
   class MockCompositor {
-  fork(): MockCompositor { return new MockCompositor() }
+  constructor(_canvas?: OffscreenCanvas, _shared?: MockCompositor, private readonly capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined) {}
+  fork(canvas: OffscreenCanvas, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined): MockCompositor { return new MockCompositor(canvas, this, capture) }
   async blank(width: number, height: number, timestamp: number, duration: number) {
     return new VideoEditGpuFrame({ timestamp, duration, displayWidth: width, displayHeight: height, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 4, () => {})
   }
@@ -78,10 +80,10 @@ vi.mock('./videoEditGpuCompositor', async () => {
     builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
-  async prepareImages() { return new Map() }
+  async prepareImages(images: ReadonlyMap<string, ImageBitmap>) { for (const [key, image] of images) contentInputs.uploads.push([key, (image as ImageBitmap & { timestamp?: number }).timestamp]); return new Map() }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) boundary.evaluatedClips = clips; boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); return { presented: true, completion: Promise.resolve() } }
+  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) boundary.evaluatedClips = clips; boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); if (!destination) this.capture?.()?.(Promise.resolve({ width: document.width, height: document.height, timestamp: pictures[0]?.timestamp, close: () => { contentInputs.closed++ } } as unknown as ImageBitmap)); return { presented: true, completion: Promise.resolve() } }
   setPictureDivisor(divisor: number): void { boundary.divisors.push(divisor) }
   async dispose(): Promise<void> {}
   async invalidateFontResources(): Promise<void> {}
@@ -95,6 +97,7 @@ vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {
   async dispose() { this.cache.deleteMedia(this.path) }
 } }))
 beforeEach(() => {
+  contentInputs.uploads = []; contentInputs.closed = 0
   boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
@@ -253,6 +256,25 @@ function fixture(): ReturnType<typeof videoEditComposition> {
   document.sequences[0].clips = [clip]
   return videoEditComposition(document, document.sequences[0].id)
 }
+
+it('t102 视频参数经共享解码与取帧回调进入图片输入，固定和跟随时间可随机寻帧且回收画面', async () => {
+  const document = fixture()
+  const source = 'export default {apiVersion:1,languageVersion:3,name:"视频输入",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({source:ctx.params.picture,x:0,y:0,width:3840,height:2160})];}}'
+  document.codeMaterials = [{ id: 'definition', name: '视频输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 3, ...testCodeManifest(source, document) }] }]
+  const code = { definitionId: 'definition', versionId: 'v', parameters: { picture: { kind: 'video' as const, mediaId: 'A' } } }
+  document.items.push({ id: 'code', name: '视频输入', kind: 'code', code })
+  document.clips = [{ ...document.clips[0], itemId: 'code', kind: 'code', code, start: 10 }]
+  const renderer = new VideoEditRenderer(document)
+  const sample = async (frame: number) => { contentInputs.uploads = []; const result = await renderer.render(frame); await result.completion; return contentInputs.uploads.find(([key]) => key.startsWith('code-input:'))?.[1] }
+  try {
+    expect(await sample(25)).toBe(.5)
+    expect(await sample(40)).toBe(1)
+    expect(await sample(25)).toBe(.5)
+    await renderer.updateDocument({ ...document, clips: document.clips.map(clip => ({ ...clip, code: { ...code, parameters: { picture: { kind: 'video', mediaId: 'A', time: .25 } } } })) })
+    expect(await sample(40)).toBe(.25)
+    expect(contentInputs.closed).toBe(4)
+  } finally { await renderer.dispose() }
+})
 
 it('parameter updates keep the running decoder schedule and reuse uploaded paused pictures', async () => {
   const document = fixture()

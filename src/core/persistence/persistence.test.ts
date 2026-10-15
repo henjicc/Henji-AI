@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { PERSISTENCE_FORMATS } from './formats'
 import baseline from './schemaBaseline.json'
-import { PersistenceError, upgradePersistenceContent } from './migrations'
+import { PersistenceError, migratePersistenceContent, upgradePersistenceContent } from './migrations'
 import { persistenceSchemaStructure } from './fingerprint'
 import { parseDocumentEnvelope, parseDocumentText } from '../documents/envelope'
 import { videoEditDocumentSchema } from '../videoEdit/document'
@@ -123,6 +123,26 @@ describe('Schema结构指纹', () => {
 })
 
 describe('所有登记格式的黄金样本', () => {
+  it.each([
+    ['document.video_edit', 9, 10],
+    ['document.screen_recording', 11, 12],
+    ['code-asset', 1, 2],
+    ['title-templates', 3, 4],
+    ['video-preset-package', 2, 3],
+    ['subtitle-manifest', 5, 6],
+  ] as const)('%s 参数类型拓宽只升级版本，完整保留旧样本与内嵌内容', (id, from, to) => {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+    expect(format.version).toBe(to)
+    const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${from}.json`, 'utf8')) as unknown
+    const before = structuredClone(raw)
+    const content = id.startsWith('document.') ? parseDocumentEnvelope(raw).content
+      : id === 'title-templates' ? (raw as { content: unknown }).content : raw
+    const expected = ['code-asset', 'video-preset-package', 'subtitle-manifest'].includes(id)
+      ? { ...(content as object), version: to } : content
+    expect(migratePersistenceContent(format, content, from)).toEqual(expected)
+    expect(upgradePersistenceContent(format, content, from)).toEqual(format.schema.parse(expected))
+    expect(raw).toEqual(before)
+  })
   it('剪辑 v2–v7 按完整链升至当前版本，旧原稿、曲线、字幕与归档不丢失，读取不修改输入', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
     expect(baseline.formats['document.video_edit'].supportedFrom).toBe(2)

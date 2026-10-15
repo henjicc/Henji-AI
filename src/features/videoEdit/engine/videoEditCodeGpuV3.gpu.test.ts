@@ -89,6 +89,21 @@ async function run(body: string): Promise<Uint8Array> {
   } finally { target.destroy() }
 }
 describe('v3 真实 GPU 像素与工作预算', () => {
+  it('t102 音频帧级 uniform 像素值与随机寻帧一致', async () => {
+    const host = new VideoEditCodeGpu(wrapped), input = await host.target('t102:input', W, H)
+    const program = compileCodeMaterial(source('return rgba(ctx.audio.level(),ctx.audio.band("bass"),ctx.audio.beatPhase(),1);', 'filter'))
+    const audio = { fps: 2, duration: 2, levels: [.25, .75, .5, 0], bands: { bass: [.5, .25, .75, 0], mid: [0,0,0,0], treble: [0,0,0,0] }, beats: [0, .5, 1, 1.5], onsets: [0, .5, 1, 1.5], bpm: 120, beatsPerBar: 4 as const, barOrigin: 0 }
+    const render = async (localTime: number) => {
+      const picture = await host.filter('t102:output', 't102:audio', program, { ...context, localTime, audio }, {}, input)
+      return read(picture.texture)
+    }
+    try {
+      const first = await render(.25)
+      ;[64, 128, 128, 255].forEach((value, i) => expect(Math.abs(pixel(first, 32, 32)[i] - value)).toBeLessThanOrEqual(1))
+      await render(1.25)
+      expect(await render(.25)).toEqual(first)
+    } finally { await host.dispose() }
+  })
   it('t84新参数和结构字段uniform上传与WGSL读取一致，64槽边界真实编译与像素回读', async () => {
     const host = new VideoEditCodeGpu(wrapped); const input = await host.target('t84:input', W, H)
     const data = new Uint8Array(W * H * 4); data.fill(255)

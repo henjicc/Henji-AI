@@ -1,4 +1,4 @@
-import { codeLiftFrameExpression } from './filterFrameExpressions'
+import { codeExpressionIsFrameOnly, codeLiftFrameExpression } from './filterFrameExpressions'
 import ts from 'typescript'
 import { originalCodeSourceSpan } from './modules'
 import { CODE_BUILTINS, CODE_V3_MATH_BUILTINS, CODE_CONSTANTS, CODE_CONTEXT_KEYS, CODE_TIME_KEYS, CODE_V3_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, finiteCodeNumber } from './contract'
@@ -87,6 +87,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       const a = shapeOf(value.yes); const b = shapeOf(value.no)
       return JSON.stringify(a) === JSON.stringify(b) ? a : { type: value.type }
     }
+    if (value.kind === 'v3call' && ['audio.beats', 'audio.onsets'].includes(value.op)) return { type: 'array', element: { type: 'number' } }
     if (value.kind === 'v3call' && value.op === 'normalize') return { type: value.type, element: { type: 'number' } }
     if (value.kind === 'v3call' && value.op === 'measureText') return { type: 'object', fields: { width: { type: 'number' }, height: { type: 'number' }, lines: { type: 'array', element: { type: 'string' } } } }
     return { type: value.type }
@@ -199,6 +200,22 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       return result
     }
     if (ts.isIdentifier(node)) { const result = env.values.get(node.text); if (!result) fail(node, `未声明或禁止的名称：${node.text}`); return result }
+    const audioMember = (value: ts.Expression): value is ts.PropertyAccessExpression => ts.isPropertyAccessExpression(value) && !value.questionDotToken && ts.isPropertyAccessExpression(value.expression) && !value.expression.questionDotToken && ts.isIdentifier(value.expression.expression) && value.expression.expression.text === 'ctx' && value.expression.name.text === 'audio'
+    if (audioMember(node) && ['beats', 'onsets', 'bpm'].includes(node.name.text)) {
+      return { kind: 'v3call', type: node.name.text === 'bpm' ? 'number' : 'array', op: `audio.${node.name.text}`, args: [] }
+    }
+    if (ts.isCallExpression(node) && audioMember(node.expression)) {
+      const op = node.expression.name.text
+      if (node.questionDotToken || node.typeArguments?.length || !['level', 'band', 'beatPhase', 'barPhase'].includes(op)) fail(node, 'ctx.audio 支持 level(t?)、band(name,t?)、beatPhase(t?)、barPhase(t?)。')
+      const args = node.arguments.map(value => compile(value, env))
+      const offset = op === 'band' ? 1 : 0
+      if (args.length < offset || args.length > offset + 1) fail(node, '音频函数参数数量不正确。')
+      if (offset) { type(node, args[0], 'string'); if (args[0].kind !== 'literal' || !['bass', 'mid', 'treble'].includes(String(args[0].value))) fail(node, '频段名须为 bass、mid 或 treble。') }
+      if (args[offset]) type(node, args[offset], 'number')
+      if (program.mode === 'static') fail(node, '音频帧采样需要 mode:dynamic。')
+      if (args.some(value => !codeExpressionIsFrameOnly(program, value))) fail(node, '音频采样只能使用帧级时间，不能使用逐像素坐标。')
+      return { kind: 'v3call', type: 'number', op: `audio.${op}`, args, sourceSpan: codeSourceSpan(node) }
+    }
     if (ts.isPropertyAccessExpression(node) && !node.questionDotToken) {
       const key = node.name.text; assertCodeMaterialKey(key)
       if (ts.isIdentifier(node.expression) && node.expression.text === 'ctx') {

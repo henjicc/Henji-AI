@@ -9,7 +9,7 @@ import { loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, 
 import { createLogger } from '@/core/logging'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
-import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
+import { isCodeImageReference, isCodeAudioReference } from '@/core/videoEdit/codeMaterial/contract'
 import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema } from '@/core/videoEdit/document'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import type { VideoEditDocument, VideoEditItem, VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
@@ -98,10 +98,10 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
         if (inputs.length !== 1 || program.apiVersion !== publication.asset.sourceVersion.apiVersion || program.languageVersion !== publication.asset.sourceVersion.languageVersion) throw new Error('代码资产固定源码与语言版本不一致。')
         definition.versions[0].assetOrigin = publication.origin
         const parameters = structuredClone(publication.asset.parameters)
-        for (const [key, value] of Object.entries(parameters)) if (isCodeImageReference(value)) {
+        for (const [key, value] of Object.entries(parameters)) if (isCodeImageReference(value) && value.kind !== 'sequence' || isCodeAudioReference(value)) {
           const mediaId = publication.mediaIds.get(value.mediaId)
-          if (!mediaId) throw new Error('代码资产图片依赖未完成映射。')
-          parameters[key] = { kind: 'image', mediaId }
+          if (!mediaId) throw new Error('代码资产媒体依赖未完成映射。')
+          parameters[key] = { ...value, mediaId }
         }
         initial = { parameters, ...(publication.asset.curves ? { curves: structuredClone(publication.asset.curves) } : {}) }
       }

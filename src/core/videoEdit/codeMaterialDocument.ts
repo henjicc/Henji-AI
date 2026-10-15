@@ -5,7 +5,7 @@ import type { CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPe
 import type { CodeMaterialProgram } from './codeMaterial/contract'
 import { CodeMaterialError } from './codeMaterial/contract'
 import { prepareCodeMaterialParameters } from './codeMaterialAnimation'
-import { codeMaterialImageIds } from './codeMaterialResources'
+import { isCodeImageReference, isCodeAudioReference } from './codeMaterial/contract'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import { validateVideoEditTransitions, videoEditTransitionWindow } from './transitions'
 import { videoEditEffectCodes } from './compositing'
@@ -31,10 +31,12 @@ export function codeMaterialVersion(document: Pick<VideoEditDocument, 'codeMater
 }
 /** Metadata is checked against source by the host Worker, never trusted from the file. */
 export function validateCodeMaterialDocument(document: VideoEditDocument, read: CodeMaterialMetadataReader): void {
-  const images = new Set(document.media.filter(media => media.kind === 'image').map(media => media.id))
   const validate = (instance: CodeMaterialInstance, program: CodeMaterialMetadata): void => {
     prepareCodeMaterialParameters(program, instance)
-    for (const mediaId of codeMaterialImageIds(instance)) if (!images.has(mediaId)) throw new CodeMaterialError('PARAMETERS', '图片参数引用不属于此剪辑，或引用的素材不是图片。')
+    for (const value of Object.values(instance.parameters)) {
+      if (isCodeImageReference(value) && value.kind !== 'sequence' && !document.media.some(media => media.id === value.mediaId && media.kind === value.kind)) throw new CodeMaterialError('PARAMETERS', '图片或视频参数引用与剪辑素材类型不一致。')
+      if (isCodeAudioReference(value) && !document.media.some(media => media.id === value.mediaId && ['audio', 'video'].includes(media.kind))) throw new CodeMaterialError('PARAMETERS', '音频参数须引用剪辑中的音频或视频。')
+    }
   }
   for (const definition of document.codeMaterials ?? []) read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })
   for (const item of document.items) if (item.code) {

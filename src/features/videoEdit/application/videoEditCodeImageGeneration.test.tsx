@@ -203,6 +203,20 @@ it('用户期间换图后拒绝覆盖；确认应用复用原完成结果', asyn
   images.retryCodeImageGenerationBinding(second.id); await waitFor(() => expect(second.status).toBe('placed'))
   expect(submit).toHaveBeenCalledTimes(2)
 })
+it('t102 同一视频调整固定时间也拒绝被晚到的生成结果覆盖', async () => {
+  editVideoProject(owner.document.id, document => {
+    document.media.push({ id: 'movie', name: '视频', kind: 'video', path: 'D:/movie.mp4', width: 1920, height: 1080, durationSeconds: 10 })
+    document.items.push({ id: 'movie-item', name: '视频', kind: 'video', mediaId: 'movie' })
+    return document
+  })
+  await bindVideoEditCodeImage(target(), 'photo', { kind: 'media', mediaId: 'movie', time: 1 })
+  const job = await images.startCodeImageGeneration(request())
+  await bindVideoEditCodeImage(target(), 'photo', { kind: 'media', mediaId: 'movie', time: 2 })
+  await succeed(job)
+  await waitFor(() => expect(job.status).toBe('failed'))
+  expect(job.error).toContain('已选择其他图片')
+  expect(bound()).toEqual({ kind: 'video', mediaId: 'movie', time: 2 })
+})
 it('保存失败后的重试只保存原绑定；用户随后撤销不会被重新应用', async () => {
   const job = await images.startCodeImageGeneration(request())
   const write = vi.spyOn(owner.session, 'flush').mockRejectedValue(new Error('磁盘写入失败'))

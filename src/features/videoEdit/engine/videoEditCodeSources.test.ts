@@ -43,6 +43,24 @@ function changedVersion(document: VideoEditComposition, id: string): VideoEditCo
   return { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: id } })) }
 }
 
+it('t102 静态声明读取音频元数据仍随来源更新，视频参数按片段改写为当前帧输入', async () => {
+  const code = 'export default {apiVersion:1,languageVersion:3,name:"音频",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:3,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [rect({x:ctx.audio.bpm,y:0,width:10,height:10,fill:[1,1,1,1]}),image({source:ctx.params.picture,x:0,y:0,width:10,height:10})];}}'
+  const document = fixture(code)
+  document.codeMaterials![0].versions[0].languageVersion = 3
+  document.media.push({ id: 'video', name: '视频', path: 'D:/movie.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 3 })
+  const boundary = boundaries(document), audio = { fps: 30, duration: 3, bpm: 120, beats: [0, .5], onsets: [0, .5], beatsPerBar: 4, barOrigin: 0, levels: [], bands: { bass: [], mid: [], treble: [] } }
+  const options = { audio: vi.fn(async () => ({ audio, audioTime: .5 })) }
+  try {
+    await boundary.sources.prepare(document, document.clips, 0, () => true, undefined, options)
+    await boundary.sources.prepare(document, document.clips, 15, () => true, undefined, options)
+    expect(boundary.generator).toHaveBeenCalledTimes(2)
+    const next = { ...document, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, parameters: { picture: { kind: 'video' as const, mediaId: 'video' } } } })) }
+    boundary.sources.updateParameters(next)
+    await boundary.sources.prepare(next, next.clips, 15, () => true, undefined, options)
+    expect(boundary.generator).toHaveBeenLastCalledWith(expect.any(String), expect.anything(), expect.objectContaining({ audio, audioTime: .5 }), expect.objectContaining({ picture: { kind: 'image', mediaId: 'code-input:["clip","picture"]' } }), undefined, false, undefined)
+  } finally { await boundary.sources.dispose() }
+})
+
 it('static code picture cache does not freeze its native animated effect mask', async () => {
   const document = fixture(); const shape = { ...createVideoEditMaskShape('rect', 'mask'), feather: 0 }
   document.clips[0].effects = [{ id: 'blur', name: '模糊', enabled: true, amount: 1, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'shapes', shapes: [{ ...shape, pathAnimation: { pointIds: ['a', 'b', 'c', 'd'], keys: [

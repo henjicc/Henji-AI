@@ -1,12 +1,17 @@
 import { testCodeAssetSource } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
-import { CODE_ASSET_LIMITS, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from './codeAsset'
+import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from './codeAsset'
 import { videoEditDocumentSchema } from './document'
 
 const content = { sizeBytes: 123, fileModifiedAt: 456, contentIdentity: 'a'.repeat(64) }
-const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '透明标题', ...testCodeAssetSource('source', 2), parameters: { label: '中文', size: 20, tint: [1, 0, 0, 1], image: { kind: 'image', mediaId: 'old-image' } }, curves: { size: [{ id: 'key', sourceInUs: 1, sourceRemainder: { numerator: 1, denominator: 3 }, value: 21, interpolation: 'ease' }] }, images: [{ id: 'old-image', path: 'D:/original.png', content, assetId: 'original' }] })
+const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '透明标题', ...testCodeAssetSource('source', 2), parameters: { label: '中文', size: 20, tint: [1, 0, 0, 1], image: { kind: 'image', mediaId: 'old-image' } }, curves: { size: [{ id: 'key', sourceInUs: 1, sourceRemainder: { numerator: 1, denominator: 3 }, value: 21, interpolation: 'ease' }] }, images: [{ kind: 'image', id: 'old-image', path: 'D:/original.png', content, assetId: 'original' }] })
 describe('可编辑代码资产文件契约', () => {
+  it('音频、视频固定时间和下方画面无损往返，拒绝依赖种类错配', () => {
+    const asset: CodeAsset = { ...fixture(), parameters: { sound: { kind: 'audio', mediaId: 'video' }, picture: { kind: 'video', mediaId: 'video', time: .25 }, lower: { kind: 'sequence', mediaId: 'below' } }, images: [{ id: 'video', kind: 'video', path: 'D:/original.mp4', content }] }
+    expect(decodeCodeAsset(encodeCodeAsset(asset))).toEqual(asset)
+    expect(() => encodeCodeAsset({ ...asset, images: [{ ...asset.images[0], kind: 'image' }] })).toThrow('种类')
+  })
   it('清单原图片可凭固定内容身份进入剪辑；无库记录又无身份的快照拒绝', () => {
     const document = createVideoEditDocument('原图片剪辑')
     document.media = [{ id: 'fixed-image', name: '原图片', path: 'D:/original.png', kind: 'image', width: 100, height: 100, durationSeconds: 0, assetContent: { ...content }, sourceRevision: 'new-source' }]
@@ -40,6 +45,6 @@ describe('可编辑代码资产文件契约', () => {
     expect(() => encodeCodeAsset({ ...input, curves: oversizedCurves })).toThrow('512KiB')
   })
   it('拒绝无效UTF-8、JSON和文件版本', () => {
-    for (const bytes of [new Uint8Array(), new Uint8Array([255]), new TextEncoder().encode('{'), new TextEncoder().encode(JSON.stringify({ ...fixture(), version: 2 }))]) expect(() => decodeCodeAsset(bytes)).toThrow()
+    for (const bytes of [new Uint8Array(), new Uint8Array([255]), new TextEncoder().encode('{'), new TextEncoder().encode(JSON.stringify({ ...fixture(), version: CODE_ASSET_VERSION + 1 }))]) expect(() => decodeCodeAsset(bytes)).toThrow()
   })
 })

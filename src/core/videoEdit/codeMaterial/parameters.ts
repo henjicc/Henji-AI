@@ -1,4 +1,4 @@
-import { CODE_MATERIAL_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, finiteCodeNumber } from './contract'
+import { CODE_MATERIAL_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, codeAudioReference, finiteCodeNumber } from './contract'
 import type { CodeMaterialProgram, CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './contract'
 import { parseCodeMaterialV3Parameters, validateCodeMaterialV3ParameterValue } from './parameterTypes'
 import type { CodeParameterTypeDefinition } from './contract'
@@ -58,6 +58,7 @@ export function validateCodeMaterialParameterValue(declaration: CodeParameterDec
   if (declaration.type === 'boolean' && typeof value === 'boolean') return value
   if (declaration.type === 'choice' && typeof value === 'string' && declaration.options.includes(value)) return value
   if (declaration.type === 'text') return text(value, key, declaration.maxLength, true)
+  if (declaration.type === 'audio') return value === null ? null : codeAudioReference(value, key)
   if (declaration.type === 'image') return value === null ? null : codeImageReference(value, key)
   return validateCodeMaterialV3ParameterValue(declaration, value)
 }

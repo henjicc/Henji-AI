@@ -20,8 +20,8 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 9,
-      "fingerprint": "7a65a4e14d0568cf187deaaddd09452bd18ec37b5456d2f9aef97597276f569d",
+      "version": 10,
+      "fingerprint": "84d241187a265089913f87233afa5532184f3259eee49823f471058f84949a9a",
       "supportedFrom": 2
     },
     "document.canvas": {
@@ -65,8 +65,8 @@
       "supportedFrom": 1
     },
     "code-asset": {
-      "version": 1,
-      "fingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2",
+      "version": 2,
+      "fingerprint": "c527337e08f3102019f3dd9763c4c5e8d0147e439599d1f78ec73e65593e9d0e",
       "supportedFrom": 1
     },
     "image-header": {
@@ -100,8 +100,8 @@
       "supportedFrom": 1
     },
     "title-templates": {
-      "version": 3,
-      "fingerprint": "8939641fa6dde690d899eba43966872d4fbef9d8cc2ff7c912fcb71b5a320700",
+      "version": 4,
+      "fingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
       "supportedFrom": 3
     },
     "text-presets": {
@@ -190,8 +190,8 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 5,
-      "fingerprint": "91568915e10c97f456c926633e80fc9285a609fc55422d1f14e4f806a93b0054",
+      "version": 6,
+      "fingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
       "supportedFrom": 3
     },
     "storyboard-metadata": {
@@ -255,8 +255,8 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 11,
-      "fingerprint": "90e5bb9c2741bab0fd247458761556553364fb7bcb1048be29cbd3e5e3841f15",
+      "version": 12,
+      "fingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
       "supportedFrom": 5
     },
     "recording-setup": {
@@ -270,8 +270,8 @@
       "supportedFrom": 1
     },
     "video-preset-package": {
-      "version": 2,
-      "fingerprint": "91a54a7c05cc609bc452a7b2ae3a253f32bb0e882ff3a77c3ae177a80855d1c9",
+      "version": 3,
+      "fingerprint": "98e1d776ad0d10523958e78a6f3446e91178567b6b269863547239dbf6eeca04",
       "supportedFrom": 1
     }
   },

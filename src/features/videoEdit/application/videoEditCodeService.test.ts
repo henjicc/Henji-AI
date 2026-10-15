@@ -27,7 +27,7 @@ import { readVideoEditCodeEditor } from './videoEditCodeParameters'
 import { videoEditGraphicObjectId } from './videoEditCompositeEntities'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { CodeAsset } from '@/core/videoEdit/codeAsset'
-import { decodeCodeAsset, encodeCodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_VERSION, decodeCodeAsset, encodeCodeAsset } from '@/core/videoEdit/codeAsset'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset } from './videoEditCodeAssets'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { publishProjectCodeComponent, projectCodeComponents, refuseCodeComponentRemoval } from './videoEditCodeStorage'
@@ -115,7 +115,7 @@ it('关闭的剪辑可后台创建代码素材和组件，读取组件不抢占�
   } finally { app.dispose() }
 })
 const filterSource = 'export default {apiVersion:1,name:"原创滤镜",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
-const codeAssetFixture = (codeSource = source): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '可编辑资产', ...testCodeAssetSource(codeSource, codeSource.includes('type:"image"') ? 2 : 1), parameters: { amount: .7 }, curves: { amount: [{ id: 'asset-key', sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 }, value: .9, interpolation: 'ease' }] }, images: [] })
+const codeAssetFixture = (codeSource = source): CodeAsset => ({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '可编辑资产', ...testCodeAssetSource(codeSource, codeSource.includes('type:"image"') ? 2 : 1), parameters: { amount: .7 }, curves: { amount: [{ id: 'asset-key', sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 }, value: .9, interpolation: 'ease' }] }, images: [] })
 const importPublication = (asset = codeAssetFixture()) => ({ asset, media: [], mediaIds: new Map<string, string>(), origin: { assetId: 'fixed-asset', contentIdentity: 'a'.repeat(64) }, beforePublish: async () => undefined })
 function collectionBoundary() {
   const bytes = new Map<string, Uint8Array>(); const assets = new Map<string, AssetRecord>(); const platform = getPlatform()
@@ -671,7 +671,7 @@ it('滤镜维持单输入边界，不能声明图片资源或把其它参数当�
     const imageTarget = { ...target, effectId, versionId: effect.code!.versionId }
     appendVideoEditMedia(id, { id: 'fx-image', kind: 'image', path: 'D:/original-fx.png', name: '滤镜图片', width: 3840, height: 2160, durationSeconds: 0 })
     const before = owner.document; const history = owner.past.length
-    await expect(bindVideoEditCodeImage(imageTarget, 'gain', { kind: 'media', mediaId: 'fx-image' })).rejects.toThrow('此参数不是图片引用')
+    await expect(bindVideoEditCodeImage(imageTarget, 'gain', { kind: 'media', mediaId: 'fx-image' })).rejects.toThrow('此参数不是媒体引用')
     expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
     const ref = { kind: 'video_edit.effect', id: `${id}:${effectId}` }
     expect((await app.read(ref, ['video_edit.effect.parameters'])).properties).toMatchObject({ 'video_edit.effect.parameters': { gain: .5 } })
@@ -728,7 +728,7 @@ it('v3片段元素覆盖收录并导入为素材初始值，新片段独立复�
 it('代码资产图片局部ID重映射和依赖媒体在同一次历史提交中发布', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
-  const publication = importPublication({ ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'old-image' } }, curves: undefined, images: [{ id: 'old-image', path: 'D:/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] })
+  const publication = importPublication({ ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'old-image' } }, curves: undefined, images: [{ id: 'old-image', kind: 'image' as const, path: 'D:/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] })
   const media = { id: 'new-image', kind: 'image' as const, name: '原图片', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0, assetContent: publication.asset.images[0].content, sourceRevision: 'fixed-source' }
   const before = owner.past.length
   await createVideoEditCodeAssetInstance(id, { ...publication, media: [media], mediaIds: new Map([['old-image', media.id]]) })
@@ -769,7 +769,7 @@ it.each(['cancel', 'edit', 'identity'] as const)('代码资产最终%s检查不�
 it('代码资产未授权图片在任何媒体探测之前被拒绝，原目标零改动', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const baseline = owner.document
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
-  const manifest = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image' as const, mediaId: 'original' } }, curves: undefined, images: [{ id: 'original', path: 'D:/unauthorized/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] }
+  const manifest = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image' as const, mediaId: 'original' } }, curves: undefined, images: [{ id: 'original', kind: 'image' as const, path: 'D:/unauthorized/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] }
   const bytes = encodeCodeAsset(manifest)
   vi.spyOn(assetApplicationService, 'inspect').mockResolvedValue({ id: 'code-asset', mediaType: 'code', filePath: 'D:/asset.henji-code', inspectionStatus: 'ready', sizeBytes: bytes.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } as AssetRecord)
   vi.spyOn(getPlatform().system.fs, 'readFile').mockResolvedValue(bytes)
@@ -833,7 +833,7 @@ it.each([false, true])('旧无身份图片正式重探测：尺寸变化%s；同
   editVideoProject(id, document => ({ ...document, media: [{ id: 'existing-image', name: '原图片', kind: 'image', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0, sourceRevision: 'cached-original', assetId: 'current-real-asset' }] }))
   const baseline = owner.document
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
-  const manifest: CodeAsset = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'local-image' } }, curves: undefined, images: [{ id: 'local-image', path: 'D:/original.png', assetId: 'deleted-source-asset', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } }] }
+  const manifest: CodeAsset = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'local-image' } }, curves: undefined, images: [{ id: 'local-image', kind: 'image' as const, path: 'D:/original.png', assetId: 'deleted-source-asset', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } }] }
   const { bytes } = collectionBoundary(); bytes.set('D:/source.henji-code', encodeCodeAsset(manifest))
   vi.spyOn(assetApplicationService, 'inspect').mockResolvedValue({ id: 'code-asset', mediaType: 'code', filePath: 'D:/source.henji-code', inspectionStatus: 'ready', sizeBytes: bytes.get('D:/source.henji-code')!.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } as AssetRecord)
   const probe = vi.spyOn(mediaService, 'inspectVideoEditMedia').mockResolvedValue({ id: 'temporary-probe-id', name: '探测图', kind: 'image', path: 'D:/original.png', width: resized ? 200 : 100, height: 100, durationSeconds: 0 })
@@ -848,10 +848,10 @@ it.each([false, true])('旧无身份图片正式重探测：尺寸变化%s；同
   expect(probe).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
 })
 
-it('真正新原图片依赖经正式导入 facade 固定身份、保存重开与一次撤销，不伪造库记录', async () => {
+it('真正新原媒体依赖经正式导入 facade 固定身份、保存重开与一次撤销，不伪造库记录', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id
   const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
-  const manifest: CodeAsset = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'local-image' } }, curves: undefined, images: [{ id: 'local-image', path: 'D:/original.png', assetId: 'deleted-source-asset', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } }] }
+  const manifest: CodeAsset = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'local-image' } }, curves: undefined, images: [{ id: 'local-image', kind: 'image' as const, path: 'D:/original.png', assetId: 'deleted-source-asset', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } }] }
   const { bytes } = collectionBoundary(); bytes.set('D:/source.henji-code', encodeCodeAsset(manifest))
   vi.spyOn(assetApplicationService, 'inspect').mockResolvedValue({ id: 'code-asset', mediaType: 'code', filePath: 'D:/source.henji-code', inspectionStatus: 'ready', sizeBytes: bytes.get('D:/source.henji-code')!.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } as AssetRecord)
   vi.spyOn(mediaService, 'inspectVideoEditMedia').mockResolvedValue({ id: 'fresh-image', name: '原图', kind: 'image', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0 })

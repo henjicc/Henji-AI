@@ -109,4 +109,4 @@ export default {
 
 - 粒子组成文字或形状：对 `chars(text)` 的每个字用 `measureText` 求位置，粒子从随机位置 `mix` 到字的范围内，用 `expoOut(progress(...))` 汇聚。
 - 逐像素的场（烟、流体感、极光）用自写 WGSL 着色器图层，见 author-shaders；粒子和着色器背景可以叠用。
-- 跟着音乐跳：在参数曲线上按真实重音打关键帧，驱动数量、速度或亮度。
+- 跟着音乐跳：用 `ctx.audio.level()` 驱动尺寸或亮度，用 `ctx.audio.band("bass")` 读取低频能量，用 `ctx.audio.beatPhase()` 读取拍内相位；默认下方序列混音，可用 audio 参数绑定音频或视频素材。签名与时间基准见 author-api-expressions。

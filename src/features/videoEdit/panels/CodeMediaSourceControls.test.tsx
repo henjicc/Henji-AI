@@ -99,12 +99,12 @@ it('图片参数复用素材图片、正式文件选择、资产库和清除，�
   await act(async () => { fireEvent.click(view.getByRole('button', { name: '选择文件' })) })
   expect(chooseVideoEditCodeImage).toHaveBeenCalledWith(target, 'logo', expect.any(AbortSignal))
   fireEvent.click(view.getByRole('button', { name: '从资产库拖入' })); expect(openAssetLibrary).toHaveBeenCalledWith('floating')
-  await act(async () => { fireEvent.click(view.getByRole('button', { name: '清除图片' })) })
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: '清除画面' })) })
   expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(target, 'logo', null, expect.any(AbortSignal))
   expect(owner.document.media.find(media => media.id === 'imageA')!.path).toBe('D:/originalA.png'); expect(onError).not.toHaveBeenCalled()
 })
 
-it('资产拖包的路径不参与绑定，素材项必须来自当前剪辑且是单张图片，文件拖入保留原路径', async () => {
+it('资产拖包的路径不参与绑定，素材项必须来自当前剪辑且是单份图片或视频，文件拖入保留原路径', async () => {
   const view = render(<View />); const drop = view.getByLabelText('图片图片拖放区')
   await act(async () => { fireEvent.drop(drop, { dataTransfer: transfer(HENJI_DRAG_DATA_MIME, { type: 'image', sourceType: 'asset', assetId: 'assetA', filePath: 'D:/forged.png', imageUrl: 'media:assetA' }) }) })
   expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(editor().target, 'logo', { kind: 'asset', assetId: 'assetA' }, expect.any(AbortSignal))
@@ -114,7 +114,9 @@ it('资产拖包的路径不参与绑定，素材项必须来自当前剪辑且�
   vi.mocked(bindVideoEditCodeImage).mockClear()
   fireEvent.drop(drop, { dataTransfer: transfer(VIDEO_EDIT_ITEM_DRAG_MIME, { projectId: 'other-project', itemIds: [imageItem] }) })
   const videoItem = owner.document.items.find(item => item.mediaId === 'video')!.id
-  fireEvent.drop(drop, { dataTransfer: transfer(VIDEO_EDIT_ITEM_DRAG_MIME, { projectId: owner.document.id, itemIds: [videoItem] }) })
+  await act(async () => { fireEvent.drop(drop, { dataTransfer: transfer(VIDEO_EDIT_ITEM_DRAG_MIME, { projectId: owner.document.id, itemIds: [videoItem] }) }) })
+  expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(editor().target, 'logo', { kind: 'media', mediaId: 'video' }, expect.any(AbortSignal))
+  vi.mocked(bindVideoEditCodeImage).mockClear()
   fireEvent.drop(drop, { dataTransfer: transfer(VIDEO_EDIT_ITEM_DRAG_MIME, { projectId: owner.document.id, itemIds: [imageItem, imageItem] }) })
   expect(bindVideoEditCodeImage).not.toHaveBeenCalled(); expect(onError).not.toHaveBeenCalled()
   vi.spyOn(getPlatform().media, 'getPathForFile').mockReturnValue('D:/drag-original.png')
@@ -128,7 +130,7 @@ it('图片选择随目标变更或面板隐藏取消，旧请求晚到失败不�
   fireEvent.click(view.getByRole('button', { name: '选择文件' }))
   const signal = vi.mocked(chooseVideoEditCodeImage).mock.calls[0][2]!
   view.rerender(<CodeImageParameterControl target={editor(1).target} parameterKey="logo" title="图片" value={null} />)
-  expect(signal.aborted).toBe(true); expect(view.queryByText('正在应用图片')).toBeNull()
+  expect(signal.aborted).toBe(true); expect(view.queryByText('正在应用素材')).toBeNull()
   await act(async () => result.reject(new Error('旧选择失败'))); expect(onError).not.toHaveBeenCalled()
   view.unmount()
   const second = deferred<void>(); vi.mocked(chooseVideoEditCodeImage).mockReturnValue(second.promise)
@@ -136,6 +138,29 @@ it('图片选择随目标变更或面板隐藏取消，旧请求晚到失败不�
   const hiddenSignal = vi.mocked(chooseVideoEditCodeImage).mock.calls.at(-1)![2]!
   panel.rerender(<View visible={false} />); expect(hiddenSignal.aborted).toBe(true)
   await act(async () => second.resolve()); expect(onError).not.toHaveBeenCalled()
+})
+
+it('audio 参数使用同一媒体控件，默认下方混音且可以选择视频音轨', async () => {
+  const target = editor().target
+  const view = render(<CodeImageParameterControl target={target} parameterKey="music" title="音乐" value={null} mediaType="audio" />)
+  expect(view.queryByRole('button', { name: '生成' })).toBeNull()
+  fireEvent.click(view.getByRole('button', { name: '音乐声音素材' }))
+  expect(view.getByRole('option', { name: '下方序列混音' })).toBeTruthy()
+  expect(view.queryByText('图片素材A')).toBeNull()
+  await act(async () => { fireEvent.click(view.getByText(owner.document.media.find(media => media.id === 'video')!.name)) })
+  expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(target, 'music', { kind: 'media', mediaId: 'video' }, expect.any(AbortSignal))
+})
+
+it('视频时间控件提交源秒数，跟随模式不保留固定时间', async () => {
+  const target = editor().target
+  const view = render(<CodeImageParameterControl target={target} parameterKey="logo" title="画面" value={{ kind: 'video', mediaId: 'video', time: 1 }} />)
+  const field = view.getByRole('spinbutton', { name: '取帧时间' })
+  fireEvent.focus(field); fireEvent.change(field, { target: { value: '2.5' } })
+  await act(async () => { fireEvent.blur(field) })
+  expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(target, 'logo', { kind: 'media', mediaId: 'video', time: 2.5 }, expect.any(AbortSignal))
+  fireEvent.click(view.getByRole('button', { name: '视频取帧方式' }))
+  await act(async () => { fireEvent.click(view.getByRole('option', { name: '跟随片段时间' })) })
+  expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(target, 'logo', { kind: 'media', mediaId: 'video' }, expect.any(AbortSignal))
 })
 
 it('源码按需展开，检查生成真实候选画布，单片段提交携带原目标且不展示内部标识', async () => {

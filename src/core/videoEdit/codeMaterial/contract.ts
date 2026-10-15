@@ -1,3 +1,4 @@
+import type { AudioContentAnalysis } from '../../audioAnalysis/contentAnalysis'
 import type { ShaderGraphCustomShader, ShaderGraphSpec } from '../shaderGraph/spec'
 /** Closed author languages. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
@@ -12,12 +13,12 @@ export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOpe
   // 8/32 stops CPU 0.050/0.068ms, GPU submission-to-completion 0.310/0.416ms.
   // Measures evaluator + cached raster upload/composite, not Chromium cold raster or presentation.
   gradientStops: 32, textCharacters: 8192 })
-export type { CodeColor, CodeImageReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
+export type { CodeColor, CodeImageReference, CodeAudioReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
-export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'font', 'image', 'easing', 'seed'] as const
-export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'draw' | 'draws' | 'array' | 'object' | 'paint'
+export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'font', 'image', 'audio', 'easing', 'seed'] as const
+export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'audio' | 'draw' | 'draws' | 'array' | 'object' | 'paint'
 export type CodeContextKey = 'time' | 'localTime' | 'sequenceTime' | 'width' | 'height' | 'frame' | 'fps' | 'u' | 'v'
-export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number }
+export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; audio?: AudioContentAnalysis; audioTime?: number }
 export const CODE_CONTEXT_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps', 'u', 'v']
 export const CODE_TIME_KEYS: readonly CodeContextKey[] = ['time', 'localTime', 'sequenceTime', 'frame', 'fps']
 export const CODE_BUILTINS = ['sin', 'cos', 'abs', 'floor', 'ceil', 'round', 'min', 'max', 'clamp', 'mix', 'smoothstep', 'random', 'rgba', 'sample'] as const
@@ -118,13 +119,22 @@ export function codeColor(value: unknown, label: string, clamp = false): CodeCol
 export function codeImageReference(value: unknown, label: string): CodeImageReference {
   if (typeof value !== 'object' || value === null || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) throw new CodeMaterialError('PARAMETERS', `${label}必须是明确的剪辑图片引用。`)
   const fields = Object.getOwnPropertyDescriptors(value)
-  if (Reflect.ownKeys(fields).length !== 2 || !fields.kind || !fields.mediaId || !('value' in fields.kind) || !('value' in fields.mediaId) || fields.kind.value !== 'image' || typeof fields.mediaId.value !== 'string' || fields.mediaId.value.length < 1 || fields.mediaId.value.length > 100) throw new CodeMaterialError('PARAMETERS', `${label}仅允许 kind:image 和有效 mediaId。`)
-  return { kind: 'image', mediaId: fields.mediaId.value }
+  if (Reflect.ownKeys(value).length !== Object.keys(fields).length || Object.values(fields).some(field => !('value' in field)) || Object.keys(fields).some(key => !['kind', 'mediaId', 'time'].includes(key)) || !['image', 'video', 'sequence'].includes(fields.kind?.value) || typeof fields.mediaId?.value !== 'string' || fields.mediaId.value.length < 1 || fields.mediaId.value.length > 100 || fields.kind.value === 'sequence' && (fields.mediaId.value !== 'below' || fields.time)) throw new CodeMaterialError('PARAMETERS', `${label}需要图片/视频 mediaId 或 {kind:'sequence',mediaId:'below'}。`)
+  const time = fields.time?.value
+  if (fields.time && (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || fields.kind.value !== 'video')) throw new CodeMaterialError('PARAMETERS', `${label}.time 仅支持视频的非负秒数。`)
+  return { kind: fields.kind.value, mediaId: fields.mediaId.value, ...(time === undefined ? {} : { time }) }
 }
 export function isCodeImageReference(value: unknown): value is CodeImageReference {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  try { codeImageReference(value, '图片'); return true } catch { return false }
+}
+export function codeAudioReference(value: unknown, label: string): import('../../imaging/parameterTypes').CodeAudioReference {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || ![null, Object.prototype].includes(Object.getPrototypeOf(value))) throw new CodeMaterialError('PARAMETERS', `${label}需要音频素材引用。`)
   const fields = Object.getOwnPropertyDescriptors(value)
-  return Object.keys(fields).length === 2 && fields.kind?.value === 'image' && typeof fields.mediaId?.value === 'string'
+  if (Reflect.ownKeys(value).length !== 2 || fields.kind?.value !== 'audio' || typeof fields.mediaId?.value !== 'string' || !fields.mediaId.value.length || fields.mediaId.value.length > 100) throw new CodeMaterialError('PARAMETERS', `${label}仅允许 kind:audio 和 mediaId。`)
+  return { kind: 'audio', mediaId: fields.mediaId.value }
+}
+export function isCodeAudioReference(value: unknown): value is import('../../imaging/parameterTypes').CodeAudioReference {
+  try { codeAudioReference(value, '音频'); return true } catch { return false }
 }
 export function isCodeColor(value: unknown): value is CodeColor {
   return Array.isArray(value) && value.length === 4 && value.every(channel => typeof channel === 'number' && Number.isFinite(channel) && channel >= 0 && channel <= 1)

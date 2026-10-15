@@ -7,7 +7,7 @@ import { codeElementBounds, codePoint, hitCodeCommands } from './codeMaterial/ge
 import { codeElementOverrideStatus, codeElementOverridesSchema, evaluateCodeElementOverride, readCodeElementOverride } from './codeElementOverrides'
 import { codeElementSourceIds } from './codeElementBake'
 import { resizeCodeElement, snapCodeElementMove } from './codeElementManipulation'
-import { decodeCodeAsset, encodeCodeAsset } from './codeAsset'
+import { CODE_ASSET_VERSION, decodeCodeAsset, encodeCodeAsset } from './codeAsset'
 import { createVideoEditTestDocument } from './testFixtures'
 import { makeVideoEditItemClip } from './projectItems'
 
@@ -90,7 +90,7 @@ it('元素贝塞尔过冲按已有数字与RGBA范围夹取，不中断绘制', 
 })
 it('代码资产编码/导入默认值/新片段复制保留覆盖，并保持片段编辑独立', () => {
   const code = source(`return [${rect}];`); const program = compileCodeMaterial(code)
-  const asset = decodeCodeAsset(encodeCodeAsset({ format: 'henji-code-asset', version: 1, name: '编辑', ...testCodeAssetSource(code, 3), parameters: {}, images: [], elementOverrides: { box: { dx: 20 } } }))
+  const asset = decodeCodeAsset(encodeCodeAsset({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '编辑', ...testCodeAssetSource(code, 3), parameters: {}, images: [], elementOverrides: { box: { dx: 20 } } }))
   const document = createVideoEditTestDocument('导入'); document.codeMaterials = [{ id: 'd', name: '编辑', defaultVersionId: 'v', versions: [{ id: 'v', ...asset.sourceVersion }] }]; document.items.push({ id: 'i', name: '编辑', kind: 'code', code: { definitionId: 'd', versionId: 'v', parameters: {} }, elementOverrides: asset.elementOverrides })
   const clip = makeVideoEditItemClip(document, 'i', document.sequences[0].id, { frame: 0 }, () => program)
   expect(clip.elementOverrides).toEqual(asset.elementOverrides); clip.elementOverrides!.box.dx = 90; expect(asset.elementOverrides!.box.dx).toBe(20)
