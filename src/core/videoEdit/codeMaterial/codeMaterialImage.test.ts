@@ -38,11 +38,13 @@ describe('受控图片作者语言', () => {
     const getter = vi.fn(() => 'logo')
     const accessor = { kind: 'image', get mediaId() { return getter() } }
     const symbol = Symbol('host')
-    const invalid = [undefined, false, 1, 'D:/logo.png', [], {}, { kind: 'video', mediaId: 'logo' }, { kind: 'image', mediaId: '' }, { kind: 'image', mediaId: 'x'.repeat(101) }, { kind: 'image', mediaId: 'logo', path: 'D:/logo.png' }, { kind: 'image', mediaId: 'logo', [symbol]: true }, Object.create({ kind: 'image', mediaId: 'logo' }), accessor]
+    const invalid = [undefined, false, 1, 'D:/logo.png', [], {}, { kind: 'image', mediaId: '' }, { kind: 'image', mediaId: 'x'.repeat(101) }, { kind: 'image', mediaId: 'logo', path: 'D:/logo.png' }, { kind: 'image', mediaId: 'logo', [symbol]: true }, Object.create({ kind: 'image', mediaId: 'logo' }), accessor]
     for (const value of invalid) expect(() => validateCodeMaterialParameterValue(declaration, value)).toThrow(CodeMaterialError)
     expect(getter).not.toHaveBeenCalled()
     expect(validateCodeMaterialParameterValue(declaration, null)).toBeNull()
     expect(validateCodeMaterialParameterValue(declaration, { kind: 'image', mediaId: 'logo' })).toEqual({ kind: 'image', mediaId: 'logo' })
+    // t102: image 参数也接受视频引用（跟随片段时间取帧）。
+    expect(validateCodeMaterialParameterValue(declaration, { kind: 'video', mediaId: 'clip' })).toEqual({ kind: 'video', mediaId: 'clip' })
     const normalized = validateCodeMaterialParameters(program, { logo: { kind: 'image', mediaId: 'logo' } })
     expect(() => validateCodeMaterialParameters(program, { ...normalized, other: null })).toThrow('未声明')
   })

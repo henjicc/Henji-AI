@@ -57,6 +57,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 粒子、光尘、爆散、星轨 | [粒子与场](references/recipes-particles.md) |
 | 三维镜头参考、代码视差 | [空间配方](references/recipes-3d.md) |
 | 语法、图形、预算 | [作者接口](references/author-api.md)、[数学与字符串](references/author-api-expressions.md) |
+| 音乐响度节拍、视频画面输入 | [音频与画面输入](references/author-api-media.md) |
 | text、measureText、perChar、缓动 | [文字动效接口](references/author-text-motion.md) |
 | 框架组件、图层树、自写 WGSL | [着色器接口](references/author-shaders.md) |
 | 查真实组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
