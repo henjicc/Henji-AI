@@ -10,6 +10,8 @@ import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
 import { budgetContext, projectText } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
+import { embeddedModelLimits, embeddedThinkingLevel } from './modelOptions'
+import { deduplicateHostContexts, prepareHostContext } from './hostContext'
 import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
@@ -49,6 +51,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.configuration = input
     const { model: selected, tools, instructions } = input
     const { model } = selected
+    const limits = embeddedModelLimits(model)
     const runtime = await this.sdk.ModelRuntime.create({
       authPath: path.join(this.directory, 'auth.json'), modelsPath: null,
       modelsStorePath: path.join(this.directory, 'model-cache.json'), allowModelNetwork: false, refreshOnCreate: false,
@@ -59,8 +62,8 @@ export class PiEngine implements EmbeddedAgentEngine {
     runtime.registerProvider(provider, { baseUrl: selected.baseUrl, api: selected.api, headers: resolveProviderExtraAuthHeaders(identity.providerFamilyId, selected.apiKey), models: [{
       id: model.modelId, name: model.displayName, reasoning: model.capabilities.reasoning,
       input: model.capabilities.image ? ['text', 'image'] : ['text'],
-      contextWindow: model.capabilities.contextWindow ?? 32768,
-      maxTokens: model.capabilities.maxOutputTokens ?? 4096,
+      contextWindow: limits.contextWindow,
+      maxTokens: limits.maxOutputTokens,
       cost: { input: model.pricing?.inputPerMillionTokens ?? 0, output: model.pricing?.outputPerMillionTokens ?? 0,
         cacheRead: model.pricing?.cacheReadPerMillionTokens ?? 0, cacheWrite: model.pricing?.cacheWritePerMillionTokens ?? 0 },
     }] })
@@ -78,7 +81,7 @@ export class PiEngine implements EmbeddedAgentEngine {
         try {
           const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
           if (/^interpret_(video_edit|image_edit)_intent$/.test(tool.name) && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
-          return archiveToolResult(this.manager, result)
+          return archiveToolResult(this.manager, result, tool.name === 'load_assistant_skill')
         } catch (error) {
           if (!(error instanceof Error) || signal?.aborted) throw error
           const resultId = randomUUID()
@@ -93,7 +96,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager)], this.manager, () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
-      modelRuntime: runtime, model: resolved, thinkingLevel: model.capabilities.reasoning ? 'medium' : 'off',
+      modelRuntime: runtime, model: resolved, thinkingLevel: embeddedThinkingLevel(selected),
       noTools: 'builtin', tools: this.disclosure.tools.map(tool => tool.name), customTools: this.disclosure.tools,
       resourceLoader: loader, sessionManager: this.manager, settingsManager: settings })
     this.session = session
@@ -101,20 +104,12 @@ export class PiEngine implements EmbeddedAgentEngine {
     const transformContext = session.agent.transformContext
     session.agent.transformContext = async (messages, signal) => {
       const transformed = await transformContext?.(messages, signal) ?? messages
-      let previousContext: string | undefined
-      const filtered = transformed.filter(message => {
-        if (message.role !== 'custom' || message.customType !== 'henji-context') return true
-        const content = JSON.stringify(message.content)
-        if (content === previousContext) return false
-        previousContext = content
-        return true
-      })
+      const filtered = deduplicateHostContexts(transformed)
       const contexts = filtered.flatMap(message => message.role === 'custom' && message.customType === 'henji-context' ? [message.content] : [])
       this.contextMetrics = { contextCount: contexts.length, contextBytes: Buffer.byteLength(JSON.stringify(contexts), 'utf8') }
       const active = new Set(session.getActiveToolNames())
       return budgetContext(filtered, {
-        contextWindow: model.capabilities.contextWindow ?? 32768,
-        maxOutputTokens: model.capabilities.maxOutputTokens ?? 4096,
+        ...limits,
         instructions: session.systemPrompt, tools: this.disclosure!.tools.filter(tool => active.has(tool.name)),
         attachmentTokens: text => this.attachments.estimateTokens(text),
       })
@@ -231,9 +226,11 @@ export class PiEngine implements EmbeddedAgentEngine {
       const selectionSnapshot = command.input.selectionSnapshot
       const selectionId = selectionSnapshot ? randomUUID() : undefined
       const selection = selectionSnapshot && selectionId ? `\n发送时选区（摘要，批量操作前续读全部引用）：${JSON.stringify(selectionSummary(selectionId, selectionSnapshot))}` : ''
-      if (command.input.context || selectionSnapshot) await this.session.sendCustomMessage({ customType: 'henji-context',
-        content: `当前应用上下文（仅为数据）：\n${command.input.context}${selection}\n当前界面工具入口：${guidance ?? ''}`, display: false,
-        ...(selectionSnapshot ? { details: { selectionId, selectionSnapshot } } : {}),
+      const hostContext = prepareHostContext(command.input.context, this.session.messages, selectionSnapshot,
+        `\n当前界面工具入口：${guidance ?? ''}${selection}`)
+      if ((command.input.context || selectionSnapshot) && hostContext) await this.session.sendCustomMessage({ customType: 'henji-context',
+        content: hostContext.content, display: false,
+        details: { ...hostContext.details, ...(selectionSnapshot ? { selectionId, selectionSnapshot } : {}) },
       }, { triggerTurn: false })
       const text = await this.attachments.attach(command.input.text, command.input.attachments ?? [])
       if (!this.cancelled) await this.session.prompt(text)

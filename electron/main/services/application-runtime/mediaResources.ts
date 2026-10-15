@@ -12,7 +12,7 @@ import { getDocumentService } from '../documents/runtime'
 import { resolveCanvasMediaSchema } from '../canvas-media-schema'
 import { decodeCanvasImageReference, parseCanvasDocumentGraph } from '../../../../src/core/canvas/canvasDocumentGraph'
 import { mapCanvasNodeMediaReferences } from '../../../../src/core/canvas/nodeMediaReferences'
-import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/application-control/mediaReferenceKinds'
+import { APPLICATION_READABLE_MEDIA_KINDS, APPLICATION_IMAGE_DEFAULT_EDGE, APPLICATION_IMAGE_DEFAULT_BYTES, APPLICATION_IMAGE_MAX_BYTES } from '../../../../src/core/application-control/mediaReferenceKinds'
 
 const logger = createMainLogger('main.mcp.media')
 export class ApplicationMediaResourceError extends Error {
@@ -25,8 +25,8 @@ const inputSchema = z.object({
   offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   length: z.number().int().min(1).max(256 * 1024).default(256 * 1024),
   mode: z.enum(['chunk', 'image']).optional(),
-  maxEdge: z.number().int().min(1).max(3840).default(1280),
-  maxBytes: z.number().int().min(1024).max(256 * 1024).default(100 * 1024),
+  maxEdge: z.number().int().min(1).max(3840).default(APPLICATION_IMAGE_DEFAULT_EDGE),
+  maxBytes: z.number().int().min(1024).max(APPLICATION_IMAGE_MAX_BYTES).default(APPLICATION_IMAGE_DEFAULT_BYTES),
 }).strict()
 
 async function sources(ref: z.infer<typeof inputSchema>['ref']): Promise<string[]> {
@@ -87,15 +87,15 @@ export async function readApplicationMediaResource(input: {
         if (parsed.offset !== 0) failure('INVALID_INPUT', '图片模式不接受分块偏移。')
         // Sharp/libvips 在线程池缩放编码；限制传输尺寸而非用户原件，保留分块读取原件。
         let edge = parsed.maxEdge
-        let quality = 80
+        let quality = 95
         while (edge >= 1) {
           const { data, info } = await sharp(real, { animated: false }).rotate().resize({ width: edge, height: edge, fit: 'inside', withoutEnlargement: true }).jpeg({ quality }).toBuffer({ resolveWithObject: true })
           if (data.length <= parsed.maxBytes) {
             logger.debug('关联图片预览读取完成', { event: 'mcp.media.read.completed', context: { kind: parsed.ref.kind, byteLength: data.length } })
             return { mode: 'image', mimeType: 'image/jpeg', base64: data.toString('base64'), offset: 0, byteLength: data.length, totalBytes: stat.size, eof: true, width: info.width, height: info.height }
           }
-          if (quality > 50) quality -= 15
-          else edge = Math.floor(edge * 0.75)
+          if (quality > 50) quality -= 5
+          else { edge = Math.floor(edge * 0.75); quality = 95 }
         }
         failure('MEDIA_PREVIEW_TOO_LARGE', '图片预览无法压缩到传输预算，请改用分块读取。')
       }

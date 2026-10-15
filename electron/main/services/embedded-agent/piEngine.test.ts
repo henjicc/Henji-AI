@@ -6,6 +6,7 @@ import path from 'node:path'
 import type { LlmModelConfig } from '@henjicc/ai-sdk'
 import { PiEngine } from './piEngine'
 import { PiToolDisclosure } from './toolDisclosure'
+import { videoEditCreativeTools } from './toolDisclosureProfiles'
 import { contextReader } from './contextReader'
 import { SessionManager, type AgentSession, type ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { EngineEvent } from './contracts'
@@ -33,7 +34,7 @@ afterEach(async () => { for (const close of cleanup.reverse()) await close(); cl
 async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {}, api: 'openai-completions' | 'openai-responses' = 'openai-completions') {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pi-test-'))
   cleanup.push(() => fs.rm(directory, { recursive: true, force: true }))
-  const requests: Array<{ tools: Array<{ function: { name: string } }>; messages: Array<{ role: string; content: string }>; input?: Array<{ role: string; content: unknown }> }> = []
+  const requests: Array<{ tools: Array<{ function: { name: string } }>; messages: Array<{ role: string; content: string }>; input?: Array<{ role: string; content: unknown }>; max_tokens?: number; max_completion_tokens?: number; reasoning_effort?: string }> = []
   let mode: 'tool' | 'error' | 'wait' = 'tool'
   let usage: Record<string, unknown> | undefined
   let toolPlan = [{ name: 'read_project', arguments: { id: 'project' } as Record<string, unknown> }]
@@ -94,6 +95,38 @@ function applicationCatalog(allowWrites = true) {
 }
 
 describe('Pi official SDK engine', () => {
+  it('未知模型能力使用共享输出预算，推理默认 high 并尊重已有 low 设置', async () => {
+    const f = await fixture({ reasoning: true, contextWindow: null, maxOutputTokens: null })
+    f.setToolPlan([])
+    await f.engine.command({ action: 'prompt', input: { text: '回答', context: '{}' } })
+    expect(f.requests[0].max_tokens ?? f.requests[0].max_completion_tokens).toBe(32768)
+    expect(f.requests[0].reasoning_effort).toBe('high')
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, model: { ...f.configuration.model, reasoning: { enabled: true, effort: 'low' } } } })
+    await f.engine.command({ action: 'prompt', input: { text: '继续', context: '{}' } })
+    expect(f.requests.at(-1)?.reasoning_effort).toBe('low')
+  })
+
+  it('剪辑创作首轮给出核心创作工具，名称都在正式目录，保留授权过滤，切回顺序不变', () => {
+    for (const allowWrites of [true, false]) {
+      const catalog = applicationCatalog(allowWrites).tools
+      let active: string[] = []
+      const session = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names } } as AgentSession
+      const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
+        parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
+      const disclosure = new PiToolDisclosure(tools, SessionManager.inMemory(), () => session)
+      disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}')
+      const first = [...active]
+      expect(first).toEqual([...first].sort())
+      expect(first).toEqual(expect.arrayContaining(videoEditCreativeTools().filter(name => catalog.some(tool => tool.name === name))))
+      expect(first).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'analyze_video_edit_color']))
+      if (allowWrites) expect(first).toEqual(expect.arrayContaining(['change_application_entities', ...videoEditCreativeTools()]))
+      else expect(first).not.toContain('generate_video_edit_in_place')
+      expect(first).not.toContain('apply_video_edit_title_template')
+      disclosure.prepareContext('{"surface":{"id":"workspace.canvas"}}')
+      disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}')
+      expect(active).toEqual(first)
+    }
+  })
   it('授权讲解 JSONL 与历史附图经正式 Pi 消息进入受控模型 transport，用量复用原循环', async () => {
     const f = await fixture({ image: true })
     const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('read_image_edit_intent_recording')!
@@ -240,7 +273,7 @@ describe('Pi official SDK engine', () => {
   })
 
   it('完整授权目录按需披露后首轮体积缩减，续轮相同宿主信息只携带一份', async () => {
-    const f = await fixture({}, 'openai-responses')
+    const f = await fixture({ contextWindow: 128000 }, 'openai-responses')
     const catalog = applicationCatalog()
     await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: catalog.tools } })
     const context = '{"surface":{"id":"workspace.canvas"},"project":{"id":"original"}}'
@@ -278,6 +311,8 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '检查剪辑画面', context: JSON.stringify({ surface: { id: 'workspace.video_edit' } }) } })
     const editNames = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
     expect(editNames).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'change_application_entities', 'load_application_tools']))
+    expect(editNames).toEqual(expect.arrayContaining(videoEditCreativeTools()))
+    expect(editNames).toEqual([...editNames].sort())
     expect(editNames).not.toContain('export_video_edit'); expect(editNames).not.toContain('get_canvas_document')
     for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
@@ -547,7 +582,9 @@ it('任务精确 names 保持目录排序与基础工具稳定，避免整领域
     const full = measure({ domains: [domain] })
     const precise = measure({ names: [...names] })
     expect(precise.map(tool => tool.name)).toEqual(expect.arrayContaining([...names]))
-    expect(JSON.stringify(precise).length).toBeLessThan(JSON.stringify(full).length * 0.3)
+    expect(precise.map(tool => tool.name)).toEqual([...new Set([...initial.map(tool => tool.name), ...names])].sort())
+    const added = (tools: typeof precise) => tools.filter(tool => !initial.some(item => item.name === tool.name))
+    expect(JSON.stringify(added(precise)).length).toBeLessThan(JSON.stringify(added(full)).length * 0.3)
     measurements[domain] = { initial, full, precise }
   }
   if (process.env.HENJI_PI_MEASURE_FILE) await fs.writeFile(process.env.HENJI_PI_MEASURE_FILE, JSON.stringify(measurements))

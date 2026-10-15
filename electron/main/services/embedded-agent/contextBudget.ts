@@ -3,12 +3,18 @@ import type { AgentSession, ToolDefinition } from '@earendil-works/pi-coding-age
 type AgentMessage = AgentSession['messages'][number]
 export const CONTEXT_BUDGET_ERROR = '当前对话和已加载工具超出所选模型的上下文预算。请新建对话并只加载本次所需工具，或切换更大上下文的模型；已有操作不会重新执行。'
 
-/** 多模型预算估算，不是计费分词：ASCII 单词按三字符，标点逐个，非 ASCII 按 UTF-8 字节保守计。 */
+export const SKILL_RESULT_TOKEN_BUDGET = 16000
+export function isSkillResult(toolName: string, details?: unknown): boolean {
+  return toolName === 'load_assistant_skill' || Boolean(details && typeof details === 'object' && 'skillContent' in details && details.skillContent === true)
+}
+
+/** 多模型预算估算，不是计费分词：ASCII 单词按三字符、标点逐个；非 ASCII BMP 码点计 1，辅助平面码点计 2。 */
 export function estimateContextTokens(text: string): number {
   let tokens = 0
-  for (const part of text.matchAll(/[a-zA-Z0-9_]+|\s+|[^a-zA-Z0-9_\s]/gu)) {
+  for (const part of text.matchAll(/[a-zA-Z0-9_]+|[\t\n\v\f\r ]+|[^a-zA-Z0-9_\t\n\v\f\r ]/gu)) {
     const value = part[0]
-    tokens += /^[a-zA-Z0-9_\s]/.test(value) ? Math.ceil(value.length / 3) : Buffer.byteLength(value, 'utf8')
+    tokens += value.charCodeAt(0) <= 0x7f && /^[a-zA-Z0-9_\s]/.test(value) ? Math.ceil(value.length / 3)
+      : Array.from(value).reduce((sum, character) => sum + (character.codePointAt(0)! > 0xffff ? 2 : 1), 0)
   }
   return tokens
 }
@@ -88,11 +94,17 @@ export function budgetContext(messages: AgentMessage[], input: {
   let lastUser = -1
   messages.forEach((message, index) => { if (message.role === 'user') lastUser = index })
   const parts: Array<{ part: { type: 'text'; text: string }; original: string; reference: string }> = []
+  const skills: typeof parts = []
   // 先保底所有事实。历史消息次序不变；当前轮的资料分页原样保留。
   const projected = messages.map((message, messageIndex) => message.role !== 'toolResult' ? message : { ...message,
     content: message.content.map((part, index) => {
-      if (part.type !== 'text' || (messageIndex > lastUser && message.toolName === 'read_assistant_context')) return part
+      if (part.type !== 'text' || (messageIndex > lastUser && message.toolName === 'read_assistant_context' && !isSkillResult(message.toolName, message.details))) return part
       const reference = `tool:${resultId(message)}:${index}`
+      if (isSkillResult(message.toolName, message.details)) {
+        const next = { ...part }
+        skills.push({ part: next, original: part.text, reference })
+        return next
+      }
       const minimum = JSON.stringify(minimalProjection(part.text, reference))
       const next = { ...part, text: estimateContextTokens(minimum) < estimateContextTokens(part.text) ? minimum : part.text }
       parts.push({ part: next, original: part.text, reference })
@@ -100,6 +112,33 @@ export function budgetContext(messages: AgentMessage[], input: {
     }),
   })
   let available = remaining - projected.reduce((sum, message) => sum + messageTokens(message, input.attachmentTokens), 0)
+  // 先压缩普通结果，再淘汰最旧宿主快照；最新快照始终保留。
+  while (available < 0) {
+    const contexts = projected.flatMap((message, index) => message.role === 'custom' && message.customType === 'henji-context' ? [index] : [])
+    if (contexts.length < 2) break
+    const [removed] = projected.splice(contexts[0], 1)
+    available += messageTokens(removed, input.attachmentTokens)
+    // 被淘汰快照可能承载长文本全文；剩余快照恢复其自足版本，避免“同前文”悬空。
+    for (let index = 0; index < projected.length; index++) {
+      const message = projected[index]
+      if (message.role !== 'custom' || message.customType !== 'henji-context') continue
+      const full = (message.details as { fullContextContent?: string } | undefined)?.fullContextContent
+      if (full && full !== message.content) {
+        const restored = { ...message, content: full }
+        available -= messageTokens(restored, input.attachmentTokens) - messageTokens(message, input.attachmentTokens)
+        projected[index] = restored
+      }
+    }
+  }
+  // 只有其他可压缩内容都已让出预算，才从最旧技能原文回退到可续读投影。
+  for (const { part, original, reference } of skills) {
+    if (available >= 0) break
+    const cost = estimateContextTokens(part.text)
+    const minimum = JSON.stringify(minimalProjection(original, reference))
+    const budget = Math.max(estimateContextTokens(minimum), cost + available)
+    part.text = projectText(original, reference, budget)
+    available += cost - estimateContextTokens(part.text)
+  }
   if (available < 0) throw new Error(CONTEXT_BUDGET_ERROR)
   // 最新结果先拿正文预算；旧结果保留事实与引用，窗口不足时不再平均稀释最新写入。
   for (const { part, original, reference } of parts.reverse()) {

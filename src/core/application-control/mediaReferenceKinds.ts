@@ -13,3 +13,7 @@ export const APPLICATION_MEDIA_REFERENCE_KINDS = ['asset', 'generation.result', 
 export const APPLICATION_READABLE_MEDIA_KINDS = ['generation.result', 'asset', 'canvas.node'] as const
 
 export const APPLICATION_MEDIA_REFERENCE_GUIDANCE = 'params.uploadedImages / uploadedVideos / uploadedAudios 接受 {kind,id}：asset 为素材，generation.result 为历史结果，image_edit.preview 为编辑后的图片；直接引用，无需加入素材库。其中 image_edit.preview 是尚未保存的中间产物，只能作为输入；要读回它的字节，先用 commit_image_edit 落盘再读。'
+/** 看图传输预算与原件分块预算独立；运行时校验和工具目录共用。 */
+export const APPLICATION_IMAGE_DEFAULT_EDGE = 1600
+export const APPLICATION_IMAGE_DEFAULT_BYTES = 600 * 1024
+export const APPLICATION_IMAGE_MAX_BYTES = 1536 * 1024

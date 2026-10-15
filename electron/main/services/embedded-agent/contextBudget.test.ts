@@ -3,6 +3,41 @@ import { SessionManager, type AgentSession } from '@earendil-works/pi-coding-age
 import { archiveToolResult, contextReader } from './contextReader'
 import { budgetContext, estimateContextTokens, messageTokens, projectText } from './contextBudget'
 
+it('ASCII 规则不变，CJK/BMP 逐码点计一、emoji 和扩展汉字计二', () => {
+  expect(estimateContextTokens('abc_def123 !')).toBe(6)
+  expect(estimateContextTokens('中文é。、　')).toBe(6)
+  expect(estimateContextTokens('🙂𠀀')).toBe(4)
+})
+
+it('技能与参考超过普通结果上限仍保留原文，续页跨轮保留，普通结果先让出预算', async () => {
+  const manager = SessionManager.inMemory()
+  const text = '技能正文。'.repeat(2400)
+  const skill = archiveToolResult(manager, { content: [{ type: 'text', text }], details: undefined }, true)
+  expect(skill.content[0]).toEqual({ type: 'text', text })
+  const skillMessage: AgentSession['messages'][number] = { role: 'toolResult', toolName: 'load_assistant_skill', toolCallId: 'skill', ...skill, isError: false, timestamp: 0 }
+  const normal: AgentSession['messages'][number] = { role: 'toolResult', toolName: 'read_application_entity', toolCallId: 'ordinary', content: [{ type: 'text', text: '普通资料'.repeat(3000) }], isError: false, timestamp: 0 }
+  const user: AgentSession['messages'][number] = { role: 'user', content: '继续', timestamp: 0 }
+  const result = budgetContext([skillMessage, normal, user], { contextWindow: 16000, maxOutputTokens: 1024, instructions: '', tools: [] })
+  expect(result[0]).toMatchObject({ content: skill.content })
+  expect(messageTokens(result[1])).toBeLessThan(messageTokens(normal))
+  const pressured = budgetContext([skillMessage, normal, user], { contextWindow: 5000, maxOutputTokens: 1024, instructions: '', tools: [] })
+  expect(messageTokens(pressured[0])).toBeLessThan(messageTokens(skillMessage))
+  expect(skillMessage.content).toEqual([{ type: 'text', text }])
+  const large = archiveToolResult(manager, { content: [{ type: 'text', text: text.repeat(3) }], details: undefined }, true)
+  const reference = `tool:${(large.details as { resultId: string }).resultId}:0`
+  let offset = 0; let restored = ''
+  while (offset < text.length * 3) {
+    const page = await contextReader(manager).execute('page', { reference, offset }, undefined, undefined, {} as never)
+    const part = page.content[0]; if (part.type !== 'text') throw new Error('text')
+    const data = JSON.parse(part.text) as { data: string; nextOffset: number }
+    expect(estimateContextTokens(part.text)).toBeLessThanOrEqual(16000)
+    const pageMessage: AgentSession['messages'][number] = { role: 'toolResult', toolName: 'read_assistant_context', toolCallId: `page-${offset}`, ...page, isError: false, timestamp: 0 }
+    expect(budgetContext([pageMessage, user], { contextWindow: 24000, maxOutputTokens: 1024, instructions: '', tools: [] })[0]).toMatchObject({ content: page.content })
+    restored += data.data; offset = data.nextOffset
+  }
+  expect(restored).toBe(text.repeat(3))
+})
+
 it('最小信封保留写入事实，放不下事实时明确拒绝而不是返回空壳', () => {
   const facts = { ok: true, executionState: 'completed', operationId: 'write', verificationState: 'verified', persistenceState: 'saved' }
   const original = JSON.stringify({ ...facts, data: '长正文'.repeat(4000) })
@@ -20,7 +55,8 @@ it('长历史优先保留最新写入正文，当前轮分页信封不再二次�
     { role: 'toolResult', toolName: 'read_assistant_context', toolCallId: 'page', content: [{ type: 'text', text: page }], isError: false, timestamp: 0 }]
   const projected = budgetContext(messages, { contextWindow: 12000, maxOutputTokens: 1024, instructions: '', tools: [] })
   const text = (index: number) => { const m = projected[index]; if (m.role !== 'toolResult' || m.content[0].type !== 'text') throw new Error('text'); return m.content[0].text }
-  expect(JSON.parse(text(26)).facts).toMatchObject({ ok: true, executionState: 'completed', operationId: 'latest' })
+  const latest = JSON.parse(text(26))
+  expect(latest.facts ?? latest).toMatchObject({ ok: true, executionState: 'completed', operationId: 'latest' })
   expect(estimateContextTokens(text(26))).toBeGreaterThan(estimateContextTokens(text(0)))
   expect(text(27)).toBe(page)
 })
@@ -28,7 +64,7 @@ it('长历史优先保留最新写入正文，当前轮分页信封不再二次�
 it('中文大结果保留失败事实并按模型窗口投影，原文分页无损、分支隔离且不重放', async () => {
   const original = JSON.stringify({ ok: false, executionState: 'partial', operationId: 'original-operation',
     message: '修改已保留，保存失败', data: { text: '这是保留的中文转录事实。🙂'.repeat(4000), tail: '最终事实' } })
-  expect(estimateContextTokens(original)).toBeGreaterThan(original.length)
+  expect(estimateContextTokens(original)).toBeLessThanOrEqual(original.length)
   const manager = SessionManager.inMemory()
   const archived = archiveToolResult(manager, { content: [{ type: 'text', text: original }], details: undefined })
   const reference = `tool:${(archived.details as { resultId: string }).resultId}:0`

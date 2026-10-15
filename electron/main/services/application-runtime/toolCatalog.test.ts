@@ -58,6 +58,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.16.0'] = 'ec894040fc50ae2b242156c34bf86b023ad29c29b9b376c2ee6941fc9e77dc2b'
     // t97：风格改为给 AI 的说明书，移除提取风格与插入风格组件三个能力。
     fingerprints['2.17.0'] = '8ac85639ad6c4b8bd8b2d5b13b801b850a94af9528728c702e9ea34617485ee4'
+    fingerprints['2.18.0'] = '7bb232ec073247eb832d37f722ed714f1a373aa3c604e5016ea169ebfcd67494'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
@@ -66,6 +67,8 @@ describe('对外工具目录的投影与授权过滤', () => {
       expect((tool.inputSchema.properties as Record<string, unknown>).mode).toEqual({ type: 'string', enum: ['chunk', 'image'], description: expect.stringContaining('图片默认 image') })
       expect(tool.inputSchema.additionalProperties).toBe(false)
       expect(tool.description).toContain('图片默认返回 image')
+      expect((tool.inputSchema.properties as Record<string, unknown>).maxEdge).toMatchObject({ default: 1600 })
+      expect((tool.inputSchema.properties as Record<string, unknown>).maxBytes).toMatchObject({ default: 614400, maximum: 1572864 })
     }
   })
   it('新增付费入口只需领域声明，目录自动要求付费授权', () => {
