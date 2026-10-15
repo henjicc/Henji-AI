@@ -52,3 +52,16 @@ it('并发等待按序处理，不因等待数量拒绝产品条目，单项失�
   expect(results.map(result => result.status)).toEqual(['rejected', ...Array.from({ length: 7 }, () => 'fulfilled')])
   expect(boundary.construct).toHaveBeenCalledTimes(8); expect(boundary.dispose).toHaveBeenCalledTimes(8)
 })
+
+it('按序列帧率回传超预算测量与结构位置，不拒绝画面；预算内不附加反馈', async () => {
+  const measurements: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] = []
+  const inputs = frames(); inputs[0].document.fps = 60
+  const heaviest = { kind: 'repeat', cpuMs: 18, sourceSpan: { file: 'main.ts', start: 0, end: 8, startLine: 2, startColumn: 3, endLine: 2, endColumn: 11 } }
+  boundary.present.mockResolvedValueOnce({ ...result(), codePerformance: [{ frame: 0, cpuMs: 20, gpuMs: 4, budgetMs: 1000 / 60, heaviest }] })
+  await trialVideoEditCodeFrames(inputs, new AbortController().signal, false, undefined, measurements)
+  expect(measurements).toEqual([{ frame: 0, cpuMs: 20, gpuMs: 4, budgetMs: 1000 / 60, heaviest }])
+  measurements.length = 0
+  boundary.present.mockResolvedValueOnce({ ...result(), codePerformance: [{ frame: 0, cpuMs: 1, gpuMs: 2, budgetMs: 1000 / 60 }] })
+  await trialVideoEditCodeFrames(inputs, new AbortController().signal, false, undefined, measurements)
+  expect(measurements).toEqual([])
+})

@@ -1,3 +1,4 @@
+import { CODE_FILTER_UNIFORM_VEC4S } from '@/core/videoEdit/codeMaterial/filterParameters'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { describe, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -87,7 +88,7 @@ describe('代码GPU会话复用与资源边界', () => {
     expect(device.createBindGroupLayout).toHaveBeenCalledWith({ entries: [
       { binding: 0, visibility: 2, texture: { sampleType: 'float' } },
       { binding: 1, visibility: 2, sampler: { type: 'filtering' } },
-      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 1072 } },
+      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: CODE_FILTER_UNIFORM_VEC4S * 16 } },
     ] })
     expect(device.createPipelineLayout).toHaveBeenCalledOnce()
     expect(compiled.mock.calls.slice(-2).every(([descriptor]) => (descriptor as { layout: unknown }).layout === device.createPipelineLayout.mock.results[0].value)).toBe(true)

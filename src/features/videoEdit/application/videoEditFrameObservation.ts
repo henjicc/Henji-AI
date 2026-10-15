@@ -1,3 +1,4 @@
+import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { prepareVideoEditAnnotationObservation, paintVideoEditAnnotationObservation, type VideoEditAnnotationObservationOptions } from './videoEditAnnotationImage'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { createLogger } from '@/core/logging'
@@ -21,6 +22,7 @@ export type VideoEditFrameObservationTarget =
   | { kind: 'source'; itemId: string; timeUs: number }
   | ({ kind: 'contact_sheet'; sequenceId?: string } & VideoEditContactSheetRange)
 export interface VideoEditFrameObservation {
+  performance?: CodeFramePerformance[]
   asset: AssetRecord
   width: number
   height: number
@@ -62,6 +64,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   if (maxWidth !== null && (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840)) throw new Error('观察宽度须为256到3840之间的整数像素。')
   const owner = requireVideoEditInstance(projectId); const document = owner.document
   const documentVersion = videoEditObservationVersion(owner, document.revision)
+  const measurements: CodeFramePerformance[] = []
   const started = performance.now()
   let composition: VideoEditComposition; let frame = 0
   if (target.kind === 'program' || target.kind === 'contact_sheet') {
@@ -77,11 +80,11 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   logger.info('剪辑指定画面观察开始', { event: 'video_edit.frame_observation.start', context: { projectId, kind: target.kind, revision: document.revision } })
   if (target.kind !== 'program' && (annotations.overlayAnnotations || annotations.annotationIds?.length || annotations.cropAnnotationId || annotations.highlightElement)) throw new Error('标注叠加、元素高亮与放大只用于序列合成帧。')
   if (target.kind === 'contact_sheet') {
-    const sheet = await renderVideoEditContactSheet(composition, target, maxWidth ?? VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal)
+    const sheet = await renderVideoEditContactSheet(composition, target, maxWidth ?? VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal, measurements)
     if (owner.document !== document) throw new Error('联系表渲染期间剪辑已改变，请重新取帧。')
     const asset = await publishObservationImage(sheet.bytes, sheet.width, sheet.height, `${document.name} · ${composition.name} · 联系表`, signal)
     logger.info('剪辑联系表观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width: sheet.width, height: sheet.height, durationMs: Math.round(performance.now() - started) } })
-    return { asset, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
+    return { ...(measurements.length ? { performance: measurements } : {}), asset, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
       documentRevision: document.revision, documentVersion, sequenceId: composition.id, contactSheet: { frames: sheet.frames, columns: sheet.columns, rows: sheet.rows } }
   }
   const marks = target.kind === 'program' ? composition.annotations.map(mark => resolveVideoEditElementAnnotation(owner, mark, composition.id, frame).mark) : composition.annotations
@@ -91,7 +94,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const element = entry?.index.byId.get(highlight?.elementId ?? '')
   const elementRegion = entry && element ? videoEditCodeElementRegion(entry, element, composition) : undefined
   if (highlight && (!element || !elementRegion || element.opacity < .01)) throw new Error('要高亮的代码元素在指定帧不可见或已不存在，请检查片段和源码位置。')
-  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true)
+  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements)
   if (!bitmap) throw new Error('指定画面没有渲染结果，请重试。')
   let bytes: Uint8Array; let width: number; let height: number; const sourceWidth = bitmap.width; const sourceHeight = bitmap.height
   try {
@@ -118,7 +121,7 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const label = target.kind === 'program' ? `帧 ${frame}` : `源 ${(target.timeUs / 1e6).toFixed(3)} 秒`
   const asset = await publishObservationImage(bytes, width, height, `${document.name} · ${composition.name} · ${label} 观察`, signal)
   logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width, height, durationMs: Math.round(performance.now() - started) } })
-  return { asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
+  return { ...(measurements.length ? { performance: measurements } : {}), asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
 }
 
 async function publishObservationImage(bytes: Uint8Array, width: number, height: number, displayName: string, signal: AbortSignal): Promise<AssetRecord> {

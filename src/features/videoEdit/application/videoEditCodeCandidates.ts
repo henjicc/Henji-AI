@@ -1,3 +1,4 @@
+import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { prepareCodeVersionPublication } from './videoEditCodeStorage'
@@ -15,6 +16,7 @@ import { createLogger } from '@/core/logging'
 const logger = createLogger('features.videoEdit.codeCandidates')
 export type VideoEditCodeApplyScope = 'single' | 'matching'
 export interface VideoEditCodeCandidate {
+  readonly performance?: CodeFramePerformance[]
   readonly target: VideoEditCodeTarget
   readonly scope: VideoEditCodeApplyScope
   readonly files: CodeMaterialFiles
@@ -95,10 +97,11 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const requested = owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start
     const frame = videoEditTransitionsAt(videoEditComposition(document, target.sequenceId), requested).some(window => window.left.id === original.id || window.right.id === original.id) ? requested : Math.max(original.start, Math.min(original.start + original.duration - 1, requested))
     const uniqueFrames = videoEditCodeValidationFrames(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: selectedEffects.get(clip.id) } : {}) }))), { sequenceId: target.sequenceId, frame })
-    bitmap = await trialVideoEditCodeFrames(uniqueFrames, controller.signal, true)
+    const measurements: CodeFramePerformance[] = []
+    bitmap = await trialVideoEditCodeFrames(uniqueFrames, controller.signal, true, undefined, measurements)
     controller.signal.throwIfAborted()
     if (!bitmap || !isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码候选的原剪辑已改变。')
-    candidate = Object.freeze({ target: Object.freeze({ ...target }), scope, files: normalizeCodeMaterialFiles(source), versionId: appended.versionId, clipCount: count, bitmap, impacts: structuredClone(impacts) })
+    candidate = Object.freeze({ ...(measurements.length ? { performance: measurements } : {}), target: Object.freeze({ ...target }), scope, files: normalizeCodeMaterialFiles(source), versionId: appended.versionId, clipCount: count, bitmap, impacts: structuredClone(impacts) })
     candidates.set(candidate, { owner, contentVersion, document, controller, clean: () => { committed = owner.document.codeMaterials?.some(definition => definition.versions.some(version => version.id === newVersion)) ?? false; clean() }, needsConfirmation: impacts.length > 0 })
     const set = active.get(owner) ?? new Set(); set.add(candidate); active.set(owner, set)
     logger.info('源码候选已生成', { event: 'video_edit.code.candidate.ready', context: { projectId: target.projectId, count, impacts: impacts.length } })

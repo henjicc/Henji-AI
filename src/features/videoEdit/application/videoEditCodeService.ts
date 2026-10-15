@@ -1,3 +1,4 @@
+import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
@@ -68,7 +69,7 @@ function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataRead
 }
 /** Creation is an algorithmic collection operation: raw source is checked,
  * trial-rendered, then becomes one atomic domain edit. It never executes JS. */
-async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument): Promise<Candidate[]> {
+async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument, measurements?: CodeFramePerformance[]): Promise<Candidate[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的代码素材。')
   const owner = requireVideoEditInstance(projectId)
@@ -135,7 +136,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     validateCodeMaterialDocument(candidateDocument, read)
     const placements = publication || afterCreate ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
     const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication))
-    await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal)
+    await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal, false, undefined, measurements)
     if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
     if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，候选不会写入新会话。')
@@ -157,8 +158,8 @@ export async function createVideoEditPlacedCodeItems(projectId: string, inputs: 
   return (await createCheckedMaterials(projectId, inputs, 'generator', signal, undefined, afterCreate)).map(candidate => candidate.item.id)
 }
 /** General source creation publishes trusted generator or filter definitions. */
-export async function createVideoEditCodeMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal): Promise<string[]> {
-  return (await createCheckedMaterials(projectId, inputs, undefined, signal)).map(candidate => candidate.definition.id)
+export async function createVideoEditCodeMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[]): Promise<string[]> {
+  return (await createCheckedMaterials(projectId, inputs, undefined, signal, undefined, undefined, measurements)).map(candidate => candidate.definition.id)
 }
 /** Effect authoring refuses a generator before any project publication. */
 export async function createVideoEditFilterMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal): Promise<string[]> {
@@ -184,7 +185,7 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
 
 /** Append checked immutable versions. Existing defaults, items and clips keep
  * their fixed bindings; an explicit domain property edit binds a new version. */
-export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal): Promise<string[]> {
+export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal, measurements?: CodeFramePerformance[]): Promise<string[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的源码版本。')
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
@@ -209,7 +210,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     const read = readVideoEditCodeMetadata(owner, document)
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.
-    await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false)), controller.signal)
+    await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false)), controller.signal, false, undefined, measurements)
     controller.signal.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))

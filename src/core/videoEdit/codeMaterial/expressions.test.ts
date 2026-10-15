@@ -1,3 +1,5 @@
+import { evaluateCodeFrameExpression } from './evaluateV3'
+import { codeFilterFrameExpressions } from './filterFrameExpressions'
 import { describe, expect, it } from 'vitest'
 import { compileCodeMaterial } from './compiler'
 import { evaluateCodeMaterial } from './evaluate'
@@ -89,7 +91,8 @@ describe('v3 表达式与边界', () => {
       const filter = source(`return rgba(clamp(${expression},0,1),0,0,1);`).replace('kind:"generator"', 'kind:"filter"')
       expect(emitCodeMaterialFilter(compileCodeMaterial(filter)), expression).toContain('@fragment')
     }
-    expect(() => emitCodeMaterialFilter(compileCodeMaterial(source('return rgba(sqrt(-1),0,0,1);').replace('kind:"generator"', 'kind:"filter"')))).toThrow('sqrt')
+    const invalid = compileCodeMaterial(source('return rgba(sqrt(-1),0,0,1);').replace('kind:"generator"', 'kind:"filter"'))
+    expect(() => codeFilterFrameExpressions(invalid).map(e => evaluateCodeFrameExpression(invalid, e, context, {}))).toThrow('sqrt')
   })
 })
 

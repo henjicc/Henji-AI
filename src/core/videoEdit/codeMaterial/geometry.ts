@@ -15,7 +15,11 @@ export function codeTransform(command: CodeDrawCommand): CodeMatrix {
   const x = command.kind === 'group' ? command.x : 0; const y = command.kind === 'group' ? command.y : 0
   const ax = (command.anchorX ?? 0) + (command.kind !== 'group' && 'x' in command ? command.x : 0)
   const ay = (command.anchorY ?? 0) + (command.kind !== 'group' && 'y' in command ? command.y : 0)
-  const base: CodeMatrix = [c * sx, s * sx, -s * sy, c * sy, x + ax - c * sx * ax + s * sy * ay, y + ay - s * sx * ax - c * sy * ay]
+  const kx = Math.tan((command.skewX ?? 0) * Math.PI / 180); const ky = Math.tan((command.skewY ?? 0) * Math.PI / 180)
+  // Anchor -> scale -> simultaneous x/y shear -> rotation -> translation.
+  const a = (c - s * ky) * sx; const b = (s + c * ky) * sx
+  const d = (c * kx - s) * sy; const e = (s * kx + c) * sy
+  const base: CodeMatrix = [a, b, d, e, x + ax - a * ax - d * ay, y + ay - b * ax - e * ay]
   return command.elementTransform ? codeMultiply(command.elementTransform, base) : base
 }
 const paths = new Map<string, { value: CodePoint[][]; bytes: number }>(); let pathBytes = 0
@@ -127,8 +131,9 @@ function codeTextGlyphBoxes(command: Extract<CodeDrawCommand, { kind: 'text' }>,
     const transform = command.perChar?.[i] ?? { x: 0, y: 0, opacity: 1, scale: 1, rotation: 0 }
     const row = Math.round(glyph.y / (command.layout!.fontSize * (command.lineHeight ?? 1.2))); const lineWidth = command.layout!.lineWidths?.[row] ?? command.layout!.width
     const x = box.x + glyph.x + (command.align === 'center' ? (box.width - lineWidth) / 2 : command.align === 'right' ? box.width - lineWidth : 0); const y = box.y + glyph.y
-    const rotation = transform.rotation * Math.PI / 180; const c = Math.cos(rotation) * transform.scale; const s = Math.sin(rotation) * transform.scale
-    return { x, y, width: glyph.width, height: command.layout!.fontSize * (command.lineHeight ?? 1.2), opacity: transform.opacity, matrix: [c, s, -s, c, x + transform.x - c * x + s * y, y + transform.y - s * x - c * y] }
+    const matrix = codeTransform({ ...command, x, y, anchorX: 0, anchorY: 0, elementTransform: undefined, rotation: transform.rotation, scaleX: transform.scale, scaleY: transform.scale, skewX: transform.skewX, skewY: 0 })
+    matrix[4] += transform.x; matrix[5] += transform.y
+    return { x, y, width: glyph.width, height: command.layout!.fontSize * (command.lineHeight ?? 1.2), opacity: transform.opacity, matrix }
   })
 }
 export function codeElementBounds(commands: readonly CodeDrawCommand[], parent: CodeMatrix = CODE_IDENTITY, inheritedOpacity = 1, inheritedClip?: { x: number; y: number; width: number; height: number }): CodeElementBounds[] {
@@ -164,7 +169,7 @@ function polygonContains(paths: CodePoint[][], x: number, y: number): boolean {
 function paintAlpha(paint: CodePaint, x: number, y: number): number {
   if (Array.isArray(paint)) return paint[3]
   const dx = (paint.x2 ?? 0) - (paint.x1 ?? 0); const dy = (paint.y2 ?? 0) - (paint.y1 ?? 0)
-  const at = Math.min(1, Math.max(0, paint.kind === 'radialGradient' ? Math.hypot(x - paint.cx!, y - paint.cy!) / paint.r! : ((x - paint.x1!) * dx + (y - paint.y1!) * dy) / (dx * dx + dy * dy)))
+  const at = Math.min(1, Math.max(0, paint.kind === 'conicGradient' ? ((Math.atan2(y - paint.cy!, x - paint.cx!) - (paint.angle ?? 0) * Math.PI / 180) / (2 * Math.PI) % 1 + 1) % 1 : paint.kind === 'radialGradient' ? Math.hypot(x - paint.cx!, y - paint.cy!) / paint.r! : ((x - paint.x1!) * dx + (y - paint.y1!) * dy) / (dx * dx + dy * dy)))
   const right = paint.stops.findIndex(stop => stop[0] > at)
   if (right < 0) return paint.stops.at(-1)![1][3]
   if (right === 0) return paint.stops[0][1][3]

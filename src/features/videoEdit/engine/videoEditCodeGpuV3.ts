@@ -1,5 +1,6 @@
 import {paintMeasuredText} from '@/services/vectorContent/textRaster'
 import { polylinePath, traceVectorPath } from '@/core/imaging/vectorContent'
+import { CODE_BLEND_INDICES, CODE_BLEND_WGSL } from '@/core/videoEdit/codeMaterial/compositing'
 import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
@@ -18,7 +19,7 @@ interface CachedImage extends Image { bytes: number; used: boolean; glyph?: bool
 interface Allocator { allocate(width: number, height: number): GpuTexture; release(texture: GpuTexture): void }
 type Encoder = ReturnType<GpuDevice['createCommandEncoder']>
 const normalBlend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
-const shader = COMPOSITING_WGSL + `
+const shader = COMPOSITING_WGSL + CODE_BLEND_WGSL + `
 struct P { box:vec4f, color:vec4f, canvas:vec4f, matrix0:vec4f, matrix1:vec4f, stroke:vec4f, extra:vec4f }
 @group(0) @binding(0) var<uniform> p:P;
 struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f }
@@ -47,10 +48,15 @@ struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 @fragment fn composite(v:V)->@location(0) vec4f {
  let a=textureSampleLevel(image,sampler0,v.uv,0.0)*p.canvas.z; let b=textureSampleLevel(background,sampler0,v.position.xy/p.canvas.xy,0.0);
  let s=select(vec3f(0),a.rgb/a.a,a.a>0.0); let d=select(vec3f(0),b.rgb/b.a,b.a>0.0);
- var rgb=blendRgb(d,s,u32(p.extra.x));
- // Video-only modes extend the adapter; shared modes and source-over use the neutral kernel.
- if(p.extra.x==4.0) { rgb=min(s+d,vec3f(1)); } else if(p.extra.x==5.0) { rgb=max(s,d); } else if(p.extra.x==6.0) { rgb=min(s,d); }
+ let rgb=codeBlendRgb(d,s,u32(p.extra.x));
  return compositeWithBlend(b,a,rgb,false);
+}
+@fragment fn masked(v:V)->@location(0) vec4f {
+ let content=textureSampleLevel(image,sampler0,v.uv,0.0);
+ let mask=textureSampleLevel(background,sampler0,v.uv,0.0);
+ var coverage=clamp(select(mask.a,dot(mask.rgb,vec3f(.2126,.7152,.0722)),p.extra.x==1.0),0.0,1.0);
+ if(p.extra.y==1.0) { coverage=1.0-coverage; }
+ return content*coverage;
 }
 @fragment fn effects(v:V)->@location(0) vec4f {
  let base=textureSampleLevel(background,sampler0,v.uv,0.0);
@@ -70,7 +76,6 @@ struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f }
  let alpha=textureSampleLevel(image,sampler0,v.uv,0.0).a*p.color.a;
  return vec4f(p.color.rgb*alpha,alpha);
 }`
-const blendNames: CodeBlend[] = ['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken']
 // Trusted instancing variant shares the exact geometry/SDF with the single-quad path.
 const shapeBody = shader.slice(shader.indexOf('@fragment fn shape(v:V)->@location(0) vec4f {') + '@fragment fn shape(v:V)->@location(0) vec4f {'.length, shader.indexOf('\n}\n@group(0) @binding(1)'))
 // Per-instance data arrives as vertex attributes, not a vertex-stage storage buffer: compatibility-mode WebGPU allows none there.
@@ -90,7 +95,7 @@ const INSTANCE_LAYOUT = { arrayStride: 112, stepMode: 'instance', attributes: Ar
 function cssColor(color: CodeColor): string { return `rgba(${color[0] * 255},${color[1] * 255},${color[2] * 255},${color[3]})` }
 function canvasPaint(context: OffscreenCanvasRenderingContext2D, paint: CodePaint): string | CanvasGradient {
   if (Array.isArray(paint)) return cssColor(paint)
-  const gradient = paint.kind === 'linearGradient' ? context.createLinearGradient(paint.x1!, paint.y1!, paint.x2!, paint.y2!) : context.createRadialGradient(paint.cx!, paint.cy!, 0, paint.cx!, paint.cy!, paint.r!)
+  const gradient = paint.kind === 'linearGradient' ? context.createLinearGradient(paint.x1!, paint.y1!, paint.x2!, paint.y2!) : paint.kind === 'conicGradient' ? context.createConicGradient((paint.angle ?? 0) * Math.PI / 180, paint.cx!, paint.cy!) : context.createRadialGradient(paint.cx!, paint.cy!, 0, paint.cx!, paint.cy!, paint.r!)
   paint.stops.forEach(([offset, color]) => gradient.addColorStop(offset, cssColor(color))); return gradient
 }
 /** No blur/shadow/filter is run on Canvas. Rasterization is cached and independent of animation transforms. */
@@ -147,7 +152,7 @@ export class VideoEditCodeGpuV3 {
     this.device.pushErrorScope('validation')
     try {
       this.module = this.device.createShaderModule({ code: shader })
-      for (const entry of ['shape', 'textured', 'composite', 'effects', 'tint', 'bright']) this.pipelines.set(entry, this.device.createRenderPipeline({ layout: 'auto', vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format: 'rgba8unorm', ...(['shape', 'textured', 'tint'].includes(entry) ? { blend: normalBlend } : {}) }] }, primitive: { topology: 'triangle-list' } }))
+      for (const entry of ['shape', 'textured', 'composite', 'effects', 'tint', 'bright', 'masked']) this.pipelines.set(entry, this.device.createRenderPipeline({ layout: 'auto', vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format: 'rgba8unorm', ...(['shape', 'textured', 'tint'].includes(entry) ? { blend: normalBlend } : {}) }] }, primitive: { topology: 'triangle-list' } }))
       const instanced = this.device.createShaderModule({ code: instanceShader })
       this.pipelines.set('instances', this.device.createRenderPipeline({ layout: 'auto', vertex: { module: instanced, entryPoint: 'vs', buffers: [INSTANCE_LAYOUT] }, fragment: { module: instanced, entryPoint: 'shape', targets: [{ format: 'rgba8unorm', blend: normalBlend }] }, primitive: { topology: 'triangle-list' } }))
       const diffusion = this.device.createShaderModule({ code: diffusionSource })
@@ -277,8 +282,8 @@ export class VideoEditCodeGpuV3 {
     const box = codeLocalBounds(command)
     const padding = Math.ceil(Math.max(command.strokeWidth ?? 0, command.kind === 'line' ? command.width : 0) / 2 + Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0)) + 2)
     const dimensions = { x: Math.floor(box.x - padding), y: Math.floor(box.y - padding), width: Math.max(1, Math.ceil(box.width + padding * 2)), height: Math.max(1, Math.ceil(box.height + padding * 2)) }
-    const { elementId: _id, elementPath: _path, sourceSpan: _span, opacity: _opacity, rotation: _rotation, scaleX: _sx, scaleY: _sy, anchorX: _ax, anchorY: _ay, blend: _blend, elementTransform: _transform, ...content } = command
-    void _id; void _path; void _span; void _opacity; void _rotation; void _sx; void _sy; void _ax; void _ay; void _blend; void _transform
+    const { elementId: _id, elementPath: _path, sourceSpan: _span, opacity: _opacity, rotation: _rotation, scaleX: _sx, scaleY: _sy, anchorX: _ax, anchorY: _ay, blend: _blend, skewX: _kx, skewY: _ky, elementTransform: _transform, ...content } = command
+    void _id; void _path; void _span; void _opacity; void _rotation; void _sx; void _sy; void _ax; void _ay; void _blend; void _kx; void _ky; void _transform
     const positioned = 'x' in content && 'y' in content && (!command.paint || Array.isArray(command.paint)) && (!command.stroke || Array.isArray(command.stroke))
     const key = JSON.stringify([positioned ? { ...content, x: 0, y: 0 } : content, command.kind === 'text' ? documentFontRevision() : 0, resolution])
     const placed = (image: Image): Image => ({ ...image, width: image.width / resolution, height: image.height / resolution, x: dimensions.x + position.x, y: dimensions.y + position.y })
@@ -310,7 +315,8 @@ export class VideoEditCodeGpuV3 {
   private groupBounds(children: readonly CodeDrawCommand[]): { x: number; y: number; width: number; height: number } {
     const bounds = codeElementBounds(children).map(element => {
       const command = element.command; const m = element.matrix; const scale = Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]))
-      const pad = (Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0))) * scale
+      const glyphPad = command.kind === 'text' ? Math.max(0, ...(command.perChar ?? []).map(char => Math.max(char.blur ?? command.blur ?? 0, char.glow?.radius ?? command.glow?.radius ?? 0) * Math.abs(char.scale))) : 0
+      const pad = (Math.max(glyphPad, command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0))) * scale
       return { x: element.x - pad, y: element.y - pad, width: element.width + pad * 2, height: element.height + pad * 2 }
     })
     if (!bounds.length) return { x: 0, y: 0, width: 0, height: 0 }
@@ -342,7 +348,7 @@ export class VideoEditCodeGpuV3 {
           const glyph = layout.glyphs[i]; const transform = command.perChar[i]
           if (!transform.opacity) continue
           const row = Math.round(glyph.y / (layout.fontSize * (command.lineHeight ?? 1.2))); const lineWidth = layout.lineWidths?.[row] ?? layout.width
-          const char: CodeDrawCommand = { ...command, x: box.x + glyph.x + (command.align === 'center' ? (box.width - lineWidth) / 2 : command.align === 'right' ? box.width - lineWidth : 0), y: box.y + glyph.y, text: glyph.text, align: 'left', baseline: 'top', perChar: undefined, layout: { ...layout, width: glyph.width, height: layout.fontSize * (command.lineHeight ?? 1.2), lines: [glyph.text], lineWidths: [glyph.width], glyphs: [{ ...glyph, x: 0, y: 0 }] }, opacity: opacity * transform.opacity, rotation: transform.rotation, scaleX: transform.scale, scaleY: transform.scale, anchorX: 0, anchorY: 0, elementPath: [...(command.elementPath ?? []), `char:${i}`] }
+          const char: CodeDrawCommand = { ...command, x: box.x + glyph.x + (command.align === 'center' ? (box.width - lineWidth) / 2 : command.align === 'right' ? box.width - lineWidth : 0), y: box.y + glyph.y, text: glyph.text, align: 'left', baseline: 'top', perChar: undefined, layout: { ...layout, width: glyph.width, height: layout.fontSize * (command.lineHeight ?? 1.2), lines: [glyph.text], lineWidths: [glyph.width], glyphs: [{ ...glyph, x: 0, y: 0 }] }, opacity: opacity * transform.opacity, rotation: transform.rotation, skewX: transform.skewX, skewY: 0, paint: transform.fill ?? command.paint, blur: transform.blur ?? command.blur, glow: transform.glow ?? command.glow, elementTransform: undefined, scaleX: transform.scale, scaleY: transform.scale, anchorX: 0, anchorY: 0, elementPath: [...(command.elementPath ?? []), `char:${i}`] }
           // Animate in a translated parent, keeping the glyph raster identity independent of displacement.
           await draw(char, target, codeMultiply(matrix, [1, 0, 0, 1, transform.x, transform.y]))
         }
@@ -353,7 +359,17 @@ export class VideoEditCodeGpuV3 {
         const layer = this.layer(`${key}:group`, Math.max(1, Math.ceil(bounds.width + pad * 2)), Math.max(1, Math.ceil(bounds.height + pad * 2)), Math.floor(bounds.x - pad), Math.floor(bounds.y - pad))
         this.clear(encoder, layer)
         for (const child of command.children) await draw(child, layer, [1, 0, 0, 1, -layer.x, -layer.y])
-        flush(); const image = await this.effects(layer, command, key)
+        flush(); let image = await this.effects(layer, command, key)
+        if (command.mask) {
+          const mask = this.layer(`${key}:mask`, layer.width, layer.height, layer.x, layer.y)
+          this.clear(encoder, mask)
+          if (command.mask.shape) await draw(command.mask.shape, mask, [1, 0, 0, 1, -layer.x, -layer.y])
+          flushBatch()
+          const masked = this.layer(`${key}:masked`, layer.width, layer.height, layer.x, layer.y)
+          this.clear(encoder, masked)
+          this.paint(encoder, masked, { ...image, x: 0, y: 0 }, CODE_IDENTITY, 1, 'masked', [1, 1, 1, 1], [command.mask.mode === 'luma' ? 1 : 0, command.mask.invert ? 1 : 0, 0, 1], [0, 0, 0, 0], mask)
+          flush(); image = masked
+        }
         if (command.clip) {
           // Clip the effected layer in group-local coordinates before its transform is composited.
           const clip = command.clip; const clipped = this.layer(`${key}:clip`, Math.max(1, Math.ceil(clip.width)), Math.max(1, Math.ceil(clip.height)), clip.x, clip.y)
@@ -395,7 +411,7 @@ export class VideoEditCodeGpuV3 {
       if (mode === 'normal') { this.paint(encoder, target, image, matrix, opacity, 'textured'); return }
       const copy = this.layer(`${key}:backdrop`, target.width, target.height); this.clear(encoder, copy)
       this.paint(encoder, copy, { ...target, x: 0, y: 0 }, CODE_IDENTITY, 1, 'textured')
-      this.paint(encoder, target, image, matrix, opacity, 'composite', [1, 1, 1, 1], [blendNames.indexOf(mode), 0, 0, 1], [0, 0, 0, 0], copy)
+      this.paint(encoder, target, image, matrix, opacity, 'composite', [1, 1, 1, 1], [CODE_BLEND_INDICES[mode], 0, 0, 1], [0, 0, 0, 0], copy)
     }
     try { for (const command of commands) await draw(command, target, CODE_IDENTITY); flush() }
     finally {

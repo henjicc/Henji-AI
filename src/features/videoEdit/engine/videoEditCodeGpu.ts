@@ -1,3 +1,5 @@
+import type { CodeFramePerformance, CodeHeavyStructure } from '@/core/videoEdit/codeMaterial/performance'
+import { codeFilterFrameExpressions, codeExpressionChildren, codeExpressionIsFrameOnly } from '@/core/videoEdit/codeMaterial/filterFrameExpressions'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 export { VideoEditCodePicture } from './videoEditCodePicture'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
@@ -12,7 +14,7 @@ import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
 import { codeShaderFilterPasses, codeShaderGraph } from '@/core/videoEdit/codeMaterial/shaders'
-import { evaluateCodeFrameExpression } from '@/core/videoEdit/codeMaterial/evaluateV3'
+import { evaluateCodeFrameExpression, evaluateCodeFrameExpressions } from '@/core/videoEdit/codeMaterial/evaluateV3'
 import { codeFilterRadius, codeMaterialFilterPasses } from './videoEditCodeCompilerFilterV3'
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
@@ -92,6 +94,15 @@ interface FilterLayoutDevice {
   createPipelineLayout(descriptor: unknown): unknown
 }
 export class VideoEditCodeGpu {
+  private readonly performanceFrames = new Map<string, CodeFramePerformance>()
+  private readonly performanceSpans = new Map<CodeFramePerformance, { cpu: [number, number]; gpu: [number, number] }>()
+  private trackPerformance(key: string, timing: CodeFramePerformance, cpuStart: number, gpuStart: number): () => void {
+    const previous = this.performanceFrames.get(key); if (previous) this.performanceSpans.delete(previous)
+    this.performanceFrames.set(key, timing)
+    const spans: { cpu: [number, number]; gpu: [number, number] } = { cpu: [cpuStart, gpuStart], gpu: [gpuStart, gpuStart] }
+    this.performanceSpans.set(timing, spans)
+    return () => { spans.gpu[1] = performance.now(); timing.gpuMs = spans.gpu[1] - gpuStart }
+  }
   private readonly surfaces = new Map<string, Surface>()
   private readonly glyphs = new Map<string, Glyph>()
   private readonly filters = new Map<string, CompiledFilter>()
@@ -223,7 +234,7 @@ export class VideoEditCodeGpu {
     const precise = format === VIDEO_EDIT_PRECISE_FORMAT
     if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或256MiB会话预算。')
     if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或256MiB会话预算。')
-    const texture = this.device.createTexture({ size: [width, height], format, usage: 0x02 | 0x04 | 0x10 })
+    const texture = this.device.createTexture({ size: [width, height], format, usage: 0x01 | 0x02 | 0x04 | 0x10 })
     this.bytes += bytes; if (precise) this.preciseBytes += bytes
     this.textureBytes.set(texture, bytes); if (precise) this.preciseTextures.add(texture)
     this.counts.textureAllocations++
@@ -288,17 +299,22 @@ export class VideoEditCodeGpu {
     return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes } }, undefined, () => this.shaderGraphs())
   }
   async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false, overrides?: Pick<import('@/core/videoEdit/codeMaterial/evaluate').CodeMaterialEvaluationOptions, 'elementOverrides' | 'sourceTime'>): Promise<VideoEditCodePicture> {
-    const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, ...overrides, measureText: measureCodeText, onDiagnostic: diagnostic => {
+    const started = performance.now(); let heaviest: CodeHeavyStructure | undefined
+    const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, ...overrides, onProfile: value => { heaviest = value }, measureText: measureCodeText, onDiagnostic: diagnostic => {
       if (!this.missingFonts.has(diagnostic.fontFamily)) { this.missingFonts.add(diagnostic.fontFamily); codeLogger.warn('代码文字缺少字体，使用无衬线字体', { event: 'video_edit.code.font.missing', context: { fontFamily: diagnostic.fontFamily } }) }
     } })
+    const cpuMs = performance.now() - started; const gpuStart = performance.now()
+    const timing: CodeFramePerformance = { frame: context.frame, cpuMs, gpuMs: 0, budgetMs: 1000 / context.fps, ...(heaviest ? { heaviest } : {}) }
+    const completed = this.trackPerformance(key, timing, started, gpuStart)
     if (program.languageVersion === 3) {
       await this.ready; this.assertLive()
       const target = this.surface(key, context.width, context.height)
       await this.v3().render(target.picture.texture, context.width, context.height, commands, images)
-      this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.generatorFrames++
+      this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
       return target.picture
     }
-    return this.draw(key, context.width, context.height, commands.map(command => ({ command, rotation: 0, pivotX: 0, pivotY: 0 })), images)
+    const picture = await this.draw(key, context.width, context.height, commands.map(command => ({ command, rotation: 0, pivotX: 0, pivotY: 0 })), images)
+    this.pending = this.pending.then(completed); return picture
   }
   /** Structured graphics and trusted generator IR use one drawing/glyph/cache implementation. */
   async draw(key: string, width: number, height: number, draws: readonly VideoEditGraphicDraw[], images?: ReadonlyMap<string, VideoEditCodeImageInput>, rasterScale = 1): Promise<VideoEditCodePicture> {
@@ -366,6 +382,8 @@ export class VideoEditCodeGpu {
     return target.picture
   }
   async filter(key: string, version: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, input: VideoEditCodePicture, transitionHandles = false): Promise<VideoEditCodePicture> {
+    await this.ready; this.assertLive()
+    const cpuStart = performance.now()
     const values = validateCodeMaterialParameters(program, parameters)
     if (!Number.isFinite(context.time) || context.time < 0) throw new CodeMaterialError('CONTEXT', '滤镜源时间必须有限且非负。')
     // Static authors cannot read time. Curves were evaluated against the real source
@@ -379,6 +397,34 @@ export class VideoEditCodeGpu {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     // The output keeps the input's precision: an effect on 10-bit material stays rgba16float.
     const format = input.textureFormat
+    const frameExpressions = codeFilterFrameExpressions(program)
+    let heaviest: CodeHeavyStructure | undefined
+    const frameValues = evaluateCodeFrameExpressions(program, frameExpressions, context, values, { onProfile: value => { heaviest = value } })
+    // Re-prove mixed pixel/frame arithmetic with the exact uploaded f32 values.
+    // This does not compile a new pipeline: uniforms keep the WGSL source stable.
+    if (frameExpressions.length) emitCodeMaterialFilter(program, transitionHandles, frameValues)
+    const checkRepeat = (expression: import('@/core/videoEdit/codeMaterial/contract').CodeExpression): void => {
+      if (expression.kind === 'repeat') {
+        if (!codeExpressionIsFrameOnly(program, expression.count)) throw new CodeMaterialError('TYPE', '滤镜 repeat 次数只能依赖帧与参数。', expression.sourceSpan)
+        const count = evaluateCodeFrameExpression(program, expression.count, context, values)
+        if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > expression.max || expression.max > 64) throw new CodeMaterialError('BUDGET', '滤镜 repeat 次数须为 1–64 的整数且不超过声明上界。', expression.sourceSpan)
+      }
+      codeExpressionChildren(expression).forEach(checkRepeat)
+    }
+    program.bindings.forEach(binding => checkRepeat(binding.expression)); checkRepeat(program.result)
+    const blurPasses = codeMaterialFilterPasses(program).map(primitive => ({ radius: codeFilterRadius(program, primitive.radius, values, context), threshold: primitive.threshold ? codeFilterRadius(program, primitive.threshold, values, context) : undefined }))
+    const shaderPasses = codeShaderFilterPasses(program)
+    const graphs = new Map(shaderPasses.map(primitive => {
+      let graph: import('@/core/videoEdit/shaderGraph/spec').ShaderGraphSpec
+      try {
+        graph = primitive.name !== undefined
+            ? codeShaderGraph(program, { name: primitive.name, params: primitive.params ? evaluateCodeFrameExpression(program, primitive.params, context, values) : {} }, 'filter')
+            : codeShaderGraph(program, evaluateCodeFrameExpression(program, primitive.target, context, values) as { layers?: unknown }, 'filter')
+      } catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, primitive.expression.sourceSpan); throw error }
+      return [primitive, graph] as const
+    }))
+    const timing: CodeFramePerformance = { frame: context.frame, cpuMs: performance.now() - cpuStart, gpuMs: 0, budgetMs: 1000 / context.fps, ...(heaviest ? { heaviest } : {}) }
+    const gpuStart = performance.now(); const completed = this.trackPerformance(key, timing, cpuStart, gpuStart)
     const pipeline = await this.prepareFilter(version, program, transitionHandles, format)
     this.assertLive(); this.assertInput(input.texture)
     const target = this.surface(key, input.width, input.height, format)
@@ -391,21 +437,20 @@ export class VideoEditCodeGpu {
     new Uint32Array(packed.buffer)[7] = seed
     packed.set(packCodeFilterParameters(program, values), 8)
     packed[(CODE_FILTER_PARAMETER_SLOTS + 2) * 4] = 1
+    frameValues.forEach((value, index) => {
+      const channels = typeof value === 'number' || typeof value === 'boolean' ? [Number(value)] : value as number[]
+      if (!Array.isArray(channels) || channels.some(value => !Number.isFinite(value) || !Number.isFinite(Math.fround(value)))) throw new CodeMaterialError('NON_FINITE', '滤镜帧级 uniform 不是有限 f32 值。')
+      packed.set(channels, (CODE_FILTER_PARAMETER_SLOTS + 3 + index) * 4)
+    })
     this.device.queue.writeBuffer(target.filterBuffer, 0, packed)
-    const shaderPasses = codeShaderFilterPasses(program)
     const shaderTextures: GpuTexture[] = []
     const shaderResults = new Map<GpuTexture, Map<string, GpuTexture>>()
     const releaseShader = (texture: GpuTexture): void => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes; if (this.preciseTextures.has(texture)) this.preciseBytes -= bytes }
     const blurred: { texture: GpuTexture; release: () => void }[] = []
     try {
-      for (const primitive of codeMaterialFilterPasses(program)) blurred.push(await this.v3().filterBlur(input.texture, input.width, input.height, codeFilterRadius(program, primitive.radius, values), primitive.threshold ? codeFilterRadius(program, primitive.threshold, values) : undefined))
+      for (const primitive of blurPasses) blurred.push(await this.v3().filterBlur(input.texture, input.width, input.height, primitive.radius, primitive.threshold))
       for (const primitive of shaderPasses) {
-        let graph: import('@/core/videoEdit/shaderGraph/spec').ShaderGraphSpec
-        try {
-          graph = primitive.name !== undefined
-            ? codeShaderGraph(program, { name: primitive.name, params: primitive.params ? evaluateCodeFrameExpression(program, primitive.params, context, values) : {} }, 'filter')
-            : codeShaderGraph(program, evaluateCodeFrameExpression(program, primitive.target, context, values) as { layers?: unknown }, 'filter')
-        } catch (error) { if (error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, primitive.expression.sourceSpan); throw error }
+        const graph = graphs.get(primitive)!
         const source = primitive.input === undefined ? input.texture : shaderTextures[primitive.input]
         const signature = JSON.stringify(graph)
         let results = shaderResults.get(source); if (!results) { results = new Map(); shaderResults.set(source, results) }
@@ -419,7 +464,7 @@ export class VideoEditCodeGpu {
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     pass.setPipeline(pipeline)
     pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: input.texture.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: target.filterBuffer } }, ...blurred.map((value, index) => ({ binding: index + 3, resource: value.texture.createView() })), ...shaderTextures.map((value, index) => ({ binding: index + 3 + blurred.length, resource: value.createView() }))] }))
-    pass.draw(3); pass.end(); this.submit(encoder); this.counts.filterFrames++
+    pass.draw(3); pass.end(); this.submit(encoder); this.pending = this.pending.then(completed); this.counts.filterFrames++
     return target.picture
     } finally { blurred.forEach(value => value.release()); new Set(shaderTextures).forEach(releaseShader) }
   }
@@ -604,7 +649,49 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }
+  resetFramePerformance(): void { this.performanceFrames.clear(); this.performanceSpans.clear() }
+  framePerformance(): CodeFramePerformance[] {
+    const frames = [...this.performanceFrames.values()]; if (!frames.length) return []
+    // Queue completions overlap across targets. Merge their wall intervals and
+    // subtract CPU evaluation intervals before reporting one sequence-frame total.
+    const spans = frames.flatMap(frame => this.performanceSpans.get(frame) ?? [])
+    const events = spans.flatMap(span => [
+      { at: span.cpu[0], cpu: 1, gpu: 0 }, { at: span.cpu[1], cpu: -1, gpu: 0 },
+      { at: span.gpu[0], cpu: 0, gpu: 1 }, { at: span.gpu[1], cpu: 0, gpu: -1 },
+    ]).sort((a, b) => a.at - b.at)
+    let cpu = 0; let gpu = 0; let gpuMs = 0; let previous = events[0]?.at ?? 0
+    for (const event of events) { if (gpu > 0 && cpu === 0) gpuMs += event.at - previous; cpu += event.cpu; gpu += event.gpu; previous = event.at }
+    const heaviest = frames.flatMap(frame => frame.heaviest ?? []).sort((a, b) => b.cpuMs - a.cpuMs)[0]
+    return [{ frame: frames.at(-1)!.frame, cpuMs: frames.reduce((sum, value) => sum + value.cpuMs, 0), gpuMs, budgetMs: frames.at(-1)!.budgetMs, ...(heaviest ? { heaviest } : {}) }]
+  }
   releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle(); this.graphCache?.releaseIdle() }
+  /** WebGPU exposes no available-VRAM query. Use the owned texture-byte budget,
+   * reserving half for layers/effects; resolution determines the target count. */
+  generatorTargetCapacity(width: number, height: number): number {
+    return Math.max(1, Math.floor(MAX_RESIDENT_BYTES / 2 / (width * height * 4)))
+  }
+  /** Spill a completed generator target before reusing its GPU budget. The caller
+   * owns the bitmap until composition completes; only this keyed surface retires. */
+  async spillGeneratorTarget(key: string): Promise<ImageBitmap> {
+    const surface = this.surfaces.get(key)
+    if (!surface || surface.picture.highPrecision) throw new CodeMaterialError('CONTEXT', '生成器缓存目标不存在。')
+    const { width, height, texture } = surface.picture; const bytesPerRow = Math.ceil(width * 4 / 256) * 256
+    const buffer = this.device.createBuffer({ size: bytesPerRow * height, usage: 0x01 | 0x08 }) as GpuBuffer & { mapAsync(mode: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void }
+    const encoder = this.device.createCommandEncoder()
+    try {
+      (encoder as unknown as { copyTextureToBuffer(a: unknown, b: unknown, size: unknown): void }).copyTextureToBuffer({ texture }, { buffer, bytesPerRow }, [width, height])
+      this.submit(encoder); await buffer.mapAsync(1)
+      const mapped = new Uint8Array(buffer.getMappedRange()); const rgba = new Uint8ClampedArray(width * height * 4)
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const from = y * bytesPerRow + x * 4; const to = (y * width + x) * 4; const alpha = mapped[from + 3]
+        rgba[to + 3] = alpha
+        for (let c = 0; c < 3; c++) rgba[to + c] = alpha ? Math.round(mapped[from + c] * 255 / alpha) : 0
+      }
+      buffer.unmap()
+      const bitmap = await createImageBitmap(new ImageData(rgba, width, height))
+      this.releaseSurface(key); return bitmap
+    } finally { buffer.destroy() }
+  }
   /** Only evict prior nested output frames; generated/effect surfaces have their own existing owner. */
   releaseNestedFrames(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (key.startsWith('nested:frame:') && !keys.has(key)) this.releaseSurface(key) }
   /** CodeSources owns IR identity. Retired IR cannot leave an older pipeline identity behind. */

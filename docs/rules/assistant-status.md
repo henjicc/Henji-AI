@@ -1,3 +1,5 @@
+2026-10-15：[t101 / 代码渲染表现力](../task/代码画面与AI协作/任务/t101-渲染表现力.md) 作者语言新增任意图层 alpha/luma/invert 蒙版、17 种混合、逐字填充/模糊/辉光/倾斜、32 色标锥形渐变与图形倾斜；滤镜帧级表达式改用 CPU uniform，保留逐像素安全检查。代码目标按纹理预算 LRU 回读、淘汰与重建。试渲染创建结果 evidence 和取帧 performance 回报超实时预算的 CPU/GPU 完成耗时及最重源码结构，对外契约 2.19.0。精确契约与无窗口 GPU 像素用例覆盖上述链路；GPU 耗时为含栅格上传的队列完成墙钟，不是硬件 timestamp。按任务要求不启动 Electron、不运行真实模型；实际桌面呈现与不同显卡上的持续播放性能待总管理者集成验收。
+
 2026-10-15：[t99 / 助手上下文与看图](../task/代码画面与AI协作/任务/t99-助手上下文与看图.md) 在既有 observe_video_edit_frame 增加联系表模式，按整数帧范围均匀采样 2–12 帧、标时间码并经原资产读取通道返回一张图；剪辑首轮创作工具从正式能力引用与效果声明派生。技能原文、宿主上下文与媒体默认参数属于原链路修复。公共入口与受控 Pi 精确测试已有证据；本任务按工作方式不启动 Electron，真实 GPU 像素、联系表长片性能及真实模型判断动作/节奏的质量由总管理者集成验收。
 
 2026-10-15：[t97 第三阶段](../task/代码画面与AI协作/任务/t97-风格模板.md) **推翻 t97 前两阶段与 t68 的风格口径**：风格改为给 AI 的说明书（Markdown 固定章节 + 0–6 段参考代码），不再是参数或组件。删除代码语言 ctx.style、video_edit.style_kit/style_preset.keyframe_curves、clip.style_kit_id，以及 extract_video_edit_work_style、extract_video_edit_reference_style、insert_video_edit_style_component 三个能力；文字/字幕/标题不再自动跟随风格，由助手按说明书设置。sequence.style_kit_id 只表示按哪份说明书创作；绑定时宿主上下文给出整份说明书。就地生成改为并入说明书的“画面生成提示”。对外契约 2.17.0。精确测试与门禁通过，真实 Pi/MCP 按说明书创作的语义质量未验。

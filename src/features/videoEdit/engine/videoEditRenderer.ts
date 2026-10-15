@@ -109,6 +109,7 @@ export class VideoEditRenderer {
   async precisionDiagnostics(row?: number): Promise<{ counters?: ReturnType<VideoEditGpuCompositor['precisionDiagnostics']>; row?: Uint16Array }> {
     return { counters: this.compositor?.precisionDiagnostics(), row: row === undefined ? undefined : await this.compositor?.readPreciseRow(row) }
   }
+  codePerformance(): import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.compositor?.codePerformance() ?? [] }
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
   constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void) {

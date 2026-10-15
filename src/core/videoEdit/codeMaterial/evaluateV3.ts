@@ -1,4 +1,5 @@
-import { CODE_V3_LIMITS, codeBinaryCost, codeBuiltinCost, CodeMaterialError, codeColor as validateColor, codeImageReference, finiteCodeNumber } from './contract'
+import type { CodeHeavyStructure } from './performance'
+import { CODE_V3_LIMITS, CODE_BLEND_NAMES, codeBinaryCost, codeBuiltinCost, CodeMaterialError, codeColor as validateColor, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeColor, CodeDrawCommand, CodeDrawMetadata, CodeExpression, CodeGradient, CodeMaterialContext, CodeMaterialProgram, CodePaint, CodeTextMeasurer, CodeTextMeasureRequest } from './contract'
 import { codeNumericPlan, runCodeNumericPlan } from './numericPlan'
 import { validateCodeMaterialParameters } from './parameters'
@@ -21,7 +22,7 @@ function keys(fields: Record<string, unknown>, allowed: string[]): void { for (c
 function paint(value: unknown): CodePaint {
   if (Array.isArray(value)) return codeColor(value, '颜色')
   const fields = object(value)
-  if (!['linearGradient', 'radialGradient'].includes(string(fields.kind))) throw new CodeMaterialError('TYPE', '需要颜色或渐变。')
+  if (!['linearGradient', 'radialGradient', 'conicGradient'].includes(string(fields.kind))) throw new CodeMaterialError('TYPE', '需要颜色或渐变。')
   return value as CodeGradient
 }
 export function codeTextRequest(fields: Record<string, unknown>): CodeTextMeasureRequest {
@@ -36,8 +37,10 @@ export function codeTextRequest(fields: Record<string, unknown>): CodeTextMeasur
 }
 function metadata(fields: Record<string, unknown>): CodeDrawMetadata {
   const value: CodeDrawMetadata = { opacity: saturated(fields.opacity ?? 1, 0, 1, 'opacity'), rotation: bounded(fields.rotation ?? 0, -32768, 32768, 'rotation'), scaleX: bounded(fields.scaleX ?? fields.scale ?? 1, -1024, 1024, 'scaleX'), scaleY: bounded(fields.scaleY ?? fields.scale ?? 1, -1024, 1024, 'scaleY'), anchorX: bounded(fields.anchorX ?? 0, -32768, 32768, 'anchorX'), anchorY: bounded(fields.anchorY ?? 0, -32768, 32768, 'anchorY') }
+  if (fields.skewX !== undefined) value.skewX = bounded(fields.skewX, -89.9, 89.9, 'skewX')
+  if (fields.skewY !== undefined) value.skewY = bounded(fields.skewY, -89.9, 89.9, 'skewY')
   value.authorAnchor = fields.anchorX !== undefined || fields.anchorY !== undefined
-  if (fields.blend !== undefined) { const blend = string(fields.blend); if (!['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken'].includes(blend)) throw new CodeMaterialError('TYPE', `未知 blend ${blend}；可用值：normal、multiply、screen、overlay、add、lighten、darken。`); value.blend = blend as CodeDrawMetadata['blend'] }
+  if (fields.blend !== undefined) { const blend = string(fields.blend); if (!(CODE_BLEND_NAMES as readonly string[]).includes(blend)) throw new CodeMaterialError('TYPE', `未知 blend ${blend}；可用值：${CODE_BLEND_NAMES.join('、')}。`); value.blend = blend as CodeDrawMetadata['blend'] }
   if (fields.fill !== undefined) value.paint = paint(fields.fill)
   if (fields.stroke !== undefined) value.stroke = paint(fields.stroke)
   if (fields.strokeWidth !== undefined) value.strokeWidth = bounded(fields.strokeWidth, 0, 1024, 'strokeWidth')
@@ -62,8 +65,9 @@ function rgbaFromHsv(h: number, s: number, v: number, alpha: number): CodeColor 
   const rgb = hue < 1 ? [c, x, 0] : hue < 2 ? [x, c, 0] : hue < 3 ? [0, c, x] : hue < 4 ? [0, x, c] : hue < 5 ? [x, 0, c] : [c, 0, x]
   return codeColor([...rgb.map(channel => channel + m), alpha], 'HSV 结果')
 }
-export interface CodeEvaluationOptions { measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
+export interface CodeEvaluationOptions { onProfile?: (heaviest: CodeHeavyStructure | undefined) => void; measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
 function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}, root?: CodeExpression): unknown {
+  const profile = new Map<string, CodeHeavyStructure>()
   const parameters = validateCodeMaterialParameters(program, values); const bindings: unknown[] = []; const locals = new Map<number, unknown>()
   let operations = 0; let draws = 0; let characters = 0; const indices: number[] = []
   const charge = (cost = 1): void => { operations += cost; if (operations > CODE_V3_LIMITS.cpuOperations) throw new CodeMaterialError('BUDGET', `CPU 工作量 ${operations} / ${CODE_V3_LIMITS.cpuOperations}，超出 ${operations - CODE_V3_LIMITS.cpuOperations}；当前结构见源码位置。`) }
@@ -81,6 +85,8 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
   }
   const numericFrame = { context, locals }
   const evaluate = (expression: CodeExpression, depth = 0): unknown => {
+    const measured = options.onProfile && expression.sourceSpan && ['draw', 'repeat', 'v3call', 'call', 'binary'].includes(expression.kind)
+    const started = measured ? performance.now() : 0
     try {
       if (expression.kind === 'literal') { charge(); return expression.value }
       const plan = codeNumericPlan(expression)
@@ -91,6 +97,12 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
       const span = expression.sourceSpan
       if (span && error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, span)
       throw error
+    } finally {
+      if (measured && expression.sourceSpan) {
+        const span = expression.sourceSpan; const key = `${span.file}:${span.start}:${expression.kind}`
+        const entry = profile.get(key) ?? { kind: expression.kind === 'draw' ? expression.shape : expression.kind === 'v3call' || expression.kind === 'call' ? expression.op : expression.kind, cpuMs: 0, sourceSpan: span }
+        entry.cpuMs += performance.now() - started; profile.set(key, entry)
+      }
     }
   }
   const evaluateNode = (expression: CodeExpression, depth = 0): unknown => {
@@ -166,6 +178,12 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           case 'chars': case 'words': { const text = codeString(string(args[0])); charge(text.length); return op === 'chars' ? Array.from(text) : text.trim().split(/\s+/u).filter(Boolean) }
           case 'formatNumber': { const text = formatCodeNumber(args[0], args[1]); charge(64 + text.length); return text }
           case 'formatTime': { const text = formatCodeTime(args[0], args[1]); charge(64 + text.length); return text }
+          case 'average': {
+            const items = array(args[0]).map(channels)
+            if (!items.length || items.length > 64) throw new CodeMaterialError('BUDGET', 'average 需要 1–64 个颜色。')
+            charge(items.length * 4)
+            return channels([0, 1, 2, 3].map(i => items.reduce((sum, item) => sum + item[i], 0) / items.length))
+          }
           case 'measureText': { const fields = object(args[0]); keys(fields, ['text', 'fontFamily', 'fontStyle', 'fontWeight', 'fontSize', 'letterSpacing', 'lineHeight', 'maxWidth', 'wrap', 'maxLines']); return measure(fields) }
           case 'keyframes': {
             const frames = array(args[1]).map(array)
@@ -175,11 +193,12 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
             const index = frames.findIndex(row => n(row[0]) > a()); const left = frames[index - 1]; const right = frames[index]
             return mix(left[1], right[1], codeEase(string(left[2] ?? 'linear'), codeProgress(a(), n(left[0]), n(right[0]) - n(left[0]))))
           }
-          case 'linearGradient': case 'radialGradient': {
-            const fields = object(args[0]); keys(fields, op === 'linearGradient' ? ['x1', 'y1', 'x2', 'y2', 'stops'] : ['cx', 'cy', 'r', 'stops'])
+          case 'linearGradient': case 'radialGradient': case 'conicGradient': {
+            const fields = object(args[0]); keys(fields, op === 'linearGradient' ? ['x1', 'y1', 'x2', 'y2', 'stops'] : op === 'conicGradient' ? ['cx', 'cy', 'angle', 'stops'] : ['cx', 'cy', 'r', 'stops'])
             const stops = array(fields.stops).map(item => { const row = array(item); if (row.length !== 2) throw new CodeMaterialError('TYPE', '渐变 stop 必须为 [位置,RGBA]。'); return [bounded(row[0], 0, 1, 'stop'), codeColor(row[1], 'stop.color')] as [number, CodeColor] })
-            if (stops.length < 2 || stops.length > 8 || stops.some((row, i) => i > 0 && row[0] < stops[i - 1][0])) throw new CodeMaterialError('BUDGET', '渐变 stops 须为 2–8 项递增位置。')
+            if (stops.length < 2 || stops.length > CODE_V3_LIMITS.gradientStops || stops.some((row, i) => i > 0 && row[0] < stops[i - 1][0])) throw new CodeMaterialError('BUDGET', '渐变 stops 须为 2–32 项递增位置。')
             if (op === 'linearGradient') { const x1 = n(fields.x1); const y1 = n(fields.y1); const x2 = n(fields.x2); const y2 = n(fields.y2); if (x1 === x2 && y1 === y2) throw new CodeMaterialError('TYPE', '渐变起终点不能相同。'); return { kind: op, x1, y1, x2, y2, stops } }
+            if (op === 'conicGradient') return { kind: op, cx: n(fields.cx), cy: n(fields.cy), angle: n(fields.angle ?? 0), stops }
             return { kind: op, cx: n(fields.cx), cy: n(fields.cy), r: bounded(fields.r, .000001, 32768, 'gradient.r'), stops }
           }
           case 'hsv': return rgbaFromHsv(a(), saturated(args[1], 0, 1, `${op}.s`), saturated(args[2], 0, 1, 'hsv.v'), args[3] === undefined ? 1 : saturated(args[3], 0, 1, `${op}.alpha`))
@@ -212,8 +231,15 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           if (expression.shape === 'group') {
             let clip: { x: number; y: number; width: number; height: number } | undefined
             if (fields.clip !== undefined) { const raw = object(fields.clip); keys(raw, ['x', 'y', 'width', 'height']); clip = { x: n(raw.x), y: n(raw.y), width: bounded(raw.width, 0, 32768, 'clip.width'), height: bounded(raw.height, 0, 32768, 'clip.height') } }
+            let mask: Extract<CodeDrawCommand, { kind: 'group' }>['mask']
+            if (fields.mask !== undefined) {
+              const raw = object(fields.mask); keys(raw, ['shape', 'mode', 'invert'])
+              const mode = string(raw.mode ?? 'alpha')
+              if (!['alpha', 'luma'].includes(mode) || raw.invert !== undefined && typeof raw.invert !== 'boolean') throw new CodeMaterialError('TYPE', 'mask.mode 须为 alpha/luma，invert 须为 boolean。')
+              mask = { shape: raw.shape as CodeDrawCommand | null, mode: mode as 'alpha' | 'luma', invert: raw.invert === true }
+            }
             const children = array(next(expression.children!)) as CodeDrawCommand[]
-            return { ...meta, kind: 'group', x: coordinate('x'), y: coordinate('y'), children, ...(clip ? { clip } : {}) }
+            return { ...meta, kind: 'group', x: coordinate('x'), y: coordinate('y'), children, ...(clip ? { clip } : {}), ...(mask ? { mask } : {}) }
           }
           if (expression.shape === 'path') {
             const points = fields.d === undefined ? [array(fields.points).map(item => { const pair = array(item); if (pair.length !== 2) throw new CodeMaterialError('TYPE', '路径点须为 [x,y]。'); return [bounded(pair[0], -32768, 32768, 'point.x'), bounded(pair[1], -32768, 32768, 'point.y')] as [number, number] })] : parseCodePath(string(fields.d), context.width, context.height)
@@ -242,8 +268,9 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
           const animation = expression.properties.perChar
           if (animation?.kind === 'textAnimation') {
             perChar = layout.glyphs.map((_, index) => {
-              locals.set(animation.slot, index); locals.set(animation.countSlot, layout.glyphs.length); const transform = object(next(animation.body)); keys(transform, ['x', 'y', 'opacity', 'scale', 'rotation'])
-              return { x: bounded(transform.x ?? 0, -32768, 32768, 'perChar.x'), y: bounded(transform.y ?? 0, -32768, 32768, 'perChar.y'), opacity: saturated(transform.opacity ?? 1, 0, 1, 'perChar.opacity'), scale: bounded(transform.scale ?? 1, 0, 1024, 'perChar.scale'), rotation: bounded(transform.rotation ?? 0, -32768, 32768, 'perChar.rotation') }
+              locals.set(animation.slot, index); locals.set(animation.countSlot, layout.glyphs.length); const transform = object(next(animation.body)); keys(transform, ['x', 'y', 'opacity', 'scale', 'rotation', 'skewX', 'fill', 'blur', 'glow'])
+              const style = metadata(transform)
+              return { x: bounded(transform.x ?? 0, -32768, 32768, 'perChar.x'), y: bounded(transform.y ?? 0, -32768, 32768, 'perChar.y'), opacity: saturated(transform.opacity ?? 1, 0, 1, 'perChar.opacity'), scale: bounded(transform.scale ?? 1, 0, 1024, 'perChar.scale'), rotation: bounded(transform.rotation ?? 0, -32768, 32768, 'perChar.rotation'), ...(style.skewX !== undefined ? { skewX: style.skewX } : {}), ...(style.paint ? { fill: style.paint } : {}), ...(style.blur !== undefined ? { blur: style.blur } : {}), ...(style.glow ? { glow: style.glow } : {}) }
             })
             locals.delete(animation.slot); locals.delete(animation.countSlot)
           }
@@ -256,7 +283,8 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
     }
     throw new CodeMaterialError('TYPE', '未知 IR。')
   }
-  if (root) return evaluate(root)
+  const report = (): void => options.onProfile?.([...profile.values()].sort((a, b) => b.cpuMs - a.cpuMs)[0])
+  if (root) { const result = evaluate(root); report(); return result }
   program.bindings.forEach((binding, index) => { if (!(index in bindings)) bindings[index] = evaluate(binding.expression) })
   const output = array(evaluate(program.result)) as CodeDrawCommand[]
   let actual = 0; let textCharacters = 0; let shaderLayers = 0
@@ -267,18 +295,18 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
     command.elementPath = [...path, `${command.elementId}/${index}`]
     if (command.kind === 'text') textCharacters += command.text.length
     if (textCharacters > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', '本帧文本字符总数超过 8192。', command.sourceSpan)
-    if (command.kind === 'group') assign(command.children, command.elementPath)
+    if (command.kind === 'group') { assign(command.children, command.elementPath); if (command.mask?.shape) assign([command.mask.shape], [...command.elementPath, 'mask']) }
   })
   // Fresh frame commands already belong to this evaluation. Only aliases need a
   // copy before path assignment; no shared occurrence may mutate another's path.
   const seen = new WeakSet<CodeDrawCommand>()
   const clone = (commands: CodeDrawCommand[]): CodeDrawCommand[] => commands.filter(Boolean).map(command => {
     const next = seen.has(command) ? { ...command } : command; seen.add(command); seen.add(next)
-    if (next.kind === 'group') next.children = clone(next.children)
+    if (next.kind === 'group') { next.children = clone(next.children); if (next.mask) next.mask = { ...next.mask, shape: next.mask.shape ? clone([next.mask.shape])[0] : null } }
     return next
   })
   const commands = clone(output); assign(commands, [])
-  return commands
+  report(); return commands
 }
 
 export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}): CodeDrawCommand[] {
@@ -287,4 +315,9 @@ export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: Co
 /** Used only for compiler-checked, pixel-independent uniforms of trusted filter passes. */
 export function evaluateCodeFrameExpression(program: CodeMaterialProgram, expression: CodeExpression, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>): unknown {
   return evaluateV3(program, context, values, {}, expression)
+}
+
+/** One frame budget and binding cache shared by all lifted expressions. */
+export function evaluateCodeFrameExpressions(program: CodeMaterialProgram, expressions: readonly CodeExpression[], context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}): unknown[] {
+  return evaluateV3(program, context, values, options, { kind: 'array', type: 'array', values: [...expressions] }) as unknown[]
 }
