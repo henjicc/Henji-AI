@@ -1,7 +1,7 @@
 import { trackingFrameBatchCount } from '@/platform/contracts/tracking'
 
 /** 在正式渲染 Worker 内缩放、读回及合到黑底，避免 RGB 转换阻塞界面线程。 */
-export function readVideoEditTrackingRgb(picture: OffscreenCanvas, size: { width: number; height: number }): Uint8Array {
+export function readVideoEditTrackingRgb(picture: OffscreenCanvas | ImageBitmap, size: { width: number; height: number }): Uint8Array {
   trackingFrameBatchCount(size.width, size.height)
   const canvas = new OffscreenCanvas(size.width, size.height)
   try {

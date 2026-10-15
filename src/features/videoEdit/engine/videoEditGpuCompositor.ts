@@ -20,7 +20,7 @@ interface VideoGpuDevice extends GpuDevice {
 }
 export type VideoEditPicture = VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null
 interface LayerPipelines { video: GpuRenderPipeline; image: GpuRenderPipeline; codeImage: GpuRenderPipeline; cachedVideo: GpuRenderPipeline }
-type PresentationCapture = (pixels: Promise<ImageBitmap>) => void
+export type VideoEditPresentationCapture = ((pixels: Promise<ImageBitmap>) => void) & { maxPixels?: number }
 interface PresentationBuffer extends GpuBuffer { mapAsync(mode: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void }
 interface PresentationEncoder { copyTextureToBuffer(source: unknown, destination: unknown, size: unknown): void }
 /** Full resolution composition, shared by preview and export. VideoFrames stay on
@@ -70,7 +70,7 @@ export class VideoEditGpuCompositor {
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private blankTexture?: GpuTexture
-  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => PresentationCapture | undefined, readyTiming?: (durationMs: number, stage?: string) => void) {
+  constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => VideoEditPresentationCapture | undefined, readyTiming?: (durationMs: number, stage?: string) => void) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
     const started = performance.now()
@@ -111,7 +111,7 @@ export class VideoEditGpuCompositor {
     timing?.(performance.now() - pipelineStarted, 'pipelines')
   }
   /** Nested layers must belong to this device so the parent can sample them without readback or 8-bit quantization. */
-  fork(canvas: OffscreenCanvas, capturePresentation?: () => PresentationCapture | undefined): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this, capturePresentation) }
+  fork(canvas: OffscreenCanvas, capturePresentation?: () => VideoEditPresentationCapture | undefined): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this, capturePresentation) }
   private layerPipelines(format: string): LayerPipelines
   private layerPipelines(format: string, create: (descriptor: unknown) => Promise<GpuRenderPipeline>): { [K in keyof LayerPipelines]: Promise<GpuRenderPipeline> }
   private layerPipelines(format: string, create: (descriptor: unknown) => GpuRenderPipeline | Promise<GpuRenderPipeline> = descriptor => this.device.createRenderPipeline(descriptor)): { [K in keyof LayerPipelines]: GpuRenderPipeline | Promise<GpuRenderPipeline> } {
@@ -430,7 +430,7 @@ export class VideoEditGpuCompositor {
               rgba[to] = mapped[from + (bgra ? 2 : 0)]; rgba[to + 1] = mapped[from + 1]; rgba[to + 2] = mapped[from + (bgra ? 0 : 2)]; rgba[to + 3] = mapped[from + 3]
             }
             buffer.unmap()
-            const ratio = Math.min(1, Math.sqrt(1280 * 720 / (width * height)))
+            const ratio = Math.min(1, Math.sqrt((capture.maxPixels ?? 1280 * 720) / (width * height)))
             return await createImageBitmap(new ImageData(rgba, width, height), { resizeWidth: Math.max(1, Math.floor(width * ratio)), resizeHeight: Math.max(1, Math.floor(height * ratio)), resizeQuality: 'high' })
           } finally { buffer.destroy() }
         })()
