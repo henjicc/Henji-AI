@@ -1,5 +1,6 @@
+import { discardVideoEditCodeFiles, codePublicationFiles } from './videoEditCodeStorage'
 import { codePerformanceMessage, type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
-import { withVideoEditCurrentMetadata, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
+import { withVideoEditCurrentMetadata, saveVideoEdit, editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { codeFilesFromInput } from '@/core/videoEdit/codeMaterial/sources'
 import { assertVideoEditAnnotationTransition } from '@/core/videoEdit/annotations'
@@ -127,7 +128,7 @@ function withAuthoringHints(result: ApplicationCompletedStepResult, versions: Ar
   if (measurements.length) evidence.push({ kind: 'observation', fact: measurements.map(codePerformanceMessage).join('\n'), data: measurements.map(value => ({ frame: value.frame, cpuMs: value.cpuMs, gpuMs: value.gpuMs, budgetMs: value.budgetMs, ...(value.heaviest ? { heaviest: { kind: value.heaviest.kind, cpuMs: value.heaviest.cpuMs, sourceSpan: { ...value.heaviest.sourceSpan } } } : {}) })), capturedAt })
   return { ...result, evidence }
 }
-async function restore(token: string): Promise<ApplicationCompletedStepResult> {
+async function restore(token: string, compensation = false): Promise<ApplicationCompletedStepResult> {
   const record = undo.get(token); if (!record) throw new Error('撤销记录已过期，请使用剪辑撤销。')
   const instance = requireVideoEditInstance(record.before.id)
   if (instance !== record.owner) throw new Error('原剪辑会话已关闭，请使用当前剪辑历史。')
@@ -160,7 +161,12 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
       throw error
     } finally { unsubscribeView(); unsubscribeDomain() }
   }
-  restoreVideoEditSnapshot(record.before.id, record.after, record.before); undo.delete(token)
+  restoreVideoEditSnapshot(record.before.id, record.after, record.before, compensation); undo.delete(token)
+  if (compensation) {
+    const previous = new Set(codePublicationFiles(record.before).map(file => file.location))
+    const files = codePublicationFiles(record.after).filter(file => !previous.has(file.location))
+    if (files.length) { await saveVideoEdit(record.before.id); await discardVideoEditCodeFiles(files) }
+  }
   if (record.viewBefore) {
     setVideoEditProjectView(record.before.id, record.viewBefore.view); switchVideoEditSequence(record.before.id, record.viewBefore.activeSequenceId)
     setVideoEditTimelineView(record.before.id, record.viewBefore.timeline, record.viewBefore.primary ?? undefined)
@@ -287,7 +293,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
     return completed(before, after, [step.target], viewBefore, sourcePause)
   }
-  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken)).evidence : [] }
+  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true)).evidence : [] }
   async undo(token: string): Promise<ApplicationCompletedStepResult> { return restore(token) }
 }
 export class VideoEditCollectionExecutor implements ApplicationCollectionExecutor {
@@ -458,6 +464,6 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     }
     return result
   }
-  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken)).evidence : [] }
+  async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken, true)).evidence : [] }
   async undo(token: string): Promise<ApplicationCompletedStepResult> { return restore(token) }
 }

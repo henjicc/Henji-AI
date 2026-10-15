@@ -1,3 +1,6 @@
+import fsp from 'node:fs/promises'
+import path from 'node:path'
+import { createTestEnvironment } from '../../../../electron/main/services/documents/documents.test-support'
 import { createElement } from 'react'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { CodeSourceEditor } from '../panels/CodeSourceEditor'
@@ -957,14 +960,14 @@ it('版本创建写文件先于文档提交，文件写入失败不修改文档�
   await createVideoEditCodeMaterials(owner.document.id,[{source}]); expect(order).toHaveBeenCalledOnce(); expect(owner.document).not.toBe(baseline); order.mockRestore()
 })
 
-it('文件成功写入后文档提交失败，文档和历史保持原状，孤儿源码仍可读取', async () => {
+it('文件成功写入后文档提交失败，文档和历史保持原状，孤儿源码被回收', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const baseline = owner.document; const history = owner.past.length
   const write = vi.spyOn(getPlatform().documents, 'writeCodeVersion')
   const commit = vi.spyOn(projectService, 'editVideoProject').mockImplementation(() => { throw new Error('提交失败') })
   await expect(createVideoEditCodeMaterials(owner.document.id, [{ source }])).rejects.toThrow('提交失败')
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(write).toHaveBeenCalledOnce()
   const stored = await write.mock.results[0].value
-  expect(await getPlatform().documents.readCodeFile(stored.files[0])).toBe(source)
+  await expect(getPlatform().documents.readCodeFile(stored.files[0])).rejects.toThrow('缺失')
   commit.mockRestore(); write.mockRestore()
 })
 
@@ -975,7 +978,7 @@ it('组件集合批次失败撤回已发布版本，通用撤销保留源码且�
   await expect(create(['export const width=1;', 'export default {}'])).rejects.toThrow('默认导出')
   expect(await projectCodeComponents(id)).toEqual([])
   const result = await create(['export const width=2;']); const version = (await projectCodeComponents(id))[0].versions[0]
-  expect(version.version).toBe(2); expect(result.undoToken).toBeTruthy()
+  expect(version.version).toBe(1); expect(result.undoToken).toBeTruthy()
   await executor.undo(result.undoToken!); expect(await projectCodeComponents(id)).toEqual([])
   expect(await getPlatform().documents.readCodeFile({ path: '可撤回', location: version.location, hash: version.hash })).toContain('width=2')
 })
@@ -1020,4 +1023,85 @@ it('代码创建回报真实试渲染超预算与源码行列，保留正常提�
     expect(data.evidence.find(value=>value.fact.includes('CPU 求值'))).toMatchObject({kind:'observation',data:expect.arrayContaining([expect.objectContaining({cpuMs:25,gpuMs:15,heaviest})])})
     expect(owner.document.codeMaterials).toHaveLength(1)
   }finally{app.dispose()}
+})
+
+it('真实源码目录：试渲染失败、取消、提交失败和公共事务补偿零残留，成功及撤销重做保留源码', async () => {
+  const env = createTestEnvironment()
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const service = env.services.service
+  const project = await service.createProject({ name: '失败回收' })
+  const diskDocument = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '剪辑' })
+  const target = { id: diskDocument.meta.id }
+  const api = getPlatform().documents
+  const writeMock = vi.spyOn(api, 'writeCodeVersion').mockImplementation(request => service.writeCodeVersion({ ...request, target }))
+  const mocks = [writeMock,
+    vi.spyOn(api, 'readCodeFile').mockImplementation(service.readCodeFile),
+    vi.spyOn(api, 'listCodeComponents').mockImplementation(() => service.listCodeComponents(target)),
+    vi.spyOn(api, 'publishCodeComponent').mockImplementation(request => service.publishCodeComponent({ ...request, target })),
+    vi.spyOn(api, 'discardCodeFiles').mockImplementation(service.discardCodeFiles),
+  ]
+  const entries = () => fsp.readdir(path.join(project.path, '代码'), { recursive: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error })
+  const app = createApplicationHarness()
+  try {
+    boundary.failTrial = true
+    await expect(createVideoEditCodeMaterials(id, [{ source }])).rejects.toThrow('GPU trial rejected')
+    expect(await entries()).toEqual([])
+    boundary.failTrial = false
+    await expect(createVideoEditCodeMaterials(id, [{ source: 'bad syntax' }])).rejects.toThrow()
+    expect(await entries()).toEqual([])
+    const controller = new AbortController()
+    writeMock.mockImplementation(async request => { const result = await service.writeCodeVersion({ ...request, target }); controller.abort(); return result })
+    await expect(createVideoEditCodeMaterials(id, [{ source }], controller.signal)).rejects.toThrow()
+    writeMock.mockImplementation(request => service.writeCodeVersion({ ...request, target }))
+    expect(await entries()).toEqual([])
+    const commit = vi.spyOn(projectService, 'editVideoProject').mockImplementation(() => { throw new Error('提交失败') })
+    await expect(createVideoEditCodeMaterials(id, [{ source }])).rejects.toThrow('提交失败')
+    commit.mockRestore()
+    expect(await entries()).toEqual([])
+    const parent = { kind: 'video_edit.document', id }
+    const historyBefore = [...owner.past]
+    const result = await app.call('change_application_entities', { summary: '失败事务', changes: [
+      { kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': source } }] },
+      { kind: 'create_items', entityType: 'video_edit.code_component', parent, items: [{ properties: { 'video_edit.code_component.name': '触发补偿', 'video_edit.code_component.source': 'export default {}' } }] },
+    ] })
+    expect(owner.past).toEqual(historyBefore)
+    expect(result).toMatchObject({ ok: false })
+    expect(owner.document.codeMaterials ?? []).toEqual([])
+    expect(await entries()).toEqual([])
+    const components = new CodeComponentCollectionExecutor()
+    await expect(components.apply({ kind: 'collection', entityType: 'video_edit.code_component', parent, expectedRevisions: {}, operation: {
+      kind: 'create', items: ['export const size=1;', 'export default {}'].map(value => ({ properties: { 'video_edit.code_component.name': '失败组件', 'video_edit.code_component.source': value } })),
+    } }, { requestId: 'disk-compensation', exposure: 'assistant', permissions: new Set(['video_edit:write']), acceptedDataClasses: new Set(['C1']) })).rejects.toThrow('默认导出')
+    expect(await entries()).toEqual([])
+    const [definitionId] = await createVideoEditCodeMaterials(id, [{ source }])
+    const baseline = await entries()
+    expect(baseline.some(entry => entry.endsWith('main.ts'))).toBe(true)
+    boundary.failTrial = true
+    await expect(createVideoEditCodeVersions(id, [{ definitionId, source: source.replace('seed:7', 'seed:8') }])).rejects.toThrow('GPU trial rejected')
+    expect(await entries()).toEqual(baseline)
+    boundary.failTrial = false
+    const item = owner.document.items.find(item => item.code?.definitionId === definitionId)!
+    const [clipId] = appendVideoEditItems(id, [item.id], owner.activeSequenceId)
+    const candidateTarget = { projectId: id, sequenceId: owner.activeSequenceId, clipId, versionId: item.code!.versionId }
+    boundary.failTrial = true
+    await expect(prepareVideoEditCodeCandidate(candidateTarget, source.replace('seed:7', 'seed:9'))).rejects.toThrow('GPU trial rejected')
+    expect(await entries()).toEqual(baseline)
+    boundary.failTrial = false
+    const candidate = await prepareVideoEditCodeCandidate(candidateTarget, source.replace('seed:7', 'seed:9'))
+    disposeVideoEditCodeCandidate(candidate)
+    await vi.waitFor(async () => expect(await entries()).toEqual(baseline))
+    // Undo placement first, then creation; redo must still resolve immutable source.
+    undoVideoEdit(id)
+    undoVideoEdit(id); expect(await entries()).toEqual(baseline)
+    undoVideoEdit(id, true); expect(owner.document.codeMaterials?.[0].id).toBe(definitionId)
+    await saveVideoEdit(id)
+    const reopened = await reopenVideoEdit(id)
+    expect(reopened.document.codeMaterials?.[0].id).toBe(definitionId)
+    expect(await entries()).toEqual(baseline)
+  } finally {
+    app.dispose()
+    await closeVideoEditProject(id)
+    mocks.forEach(mock => mock.mockRestore())
+    await env.cleanup()
+  }
 })

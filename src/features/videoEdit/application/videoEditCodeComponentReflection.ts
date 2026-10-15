@@ -5,7 +5,7 @@ import { codeComponentNameSchema, componentSourceMetadata } from '@/core/videoEd
 import { codeSourceTextSchema, componentFileReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditSchemaRef } from './videoEditFields'
 import { listVideoEditInstances, openVideoEditDocument, videoEditDomainRevision } from './videoEditService'
-import { projectCodeComponents, publishProjectCodeComponent, refuseCodeComponentRemoval, withdrawProjectCodeComponents, codeComponentReferences, type CodeComponentReference } from './videoEditCodeStorage'
+import { projectCodeComponents, publishProjectCodeComponent, refuseCodeComponentRemoval, discardProjectCodeComponents, withdrawProjectCodeComponents, codeComponentReferences, type CodeComponentReference } from './videoEditCodeStorage'
 import type { CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 
 export const CODE_COMPONENT_ENTITY = 'video_edit.code_component'
@@ -87,13 +87,14 @@ export class CodeComponentCollectionExecutor implements ApplicationCollectionExe
       versions.push(version)
       refs.push({ kind: type, id: `${step.parent.id}:${version.name}`, label: version.name })
     }
-    } catch (error) { await withdrawProjectCodeComponents(step.parent.id, versions); throw error }
+    } catch (error) { await discardProjectCodeComponents(versions); throw error }
     const undoToken = crypto.randomUUID(); this.receipts.set(undoToken, { projectId: step.parent.id, versions })
     return { status: 'completed', directRefs: refs, undoToken, resultingRevisions: { video_edit: videoEditDomainRevision() }, evidence: [{ kind: 'entity_state', fact: '项目组件已写入不可变源码文件，可经同一组件实体读回。', capturedAt: new Date().toISOString() }] }
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
-    if (result.undoToken) await this.undo(result.undoToken)
-    return [{ kind: 'entity_state', fact: '此事务的组件发布已撤回；源码文件和固定引用保留。', capturedAt: new Date().toISOString() }]
+    const receipt = result.undoToken ? this.receipts.get(result.undoToken) : undefined
+    if (receipt) { await discardProjectCodeComponents(receipt.versions); this.receipts.delete(result.undoToken!) }
+    return [{ kind: 'entity_state', fact: '此事务的新建组件文件已回收，仍被引用的文件保留。', capturedAt: new Date().toISOString() }]
   }
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
     const receipt = this.receipts.get(undoToken)

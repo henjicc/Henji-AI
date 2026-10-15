@@ -1,6 +1,6 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestEnvironment, type TestEnvironment } from './documents.test-support'
 
 let env: TestEnvironment
@@ -122,4 +122,81 @@ describe('项目源码普通文件', () => {
     await fsp.symlink(env.outside, path.join(unsafeProject.path, '代码', original.folder), 'junction')
     await expect(service.duplicateDocument({ target, container: { kind: 'project', projectId: unsafeProject.id }, onConflict: 'keepBoth' })).rejects.toThrow('链接')
   })
+})
+
+it('失败补偿回收源码、归属文件和空目录，原版本及被保存文档引用的目录保留', async () => {
+  const { service, project, target, write } = await setup()
+  const first = await write()
+  const second = await service.writeCodeVersion({ target, definitionId: 'definition', name: '新版', folder: first.folder, contents: { entry: 'main.ts', files: { 'main.ts': 'next' } } })
+  await service.discardCodeFiles({ files: second.files, retainedLocations: [] })
+  expect(await fsp.readdir(path.join(project.path, '代码', first.folder))).toEqual(expect.arrayContaining(['.definition', 'v1']))
+  expect(await fsp.readdir(path.join(project.path, '代码', first.folder))).not.toContain('v2')
+  const otherProject = await service.createProject({ name: '外部项目' })
+  const other = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: otherProject.id }, name: '外部引用' })
+  await service.saveDocument({ target: { id: other.meta.id }, expectedRevision: 0, content: { ...other.content as Record<string, unknown>, codeMaterials: [{ id: 'reference', versions: [{ files: first.files }] }] } })
+  await service.discardCodeFiles({ files: first.files, retainedLocations: [] })
+  expect(await service.readCodeFile(first.files[0])).toBe('export default {}')
+  const failed = await write('failed', '失败')
+  await service.discardCodeFiles({ files: failed.files, retainedLocations: [] })
+  expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([first.folder])
+})
+
+it('活跃历史与组件引用保护文件，回收未引用组件时也清除校验文件和空目录', async () => {
+  const { service, project, target, write } = await setup()
+  const stored = await write()
+  await service.discardCodeFiles({ files: stored.files, retainedLocations: [stored.files[0].location] })
+  expect(await service.readCodeFile(stored.files[1])).toBe('export const width=20')
+  const base = await service.publishCodeComponent({ target, name: '基础', source: 'export const value=1;', description: '', exports: ['value'], imports: [] })
+  const parent = await service.publishCodeComponent({ target, name: '引用', source: 'export const value=2;', description: '', exports: ['value'], imports: [base] })
+  const ref = (version: typeof base) => ({ path: version.name, location: version.location, hash: version.hash })
+  await service.discardCodeFiles({ files: [ref(base)], retainedLocations: [] })
+  expect(await service.readCodeFile(ref(base))).toBe(base.source)
+  await service.discardCodeFiles({ files: [ref(base), ref(parent)], retainedLocations: [parent.location] })
+  expect(await service.readCodeFile(ref(base))).toBe(base.source)
+  await service.discardCodeFiles({ files: [ref(base), ref(parent)], retainedLocations: [] })
+  expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([stored.folder])
+})
+
+it('部分写盘失败会回收本次源码及组件 sidecar，不删除原有版本', async () => {
+  const { service, project, target, write } = await setup()
+  const first = await write()
+  const open = fsp.open.bind(fsp)
+  const failure = vi.spyOn(fsp, 'open').mockImplementation(async (...args: Parameters<typeof fsp.open>) => {
+    if (String(args[0]).includes('bad.ts')) throw new Error('磁盘失败')
+    return open(...args)
+  })
+  await expect(service.writeCodeVersion({ target, definitionId: 'bad', name: '失败', contents: { entry: 'main.ts', files: { 'main.ts': 'good', 'nested/bad.ts': 'bad' } } })).rejects.toThrow('磁盘失败')
+  failure.mockRestore()
+  expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([first.folder])
+  await expect(service.publishCodeComponent({ target, name: '超限', source: 'x'.repeat(65536), description: '', exports: [], imports: [] })).rejects.toThrow('64KiB')
+  expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([first.folder])
+})
+
+it('同批次多个新版本补偿后归属目录也消失，非本次新建文件和被篡改源码不删除', async () => {
+  const { service, project, target, write } = await setup()
+  const first = await write()
+  const second = await service.writeCodeVersion({ target, definitionId: 'definition', name: '第二版', folder: first.folder, contents: { entry: 'main.ts', files: { 'main.ts': 'next' } } })
+  await service.discardCodeFiles({ files: [...first.files, ...second.files], retainedLocations: [] })
+  expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([])
+  const changed = await write()
+  await fsp.writeFile(changed.files[0].location, '用户修改')
+  await expect(service.discardCodeFiles({ files: changed.files, retainedLocations: [] })).rejects.toThrow('外部修改')
+  expect(await fsp.readFile(changed.files[0].location, 'utf8')).toBe('用户修改')
+  const unknown = path.join(project.path, '代码', '自建.ts')
+  await fsp.writeFile(unknown, 'user')
+  await service.discardCodeFiles({ files: [{ path: '自建.ts', location: unknown, hash: 'a'.repeat(64) }], retainedLocations: [] })
+  expect(await fsp.readFile(unknown, 'utf8')).toBe('user')
+})
+
+it('组件源码发布失败回收已写校验文件', async () => {
+  const { service, project, target } = await setup()
+  const open = fsp.open.bind(fsp)
+  const failure = vi.spyOn(fsp, 'open').mockImplementation(async (...args: Parameters<typeof fsp.open>) => {
+    if (String(args[0]).includes('v1.ts') && !String(args[0]).includes('sha256')) throw new Error('源码写入失败')
+    return open(...args)
+  })
+  try {
+    await expect(service.publishCodeComponent({ target, name: '失败', source: 'export const value=1;', description: '', exports: ['value'], imports: [] })).rejects.toThrow('源码写入失败')
+  } finally { failure.mockRestore() }
+  expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([])
 })

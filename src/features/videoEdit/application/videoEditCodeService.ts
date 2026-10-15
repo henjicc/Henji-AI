@@ -2,10 +2,10 @@ import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/perform
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
-import { importAssetCodeComponents, withdrawProjectCodeComponents } from './videoEditCodeStorage'
+import { importAssetCodeComponents, discardProjectCodeComponents, discardVideoEditCodeFiles } from './videoEditCodeStorage'
 import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoEdit/codeAsset'
 import { prepareCodeVersionPublication } from './videoEditCodeStorage'
-import { loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
@@ -81,12 +81,12 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     if (!listVideoEditInstances().includes(owner)) controller.abort(new Error('原剪辑已关闭，候选已取消。'))
     else if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('检查期间剪辑已修改，候选已取消。'))
   })
-  const candidates: Candidate[] = []
+  const candidates: Candidate[] = []; const createdFiles: CodeFileReference[] = []
   logger.info('检查代码素材', { event: 'video_edit.code.create.start', context: { projectId, count: inputs.length } })
   try {
     for (const input of inputs) {
       const contents = codeFilesFromInput(input)
-      const publicationState = await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports)
+      const publicationState = await prepareCodeVersionPublication(projectId, contents, input.name, publication?.asset.sourceVersion.imports, createdFiles)
       const { definition, program } = await makeCodeMaterialDefinition(contents, source => compileVideoEditCode(source, controller.signal), publicationState)
       controller.signal.throwIfAborted()
       if (expectedKind === 'generator' && program.kind !== 'generator') throw new Error('输入滤镜应添加为效果，不能直接创建生成素材。')
@@ -145,6 +145,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     logger.info('代码素材已创建', { event: 'video_edit.code.create.completed', context: { projectId, count: candidates.length } })
     return candidates
   } catch (error) {
+    await discardVideoEditCodeFiles(createdFiles)
     for (const candidate of candidates) forgetVideoEditCodeMetadata(owner, candidate.definition.defaultVersionId)
     logger.debug('代码素材检查未完成', { event: 'video_edit.code.create.failed', error, context: { projectId } })
     throw error
@@ -176,10 +177,10 @@ export async function createVideoEditCodeAssetInstance(projectId: string, public
   const created = (await createCheckedMaterials(projectId, [{ ...resolveCodeMaterialFiles(publication.asset.sourceVersion, assetCodeSourceResolver(publication.asset)), name: publication.asset.name, ...(binId ? { binId } : {}) }], undefined, signal, publication))[0]
   return { definitionId: created.definition.id, ...(!created.filter ? { itemId: created.item.id } : {}) }
   } catch (error) {
-    // Parents are withdrawn before their children; fixed file references remain readable.
+    // Compensate the entire import batch so referenced dependencies remain protected.
     const components = publication.asset.sourceVersion.imports ?? []
     const flattened = (pins: typeof components): typeof components => pins.flatMap(pin => [...flattened(pin.imports), pin])
-    await withdrawProjectCodeComponents(projectId, flattened(components)); throw error
+    await discardProjectCodeComponents(flattened(components)); throw error
   }
 }
 
@@ -192,14 +193,14 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
   const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('源码版本创建已取消。'))
   signal?.addEventListener('abort', cancel, { once: true })
   const off = subscribeVideoEditDomain(() => { if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
-  const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []
+  const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []; const createdFiles: CodeFileReference[] = []
   try {
     for (const input of inputs) {
       const definition = definitions.get(input.definitionId)
       if (!definition) throw new Error('代码素材定义不属于此剪辑。')
       await loadCodeSourceReferences(definition.versions.find(version => version.id === definition.defaultVersionId)!)
       const contents = codeFilesFromInput(input)
-      const result = await appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), await prepareCodeVersionPublication(projectId, contents))
+      const result = await appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), await prepareCodeVersionPublication(projectId, contents, undefined, undefined, createdFiles))
       controller.signal.throwIfAborted()
       if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
       definitions.set(definition.id, result.definition); added.push(result.versionId)
@@ -215,6 +216,6 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))
     return added
-  } catch (error) { added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
+  } catch (error) { await discardVideoEditCodeFiles(createdFiles); added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
   finally { off(); signal?.removeEventListener('abort', cancel) }
 }

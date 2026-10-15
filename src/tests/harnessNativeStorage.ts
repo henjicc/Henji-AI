@@ -200,7 +200,7 @@ export function resetHarnessDocumentStore(): void {
 }
 
 const DOCUMENT_METHODS = [
-  'withdrawCodeComponent', 'writeCodeVersion', 'readCodeFile', 'listCodeComponents', 'publishCodeComponent',
+  'discardCodeFiles', 'withdrawCodeComponent', 'writeCodeVersion', 'readCodeFile', 'listCodeComponents', 'publishCodeComponent',
   'listDocumentsPage', 'listProjectsPage', 'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument',
   'moveDocument', 'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'markDocumentOpened', 'revealDocument', 'checkName',
   'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject', 'trashProject', 'revealProject',
