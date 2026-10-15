@@ -1,3 +1,4 @@
+import { sampleAudioContent } from '../../audioAnalysis/contentAnalysis'
 import type { CodeHeavyStructure } from './performance'
 import { CODE_V3_LIMITS, CODE_BLEND_NAMES, codeBinaryCost, codeBuiltinCost, CodeMaterialError, codeColor as validateColor, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeColor, CodeDrawCommand, CodeDrawMetadata, CodeExpression, CodeGradient, CodeMaterialContext, CodeMaterialProgram, CodePaint, CodeTextMeasurer, CodeTextMeasureRequest } from './contract'
@@ -156,6 +157,7 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
       case 'draws': return expression.values.flatMap(value => { const result = next(value); return result === null ? [] : Array.isArray(result) ? result : [result] })
       case 'call': case 'v3call': {
         const args = expression.args.map(next); const op = expression.op
+        if (op.startsWith('audio.')) { const method = op.slice(6); return sampleAudioContent(context.audio, method, (context.audioTime ?? context.localTime) + (method === 'band' ? args[1] === undefined ? 0 : n(args[1]) : args[0] === undefined ? 0 : n(args[0])), method === 'band' ? String(args[0]) : undefined) }
         if (op in CODE_MATH_COSTS) { charge(CODE_MATH_COSTS[op as keyof typeof CODE_MATH_COSTS]); return evaluateCodeMath(op as keyof typeof CODE_MATH_COSTS, args) }
         if (expression.kind === 'call') charge(codeBuiltinCost(expression.op, expression.type).cpu)
         const a = (): number => n(args[0]); const b = (): number => n(args[1]); const c = (): number => n(args[2])

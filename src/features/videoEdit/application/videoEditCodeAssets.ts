@@ -3,9 +3,9 @@ import { backupPersistenceSnapshot } from '@/core/persistence/backup'
 import { PersistenceError } from '@/core/persistence/migrations'
 import { componentFileReferences, documentCodeSourceResolver, loadCodeSourceReferences, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
-import { CODE_ASSET_LIMITS, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, codeAssetSchema, codeAssetContract, parseCodeAssetBytes, decodeCodeAsset, encodeCodeAsset, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
-import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import type { VideoEditDocument, VideoEditMedia, VideoEditClip } from '@/core/videoEdit/document'
@@ -32,7 +32,7 @@ function assertOwner(owner: VideoEditInstance, contentVersion: number, signal?: 
 function sameContent(left: AssetFileContent, right: AssetFileContent): boolean { return left.contentIdentity === right.contentIdentity && left.sizeBytes === right.sizeBytes && left.fileModifiedAt === right.fileModifiedAt }
 async function checkImage(image: CodeAsset['images'][number], signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
-  const actual = await getPlatform().assetLibrary.inspectFileContent(image.path, 'image')
+  const actual = await getPlatform().assetLibrary.inspectFileContent(image.path, image.kind)
   signal?.throwIfAborted()
   if (!sameContent(actual, image.content)) throw new Error('代码素材引用的原图片已改变，请恢复原图片后重新导入。')
 }
@@ -91,15 +91,15 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     }
     if (options.libraryId) await assetApplicationService.inspectLibrary(options.libraryId)
     const images: CodeAsset['images'] = []
-    for (const id of codeMaterialImageIds(selected.code)) {
-      const media = baseline.media.find(media => media.id === id && media.kind === 'image')
+    for (const id of codeMaterialMediaIds(selected.code)) {
+      const media = baseline.media.find(media => media.id === id)
       if (!media) throw new Error('代码素材图片引用已失效，请恢复原图片。')
       await verifyVideoEditMediaContent(media, signal)
-      const content = await getPlatform().assetLibrary.inspectFileContent(media.path, 'image')
+      const content = await getPlatform().assetLibrary.inspectFileContent(media.path, media.kind)
       assertOwner(owner, contentVersion, signal)
-      images.push({ id, path: media.path, content, ...(media.assetId ? { assetId: media.assetId } : {}) })
+      images.push({ kind: media.kind, id, path: media.path, content, ...(media.assetId ? { assetId: media.assetId } : {}) })
     }
-    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: 1, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files.map(file => ({ ...file, location: `asset:${file.hash}` })), ...(source.imports ? { imports: assetPins(source.imports) } : {}) }, codeSources: [...new Map([...source.files, ...componentFileReferences(source.imports)].map(file => [file.hash, { hash: file.hash, source: documentCodeSourceResolver().read(file.hash, file.location, file.path) }])).values()], parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
+    const manifest = codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: selected.name, sourceVersion: { apiVersion: source.apiVersion, languageVersion: source.languageVersion, entry: source.entry, files: source.files.map(file => ({ ...file, location: `asset:${file.hash}` })), ...(source.imports ? { imports: assetPins(source.imports) } : {}) }, codeSources: [...new Map([...source.files, ...componentFileReferences(source.imports)].map(file => [file.hash, { hash: file.hash, source: documentCodeSourceResolver().read(file.hash, file.location, file.path) }])).values()], parameters: structuredClone(selected.code.parameters), ...(selected.code.curves ? { curves: structuredClone(selected.code.curves) } : {}), ...(selected.elementOverrides ? { elementOverrides: structuredClone(selected.elementOverrides) } : {}), images })
     const bytes = encodeCodeAsset(manifest); const platform = getPlatform()
     const path = typeof options.path === 'function' ? await options.path() : options.path ?? await platform.system.dialog.save({ defaultPath: `${selected.name}.henji-code`, filters: [{ name: '可编辑代码素材', extensions: ['henji-code'] }] })
     assertOwner(owner, contentVersion, signal)
@@ -129,10 +129,10 @@ export async function importVideoEditCodeAsset(projectId: string, assetId: strin
     if (inspected?.assetContent?.contentIdentity) await verifyVideoEditMediaContent(inspected, signal)
     else if (inspected) {
       const current = await inspectVideoEditMedia(image.path, signal)
-      if (current.kind !== inspected.kind || current.width !== inspected.width || current.height !== inspected.height) throw new Error('原剪辑中的图片信息已改变，请先重新定位源素材。')
+      if (current.kind !== inspected.kind || current.width !== inspected.width || current.height !== inspected.height) throw new Error('原剪辑中的媒体信息已改变，请先重新定位源素材。')
       inspected = { ...current, id: inspected.id, name: inspected.name, ...(inspected.assetId ? { assetId: inspected.assetId } : {}), sourceRevision: crypto.randomUUID() }
     } else inspected = await inspectVideoEditMedia(image.path, signal)
-    if (inspected.kind !== 'image') throw new Error('代码素材图片依赖必须是真实图片。')
+    if (inspected.kind !== image.kind) throw new Error('代码素材媒体依赖与声明种类不符。')
     await checkImage(image, signal); assertOwner(owner, contentVersion, signal)
     const fixed = { ...inspected, path: image.path, assetContent: { ...image.content }, sourceRevision: inspected.sourceRevision ?? crypto.randomUUID() }
     if (!media.some(media => media.id === fixed.id)) media.push(fixed)

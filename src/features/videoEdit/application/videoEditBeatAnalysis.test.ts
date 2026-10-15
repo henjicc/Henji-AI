@@ -1,3 +1,5 @@
+import { readVideoEditMediaAudio, analyzeVideoEditMediaAudio } from './videoEditContentAudio'
+import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import path from 'node:path'
@@ -27,8 +29,8 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
     return { numberOfChannels: 1, getChannelData: () => pcm }
   }
 } }))
-vi.mock('./videoEditBeatWorkerClient', () => ({ analyzeVideoEditBeatsOffThread: async (rate: number, blocks: AsyncIterable<Float32Array[]>, signal: AbortSignal) => {
-  const analyzer = new BeatAnalyzer(rate)
+vi.mock('./videoEditBeatWorkerClient', () => ({ analyzeVideoEditBeatsOffThread: async (rate: number, blocks: AsyncIterable<Float32Array[]>, signal: AbortSignal, fps?: number) => {
+  const analyzer = fps === undefined ? new BeatAnalyzer(rate) : new AudioContentAnalyzer(rate, fps)
   for await (const planes of blocks) { signal.throwIfAborted(); analyzer.append(planes) }
   signal.throwIfAborted(); return analyzer.finish()
 } }))
@@ -143,4 +145,32 @@ it('保存失败保留已生成标记，恢复只保存，不重分析', async (
     failVideoEditSaves(false); await app.requireResult('save_video_edit', { documentRef: { kind: 'video_edit.document', id } })
     expect(boundary.compositions).toHaveLength(1)
   } finally { app.dispose() }
+})
+
+it('原素材分析沿公共能力与实体读回，复用缓存且不写标记/历史', async () => {
+  const { owner, id, target } = await setup(), app = createApplicationHarness(), history = owner.past.length
+  const input = { documentRef: { kind: 'video_edit.document', id }, sequenceRef: { kind: 'video_edit.sequence', id: `${id}:${target.sequenceId}` }, mediaRef: { kind: 'video_edit.media', id: `${id}:sound` } }
+  expect(readVideoEditMediaAudio(id, 'sound')).toBeUndefined()
+  try {
+    const result = await app.requireResult('analyze_video_edit_beats', input)
+    expect(result).toMatchObject({ verified: true, markerRefs: [], audio: { bpm: expect.any(Number) } })
+    expect(readVideoEditMediaAudio(id, 'sound')!.bpm).toBeCloseTo(120, 0)
+    const calls = boundary.compositions.length
+    await app.requireResult('analyze_video_edit_beats', input)
+    expect(boundary.compositions).toHaveLength(calls)
+    expect(owner.past).toHaveLength(history)
+    const read = await app.requireResult('read_application_entity', { ref: input.mediaRef, propertyIds: ['video_edit.media.audio_analysis'] })
+    expect(JSON.stringify(read)).toContain('bpm')
+  } finally { app.dispose() }
+})
+it('原素材分析静音完成为空；取消与解码失败不缓存，可重试', async () => {
+  const { id, target } = await setup(); const controller = new AbortController()
+  controller.abort(new Error('取消'))
+  await expect(analyzeVideoEditMediaAudio(id, target.sequenceId, 'sound', controller.signal)).rejects.toThrow('取消')
+  expect(readVideoEditMediaAudio(id, 'sound')).toBeUndefined()
+  boundary.block = async () => { throw new Error('无法解码音频') }
+  await expect(analyzeVideoEditMediaAudio(id, target.sequenceId, 'sound')).rejects.toThrow('无法解码音频')
+  expect(readVideoEditMediaAudio(id, 'sound')).toBeUndefined()
+  boundary.block = undefined; boundary.silence = true
+  expect(await analyzeVideoEditMediaAudio(id, target.sequenceId, 'sound')).toMatchObject({ bpm: 0, beats: [], onsets: [] })
 })

@@ -90,7 +90,7 @@ export function setVideoEditCodeParameter(target: VideoEditParameterTarget, key:
   const { parameter } = declaration(target, key); const value = validateCodeMaterialParameterValue(parameter, raw)
   edit(target, (_document, { binding: code }) => {
     if (options.time && code.curves?.[key]?.length) {
-      if (parameter.type === 'image') throw new Error('图片参数不支持关键帧。')
+      if ((parameter.type === 'image' || parameter.type === 'audio')) throw new Error('媒体参数不支持关键帧。')
       code.curves[key] = upsert(code.curves[key], options.time, value as CodeMaterialKeyframe['value'], !codeParameterSupportsInterpolation(parameter))
     } else code.parameters[key] = value
   }, options.gesture)
@@ -101,7 +101,7 @@ export function resetVideoEditCodeParameter(target: VideoEditParameterTarget, ke
 }
 export function addVideoEditCodeKeyframe(target: VideoEditParameterTarget, key: string, time: VideoEditSourceTime): void {
   const { metadata, parameter } = declaration(target, key)
-  if (parameter.type === 'image' || !parameter.animatable) throw new Error('此参数不支持关键帧。')
+  if ((parameter.type === 'image' || parameter.type === 'audio') || !parameter.animatable) throw new Error('此参数不支持关键帧。')
   edit(target, (_document, { binding: code }) => {
     const value = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(metadata, code), time)[key] as CodeMaterialKeyframe['value']
     code.curves = { ...(code.curves ?? {}), [key]: upsert(code.curves?.[key] ?? [], time, value, !codeParameterSupportsInterpolation(parameter)) }

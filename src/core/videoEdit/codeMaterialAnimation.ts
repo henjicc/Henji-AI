@@ -46,7 +46,7 @@ export function prepareCodeMaterialParameters(program: CodeMaterialMetadata, ins
   const curves = new Map<string, PreparedCurve>()
   for (const [key, raw] of Object.entries(codeMaterialCurvesSchema.parse(instance.curves ?? {}))) {
     const declaration = program.parameters.find(parameter => parameter.key === key)
-    if (!declaration || declaration.type === 'image' || !declaration.animatable) throw new CodeMaterialError('PARAMETERS', `参数 ${key} 不支持关键帧。`)
+    if (!declaration || (declaration.type === 'image' || declaration.type === 'audio') || !declaration.animatable) throw new CodeMaterialError('PARAMETERS', `参数 ${key} 不支持关键帧。`)
     const points = raw.map(point => ({ ...point, value: validateCodeMaterialParameterValue(declaration, point.value) as CodeMaterialKeyframe['value'] })).sort(compareCodeMaterialTime)
     for (let index = 0; index < points.length; index++) {
       const point = points[index]

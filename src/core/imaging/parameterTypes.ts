@@ -1,5 +1,6 @@
 export type CodeColor = [number, number, number, number]
-export interface CodeImageReference { kind: 'image'; mediaId: string }
+export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never } | { kind: 'video'; mediaId: string; time?: number } | { kind: 'sequence'; mediaId: 'below'; time?: never }
+export interface CodeAudioReference { kind: 'audio'; mediaId: string }
 export interface CodePoint { x: number; y: number }
 export interface CodeGrade { hue: number; strength: number; luminance: number }
 export interface CodeGradientStop { at: number; color: CodeColor }
@@ -7,7 +8,7 @@ export type CodeRange = [number, number]
 export type CodeEasing = string | CodeColor
 export type CodeBasicParameterValue = number | boolean | string | CodeColor | CodeRange | CodePoint | CodeGrade | CodeGradientStop[] | CodePoint[]
 export type CodeParameterObject = Record<string, CodeBasicParameterValue>
-export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeImageReference | null
+export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeImageReference | CodeAudioReference | null
 export type CodeParameterValues = Record<string, CodeParameterValue>
 export interface CodeParameterVisibility { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
 interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
@@ -31,5 +32,6 @@ export interface CodeParameterTypeDefinition { title: string; layout: 'stack' | 
 /** A closed IR tag keeps consumers exhaustive; typeName retains the author's open type name. */
 export type CodeParameterDeclaration = CodeBasicParameterDeclaration | (ParameterBase & (
   | { type: 'image'; default: null; animatable: false }
+  | { type: 'audio'; default: null; animatable: false }
   | { type: 'custom'; typeName: string; default: CodeParameterObject; fields: Record<string, CodeBasicParameterDeclaration> }
 ))

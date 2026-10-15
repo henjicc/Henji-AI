@@ -2,7 +2,7 @@ import { z } from 'zod'
 export const NODE_DEFAULTS_VERSION = 1
 export const MODEL_DEFAULTS_VERSION = 2
 export const ONBOARDING_VERSION = 2
-export const SUBTITLE_MANIFEST_VERSION = 5
+export const SUBTITLE_MANIFEST_VERSION = 6
 export const STORYBOARD_METADATA_VERSION = 1
 export const RECORDING_SETUP_VERSION = 1
 /** The last screen-recording choices, offered again next time; the session name is per recording and not kept. */

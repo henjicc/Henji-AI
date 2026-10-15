@@ -1,3 +1,4 @@
+import { readVideoEditMediaAudio, videoEditContentAudioProgress } from './videoEditContentAudio'
 import { createCodeComponentRegistration } from './videoEditCodeComponentReflection'
 import { createVideoEditExplanationRegistration } from './videoEditExplanationReflection'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
@@ -53,7 +54,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.document') return { selectedCodeElement: JSON.parse(JSON.stringify(videoEditSelectedCodeElementContext(instance))), mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total, totalKnown: task.totalKnown ?? false, discovered: task.discovered ?? task.total, queued: task.queued, requests: task.requests, imported: task.imported, skipped: task.skipped } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, colorLuts: (instance.document.colorLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
+  if (ref.kind === 'video_edit.document') return { audioAnalysisProgress: videoEditContentAudioProgress(projectId), selectedCodeElement: JSON.parse(JSON.stringify(videoEditSelectedCodeElementContext(instance))), mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total, totalKnown: task.totalKnown ?? false, discovered: task.discovered ?? task.total, queued: task.queued, requests: task.requests, imported: task.imported, skipped: task.skipped } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, colorLuts: (instance.document.colorLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === ref.kind)) return videoEditCompositeData(instance.document, ref.kind as VideoEditCompositeEntityType, childId)
   if (ref.kind === 'video_edit.builtin_effect') {
@@ -83,6 +84,8 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): Vi
   if (!found) throw new Error('NOT_FOUND：目标不属于此剪辑或已删除。')
   const data = JSON.parse(JSON.stringify(found)) as VideoEditFieldData
   if (ref.kind === 'video_edit.media') {
+    const audio = readVideoEditMediaAudio(projectId, childId)
+    data.audioAnalysis = audio ? { bpm: audio.bpm, beats: [...audio.beats], onsets: [...audio.onsets], beatsPerBar: audio.beatsPerBar, barOrigin: audio.barOrigin } : null
     data.proxyState = { ...readVideoEditProxyState(projectId, childId) }
     const source = instance.document.media.find(media => media.id === childId)?.recordingCursor
     data.recordingCursorMode = source ? source.cursorBakedIn ? 'clicks' : 'redraw' : 'unavailable'

@@ -3,7 +3,7 @@ import { videoEditClipMedia, videoEditNestedComposition, videoEditSequenceSchema
 import { videoEditReachableSequences } from './sequenceGraph'
 import { videoEditFps } from './time'
 import { videoEditSequenceFrameAtSeconds } from './nestedSequences'
-import { codeMaterialImageIds } from './codeMaterialResources'
+import { codeMaterialMediaIds } from './codeMaterialResources'
 import { videoEditEffectCodes } from './compositing'
 import type { TrackingSequenceSource } from '../../platform/contracts/tracking'
 
@@ -26,7 +26,7 @@ export function videoEditSequenceTrackingSource(document: TrackingDocument, clip
   const items = document.items.filter(item => ids.has(item.id))
   const mediaIds = new Set(items.map(item => item.mediaId))
   for (const sequence of sequences) for (const clip of sequence.clips) {
-    for (const instance of [clip.code, ...videoEditEffectCodes(clip.effects)]) for (const id of codeMaterialImageIds(instance)) mediaIds.add(id)
+    for (const instance of [clip.code, ...videoEditEffectCodes(clip.effects)]) for (const id of codeMaterialMediaIds(instance)) mediaIds.add(id)
   }
   // 根是合成快照，可能继承工程外壳与任务元数据；按权威序列字段投影，不维护排除名单。
   const projection = { version: 2, sequences: sequences.map(sequence => Object.fromEntries(sequenceKeys.map(key => [key, sequence[key]]))),

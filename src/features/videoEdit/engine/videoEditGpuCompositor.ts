@@ -111,7 +111,7 @@ export class VideoEditGpuCompositor {
     timing?.(performance.now() - pipelineStarted, 'pipelines')
   }
   /** Nested layers must belong to this device so the parent can sample them without readback or 8-bit quantization. */
-  fork(canvas: OffscreenCanvas): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this) }
+  fork(canvas: OffscreenCanvas, capturePresentation?: () => PresentationCapture | undefined): VideoEditGpuCompositor { return new VideoEditGpuCompositor(canvas, this, capturePresentation) }
   private layerPipelines(format: string): LayerPipelines
   private layerPipelines(format: string, create: (descriptor: unknown) => Promise<GpuRenderPipeline>): { [K in keyof LayerPipelines]: Promise<GpuRenderPipeline> }
   private layerPipelines(format: string, create: (descriptor: unknown) => GpuRenderPipeline | Promise<GpuRenderPipeline> = descriptor => this.device.createRenderPipeline(descriptor)): { [K in keyof LayerPipelines]: GpuRenderPipeline | Promise<GpuRenderPipeline> } {

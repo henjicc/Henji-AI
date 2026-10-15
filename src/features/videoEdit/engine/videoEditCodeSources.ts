@@ -1,3 +1,6 @@
+import { codeMediaFrameParameters } from './videoEditCodeMediaInput'
+import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeMaterialContext } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditRecordingCursorSource } from './videoEditRecordingCursorSource'
 import { RECORDING_CURSOR_EFFECT, sampleRecordingCursor } from '@/core/videoEdit/recordingCursor'
 import { recordingCursorDraws, type RecordingCursorRenderInput } from './videoEditRecordingCursorPlan'
@@ -25,7 +28,7 @@ import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } fro
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
-import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { codeMaterialImageIds, codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { VideoEditBuiltinEffectInstance, VideoEditEffect } from '@/core/videoEdit/compositing'
@@ -51,7 +54,7 @@ export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
-export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void }
+export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
 function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
   const seen = new WeakSet<object>()
@@ -146,13 +149,14 @@ export class VideoEditCodeSources {
     const effects = new Map<string, PreparedVideoEditEffect[]>()
     const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
-    const animated = (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram): Pick<Plan, 'context' | 'parameters' | 'transitionHandles'> => {
+    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram): Promise<Pick<Plan, 'context' | 'parameters' | 'transitionHandles'>> => {
       let animation = this.parameters.get(instance)
       if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation) }
       const window = transitionByClip.get(clip.id)
       const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window) : codeMaterialContextForFrame(clip, frame, document.frameRate, program)
       const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
-      return { context, parameters, transitionHandles: Boolean(window) }
+      Object.assign(context, await options.audio?.(clip, program, parameters, controller.signal)); assertCurrent()
+      return { context, parameters: codeMediaFrameParameters(clip, parameters), transitionHandles: Boolean(window) }
     }
     try {
       for (const clip of clips) {
@@ -195,7 +199,7 @@ export class VideoEditCodeSources {
             const key = identity(effect.code.definitionId, effect.code.versionId)
             const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
             if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
-            const animation = animated(clip, effect.code, program)
+            const animation = await animated(clip, effect.code, program)
             chain.push({ effect, version: key, program, ...animation })
           } catch (error) {
             assertCurrent()
@@ -222,13 +226,14 @@ export class VideoEditCodeSources {
         const key = identity(clip.code.definitionId, clip.code.versionId)
         const program = await this.program(key, version, controller.signal, pinned); assertCurrent()
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
-        const { parameters, context, transitionHandles } = animated(clip, clip.code, program)
-        const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && media.kind === 'image'); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
+        const { parameters, context, transitionHandles } = await animated(clip, clip.code, program)
+        const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind)); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
         const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
         const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
-        const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues])}` : `code:dynamic:${clip.id}`
+        const isStatic = program.mode === 'static' && !codeMaterialUsesAudio(program) && !Object.values(clip.code.parameters).some(value => isCodeImageReference(value) && value.kind !== 'image')
+        const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues])}` : `code:dynamic:${clip.id}`
         keys.add(target)
-        plans.push({ clip, key: target, static: program.mode === 'static', program, parameters, context, transitionHandles })
+        plans.push({ clip, key: target, static: isStatic, program, parameters, context, transitionHandles })
       }
       assertCurrent(); this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }

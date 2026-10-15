@@ -117,7 +117,7 @@ describe('文档类型登记', () => {
       ['audio_edit', '.henji-audio', { zh: '口播', en: 'Voiceovers' }, 'json', 1],
       ['camera_stage', '.henji-stage', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
       ['image_document', '.henjiimg', { zh: '图片文档', en: 'Image Documents' }, 'package', 1],
-      ['screen_recording', '.henji-recording', { zh: '录制会话', en: 'Recordings' }, 'json', 11],
+      ['screen_recording', '.henji-recording', { zh: '录制会话', en: 'Recordings' }, 'json', 12],
     ])
     expect(documentKindRegistry.forFileName('a.HenjiImg')?.id).toBe('image_document')
     expect(documentKindRegistry.forFileName('a.json')).toBeUndefined()

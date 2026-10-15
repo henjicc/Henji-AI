@@ -124,7 +124,7 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
     case 'choice': control = field.control === 'segmented' ? <UiSegmented ariaLabel={label} size="sm" value={value as string} onChange={gesture.atomic} options={field.options.map(option => ({ value: option, label: field.optionLabels?.[option] ?? option }))} /> : <Dropdown size="sm" ariaLabel={label} value={value as string} options={field.options.map(option => ({ label: field.optionLabels?.[option] ?? option, value: option }))} onSelect={gesture.atomic} />; break
     case 'text': control = <UiTextArea aria-label={label} rows={field.multiline ? 3 : 2} maxLength={field.maxLength} value={value as string} onChange={event => gesture.write(event.target.value)} textHistory={{ onValueChange: gesture.write, onEditStart: gesture.begin, onEditEnd: gesture.finish }} />; break
     case 'font': control = <UiFontPicker ariaLabel={label} value={value as string} projectFonts={font?.projectFonts} onPreview={face => font?.onPreview(face?.fullName ?? null)} onSelect={gesture.atomic} />; break
-    case 'image': control = image; break
+    case 'audio': case 'image': control = image; break
     case 'custom': control = <Custom field={field} value={value} gesture={gesture} font={font} />; break
     case 'lut': control = resource ?? <span className="text-xs text-text3">在 全能调色面板选择</span>; break
   }

@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import type { VideoEditInstance } from '@/features/videoEdit/application/videoEditService'
-import type { CodeAsset } from '@/core/videoEdit/codeAsset'
+import { CODE_ASSET_VERSION, type CodeAsset } from '@/core/videoEdit/codeAsset'
 
 import { AssetPreviewOverlay } from './AssetPreviewOverlay'
 
@@ -37,7 +37,7 @@ const asset: AssetRecord = {
   inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [],
 }
 const manifest: CodeAsset = {
-  format: 'henji-code-asset', version: 1, name: '可调图案', ...testCodeAssetSource('not-executed-in-preview', 1),
+  format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '可调图案', ...testCodeAssetSource('not-executed-in-preview', 1),
   parameters: { size: 100 }, images: [],
 }
 function owner(id = 'project-a'): VideoEditInstance {

@@ -13,7 +13,7 @@ import { CodeParamField } from './params/CodeParamField'
 import type { ParamFieldSpec } from './params/fieldSpec'
 import { VideoEditKeyframeInterpolation } from './VideoEditKeyframeInterpolation'
 
-type ScalarParameter = Exclude<CodeParameterDeclaration, { type: 'image' }>
+type ScalarParameter = Exclude<CodeParameterDeclaration, { type: 'image' | 'audio' }>
 interface Props {
   editor: VideoEditParameterEditorState
   parameter: ScalarParameter

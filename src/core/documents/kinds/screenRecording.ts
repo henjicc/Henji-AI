@@ -3,7 +3,7 @@ import { createRecordingDocument, recordingDocumentSchema, type RecordingDocumen
 import { dropVideoEditStyleKits } from './videoEdit'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 11,
+  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 12,
   migrations: {
     // 5 → 6：新增可选正式开始/结束时刻；旧会话没有预热段，原样保留。
     5: content => content,
@@ -16,6 +16,8 @@ export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocume
     // 9 → 10 → 11（t97）：脚本基线里嵌入的剪辑内容丢弃旧风格快照与绑定。
     9: migrateRecordingContentV9,
     10: migrateRecordingContentV9,
+    // 11 → 12（t102）：内嵌剪辑的代码参数类型拓宽，基线内容及其文档版本原样保留。
+    11: content => content,
   },
   standaloneFolderNames: { zh: '录制会话', en: 'Recordings' },
   untitledNames: { zh: '未命名录制', en: 'Untitled Recording' },

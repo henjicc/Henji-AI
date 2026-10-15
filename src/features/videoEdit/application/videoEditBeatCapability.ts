@@ -1,3 +1,4 @@
+import { analyzeVideoEditMediaAudio, readVideoEditMediaAudio } from './videoEditContentAudio'
 import { verifyVideoEditContentSaved } from './videoEditDocumentAlgorithm'
 import type { z } from 'zod'
 import { analyzeVideoEditBeatsCapability } from '@/core/application-control/domains/videoEdit/videoEditBeatCapability'
@@ -8,6 +9,13 @@ import { requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 export async function executeVideoEditBeatCapability(input: z.infer<typeof analyzeVideoEditBeatsCapability.inputSchema>, signal?: AbortSignal): Promise<z.infer<typeof analyzeVideoEditBeatsCapability.outputSchema>> {
   const id = input.documentRef.id, owner = requireVideoEditInstance(id), sequence = splitVideoEditRef(input.sequenceRef), clip = input.clipRef ? splitVideoEditRef(input.clipRef) : undefined
   if (sequence.projectId !== id || !sequence.childId || clip && (clip.projectId !== id || !clip.childId)) throw new Error('sequenceRef 和 clipRef 必须属于 documentRef 指定的剪辑。')
+  if (input.mediaRef) {
+    const media = splitVideoEditRef(input.mediaRef)
+    if (input.clipRef || media.projectId !== id || !media.childId) throw new Error('mediaRef 必须属于当前剪辑且不可与 clipRef 同用。')
+    const data = await analyzeVideoEditMediaAudio(id, sequence.childId, media.childId, signal)
+    const { bpm, beats, onsets, beatsPerBar, barOrigin } = data
+    return { resultRef: input.documentRef, markerRefs: [], audio: { bpm, beats, onsets, beatsPerBar, barOrigin }, verified: readVideoEditMediaAudio(id, media.childId) === data, message: '音频分析完成，可读取素材的节拍与 BPM。' }
+  }
   const markers = await analyzeVideoEditBeats({ projectId: id, sequenceId: sequence.childId, clipId: clip?.childId }, signal)
   const expected = owner.document; const contentVersion = owner.contentVersion
   try { await saveVideoEdit(id) } catch (error) {

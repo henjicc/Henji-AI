@@ -4,7 +4,7 @@ import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { collectVideoEditCodeAsset } from '../application/videoEditCodeAssets'
-import type { CodeImageReference, CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeImageReference, CodeAudioReference, CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
 import { readVideoEditCodeEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, type VideoEditCodeEditorState, type VideoEditParameterEditorState } from '../application/videoEditCodeParameters'
 import { activeVideoEditInstance, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision } from '../application/videoEditService'
 import { CodeKeyframePanel } from './CodeKeyframePanel'
@@ -27,9 +27,9 @@ export function VideoEditParameterFields({ editor, onError }: { editor: VideoEdi
     {chosen && <div className="text-xs text-accent-text" aria-label="已选元素">已选元素：{chosen.label}</div>}
     <ParamList key={videoEditParameterTargetIdentity(editor.target)} fields={fields} values={editor.parameters} extras={editor.curves} contextKey={JSON.stringify(editor.sourceTime)} highlightedKeys={chosen?.parameterKeys}
       onReset={field => { try { resetVideoEditCodeParameter(editor.target, field.key) } catch (error) { onError(error) } }}
-      renderControl={(field, value) => field.type === 'image' ? 'code' in editor ? <ParamField field={field} value={value} gesture={{ begin() {}, finish() {}, cancel() {}, active: () => false, write() {}, atomic() {} }} image={<CodeImageParameterControl target={editor.target} parameterKey={field.key} title={field.title} value={value as CodeImageReference | null} />} /> : null :
+      renderControl={(field, value) => (field.type === 'image' || field.type === 'audio') ? 'code' in editor ? <ParamField field={field} value={value} gesture={{ begin() {}, finish() {}, cancel() {}, active: () => false, write() {}, atomic() {} }} image={<CodeImageParameterControl target={editor.target} parameterKey={field.key} title={field.title} mediaType={field.type} value={value as CodeImageReference | CodeAudioReference | null} />} /> : null :
         <CodeParamField target={editor.target} field={field} value={value} time={editor.sourceTime} onError={onError} onWrite={(next, gesture, at) => setVideoEditCodeParameter(editor.target, field.key, next, { gesture, time: at })} />}
-      renderAnimation={field => field.type === 'image' || field.type === 'lut' ? null : <CodeKeyframePanel editor={editor} parameter={editor.metadata.parameters.find(parameter => parameter.key === field.key)! as Exclude<CodeParameterDeclaration, { type: 'image' }>} field={field} onError={onError} />}
+      renderAnimation={field => field.type === 'image' || field.type === 'audio' || field.type === 'lut' ? null : <CodeKeyframePanel editor={editor} parameter={editor.metadata.parameters.find(parameter => parameter.key === field.key)! as Exclude<CodeParameterDeclaration, { type: 'image' | 'audio' }>} field={field} onError={onError} />}
     />
   </UiGroup>
 }

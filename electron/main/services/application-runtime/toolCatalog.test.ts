@@ -60,6 +60,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.17.0'] = '8ac85639ad6c4b8bd8b2d5b13b801b850a94af9528728c702e9ea34617485ee4'
     fingerprints['2.18.0'] = '7bb232ec073247eb832d37f722ed714f1a373aa3c604e5016ea169ebfcd67494'
     fingerprints['2.19.0'] = '46929adeef99a4f47c6b854d625f19f8915bbff54c4f7162630de9a8b3e8769b'
+    fingerprints['2.20.0'] = '7dad0f870114b60848e49c2e976f2fe5d31f9eff5743f0ad8fef829e777b3592'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
