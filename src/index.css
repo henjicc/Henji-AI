@@ -292,6 +292,11 @@
  * 让所有绝对定位的玻璃控件跑位。放进 components 层后 utilities 稳定胜出。
  */
 @layer components {
+  /* 文本框随内容变高；最小高度仍由 height 档位给出。 */
+  .ui-textarea-fit {
+    field-sizing: content;
+  }
+
   .ui-glass {
     position: relative;
     background-color: var(--ui-glass-tint);

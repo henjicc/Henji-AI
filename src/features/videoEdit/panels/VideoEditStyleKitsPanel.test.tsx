@@ -44,3 +44,17 @@ it('按章节编辑说明书是候选，绑定一次撤销；缺必填章节被�
   // The only reported failure is the deliberate incomplete-guide check above.
   expect(error).toHaveBeenCalledTimes(1)
 }, 20_000)
+it('让助手按说明书写示例带上未保存的全文并直接发送；起草说明书只预填等用户补充', async () => {
+  const { useAssistantUiStore } = await import('@/features/assistant/store/assistantUiStore')
+  const instance = await createVideoEditTestProject(); applyStyleKitToSequence(instance.document.id, instance.activeSequenceId, copyStyleKit(BUILTIN_STYLE_KITS[1]))
+  render(<VideoEditStyleKitsPanel instance={instance} onError={vi.fn()} visible={false} />)
+  fireEvent.change(screen.getByRole('textbox', { name: '说明书：避免' }), { target: { value: '- 未保存的新规矩' } })
+  fireEvent.click(screen.getByRole('button', { name: '让助手按说明书写一段' }))
+  await waitFor(() => expect(useAssistantUiStore.getState().pendingGoal).toContain('科技信息'))
+  expect(useAssistantUiStore.getState().pendingGoalOptions).toMatchObject({ autoSend: true })
+  expect(useAssistantUiStore.getState().pendingGoalOptions?.context).toContain('- 未保存的新规矩')
+  fireEvent.click(screen.getByRole('button', { name: '让助手起草' }))
+  await waitFor(() => expect(useAssistantUiStore.getState().pendingGoal).toMatch(/^参考我给的素材/))
+  expect(useAssistantUiStore.getState().pendingGoalOptions?.autoSend).toBeFalsy()
+  expect(screen.getByRole('textbox', { name: '说明书：定位' }).className).toContain('ui-textarea-fit')
+}, 20_000)

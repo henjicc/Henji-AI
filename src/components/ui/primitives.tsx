@@ -492,7 +492,7 @@ const UI_TEXT_AREA_FRAME_CLASS: Record<NonNullable<UiTextAreaProps['frame']>, st
 };
 
 export const UiTextArea = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
-  ({ className = '', textHistory, value, frame = 'field', height = 'short', ...props }, ref) => {
+  ({ className = '', textHistory, value, frame = 'field', height = 'short', fit = 'fixed', ...props }, ref) => {
     const historyProps = useScopedTextHistoryProps(
       resolveTextHistoryValue(value),
       textHistory,
@@ -503,7 +503,7 @@ export const UiTextArea = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
       <textarea
         ref={ref}
         value={value}
-        className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${UI_TEXT_AREA_HEIGHT_CLASS[height]} ${className}`}
+        className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${UI_TEXT_AREA_HEIGHT_CLASS[height]}${fit === 'content' ? ' ui-textarea-fit' : ''} ${className}`}
         {...props}
         {...historyProps}
         {...rowLabelling}

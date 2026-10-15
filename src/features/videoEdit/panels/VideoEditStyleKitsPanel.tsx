@@ -7,6 +7,7 @@ import { applyStyleKitToSequence, captureVideoEditStyleExample, checkStyleKit, c
 import { videoEditStyleKitLibrary } from '../application/videoEditStyleKitLibrary'
 import { getActiveVideoEditSequence, requireVideoEditInstance, type VideoEditInstance } from '../application/videoEditService'
 import { styleKitDraftProblem } from '../application/videoEditStyleKitDraft'
+import { askAssistantForStyleExample, askAssistantToDraftStyleKit } from '../application/videoEditStyleKitAssistant'
 import { VideoEditPresetPlayer } from './VideoEditPresetPlayer'
 
 const PREVIEW_SIZE = { width: 320, height: 180 }
@@ -51,7 +52,7 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   const selectedPreset = selected.startsWith('preset:') ? videoEditStyleKitLibrary.custom().find(kit => kit.id === selected.slice(7)) : undefined
   const selectedCode = Boolean(sequence.clips.find(clip => clip.id === instance.selection)?.code)
   const section = (title: string, hint: string): React.ReactElement => <UiGroup key={title} title={title} titleTone="compact">
-    <UiTextArea aria-label={`说明书：${title}`} height={title === '定位' ? 'short' : 'medium'} placeholder={hint} value={sections.find(value => value.title === title)?.body ?? ''} onChange={event => writeSection(title, event.target.value)} />
+    <UiTextArea aria-label={`说明书：${title}`} height={title === '定位' ? 'short' : 'medium'} fit="content" placeholder={hint} value={sections.find(value => value.title === title)?.body ?? ''} onChange={event => writeSection(title, event.target.value)} />
   </UiGroup>
   return <UiGroup labelWidth={72} gap="stack" className="h-full min-h-0 overflow-y-auto p-3" data-video-edit-style-kits>
     {(error || videoEditStyleKitLibrary.loadError()) && <UiError size="sm" message={error || videoEditStyleKitLibrary.loadError()} />}
@@ -62,6 +63,7 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
       <UiButton size="sm" disabled={busy || !draft.name.trim()} onClick={() => { void run(async signal => { const checked = await prepare(signal); guard(signal); const value = videoEditStyleKitLibrary.save(checked); setSelected(`preset:${value.id}`); refreshLibrary(value => value + 1) }) }}>另存到风格库</UiButton>
       {selectedPreset && <UiButton size="sm" disabled={busy} onClick={() => { void run(async signal => { const checked = await prepare(signal); guard(signal); videoEditStyleKitLibrary.update(selectedPreset.id, checked); refreshLibrary(value => value + 1) }) }}>更新个人风格</UiButton>}
       {selectedPreset && <UiButton size="sm" variant="danger" disabled={busy} onClick={() => { void run(signal => { guard(signal); videoEditStyleKitLibrary.remove(selectedPreset.id); setDraft(current ? structuredClone(current) : fresh(BUILTIN_STYLE_KITS[0])); setSelected(current ? `project:${current.id}` : `preset:${BUILTIN_STYLE_KITS[0].id}`); refreshLibrary(value => value + 1) }) }}>删除个人风格</UiButton>}
+      <UiButton size="sm" disabled={busy} tooltip="把参考图、视频或描述交给助手，起草一份新的说明书" onClick={() => { void run(signal => { guard(signal); askAssistantToDraftStyleKit(projectId) }) }}>让助手起草</UiButton>
       {busy && <UiButton size="sm" onClick={() => abort.current?.abort()}>取消</UiButton>}
     </div>
     {STYLE_GUIDE_SECTIONS.map(spec => section(spec.title, spec.hint))}
@@ -74,9 +76,12 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
         <UiFormRow label="标题" density="compact" trailing={<UiIconButton size="sm" tone="danger" label={`删除示例“${example.title}”`} disabled={busy} onClick={() => setDraft(previous => ({ ...previous, examples: previous.examples.filter(value => value.id !== example.id) }))}><Trash2 /></UiIconButton>}>
           <UiInput size="sm" aria-label="示例标题" value={example.title} onChange={event => editExample(example.id, { title: event.target.value })} />
         </UiFormRow>
-        <UiFormRow label="演示了" density="compact" trailing={null}><UiTextArea aria-label="示例说明" placeholder="这段示例演示了说明书里的哪几条规矩" value={example.note} onChange={event => editExample(example.id, { note: event.target.value })} /></UiFormRow>
+        <UiFormRow label="演示了" density="compact" trailing={null}><UiTextArea aria-label="示例说明" fit="content" placeholder="这段示例演示了说明书里的哪几条规矩" value={example.note} onChange={event => editExample(example.id, { note: event.target.value })} /></UiFormRow>
       </UiGroup>)}
-      <UiButton size="sm" disabled={busy || !selectedCode} disabledReason="先在时间线上选择一个代码片段" onClick={() => { void run(signal => { guard(signal); setDraft(captureVideoEditStyleExample(projectId, sequence.id, draft)) }) }}>把所选代码片段加为示例</UiButton>
+      <div className="flex flex-wrap gap-2">
+        <UiButton size="sm" disabled={busy || !selectedCode} disabledReason="先在时间线上选择一个代码片段" onClick={() => { void run(signal => { guard(signal); setDraft(captureVideoEditStyleExample(projectId, sequence.id, draft)) }) }}>把所选代码片段加为示例</UiButton>
+        <UiButton size="sm" disabled={busy} tooltip="助手按这份说明书新写一段放到时间线上，满意再加为示例；会调用一次助手模型" onClick={() => { void run(signal => { guard(signal); askAssistantForStyleExample(projectId, draft) }) }}>让助手按说明书写一段</UiButton>
+      </div>
     </UiGroup>
   </UiGroup>
 }

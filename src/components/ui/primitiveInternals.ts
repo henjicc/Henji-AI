@@ -242,6 +242,8 @@ export interface UiTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElem
    * `none`：无框，直接落在所在表面上编辑（画布文本展示节点的编辑态，与静态正文同字号行高，对齐 `PromptEditor frame="none"`）。
    */
   frame?: 'field' | 'none'
+  /** `fixed`（默认）：固定档位高度，内容超出时框内滚动。`content`：随内容变高，档位高度作为最小高度。 */
+  fit?: 'fixed' | 'content'
 }
 
 export type UiPanelVariant = 'panel' | 'inset' | 'bare' | 'glass'

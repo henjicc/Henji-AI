@@ -69,7 +69,7 @@ export function styleKitHostSummary(projectId: string, sequenceId: string): { re
   if (kit) return { ref: `video_edit.style_kit:${projectId}:${kit.id}`, name: kit.name, summary: `本序列按下面的风格说明书创作：新做的代码画面、文字、标题、字幕、关键帧和转场都要遵守它，“必须”不可违反，“可以自由发挥”的部分每次做出变化。${kit.examples.length ? `参考示例 ${kit.examples.length} 段，需要时读取 content.examples，只学手法不照搬。` : ''}做完逐条对照“必须”和核心理念的判据自查。\n\n${styleKitBriefing(kit, { examples: false })}` }
   const personal = videoEditStyleKitLibrary.custom()
   const listed = personal.slice(0, 8).map(value => { const summary = styleKitSummary(value); return summary ? `${value.name}（${summary.slice(0, 40)}）` : value.name })
-  return { ref: null, name: '', summary: `未绑定风格。${listed.length ? `本机个人风格 ${personal.length} 套：${listed.join('、')}${personal.length > listed.length ? ' 等' : ''}。按任务场景推荐一套并询问用户，用户不需要时按其输入创作。` : ''}` }
+  return { ref: null, name: '', summary: `未绑定风格：按用户的需求和偏好自己定方向直接做，交付时说明选了什么。${listed.length ? `本机个人风格 ${personal.length} 套：${listed.join('、')}${personal.length > listed.length ? ' 等' : ''}；用户提到其中某套、或任务明显对得上时，可以直接按它做并说明，也可以建议绑定。` : ''}` }
 }
 export function styleKitFromContent(name: string, content: StyleKitContent): StyleKit { return styleKitSchema.parse({ id: crypto.randomUUID(), name, ...content, revision: 0 }) }
 export function saveStyleKitToLibrary(kit: StyleKit): StyleKit { return videoEditStyleKitLibrary.save(styleKitSchema.parse({ ...kit, ...styleKitContent(kit) })) }
