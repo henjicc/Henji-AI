@@ -13,7 +13,11 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 import { VideoEditCodeGpuV3 } from './videoEditCodeGpuV3'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { ContactSheetBitmap, ContactSheetCanvas } from '@/tests/videoEditContactSheetCanvas'
+import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
+import { videoEditComposition } from '@/core/videoEdit/document'
+import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 
 let gpu: Gpu; let device: Gpu['gpu']; let wrapped: GpuDevice; let runtime: VideoEditCodeGpuV3
 const W = 64; const H = 64
@@ -510,3 +514,53 @@ it('逐字颜色、倾斜、模糊与发光在组内保留，缺省字继承父�
   expect(pixels.some((v,i)=>i%4===1&&v>100)).toBe(true)
   expect(pixels.some((v,i)=>i%4===2&&v>10)).toBe(true)
 })
+
+it('codeB 九帧联系表每格保留 GPU 画面和左上角时间码，位图逐帧独立释放', async () => {
+  const program = compileCodeMaterial(readFileSync(new URL('../../../tests/fixtures/videoEdit/contactSheet/variety-title.ts.txt', import.meta.url), 'utf8'))
+  const document = createVideoEditTestDocument('综艺花字片头')
+  document.items.push({ id: 'code-b', name: '综艺花字片头', kind: 'code', code: { definitionId: 'code-b', versionId: 'v1', parameters: {} } })
+  const sequence = document.sequences[0]
+  sequence.width = 1920; sequence.height = 1080
+  sequence.clips.push({ ...makeVideoEditItemClip(document, 'code-b', sequence.id, { frame: 0 }, () => program), duration: 120 })
+  const composition = videoEditComposition(document, sequence.id)
+  const bitmaps: ContactSheetBitmap[] = []; const requested: number[] = []
+  // Keep the real trial queue and contact-sheet painter; replace only the browser Worker
+  // boundary with native Dawn rendering + explicit owned CPU pixels (no canvas expiry in Node).
+  vi.doMock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+    async present(frame: number) {
+      requested.push(frame)
+      const target = texture(1920, 1080)
+      try {
+        device.pushErrorScope('validation')
+        const time = frame / composition.fps
+        const commands = evaluateCodeMaterial(program, { ...context, width: 1920, height: 1080, fps: composition.fps, frame, time, localTime: time, sequenceTime: time }, {}, { measureText: testMeasure })
+        await runtime.render(target, 1920, 1080, commands)
+        const pixels = await read(target, 1920, 1080)
+        expect(await device.popErrorScope()).toBeNull()
+        const bitmap = new ContactSheetBitmap(pixels, 1920, 1080); bitmaps.push(bitmap)
+        return { presented: true, bitmap }
+      } finally { target.destroy() }
+    }
+    async updateDocument() {}
+    async dispose() {}
+  } }))
+  vi.stubGlobal('OffscreenCanvas', ContactSheetCanvas)
+  try {
+    const { renderVideoEditContactSheet } = await import('../application/videoEditContactSheet')
+    const sheet = await renderVideoEditContactSheet(composition, { startFrame: 0, endFrame: 119, frameCount: 9 }, 1920, new AbortController().signal)
+    expect(requested).toEqual([0, 15, 30, 45, 60, 74, 89, 104, 119])
+    const pixels = await sharp(sheet.bytes).ensureAlpha().raw().toBuffer()
+    for (let index = 0; index < 9; index++) {
+      const left = index % sheet.columns * sheet.cellWidth; const top = Math.floor(index / sheet.columns) * sheet.cellHeight
+      let picturePixels = 0; let labelPixels = 0
+      for (let y = 0; y < sheet.cellHeight; y++) for (let x = 0; x < sheet.cellWidth; x++) {
+        const at = ((top + y) * sheet.width + left + x) * 4
+        if (y >= 40 && pixels[at] + pixels[at + 1] + pixels[at + 2] > 30) picturePixels++
+        if (x < 140 && y < 36 && pixels[at] > 200 && pixels[at + 1] > 200 && pixels[at + 2] > 200) labelPixels++
+      }
+      expect(picturePixels, `帧 ${requested[index]} 的画面`).toBeGreaterThan(sheet.cellWidth * (sheet.cellHeight - 40) * .9)
+      expect(labelPixels, `帧 ${requested[index]} 的时间码`).toBeGreaterThan(100)
+      expect(bitmaps[index].closes).toBe(1)
+    }
+  } finally { vi.doUnmock('./videoEditRenderSession'); vi.unstubAllGlobals() }
+}, 120_000)

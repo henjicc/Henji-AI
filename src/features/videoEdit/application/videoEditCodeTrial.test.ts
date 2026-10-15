@@ -65,3 +65,24 @@ it('按序列帧率回传超预算测量与结构位置，不拒绝画面；预�
   await trialVideoEditCodeFrames(inputs, new AbortController().signal, false, undefined, measurements)
   expect(measurements).toEqual([])
 })
+
+it('末帧和收集模式移交独立位图，销毁会话不提前关闭调用方画面', async () => {
+  const first = result(); const last = result(); const input = frames()
+  boundary.present.mockResolvedValueOnce(first).mockResolvedValueOnce(last)
+  const kept = await trialVideoEditCodeFrames([...input, { ...input[0], frame: 15 }], new AbortController().signal, true)
+  expect(kept).toBe(last.bitmap); expect(first.bitmap.close).toHaveBeenCalledOnce()
+  expect(last.bitmap.close).not.toHaveBeenCalled(); expect(boundary.dispose).toHaveBeenCalledOnce()
+  kept!.close()
+  const a = result(); const b = result(); const collected: ImageBitmap[] = []
+  boundary.present.mockResolvedValueOnce(a).mockResolvedValueOnce(b)
+  expect(await trialVideoEditCodeFrames([...input, { ...input[0], frame: 30 }], new AbortController().signal, false, collected)).toBeUndefined()
+  expect(collected).toEqual([a.bitmap, b.bitmap])
+  for (const bitmap of collected) { expect(bitmap.close).not.toHaveBeenCalled(); bitmap.close() }
+})
+
+it('销毁会话失败不移交末帧，并释放已取得的位图', async () => {
+  const pixels = result(); boundary.present.mockResolvedValueOnce(pixels)
+  boundary.dispose.mockRejectedValueOnce(new Error('销毁失败'))
+  await expect(trialVideoEditCodeFrames(frames(), new AbortController().signal, true)).rejects.toThrow('销毁失败')
+  expect(pixels.bitmap.close).toHaveBeenCalledOnce()
+})

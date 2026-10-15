@@ -95,6 +95,24 @@ it('历史缓冲区映射失败仍销毁缓冲区，错误交给采集而不伪�
   expect(buffer.destroy).toHaveBeenCalledOnce()
   await compositor.dispose()
 })
+it.each([undefined, Infinity])('快照像素预算 %s：历史缩放而正式取帧保留全尺寸', async maxPixels => {
+  const capture = Object.assign(vi.fn(), { maxPixels })
+  const bitmap = { close: vi.fn() } as unknown as ImageBitmap
+  vi.stubGlobal('ImageData', class { constructor(readonly data: Uint8ClampedArray, readonly width: number, readonly height: number) {} })
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap))
+  const { compositor, device, output } = copyFixture(async () => {}, () => capture)
+  output.width = 1920; output.height = 1080
+  device.createBuffer.mockReturnValueOnce({ mapAsync: async () => {}, getMappedRange: () => new ArrayBuffer(1920 * 1080 * 4), unmap: vi.fn(), destroy: vi.fn() })
+  try {
+    const document = createVideoEditDocument('取帧分辨率')
+    await (await compositor.draw(videoEditComposition(document, document.sequences[0].id), [], [], () => true)).completion
+    await capture.mock.calls[0][0]
+    expect(createImageBitmap).toHaveBeenCalledWith(expect.objectContaining({ width: 1920, height: 1080 }), {
+      resizeWidth: maxPixels === Infinity ? 1920 : 1280, resizeHeight: maxPixels === Infinity ? 1080 : 720, resizeQuality: 'high',
+    })
+    bitmap.close()
+  } finally { await compositor.dispose() }
+})
 it('GPU validation failure rejects the frame receipt instead of reporting a blank frame as successful', async () => {
   const { compositor, device } = copyFixture(async () => {})
   const project = createVideoEditDocument('合成错误')

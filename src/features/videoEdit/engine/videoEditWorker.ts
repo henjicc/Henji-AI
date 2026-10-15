@@ -166,23 +166,40 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         let snapshot: Promise<ImageBitmap> | undefined
-        const capture = request.history ? (pixels: Promise<ImageBitmap>): void => {
+        // A canvas texture expires across asynchronous boundaries. Copy in the draw
+        // submission, before awaiting GPU completion or tearing down a trial session.
+        const needsPixels = !direct || !!request.readRgb
+        const capture = request.history || needsPixels ? Object.assign((pixels: Promise<ImageBitmap>): void => {
           if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {})
           snapshot = pixels
           void snapshot.catch(() => {})
-        } : undefined
+        }, { maxPixels: needsPixels ? Infinity : 1280 * 720 }) : undefined
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error })
         const finish = async (): Promise<void> => {
+          const owned = new Set<ImageBitmap>()
           try {
           const start = performance.now()
           for (const message of result.effectErrors ?? []) if (!effectWarnings.has(message)) log('warn', message, 'video_edit.effect.skipped', { sequenceId: renderer?.document.id, frame: request.frame })
           effectWarnings = new Set(result.effectErrors)
           await result.completion
-          const history = snapshot ? await snapshot : undefined
-          const rgb = request.readRgb && result.presented ? readVideoEditTrackingRgb(result.canvas, request.readRgb) : undefined
-          const bitmap = rgb || direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
+          const pixels = snapshot ? await snapshot : undefined
+          if (pixels) owned.add(pixels)
+          if (result.presented && (needsPixels || request.history) && !pixels) throw new Error('剪辑渲染没有返回画面快照。')
+          let history: ImageBitmap | undefined
+          if (request.history && pixels && result.presented) {
+            const ratio = Math.min(1, Math.sqrt(1280 * 720 / (pixels.width * pixels.height)))
+            history = needsPixels ? await createImageBitmap(pixels, { resizeWidth: Math.max(1, Math.floor(pixels.width * ratio)), resizeHeight: Math.max(1, Math.floor(pixels.height * ratio)), resizeQuality: 'high' }) : pixels
+            owned.add(history)
+          }
+          const rgb = request.readRgb && result.presented && pixels ? readVideoEditTrackingRgb(pixels, request.readRgb) : undefined
+          const bitmap = rgb || direct || !result.presented ? undefined : pixels
           self.postMessage({ id: request.id, bitmap, history, rgb, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: renderer?.codePerformance() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
-          } catch (error) { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error }
+          if (bitmap) owned.delete(bitmap)
+          if (history) owned.delete(history)
+          } catch (error) {
+            if (!owned.size && snapshot) void snapshot.then(bitmap => bitmap.close(), () => {})
+            throw error
+          } finally { owned.forEach(bitmap => bitmap.close()) }
         }
         // 拖动与正向播放：提交后先回执，下一帧不必等这一帧的 GPU 完成（节目监视器两帧流水）。
         if (direct && !request.history && (request.scrubbing || (request.sequential && request.deadline !== undefined))) {

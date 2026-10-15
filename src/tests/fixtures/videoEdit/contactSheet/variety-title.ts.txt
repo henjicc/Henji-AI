@@ -1,0 +1,42 @@
+export default {
+  apiVersion: 1, languageVersion: 3, name: "综艺花字片头", kind: "generator", mode: "dynamic",
+  width: 1920, height: 1080, durationSeconds: 4, seed: 42,
+  parameters: {
+    title: { type: "text", title: "主标题", default: "把复杂的事做简单", maxLength: 20 },
+    subtitle: { type: "text", title: "副标题", default: "痕迹 AI", maxLength: 20 },
+    hold: { type: "number", title: "退场时间", default: 3.8, min: 0.3, max: 4, step: 0.1 }
+  },
+  render(ctx) {
+    const s = { motion: { pop: 0.3, popEase: "backOut", charStagger: 0.05, burstDelay: 0.05, titleDelay: 0.15, tagDelay: 0.55, exit: 0.2, exitEase: "cubicIn" }, typeScale: { title: 0.13, tag: 0.038 }, palette: { bg: [0.1529, 0.1216, 0.2157, 1], panel: [0.2314, 0.1686, 0.2902, 1], accent: [1, 0.8157, 0.251, 1], accent2: [1, 0.4745, 0.5686, 1], fg: [1, 0.9647, 0.898, 1] }, fonts: { display: { family: "Noto Sans S Chinese Black", weight: 400 } } };
+    const H = ctx.height;
+    const W = ctx.width;
+    const titleSize = s.typeScale.title * H;
+    const tagSize = s.typeScale.tag * H;
+    const box = measureText({ text: ctx.params.title, fontFamily: s.fonts.display.family, fontWeight: s.fonts.display.weight, fontSize: titleSize });
+    const tagBox = measureText({ text: ctx.params.subtitle, fontFamily: s.fonts.display.family, fontWeight: s.fonts.display.weight, fontSize: tagSize });
+    const bandW = box.width + H * 0.06;
+    const bandH = titleSize * 1.28;
+    const chipW = tagBox.width + H * 0.052;
+    const chipH = tagSize * 1.75;
+    const burst = tween(ctx.time, s.motion.burstDelay, s.motion.pop, 0, 1, s.motion.popEase);
+    const tagPop = tween(ctx.time, s.motion.tagDelay, s.motion.pop, 0, 1, s.motion.popEase);
+    const out = progress(ctx.time, ctx.params.hold, s.motion.exit);
+    const alive = 1 - out;
+    return [
+      rect({ id: "bg", x: 0, y: 0, width: W, height: H, fill: s.palette.bg }),
+      repeat(16, i => ellipse({ id: "dot", x: W * random(i), y: H * random(i + 40), width: H * (0.009 + 0.011 * random(i + 80)), height: H * (0.009 + 0.011 * random(i + 80)), fill: mix(s.palette.accent, s.palette.accent2, random(i + 120)), opacity: 0.65 })),
+      group({ id: "card", x: W / 2, y: H * 0.46, rotation: -6, opacity: alive, scale: max(burst, 0) * (1 - 0.05 * out) }, [
+        repeat(18, i => path({ id: "spike", d: "M 0 -336 L -60 -58 L 60 -58 Z", rotation: i * 20, fill: s.palette.accent })),
+        rect({ id: "band", x: -bandW / 2, y: -bandH / 2, width: bandW, height: bandH, fill: s.palette.panel, radius: bandH * 0.5, shadow: { x: H * 0.008, y: H * 0.012, blur: 0, color: s.palette.bg } }),
+        text({ id: "headline", x: 0, y: 0, text: ctx.params.title, fontFamily: s.fonts.display.family, fontWeight: s.fonts.display.weight, fontSize: titleSize, color: s.palette.fg, align: "center", baseline: "middle",
+          stroke: s.palette.bg, strokeWidth: H * 0.014, shadow: { x: H * 0.006, y: H * 0.01, blur: 0, color: s.palette.bg },
+          perChar: (i, n) => ({ scale: max(0, tween(ctx.time, s.motion.titleDelay + stagger(i, s.motion.charStagger), s.motion.pop, 0, 1, s.motion.popEase)), rotation: (i - (n - 1) / 2) * 1.5 }) })
+      ]),
+      group({ id: "tag", x: W * 0.68, y: H * 0.73, rotation: 8, opacity: alive, scale: max(tagPop, 0) * (1 - 0.05 * out) }, [
+        rect({ id: "chip", x: -chipW / 2, y: -chipH / 2, width: chipW, height: chipH, fill: s.palette.accent2, radius: chipH * 0.5, shadow: { x: H * 0.006, y: H * 0.009, blur: 0, color: s.palette.bg } }),
+        text({ id: "subtitle", x: 0, y: 0, text: ctx.params.subtitle, fontFamily: s.fonts.display.family, fontWeight: s.fonts.display.weight, fontSize: tagSize, color: s.palette.bg, align: "center", baseline: "middle",
+          perChar: (i, n) => ({ scale: max(0, tween(ctx.time, s.motion.tagDelay + 0.08 + stagger(i, 0.04), s.motion.pop, 0, 1, s.motion.popEase)) }) })
+      ])
+    ];
+  }
+}
