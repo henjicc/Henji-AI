@@ -113,3 +113,16 @@ it('等待工具跨过普通调用期限，取消时通知宿主并释放等待'
   expect(send.mock.calls[1][0]).toBe('application:host:cancel')
   expect(vi.getTimerCount()).toBe(0)
 })
+it('同一渲染进程从未就绪切到就绪时，先到的新上下文不会被未就绪注册清掉', () => {
+  const bridge = new ApplicationHostBridge(() => undefined)
+  const transport = { send: vi.fn() } as unknown as Parameters<ApplicationHostBridge['register']>[1]
+  const registration = { rendererEpoch: 'epoch', attachmentSequence: 1, ready: false, tools: [], domains: [] }
+  bridge.register(registration as never, transport)
+  bridge.publishContext({ uiReady: true } as never)
+  bridge.register({ ...registration, attachmentSequence: 1, ready: false } as never, transport)
+  bridge.register({ ...registration, attachmentSequence: 2, ready: true } as never, transport)
+  expect(bridge.ready).toBe(true)
+  expect(bridge.getContext()).toMatchObject({ uiReady: true })
+  bridge.register({ ...registration, rendererEpoch: 'next', attachmentSequence: 3, ready: true } as never, transport)
+  expect(bridge.getContext()).toBeUndefined()
+})

@@ -67,7 +67,10 @@ export class ApplicationHostBridge {
     if (input.attachmentSequence < this.attachmentSequence) return
     const registration = input
     this.attachmentSequence = registration.attachmentSequence
-    if (this.host?.registration.rendererEpoch !== registration.rendererEpoch || !registration.ready) this.disconnect()
+    // 同一渲染进程内“未就绪→就绪”的切换会先发未就绪注册；它与上下文发布走不同通道，到达顺序不定。
+    // 只有换了渲染进程才清掉上下文，否则先到的新上下文会被清空，之后没有变化就不会再发布。
+    if (this.host?.registration.rendererEpoch !== registration.rendererEpoch) this.disconnect()
+    else if (!registration.ready) this.cancelPending()
     this.host = { registration, transport }
     this.changed()
   }
