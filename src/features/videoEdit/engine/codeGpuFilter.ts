@@ -1,3 +1,4 @@
+import { emitCodeMath } from './codeGpuMath'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '@/core/videoEdit/time'
 import { CodeMaterialError, CODE_MATERIAL_LIMITS, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
@@ -166,6 +167,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionH
       }
       case 'binary': {
         const a = next(expression.left); const b = next(expression.right)
+        if (expression.op === '**') return emitCodeMath('pow', [a, b], { range, scalar, multiply, divide, operationRange })
         let bounds: Bounds = null
         if (expression.type === 'number') {
           const x = scalar(a); const y = scalar(b)

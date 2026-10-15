@@ -1,7 +1,9 @@
 import ts from 'typescript'
 import { originalCodeSourceSpan } from './modules'
-import { CODE_BUILTINS, CODE_CONTEXT_KEYS, CODE_TIME_KEYS, CODE_V3_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, finiteCodeNumber } from './contract'
+import { CODE_BUILTINS, CODE_V3_MATH_BUILTINS, CODE_CONSTANTS, CODE_CONTEXT_KEYS, CODE_TIME_KEYS, CODE_V3_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeBinaryCost, codeBuiltinCost, finiteCodeNumber } from './contract'
 import type { CodeBinaryOperator, CodeBuiltin, CodeContextKey, CodeDrawKind, CodeExpression, CodeMaterialProgram, CodeSourceSpan, CodeValueType } from './contract'
+import { CODE_MATH_COSTS, CODE_EXPRESSION_SIGNATURES } from './expressions'
+import { codeSyntaxHint, nearestCodeFunctions } from './diagnostics'
 import { CODE_EASE_NAMES } from './motion'
 import { codeParameterShape, codeParameterValueType, type CodeParameterShape } from './parameterTypes'
 import { CODE_PARAMETER_FUNCTION_COSTS } from './parameterSampling'
@@ -40,25 +42,38 @@ const shapeFields: Record<CodeDrawKind, string[]> = {
   group: [...common, 'x', 'y', 'clip'], image: [...common, 'source', 'x', 'y', 'width', 'height'],
 }
 const operators: Partial<Record<ts.SyntaxKind, CodeBinaryOperator>> = {
-  [ts.SyntaxKind.PlusToken]: '+', [ts.SyntaxKind.MinusToken]: '-', [ts.SyntaxKind.AsteriskToken]: '*', [ts.SyntaxKind.SlashToken]: '/', [ts.SyntaxKind.PercentToken]: '%',
+  [ts.SyntaxKind.AsteriskAsteriskToken]: '**', [ts.SyntaxKind.PlusToken]: '+', [ts.SyntaxKind.MinusToken]: '-', [ts.SyntaxKind.AsteriskToken]: '*', [ts.SyntaxKind.SlashToken]: '/', [ts.SyntaxKind.PercentToken]: '%',
   [ts.SyntaxKind.LessThanToken]: '<', [ts.SyntaxKind.LessThanEqualsToken]: '<=', [ts.SyntaxKind.GreaterThanToken]: '>', [ts.SyntaxKind.GreaterThanEqualsToken]: '>=',
   [ts.SyntaxKind.EqualsEqualsEqualsToken]: '===', [ts.SyntaxKind.ExclamationEqualsEqualsToken]: '!==', [ts.SyntaxKind.AmpersandAmpersandToken]: '&&', [ts.SyntaxKind.BarBarToken]: '||',
 }
-const extra = ['sampleGradient', 'sampleCurve', 'ease', 'shaderFilter', 'repeat', 'linearGradient', 'radialGradient', 'measureText', 'chars', 'words', 'progress', 'tween', 'stagger', 'keyframes', 'cubicBezier', 'noise', 'sampleOffset', 'blur', 'glow', 'luma', 'contrast', 'saturate', 'hsv', 'hsl', 'toHsv', 'toHsl', 'average', ...CODE_EASE_NAMES]
+const extra: readonly string[] = [...CODE_V3_MATH_BUILTINS, 'formatNumber', 'formatTime', 'sampleGradient', 'sampleCurve', 'ease', 'shaderFilter', 'repeat', 'linearGradient', 'radialGradient', 'measureText', 'chars', 'words', 'progress', 'tween', 'stagger', 'keyframes', 'cubicBezier', 'noise', 'sampleOffset', 'blur', 'glow', 'luma', 'contrast', 'saturate', 'hsv', 'hsl', 'toHsv', 'toHsl', 'average', ...CODE_EASE_NAMES]
 interface Scope { values: Map<string, CodeExpression>; helpers: Map<string, ts.ArrowFunction> }
 
 /** Helper calls are statically inlined into data; arrows never become callable host values. */
 export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.SourceFile, body: ts.Block, top: readonly ts.Statement[]): CodeMaterialProgram {
-  const scope: Scope = { values: new Map(), helpers: new Map() }
+  const scope: Scope = { values: new Map(Object.entries(CODE_CONSTANTS).map(([key, value]) => [key, { kind: 'literal', type: 'number', value }])), helpers: new Map() }
   const active = new Set<ts.ArrowFunction>(); const checked = new Set<ts.ArrowFunction>(); let slot = 0; let multiplier = 1; let repeatDepth = 0; let inliningDepth = 0
   const charge = (node: ts.Node, cpu = 1, scalar = 0, samples = 0): void => {
     program.metrics.cpuOperations += cpu * multiplier; program.metrics.scalarOperations += scalar * multiplier; program.metrics.samples += samples * multiplier
-    if (program.metrics.cpuOperations > CODE_V3_LIMITS.cpuOperations || program.kind === 'filter' && (program.metrics.scalarOperations > CODE_V3_LIMITS.filterScalarOperations || program.metrics.samples > CODE_V3_LIMITS.filterSamples)) fail(node, '展开后的操作或采样超出 v3 技术预算。', 'BUDGET')
+    if (program.metrics.cpuOperations > CODE_V3_LIMITS.cpuOperations || program.kind === 'filter' && (program.metrics.scalarOperations > CODE_V3_LIMITS.filterScalarOperations || program.metrics.samples > CODE_V3_LIMITS.filterSamples)) fail(node, program.metrics.cpuOperations > CODE_V3_LIMITS.cpuOperations ? `CPU 工作量 ${program.metrics.cpuOperations} / ${CODE_V3_LIMITS.cpuOperations}，超出 ${program.metrics.cpuOperations - CODE_V3_LIMITS.cpuOperations}；主要结构 ${repeatDepth ? 'repeat' : '表达式'}，当前 ${node.getText().slice(0, 60)}。` : `滤镜标量 ${program.metrics.scalarOperations}/${CODE_V3_LIMITS.filterScalarOperations}、采样 ${program.metrics.samples}/${CODE_V3_LIMITS.filterSamples} 超出预算。`, 'BUDGET')
   }
   const type = (node: ts.Node, value: CodeExpression, expected: CodeValueType | CodeValueType[]): void => {
     if (!(Array.isArray(expected) ? expected : [expected]).includes(value.type)) fail(node, `需要 ${expected}，实际 ${value.type}。`, 'TYPE')
   }
   const unwrap = (value: CodeExpression): CodeExpression => value.kind === 'binding' ? unwrap(program.bindings[value.slot].expression) : value
+  const textLength = (input?: CodeExpression): number => {
+    if (!input) return 4096
+    const value = unwrap(input)
+    if (value.kind === 'literal' && typeof value.value === 'string') return value.value.length
+    if (value.kind === 'parameter') {
+      const parameter = program.parameters.find(item => item.key === value.key)
+      if (parameter?.type === 'text') return parameter.maxLength
+      if (parameter?.type === 'choice') return Math.max(0, ...parameter.options.map(option => option.length))
+    }
+    if (value.kind === 'conditional') return Math.max(textLength(value.yes), textLength(value.no))
+    if (value.kind === 'binary' && value.type === 'string') return Math.min(CODE_V3_LIMITS.textCharacters, textLength(value.left) + textLength(value.right))
+    return CODE_V3_LIMITS.textCharacters
+  }
   const shapeOf = (input: CodeExpression): CodeParameterShape => {
     const value = unwrap(input)
     if (value.kind === 'parameter') return codeParameterShape(program.parameters.find(parameter => parameter.key === value.key)!)
@@ -71,6 +86,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       const a = shapeOf(value.yes); const b = shapeOf(value.no)
       return JSON.stringify(a) === JSON.stringify(b) ? a : { type: value.type }
     }
+    if (value.kind === 'v3call' && value.op === 'normalize') return { type: value.type, element: { type: 'number' } }
     if (value.kind === 'v3call' && value.op === 'measureText') return { type: 'object', fields: { width: { type: 'number' }, height: { type: 'number' }, lines: { type: 'array', element: { type: 'string' } } } }
     return { type: value.type }
   }
@@ -147,7 +163,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     return arrow.parameters.map(parameter => {
       if (!ts.isIdentifier(parameter.name) || parameter.type || parameter.initializer || parameter.dotDotDotToken || parameter.questionToken || parameter.modifiers?.length) fail(parameter, '函数参数必须是未注解的名称。')
       assertCodeMaterialKey(parameter.name.text)
-      if (parameter.name.text === 'ctx' || CODE_BUILTINS.includes(parameter.name.text as CodeBuiltin) || extra.includes(parameter.name.text) || parameter.name.text in shapeFields) fail(parameter, '函数参数不能遮蔽保留名称。')
+      if (parameter.name.text === 'ctx' || parameter.name.text in CODE_CONSTANTS || CODE_BUILTINS.includes(parameter.name.text as CodeBuiltin) || extra.includes(parameter.name.text) || parameter.name.text in shapeFields) fail(parameter, '函数参数不能遮蔽保留名称。')
       return parameter.name.text
     })
   }
@@ -155,7 +171,8 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     if (active.has(arrow)) fail(arrow, '不允许递归或互相递归。')
     if (++inliningDepth > 16) fail(arrow, '纯函数展开深度超过 16。', 'BUDGET')
     const names = arrowParams(arrow)
-    if (new Set(names).size !== names.length || names.length !== args.length || names.includes('ctx')) fail(arrow, '函数参数数量不匹配、重复或遮蔽 ctx。')
+    if (names.length !== args.length) fail(arrow, `纯函数期望 ${names.length} 个参数，实际 ${args.length}；签名 (${names.join(', ')}) => expression。`)
+    if (new Set(names).size !== names.length || names.includes('ctx')) fail(arrow, '函数参数重复或遮蔽 ctx。')
     const inner: Scope = { values: new Map(parent.values), helpers: new Map(parent.helpers) }
     names.forEach((name, index) => inner.values.set(name, args[index])); active.add(arrow)
     const result = ts.isBlock(arrow.body) ? block(arrow.body.statements, inner) : compile(arrow.body, inner)
@@ -171,6 +188,15 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       return { kind: 'literal', type: 'string', value: node.text }
     }
     if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) return { kind: 'literal', type: 'boolean', value: node.kind === ts.SyntaxKind.TrueKeyword }
+    if (ts.isTemplateExpression(node)) {
+      let result: CodeExpression = { kind: 'literal', type: 'string', value: node.head.text }
+      for (const span of node.templateSpans) {
+        const value = compile(span.expression, env); type(span.expression, value, ['string', 'number', 'boolean'])
+        result = { kind: 'binary', type: 'string', op: '+', left: result, right: value }
+        result = { kind: 'binary', type: 'string', op: '+', left: result, right: { kind: 'literal', type: 'string', value: span.literal.text } }
+      }
+      return result
+    }
     if (ts.isIdentifier(node)) { const result = env.values.get(node.text); if (!result) fail(node, `未声明或禁止的名称：${node.text}`); return result }
     if (ts.isPropertyAccessExpression(node) && !node.questionDotToken) {
       const key = node.name.text; assertCodeMaterialKey(key)
@@ -212,11 +238,12 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     if (ts.isBinaryExpression(node)) {
       const op = operators[node.operatorToken.kind]; if (!op) fail(node, '禁止赋值或此二元操作。')
       const left = compile(node.left, env); const right = compile(node.right, env)
+      if (op === '+' && (left.type === 'string' || right.type === 'string')) { type(node, left, ['string', 'number', 'boolean']); type(node, right, ['string', 'number', 'boolean']); return { kind: 'binary', type: 'string', op, left, right } }
       if (['===', '!=='].includes(op)) { type(node, left, ['number', 'boolean', 'string']); type(node, right, left.type) }
       else { type(node, left, ['&&', '||'].includes(op) ? 'boolean' : 'number'); type(node, right, left.type) }
       if (['/', '%'].includes(op) && right.kind === 'literal' && right.value === 0) fail(node, '除数不能为零。', 'NON_FINITE')
       charge(node, codeBinaryCost(op) - 1, codeBinaryCost(op))
-      return { kind: 'binary', type: ['+', '-', '*', '/', '%'].includes(op) ? 'number' : 'boolean', op, left, right }
+      return { kind: 'binary', type: ['+', '-', '*', '/', '%', '**'].includes(op) ? 'number' : 'boolean', op, left, right }
     }
     if (ts.isConditionalExpression(node)) {
       const condition = compile(node.condition, env); type(node, condition, 'boolean')
@@ -230,12 +257,13 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       return { kind: valueType === 'color' ? 'color' : valueType === 'draws' ? 'draws' : 'array', type: valueType, values }
     }
     if (ts.isObjectLiteralExpression(node)) return { kind: 'object', type: 'object', properties: Object.fromEntries([...fields(node)].map(([key, value]) => [key, compile(value, env)])) }
-    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.questionDotToken || node.typeArguments?.length) fail(node, `禁止语法：${ts.SyntaxKind[node.kind]}`)
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.questionDotToken || node.typeArguments?.length) fail(node, codeSyntaxHint(node))
     const op = node.expression.text
     const helper = env.helpers.get(op)
     if (helper) return invoke(helper, node.arguments.map(item => compile(item, env)), env)
     if (op === 'repeat') {
-      if (node.arguments.length !== 2 || !ts.isArrowFunction(node.arguments[1])) fail(node, 'repeat(count, i => expression) 需要纯箭头函数。')
+      if (node.arguments.length !== 2) fail(node, `repeat 期望 2 个参数，实际 ${node.arguments.length}；签名 repeat(count, i => expression)。`)
+      if (!ts.isArrowFunction(node.arguments[1])) fail(node, 'repeat(count, i => expression) 需要纯箭头函数。')
       const count = compile(node.arguments[0], env); type(node, count, 'number'); const max = bound(node.arguments[0], count)
       if (max > CODE_V3_LIMITS.draws || ++repeatDepth > CODE_V3_LIMITS.repeatDepth) fail(node, 'repeat 次数超过 4096 或嵌套深度超过 4。', 'BUDGET')
       const localSlot = slot++; const before = multiplier; multiplier *= max
@@ -244,17 +272,17 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       return { kind: 'repeat', type: ['draw', 'draws'].includes(result.type) ? 'draws' : 'array', count, max, slot: localSlot, body: result }
     }
     if (Object.prototype.hasOwnProperty.call(shapeFields, op)) {
-      if (program.kind !== 'generator' || node.arguments.length !== (op === 'group' ? 2 : 1) || !ts.isObjectLiteralExpression(node.arguments[0])) fail(node, '图形需要静态字段对象；group 还需要 children 数组。')
+      if (node.arguments.length !== (op === 'group' ? 2 : 1)) fail(node, `${op} 期望 ${op === 'group' ? 2 : 1} 个参数，实际 ${node.arguments.length}；签名 ${op}(${op === 'group' ? 'properties, children' : 'properties'})。`)
+      if (program.kind !== 'generator' || !ts.isObjectLiteralExpression(node.arguments[0])) fail(node, '图形需要静态字段对象；group 还需要 children 数组。')
       const shape = op as CodeDrawKind; const properties: Record<string, CodeExpression> = {}
       const inputs = fields(node.arguments[0])
       for (const [key, input] of inputs) {
-        if (!shapeFields[shape].includes(key)) fail(input, `未知 ${shape} 字段：${key}`)
+        if (!shapeFields[shape].includes(key)) fail(input, `未知 ${shape} 字段：${key}；可用字段：${shapeFields[shape].join('、')}。`)
         if (key === 'perChar') {
           if (!ts.isArrowFunction(input)) fail(input, 'perChar 必须是 (i,n) => 变换对象。')
           const textInput = inputs.get('text')
           const textExpression = textInput ? unwrap(compile(textInput, env)) : undefined
-          const textParameter = textExpression?.kind === 'parameter' ? program.parameters.find(item => item.key === textExpression.key) : undefined
-          const maxCharacters = textExpression?.kind === 'literal' && typeof textExpression.value === 'string' ? textExpression.value.length : textParameter?.type === 'text' ? textParameter.maxLength : 4096
+          const maxCharacters = textLength(textExpression)
           const localSlot = slot++; const countSlot = slot++; const before = multiplier; multiplier *= maxCharacters
           const result = invoke(input, [{ kind: 'local', type: 'number', slot: localSlot }, { kind: 'local', type: 'number', slot: countSlot }], env); multiplier = before
           type(input, result, 'object')
@@ -280,7 +308,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       if (properties.d) {
         const d = unwrap(properties.d)
         if (d.kind === 'literal' && typeof d.value === 'string') {
-          try { parseCodePath(d.value) } catch (error) { if (error instanceof CodeMaterialError) fail(inputs.get('d')!, error.message, error.code === 'BUDGET' ? 'BUDGET' : 'SYNTAX'); throw error }
+          try { parseCodePath(d.value, program.width, program.height) } catch (error) { if (error instanceof CodeMaterialError) fail(inputs.get('d')!, error.message, error.code === 'BUDGET' ? 'BUDGET' : 'SYNTAX'); throw error }
         }
       }
       if (shape === 'shader') {
@@ -313,10 +341,23 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       }
       return { kind: 'v3call', type: 'color', op, args, sourceSpan: codeSourceSpan(node) }
     }
-    if (!CODE_BUILTINS.includes(op as CodeBuiltin) && !extra.includes(op)) fail(node, `不允许调用：${op}`)
+    if (!CODE_BUILTINS.includes(op as CodeBuiltin) && !extra.includes(op)) fail(node, `未知函数 ${op}；最接近的可用函数：${nearestCodeFunctions(op, [...CODE_BUILTINS, ...extra, ...Object.keys(shapeFields), ...env.helpers.keys()]).join('、')}。`)
     const args = node.arguments.map(item => compile(item, env))
     const arity: Record<string, number[]> = { sampleGradient: [2], sampleCurve: [2], ease: [2], min: [2], max: [2], sample: [2], clamp: [3], mix: [3], smoothstep: [3], rgba: [4], noise: [1, 2, 3], cubicBezier: [5], progress: [3], tween: [6], stagger: [2], keyframes: [2], sampleOffset: [2], glow: [3], contrast: [2], saturate: [2], hsv: [3, 4], hsl: [3, 4], backOut: [1, 2] }
-    if (!(arity[op] ?? [1]).includes(args.length)) fail(node, `${op} 参数数量无效。`)
+    const signature = CODE_EXPRESSION_SIGNATURES[op]
+    const counts = signature ? Array.from({ length: signature.filter(name => name.endsWith('?')).length + 1 }, (_, i) => signature.filter(name => !name.endsWith('?')).length + i) : arity[op] ?? [1]
+    if (!counts.includes(args.length)) fail(node, `${op} 期望 ${counts.join(' 或 ')} 个参数，实际 ${args.length}；签名 ${op}(${(signature ?? Array.from({ length: Math.max(...counts) }, (_, i) => `arg${i + 1}${i >= Math.min(...counts) ? '?' : ''}`)).join(', ')})。`)
+    if (op in CODE_MATH_COSTS) {
+      const vector = ['length', 'distance', 'normalize'].includes(op)
+      args.forEach(arg => type(node, arg, vector ? ['array', 'color'] : 'number'))
+      const cost = CODE_MATH_COSTS[op as keyof typeof CODE_MATH_COSTS]; charge(node, cost, cost)
+      return { kind: 'v3call', type: op === 'normalize' ? args[0].type : 'number', op, args }
+    }
+    if (op === 'formatNumber' || op === 'formatTime') {
+      type(node, args[0], 'number'); if (args[1]) type(node, args[1], op === 'formatNumber' ? 'object' : 'string')
+      charge(node, 64)
+      return { kind: 'v3call', type: 'string', op, args }
+    }
     let resultType: CodeValueType = 'number'
     if (['sampleGradient', 'sampleCurve', 'ease'].includes(op)) {
       type(node, args[0], op === 'ease' ? ['string', 'array', 'color'] : 'array'); type(node, args[1], 'number')
@@ -326,8 +367,8 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       const raw = unwrap(args[0]); const stops = raw.kind === 'object' ? raw.properties.stops : undefined
       const table = stops && unwrap(stops)
       if (!table || table.kind !== 'array' || table.values.length < 2 || table.values.length > CODE_V3_LIMITS.gradientStops) fail(node, '渐变 stops 必须是 2–8 项静态数组。', 'BUDGET')
-    } else if (op === 'measureText') { type(node, args[0], 'object'); resultType = 'object'; charge(node, 4096) }
-    else if (['chars', 'words'].includes(op)) { type(node, args[0], 'string'); resultType = 'array'; charge(node, 4096) }
+    } else if (op === 'measureText') { type(node, args[0], 'object'); resultType = 'object'; charge(node, textLength(unwrap(args[0]).kind === 'object' ? (unwrap(args[0]) as Extract<CodeExpression, { kind: 'object' }>).properties.text : undefined) * 2 + 64) }
+    else if (['chars', 'words'].includes(op)) { type(node, args[0], 'string'); resultType = 'array'; charge(node, textLength(args[0])) }
     else if (op === 'average') { type(node, args[0], 'array'); resultType = 'color'; charge(node, 4, 4) }
     else if (['sample', 'sampleOffset', 'blur', 'glow'].includes(op)) {
       if (program.kind !== 'filter') fail(node, `${op} 仅用于单输入滤镜。`)
@@ -348,11 +389,11 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
   }
   const declarations = (statements: readonly ts.Statement[], env: Scope): void => {
     for (const statement of statements) {
-      if (!ts.isVariableStatement(statement) || statement.modifiers?.length || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) fail(statement, '仅允许 const 声明。')
+      if (!ts.isVariableStatement(statement) || statement.modifiers?.length || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) fail(statement, codeSyntaxHint(statement))
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name) || !declaration.initializer || declaration.type || declaration.exclamationToken) fail(declaration, 'const 需要未注解的名称与纯表达式。')
         const name = declaration.name.text; assertCodeMaterialKey(name)
-        if (name === 'ctx' || env.values.has(name) || env.helpers.has(name) || CODE_BUILTINS.includes(name as CodeBuiltin) || extra.includes(name) || name in shapeFields) fail(declaration, `重复或保留名称：${name}`)
+        if (name === 'ctx' || name in CODE_CONSTANTS || env.values.has(name) || env.helpers.has(name) || CODE_BUILTINS.includes(name as CodeBuiltin) || extra.includes(name) || name in shapeFields) fail(declaration, `重复或保留名称：${name}`)
         if (ts.isArrowFunction(declaration.initializer)) { arrowParams(declaration.initializer); env.helpers.set(name, declaration.initializer) }
         else {
           const expression = compile(declaration.initializer, env)
@@ -374,8 +415,8 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     const value = unwrap(input)
     if (value.kind === 'draw') {
       if (value.shape === 'text' && value.properties.perChar) {
-        const text = unwrap(value.properties.text); const parameter = text.kind === 'parameter' ? program.parameters.find(item => item.key === text.key) : undefined
-        return Math.max(1, text.kind === 'literal' && typeof text.value === 'string' ? Array.from(text.value).length : parameter?.type === 'text' ? parameter.maxLength : 4096)
+        const text = unwrap(value.properties.text)
+        return Math.max(1, textLength(text))
       }
       return 1 + (value.children ? drawCount(value.children) : 0)
     }
@@ -424,18 +465,18 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
     else if (value.kind === 'draw') {
       if (value.shape === 'path') {
         const d = value.properties.d && unwrap(value.properties.d); const points = value.properties.points && unwrap(value.properties.points)
-        const count = d?.kind === 'literal' && typeof d.value === 'string' ? parseCodePath(d.value).reduce((sum, path) => sum + path.length, 0) : points?.kind === 'array' ? points.values.length : points?.kind === 'repeat' ? points.max : CODE_V3_LIMITS.pathPoints
+        const count = d?.kind === 'literal' && typeof d.value === 'string' ? parseCodePath(d.value, program.width, program.height).reduce((sum, path) => sum + path.length, 0) : points?.kind === 'array' ? points.values.length : points?.kind === 'repeat' ? points.max : CODE_V3_LIMITS.pathPoints
         result += (count + Number(!!value.properties.closed)) * 4
       }
       if (value.shape === 'text') {
-        const text = value.properties.text && unwrap(value.properties.text); const parameter = text?.kind === 'parameter' ? program.parameters.find(p => p.key === text.key) : undefined
-        const length = text?.kind === 'literal' && typeof text.value === 'string' ? text.value.length : parameter?.type === 'text' ? parameter.maxLength : 4096
+        const text = value.properties.text && unwrap(value.properties.text)
+        const length = textLength(text)
         result += length * (value.properties.maxLines ? 32 : 2)
       }
       for (const [key, child] of Object.entries(value.properties)) {
         if (key === 'perChar' && child.kind === 'textAnimation') {
-          const text = value.properties.text && unwrap(value.properties.text); const parameter = text?.kind === 'parameter' ? program.parameters.find(p => p.key === text.key) : undefined
-          const length = text?.kind === 'literal' && typeof text.value === 'string' ? text.value.length : parameter?.type === 'text' ? parameter.maxLength : 4096
+          const text = value.properties.text && unwrap(value.properties.text)
+          const length = textLength(text)
           result += length * work(child.body)
         } else result += work(child)
       }
@@ -446,21 +487,27 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
         else if (item && typeof item === 'object' && 'kind' in item) result += work(item as CodeExpression)
       }
       if (value.kind === 'object') Object.values(value.properties).forEach(child => { result += work(child) })
+      if (value.kind === 'binary') result += codeBinaryCost(value.op) - 1
       if (value.kind === 'call') result += codeBuiltinCost(value.op, value.type).cpu
       if (value.kind === 'v3call') {
         if (value.op === 'measureText') {
           const fields = unwrap(value.args[0]); const text = fields.kind === 'object' && fields.properties.text ? unwrap(fields.properties.text) : undefined
-          const parameter = text?.kind === 'parameter' ? program.parameters.find(item => item.key === text.key) : undefined
-          const length = text?.kind === 'literal' && typeof text.value === 'string' ? text.value.length : parameter?.type === 'text' ? parameter.maxLength : 4096
+          const length = textLength(text)
           result += length * (fields.kind === 'object' && fields.properties.maxLines ? 32 : 2) + 64
-        } else result += CODE_PARAMETER_FUNCTION_COSTS[value.op] ?? (CODE_EASE_NAMES.includes(value.op) || ['noise', 'tween', 'cubicBezier'].includes(value.op) ? 64 : 1)
+        } else if (['chars', 'words'].includes(value.op)) result += textLength(value.args[0])
+        else if (value.op === 'formatNumber' || value.op === 'formatTime') result += 64
+        else result += CODE_MATH_COSTS[value.op as keyof typeof CODE_MATH_COSTS] ?? CODE_PARAMETER_FUNCTION_COSTS[value.op] ?? (CODE_EASE_NAMES.includes(value.op) || ['noise', 'tween', 'cubicBezier'].includes(value.op) ? 64 : 1)
       }
     }
     costs.set(value, result); return result
   }
   const operations = program.bindings.reduce((sum, binding) => sum + work(binding.expression), 0) + work(program.result)
   program.metrics.cpuOperations = Math.max(program.metrics.cpuOperations, operations)
-  if (operations > CODE_V3_LIMITS.cpuOperations) fail(body, '纯函数展开后的逐帧工作量超出 CPU 预算。', 'BUDGET')
+  if (operations > CODE_V3_LIMITS.cpuOperations) {
+    const largest = [program.result, ...program.bindings.map(binding => binding.expression)].sort((a, b) => work(b) - work(a))[0]
+    const span = largest.sourceSpan ?? codeSourceSpan(body)
+    throw new CodeMaterialError('BUDGET', `CPU 工作量 ${operations} / ${CODE_V3_LIMITS.cpuOperations}，超出 ${operations - CODE_V3_LIMITS.cpuOperations}；主要结构 ${largest.kind} 使用 ${work(largest)}。`, span)
+  }
   if (program.kind === 'filter') {
     const memo = new WeakMap<CodeExpression, { scalar: number; samples: number }>()
     const cost = (value: CodeExpression): { scalar: number; samples: number } => {
@@ -479,7 +526,7 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
       if (value.kind === 'call') { result.scalar += codeBuiltinCost(value.op, value.type).scalar; if (value.op === 'sample') result.samples++ }
       if (value.kind === 'v3call') {
         const op = value.op
-        result.scalar += op === 'noise' ? 256 : op === 'cubicBezier' ? 512 : CODE_EASE_NAMES.includes(op) || op === 'tween' ? 96 : ['hsv', 'hsl', 'toHsv', 'toHsl'].includes(op) ? 96 : op === 'average' ? 256 : op === 'keyframes' ? 1024 : 32
+        result.scalar += op in CODE_MATH_COSTS ? CODE_MATH_COSTS[op as keyof typeof CODE_MATH_COSTS] : op === 'noise' ? 256 : op === 'cubicBezier' ? 512 : CODE_EASE_NAMES.includes(op) || op === 'tween' ? 96 : ['hsv', 'hsl', 'toHsv', 'toHsl'].includes(op) ? 96 : op === 'average' ? 256 : op === 'keyframes' ? 1024 : 32
         result.samples += op === 'blur' ? 13 : op === 'glow' ? 14 : ['sampleOffset', 'shaderFilter'].includes(op) ? 1 : 0
       }
       memo.set(value, result); return result

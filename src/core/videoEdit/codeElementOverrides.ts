@@ -64,14 +64,18 @@ export function evaluateCodeElementOverride(value: CodeElementOverride, time: Vi
 }
 
 /** Alias IDs must be identical for paint, selection, annotations and persistence. */
-export function identifyCodeElements(commands: readonly CodeDrawCommand[]): CodeDrawCommand[] {
+export function identifyCodeElements(commands: readonly CodeDrawCommand[], owned = false): CodeDrawCommand[] {
   const counts = new Map<string, number>()
   const count = (commands: readonly CodeDrawCommand[]): void => { commands.forEach((command, i) => { const id = command.elementId ?? `draw:${i}`; counts.set(id, (counts.get(id) ?? 0) + 1); if (command.kind === 'group') count(command.children) }) }
   count(commands)
   const visit = (commands: readonly CodeDrawCommand[]): CodeDrawCommand[] => commands.map((command, i) => {
     const id = command.elementId ?? `draw:${i}`
-    const next = { ...command, authorElementId: id, elementId: counts.get(id)! > 1 ? `${id}@${JSON.stringify(command.elementPath ?? [])}` : id }
-    return next.kind === 'group' ? { ...next, children: visit(next.children) } : next
+    // The frame evaluator can transfer fresh, de-aliased commands. Other callers
+    // retain the original non-mutating contract.
+    const next = owned ? command : { ...command }
+    next.authorElementId = id; next.elementId = counts.get(id)! > 1 ? `${id}@${JSON.stringify(command.elementPath ?? [])}` : id
+    if (next.kind === 'group') next.children = visit(next.children)
+    return next
   })
   return visit(commands)
 }

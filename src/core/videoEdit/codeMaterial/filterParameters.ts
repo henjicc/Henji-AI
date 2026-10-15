@@ -36,7 +36,7 @@ export function codeFilterParameterSlots(program: CodeMaterialProgram): CodeFilt
     if (visited.has(value)) return
     visited.add(value)
     if (value.kind === 'v3call' && value.op === 'shaderFilter') return
-    if (value.kind === 'v3call' && ['sampleGradient', 'sampleCurve', 'ease'].includes(value.op)) throw new CodeMaterialError('TYPE', `${value.op} 仅在 CPU 帧级表达式可用，不能用于逐像素 GPU 表达式；请放入 shaderFilter 属性，或使用自写 WGSL / shader 组件。`, value.sourceSpan)
+    if (value.kind === 'v3call' && ['sampleGradient', 'sampleCurve', 'ease', 'formatNumber', 'formatTime', 'chars', 'words', 'measureText'].includes(value.op)) throw new CodeMaterialError('TYPE', `${value.op} 仅在 CPU 帧级表达式可用，不能用于逐像素 GPU 表达式；请放入 shaderFilter 属性，或使用自写 WGSL / shader 组件。`, value.sourceSpan)
     const reference = codeFilterParameterReference(program, value)
     if (reference) { add(reference.key, reference.parameter, reference.field); return }
     if (value.kind === 'binding') { visit(program.bindings[value.slot].expression); return }

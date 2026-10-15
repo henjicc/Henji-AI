@@ -1,3 +1,4 @@
+import svgpath from 'svgpath'
 import { CODE_V3_LIMITS, CodeMaterialError } from './contract'
 import type { CodeDrawCommand, CodeMatrix, CodePaint, CodeSourceSpan } from './contract'
 
@@ -18,39 +19,63 @@ export function codeTransform(command: CodeDrawCommand): CodeMatrix {
   return command.elementTransform ? codeMultiply(command.elementTransform, base) : base
 }
 const paths = new Map<string, { value: CodePoint[][]; bytes: number }>(); let pathBytes = 0
-/** A deliberately small SVG grammar. Absolute M/L/C/Q/Z only; curves flatten identically for paint and hit tests. */
-export function parseCodePath(d: string): CodePoint[][] {
-  const cached = paths.get(d)
-  if (cached) { paths.delete(d); paths.set(d, cached); return cached.value.map(path => path.map(point => [...point])) }
-  if (d.length > 4096) throw new CodeMaterialError('BUDGET', '路径字符串超过 4096 字符。')
-  const tokens = d.match(/[MLCQZ]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g) ?? []
-  if (d.replace(/[MLCQZ]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?|[\s,]/g, '')) throw new CodeMaterialError('SYNTAX', 'path.d 仅支持绝对 M L C Q Z。')
-  const output: CodePoint[][] = []; let path: CodePoint[] = []; let at = 0; let op = ''; let current: CodePoint = [0, 0]; let count = 0
+/** svgpath owns SVG tokenization, relative/smooth commands and arc conversion (MIT).
+ * Compared with svg-path-properties, it preserves subpath/close boundaries without
+ * reparsing; our existing point representation remains shared by paint and hit tests.
+ */
+export function parseCodePath(d: string, width = 1920, height = 1080): CodePoint[][] {
+  if (d.length > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', '路径字符串超过 8192 字符。')
+  if (![width, height].every(value => Number.isFinite(value) && value > 0)) throw new CodeMaterialError('NON_FINITE', '路径画幅必须是正有限数值。')
+  const key = `${width},${height}:${d}`
+  const cached = paths.get(key)
+  if (cached) { paths.delete(key); paths.set(key, cached); return cached.value.map(path => path.map(point => [...point])) }
+  const parsed = svgpath(d)
+  if ('err' in parsed && parsed.err) throw new CodeMaterialError('SYNTAX', `path.d SVG 语法错误：${String(parsed.err)}`)
+  const validateSegments = (): void => { parsed.iterate(segment => {
+    for (const value of segment.slice(1)) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new CodeMaterialError('NON_FINITE', 'path.d 坐标必须是有限数值。')
+      if (Math.abs(value) > 32768) throw new CodeMaterialError('BUDGET', 'path.d 坐标、控制点或弧线参数超出技术范围。')
+    }
+  }) }
+  validateSegments()
+  // Normalize smooth controls before converting arcs: S must not reflect a control
+  // point introduced by an arc conversion.
+  parsed.abs().unshort(); validateSegments(); parsed.unarc()
+  const output: CodePoint[][] = []; let path: CodePoint[] = []; let current: CodePoint = [0, 0]; let count = 0
   const append = (point: CodePoint): void => {
-    if (++count > CODE_V3_LIMITS.pathPoints || point.some(value => !Number.isFinite(value) || Math.abs(value) > 32768)) throw new CodeMaterialError('BUDGET', '路径点数超过 4096 或坐标超出技术范围。')
+    if (point.some(value => !Number.isFinite(value))) throw new CodeMaterialError('NON_FINITE', 'path.d 坐标必须是有限数值。')
+    if (++count > CODE_V3_LIMITS.pathPoints || point.some(value => Math.abs(value) > 32768)) throw new CodeMaterialError('BUDGET', '路径点数超过 4096 或坐标超出技术范围。')
     path.push(point); current = point
   }
-  const pair = (): CodePoint => {
-    if (at + 1 >= tokens.length || /[MLCQZ]/.test(tokens[at]) || /[MLCQZ]/.test(tokens[at + 1])) throw new CodeMaterialError('SYNTAX', '路径坐标数量不完整。')
-    return [Number(tokens[at++]), Number(tokens[at++])]
-  }
-  while (at < tokens.length) {
-    if (/^[MLCQZ]$/.test(tokens[at])) op = tokens[at++]
-    if (op === 'M') { path = []; output.push(path); append(pair()); op = 'L' }
-    else if (!path.length) throw new CodeMaterialError('SYNTAX', '路径必须从 M 开始。')
-    else if (op === 'Z') { append([...path[0]]); op = ''; if (at < tokens.length && !/^[MLCQZ]$/.test(tokens[at])) throw new CodeMaterialError('SYNTAX', 'Z 后须有路径命令。') }
-    else if (op === 'L') append(pair())
-    else if (op === 'C' || op === 'Q') {
-      const start = current; const a = pair(); const b = pair(); const end = op === 'C' ? pair() : b
-      for (let i = 1; i <= 32; i++) {
-        const t = i / 32; const u = 1 - t
-        append(op === 'C' ? [u ** 3 * start[0] + 3 * u * u * t * a[0] + 3 * u * t * t * b[0] + t ** 3 * end[0], u ** 3 * start[1] + 3 * u * u * t * a[1] + 3 * u * t * t * b[1] + t ** 3 * end[1]] : [u * u * start[0] + 2 * u * t * a[0] + t * t * end[0], u * u * start[1] + 2 * u * t * a[1] + t * t * end[1]])
+  const distance = (a: CodePoint, b: CodePoint): number => Math.hypot(a[0] - b[0], a[1] - b[1])
+  // 4–256 segments per curve; control-polygon length and frame diagonal both
+  // contribute. Larger frames receive finer curves, capped before allocation.
+  const quality = Math.sqrt(Math.hypot(width, height) / Math.hypot(1920, 1080))
+  parsed.iterate(segment => {
+    const op = segment[0]
+    if (op === 'M') { path = []; output.push(path); append([segment[1], segment[2]]); return }
+    if (!path.length) throw new CodeMaterialError('SYNTAX', '路径必须从 M/m 开始。')
+    if (op === 'Z' || op === 'z') { append([...path[0]]); return }
+    if (op === 'L') { append([segment[1], segment[2]]); return }
+    if (op === 'H') { append([segment[1], current[1]]); return }
+    if (op === 'V') { append([current[0], segment[1]]); return }
+    if (op === 'C' || op === 'Q') {
+      const start = current; const a: CodePoint = [segment[1], segment[2]]; const b: CodePoint = [segment[3], segment[4]]
+      const end: CodePoint = op === 'C' ? [segment[5], segment[6]] : b
+      const length = distance(start, a) + distance(a, b) + (op === 'C' ? distance(b, end) : 0)
+      if (!Number.isFinite(length)) throw new CodeMaterialError('NON_FINITE', 'path.d 曲线控制点必须是有限数值。')
+      const segments = Math.max(4, Math.min(256, Math.ceil(Math.sqrt(length) * quality * 2)))
+      for (let i = 1; i <= segments; i++) {
+        const t = i / segments; const u = 1 - t
+        append(i === segments ? end : op === 'C' ? [u ** 3 * start[0] + 3 * u * u * t * a[0] + 3 * u * t * t * b[0] + t ** 3 * end[0], u ** 3 * start[1] + 3 * u * u * t * a[1] + 3 * u * t * t * b[1] + t ** 3 * end[1]] : [u * u * start[0] + 2 * u * t * a[0] + t * t * end[0], u * u * start[1] + 2 * u * t * a[1] + t * t * end[1]])
       }
-    } else throw new CodeMaterialError('SYNTAX', '未知路径命令。')
-  }
-  const bytes = count * 16 + d.length * 2
-  while (paths.size && (paths.size >= 128 || pathBytes + bytes > 2 * 1024 ** 2)) { const key = paths.keys().next().value!; pathBytes -= paths.get(key)!.bytes; paths.delete(key) }
-  paths.set(d, { value: output, bytes }); pathBytes += bytes
+      return
+    }
+    throw new CodeMaterialError('SYNTAX', `未知 SVG 路径命令 ${op}。`)
+  })
+  const bytes = count * 16 + key.length * 2
+  while (paths.size && (paths.size >= 128 || pathBytes + bytes > 2 * 1024 ** 2)) { const oldest = paths.keys().next().value!; pathBytes -= paths.get(oldest)!.bytes; paths.delete(oldest) }
+  paths.set(key, { value: output, bytes }); pathBytes += bytes
   return output.map(path => path.map(point => [...point]))
 }
 export function trimCodePath(points: CodePoint[][], start = 0, end = 1): CodePoint[][] {

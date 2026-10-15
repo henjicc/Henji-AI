@@ -1,4 +1,5 @@
-import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
+import { emitCodeMath } from './codeGpuMath'
+import { CODE_V3_MATH_BUILTINS, CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeExpression, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { CODE_EASE_NAMES } from '@/core/videoEdit/codeMaterial/motion'
 import type { Range, Value } from './codeGpuFilter'
@@ -30,6 +31,7 @@ export function codeFilterRadius(program: CodeMaterialProgram, expression: CodeE
   return value
 }
 export function emitCodeV3FilterCall(expression: Extract<CodeExpression, { kind: 'v3call' }>, args: Value[], passes: CodeFilterPass[], proof: Proof): Value {
+  if (CODE_V3_MATH_BUILTINS.includes(expression.op as typeof CODE_V3_MATH_BUILTINS[number])) return emitCodeMath(expression.op as typeof CODE_V3_MATH_BUILTINS[number], args, proof)
   const { range, scalar, colors, union, multiply, divide, operationRange } = proof
   const code = args.map(value => value.code)
   const boundedColors = (value: Value): Range[] => {
@@ -105,6 +107,7 @@ export function emitCodeV3FilterCall(expression: Extract<CodeExpression, { kind:
   }
 }
 export const CODE_V3_FILTER_HELPERS = `
+fn codeMod(a:f32,b:f32)->f32 { let r=codeRemainder(a,b); return select(r+b,r,r==0.0 || sign(r)==sign(b)); }
 fn codeUnpremultiply(c:vec4f)->vec4f { return vec4f(clamp(c.rgb/max(c.a,.000001),vec3f(0),vec3f(1)),c.a); }
 fn codeGlow(uv:vec2f,threshold:f32,intensity:f32,blurred:vec4f)->vec4f {
  let base=codeSample(uv); let halo=clamp(blurred*clamp(intensity,0.0,16.0),vec4f(0),vec4f(1));

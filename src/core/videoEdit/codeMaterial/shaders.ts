@@ -58,7 +58,7 @@ const hex = (value: number): string => Math.round(Math.min(1, Math.max(0, value)
 /** 作者颜色（0–1 RGBA）→ 框架颜色字符串。 */
 export function codeShaderColor(value: unknown, label: string): string {
   if (typeof value === 'string') return value
-  const color: CodeColor = codeColor(value, label)
+  const color: CodeColor = codeColor(value, label, true)
   return `#${color.map(hex).join('')}`
 }
 type Kind = 'color' | 'position' | 'other'

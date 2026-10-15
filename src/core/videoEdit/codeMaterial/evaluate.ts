@@ -39,7 +39,7 @@ export function evaluateCodeMaterial(program: CodeMaterialProgram, context: Code
 function evaluateCodeMaterialProgram(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeMaterialEvaluationOptions): CodeDrawCommand[] {
   if (program.languageVersion === 3 && program.kind === 'generator' && program.apiVersion === 1) {
     validateContext(context, options.transitionHandles === true); codeMaterialRandom(context.seed ?? program.seed, 0)
-    const commands = identifyCodeElements(evaluateCodeMaterialV3(program, context, values, options))
+    const commands = identifyCodeElements(evaluateCodeMaterialV3(program, context, values, options), true)
     if (!options.elementOverrides || !Object.keys(options.elementOverrides).length) return commands
     if (!options.measureText || !options.sourceTime) throw new CodeMaterialError('CONTEXT', '元素覆盖需要源时刻与共享文字度量。')
     return applyCodeElementOverrides(commands, options.elementOverrides, options.sourceTime, options.measureText)

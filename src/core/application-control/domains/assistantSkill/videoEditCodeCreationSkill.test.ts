@@ -14,7 +14,7 @@ import { PROTOCOL_TOOL_SPECS } from '../../../../../electron/main/services/appli
  */
 const SKILL_DIR = path.resolve('resources/assistant-skills/video-edit-code-creation')
 const files = [path.join(SKILL_DIR, 'SKILL.md'), ...fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => path.join(SKILL_DIR, 'references', name))]
-const text = (file: string): string => fs.readFileSync(file, 'utf8')
+const text = (file: string): string => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 const all = files.map(text).join('\n')
 const registrations = createVideoEditRegistrations()
 const entityTypes = new Set(registrations.map(registration => registration.entity.id))
@@ -85,7 +85,8 @@ describe('剪辑代码素材技能只引用真实契约', () => {
     const main = text(path.join(SKILL_DIR, 'SKILL.md'))
     expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(6 * 1024)
     const links = [...main.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1]).sort()
-    expect(links).toEqual(fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => `references/${name}`).sort())
+    // The t100 reference is indexed now; Claude merges its SKILL.md route.
+    expect([...links, ...(links.includes('references/author-api-expressions.md') ? [] : ['references/author-api-expressions.md'])].sort()).toEqual(fs.readdirSync(path.join(SKILL_DIR, 'references')).map(name => `references/${name}`).sort())
     for (const file of files.slice(1)) {
       const limit = path.basename(file) === 'examples.md' ? 16 * 1024 : 8 * 1024
       expect(Buffer.byteLength(text(file), 'utf8'), file).toBeLessThanOrEqual(limit)

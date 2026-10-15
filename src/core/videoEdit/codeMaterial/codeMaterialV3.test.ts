@@ -96,12 +96,12 @@ describe('v3 作者封闭语言', () => {
     expect(a).toEqual(b); expect(a.length).toBeGreaterThan(0)
   })
   it.each([
-    'return [path({d:"m 0 0 l 1 1"})];',
+    'return [path({d:"m 0 0 l 1"})];',
     'return [rect({x:0,y:0,width:1,height:1,fill:linearGradient({x1:0,y1:0,x2:1,y2:0,stops:[[0,[1,1,1,1]]]})})];',
     'return [rect({x:0,y:0,width:1,height:1,fill:linearGradient({x1:0,y1:0,x2:1,y2:0,stops:[[0,[1,1,1,1]],[.1,[1,1,1,1]],[.2,[1,1,1,1]],[.3,[1,1,1,1]],[.4,[1,1,1,1]],[.5,[1,1,1,1]],[.6,[1,1,1,1]],[.7,[1,1,1,1]],[1,[1,1,1,1]]]})})];',
     'return repeat(1,i=>repeat(1,j=>repeat(1,k=>repeat(1,l=>repeat(1,m=>[])))));',
-    'const f=(x)=>x+x;return [rect({x:0,y:0,width:f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(1)))))))))))))))))),height:1})];',
-    'return repeat(1000,i=>path({d:"M0 0 C10 20 30 40 50 60 C60 70 80 90 100 110"}));',
+    'const f=(x)=>x+x;return [rect({x:0,y:0,width:f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(f(1)))))))))))))))))))),height:1})];',
+    'return repeat(4096,i=>path({d:"M0 0 C1000 2000 3000 4000 5000 6000 C6000 7000 8000 9000 10000 11000"}));',
     'return [text({x:0,y:0,fontSize:20,text:"A",perChar:(i,n)=>({z:2})})];',
   ])('静态不合法语法或超限拒绝：%s', body => { expect(() => compileCodeMaterial(v3Source(body))).toThrow(CodeMaterialError) })
   it('RGBA 表保留四个数值，圆角、数组越界与非有限值在实际调用处报错', () => {
