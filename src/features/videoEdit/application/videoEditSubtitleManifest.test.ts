@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest'
+import path from 'node:path'
 import { SUBTITLE_MANIFEST_VERSION } from '@/core/persistence/preferenceSchemas'
 import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
 
@@ -11,24 +12,25 @@ vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { fs: {
   exists: async (path: string) => boundary.backups.has(path),
 } } }) }))
 
-it('共享读取预检版本与当前内容；放弃兼容的旧版、未来版或无效内容不能进入恢复', async () => {
-  const path = 'D:/mix.wav.subtitle.json'
+it('共享读取拒绝未来版和无效内容；旧版升级先备份且不修改原件', async () => {
+  const filePath = path.resolve(path.sep, 'mix.wav.subtitle.json')
   const manifest = { version: SUBTITLE_MANIFEST_VERSION, projectId: 'project', sequenceId: 'sequence', signature: 'saved-sound', startFrame: 0, endFrame: 30 }
   boundary.text = JSON.stringify({ ...manifest, version: SUBTITLE_MANIFEST_VERSION + 1 })
-  await expect(readVideoEditSubtitleManifest(path)).rejects.toThrow()
-  expect(boundary.mkdir).not.toHaveBeenCalled()
-  // v3 之前已登记放弃兼容；v3 → v4 只新增可选缩放区间，可升级。
-  boundary.text = JSON.stringify({ ...manifest, version: 2 })
-  await expect(readVideoEditSubtitleManifest(path)).rejects.toMatchObject({ code: 'unsupported-version' })
+  await expect(readVideoEditSubtitleManifest(filePath)).rejects.toThrow()
   expect(boundary.mkdir).not.toHaveBeenCalled()
   boundary.text = JSON.stringify(manifest)
   const snapshot = boundary.text
-  expect(await readVideoEditSubtitleManifest(path)).toMatchObject({ ...manifest, version: SUBTITLE_MANIFEST_VERSION })
+  expect(await readVideoEditSubtitleManifest(filePath)).toMatchObject({ ...manifest, version: SUBTITLE_MANIFEST_VERSION })
   expect(boundary.backups.size).toBe(0)
   expect(boundary.text).toBe(snapshot)
   boundary.text = JSON.stringify({ ...manifest, version: SUBTITLE_MANIFEST_VERSION, endFrame: 'invalid' })
-  await expect(readVideoEditSubtitleManifest(path)).rejects.toThrow()
-  boundary.text = JSON.stringify({ ...manifest, version: 3 })
-  expect(await readVideoEditSubtitleManifest(path)).toMatchObject({ ...manifest, version: SUBTITLE_MANIFEST_VERSION })
-  expect(boundary.backups.size).toBe(1)
+  await expect(readVideoEditSubtitleManifest(filePath)).rejects.toThrow()
+  for (const version of [1, 2, 3]) {
+    boundary.text = JSON.stringify({ ...manifest, version })
+    const original = boundary.text
+    expect(await readVideoEditSubtitleManifest(filePath)).toMatchObject(manifest)
+    expect(boundary.text).toBe(original)
+    expect([...boundary.backups.values()].map(bytes => new TextDecoder().decode(bytes))).toContain(original)
+  }
+  expect(boundary.backups.size).toBe(3)
 })
