@@ -1,3 +1,4 @@
+import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { CodeFramePerformance, CodeHeavyStructure } from '@/core/videoEdit/codeMaterial/performance'
 import { codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
 import { codeFilterFrameExpressions, codeExpressionChildren, codeExpressionIsFrameOnly } from '@/core/videoEdit/codeMaterial/filterFrameExpressions'
@@ -189,6 +190,7 @@ export class VideoEditCodeGpu {
       if (pipeline) return pipeline
     }
     if (compiling) { await compiling.pending; return this.prepareFilter(version, program, transitionHandles, format) }
+    const started = performance.now()
     const code = emitCodeMaterialFilter(program, transitionHandles)
     const pending = (async (): Promise<GpuRenderPipeline> => {
       this.device.pushErrorScope('validation')
@@ -206,6 +208,7 @@ export class VideoEditCodeGpu {
         // CodeSources retires unused program versions at the frame boundary. Keep all live
         // versions so a long effect chain never recompiles its pipelines on every frame.
         this.filters.set(version, { program, pipelines: new Map([[format, pipeline]]), transitionHandles })
+        recordVideoEditPreparation('contentPipelines', performance.now() - started)
       }
       this.counts.pipelineCompiles++
       return pipeline
@@ -236,7 +239,9 @@ export class VideoEditCodeGpu {
     if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或256MiB会话预算。')
     if (!precise && bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) this.v3Runtime?.evictUnused(bytes + this.bytes - this.preciseBytes - MAX_RESIDENT_BYTES)
     if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或256MiB会话预算。')
+    const textureStarted = performance.now()
     const texture = this.device.createTexture({ size: [width, height], format, usage: 0x01 | 0x02 | 0x04 | 0x10 })
+    recordVideoEditPreparation('textureAllocation', performance.now() - textureStarted)
     this.bytes += bytes; if (precise) this.preciseBytes += bytes
     this.textureBytes.set(texture, bytes); if (precise) this.preciseTextures.add(texture)
     this.counts.textureAllocations++
@@ -301,6 +306,13 @@ export class VideoEditCodeGpu {
   private v3(): VideoEditCodeGpuV3 {
     return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes }, canRetain: bytes => this.bytes - this.preciseBytes + bytes <= MAX_RESIDENT_BYTES / 2 }, undefined, () => this.shaderGraphs())
   }
+  async prepareGenerator(program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, current: () => boolean): Promise<void> {
+    await this.ready; this.assertLive()
+    if (!current()) return
+    const commands = evaluateCodeMaterial(program, context, parameters, { cullInvisible: true, measureText: measureCodeText })
+    if (program.languageVersion === 3) await this.v3().prepareContent(commands, current)
+  }
+  async prepareEffect(version: string, program: CodeMaterialProgram): Promise<void> { await this.ready; await this.prepareFilter(version, program, false) }
   async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false, overrides?: Pick<import('@/core/videoEdit/codeMaterial/evaluate').CodeMaterialEvaluationOptions, 'elementOverrides' | 'sourceTime'>): Promise<VideoEditCodePicture> {
     const started = performance.now(); let heaviest: CodeHeavyStructure | undefined
     let evaluation: Parameters<NonNullable<import('@/core/videoEdit/codeMaterial/evaluateV3').CodeEvaluationOptions['onEvaluation']>>[0] | undefined

@@ -1,3 +1,6 @@
+import { prepareVideoEditCode } from '../application/videoEditCodeState'
+import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
+import type { SharedCompilationRequest, SharedCompilationResponse } from './videoEditSharedCompilation'
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { verifiedVideoEditProxySources } from '../application/videoEditProxy'
@@ -35,6 +38,7 @@ export function warmVideoEditNativeDecoder(): Promise<void> {
 
 /** A bounded request stream owned by a view/export, independent from the project lifetime. */
 export class VideoEditRenderSession {
+  private readonly compilations = new Map<number, AbortController>()
   private readonly worker = new Worker(new URL('./videoEditWorker.ts', import.meta.url), { type: 'module' })
   private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void }>()
   private nextId = 0
@@ -128,7 +132,24 @@ export class VideoEditRenderSession {
     if (this.timing) videoEditTimingEvent(this.timing, 'render.session.start')
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
-    this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage>) => {
+    this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage | SharedCompilationRequest>) => {
+      if ('kind' in event.data && event.data.kind === 'code.cancel') {
+        this.compilations.get(event.data.token)?.abort(); this.compilations.delete(event.data.token); return
+      }
+      if ('kind' in event.data && event.data.kind === 'code.compile') {
+        const { token, files } = event.data; const controller = new AbortController()
+        this.compilations.set(token, controller)
+        const started = performance.now()
+        void prepareVideoEditCode(files, controller.signal).then(
+          program => ({ id: token, program }),
+          error => ({ id: token, error: { code: error instanceof CodeMaterialError ? error.code : 'CONTEXT' as const, message: error instanceof Error ? error.message : String(error), ...(error instanceof CodeMaterialError ? { sourceSpan: error.sourceSpan } : {}) } }),
+        ).then(result => {
+          this.compilations.delete(token)
+          if (!this.disposed && !controller.signal.aborted) this.worker.postMessage({ kind: 'code.compiled', token, result } satisfies SharedCompilationResponse)
+          logger.debug('共享源码准备完成', { event: 'video_edit.code.shared_compile.completed', context: { durationMs: performance.now() - started } })
+        })
+        return
+      }
       if ('kind' in event.data) { const entry = event.data; logger[entry.level](entry.message, { event: entry.event, context: entry.context }); return }
       const value = event.data; const pending = this.pending.get(value.id)
       if (value.phase === 'submitted') { pending?.submitted?.(); return }
@@ -175,6 +196,17 @@ export class VideoEditRenderSession {
     await step('code', this.codeSources(document).then(value => { codeSources = value }))
     await step('worker', this.request({ kind: 'update', timing: this.timing, document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document), proxies: this.proxySources() })); this.document = document
     logger.info('剪辑渲染文档已更新', { event: 'video_edit.render.document.updated', context: { sequenceId: document.id, durationMs: Math.round(performance.now() - started), steps } })
+  }
+  /** Exclusive offscreen lease boundary. Candidate revisions need not be monotonic. */
+  async replaceContent(document: VideoEditComposition): Promise<void> {
+    await this.ready
+    await this.content.check(document)
+    await this.authorizeLuts(document)
+    await this.syncFonts(document)
+    const codeSources = await this.codeSources(document)
+    await this.request({ kind: 'replaceContent', document: this.mediaDocument(document), codeSources, localPaths: this.localPaths(document) })
+    this.document = document
+    this.canvas.width = document.width; this.canvas.height = document.height
   }
   /** Called by the sequence change notification before React commits the new panels. */
   preopenSequence(document: VideoEditComposition, frame: number): void {
@@ -230,6 +262,8 @@ export class VideoEditRenderSession {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    for (const controller of this.compilations.values()) controller.abort()
+    this.compilations.clear()
     this.stopFonts?.()
     releaseDocumentFonts(this)
     this.content.dispose()

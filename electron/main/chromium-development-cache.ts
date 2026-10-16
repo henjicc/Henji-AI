@@ -28,7 +28,8 @@ export function configureChromiumDevelopmentCache(): void {
     fs.mkdirSync(cachePath, { recursive: true })
     fs.accessSync(cachePath, fs.constants.R_OK | fs.constants.W_OK)
     app.commandLine.appendSwitch('disk-cache-dir', cachePath)
-    app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+    // Chromium/Dawn owns portable shader cache keys and invalidation. Keep it enabled.
+    // GPU caches follow userData, so an explicit isolated profile remains fully isolated.
     logger.info('开发态 Chromium 磁盘缓存已隔离', {
       event: 'chromium_cache.initialize.completed',
       context: { configured: true, workspaceScoped: true },

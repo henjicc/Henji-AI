@@ -73,6 +73,7 @@ async function observeWorkers(page) {
         evidence.peakLive = Math.max(evidence.peakLive, evidence.workers.filter(worker => !worker.terminated).length)
         evidence.events.push({ worker: record.id, kind: 'created', at: record.createdAt })
         this.addEventListener('message', event => {
+          if (event.data?.kind === 'log') evidence.events.push({ worker: record.id, kind: 'worker.log', at: performance.now(), event: event.data.event, context: event.data.context })
           const request = record.pending.get(event.data?.id)
           if (!request || event.data.phase === 'submitted') return
           record.pending.delete(event.data.id)
@@ -80,7 +81,7 @@ async function observeWorkers(page) {
           if (request.kind === 'init') record.initialized = true
           if (request.kind === 'dispose') record.disposedAt = receivedAt
           evidence.events.push({ worker: record.id, kind: `${request.kind}.completed`, frame: request.frame, at: receivedAt, elapsedMs: receivedAt - request.at, error: event.data.error,
-            presented: event.data.presented, decodeMs: event.data.decodeMs, gpuMs: event.data.gpuMs, cacheHits: event.data.cacheHits, codeResources: event.data.codeResources, codePerformance: event.data.codePerformance })
+            presented: event.data.presented, decodeMs: event.data.decodeMs, gpuMs: event.data.gpuMs, cacheHits: event.data.cacheHits, codeResources: event.data.codeResources, codePerformance: event.data.codePerformance, preparationStages: event.data.preparationStages })
         })
       }
       postMessage(message, transfer) {

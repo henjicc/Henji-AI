@@ -1,3 +1,4 @@
+import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { codeMediaFrameParameters } from './videoEditCodeMediaInput'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialContext } from '@/core/videoEdit/codeMaterial/contract'
@@ -44,7 +45,7 @@ import { videoEditTextResolution } from './videoEditTextSurface'
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'retainProgramVersions' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'retainProgramVersions' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'prepareGenerator' | 'prepareEffect'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'compile' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
@@ -54,7 +55,7 @@ export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture | ImageBitmap>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
-export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
+export interface VideoEditCodePrepareOptions { preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>> }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
 function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
   const seen = new WeakSet<object>()
@@ -105,6 +106,21 @@ export class VideoEditCodeSources {
     for (const [key, version] of additions) this.known.set(key, version)
     this.knownBytes = bytes
   }
+  async replaceContent(document: VideoEditComposition): Promise<void> {
+    this.cancel(); await this.gpuWork
+    this.protectedKeys.clear(); this.releaseUnused(this.protectedKeys)
+    for (const bitmap of this.spilledPictures) bitmap.close()
+    this.spilledPictures.clear(); this.targetPictures.clear(); this.staticPictures.clear()
+    // Versions belong to a document; a candidate from another owner may use the same ids.
+    const previous = new Map(this.known)
+    this.known.clear(); this.knownBytes = 0; this.checkVersions(document)
+    for (const [key, cached] of this.programs) {
+      const next = this.known.get(key); const old = previous.get(key)
+      if (next && old && next.source === old.source && next.apiVersion === old.apiVersion && next.languageVersion === old.languageVersion) continue
+      this.programs.delete(key); this.programBytes -= cached.bytes
+    }
+    this.runtime?.retainProgramVersions?.(new Set(this.programs.keys()))
+  }
   updateDocument(document: VideoEditComposition): void {
     if (this.disposed) throw new Error('代码素材源会话已关闭。')
     // 节目渲染器在序列间切换时沿用同一会话：代码素材定义与版本是项目级、不可变的，编译结果按版本缓存可直接复用；
@@ -124,7 +140,9 @@ export class VideoEditCodeSources {
     }
     logger.debug('可见代码源码检查开始', { event: 'video_edit.code.compile.start', context: { sequenceId: this.document.id, version: key } })
     try {
+      const started = performance.now()
       const program = await this.compiler.compile(files, signal); signal.throwIfAborted()
+      recordVideoEditPreparation('sourceCompilation', performance.now() - started)
       if (program.apiVersion !== version.apiVersion || program.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '代码源码协议与固定版本声明不一致。')
       const bytes = new TextEncoder().encode(source).byteLength + new TextEncoder().encode(JSON.stringify(program)).byteLength
       while (this.programs.size >= CACHED_PROGRAMS || this.programBytes + bytes > CACHED_PROGRAM_BYTES) {
@@ -235,12 +253,23 @@ export class VideoEditCodeSources {
         keys.add(target)
         plans.push({ clip, key: target, static: isStatic, program, parameters, context, transitionHandles })
       }
-      assertCurrent(); this.protectedKeys = keys
+      assertCurrent(); if (!options.preparationOnly) this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }
       // Serialize GPU mutations, including a generator whose readiness resolves after cancellation.
       const work = this.gpuWork.then(async () => {
         assertCurrent()
         if (plans.length || effects.size || keys.size) { this.runtime ??= await this.acquireRuntime(); assertCurrent() }
+        if (options.preparationOnly) {
+          for (const plan of plans) {
+            assertCurrent()
+            if (plan.program && !codeMaterialUsesAudio(plan.program)) await this.runtime?.prepareGenerator?.(plan.program, plan.context, plan.parameters, shouldPresent)
+          }
+          for (const chain of effects.values()) for (const effect of chain) {
+            assertCurrent()
+            if (!effect.builtin) await this.runtime?.prepareEffect?.(effect.version, effect.program)
+          }
+          return
+        }
         this.runtime?.resetFramePerformance?.()
         this.runtime?.retainProgramVersions?.(new Set([...this.programs.keys(), ...[...effects.values()].flatMap(chain => chain.flatMap(effect => effect.builtin ? [] : [effect.version]))]))
         const outcome = (await imageOutcome)?.[0]
@@ -274,7 +303,7 @@ export class VideoEditCodeSources {
           result.pictures.set(plan.clip.id, picture)
         }
       })
-      this.gpuWork = work.catch(() => { this.releaseUnused(this.protectedKeys) })
+      this.gpuWork = work.catch(() => { if (!options.preparationOnly) this.releaseUnused(this.protectedKeys) })
       await work; assertCurrent(); return result
     } catch (error) {
       // File I/O can fail before the serialized GPU work starts. Drop this frame's

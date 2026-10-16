@@ -1,3 +1,4 @@
+import { recordVideoEditPreparation } from '../videoEditPreparationTiming'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { shaderGraphIssues, shaderGraphLayerProps, shaderGraphStructureKey, type ShaderGraphSpec } from '@/core/videoEdit/shaderGraph/spec'
 import { createLogger } from '@/core/logging'
@@ -23,6 +24,7 @@ export class ShaderGraphCache {
       if (issues.length) throw new ShaderGraphError(issues.join('\n'))
       const started = performance.now()
       const session = ShaderGraphSession.create(this.device, spec)
+      session.then(() => recordVideoEditPreparation('contentPipelines', performance.now() - started), () => undefined)
       session.then(() => logger.info('着色器图已准备', { event: 'video_edit.shader_graph.prepared', context: { layers: spec.layers.length, custom: spec.shaders?.length ?? 0, ms: Math.round(performance.now() - started) } }), () => undefined)
       entry = { session, used: performance.now(), queue: Promise.resolve() }
       this.entries.set(key, entry)

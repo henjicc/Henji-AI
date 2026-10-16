@@ -12,16 +12,22 @@ const stride = 32
 
 /** Fragment-only storage works on compatibility devices with no vertex storage buffers. */
 export class CodeVectorGpu {
-  private readonly pipeline: GpuRenderPipeline
-  private readonly fastPipeline: GpuRenderPipeline
+  private pipeline!: GpuRenderPipeline
+  private fastPipeline!: GpuRenderPipeline
   private readonly buffers: BatchBuffer[] = []
   private readonly geometry = new CodeVectorGeometry()
   private index = 0
   readonly counts = { draws: 0, bufferAllocations: 0 }
-  constructor(private readonly device: GpuDevice) {
+  readonly ready: Promise<void>
+  constructor(private readonly device: GpuDevice, asynchronous = false) {
     const module = device.createShaderModule({ code: source })
-    const pipeline = (entryPoint: string): GpuRenderPipeline => device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs', buffers: [{ arrayStride: stride * 4, stepMode: 'instance', attributes: Array.from({ length: 8 }, (_, index) => ({ shaderLocation: index, offset: index * 16, format: 'float32x4' })) }] }, fragment: { module, entryPoint, targets: [{ format: 'rgba8unorm', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
-    this.pipeline = pipeline('fs'); this.fastPipeline = pipeline('fastFs')
+    const descriptor = (entryPoint: string): unknown => ({ layout: 'auto', vertex: { module, entryPoint: 'vs', buffers: [{ arrayStride: stride * 4, stepMode: 'instance', attributes: Array.from({ length: 8 }, (_, index) => ({ shaderLocation: index, offset: index * 16, format: 'float32x4' })) }] }, fragment: { module, entryPoint, targets: [{ format: 'rgba8unorm', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    if (asynchronous && device.createRenderPipelineAsync) {
+      this.ready = Promise.all([device.createRenderPipelineAsync(descriptor('fs')), device.createRenderPipelineAsync(descriptor('fastFs'))]).then(([pipeline, fast]) => { this.pipeline = pipeline; this.fastPipeline = fast })
+    } else {
+      this.pipeline = device.createRenderPipeline(descriptor('fs')); this.fastPipeline = device.createRenderPipeline(descriptor('fastFs'))
+      this.ready = Promise.resolve()
+    }
   }
   beginFrame(): void { this.index = 0 }
   draw(pass: Pass, width: number, height: number, instances: CodeVectorInstance[]): void {

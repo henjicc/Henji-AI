@@ -544,3 +544,19 @@ it('纹理预算容量2时LRU溢出为位图，同帧结果仍有效；下一帧
   } finally { await boundary.sources.dispose() }
   bitmaps.forEach(bitmap => expect(bitmap.close).toHaveBeenCalledOnce())
 })
+
+it('离屏租约允许同名版本属于不同候选，清理旧画面并按源码重编译', async () => {
+  const first = fixture(source('static', 'A')); const second = fixture(source('static', 'B'))
+  second.id = first.id; second.revision = 0
+  const boundary = boundaries(first)
+  try {
+    await boundary.sources.prepare(first, first.clips, 0, () => true)
+    await boundary.sources.replaceContent(second); boundary.sources.updateDocument(second)
+    await boundary.sources.prepare(second, second.clips, 0, () => true)
+    expect(boundary.generator.mock.calls.map(call => call[1].name)).toEqual(['A', 'B'])
+    expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
+    await boundary.sources.replaceContent(second); boundary.sources.updateDocument(second)
+    await boundary.sources.prepare(second, second.clips, 0, () => true)
+    expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
+  } finally { await boundary.sources.dispose() }
+})

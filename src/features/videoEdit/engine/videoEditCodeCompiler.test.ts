@@ -64,3 +64,21 @@ it('Worker协议传完整文件集合，错误回执保留模块位置', async (
   runtime.onmessage!({ data: { id: 1, error: { code: 'SYNTAX', message: '模块错误', sourceSpan: span } } } as MessageEvent)
   await failure; compiler.dispose()
 })
+
+it('共享准备满队列时等待容量；取消等待不改变原有编译预算', async () => {
+  const runtime = worker(); const compiler = new VideoEditCodeCompiler(() => runtime)
+  const pending = Array.from({ length: 8 }, () => compiler.compile('source'))
+  const all = Promise.allSettled(pending)
+  const controller = new AbortController()
+  const cancelled = compiler.compileQueued('cancel', controller.signal)
+  const failed = expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort(); await failed
+  const waiting = compiler.compileQueued('shared')
+  expect(runtime.postMessage).toHaveBeenCalledTimes(8)
+  await expect(compiler.compile('interactive')).rejects.toThrow('队列')
+  runtime.onmessage!({ data: { id: 1, program: { name: 'first' } as CodeMaterialProgram } } as MessageEvent)
+  await vi.waitFor(() => expect(runtime.postMessage).toHaveBeenCalledTimes(9))
+  runtime.onmessage!({ data: { id: 9, program: { name: 'shared' } as CodeMaterialProgram } } as MessageEvent)
+  expect((await waiting).name).toBe('shared')
+  compiler.dispose(); await all
+})

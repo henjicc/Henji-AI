@@ -44,7 +44,7 @@ describe('configureChromiumDevelopmentCache', () => {
       'disk-cache-dir',
       expect.stringMatching(/henji-electron-cache-[a-f0-9]{12}$/)
     )
-    expect(mocks.appendSwitch).toHaveBeenCalledWith('disable-gpu-shader-disk-cache')
+    expect(mocks.appendSwitch).not.toHaveBeenCalledWith('disable-gpu-shader-disk-cache')
     expect(mocks.info).toHaveBeenCalledOnce()
     expect(mocks.warn).not.toHaveBeenCalled()
   })
