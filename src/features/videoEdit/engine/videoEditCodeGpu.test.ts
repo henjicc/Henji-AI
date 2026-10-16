@@ -13,7 +13,7 @@ const context = { time: 1, localTime: 1, sequenceTime: 1, width: 3840, height: 2
 const source = (body: string, kind = 'generator', parameters = '{}'): string => `export default {apiVersion:1,name:"实验",kind:"${kind}",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:${parameters},render(ctx){${body}}}`
 function gpu() {
   const destroyed = vi.fn(); const compiled = vi.fn((_descriptor: unknown) => ({ getBindGroupLayout: () => ({}) }))
-  const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
+  const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), setVertexBuffer: vi.fn(), draw: vi.fn(), end: vi.fn() }
   const bindGroupLayout = vi.fn(() => ({ bindings: 'filter' })); const pipelineLayout = vi.fn(() => ({ layout: 'filter' }))
   const device: GpuDevice & { createBindGroupLayout: typeof bindGroupLayout; createPipelineLayout: typeof pipelineLayout } = {
     queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: vi.fn(async () => {}) },
@@ -31,6 +31,27 @@ function mockTextCanvas(): void {
   })
 }
 describe('代码GPU会话复用与资源边界', () => {
+  it('v3 完成回执只等待一次队列，下一帧不能延后上一帧的成本记录', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const program = compileCodeMaterial(source('return [rect({x:ctx.frame,y:0,width:20,height:20,fill:[1,0,0,1]})];').replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,'))
+    try {
+      await runtime.generator('frame', program, context, {})
+      runtime.resetFramePerformance()
+      vi.mocked(device.queue.onSubmittedWorkDone).mockClear()
+      let finish!: () => void
+      vi.mocked(device.queue.onSubmittedWorkDone).mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve }))
+      const rendering = runtime.generator('frame', program, { ...context, frame: 61 }, {})
+      await vi.waitFor(() => expect(device.queue.onSubmittedWorkDone).toHaveBeenCalledTimes(1))
+      finish(); await rendering
+      expect(device.queue.onSubmittedWorkDone).toHaveBeenCalledTimes(1)
+      const captured = runtime.captureFramePerformance()
+      const first = captured()[0]
+      expect(first.frame).toBe(61); expect(first.gpuMs).toBeGreaterThan(0)
+      runtime.resetFramePerformance()
+      await runtime.generator('frame', program, { ...context, frame: 62 }, {})
+      expect(captured()[0]).toEqual(first)
+    } finally { await runtime.dispose() }
+  })
   it('复杂图形文字只缓存外观和分辨率档位，锚点/位置/旋转/透明度进入GPU均匀缓冲', async () => {
     vi.stubGlobal('OffscreenCanvas', class {
       constructor(public width: number, public height: number) {}

@@ -48,6 +48,7 @@
     "scripts/lib/uiInspectionSceneHelpers.test.cjs",
     "scripts/lib/uiInspectionSceneVideoEditCodeAi.test.cjs",
     "scripts/lib/uiInspectionSceneVideoEditFirstFrame.test.cjs",
+    "scripts/lib/uiInspectionVideoEditFrameTrace.test.cjs",
     "scripts/lib/uiInspectionVideoEditExportDialog.test.cjs",
     "scripts/lib/uiInspectionVideoEditMonitorFixtures.test.cjs",
     "scripts/lib/uiResidueRules.test.cjs",

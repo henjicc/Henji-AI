@@ -85,6 +85,7 @@ export function codeExecutionCompiler(program: CodeMaterialProgram): Compile {
   if (existing) return existing
   const plans = new WeakMap<CodeExpression, CodeExecutionPlan>()
   let nextCacheSlot = 0
+  let nextProfileSlot = 0
   const compile: Compile = expression => {
     const existing = plans.get(expression)
     if (existing) { existing.uses++; return existing }
@@ -114,6 +115,7 @@ export function codeExecutionCompiler(program: CodeMaterialProgram): Compile {
     const span = expression.sourceSpan
     const profileKey = span ? `${span.file}:${span.start}:${expression.kind}` : ''
     const profileKind = expression.kind === 'draw' ? expression.shape : expression.kind === 'v3call' || expression.kind === 'call' ? expression.op : expression.kind
+    const profileSlot = measured ? nextProfileSlot++ : -1
     const guarded: Run = !span ? body : (frame, depth) => {
       try { return body(frame, depth) } catch (error) {
         if (error instanceof CodeMaterialError && !error.sourceSpan) throw new CodeMaterialError(error.code, error.message, span)
@@ -122,10 +124,21 @@ export function codeExecutionCompiler(program: CodeMaterialProgram): Compile {
     }
     const run: Run = !measured || !span ? guarded : (frame, depth) => {
       if (!frame.profile) return guarded(frame, depth)
+      // Repeats can execute this scope thousands of times per frame. Resolve
+      // its shared source entry once, preserving the same inclusive clocks and
+      // metered execution without hashing/writing the source key each time.
+      const entries = frame.profileEntries ??= []
       const started = performance.now()
       try { return guarded(frame, depth) } finally {
-        const entry = frame.profile.get(profileKey) ?? { kind: profileKind, cpuMs: 0, sourceSpan: span }
-        entry.cpuMs += performance.now() - started; frame.profile.set(profileKey, entry)
+        const elapsed = performance.now() - started
+        let entry = entries[profileSlot]
+        if (!entry) {
+          // Resolve after children, retaining source aggregation and insertion
+          // order even when nested scopes share a source key.
+          entry = frame.profile.get(profileKey) ?? { kind: profileKind, cpuMs: 0, sourceSpan: span }
+          frame.profile.set(profileKey, entry); entries[profileSlot] = entry
+        }
+        entry.cpuMs += elapsed
       }
     }
     const plan = memoizeCodeExecution(expression, children, numeric, run, () => nextCacheSlot++)

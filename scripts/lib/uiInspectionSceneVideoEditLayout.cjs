@@ -47,8 +47,8 @@ function layoutSignature(layout) {
 }
 
 /** Observes native Workers without substituting decoding, rendering, timers or messages. */
-async function observeWorkers(page) {
-  await page.evaluate(() => {
+async function observeWorkers(page, traceFrames = false) {
+  await page.evaluate(traceFrames => {
     const NativeWorker = window.Worker
     const evidence = { workers: [], events: [], peakLive: 0, frames: [], sequence: 0 }
     window.__videoLayoutEvidence = evidence
@@ -56,8 +56,11 @@ async function observeWorkers(page) {
     window.__videoLayoutObservers = []
     window.__videoLayoutWatchCanvas = canvas => {
       const canvasId = window.__videoLayoutObservers.length + 1
-      const recordFrame = initial => evidence.frames.push({ canvasId, initial, at: performance.now(), frame: Number(canvas.dataset.presentedFrame), width: canvas.width, height: canvas.height,
-        requestedAt: Number(canvas.dataset.requestedAt), renderMs: Number(canvas.dataset.renderMs), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs), cacheHits: Number(canvas.dataset.cacheHits) })
+      const recordFrame = initial => {
+        evidence.frames.push({ canvasId, initial, at: performance.now(), frame: Number(canvas.dataset.presentedFrame), width: canvas.width, height: canvas.height,
+          requestedAt: Number(canvas.dataset.requestedAt), renderMs: Number(canvas.dataset.renderMs), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs), cacheHits: Number(canvas.dataset.cacheHits) })
+        if (traceFrames) performance.mark(`henji.main.presented:${canvas.dataset.presentedFrame}`)
+      }
       recordFrame(true)
       const observer = new MutationObserver(() => recordFrame(false))
       observer.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
@@ -78,6 +81,7 @@ async function observeWorkers(page) {
           if (!request || event.data.phase === 'submitted') return
           record.pending.delete(event.data.id)
           const receivedAt = performance.now()
+          if (traceFrames && request.kind === 'render') performance.mark(`henji.main.received:${request.frame}`)
           if (request.kind === 'init') record.initialized = true
           if (request.kind === 'dispose') record.disposedAt = receivedAt
           evidence.events.push({ worker: record.id, kind: `${request.kind}.completed`, frame: request.frame, at: receivedAt, elapsedMs: receivedAt - request.at, error: event.data.error,
@@ -88,6 +92,8 @@ async function observeWorkers(page) {
         const record = this.__videoLayoutRecord
         if (record && message && typeof message === 'object') {
           const request = { kind: message.kind, frame: message.frame, at: performance.now() }
+          if (traceFrames && message.kind === 'init') message = { ...message, traceFrames: true }
+          if (traceFrames && message.kind === 'render') performance.mark(`henji.main.request:${message.frame}`)
           record.pending.set(message.id, request)
           evidence.events.push({ worker: record.id, ...request })
           if (message.kind === 'init') { record.sequenceId = message.document.id; record.direct = !!message.surface; record.renderSize = { width: message.document.width, height: message.document.height, fps: message.document.fps, previewWidth: message.previewWidth } }
@@ -101,7 +107,7 @@ async function observeWorkers(page) {
         return super.terminate()
       }
     }
-  })
+  }, traceFrames)
 }
 async function workerSnapshot(page) {
   return page.evaluate(() => {

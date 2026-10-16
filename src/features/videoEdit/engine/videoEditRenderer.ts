@@ -1,4 +1,5 @@
 import { codeMediaInputKey, codeMediaInputComposition } from './videoEditCodeMediaInput'
+import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { isCodeImageReference, isCodeAudioReference } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
 import { VideoEditContentAudio, codeAudioComposition } from './videoEditContentAudio'
@@ -679,6 +680,7 @@ export class VideoEditRenderer {
     }
     const { presented, completion } = result
     const gpuMs = performance.now() - gpuStart
+    traceVideoEditFrame('compositor.record', frame, gpuStart)
     const activeIds = new Set(canPresent() ? [...active, ...upcoming].map(clip => clip.id) : [...this.sources.keys()].filter(key => !key.startsWith('audio:')))
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {
       this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source)

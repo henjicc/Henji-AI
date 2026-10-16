@@ -1,4 +1,5 @@
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { traceVideoEditFrame } from './videoEditFrameTrace'
 import type { CodeFramePerformance, CodeHeavyStructure } from '@/core/videoEdit/codeMaterial/performance'
 import { codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
 import { codeFilterFrameExpressions, codeExpressionChildren, codeExpressionIsFrameOnly } from '@/core/videoEdit/codeMaterial/filterFrameExpressions'
@@ -320,6 +321,7 @@ export class VideoEditCodeGpu {
       if (!this.missingFonts.has(diagnostic.fontFamily)) { this.missingFonts.add(diagnostic.fontFamily); codeLogger.warn('代码文字缺少字体，使用无衬线字体', { event: 'video_edit.code.font.missing', context: { fontFamily: diagnostic.fontFamily } }) }
     } })
     const cpuMs = performance.now() - started; const gpuStart = performance.now()
+    traceVideoEditFrame('evaluate', context.frame, started, gpuStart)
     const timing: CodeFramePerformance = { frame: context.frame, cpuMs, gpuMs: 0, budgetMs: 1000 / context.fps, ...(heaviest ? { heaviest } : {}) }
     const completed = this.trackPerformance(key, timing, started, gpuStart)
     if (program.languageVersion === 3) {
@@ -327,10 +329,15 @@ export class VideoEditCodeGpu {
       const target = this.surface(key, context.width, context.height, 'rgba8unorm', false, true)
       const runtime = this.v3()
       await runtime.render(target.picture.texture, context.width, context.height, commands, images, true)
+      traceVideoEditFrame('draw.record', context.frame, gpuStart, runtime.recordedAt)
+      traceVideoEditFrame('draw.complete', context.frame, runtime.recordedAt, runtime.completedAt)
       timing.structures = codeStructureCosts(evaluation?.structures ?? [], runtime.drawCosts)
       timing.reuse = { ...runtime.reuse, culledGroups: evaluation?.culledGroups ?? 0, operations: evaluation?.operations ?? 0 }
       timing.attribution = 'draw-preparation-wall'
-      this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
+      // Profiling render already awaited this queue. A second fence adds a GPU
+      // process round trip and can report the next frame's CPU work as this
+      // frame's GPU cost when its callback is delayed by the two-frame pipeline.
+      completed(); this.pending = Promise.resolve(); this.counts.generatorFrames++
       return target.picture
     }
     const picture = await this.draw(key, context.width, context.height, commands.map(command => ({ command, rotation: 0, pivotX: 0, pivotY: 0 })), images)

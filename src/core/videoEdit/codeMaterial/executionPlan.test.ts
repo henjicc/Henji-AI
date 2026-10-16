@@ -149,6 +149,15 @@ describe('闭包执行的计费、缓存与诊断边界', () => {
       clock = 0
       evaluateCodeMaterialV3(program, context, {}, { onProfile: entry => { actual = entry } })
       expect(actual).toStrictEqual(expected)
+      // Compiled slots survive; their measured entries must belong to each
+      // evaluation, including a different program with the same slot numbers.
+      for (const current of [compileCodeMaterial(source('return [rect({x:0,y:0,width:1,height:1,fill:[1,0,0,1]})];')), program, program]) {
+        clock = 0
+        reference(structuredClone(current), context, {}, { onProfile: entry => { expected = entry } })
+        clock = 0
+        evaluateCodeMaterialV3(current, context, {}, { onProfile: entry => { actual = entry } })
+        expect(actual).toStrictEqual(expected)
+      }
     } finally { spy.mockRestore() }
   })
 
