@@ -6,6 +6,8 @@ import { memoizeCodeExecution, type CodeExecutionFrame, type CodeExecutionPlan }
 import { CODE_EASE_NAMES, codeCubicBezier, codeEase, codeNoise, codeProgress } from './motion'
 import { CODE_MATH_COSTS, codeString, codeStringPart, codeMathOperation, formatCodeNumber, formatCodeTime } from './expressions'
 import { parseCodePath } from './geometry'
+import { CODE_IDENTITY, codeMultiply, codeTransform } from './geometry'
+import { codeEmptyGroup, codeInvisible } from './visibility'
 import { codeShaderGraph, codeShaderTime } from './shaders'
 import { CODE_PARAMETER_FUNCTION_COSTS, easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
 
@@ -149,7 +151,20 @@ function compileNode(expression: CodeExpression, child: (value: CodeExpression) 
       const slot = expression.slot
       if (slot < 0 || slot >= program.bindings.length) return () => { throw new CodeMaterialError('TYPE', '无效 const 绑定。') }
       const value = child(program.bindings[slot].expression)
-      return (frame, depth) => { if (!(slot in frame.bindings)) frame.bindings[slot] = value(frame, depth + 1); return frame.bindings[slot] }
+      return (frame, depth) => {
+        if (!(slot in frame.bindings)) {
+          if (!frame.lazyDrawBindings) frame.bindings[slot] = value(frame, depth + 1)
+          else {
+            // A top-level binding has its own lexical indices and no placement.
+            // It may be used by several differently transformed instances.
+            const indices = frame.indices; const blocked = frame.placementCullBlocked
+            frame.indices = []; frame.placementCullBlocked = true
+            try { frame.bindings[slot] = value(frame, 0) }
+            finally { frame.indices = indices; frame.placementCullBlocked = blocked }
+          }
+        }
+        return frame.bindings[slot]
+      }
     }
     case 'local': {
       const slot = expression.slot
@@ -406,7 +421,11 @@ function compileDraw(expression: Extract<CodeExpression, { kind: 'draw' }>, chil
   return (frame, depth) => {
     if (++frame.draws > CODE_V3_LIMITS.draws) throw new CodeMaterialError('BUDGET', '本帧图形超过 4096。')
     const fields: Record<string, unknown> = {}
-    for (let i = 0; i < propertyNames.length; i++) fields[propertyNames[i]] = properties[i](frame, depth + 1)
+    // A mask expression is evaluated in group-local coordinates, not the frame.
+    const placementBlocked = frame.placementCullBlocked
+    frame.placementCullBlocked = true
+    try { for (let i = 0; i < propertyNames.length; i++) fields[propertyNames[i]] = properties[i](frame, depth + 1) }
+    finally { frame.placementCullBlocked = placementBlocked }
     const elementId = string(fields.id ?? `call:${expression.sourceSpan?.file ?? 'main.ts'}:${expression.sourceSpan?.start ?? 0}`) + (frame.indices.length ? `:${frame.indices.join('.')}` : '')
     const meta = metadata(fields)
     meta.elementId = elementId;
@@ -433,8 +452,21 @@ function compileDrawShape(expression: Extract<CodeExpression, { kind: 'draw' }>,
       if (!['alpha', 'luma'].includes(mode) || raw.invert !== undefined && typeof raw.invert !== 'boolean') throw new CodeMaterialError('TYPE', 'mask.mode 须为 alpha/luma，invert 须为 boolean。')
       mask = { shape: raw.shape as CodeDrawCommand | null, mode: mode as 'alpha' | 'luma', invert: raw.invert === true }
     }
-    const children = array(runChildren!(frame, depth + 1)) as CodeDrawCommand[]
-    return { ...meta, kind: 'group', x: coordinate(fields, 'x'), y: coordinate(fields, 'y'), children, ...(clip ? { clip } : {}), ...(mask ? { mask } : {}) }
+    const command: Extract<CodeDrawCommand, { kind: 'group' }> = { ...meta, kind: 'group', x: coordinate(fields, 'x'), y: coordinate(fields, 'y'), children: [], ...(clip ? { clip } : {}), ...(mask ? { mask } : {}) }
+    // Bindings can later be reused under another transform; ancestor effects can
+    // spread pixels. Only direct result-tree placement is known here.
+    const parent = frame.parentMatrix
+    const matrix = codeMultiply(parent ?? CODE_IDENTITY, codeTransform(command))
+    if (frame.cullInvisible && (codeEmptyGroup(command) || frame.bindingsReady && !frame.placementCullBlocked && codeInvisible(command, matrix, frame.context.width, frame.context.height))) {
+      frame.culledGroups = (frame.culledGroups ?? 0) + 1
+      return command
+    }
+    const blocked = frame.placementCullBlocked
+    frame.parentMatrix = matrix
+    frame.placementCullBlocked = blocked || !!command.blur || !!command.shadow || !!command.glow
+    try { command.children = array(runChildren!(frame, depth + 1)) as CodeDrawCommand[] }
+    finally { frame.parentMatrix = parent; frame.placementCullBlocked = blocked }
+    return command
   }
   if (expression.shape === 'path') return (fields, meta, frame, _depth) => {
     const fill = drawFill(fields, meta)

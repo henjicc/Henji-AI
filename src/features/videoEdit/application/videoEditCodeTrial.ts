@@ -1,4 +1,4 @@
-import { codePerformanceExceeded, type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
+import { type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditComposition, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
@@ -91,8 +91,7 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
         return result
       }), deadline])
       const samples = result.codePerformance ?? []
-      if (samples.reduce((sum, value) => sum + value.cpuMs + value.gpuMs, 0) > 1000 / input.document.fps) measurements?.push(...samples.map(value => ({ ...value, frame: input.frame, budgetMs: 1000 / input.document.fps })))
-      else measurements?.push(...samples.filter(codePerformanceExceeded))
+      measurements?.push(...samples.map(value => ({ ...value, frame: input.frame, budgetMs: 1000 / input.document.fps })))
       bitmap?.close(); bitmap = result.bitmap
       if (result.effectErrors?.length) throw new Error(result.effectErrors.join('\n'))
       if (!result.presented || !bitmap) throw new Error('源码候选没有生成可用画面。')

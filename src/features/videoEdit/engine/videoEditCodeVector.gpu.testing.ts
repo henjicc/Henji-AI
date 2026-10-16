@@ -146,6 +146,9 @@ it('t108 混排顺序、实例缓冲复用与 4096 绘制预算保持不变', as
     expect(draws).toBe(1)
     const allocated = buffers
     await runtime.render(target, 128, 128, commands)
+    expect(buffers).toBe(allocated); expect(draws).toBe(1); expect(runtime.reuse.frameHits).toBe(1)
+    runtime.invalidate(target)
+    await runtime.render(target, 128, 128, commands)
     expect(buffers).toBe(allocated); expect(draws).toBe(2)
     const mixed: CodeDrawCommand[] = [commands[0], { kind: 'path', points: [[[0, 48], [128, 48], [128, 80], [0, 80]]], closed: true, fill: [0, 1, 0, 1] }, commands[2]]
     await runtime.render(target, 128, 128, mixed)

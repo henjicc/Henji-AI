@@ -125,7 +125,7 @@ function withAuthoringHints(result: ApplicationCompletedStepResult, versions: Ar
     const hints = program ? codeMaterialAuthoringHints(program) : []
     if (hints.length) evidence.push({ kind: 'observation', target: ref, fact: `参数化体检（不阻止提交，建议改进后再交付）：${hints.map(hint => hint.message).join(' ')}`.slice(0, 1000), data: hints.map(hint => ({ code: hint.code, message: hint.message, ...(hint.line === undefined ? {} : { line: hint.line }) })), capturedAt })
   }
-  if (measurements.length) evidence.push({ kind: 'observation', fact: measurements.map(codePerformanceMessage).join('\n'), data: measurements.map(value => ({ frame: value.frame, cpuMs: value.cpuMs, gpuMs: value.gpuMs, budgetMs: value.budgetMs, ...(value.heaviest ? { heaviest: { kind: value.heaviest.kind, cpuMs: value.heaviest.cpuMs, sourceSpan: { ...value.heaviest.sourceSpan } } } : {}) })), capturedAt })
+  if (measurements.length) evidence.push({ kind: 'observation', fact: measurements.map(codePerformanceMessage).join('\n'), data: measurements.map(value => ({ frame: value.frame, cpuMs: value.cpuMs, gpuMs: value.gpuMs, budgetMs: value.budgetMs, ...(value.structures ? { structures: value.structures.map(item => ({ ...item, sourceSpan: { ...item.sourceSpan } })) } : {}), ...(value.reuse ? { reuse: { ...value.reuse } } : {}), ...(value.attribution ? { attribution: value.attribution } : {}), ...(value.heaviest ? { heaviest: { kind: value.heaviest.kind, cpuMs: value.heaviest.cpuMs, sourceSpan: { ...value.heaviest.sourceSpan } } } : {}) })), capturedAt })
   return { ...result, evidence }
 }
 async function restore(token: string, compensation = false): Promise<ApplicationCompletedStepResult> {

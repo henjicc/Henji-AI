@@ -15,6 +15,10 @@ import { VideoEditCodeGpuV3 } from './videoEditCodeGpuV3'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import * as fontFaces from '@/platform/fontFaces'
+import { codeFramePerformanceSchema } from '@/core/videoEdit/codeMaterial/performance'
 import { ContactSheetBitmap, ContactSheetCanvas } from '@/tests/videoEditContactSheetCanvas'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
@@ -48,6 +52,152 @@ async function read(texture: GpuTexture, width = W, height = H): Promise<Uint8Ar
   buffer.unmap(); buffer.destroy(); return pixels
 }
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.slice((y * W + x) * 4, (y * W + x) * 4 + 4)]
+
+it('t109 整帧复用、微小变化、外部写入、尺寸与目标隔离', async () => {
+  const output = texture(); const other = texture()
+  const commands = evaluateCodeMaterial(compileCodeMaterial(source('return [rect({x:4,y:4,width:20,height:20,fill:[1,0,0,1]})];')), context)
+  try {
+    await runtime.render(output, W, H, commands)
+    const pixels = await read(output); const submissions = runtime.counts.submissions
+    await runtime.render(output, W, H, structuredClone(commands))
+    expect(runtime.reuse.frameHits).toBe(1); expect(runtime.counts.submissions).toBe(submissions)
+    expect(await read(output)).toEqual(pixels)
+    await runtime.render(other, W, H, commands); expect(runtime.reuse.frameHits).toBe(0)
+    const changed = structuredClone(commands); (changed[0] as Extract<CodeDrawCommand, { kind: 'rect' }>).x += 1e-12
+    await runtime.render(output, W, H, changed); expect(runtime.reuse.frameHits).toBe(0)
+    runtime.invalidate(output)
+    await runtime.render(output, W, H, changed); expect(runtime.reuse.frameHits).toBe(0)
+    const revision = vi.spyOn(fontFaces, 'documentFontRevision').mockReturnValue(9876)
+    try { await runtime.render(output, W, H, changed); expect(runtime.reuse.frameHits).toBe(0) }
+    finally { revision.mockRestore() }
+  } finally { output.destroy(); other.destroy() }
+})
+
+it('t109 正式宿主成本结果经过队列完成并合并，多目标及其他写入失效同源', async () => {
+  const host = new VideoEditCodeGpu(wrapped)
+  const program = compileCodeMaterial(source('return [group({opacity:0},repeat(100,i=>rect({x:i,y:0,width:1,height:1,fill:[1,0,0,1]}))),rect({x:4,y:4,width:20,height:20,fill:[1,0,0,1]})];'))
+  try {
+    await host.generator('t109-cost', program, context, {})
+    await device.queue.onSubmittedWorkDone()
+    const [first] = host.framePerformance()
+    expect(codeFramePerformanceSchema.safeParse(first).success).toBe(true)
+    expect(first.reuse?.culledGroups).toBe(1)
+    expect(first.structures?.some(value => value.gpuMs > 0 && value.cpuMs > 0 && value.sourceSpan.startLine > 0)).toBe(true)
+    await host.generator('t109-cost', program, context, {}); await device.queue.onSubmittedWorkDone()
+    expect(host.framePerformance()[0].reuse?.frameHits).toBe(1)
+    await host.draw('t109-cost', W, H, [])
+    const restored = await host.generator('t109-cost', program, context, {}); await device.queue.onSubmittedWorkDone()
+    expect(host.framePerformance()[0].reuse?.frameHits).toBe(0)
+    expect(pixel(await read(restored.texture), 10, 10)).toEqual([255, 0, 0, 255])
+    await host.generator('t109-other', program, context, {}); await device.queue.onSubmittedWorkDone()
+    expect(codeFramePerformanceSchema.safeParse(host.framePerformance()[0]).success).toBe(true)
+  } finally { await host.dispose() }
+  expect(host.diagnostics().residentBytes).toBe(0)
+})
+
+it('t109 静态子树只合成、内容变化失效，复用像素容差 0，预算不足不留缓存', async () => {
+  const output = texture()
+  const program = compileCodeMaterial(source('return [group({id:"stable",opacity:0.7,clip:{x:2,y:2,width:34,height:34},blur:2},[rect({x:4,y:4,width:20,height:20,fill:[1,0,0,1]})]),rect({x:45+ctx.time,y:4,width:4,height:4,fill:[0,1,0,1]})];'))
+  const local = new VideoEditCodeGpuV3(wrapped, { allocate: texture, release: value => value.destroy() }, rasterFixture)
+  const commands = (time: number) => evaluateCodeMaterial(program, { ...context, time })
+  try {
+    await local.render(output, W, H, commands(0))
+    await local.render(output, W, H, commands(1)); const before = await read(output)
+    await local.render(output, W, H, commands(2))
+    expect(local.reuse).toMatchObject({ frameHits: 0, subtreeHits: 1 })
+    const after = await read(output)
+    for (let y = 0; y < H; y++) expect(after.slice(y * W * 4, (y * W + 40) * 4)).toEqual(before.slice(y * W * 4, (y * W + 40) * 4))
+    const changed = commands(3); const group = changed[0] as Extract<CodeDrawCommand, { kind: 'group' }>
+    ;(group.children[0] as Extract<CodeDrawCommand, { kind: 'rect' }>).width += 1e-12
+    await local.render(output, W, H, changed); expect(local.reuse.subtreeHits).toBe(0)
+    expect(local.diagnostics().cachedBytes).toBeLessThanOrEqual(48 * 1024 ** 2)
+    const cachedBytes = local.diagnostics().cachedBytes
+    local.evictUnused(1); expect(local.diagnostics().cachedBytes).toBeLessThan(cachedBytes)
+  } finally { output.destroy(); await local.dispose() }
+  let resident = 0
+  const limited = new VideoEditCodeGpuV3(wrapped, { allocate: (w, h) => { resident++; return texture(w, h) }, release: value => { resident--; value.destroy() }, canRetain: () => false }, rasterFixture)
+  const target = texture()
+  try {
+    for (let time = 0; time < 4; time++) await limited.render(target, W, H, commands(time))
+    expect(limited.reuse.subtreeHits).toBe(0)
+  } finally { target.destroy(); await limited.dispose() }
+  expect(resident).toBe(0)
+})
+
+it('t109 画外剔除与效果/父变换正反例像素，媒体纹理原地变化不复用', async () => {
+  const output = texture(); const media = texture()
+  try {
+    const commands = evaluateCodeMaterial(compileCodeMaterial(source('return [rect({x:100,y:0,width:10,height:10,fill:[1,0,0,1]}),group({x:-100},[rect({x:110,y:10,width:10,height:10,fill:[0,1,0,1]})]),rect({x:70,y:30,width:10,height:10,fill:[0,0,1,1],shadow:{x:-30,y:0,blur:0,color:[1,0,0,1]}})];')), context)
+    await runtime.render(output, W, H, commands)
+    expect(runtime.reuse.culledDraws).toBe(1)
+    const pixels = await read(output); expect(pixel(pixels, 15, 15)).toEqual([0, 255, 0, 255]); expect(pixel(pixels, 45, 35)).toEqual([255, 0, 0, 255])
+    const image: CodeDrawCommand = { kind: 'image', source: { kind: 'image', mediaId: 'live' }, x: 0, y: 0, width: W, height: H, opacity: 1 }
+    const inputs = new Map([['live', { texture: media, width: W, height: H, owner: wrapped, premultiplied: true }]])
+    for (const channel of [0, 1]) {
+      const bytes = new Uint8Array(W * H * 4); for (let i = 0; i < W * H; i++) { bytes[i * 4 + channel] = 255; bytes[i * 4 + 3] = 255 }
+      device.queue.writeTexture({ texture: media as never }, bytes, { bytesPerRow: W * 4 }, [W, H])
+      await runtime.render(output, W, H, [image], inputs)
+      expect(runtime.reuse.frameHits).toBe(0); expect(pixel(await read(output), 10, 10)[channel]).toBe(255)
+    }
+  } finally { output.destroy(); media.destroy() }
+})
+
+it.runIf(!!process.env.HENJI_T109_BENCH)('t109 分段基准与改前像素（每通道容差 1，变化通道不超过 0.01%）', async () => {
+  const report: unknown[] = []
+  for (const name of ['complex-to-simple', 'variety-title', 'tech-title']) {
+    const program = compileCodeMaterial(readFileSync(`src/tests/fixtures/videoEdit/performance/${name}.ts.txt`, 'utf8'))
+    const output = texture(1920, 1080)
+    try {
+      for (const start of [30, 96, 166]) {
+        const cpu: number[] = []; const gpuTimes: number[] = []
+        let frameHits = 0; let subtreeHits = 0; let changedChannels = 0; let maxDelta = 0
+        for (let i = -5; i < 12; i++) {
+          const frame = start + Math.max(0, i); const time = frame / 30
+          const before = performance.now()
+          const commands = evaluateCodeMaterial(program, { ...context, width: 1920, height: 1080, fps: 30, frame, time, localTime: time, sequenceTime: time }, {}, { measureText: testMeasure, cullInvisible: true })
+          const evaluated = performance.now()
+          await runtime.render(output, 1920, 1080, commands)
+          await device.queue.onSubmittedWorkDone()
+          if (i >= 0) { cpu.push(evaluated - before); gpuTimes.push(performance.now() - evaluated); frameHits += runtime.reuse.frameHits; subtreeHits += runtime.reuse.subtreeHits }
+        }
+        const pixels = await read(output, 1920, 1080)
+        const path = join(tmpdir(), `henji-t109-${name}-${start}.rgba`)
+        if (process.env.HENJI_T109_BENCH === 'before') writeFileSync(path, pixels)
+        else {
+          const original = readFileSync(path); let changed = 0; let max = 0
+          expect(pixels.length).toBe(original.length)
+          for (let i = 0; i < pixels.length; i++) { const delta = Math.abs(pixels[i] - original[i]); if (delta) changed++; max = Math.max(max, delta) }
+          expect(max).toBeLessThanOrEqual(1); expect(changed / pixels.length).toBeLessThanOrEqual(.0001)
+          changedChannels = changed; maxDelta = max
+        }
+        cpu.sort((a, b) => a - b); gpuTimes.sort((a, b) => a - b)
+        report.push({ name, start, cpuMedian: cpu[6], cpuP95: cpu[11], gpuMedian: gpuTimes[6], gpuP95: gpuTimes[11], frameHits, subtreeHits, changedChannels, maxDelta })
+      }
+    } finally { output.destroy() }
+  }
+  process.stdout.write(`T109_${process.env.HENJI_T109_BENCH} ${JSON.stringify(report)}\n`)
+}, 120_000)
+
+it('t109 真静止结尾对照命中复用，原素材持续呼吸不误判为静止', async () => {
+  const original = readFileSync('src/tests/fixtures/videoEdit/performance/complex-to-simple.ts.txt', 'utf8')
+  const frozen = compileCodeMaterial(original.replace('sin(t * 1.6)', 'sin(5.5 * 1.6)'))
+  const live = compileCodeMaterial(original)
+  const output = texture(1920, 1080); let hits = 0
+  try {
+    for (let frame = 167; frame < 180; frame++) {
+      const time = frame / 30; const ctx = { ...context, width: 1920, height: 1080, fps: 30, frame, time, localTime: time, sequenceTime: time }
+      const commands = evaluateCodeMaterial(frozen, ctx, {}, { measureText: testMeasure, cullInvisible: true })
+      await runtime.render(output, 1920, 1080, commands); hits += runtime.reuse.frameHits
+    }
+    expect(hits).toBe(12)
+    for (let frame = 166; frame < 169; frame++) {
+      const time = frame / 30
+      await runtime.render(output, 1920, 1080, evaluateCodeMaterial(live, { ...context, width: 1920, height: 1080, frame, time, localTime: time, sequenceTime: time }, {}, { measureText: testMeasure, cullInvisible: true }))
+      expect(runtime.reuse.frameHits).toBe(0)
+    }
+    process.stdout.write(`T109_STATIC_CONTROL ${JSON.stringify({ frames: 13, warmFrames: 1, frameHits: hits })}\n`)
+  } finally { output.destroy() }
+})
 async function run(body: string): Promise<Uint8Array> {
   const target = texture(); device.pushErrorScope('validation')
   try {

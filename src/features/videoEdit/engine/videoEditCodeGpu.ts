@@ -1,4 +1,5 @@
 import type { CodeFramePerformance, CodeHeavyStructure } from '@/core/videoEdit/codeMaterial/performance'
+import { codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
 import { codeFilterFrameExpressions, codeExpressionChildren, codeExpressionIsFrameOnly } from '@/core/videoEdit/codeMaterial/filterFrameExpressions'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 export { VideoEditCodePicture } from './videoEditCodePicture'
@@ -233,6 +234,7 @@ export class VideoEditCodeGpu {
     const bytes = width * height * videoEditGpuBytesPerPixel(format)
     const precise = format === VIDEO_EDIT_PRECISE_FORMAT
     if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或256MiB会话预算。')
+    if (!precise && bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) this.v3Runtime?.evictUnused(bytes + this.bytes - this.preciseBytes - MAX_RESIDENT_BYTES)
     if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或256MiB会话预算。')
     const texture = this.device.createTexture({ size: [width, height], format, usage: 0x01 | 0x02 | 0x04 | 0x10 })
     this.bytes += bytes; if (precise) this.preciseBytes += bytes
@@ -240,7 +242,7 @@ export class VideoEditCodeGpu {
     this.counts.textureAllocations++
     return texture
   }
-  private surface(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm', retainMask = false): Surface {
+  private surface(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm', retainMask = false, retainGenerator = false): Surface {
     let surface = this.surfaces.get(key)
     if (surface && (surface.picture.width !== width || surface.picture.height !== height || surface.picture.textureFormat !== format)) { this.releaseSurface(key); surface = undefined }
     if (!surface) {
@@ -249,6 +251,7 @@ export class VideoEditCodeGpu {
       this.surfaces.set(key, surface)
     }
     if (!retainMask) surface.maskData = undefined
+    if (!retainGenerator) this.v3Runtime?.invalidate(surface.picture.texture)
     return surface
   }
   private glyph(command: Extract<CodeDrawCommand, { kind: 'text' }>, protectedKeys: ReadonlySet<string>): Glyph {
@@ -296,11 +299,12 @@ export class VideoEditCodeGpu {
     this.device.queue.submit([encoder.finish()]); this.pending = this.device.queue.onSubmittedWorkDone()
   }
   private v3(): VideoEditCodeGpuV3 {
-    return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes } }, undefined, () => this.shaderGraphs())
+    return this.v3Runtime ??= new VideoEditCodeGpuV3(this.device, { allocate: (width, height) => this.texture(width, height), release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes }, canRetain: bytes => this.bytes - this.preciseBytes + bytes <= MAX_RESIDENT_BYTES / 2 }, undefined, () => this.shaderGraphs())
   }
   async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false, overrides?: Pick<import('@/core/videoEdit/codeMaterial/evaluate').CodeMaterialEvaluationOptions, 'elementOverrides' | 'sourceTime'>): Promise<VideoEditCodePicture> {
     const started = performance.now(); let heaviest: CodeHeavyStructure | undefined
-    const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, ...overrides, onProfile: value => { heaviest = value }, measureText: measureCodeText, onDiagnostic: diagnostic => {
+    let evaluation: Parameters<NonNullable<import('@/core/videoEdit/codeMaterial/evaluateV3').CodeEvaluationOptions['onEvaluation']>>[0] | undefined
+    const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, ...overrides, cullInvisible: true, onEvaluation: value => { evaluation = value; heaviest = value.structures[0] }, measureText: measureCodeText, onDiagnostic: diagnostic => {
       if (!this.missingFonts.has(diagnostic.fontFamily)) { this.missingFonts.add(diagnostic.fontFamily); codeLogger.warn('代码文字缺少字体，使用无衬线字体', { event: 'video_edit.code.font.missing', context: { fontFamily: diagnostic.fontFamily } }) }
     } })
     const cpuMs = performance.now() - started; const gpuStart = performance.now()
@@ -308,8 +312,12 @@ export class VideoEditCodeGpu {
     const completed = this.trackPerformance(key, timing, started, gpuStart)
     if (program.languageVersion === 3) {
       await this.ready; this.assertLive()
-      const target = this.surface(key, context.width, context.height)
-      await this.v3().render(target.picture.texture, context.width, context.height, commands, images)
+      const target = this.surface(key, context.width, context.height, 'rgba8unorm', false, true)
+      const runtime = this.v3()
+      await runtime.render(target.picture.texture, context.width, context.height, commands, images, true)
+      timing.structures = codeStructureCosts(evaluation?.structures ?? [], runtime.drawCosts)
+      timing.reuse = { ...runtime.reuse, culledGroups: evaluation?.culledGroups ?? 0, operations: evaluation?.operations ?? 0 }
+      timing.attribution = 'inclusive-queue-wall'
       this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
       return target.picture
     }
@@ -399,7 +407,8 @@ export class VideoEditCodeGpu {
     const format = input.textureFormat
     const frameExpressions = codeFilterFrameExpressions(program)
     let heaviest: CodeHeavyStructure | undefined
-    const frameValues = evaluateCodeFrameExpressions(program, frameExpressions, context, values, { onProfile: value => { heaviest = value } })
+    let cpuStructures: CodeHeavyStructure[] = []
+    const frameValues = evaluateCodeFrameExpressions(program, frameExpressions, context, values, { onEvaluation: value => { cpuStructures = value.structures; heaviest = value.structures[0] } })
     // Re-prove mixed pixel/frame arithmetic with the exact uploaded f32 values.
     // This does not compile a new pipeline: uniforms keep the WGSL source stable.
     if (frameExpressions.length) emitCodeMaterialFilter(program, transitionHandles, frameValues)
@@ -424,7 +433,13 @@ export class VideoEditCodeGpu {
       return [primitive, graph] as const
     }))
     const timing: CodeFramePerformance = { frame: context.frame, cpuMs: performance.now() - cpuStart, gpuMs: 0, budgetMs: 1000 / context.fps, ...(heaviest ? { heaviest } : {}) }
-    const gpuStart = performance.now(); const completed = this.trackPerformance(key, timing, cpuStart, gpuStart)
+    const gpuStart = performance.now(); const recordCompleted = this.trackPerformance(key, timing, cpuStart, gpuStart)
+    const completed = (): void => {
+      recordCompleted()
+      const sourceSpan = program.result.sourceSpan ?? program.sourceSpan
+      timing.structures = codeStructureCosts(cpuStructures, sourceSpan ? [{ kind: 'filter', cpuMs: 0, gpuMs: timing.gpuMs, sourceSpan }] : [])
+      timing.attribution = 'inclusive-queue-wall'
+    }
     const pipeline = await this.prepareFilter(version, program, transitionHandles, format)
     this.assertLive(); this.assertInput(input.texture)
     const target = this.surface(key, input.width, input.height, format)
@@ -662,7 +677,17 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     let cpu = 0; let gpu = 0; let gpuMs = 0; let previous = events[0]?.at ?? 0
     for (const event of events) { if (gpu > 0 && cpu === 0) gpuMs += event.at - previous; cpu += event.cpu; gpu += event.gpu; previous = event.at }
     const heaviest = frames.flatMap(frame => frame.heaviest ?? []).sort((a, b) => b.cpuMs - a.cpuMs)[0]
-    return [{ frame: frames.at(-1)!.frame, cpuMs: frames.reduce((sum, value) => sum + value.cpuMs, 0), gpuMs, budgetMs: frames.at(-1)!.budgetMs, ...(heaviest ? { heaviest } : {}) }]
+    const details = frames.filter(frame => frame.structures)
+    // Recover the pre-truncation denominators, so merging the top-five summaries
+    // of multiple clips never turns a 20% structure into a fictitious 100% one.
+    const totals = details.reduce((sum, frame) => {
+      const cpu = frame.structures?.find(value => value.cpuShare > 0); const gpu = frame.structures?.find(value => value.gpuShare > 0)
+      sum.cpuMs += cpu ? cpu.cpuMs / cpu.cpuShare : 0; sum.gpuMs += gpu ? gpu.gpuMs / gpu.gpuShare : 0
+      return sum
+    }, { cpuMs: 0, gpuMs: 0 })
+    const structures = codeStructureCosts(details.flatMap(frame => (frame.structures ?? []).map(value => ({ ...value, gpuMs: 0 }))), details.flatMap(frame => (frame.structures ?? []).map(value => ({ ...value, cpuMs: 0 }))), totals)
+    const reuse = details.reduce((sum, frame) => { for (const key of Object.keys(sum) as Array<keyof typeof sum>) sum[key] += frame.reuse?.[key] ?? 0; return sum }, { culledGroups: 0, culledDraws: 0, frameHits: 0, subtreeHits: 0, subtreeMisses: 0, operations: 0 })
+    return [{ frame: frames.at(-1)!.frame, cpuMs: frames.reduce((sum, value) => sum + value.cpuMs, 0), gpuMs, budgetMs: frames.at(-1)!.budgetMs, ...(heaviest ? { heaviest } : {}), ...(details.length ? { structures, reuse, attribution: 'inclusive-queue-wall' as const } : {}) }]
   }
   releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle(); this.graphCache?.releaseIdle() }
   /** WebGPU exposes no available-VRAM query. Use the owned texture-byte budget,

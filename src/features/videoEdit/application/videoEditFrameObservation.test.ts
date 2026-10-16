@@ -203,6 +203,9 @@ it('公共观察高亮指定代码元素，绑定标注按指定动画帧跟随�
 it('超预算帧测量与最重源码结构经公共能力schema读回', async () => {
   const owner = await createVideoEditProject(); const app = createApplicationHarness()
   render.performance = [{ frame: 0, cpuMs: 25, gpuMs: 10, budgetMs: 1000/60, heaviest: { kind: 'repeat', cpuMs: 22, sourceSpan: { file: 'main.ts', start: 10, end: 30, startLine: 3, startColumn: 2, endLine: 3, endColumn: 22 } } }]
+  render.performance[0].structures = [{ ...render.performance[0].heaviest!, gpuMs: 8, cpuShare: .8, gpuShare: .9 }]
+  render.performance[0].reuse = { culledGroups: 1, culledDraws: 3, frameHits: 0, subtreeHits: 2, subtreeMisses: 1, operations: 123 }
+  render.performance[0].attribution = 'inclusive-queue-wall'
   try {
     const result = await app.requireResult('observe_video_edit_frame', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, target: { kind: 'program', frame: 0 } })
     expect(result.performance).toEqual(render.performance)
