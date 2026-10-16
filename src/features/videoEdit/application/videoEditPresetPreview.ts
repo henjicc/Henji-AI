@@ -6,12 +6,10 @@ import { resizeCodeMaterialCanvas } from '@/core/videoEdit/codeElementBake'
 import { instantiateTitleTemplate } from '@/core/videoEdit/titleTemplates'
 import type { StyleKit } from '@/core/videoEdit/styleKit'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
-import { createLogger } from '@/core/logging'
+import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
 import { compileVideoEditCode } from './videoEditCodeState'
 import type { VideoEditPresetSource } from './videoEditPresetCatalog'
-import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 
-const logger = createLogger('features.videoEdit.presetPreview')
 export const PRESET_PREVIEW_FPS = 30
 /** Shared moving footage, so every effect, caption, transition and style is judged on the same picture. */
 const BACKDROP = `export default { apiVersion: 1, languageVersion: 3, name: "预设样片", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 8, seed: 7,
@@ -149,30 +147,31 @@ export function presetPreviewTimeline(source: VideoEditPresetSource, size: { wid
  * requested one at a time so posters and a playing loop interleave; the session is released after a quiet minute.
  */
 class PresetRenderer {
-  private session?: VideoEditRenderSession
-  private current?: VideoEditComposition
-  private chain: Promise<unknown> = Promise.resolve()
-  private idle?: ReturnType<typeof setTimeout>
-  frame(composition: VideoEditComposition, frame: number, signal: AbortSignal): Promise<ImageBitmap | null> {
-    const run = this.chain.then(async () => {
-      signal.throwIfAborted()
-      if (this.idle) { clearTimeout(this.idle); this.idle = undefined }
-      if (!this.session) { const { VideoEditRenderSession } = await import('../engine/videoEditRenderSession'); this.session = new VideoEditRenderSession(composition); this.current = composition }
-      else if (this.current !== composition) { await this.session.updateDocument(composition); this.current = composition }
-      signal.throwIfAborted()
-      const result = await this.session.present(frame)
+  async frame(composition: VideoEditComposition, frame: number, signal: AbortSignal): Promise<ImageBitmap | null> {
+    const lease = await videoEditOffscreenPool.acquire(composition, signal, async document => {
+      const { VideoEditRenderSession } = await import('../engine/videoEditRenderSession')
+      return new VideoEditRenderSession(document)
+    })
+    let succeeded = false; let expired = false
+    let abort!: () => void; let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+      abort = () => { expired = true; reject(signal.reason ?? new DOMException('预设预览已取消。', 'AbortError')) }
+      signal.addEventListener('abort', abort, { once: true })
+      timer = setTimeout(() => { expired = true; reject(new Error('预设单帧渲染超过30秒，请重试。')) }, 30_000)
+      if (signal.aborted) abort()
+    })
+    try {
+      const result = await Promise.race([lease.session.present(frame).then(result => {
+        if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('预设预览已失效。') }
+        return result
+      }), deadline])
       if (signal.aborted) { result.bitmap?.close(); signal.throwIfAborted() }
       if (result.effectErrors?.length) { result.bitmap?.close(); throw new Error(result.effectErrors.join('\n')) }
-      // A skipped present (nothing new to show) is not a failure; the caller keeps the last picture.
+      succeeded = true
       return result.bitmap ?? null
-    })
-    this.chain = run.catch(() => undefined).finally(() => this.scheduleRelease())
-    return run
-  }
-  private scheduleRelease(): void {
-    if (this.idle) clearTimeout(this.idle)
-    this.idle = setTimeout(() => { const session = this.session; this.session = undefined; this.current = undefined; void session?.dispose().catch(error => logger.warn('预设预览会话释放失败', { event: 'preset.preview.dispose_failed', error })) }, 60_000)
+    } finally { clearTimeout(timer); signal.removeEventListener('abort', abort); await lease.release(!succeeded) }
   }
 }
+
 const renderer = new PresetRenderer()
 export function renderPresetPreviewFrame(composition: VideoEditComposition, frame: number, signal: AbortSignal): Promise<ImageBitmap | null> { return renderer.frame(composition, frame, signal) }

@@ -19,6 +19,12 @@ export function compileVideoEditCode(source: string | CodeMaterialFiles, signal?
   return compiler.compile(source, signal)
 }
 export function releaseVideoEditCodeCompiler(): void { compiler?.dispose(); compiler = undefined }
+/** Render-session preparation shares source-keyed IR, while interactive compilation keeps its original budget. */
+export function prepareVideoEditCode(source: CodeMaterialFiles, signal: AbortSignal): Promise<CodeMaterialProgram> {
+  initializeVideoEditCodeSourceRuntime()
+  compiler ??= new VideoEditCodeCompiler()
+  return compiler.compileQueued(source, signal)
+}
 export function installVideoEditCodeMetadata(owner: object, metadata: VideoEditCodeMetadata): void { states.set(owner, metadata) }
 export function readVideoEditCodeMetadata(owner: object, document: VideoEditDocument): CodeMaterialMetadataReader {
   for (const definition of document.codeMaterials ?? []) for (const version of definition.versions) {

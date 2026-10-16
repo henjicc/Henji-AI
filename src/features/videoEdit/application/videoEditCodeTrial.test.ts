@@ -1,19 +1,22 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
+import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { memoryInfo: async () => ({ availableBytes: 2 ** 32, totalBytes: 2 ** 33 }) } }) }))
 const boundary = vi.hoisted(() => ({ present: vi.fn(), dispose: vi.fn(), construct: vi.fn() }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   constructor() { boundary.construct() }
   present = boundary.present
   dispose = boundary.dispose
   async updateDocument() {}
+  async replaceContent() {}
 } }))
 function frames() { const document = createVideoEditTestDocument('试渲染'); return [{ document: videoEditComposition(document, document.sequences[0].id), frame: 0 }] }
 function result() { return { presented: true, bitmap: { width: 1, height: 1, close: vi.fn() } as unknown as ImageBitmap } }
 beforeEach(() => { vi.clearAllMocks(); boundary.present.mockResolvedValue(result()); boundary.dispose.mockResolvedValue(undefined) })
-afterEach(() => { vi.useRealTimers() })
+afterEach(async () => { await videoEditOffscreenPool.dispose(); vi.useRealTimers() })
 it('等待中的中止立即返回，但重启请求仍等待前项；不创建多余renderer', async () => {
   let finish!: (value: ReturnType<typeof result>) => void
   boundary.present.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
@@ -23,7 +26,7 @@ it('等待中的中止立即返回，但重启请求仍等待前项；不创建�
   const assertion = expect(cancelled).rejects.toThrow(); controller.abort(); await assertion
   const restarted = trialVideoEditCodeFrames(input, new AbortController().signal)
   await Promise.resolve(); expect(boundary.construct).toHaveBeenCalledOnce()
-  finish(result()); await first; await restarted; expect(boundary.construct).toHaveBeenCalledTimes(2)
+  finish(result()); await first; await restarted; expect(boundary.construct).toHaveBeenCalledTimes(1)
 })
 it('活动请求中止释放队列，迟到bitmap关闭，下一项正常完成', async () => {
   let finish!: (value: ReturnType<typeof result>) => void
@@ -43,14 +46,14 @@ it('单帧卡住30秒后释放队列；后续请求不会被永久阻塞', async
   await vi.advanceTimersByTimeAsync(0); expect(boundary.present).toHaveBeenCalledOnce()
   await vi.advanceTimersByTimeAsync(30_000); await assertion
   await trialVideoEditCodeFrames(input, new AbortController().signal)
-  expect(boundary.dispose).toHaveBeenCalledTimes(2); expect(vi.getTimerCount()).toBe(0)
+  expect(boundary.dispose).toHaveBeenCalledTimes(1); await videoEditOffscreenPool.dispose(); expect(vi.getTimerCount()).toBe(0)
 })
 it('并发等待按序处理，不因等待数量拒绝产品条目，单项失败后继续', async () => {
   const input = frames(); const signal = new AbortController().signal
   boundary.present.mockRejectedValueOnce(new Error('单项失败'))
   const results = await Promise.allSettled(Array.from({ length: 8 }, () => trialVideoEditCodeFrames(input, signal)))
   expect(results.map(result => result.status)).toEqual(['rejected', ...Array.from({ length: 7 }, () => 'fulfilled')])
-  expect(boundary.construct).toHaveBeenCalledTimes(8); expect(boundary.dispose).toHaveBeenCalledTimes(8)
+  expect(boundary.construct).toHaveBeenCalledTimes(2); expect(boundary.dispose).toHaveBeenCalledTimes(1)
 })
 
 it('按序列帧率回传测量与结构位置，超预算不拒绝画面，预算内也保留复用反馈', async () => {
@@ -96,7 +99,7 @@ it('末帧和收集模式移交独立位图，销毁会话不提前关闭调用�
   boundary.present.mockResolvedValueOnce(first).mockResolvedValueOnce(last)
   const kept = await trialVideoEditCodeFrames([...input, { ...input[0], frame: 15 }], new AbortController().signal, true)
   expect(kept).toBe(last.bitmap); expect(first.bitmap.close).toHaveBeenCalledOnce()
-  expect(last.bitmap.close).not.toHaveBeenCalled(); expect(boundary.dispose).toHaveBeenCalledOnce()
+  expect(last.bitmap.close).not.toHaveBeenCalled(); expect(boundary.dispose).not.toHaveBeenCalled()
   kept!.close()
   const a = result(); const b = result(); const collected: ImageBitmap[] = []
   boundary.present.mockResolvedValueOnce(a).mockResolvedValueOnce(b)
@@ -105,9 +108,11 @@ it('末帧和收集模式移交独立位图，销毁会话不提前关闭调用�
   for (const bitmap of collected) { expect(bitmap.close).not.toHaveBeenCalled(); bitmap.close() }
 })
 
-it('销毁会话失败不移交末帧，并释放已取得的位图', async () => {
+it('成功请求保留会话，空闲销毁失败不影响已经移交的独立画面', async () => {
   const pixels = result(); boundary.present.mockResolvedValueOnce(pixels)
   boundary.dispose.mockRejectedValueOnce(new Error('销毁失败'))
-  await expect(trialVideoEditCodeFrames(frames(), new AbortController().signal, true)).rejects.toThrow('销毁失败')
-  expect(pixels.bitmap.close).toHaveBeenCalledOnce()
+  const kept = await trialVideoEditCodeFrames(frames(), new AbortController().signal, true)
+  await videoEditOffscreenPool.dispose()
+  expect(kept).toBe(pixels.bitmap); expect(pixels.bitmap.close).not.toHaveBeenCalled()
+  kept!.close()
 })

@@ -10,6 +10,9 @@ export interface CodeCompilerWorker {
   postMessage(message: { id: number; files: CodeMaterialFiles }): void
   terminate(): void
 }
+let sharedWorkerFactory: (() => CodeCompilerWorker) | undefined
+/** Render workers delegate to the host's existing source compiler/cache. */
+export function setVideoEditCodeCompilerWorkerFactory(factory: () => CodeCompilerWorker): void { sharedWorkerFactory = factory }
 interface Pending { resolve: (program: CodeMaterialProgram) => void; reject: (error: Error) => void; clean: () => void }
 /** Browser Worker is for thread isolation and bounded failure recovery; the AST
  * whitelist remains the execution boundary. No author JS enters this worker. */
@@ -17,11 +20,12 @@ export class VideoEditCodeCompiler {
   private worker?: CodeCompilerWorker
   private readonly pending = new Map<number, Pending>()
   private readonly jobs = new Set<number>()
+  private readonly capacityWaiters = new Set<() => void>()
   private next = 0
   private disposed = false
   private cacheHits = 0
   private workerStarts = 0
-  constructor(private readonly createWorker: () => CodeCompilerWorker = () => new Worker(new URL('./videoEditCodeCompiler.worker.ts', import.meta.url), { type: 'module' }), private readonly timeoutMs = 5000) {}
+  constructor(private readonly createWorker: () => CodeCompilerWorker = () => sharedWorkerFactory?.() ?? new Worker(new URL('./videoEditCodeCompiler.worker.ts', import.meta.url), { type: 'module' }), private readonly timeoutMs = 5000) {}
   private acquire(): CodeCompilerWorker {
     if (this.worker) return this.worker
     const worker = this.createWorker(); this.worker = worker
@@ -30,6 +34,7 @@ export class VideoEditCodeCompiler {
       if (this.worker !== worker) return
       const response = event.data
       if (!this.jobs.delete(response.id)) return
+      this.wakeCapacityWaiters()
       const pending = this.pending.get(response.id)
       if (!pending) return
       this.pending.delete(response.id); pending.clean()
@@ -45,6 +50,22 @@ export class VideoEditCodeCompiler {
     for (const pending of this.pending.values()) { pending.clean(); pending.reject(error) }
     this.pending.clear()
     this.jobs.clear()
+    this.wakeCapacityWaiters()
+  }
+  private wakeCapacityWaiters(): void { for (const wake of [...this.capacityWaiters]) wake() }
+  /** Shared preparation waits for the existing eight-job limit. It must not
+   * turn independent sessions into a new user-visible global budget failure. */
+  async compileQueued(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
+    while (this.jobs.size >= 8 && !this.disposed) {
+      signal?.throwIfAborted()
+      await new Promise<void>((resolve, reject) => {
+        const clean = (): void => { this.capacityWaiters.delete(wake); signal?.removeEventListener('abort', abort) }
+        const wake = (): void => { clean(); resolve() }
+        const abort = (): void => { clean(); reject(signal?.reason) }
+        this.capacityWaiters.add(wake); signal?.addEventListener('abort', abort, { once: true })
+      })
+    }
+    return this.compile(source, signal)
   }
   compile(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
     if (this.disposed) return Promise.reject(new Error('源码检查会话已关闭。'))
@@ -60,7 +81,7 @@ export class VideoEditCodeCompiler {
         const pending = this.pending.get(id)
         if (!pending) return
         this.pending.delete(id); pending.clean(); pending.reject(new DOMException('源码检查已取消。', 'AbortError'))
-        if (!this.pending.size) { this.worker?.terminate(); this.worker = undefined; this.jobs.clear() }
+        if (!this.pending.size) { this.worker?.terminate(); this.worker = undefined; this.jobs.clear(); this.wakeCapacityWaiters() }
       }
       const timer = setTimeout(() => { if (this.pending.has(id)) this.reset(new Error('源码检查超过时限，已释放线程；最后有效版本保留，请重试。')) }, this.timeoutMs)
       const clean = (): void => { clearTimeout(timer); signal?.removeEventListener('abort', abort) }

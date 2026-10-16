@@ -108,6 +108,17 @@ export class VideoEditRenderer {
   }
   /** Only devices/pipelines: no project media, render targets or sound are opened during workspace warmup. */
   async prepareGpu(): Promise<void> { await this.ensureCompositor().prepare() }
+  async prepareContent(frame: number, current: () => boolean): Promise<void> {
+    const document = this.document
+    const clips = activeVideoEditClips(document, frame).filter(clip => clip.kind === 'code' || activeVideoEditEffects(clip).some(effect => effect.code))
+    if (!clips.length || !current()) return
+    const compositor = this.ensureCompositor()
+    await compositor.prepare()
+    const { VideoEditCodeSources } = await import('./videoEditCodeSources')
+    if (!current()) return
+    this.codeSources ??= new VideoEditCodeSources(document, () => compositor.code())
+    await this.codeSources.prepare(document, clips, frame, current, undefined, { preparationOnly: true })
+  }
   /** Preview only (task 4.9): the canvas, composition targets and owned pictures are 1/divisor of the sequence size. */
   private renderDivisor: VideoEditRenderDivisor = 1
   /** High-precision composition counters and, with `row`, that row of the last high-precision frame before 8-bit quantization (task 2.7 acceptance). */
@@ -207,6 +218,16 @@ export class VideoEditRenderer {
     this.images.delete(id); image.controller.abort()
     // Successful cached bitmaps close here; a late decoder closes in image().
     void image.pending.then(bitmap => bitmap.close(), () => {})
+  }
+  /** Clear mutable per-request state, retaining only content-keyed preparation. */
+  async replaceContent(document: VideoEditComposition): Promise<void> {
+    this.cancelPresentation(); await this.disposePlayback()
+    await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
+    this.sources.clear(); this.frameCache.clear(); this.contentAudio.clear()
+    for (const chain of this.audioChains.values()) chain.dispose()
+    this.audioChains.clear()
+    await this.codeSources?.replaceContent(document)
+    await this.updateDocument(document)
   }
   async updateDocument(document: VideoEditComposition): Promise<void> {
     if (document.id !== this.document.id) {

@@ -1,3 +1,4 @@
+import { videoEditOffscreenPool, type VideoEditOffscreenLease } from '../engine/videoEditOffscreenPool'
 import { type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
@@ -53,41 +54,46 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
   return frames
 }
 
-let tail: Promise<void> = Promise.resolve()
 /** One serial queue for creation, source candidates and explicit version binds.
- * Every trial uses the production full-composition worker and releases it. */
+ * Every trial holds an exclusive lease on the production offscreen worker. */
 /** `collect` receives every presented frame (caller owns and closes them); used for short animated previews. */
 export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[]): Promise<ImageBitmap | undefined> {
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
-  const previous = tail; let release!: () => void
-  tail = new Promise<void>(resolve => { release = resolve })
-  let acquired = false
-  let renderer: VideoEditRenderSession | undefined; let sequenceId: string | undefined; let bitmap: ImageBitmap | undefined
+  let renderer: VideoEditRenderSession | undefined; let lease: VideoEditOffscreenLease | undefined; let bitmap: ImageBitmap | undefined
+  const poolAbort = new AbortController()
+  let succeeded = false
   let expired = false; let timer: ReturnType<typeof setTimeout> | undefined; let abort: (() => void) | undefined
   try {
     signal.throwIfAborted()
     let rejectDeadline!: (reason: Error) => void
     const deadline = new Promise<never>((_, reject) => {
-      rejectDeadline = reject
-      abort = () => { expired = true; reject(signal.reason) }
+      rejectDeadline = reason => { poolAbort.abort(reason); reject(reason) }
+      abort = () => { expired = true; poolAbort.abort(signal.reason); reject(signal.reason) }
       signal.addEventListener('abort', abort, { once: true })
     })
     // Teardown and module loading also have asynchronous boundaries before the next race.
     void deadline.catch(() => undefined)
     timer = setTimeout(() => { expired = true; rejectDeadline(new Error('试渲染等待过久，请重试。')) }, 30_000)
-    await Promise.race([previous, deadline]); acquired = true
+
     signal.throwIfAborted()
     for (const input of frames) {
       signal.throwIfAborted()
       const preparationStarted = performance.now()
-      const sessionReused = !!renderer && sequenceId === input.document.id
+      let sessionReused = !!renderer
       // Detect a stalled frame, rather than imposing a total duration/count budget on a large edit.
       clearTimeout(timer)
       timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
-      if (renderer && sequenceId !== input.document.id) { await renderer.dispose(); renderer = undefined }
-      if (!renderer) { const { VideoEditRenderSession } = await Promise.race([import('../engine/videoEditRenderSession'), deadline]); signal.throwIfAborted(); renderer = new VideoEditRenderSession(input.document); sequenceId = input.document.id }
-      else await Promise.race([renderer.updateDocument(input.document), deadline])
+      if (!lease) {
+        const acquiring = videoEditOffscreenPool.acquire(input.document, poolAbort.signal, async document => {
+          const { VideoEditRenderSession } = await import('../engine/videoEditRenderSession')
+          return new VideoEditRenderSession(document)
+        }).then(value => {
+          if (expired || signal.aborted) { void value.release(true); throw signal.reason ?? new Error('试渲染已超时。') }
+          return value
+        })
+        lease = await Promise.race([acquiring, deadline]); renderer = lease.session; sessionReused = lease.reused
+      } else await Promise.race([renderer!.replaceContent(input.document), deadline])
       const present = async (frame: number): ReturnType<VideoEditRenderSession['present']> => {
         signal.throwIfAborted()
         clearTimeout(timer)
@@ -128,16 +134,13 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
     }
     signal.throwIfAborted()
     // Keep ownership until teardown succeeds; a failed teardown must close the candidate too.
-    await renderer?.dispose(); renderer = undefined
+    succeeded = true
     const kept = keepLast ? bitmap : undefined
     if (!keepLast) bitmap?.close()
     bitmap = undefined; return kept
   } finally {
     bitmap?.close(); clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort)
-    try { await renderer?.dispose() } finally {
-      // A cancelled waiter must not release a slot ahead of the still-running predecessor.
-      if (acquired) release(); else void previous.then(release)
-    }
+    await lease?.release(!succeeded || expired || signal.aborted)
   }
 }
 

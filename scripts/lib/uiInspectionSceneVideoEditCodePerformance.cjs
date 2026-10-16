@@ -64,6 +64,10 @@ function createVideoEditCodePerformanceScene() {
         const playback = (frame, playing) => change(documentRef, { kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } })
         await change(documentRef, { kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.playback_resolution': { resolution: 'full', fullWhenPaused: true } } })
         const canvas = page.locator('canvas[aria-label="剪辑画面"]')
+        if (label === 'after') {
+          await page.waitForFunction(sequenceId => window.__videoLayoutEvidence.events.some(event => event.event === 'video_edit.content.warm.completed' && event.context.sequenceId === sequenceId), project.sequences[0].id, { timeout: 60000 })
+          evidence.prewarm = (await workerSnapshot(page)).events.filter(event => event.event?.startsWith('video_edit.content.warm.'))
+        }
         for (let round = 0; round < 2; round++) {
           await playback(0, false); await presented(page, 0)
           const start = await page.evaluate(() => performance.now())
@@ -95,14 +99,31 @@ function createVideoEditCodePerformanceScene() {
           const result = await callTool(client, 'observe_video_edit_frame', { documentRef, target: { kind: 'program', sequenceRef, frame }, maxWidth: 1920 })
           evidence.observations.push({ frame, result }); save()
         }
+        if (label === 'after') {
+          const beforeObservation = await canvas.evaluate(canvas => ({ pixels: canvas.toDataURL('image/png'), frame: canvas.dataset.presentedFrame }))
+          const observations = await Promise.all([30, 150].map(frame => callTool(client, 'observe_video_edit_frame', { documentRef, target: { kind: 'program', sequenceRef, frame }, maxWidth: 1920 })))
+          assert.ok(observations.every(result => (result.result?.data ?? result.data)?.performance?.length), '并发取帧必须分别完成')
+          const afterObservation = await canvas.evaluate(canvas => ({ pixels: canvas.toDataURL('image/png'), frame: canvas.dataset.presentedFrame }))
+          assert.deepEqual(afterObservation, beforeObservation, '离屏请求不能移动节目播放头或改变画面')
+          evidence.isolation = { concurrentFrames: [30, 150], programFrame: afterObservation.frame, pixelsUnchanged: true }
+        }
         await capture('code-performance-175')
         evidence.workers = (await workerSnapshot(page)).workers
+        evidence.preparationEvents = (await workerSnapshot(page)).events.filter(event => event.preparationStages || event.kind === 'worker.log' || event.kind === 'created')
+        const shaderCache = await app.evaluate(({ app }) => ({ root: app.getPath('sessionData'), disabled: app.commandLine.hasSwitch('disable-gpu-shader-disk-cache') }))
+        evidence.shaderCache = { disabled: shaderCache.disabled, caches: fs.readdirSync(shaderCache.root, { withFileTypes: true })
+          .filter(entry => entry.isDirectory() && /dawn|gpu.*cache/i.test(entry.name)).map(entry => ({ name: entry.name,
+            files: fs.readdirSync(path.join(shaderCache.root, entry.name), { recursive: true, withFileTypes: true }).filter(file => file.isFile()).length })) }
+        if (label === 'after') assert.equal(evidence.shaderCache.disabled, false)
+        save()
         if (label === 'after') {
           assert.ok(evidence.runs[1].evaluateDrawMs.p95 <= 1000 / 30, '稳态 p95 必须进入 30fps 预算')
           assert.equal(evidence.runs[1].dropped, 0, '热播放必须呈现全部 180 帧')
+          assert.equal(evidence.runs[0].dropped, 0, '预热后首轮播放必须呈现全部 180 帧')
           for (const observation of evidence.observations) {
             const data = observation.result.result?.data ?? observation.result.data
             assert.ok(data.performance?.length)
+            assert.ok(data.performance.every(sample => sample.preparation?.sessionReused), '取帧必须实际复用离屏会话')
             assert.ok(data.performance.every(sample => sample.preparation && sample.sampling?.mode === 'adjacent-frame'), '取帧必须返回独立首次准备和相邻帧稳态样本')
           }
         }

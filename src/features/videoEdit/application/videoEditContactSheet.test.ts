@@ -1,3 +1,4 @@
+import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import sharp from 'sharp'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
@@ -6,11 +7,13 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { ContactSheetBitmap, ContactSheetCanvas } from '@/tests/videoEditContactSheetCanvas'
 import { renderVideoEditContactSheet } from './videoEditContactSheet'
 
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { memoryInfo: async () => ({ availableBytes: 2 ** 32, totalBytes: 2 ** 33 }) } }) }))
 const boundary = vi.hoisted(() => ({ present: vi.fn(), dispose: vi.fn() }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   present = boundary.present
   dispose = boundary.dispose
   async updateDocument() {}
+  async replaceContent() {}
 } }))
 const document = createVideoEditTestDocument('联系表格子隔离')
 document.items.push({ id: 'image', kind: 'image', name: '画面' })
@@ -30,7 +33,7 @@ beforeEach(() => {
     return { presented: true, bitmap }
   })
 })
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(async () => { await videoEditOffscreenPool.dispose(); vi.unstubAllGlobals() })
 
 it('不同尺寸的九张位图只覆盖各自格子，后帧和关闭位图不抹掉既有时间码', async () => {
   const sheet = await renderVideoEditContactSheet(composition, { startFrame: 0, endFrame: 119, frameCount: 9 }, 960, new AbortController().signal)
@@ -47,7 +50,7 @@ it('不同尺寸的九张位图只覆盖各自格子，后帧和关闭位图不�
     expect(white, `格子 ${i} 时间码`).toBeGreaterThan(50)
     expect(bitmaps[i].closes).toBe(1)
   }
-  expect(boundary.dispose).toHaveBeenCalledTimes(9)
+  expect(boundary.dispose).not.toHaveBeenCalled()
 })
 
 it('中途渲染失败保留错误并释放已生成位图，不返回残缺联系表', async () => {

@@ -819,3 +819,19 @@ it('codeB 九帧联系表每格保留 GPU 画面和左上角时间码，位图�
   } finally { vi.doUnmock('./videoEditRenderSession'); vi.unstubAllGlobals() }
 }, 120_000)
 
+
+it('t113 仅预热管线与字形不绘制画面，随后输出与冷会话逐通道一致', async () => {
+  const make = (): VideoEditCodeGpuV3 => new VideoEditCodeGpuV3(wrapped, { allocate: (width, height) => texture(width, height), release: value => value.destroy() }, rasterFixture)
+  const cold = make(); const warm = make(); const a = texture(); const b = texture()
+  try {
+    const program = compileCodeMaterial(source('return [text({x:5,y:20,text:"AI",fontSize:18,color:[1,.6,.2,1],perChar:(i,n)=>({x:i*.4,y:i,opacity:1,scale:1,blur:2})})];'))
+    const draws = evaluateCodeMaterial(program, context, {}, { measureText: testMeasure })
+    const submissions = queueSubmissions
+    await warm.prepareContent(draws, () => true)
+    expect(queueSubmissions).toBe(submissions)
+    expect(warm.counts.uploads).toBeGreaterThan(0)
+    await cold.render(a, W, H, draws); await warm.render(b, W, H, draws)
+    expect(await read(b)).toEqual(await read(a))
+    await expect(warm.prepareContent(draws, () => false)).rejects.toMatchObject({ name: 'AbortError' })
+  } finally { a.destroy(); b.destroy(); await cold.dispose(); await warm.dispose() }
+})

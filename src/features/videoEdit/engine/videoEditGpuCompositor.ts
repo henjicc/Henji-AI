@@ -1,3 +1,4 @@
+import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { VideoSample } from 'mediabunny'
 import { rasterizeVideoEditText, videoEditTextResolution, type VideoEditTextRaster } from './videoEditTextSurface'
@@ -84,6 +85,7 @@ export class VideoEditGpuCompositor {
     const deviceStarted = performance.now()
     const managed = this.shared ? undefined : await this.manager.acquire()
     if (this.shared) await this.shared.ready
+    recordVideoEditPreparation('adapterDevice', performance.now() - deviceStarted)
     timing?.(performance.now() - deviceStarted, 'device')
     const pipelineStarted = performance.now()
     this.device = this.shared?.device ?? managed!.device as VideoGpuDevice
@@ -108,6 +110,7 @@ export class VideoEditGpuCompositor {
     for (const [index, key] of keys.entries()) this[key] = pipelines[index]
     ;[this.copyY, this.copyUv, this.copyRgba] = pipelines.slice(4, 7)
     this.copyDeep.set('rgb10a2unorm', pipelines[7]); this.copyDeep.set('rgba16float', pipelines[8])
+    recordVideoEditPreparation('compositorPipelines', performance.now() - pipelineStarted)
     timing?.(performance.now() - pipelineStarted, 'pipelines')
   }
   /** Nested layers must belong to this device so the parent can sample them without readback or 8-bit quantization. */
