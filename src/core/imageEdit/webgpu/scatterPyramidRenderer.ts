@@ -20,6 +20,12 @@ export interface ScatterPyramidRenderOptions {
   acquireTexture: (width: number, height: number) => GpuTexture;
   releaseTexture: (texture: GpuTexture) => void;
   isCancelled?: () => boolean;
+  /** Borrow a caller-owned encoder/uniform pool. The caller retains resources
+   * until submission; the pyramid's kernel, dimensions and weights are unchanged. */
+  recording?: {
+    uniform(values: Float32Array): { buffer: GpuBuffer; offset?: number; size?: number };
+    pass(pipeline: GpuRenderPipeline, entries: readonly unknown[], target: GpuTexture): void;
+  };
 }
 
 export interface ScatterPyramidRenderResult {
@@ -45,21 +51,29 @@ export async function renderScatterPyramid(
   const downsampled: GpuTexture[] = [];
   const textures: GpuTexture[] = [];
   const uniforms: GpuBuffer[] = [];
+  const uniform = (values: Float32Array): { buffer: GpuBuffer; offset?: number; size?: number } => {
+    if (options.recording) return options.recording.uniform(values);
+    const buffer = createUniformBuffer(options.device, values);
+    uniforms.push(buffer);
+    return { buffer };
+  };
+  const pass = (pipeline: GpuRenderPipeline, entries: readonly unknown[], target: GpuTexture): void => {
+    if (options.recording) options.recording.pass(pipeline, entries, target);
+    else renderPipelinePass(options.device, pipeline, entries, target);
+  };
   try {
     let previous = options.source;
     for (const level of options.levels) {
       assertNotCancelled(options.isCancelled);
       const dimensions = dimensionsForDivisor(options.width, options.height, level.divisor);
       const target = options.acquireTexture(dimensions.width, dimensions.height);
-      const uniform = createUniformBuffer(options.device, createDiffusionDownsampleUniform());
-      uniforms.push(uniform);
-      renderPipelinePass(
-        options.device,
+      const params = uniform(createDiffusionDownsampleUniform());
+      pass(
         options.downsamplePipeline,
         [
           { binding: 0, resource: previous.createView() },
           { binding: 1, resource: options.sampler },
-          { binding: 2, resource: { buffer: uniform } },
+          { binding: 2, resource: params },
         ],
         target
       );
@@ -79,18 +93,15 @@ export async function renderScatterPyramid(
         options.levels[index].divisor
       );
       const target = options.acquireTexture(dimensions.width, dimensions.height);
-      const uniform = createUniformBuffer(
-        options.device,
+      const params = uniform(
         createDiffusionUpsampleUniform(options.levels[index].weight, accumulatedWeight)
       );
-      uniforms.push(uniform);
-      renderPipelinePass(
-        options.device,
+      pass(
         options.upsamplePipeline,
         [
           { binding: 0, resource: downsampled[index].createView() },
           { binding: 1, resource: options.sampler },
-          { binding: 2, resource: { buffer: uniform } },
+          { binding: 2, resource: params },
           { binding: 10, resource: accumulated.createView() },
         ],
         target

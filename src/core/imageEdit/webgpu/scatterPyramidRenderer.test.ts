@@ -43,6 +43,23 @@ function createDevice() {
 }
 
 describe('renderScatterPyramid', () => {
+  it('借用录制器与均匀缓冲区时不自行提交、释放缓冲区，取消仍释放纹理', async () => {
+    const { device, submit } = createDevice()
+    const destroy = vi.fn(); const releaseTexture = vi.fn(); const pass = vi.fn()
+    const options = {
+      device, sampler: {}, source: createTexture(), width: 63, height: 39,
+      downsamplePipeline: { getBindGroupLayout: () => ({}) }, upsamplePipeline: { getBindGroupLayout: () => ({}) },
+      levels: [{ divisor: 2, weight: [.5, .5, .5] as const }, { divisor: 4, weight: [.5, .5, .5] as const }],
+      acquireTexture: () => createTexture(), releaseTexture,
+      recording: { uniform: () => ({ buffer: { destroy }, offset: 256, size: 112 }), pass },
+    }
+    const result = await renderScatterPyramid(options)
+    expect(result.textures).toHaveLength(3)
+    expect(pass).toHaveBeenCalledTimes(3); expect(submit).not.toHaveBeenCalled(); expect(destroy).not.toHaveBeenCalled()
+    let checks = 0
+    await expect(renderScatterPyramid({ ...options, isCancelled: () => ++checks === 2 })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(releaseTexture).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled()
+  })
   it('同一散射链依赖队列顺序提交，不逐 pass 等待全队列栅栏', async () => {
     const { device, submit, onSubmittedWorkDone } = createDevice()
     const textures: GpuTexture[] = []
