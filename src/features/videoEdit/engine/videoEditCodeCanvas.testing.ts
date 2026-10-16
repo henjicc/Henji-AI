@@ -1,10 +1,10 @@
-import { build } from 'esbuild'
-import { chromium } from 'playwright'
 import type { CodeDrawCommand } from '@/core/videoEdit/codeMaterial/contract'
 
 interface RasterBox { x: number; y: number; width: number; height: number; resolution?: number }
 /** Only a Canvas2D oracle, never application/Electron acceptance or a GPU benchmark. */
 export async function createCanvasOracle(): Promise<{ raster: (command: CodeDrawCommand, box: RasterBox) => Promise<OffscreenCanvas>; dispose: () => Promise<void> }> {
+  // 只有显式开启 Canvas 对照时才加载浏览器与打包器，普通 GPU CI 不引入它们。
+  const [{ build }, { chromium }] = await Promise.all([import('esbuild'), import('playwright')])
   const bundle = await build({ stdin: { contents: `import {rasterizeCodeShape} from './src/features/videoEdit/engine/videoEditCodeRaster'; globalThis.t108Raster=rasterizeCodeShape;`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser', loader: { '.wgsl': 'text' }, logLevel: 'silent' })
   const browser = await chromium.launch({ headless: true })
   try {

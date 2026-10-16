@@ -14,6 +14,7 @@ const GPU_TEST_FILES = [
   'src/core/imageEdit/testing/vgpuImpulseProbe.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditCodeGpuV3.gpu.test.ts',
+  'src/features/videoEdit/engine/videoEditCodeVector.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditCornerPin.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts',
   'src/features/videoEdit/engine/gaussianHosts.gpu.test.ts',

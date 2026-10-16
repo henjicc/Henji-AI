@@ -528,4 +528,3 @@ it('codeB 九帧联系表每格保留 GPU 画面和左上角时间码，位图�
   } finally { vi.doUnmock('./videoEditRenderSession'); vi.unstubAllGlobals() }
 }, 120_000)
 
-import './videoEditCodeVector.gpu.testing'
