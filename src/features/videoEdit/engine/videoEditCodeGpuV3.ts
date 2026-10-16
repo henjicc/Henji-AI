@@ -1,11 +1,11 @@
-import {paintMeasuredText} from '@/services/vectorContent/textRaster'
-import { polylinePath, traceVectorPath } from '@/core/imaging/vectorContent'
+import { rasterizeCodeShape } from './videoEditCodeRaster'
+export { rasterizeCodeShape } from './videoEditCodeRaster'
 import { CODE_BLEND_INDICES, CODE_BLEND_WGSL } from '@/core/videoEdit/codeMaterial/compositing'
 import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeBlend, CodeColor, CodeDrawCommand, CodeMatrix, CodePaint } from '@/core/videoEdit/codeMaterial/contract'
-import { CODE_IDENTITY, codeElementBounds, codeLocalBounds, codeMultiply, codeTextBaseBounds, codeTransform, trimCodePath } from '@/core/videoEdit/codeMaterial/geometry'
+import { CODE_IDENTITY, codeElementBounds, codeLocalBounds, codeMultiply, codeTextBaseBounds, codeTransform } from '@/core/videoEdit/codeMaterial/geometry'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
 import { codeShaderFailure } from './shaderEngines/codeShaderFailure'
@@ -13,12 +13,17 @@ import diffusionSource from '@/core/imageEdit/shaders/diffusion.wgsl?raw'
 import { renderScatterPyramid } from '@/core/imageEdit/webgpu/scatterPyramidRenderer'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { videoEditTextResolution } from './videoEditTextSurface'
+import { CodeVectorGpu, type CodeVectorInstance } from './videoEditCodeVectorGpu'
+import { isCodeVector, supportsCodeVector } from './videoEditCodeVectorGeometry'
 
 interface Image { texture: GpuTexture; width: number; height: number; x: number; y: number; resolution?: number }
 interface CachedImage extends Image { bytes: number; used: boolean; glyph?: boolean }
 interface Allocator { allocate(width: number, height: number): GpuTexture; release(texture: GpuTexture): void }
 type Encoder = ReturnType<GpuDevice['createCommandEncoder']>
 const normalBlend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
+function identityPrimitive(command: CodeDrawCommand): boolean {
+  return command.kind !== 'group' && !command.elementTransform && !command.rotation && !command.skewX && !command.skewY && (command.scaleX ?? 1) === 1 && (command.scaleY ?? 1) === 1
+}
 const shader = COMPOSITING_WGSL + CODE_BLEND_WGSL + `
 struct P { box:vec4f, color:vec4f, canvas:vec4f, matrix0:vec4f, matrix1:vec4f, stroke:vec4f, extra:vec4f }
 @group(0) @binding(0) var<uniform> p:P;
@@ -92,43 +97,6 @@ struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f, @location(1
  let p=P(v.box,v.color,v.canvas,vec4f(0),vec4f(0),v.stroke,v.extra);${shapeBody}
 }`
 const INSTANCE_LAYOUT = { arrayStride: 112, stepMode: 'instance', attributes: Array.from({ length: 7 }, (_, index) => ({ shaderLocation: index, offset: index * 16, format: 'float32x4' })) }
-function cssColor(color: CodeColor): string { return `rgba(${color[0] * 255},${color[1] * 255},${color[2] * 255},${color[3]})` }
-function canvasPaint(context: OffscreenCanvasRenderingContext2D, paint: CodePaint): string | CanvasGradient {
-  if (Array.isArray(paint)) return cssColor(paint)
-  const gradient = paint.kind === 'linearGradient' ? context.createLinearGradient(paint.x1!, paint.y1!, paint.x2!, paint.y2!) : paint.kind === 'conicGradient' ? context.createConicGradient((paint.angle ?? 0) * Math.PI / 180, paint.cx!, paint.cy!) : context.createRadialGradient(paint.cx!, paint.cy!, 0, paint.cx!, paint.cy!, paint.r!)
-  paint.stops.forEach(([offset, color]) => gradient.addColorStop(offset, cssColor(color))); return gradient
-}
-/** No blur/shadow/filter is run on Canvas. Rasterization is cached and independent of animation transforms. */
-export function rasterizeCodeShape(command: CodeDrawCommand, image: Omit<Image, 'texture'>): OffscreenCanvas {
-  const canvas = new OffscreenCanvas(Math.ceil(image.width * (image.resolution ?? 1)), Math.ceil(image.height * (image.resolution ?? 1))); const context = canvas.getContext('2d')
-  if (!context) throw new CodeMaterialError('CONTEXT', '无法创建代码图形栅格环境。')
-  if ((image.resolution ?? 1) !== 1) context.scale(image.resolution!, image.resolution!)
-  context.translate(-image.x, -image.y)
-  context.fillStyle = canvasPaint(context, command.paint ?? ('fill' in command ? command.fill : 'color' in command ? command.color : [1, 1, 1, 1]))
-  if (command.stroke) context.strokeStyle = canvasPaint(context, command.stroke)
-  context.lineWidth = command.strokeWidth ?? (command.kind === 'line' ? command.width : 0); context.lineCap = command.lineCap ?? 'butt'; context.lineJoin = command.lineJoin ?? 'miter'
-  context.setLineDash(command.dash ?? [])
-  if (command.kind === 'text') {
-    if (!command.layout) throw new CodeMaterialError('CONTEXT', '文字缺少共享度量。')
-    paintMeasuredText(context,command.layout,codeLocalBounds(command),command.layout.fontSize*(command.lineHeight??1.2),command.align??'left',Boolean(command.letterSpacing),command.stroke?command.strokeWidth:0)
-    return canvas
-  }
-  context.beginPath()
-  if (command.kind === 'rect') context.roundRect(command.x, command.y, command.width, command.height, command.radii ?? command.radius)
-  else if (command.kind === 'ellipse') context.ellipse(command.x + command.width / 2, command.y + command.height / 2, command.width / 2, command.height / 2, 0, 0, Math.PI * 2)
-  else if (command.kind === 'line' || command.kind === 'path') {
-    const paths = command.kind === 'path' ? command.points : [[[command.x1, command.y1], [command.x2, command.y2]] as [number, number][]]
-    for (const path of paths) { if (!path.length) continue; traceVectorPath(context,polylinePath(path.map(([x,y])=>({x,y})),command.kind === 'path' && command.closed)) }
-    if (command.kind === 'path') context.fill()
-    context.beginPath()
-    for (const path of trimCodePath(paths, command.trimStart, command.trimEnd)) traceVectorPath(context,polylinePath(path.map(([x,y])=>({x,y}))))
-    if (command.kind === 'line') context.strokeStyle = canvasPaint(context, command.stroke ?? command.color)
-    if (command.kind === 'line' || command.stroke && command.strokeWidth) context.stroke()
-    return canvas
-  } else throw new CodeMaterialError('TYPE', '此图形不能栅格化。')
-  context.fill(); if (command.stroke && command.strokeWidth) context.stroke(); return canvas
-}
-
 /** v3 tree compositor. GPU resources are allocated through the original resident-byte owner. */
 export class VideoEditCodeGpuV3 {
   private readonly pipelines = new Map<string, GpuRenderPipeline>()
@@ -143,8 +111,9 @@ export class VideoEditCodeGpuV3 {
   private module: unknown; private sampler: unknown; private ready: Promise<void>
   private disposed = false
   private ownGraphs?: ShaderGraphCache
+  private vectors?: CodeVectorGpu
   readonly counts = { uploads: 0, allocations: 0, submissions: 0, passes: 0 }
-  constructor(private readonly device: GpuDevice, private readonly allocator: Allocator, private readonly rasterize: (command: CodeDrawCommand, image: Omit<Image, 'texture'>) => OffscreenCanvas | Promise<OffscreenCanvas> = rasterizeCodeShape, private graphs?: () => ShaderGraphCache) {
+  constructor(private readonly device: GpuDevice, private readonly allocator: Allocator, private readonly rasterize: (command: CodeDrawCommand, image: Omit<Image, 'texture'>) => OffscreenCanvas | Promise<OffscreenCanvas> = rasterizeCodeShape, private graphs?: () => ShaderGraphCache, private readonly nativeVectors = true) {
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' })
     this.ready = this.prepare()
   }
@@ -155,6 +124,7 @@ export class VideoEditCodeGpuV3 {
       for (const entry of ['shape', 'textured', 'composite', 'effects', 'tint', 'bright', 'masked']) this.pipelines.set(entry, this.device.createRenderPipeline({ layout: 'auto', vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format: 'rgba8unorm', ...(['shape', 'textured', 'tint'].includes(entry) ? { blend: normalBlend } : {}) }] }, primitive: { topology: 'triangle-list' } }))
       const instanced = this.device.createShaderModule({ code: instanceShader })
       this.pipelines.set('instances', this.device.createRenderPipeline({ layout: 'auto', vertex: { module: instanced, entryPoint: 'vs', buffers: [INSTANCE_LAYOUT] }, fragment: { module: instanced, entryPoint: 'shape', targets: [{ format: 'rgba8unorm', blend: normalBlend }] }, primitive: { topology: 'triangle-list' } }))
+      if (this.nativeVectors) this.vectors = new CodeVectorGpu(this.device)
       const diffusion = this.device.createShaderModule({ code: diffusionSource })
       for (const entry of ['fragment_scatter_downsample', 'fragment_scatter_upsample']) this.pipelines.set(entry, this.device.createRenderPipeline({ layout: 'auto', vertex: { module: diffusion, entryPoint: 'vertex_main' }, fragment: { module: diffusion, entryPoint: entry, targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } }))
     } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
@@ -294,9 +264,15 @@ export class VideoEditCodeGpuV3 {
       const oldest = [...this.cached].find(([, value]) => !value.used); if (!oldest) break
       this.release(oldest[1]); this.cachedBytes -= oldest[1].bytes; this.cached.delete(oldest[0])
     }
-    const canvas = await this.rasterize(command, { ...dimensions, resolution }); const raw = this.image(dimensions.width * resolution, dimensions.height * resolution, dimensions.x * resolution, dimensions.y * resolution); raw.glyph = command.kind === 'text'
+    const raw = this.image(dimensions.width * resolution, dimensions.height * resolution, dimensions.x * resolution, dimensions.y * resolution); raw.glyph = command.kind === 'text'
     try {
-      this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: raw.texture, premultipliedAlpha: true }, [raw.width, raw.height]); this.counts.uploads++
+      if (this.vectors && supportsCodeVector(command)) {
+        const encoder = this.device.createCommandEncoder(); this.clear(encoder, raw)
+        this.vectors.draw(this.pass(encoder, raw), raw.width, raw.height, [{ command, matrix: [1, 0, 0, 1, -raw.x, -raw.y], opacity: 1 }]); this.submit(encoder)
+      } else {
+        const canvas = await this.rasterize(command, { ...dimensions, resolution })
+        this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: raw.texture, premultipliedAlpha: true }, [raw.width, raw.height]); this.counts.uploads++
+      }
       const appearance = resolution === 1 ? command : { ...command, blur: (command.blur ?? 0) * resolution, ...(command.glow ? { glow: { ...command.glow, radius: command.glow.radius * resolution } } : {}), ...(command.shadow ? { shadow: { ...command.shadow, x: command.shadow.x * resolution, y: command.shadow.y * resolution, blur: command.shadow.blur * resolution } } : {}) }
       const effected = await this.effects(raw, appearance, `raster:${key}`)
       // Cache only the final texture, never one scratch layer for every historical radius/paint value.
@@ -310,9 +286,23 @@ export class VideoEditCodeGpuV3 {
   /** 着色器图层：优先用宿主共享的会话缓存（与效果、转场同一份），独立使用时自建。 */
   private shaderGraphs(): ShaderGraphCache { return this.graphs?.() ?? (this.ownGraphs ??= new ShaderGraphCache(this.device)) }
   private simple(command: CodeDrawCommand): command is Extract<CodeDrawCommand, { kind: 'rect' | 'ellipse' }> {
-    return ['rect', 'ellipse'].includes(command.kind) && !command.shadow && !command.glow && !command.blur && (!command.paint || Array.isArray(command.paint)) && !(command.stroke && command.strokeWidth) && !(command.kind === 'rect' && command.radii)
+    return (command.kind === 'rect' || command.kind === 'ellipse') && !command.shadow && !command.glow && !command.blur && (!command.paint || Array.isArray(command.paint)) && !(command.stroke && command.strokeWidth) && !(command.kind === 'rect' && command.radii)
   }
   private groupBounds(children: readonly CodeDrawCommand[]): { x: number; y: number; width: number; height: number } {
+    // Flat vector batches need a union, not an element-inspection tree with four transformed
+    // corners, source paths and intermediate arrays per primitive. Keep the general path below
+    // for nesting, text, effects and transforms; the padding arithmetic is the same as geometry.ts.
+    if (this.vectors && children.length && children.every(command => isCodeVector(command) && identityPrimitive(command) && !command.blur && !command.glow && !command.shadow)) {
+      let left = Infinity; let top = Infinity; let right = -Infinity; let bottom = -Infinity
+      for (const command of children) {
+        const box = codeLocalBounds(command)
+        const padding = command.kind === 'line' ? command.width / 2 : command.stroke ? (command.strokeWidth ?? 0) / 2 : 0
+        const x = box.x - padding; const y = box.y - padding
+        left = Math.min(left, x); top = Math.min(top, y)
+        right = Math.max(right, x + (box.width + padding * 2)); bottom = Math.max(bottom, y + (box.height + padding * 2))
+      }
+      return { x: left, y: top, width: right - left, height: bottom - top }
+    }
     const bounds = codeElementBounds(children).map(element => {
       const command = element.command; const m = element.matrix; const scale = Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]))
       const glyphPad = command.kind === 'text' ? Math.max(0, ...(command.perChar ?? []).map(char => Math.max(char.blur ?? command.blur ?? 0, char.glow?.radius ?? command.glow?.radius ?? 0) * Math.abs(char.scale))) : 0
@@ -326,21 +316,41 @@ export class VideoEditCodeGpuV3 {
   async render(texture: GpuTexture, width: number, height: number, commands: readonly CodeDrawCommand[], images?: ReadonlyMap<string, VideoEditCodeImageInput>): Promise<void> {
     await this.ready; if (this.disposed) throw new CodeMaterialError('CONTEXT', 'v3 渲染器已释放。')
     this.uniformIndex = 0; this.instanceIndex = 0; this.cached.forEach(value => { value.used = false }); this.layers.forEach(value => { value.used = false })
+    this.vectors?.beginFrame()
     const target: Image = { texture, width, height, x: 0, y: 0 }; let encoder = this.device.createCommandEncoder(); this.clear(encoder, target); let count = 0; let shaderCount = 0
     const shaderResults = new Map<string, Image>()
     let batchTarget: Image | undefined
     const batch: { command: Extract<CodeDrawCommand, { kind: 'rect' | 'ellipse' }>; matrix: CodeMatrix; opacity: number }[] = []
-    const flushBatch = (): void => { if (batchTarget && batch.length) { this.instances(encoder, batchTarget, batch); batch.length = 0; batchTarget = undefined } }
+    const vectors: CodeVectorInstance[] = []
+    const flushBatch = (): void => {
+      if (batchTarget && batch.length) { this.instances(encoder, batchTarget, batch); batch.length = 0 }
+      if (batchTarget && vectors.length) { this.vectors!.draw(this.pass(encoder, batchTarget), batchTarget.width, batchTarget.height, vectors); vectors.length = 0 }
+      batchTarget = undefined
+    }
     const flush = (): void => { flushBatch(); this.submit(encoder); encoder = this.device.createCommandEncoder() }
-    const draw = async (command: CodeDrawCommand, target: Image, parent: CodeMatrix): Promise<void> => {
+    // Appending an instance is synchronous. Do not allocate/await a Promise for every vector.
+    const draw = (command: CodeDrawCommand, target: Image, parent: CodeMatrix): void | Promise<void> => {
       if (!(command.kind === 'text' && command.perChar) && ++count > CODE_V3_LIMITS.draws) throw new CodeMaterialError('BUDGET', 'GPU 图形超出 4096。')
-      const matrix = codeMultiply(parent, codeTransform(command)); const opacity = command.opacity ?? 1
+      // Evaluated primitives normally have identity element transforms. Reuse the parent matrix
+      // in that case instead of allocating two matrices and evaluating four trig functions each.
+      const identity = this.vectors && identityPrimitive(command)
+      const matrix = identity ? parent : codeMultiply(parent, codeTransform(command)); const opacity = command.opacity ?? 1
       if (!opacity) return
-      const key = command.elementPath?.join('/') ?? command.elementId ?? `draw:${count}`
-      if (this.simple(command) && (!command.blend || command.blend === 'normal')) {
-        if (batchTarget && batchTarget.texture !== target.texture) flushBatch()
+      if (!this.vectors && this.simple(command) && (!command.blend || command.blend === 'normal')) {
+        if (vectors.length || batchTarget && batchTarget.texture !== target.texture) flushBatch()
         batchTarget = target; batch.push({ command, matrix, opacity }); return
       }
+      // The previous raster path is sampled in local pixel space before its element transform.
+      // Keep that sampling for rotated/scaled/subpixel-translated complex shapes: draw their local
+      // layer on GPU, cache it, then use the original texture compositor (no Canvas upload).
+      const directVector = this.simple(command) || matrix[0] === 1 && matrix[1] === 0 && matrix[2] === 0 && matrix[3] === 1 && Number.isInteger(matrix[4]) && Number.isInteger(matrix[5])
+      if (this.vectors && directVector && (supportsCodeVector(command) || this.simple(command)) && !command.shadow && !command.glow && !command.blur && (!command.blend || command.blend === 'normal')) {
+        if (batch.length || batchTarget && batchTarget.texture !== target.texture) flushBatch()
+        batchTarget = target; vectors.push({ command, matrix, opacity }); return
+      }
+      return drawLayer(command, target, matrix, opacity, command.elementPath?.join('/') ?? command.elementId ?? `draw:${count}`)
+    }
+    const drawLayer = async (command: CodeDrawCommand, target: Image, matrix: CodeMatrix, opacity: number, key: string): Promise<void> => {
       flushBatch()
       if (command.kind === 'text' && command.perChar && command.layout) {
         const box = codeTextBaseBounds(command); const layout = command.layout
@@ -358,7 +368,8 @@ export class VideoEditCodeGpuV3 {
         const bounds = this.groupBounds(command.children); const pad = Math.ceil(Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0)) + 2)
         const layer = this.layer(`${key}:group`, Math.max(1, Math.ceil(bounds.width + pad * 2)), Math.max(1, Math.ceil(bounds.height + pad * 2)), Math.floor(bounds.x - pad), Math.floor(bounds.y - pad))
         this.clear(encoder, layer)
-        for (const child of command.children) await draw(child, layer, [1, 0, 0, 1, -layer.x, -layer.y])
+        const parent: CodeMatrix = [1, 0, 0, 1, -layer.x, -layer.y]
+        for (const child of command.children) { const pending = draw(child, layer, parent); if (pending) await pending }
         flush(); let image = await this.effects(layer, command, key)
         if (command.mask) {
           const mask = this.layer(`${key}:mask`, layer.width, layer.height, layer.x, layer.y)
@@ -413,13 +424,13 @@ export class VideoEditCodeGpuV3 {
       this.paint(encoder, copy, { ...target, x: 0, y: 0 }, CODE_IDENTITY, 1, 'textured')
       this.paint(encoder, target, image, matrix, opacity, 'composite', [1, 1, 1, 1], [CODE_BLEND_INDICES[mode], 0, 0, 1], [0, 0, 0, 0], copy)
     }
-    try { for (const command of commands) await draw(command, target, CODE_IDENTITY); flush() }
+    try { for (const command of commands) { const pending = draw(command, target, CODE_IDENTITY); if (pending) await pending } flush() }
     finally {
       for (const [key, layer] of this.layers) if (!layer.used || key.startsWith('raster:')) { this.release(layer); this.layers.delete(key) }
       this.ownGraphs?.releaseIdle()
       // Buffers are reusable until the next render. Texture ownership remains with the parent's resident-byte budget.
     }
   }
-  diagnostics(): { cachedBytes: number; cachedImages: number; glyphs: number; layers: number; uniformBytes: number; pipelines: number } { return { cachedBytes: this.cachedBytes, cachedImages: this.cached.size, glyphs: [...this.cached.values()].filter(image => image.glyph).length, layers: this.layers.size, uniformBytes: this.uniforms.length * 112 + this.instanceBuffers.reduce((sum, entry) => sum + entry.data.byteLength, 0), pipelines: this.pipelines.size } }
-  async dispose(): Promise<void> { this.disposed = true; await this.ready.catch(() => {}); await this.device.queue.onSubmittedWorkDone().catch(() => {}); this.cached.forEach(value => this.release(value)); this.layers.forEach(value => this.release(value)); this.scratch.forEach(value => this.release(value)); this.scratch.length = 0; this.uniforms.forEach(buffer => buffer.destroy()); this.instanceBuffers.forEach(entry => entry.buffer.destroy()); this.cached.clear(); this.layers.clear(); this.cachedBytes = 0; this.ownGraphs?.dispose() }
+  diagnostics(): { cachedBytes: number; cachedImages: number; glyphs: number; layers: number; uniformBytes: number; pipelines: number } { return { cachedBytes: this.cachedBytes, cachedImages: this.cached.size, glyphs: [...this.cached.values()].filter(image => image.glyph).length, layers: this.layers.size, uniformBytes: this.uniforms.length * 112 + this.instanceBuffers.reduce((sum, entry) => sum + entry.data.byteLength, 0) + (this.vectors?.bytes ?? 0), pipelines: this.pipelines.size + (this.vectors ? 2 : 0) } }
+  async dispose(): Promise<void> { this.disposed = true; await this.ready.catch(() => {}); await this.device.queue.onSubmittedWorkDone().catch(() => {}); this.cached.forEach(value => this.release(value)); this.layers.forEach(value => this.release(value)); this.scratch.forEach(value => this.release(value)); this.scratch.length = 0; this.uniforms.forEach(buffer => buffer.destroy()); this.instanceBuffers.forEach(entry => entry.buffer.destroy()); this.vectors?.dispose(); this.cached.clear(); this.layers.clear(); this.cachedBytes = 0; this.ownGraphs?.dispose() }
 }
