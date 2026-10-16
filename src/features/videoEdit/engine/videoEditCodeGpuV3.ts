@@ -12,6 +12,7 @@ import { codeShaderFailure } from './shaderEngines/codeShaderFailure'
 import diffusionSource from '@/core/imageEdit/shaders/diffusion.wgsl?raw'
 import { renderScatterPyramid } from '@/core/imageEdit/webgpu/scatterPyramidRenderer'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { videoEditTextResolution } from './videoEditTextSurface'
 import { CodeVectorGpu, type CodeVectorInstance } from './videoEditCodeVectorGpu'
@@ -109,6 +110,8 @@ struct V { @builtin(position) position:vec4f, @location(0) uv:vec2f, @location(1
 const INSTANCE_LAYOUT = { arrayStride: 112, stepMode: 'instance', attributes: Array.from({ length: 7 }, (_, index) => ({ shaderLocation: index, offset: index * 16, format: 'float32x4' })) }
 /** v3 tree compositor. GPU resources are allocated through the original resident-byte owner. */
 export class VideoEditCodeGpuV3 {
+  recordedAt = 0
+  completedAt = 0
   private readonly pipelines = new Map<string, GpuRenderPipeline>()
   private readonly cached = new Map<string, CachedImage>()
   private readonly layers = new Map<string, CachedImage>()
@@ -461,7 +464,7 @@ export class VideoEditCodeGpuV3 {
     const revision = documentFontRevision()
     const signature = codeHasLiveImage(commands) ? undefined : probe.signature([width, height, revision, commands], () => JSON.stringify([width, height, revision, visualCommands().commands]))
     const previous = this.frames.get(texture)
-    if (signature && previous === signature) { this.reuse.frameHits++; return }
+    if (signature && previous === signature) { this.reuse.frameHits++; this.recordedAt = this.completedAt = performance.now(); return }
     // A failed/partial render can never validate the previous contents.
     this.frames.delete(texture)
     const previousGroups = this.groupSignatures.get(texture); const currentGroups = new Map<string, string>()
@@ -626,18 +629,22 @@ export class VideoEditCodeGpuV3 {
         }
       }
       flush()
+      this.recordedAt = performance.now()
       if (profile) await this.device.queue.onSubmittedWorkDone()
+      this.completedAt = performance.now()
       if (signature) this.frames.set(texture, signature)
       this.groupSignatures.set(texture, currentGroups)
       this.groupProbes.set(texture, currentProbes)
     }
     finally {
+      const cleanupStarted = performance.now()
       this.close(encoder)
       this.rendering = false
       for (const [key, layer] of this.layers) if (!layer.used || key.startsWith('raster:')) { this.release(layer); this.layers.delete(key) }
       for (const [key, result] of this.glyphResults) if (!result.used) this.glyphResults.delete(key)
       this.pruneGlyphLayers()
       this.ownGraphs?.releaseIdle()
+      traceVideoEditFrame('cache.cleanup', -1, cleanupStarted)
       // Buffers are reusable until the next render. Texture ownership remains with the parent's resident-byte budget.
     }
   }
@@ -645,6 +652,7 @@ export class VideoEditCodeGpuV3 {
   /** Return idle optional caches to the owning session before it rejects an
    * allocation. Textures referenced by the current encoder stay protected. */
   evictUnused(bytes: number): void {
+    traceVideoEditFrame('cache.evict', -1, performance.now())
     let released = 0
     for (const [key, image] of this.layers) {
       if (!key.startsWith('glyph:') || this.rendering && image.used) continue

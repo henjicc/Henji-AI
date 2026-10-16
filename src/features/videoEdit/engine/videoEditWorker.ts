@@ -1,4 +1,5 @@
 import { VideoEditContentWarmup } from './videoEditContentWarmup'
+import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrameTrace'
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
 import { setVideoEditCodeCompilerWorkerFactory } from './videoEditCodeCompiler'
 import { videoEditPreparationSnapshot, recordVideoEditPreparation } from './videoEditPreparationTiming'
@@ -29,7 +30,7 @@ import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
 export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
 export type RenderRequest = { id: number } & (
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean } |
-  { kind: 'init'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
+  { kind: 'init'; traceFrames?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'replaceContent'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths: Record<string, string> }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'parameters'; update: VideoEditParameterUpdate }
@@ -143,6 +144,8 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   if (event.data.kind === 'code.compiled') { sharedCompilation.receive(event.data); return }
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
+  const receivedAt = performance.now()
+  if (request.kind === 'init') enableVideoEditFrameTrace(request.traceFrames === true)
   if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'fonts'].includes(request.kind)) contentWarmup.cancel()
   if (request.kind === 'render') contentWarmup.defer()
   if (request.kind === 'preopen') { preopenMedia(request); return }
@@ -193,6 +196,8 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         renderer.updateParameters(request.update); if (direct) warmContent(renderer.document); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        const renderStarted = performance.now()
+        traceVideoEditFrame('worker.queue', request.frame, receivedAt, renderStarted)
         let snapshot: Promise<ImageBitmap> | undefined
         // A canvas texture expires across asynchronous boundaries. Copy in the draw
         // submission, before awaiting GPU completion or tearing down a trial session.
@@ -204,6 +209,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         }, { maxPixels: needsPixels ? Infinity : 1280 * 720 }) : undefined
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error })
         const readCodePerformance = renderer.captureCodePerformance()
+        traceVideoEditFrame('worker.render', request.frame, renderStarted)
         const finish = async (): Promise<void> => {
           const owned = new Set<ImageBitmap>()
           try {
@@ -211,6 +217,8 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           for (const message of result.effectErrors ?? []) if (!effectWarnings.has(message)) log('warn', message, 'video_edit.effect.skipped', { sequenceId: renderer?.document.id, frame: request.frame })
           effectWarnings = new Set(result.effectErrors)
           await result.completion
+          traceVideoEditFrame('compositor.complete', request.frame, start)
+          const transferStarted = performance.now()
           const pixels = snapshot ? await snapshot : undefined
           if (pixels) owned.add(pixels)
           if (result.presented && (needsPixels || request.history) && !pixels) throw new Error('剪辑渲染没有返回画面快照。')
@@ -222,8 +230,11 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           }
           const rgb = request.readRgb && result.presented && pixels ? readVideoEditTrackingRgb(pixels, request.readRgb) : undefined
           const bitmap = rgb || direct || !result.presented ? undefined : pixels
+          traceVideoEditFrame('bitmap.prepare', request.frame, transferStarted)
+          const postedAt = performance.now()
           self.postMessage({ id: request.id, bitmap, history, rgb, effectErrors: result.effectErrors, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, singleFrameReads: result.singleFrameReads, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics(), codePerformance: readCodePerformance(), preparationStages: videoEditPreparationSnapshot() } satisfies RenderResponse, { transfer: [...(rgb ? [rgb.buffer as ArrayBuffer] : bitmap ? [bitmap] : []), ...(history ? [history] : [])] })
           if (bitmap) owned.delete(bitmap)
+          traceVideoEditFrame('worker.post', request.frame, postedAt)
           if (history) owned.delete(history)
           } catch (error) {
             if (!owned.size && snapshot) void snapshot.then(bitmap => bitmap.close(), () => {})

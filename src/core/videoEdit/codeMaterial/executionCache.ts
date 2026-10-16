@@ -18,6 +18,8 @@ export interface CodeExecutionFrame {
   charge(cost?: number): void
   measure(fields: Record<string, unknown>): ReturnType<CodeTextMeasurer>
   profile?: Map<string, CodeHeavyStructure>
+  /** Per-evaluation slots; never retained in the cross-frame expression cache. */
+  profileEntries?: CodeHeavyStructure[]
   profileCached?: boolean
   bindingsReady: boolean
   cache: ExecutionCache

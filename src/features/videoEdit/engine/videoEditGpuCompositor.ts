@@ -1,4 +1,5 @@
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { documentFontRevision } from '@/platform/fontFaces'
 import { VideoSample } from 'mediabunny'
 import { rasterizeVideoEditText, videoEditTextResolution, type VideoEditTextRaster } from './videoEditTextSurface'
@@ -317,15 +318,19 @@ export class VideoEditGpuCompositor {
     const pipelines = target ? await this.offscreenPipelines(target.textureFormat) : highPrecision ? await this.offscreenPipelines(VIDEO_EDIT_PRECISE_FORMAT) : undefined
     const present = highPrecision ? await this.presentPipeline() : undefined
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
+    const deadlineStarted = performance.now()
     if (deadline !== undefined && performance.timeOrigin + performance.now() < deadline - 0.8) await new Promise<void>(resolve => {
       let request = 0
       const finish = (): void => { self.cancelAnimationFrame(request); this.waits.delete(finish); resolve() }
       const tick = (at: number): void => { if (!shouldPresent() || performance.timeOrigin + at >= deadline - 0.8) finish(); else request = self.requestAnimationFrame(tick) }
       this.waits.add(finish); request = self.requestAnimationFrame(tick)
     })
+    traceVideoEditFrame('compositor.deadline', -1, deadlineStarted)
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+    const inflightStarted = performance.now()
     while (this.uploads.size >= 2) await Promise.race(this.uploads)
+    traceVideoEditFrame('compositor.inflight', -1, inflightStarted)
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (target) {
       if (target.width !== document.width || target.height !== document.height) throw new Error('离屏合成需要序列全尺寸目标。')
