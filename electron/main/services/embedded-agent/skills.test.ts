@@ -149,7 +149,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     expect(new Set(links)).toEqual(new Set(main.referencePaths))
     expect(main.referencePaths).toEqual(expect.arrayContaining([
       'references/author-api-expressions.md', 'references/author-api-media.md', 'references/approach.md', 'references/recipes-text.md', 'references/recipes-text-data.md', 'references/recipes-text-words.md',
-      'references/recipes-captions.md', 'references/recipes-glass-lines.md', 'references/recipes-particles.md', 'references/recipes-3d.md', 'references/review-ai.md',
+      'references/recipes-captions.md', 'references/recipes-glass-lines.md', 'references/recipes-particles.md', 'references/performance.md', 'references/recipes-3d.md', 'references/review-ai.md',
     ]))
     for (const reference of main.referencePaths) {
       const result = (await callEmbeddedSkill({ name: 'video-edit-code-creation', path: reference, reason: '当前步骤' }, signal)).data
