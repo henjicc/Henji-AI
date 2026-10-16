@@ -1016,13 +1016,13 @@ it('代码创建回报真实试渲染超预算与源码行列，保留正常提�
   const heaviest={kind:'repeat',cpuMs:24,sourceSpan:{file:'main.ts',start:0,end:20,startLine:2,startColumn:3,endLine:2,endColumn:23}}
   const structures=[{...heaviest,gpuMs:12,cpuShare:.8,gpuShare:.8}]
   const reuse={culledGroups:1,culledDraws:2,frameHits:0,subtreeHits:3,subtreeMisses:1,operations:123}
-  vi.spyOn(VideoEditRenderSession.prototype,'present').mockResolvedValue({id:1,presented:true,bitmap:{width:64,height:64,close:vi.fn()} as unknown as ImageBitmap,codePerformance:[{frame:0,cpuMs:25,gpuMs:15,budgetMs:1000/60,heaviest,structures,reuse,attribution:'inclusive-queue-wall'}]})
+  vi.spyOn(VideoEditRenderSession.prototype,'present').mockResolvedValue({id:1,presented:true,bitmap:{width:64,height:64,close:vi.fn()} as unknown as ImageBitmap,codePerformance:[{frame:0,cpuMs:25,gpuMs:15,budgetMs:1000/60,heaviest,structures,reuse,attribution:'draw-preparation-wall'}]})
   try{
     const parent={kind:'video_edit.document',id:owner.document.id};const baseline=await app.read(parent)
     const result=await app.call('change_application_entities',{summary:'创建含性能回报的代码',changes:[{kind:'create_items',entityType:'video_edit.code_material',parent,items:[{properties:{'video_edit.code_material.source':source}}]}]},baseline.revisions as Record<string,number>)
     expect(result).toMatchObject({ok:true})
     const data=(result as unknown as {data:{evidence:Array<{kind:string;fact:string;data?:unknown}>}}).data
-    expect(data.evidence.find(value=>value.fact.includes('CPU 求值'))).toMatchObject({kind:'observation',data:expect.arrayContaining([expect.objectContaining({cpuMs:25,gpuMs:15,heaviest,structures,reuse,attribution:'inclusive-queue-wall'})])})
+    expect(data.evidence.find(value=>value.fact.includes('CPU 求值'))).toMatchObject({kind:'observation',data:expect.arrayContaining([expect.objectContaining({cpuMs:25,gpuMs:15,heaviest,structures,reuse,attribution:'draw-preparation-wall'})])})
     expect(owner.document.codeMaterials).toHaveLength(1)
   }finally{app.dispose()}
 })

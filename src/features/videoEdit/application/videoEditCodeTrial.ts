@@ -1,7 +1,7 @@
 import { type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
-import { videoEditComposition, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditComposition, videoEditDuration, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { ensureVideoEditCodeDocumentMetadata } from './videoEditCodeState'
 import { subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
@@ -80,21 +80,50 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
     signal.throwIfAborted()
     for (const input of frames) {
       signal.throwIfAborted()
+      const preparationStarted = performance.now()
+      const sessionReused = !!renderer && sequenceId === input.document.id
       // Detect a stalled frame, rather than imposing a total duration/count budget on a large edit.
       clearTimeout(timer)
       timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
       if (renderer && sequenceId !== input.document.id) { await renderer.dispose(); renderer = undefined }
       if (!renderer) { const { VideoEditRenderSession } = await Promise.race([import('../engine/videoEditRenderSession'), deadline]); signal.throwIfAborted(); renderer = new VideoEditRenderSession(input.document); sequenceId = input.document.id }
       else await Promise.race([renderer.updateDocument(input.document), deadline])
-      const result = await Promise.race([renderer.present(input.frame).then(result => {
-        if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
-        return result
-      }), deadline])
-      const samples = result.codePerformance ?? []
-      measurements?.push(...samples.map(value => ({ ...value, frame: input.frame, budgetMs: 1000 / input.document.fps })))
+      const present = async (frame: number): ReturnType<VideoEditRenderSession['present']> => {
+        signal.throwIfAborted()
+        clearTimeout(timer)
+        timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
+        return await Promise.race([renderer!.present(frame).then(result => {
+          if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
+          return result
+        }), deadline])
+      }
+      let result = await present(input.frame)
       bitmap?.close(); bitmap = result.bitmap
       if (result.effectErrors?.length) throw new Error(result.effectErrors.join('\n'))
       if (!result.presented || !bitmap) throw new Error('源码候选没有生成可用画面。')
+      if (measurements && result.codePerformance?.length) {
+        const first = result.codePerformance
+        const preparation = { wallMs: performance.now() - preparationStarted, cpuMs: first.reduce((sum, sample) => sum + sample.cpuMs, 0), gpuMs: first.reduce((sum, sample) => sum + sample.gpuMs, 0), sessionReused }
+        // Warm the requested resources first, then traverse an adjacent frame so
+        // animated output cannot report the cheap identical-frame cache as playback.
+        const precedingFrame = input.frame > 0 ? input.frame - 1 : Math.min(1, Math.max(0, videoEditDuration(input.document) - 1))
+        let sampling: NonNullable<CodeFramePerformance['sampling']> = { mode: precedingFrame === input.frame ? 'repeat-frame' : 'adjacent-frame', precedingFrame }
+        try {
+          const warmup = await present(precedingFrame)
+          warmup.bitmap?.close()
+          if (!warmup.presented || warmup.effectErrors?.length) throw new Error(warmup.effectErrors?.join('\n') || '相邻帧没有生成画面。')
+          const steady = await present(input.frame)
+          if (!steady.presented || !steady.bitmap || steady.effectErrors?.length || !steady.codePerformance?.length) { steady.bitmap?.close(); throw new Error(steady.effectErrors?.join('\n') || '稳态采样没有返回画面及成本。') }
+          bitmap.close(); bitmap = steady.bitmap; result = steady
+        } catch (error) {
+          // Optional diagnostics must not change acceptance of the requested
+          // frame (e.g. a neighbour exceeds its author budget). Preserve its pixels
+          // and expose the failed sample explicitly, never label it as steady.
+          if (expired || signal.aborted) throw error
+          sampling = { mode: 'unavailable', precedingFrame, error: error instanceof Error ? error.message : String(error) }
+        }
+        measurements.push(...(result.codePerformance ?? first).map(value => ({ ...value, frame: input.frame, budgetMs: 1000 / input.document.fps, preparation, sampling })))
+      }
       if (collect) { collect.push(bitmap); bitmap = undefined }
     }
     signal.throwIfAborted()

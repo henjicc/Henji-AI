@@ -197,6 +197,10 @@ it('t109 正式宿主成本结果经过队列完成并合并，多目标及其�
     expect(codeFramePerformanceSchema.safeParse(first).success).toBe(true)
     expect(first.reuse?.culledGroups).toBe(1)
     expect(first.structures?.some(value => value.gpuMs > 0 && value.cpuMs > 0 && value.sourceSpan.startLine > 0)).toBe(true)
+    const captured = host.captureFramePerformance()
+    host.resetFramePerformance()
+    expect(host.framePerformance()).toEqual([])
+    expect(captured()[0]).toEqual(first)
     await host.generator('t109-cost', program, context, {}); await device.queue.onSubmittedWorkDone()
     expect(host.framePerformance()[0].reuse?.frameHits).toBe(1)
     await host.draw('t109-cost', W, H, [])
@@ -207,6 +211,22 @@ it('t109 正式宿主成本结果经过队列完成并合并，多目标及其�
     expect(codeFramePerformanceSchema.safeParse(host.framePerformance()[0]).success).toBe(true)
   } finally { await host.dispose() }
   expect(host.diagnostics().residentBytes).toBe(0)
+})
+
+it('性能归因不拆散矢量批次，开启与关闭采样像素完全一致', async () => {
+  const program = compileCodeMaterial(source('return repeat(180,i=>rect({x:i%8*7,y:floor(i/8)%8*7,width:6,height:6,fill:[.2,.6,1,.3]}));'))
+  const commands = evaluateCodeMaterial(program, context)
+  const a = texture(); const b = texture()
+  const plain = new VideoEditCodeGpuV3(wrapped, { allocate: texture, release: value => value.destroy() }, rasterFixture)
+  const measured = new VideoEditCodeGpuV3(wrapped, { allocate: texture, release: value => value.destroy() }, rasterFixture)
+  try {
+    await plain.render(a, W, H, commands)
+    await measured.render(b, W, H, commands, undefined, true)
+    expect(measured.counts.submissions).toBe(plain.counts.submissions)
+    expect(measured.counts.passes).toBe(plain.counts.passes)
+    expect(measured.drawCosts.length).toBeGreaterThan(0)
+    expect(await read(a)).toEqual(await read(b))
+  } finally { a.destroy(); b.destroy(); await plain.dispose(); await measured.dispose() }
 })
 
 it('t109 静态子树只合成、内容变化失效，复用像素容差 0，预算不足不留缓存', async () => {

@@ -317,7 +317,7 @@ export class VideoEditCodeGpu {
       await runtime.render(target.picture.texture, context.width, context.height, commands, images, true)
       timing.structures = codeStructureCosts(evaluation?.structures ?? [], runtime.drawCosts)
       timing.reuse = { ...runtime.reuse, culledGroups: evaluation?.culledGroups ?? 0, operations: evaluation?.operations ?? 0 }
-      timing.attribution = 'inclusive-queue-wall'
+      timing.attribution = 'draw-preparation-wall'
       this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.generatorFrames++
       return target.picture
     }
@@ -434,11 +434,12 @@ export class VideoEditCodeGpu {
     }))
     const timing: CodeFramePerformance = { frame: context.frame, cpuMs: performance.now() - cpuStart, gpuMs: 0, budgetMs: 1000 / context.fps, ...(heaviest ? { heaviest } : {}) }
     const gpuStart = performance.now(); const recordCompleted = this.trackPerformance(key, timing, cpuStart, gpuStart)
+    let preparationMs = 0
     const completed = (): void => {
       recordCompleted()
       const sourceSpan = program.result.sourceSpan ?? program.sourceSpan
-      timing.structures = codeStructureCosts(cpuStructures, sourceSpan ? [{ kind: 'filter', cpuMs: 0, gpuMs: timing.gpuMs, sourceSpan }] : [])
-      timing.attribution = 'inclusive-queue-wall'
+      timing.structures = codeStructureCosts(cpuStructures, sourceSpan ? [{ kind: 'filter', cpuMs: 0, gpuMs: preparationMs, sourceSpan }] : [])
+      timing.attribution = 'draw-preparation-wall'
     }
     const pipeline = await this.prepareFilter(version, program, transitionHandles, format)
     this.assertLive(); this.assertInput(input.texture)
@@ -479,7 +480,7 @@ export class VideoEditCodeGpu {
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     pass.setPipeline(pipeline)
     pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: input.texture.createView() }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: target.filterBuffer } }, ...blurred.map((value, index) => ({ binding: index + 3, resource: value.texture.createView() })), ...shaderTextures.map((value, index) => ({ binding: index + 3 + blurred.length, resource: value.createView() }))] }))
-    pass.draw(3); pass.end(); this.submit(encoder); this.pending = this.pending.then(completed); this.counts.filterFrames++
+    pass.draw(3); pass.end(); this.submit(encoder); preparationMs = performance.now() - gpuStart; this.pending = this.pending.then(completed); this.counts.filterFrames++
     return target.picture
     } finally { blurred.forEach(value => value.release()); new Set(shaderTextures).forEach(releaseShader) }
   }
@@ -665,11 +666,18 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     return target.picture
   }
   resetFramePerformance(): void { this.performanceFrames.clear(); this.performanceSpans.clear() }
-  framePerformance(): CodeFramePerformance[] {
-    const frames = [...this.performanceFrames.values()]; if (!frames.length) return []
+  captureFramePerformance(): () => CodeFramePerformance[] {
+    // Keep this request's records alive while the next pipelined frame resets the
+    // current maps. Queue completion still updates these captured span objects.
+    const frames = [...this.performanceFrames.values()]
+    const spans = new Map(this.performanceSpans)
+    return () => this.framePerformance(frames, spans)
+  }
+  framePerformance(frames = [...this.performanceFrames.values()], performanceSpans = this.performanceSpans): CodeFramePerformance[] {
+    if (!frames.length) return []
     // Queue completions overlap across targets. Merge their wall intervals and
     // subtract CPU evaluation intervals before reporting one sequence-frame total.
-    const spans = frames.flatMap(frame => this.performanceSpans.get(frame) ?? [])
+    const spans = frames.flatMap(frame => performanceSpans.get(frame) ?? [])
     const events = spans.flatMap(span => [
       { at: span.cpu[0], cpu: 1, gpu: 0 }, { at: span.cpu[1], cpu: -1, gpu: 0 },
       { at: span.gpu[0], cpu: 0, gpu: 1 }, { at: span.gpu[1], cpu: 0, gpu: -1 },
@@ -687,7 +695,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     }, { cpuMs: 0, gpuMs: 0 })
     const structures = codeStructureCosts(details.flatMap(frame => (frame.structures ?? []).map(value => ({ ...value, gpuMs: 0 }))), details.flatMap(frame => (frame.structures ?? []).map(value => ({ ...value, cpuMs: 0 }))), totals)
     const reuse = details.reduce((sum, frame) => { for (const key of Object.keys(sum) as Array<keyof typeof sum>) sum[key] += frame.reuse?.[key] ?? 0; return sum }, { culledGroups: 0, culledDraws: 0, frameHits: 0, subtreeHits: 0, subtreeMisses: 0, operations: 0 })
-    return [{ frame: frames.at(-1)!.frame, cpuMs: frames.reduce((sum, value) => sum + value.cpuMs, 0), gpuMs, budgetMs: frames.at(-1)!.budgetMs, ...(heaviest ? { heaviest } : {}), ...(details.length ? { structures, reuse, attribution: 'inclusive-queue-wall' as const } : {}) }]
+    return [{ frame: frames.at(-1)!.frame, cpuMs: frames.reduce((sum, value) => sum + value.cpuMs, 0), gpuMs, budgetMs: frames.at(-1)!.budgetMs, ...(heaviest ? { heaviest } : {}), ...(details.length ? { structures, reuse, attribution: 'draw-preparation-wall' as const } : {}) }]
   }
   releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle(); this.graphCache?.releaseIdle() }
   /** WebGPU exposes no available-VRAM query. Use the owned texture-byte budget,

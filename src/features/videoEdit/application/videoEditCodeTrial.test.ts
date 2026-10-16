@@ -57,13 +57,38 @@ it('按序列帧率回传测量与结构位置，超预算不拒绝画面，预�
   const measurements: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] = []
   const inputs = frames(); inputs[0].document.fps = 60
   const heaviest = { kind: 'repeat', cpuMs: 18, sourceSpan: { file: 'main.ts', start: 0, end: 8, startLine: 2, startColumn: 3, endLine: 2, endColumn: 11 } }
-  boundary.present.mockResolvedValueOnce({ ...result(), codePerformance: [{ frame: 0, cpuMs: 20, gpuMs: 4, budgetMs: 1000 / 60, heaviest }] })
+  boundary.present.mockImplementation(async () => ({ ...result(), codePerformance: [{ frame: 0, cpuMs: 20, gpuMs: 4, budgetMs: 1000 / 60, heaviest }] }))
   await trialVideoEditCodeFrames(inputs, new AbortController().signal, false, undefined, measurements)
-  expect(measurements).toEqual([{ frame: 0, cpuMs: 20, gpuMs: 4, budgetMs: 1000 / 60, heaviest }])
+  expect(measurements).toEqual([expect.objectContaining({ frame: 0, cpuMs: 20, gpuMs: 4, budgetMs: 1000 / 60, heaviest, preparation: expect.objectContaining({ sessionReused: false }), sampling: expect.objectContaining({ mode: 'repeat-frame' }) })])
   measurements.length = 0
-  boundary.present.mockResolvedValueOnce({ ...result(), codePerformance: [{ frame: 0, cpuMs: 1, gpuMs: 2, budgetMs: 1000 / 60 }] })
+  boundary.present.mockImplementation(async () => ({ ...result(), codePerformance: [{ frame: 0, cpuMs: 1, gpuMs: 2, budgetMs: 1000 / 60 }] }))
   await trialVideoEditCodeFrames(inputs, new AbortController().signal, false, undefined, measurements)
-  expect(measurements).toEqual([{ frame: 0, cpuMs: 1, gpuMs: 2, budgetMs: 1000 / 60 }])
+  expect(measurements).toEqual([expect.objectContaining({ frame: 0, cpuMs: 1, gpuMs: 2, budgetMs: 1000 / 60 })])
+})
+
+it('首次准备独立记录，前一帧预热后重画目标，不把整帧缓存当播放成本', async () => {
+  const inputs = frames(); inputs[0].frame = 96
+  const measurements: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] = []
+  const cold = { ...result(), codePerformance: [{ frame: 96, cpuMs: 10, gpuMs: 300, budgetMs: 33 }] }
+  const neighbour = result()
+  const steady = { ...result(), codePerformance: [{ frame: 96, cpuMs: 2, gpuMs: 8, budgetMs: 33 }] }
+  boundary.present.mockResolvedValueOnce(cold).mockResolvedValueOnce(neighbour).mockResolvedValueOnce(steady)
+  const kept = await trialVideoEditCodeFrames(inputs, new AbortController().signal, true, undefined, measurements)
+  expect(boundary.present.mock.calls.map(call => call[0])).toEqual([96, 95, 96])
+  expect(measurements[0]).toMatchObject({ cpuMs: 2, gpuMs: 8, preparation: { cpuMs: 10, gpuMs: 300, sessionReused: false }, sampling: { mode: 'adjacent-frame', precedingFrame: 95 } })
+  expect(kept).toBe(steady.bitmap); expect(cold.bitmap.close).toHaveBeenCalledOnce(); expect(neighbour.bitmap.close).toHaveBeenCalledOnce()
+  expect(steady.bitmap.close).not.toHaveBeenCalled(); kept!.close()
+})
+
+it('相邻诊断帧超预算不改变目标验收，明确标记未取得稳态而保留目标像素', async () => {
+  const inputs = frames(); inputs[0].frame = 96
+  const measurements: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] = []
+  const cold = { ...result(), codePerformance: [{ frame: 96, cpuMs: 10, gpuMs: 300, budgetMs: 33 }] }
+  boundary.present.mockResolvedValueOnce(cold).mockRejectedValueOnce(new Error('相邻帧超出预算'))
+  const kept = await trialVideoEditCodeFrames(inputs, new AbortController().signal, true, undefined, measurements)
+  expect(kept).toBe(cold.bitmap)
+  expect(measurements[0]).toMatchObject({ cpuMs: 10, gpuMs: 300, sampling: { mode: 'unavailable', error: '相邻帧超出预算' } })
+  expect(cold.bitmap.close).not.toHaveBeenCalled(); kept!.close()
 })
 
 it('末帧和收集模式移交独立位图，销毁会话不提前关闭调用方画面', async () => {

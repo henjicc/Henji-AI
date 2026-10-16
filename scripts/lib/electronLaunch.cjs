@@ -273,6 +273,9 @@ async function launchElectronApp({
     fs.mkdirSync(launchEnv.HENJI_ISOLATED_APP_DATA, { recursive: true })
   }
   if (useElectronApi || process.env.HENJI_SMOKE_USE_ELECTRON_API === '1') {
+    let launchedApp
+    let launchedPid
+    let processOutput = ''
     try {
       const app = await electron.launch({
         executablePath: target.executable,
@@ -280,7 +283,11 @@ async function launchElectronApp({
         cwd: target.cwd,
         env: createElectronEnv(launchEnv),
       })
+      launchedApp = app
+      app.process().stderr?.on('data', chunk => { processOutput = appendProcessOutput(processOutput, chunk) })
+      app.process().stdout?.on('data', chunk => { processOutput = appendProcessOutput(processOutput, chunk) })
       const nativePid = await app.evaluate(() => process.pid)
+      launchedPid = nativePid
       const page = await app.firstWindow({ timeout: 30000 })
       const restoreOnboarding = skipOnboarding
         ? await suppressOnboardingForAutomation(page)
@@ -309,8 +316,9 @@ async function launchElectronApp({
         },
       }
     } catch (error) {
+      if (launchedApp) await stopElectronChild(launchedApp.process(), launchedPid)
       await cleanupIsolatedUserDataDir(ownedUserDataDir)
-      throw error
+      throw new Error(processOutput.trim() ? `${error.message}\nElectron process output:\n${processOutput.trim()}` : error.message, { cause: error })
     }
   }
 

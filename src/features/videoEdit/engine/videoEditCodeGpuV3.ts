@@ -424,7 +424,6 @@ export class VideoEditCodeGpuV3 {
     this.vectors?.beginFrame()
     const target: Image = { texture, width, height, x: 0, y: 0 }; let encoder = this.device.createCommandEncoder(); this.clear(encoder, target); let count = 0; let shaderCount = 0
     const shaderResults = new Map<string, Image>()
-    const measurements: Promise<void>[] = []
     let batchTarget: Image | undefined
     const batch: { command: Extract<CodeDrawCommand, { kind: 'rect' | 'ellipse' }>; matrix: CodeMatrix; opacity: number }[] = []
     const vectors: CodeVectorInstance[] = []
@@ -574,14 +573,14 @@ export class VideoEditCodeGpuV3 {
         const started = performance.now()
         const pending = draw(command, target, CODE_IDENTITY); if (pending) await pending
         if (profile && command.sourceSpan && !codeInvisible(command, codeTransform(command), width, height)) {
-          flush()
-          const entry = { kind: command.kind, sourceSpan: command.sourceSpan, cpuMs: 0, gpuMs: 0 }
-          this.drawCosts.push(entry)
-          measurements.push(this.device.queue.onSubmittedWorkDone().then(() => { entry.gpuMs = performance.now() - started }))
+          // Attribution must not split vector batches or fence the GPU for every
+          // source structure. Frame latency still waits for the queue in the host;
+          // these inclusive scopes measure draw preparation, not GPU execution.
+          this.drawCosts.push({ kind: command.kind, sourceSpan: command.sourceSpan, cpuMs: 0, gpuMs: performance.now() - started })
         }
       }
       flush()
-      await Promise.all(measurements)
+      if (profile) await this.device.queue.onSubmittedWorkDone()
       if (signature) this.frames.set(texture, signature)
       this.groupSignatures.set(texture, currentGroups)
       this.groupProbes.set(texture, currentProbes)
