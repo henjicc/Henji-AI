@@ -3,15 +3,17 @@ import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest, RenderResponse } from './videoEditWorker'
 import type { VideoEditPresentationCapture } from './videoEditGpuCompositor'
+import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 
-const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn() }))
+const state = vi.hoisted(() => ({ render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[] }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   constructor(readonly document: unknown) {}
   render = state.render
   async dispose() {}
   cancelPresentation() {}
   codeDiagnostics() { return {} }
-  codePerformance() { return [] }
+  codePerformance() { return state.performance }
+  captureCodePerformance() { const frames = state.performance; return () => frames }
 } }))
 vi.mock('./videoEditTrackingPixels', () => ({ readVideoEditTrackingRgb: state.readRgb }))
 
@@ -36,7 +38,7 @@ async function init(direct = false): Promise<void> {
 beforeEach(async () => {
   vi.stubGlobal('self', worker)
   vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap()))
-  postMessage.mockClear(); state.render.mockReset(); messages.length = 0
+  postMessage.mockClear(); state.render.mockReset(); messages.length = 0; state.performance = []
   state.readRgb.mockReset().mockReturnValue(new Uint8Array([1, 2, 3]))
   await import('./videoEditWorker')
   await init()
@@ -95,4 +97,22 @@ it('GPU 完成失败、取消呈现和发送失败都关闭快照，不回报黑
   const unsent = bitmap(); render(unsent)
   postMessage.mockImplementationOnce(() => { throw new Error('发送失败') })
   expect((await send(request)).error).toContain('发送失败'); expect(unsent.close).toHaveBeenCalledOnce()
+})
+
+it('两帧流水的迟到完成保留各自成本，不读下一帧重置后的统计', async () => {
+  await init(true)
+  let complete!: () => void
+  const pending = new Promise<void>(resolve => { complete = resolve })
+  state.render.mockImplementation(async (frame: number) => {
+    state.performance = [{ frame, cpuMs: frame, gpuMs: frame + 1, budgetMs: 33 }]
+    return { presented: true, completion: frame === 30 ? pending : Promise.resolve(), gpuMs: 1 }
+  })
+  const firstId = ++nextId
+  worker.onmessage({ data: { id: firstId, kind: 'render', frame: 30, sequential: true, deadline: performance.now() + 1000 } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === firstId && message.phase === 'submitted')).toBe(true))
+  const second = await send({ kind: 'render', frame: 31, sequential: true, deadline: performance.now() + 1000 })
+  complete()
+  await vi.waitFor(() => expect(messages.some(message => message.id === firstId && !message.phase)).toBe(true))
+  expect(second.codePerformance?.[0]).toMatchObject({ frame: 31, gpuMs: 32 })
+  expect(messages.find(message => message.id === firstId && !message.phase)?.codePerformance?.[0]).toMatchObject({ frame: 30, gpuMs: 31 })
 })

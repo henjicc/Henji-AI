@@ -74,7 +74,7 @@ describe('保守可见性与确定性', () => {
   it('前五项成本含源码位置、占比、复用统计，超预算文本不丢详情', () => {
     const span = { file: 'main.ts', start: 0, end: 10, startLine: 2, startColumn: 3, endLine: 2, endColumn: 13 }
     const structures = codeStructureCosts([{ kind: 'group', cpuMs: 20, sourceSpan: span }], [{ kind: 'group', cpuMs: 0, gpuMs: 30, sourceSpan: span }])
-    const value = codeFramePerformanceSchema.parse({ frame: 0, cpuMs: 20, gpuMs: 30, budgetMs: 33, structures, attribution: 'inclusive-queue-wall', reuse: { operations: 1, culledGroups: 2, culledDraws: 3, frameHits: 1, subtreeHits: 2, subtreeMisses: 1 } })
+    const value = codeFramePerformanceSchema.parse({ frame: 0, cpuMs: 20, gpuMs: 30, budgetMs: 33, structures, attribution: 'draw-preparation-wall', reuse: { operations: 1, culledGroups: 2, culledDraws: 3, frameHits: 1, subtreeHits: 2, subtreeMisses: 1 } })
     expect(value.structures?.[0]).toMatchObject({ cpuShare: 1, gpuShare: 1 })
     expect(codePerformanceMessage(value)).toContain('main.ts:2:3')
     expect(codePerformanceMessage(value)).toContain('整帧复用 1')

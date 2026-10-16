@@ -256,6 +256,7 @@ export class VideoEditGpuCompositor {
     return this.codeRuntime
   }
   codePerformance(): import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.codeRuntime?.framePerformance() ?? [] }
+  captureCodePerformance(): () => import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.codeRuntime?.captureFramePerformance() ?? (() => []) }
   codeDiagnostics(): ReturnType<VideoEditCodeGpu['diagnostics']> | undefined { return this.codeRuntime?.diagnostics() }
   /** High-precision path counters: owned `rgba16float` snapshots, frames composed through the precise target and its size. */
   precisionDiagnostics() { return { highPrecisionSnapshots: this.precision.snapshots, highPrecisionFrames: this.precision.frames, preciseTargetBytes: this.precise ? this.precise.width * this.precise.height * 8 : 0 } }

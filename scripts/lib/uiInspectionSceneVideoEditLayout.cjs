@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
-const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
+const { openVideoEditFile, readVideoEditFile, closeVideoEditDockPanel, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -80,7 +80,7 @@ async function observeWorkers(page) {
           if (request.kind === 'init') record.initialized = true
           if (request.kind === 'dispose') record.disposedAt = receivedAt
           evidence.events.push({ worker: record.id, kind: `${request.kind}.completed`, frame: request.frame, at: receivedAt, elapsedMs: receivedAt - request.at, error: event.data.error,
-            presented: event.data.presented, decodeMs: event.data.decodeMs, gpuMs: event.data.gpuMs, cacheHits: event.data.cacheHits, codeResources: event.data.codeResources })
+            presented: event.data.presented, decodeMs: event.data.decodeMs, gpuMs: event.data.gpuMs, cacheHits: event.data.cacheHits, codeResources: event.data.codeResources, codePerformance: event.data.codePerformance })
         })
       }
       postMessage(message, transfer) {
@@ -89,7 +89,8 @@ async function observeWorkers(page) {
           const request = { kind: message.kind, frame: message.frame, at: performance.now() }
           record.pending.set(message.id, request)
           evidence.events.push({ worker: record.id, ...request })
-          if (message.kind === 'init') record.renderSize = { width: message.document.width, height: message.document.height, fps: message.document.fps, previewWidth: message.previewWidth }
+          if (message.kind === 'init') { record.sequenceId = message.document.id; record.direct = !!message.surface; record.renderSize = { width: message.document.width, height: message.document.height, fps: message.document.fps, previewWidth: message.previewWidth } }
+          if (message.kind === 'update') { record.sequenceId = message.document.id; record.renderSize = { ...record.renderSize, width: message.document.width, height: message.document.height, fps: message.document.fps } }
         }
         return transfer === undefined ? super.postMessage(message) : super.postMessage(message, transfer)
       }
