@@ -23,8 +23,12 @@ import { ContactSheetBitmap, ContactSheetCanvas } from '@/tests/videoEditContact
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { codeMultiply, codeTextBaseBounds, codeTransform } from '@/core/videoEdit/codeMaterial/geometry'
+import { createCanvasOracle } from './videoEditCodeCanvas.testing'
 
 let gpu: Gpu; let device: Gpu['gpu']; let wrapped: GpuDevice; let runtime: VideoEditCodeGpuV3
+let queueSubmissions = 0
+let canvasOracle: Awaited<ReturnType<typeof createCanvasOracle>> | undefined
 const W = 64; const H = 64
 const source = (body: string, kind = 'generator', shaders = ''): string => `export default {apiVersion:1,languageVersion:3,name:"GPU v3",kind:"${kind}",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{},${shaders ? `shaders:${shaders},` : ''}render(ctx){${body}}}`
 const context = { time: .4, localTime: .4, sequenceTime: .4, width: W, height: H, frame: 24, fps: 60 }
@@ -32,6 +36,7 @@ const testMeasure: CodeTextMeasurer = request => layoutCodeText(request, (text, 
 beforeAll(async () => {
   gpu = await initShaderGraphTestGpu(); device = gpu.gpu
   const queue = new Proxy(device.queue, { get(target, key) {
+    if (key === 'submit') return (commands: Parameters<typeof device.queue.submit>[0]) => { queueSubmissions++; target.submit(commands) }
     if (key === 'copyExternalImageToTexture') return (from: { source: { pixels: Uint8Array; width: number; height: number } }, to: { texture: Parameters<typeof device.queue.writeTexture>[0]['texture'] }) => target.writeTexture(to, from.source.pixels, { bytesPerRow: from.source.width * 4 }, [from.source.width, from.source.height])
     const value = Reflect.get(target, key) as unknown; return value instanceof Function ? value.bind(target) : value
   } })
@@ -41,8 +46,9 @@ beforeAll(async () => {
     const value = Reflect.get(target, key) as unknown; return value instanceof Function ? value.bind(target) : value
   } }) as unknown as GpuDevice
   runtime = new VideoEditCodeGpuV3(wrapped, { allocate: (width, height) => texture(width, height), release: texture => texture.destroy() }, rasterFixture)
+  if (process.env.HENJI_T108_CANVAS === '1') canvasOracle = await createCanvasOracle()
 })
-afterAll(async () => { await runtime?.dispose(); gpu?.dispose() })
+afterAll(async () => { await canvasOracle?.dispose(); await runtime?.dispose(); gpu?.dispose() })
 function texture(width = W, height = H): GpuTexture { return device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x10 }) as unknown as GpuTexture }
 async function read(texture: GpuTexture, width = W, height = H): Promise<Uint8Array> {
   const bytesPerRow = Math.ceil(width * 4 / 256) * 256; const buffer = device.createBuffer({ size: bytesPerRow * height, usage: 0x01 | 0x08 }); const encoder = device.createCommandEncoder()
@@ -52,6 +58,114 @@ async function read(texture: GpuTexture, width = W, height = H): Promise<Uint8Ar
   buffer.unmap(); buffer.destroy(); return pixels
 }
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.slice((y * W + x) * 4, (y * W + x) * 4 + 4)]
+
+// Independent oracle: expand perChar into the original individual text draws.
+// This bypasses text batching/source reuse, retaining the same raster and filters.
+function individualCharacters(commands: readonly CodeDrawCommand[]): CodeDrawCommand[] {
+  return commands.flatMap((command): CodeDrawCommand[] => {
+    if (command.kind === 'group') return [{ ...command, children: individualCharacters(command.children) }]
+    if (command.kind !== 'text' || !command.perChar || !command.layout) return [command]
+    const layout = command.layout; const box = codeTextBaseBounds(command)
+    return layout.glyphs.flatMap((glyph, i): CodeDrawCommand[] => {
+      const style = command.perChar![i]
+      if (!style.opacity) return []
+      const row = Math.round(glyph.y / (layout.fontSize * (command.lineHeight ?? 1.2)))
+      const width = layout.lineWidths?.[row] ?? layout.width
+      return [{ ...command,
+        x: box.x + glyph.x + (command.align === 'center' ? (box.width - width) / 2 : command.align === 'right' ? box.width - width : 0), y: box.y + glyph.y,
+        text: glyph.text, align: 'left', baseline: 'top', perChar: undefined,
+        layout: { ...layout, width: glyph.width, height: layout.fontSize * (command.lineHeight ?? 1.2), lines: [glyph.text], lineWidths: [glyph.width], glyphs: [{ ...glyph, x: 0, y: 0 }] },
+        opacity: (command.opacity ?? 1) * style.opacity, rotation: style.rotation, skewX: style.skewX, skewY: 0,
+        paint: style.fill ?? command.paint, blur: style.blur ?? command.blur, glow: style.glow ?? command.glow,
+        scaleX: style.scale, scaleY: style.scale, anchorX: 0, anchorY: 0,
+        elementTransform: codeMultiply(codeTransform(command), [1, 0, 0, 1, style.x, style.y]), elementPath: [...(command.elementPath ?? []), `char:${i}`],
+      }]
+    })
+  })
+}
+
+it.each([
+  ['blur', 'blur:(i+ctx.time)*1.4', ''],
+  ['glow', 'glow:{radius:2+i+ctx.time,intensity:.8,color:[.2,.6,1,.7]}', ''],
+  ['mixed', 'x:i*.3,y:sin(i+ctx.time)*5,scale:.8+i*.05,rotation:i*2,skewX:i*3,opacity:.3+i*.1,fill:rgba(i/6,.7,1-i/6,.8),blur:i+ctx.time,glow:{radius:3+i,intensity:.7,color:[1,.2,.4,.6]}', ',stroke:[.1,.8,.5,.7],strokeWidth:1.2,shadow:{x:2,y:-1,blur:2,color:[.1,.2,.3,.5]},blend:"screen"'],
+  ['gradient', 'y:i*2,blur:i+ctx.time', ',fill:linearGradient({x1:50,y1:0,x2:320,y2:150,stops:[[0,[1,.2,.3,.7]],[1,[.2,.8,1,.8]]]})'],
+])('t111 逐字%s对照原单字路径，通道容差1/255，变化不超过0.1%%', async (name, style, extra) => {
+  const width = 512; const height = 256
+  const text = JSON.stringify(name === 'mixed' ? 'Ae\u0301你\nD中F' : 'ABCDEF')
+  const program = compileCodeMaterial(source(`return [group({x:3.25,y:5,scaleX:1.2,scaleY:.9,rotation:2,opacity:.8,clip:{x:0,y:0,width:450,height:240}},[text({x:210,y:90,text:${text},fontStyle:"italic",fontSize:32,align:"center",baseline:"middle",letterSpacing:2+ctx.time,perChar:(i,n)=>({${style}})${extra}})])];`))
+  const raster = canvasOracle?.raster ?? rasterFixture
+  const batch = new VideoEditCodeGpuV3(wrapped, { allocate: texture, release: t => t.destroy() }, raster)
+  const reference = new VideoEditCodeGpuV3(wrapped, { allocate: texture, release: t => t.destroy() }, raster)
+  const actual = texture(width, height); const expected = texture(width, height)
+  device.pushErrorScope('validation')
+  try {
+    for (const time of [0, .1, .6, .1]) {
+      const commands = evaluateCodeMaterial(program, { ...context, width, height, time }, {}, { measureText: testMeasure })
+      const before = batch.counts.submissions; const refBefore = reference.counts.submissions
+      await batch.render(actual, width, height, commands)
+      await reference.render(expected, width, height, individualCharacters(commands))
+      const a = await read(actual, width, height); const b = await read(expected, width, height)
+      expect(a.some((value, index) => index % 4 === 3 && value > 0)).toBe(true)
+      let max = 0; let changed = 0
+      for (let i = 0; i < a.length; i++) { const delta = Math.abs(a[i] - b[i]); max = Math.max(max, delta); if (delta) changed++ }
+      expect(max, `${name} time=${time}`).toBeLessThanOrEqual(1)
+      expect(changed / a.length, `${name} time=${time}`).toBeLessThanOrEqual(.001)
+      if (time === 0) expect(batch.counts.submissions - before).toBeLessThan(reference.counts.submissions - refBefore)
+    }
+  } finally { actual.destroy(); expected.destroy(); await batch.dispose(); await reference.dispose() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('t111 字形缓存不随字距/半径重画，字体/分辨率失效，失败重试及绘制预算保持', async () => {
+  const raster = vi.fn(rasterFixture)
+  let resident = 0
+  const sizes = new Map<GpuTexture, number>()
+  const batch = new VideoEditCodeGpuV3(wrapped, {
+    allocate: (w, h) => { const t = texture(w, h); sizes.set(t, w * h * 4); resident += w * h * 4; return t },
+    release: t => { resident -= sizes.get(t)!; sizes.delete(t); t.destroy() },
+  }, raster)
+  const output = texture(256, 128)
+  const program = compileCodeMaterial(source('return [text({x:20,y:50,text:"AAA",fontSize:24,letterSpacing:ctx.time,perChar:(i,n)=>({blur:3+ctx.time,glow:{radius:8,intensity:1,color:[1,0,0,1]}})})];'))
+  const commands = (time: number) => evaluateCodeMaterial(program, { ...context, width: 256, height: 128, time }, {}, { measureText: testMeasure })
+  try {
+    await batch.render(output, 256, 128, commands(0)); const initial = raster.mock.calls.length
+    await batch.render(output, 256, 128, commands(.1)); const warm = raster.mock.calls.length
+    await batch.render(output, 256, 128, commands(.2))
+    expect(raster.mock.calls.length).toBe(warm); expect(warm).toBeLessThanOrEqual(initial + 1)
+    const scaled = commands(.3); scaled[0].scaleX = 2
+    await batch.render(output, 256, 128, scaled); expect(raster.mock.calls.length).toBeGreaterThan(warm)
+    const revision = vi.spyOn(fontFaces, 'documentFontRevision').mockReturnValue(56789)
+    try {
+      const calls = raster.mock.calls.length
+      raster.mockRejectedValueOnce(new Error('fixture upload failure'))
+      await expect(batch.render(output, 256, 128, commands(.4))).rejects.toThrow('fixture upload failure')
+      await batch.render(output, 256, 128, commands(.4)); expect(raster.mock.calls.length).toBeGreaterThan(calls)
+    } finally { revision.mockRestore() }
+    const outside: CodeDrawCommand = { kind: 'rect', x: 500, y: 500, width: 1, height: 1, radius: 0, fill: [1, 1, 1, 1] }
+    await expect(batch.render(output, 256, 128, [...Array.from({ length: 4095 }, () => outside), ...commands(.5)])).rejects.toMatchObject({ code: 'BUDGET' })
+    await batch.render(output, 256, 128, commands(.5))
+    expect(batch.reuse.frameHits).toBe(0)
+  } finally { output.destroy(); await batch.dispose() }
+  expect(resident).toBe(0)
+})
+
+it('t111 可选字形缓存无余量时回到原栅格尺寸，匿名文字互不覆盖', async () => {
+  const output = texture(256, 128); const expected = texture(256, 128)
+  const limited = new VideoEditCodeGpuV3(wrapped, { allocate: texture, release: t => t.destroy(), canRetain: () => false }, rasterFixture)
+  const reference = new VideoEditCodeGpuV3(wrapped, { allocate: texture, release: t => t.destroy() }, rasterFixture)
+  const program = compileCodeMaterial(source('return [text({x:20,y:50,text:"AB",fontSize:24,perChar:(i,n)=>({blur:2+ctx.time})}),text({x:60,y:60,text:"CD",fontSize:24,color:[1,0,0,1],perChar:(i,n)=>({blur:3+ctx.time})})];'))
+  device.pushErrorScope('validation')
+  try {
+    for (const time of [0, .5, 0]) {
+      const commands = evaluateCodeMaterial(program, { ...context, width: 256, height: 128, time }, {}, { measureText: testMeasure })
+      for (const command of commands) { delete command.elementPath; delete command.elementId }
+      await limited.render(output, 256, 128, commands)
+      await reference.render(expected, 256, 128, individualCharacters(commands))
+      expect(await read(output, 256, 128)).toEqual(await read(expected, 256, 128))
+    }
+  } finally { output.destroy(); expected.destroy(); await limited.dispose(); await reference.dispose() }
+  expect(await device.popErrorScope()).toBeNull()
+})
 
 it('t109 整帧复用、微小变化、外部写入、尺寸与目标隔离', async () => {
   const output = texture(); const other = texture()
@@ -149,16 +263,20 @@ it.runIf(!!process.env.HENJI_T109_BENCH)('t109 分段基准与改前像素（每
     const output = texture(1920, 1080)
     try {
       for (const start of [30, 96, 166]) {
-        const cpu: number[] = []; const gpuTimes: number[] = []
+        const cpu: number[] = []; const gpuTimes: number[] = []; const totals: number[] = []; const submissions: number[] = []
         let frameHits = 0; let subtreeHits = 0; let changedChannels = 0; let maxDelta = 0
         for (let i = -5; i < 12; i++) {
           const frame = start + Math.max(0, i); const time = frame / 30
           const before = performance.now()
           const commands = evaluateCodeMaterial(program, { ...context, width: 1920, height: 1080, fps: 30, frame, time, localTime: time, sequenceTime: time }, {}, { measureText: testMeasure, cullInvisible: true })
           const evaluated = performance.now()
+          const countsBefore = { ...runtime.counts }
+          const submissionsBefore = queueSubmissions
           await runtime.render(output, 1920, 1080, commands)
+          const submitted = performance.now()
           await device.queue.onSubmittedWorkDone()
-          if (i >= 0) { cpu.push(evaluated - before); gpuTimes.push(performance.now() - evaluated); frameHits += runtime.reuse.frameHits; subtreeHits += runtime.reuse.subtreeHits }
+          if (process.env.HENJI_T111_PROFILE && name === 'complex-to-simple' && start === 96 && i >= 0) process.stdout.write(`T111_FRAME ${JSON.stringify({ frame, submit: submitted - evaluated, completed: performance.now() - evaluated, counts: Object.fromEntries(Object.entries(runtime.counts).map(([key, value]) => [key, value - countsBefore[key as keyof typeof countsBefore]])) })}\n`)
+          if (i >= 0) { const completed = performance.now(); cpu.push(evaluated - before); gpuTimes.push(completed - evaluated); totals.push(completed - before); submissions.push(queueSubmissions - submissionsBefore); frameHits += runtime.reuse.frameHits; subtreeHits += runtime.reuse.subtreeHits }
         }
         const pixels = await read(output, 1920, 1080)
         const path = join(tmpdir(), `henji-t109-${name}-${start}.rgba`)
@@ -171,7 +289,8 @@ it.runIf(!!process.env.HENJI_T109_BENCH)('t109 分段基准与改前像素（每
           changedChannels = changed; maxDelta = max
         }
         cpu.sort((a, b) => a - b); gpuTimes.sort((a, b) => a - b)
-        report.push({ name, start, cpuMedian: cpu[6], cpuP95: cpu[11], gpuMedian: gpuTimes[6], gpuP95: gpuTimes[11], frameHits, subtreeHits, changedChannels, maxDelta })
+        totals.sort((a, b) => a - b); submissions.sort((a, b) => a - b)
+        report.push({ name, start, cpuMedian: cpu[6], cpuP95: cpu[11], gpuMedian: gpuTimes[6], gpuP95: gpuTimes[11], totalMedian: totals[6], totalP95: totals[11], submissionsMedian: submissions[6], frameHits, subtreeHits, changedChannels, maxDelta })
       }
     } finally { output.destroy() }
   }

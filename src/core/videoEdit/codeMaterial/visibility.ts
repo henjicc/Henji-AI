@@ -5,6 +5,10 @@ type Box = { x: number; y: number; width: number; height: number }
 /** Conservative support, including raster padding and the default miter limit.
  * Never cull animated glyphs using their unanimated text rectangle. */
 export function codeOutside(box: Box, matrix: CodeMatrix, width: number, height: number, pad = 2): boolean {
+  if (matrix[0] === 1 && matrix[1] === 0 && matrix[2] === 0 && matrix[3] === 1 && box.width >= 0 && box.height >= 0) {
+    return box.x + box.width + pad + matrix[4] < 0 || box.y + box.height + pad + matrix[5] < 0
+      || box.x - pad + matrix[4] > width || box.y - pad + matrix[5] > height
+  }
   const points = [[box.x - pad, box.y - pad], [box.x + box.width + pad, box.y - pad], [box.x - pad, box.y + box.height + pad], [box.x + box.width + pad, box.y + box.height + pad]].map(([x, y]) => codePoint(matrix, x, y))
   return points.every(p => p[0] < 0) || points.every(p => p[1] < 0) || points.every(p => p[0] > width) || points.every(p => p[1] > height)
 }
