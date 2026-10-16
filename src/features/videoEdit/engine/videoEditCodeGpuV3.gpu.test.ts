@@ -424,7 +424,9 @@ describe('t101 CPU/GPU 像素契约', () => {
     const target=texture();try {
       await runtime.render(target,W,H,commands)
       const actual=await read(target)
-      actual.forEach((value,i)=>expect(Math.abs(value-reference.pixels[i])).toBeLessThanOrEqual(1))
+      // 0°/360° 接缝两侧颜色从首色标跳到末色标，软件与硬件 GPU 的浮点误差会让紧贴接缝的像素落到另一侧；只豁免离接缝 1 像素内的像素。
+      const seam=(index:number):boolean=>{const p=index>>2;const dx=p%W+.5-32;const dy=Math.floor(p/W)+.5-32;const a=((Math.atan2(dy,dx)/(Math.PI*2)-45/360)%1+1)%1;return Math.min(a,1-a)*Math.PI*2*Math.hypot(dx,dy)<1}
+      actual.forEach((value,i)=>{if(!seam(i))expect(Math.abs(value-reference.pixels[i])).toBeLessThanOrEqual(1)})
     }finally{target.destroy()}
   })
   it('时间uniform、动态半径、回弹、参数repeat与负底数幂真实GPU运行并保留测量',async()=>{
