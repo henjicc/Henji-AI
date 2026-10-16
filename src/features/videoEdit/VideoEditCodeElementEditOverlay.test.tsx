@@ -28,6 +28,7 @@ vi.mock('./engine/videoEditCodeCompiler', async () => ({ VideoEditCodeCompiler: 
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
   async updateDocument() {}
+  async replaceContent() {}
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}
 } }))

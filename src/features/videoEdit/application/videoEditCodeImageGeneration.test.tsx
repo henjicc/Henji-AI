@@ -45,7 +45,7 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
   return { VideoEditCodeCompiler: class { async compile(source: string) { return compileCodeMaterial(source) } dispose() {} } }
 })
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
-  async updateDocument() {} async dispose() {}
+  async updateDocument() {} async replaceContent() {} async dispose() {}
   async present() { if (state.failTrial) throw new Error('试渲染失败'); return { presented: true, bitmap: { width: 64, height: 64, close() {} } } }
 } }))
 vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: class { async getPrimaryVideoTrack() { return null } async getPrimaryAudioTrack() { return null } dispose() {} } }))

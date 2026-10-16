@@ -39,6 +39,10 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import * as mediaService from './videoEditMedia'
 import * as projectService from './videoEditService'
 import { openSeededVideoEdit, replaceSavedVideoEdit, savedVideoEdit, reopenVideoEdit, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
+import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
+
+/** 短活共用的离屏会话按设计常驻；回收它之后不应再有任何渲染器存活。 */
+async function expectRenderersReleased(): Promise<void> { await videoEditOffscreenPool.dispose(); expect(boundary.activeRenderers).toBe(0) }
 
 const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[] }))
 // Only thread/pixel boundaries are replaced. AST language checks, domain
@@ -54,6 +58,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   setTracks() {}
   constructor(private document: VideoEditComposition) { boundary.activeRenderers++; boundary.dimensions.push([document.width, document.height]) }
   async updateDocument(document: VideoEditComposition) { this.document = document }
+  async replaceContent(document: VideoEditComposition) { this.document = document }
   async present(frame: number) {
     boundary.trialCalls++; boundary.presentedFrames.push(frame); await boundary.trialGate
     if (boundary.failTrial) throw new Error('GPU trial rejected')
@@ -233,7 +238,7 @@ it('隐藏或关闭滤镜的候选仍进入真实范围证明，负转场不安�
     const baseline = owner.document; const history = owner.past.length; const proofs = boundary.filterProofs
     const editor = readVideoEditCodeEditor(id, seq, right, effectId)
     await expect(prepareVideoEditCodeCandidate(editor.target, unsafe)).rejects.toThrow(/范围|除|零|divis|分母/i)
-    expect(boundary.filterProofs).toBeGreaterThan(proofs); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
+    expect(boundary.filterProofs).toBeGreaterThan(proofs); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); await expectRenderersReleased()
   }
   editVideoSequence(id, seq, sequence => { sequence.tracks.find(track => track.index === 1)!.enabled = true; return sequence })
   const adjustmentItem = createVideoEditAdjustmentItem(id); const [adjustmentClipId] = appendVideoEditItems(id, [adjustmentItem], seq, { frame: 0, track: 2 })
@@ -242,15 +247,15 @@ it('隐藏或关闭滤镜的候选仍进入真实范围证明，负转场不安�
   const baseline = owner.document; const history = owner.past.length; const proofs = boundary.filterProofs
   const adjustmentEditor = readVideoEditCodeEditor(id, seq, adjustmentClipId, adjustmentEffect)
   await expect(prepareVideoEditCodeCandidate(adjustmentEditor.target, unsafe.replace('ctx.localTime+.5', 'ctx.localTime'))).rejects.toThrow(/范围|除|零|divis|分母/i)
-  expect(boundary.filterProofs).toBeGreaterThan(proofs); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
+  expect(boundary.filterProofs).toBeGreaterThan(proofs); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); await expectRenderersReleased()
 })
 it('滤镜创作入口在发布前拒绝生成源码，检查通过后只新增滤镜定义', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const baseline = owner.document; const history = owner.past.length
   await expect(createVideoEditFilterMaterials(owner.document.id, [{ source }])).rejects.toThrow('输入滤镜')
-  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); await expectRenderersReleased()
   const [id] = await createVideoEditFilterMaterials(owner.document.id, [{ source: filterSource }])
   expect(owner.document.codeMaterials!.map(definition => definition.id)).toEqual([id]); expect(owner.document.items).toEqual([])
-  expect(owner.past).toHaveLength(history + 1); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.past).toHaveLength(history + 1); await expectRenderersReleased()
 })
 it('已验证效果的排序开关强度复制删除和转场直接提交，新代码参数检查失败不留下状态', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
@@ -277,7 +282,7 @@ it('已验证效果的排序开关强度复制删除和转场直接提交，新�
   await expect(updateVideoEditTransition(projectId, sequenceId, transitionId, 500)).rejects.toThrow('窗口')
   boundary.failTrial = true
   await expect(updateVideoEditEffect(target, first, { parameters: { gain: .9 } })).rejects.toThrow('GPU trial')
-  expect(owner.document).toBe(stable); expect(owner.past).toHaveLength(past); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.document).toBe(stable); expect(owner.past).toHaveLength(past); await expectRenderersReleased()
   await updateVideoEditEffect(target, first, { amount: .5 })
   const callsBeforeDelete = boundary.trialCalls
   await deleteVideoEditEffects(target, [first]); await deleteVideoEditTransition(projectId, sequenceId, transitionId)
@@ -307,7 +312,7 @@ it('效果源码候选只迁移指定稳定实例，并检查转场边界后单�
 it('原创滤镜先完整试渲染后只发布源码定义，追加滤镜版本保持类型与既有引用', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const history = owner.past.length
   const [definitionId] = await createVideoEditCodeMaterials(id, [{ source: filterSource }])
-  expect(boundary.trialCalls).toBe(1); expect(boundary.activeRenderers).toBe(0); expect(boundary.dimensions).toEqual([[3840, 2160]])
+  expect(boundary.trialCalls).toBe(1); await expectRenderersReleased(); expect(boundary.dimensions).toEqual([[3840, 2160]])
   expect(owner.document.items).toEqual([]); expect(owner.document.media).toEqual([]); expect(owner.past).toHaveLength(history + 1)
   const original = owner.document.codeMaterials![0]; expect(original.id).toBe(definitionId)
   const [versionId] = await createVideoEditCodeVersions(id, [{ definitionId, source: filterSource.replace('default:.5', 'default:.7') }])
@@ -325,13 +330,13 @@ it('滤镜试渲染失败、取消和剪辑变化都不发布部分源码或留�
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const baseline = owner.document; const history = owner.past.length
   boundary.failTrial = true
   await expect(createVideoEditCodeMaterials(id, [{ source: filterSource }])).rejects.toThrow('GPU trial')
-  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); await expectRenderersReleased()
   boundary.failTrial = false
   let release!: () => void; boundary.trialGate = new Promise(resolve => { release = resolve })
   const controller = new AbortController(); const pending = createVideoEditCodeMaterials(id, [{ source: filterSource }], controller.signal)
   const rejected = expect(pending).rejects.toThrow('取消')
   await vi.waitFor(() => expect(boundary.activeRenderers).toBe(1)); controller.abort(new Error('主动取消')); release(); await rejected
-  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); await expectRenderersReleased()
 })
 it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜类型和范围失败没有额外写入', async () => {
   const document = createVideoEditDocument('真实固定滤镜'); const sequence = document.sequences[0]
@@ -367,24 +372,24 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
 })
-afterEach(async () => { for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+afterEach(async () => { await videoEditOffscreenPool.dispose(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
-it('候选返回前渲染器释放失败时仍关闭候选画面并释放试渲染队列', async () => {
-  const owner = (await createLegacyTrackVideoEditProject()); const close = vi.fn()
-  vi.spyOn(VideoEditRenderSession.prototype, 'present').mockResolvedValueOnce({ id: 1, presented: true, bitmap: { width: 1, height: 1, close } })
-  vi.spyOn(VideoEditRenderSession.prototype, 'dispose').mockRejectedValueOnce(new Error('释放失败'))
+it('离屏会话回收时释放失败只记录，后续试渲染换新会话照常完成', async () => {
+  const owner = (await createLegacyTrackVideoEditProject())
   const input = [{ document: videoEditComposition(owner.document, owner.activeSequenceId), frame: 0 }]
-  await expect(trialVideoEditCodeFrames(input, new AbortController().signal, true)).rejects.toThrow('释放失败')
-  expect(close).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
   await expect(trialVideoEditCodeFrames(input, new AbortController().signal)).resolves.toBeUndefined()
-  expect(boundary.activeRenderers).toBe(0)
+  const created = boundary.dimensions.length
+  vi.spyOn(VideoEditRenderSession.prototype, 'dispose').mockRejectedValueOnce(new Error('释放失败'))
+  await expect(videoEditOffscreenPool.dispose()).resolves.toBeUndefined()
+  await expect(trialVideoEditCodeFrames(input, new AbortController().signal)).resolves.toBeUndefined()
+  expect(boundary.dimensions.length).toBe(created + 1)
 })
 it('运行时跳过失败代码效果的画面不能让新增代码试渲染误通过', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const close = vi.fn()
   vi.spyOn(VideoEditRenderSession.prototype, 'present').mockResolvedValueOnce({ id: 1, presented: true, bitmap: { width: 1, height: 1, close }, effectErrors: ['效果无法应用，已跳过'] })
   const input = [{ document: videoEditComposition(owner.document, owner.activeSequenceId), frame: 0 }]
   await expect(trialVideoEditCodeFrames(input, new AbortController().signal)).rejects.toThrow('效果无法应用')
-  expect(close).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
+  expect(close).toHaveBeenCalledOnce(); await expectRenderersReleased()
 })
 
 it('创建结果附带参数化体检提示，不阻止提交', async () => {
@@ -408,7 +413,7 @@ it('公共集合提交新源码、实例参数独立、保存重开只保存源�
     const created = await app.call('change_application_entities', { summary: '创作新的透明动态图形', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent, items: [{ properties: { 'video_edit.code_material.source': source } }] }] }, baseline.revisions as Record<string, number>)
     expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
     expect(JSON.stringify(created)).not.toContain('参数化体检')
-    expect(instance.past).toHaveLength(1); expect(boundary.dimensions).toEqual([[3840, 2160]]); expect(boundary.activeRenderers).toBe(0)
+    expect(instance.past).toHaveLength(1); expect(boundary.dimensions).toEqual([[3840, 2160]]); await expectRenderersReleased()
     const definition = instance.document.codeMaterials![0]; const item = instance.document.items[0]
     const materialRef = { kind: 'video_edit.code_material', id: `${id}:${definition.id}` }
     expect((await app.read(materialRef, ['video_edit.code_material.source'])).properties).toEqual({ 'video_edit.code_material.source': source })
@@ -434,7 +439,7 @@ it('公共集合提交新源码、实例参数独立、保存重开只保存源�
     expect(reopened.document.codeMaterials).toEqual(instance.document.codeMaterials)
     expect(getActiveVideoEditSequence(reopened).clips[0].code!.parameters.amount).toBe(.8)
     expect(readVideoEditCodeMetadata(reopened, reopened.document)(reopened.document.items[0].code!).mode).toBe('dynamic')
-    expect(boundary.activeRenderers).toBe(0); expect(boundary.disposedCompilers).toBeGreaterThan(0)
+    await expectRenderersReleased(); expect(boundary.disposedCompilers).toBeGreaterThan(0)
   } finally { app.dispose() }
 })
 
@@ -443,13 +448,13 @@ it('非法源码与试渲染失败均不入库，不留下历史或像素资源�
   await expect(createVideoEditCodeItems(id, [{ source: source.replace('return [ellipse', 'while(true){} return [ellipse') }])).rejects.toThrow()
   boundary.failTrial = true
   await expect(createVideoEditCodeItems(id, [{ source }])).rejects.toThrow('GPU trial rejected')
-  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
+  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(0); await expectRenderersReleased()
   expect(savedVideoEdit(instance).items).toEqual([])
   boundary.failTrial = false; await createVideoEditCodeItems(id, [{ source }])
   expect(instance.document.items).toHaveLength(1); expect(instance.past).toHaveLength(1)
   const good = instance.document
   await expect(createVideoEditCodeItems(id, [{ source, binId: 'missing' }])).rejects.toThrow('素材箱')
-  expect(instance.document).toBe(good); expect(boundary.activeRenderers).toBe(0)
+  expect(instance.document).toBe(good); await expectRenderersReleased()
 })
 
 it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写入重开的同ID剪辑', async () => {
@@ -467,7 +472,7 @@ it('试渲染晚到不能覆盖期间的手动修改，旧会话编译不能写�
   await vi.waitFor(() => expect(boundary.compileCalls).toBe(count + 1))
   await closeVideoEditProject(id); const reopened = await reopenVideoEdit(instance.document.id)
   release(); await expect(pending).rejects.toThrow('原剪辑已关闭')
-  expect(reopened.document.items).toEqual([]); expect(reopened.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
+  expect(reopened.document.items).toEqual([]); expect(reopened.past).toHaveLength(0); await expectRenderersReleased()
 })
 
 it('磁盘替换固定版本或未检查引用不能进入剪辑，失败打开释放源码线程并保留原文件', async () => {
@@ -493,9 +498,9 @@ it('试渲染无回执在期限内释放队列和资源，随后候选可正常�
     const rejected = expect(createVideoEditCodeItems(instance.document.id, [{ source }])).rejects.toThrow('超过30秒')
     await vi.waitFor(() => expect(boundary.trialCalls).toBe(1))
     await vi.advanceTimersByTimeAsync(30_001); await rejected
-    expect(boundary.activeRenderers).toBe(0); expect(instance.document.items).toEqual([]); expect(instance.past).toHaveLength(0)
+    await expectRenderersReleased(); expect(instance.document.items).toEqual([]); expect(instance.past).toHaveLength(0)
     boundary.trialGate = undefined
-    await createVideoEditCodeItems(instance.document.id, [{ source }]); expect(instance.document.items).toHaveLength(1); expect(boundary.activeRenderers).toBe(0)
+    await createVideoEditCodeItems(instance.document.id, [{ source }]); expect(instance.document.items).toHaveLength(1); await expectRenderersReleased()
   } finally { vi.useRealTimers() }
 })
 
@@ -506,7 +511,7 @@ it('公共集合的显式请求取消进入同一候选流程，不提交晚到�
   const executor = new VideoEditCollectionExecutor('video_edit.code_material')
   const rejected = expect(executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.document', id: instance.document.id }, expectedRevisions: {}, operation: { kind: 'create', items: [{ properties: { 'video_edit.code_material.source': source } }] } }, { requestId: 'cancel-create', exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']), signal: controller.signal })).rejects.toThrow('请求取消')
   await vi.waitFor(() => expect(boundary.trialCalls).toBe(1)); controller.abort(new Error('请求取消')); await rejected
-  expect(instance.document.items).toEqual([]); expect(instance.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
+  expect(instance.document.items).toEqual([]); expect(instance.past).toHaveLength(0); await expectRenderersReleased()
   release()
 })
 
@@ -520,7 +525,7 @@ it('候选显示迁移影响，确认后只绑定原片段一次撤销，明确�
   const baseline = owner.document; const history = owner.past.length
   const candidate = await prepareVideoEditCodeCandidate(target, source.replaceAll('amount', 'opacity'))
   expect(candidate.clipCount).toBe(1); expect(candidate.impacts).toEqual([expect.objectContaining({ key: 'amount', resetValue: true, removeCurve: true })])
-  expect(owner.document).toBe(baseline); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.document).toBe(baseline); await expectRenderersReleased()
   expect(() => commitVideoEditCodeCandidate(candidate)).toThrow('确认')
   expect(() => commitVideoEditCodeCandidate({ ...candidate }, true)).toThrow('失效')
   const version = commitVideoEditCodeCandidate(candidate, true)
@@ -550,7 +555,7 @@ it('取消或剪辑变化释放候选，非法源码和GPU失败保留最后有�
   const pending = prepareVideoEditCodeCandidate(target, source.replace('seed:7', 'seed:10'))
   await vi.waitFor(() => expect(boundary.trialCalls).toBe(trialCount + 1))
   editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '期间编辑' }) })); release()
-  await expect(pending).rejects.toThrow('内容已改变'); expect(owner.document.sequences[0].name).toBe('期间编辑'); expect(boundary.activeRenderers).toBe(0)
+  await expect(pending).rejects.toThrow('内容已改变'); expect(owner.document.sequences[0].name).toBe('期间编辑'); await expectRenderersReleased()
 })
 
 it('MCP只追加检查后的不可变版本，显式版本/参数/曲线事务共用手动保存与撤销', async () => {
@@ -702,7 +707,7 @@ it('批量候选绑定已有源码版本只检查选定原版本集合，不重�
 it('代码资产原始参数和有理源曲线一次发布、保存重开、单次撤销，固定源码不依赖源剪辑', async () => {
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const before = owner.past.length
   const result = await createVideoEditCodeAssetInstance(id, importPublication())
-  expect(owner.past).toHaveLength(before + 1); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.past).toHaveLength(before + 1); await expectRenderersReleased()
   const code = owner.document.items.find(item => item.id === result.itemId)!.code!
   expect(code.parameters).toEqual({ amount: .7 }); expect(code.curves).toEqual(codeAssetFixture().curves)
   expect(owner.document.codeMaterials![0].versions[0].assetOrigin).toEqual(importPublication().origin)
@@ -742,7 +747,7 @@ it('代码资产不匹配语言、参数或图片映射均拒绝且不发布部�
   const owner = (await createLegacyTrackVideoEditProject()); const id = owner.document.id; const baseline = owner.document
   for (const asset of [{ ...codeAssetFixture(), sourceVersion: { ...codeAssetFixture().sourceVersion, languageVersion: 2 as const } }, { ...codeAssetFixture(), parameters: { amount: 100 } }, { ...codeAssetFixture(), parameters: { amount: { kind: 'image' as const, mediaId: 'not-mapped' } } }]) {
     await expect(createVideoEditCodeAssetInstance(id, importPublication(asset))).rejects.toThrow()
-    expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
+    expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0); await expectRenderersReleased()
   }
 })
 it('代码资产filter强制检查隐藏真实目标并保留参数，不制造素材项；动态源时长和锁定拒绝', async () => {
@@ -766,7 +771,7 @@ it.each(['cancel', 'edit', 'identity'] as const)('代码资产最终%s检查不�
     if (action === 'edit') editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '后续手工修改' }) }))
     if (action === 'identity') throw new Error('原文件身份已变')
   } }, undefined, controller.signal)).rejects.toThrow()
-  expect(owner.document.items).toHaveLength(0); expect(owner.document.codeMaterials ?? []).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
+  expect(owner.document.items).toHaveLength(0); expect(owner.document.codeMaterials ?? []).toHaveLength(0); await expectRenderersReleased()
   if (action !== 'edit') { expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0) } else expect(owner.document.sequences[0].name).toBe('后续手工修改')
 })
 it('代码资产未授权图片在任何媒体探测之前被拒绝，原目标零改动', async () => {
@@ -848,7 +853,7 @@ it.each([false, true])('旧无身份图片正式重探测：尺寸变化%s；同
     expect(owner.document.media[0].sourceRevision).not.toBe('cached-original')
     expect(owner.document.items[0].code!.parameters.logo).toEqual({ kind: 'image', mediaId: 'existing-image' })
   }
-  expect(probe).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
+  expect(probe).toHaveBeenCalledOnce(); await expectRenderersReleased()
 })
 
 it('真正新原媒体依赖经正式导入 facade 固定身份、保存重开与一次撤销，不伪造库记录', async () => {
@@ -872,7 +877,7 @@ it('一次创建260份代码素材和试渲染边界不受32/64/257旧数量限�
   const ids = await createVideoEditCodeItems(instance.document.id, Array.from({ length: 260 }, () => ({ source })))
   expect(ids).toHaveLength(260); expect(instance.document.codeMaterials).toHaveLength(260)
   expect(instance.document.items).toHaveLength(260); expect(instance.past).toHaveLength(1)
-  expect(boundary.activeRenderers).toBe(0)
+  await expectRenderersReleased()
 })
 
 it('公共多文件创建与追加保留旧版本、哈希去重，保存清理无引用内容且资产往返完整', async () => {
