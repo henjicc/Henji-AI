@@ -6,15 +6,16 @@ import { evaluateCodeMaterialV3, type CodeEvaluationOptions } from './evaluateV3
 import { codeElementBounds, hitCodeCommands, type CodeElementBounds } from './geometry'
 import { applyCodeElementOverrides, identifyCodeElements, type CodeElementOverrides } from '../codeElementOverrides'
 import type { VideoEditSourceTime } from '../time'
+import { hideInvisibleCodeCommands } from './visibility'
 
 export type CodeMaterialEvaluationOptions = { transitionHandles?: boolean; elementOverrides?: CodeElementOverrides; sourceTime?: VideoEditSourceTime } & CodeEvaluationOptions
 
 /** Geometry consumes the same validated, shared-font command stream as rendering. */
 export function evaluateCodeMaterialBounds(program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>> = {}, options: CodeMaterialEvaluationOptions = {}): CodeElementBounds[] {
-  return codeElementBounds(evaluateCodeMaterial(program, context, parameters, options))
+  return codeElementBounds(hideInvisibleCodeCommands(evaluateCodeMaterial(program, context, parameters, { ...options, cullInvisible: false }), context.width, context.height))
 }
 export function hitTestCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, point: { x: number; y: number }, options: CodeMaterialEvaluationOptions = {}): CodeElementBounds | undefined {
-  return hitCodeCommands(evaluateCodeMaterial(program, context, parameters, options), finiteCodeNumber(point.x, 'point.x'), finiteCodeNumber(point.y, 'point.y'))
+  return hitCodeCommands(hideInvisibleCodeCommands(evaluateCodeMaterial(program, context, parameters, { ...options, cullInvisible: false }), context.width, context.height), finiteCodeNumber(point.x, 'point.x'), finiteCodeNumber(point.y, 'point.y'))
 }
 
 type EvaluatedValue = CodeParameterValue | CodeDrawCommand | CodeDrawCommand[]
@@ -39,7 +40,9 @@ export function evaluateCodeMaterial(program: CodeMaterialProgram, context: Code
 function evaluateCodeMaterialProgram(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeMaterialEvaluationOptions): CodeDrawCommand[] {
   if (program.languageVersion === 3 && program.kind === 'generator' && program.apiVersion === 1) {
     validateContext(context, options.transitionHandles === true); codeMaterialRandom(context.seed ?? program.seed, 0)
-    const commands = identifyCodeElements(evaluateCodeMaterialV3(program, context, values, options), true)
+    // Overrides may reveal or move a previously invisible element. Resolve IDs
+    // against the complete author tree before applying them.
+    const commands = identifyCodeElements(evaluateCodeMaterialV3(program, context, values, { ...options, cullInvisible: options.cullInvisible && !Object.keys(options.elementOverrides ?? {}).length }), true)
     if (!options.elementOverrides || !Object.keys(options.elementOverrides).length) return commands
     if (!options.measureText || !options.sourceTime) throw new CodeMaterialError('CONTEXT', '元素覆盖需要源时刻与共享文字度量。')
     return applyCodeElementOverrides(commands, options.elementOverrides, options.sourceTime, options.measureText)

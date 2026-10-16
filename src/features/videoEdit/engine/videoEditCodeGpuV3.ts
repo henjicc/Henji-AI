@@ -15,10 +15,12 @@ import { documentFontRevision } from '@/platform/fontFaces'
 import { videoEditTextResolution } from './videoEditTextSurface'
 import { CodeVectorGpu, type CodeVectorInstance } from './videoEditCodeVectorGpu'
 import { isCodeVector, supportsCodeVector } from './videoEditCodeVectorGeometry'
+import { codeCommandSignature, codeHasLiveImage, codeInvisible, codeVisualCommands } from '@/core/videoEdit/codeMaterial/visibility'
+import type { CodeHeavyStructure } from '@/core/videoEdit/codeMaterial/performance'
 
 interface Image { texture: GpuTexture; width: number; height: number; x: number; y: number; resolution?: number }
 interface CachedImage extends Image { bytes: number; used: boolean; glyph?: boolean }
-interface Allocator { allocate(width: number, height: number): GpuTexture; release(texture: GpuTexture): void }
+interface Allocator { allocate(width: number, height: number): GpuTexture; release(texture: GpuTexture): void; canRetain?(bytes: number): boolean }
 type Encoder = ReturnType<GpuDevice['createCommandEncoder']>
 const normalBlend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
 function identityPrimitive(command: CodeDrawCommand): boolean {
@@ -110,8 +112,13 @@ export class VideoEditCodeGpuV3 {
   private cachedBytes = 0; private uniformIndex = 0
   private module: unknown; private sampler: unknown; private ready: Promise<void>
   private disposed = false
+  private rendering = false
   private ownGraphs?: ShaderGraphCache
   private vectors?: CodeVectorGpu
+  private readonly frames = new WeakMap<GpuTexture, { hash: number; exact: string }>()
+  private readonly groupSignatures = new WeakMap<GpuTexture, Map<string, string>>()
+  readonly reuse = { culledDraws: 0, frameHits: 0, subtreeHits: 0, subtreeMisses: 0 }
+  readonly drawCosts: Array<CodeHeavyStructure & { gpuMs: number }> = []
   readonly counts = { uploads: 0, allocations: 0, submissions: 0, passes: 0 }
   constructor(private readonly device: GpuDevice, private readonly allocator: Allocator, private readonly rasterize: (command: CodeDrawCommand, image: Omit<Image, 'texture'>) => OffscreenCanvas | Promise<OffscreenCanvas> = rasterizeCodeShape, private graphs?: () => ShaderGraphCache, private readonly nativeVectors = true) {
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' })
@@ -313,12 +320,21 @@ export class VideoEditCodeGpuV3 {
     const x = Math.min(...bounds.map(box => box.x)); const y = Math.min(...bounds.map(box => box.y))
     return { x, y, width: Math.max(...bounds.map(box => box.x + box.width)) - x, height: Math.max(...bounds.map(box => box.y + box.height)) - y }
   }
-  async render(texture: GpuTexture, width: number, height: number, commands: readonly CodeDrawCommand[], images?: ReadonlyMap<string, VideoEditCodeImageInput>): Promise<void> {
+  async render(texture: GpuTexture, width: number, height: number, commands: readonly CodeDrawCommand[], images?: ReadonlyMap<string, VideoEditCodeImageInput>, profile = false): Promise<void> {
     await this.ready; if (this.disposed) throw new CodeMaterialError('CONTEXT', 'v3 渲染器已释放。')
+    Object.assign(this.reuse, { culledDraws: 0, frameHits: 0, subtreeHits: 0, subtreeMisses: 0 }); this.drawCosts.length = 0
+    const visual = codeVisualCommands(commands)
+    const signature = codeHasLiveImage(commands) ? undefined : codeCommandSignature([width, height, documentFontRevision(), visual.commands])
+    const previous = this.frames.get(texture)
+    if (signature && previous?.hash === signature.hash && previous.exact === signature.exact) { this.reuse.frameHits++; return }
+    // A failed/partial render can never validate the previous contents.
+    this.frames.delete(texture)
+    const previousGroups = this.groupSignatures.get(texture); const currentGroups = new Map<string, string>()
     this.uniformIndex = 0; this.instanceIndex = 0; this.cached.forEach(value => { value.used = false }); this.layers.forEach(value => { value.used = false })
     this.vectors?.beginFrame()
     const target: Image = { texture, width, height, x: 0, y: 0 }; let encoder = this.device.createCommandEncoder(); this.clear(encoder, target); let count = 0; let shaderCount = 0
     const shaderResults = new Map<string, Image>()
+    const measurements: Promise<void>[] = []
     let batchTarget: Image | undefined
     const batch: { command: Extract<CodeDrawCommand, { kind: 'rect' | 'ellipse' }>; matrix: CodeMatrix; opacity: number }[] = []
     const vectors: CodeVectorInstance[] = []
@@ -335,7 +351,7 @@ export class VideoEditCodeGpuV3 {
       // in that case instead of allocating two matrices and evaluating four trig functions each.
       const identity = this.vectors && identityPrimitive(command)
       const matrix = identity ? parent : codeMultiply(parent, codeTransform(command)); const opacity = command.opacity ?? 1
-      if (!opacity) return
+      if (codeInvisible(command, matrix, target.width, target.height)) { this.reuse.culledDraws++; return }
       if (!this.vectors && this.simple(command) && (!command.blend || command.blend === 'normal')) {
         if (vectors.length || batchTarget && batchTarget.texture !== target.texture) flushBatch()
         batchTarget = target; batch.push({ command, matrix, opacity }); return
@@ -365,6 +381,14 @@ export class VideoEditCodeGpuV3 {
         return
       }
       if (command.kind === 'group') {
+        // Placement, opacity and blending are applied only when composing the
+        // finished layer; moving/fading a static group does not repaint it.
+        const content = visual.groups.get(command) ?? command
+        const cacheKey = codeHasLiveImage([command]) ? undefined : `subtree:${JSON.stringify([documentFontRevision(), content.children, content.clip, content.mask, content.blur, content.shadow, content.glow])}`
+        if (cacheKey) currentGroups.set(key, cacheKey)
+        const cached = cacheKey ? this.cached.get(cacheKey) : undefined
+        if (cached) { cached.used = true; this.cached.delete(cacheKey!); this.cached.set(cacheKey!, cached); this.reuse.subtreeHits++; await composite(cached, target, matrix, opacity, command.blend ?? 'normal', key); return }
+        this.reuse.subtreeMisses++
         const bounds = this.groupBounds(command.children); const pad = Math.ceil(Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0)) + 2)
         const layer = this.layer(`${key}:group`, Math.max(1, Math.ceil(bounds.width + pad * 2)), Math.max(1, Math.ceil(bounds.height + pad * 2)), Math.floor(bounds.x - pad), Math.floor(bounds.y - pad))
         this.clear(encoder, layer)
@@ -385,8 +409,24 @@ export class VideoEditCodeGpuV3 {
           // Clip the effected layer in group-local coordinates before its transform is composited.
           const clip = command.clip; const clipped = this.layer(`${key}:clip`, Math.max(1, Math.ceil(clip.width)), Math.max(1, Math.ceil(clip.height)), clip.x, clip.y)
           this.clear(encoder, clipped); this.paint(encoder, clipped, { ...image, x: image.x - clip.x, y: image.y - clip.y }, CODE_IDENTITY, 1, 'textured'); flush()
-          await composite(clipped, target, matrix, opacity, command.blend ?? 'normal', key)
-        } else await composite(image, target, matrix, opacity, command.blend ?? 'normal', key)
+          image = clipped
+        }
+        // Retain only the finished layer. It shares the raster LRU and the
+        // allocator's resident-byte budget, never a separate unbounded pool.
+        const bytes = image.width * image.height * 4
+        if (cacheKey && previousGroups?.get(key) === cacheKey && bytes <= 48 * 1024 ** 2) {
+          while (this.cachedBytes + bytes > 48 * 1024 ** 2) {
+            const oldest = [...this.cached].find(([, value]) => !value.used)
+            if (!oldest) break
+            this.release(oldest[1]); this.cachedBytes -= oldest[1].bytes; this.cached.delete(oldest[0])
+          }
+          if (this.cachedBytes + bytes <= 48 * 1024 ** 2 && (this.allocator.canRetain?.(bytes) ?? true)) {
+            const saved = this.image(image.width, image.height, image.x, image.y)
+            this.clear(encoder, saved); this.paint(encoder, saved, { ...image, x: 0, y: 0 }, CODE_IDENTITY, 1, 'textured'); flush()
+            this.cached.set(cacheKey, saved); this.cachedBytes += bytes
+          }
+        }
+        await composite(image, target, matrix, opacity, command.blend ?? 'normal', key)
         return
       }
       if (command.kind === 'shader') {
@@ -424,11 +464,39 @@ export class VideoEditCodeGpuV3 {
       this.paint(encoder, copy, { ...target, x: 0, y: 0 }, CODE_IDENTITY, 1, 'textured')
       this.paint(encoder, target, image, matrix, opacity, 'composite', [1, 1, 1, 1], [CODE_BLEND_INDICES[mode], 0, 0, 1], [0, 0, 0, 0], copy)
     }
-    try { for (const command of commands) { const pending = draw(command, target, CODE_IDENTITY); if (pending) await pending } flush() }
+    this.rendering = true
+    try {
+      for (const command of commands) {
+        const started = performance.now()
+        const pending = draw(command, target, CODE_IDENTITY); if (pending) await pending
+        if (profile && command.sourceSpan && !codeInvisible(command, codeTransform(command), width, height)) {
+          flush()
+          const entry = { kind: command.kind, sourceSpan: command.sourceSpan, cpuMs: 0, gpuMs: 0 }
+          this.drawCosts.push(entry)
+          measurements.push(this.device.queue.onSubmittedWorkDone().then(() => { entry.gpuMs = performance.now() - started }))
+        }
+      }
+      flush()
+      await Promise.all(measurements)
+      if (signature) this.frames.set(texture, signature)
+      this.groupSignatures.set(texture, currentGroups)
+    }
     finally {
+      this.rendering = false
       for (const [key, layer] of this.layers) if (!layer.used || key.startsWith('raster:')) { this.release(layer); this.layers.delete(key) }
       this.ownGraphs?.releaseIdle()
       // Buffers are reusable until the next render. Texture ownership remains with the parent's resident-byte budget.
+    }
+  }
+  invalidate(texture: GpuTexture): void { this.frames.delete(texture) }
+  /** Return idle optional caches to the owning session before it rejects an
+   * allocation. Textures referenced by the current encoder stay protected. */
+  evictUnused(bytes: number): void {
+    let released = 0
+    for (const [key, image] of this.cached) {
+      if (this.rendering && image.used) continue
+      this.release(image); this.cached.delete(key); this.cachedBytes -= image.bytes; released += image.bytes
+      if (released >= bytes) break
     }
   }
   diagnostics(): { cachedBytes: number; cachedImages: number; glyphs: number; layers: number; uniformBytes: number; pipelines: number } { return { cachedBytes: this.cachedBytes, cachedImages: this.cached.size, glyphs: [...this.cached.values()].filter(image => image.glyph).length, layers: this.layers.size, uniformBytes: this.uniforms.length * 112 + this.instanceBuffers.reduce((sum, entry) => sum + entry.data.byteLength, 0) + (this.vectors?.bytes ?? 0), pipelines: this.pipelines.size + (this.vectors ? 2 : 0) } }

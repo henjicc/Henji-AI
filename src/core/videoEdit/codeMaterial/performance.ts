@@ -2,15 +2,36 @@ import { z } from 'zod'
 import type { CodeSourceSpan } from './contract'
 
 export interface CodeHeavyStructure { kind: string; cpuMs: number; sourceSpan: CodeSourceSpan }
-export interface CodeFramePerformance { frame: number; cpuMs: number; gpuMs: number; budgetMs: number; heaviest?: CodeHeavyStructure }
+export interface CodeStructureCost extends CodeHeavyStructure { gpuMs: number; cpuShare: number; gpuShare: number }
+export interface CodeReuseStatistics { culledGroups: number; culledDraws: number; frameHits: number; subtreeHits: number; subtreeMisses: number; operations: number }
+export interface CodeFramePerformance { frame: number; cpuMs: number; gpuMs: number; budgetMs: number; heaviest?: CodeHeavyStructure; structures?: CodeStructureCost[]; reuse?: CodeReuseStatistics; attribution?: 'inclusive-queue-wall' }
 /** GPU elapsed is wall time from render submission preparation through queue
  * completion, including raster upload; it is not a hardware timestamp query. */
 export const codeFramePerformanceSchema = z.object({
   frame: z.number().int().nonnegative(), cpuMs: z.number().finite().nonnegative(), gpuMs: z.number().finite().nonnegative(), budgetMs: z.number().positive(),
   heaviest: z.object({ kind: z.string(), cpuMs: z.number().finite().nonnegative(), sourceSpan: z.object({ file: z.string(), start: z.number(), end: z.number(), startLine: z.number(), startColumn: z.number(), endLine: z.number(), endColumn: z.number() }).strict() }).strict().optional(),
+  structures: z.array(z.object({ kind: z.string(), cpuMs: z.number().finite().nonnegative(), gpuMs: z.number().finite().nonnegative(), cpuShare: z.number().min(0).max(1), gpuShare: z.number().min(0).max(1), sourceSpan: z.object({ file: z.string(), start: z.number(), end: z.number(), startLine: z.number(), startColumn: z.number(), endLine: z.number(), endColumn: z.number() }).strict() }).strict()).max(5).optional(),
+  reuse: z.object({ culledGroups: z.number().int().nonnegative(), culledDraws: z.number().int().nonnegative(), frameHits: z.number().int().nonnegative(), subtreeHits: z.number().int().nonnegative(), subtreeMisses: z.number().int().nonnegative(), operations: z.number().int().nonnegative() }).strict().optional(),
+  attribution: z.literal('inclusive-queue-wall').optional(),
 }).strict()
+/** Inclusive scopes overlap. Shares use the sum of all measured scopes (before
+ * top-five truncation), not frame latency; GPU scopes include preparation and
+ * queue completion, never claim hardware timestamps or sum them as frame time. */
+export function codeStructureCosts(cpu: readonly CodeHeavyStructure[], gpu: readonly (CodeHeavyStructure & { gpuMs: number })[], totals?: { cpuMs: number; gpuMs: number }): CodeStructureCost[] {
+  const entries = new Map<string, CodeStructureCost>()
+  for (const value of [...cpu, ...gpu]) {
+    const key = `${value.sourceSpan.file}:${value.sourceSpan.start}:${value.kind}`
+    const entry = entries.get(key) ?? { kind: value.kind, sourceSpan: value.sourceSpan, cpuMs: 0, gpuMs: 0, cpuShare: 0, gpuShare: 0 }
+    entry.cpuMs += value.cpuMs; entry.gpuMs += 'gpuMs' in value && typeof value.gpuMs === 'number' ? value.gpuMs : 0; entries.set(key, entry)
+  }
+  const values = [...entries.values()]; const cpuTotal = totals?.cpuMs ?? values.reduce((sum, value) => sum + value.cpuMs, 0); const gpuTotal = totals?.gpuMs ?? values.reduce((sum, value) => sum + value.gpuMs, 0)
+  for (const value of values) { value.cpuShare = cpuTotal ? Math.min(1, value.cpuMs / cpuTotal) : 0; value.gpuShare = gpuTotal ? Math.min(1, value.gpuMs / gpuTotal) : 0 }
+  return values.sort((a, b) => b.cpuShare + b.gpuShare - a.cpuShare - a.gpuShare).slice(0, 5)
+}
 export function codePerformanceExceeded(value: CodeFramePerformance): boolean { return value.cpuMs + value.gpuMs > value.budgetMs }
 export function codePerformanceMessage(value: CodeFramePerformance): string {
   const h = value.heaviest; const at = h ? `；最重结构 ${h.kind}（${h.sourceSpan.file ?? 'main.ts'}:${h.sourceSpan.startLine}:${h.sourceSpan.startColumn}，CPU ${h.cpuMs.toFixed(2)}ms）` : ''
-  return `帧 ${value.frame}：CPU 求值 ${value.cpuMs.toFixed(2)}ms，GPU 渲染完成 ${value.gpuMs.toFixed(2)}ms，实时预算 ${value.budgetMs.toFixed(2)}ms${at}。`
+  const distribution = value.structures?.map(item => `${item.kind} ${item.sourceSpan.file}:${item.sourceSpan.startLine}:${item.sourceSpan.startColumn} CPU ${item.cpuMs.toFixed(2)}ms/${(item.cpuShare * 100).toFixed(1)}%，绘制 ${item.gpuMs.toFixed(2)}ms/${(item.gpuShare * 100).toFixed(1)}%`).join('；')
+  const reuse = value.reuse
+  return `帧 ${value.frame}：CPU 求值 ${value.cpuMs.toFixed(2)}ms，GPU 渲染完成 ${value.gpuMs.toFixed(2)}ms，实时预算 ${value.budgetMs.toFixed(2)}ms${at}。${distribution ? `成本分布（含子结构，绘制含准备与队列完成，非硬件计时；占比按各类已测结构总和）：${distribution}。` : ''}${reuse ? `剔除组 ${reuse.culledGroups}，剔除绘制 ${reuse.culledDraws}，整帧复用 ${reuse.frameHits}，子树复用 ${reuse.subtreeHits}/${reuse.subtreeHits + reuse.subtreeMisses}。` : ''}`
 }

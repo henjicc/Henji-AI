@@ -6,7 +6,7 @@ import { codeExecutionCompiler, codeTextRequest } from './executionPlan'
 import { codeExecutionCache, type CodeExecutionFrame } from './executionCache'
 export { codeTextRequest } from './executionPlan'
 const array = (value: unknown): unknown[] => { if (!Array.isArray(value)) throw new CodeMaterialError('TYPE', '需要数组。'); return value }
-export interface CodeEvaluationOptions { onProfile?: (heaviest: CodeHeavyStructure | undefined) => void; measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
+export interface CodeEvaluationOptions { cullInvisible?: boolean; onEvaluation?: (value: { structures: CodeHeavyStructure[]; culledGroups: number; operations: number }) => void; onProfile?: (heaviest: CodeHeavyStructure | undefined) => void; measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
 function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}, root?: CodeExpression): unknown {
   const profile = new Map<string, CodeHeavyStructure>()
   const parameters = validateCodeMaterialParameters(program, values); const bindings: unknown[] = []; const locals = new Map<number, unknown>()
@@ -23,9 +23,19 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
   const cache = codeExecutionCache(program, parameters, context)
   const frame: CodeExecutionFrame = { context, parameters, bindings, locals, indices, draws: 0, characters: 0, operations: 0, prepaid: false, charge, measure, profile: options.onProfile ? profile : undefined, bindingsReady: false, cache, epoch: cache.epoch }
   const evaluate = (expression: CodeExpression): unknown => compile(expression).run(frame, 0)
-  const report = (): void => options.onProfile?.([...profile.values()].sort((a, b) => b.cpuMs - a.cpuMs)[0])
+  frame.cullInvisible = options.cullInvisible; frame.culledGroups = 0
+  if (options.onEvaluation) { frame.profile = profile; frame.profileCached = !options.onProfile }
+  const report = (): void => {
+    const structures = [...profile.values()].sort((a, b) => b.cpuMs - a.cpuMs)
+    options.onProfile?.(structures[0])
+    options.onEvaluation?.({ structures, culledGroups: frame.culledGroups ?? 0, operations: frame.operations })
+  }
   if (root) { const result = evaluate(root); report(); return result }
-  program.bindings.forEach((binding, index) => { if (!(index in bindings)) bindings[index] = evaluate(binding.expression) })
+  frame.lazyDrawBindings = frame.cullInvisible && program.bindings.some(binding => ['draw', 'draws'].includes(binding.expression.type))
+  program.bindings.forEach((binding, index) => {
+    if (frame.lazyDrawBindings && ['draw', 'draws'].includes(binding.expression.type)) return
+    if (!(index in bindings)) bindings[index] = evaluate(binding.expression)
+  })
   frame.bindingsReady = true
   const output = array(evaluate(program.result)) as CodeDrawCommand[]
   let actual = 0; let textCharacters = 0; let shaderLayers = 0

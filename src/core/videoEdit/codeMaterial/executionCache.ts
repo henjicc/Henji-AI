@@ -2,7 +2,7 @@ import { CODE_V3_LIMITS, codeBinaryCost, codeBuiltinCost } from './contract'
 import { CODE_MATH_COSTS } from './expressions'
 import { CODE_EASE_NAMES } from './motion'
 import { CODE_PARAMETER_FUNCTION_COSTS } from './parameterSampling'
-import type { CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeTextMeasurer } from './contract'
+import type { CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeTextMeasurer, CodeMatrix } from './contract'
 import type { CodeHeavyStructure } from './performance'
 
 export interface CodeExecutionFrame {
@@ -18,9 +18,15 @@ export interface CodeExecutionFrame {
   charge(cost?: number): void
   measure(fields: Record<string, unknown>): ReturnType<CodeTextMeasurer>
   profile?: Map<string, CodeHeavyStructure>
+  profileCached?: boolean
   bindingsReady: boolean
   cache: ExecutionCache
   epoch: number
+  cullInvisible?: boolean
+  lazyDrawBindings?: boolean
+  parentMatrix?: CodeMatrix
+  placementCullBlocked?: boolean
+  culledGroups?: number
 }
 export interface CodeExecutionPlan {
   run(frame: CodeExecutionFrame, depth: number): unknown
@@ -64,7 +70,7 @@ export function memoizeCodeExecution(expression: CodeExpression, children: CodeE
   }
   const bindings = expression.kind === 'binding' ? [expression.slot] : [...new Set(children.flatMap(child => bindingDependencies.get(child) ?? []))]
   bindingDependencies.set(plan, bindings)
-  const ready = (frame: CodeExecutionFrame): boolean => frame.bindingsReady || bindings.every(slot => slot in frame.bindings)
+  const ready = (frame: CodeExecutionFrame): boolean => frame.bindingsReady && !frame.lazyDrawBindings || bindings.every(slot => slot in frame.bindings)
   if (expression.kind === 'local') plan.locals = [expression.slot]
   if (expression.kind === 'context') plan.frameDependent = !['width', 'height'].includes(expression.key)
   if (expression.kind === 'draw' || expression.kind === 'repeat' || expression.kind === 'textAnimation' || expression.kind === 'color'
@@ -72,7 +78,7 @@ export function memoizeCodeExecution(expression: CodeExpression, children: CodeE
   if (plan.cost !== undefined && plan.cost > 1 && !numeric) {
     const cost = plan.cost; const metered = run
     run = (frame, depth) => {
-      if (frame.prepaid || !ready(frame) || frame.profile || depth + plan.height > CODE_V3_LIMITS.depth || frame.operations + cost > CODE_V3_LIMITS.cpuOperations) return metered(frame, depth)
+      if (frame.prepaid || !ready(frame) || frame.profile && !frame.profileCached || depth + plan.height > CODE_V3_LIMITS.depth || frame.operations + cost > CODE_V3_LIMITS.cpuOperations) return metered(frame, depth)
       frame.operations += cost
       frame.prepaid = true
       try { return metered(frame, depth) } finally { frame.prepaid = false }
@@ -92,7 +98,7 @@ export function memoizeCodeExecution(expression: CodeExpression, children: CodeE
     // Profiling executes every closure so its attribution remains inclusive.
     // Near the ceiling replay individual charges to keep the exact error span,
     // charge amount and first failing operation, including short-circuit paths.
-    if (frame.profile || !ready(frame) || (tuple || plan.frameDependent) && plan.uses < 2 || depth + plan.height > CODE_V3_LIMITS.depth) return run(frame, depth)
+    if (frame.profile && !frame.profileCached || !ready(frame) || (tuple || plan.frameDependent) && plan.uses < 2 || depth + plan.height > CODE_V3_LIMITS.depth) return run(frame, depth)
     const index = slot === undefined ? 0 : frame.locals.get(slot)
     if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= 4096) return run(frame, depth)
     const cache = frame.cache
