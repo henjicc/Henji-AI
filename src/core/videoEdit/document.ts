@@ -10,6 +10,7 @@ import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './cod
 import { codeElementOverridesSchema } from './codeElementOverrides'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
+import { projectVideoEditNestedCaptions } from './nestedCaptions'
 import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
 import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition } from './transitions'
@@ -250,6 +251,7 @@ export const videoEditDocumentSchema = z.object({
       if (marker.frame >= Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) || marker.clipId && (!clip || marker.frame < clip.start || marker.frame >= clip.start + clip.duration)) issue('标记须位于序列或所属片段的半开范围内。')
     }
     for (const caption of sequence.captions ?? []) {
+      if (caption.speech?.words.some(word => !clipsById.has(word.clipId))) issue('字幕的声音来源须属于当前序列。')
       const clip = clipsById.get(caption.clipId ?? '')
       if (caption.start + caption.duration > Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) || caption.clipId && (!clip || caption.start < clip.start || caption.start + caption.duration > clip.start + clip.duration)) issue('字幕须位于序列或所属片段的半开范围内。')
     }
@@ -292,12 +294,13 @@ export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' 
   return document.media.find(media => media.id === item?.mediaId)
 }
 /** Render/export snapshots carry the complete sequence graph; files stay in media only. */
-export function videoEditNestedComposition(document: VideoEditComposition, clip: Pick<VideoEditClip, 'itemId' | 'kind' | 'multicamCameraId'>): VideoEditComposition | undefined {
+export function videoEditNestedComposition(document: VideoEditComposition, clip: Pick<VideoEditClip, 'itemId' | 'kind' | 'multicamCameraId'> & Partial<VideoEditClip>): VideoEditComposition | undefined {
   if (clip.kind !== 'sequence') return undefined
   const item = document.items.find(item => item.id === clip.itemId)
   const sequence = document.sequences?.find(sequence => sequence.id === item?.sequenceId)
   if (!sequence) throw new Error('嵌套序列已移除或未包含在渲染快照中。')
   const composition = composeVideoEditSequence(document, sequence)
+  if (clip.start !== undefined && clip.duration !== undefined && clip.sourceInUs !== undefined) composition.captions = projectVideoEditNestedCaptions(sequence, { start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder ?? { numerator: 0, denominator: 1 }, speed: clip.speed, reverse: clip.reverse }, document.fps)
   if (!sequence.multicam) return composition
   const camera = sequence.multicam.cameras.find(camera => camera.id === (clip.multicamCameraId ?? sequence.multicam!.cameras[0].id))
   if (!camera) throw new Error('片段所选机位已移除。')

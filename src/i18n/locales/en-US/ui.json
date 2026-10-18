@@ -251,6 +251,8 @@
   },
   "videoEdit": { "inlineCaption": "Edit caption in place" },
   "captionTrack": {
+    "review": "Review",
+    "reviewHint": "The original caption was preserved after editing. Check its text, translation and timing.",
     "name": "Captions",
     "show": "Show caption track",
     "hide": "Hide caption track",

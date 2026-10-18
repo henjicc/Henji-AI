@@ -20,6 +20,7 @@ import { buildDocumentEnvelope } from '../src/core/documents/envelope'
 import { buildProjectManifest } from '../src/core/documents/projectManifest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema } from '../src/core/videoEdit/document'
 import { makeVideoEditItemClip } from '../src/core/videoEdit/projectItems'
+import { bindVideoEditCaptionSpeech } from '../src/core/videoEdit/captionSpeech'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../src/core/videoEdit/codeAsset'
 import { BUILTIN_STYLE_KITS } from '../src/core/videoEdit/styleKitPresets'
 import { BUILTIN_TITLE_TEMPLATES } from '../src/core/videoEdit/titleTemplates'
@@ -85,6 +86,13 @@ soundDocument.media.push({ id: 'golden-sound', name: '鼓点', path: '/persisten
 soundDocument.items.push({ id: 'golden-sound-item', name: '鼓点', kind: 'audio', mediaId: 'golden-sound' })
 const soundClip = makeVideoEditItemClip(soundDocument, 'golden-sound-item', soundSequence.id, { frame: 0, duration: 90 })
 soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true
+document.media.push(...soundDocument.media)
+document.items.push(...soundDocument.items)
+sequence.clips.push(soundClip)
+sequence.captions = sequence.captions.map(caption => ({ ...bindVideoEditCaptionSpeech(caption, [
+  { clipId: soundClip.id, text: '字幕', startUs: 166667, endUs: 700000, precision: 'word' },
+  { clipId: soundClip.id, text: '原文', startUs: 700000, endUs: 1500000, precision: 'word' },
+]), reviewReasons: ['translation'] }))
 const image = createImageEditDocumentV3({ width: 64, height: 48, documentId: 'golden-image', color: createDefaultImageEditColorModeV3() })
 image.namedRegions = [{ id: 'golden-region', name: '主体', selection: { operations: [{ combine: 'replace', invertBefore: false, shape: { type: 'ellipse', x: .2, y: .1, width: .5, height: .7 } }], feather: .02, inverted: false } }]
 image.namedRegions.push({id:'golden-outside',name:'画面外范围',selection:{operations:[{combine:'replace',invertBefore:false,shape:{type:'rectangle',x:-.4,y:1.1,width:1.5,height:.4}}],feather:0,inverted:false}})

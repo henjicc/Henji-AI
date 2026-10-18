@@ -1,4 +1,6 @@
 import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
+import { bindVideoEditTranscriptCaptions } from '@/core/videoEdit/captionSpeechBinding'
+import { sliceVideoEditCaptionSpeech } from '@/core/videoEdit/captionSpeech'
 import { prepareVideoEditCaptions } from './videoEditCaptionCreation'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { executeApplicationWrite, applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
@@ -125,9 +127,10 @@ export function appendAutoSubtitles(projectId: string, sequenceId: string, capti
   const owner = requireVideoEditInstance(projectId)
   const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('原序列已移除，请重新选择。')
-  const parsed = prepareVideoEditCaptions(sequence, captions)
+  const transcription = textTranscription ? mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription) : sequence.textTranscription
+  const parsed = prepareVideoEditCaptions(sequence, bindVideoEditTranscriptCaptions({ ...videoEditComposition(owner.document, sequenceId), textTranscription: transcription }, captions))
   if (!parsed.length) throw new Error('没有可用字幕，请检查识别结果。')
-  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...(textTranscription ? { textTranscription: mergeVideoEditTextTranscription(sequence.textTranscription, textTranscription) } : {}), captions: [...(sequence.captions ?? []), ...parsed] }))
+  editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, ...(transcription ? { textTranscription: transcription } : {}), captions: [...(sequence.captions ?? []), ...parsed] }))
   return parsed.map(caption => caption.id)
 }
 
@@ -203,16 +206,8 @@ export function splitVideoEditSubtitle(projectId: string, sequenceId: string, id
     if (!cue || frame <= cue.start || frame >= cue.start + cue.duration || !Number.isInteger(character)) throw new Error('请在字幕内部选择拆分时刻与文字位置。')
     const points = Array.from(cue.text); const left = points.slice(0, character).join('').trim(); const right = points.slice(character).join('').trim()
     if (character <= 0 || character >= points.length || !left || !right) throw new Error('拆分后两行都须保留文字。')
-    let translations: [string, string] | undefined
-    if (cue.translation) {
-      const translated = Array.from(cue.translation)
-      const target = Math.max(1, Math.min(translated.length - 1, Math.round(translated.length * character / points.length)))
-      const spaces = translated.flatMap((point, index) => /\s/u.test(point) && index > 0 && index < translated.length - 1 ? [index] : [])
-      const boundary = spaces.length ? spaces.reduce((closest, index) => Math.abs(index - target) < Math.abs(closest - target) ? index : closest) : target
-      translations = [translated.slice(0, boundary).join('').trim(), translated.slice(boundary).join('').trim()]
-      if (translations.some(text => !text)) throw new Error('译文太短无法拆分，请先清除第二语言，拆分后重新翻译。')
-    }
-    return { ...sequence, captions: sequence.captions!.flatMap(value => value.id === id ? [{ ...cue, text: left, ...(translations ? { translation: translations[0] } : {}), duration: frame - cue.start }, { ...cue, id: crypto.randomUUID(), text: right, ...(translations ? { translation: translations[1] } : {}), start: frame, duration: cue.start + cue.duration - frame }] : [value]) }
+    const reviewReasons = cue.translation ? [...new Set([...(cue.reviewReasons ?? []), 'translation' as const])] : cue.reviewReasons
+    return { ...sequence, captions: sequence.captions!.flatMap(value => value.id === id ? [sliceVideoEditCaptionSpeech({ ...cue, text: left, sourceText: left, reviewReasons, duration: frame - cue.start }, sequence), sliceVideoEditCaptionSpeech({ ...cue, id: crypto.randomUUID(), text: right, sourceText: right, reviewReasons, start: frame, duration: cue.start + cue.duration - frame }, sequence)] : [value]) }
   })
 }
 export function mergeVideoEditSubtitles(projectId: string, sequenceId: string, ids: readonly string[]): void {
@@ -222,7 +217,9 @@ export function mergeVideoEditSubtitles(projectId: string, sequenceId: string, i
     const first = selected[0]; const last = selected.at(-1)
     if (ids.length < 2 || selected.length !== ids.length || !first || !last || all.slice(all.indexOf(first), all.indexOf(last) + 1).length !== selected.length || selected.some(cue => cue.clipId !== first.clipId)) throw new Error('请选择相邻且跟随同一片段的字幕。')
     if (selected.some(cue => Boolean(cue.translation)) && !selected.every(cue => Boolean(cue.translation))) throw new Error('请先为这些字幕统一生成或清除第二语言，再合并。')
-    const merged = videoEditCaptionSchema.parse({ ...first, text: selected.map(cue => cue.text).join('\n'), sourceText: joinCaptionText(selected.map(cue => restoreCaptionSourceText(cue.text, cue.sourceText))), ...(first.translation ? { translation: selected.map(cue => cue.translation).join(' ') } : {}), duration: Math.max(...selected.map(cue => cue.start + cue.duration)) - first.start })
+    const mergedTranslation = selected.every(cue => cue.translation === first.translation && cue.reviewReasons?.includes('translation')) ? first.translation : selected.map(cue => cue.translation).join(' ')
+    const mergedText = selected.map(cue => cue.text).join('\n')
+    const merged = videoEditCaptionSchema.parse({ ...first, text: mergedText, sourceText: joinCaptionText(selected.map(cue => restoreCaptionSourceText(cue.text, cue.sourceText))), speech: selected.every(cue => cue.speech) ? { text: mergedText, aligned: selected.every(cue => cue.speech!.aligned && cue.text === cue.speech!.text), words: selected.flatMap(cue => cue.speech!.words) } : undefined, ...(first.translation ? { translation: mergedTranslation } : {}), duration: Math.max(...selected.map(cue => cue.start + cue.duration)) - first.start })
     return { ...sequence, captions: sequence.captions!.flatMap(cue => cue.id === first.id ? [merged] : ids.includes(cue.id) ? [] : [cue]) }
   })
 }
@@ -286,9 +283,12 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
       const cues = timings && scopedClip ? (await buildSpeechSubtitles(text, timings, scopedClip, sequence.frameRate, settings, signal, pauses, 'clip')).map(value => value.caption)
         : buildAutoSubtitles(group.map((caption, index) => ({ id: caption.id, text: joinCaptionText(texts[index].split('\n')), startFrame: (caption.start - first.start) * sequence.frameRate.denominator, endFrame: (caption.start + caption.duration - first.start) * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false })), sequence.frameRate.numerator, sequence.frameRate, { startFrame: first.start, endFrame }, settings, sequencePauses)
       if (!cues.length) throw new Error('已有时间信息无法覆盖这些字幕，请检查字幕与声音片段的对应位置。')
+      const sourceWords = group.flatMap(caption => caption.speech?.words ?? [])
       for (let index = 0; index < cues.length; index++) {
         const original = group[index]; const id = original?.id ?? cues[index].id
-        const value = { ...first, ...cues[index], id, style: first.style, clipId: first.clipId }
+        const value = sliceVideoEditCaptionSpeech({ ...first, ...cues[index], id, style: first.style, clipId: first.clipId,
+          ...(sourceWords.length && !cues[index].speech ? { speech: { text: cues[index].text, aligned: false, words: sourceWords } } : {}),
+        }, sequence)
         captions.push(value); captionIds.push(id)
         if (!original) createdIds.push(id)
       }

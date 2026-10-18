@@ -5,6 +5,7 @@ import { Captions } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import type { VideoEditCaption } from '@/core/videoEdit/timedContent'
+import { videoEditCaptionClipIds } from '@/core/videoEdit/captionSpeech'
 import { retimeVideoEditCaption, type VideoEditCaptionGesture } from '@/core/videoEdit/captionTiming'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { createRafScheduler } from '@/utils/createRafScheduler'
@@ -26,6 +27,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
   const [preview, setPreview] = useState<VideoEditCaption | null>(null)
   const cancel = useRef<(() => void) | null>(null)
   const projectId = instance.document.id
+  const locked = (caption: VideoEditCaption): boolean => Boolean(sequence.captionTrackLocked || videoEditCaptionClipIds(caption).some(id => sequence.tracks.find(track => track.index === sequence.clips.find(clip => clip.id === id)?.track)?.locked))
   useEffect(() => () => cancel.current?.(), [instance, sequence.id])
   useEffect(() => { cancel.current?.() }, [sequence, pixels])
   const run = (action: () => void): void => { try { action() } catch (error) { onError(error) } }
@@ -36,8 +38,7 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     cancel.current?.()
     event.currentTarget.focus({ preventScroll: true })
     run(() => select(caption.id))
-    const clip = sequence.clips.find(value => value.id === caption.clipId)
-    if (sequence.captionTrackLocked || clip && sequence.tracks.find(track => track.index === clip.track)?.locked) return
+    if (locked(caption)) return
     const host = viewport.current
     if (!host) return
     const win = ownerWindowOf(host); const contentVersion = instance.contentVersion
@@ -89,14 +90,15 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
     {(sequence.captions ?? []).filter(caption => caption.id === preview?.id || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 32).map(original => {
       const caption = preview?.id === original.id ? preview : original
-      return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={sequence.captionTrackLocked || undefined} tooltip={caption.text}
+      return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={locked(caption) || undefined} tooltip={caption.reviewReasons?.length ? `${caption.text}\n${t('captionTrack.reviewHint')}` : caption.text}
         data-video-edit-caption-range={caption.id} data-caption-start={caption.start} data-caption-duration={caption.duration}
-        className={`absolute top-0.5 ${sequence.captionTrackLocked ? 'cursor-default' : 'cursor-grab'}`}
+        className={`absolute top-0.5 ${locked(caption) ? 'cursor-default' : 'cursor-grab'}`}
         style={{ height: row.height - 4, left: TIMELINE_HEADER_WIDTH + caption.start * pixels, width: Math.max(3, caption.duration * pixels) }}
         onPointerDown={event => down(event, original, 'move')} onClick={event => { if (event.detail === 0) run(() => select(caption.id)) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); run(() => select(caption.id)) } }}>
         <span className={`flex h-full w-full items-center gap-1 overflow-hidden rounded-md border bg-clip-title px-1.5 text-2xs text-text1 ${selected === caption.id ? 'border-accent-ring ring-1 ring-accent-ring' : 'border-clip-title-line'}`}>
           <Captions className="shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{caption.text}</span>
-          {!sequence.captionTrackLocked && (['in', 'out'] as const).map(edge => <span key={edge} data-caption-trim={edge} title={t(`captionTrack.${edge === 'in' ? 'trimStart' : 'trimEnd'}`)} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, original, edge)} />)}
+          {Boolean(caption.reviewReasons?.length) && <span className="shrink-0">{t('captionTrack.review')}</span>}
+          {!locked(caption) && (['in', 'out'] as const).map(edge => <span key={edge} data-caption-trim={edge} title={t(`captionTrack.${edge === 'in' ? 'trimStart' : 'trimEnd'}`)} className={`absolute inset-y-0 w-1 cursor-ew-resize ${edge === 'in' ? 'left-0' : 'right-0'}`} onPointerDown={event => down(event, original, edge)} />)}
         </span>
       </UiIconButton>
     })}

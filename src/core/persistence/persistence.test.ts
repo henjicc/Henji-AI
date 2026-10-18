@@ -130,26 +130,28 @@ describe('所有登记格式的黄金样本', () => {
     ['title-templates', 3, 4],
     ['video-preset-package', 2, 3],
     ['subtitle-manifest', 5, 6],
-  ] as const)('%s 参数类型拓宽只升级版本，完整保留旧样本与内嵌内容', (id, from, to) => {
+  ] as const)('%s 历史参数拓宽步骤保留旧样本；不等于恢复开发期已放弃的读取支持', (id, from, to) => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
-    expect(format.version).toBe(to)
+    expect(format.version).toBeGreaterThanOrEqual(to)
     const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${from}.json`, 'utf8')) as unknown
     const before = structuredClone(raw)
     const content = id.startsWith('document.') ? parseDocumentEnvelope(raw).content
       : id === 'title-templates' ? (raw as { content: unknown }).content : raw
     const expected = ['code-asset', 'video-preset-package', 'subtitle-manifest'].includes(id)
       ? { ...(content as object), version: to } : content
-    expect(migratePersistenceContent(format, content, from)).toEqual(expected)
-    expect(upgradePersistenceContent(format, content, from)).toEqual(format.schema.parse(expected))
+    expect(migratePersistenceContent({ ...format, version: to }, content, from)).toEqual(expected)
+    if (format.version === to) expect(upgradePersistenceContent(format, content, from)).toEqual(format.schema.parse(expected))
+    else expect(() => upgradePersistenceContent(format, content, from)).toThrowError(expect.objectContaining({ code: 'unsupported-version', fromVersion: to, toVersion: to + 1 }))
     expect(raw).toEqual(before)
   })
-  it('剪辑 v2–v7 按完整链升至当前版本，旧原稿、曲线、字幕与归档不丢失，读取不修改输入', () => {
+  it('剪辑历史 v2–v7 至 v10 的纯迁移保留原稿，但不能越过字幕词源的开发期断点', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
-    expect(baseline.formats['document.video_edit'].supportedFrom).toBe(2)
+    expect(baseline.formats['document.video_edit'].supportedFrom).toBe(11)
     for (const version of [2, 3, 4, 5, 6, 7]) {
       const raw = parseDocumentEnvelope(JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.video_edit/v${version}.json`, 'utf8')))
       const before = structuredClone(raw.content) as VideoEditDocumentContent
-      const upgraded = upgradePersistenceContent(format, raw.content, version) as VideoEditDocumentContent
+      const upgraded = migratePersistenceContent({ ...format, version: 10 }, raw.content, version) as VideoEditDocumentContent
+      expect(() => upgradePersistenceContent(format, raw.content, version)).toThrowError(expect.objectContaining({ code: 'unsupported-version', fromVersion: 10, toVersion: 11 }))
       expect(raw.content).toEqual(before)
       expect(upgraded.creativeIntents).toEqual(before.creativeIntents)
       expect(upgraded.codeMaterials).toEqual(before.codeMaterials)
@@ -173,8 +175,15 @@ describe('所有登记格式的黄金样本', () => {
       if (version < floor) {
         it(`${format.id} ${file}低于支持下限v${floor}，明确拒绝为旧版本`, () => {
           const raw: unknown = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))
+          let failure: unknown
+          try { upgradePersistenceContent(format, raw, version) } catch (error) { failure = error }
+          expect(failure).toBeInstanceOf(PersistenceError)
+          if (!(failure instanceof PersistenceError)) throw new Error('旧版本必须返回正式持久化错误。')
+          expect(failure.fromVersion).toBeGreaterThanOrEqual(version)
+          expect(failure.fromVersion).toBeLessThan(floor)
+          expect(failure.toVersion).toBe(failure.fromVersion + 1)
           expect(() => upgradePersistenceContent(format, raw, version)).toThrowError(expect.objectContaining({
-            code: 'unsupported-version', formatId: format.id, fromVersion: version,
+            code: 'unsupported-version', formatId: format.id,
           }))
           expect(() => upgradePersistenceContent(format, raw, version)).toThrow('旧版本格式')
         })
@@ -195,6 +204,10 @@ describe('所有登记格式的黄金样本', () => {
           expect(clip.effects?.map(effect => effect.builtin?.id)).toEqual(['color_grade', 'gaussian_blur'])
           expect(clip.curves?.opacity?.[1].value).toBe(1)
           expect(document.sequences[0].captions?.[0].translation).toBe('Golden caption')
+          if (version >= 11) {
+            expect(document.sequences[0].captions?.[0].speech).toMatchObject({ aligned: true, words: [{ clipId: 'golden-sound-clip', text: '字幕', startUs: 166667, endUs: 700000 }, { clipId: 'golden-sound-clip', text: '原文', startUs: 700000, endUs: 1500000 }] })
+            expect(document.sequences[0].captions?.[0].reviewReasons).toEqual(['translation'])
+          }
           expect(document.sequences[0].transitions?.[0].rightClipId).toBe(clip.id)
           // v7：自动缩放的缩放区间（源时间、档位、跟随/固定焦点）与录屏画框参数原样读回。
           if (version >= 7) {

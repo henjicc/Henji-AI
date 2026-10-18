@@ -4,6 +4,8 @@ import { assertVideoEditClipsEditable } from './lockedTracks'
 import { clipSourceSeconds } from './document'
 import { videoEditTransitionClipIds } from './transitions'
 import { mapVideoEditAnnotationTime } from './annotations'
+import { createVideoEditSpeechCaptionRetimer } from './captionSpeech'
+import type { VideoEditCaption } from './timedContent'
 
 /** Shared by matching frames, preview and export (floor selects the child's half-open frame). */
 export function videoEditSequenceFrameAtSeconds(seconds: number, fps: number): number {
@@ -44,6 +46,13 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
   const movedTransitions = (parent.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id)))
   if ((parent.transitions ?? []).some(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id)) && !videoEditTransitionClipIds(transition).every(id => ids.has(id)))) throw new Error('过渡两侧片段必须一起嵌套，请扩大选区或先移除边界过渡。')
   const anchored = (value: { clipId?: string }): boolean => Boolean(value.clipId && ids.has(value.clipId))
+  const captionAnchored = (value: VideoEditCaption): boolean => value.speech ? value.speech.words.every(word => ids.has(word.clipId)) : anchored(value)
+  const selectedSpeech = createVideoEditSpeechCaptionRetimer(parent, { ...parent, clips: selected }, new Map())
+  const otherSpeech = createVideoEditSpeechCaptionRetimer(parent, { ...parent, clips: parent.clips.filter(clip => !ids.has(clip.id)) }, new Map())
+  const captions = (parent.captions ?? []).flatMap(caption => {
+    if (!caption.speech || caption.speech.words.every(word => ids.has(word.clipId)) || caption.speech.words.every(word => !ids.has(word.clipId))) return [caption]
+    return [...selectedSpeech(caption), ...otherSpeech(caption).map(cue => ({ ...cue, id: crypto.randomUUID() }))]
+  })
   const trackIds = new Map(parent.tracks.map(track => [track.id, crypto.randomUUID()]))
   const child: VideoEditSequence = { ...createVideoEditSequence(name), ...(parent.styleKitId ? { styleKitId: parent.styleKitId } : {}), width: parent.width, height: parent.height, frameRate: parent.frameRate, pixelAspectRatio: parent.pixelAspectRatio, sampleRate: parent.sampleRate, channels: parent.channels,
     ...(parent.captionTrackEnabled !== undefined ? { captionTrackEnabled: parent.captionTrackEnabled } : {}),
@@ -64,12 +73,12 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
       return mapped
     }),
     markers: (parent.markers ?? []).filter(anchored).map(value => ({ ...value, frame: value.frame - start })),
-    captions: (parent.captions ?? []).filter(anchored).map(value => ({ ...value, start: value.start - start })), transitions: movedTransitions,
+    captions: captions.filter(captionAnchored).map(value => ({ ...value, start: value.start - start })), transitions: movedTransitions,
   }
   const item = { id: crypto.randomUUID(), kind: 'sequence' as const, name, sequenceId: child.id }
   const clip: VideoEditClip = { id: crypto.randomUUID(), itemId: item.id, kind: 'sequence', name, track, start, duration: end - start, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   const next = { ...parent, clips: [...parent.clips.filter(clip => !ids.has(clip.id)), clip], annotations: parent.annotations.filter(value => !anchored(value)),
-    ...(parent.markers ? { markers: parent.markers.filter(value => !anchored(value)) } : {}), ...(parent.captions ? { captions: parent.captions.filter(value => !anchored(value)) } : {}), ...(parent.transitions ? { transitions: parent.transitions.filter(value => !movedTransitions.includes(value)) } : {}),
+    ...(parent.markers ? { markers: parent.markers.filter(value => !anchored(value)) } : {}), ...(parent.captions ? { captions: captions.filter(value => !captionAnchored(value)) } : {}), ...(parent.transitions ? { transitions: parent.transitions.filter(value => !movedTransitions.includes(value)) } : {}),
   }
   const result = videoEditDocumentSchema.parse({ ...document, items: [...document.items, item], sequences: [...document.sequences.map(sequence => sequence.id === sequenceId ? next : sequence), child] })
   return { document: result, sequence: child, clip, movedClipIds: selected.map(clip => clip.id) }

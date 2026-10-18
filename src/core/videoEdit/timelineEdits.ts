@@ -9,6 +9,7 @@ import { rescaleVideoEditFrame, type VideoEditRatio, type VideoEditSourceTime } 
 import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipSpeedValue, videoEditClipWithinSource } from './clipSpeed'
 import { videoEditSyncCorrections } from './linkSync'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
+import { remapVideoEditCaptionSpeech, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
 import { validateVideoEditTransitions, videoEditTransitionClipIds, type VideoEditTransition } from './transitions'
 import { validateVideoEditAdjustmentRanges } from './compositing'
 import { applyVideoEditTrim, type VideoEditTrimMode } from './timelineTrims'
@@ -167,7 +168,10 @@ function intervals(clips: readonly VideoEditClip[]): Array<{ from: number; to: n
 export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[], linked: VideoEditRelations = true): VideoEditClipboard {
   const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds, linked))
   if (!ids.size) throw new Error('请先选择要复制的片段。')
-  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => Boolean(mark.clipId && ids.has(mark.clipId)) || mark.target.kind === 'range' && Boolean(mark.target.clipIds?.some(id => ids.has(id)))), annotationTrackIndices: Object.fromEntries(sequence.tracks.map(track => [track.id, track.index])), markers: (sequence.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), transitions: (sequence.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id))), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
+  const clips = sequence.clips.filter(clip => ids.has(clip.id))
+  const retimeSpeech = createVideoEditSpeechCaptionRetimer(sequence, { ...sequence, clips }, new Map())
+  const captions = (sequence.captions ?? []).flatMap(caption => caption.speech ? retimeSpeech(caption) : caption.clipId && ids.has(caption.clipId) ? [caption] : [])
+  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips, annotations: sequence.annotations.filter(mark => Boolean(mark.clipId && ids.has(mark.clipId)) || mark.target.kind === 'range' && Boolean(mark.target.clipIds?.some(id => ids.has(id)))), annotationTrackIndices: Object.fromEntries(sequence.tracks.map(track => [track.id, track.index])), markers: (sequence.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))), captions, transitions: (sequence.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id))), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
 }
 
 /** Vertical dragging moves the selected lanes of the primary kind; linked audio keeps its lane. */
@@ -426,7 +430,7 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     return [{ ...mapped, target, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: ids.get(mark.clipId)! } : {}), status: mark.status === 'draft' ? 'draft' as const : 'open' as const, addressedBy: undefined }]
   })
   const markers = (edit.clipboard.markers ?? []).map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId!)!, frame: edit.frame + convert(mark.frame) }))
-  const captions = (edit.clipboard.captions ?? []).map(caption => ({ ...caption, id: crypto.randomUUID(), clipId: ids.get(caption.clipId!)!, start: edit.frame + convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) }))
+  const captions = (edit.clipboard.captions ?? []).map(caption => remapVideoEditCaptionSpeech({ ...caption, id: crypto.randomUUID(), clipId: ids.get(caption.clipId!)!, start: edit.frame + convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) }, ids))
   const transitions = (edit.clipboard.transitions ?? []).map(transition => {
     const leftClipId = transition.leftClipId && ids.get(transition.leftClipId); const rightClipId = transition.rightClipId && ids.get(transition.rightClipId)
     if (transition.leftClipId && !leftClipId || transition.rightClipId && !rightClipId) throw new Error('复制转场必须同时包含两端片段。')

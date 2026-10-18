@@ -199,10 +199,11 @@ it('手动双语确认后才调用模型，整批共用一次费用授权', asyn
   expect([...bridge.records.values()]).toMatchObject([{ state: 'completed', paidReservations: [{ category: 'translation' }] }])
 })
 
-it('手动拆分和合并双语保留两份文本，译文按词边界比例拆分', () => {
+it('手动拆分双语不猜译文边界，保留全文待复核，合并不重复保留的译文', () => {
   const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 60, text: '甲乙丙丁', translation: 'Hello beautiful world', style: videoEditSubtitleStyleSchema.parse({}) })
   splitVideoEditSubtitle(owner.document.id, sequence().id, id, 30, 2)
-  expect(sequence().captions?.map(caption => [caption.text, caption.translation])).toEqual([['甲乙', 'Hello beautiful'], ['丙丁', 'world']])
+  expect(sequence().captions?.map(caption => [caption.text, caption.translation])).toEqual([['甲乙', 'Hello beautiful world'], ['丙丁', 'Hello beautiful world']])
+  expect(sequence().captions?.every(caption => caption.reviewReasons?.includes('translation'))).toBe(true)
   mergeVideoEditSubtitles(owner.document.id, sequence().id, sequence().captions!.map(caption => caption.id))
   expect(sequence().captions).toMatchObject([{ text: '甲乙\n丙丁', translation: 'Hello beautiful world', duration: 60 }])
 })

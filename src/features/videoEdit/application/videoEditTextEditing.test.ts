@@ -17,6 +17,7 @@ import { readVideoEditTranscriptQuery } from './videoEditTranscriptQuery'
 import * as transcriptFunctions from '@/core/videoEdit/textTranscript'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+import { appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles } from './videoEditAutoSubtitles'
 
 beforeEach(installHarnessNativeStorage)
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
@@ -173,4 +174,49 @@ it('长稿重复句分开分页，公共只读授权能查询且不能借候选�
   expect(next.matches[0].from).toBe(page.matches.at(-1)!.to)
   await expect(session.execute({ id: 'extract_video_edit_text', version: 1, input: { documentRef: input.documentRef, sequenceRef: input.sequenceRef, selector: page.matches[0].selector } }, request())).rejects.toThrow()
   expect(owner.past.length).toBe(history)
+})
+
+it('自动字幕词源经公共剪辑保存，撤销重做和重开保留正文及来源；来源不可伪写', async () => {
+  const owner = await fixture(); const sequenceId = owner.document.sequences[0].id
+  appendAutoSubtitles(owner.document.id, sequenceId, [{ id: 'speech-caption', text: '嗯价格九元那个', start: 0, duration: 105 }])
+  const before = structuredClone(owner.document); const app = createApplicationHarness()
+  const documentRef = { kind: 'video_edit.document', id: owner.document.id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequenceId}` }
+  try {
+    const captionRef = { kind: 'video_edit.caption', id: `${owner.document.id}:speech-caption` }
+    const read = await app.read(captionRef, ['video_edit.caption.speech', 'video_edit.caption.review_reasons'])
+    expect(read.properties).toMatchObject({ 'video_edit.caption.speech': { aligned: true, words: [{ clipId: 'a' }, { clipId: 'a' }, { clipId: 'a' }] }, 'video_edit.caption.review_reasons': [] })
+    expect(await app.change(captionRef, { 'video_edit.caption.speech': null })).toMatchObject({ ok: false })
+    const parentBaseline = await app.read(sequenceRef, ['video_edit.sequence.name'])
+    const forged = await app.call('change_application_entities', { summary: '拒绝创建伪造词源', changes: [{ kind: 'create_items', entityType: 'video_edit.caption', parent: sequenceRef, items: [{ properties: {
+      'video_edit.caption.start': 0, 'video_edit.caption.duration': 15, 'video_edit.caption.text': '伪造', 'video_edit.caption.speech': (read.properties as Record<string, unknown>)['video_edit.caption.speech'],
+    } }] }] }, parentBaseline.revisions as Record<string, number>)
+    expect(forged).toMatchObject({ ok: false, error: { message: expect.stringContaining('字幕来源') } })
+    const query = queryVideoEditTranscriptCapability.outputSchema.parse(await app.requireResult('query_video_edit_transcript', { documentRef, sequenceRef, text: '价格九元', matchSource: 'asr' }))
+    const baseline = await app.read(documentRef, ['video_edit.document.name'])
+    const deleted = await app.call('ripple_delete_video_edit_text', { documentRef, sequenceRef, selector: query.matches[0].selector }, baseline.revisions as Record<string, number>)
+    expect(deleted, JSON.stringify(deleted)).toMatchObject({ ok: true })
+    expect(owner.document.sequences[0].captions!.map(caption => caption.text)).toEqual(['嗯', '那个'])
+    const after = structuredClone(owner.document.sequences)
+    expect(savedVideoEdit(owner).sequences).toEqual(after)
+    undoVideoEdit(owner.document.id); expect(owner.document.sequences).toEqual(before.sequences)
+    undoVideoEdit(owner.document.id, true); expect(owner.document.sequences).toEqual(after)
+    const reopened = await reopenVideoEdit(owner.document.id)
+    expect(reopened.document.sequences).toEqual(after)
+  } finally { app.dispose() }
+})
+
+it('字幕拆并更新各自词源，锁定声音也保护未绑定单个片段的字幕与待复核确认', async () => {
+  const owner = await fixture(); const id = owner.document.id; const sequenceId = owner.document.sequences[0].id
+  appendAutoSubtitles(id, sequenceId, [{ id: 'cue', text: '嗯价格九元。那个', start: 0, duration: 105 }])
+  splitVideoEditSubtitle(id, sequenceId, 'cue', 60, 6)
+  expect(owner.document.sequences[0].captions!.map(caption => caption.speech!.words.length)).toEqual([2, 1])
+  mergeVideoEditSubtitles(id, sequenceId, owner.document.sequences[0].captions!.map(caption => caption.id))
+  expect(owner.document.sequences[0].captions![0].speech!.words).toHaveLength(3)
+  editVideoProject(id, document => { document.sequences[0].captions![0].reviewReasons = ['translation']; return document })
+  const app = createApplicationHarness(); const captionRef = { kind: 'video_edit.caption', id: `${id}:cue` }
+  try {
+    expect(await app.change(captionRef, { 'video_edit.caption.review_reasons': [] })).toMatchObject({ ok: true })
+    editVideoProject(id, document => { document.sequences[0].tracks.find(track => track.kind === 'audio')!.locked = true; return document })
+    expect(await app.change(captionRef, { 'video_edit.caption.text': '不能覆盖锁定声音的字幕' })).toMatchObject({ ok: false })
+  } finally { app.dispose() }
 })

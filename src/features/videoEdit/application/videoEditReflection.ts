@@ -1,3 +1,4 @@
+import { videoEditCaptionClipIds } from '@/core/videoEdit/captionSpeech'
 import { readVideoEditMediaAudio, videoEditContentAudioProgress } from './videoEditContentAudio'
 import { createCodeComponentRegistration } from './videoEditCodeComponentReflection'
 import { createVideoEditExplanationRegistration } from './videoEditExplanationReflection'
@@ -86,6 +87,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
   const selected = ref.kind === 'video_edit.sequence' && propertyIds?.length
     ? Object.fromEntries(propertyIds.map(id => videoEditDataKey(id.slice(ref.kind.length + 1))).filter(key => key in found).map(key => [key, (found as unknown as VideoEditFieldData)[key]])) : found
   const data = JSON.parse(JSON.stringify(selected)) as VideoEditFieldData
+  if (ref.kind === 'video_edit.caption') data.reviewReasons ??= []
   if (ref.kind === 'video_edit.media') {
     const audio = readVideoEditMediaAudio(projectId, childId)
     data.audioAnalysis = audio ? { bpm: audio.bpm, beats: [...audio.beats], onsets: [...audio.onsets], beatsPerBar: audio.beatsPerBar, barOrigin: audio.barOrigin } : null
@@ -161,7 +163,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const curveReason = curveKey && this.entityType === 'video_edit.effect' && (!builtin || !requireVideoEditBuiltinEffect(builtin.id).params.some(param => param.key === curveKey)) ? '此内置效果没有该参数；代码滤镜请用 curves 源时间曲线。' : curveKey && this.entityType === 'video_edit.clip' && (data.kind === 'adjustment' && curveKey !== 'opacity' || data.kind === 'audio' && curveKey !== 'volume') ? '此片段类型不支持该动画参数。' : undefined
       const captionOwner = this.entityType === 'video_edit.caption' ? document.sequences.find(sequence => sequence.captions?.some(caption => caption.id === childId)) : undefined
       const caption = captionOwner?.captions?.find(value => value.id === childId)
-      const locked = captionOwner ? Boolean(captionOwner.captionTrackLocked || caption?.clipId && captionOwner.tracks.find(track => track.index === captionOwner.clips.find(clip => clip.id === caption.clipId)?.track)?.locked) : childOwner ? childOwner.clipIds.some(id => childOwner.sequence.tracks.find(track => track.index === childOwner.sequence.clips.find(clip => clip.id === id)?.track)?.locked) : false
+      const locked = captionOwner ? Boolean(captionOwner.captionTrackLocked || caption && videoEditCaptionClipIds(caption).some(id => captionOwner.tracks.find(track => track.index === captionOwner.clips.find(clip => clip.id === id)?.track)?.locked)) : childOwner ? childOwner.clipIds.some(id => childOwner.sequence.tracks.find(track => track.index === childOwner.sequence.clips.find(clip => clip.id === id)?.track)?.locked) : false
       const reasons = overrideUnsupported ? ['元素覆盖需要第三版代码生成素材。'] : noTimeline ? ['没有序列，请先通过序列集合新建序列。'] : multicamUnsupported ? ['请选择多机位源序列或多机位片段。'] : roleUnsupported ? ['只有带声音的音视频片段可以标注声音类型。'] : curveReason ? [curveReason] : absent ? ['此片段没有代码实例参数。'] : wrongKind ? ['此片段类型不支持该操作。'] : locked ? ['所属轨道已锁定。'] : field.writer ? [] : [field.descriptor.readOnlyReason!]
       return { propertyId, readable: true, writable: Boolean(field.writer) && !overrideUnsupported && !noTimeline && !absent && !wrongKind && !locked && !curveReason && !roleUnsupported && !multicamUnsupported, reasons, requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
     })

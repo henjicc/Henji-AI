@@ -10,6 +10,7 @@ import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/cor
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import { styleVideoEditSubtitles, segmentVideoEditSubtitles, type SubtitleScope } from '../application/videoEditAutoSubtitles'
+import { updateVideoEditTimedContent } from '../application/videoEditTimedContent'
 import { readSubtitleJob, subscribeSubtitleJobs, subtitleJobsRevision, runVideoEditSubtitleJob, cancelSubtitleJob, findRecoverableSubtitleAudio } from '../application/videoEditSubtitleJobs'
 import { subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
 import { listVideoEditSubtitlePresets } from '../application/videoEditSubtitlePresets'
@@ -81,6 +82,10 @@ export function VideoEditSubtitleActions({ instance, sequence, selectedCaptionId
     void confirmVideoEditBilingualSubtitles(instance.document.id, sequence.id, { targetLanguage }, controller.signal).catch(error => { if (mounted.current && !controller.signal.aborted) onError(error) }).finally(() => { if (mounted.current) setTranslating(false); if (translation.current === controller) translation.current = undefined })
   }
   return <PanelTrigger open={open} onOpenChange={setOpen} panelSize="compact" zIndex={Z_LAYERS.dropdown} renderPanel={() => <div className="flex max-h-96 flex-col gap-3 overflow-auto">
+    {Boolean(currentCaption?.reviewReasons?.length) && <UiGroup title="剪辑后复核" titleTone="compact">
+      <p className={UI_TEXT_META_CLASS}>这条字幕有待核对的内容。请核对正文、译文与声音是否对应，并检查显示时间。</p>
+      <UiButton size="sm" disabled={sequence.captionTrackLocked || busy} disabledReason={sequence.captionTrackLocked ? '字幕轨道已锁定，请先解锁。' : busy ? '字幕正在处理中，请稍后确认。' : undefined} onClick={() => { if (currentCaption) { try { updateVideoEditTimedContent(instance.document.id, sequence.id, 'caption', currentCaption.id, { reviewReasons: [] }) } catch (error) { onError(error) } } }}>确认已检查</UiButton>
+    </UiGroup>}
     <UiGroup title="自动字幕" titleTone="compact">
       <UiFormRow label="范围" density="compact"><Dropdown ariaLabel="字幕转录范围" size="sm" value={scope} onSelect={setScope} disabled={sequence.captionTrackLocked || busy} options={[{ value: 'sequence', label: '整个序列' }, { value: 'in-out', label: '序列入出点' }, { value: 'selection', label: '选中片段' }]} /></UiFormRow>
       <UiFormRow label="声音" density="compact"><Dropdown ariaLabel="字幕声音来源" size="sm" value={trackId} onSelect={setTrackId} disabled={sequence.captionTrackLocked || busy} options={[{ value: '', label: '可听混音' }, ...sequence.tracks.map(track => ({ value: track.id, label: track.name }))]} /></UiFormRow>

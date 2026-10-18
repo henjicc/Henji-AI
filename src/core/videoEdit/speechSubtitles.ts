@@ -7,6 +7,7 @@ import { joinAudioEditText } from '../audioEdit/captions'
 import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange, videoEditClipSpeedValue, type VideoEditClipTiming } from './clipSpeed'
 import { videoEditFps, type VideoEditRatio } from './time'
 import type { VideoEditCaption } from './timedContent'
+import { bindVideoEditCaptionSpeech, type VideoEditCaptionSpeechWord } from './captionSpeech'
 
 export interface SpeechSubtitle { caption: VideoEditCaption; startUs: number; endUs: number; confidence: number; estimated: boolean }
 /** Original text is authoritative; provider/ASR text supplies only matching anchors. */
@@ -18,6 +19,21 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
   const scopedTimings = textScope === 'clip' ? { ...timings, items: timings.items.filter(item => item.endMs > range.from * 1000 && item.startMs < range.to * 1000) } : timings
   const aligned = (await alignSpeechTimings(original, scopedTimings, signal)).filter(char =>
     (char.endMs > range.from * 1000 + 1e-6 || char.endMs === char.startMs && char.startMs >= range.from * 1000 - 1e-6) && char.startMs < range.to * 1000 - 1e-6)
+  const bind = (caption: VideoEditCaption, chars: typeof aligned): VideoEditCaption => {
+    const words: VideoEditCaptionSpeechWord[] = []
+    let previousWord: number | undefined
+    for (const char of chars) {
+      const last = words.at(-1)
+      const startUs = Math.max(0, Math.round(char.startMs * 1000)); const endUs = Math.max(startUs, Math.round(char.endMs * 1000))
+      if (last && char.wordId !== undefined && previousWord === char.wordId) {
+        last.text += char.text; last.endUs = Math.max(last.endUs, endUs)
+        if (char.mismatch || !char.endExact) last.precision = 'estimated'
+        else if (char.startExact || char.wordStartMs !== undefined && last.startUs === Math.round(char.wordStartMs * 1000)) last.precision = 'word'
+      } else words.push({ clipId: clip.id, text: char.text, startUs, endUs, precision: char.startExact && char.endExact && !char.mismatch ? 'word' : 'estimated' })
+      previousWord = char.wordId
+    }
+    return bindVideoEditCaptionSpeech(caption, words)
+  }
   if (settings.chinese) {
     const tokens = subtitleTokensFromCharacters(aligned.map(char => ({ ...char, timing: timings.granularity === 'word' ? 'word' as const : 'estimated' as const })))
     for (const token of tokens) if (token.wordId !== undefined) {
@@ -44,7 +60,7 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
       const anchored = timings.granularity !== 'sentence'
         && timings.items.some(item => frameAt(clip.reverse ? item.endMs : item.startMs) === start)
         && timings.items.some(item => frameAt(item.endMs) === end || frameAt(item.startMs) === end)
-      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text: group.text, sourceText: group.sourceText, start, duration: Math.max(1, end - start) },
+      return { caption: bind({ id: crypto.randomUUID(), clipId: clip.id, text: group.text, sourceText: group.sourceText, start, duration: Math.max(1, end - start) }, chars),
         startUs: Math.round(start / fps * 1e6), endUs: Math.round(end / fps * 1e6), confidence: mismatch ? 0 : Math.min(first?.confidence ?? 0, last?.confidence ?? 0) * Number(anchored), estimated: mismatch || !anchored }
     }).sort((a, b) => a.caption.start - b.caption.start)
     for (let index = 0; index + 1 < result.length; index++) {
@@ -83,7 +99,7 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
       const startExact = (boundaryStart <= boundaryEnd ? first.startExact : last.endExact) && start === subtitleFrameBoundary(Math.min(boundaryStart, boundaryEnd))
       const endExact = (boundaryStart <= boundaryEnd ? last.endExact : first.startExact) && end === subtitleFrameBoundary(Math.max(boundaryStart, boundaryEnd))
       const estimated = !startExact || !endExact || mismatched
-      return { caption: { id: crypto.randomUUID(), clipId: clip.id, text, start, duration: end - start },
+      return { caption: bind({ id: crypto.randomUUID(), clipId: clip.id, text, start, duration: end - start }, chars),
       startUs: Math.round(start * rate.denominator * 1e6 / rate.numerator), endUs: Math.round(end * rate.denominator * 1e6 / rate.numerator),
       confidence: mismatched ? 0 : Math.min(first.confidence, last.confidence) * (Number(Boolean(startExact)) + Number(Boolean(endExact))) / 2, estimated }
     })

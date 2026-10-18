@@ -251,6 +251,8 @@
   },
   "videoEdit": { "inlineCaption": "就地编辑字幕" },
   "captionTrack": {
+    "review": "待复核",
+    "reviewHint": "剪辑后保留了原字幕，请核对正文、译文和显示时间。",
     "name": "字幕",
     "show": "显示字幕轨道",
     "hide": "隐藏字幕轨道",

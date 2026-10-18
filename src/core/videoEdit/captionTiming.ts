@@ -2,6 +2,7 @@ import type { VideoEditSequence } from './document'
 import type { VideoEditCaption } from './timedContent'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS, videoEditFps } from './time'
 import { assertVideoEditClipsEditable } from './lockedTracks'
+import { videoEditCaptionClipIds } from './captionSpeech'
 
 export type VideoEditCaptionGesture = 'move' | 'in' | 'out'
 
@@ -10,7 +11,7 @@ export function retimeVideoEditCaption(sequence: VideoEditSequence, id: string, 
   const caption = sequence.captions?.find(value => value.id === id)
   if (!caption) throw new Error('原字幕已移除，请重新选择。')
   if (sequence.captionTrackLocked) throw new Error('字幕轨道已锁定，请先解锁再编辑。')
-  if (caption.clipId) assertVideoEditClipsEditable(sequence, [caption.clipId])
+  assertVideoEditClipsEditable(sequence, videoEditCaptionClipIds(caption))
   const owner = sequence.clips.find(clip => clip.id === caption.clipId)
   let from = owner?.start ?? 0
   let to = owner ? owner.start + owner.duration : Math.floor(videoEditFps(sequence.frameRate) * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)

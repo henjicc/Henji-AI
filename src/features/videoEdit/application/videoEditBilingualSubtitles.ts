@@ -7,6 +7,7 @@ import { describeLlmProviderError } from '@/core/llm/providerErrorMessage'
 import { videoEditCaptionSchema } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
+import { videoEditCaptionClipIds } from '@/core/videoEdit/captionSpeech'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
 import { editVideoSequence, requireVideoEditInstance, holdVideoEditActivity, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 
@@ -28,7 +29,7 @@ export async function generateVideoEditBilingualSubtitles(projectId: string, seq
   const captions = structuredClone((sequence.captions ?? []).filter(caption => !options.captionIds || options.captionIds.includes(caption.id)))
   if (!captions.length || options.captionIds?.some(id => !captions.some(caption => caption.id === id))) throw new Error('请先选择仍存在的字幕。')
   if (captions.some(caption => caption.text.split('\n').length > 1)) throw new Error('双语上下双行需要原文单行，请先将每条最多行数设为 1，再整理长句。')
-  assertVideoEditClipsEditable(sequence, captions.flatMap(caption => caption.clipId ? [caption.clipId] : []))
+  assertVideoEditClipsEditable(sequence, captions.flatMap(videoEditCaptionClipIds))
   if (running.has(owner)) throw new Error('此剪辑正在生成双语字幕，请等待或取消。')
   const baseline = JSON.stringify(captions)
   const assertTarget = (): void => {

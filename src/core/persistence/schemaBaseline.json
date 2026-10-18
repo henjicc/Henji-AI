@@ -113,9 +113,9 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 10,
-      "fingerprint": "84d241187a265089913f87233afa5532184f3259eee49823f471058f84949a9a",
-      "supportedFrom": 2
+      "version": 11,
+      "fingerprint": "935f7a1492b7d5597bb23d9f9fbba96ef6c4d88d5ad202d9abd4d7ce137e0d0e",
+      "supportedFrom": 11
     },
     "document.canvas": {
       "version": 1,
@@ -283,9 +283,9 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 6,
-      "fingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
-      "supportedFrom": 1
+      "version": 7,
+      "fingerprint": "4fcdfc8d74520ad802adc5ff527b95a3fb0cda7fe95d0485668e8c2faf8497b3",
+      "supportedFrom": 7
     },
     "storyboard-metadata": {
       "version": 1,
@@ -348,9 +348,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 12,
-      "fingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
-      "supportedFrom": 2
+      "version": 13,
+      "fingerprint": "394d6c3b5a670beb03ee5a07d71bd75fde9ef6863ae4a1d859de985e9e02b3b2",
+      "supportedFrom": 13
     },
     "recording-setup": {
       "version": 1,
@@ -1585,6 +1585,33 @@
       "reason": "4.23 导演脚本、配音回执与可选真实 ASR 文档引用，开发期升至 v5",
       "previousFingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
       "fingerprint": "88543a4f90b66eff15998d917e5fc115fb532a6e29e9a0b8c1cc04960957b9be",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-18T21:57:58.219Z",
+      "format": "document.video_edit",
+      "version": 11,
+      "reason": "自动字幕新增来源词关联与剪辑后复核语义，开发期直接采用新格式；同步内嵌剪辑快照和字幕回填记录，不伪造旧字幕词源。",
+      "previousFingerprint": "84d241187a265089913f87233afa5532184f3259eee49823f471058f84949a9a",
+      "fingerprint": "935f7a1492b7d5597bb23d9f9fbba96ef6c4d88d5ad202d9abd4d7ce137e0d0e",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-18T21:57:58.221Z",
+      "format": "document.screen_recording",
+      "version": 13,
+      "reason": "自动字幕新增来源词关联与剪辑后复核语义，开发期直接采用新格式；同步内嵌剪辑快照和字幕回填记录，不伪造旧字幕词源。",
+      "previousFingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
+      "fingerprint": "394d6c3b5a670beb03ee5a07d71bd75fde9ef6863ae4a1d859de985e9e02b3b2",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-18T21:57:58.221Z",
+      "format": "subtitle-manifest",
+      "version": 7,
+      "reason": "自动字幕新增来源词关联与剪辑后复核语义，开发期直接采用新格式；同步内嵌剪辑快照和字幕回填记录，不伪造旧字幕词源。",
+      "previousFingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
+      "fingerprint": "4fcdfc8d74520ad802adc5ff527b95a3fb0cda7fe95d0485668e8c2faf8497b3",
       "waivedFixtureVersions": []
     }
   ],

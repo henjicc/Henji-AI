@@ -34,6 +34,8 @@ maxCharacters/maxLines、minDurationSeconds/maxDurationSeconds、maxReadingSpeed
 
 后续用 `video_edit.caption.text` / `video_edit.caption.start` / `video_edit.caption.duration` / `video_edit.caption.translation` 校正。重新分段前已有译文需先清除，再分段重译；尽量复用原引用，新增与合并移除的引用读返回值。
 
+自动字幕的 `video_edit.caption.speech` 是只读来源词证据，文本剪辑、复制和嵌套共用，不手工伪造。独立创建/导入的字幕保持原有锚定语义。剪辑后读 `video_edit.caption.review_reasons`：text 表示保留的人工正文需核对，translation 表示保留的译文需改写或重译，timing 表示词内切点或估算时间需试听。先核对声音和对应字幕，再通过通用属性写 `review_reasons: []` 确认；不能把清空标记当成已经检查。译文没有词级对应时不按字数比例猜拆。
+
 ## 翻译和样式
 
 - `translate_video_edit_subtitles` 给 documentRef、sequenceRef、targetLanguage，可选 captionRefs、providerId/modelId；可能计费，不能把免费整理和翻译混同。双语流程按现有声明先 maxLines=1 整理原文，再生成下方译文；重生成替换所选译文，失败后先查原状态，不能承诺失败批次重试免费。

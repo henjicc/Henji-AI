@@ -34,7 +34,7 @@ export const VIDEO_EDIT_TIME_CASCADES = [
   { declarationId: 'video_edit.sequence_caption_time', effect: 'update', entityType: 'video_edit.caption', propertyIds: ['video_edit.caption.start', 'video_edit.caption.duration'], revisionScopes: ['video_edit'] },
 ] as const
 export const VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE = { declarationId: 'video_edit.clip_keyframe_time', effect: 'update' as const, entityType: 'video_edit.clip', propertyIds: VIDEO_EDIT_ANIMATABLE_KEYS.map(key => `video_edit.clip.${videoEditPropertyKey(key)}.keyframes`), revisionScopes: ['video_edit'] }
-export const VIDEO_EDIT_CLIP_CONTENT_CASCADES = (['create', 'update', 'delete'] as const).flatMap(effect => (['marker', 'caption'] as const).map(kind => ({ declarationId: `video_edit.clip_${kind}_${effect}`, effect, entityType: `video_edit.${kind}`, propertyIds: effect === 'update' ? kind === 'marker' ? ['video_edit.marker.frame', 'video_edit.marker.clip_id'] : ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.clip_id'] : [], revisionScopes: ['video_edit'] })))
+export const VIDEO_EDIT_CLIP_CONTENT_CASCADES = (['create', 'update', 'delete'] as const).flatMap(effect => (['marker', 'caption'] as const).map(kind => ({ declarationId: `video_edit.clip_${kind}_${effect}`, effect, entityType: `video_edit.${kind}`, propertyIds: effect === 'update' ? kind === 'marker' ? ['video_edit.marker.frame', 'video_edit.marker.clip_id'] : ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.clip_id', 'video_edit.caption.text', 'video_edit.caption.source_text', 'video_edit.caption.speech', 'video_edit.caption.review_reasons'] : [], revisionScopes: ['video_edit'] })))
 const compositeUpdateKeys = { 'video_edit.tracker': ['name', 'method', 'prompts'], 'video_edit.graphic_object': ['name', 'parameters', 'curves', 'text_style', 'visible'], 'video_edit.effect': ['name', 'enabled', 'amount', 'version_id', 'parameters', 'curves', 'frame_curves', 'mask', 'regions'], 'video_edit.transition': ['kind', 'duration_frames', 'alignment', 'frames_before_cut', 'parameters', 'frame_curves'] }
 export const VIDEO_EDIT_COMPOSITE_CASCADES = (['create', 'update', 'delete'] as const).flatMap(effect => VIDEO_EDIT_COMPOSITE_TYPES.map(entityType => ({ declarationId: `${entityType}_${effect}`, effect, entityType, propertyIds: effect === 'update' ? compositeUpdateKeys[entityType].map(key => `${entityType}.${key}`) : [], revisionScopes: ['video_edit'] })))
 export const VIDEO_EDIT_SOURCE_PROGRAM_CASCADE = { declarationId: 'video_edit.source_foreground_program_pause', effect: 'update' as const, entityType: 'video_edit.document', propertyIds: ['video_edit.document.program_playback'], revisionScopes: ['video_edit'] }
@@ -266,9 +266,11 @@ function defaultFieldDescription(key: string): string {
   return fieldDescriptions[key] ?? schemasDescription(key) ?? `${title}。`
 }
 Object.assign(labels, { amount: '效果强度', sourceText: '原句', source: '作者源码', files: '源码文件', entry: '源码入口', apiVersion: '代码接口版本', languageVersion: '代码语言版本', defaultVersionId: '默认源码版本', versionIds: '源码版本列表', types: '自定义参数类型', visible: '可见', anchorX: '水平锚点', anchorY: '垂直锚点', method: '跟踪方法', prompts: '跟踪提示', styleKitId: '风格', proxyPreference: '代理媒体偏好', proxyState: '代理媒体状态', follow: '跟随跟踪器', trackers: '跟踪器', sourceRange: '初始源范围', creativeSource: '生成来源', elementOverrides: '元素覆盖', color: '颜色', scaleX: '水平缩放', scaleY: '垂直缩放', flipX: '水平翻转', flipY: '垂直翻转', endFrame: '结束帧', author: '批注作者', createdAt: '创建时间', addressedBy: '处理操作', target: '批注目标', thread: '讨论记录', code: '代码实例' })
+Object.assign(labels, { speech: '来源文字', reviewReasons: '待复核内容' })
+schemas['video_edit.caption'].speech = videoEditCaptionSchema.shape.speech.unwrap().nullable()
 export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityType => [entityType, Object.entries(schemas[entityType]).map(([key, schema]): ApplicationFieldDefinition<VideoEditFieldData, VideoEditFieldData> => {
   const id = `${entityType}.${videoEditPropertyKey(key)}`
-  const controlled = VIDEO_EDIT_CONTROLLED_AGGREGATES.some(value => value === key)
+  const controlled = VIDEO_EDIT_CONTROLLED_AGGREGATES.some(value => value === key) || entityType === 'video_edit.caption' && key === 'speech'
   const child = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === entityType)
   const curveKey = key.endsWith('.keyframes') ? key.split('.').at(-2)! : undefined
   const curveDataKey = entityType === 'video_edit.clip' ? 'curves' : 'frameCurves'
@@ -297,6 +299,7 @@ export function videoEditCollectionValues(entityType: VideoEditEntityType, prope
     const suffix = propertyId.slice(entityType.length + 1)
     const key = Object.keys(schemas[entityType]).find(key => videoEditPropertyKey(key) === suffix)
     if (!key) throw new Error('创建属性未登记。')
+    if (entityType === 'video_edit.caption' && key === 'speech') throw new Error('字幕来源只由自动字幕与对齐服务维护；手动创建请省略 speech，建立独立字幕。')
     const schema = schemas[entityType][key]
     if (entityType === 'video_edit.annotation' && schema.isOptional() && value === null) continue
     const parsed = schema.parse(value) as JsonValue

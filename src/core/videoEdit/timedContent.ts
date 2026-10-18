@@ -8,12 +8,15 @@ import { buildSubtitleText, parseSubtitleText } from '../media/subtitleFormat'
 import { retimeVideoEditTransitions } from './transitions'
 import { subtitleGraphic, videoEditSubtitleStyleSchema } from './subtitleStyle'
 import type { VideoEditGraphic } from './graphics'
+import { videoEditCaptionSpeechSchema, videoEditCaptionReviewSchema, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
 
 const id = z.string().min(1).max(100)
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 export const videoEditMarkerSchema = z.object({ id, clipId: id.optional(), frame, name: z.string().trim().min(1).max(200), type: z.enum(['marker', 'beat']).optional().describe('beat 为节拍，marker 或省略表示普通标记。'), strength: z.number().finite().min(0).max(1).optional().describe('节拍的相对重音强度，0–1。') }).strict()
 export const videoEditCaptionSchema = z.object({ id, clipId: id.optional(), start: frame, duration: frame.min(1), text: z.string().min(1).max(2000).refine(text => Boolean(text.trim()), '字幕须包含文字。'),
   sourceText: z.string().optional().describe('排版前原句，供重新整理恢复行尾被移除的标点；人工改字后不覆盖现文。'),
+  speech: videoEditCaptionSpeechSchema.optional().describe('自动字幕的来源文字及声音源区间，由字幕与剪辑服务维护。'),
+  reviewReasons: videoEditCaptionReviewSchema.optional().describe('剪辑后待复核的正文、译文或估算时间；确认对应内容后可清空。'),
   translation: z.string().trim().max(2000).optional().describe('第二语言字幕，显示在原文下方；空字符串清除翻译。'),
   // Reflection's shared unset-value convention is the empty string; make it a valid schema value.
   style: z.union([videoEditSubtitleStyleSchema, z.literal('')]).optional().describe('共享文字样式，空间量以1080p为参考，bottomMargin为底部安全区比例0–1；空字符串恢复默认。'),
@@ -52,7 +55,9 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
       return frame >= clip.start && frame < clip.start + clip.duration ? [{ ...marker, clipId: clip.id, frame }] : []
     })
   })
+  const retimeSpeech = before.captions?.some(caption => caption.speech) ? createVideoEditSpeechCaptionRetimer(before, after, origins) : undefined
   const captions = before.captions?.flatMap(caption => {
+    if (caption.speech) return retimeSpeech!(caption)
     if (!caption.clipId) return [caption]
     let retained = false
     return (descendants.get(caption.clipId) ?? []).flatMap(({ clip, shift }) => {

@@ -1,5 +1,6 @@
 import type { VideoEditDocument, VideoEditSequence } from './document'
 import { videoEditTransitionClipIds } from './transitions'
+import { videoEditCaptionClipIds } from './captionSpeech'
 
 /** Lock is an editing constraint, not an output switch. Undo restores the whole transaction. */
 export function assertVideoEditLockedTracks(before: VideoEditDocument, after: VideoEditDocument): void {
@@ -16,7 +17,7 @@ export function assertVideoEditLockedTracks(before: VideoEditDocument, after: Vi
         const ids = new Set(clips.map(clip => clip.id))
         const annotations = value.annotations.filter(mark => Boolean(mark.clipId && ids.has(mark.clipId))).sort((a, b) => a.id.localeCompare(b.id))
         const markers = (value.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))).sort((a, b) => a.id.localeCompare(b.id))
-        const captions = (value.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)).sort((a, b) => a.id.localeCompare(b.id))
+        const captions = (value.captions ?? []).filter(caption => videoEditCaptionClipIds(caption).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
         const transitions = (value.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
         return JSON.stringify({ clips, annotations, markers, captions, transitions })
       }
