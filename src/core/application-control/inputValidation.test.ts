@@ -10,7 +10,7 @@ const publicClipSchema = { ...z.toJSONSchema(clipSchema, { io: 'input' }), prope
   ...z.toJSONSchema(clipSchema, { io: 'input' }).properties,
   ...z.toJSONSchema(commonToolInputSchema, { io: 'input' }).properties,
 } }
-const accepted = '这个工具接受：clipRef（必填）。\n通用：includeRevisions、includeEvidence、includeDetails。'
+const accepted = '这个工具接受：clipRef（必填）、range、searchMs、retainedMs。\n通用：includeRevisions、includeEvidence、includeDetails。'
 const message = (schema: z.ZodType, input: unknown, publicSchema: Record<string, unknown>) => {
   const parsed = schema.safeParse(input)
   if (parsed.success) throw new Error('测试输入必须无效')

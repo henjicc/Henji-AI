@@ -1,6 +1,14 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+/** Tooling reads the same formal version declaration; fixtures must not maintain a second version number. */
+function videoEditDocumentVersion() {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../src/core/persistence/schemaVersions.ts'), 'utf8')
+  const match = /^export const VIDEO_EDIT_DOCUMENT_VERSION = (\d+)\s*$/m.exec(source)
+  if (!match) throw new Error('无法读取正式剪辑文档版本，请核对 schemaVersions.ts')
+  return Number(match[1])
+}
+
 /*
  * 剪辑巡检场景的数据与入口（3.1 剪辑接入）：剪辑是项目里的文档文件（`.henji-video`，统一文档外壳），
  * 不再有“打开项目文件 / 另存为”。场景经正式文档接口（preload `henjiNative.documents`）造数据，
@@ -51,7 +59,7 @@ function readVideoEditFile(file) {
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decode(item)]))
     return value
   }
-  return { format: 'henji-video-project', version: 5, id: raw.id, name: raw.name, revision: raw.revision, ...decode(raw.content) }
+  return { format: 'henji-video-project', version: videoEditDocumentVersion(), id: raw.id, name: raw.name, revision: raw.revision, ...decode(raw.content) }
 }
 
 /**
@@ -216,6 +224,7 @@ module.exports = {
   openVideoEditFixture,
   openVideoEditProjectCard,
   readVideoEditFile,
+  videoEditDocumentVersion,
   savedVideoEdit,
   seedVideoEditProject,
   showVideoEditProjects,

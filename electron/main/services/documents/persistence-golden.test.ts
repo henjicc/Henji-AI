@@ -13,7 +13,7 @@ import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSc
 import { readStoryboardMetadataFromPng } from '../image/png-metadata'
 import { compileCodeMaterial } from '../../../../src/core/videoEdit/codeMaterial/compiler'
 import { videoEditDocumentSchema } from '../../../../src/core/videoEdit/document'
-import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, VIDEO_EDIT_DOCUMENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
+import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, VIDEO_EDIT_DOCUMENT_VERSION, VIDEO_EDIT_CONTENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
 import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
 
@@ -88,15 +88,20 @@ describe('正式读入口打开黄金归档与源码', () => {
   })
   it.each(supported('project-package'))('真实项目包 v%s 导入后剪辑内容和代码文件可读，保留效果、字幕与调色', async version => {
     environment = createTestEnvironment()
-    const source = fixture('project-package', `v${version}.henjipack`)
+    // The archive envelope and its editable documents have independent format versions.
+    const source = fixture('project-package', `v${version}-video-v${VIDEO_EDIT_CONTENT_VERSION}.henjipack`)
     const original = await fsp.readFile(source)
     const imported = await environment.services.service.importPackage({ source })
     if (imported.type !== 'project') throw new Error('应为项目包')
     const document = environment.catalog.listDocuments({ projectId: imported.project.id, kind: 'video_edit' })[0]
     const read = await environment.services.service.readDocument({ id: document.id })
     // 归档可读还必须能进入剪辑的完整 schema，不能只通过主进程的外层校验。
-    videoEditDocumentSchema.parse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: read.meta.id, name: read.meta.name, revision: read.meta.revision, ...(read.content as object) })
-    expect(read.content).toMatchObject({ sequences: [{ clips: [{ effects: [{ builtin: { id: 'color_grade' } }, { builtin: { id: 'gaussian_blur' } }] }], captions: [{ translation: 'Golden caption' }] }] })
+    const parsed = videoEditDocumentSchema.parse({ format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: read.meta.id, name: read.meta.name, revision: read.meta.revision, ...(read.content as object) })
+    expect(parsed.sequences[0].clips.find(clip => clip.kind === 'code')).toMatchObject({ effects: [{ builtin: { id: 'color_grade' } }, { builtin: { id: 'gaussian_blur' } }], contentAnchor: { ranges: [{ clipId: 'golden-sound-clip', itemId: 'golden-sound-item' }] } })
+    expect(parsed.sequences[0].captions).toMatchObject([{ translation: 'Golden caption', speech: { words: [
+      { clipId: 'golden-sound-clip', text: '字幕', startUs: 166667, endUs: 700000 },
+      { clipId: 'golden-sound-clip', text: '原文', startUs: 700000, endUs: 1500000 },
+    ] } }])
     const code = read.content as { codeMaterials: { versions: { files: { location: string; hash: string }[] }[] }[] }
     const file = code.codeMaterials[0].versions[0].files[0]
     expect(codeSourceHash(await fsp.readFile(file.location, 'utf8'))).toBe(file.hash)

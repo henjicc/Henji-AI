@@ -6,6 +6,7 @@ import { parseDocumentEnvelope } from '../documents/envelope'
 import { readLocalPersistenceJson, serializeVersionedPersistenceJson } from './versionedJson'
 import { decodePersistenceResource } from './resourceContracts'
 import type { RecordingDocument } from '../screenRecording/document'
+import { z } from 'zod'
 
 function fixture(id: string, version: number): string {
   return fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8')
@@ -27,10 +28,13 @@ describe('同源 dev-break 的无损恢复', () => {
     expect(readLocalPersistenceJson(storage.getItem(key)!, key, contract, storage)).toEqual(upgraded)
   })
 
-  it.each([1, 2])('字幕回填 v%s 保留声音身份、时间与原文字段，不伪造新原文', version => {
+  it.each([1, 2])('字幕回填 v%s 的历史1→6迁移保留声音身份与原文字段，当前版本明确拒绝', version => {
     const raw = JSON.parse(fixture('subtitle-manifest', version)) as { captions: unknown; soundIdentities: unknown; soundClips: unknown }
     const before = structuredClone(raw)
-    const contract = PERSISTENCE_FORMATS.find(format => format.id === 'subtitle-manifest')!
+    const current = PERSISTENCE_FORMATS.find(format => format.id === 'subtitle-manifest')!
+    expect(() => upgradePersistenceContent(current, raw, version)).toThrowError(expect.objectContaining({ code: 'unsupported-version' }))
+    // Pure historical migration evidence does not promise current-format compatibility.
+    const contract = { ...current, version: 6, schema: z.unknown() }
     const upgraded = upgradePersistenceContent(contract, raw, version) as typeof raw
     expect(upgraded.captions).toEqual(raw.captions)
     expect(upgraded.soundIdentities).toEqual(raw.soundIdentities)
@@ -48,10 +52,12 @@ describe('同源 dev-break 的无损恢复', () => {
     expect(raw).toEqual(before)
   })
 
-  it.each([2, 3, 4])('录制文档 v%s 保留媒体、引用及理解结果，补齐新增空集合且保存后可读', version => {
+  it.each([2, 3, 4])('录制文档 v%s 的历史2→12迁移保留媒体与理解结果，当前版本明确拒绝', version => {
     const raw = parseDocumentEnvelope(JSON.parse(fixture('document.screen_recording', version)))
     const original = structuredClone(raw)
-    const contract = PERSISTENCE_FORMATS.find(format => format.id === 'document.screen_recording')!
+    const current = PERSISTENCE_FORMATS.find(format => format.id === 'document.screen_recording')!
+    expect(() => upgradePersistenceContent(current, raw.content, version)).toThrowError(expect.objectContaining({ code: 'unsupported-version' }))
+    const contract = { ...current, version: 12, schema: z.unknown() }
     const upgraded = upgradePersistenceContent(contract, raw.content, version) as RecordingDocument
     const old = raw.content as RecordingDocument
     expect(upgraded.media).toEqual(old.media)

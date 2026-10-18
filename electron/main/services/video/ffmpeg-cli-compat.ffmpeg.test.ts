@@ -31,6 +31,7 @@ const OTHER_COMMAND_TOKENS: Record<string, string> = {
 
 /** 按文件登记的 FFmpeg 选项例外：必须真实出现，避免例外过期后继续放行。 */
 const FILE_EXCEPTIONS: Record<string, Record<string, string>> = {
+  'electron/main/services/audio-edit/speech-energy.ts': { inf: 'astats 返回的负无穷电平元数据，不是命令行参数' },
   'electron/main/services/video/hwaccel.ts': { allow_sw: 'h264_videotoolbox 私有选项，只在 macOS 构建中存在' },
   'electron/main/services/video/ffmpeg-loader.ts': { filter_complex_script: '只对仍声明该选项的 6.1.2 使用（按选项列表判定）' },
   'electron/main/services/video/ffmpeg-loader.test.ts': { filter_complex_script: '旧写法分支的精确测试' },

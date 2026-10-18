@@ -4,6 +4,12 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
+import type { VideoEditMedia } from '../src/core/videoEdit/document'
+import { captureLogPageSchema } from '../src/core/captureLog/events'
+import { recordingCursorPageReference } from '../src/core/videoEdit/recordingCursor'
+import { loadFfmpegPath } from '../electron/main/services/video/ffmpeg-loader'
+import { runAudioEditProcess } from '../electron/main/services/audio-edit/process'
 import { createTestEnvironment } from '../electron/main/services/documents/documents.test-support'
 import { HenjiImagePackageCodec } from '../electron/main/services/image-editor-v3/package-codec'
 import { ContentAddressedResourceStore } from '../electron/main/services/image-editor-v3/resource-store'
@@ -11,6 +17,7 @@ import { validateImageEditDocumentEnvelope } from '../electron/main/services/ima
 import { parseImageDocumentHeader, serializeImageDocumentHeader } from '../electron/main/services/image-editor-v3/image-document/header'
 import { packageComponentSource, type CodeComponentMetadata } from '../src/core/videoEdit/codeMaterial/components'
 import { parseDocumentText } from '../src/core/documents/envelope'
+import { PACKAGE_VERSION } from '../src/core/persistence/storedSchemas'
 import { encodePngWithStoryboardMetadata } from '../electron/main/services/image/png-metadata'
 import { loadSharp } from '../electron/main/services/image/sharp-loader'
 import { IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, CANVAS_LAYER_PACKAGE_VERSION, VIDEO_EDIT_CONTENT_VERSION } from '../src/core/persistence/schemaVersions'
@@ -122,11 +129,28 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     const project = await service.createProject({ name: '黄金项目' })
     const created = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '黄金剪辑' })
     const current = await service.readDocument({ id: created.meta.id })
-    const golden = parseDocumentText(fs.readFileSync(fixture('document.video_edit', `v${VIDEO_EDIT_CONTENT_VERSION}.json`), 'utf8')).content as { codeMaterials: { versions: { files: { location: string }[] }[] }[]; creativeIntents?: unknown }
+    const golden = parseDocumentText(fs.readFileSync(fixture('document.video_edit', `v${VIDEO_EDIT_CONTENT_VERSION}.json`), 'utf8')).content as { media: VideoEditMedia[]; codeMaterials: { versions: { files: { location: string }[] }[] }[]; creativeIntents?: unknown }
     const location = path.join(project.path, '代码', '标题', 'v1', 'main.ts')
     await fsp.mkdir(path.dirname(location), { recursive: true })
     await fsp.writeFile(location, source)
     golden.codeMaterials[0].versions[0].files[0].location = location
+    // Archive samples carry actual media and capture pages, rather than dangling JSON-only placeholder paths.
+    const mediaDirectory = path.join(project.path, '素材')
+    await fsp.mkdir(mediaDirectory, { recursive: true })
+    for (const media of golden.media) {
+      const file = path.join(mediaDirectory, media.kind === 'video' ? 'screen.mp4' : '鼓点.wav')
+      const video = media.kind === 'video'
+      await runAudioEditProcess(await loadFfmpegPath(), ['-hide_banner', '-f', 'lavfi', '-i', video ? 'color=c=black:s=1920x1080:r=30:d=3' : 'sine=frequency=440:sample_rate=48000:duration=3',
+        ...(video ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p'] : ['-c:a', 'pcm_s16le']), file])
+      media.path = file
+      if (media.recordingCursor) {
+        const sourceDigest = `sha256:${createHash('sha256').update(await fsp.readFile(file)).digest('hex')}`
+        const page = captureLogPageSchema.parse({ ...(read('capture-log-page', 'v2.json') as object), ownerRef: media.recordingCursor.ownerRef, sourceDigest })
+        const pageFile = path.join(mediaDirectory, 'events.capture.json')
+        const bytes = Buffer.from(JSON.stringify(page)); await fsp.writeFile(pageFile, bytes)
+        media.recordingCursor = { ...media.recordingCursor, sourceDigest, pages: [recordingCursorPageReference(page, pageFile, createHash('sha256').update(bytes).digest('hex'))] }
+      }
+    }
     // The motion fixture owns additional semantic evidence; newer minimal JSON samples must not erase it from the archive.
     const motion = parseDocumentText(fs.readFileSync(fixture('document.video_edit', 'v2.json'), 'utf8'))
     const head = creativeIntentsSchema.parse((motion.content as { creativeIntents: unknown }).creativeIntents)
@@ -140,7 +164,7 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     const content = await rehomeVideoMotionResources(golden, motion.id, current.meta.id, project.path)
     await service.saveDocument({ target: { id: current.meta.id }, expectedRevision: current.meta.revision, content })
     const exported = await service.exportProjectPackage({ projectId: project.id })
-    await fsp.copyFile(exported.path, projectTarget ?? fixture('project-package', 'v1.henjipack'), fs.constants.COPYFILE_EXCL)
+    await fsp.copyFile(exported.path, projectTarget ?? fixture('project-package', `v${PACKAGE_VERSION}-video-v${VIDEO_EDIT_CONTENT_VERSION}.henjipack`), fs.constants.COPYFILE_EXCL)
   } finally { await env.cleanup() }
 }
 

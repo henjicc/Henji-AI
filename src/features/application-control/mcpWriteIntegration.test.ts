@@ -441,6 +441,8 @@ it.each(['external', 'embedded'] as const)('%s：真实字幕能力弹窗不挂�
   vi.spyOn(audio, 'listAsrModels').mockResolvedValue([{ id: 'test-asr', providerId: 'test', timestamps: true, configured: true, longAudio: true }])
   vi.spyOn(audio, 'listTasks').mockResolvedValue([])
   vi.spyOn(audio, 'preflightTranscription').mockResolvedValue({ modelId: 'test-asr', requiresConfirmation: true })
+  // This test exercises real approval/SQLite persistence; only the acoustic decode boundary is simulated.
+  vi.spyOn(audio, 'detectSilence').mockResolvedValue({ revision: 0, suggestions: [], energy: { resolutionMs: 10, thresholdDb: -50, highThresholdDb: -70, pauses: [] } })
   const transcribe = vi.spyOn(audio, 'transcribe').mockImplementation(async request => {
     const project = await loadAudioEditProject(request.projectId)
     return { project: { ...project.document, transcript: [{ id: 'word', text: 'Hello', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' }] }, modelId: 'test-asr', granularity: 'word' }

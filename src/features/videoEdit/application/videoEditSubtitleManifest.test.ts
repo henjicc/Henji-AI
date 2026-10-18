@@ -12,7 +12,7 @@ vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { fs: {
   exists: async (path: string) => boundary.backups.has(path),
 } } }) }))
 
-it('共享读取拒绝未来版和无效内容；旧版升级先备份且不修改原件', async () => {
+it('共享读取验证当前版本；未来版、无效内容和已放弃的开发版均不改原件', async () => {
   const filePath = path.resolve(path.sep, 'mix.wav.subtitle.json')
   const manifest = { version: SUBTITLE_MANIFEST_VERSION, projectId: 'project', sequenceId: 'sequence', signature: 'saved-sound', startFrame: 0, endFrame: 30 }
   boundary.text = JSON.stringify({ ...manifest, version: SUBTITLE_MANIFEST_VERSION + 1 })
@@ -28,9 +28,9 @@ it('共享读取拒绝未来版和无效内容；旧版升级先备份且不修�
   for (const version of [1, 2, 3]) {
     boundary.text = JSON.stringify({ ...manifest, version })
     const original = boundary.text
-    expect(await readVideoEditSubtitleManifest(filePath)).toMatchObject(manifest)
+    await expect(readVideoEditSubtitleManifest(filePath)).rejects.toMatchObject({ code: 'unsupported-version' })
     expect(boundary.text).toBe(original)
-    expect([...boundary.backups.values()].map(bytes => new TextDecoder().decode(bytes))).toContain(original)
+    expect(boundary.backups.size).toBe(0)
   }
-  expect(boundary.backups.size).toBe(3)
+  expect(boundary.mkdir).not.toHaveBeenCalled()
 })
