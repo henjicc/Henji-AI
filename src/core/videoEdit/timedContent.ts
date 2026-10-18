@@ -110,7 +110,7 @@ export function reconcileVideoEditTimedContent(before: VideoEditDocument, reques
     if (JSON.stringify(previous.clips) === JSON.stringify(sequence.clips)) return { ...sequence, annotations }
     // Replacing a clip's source preserves its program anchors; it is not an in-trim.
     const replacementOrigins = new Map(sequence.clips.filter(clip => preserveProgramAnchors.includes(clip.id) || previous.clips.some(prior => prior.id === clip.id && prior.itemId !== clip.itemId)).map(clip => [clip.id, { originalId: clip.id, shift: 0 }]))
-    const mapped = retimeVideoEditContent(previous, sequence, replacementOrigins)
+    const mapped = retimeVideoEditContent(previous, { ...sequence, annotations }, replacementOrigins)
     return { ...sequence, clips: mapped.clips, annotations: mapped.annotations, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
   }) }
 }
