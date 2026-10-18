@@ -58,3 +58,24 @@ it('timeline edits invalidate an existing text selection instead of deleting new
   expect(view.getByRole('button', { name: '删除' }).hasAttribute('disabled')).toBe(true)
   fireEvent.click(view.getByRole('button', { name: '跳转到：价格' })); expect(owner.frame).toBe(45)
 })
+
+it('选中画面可关联文字并定位到词范围，一次撤销解除关联', async () => {
+  act(() => editVideoProject(owner.document.id, document => {
+    document.items.push({ id: 'label-item', name: '强调', kind: 'text' })
+    const sequence = document.sequences[0]
+    sequence.tracks.push({ ...sequence.tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })
+    sequence.clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequence.id, { frame: 0, duration: 15, track: 2 }), id: 'label', text: '九元' })
+    return document
+  }))
+  act(() => setVideoEditView(owner.document.id, { selection: 'label' }))
+  const view = render(<View />); const before = structuredClone(owner.document.sequences); const history = owner.past.length
+  fireEvent.click(await view.findByRole('button', { name: '跳转到：价格' }))
+  fireEvent.click(view.getByRole('button', { name: '跳转到：九元。' }), { shiftKey: true })
+  let bind = view.queryByRole('button', { name: '选中画面随这段内容' })
+  if (!bind) { fireEvent.click(view.getByRole('button', { name: '更多文本剪辑操作' })); bind = await view.findByRole('button', { name: '选中画面随这段内容' }) }
+  fireEvent.click(bind)
+  expect(owner.document.sequences[0].clips.find(clip => clip.id === 'label')).toMatchObject({ start: 30, duration: 30, contentAnchor: { ranges: [{ fromUs: 1000000, toUs: 2000000 }] } })
+  expect(owner.past.length).toBe(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(owner.document.sequences).toEqual(before)
+  expect(report).not.toHaveBeenCalled()
+})

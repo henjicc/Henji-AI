@@ -66,6 +66,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.23.0'] = '24111e197dc1eeae75e77c388a958a677f121e4bc65f9d9172a32cd77130845b'
     // 2.24：新增字幕来源与复核实体属性，静态工具参数保持同源投影。
     fingerprints['2.24.0'] = '24111e197dc1eeae75e77c388a958a677f121e4bc65f9d9172a32cd77130845b'
+    fingerprints['2.25.0'] = '24111e197dc1eeae75e77c388a958a677f121e4bc65f9d9172a32cd77130845b'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

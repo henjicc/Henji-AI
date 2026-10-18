@@ -146,7 +146,7 @@ describe('所有登记格式的黄金样本', () => {
   })
   it('剪辑历史 v2–v7 至 v10 的纯迁移保留原稿，但不能越过字幕词源的开发期断点', () => {
     const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
-    expect(baseline.formats['document.video_edit'].supportedFrom).toBe(11)
+    expect(baseline.formats['document.video_edit'].supportedFrom).toBe(format.version)
     for (const version of [2, 3, 4, 5, 6, 7]) {
       const raw = parseDocumentEnvelope(JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.video_edit/v${version}.json`, 'utf8')))
       const before = structuredClone(raw.content) as VideoEditDocumentContent
@@ -208,6 +208,7 @@ describe('所有登记格式的黄金样本', () => {
             expect(document.sequences[0].captions?.[0].speech).toMatchObject({ aligned: true, words: [{ clipId: 'golden-sound-clip', text: '字幕', startUs: 166667, endUs: 700000 }, { clipId: 'golden-sound-clip', text: '原文', startUs: 700000, endUs: 1500000 }] })
             expect(document.sequences[0].captions?.[0].reviewReasons).toEqual(['translation'])
           }
+          if (version >= 12) expect(clip.contentAnchor).toEqual({ ranges: [{ clipId: 'golden-sound-clip', itemId: 'golden-sound-item', fromUs: 0, toUs: 3000000 }], startOffsetSeconds: 0, endOffsetSeconds: 0 })
           expect(document.sequences[0].transitions?.[0].rightClipId).toBe(clip.id)
           // v7：自动缩放的缩放区间（源时间、档位、跟随/固定焦点）与录屏画框参数原样读回。
           if (version >= 7) {

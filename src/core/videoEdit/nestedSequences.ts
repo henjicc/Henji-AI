@@ -5,6 +5,7 @@ import { clipSourceSeconds } from './document'
 import { videoEditTransitionClipIds } from './transitions'
 import { mapVideoEditAnnotationTime } from './annotations'
 import { createVideoEditSpeechCaptionRetimer } from './captionSpeech'
+import { expandVideoEditContentSelection } from './contentAnchors'
 import type { VideoEditCaption } from './timedContent'
 
 /** Shared by matching frames, preview and export (floor selects the child's half-open frame). */
@@ -27,9 +28,10 @@ export function ensureVideoEditSequenceItem(document: VideoEditDocument, sequenc
 export function nestVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: readonly string[], name: string): { document: VideoEditDocument; sequence: VideoEditSequence; clip: VideoEditClip; movedClipIds: string[] } {
   const parent = document.sequences.find(sequence => sequence.id === sequenceId)
   if (!parent) throw new Error('目标序列不存在。')
-  const ids = new Set(clipIds)
+  const ids = new Set(expandVideoEditContentSelection(parent, clipIds, true))
   const selected = parent.clips.filter(clip => ids.has(clip.id))
   if (!selected.length || selected.length !== ids.size) throw new Error('请选择同一序列中的现有片段。')
+  if (selected.some(clip => clip.contentAnchor?.ranges.some(range => !ids.has(range.clipId)))) throw new Error('关联画面与其来源片段须一起嵌套，请一并选择来源或先解除关联。')
   assertVideoEditClipsEditable(parent, [...ids])
   const start = Math.min(...selected.map(clip => clip.start)); const end = Math.max(...selected.map(clip => clip.start + clip.duration))
   const visuals = selected.filter(clip => clip.kind !== 'audio')

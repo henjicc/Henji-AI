@@ -10,6 +10,7 @@ import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipSpee
 import { videoEditSyncCorrections } from './linkSync'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
 import { remapVideoEditCaptionSpeech, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
+import { expandVideoEditContentSelection, retimeVideoEditContentClips, remapVideoEditContentAnchor } from './contentAnchors'
 import { validateVideoEditTransitions, videoEditTransitionClipIds, type VideoEditTransition } from './transitions'
 import { validateVideoEditAdjustmentRanges } from './compositing'
 import { applyVideoEditTrim, type VideoEditTrimMode } from './timelineTrims'
@@ -166,9 +167,9 @@ function intervals(clips: readonly VideoEditClip[]): Array<{ from: number; to: n
 }
 
 export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[], linked: VideoEditRelations = true): VideoEditClipboard {
-  const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds, linked))
+  const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditContentSelection(sequence, expandVideoEditSelection(sequence, clipIds, linked), typeof linked === 'boolean' ? linked : linked.links))
   if (!ids.size) throw new Error('请先选择要复制的片段。')
-  const clips = sequence.clips.filter(clip => ids.has(clip.id))
+  const clips = retimeVideoEditContentClips(sequence, { ...sequence, clips: sequence.clips.filter(clip => ids.has(clip.id)).map(clip => clip.contentAnchor && !clip.contentAnchor.ranges.some(range => ids.has(range.clipId)) ? { ...clip, contentAnchor: undefined } : clip) }, new Map())
   const retimeSpeech = createVideoEditSpeechCaptionRetimer(sequence, { ...sequence, clips }, new Map())
   const captions = (sequence.captions ?? []).flatMap(caption => caption.speech ? retimeSpeech(caption) : caption.clipId && ids.has(caption.clipId) ? [caption] : [])
   return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips, annotations: sequence.annotations.filter(mark => Boolean(mark.clipId && ids.has(mark.clipId)) || mark.target.kind === 'range' && Boolean(mark.target.clipIds?.some(id => ids.has(id)))), annotationTrackIndices: Object.fromEntries(sequence.tracks.map(track => [track.id, track.index])), markers: (sequence.markers ?? []).filter(mark => mark.clipId && Boolean(mark.clipId && ids.has(mark.clipId))), captions, transitions: (sequence.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id))), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
@@ -202,6 +203,7 @@ export function applyVideoEditTimelineEditResult(document: VideoEditDocument, se
   const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence }
     : edit.kind === 'speed' ? { sequence: applyVideoEditSpeedChange(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.change, metadata) }
     : edit.kind === 'stretch' ? { sequence: applyVideoEditRateStretch(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.edge, edit.delta).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
+  result.sequence = { ...result.sequence, clips: retimeVideoEditContentClips(sequenceOf(document, sequenceId), result.sequence, new Map()) }
   if (result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('编辑结果超出序列时间边界。')
   validateVideoEditAdjustmentRanges(result.sequence)
   validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
@@ -365,7 +367,8 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
   const from = Math.min(...edit.clipboard.clips.map(clip => clip.start))
   const convert = (frame: number): number => rescaleVideoEditFrame(frame - from, edit.clipboard.frameRate, sequence.frameRate)
   const ids = new Map(edit.clipboard.clips.map(clip => [clip.id, crypto.randomUUID()]))
-  const incoming = remapRelations(edit.clipboard.clips.map(clip => ({ ...structuredClone(clip), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })))
+  const clipboardClips = edit.clipboard.clips.map(clip => ({ ...clip, ...(clip.contentAnchor ? { contentAnchor: remapVideoEditContentAnchor(clip.contentAnchor, ids) } : {}) }))
+  const incoming = remapRelations(clipboardClips.map(clip => ({ ...structuredClone(clip), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })))
   assertTargets(sequence, incoming)
   assertNewInternalOverlap(edit.clipboard.clips, incoming)
   if (incoming.some(clip => !document.items.some(item => item.id === clip.itemId) || clip.duration < 1 || clip.start < 0 || clip.start + clip.duration > Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('剪贴板引用已移除，或粘贴范围超出序列边界。')

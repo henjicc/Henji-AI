@@ -12,6 +12,10 @@ export interface VideoEditTranscriptMatch {
   source: 'asr' | 'caption'; precision: 'word' | 'segment' | 'caption'; editable: boolean
   clipId?: string; itemId?: string; sourceRange?: { startUs: number; endUs: number }
   wordRange?: { start: number; end: number }
+  wordSignature?: string
+}
+export function videoEditTranscriptWordSignature(words: readonly VideoEditTextWord[]): string {
+  return JSON.stringify(words.map(word => [word.id, word.text, word.clipId, word.sourceItemId, word.startFrame, word.endFrame, word.from, word.to, word.granularity]))
 }
 function join(words: readonly { text: string }[]): string {
   let text = ''
@@ -51,7 +55,7 @@ export function queryVideoEditTranscript(composition: VideoEditComposition, quer
       matches.push({ text: join(selected), before: join(group.slice(Math.max(0, range.start - context), range.start)), after: join(group.slice(range.end + 1, range.end + 1 + context)), from, to, source: 'asr', precision: exact ? 'word' : 'segment', editable,
         clipId: selected[0].clipId, itemId: selected[0].sourceItemId,
         sourceRange: { startUs, endUs },
-        ...(editable ? { wordRange: { start: selected[0].index, end: selected.at(-1)!.index } } : {}) })
+        ...(exact ? { wordRange: { start: selected[0].index, end: selected.at(-1)!.index }, wordSignature: videoEditTranscriptWordSignature(selected) } : {}) })
     }
   }
   if (query.source !== 'asr') for (const caption of composition.captions ?? []) {

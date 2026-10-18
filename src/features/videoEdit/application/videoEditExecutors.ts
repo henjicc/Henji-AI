@@ -37,6 +37,8 @@ import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tra
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 import { prepareVideoEditCaption } from './videoEditCaptionCreation'
 import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
+import { resolveVideoEditContentAnchor } from './videoEditContentAnchors'
+import { retimeVideoEditContentClips } from '@/core/videoEdit/contentAnchors'
 import { defaultVideoEditStyleBinding } from './videoEditDefaultStyle'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting; proxyPreference: VideoEditProxyPreference }
@@ -52,6 +54,13 @@ const undo = new Map<string, { owner: object; before: VideoEditDocument; after: 
 function sourcePauseEffect(projectId: string): ApplicationEffectReceipt { return { effect: 'update', entityType: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.entityType, propertyIds: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.propertyIds, refs: [{ kind: 'video_edit.source', id: `${projectId}:source` }], origin: { kind: 'cascade', declarationId: VIDEO_EDIT_PROGRAM_SOURCE_CASCADE.declarationId } } }
 function cascades(before: VideoEditDocument, after: VideoEditDocument): ApplicationEffectReceipt[] {
   const effects: ApplicationEffectReceipt[] = []
+  const oldClips = before.sequences.flatMap(sequence => sequence.clips); const newClips = after.sequences.flatMap(sequence => sequence.clips)
+  const oldById = new Map(oldClips.map(clip => [clip.id, clip])); const newById = new Map(newClips.map(clip => [clip.id, clip]))
+  for (const effect of ['create', 'update', 'delete'] as const) {
+    const values = effect === 'delete' ? oldClips.filter(clip => clip.contentAnchor && !newById.has(clip.id)) : newClips.filter(clip => (clip.contentAnchor || oldById.get(clip.id)?.contentAnchor) && (effect === 'create' ? !oldById.has(clip.id) : oldById.has(clip.id) && JSON.stringify(oldById.get(clip.id)) !== JSON.stringify(clip)))
+    const declaration = VIDEO_EDIT_CLIP_CONTENT_CASCADES.find(value => value.entityType === 'video_edit.clip' && value.effect === effect)!
+    for (let offset = 0; offset < values.length; offset += 256) effects.push({ effect, entityType: 'video_edit.clip', propertyIds: declaration.propertyIds, refs: values.slice(offset, offset + 256).map(clip => ({ kind: 'video_edit.clip', id: `${after.id}:${clip.id}` })), origin: { kind: 'cascade', declarationId: declaration.declarationId } })
+  }
   for (const type of VIDEO_EDIT_COMPOSITE_TYPES) {
     const from = videoEditCompositeItems(before, type); const to = videoEditCompositeItems(after, type)
     const oldIds = new Set(from.map(item => item.id)); const newIds = new Set(to.map(item => item.id))
@@ -190,6 +199,8 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     const data = readVideoEditData(step.target)
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
+    const anchorSequence = this.entityType === 'video_edit.clip' && keys.includes('video_edit.clip.content_anchor') ? before.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId)) : undefined
+    const expectedAnchor = anchorSequence ? resolveVideoEditContentAnchor(projectId, anchorSequence.id, childId, data.contentAnchor ?? null) : undefined
     if (this.entityType === 'video_edit.annotation') {
       const prior = before.sequences.flatMap(sequence => sequence.annotations).find(mark => mark.id === childId)!
       if (data.status === 'addressed' && prior.status !== 'addressed') data.addressedBy = { transactionId: context?.requestId ?? crypto.randomUUID(), revision: before.revision + 1 }
@@ -286,6 +297,15 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       }
     }
     const after = editVideoProject(projectId, update)
+    if (anchorSequence) {
+      const sequence = after.sequences.find(sequence => sequence.id === anchorSequence.id)!
+      const target = sequence.clips.find(clip => clip.id === childId)
+      const stable = retimeVideoEditContentClips(sequence, sequence, new Map()).find(clip => clip.id === childId)
+      if (!target || JSON.stringify(target.contentAnchor) !== JSON.stringify(expectedAnchor) || !stable || target.start !== stable.start || target.duration !== stable.duration) {
+        restoreVideoEditSnapshot(projectId, after, before, true)
+        throw new Error('内容关联未通过来源与时间读回核对，本次修改已撤回，请重新查询。')
+      }
+    }
     if (writesView) setVideoEditProjectView(projectId, { selectedItemIds: data.selectedItemIds as string[], selectedBinId: String(data.selectedBinId), openSequenceIds: data.openSequenceIds as string[] })
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.timeline_view')) setVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.proxy_preference')) setVideoEditProxyPreference(projectId, data.proxyPreference as unknown as VideoEditProxyPreference)
@@ -347,6 +367,11 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           for (const key of ['binId', 'parentId', 'linkId', 'groupId', 'clipId']) if (values[key] === '') delete values[key]
           if (values.sourceComponent === 'all') delete values.sourceComponent
           const id = crypto.randomUUID()
+          if (this.entityType === 'video_edit.clip' && values.contentAnchor !== undefined) {
+            const anchor = resolveVideoEditContentAnchor(before.id, sequence!.id, id, values.contentAnchor)
+            if (anchor) values.contentAnchor = anchor
+            else delete values.contentAnchor
+          }
           if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType)) {
             const created = createVideoEditCompositeEntity(document, this.entityType as VideoEditCompositeEntityType, parsed.childId, values, readVideoEditCodeMetadata(instance, document))
             refs.push({ kind: this.entityType, id: `${before.id}:${created}` }); continue

@@ -220,3 +220,59 @@ it('字幕拆并更新各自词源，锁定声音也保护未绑定单个片段�
     expect(await app.change(captionRef, { 'video_edit.caption.text': '不能覆盖锁定声音的字幕' })).toMatchObject({ ok: false })
   } finally { app.dispose() }
 })
+
+it('公共片段属性直接用检索候选关联标签，源片段移动时同事务跟随并可撤销', async () => {
+  const owner = await fixture(); const id = owner.document.id; const sequence = owner.document.sequences[0]
+  editVideoProject(id, document => {
+    document.items.push({ id: 'label-item', name: '强调标签', kind: 'text' })
+    document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2, name: '包装' })
+    document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequence.id, { frame: 0, duration: 30, track: 2 }), id: 'label', text: '九元' })
+    return document
+  })
+  const app = createApplicationHarness()
+  const documentRef = { kind: 'video_edit.document', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }; const ref = { kind: 'video_edit.clip', id: `${id}:label` }
+  try {
+    const query = queryVideoEditTranscriptCapability.outputSchema.parse(await app.requireResult('query_video_edit_transcript', { documentRef, sequenceRef, text: '价格九元', matchSource: 'asr' }))
+    const bound = await app.change(ref, { 'video_edit.clip.content_anchor': { matchId: query.matches[0].matchId } })
+    expect(bound, JSON.stringify(bound)).toMatchObject({ ok: true })
+    expect(owner.document.sequences[0].clips.find(clip => clip.id === 'label')).toMatchObject({ start: 30, duration: 30, contentAnchor: { ranges: [{ clipId: 'a', itemId: 'item' }] } })
+    const before = structuredClone(owner.document.sequences)
+    const moved = await app.change({ kind: 'video_edit.clip', id: `${id}:a` }, { 'video_edit.clip.start': 90 })
+    expect(moved, JSON.stringify(moved)).toMatchObject({ ok: true })
+    expect(owner.document.sequences[0].clips.find(clip => clip.id === 'label')!.start).toBe(120)
+    expect(savedVideoEdit(owner).sequences[0].clips.find(clip => clip.id === 'label')!.start).toBe(120)
+    undoVideoEdit(id); expect(owner.document.sequences).toEqual(before)
+    undoVideoEdit(id, true)
+    const reopened = await reopenVideoEdit(id)
+    expect(reopened.document.sequences[0].clips.find(clip => clip.id === 'label')).toMatchObject({ start: 120, contentAnchor: { ranges: [{ clipId: 'a', itemId: 'item' }] } })
+    const detached = await app.change(ref, { 'video_edit.clip.content_anchor': null })
+    expect(detached, JSON.stringify(detached)).toMatchObject({ ok: true })
+    expect(reopened.document.sequences[0].clips.find(clip => clip.id === 'label')).toMatchObject({ start: 120, duration: 30 })
+    expect(reopened.document.sequences[0].clips.find(clip => clip.id === 'label')!.contentAnchor).toBeUndefined()
+    expect(await app.change(ref, { 'video_edit.clip.content_anchor': { matchId: query.matches[0].matchId } })).toMatchObject({ ok: false })
+  } finally { app.dispose() }
+})
+
+it('同一候选可关联多个包装，正文改变后拒绝旧候选；公共创建能就地建立关联', async () => {
+  const owner = await fixture(); const id = owner.document.id; const sequence = owner.document.sequences[0]
+  editVideoProject(id, document => { document.items.push({ id: 'label-item', name: '强调', kind: 'text' }); return document })
+  const app = createApplicationHarness()
+  const documentRef = { kind: 'video_edit.document', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequence.id}` }
+  try {
+    const query = queryVideoEditTranscriptCapability.outputSchema.parse(await app.requireResult('query_video_edit_transcript', { documentRef, sequenceRef, text: '价格九元', matchSource: 'asr' }))
+    const anchor = { matchId: query.matches[0].matchId, startOffsetSeconds: -.1, endOffsetSeconds: .2 }
+    const create = async (name: string) => {
+      const baseline = await app.read(sequenceRef, ['video_edit.sequence.name'])
+      return app.call('change_application_entities', { summary: '添加随句包装', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: {
+        'video_edit.clip.item_id': 'label-item', 'video_edit.clip.kind': 'text', 'video_edit.clip.name': name, 'video_edit.clip.text': name, 'video_edit.clip.track': 1, 'video_edit.clip.content_anchor': anchor,
+      } }] }] }, baseline.revisions as Record<string, number>)
+    }
+    const first = await create('价格'); expect(first, JSON.stringify(first)).toMatchObject({ ok: true })
+    const second = await create('促销'); expect(second, JSON.stringify(second)).toMatchObject({ ok: true })
+    expect(owner.document.sequences[0].clips.filter(clip => clip.contentAnchor).map(clip => [clip.start, clip.duration])).toEqual([[27, 39], [27, 39]])
+    const oldHistory = owner.past.length
+    editVideoProject(id, document => { document.sequences[0].textTranscription!.sources[0].blocks[1].text = '已改价'; return document })
+    const stale = await create('不应插入'); expect(stale).toMatchObject({ ok: false })
+    expect(owner.past.length).toBe(oldHistory + 1)
+  } finally { app.dispose() }
+})

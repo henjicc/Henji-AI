@@ -88,6 +88,7 @@ const soundClip = makeVideoEditItemClip(soundDocument, 'golden-sound-item', soun
 soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true
 document.media.push(...soundDocument.media)
 document.items.push(...soundDocument.items)
+clip.contentAnchor = { ranges: [{ clipId: soundClip.id, itemId: soundClip.itemId, fromUs: 0, toUs: 3000000 }], startOffsetSeconds: 0, endOffsetSeconds: 0 }
 sequence.clips.push(soundClip)
 sequence.captions = sequence.captions.map(caption => ({ ...bindVideoEditCaptionSpeech(caption, [
   { clipId: soundClip.id, text: '字幕', startUs: 166667, endUs: 700000, precision: 'word' },

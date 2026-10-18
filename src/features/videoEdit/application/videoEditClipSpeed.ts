@@ -3,6 +3,7 @@ import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from '@/core
 import { videoEditClipSpeedPercent, videoEditSpeedRatio } from '@/core/videoEdit/clipSpeed'
 import { applyVideoEditSpeedChange, type VideoEditSpeedChange } from '@/core/videoEdit/clipSpeedEdits'
 import { updateVideoEditClipStructure } from './videoEditCompositeEntities'
+import { resolveVideoEditContentAnchor } from './videoEditContentAnchors'
 
 /**
  * 片段速度的助手属性（4.13）：`speed_percent`、`reverse`、`preserve_pitch` 三个通用属性，写入时与“速度/持续时间”
@@ -25,6 +26,11 @@ export function updateVideoEditClipInSequence(document: VideoEditDocument, seque
   // 速度字段由速度编辑维护：结构写入时保持原值。
   const keep = { ...(original.speed ? { speed: original.speed } : {}), ...(original.reverse ? { reverse: true } : {}), ...(original.preservePitch ? { preservePitch: true } : {}) }
   const plain = Object.fromEntries(Object.entries(rest).filter(([key]) => !['speed', 'reverse', 'preservePitch'].includes(key)))
+  if (keys.includes('contentAnchor')) {
+    const anchor = resolveVideoEditContentAnchor(document.id, sequence.id, clipId, data.contentAnchor ?? null)
+    if (anchor) plain.contentAnchor = anchor
+    else delete plain.contentAnchor
+  }
   const structured = updateVideoEditClipStructure(original, { ...plain, ...keep } as Data, keys.filter(key => !(VIDEO_EDIT_SPEED_DATA_KEYS as readonly string[]).includes(key)))
   const next = { ...sequence, clips: sequence.clips.map(clip => clip.id === clipId ? structured : clip) }
   const change: VideoEditSpeedChange = {

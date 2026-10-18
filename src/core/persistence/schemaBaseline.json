@@ -113,9 +113,9 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 11,
-      "fingerprint": "935f7a1492b7d5597bb23d9f9fbba96ef6c4d88d5ad202d9abd4d7ce137e0d0e",
-      "supportedFrom": 11
+      "version": 12,
+      "fingerprint": "8290ab9630276ec74b471a29b3d25a266d4aed11690048b0068e1fb32fcf1099",
+      "supportedFrom": 12
     },
     "document.canvas": {
       "version": 1,
@@ -283,9 +283,9 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 7,
-      "fingerprint": "4fcdfc8d74520ad802adc5ff527b95a3fb0cda7fe95d0485668e8c2faf8497b3",
-      "supportedFrom": 7
+      "version": 8,
+      "fingerprint": "940e7d9b37100162c653a45dcaea5e66bc91e9900fb304d50a84604452ad478d",
+      "supportedFrom": 8
     },
     "storyboard-metadata": {
       "version": 1,
@@ -348,9 +348,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 13,
-      "fingerprint": "394d6c3b5a670beb03ee5a07d71bd75fde9ef6863ae4a1d859de985e9e02b3b2",
-      "supportedFrom": 13
+      "version": 14,
+      "fingerprint": "c44f68bed9c98989c6aecee3dea66b4d931c126178c57016683fc8b2ea83bb50",
+      "supportedFrom": 14
     },
     "recording-setup": {
       "version": 1,
@@ -1612,6 +1612,33 @@
       "reason": "自动字幕新增来源词关联与剪辑后复核语义，开发期直接采用新格式；同步内嵌剪辑快照和字幕回填记录，不伪造旧字幕词源。",
       "previousFingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
       "fingerprint": "4fcdfc8d74520ad802adc5ff527b95a3fb0cda7fe95d0485668e8c2faf8497b3",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-18T22:36:17.495Z",
+      "format": "document.video_edit",
+      "version": 12,
+      "reason": "新增画面与内容来源区间关联，开发期统一采用正式来源引用及偏移语义，不保留旧开发数据兼容。",
+      "previousFingerprint": "935f7a1492b7d5597bb23d9f9fbba96ef6c4d88d5ad202d9abd4d7ce137e0d0e",
+      "fingerprint": "8290ab9630276ec74b471a29b3d25a266d4aed11690048b0068e1fb32fcf1099",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-18T22:36:17.497Z",
+      "format": "document.screen_recording",
+      "version": 14,
+      "reason": "新增画面与内容来源区间关联，开发期统一采用正式来源引用及偏移语义，不保留旧开发数据兼容。",
+      "previousFingerprint": "394d6c3b5a670beb03ee5a07d71bd75fde9ef6863ae4a1d859de985e9e02b3b2",
+      "fingerprint": "c44f68bed9c98989c6aecee3dea66b4d931c126178c57016683fc8b2ea83bb50",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-18T22:36:17.497Z",
+      "format": "subtitle-manifest",
+      "version": 8,
+      "reason": "新增画面与内容来源区间关联，开发期统一采用正式来源引用及偏移语义，不保留旧开发数据兼容。",
+      "previousFingerprint": "4fcdfc8d74520ad802adc5ff527b95a3fb0cda7fe95d0485668e8c2faf8497b3",
+      "fingerprint": "940e7d9b37100162c653a45dcaea5e66bc91e9900fb304d50a84604452ad478d",
       "waivedFixtureVersions": []
     }
   ],

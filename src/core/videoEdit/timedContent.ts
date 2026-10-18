@@ -9,6 +9,7 @@ import { retimeVideoEditTransitions } from './transitions'
 import { subtitleGraphic, videoEditSubtitleStyleSchema } from './subtitleStyle'
 import type { VideoEditGraphic } from './graphics'
 import { videoEditCaptionSpeechSchema, videoEditCaptionReviewSchema, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
+import { retimeVideoEditContentClips } from './contentAnchors'
 
 const id = z.string().min(1).max(100)
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
@@ -38,6 +39,19 @@ export interface VideoEditContentOrigin { originalId: string; shift: number }
 
 /** Sequence anchors stay at their program clock. Clip anchors follow only their owner. */
 export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEditSequence, origins: ReadonlyMap<string, VideoEditContentOrigin> = new Map(), dropLostTransitionBoundary = false): VideoEditSequence {
+  const requestedClips = new Map(after.clips.map(clip => [clip.id, clip]))
+  const mappedClips = retimeVideoEditContentClips(before, after, origins)
+  const derived = new Map(mappedClips.map(clip => [clip.id, clip]))
+  const annotations = after.annotations.flatMap(mark => {
+    if (!mark.clipId) return [mark]
+    const requested = requestedClips.get(mark.clipId); const mapped = derived.get(mark.clipId)
+    if (!requested?.contentAnchor) return [mark]
+    if (!mapped) return []
+    if (requested.start === mapped.start && requested.duration === mapped.duration) return [mark]
+    const result = retimeVideoEditAnnotation(mark, requested, mapped, videoEditFps(after.frameRate))
+    return result ? [result] : []
+  })
+  after = { ...after, clips: mappedClips, annotations }
   const prior = new Map(before.clips.map(clip => [clip.id, clip]))
   const descendants = new Map<string, Array<{ clip: VideoEditClip; shift: number }>>()
   for (const clip of after.clips) {
@@ -97,7 +111,7 @@ export function reconcileVideoEditTimedContent(before: VideoEditDocument, reques
     // Replacing a clip's source preserves its program anchors; it is not an in-trim.
     const replacementOrigins = new Map(sequence.clips.filter(clip => preserveProgramAnchors.includes(clip.id) || previous.clips.some(prior => prior.id === clip.id && prior.itemId !== clip.itemId)).map(clip => [clip.id, { originalId: clip.id, shift: 0 }]))
     const mapped = retimeVideoEditContent(previous, sequence, replacementOrigins)
-    return { ...sequence, annotations, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
+    return { ...sequence, clips: mapped.clips, annotations: mapped.annotations, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
   }) }
 }
 

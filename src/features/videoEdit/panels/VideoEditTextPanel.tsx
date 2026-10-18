@@ -9,6 +9,7 @@ import { groupVideoEditTextWords, videoEditTranscriptWords, resolveVideoEditText
 import { editVideoEditText, hasSavedVideoEditText, restoreVideoEditText } from '../application/videoEditTextEditing'
 import { findRecoverableSubtitleAudio, readSubtitleJob, runVideoEditSubtitleJob, subscribeSubtitleJobs, subtitleJobsRevision, cancelSubtitleJob } from '../application/videoEditSubtitleJobs'
 import { setVideoEditView, subscribeVideoEditView, videoEditViewRevision, switchVideoEditSequence, type VideoEditInstance } from '../application/videoEditService'
+import { bindVideoEditClipsToWords, setVideoEditClipContentAnchors } from '../application/videoEditContentAnchors'
 
 export function VideoEditTextPanel({ instance, sequence, onError }: { instance: VideoEditInstance; sequence: VideoEditSequence; onError: (error: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -71,11 +72,21 @@ export function VideoEditTextPanel({ instance, sequence, onError }: { instance: 
   const job = readSubtitleJob(instance, sequence.id); const recognizing = Boolean(job && ['preparing', 'confirming', 'transcribing'].includes(job.state))
   const disabled = busy || recognizing
   const silences = useMemo(() => resolveVideoEditTextRanges(composition, { kind: 'silence' }), [composition])
+  const pictures = sequence.clips.filter(clip => instance.selectedClipIds.includes(clip.id) && !all.some(word => word.clipId === clip.id) && clip.kind !== 'audio')
+  const bindPictures = (clear = false): void => {
+    try {
+      if (clear) setVideoEditClipContentAnchors(instance.document.id, sequence.id, pictures.map(clip => clip.id), null, sequence)
+      else bindVideoEditClipsToWords(instance.document.id, sequence.id, pictures.map(clip => clip.id), wordRanges, sequence)
+      setSelection(undefined); setPause(false); setError('')
+    } catch (reason) { report(reason) }
+  }
   const items: UiOverflowRowItem[] = [
     { id: 'scope', priority: 10, pinned: true, node: <Dropdown ariaLabel="转录稿范围" size="sm" value={scope} onSelect={value => { setScope(value); setSelection(undefined); setPause(false) }} options={[{ value: 'sequence', label: '整个序列' }, { value: 'selection', label: '选中片段' }]} /> },
     { id: 'delete', priority: 10, pinned: true, node: <UiButton variant="danger" size="sm" disabled={disabled || !selector} onClick={() => operation('delete')}>删除</UiButton> },
     { id: 'extract', priority: 2, node: <UiButton size="sm" disabled={disabled || !selector || pause} onClick={() => operation('extract')}>提取到新序列</UiButton> },
     { id: 'insert', priority: 1, node: <UiButton size="sm" disabled={disabled || !selector || pause} onClick={() => operation('insert')}>插入到播放头</UiButton> },
+    { id: 'bind-content', priority: 1, node: <UiButton size="sm" disabled={disabled || !selector || pause || !pictures.length} disabledReason="先在时间线选择花字或配图，再在这里选择对应口述。" onClick={() => bindPictures()}>选中画面随这段内容</UiButton> },
+    ...(pictures.some(clip => clip.contentAnchor) ? [{ id: 'unbind-content', priority: 0, node: <UiButton size="sm" disabled={disabled} disabledReason="正在处理转录稿，请稍后解除关联。" onClick={() => bindPictures(true)}>解除内容关联</UiButton> }] : []),
     { id: 'fillers', priority: 0, node: <UiButton variant="danger" size="sm" disabled={disabled || !visible.length} onClick={cleanFillers}>删除口头禅</UiButton> },
     { id: 'silence', priority: 0, node: <label className="flex items-center gap-2 text-xs text-text2"><UiCheckbox aria-label="选择全序列静音段" checked={pause} disabled={disabled || !silences.length || scope !== 'sequence'} onCheckedChange={value => { setPause(value); setSelection(undefined) }} />选择全序列静音段</label> },
     { id: 'transcribe', priority: 3, node: <UiButton size="sm" disabled={disabled} onClick={() => prepare()}>{sequence.textTranscription ? '恢复识别稿' : '转录 / 读取已有稿'}</UiButton> },

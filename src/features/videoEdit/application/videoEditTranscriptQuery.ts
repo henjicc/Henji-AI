@@ -2,7 +2,8 @@ import { createLogger } from '@/core/logging'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import type { ApplicationRef } from '@/core/application-control'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { queryVideoEditTranscript, type VideoEditTranscriptMatch, type VideoEditTranscriptQuery } from '@/core/videoEdit/transcriptQuery'
+import { queryVideoEditTranscript, videoEditTranscriptWordSignature, type VideoEditTranscriptMatch, type VideoEditTranscriptQuery } from '@/core/videoEdit/transcriptQuery'
+import { videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
 import type { VideoEditTextSelector } from '@/core/videoEdit/textTranscript'
 import { requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
 
@@ -11,7 +12,7 @@ interface QueryResult { sequenceId: string; contentVersion: number; key: string;
 const results = new WeakMap<VideoEditInstance, Map<string, QueryResult>>()
 const MAX_QUERIES = 4
 export interface VideoEditTranscriptQueryPage {
-  matches: (Omit<VideoEditTranscriptMatch, 'clipId' | 'itemId' | 'wordRange'> & {
+  matches: (Omit<VideoEditTranscriptMatch, 'clipId' | 'itemId' | 'wordRange' | 'wordSignature'> & {
     matchId: string; clipRef?: ApplicationRef; itemRef?: ApplicationRef
     selector?: { kind: 'match'; matchId: string }
   })[]
@@ -41,7 +42,7 @@ export function readVideoEditTranscriptQuery(projectId: string, sequenceId: stri
     } catch (error) { logger.error('转录局部检索失败', { event: 'video_edit.transcript.query.failed', context: { projectId, sequenceId }, error }); throw error }
   }
   const matches = result.matches.slice(offset, offset + page.limit).map((value, index) => {
-    const { clipId, itemId, wordRange, ...match } = value
+    const { clipId, itemId, wordRange, wordSignature: _wordSignature, ...match } = value
     const matchId = `${queryId}:${offset + index}`
     return { ...match, matchId, ...(clipId ? { clipRef: { kind: 'video_edit.clip' as const, id: `${projectId}:${clipId}` } } : {}), ...(itemId ? { itemRef: { kind: 'video_edit.item' as const, id: `${projectId}:${itemId}` } } : {}),
       ...(value.editable && wordRange ? { selector: { kind: 'match' as const, matchId } } : {}) }
@@ -57,4 +58,14 @@ export function resolveVideoEditTranscriptMatch(projectId: string, sequenceId: s
   const match = result.matches[Number(parsed![2])]
   if (!match?.editable || !match.wordRange) throw new ApplicationPreflightFailure('此候选只有字幕或句级时间，或含受保护内容；请读取原词级转录后选择。')
   return { kind: 'words', ranges: [match.wordRange] }
+}
+
+/** Binding does not edit the source. Other labels may change while the exact source words stay current. */
+export function resolveVideoEditTranscriptAnchorMatch(projectId: string, sequenceId: string, matchId: string): VideoEditTranscriptMatch {
+  const owner = requireVideoEditInstance(projectId); const parsed = /^([a-f0-9-]{36}):(\d+)$/.exec(matchId)
+  const result = parsed && results.get(owner)?.get(parsed[1]); const match = result?.matches[Number(parsed![2])]
+  if (!result || result.sequenceId !== sequenceId || !match?.wordRange || !match.wordSignature) throw new ApplicationPreflightFailure('内容关联需要当前原始词级候选，请重新查询。')
+  const words = videoEditTranscriptWords(videoEditComposition(owner.document, sequenceId)).slice(match.wordRange.start, match.wordRange.end + 1)
+  if (videoEditTranscriptWordSignature(words) !== match.wordSignature) throw new ApplicationPreflightFailure('这段内容已有变化，请重新查询后关联。')
+  return match
 }

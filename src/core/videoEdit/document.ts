@@ -10,7 +10,8 @@ import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './cod
 import { codeElementOverridesSchema } from './codeElementOverrides'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
-import { projectVideoEditNestedCaptions } from './nestedCaptions'
+import { projectVideoEditNestedCaptions, projectVideoEditNestedContentClips } from './nestedCaptions'
+import { videoEditContentAnchorSchema, sliceVideoEditContentAnchor, assertVideoEditContentAnchors } from './contentAnchors'
 import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia } from './compositing'
 import { videoEditTransitionSchema, validateVideoEditTransitions, resizeVideoEditTransition } from './transitions'
@@ -63,6 +64,7 @@ const videoEditClipStateSchema = z.object({
   multicamCameraId: identifier.optional(),
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
+  contentAnchor: videoEditContentAnchorSchema.optional(),
   snapToBeat: z.boolean().optional().describe('超级关键帧整理时吸附到序列节拍标记，钉点优先。'),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
   elementOverrides: codeElementOverridesSchema.optional(),
@@ -187,6 +189,7 @@ export const videoEditDocumentSchema = z.object({
     }
     if (sequence.binId && !binsById.has(sequence.binId)) issue('序列的素材箱不存在。')
     const clipsById = new Map(sequence.clips.map(clip => [clip.id, clip]))
+    try { assertVideoEditContentAnchors(sequence) } catch (error) { issue(error instanceof Error ? error.message : '内容关联无效。') }
     const tracksByIndex = new Map(sequence.tracks.map(track => [track.index, track]))
     const fps = videoEditFps(sequence.frameRate)
     if (Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator) > 8192) issue('等效画面宽度超出导出范围。')
@@ -300,7 +303,11 @@ export function videoEditNestedComposition(document: VideoEditComposition, clip:
   const sequence = document.sequences?.find(sequence => sequence.id === item?.sequenceId)
   if (!sequence) throw new Error('嵌套序列已移除或未包含在渲染快照中。')
   const composition = composeVideoEditSequence(document, sequence)
-  if (clip.start !== undefined && clip.duration !== undefined && clip.sourceInUs !== undefined) composition.captions = projectVideoEditNestedCaptions(sequence, { start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder ?? { numerator: 0, denominator: 1 }, speed: clip.speed, reverse: clip.reverse }, document.fps)
+  if (clip.start !== undefined && clip.duration !== undefined && clip.sourceInUs !== undefined) {
+    const timing = { start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder ?? { numerator: 0, denominator: 1 }, speed: clip.speed, reverse: clip.reverse }
+    composition.captions = projectVideoEditNestedCaptions(sequence, timing, document.fps)
+    composition.clips = projectVideoEditNestedContentClips(sequence, timing, document.fps)
+  }
   if (!sequence.multicam) return composition
   const camera = sequence.multicam.cameras.find(camera => camera.id === (clip.multicamCameraId ?? sequence.multicam!.cameras[0].id))
   if (!camera) throw new Error('片段所选机位已移除。')
@@ -384,6 +391,10 @@ export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: 
   // 淡入留在左半段开头、淡出留在右半段结尾（PR 拆分后淡化手柄跟着原片段的首尾）。
   delete right.fadeInFrames
   const leftPart = { ...sliceVideoEditClipKeyframes(clip, 0, left), duration: left }; delete leftPart.fadeOutFrames
+  if (clip.contentAnchor) {
+    leftPart.contentAnchor = sliceVideoEditContentAnchor(clip.contentAnchor, sequence, clip.start, at)
+    right.contentAnchor = sliceVideoEditContentAnchor(clip.contentAnchor, sequence, at, clip.start + clip.duration)
+  }
   const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [leftPart, right] : [item]), annotations: sequence.annotations.flatMap(item => {
     const spansSplit = item.frame < at && (item.endFrame ?? item.frame) >= at
     if (item.clipId === id && spansSplit && item.target.kind === 'element') return [{ ...item, endFrame: at - 1 }, { ...item, id: crypto.randomUUID(), clipId: right.id, frame: at, status: item.status === 'draft' ? 'draft' as const : 'open' as const, addressedBy: undefined }]
