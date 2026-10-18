@@ -52,7 +52,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
     case 'video_edit.builtin_effect': return [...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name })), ...VIDEO_EDIT_TRANSITION_PRESETS.map(preset => ({ id: `${VIDEO_EDIT_TRANSITION_REF_PREFIX}${preset.kind}`, name: preset.name }))]
   }
 }
-export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): VideoEditFieldData {
+export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, propertyIds?: readonly string[]): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
   if (ref.kind === 'video_edit.document') return { audioAnalysisProgress: videoEditContentAudioProgress(projectId), selectedCodeElement: JSON.parse(JSON.stringify(videoEditSelectedCodeElementContext(instance))), mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total, totalKnown: task.totalKnown ?? false, discovered: task.discovered ?? task.total, queued: task.queued, requests: task.requests, imported: task.imported, skipped: task.skipped } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, colorLuts: (instance.document.colorLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
@@ -82,7 +82,10 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): Vi
   if (!VIDEO_EDIT_TYPES.includes(ref.kind as VideoEditEntityType)) throw new Error('未知剪辑实体类型。')
   const found = videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).find(item => item.id === childId)
   if (!found) throw new Error('NOT_FOUND：目标不属于此剪辑或已删除。')
-  const data = JSON.parse(JSON.stringify(found)) as VideoEditFieldData
+  // Sequence projections must not clone the full transcript, clips and captions for a name read.
+  const selected = ref.kind === 'video_edit.sequence' && propertyIds?.length
+    ? Object.fromEntries(propertyIds.map(id => videoEditDataKey(id.slice(ref.kind.length + 1))).filter(key => key in found).map(key => [key, (found as unknown as VideoEditFieldData)[key]])) : found
+  const data = JSON.parse(JSON.stringify(selected)) as VideoEditFieldData
   if (ref.kind === 'video_edit.media') {
     const audio = readVideoEditMediaAudio(projectId, childId)
     data.audioAnalysis = audio ? { bpm: audio.bpm, beats: [...audio.beats], onsets: [...audio.onsets], beatsPerBar: audio.beatsPerBar, barOrigin: audio.barOrigin } : null
@@ -95,9 +98,13 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false): Vi
     data.captionTrackEnabled ??= true
     data.captionTrackLocked ??= false
     data.multicam ??= null
-    const composition = videoEditComposition(instance.document, childId)
-    data.transcript = videoEditTranscriptWords(composition).map(word => ({ index: word.index, text: word.text, from: word.from, to: word.to, editable: !word.locked && word.granularity === 'word', granularity: word.granularity }))
-    data.textSilences = resolveVideoEditTextRanges(composition, { kind: 'silence' }).map(range => ({ ...range }))
+    const transcript = !propertyIds?.length || propertyIds.includes('video_edit.sequence.transcript')
+    const silences = !propertyIds?.length || propertyIds.includes('video_edit.sequence.text_silences')
+    if (transcript || silences) {
+      const composition = videoEditComposition(instance.document, childId)
+      if (transcript) data.transcript = videoEditTranscriptWords(composition).map(word => ({ index: word.index, text: word.text, from: word.from, to: word.to, editable: !word.locked && word.granularity === 'word', granularity: word.granularity }))
+      if (silences) data.textSilences = resolveVideoEditTextRanges(composition, { kind: 'silence' }).map(range => ({ ...range }))
+    }
   }
   if (ref.kind === 'video_edit.clip') {
     const clip = instance.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)!
@@ -128,12 +135,13 @@ class VideoEditProvider implements ApplicationEntityProvider {
       if (!definition) throw new Error('NOT_FOUND：代码素材或固定源码版本不存在。')
       await ensureVideoEditCodeParameterMetadata(owner, owner.document, definition.id, this.entityType === 'video_edit.code_material' ? definition.defaultVersionId : childId)
     }
-    const data = fieldReadValues(VIDEO_EDIT_FIELDS[this.entityType], readVideoEditData(ref, needsMetadata))
+    const fields = request.propertyIds?.length ? VIDEO_EDIT_FIELDS[this.entityType].filter(field => request.propertyIds!.includes(field.propertyId)) : VIDEO_EDIT_FIELDS[this.entityType]
+    const data = fieldReadValues(fields, readVideoEditData(ref, needsMetadata, request.propertyIds))
     return { ref, entityType: this.entityType, revisions: { video_edit: videoEditRevision() }, properties: request.propertyIds?.length ? Object.fromEntries(Object.entries(data).filter(([key]) => request.propertyIds!.includes(key))) : data, capturedAt: new Date().toISOString() }
   }
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
     if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(ref).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(ref).projectId }, { focus: false })
-    const data = readVideoEditData(ref)
+    const data = readVideoEditData(ref, false, propertyIds)
     return propertyIds.map(propertyId => {
       const field = VIDEO_EDIT_FIELDS[this.entityType].find(item => item.propertyId === propertyId)
       if (!field) throw new Error(`未知属性 ${propertyId}，可用属性：${VIDEO_EDIT_FIELDS[this.entityType].map(item => item.propertyId).join('、')}`)

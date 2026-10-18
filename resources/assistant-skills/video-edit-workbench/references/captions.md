@@ -4,7 +4,7 @@
 
 ## 识别和生成
 
-1. 先查现有 `video_edit.caption` 与 `video_edit.sequence.transcript`，已有可用文本不重复识别。需要识别时 `prepare_video_edit_subtitle_audio` 给 documentRef、sequenceRef，scope=sequence/in-out/selection，可给 trackRef 指定人声轨。
+1. 先用 `query_video_edit_transcript` 局部查已有口播与校对字幕，需要完整编辑时再读 `video_edit.caption` 或序列转录稿；已有可用文本不重复识别。需要识别时 `prepare_video_edit_subtitle_audio` 给 documentRef、sequenceRef，scope=sequence/in-out/selection，可给 trackRef 指定人声轨。
 2. 准备是本地混音，不计识别费；selection 保持选中声音之间的序列空隙，in-out 需要完整入出点。背景音乐太强时选清楚的人声轨。
 3. 拿返回 audioDocumentRef 调 `generate_video_edit_subtitles`，给同一 documentRef/sequenceRef/audioDocumentRef，按需 modelId、language=zh/en 及分段参数。识别可能计费，先走正式审批。修改声音或时序后重新准备，迟到结果不能填进已变目标。
 4. 失败保留 audioDocumentRef，先查既有口播任务与结果，再恢复；已有识别结果不重复付费。字幕开始／时长为序列帧，回读文字、范围与源关联，人工校正走通用属性。

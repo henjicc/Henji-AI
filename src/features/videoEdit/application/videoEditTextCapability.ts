@@ -1,7 +1,7 @@
 import { isVideoEditContentCurrent, verifyVideoEditContentSaved } from './videoEditDocumentAlgorithm'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
-import { VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, getVideoEditClipPausesCapability } from '@/core/application-control/domains/videoEdit/videoEditTextCapabilities'
+import { VIDEO_EDIT_TEXT_CAPABILITIES, detectVideoEditTextSilenceCapability, getVideoEditClipPausesCapability, queryVideoEditTranscriptCapability } from '@/core/application-control/domains/videoEdit/videoEditTextCapabilities'
 import { videoEditClipFrameBoundaryAtSource } from '@/core/videoEdit/clipSpeed'
 import { getVideoEditClipPauseMap, readClipEnergyPauses } from './videoEditPauseMap'
 import { videoEditComposition } from '@/core/videoEdit/document'
@@ -9,8 +9,25 @@ import { resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
 import { editVideoEditText, restoreVideoEditText } from './videoEditTextEditing'
 import { splitVideoEditRef } from './videoEditReflection'
 import { openVideoEditDocument, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
+import { readVideoEditTranscriptQuery } from './videoEditTranscriptQuery'
 
 export async function handleVideoEditTextCapability(id: string, raw: unknown, signal?: AbortSignal): Promise<Record<string, unknown> | undefined> {
+  if (id === queryVideoEditTranscriptCapability.id) {
+    const input = queryVideoEditTranscriptCapability.inputSchema.parse(raw)
+    const projectId = input.documentRef.id; const sequence = splitVideoEditRef(input.sequenceRef)
+    const child = (ref?: { kind: string; id: string }): string | undefined => {
+      if (!ref) return undefined
+      const target = splitVideoEditRef(ref)
+      if (target.projectId !== projectId || !target.childId) throw new ApplicationPreflightFailure(`${ref.kind} 必须属于 documentRef。`)
+      return target.childId
+    }
+    if (sequence.projectId !== projectId || !sequence.childId) throw new ApplicationPreflightFailure('sequenceRef 必须属于 documentRef。')
+    signal?.throwIfAborted()
+    await openVideoEditDocument({ id: projectId }, { focus: false })
+    signal?.throwIfAborted()
+    const result = readVideoEditTranscriptQuery(projectId, sequence.childId, { text: input.text, from: input.from, to: input.to, clipId: child(input.clipRef), itemId: child(input.itemRef), source: input.matchSource, contextWords: input.contextWords }, { cursor: input.cursor, limit: input.limit })
+    return { documentRef: input.documentRef, sequenceRef: input.sequenceRef, ...result, message: `找到 ${result.total} 处内容，本次返回 ${result.matches.length} 处；原剪辑改变后请重新查询。` }
+  }
   if (id === getVideoEditClipPausesCapability.id) {
     const input = getVideoEditClipPausesCapability.inputSchema.parse(raw)
     const { projectId, childId } = splitVideoEditRef(input.clipRef)

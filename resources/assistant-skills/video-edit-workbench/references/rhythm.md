@@ -29,10 +29,11 @@
 
 ## 按文字剪口播
 
-先读 `video_edit.sequence.transcript`，确认 index、text、from/to、editable 和 granularity。没有转录时走 captions 的准备与审批流程；句级或 editable=false 内容不能伪装成精确词级剪辑。
+优先用 `query_video_edit_transcript` 按 text 或 from/to 局部查已有口播与校对字幕，可限定 clipRef（含链接声音）或 itemRef。from/to 是半开序列帧；matchSource 可选 asr/caption/all；limit 为1–50，contextWords 为0–20。分页时重复原条件并带 nextCursor，不把整份长稿读进上下文。没有转录时走 captions 的准备与审批流程。
 
 - `ripple_delete_video_edit_text` 删除匹配并闭合全轨时间；`extract_video_edit_text` 复制到紧凑新序列，name 只用于此操作；`insert_video_edit_text` 复制插入，frame 必填且为序列帧。
-- selector.kind=words 时 ranges 的 start/end 是含首尾的当前词索引；kind=text 时 text 是稿子原文，occurrence 从0开始，省略匹配全部。所谓“删重复观点”需助手先读稿选择真实索引，不是工具语义搜索。
+- 优先直接使用查询命中的 selector（kind=match）；候选包含必要上下文、序列位置和源微秒，剪辑改变、关闭或被最近查询回收后须重新查。校对字幕命中标为 precision=caption，不能冒充精确词源；editable=false 不可直接剪。
+- 需要原始词表时再读 `video_edit.sequence.transcript`。selector.kind=words 的 start/end 为含首尾词索引；kind=text 忽略标点、空白、全半角与英文大小写，occurrence 从0开始，省略匹配全部。重复观点仍需根据实际内容选择，不能把文字检索当语义判断。
 - 编辑会改变词索引；每组删除后回读新稿，不沿用旧索引。波纹会影响其他轨道，先看锁轨、配乐、字幕和时间锚点，再核对实际返回 ranges。
 
 ## 多机位

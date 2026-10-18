@@ -10,6 +10,7 @@ import { videoEditSubtitleSequenceSignature } from './videoEditAutoSubtitles'
 import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
 import { editVideoProject, editVideoSequence, holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { resolveVideoEditTranscriptMatch } from './videoEditTranscriptQuery'
 
 const logger = createLogger('features.videoEdit.textEditing')
 export async function hasSavedVideoEditText(audioDocumentId: string): Promise<boolean> { return Boolean((await loadAudioEditProject(audioDocumentId)).document.transcript.length) }
@@ -17,7 +18,8 @@ export interface VideoEditTextEditResult { ranges: VideoEditTextRange[]; sequenc
 export function editVideoEditText(projectId: string, sequenceId: string, selector: VideoEditTextSelector, action: 'delete' | 'extract' | 'insert', frame?: number, name?: string, baseline?: object): VideoEditTextEditResult {
   const owner = requireVideoEditInstance(projectId); const document = owner.document; const contentVersion = owner.contentVersion
   if (baseline && baseline !== document.sequences.find(sequence => sequence.id === sequenceId)) throw new Error('时间线已有修改，请重新选中文字。')
-  const ranges = resolveVideoEditTextRanges(videoEditComposition(document, sequenceId), selector)
+  const resolved = selector.kind === 'match' ? resolveVideoEditTranscriptMatch(projectId, sequenceId, selector.matchId) : selector
+  const ranges = resolveVideoEditTextRanges(videoEditComposition(document, sequenceId), resolved)
   if (!ranges.length) return { ranges, sequenceId, changed: false }
   logger.info('文本剪辑开始', { event: 'video_edit.text.edit.start', context: { projectId, sequenceId, action, count: ranges.length } })
   try {

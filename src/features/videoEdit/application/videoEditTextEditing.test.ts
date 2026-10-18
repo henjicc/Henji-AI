@@ -12,6 +12,11 @@ import { closeAllVideoEdits, savedVideoEdit, reopenVideoEdit, failVideoEditSaves
 import { handleVideoEditTextCapability } from './videoEditTextCapability'
 import { getPlatform } from '@/platform/runtime'
 import { nestVideoEditSelection } from './videoEditNesting'
+import { queryVideoEditTranscriptCapability } from '@/core/application-control/domains/videoEdit/videoEditTextCapabilities'
+import { readVideoEditTranscriptQuery } from './videoEditTranscriptQuery'
+import * as transcriptFunctions from '@/core/videoEdit/textTranscript'
+import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 
 beforeEach(installHarnessNativeStorage)
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
@@ -86,4 +91,86 @@ it('capability returns actual deleted original intervals, no recognition; save f
   undoVideoEdit(owner.document.id); const history = owner.past.length; failVideoEditSaves(true)
   await expect(handleVideoEditTextCapability('ripple_delete_video_edit_text', raw)).rejects.toMatchObject({ message: expect.stringContaining('不要重复剪辑') })
   expect(owner.past.length).toBe(history + 1); expect(asr).not.toHaveBeenCalled(); failVideoEditSaves(false)
+})
+
+it('正式局部查询返回有界候选，直接摘选、保存并撤销；剪后旧候选拒绝重放', async () => {
+  const owner = await fixture(); const app = createApplicationHarness(); const sequence = owner.document.sequences[0]
+  const documentRef = { kind: 'video_edit.document', id: owner.document.id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence.id}` }
+  const recognize = vi.spyOn(getPlatform().audioEdit, 'transcribe'); const history = owner.past.length
+  try {
+    const query = queryVideoEditTranscriptCapability.outputSchema.parse(await app.requireResult('query_video_edit_transcript', { documentRef, sequenceRef, text: '价格，九元', matchSource: 'asr', limit: 1 }))
+    expect(query).toMatchObject({ total: 1, nextCursor: null, matches: [{ text: '价格九元。', from: 30, to: 60, editable: true, sourceRange: { startUs: 1000000, endUs: 2000000 } }] })
+    expect(owner.past.length).toBe(history)
+    const selector = query.matches[0].selector
+    expect(selector).toBeDefined()
+    expect(await app.call('extract_video_edit_text', { documentRef, sequenceRef, selector, name: '查询摘选' })).toMatchObject({ ok: true, data: { ranges: [{ from: 30, to: 60 }], verified: true } })
+    expect(savedVideoEdit(owner).sequences[1].name).toBe('查询摘选'); expect(owner.past.length).toBe(history + 1)
+    expect(await app.call('extract_video_edit_text', { documentRef, sequenceRef, selector })).toMatchObject({ ok: false })
+    undoVideoEdit(owner.document.id)
+    expect(owner.document.sequences).toHaveLength(1); expect(recognize).not.toHaveBeenCalled()
+  } finally { app.dispose() }
+})
+
+it('查询分页按原条件读回，跨序列、关闭重开、内容变化与未知候选均不能剪辑', async () => {
+  const owner = await fixture(); const sequence = owner.document.sequences[0]
+  const first = readVideoEditTranscriptQuery(owner.document.id, sequence.id, {}, { limit: 1 })
+  expect(first.total).toBe(2); expect(first.nextCursor).toBeTruthy()
+  const second = readVideoEditTranscriptQuery(owner.document.id, sequence.id, {}, { limit: 1, cursor: first.nextCursor! })
+  expect(second.matches[0].text).not.toBe(first.matches[0].text)
+  expect(() => readVideoEditTranscriptQuery(owner.document.id, sequence.id, { text: '改变条件' }, { limit: 1, cursor: first.nextCursor! })).toThrow('失效')
+  expect(() => editVideoEditText(owner.document.id, 'other-sequence', first.matches[0].selector!, 'delete')).toThrow()
+  expect(() => editVideoEditText(owner.document.id, sequence.id, { kind: 'match', matchId: 'made-up' }, 'delete')).toThrow('失效')
+  editVideoProject(owner.document.id, document => { document.sequences[0].name = '已修改'; return document })
+  expect(() => readVideoEditTranscriptQuery(owner.document.id, sequence.id, {}, { limit: 1, cursor: first.nextCursor! })).toThrow('失效')
+  expect(() => editVideoEditText(owner.document.id, sequence.id, first.matches[0].selector!, 'delete')).toThrow('失效')
+  const fresh = readVideoEditTranscriptQuery(owner.document.id, sequence.id, {}, { limit: 1 })
+  await reopenVideoEdit(owner.document.id)
+  expect(() => editVideoEditText(owner.document.id, sequence.id, fresh.matches[0].selector!, 'delete')).toThrow('失效')
+})
+
+it('读取序列名字不计算转录与静音；局部检索条件拒绝纯标点和错误范围', async () => {
+  const owner = await fixture(); const app = createApplicationHarness(); const sequence = owner.document.sequences[0]
+  const ref = { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence.id}` }
+  const words = vi.spyOn(transcriptFunctions, 'videoEditTranscriptWords'); const ranges = vi.spyOn(transcriptFunctions, 'resolveVideoEditTextRanges')
+  try {
+    expect((await app.read(ref, ['video_edit.sequence.name'])).properties).toEqual({ 'video_edit.sequence.name': sequence.name })
+    expect(words).not.toHaveBeenCalled(); expect(ranges).not.toHaveBeenCalled()
+    const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: ref }
+    expect(await app.call('query_video_edit_transcript', { ...input, text: '，。' })).toMatchObject({ ok: false })
+    expect(await app.call('query_video_edit_transcript', { ...input, from: 60, to: 30 })).toMatchObject({ ok: false })
+    expect(await app.call('query_video_edit_transcript', { ...input, clipRef: { kind: 'video_edit.clip', id: 'other-project:v' } })).toMatchObject({ ok: false })
+    expect(await app.call('query_video_edit_transcript', { ...input, itemRef: { kind: 'video_edit.item', id: `${owner.document.id}:missing` } })).toMatchObject({ ok: false })
+  } finally { app.dispose() }
+})
+
+it('长稿重复句分开分页，公共只读授权能查询且不能借候选写入', async () => {
+  const owner = await fixture(); const sequence = owner.document.sequences[0]
+  editVideoProject(owner.document.id, document => {
+    document.media[0].durationSeconds = 200
+    for (const clip of document.sequences[0].clips) clip.duration = 6000
+    document.sequences[0].textTranscription!.sources[0].blocks = Array.from({ length: 1200 }, (_, index) => ({
+      id: `word-${index}`, text: '打开后台。', startFrame: index * 100000, endFrame: (index + 1) * 100000, granularity: 'word' as const, included: true, locked: false,
+    }))
+    return document
+  })
+  const history = owner.past.length
+  const session = createApplicationCapabilitySession(createApplicationCallerGrant({
+    callerId: crypto.randomUUID(), capabilityIds: ['query_video_edit_transcript', 'extract_video_edit_text'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false,
+  }))
+  const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence.id}` }, text: '打开，后台', matchSource: 'asr', limit: 50 }
+  const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  const first = await session.execute({ id: 'query_video_edit_transcript', version: 1, input }, request())
+  expect(first.ok).toBe(true)
+  if (!first.ok) throw new Error(JSON.stringify(first.error))
+  const page = queryVideoEditTranscriptCapability.outputSchema.parse(first.data)
+  expect(page.total).toBe(1200); expect(page.matches).toHaveLength(50)
+  expect(new Set(page.matches.map(match => match.matchId)).size).toBe(50)
+  expect(JSON.stringify(page).length).toBeLessThan(60000)
+  const second = await session.execute({ id: 'query_video_edit_transcript', version: 1, input: { ...input, cursor: page.nextCursor } }, request())
+  expect(second.ok).toBe(true)
+  if (!second.ok) throw new Error(JSON.stringify(second.error))
+  const next = queryVideoEditTranscriptCapability.outputSchema.parse(second.data)
+  expect(next.matches[0].from).toBe(page.matches.at(-1)!.to)
+  await expect(session.execute({ id: 'extract_video_edit_text', version: 1, input: { documentRef: input.documentRef, sequenceRef: input.sequenceRef, selector: page.matches[0].selector } }, request())).rejects.toThrow()
+  expect(owner.past.length).toBe(history)
 })
