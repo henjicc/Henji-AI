@@ -35,6 +35,8 @@
 
 ## 按文字剪口播
 
+还未放进时间线的素材可用 `query_video_edit_content` 查原文件内容，给 documentRef、itemRef 及可选文字/源微秒范围。只有显式请求 `kinds` 含 `pause` 或 `scene` 才启动免费本地分析；声音低谷按素材声道布局各路共同低谷返回，画面切点只是镜头变化候选。已有分析由内容缓存复用，翻页不重新解码。检查 `basis`、`precision`、`sourceVerified` 与 warnings；查询结果不是已试听或看片的质量结论，也不是可直接剪辑的 selector。
+
 优先用 `query_video_edit_transcript` 按 text 或 from/to 局部查已有口播与校对字幕，可限定 clipRef（含链接声音）或 itemRef。from/to 是半开序列帧；matchSource 可选 asr/caption/all；limit 为1–50，contextWords 为0–20。分页时重复原条件并带 nextCursor，不把整份长稿读进上下文。没有转录时走 captions 的准备与审批流程。
 
 - `ripple_delete_video_edit_text` 删除匹配并闭合全轨时间；`extract_video_edit_text` 复制到紧凑新序列，name 只用于此操作；`insert_video_edit_text` 复制插入，frame 必填且为序列帧。

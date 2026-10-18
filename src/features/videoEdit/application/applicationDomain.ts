@@ -15,6 +15,8 @@ import { screenAttentionVideoEditCapability } from '@/core/application-control/d
 import { executeVideoEditScreenAttentionCapability } from './videoEditScreenAttentionCapability'
 import { reframeVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditReframeCapability'
 import { handleVideoEditTextCapability } from './videoEditTextCapability'
+import { queryVideoEditContentCapability } from '@/core/application-control/domains/videoEdit/videoEditContentIndexCapability'
+import { readVideoEditContentIndex } from './videoEditContentIndex'
 import { executeVideoEditReframeCapability } from './videoEditReframeCapability'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
 import { analyzeVideoEditColorGradeCapability } from '@/core/application-control/domains/videoEdit/videoEditColorGradeCapability'
@@ -144,6 +146,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const multicam = await handleVideoEditMulticamCapability(definition.id, raw, context.signal)
       if (multicam !== undefined) return multicam
       const textEdit = await handleVideoEditTextCapability(definition.id, raw, context.signal)
+      if (definition.id === queryVideoEditContentCapability.id) return readVideoEditContentIndex(raw, context)
       if (textEdit) return textEdit
       const transfer = await handleVideoEditWorkspaceTransfer(definition.id, raw, context.signal)
       if (transfer) return transfer
