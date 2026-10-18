@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import path from 'node:path'
 import { findTranscriptSearchRanges, normalizeTranscriptSearch } from '../media/transcriptSearch'
 import { createVideoEditTestDocument } from './testFixtures'
 import { createVideoEditSequence, videoEditComposition } from './document'
@@ -8,7 +9,7 @@ import { resolveVideoEditTextRanges, videoEditTextMediaIdentity } from './textTr
 
 function fixture() {
   const document = createVideoEditTestDocument('转录检索'); const sequence = document.sequences[0]
-  document.media = [{ id: 'm', name: '原片', path: 'D:/source.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 20, hasAudio: true }]
+  document.media = [{ id: 'm', name: '原片', path: path.resolve(path.sep, 'media', 'source.mp4'), kind: 'video', width: 64, height: 64, durationSeconds: 20, hasAudio: true }]
   document.items = [{ id: 'item', name: '原片', kind: 'video', mediaId: 'm' }]
   const clip = { ...makeVideoEditItemClip(document, 'item', sequence.id, { frame: 30, track: sequence.tracks.find(track => track.kind === 'video')!.index, duration: 300 }), id: 'picture', sourceComponent: 'video' as const, linkId: 'linked' }
   sequence.clips = [clip, { ...clip, id: 'voice', kind: 'audio', sourceComponent: 'audio', track: sequence.tracks.find(track => track.kind === 'audio')!.index }]
