@@ -13,7 +13,7 @@
 
 默认 `style=netflix_zh_hans`：每行最多16字、最多2行，半角计半字，能一行就一行；最短5/6秒、最长7秒，成人阅读速度≤9字/秒。句中逗号句号、分号冒号破折号换一个半角空格，句尾删除；？！…保留，顿号不放行尾或字幕末尾。相邻间隔<500ms，前条结束接到后条开始。用户另有规范以用户为准；英语暂沿用原有规则。
 
-分句先看意群，再结合音频停顿，不能只按字数均分。读已有逐词时间，或免费调用 `get_video_edit_clip_pauses(clipRef)` 取得序列帧的 words 与 pauses；字幕边界吸附词边界，不在词念完前切换，零间隔连读短语尽量不拆。`audio_edit.transcript_block.start_frame/end_frame` 是源采样帧，除以该块 sample_rate 才是秒，不能当作序列帧。停顿图已计入片段起点、入点、变速。
+分句先看意群，再结合音频停顿，不能只按字数均分。免费调用 `get_video_edit_clip_pauses(clipRef)` 同时取得已有 words 与真实声音 pauses，即使逐词时间连续也会分析全频和高频低谷，不重复识别。words_and_energy 表示两种证据齐全；breath/punct 只是词间候选，silence 才来自声音。字幕整理与原文字幕生成共用分析结果；声音证据可提示断句，但不会覆盖已有精确词时间。`audio_edit.transcript_block.start_frame/end_frame` 是源采样帧，除以 sample_rate 才是秒，不能当作序列帧。停顿图已计入片段起点、入点、变速、倒放及声道选择。
 
 maxCharacters/maxLines、minDurationSeconds/maxDurationSeconds、maxReadingSpeed、joinGapMs 和 punctuation 均可覆盖。pauseSeconds 默认省略，按说话人停顿分布自适应；需要固定值时 TTS 可从0.2–0.3秒校正，0.6秒往往漏过真实气口。时间不足时保留完整词和原文；缺词级时间按已有字幕范围估算，不能冒充识别精度。
 

@@ -1,12 +1,13 @@
-import type { AudioEditRange, AudioEditSilenceRequest, AudioEditSuggestion } from '../../../../src/core/audioEdit/types'
+import type { AudioEditRange, AudioEditSilenceRequest, AudioEditSilenceResult, AudioEditSuggestion } from '../../../../src/core/audioEdit/types'
 import { subtractRanges } from '../../../../src/core/audioEdit/edits'
 import { requireAudioEditProject } from './project-store'
 import { probeAudioEditImport, verifyAudioEditSource } from './media'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { runAudioEditProcess } from './process'
 import { registerAudioEditTaskController, runAudioEditTask } from './task-store'
+import { analyzeSpeechEnergy } from './speech-energy'
 
-export async function detectAudioEditSilence(request: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }> {
+export async function detectAudioEditSilence(request: AudioEditSilenceRequest): Promise<AudioEditSilenceResult> {
   const requestId = request.requestId ?? crypto.randomUUID()
   const controller = new AbortController()
   const release = registerAudioEditTaskController(requestId, request.projectId ?? requestId, controller, true)
@@ -17,7 +18,7 @@ export async function detectAudioEditSilence(request: AudioEditSilenceRequest): 
   } finally { release() }
 }
 
-async function detectRegisteredSilence(request: AudioEditSilenceRequest, controller: AbortController): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }> {
+async function detectRegisteredSilence(request: AudioEditSilenceRequest, controller: AbortController): Promise<AudioEditSilenceResult> {
   // Source-only analysis is read-only: no draft, transcript, or navigation side effect.
   const projectId = request.projectId ?? request.requestId ?? crypto.randomUUID()
   const project = request.projectId !== undefined ? await requireAudioEditProject(request.projectId)
@@ -29,7 +30,9 @@ async function detectRegisteredSilence(request: AudioEditSilenceRequest, control
   return runAudioEditTask(projectId, 'silence', async (signal, progress) => {
     const intervals: AudioEditRange[] = []
     let start: number | undefined
-    await runAudioEditProcess(await loadFfmpegPath(), ['-hide_banner', '-nostats', '-i', project.source.audioPath,
+    const energy = request.energy ? await analyzeSpeechEnergy(project.source, request.energy, signal, progress, () => verifyAudioEditSource(project, true, signal)) : undefined
+    if (energy) intervals.push(...energy.pauses.map(pause => ({ startFrame: Math.ceil(pause.startMs * project.source.sampleRate / 1000), endFrame: Math.floor(pause.endMs * project.source.sampleRate / 1000) })))
+    else await runAudioEditProcess(await loadFfmpegPath(), ['-hide_banner', '-nostats', '-i', project.source.audioPath,
       '-map', project.source.ownership === 'external' ? `0:${project.source.audioStreamIndex ?? 0}` : '0:a:0',
       '-af', `asetpts=PTS-STARTPTS,silencedetect=noise=${settings.noiseDb}dB:d=${settings.silenceThresholdMs / 1000}`, '-vn', '-f', 'null', '-'], signal, (line) => {
       const began = /silence_start: ([\d.e+-]+)/.exec(line)
@@ -52,6 +55,6 @@ async function detectRegisteredSilence(request: AudioEditSilenceRequest, control
       .map((range) => ({ ...range, id: `silence:${range.startFrame}:${range.endFrame}`, kind: 'long_silence', evidence: 'audio', title: '压缩停顿', detail: `保留 ${settings.retainedSilenceMs} 毫秒气口`, blockIds: [], confidence: 'high', status: 'pending' }))
     signal.throwIfAborted()
     await verifyAudioEditSource(project, true, signal)
-    return { revision: project.revision, suggestions }
-  }, request.requestId, JSON.stringify([project.revision, project.source.identity, settings, request.range]), true, controller)
+    return { revision: project.revision, suggestions, ...(energy ? { energy } : {}) }
+  }, request.requestId, JSON.stringify([project.revision, project.source.identity, settings, request.range, request.energy]), true, controller)
 }

@@ -117,6 +117,15 @@ it('能量停顿修正估算词边界；已识别的词时钟不被能量覆盖'
   expect(exact.every(cue => cue.startMs === 0 || cue.startMs === 3000)).toBe(true)
 })
 
+it('明确声音证据可解释连续ASR词之间的气口，但不篡改已识别词时间', () => {
+  const tokens: SubtitleToken[] = [{ text: '我们已经写出指令，', startMs: 0, endMs: 3000, timing: 'word' }, { text: '再交给画图的工作伙伴。', startMs: 3000, endMs: 6000, timing: 'word' }]
+  const snapshot = structuredClone(tokens)
+  const result = segmentTimedSubtitles(tokens, { startMs: 0, endMs: 7000 }, {}, [{ startMs: 2800, endMs: 3200, evidence: 'audio' }])
+  expect(result).toHaveLength(2)
+  expect(result[1].startMs).toBe(3000)
+  expect(tokens).toEqual(snapshot)
+})
+
 it('变速后的最短时长使用序列时间，局部原文只对齐片段源范围内的同名词', async () => {
   const timings: SpeechTimings = { granularity: 'word', items: [
     { text: '你好。', startMs: 0, endMs: 400 }, { text: '你好。', startMs: 2000, endMs: 2400 },

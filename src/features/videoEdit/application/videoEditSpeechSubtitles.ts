@@ -80,7 +80,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
         startMs: block.startFrame * 1000 / sampleRate, endMs: block.endFrame * 1000 / sampleRate, ...(block.confidence === undefined ? {} : { confidence: block.confidence }) })) } satisfies SpeechTimings
     }
     assertTarget()
-    const pauses = timings.granularity === 'word' ? [] : await readClipEnergyPauses(projectId, sequenceId, clipId, signal)
+    const pauses = await readClipEnergyPauses(projectId, sequenceId, clipId, signal)
     const subtitles = await buildSpeechSubtitles(originalText, timings, clip, sequence.frameRate, autoSubtitleOptionsSchema.strip().parse(options), signal, pauses)
     assertTarget()
     appendAutoSubtitles(projectId, sequenceId, subtitles.map(value => value.caption))

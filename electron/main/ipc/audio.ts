@@ -4,6 +4,7 @@ import { registerAudioLoudnessHandlers } from './audio-loudness'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 import { probeAudioEditImport, relinkAudioEditSource, verifyAudioEditSource } from '../services/audio-edit/media'
 import { detectAudioEditSilence } from '../services/audio-edit/silence'
+import { speechEnergyOptionsSchema } from '../../../src/core/audioEdit/speechEnergy'
 import { cancelAudioEditTask, listAudioEditTasks, runAudioEditTask } from '../services/audio-edit/task-store'
 import { audioEditSettingsSchema, audioEditRangeSchema, audioEditFrameRateSchema } from '../../../src/core/audioEdit/schema'
 import { requireAudioEditProject } from '../services/audio-edit/project-store'
@@ -42,7 +43,7 @@ export function registerAudioIpc(): void {
     const record = parseRecord(input)
     if (record.projectId !== undefined && record.sourcePath !== undefined) throw new Error('只提供 projectId 或 sourcePath。')
     const target = record.sourcePath === undefined ? { projectId: readString(record, 'projectId') } : { sourcePath: readString(record, 'sourcePath') }
-    return { ...target, settings: audioEditSettingsSchema.parse(record.settings), range: record.range === undefined ? undefined : audioEditRangeSchema.parse(record.range), requestId: readOptionalString(record, 'requestId') }
+    return { ...target, settings: audioEditSettingsSchema.parse(record.settings), range: record.range === undefined ? undefined : audioEditRangeSchema.parse(record.range), requestId: readOptionalString(record, 'requestId'), energy: record.energy === undefined ? undefined : speechEnergyOptionsSchema.parse(record.energy) }
   }, detectAudioEditSilence)
   registerIpcHandler('audioEdit:tasks:list', (input) => parseStringField(input, 'projectId'), listAudioEditTasks)
   registerIpcHandler('audioEdit:tasks:cancel', (input) => parseStringField(input, 'requestId'), cancelAudioEditTask)

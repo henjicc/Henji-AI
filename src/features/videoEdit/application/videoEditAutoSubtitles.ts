@@ -178,8 +178,8 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     else await flushAudioEditProject(audioDocumentId)
     await assertTarget()
     const fps = current(projectId, sequenceId).fps
-    const pauses = !manifest.captions && audio.document.transcript.some(block => block.granularity !== 'word')
-      ? (await readSourceEnergyPauses(audio.document.source.sourcePath, signal)).map(pause => ({ startMs: pause.startMs + manifest.startFrame / fps * 1000, endMs: pause.endMs + manifest.startFrame / fps * 1000 })) : []
+    const pauses = !manifest.captions
+      ? (await readSourceEnergyPauses(audio.document.source.sourcePath, signal)).map(pause => ({ startMs: pause.startMs + manifest.startFrame / fps * 1000, endMs: pause.endMs + manifest.startFrame / fps * 1000, evidence: pause.evidence })) : []
     const captions = manifest.captions ?? prepareVideoEditCaptions(current(projectId, sequenceId), buildAutoSubtitles(audio.document.transcript, audio.document.source.sampleRate, current(projectId, sequenceId).frameRate, manifest, settings, pauses))
     if (!captions.length) throw new Error('识别结果没有可用字幕。')
     // Record planned IDs before committing, so a lost save acknowledgement cannot create a duplicate batch.
@@ -266,7 +266,7 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
       const clip = sequence.clips.find(clip => clip.id === first.clipId)
       if (clip && !savedTimings.has(clip.id)) savedTimings.set(clip.id, readClipSpeechTimings(projectId, sequenceId, clip.id))
       const timings = clip ? await savedTimings.get(clip.id) : undefined
-      if (clip && timings?.granularity !== 'word' && !energyTimings.has(clip.id)) energyTimings.set(clip.id, readClipEnergyPauses(projectId, sequenceId, clip.id, signal))
+      if (clip && !energyTimings.has(clip.id)) energyTimings.set(clip.id, readClipEnergyPauses(projectId, sequenceId, clip.id, signal))
       const pauses = clip ? await energyTimings.get(clip.id) ?? [] : []
       const boundary = all[positions.get(last.id)! + 1]?.start ?? videoEditDuration(sequence)
       const endFrame = Math.min(boundary, clip ? clip.start + clip.duration : boundary)
@@ -278,7 +278,7 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
       const sequencePauses = clip ? pauses.map(pause => {
         const a = videoEditClipFrameBoundaryAtSource(clip, pause.startMs / 1000, fps) / fps * 1000
         const b = videoEditClipFrameBoundaryAtSource(clip, pause.endMs / 1000, fps) / fps * 1000
-        return { startMs: Math.min(a, b), endMs: Math.max(a, b) }
+        return { startMs: Math.min(a, b), endMs: Math.max(a, b), evidence: pause.evidence }
       }) : []
       const cues = timings && scopedClip ? (await buildSpeechSubtitles(text, timings, scopedClip, sequence.frameRate, settings, signal, pauses, 'clip')).map(value => value.caption)
         : buildAutoSubtitles(group.map((caption, index) => ({ id: caption.id, text: joinCaptionText(texts[index].split('\n')), startFrame: (caption.start - first.start) * sequence.frameRate.denominator, endFrame: (caption.start + caption.duration - first.start) * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false })), sequence.frameRate.numerator, sequence.frameRate, { startFrame: first.start, endFrame }, settings, sequencePauses)

@@ -42,6 +42,8 @@
 - 需要原始词表时再读 `video_edit.sequence.transcript`。selector.kind=words 的 start/end 为含首尾词索引；kind=text 忽略标点、空白、全半角与英文大小写，occurrence 从0开始，省略匹配全部。重复观点仍需根据实际内容选择，不能把文字检索当语义判断。
 - 编辑会改变词索引；每组删除后回读新稿，不沿用旧索引。波纹会影响其他轨道，先看锁轨、配乐、字幕和时间锚点，再核对实际返回 ranges。
 
+选声音切点时，把转录查询结果的 from/to 作为 `get_video_edit_clip_pauses` 的 range，clipRef 指向其声音片段；searchMs 默认300、retainedMs 默认120，单位均为播放毫秒。返回 cutCandidates 最多包含目标首尾各一个候选，cutFrame 和 retainedFromFrame/retainedToFrame 均为序列帧；保留区间不会越过检测低谷。没有候选就说明附近缺乏足够声音证据，不按标点补造切点。结果只读且未改作品，修改前后需试听；同一素材分析按内容和声道复用，不能将候选当作已通过听感验收。
+
 ## 多机位
 
 用 `create_video_edit_multicam`，给 documentRef、templateSequenceRef、name、cameras（各项 itemRef）、sync=audio/in_points/timecode，按实际素材选同步依据；audioCameraIndex 指定主音频。入点给 inPointSeconds，时间码给 timecodeSeconds。声音不能可靠同步时改用已核实入点或时间码，不编造同步成功。

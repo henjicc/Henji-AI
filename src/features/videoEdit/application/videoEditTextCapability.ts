@@ -34,7 +34,7 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
     await openVideoEditDocument({ id: projectId }, { focus: false })
     const sequence = requireVideoEditInstance(projectId).document.sequences.find(value => value.clips.some(clip => clip.id === childId))
     if (!sequence) throw new ApplicationPreflightFailure('clipRef 不属于当前剪辑。')
-    return { clipRef: input.clipRef, ...await getVideoEditClipPauseMap(projectId, sequence.id, childId, signal), message: '已读取片段停顿与词边界。' }
+    return { clipRef: input.clipRef, ...await getVideoEditClipPauseMap(projectId, sequence.id, childId, signal, input), message: '已读取真实声音低谷与已有词边界，切点候选请试听复核。' }
   }
   const definition = VIDEO_EDIT_TEXT_CAPABILITIES.find(value => value.id === id)
   if (!definition && id !== detectVideoEditTextSilenceCapability.id) return undefined
@@ -60,7 +60,7 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
       if (ref.projectId !== projectId || !clip) throw new ApplicationPreflightFailure('clipRef 必须属于目标序列。')
       const ranges = (await readClipEnergyPauses(projectId, sequence.childId, clip.id, signal)).map(pause => {
         const a = videoEditClipFrameBoundaryAtSource(clip, pause.startMs / 1000, composition.fps); const b = videoEditClipFrameBoundaryAtSource(clip, pause.endMs / 1000, composition.fps)
-        return { from: Math.max(clip.start, Math.floor(Math.min(a, b))), to: Math.min(clip.start + clip.duration, Math.ceil(Math.max(a, b))) }
+        return { from: Math.max(clip.start, Math.ceil(Math.min(a, b) - 1e-7)), to: Math.min(clip.start + clip.duration, Math.floor(Math.max(a, b) + 1e-7)) }
       }).filter(range => range.to > range.from)
       if (!isVideoEditContentCurrent(owner, contentVersion)) throw new ApplicationPreflightFailure('检测期间片段已改变，请重新检测静音。')
       return { documentRef: input.documentRef, resultRef: input.sequenceRef, ranges, changed: false, verified: true, message: `已免费检测 ${ranges.length} 处片段静音，未修改剪辑。` }

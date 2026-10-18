@@ -1,3 +1,5 @@
+import type { SpeechEnergyAnalysis, SpeechEnergyOptions } from './speechEnergy'
+
 export type AudioEditPreviewMode = 'edited' | 'source' | 'delivery'
 
 export interface AudioEditRange { startFrame: number; endFrame: number }
@@ -159,6 +161,14 @@ export type AudioEditSilenceRequest = ({ projectId: string; sourcePath?: never }
   settings: AudioEditBatchSettings
   range?: AudioEditRange
   requestId?: string
+  /** Adaptive acoustic evidence, independent of ASR; no recognition or document mutation. */
+  energy?: SpeechEnergyOptions
+}
+
+export interface AudioEditSilenceResult {
+  revision: number
+  suggestions: AudioEditSuggestion[]
+  energy?: SpeechEnergyAnalysis
 }
 
 export interface AudioEditTask {

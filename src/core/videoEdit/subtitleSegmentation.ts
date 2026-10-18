@@ -1,7 +1,7 @@
 import { adaptiveSubtitlePause, normalizeSubtitlePunctuation, resolveSubtitleStyle, subtitleWidth, type SubtitleStyleOptions } from './subtitleStyleProfiles'
 
 export interface SubtitleToken { text: string; startMs: number; endMs: number; wordId?: number; timing?: 'word' | 'estimated' }
-export interface SubtitlePause { startMs: number; endMs: number }
+export interface SubtitlePause { startMs: number; endMs: number; evidence?: 'audio' }
 export interface SegmentedSubtitle { text: string; sourceText: string; startMs: number; endMs: number; first: number; last: number }
 const words = new Intl.Segmenter('zh', { granularity: 'word' })
 const sentenceEnd = /[。？！!?…]\s*$/u
@@ -77,7 +77,8 @@ export function segmentTimedSubtitles(input: readonly SubtitleToken[], range: { 
       const left = tokens[boundary]; const right = tokens[boundary + 1]
       if (!left || !right || pause.startMs < left.startMs || pause.endMs > right.endMs) continue
       const exact = left.timing === 'word' || right.timing === 'word'
-      if (exact && (pause.startMs < left.endMs - 1 || pause.endMs > right.startMs + 1)) continue
+      const acousticBoundary = pause.evidence === 'audio' && Math.abs(midpoint - (left.endMs + right.startMs) / 2) <= 150
+      if (exact && !acousticBoundary && (pause.startMs < left.endMs - 1 || pause.endMs > right.startMs + 1)) continue
       const delta = Math.abs(midpoint - (left.endMs + right.startMs) / 2)
       if (delta < distance) { best = boundary; distance = delta }
     }

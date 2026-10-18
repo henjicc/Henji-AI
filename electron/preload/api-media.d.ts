@@ -352,7 +352,7 @@ export interface HenjiAudioApi {
   preflightTranscription(input: import('../../src/core/audioEdit/transcriptionFailure').TranscriptionPreflight): Promise<import('../../src/core/audioEdit/transcriptionFailure').TranscriptionPreparation>
   verifyEditSource(projectId: string): Promise<void>
   relinkEditSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata>
-  detectEditSilence(payload: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }>
+  detectEditSilence(payload: AudioEditSilenceRequest): Promise<AudioEditSilenceResult>
   listEditTasks(projectId: string): Promise<AudioEditTask[]>
   cancelEditTask(requestId: string): Promise<void>
   prepareEditProcessing(projectId: string, requestId: string): Promise<void>
@@ -363,7 +363,7 @@ export interface HenjiAudioApi {
 import type {
   AudioEditExportRequest,
   AudioEditSilenceRequest,
-  AudioEditSuggestion,
+  AudioEditSilenceResult,
   AudioEditTask,
   AudioEditExportResult,
   AudioEditProcessorDescriptor,

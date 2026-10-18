@@ -37,6 +37,7 @@ vi.mock('mediabunny', async importOriginal => {
   const original = await importOriginal<typeof import('mediabunny')>()
   return { ...original, Output: class { addAudioTrack() {} async start() {} async finalize() {} async cancel() {} }, AudioBufferSource: class { async add() {} } }
 })
+const emptyEnergy = { resolutionMs: 10, thresholdDb: -50, highThresholdDb: -60, pauses: [] }
 const texts = new Map<string, string>(); const files = new Set<string>()
 let owner: VideoEditInstance
 beforeEach(async () => {
@@ -54,7 +55,7 @@ beforeEach(async () => {
   vi.spyOn(getPlatform().audioEdit, 'listTasks').mockResolvedValue([])
   vi.spyOn(getPlatform().audioEdit, 'preflightTranscription').mockResolvedValue({ modelId: 'test-asr', requiresConfirmation: true })
   vi.spyOn(getPlatform().audioEdit, 'cancelTask').mockResolvedValue(undefined)
-  vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockResolvedValue({ revision: 0, suggestions: [] })
+  vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockResolvedValue({ revision: 0, suggestions: [], energy: emptyEnergy })
   vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([{ id: 'test-asr', providerId: 'test', timestamps: true, configured: true, longAudio: true }])
   vi.spyOn(getPlatform().audioEdit, 'transcribe').mockImplementation(async request => {
     const audio = await loadAudioEditProject(request.projectId)
@@ -80,7 +81,7 @@ it.each(['metadata', 'content'] as const)('字幕整理期间写入 %s：元数�
     else editVideoProject(id, document => { document.sequences[0].captions![0].text = '用户已修改'; return document })
     expect(owner.document).not.toBe(baseline)
     expect(owner.contentVersion === version).toBe(change === 'metadata')
-    return { revision: 0, suggestions: [] }
+    return { revision: 0, suggestions: [], energy: emptyEnergy }
   })
   const processing = segmentVideoEditSubtitles(id, sequenceId, {})
   if (change === 'metadata') {
@@ -240,7 +241,7 @@ it('仅规范化所选字幕，复用片段范围内同名词的时间，不识�
   expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(owner.document.id); expect(sequence().captions).toEqual(previous)
 })
-it('片段停顿图免费只读：优先词时间，缺少时使用已有能量检测；clipRef静音路径无需序列转录', async () => {
+it('片段停顿图同时读取词时间与声音证据，clipRef静音路径无需序列转录', async () => {
   editVideoProject(owner.document.id, document => {
     document.media[0].creativeSource = { type: 'generation', recordId: 'tts-pauses', outputIndex: 0, prompt: '你好 世界' }
     document.sequences[0].clips[0].start = 60
@@ -254,17 +255,51 @@ it('片段停顿图免费只读：优先词时间，缺少时使用已有能量�
   const before = owner.document; const history = owner.past.length
   try {
     const result = await app.requireResult('get_video_edit_clip_pauses', { clipRef })
-    expect(result).toMatchObject({ source: 'words', words: [{ text: '你好', startFrame: 60, endFrame: 66 }, { text: '世界', startFrame: 70, endFrame: 76 }], pauses: [{ startFrame: 66, endFrame: 70 }] })
-    expect(getPlatform().audioEdit.detectSilence).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ source: 'words_and_energy', words: [{ text: '你好', startFrame: 60, endFrame: 66 }, { text: '世界', startFrame: 70, endFrame: 76 }], pauses: [{ startFrame: 66, endFrame: 70 }] })
+    expect(getPlatform().audioEdit.detectSilence).toHaveBeenCalledWith(expect.objectContaining({ energy: {} }))
     read.mockResolvedValue({ status: 'completed' })
     vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, durationFrames: 12000, channels: 1 })
-    vi.mocked(getPlatform().audioEdit.detectSilence).mockResolvedValue({ revision: 0, suggestions: [{ id: 'pause', kind: 'long_silence', evidence: 'audio', title: '', detail: '', startFrame: 1400, endFrame: 1700, blockIds: [], confidence: 'high', status: 'pending' }] })
+    vi.mocked(getPlatform().audioEdit.detectSilence).mockResolvedValue({ revision: 0, energy: { ...emptyEnergy, pauses: [{ startMs: 1400, endMs: 1700, cutMs: 1550 }] }, suggestions: [{ id: 'pause', kind: 'long_silence', evidence: 'audio', title: '', detail: '', startFrame: 1400, endFrame: 1700, blockIds: [], confidence: 'high', status: 'pending' }] })
     expect(await app.requireResult('get_video_edit_clip_pauses', { clipRef })).toMatchObject({ source: 'energy', words: [], pauses: [{ startFrame: 66, endFrame: 70, kind: 'silence' }] })
-    expect(await app.requireResult('detect_video_edit_text_silence', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef })).toMatchObject({ changed: false, verified: true, ranges: [{ from: 66, to: 71 }] })
+    expect(await app.requireResult('detect_video_edit_text_silence', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef })).toMatchObject({ changed: false, verified: true, ranges: [{ from: 66, to: 70 }] })
     expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
     expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
   } finally { app.dispose() }
 })
+it('连续词时钟仍发现真实气口，公共入口返回目标附近切点且保持只读', async () => {
+  editVideoProject(owner.document.id, document => {
+    document.media[0].creativeSource = { type: 'generation', recordId: 'continuous', outputIndex: 0, prompt: '你好世界' }
+    return document
+  })
+  vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'word', items: [{ text: '你好', startMs: 0, endMs: 2000 }, { text: '世界', startMs: 2000, endMs: 4000 }] } }] } })
+  vi.mocked(getPlatform().audioEdit.detectSilence).mockResolvedValue({ revision: 0, suggestions: [], energy: { ...emptyEnergy, pauses: [{ startMs: 1900, endMs: 2100, cutMs: 2000 }] } })
+  const app = createApplicationHarness(); const before = owner.document; const history = owner.past.length
+  try {
+    const result = await app.requireResult('get_video_edit_clip_pauses', { clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, range: { from: 60, to: 120 } })
+    expect(result).toMatchObject({ source: 'words_and_energy', pauses: [{ startFrame: 57, endFrame: 63, kind: 'silence', cutFrame: 60 }], cutCandidates: [{ boundary: 'start', targetFrame: 60, cutFrame: 60, retainedFromFrame: 58, retainedToFrame: 62 }] })
+    expect(owner.document).toBe(before); expect(owner.past).toHaveLength(history)
+    expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  } finally { app.dispose() }
+})
+
+it('气口按倒放变速与片段修剪映射，取消和内容变化拒绝迟到结果', async () => {
+  editVideoProject(owner.document.id, document => {
+    Object.assign(document.sequences[0].clips[0], { start: 60, duration: 90, sourceInUs: 7_000_000, speed: { numerator: 2, denominator: 1 }, reverse: true })
+    return document
+  })
+  vi.mocked(getPlatform().audioEdit.detectSilence).mockResolvedValue({ revision: 0, suggestions: [], energy: { ...emptyEnergy, pauses: [{ startMs: 6000, endMs: 6200, cutMs: 6100 }] } })
+  expect(await getVideoEditClipPauseMap(owner.document.id, sequence().id, 'voice')).toMatchObject({ pauses: [{ startFrame: 72, endFrame: 75, cutFrame: 73 }] })
+  vi.mocked(getPlatform().audioEdit.detectSilence).mockImplementationOnce(async () => {
+    editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start++; return document })
+    return { revision: 0, suggestions: [], energy: emptyEnergy }
+  })
+  await expect(getVideoEditClipPauseMap(owner.document.id, sequence().id, 'voice')).rejects.toThrow('片段已改变')
+  const controller = new AbortController()
+  vi.mocked(getPlatform().audioEdit.detectSilence).mockImplementationOnce(async () => { controller.abort(); return { revision: 0, suggestions: [], energy: emptyEnergy } })
+  await expect(getVideoEditClipPauseMap(owner.document.id, sequence().id, 'voice', controller.signal)).rejects.toThrow()
+  expect(getPlatform().audioEdit.cancelTask).toHaveBeenCalled()
+})
+
 it('auto 预检失败在确认前返回零执行事实，native 缺时间戳同样明确未执行', async () => {
   const app = createApplicationHarness()
   const input = { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, originalText: '你好' }

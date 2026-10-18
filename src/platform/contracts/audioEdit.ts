@@ -8,7 +8,7 @@ import type {
   AudioEditTranscriptionRequest,
   AudioEditTranscriptionResult,
   AudioEditSilenceRequest,
-  AudioEditSuggestion,
+  AudioEditSilenceResult,
   AudioEditTask,
 } from '@/core/audioEdit/types'
 import type { AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult } from './audioWaveform'
@@ -35,7 +35,7 @@ export interface AudioEditPlatform {
   verifySource(projectId: string): Promise<void>
   /** 确认所选文件与原素材内容相同，返回新的素材信息（不写文档）。 */
   relinkSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata>
-  detectSilence(request: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }>
+  detectSilence(request: AudioEditSilenceRequest): Promise<AudioEditSilenceResult>
   listTasks(projectId: string): Promise<AudioEditTask[]>
   cancelTask(requestId: string): Promise<void>
   prepareProcessing(projectId: string, requestId: string): Promise<void>
