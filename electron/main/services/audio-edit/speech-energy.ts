@@ -6,7 +6,6 @@ import { runAudioEditProcess } from './process'
 
 const FRAME_MS = 10
 const MAX_FRAMES = 2_160_000 // Six hours; about 35 MB of numeric band data at the upper bound.
-const cache = new Map<string, SpeechEnergyAnalysis>()
 
 /** Keep channels separate: downmixing opposite-phase stereo can manufacture silence. */
 export function speechEnergyFilter(options: SpeechEnergyOptions): { filter: string; complex: boolean } {
@@ -19,17 +18,10 @@ export function speechEnergyFilter(options: SpeechEnergyOptions): { filter: stri
 }
 
 /** Decode/filter in FFmpeg; the coordinator receives only two levels per 10 ms, never PCM. */
-export async function analyzeSpeechEnergy(source: AudioEditSourceMetadata, raw: SpeechEnergyOptions, signal: AbortSignal, progress: (value: number) => void, verifySource: () => Promise<void>): Promise<SpeechEnergyAnalysis> {
+export async function decodeSpeechEnergy(source: AudioEditSourceMetadata, raw: SpeechEnergyOptions, signal: AbortSignal, progress: (value: number) => void): Promise<SpeechEnergyAnalysis> {
   const options = speechEnergyOptionsSchema.parse(raw)
   if (source.durationFrames / source.sampleRate * 100 > MAX_FRAMES) throw new Error('声音分析目前支持六小时以内的素材，请缩短素材后重试。')
-  const key = source.identity ? JSON.stringify([source.identity.digest, source.audioPath, source.audioStreamIndex, options, 1]) : undefined
   signal.throwIfAborted()
-  if (key && cache.has(key)) {
-    const value = cache.get(key)!
-    cache.delete(key); cache.set(key, value)
-    progress(1)
-    return structuredClone(value)
-  }
   const wide: number[] = []; const high: number[] = []
   const wideHistogram = new SpeechEnergyHistogram(); const highHistogram = new SpeechEnergyHistogram()
   let failure: Error | undefined
@@ -75,12 +67,6 @@ export async function analyzeSpeechEnergy(source: AudioEditSourceMetadata, raw: 
   }
   valleys.flush()
   const result: SpeechEnergyAnalysis = { resolutionMs: FRAME_MS, thresholdDb, highThresholdDb, pauses: valleys.pauses }
-  await verifySource()
-  signal.throwIfAborted()
-  if (key) {
-    cache.set(key, structuredClone(result))
-    while (cache.size > 8) cache.delete(cache.keys().next().value as string)
-  }
   progress(1)
   return result
 }

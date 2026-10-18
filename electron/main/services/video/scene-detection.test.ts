@@ -52,3 +52,21 @@ it('同内容与参数并发只分析一次，取消一个调用方不影响另�
   controller.abort(new Error('取消第一位')); finish()
   expect(await first).toBeInstanceOf(Error); expect(await second).toMatchObject({ cutsSeconds: [2] }); expect(run).toHaveBeenCalledOnce()
 })
+
+it('读取缓存期间原素材改变时拒绝旧证据，不拿旧缓存或旧键重新分析', async () => {
+  const { source, cache, request } = await fixture(); const run = vi.fn(async () => [2, 4])
+  const service = new SceneDetectionService(cache, run)
+  await service.detect(request, new AbortController().signal, () => undefined)
+  const read = cache.read.bind(cache)
+  vi.spyOn(cache, 'read').mockImplementationOnce(async key => { const bytes = await read(key); await fs.writeFile(source, 'replacement-during-cache-read'); return bytes })
+  await expect(service.detect(request, new AbortController().signal, () => undefined)).rejects.toThrow('读取缓存期间原视频已改变')
+  expect(run).toHaveBeenCalledOnce()
+})
+
+it('缓存写入期间原素材改变时不把迟到结果交给调用方', async () => {
+  const { source, cache, request } = await fixture(); const run = vi.fn(async () => [2])
+  const write = cache.write.bind(cache)
+  vi.spyOn(cache, 'write').mockImplementationOnce(async (key, bytes) => { await write(key, bytes); await fs.writeFile(source, 'changed-during-cache-write') })
+  const service = new SceneDetectionService(cache, run)
+  await expect(service.detect(request, new AbortController().signal, () => undefined)).rejects.toThrow('保存分析缓存期间原视频已改变')
+})

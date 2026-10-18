@@ -5,7 +5,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { runAudioEditProcess } from '../audio-edit/process'
-import { analyzeSpeechEnergy } from '../audio-edit/speech-energy'
+import { SpeechEnergyService } from '../audio-edit/speech-energy-service'
+
+const speechEnergy = new SpeechEnergyService()
+const analyzeSpeechEnergy: SpeechEnergyService['analyze'] = (...args) => speechEnergy.analyze(...args)
 
 const sessions: AudioLoudnessSession[] = []
 afterEach(async () => { await Promise.all(sessions.splice(0).map(session => session.close())) })

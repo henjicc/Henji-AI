@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { sceneDetectionRequestSchema, sceneDetectionResultSchema, sceneDetectionThreshold, type SceneDetectionRequest, type SceneDetectionResult } from '../../../../src/core/videoEdit/sceneDetection'
 import { identifyMediaContent } from '../media/content-identity'
 import type { ContentDiskCache } from '../media/content-disk-cache'
+import { SharedMediaAnalysis } from '../media/shared-analysis'
 import { loadFfmpegPath } from './ffmpeg-loader'
 
 /** Streaming metadata only. Decode, scale and scene scoring run outside Electron's event loop. */
@@ -63,8 +64,7 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
 }
 
 export class SceneDetectionService {
-  private active = 0
-  private readonly flights = new Map<string, { controller: AbortController; promise: Promise<SceneDetectionResult>; listeners: Set<(value: number) => void>; consumers: number }>()
+  private readonly shared = new SharedMediaAnalysis<SceneDetectionResult>()
   constructor(private readonly cache: ContentDiskCache, private readonly run = detectScenesFfmpeg) {}
   async detect(raw: SceneDetectionRequest, signal: AbortSignal, progress: (value: number) => void): Promise<SceneDetectionResult> {
     const request = sceneDetectionRequestSchema.parse(raw)
@@ -73,6 +73,7 @@ export class SceneDetectionService {
     const key = createHash('sha256').update(JSON.stringify(['scdet-512-v2', content.identity, request.startSeconds, request.endSeconds, request.sensitivity, request.includeStillness === true])).digest('hex')
     const bytes = await this.cache.read(key)
     if (bytes) {
+      if ((await identifyMediaContent(request.source)).identity !== content.identity) throw new Error('读取缓存期间原视频已改变，请重新检测。')
       try {
         const result = sceneDetectionResultSchema.parse(JSON.parse(Buffer.from(bytes).toString('utf8')))
         if (result.contentIdentity !== content.identity || result.cutsSeconds.some((time, index, all) => time <= request.startSeconds || time >= request.endSeconds || index > 0 && time <= all[index - 1])) throw new Error('检测缓存无效。')
@@ -81,41 +82,16 @@ export class SceneDetectionService {
       } catch (error) { if (signal.aborted) throw error; await this.cache.remove(key) }
     }
     signal.throwIfAborted()
-    let flight = this.flights.get(key)
-    if (flight?.controller.signal.aborted) throw new Error('原分析正在取消，请稍后重试。')
-    if (!flight) {
-      if (this.active >= 2) throw new Error('已有两段视频正在分析，请等待或取消后再试。')
-      this.active++
-      const controller = new AbortController(); const listeners = new Set<(value: number) => void>()
-      const promise = (async (): Promise<SceneDetectionResult> => {
-        let stillness: SceneDetectionResult['stillness']
-        const cutsSeconds = await this.run({ ...request, source: content.path }, controller.signal, value => { for (const listener of listeners) listener(value) }, undefined, ranges => { stillness = ranges })
-        controller.signal.throwIfAborted()
-        if ((await identifyMediaContent(content.path)).identity !== content.identity) throw new Error('检测期间原视频已改变，请重新检测。')
-        if (request.includeStillness && !stillness) throw new Error('静止检测未返回证据。')
-        const result = sceneDetectionResultSchema.parse({ cutsSeconds, contentIdentity: content.identity, ...(request.includeStillness ? { stillness } : {}) })
-        await this.cache.write(key, Buffer.from(JSON.stringify(result)))
-        controller.signal.throwIfAborted(); return result
-      })().finally(() => { this.active--; this.flights.delete(key) })
-      flight = { controller, promise, listeners, consumers: 0 }; this.flights.set(key, flight)
-    }
-    // Each caller owns its waiting/cancellation; shared decode stops only when the last caller leaves.
-    const shared = flight; shared.consumers++; shared.listeners.add(progress)
-    return new Promise((resolve, reject) => {
-      let settled = false
-      const release = (): boolean => {
-        if (settled) return false
-        settled = true; signal.removeEventListener('abort', abort); shared.listeners.delete(progress); shared.consumers--
-        return true
-      }
-      const abort = (): void => {
-        if (!release()) return
-        if (!shared.consumers) shared.controller.abort(signal.reason ?? new Error('场景检测已取消。'))
-        reject(signal.reason ?? new Error('场景检测已取消。'))
-      }
-      signal.addEventListener('abort', abort, { once: true })
-      if (signal.aborted) abort()
-      shared.promise.then(result => { if (release()) resolve(result) }, error => { if (release()) reject(error) })
-    })
+    return this.shared.run(key, async (sharedSignal, report) => {
+      let stillness: SceneDetectionResult['stillness']
+      const cutsSeconds = await this.run({ ...request, source: content.path }, sharedSignal, report, undefined, ranges => { stillness = ranges })
+      sharedSignal.throwIfAborted()
+      if ((await identifyMediaContent(request.source)).identity !== content.identity) throw new Error('检测期间原视频已改变，请重新检测。')
+      if (request.includeStillness && !stillness) throw new Error('静止检测未返回证据。')
+      const result = sceneDetectionResultSchema.parse({ cutsSeconds, contentIdentity: content.identity, ...(request.includeStillness ? { stillness } : {}) })
+      await this.cache.write(key, Buffer.from(JSON.stringify(result)))
+      if ((await identifyMediaContent(request.source)).identity !== content.identity) throw new Error('保存分析缓存期间原视频已改变，请重新检测。')
+      sharedSignal.throwIfAborted(); return result
+    }, signal, progress)
   }
 }

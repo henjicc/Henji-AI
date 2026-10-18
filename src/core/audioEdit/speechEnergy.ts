@@ -5,12 +5,15 @@ export const speechEnergyOptionsSchema = z.object({
 }).strict()
 export type SpeechEnergyOptions = z.infer<typeof speechEnergyOptionsSchema>
 export interface SpeechEnergyPause { startMs: number; endMs: number; cutMs: number }
-export interface SpeechEnergyAnalysis {
-  resolutionMs: number
-  thresholdDb: number
-  highThresholdDb: number
-  pauses: SpeechEnergyPause[]
-}
+export const speechEnergyAnalysisSchema = z.object({
+  resolutionMs: z.number().min(10).max(10), thresholdDb: z.number().min(-120).max(0), highThresholdDb: z.number().min(-120).max(0),
+  pauses: z.array(z.object({ startMs: z.number().nonnegative().max(21_600_000), endMs: z.number().positive().max(21_600_000), cutMs: z.number().nonnegative().max(21_600_000) }).strict()).max(216000),
+}).strict().superRefine((value, context) => {
+  value.pauses.forEach((pause, index) => {
+    if (pause.endMs - pause.startMs < 100 - .01 || pause.cutMs < pause.startMs || pause.cutMs > pause.endMs || index > 0 && pause.startMs < value.pauses[index - 1].endMs) context.addIssue({ code: 'custom', path: ['pauses', index], message: '声音低谷必须有序、不重叠，切点位于至少100毫秒的区间内。' })
+  })
+})
+export type SpeechEnergyAnalysis = z.infer<typeof speechEnergyAnalysisSchema>
 
 /** Quarter-dB histogram: bounded memory and linear cost even for hour-long recordings. */
 export class SpeechEnergyHistogram {

@@ -5,7 +5,7 @@ import { probeAudioEditImport, verifyAudioEditSource } from './media'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { runAudioEditProcess } from './process'
 import { registerAudioEditTaskController, runAudioEditTask } from './task-store'
-import { analyzeSpeechEnergy } from './speech-energy'
+import { analyzeSpeechEnergy } from './speech-energy-runtime'
 
 export async function detectAudioEditSilence(request: AudioEditSilenceRequest): Promise<AudioEditSilenceResult> {
   const requestId = request.requestId ?? crypto.randomUUID()
@@ -30,7 +30,7 @@ async function detectRegisteredSilence(request: AudioEditSilenceRequest, control
   return runAudioEditTask(projectId, 'silence', async (signal, progress) => {
     const intervals: AudioEditRange[] = []
     let start: number | undefined
-    const energy = request.energy ? await analyzeSpeechEnergy(project.source, request.energy, signal, progress, () => verifyAudioEditSource(project, true, signal)) : undefined
+    const energy = request.energy ? await analyzeSpeechEnergy(project.source, request.energy, signal, progress, verificationSignal => verifyAudioEditSource(project, true, verificationSignal)) : undefined
     if (energy) intervals.push(...energy.pauses.map(pause => ({ startFrame: Math.ceil(pause.startMs * project.source.sampleRate / 1000), endFrame: Math.floor(pause.endMs * project.source.sampleRate / 1000) })))
     else await runAudioEditProcess(await loadFfmpegPath(), ['-hide_banner', '-nostats', '-i', project.source.audioPath,
       '-map', project.source.ownership === 'external' ? `0:${project.source.audioStreamIndex ?? 0}` : '0:a:0',

@@ -4,9 +4,9 @@ import { detectAudioEditSilence } from './silence'
 import { requireAudioEditProject } from './project-store'
 import { runAudioEditTask } from './task-store'
 import { runAudioEditProcess } from './process'
-import { analyzeSpeechEnergy } from './speech-energy'
+import { analyzeSpeechEnergy } from './speech-energy-runtime'
 
-vi.mock('./speech-energy', () => ({ analyzeSpeechEnergy: vi.fn() }))
+vi.mock('./speech-energy-runtime', () => ({ analyzeSpeechEnergy: vi.fn() }))
 
 vi.mock('./project-store', () => ({ requireAudioEditProject: vi.fn() }))
 vi.mock('./media', () => ({
