@@ -1,5 +1,6 @@
 {
   "fast": [
+    "scripts/lib/premiereMigration.test.cjs",
     "scripts/lib/uiInspectionMcpClient.test.cjs",
     "scripts/lib/uiAuditDom.test.cjs",
     "scripts/lib/uiDesignRules.test.cjs",
