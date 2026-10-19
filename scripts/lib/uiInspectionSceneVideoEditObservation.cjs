@@ -8,6 +8,7 @@ const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showV
 
 const SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"单帧观察验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"背景",x:0,y:0,width:640,height:360,fill:ctx.time>=.5&&ctx.time<.51?[1,0,0,1]:[0,0,1,1]})];}}'
 const SOUND_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"声音驱动验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"声音标记",x:ctx.audio.level()*500,y:80,width:60,height:40,fill:[0,1,0,1]})];}}'
+const INPUT_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"画面输入验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({id:"输入",source:ctx.params.picture,x:0,y:0,width:640,height:360})];}}'
 async function pixel(bytes, x, y) {
   return [...await sharp(bytes).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer()]
 }
@@ -36,7 +37,7 @@ function createVideoEditObservationScene() {
           tracks: [track(1), track(2)], clips: [{ id: 'base', itemId: 'reference-item', name: '蓝色底图', kind: 'image', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }], captions: [{ id: 'review-caption', text: '检查', start: 30, duration: 1 }], annotations: [] }] }
       fixture.media.push({ id: 'sound', name: '声音电平夹具', path: soundPath, kind: 'audio', width: 0, height: 0, durationSeconds: 2, hasAudio: true })
       fixture.items.push({ id: 'sound-item', name: '声音电平夹具', kind: 'audio', mediaId: 'sound' })
-      fixture.sequences[0].tracks.push({ ...track(0), kind: 'audio', name: '声音' }, track(3))
+      fixture.sequences[0].tracks.push({ ...track(0), kind: 'audio', name: '声音' }, track(3), track(4))
       let client
       const evidence = { completed: false, observations: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -135,6 +136,37 @@ function createVideoEditObservationScene() {
         near(await pixel(soundObserved.bytes, 115, 50), [0, 0, 255]); near(await pixel(soundObserved.bytes, 360, 50), [0, 0, 255])
         assert.deepEqual(readVideoEditFile(seeded.file), soundBefore)
         assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
+        const inputBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        const inputCreated = await callTool(client, 'change_application_entities', operationEnvelope([inputBaseline], { summary: '创建画面输入验收素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: documentRef, items: [{ properties: { 'video_edit.code_material.source': INPUT_SOURCE } }] }] }))
+        assert.equal(inputCreated.verificationState, 'verified', JSON.stringify(inputCreated))
+        const inputItem = readVideoEditFile(seeded.file).items.find(value => value.kind === 'code' && ![item.id, soundItem.id].includes(value.id)); assert.ok(inputItem)
+        const inputSeq = await callTool(client, 'read_application_entity', { ref: sequenceRef })
+        const inputPlaced = await callTool(client, 'change_application_entities', operationEnvelope([inputSeq], { summary: '放置视频输入画面', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: {
+          'video_edit.clip.item_id': inputItem.id, 'video_edit.clip.name': '画面输入', 'video_edit.clip.kind': 'code', 'video_edit.clip.track': 4, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 120,
+          'video_edit.clip.code_parameters': { picture: { kind: 'video', mediaId: 'video-reference' } },
+        } }] }] }))
+        assert.equal(inputPlaced.verificationState, 'verified', JSON.stringify(inputPlaced))
+        const inputClip = readVideoEditFile(seeded.file).sequences[0].clips.find(value => value.itemId === inputItem.id)
+        const inputRef = { kind: 'video_edit.clip', id: `${seeded.documentId}:${inputClip.id}` }
+        for (const mode of ['video', 'fixed', 'sequence']) {
+          if (mode !== 'video') {
+            const baseline = await callTool(client, 'read_application_entity', { ref: inputRef })
+            const changed = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '切换画面输入验收', changes: [{ kind: 'set_properties', entityType: inputRef.kind, target: inputRef, properties: { 'video_edit.clip.code_parameters': { picture: mode === 'fixed' ? { kind: 'video', mediaId: 'video-reference', time: .5 } : { kind: 'sequence', mediaId: 'below' } } } }] }))
+            assert.equal(changed.verificationState, 'verified', JSON.stringify(changed))
+          }
+          const unchanged = readVideoEditFile(seeded.file)
+          const plan = (await callTool(client, 'query_video_edit_review', { documentRef, sequenceRef, from: 0, to: 120, motion: { videoPixels: true, minimumHoldSeconds: .25 }, limit: 50 })).data
+          const candidates = plan.records.filter(record => record.motionEvidence?.basis === 'code_input_pixels' && record.subjectRef.id === inputRef.id)
+          assert.ok(candidates.length && candidates.every(record => record.motionEvidence.input.mediaRef.id === `${seeded.documentId}:video-reference`), JSON.stringify(plan))
+          if (mode === 'fixed') assert.ok(!candidates.some(record => ['motion', 'pixel_cut', 'pixel_change'].includes(record.kind)), JSON.stringify(candidates))
+          else assert.ok(candidates.some(record => record.kind === 'pixel_cut'), JSON.stringify(candidates))
+          const observed = await observe(`input-${mode}`, { kind: 'frames', frames: [0, 60] }, { documentVersion: plan.documentVersion })
+          near(await pixel(observed.bytes, 160, 90), mode === 'sequence' ? [0, 0, 255] : [0, 128, 0])
+          near(await pixel(observed.bytes, 480, 90), mode === 'sequence' ? [0, 0, 255] : mode === 'fixed' ? [0, 128, 0] : [255, 255, 0])
+          evidence[`input_${mode}`] = plan; store()
+          assert.deepEqual(readVideoEditFile(seeded.file), unchanged)
+          assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
+        }
         evidence.capture = await capture('observation-review-host'); evidence.completed = true; store()
       } catch (error) { evidence.failure = String(error.stack ?? error); store(); throw error }
       finally {

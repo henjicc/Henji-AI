@@ -87,7 +87,9 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
             : record.kind === 'motion_hard_stop' ? '观察运动结束前后连续帧；若非有意硬停，可调整原生曲线或代码动画的减速尾段。'
             : record.kind === 'motion_hold' ? '这是片段变换保持区间；结合阅读、留白及素材内部动作判断是否需要调整，不自动补动画。'
               : code ? '观察此代码元素的独立动作或内容变化是否服务当前信息；按创作意图调整原代码或元素覆盖。' : '观察这段原生变换是否服务当前信息；有意承载运动可保留，调整仍沿原片段属性与曲线。')
-          records.push({ ...record, motionEvidence: { basis: record.basis ?? 'clip_transform', ...(record.elementPath ? { elementPath: [...record.elementPath] } : {}), ...(record.peakSpeed === undefined ? {} : { peakSpeed: record.peakSpeed }), suggestion: code && record.kind === 'motion_hold' ? '此元素自身结构保持；父组、输入视频或其他图层仍可能运动，请看图判断阅读停留。' : suggestion } })
+          records.push({ ...record, motionEvidence: { basis: record.basis ?? 'clip_transform', ...(record.elementPath ? { elementPath: [...record.elementPath] } : {}), ...(record.peakSpeed === undefined ? {} : { peakSpeed: record.peakSpeed }),
+            ...(record.input ? { input: { parameter: record.input.parameter, kind: record.input.kind, mediaRef: { kind: 'video_edit.media' as const, id: `${projectId}:${record.input.mediaId}` } } } : {}),
+            suggestion: code && record.kind === 'motion_hold' ? '此元素自身结构保持；父组、输入视频或其他图层仍可能运动，请看图判断阅读停留。' : suggestion } })
         }
         warnings.push('原生速度以所在序列画面宽为单位；代码速度以作者画幅宽为单位，均为百分比/播放秒。代码元素仅计自身动作，父组不重复计入子元素；声音驱动复用正式混音和分析。变换保持不等于画面静止，视频、着色器和代码滤镜仍须观察；密集或硬停可属创作意图。', ...(motion.warnings ?? []))
         if (video) warnings.push('视频像素证据来自原片15fps低分辨率采样，速度以原片显示画幅宽度百分比/播放秒表示，已按当前放置时钟重算；并非精确PTS或最终合成，不排除采样间的短变化。代码视频输入及着色器内部仍须观察。')
@@ -140,7 +142,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       subjectRef: ref(record.kind === 'event_crowded' ? 'video_edit.sequence' : record.kind.startsWith('tracking_') ? 'video_edit.tracker' : record.kind === 'caption' ? 'video_edit.caption' : record.kind === 'transition' ? 'video_edit.transition' : record.subjectType ?? 'video_edit.clip', record.subjectId),
       path: record.path.map(step => ({ sequenceRef: ref('video_edit.sequence', step.sequenceId), clipRef: ref('video_edit.clip', step.clipId) })),
       ...(record.confidence === undefined ? {} : { confidence: record.confidence }), ...(record.source ? { source: { ...record.source } } : {}),
-      ...(record.motionEvidence ? { motionEvidence: { ...record.motionEvidence, ...(record.motionEvidence.elementPath ? { elementPath: [...record.motionEvidence.elementPath] } : {}) } } : {}),
+      ...(record.motionEvidence ? { motionEvidence: { ...record.motionEvidence, ...(record.motionEvidence.elementPath ? { elementPath: [...record.motionEvidence.elementPath] } : {}), ...(record.motionEvidence.input ? { input: { ...record.motionEvidence.input, mediaRef: { ...record.motionEvidence.input.mediaRef } } } : {}) } } : {}),
     }))
     await verifyVideoEditMotionSources(snapshot.sources, context.signal, assertCurrent)
     assertCurrent()

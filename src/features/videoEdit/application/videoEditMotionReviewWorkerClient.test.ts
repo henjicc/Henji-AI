@@ -158,13 +158,22 @@ it('the browser bundle evaluates real code in a background thread, round-trips h
     expect(sounded.records.some(record => record.kind === 'code_unavailable')).toBe(false)
     expect(sounded.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'code_structure', elementPath: ['sound/0'], timeline: { from: 29, to: 31 } })]))
     await ThreadWorker.instances[1].stopped
+    document.media = [{ id: 'input-media', kind: 'video', name: '输入', path: fileURLToPath(new URL('./input.mp4', import.meta.url)), width: 320, height: 180, durationSeconds: 2 }]
+    document.items = [{ id: 'input-item', name: '输入', kind: 'video', mediaId: 'input-media' }]
+    clip.code!.parameters = { picture: { kind: 'video', mediaId: 'input-media' } }
+    const planned = await analyzeVideoEditMotionStructure({ composition: videoEditComposition(document, sequence.id), range: { from: 0, to: 60 }, policy: {}, planInputsOnly: true }, new AbortController().signal)
+    expect(planned.inputPlacements).toHaveLength(1)
+    expect(planned.inputPlacements![0].sourceTimes![29]).toBeCloseTo(29 / 30)
+    expect(planned.inputPlacements![0].input).toEqual({ parameter: 'picture', kind: 'video', mediaId: 'input-media' })
+    await ThreadWorker.instances[2].stopped
+    clip.code!.parameters = {}
     clip.duration = 60000
     const heavy = compile('return repeat(4096,i=>rect({id:"particle",x:ctx.time+i/10,y:10,width:100,height:100}));')
     const controller = new AbortController()
     const pending = analyzeVideoEditMotionStructure({ composition: videoEditComposition(document, sequence.id), range: { from: 0, to: 60000 }, programs: { v: heavy }, policy: {} }, controller.signal)
     const rejected = expect(pending).rejects.toThrow('取消实际代码分析')
-    await ThreadWorker.instances[2].started
+    await ThreadWorker.instances[3].started
     controller.abort(new Error('取消实际代码分析')); await rejected
-    expect(ThreadWorker.instances[2].stopped).toBeDefined(); await ThreadWorker.instances[2].stopped
+    expect(ThreadWorker.instances[3].stopped).toBeDefined(); await ThreadWorker.instances[3].stopped
   } finally { await Promise.all(ThreadWorker.instances.map(worker => worker.thread.terminate())) }
 }, 15000)

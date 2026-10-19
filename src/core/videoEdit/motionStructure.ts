@@ -14,7 +14,8 @@ export interface VideoEditMotionStructureFact {
   subjectId: string
   peakSpeed?: number
   elementPath?: string[]
-  basis?: 'clip_transform' | 'code_structure' | 'video_pixels'
+  basis?: 'clip_transform' | 'code_structure' | 'video_pixels' | 'code_input_pixels'
+  input?: { parameter: string; kind: 'video' | 'sequence'; mediaId: string }
   detail?: string
   source?: { fromUs: number; toUs: number }
 }

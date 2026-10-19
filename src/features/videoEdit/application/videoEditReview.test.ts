@@ -29,6 +29,7 @@ import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
 import { codeMotionAudioKey } from '@/core/videoEdit/codeAudio'
 import { readVideoEditContentQueries } from './videoEditContentQueryProgress'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
+import { videoEditCodeInputMotionPlacements } from '@/core/videoEdit/codeInputMotion'
 
 const soundIO = vi.hoisted(() => ({ documents: [] as VideoEditComposition[], mix: vi.fn<[number, number], Promise<Float32Array[]>>(), dispose: vi.fn(async () => {}) }))
 // Replace only PCM production and the thread boundary; keep sound selection,
@@ -60,6 +61,7 @@ class MotionWorker {
   async respond(): Promise<void> {
     try {
       const { composition, range, policy, programs, pixels, audios } = this.request
+      if (this.request.planInputsOnly) { this.onmessage?.(new MessageEvent<VideoEditMotionReviewResponse>('message', { data: { result: { records: [], sampledFrames: 0, sampledInstances: 0, inputPlacements: videoEditCodeInputMotionPlacements(composition, range) } } })); return }
       const result = collectVideoEditMotionStructure(composition, range, policy)
       if (pixels) result.records.push(...collectVideoEditPixelMotion(pixels, composition.fps, policy))
       if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, measureCodeText, audios)).records)
@@ -246,6 +248,54 @@ async function pixelFixture() {
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
   return { ...data, platform, unsubscribe, cancel, result }
 }
+async function inputPixelFixture(kind: 'video' | 'fixed' | 'sequence') {
+  const data = await pixelFixture(), { owner } = data
+  const source = 'export default {apiVersion:1,languageVersion:3,name:"输入复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:10,seed:0,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({id:"input",source:ctx.params.picture,x:0,y:0,width:1000,height:1000})];}}'
+  const version = { id: 'input-v', apiVersion: 1 as const, languageVersion: 3 as const, ...testCodeManifest(source, owner.document) }
+  rememberVideoEditCodeMetadata(owner, 'input-d', version, compileCodeMaterial(source))
+  editVideoProject(owner.document.id, document => {
+    const sequence = document.sequences[0]; addLegacyVideoEditTracks(sequence)
+    document.codeMaterials = [{ id: 'input-d', name: '输入复核', defaultVersionId: version.id, versions: [version] }]
+    document.items.push({ id: 'input-item', name: '输入复核', kind: 'code', code: { definitionId: 'input-d', versionId: version.id, parameters: { picture: kind === 'sequence' ? { kind: 'sequence', mediaId: 'below' } : { kind: 'video', mediaId: 'media', ...(kind === 'fixed' ? { time: .5 } : {}) } } } })
+    if (kind !== 'sequence') sequence.clips = []
+    sequence.clips.push({ ...makeVideoEditItemClip(document, 'input-item', sequence.id, { frame: 0, duration: 120 }, readVideoEditCodeMetadata(owner, document)), track: 3 })
+    return document
+  })
+  return data
+}
+it.each(['video', 'fixed', 'sequence'] as const)('public pixel review includes %s code input, shares source scanning and keeps source candidates separate from visible motion', async kind => {
+  const { owner, input, platform } = await inputPixelFixture(kind), app = createApplicationHarness()
+  const before = structuredClone(owner.document)
+  try {
+    const result = parse(await app.requireResult('query_video_edit_review', { ...input, motion: { videoPixels: true }, limit: 50 }))
+    const candidates = result.records.filter(record => record.motionEvidence?.basis === 'code_input_pixels')
+    expect(candidates.length).toBeGreaterThan(0)
+    expect(candidates.every(record => record.motionEvidence?.input?.parameter === 'picture' && record.motionEvidence.input.mediaRef.id === `${owner.document.id}:media`)).toBe(true)
+    expect(candidates.every(record => record.subjectRef.id.endsWith(`:${owner.document.sequences[0].clips.at(-1)!.id}`))).toBe(true)
+    expect(candidates.every(record => record.motionEvidence?.suggestion.includes('不证明代码实际绘制或最终可见'))).toBe(true)
+    if (kind === 'fixed') expect(candidates.some(record => record.kind === 'motion' || record.kind === 'motion_hard_stop')).toBe(false)
+    else expect(candidates.some(record => record.kind === 'motion')).toBe(true)
+    expect(platform.sceneDetection.detect).toHaveBeenCalledOnce()
+    if (kind === 'sequence') expect(result.records.some(record => record.motionEvidence?.basis === 'video_pixels')).toBe(true)
+    else expect(result.records.some(record => record.motionEvidence?.basis === 'video_pixels')).toBe(false)
+    expect(owner.document).toEqual(before)
+    const page = parse(await app.requireResult('query_video_edit_review', { ...input, motion: { videoPixels: true }, limit: 1 }))
+    await queryVideoEditReview({ ...input, motion: { videoPixels: true }, limit: 1, cursor: page.nextCursor }, context())
+    expect(platform.sceneDetection.detect).toHaveBeenCalledTimes(2)
+    vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'b'.repeat(64), sizeBytes: 1000, fileModifiedAt: 2000 })
+    await expect(queryVideoEditReview({ ...input, motion: { videoPixels: true }, limit: 1, cursor: page.nextCursor }, context())).rejects.toThrow('重新定位')
+  } finally { app.dispose() }
+})
+it('editing during background code-input mapping terminates the old worker before any source decoding starts', async () => {
+  const { owner, input, platform } = await inputPixelFixture('video'); MotionWorker.automatic = false
+  const pending = queryVideoEditReview({ ...input, motion: { videoPixels: true } }, context()), rejected = expect(pending).rejects.toThrow()
+  await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
+  expect(MotionWorker.instances[0].request.planInputsOnly).toBe(true)
+  editVideoProject(owner.document.id, document => { document.sequences[0].name = '新内容'; return document })
+  await rejected
+  expect(MotionWorker.instances[0].terminate).toHaveBeenCalledOnce(); expect(platform.sceneDetection.detect).not.toHaveBeenCalled()
+  expect(readVideoEditContentQueries(owner, 'input-item')).toEqual(expect.arrayContaining([expect.objectContaining({ state: 'cancelled' })]))
+})
 it('public pixel review scans overlapping source use once, retains both placements and pages without decoding again', async () => {
   const { owner, input, platform, unsubscribe } = await pixelFixture(), app = createApplicationHarness()
   const before = structuredClone(owner.document), past = owner.past.length, frame = owner.frame

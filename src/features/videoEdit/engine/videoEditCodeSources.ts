@@ -1,5 +1,5 @@
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
-import { codeMediaFrameParameters } from './videoEditCodeMediaInput'
+import { codeMediaFrameParameters } from '@/core/videoEdit/codeMediaInput'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialContext } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditRecordingCursorSource } from './videoEditRecordingCursorSource'

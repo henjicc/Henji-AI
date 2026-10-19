@@ -1,4 +1,4 @@
-import { codeMediaInputKey, codeMediaInputComposition } from './videoEditCodeMediaInput'
+import { codeMediaInputKey, codeMediaInputComposition } from '@/core/videoEdit/codeMediaInput'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'

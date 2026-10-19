@@ -3,16 +3,24 @@ import { validateVideoMotionScan, type VideoMotionScan } from '../media/motionEv
 import { videoEditSourceMapSampleSeconds, type VideoEditSourceMapEntry } from './sourceMap'
 import { VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET, type VideoEditMotionStructureFact } from './motionStructure'
 
-export interface VideoEditPixelMotionInput { entry: VideoEditSourceMapEntry; scan: VideoMotionScan }
+export interface VideoEditPixelMotionPlacement {
+  entry: VideoEditSourceMapEntry
+  /** Exact sampled source seconds for a code input; array index is rootFrame-from. */
+  sourceTimes?: number[]
+  input?: { parameter: string; kind: 'video' | 'sequence'; mediaId: string }
+}
+export interface VideoEditPixelMotionInput extends VideoEditPixelMotionPlacement { scan: VideoMotionScan }
+function sampleSeconds(entry: VideoEditSourceMapEntry, frame: number, times?: readonly number[]): number { return times ? times[frame - entry.timeline.from] : videoEditSourceMapSampleSeconds(entry, frame) }
 
 /** Integrate sampled source velocity over the exact placed playback clock. Reversal
  * changes zoom direction; nested repeated/held frames do not inherit source speed. */
-export function videoEditPixelMotionSamples(entry: VideoEditSourceMapEntry, scan: VideoMotionScan, fps: number, budget = { remaining: 200000 }): MotionReviewSample[] {
+export function videoEditPixelMotionSamples(entry: VideoEditSourceMapEntry, scan: VideoMotionScan, fps: number, budget = { remaining: 200000 }, sourceTimes?: readonly number[]): MotionReviewSample[] {
   const samples: MotionReviewSample[] = []
   if (entry.timeline.to - entry.timeline.from > VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET) throw new Error('视频运动映射超过60000帧实例预算，请缩小 from/to。')
+  if (sourceTimes && (sourceTimes.length !== entry.timeline.to - entry.timeline.from || sourceTimes.some(time => !Number.isFinite(time) || time < 0 || entry.mediaDuration !== undefined && time >= entry.mediaDuration))) throw new Error('代码画面输入采样时钟无效，请重新查询。')
   let previous: number | undefined, previousFrame = entry.timeline.from
   for (let frame = entry.timeline.from; frame < entry.timeline.to; frame++) {
-    const source = videoEditSourceMapSampleSeconds(entry, frame)
+    const source = sampleSeconds(entry, frame, sourceTimes)
     if (previous !== undefined && Math.abs(source - previous) < 1e-9) continue
     const elapsed = frame - previousFrame
     const sample: MotionReviewSample = { fromSeconds: (previous === undefined ? frame : previousFrame + 1) / fps, toSeconds: (frame + 1) / fps, speed: null, zoom: null, change: null, cut: false, still: null }
@@ -54,14 +62,15 @@ export function videoEditPixelMotionSamples(entry: VideoEditSourceMapEntry, scan
 export function collectVideoEditPixelMotion(jobs: readonly VideoEditPixelMotionInput[], fps: number, policy: MotionReviewPolicy): VideoEditMotionStructureFact[] {
   if (jobs.reduce((sum, job) => sum + job.entry.timeline.to - job.entry.timeline.from, 0) > VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET) throw new Error('视频运动映射超过60000帧实例预算，请缩小 from/to；未截断证据。')
   const records: VideoEditMotionStructureFact[] = [], checked = new Set<VideoMotionScan>(), budget = { remaining: 200000 }
-  for (const { entry, scan } of jobs) {
+  for (const { entry, scan, sourceTimes, input } of jobs) {
     if (!checked.has(scan)) { validateVideoMotionScan(scan, scan.startSeconds, scan.endSeconds); checked.add(scan) }
-    const report = reviewMotionSamples(videoEditPixelMotionSamples(entry, scan, fps, budget), policy), step = entry.path.at(-1)!
+    const report = reviewMotionSamples(videoEditPixelMotionSamples(entry, scan, fps, budget, sourceTimes), policy), step = entry.path.at(-1)!
     const append = (kind: VideoEditMotionStructureFact['kind'], fromSeconds: number, toSeconds: number, peakSpeed?: number): void => {
       const timeline = { from: Math.max(entry.timeline.from, Math.round(fromSeconds * fps)), to: Math.min(entry.timeline.to, Math.round(toSeconds * fps)) }
       if (timeline.to <= timeline.from) return
-      const first = videoEditSourceMapSampleSeconds(entry, timeline.from), last = videoEditSourceMapSampleSeconds(entry, timeline.to - 1)
-      records.push({ kind, timeline, sequenceId: step.sequenceId, path: entry.path, subjectId: step.clipId, basis: 'video_pixels', ...(peakSpeed === undefined ? {} : { peakSpeed }),
+      const first = sampleSeconds(entry, timeline.from, sourceTimes), last = sampleSeconds(entry, timeline.to - 1, sourceTimes)
+      records.push({ kind, timeline, sequenceId: step.sequenceId, path: entry.path, subjectId: step.clipId, basis: input ? 'code_input_pixels' : 'video_pixels', ...(peakSpeed === undefined ? {} : { peakSpeed }),
+        ...(input ? { input: { ...input }, detail: `这是代码参数“${input.parameter}”${input.kind === 'sequence' ? '下方画面中' : '所读取'}的原视频候选，不证明代码实际绘制或最终可见；变换、遮罩、效果与其他输入须看成片复核。` } : {}),
         source: { fromUs: Math.max(0, Math.round(Math.min(first, last) * 1e6)), toUs: Math.round(Math.min(scan.endSeconds, Math.max(first, last) + 1 / scan.samplingFps) * 1e6) } })
       if (records.length > 20000) throw new Error('视频运动候选超过20000项预算，请缩小 from/to；未截断结果。')
     }

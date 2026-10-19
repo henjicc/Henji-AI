@@ -4,7 +4,7 @@ import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { VideoEditContentAudio } from './videoEditContentAudio'
 import { codeAudioComposition } from '@/core/videoEdit/codeAudio'
-import { codeMediaInputComposition, codeMediaFrameParameters, codeMediaInputKey } from './videoEditCodeMediaInput'
+import { codeMediaInputComposition, codeMediaFrameParameters, codeMediaInputKey } from '@/core/videoEdit/codeMediaInput'
 
 vi.mock('../application/videoEditBeatWorkerClient', () => ({ analyzeVideoEditBeatsOffThread: async (rate: number, blocks: AsyncIterable<Float32Array[]>, signal: AbortSignal, fps: number) => {
   const analyzer = new AudioContentAnalyzer(rate, fps)
