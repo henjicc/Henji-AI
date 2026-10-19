@@ -148,6 +148,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   attachUiInspectionSupport(context)
 
   return Object.freeze([
+    ...(process.env.HENJI_DIRECT_AUTHOR_PROBE ? [require('./uiInspectionSceneDirectAuthor.cjs').createDirectAuthorScene()] : []),
     ...(process.env.HENJI_PREMIERE_MIGRATION_DOCUMENT ? [require('./uiInspectionScenePremiereMigration.cjs').createPremiereMigrationScene()] : []),
     ...createSurfaceGrammarScenes(context),
     ...createU8bUiScenes(context),

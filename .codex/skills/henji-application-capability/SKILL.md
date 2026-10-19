@@ -113,7 +113,7 @@ sceneField('sky_color', '天空颜色', COLOR, {
 - 只有无法用 CRUD 表达的算法操作，才在 `src/core/application-control/domains/` 的领域能力模块中声明 `ApplicationCapabilityDefinition` 并注册到统一目录，由公共应用入口调用。
 - 使用稳定、小写的能力 ID；版本从 1 开始，破坏性契约变化才升级版本。
 - 完整声明输入/输出 schema、AI 输入 schema、领域、别名、读写属性、风险、数据等级、权限、超时、幂等、撤销、预览、作用域、可用条件、前置能力、并发键、引用类型、成功证据和失败恢复。
-- AI 输入 schema 顶层必须 `additionalProperties: false`，禁止开放 `patch`、`storePatch`、`executeScript`、`script` 等任意 Store Patch 或代码入口。不得新增源码执行字段。
+- AI 输入 schema 顶层必须 `additionalProperties: false`，禁止开放 `patch`、`storePatch`、`executeScript`、`script` 等通用 Store Patch 或宿主代码入口。正式代码效果的 ES 模块是创作内容，在剪辑渲染 Worker 直接执行；其源码版本、参数与放置使用正式领域声明，不另开通用执行工具，也不降为受限 DSL。
 - 用户化描述只说明用途和影响，不写协议名、schema、revision、风险编号或开发解释。
 - 输入和输出优先传 `ApplicationRef`；禁止传原始密钥、本地路径或不受控的大对象。
 - 写能力必须绑定相关 scope revision；未知副作用的写操作禁止自动重放。

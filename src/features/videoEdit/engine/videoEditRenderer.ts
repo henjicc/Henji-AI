@@ -113,6 +113,9 @@ export class VideoEditRenderer {
   }
   /** Only devices/pipelines: no project media, render targets or sound are opened during workspace warmup. */
   async prepareGpu(): Promise<void> { await this.ensureCompositor().prepare() }
+  async renderAuthorFrame(url: string, params: import('./videoEditAuthorModule').AuthorParameters, info: import('./videoEditAuthorModule').AuthorFrameInfo, assets?: Record<string, ImageBitmap>): Promise<{ bitmap: ImageBitmap; elapsedMs: number }> {
+    return this.ensureCompositor().renderAuthorFrame(url, params, info, assets)
+  }
   async prepareContent(frame: number, current: () => boolean): Promise<void> {
     const document = this.document
     const clips = activeVideoEditClips(document, frame).filter(clip => clip.kind === 'code' || activeVideoEditEffects(clip).some(effect => effect.code))

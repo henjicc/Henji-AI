@@ -13,6 +13,8 @@ import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceMana
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { VideoEditCodePicture } from './videoEditCodePicture'
+import { loadAuthorModule, type AuthorFrameInfo, type AuthorParameters } from './videoEditAuthorModule'
+import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { videoEditClipTrackingQuad } from './videoEditTrackResults'
 import { videoEditCornerPinMatrix } from '@/core/videoEdit/tracking'
@@ -40,6 +42,51 @@ export class VideoEditGpuCompositor {
   private image!: GpuRenderPipeline
   private codeImage!: GpuRenderPipeline
   private codeRuntime?: VideoEditCodeGpu
+  private readonly authorRuntimes = new Map<string, VideoEditAuthorRuntime>()
+  private readonly authorAssets = new Map<string, Record<string, ImageBitmap>>()
+  private authorPresentation?: GpuRenderPipeline
+  private authorTarget?: { texture: GpuTexture; width: number; height: number }
+
+  /** Candidate frames use the same worker/device as the timeline, before publication. */
+  async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>): Promise<{ bitmap: ImageBitmap; elapsedMs: number }> {
+    await this.ready
+    if (assets) {
+      for (const image of Object.values(this.authorAssets.get(url) ?? {})) image.close()
+      this.authorAssets.set(url, assets)
+    }
+    let runtime = this.authorRuntimes.get(url)
+    if (!runtime) {
+      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url))
+      this.authorRuntimes.set(url, runtime)
+    }
+    const width = this.canvas.width, height = this.canvas.height
+    if (!this.authorTarget || this.authorTarget.width !== width || this.authorTarget.height !== height) {
+      this.authorTarget?.texture.destroy()
+      this.authorTarget = { texture: this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 }), width, height }
+    }
+    if (!this.authorPresentation) {
+      const module = this.device.createShaderModule({ code: `
+@group(0) @binding(0) var picture:texture_2d<f32>;
+@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
+ let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3)); return vec4f(p[i],0,1);
+}
+@fragment fn fs(@builtin(position) p:vec4f)->@location(0) vec4f { return textureLoad(picture,vec2i(p.xy),0); }` })
+      this.authorPresentation = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: this.canvasFormat }] }, primitive: { topology: 'triangle-list' } })
+    }
+    const started = performance.now()
+    this.device.pushErrorScope('validation')
+    try {
+      await runtime.render(this.authorTarget.texture, width, height, params, this.authorAssets.get(url) ?? {}, info)
+      const encoder = this.device.createCommandEncoder(), pipeline = this.authorPresentation
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store' }] })
+      pass.setPipeline(pipeline); pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: this.authorTarget.texture.createView() }] }))
+      pass.draw(3); pass.end(); this.device.queue.submit([encoder.finish()])
+      await this.device.queue.onSubmittedWorkDone()
+    } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
+    const error = await this.device.popErrorScope()
+    if (error) throw new Error(`作者效果 GPU 执行失败：${error.message}`)
+    return { elapsedMs: performance.now() - started, bitmap: this.canvas.transferToImageBitmap() }
+  }
   private copyY!: GpuRenderPipeline
   private copyUv!: GpuRenderPipeline
   private copyRgba!: GpuRenderPipeline
@@ -467,6 +514,10 @@ export class VideoEditGpuCompositor {
     await Promise.allSettled([...this.offscreen.values(), this.presentReady, ...this.downscale.values()])
     await Promise.allSettled([...this.uploads, ...this.copies])
     await this.codeRuntime?.dispose()
+    await Promise.allSettled([...this.authorRuntimes.values()].map(runtime => runtime.dispose()))
+    for (const assets of this.authorAssets.values()) for (const image of Object.values(assets)) image.close()
+    this.authorAssets.clear()
+    this.authorRuntimes.clear(); this.authorTarget?.texture.destroy(); this.authorTarget = undefined
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }

@@ -26,7 +26,7 @@ Pi 与 MCP 只负责工具和结果投影，不拥有业务状态。MCP 固定�
 
 所有向助手开放的功能必须以 `ApplicationCapabilityDefinition` 作为 schema、权限、风险、数据等级、引用、可用条件、并发规则、成功证据和失败恢复的唯一元数据源。
 
-AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patch`、`storePatch`、`executeScript`、`script`、`code` 等任意 Store Patch 或脚本执行字段；需要新增参数时先扩展正式领域 schema/注册表。
+AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patch`、`storePatch`、`executeScript`、`script`、`code` 等通用 Store Patch 或宿主脚本执行字段；需要新增参数时先扩展正式领域 schema/注册表。正式代码素材的标准 JS 源文件属于创作内容，由剪辑渲染 Worker 直接执行，不得再用本条要求把作者代码降为受限 DSL。
 
 **一次声明、多入口投影。** 同一份领域声明同时服务界面、内置 Pi 与外部智能体（MCP）：工具参数由能力定义的 Zod 输入投影，域与实体的可读可写面由反射注册表的 `exposures`／`requiredPermissions.write`／`collectionWrite`／`writeExclusion.reason` 派生。**禁止在 `electron/main/services/mcp/**` 维护任何业务字段表、实体类型清单或前缀白名单**；那里只允许协议层自身的参数与信封。新增一个已登记的业务实体或属性后，外部调用方应立刻可用，不需要回到协议层登记。对外工具名、必填参数与错误码的变化必须同步正式消费者和契约测试；本轮以新格式验收，不保留旧客户端调用样本或兼容解码分支。展开做法见 skill `henji-application-capability` 第 0.5 节。
 
@@ -100,7 +100,7 @@ MCP 工具集合与基础权限由正式前端能力声明自动派生，不再�
 - 新增内容来源或媒体消费功能时，同时核对“来源 → 下一步操作”，不能只登记单个工具。已有媒体来源清单在 `src/core/application-control/mediaReferenceKinds.ts`；新增来源须补正式解析和逐来源执行样例，准备／提交声明从清单派生。编辑预览必须经过正式合成，不能把原图当编辑结果；引用既有内容不得强制收藏、重上传或打开无关页面。关键连续操作加入现有 `check:application-control-invariants`，从下游实际媒体及正式状态断言结果，禁止仅检查测试标题或成功文字。本文要求不等于所有实体都是媒体；无法直接复用的文档、图层等应注明正式导出路径及对应验证。
 - **不得**以"助手已判断"为理由绕过安全边界
 - **禁止**从能力处理器直接调用 Store `setState` 做任意 Patch；仅允许正式领域服务内部对已声明字段执行确定性状态提交
-- **禁止**在 Application API、能力定义或应用运行时 增加 `eval`、`new Function` 或任意脚本执行入口
+- **禁止**在 Application API、能力定义或应用运行时增加通用 `eval`、`new Function` 或任意宿主脚本执行入口。代码效果的 ES 模块在剪辑渲染 Worker 使用原生 import 加载，正式领域负责源码版本、参数、撤销与结果回读。
 
 ## 公共执行与实例生命周期
 

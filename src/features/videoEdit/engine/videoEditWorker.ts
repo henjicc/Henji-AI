@@ -38,6 +38,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'scale'; divisor: number }
   | { kind: 'arm'; frame: number }
   | { kind: 'prepareGpu' }
+  | { kind: 'authorFrame'; assets?: Record<string, ImageBitmap>; url: string; params: import('./videoEditAuthorModule').AuthorParameters; info: import('./videoEditAuthorModule').AuthorFrameInfo }
   | { kind: 'preopen'; media: VideoEditComposition['media']; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
@@ -165,6 +166,10 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         // Every borrowed native frame goes back before the session may terminate this worker (record 002).
         await nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined
         self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
+      } else if (request.kind === 'authorFrame') {
+        if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
+        const result = await renderer.renderAuthorFrame(request.url, request.params, request.info, request.assets)
+        self.postMessage({ id: request.id, bitmap: result.bitmap, gpuMs: result.elapsedMs } satisfies RenderResponse, { transfer: [result.bitmap] })
       } else if (request.kind === 'fonts') {
         const started = performance.now()
         if (request.fonts.length) {

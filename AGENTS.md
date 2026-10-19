@@ -80,6 +80,8 @@ npm run test:reality -- --suite integration
 
 ## 全局架构边界
 
+**代码效果作者路线（2026-10-20 用户确认，正在实施）**：标准 ES 模块 JS 在现有剪辑渲染 Worker 直接执行，共用合成 GPUDevice；作者接口对齐 Frameflow 的 Canvas2D、layers、WebGL，并支持原生 WebGPU 与多 pass WGSL。效果、效率与 AI 创作成本优先，不以 AST 白名单或封闭 DSL 限制作者表达；不为每个效果另开隔离线程或逐帧搬运像素。确定性通过作者约定及正确失效的帧缓存实现。旧语言在三个原效果可行性验证通过后整体退役，当前不能把路线确认当作迁移验收通过。
+
 这些对绝大多数任务都成立，细则见 [architecture.md](docs/rules/architecture.md)：
 
 1. **配置驱动**：可移植的模型运行时行为写在 `packages/ai-sdk/src/catalog/**/*.model.ts` 的 schema 里；痕迹AI 专属文案、联动与面板展示补丁写在 `src/models/presentation/`。需要模型特定行为时扩展 schema，不在 UI 或宿主薄壳加模型分支。
