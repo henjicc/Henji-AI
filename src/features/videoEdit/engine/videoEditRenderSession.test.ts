@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest } from './videoEditWorker'
@@ -24,6 +24,7 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: (message: strin
 
 const workers: FakeWorker[] = []
 class FakeWorker {
+  respond = true
   readonly messages: Array<{ message: RenderRequest | { kind: string; port?: unknown }; transfer: unknown[] }> = []
   onmessage?: (event: MessageEvent) => void
   onerror?: unknown
@@ -31,7 +32,7 @@ class FakeWorker {
   constructor() { workers.push(this) }
   postMessage(message: RenderRequest, transfer: unknown[] = []) {
     this.messages.push({ message, transfer })
-    if ('id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true, ...(message.kind === 'render' ? { bitmap: { close: vi.fn() } } : {}) } } as MessageEvent))
+    if (this.respond && 'id' in message && message.id) queueMicrotask(() => this.onmessage?.({ data: { id: message.id, presented: true, ...(message.kind === 'render' ? { bitmap: { close: vi.fn() } } : {}) } } as MessageEvent))
   }
 }
 vi.stubGlobal('Worker', FakeWorker)
@@ -70,6 +71,46 @@ beforeEach(() => {
   platform.connect.mockReset().mockResolvedValue({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })
   platform.disconnect.mockReset()
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
+})
+afterEach(() => { vi.useRealTimers() })
+
+it('卡死渲染终止共享会话、释放全部等待和原生通道，显式重建可继续出画', async () => {
+  const session = new VideoEditRenderSession(composition(), undefined, undefined, undefined, undefined, undefined, false, 50)
+  await session.prepareGpu()
+  vi.useFakeTimers()
+  const old = workers[0]; old.respond = false
+  const first = session.present(0), second = session.present(1)
+  const failures = [expect(first).rejects.toThrow('超过时限'), expect(second).rejects.toThrow('超过时限')]
+  await vi.advanceTimersByTimeAsync(50); await Promise.all(failures)
+  expect(old.terminate).toHaveBeenCalledOnce()
+  expect(platform.disconnect).toHaveBeenCalledOnce()
+  expect(vi.getTimerCount()).toBe(0)
+  await expect(session.present(2)).rejects.toThrow('超过时限')
+  const close = vi.fn()
+  old.onmessage!({ data: { id: 999, bitmap: { close } } } as unknown as MessageEvent)
+  expect(close).toHaveBeenCalledOnce()
+  await session.dispose()
+  expect(platform.disconnect).toHaveBeenCalledOnce()
+  vi.useRealTimers()
+  const recovered = new VideoEditRenderSession(composition())
+  await expect(recovered.present(0)).resolves.toMatchObject({ presented: true })
+  expect(workers).toHaveLength(2)
+  await recovered.dispose()
+})
+
+it('正常回执及主动释放清理请求期限，不留下延迟终止', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.prepareGpu()
+  vi.useFakeTimers()
+  await session.present(0)
+  expect(vi.getTimerCount()).toBe(0)
+  const old = workers[0]; old.respond = false
+  const pending = session.present(1); const failure = expect(pending).rejects.toThrow('已关闭')
+  await Promise.resolve()
+  old.respond = true
+  await session.dispose(); await failure
+  expect(vi.getTimerCount()).toBe(0)
+  expect(old.terminate).toHaveBeenCalledOnce()
 })
 
 it('历史帧复制只随显式录制请求，过期回执释放位图', async () => {

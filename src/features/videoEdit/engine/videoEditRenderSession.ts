@@ -40,10 +40,11 @@ export function warmVideoEditNativeDecoder(): Promise<void> {
 export class VideoEditRenderSession {
   private readonly compilations = new Map<number, AbortController>()
   private readonly worker = new Worker(new URL('./videoEditWorker.ts', import.meta.url), { type: 'module' })
-  private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void }>()
+  private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void; timer?: ReturnType<typeof setTimeout> }>()
   private nextId = 0
   private preopenVersion = 0
   private disposed = false
+  private failure?: Error
   private timing?: VideoEditTimingContext
   private async timed<T>(stage: string, operation: () => Promise<T>): Promise<T> {
     const started = performance.now()
@@ -127,7 +128,7 @@ export class VideoEditRenderSession {
       return { nativeAvailable: false, ...(forced ? { forced } : {}) }
     }
   }
-  constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private proxyProjectId?: string, private readonly exportProxies = false) {
+  constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas, cacheBudgetBytes?: number, private proxyProjectId?: string, private readonly exportProxies = false, private readonly requestTimeoutMs = 60_000) {
     this.timing = videoEditTimingContext(proxyProjectId, document.id)
     if (this.timing) videoEditTimingEvent(this.timing, 'render.session.start')
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
@@ -158,9 +159,11 @@ export class VideoEditRenderSession {
       if (value.phase === 'submitted') { pending?.submitted?.(); return }
       this.pending.delete(value.id)
       if (!pending) { value.bitmap?.close(); value.history?.close(); return }
+      clearTimeout(pending.timer)
       if (value.error) pending.reject(new Error(value.error)); else pending.resolve(value)
     }
-    this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
+    this.worker.onerror = event => { event.preventDefault?.(); this.fail(new Error(`剪辑渲染中断：${event.message}。请重新加载预览。`)) }
+    this.worker.onmessageerror = () => this.fail(new Error('剪辑画面结果无法读取，请重新加载预览。'))
     // Verify original media before dependent code/font preparation or opening a decoder channel.
     this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('luts', () => this.authorizeLuts(document)), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     this.stopFonts = subscribeFontLibrary(() => {
@@ -177,11 +180,35 @@ export class VideoEditRenderSession {
     this.proxyProjectId = projectId
   }
   async prepareGpu(): Promise<void> { await this.ready; await this.request({ kind: 'prepareGpu' }) }
+  /** An unresponsive author shares this worker; terminate the whole session and
+   * let its existing owner/pool rebuild. Never automatically replay hung source. */
+  private fail(error: Error): void {
+    if (this.disposed) return
+    this.failure = error; this.disposed = true
+    this.worker.terminate()
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error) }
+    this.pending.clear()
+    for (const controller of this.compilations.values()) controller.abort()
+    this.compilations.clear(); this.stopFonts?.(); releaseDocumentFonts(this); this.content.dispose()
+    this.canvas.width = this.canvas.height = 1
+    this.disconnectNative()
+    logger.warn('剪辑渲染会话已中止', { event: 'video_edit.render.session.failed', error, context: { sequenceId: this.document.id } })
+  }
+  private disconnectNative(): void {
+    if (!this.route) return
+    const route = this.route; this.route = undefined
+    try { getPlatform().videoFrames.disconnect(route) } catch { /* the platform is gone with the page */ }
+  }
   private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
-    if (this.disposed) return Promise.reject(new Error('剪辑渲染已关闭。'))
+    if (this.disposed) return Promise.reject(this.failure ?? new Error('剪辑渲染已关闭。'))
     if (this.pending.size >= 3) return Promise.reject(new Error('剪辑渲染请求过多。'))
     const id = ++this.nextId
-    return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => this.fail(new Error('剪辑渲染超过时限，已停止当前画面任务。请检查代码效果后重新加载预览；已保存的作品不受影响。')), this.requestTimeoutMs)
+      this.pending.set(id, { resolve, reject, submitted, timer })
+      try { this.worker.postMessage({ ...request, id }, transfer) }
+      catch (error) { this.fail(error instanceof Error ? error : new Error(String(error))) }
+    })
   }
   private codeSources(document: VideoEditComposition): Promise<Record<string, string>> { return collectCodeSourceTexts((document.codeMaterials ?? []).flatMap(definition => definition.versions), this.sentCodeSources) }
   async updateDocument(document: VideoEditComposition, original = false): Promise<void> {
@@ -270,7 +297,7 @@ export class VideoEditRenderSession {
     this.stopFonts?.()
     releaseDocumentFonts(this)
     this.content.dispose()
-    for (const pending of this.pending.values()) pending.reject(new Error('剪辑渲染已关闭。'))
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('剪辑渲染已关闭。')) }
     this.pending.clear()
     const id = ++this.nextId
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -279,6 +306,6 @@ export class VideoEditRenderSession {
     await Promise.allSettled([Promise.race([closed, limit])])
     clearTimeout(timer); this.worker.terminate(); this.pending.clear(); this.canvas.width = 1; this.canvas.height = 1
     // Closes the port and any native session the worker could not close itself.
-    if (this.route) { const route = this.route; this.route = undefined; try { getPlatform().videoFrames.disconnect(route) } catch { /* the platform is gone with the page */ } }
+    this.disconnectNative()
   }
 }
