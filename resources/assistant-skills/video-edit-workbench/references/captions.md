@@ -6,9 +6,9 @@
 
 准备混音、生成原文字幕和回填识别字幕都会复核原始文件；嵌套声音按实际来源检查。源文件改变或缺少身份时先重新定位。识别完成后才发现原文件变化，会保留口播文档与真实计费事实并阻止回填；读取返回的 audioDocumentRef 和当前来源，确认可复用后恢复，不重放已完成识别。
 
-查询原素材已有内容时用 `query_video_edit_content(documentRef,itemRef)`，按 `text`、`fromUs/toUs`、`kinds` 筛选，`limit` 为1–50，保持原条件带 `nextCursor` 翻页。默认在当前项目发现同源口播和录制（独立作品查独立作品目录）；需要跨项目时显式指定 `discoveryScope=all`，只查剪辑与显式引用时用 `none`。可显式提供同源 `audioDocumentRef` 或 `recordingRef`。口播和录制分别受对应只读权限限制；`discovery.complete=false` 或 warnings 表示查询不完整，不能声称没有相关内容。未保存的口播校对会参与查询，关联目录、文档、文件或实例改变会使旧分页失效。
+已有源内容用 `query_video_edit_content(documentRef,itemRef)`，按 text、fromUs/toUs、kinds 筛选，limit 为1–50，原条件带 nextCursor 续查。默认同项目，discoveryScope=all 跨项目、none 仅读剪辑与显式引用；audioDocumentRef/recordingRef 可指定同源文档，受各域读取权限限制。检查 sourceVerified、discovery.complete 和 warnings；不完整不能声称没有内容，来源/实例变化须重查。
 
-时间始终为原文件微秒；`saved` 是保存的文本，`timeline` 是字幕投影，`intent` 是创作提示词，均不能冒充声音或画面检测。不同来源按 `originRef` 区分校对版本。顶层 `sourceVerified` 只说明目标素材的导入身份是否核实；逐条检查每条记录的 `sourceVerified`，仅按路径关联、没有原文件身份的录制记录仍为 false，不能继承顶层 true。默认不识别、不分析、不修改作品。此入口不提供精剪候选；按文字剪辑仍使用下述转录检索。
+内容时间是原文件微秒；saved 为保存文本，timeline 为字幕投影，intent 为创作提示。precision/basis 不可混用；校对字幕的句级位置不作为精剪词边界。
 
 查询由原读取请求持有，可并行用 `read_application_entity({ref:itemRef,propertyIds:["video_edit.item.content_queries"]})` 查阶段和终态，仅返回当前领域权限覆盖的查询。phaseProgress 是本阶段实测比例，null 表示未知；声音按完成声道路数、文档按已检查数量、画面按检测器回报。取消原请求或编辑/关闭剪辑会取消旧查询，迟到结果不恢复它。失败后读 error 再沿原入口重试，复用缓存、不重新识别或计费。进度只读、有界、不入作品和撤销，关闭重开清空。
 
@@ -25,25 +25,18 @@
 
 maxCharacters/maxLines、minDurationSeconds/maxDurationSeconds、maxReadingSpeed、joinGapMs 和 punctuation 均可覆盖。pauseSeconds 默认省略，按说话人停顿分布自适应；需要固定值时 TTS 可从0.2–0.3秒校正，0.6秒往往漏过真实气口。时间不足时保留完整词和原文；缺词级时间按已有字幕范围估算，不能冒充识别精度。
 
-已有字幕用免费 `segment_video_edit_subtitles`，documentRef、sequenceRef，可给 captionRefs 和相同规范参数；不重新识别、不计费，一步撤销。以下只是调用形状，引用需换成真实返回引用；不是对所有片子的样式限制。JSON 包含工具名与业务 input，外部 MCP 写入还需正式 operationId 信封。
+已有字幕用免费 `segment_video_edit_subtitles`，documentRef、sequenceRef，可给 captionRefs 和相同规范参数；不重新识别、不计费，一步撤销。外部 MCP 写入需正式 operationId 信封。
 
-```json
-{
-  "tool": "segment_video_edit_subtitles",
-  "input": {
-    "documentRef": {"kind": "video_edit.document", "id": "替换为文档引用"},
-    "sequenceRef": {"kind": "video_edit.sequence", "id": "替换为序列引用"},
-    "style": "netflix_zh_hans",
-    "maxCharacters": 16,
-    "maxLines": 2
-  }
-}
-```
 
 后续用 `video_edit.caption.text` / `video_edit.caption.start` / `video_edit.caption.duration` / `video_edit.caption.translation` 校正。重新分段前已有译文需先清除，再分段重译；尽量复用原引用，新增与合并移除的引用读返回值。
 
 自动字幕的 `video_edit.caption.speech` 是只读来源词证据，文本剪辑、复制和嵌套共用，不手工伪造。独立创建/导入的字幕保持原有锚定语义。剪辑后读 `video_edit.caption.review_reasons`：text 表示保留的人工正文需核对，translation 表示保留的译文需改写或重译，timing 表示词内切点或估算时间需试听。先核对声音和对应字幕，再通过通用属性写 `review_reasons: []` 确认；不能把清空标记当成已经检查。译文没有词级对应时不按字数比例猜拆。
 
+## 分批校对
+
+长字幕用 `query_video_edit_subtitle_correction`，给 documentRef/sequenceRef，可选 captionRefs、budgets={inputTokens,outputTokens,contextTokens}、rules、glossary=[{term,variants?}]。预算是保守估算，另给会话留余量；术语仅随局部内容返回。读 packet.instructions/rules，之后沿 planId 复用，续查需要重读规则时给 includeGuidance=true。模型只给 cues=[{startWord,endWord,text}]：闭合词索引完整、连续、唯一且有序覆盖 core，不改上下文，不跨原字幕合并，不给时间。
+
+提交 `apply_video_edit_subtitle_correction`，给相同文档/序列、planId、batchIndex、cues；应用生成时间并保留样式/词源，译文保留完整并标复核。每批一次撤销，无改动不加历史。续查只给 planId，自动取下一未完成批；失败重试本批，成功批不重做。protected 分页列出未处理字幕及原因，不视为已校对。新人工修改阻断对应批；计划不跨文档重开或声音时序变化。保存失败走原保存恢复，不重做校对。字义仍须听看复核。
 ## 翻译和样式
 
 - `translate_video_edit_subtitles` 给 documentRef、sequenceRef、targetLanguage，可选 captionRefs、providerId/modelId；可能计费，不能把免费整理和翻译混同。双语流程按现有声明先 maxLines=1 整理原文，再生成下方译文；重生成替换所选译文，失败后先查原状态，不能承诺失败批次重试免费。

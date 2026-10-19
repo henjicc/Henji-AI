@@ -25,6 +25,7 @@ const ATOMIC_DOCUMENT_ALGORITHMS = new Set([
   'normalize_video_edit_loudness', 'trim_video_edit_clip', 'ripple_video_edit_clip_speed',
   'nest_video_edit_clips', 'create_video_edit_multicam', 'auto_switch_video_edit_multicam',
   'apply_video_edit_scenes', 'segment_video_edit_subtitles',
+  'apply_video_edit_subtitle_correction',
   'ripple_delete_video_edit_text', 'extract_video_edit_text', 'insert_video_edit_text',
 ])
 

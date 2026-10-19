@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { defineApplicationCapability, capabilityControl } from '../shared/defineApplicationCapability'
 import { autoSubtitleOptionsSchema } from '../../../videoEdit/autoSubtitles'
+import { queryVideoEditSubtitleCorrectionCapability, applyVideoEditSubtitleCorrectionCapability } from './videoEditSubtitleCorrectionCapabilities'
 
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const documentRef = ref('video_edit.document'); const sequenceRef = ref('video_edit.sequence'); const audioDocumentRef = ref('audio_edit.document')
@@ -64,4 +65,4 @@ export const segmentVideoEditSubtitleCapability = defineApplicationCapability({
     ...refBatches(output.removedCaptionRefs).map(targetRefs => ({ effect: 'delete' as const, entityTypes: ['video_edit.caption'], propertyIds: [], targetRefs, count: targetRefs.length, verified: output.verified, evidence: output.verified ? ['合并后的字幕内容已保存，原分段引用已移除。'] : [] })),
   ], summarize: output => output.message,
 })
-export const VIDEO_EDIT_SUBTITLE_CAPABILITIES = [prepareVideoEditSubtitleCapability, generateVideoEditSubtitleCapability, translateVideoEditSubtitleCapability, segmentVideoEditSubtitleCapability]
+export const VIDEO_EDIT_SUBTITLE_CAPABILITIES = [prepareVideoEditSubtitleCapability, generateVideoEditSubtitleCapability, translateVideoEditSubtitleCapability, segmentVideoEditSubtitleCapability, queryVideoEditSubtitleCorrectionCapability, applyVideoEditSubtitleCorrectionCapability]

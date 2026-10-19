@@ -8,8 +8,12 @@ import { ApplicationPreflightFailure } from '@/core/application-control/executio
 import { generateClipSpeechSubtitles } from './videoEditSpeechSubtitles'
 import { TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 import { autoSubtitleOptionsSchema } from '@/core/videoEdit/autoSubtitles'
+import { queryVideoEditSubtitleCorrectionCapability, applyVideoEditSubtitleCorrectionCapability } from '@/core/application-control/domains/videoEdit/videoEditSubtitleCorrectionCapabilities'
+import { queryVideoEditSubtitleCorrection, applyVideoEditSubtitleCorrection } from './videoEditSubtitleCorrection'
 
 export async function handleVideoEditSubtitleCapability(id: string, raw: unknown, context: CapabilityExecutionContext): Promise<Record<string, unknown> | undefined> {
+  if (id === queryVideoEditSubtitleCorrectionCapability.id) return queryVideoEditSubtitleCorrection(raw, context)
+  if (id === applyVideoEditSubtitleCorrectionCapability.id) return applyVideoEditSubtitleCorrection(raw, context)
   if (![prepareVideoEditSubtitleCapability.id, generateVideoEditSubtitleCapability.id, translateVideoEditSubtitleCapability.id, segmentVideoEditSubtitleCapability.id].includes(id)) return undefined
   const child = (projectId: string, ref: { kind: string; id: string }): string => {
     const split = splitVideoEditRef(ref)
