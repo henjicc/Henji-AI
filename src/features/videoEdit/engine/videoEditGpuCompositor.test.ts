@@ -5,11 +5,43 @@ import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import type { VideoSample } from 'mediabunny'
+import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0 }))
+it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有权，跨设备及取消明确拒绝', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  const texture = { createView: () => ({}), destroy: vi.fn() }
+  const picture = new VideoEditCodePicture(texture, 640, 360, device, 'rgba16float')
+  try {
+    const inputs = await compositor.prepareImages(new Map([['one', picture], ['two', picture]]), () => true)
+    expect(inputs.get('one')).toMatchObject({ texture, owner: device, premultiplied: true })
+    expect(inputs.get('two')!.texture).toBe(inputs.get('one')!.texture)
+    expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
+    expect(compositor.imageDiagnostics()).toMatchObject({ textures: 0, bytes: 0, uploads: 0 })
+    const foreign = new VideoEditCodePicture(texture, 640, 360, {} as GpuDevice)
+    await expect(compositor.prepareImages(new Map([['bad', foreign]]), () => true)).rejects.toThrow('设备')
+    await expect(compositor.prepareImages(new Map([['one', picture]]), () => false)).rejects.toThrow('取消')
+    expect(texture.destroy).not.toHaveBeenCalled()
+  } finally { await compositor.dispose() }
+  expect(texture.destroy).not.toHaveBeenCalled()
+})
+it('输入画面保持原节目画布黑底，普通嵌套目标仍保留透明背景', async () => {
+  const { compositor, device } = copyFixture(async () => {}), model = createVideoEditDocument('输入黑底')
+  model.sequences[0].width = 3840; model.sequences[0].height = 2160
+  const composition = videoEditComposition(model, model.sequences[0].id)
+  try {
+    const target = await (await compositor.code()).target('target', 3840, 2160)
+    for (const opaque of [false, true]) {
+      const picture = new VideoEditCodePicture(target.texture, target.width, target.height, target.owner, target.textureFormat, opaque)
+      await (await compositor.draw(composition, [], [], () => true, undefined, picture)).completion
+      const descriptor = device.createCommandEncoder.mock.results.at(-1)!.value.beginRenderPass.mock.calls[0][0] as { colorAttachments: { clearValue: { a: number } }[] }
+      expect(descriptor.colorAttachments[0].clearValue.a).toBe(opaque ? 1 : 0)
+    }
+  } finally { await compositor.dispose() }
+})
 it('首帧管线并行异步编译，全部就绪前不提交 GPU 命令', async () => {
   const { compositor, device } = copyFixture(async () => {})
   const finishes: Array<() => void> = []

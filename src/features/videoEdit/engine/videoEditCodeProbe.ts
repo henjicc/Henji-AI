@@ -6,6 +6,7 @@ import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 export { runVideoEditCompositeProbe } from './videoEditCompositeProbe'
+export { runVideoEditCodeInputProbe } from './videoEditCodeInputProbe'
 
 const source = (body: string, kind = 'generator', mode = 'dynamic', parameters = '{}'): string => `export default {apiVersion:1,name:"4K作者实验",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:10,seed:42,parameters:${parameters},render(ctx){${body}}}`
 function percentile(values: number[], percent: number): number { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * percent))] }

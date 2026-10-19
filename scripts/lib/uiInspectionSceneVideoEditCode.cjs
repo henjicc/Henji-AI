@@ -11,7 +11,8 @@ function createVideoEditCodeScene() {
       const assets = fs.readdirSync(path.resolve('out/renderer/assets')).filter(name => /^videoEditCodeProbe-[\w-]+\.js$/.test(name))
       assert.equal(assets.length, 1, '有限实验必须使用正式最新构建的唯一模块')
       const evidence = await page.evaluate(async asset => {
-        const probe = await import(new URL(`./assets/${asset}`, window.location.href).href)
+        const imported = await import(new URL(`./assets/${asset}`, window.location.href).href)
+          const probe = imported.runVideoEditCodeProbe ? imported : Object.values(imported).find(value => value && typeof value === 'object' && typeof value.runVideoEditCodeProbe === 'function')
         const host = document.createElement('div'); host.setAttribute('data-code-contract-probe', ''); host.style.position = 'fixed'; host.style.inset = '80px 24px 40px'; host.style.zIndex = '100'
         document.body.appendChild(host)
         return await probe.runVideoEditCodeProbe(host)

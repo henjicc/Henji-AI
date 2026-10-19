@@ -1,4 +1,5 @@
 import { codeMediaInputKey, codeMediaInputComposition } from '@/core/videoEdit/codeMediaInput'
+import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
@@ -13,7 +14,7 @@ import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditCli
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
 import { assertVideoEditSequenceGraph, VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from '@/core/videoEdit/sequenceGraph'
-import type { VideoEditCodePicture } from './videoEditCodeGpu'
+import { VideoEditCodePicture } from './videoEditCodePicture'
 import { videoEditNestedAudio } from './videoEditNestedAudio'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { videoEditClipHeadRoomSeconds, videoEditClipRetimed, videoEditClipSourceSecondsAtTime, videoEditClipSpeedValue } from '@/core/videoEdit/clipSpeed'
@@ -53,8 +54,9 @@ interface PlaybackStream {
   tail: Promise<unknown>
 }
 interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream> }
-interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; bytes: number }
-interface NestedRender { context: NestedFrameContext; key: string; path: string[]; ownerKey?: string }
+interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string }
+interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number }
+interface NestedRender { context: NestedFrameContext; key: string; path: string[]; ownerKey?: string; opaqueBackground?: boolean }
 /**
  * Rounding edge of nearest-sample reads: half a sample plus a margin far above floating-point noise, so a clip whose
  * phase lies exactly half-way between two samples picks the same neighbour in every mix block.
@@ -85,6 +87,7 @@ interface VideoSource {
 export class VideoEditRenderer {
   private readonly nestedPictures = new Map<string, { renderer: VideoEditRenderer; tail: Promise<unknown> }>()
   private readonly nestedSounds = new Map<string, VideoEditRenderer>()
+  private readonly codeInputs = new Map<string, CodeInputSession>()
   private readonly sources = new Map<string, Promise<VideoSource>>()
   private playback?: PlaybackSchedule
   private lastForwardFrame?: number
@@ -129,7 +132,7 @@ export class VideoEditRenderer {
   }
   codePerformance(): import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.compositor?.codePerformance() ?? [] }
   captureCodePerformance(): () => import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[] { return this.compositor?.captureCodePerformance() ?? (() => []) }
-  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
+  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads, codeInputSessions: this.codeInputs.size } }
   /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
   constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames(), private readonly nestedOwner?: VideoEditRenderer, private sequencePath: string[] = [document.id], private readonly timing?: (stage: string, durationMs?: number) => void) {
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
@@ -247,6 +250,7 @@ export class VideoEditRenderer {
     await Promise.allSettled([...this.nestedPictures.values()].map(entry => entry.renderer.dispose()))
     await Promise.allSettled([...this.nestedSounds.values()].map(renderer => renderer.dispose()))
     this.nestedPictures.clear(); this.nestedSounds.clear()
+    await this.disposeCodeInputs()
     this.codeSources?.updateDocument(document)
     this.cancelPresentation()
     for (const [path, seeker] of this.seekers) if (!document.media.some(media => media.path === path)) { this.seekers.delete(path); await seeker.dispose() }
@@ -289,11 +293,13 @@ export class VideoEditRenderer {
     await this.codeSources?.dispose(); this.codeSources = undefined
     await this.compositor?.invalidateFontResources()
     for (const entry of this.nestedPictures.values()) await entry.renderer.invalidateFontResources()
+    for (const entry of this.codeInputs.values()) { entry.lastKey = undefined; entry.lastPicture = undefined; await entry.renderer.invalidateFontResources() }
   }
   cancelPresentation(): void {
     this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation()
     for (const entry of this.nestedPictures.values()) entry.renderer.cancelPresentation()
     for (const renderer of this.nestedSounds.values()) renderer.cancelPresentation()
+    for (const entry of this.codeInputs.values()) entry.renderer.cancelPresentation()
     for (const [id, image] of this.images) if (!image.ready) this.releaseImage(id)
   }
   /**
@@ -428,6 +434,67 @@ export class VideoEditRenderer {
       })().catch(() => undefined).finally(() => { source.prerolled = undefined })
     }, () => undefined)
   }
+  private async disposeCodeInputs(keep: ReadonlySet<string> = new Set()): Promise<void> {
+    await Promise.allSettled([...this.codeInputs].filter(([key]) => !keep.has(key)).map(async ([key, entry]) => {
+      this.codeInputs.delete(key)
+      await entry.renderer.dispose()
+      await entry.tail.catch(() => undefined)
+    }))
+  }
+  /** Input sessions borrow the parent device, while owning their render targets
+   * and decoder positions. A frame's alias map shares the exact submitted texture;
+   * no canvas readback, bitmap copy or external upload is required. */
+  private async prepareCodeInputs(document: VideoEditComposition, active: VideoEditClip[], frame: number, sequential: boolean, quality: EffectQuality, current: () => boolean, context: NestedFrameContext, path: string[]): Promise<Map<string, VideoEditCodePicture>> {
+    const requests = active.flatMap(clip => Object.entries(clip.code?.parameters ?? {}).flatMap(([parameter, reference]) => isCodeImageReference(reference) && reference.kind !== 'image' ? [{ clip, parameter, reference, source: codeMediaInputComposition(document, clip, reference, frame) }] : []))
+    const keep = new Set(requests.map(request => request.source.sessionKey))
+    if (keep.size > 32) throw new Error('同时读取的视频画面超过32份，请减少输入。')
+    await this.disposeCodeInputs(keep)
+    let shared = context.inputs.get(this)
+    if (!shared) { shared = new Map(); context.inputs.set(this, shared) }
+    const inputs = new Map<string, VideoEditCodePicture>()
+    for (const { clip, parameter, reference, source } of requests) {
+      if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
+      const sampleKey = JSON.stringify([quality, sequential, source.sampleKey]), key = JSON.stringify([source.sessionKey, sampleKey])
+      let picture = shared.get(key)
+      if (!picture) {
+        context.bytes += source.document.width * source.document.height * 8
+        if (context.bytes > 512 * 1024 ** 2) throw new Error('当前视频输入与嵌套画面超过显存预算，请减少同时读取的画面。')
+        let entry = this.codeInputs.get(source.sessionKey)
+        if (!entry) {
+          const began = performance.now()
+          const renderer = new VideoEditRenderer(source.document, undefined, undefined, 1, this.frames, this, this.sequencePath)
+          entry = { renderer, tail: Promise.resolve(), document, sourceKey: source.sampleKey, ownerKey: `code-input:${source.sessionKey}` }; this.codeInputs.set(source.sessionKey, entry)
+          recordVideoEditPreparation('codeInputRenderer', performance.now() - began)
+        }
+        const session = entry, targetKey = `nested:frame:input:${sampleKey}`
+        const keys = context.keys.get(session.ownerKey) ?? new Set<string>(); keys.add(targetKey); context.keys.set(session.ownerKey, keys)
+        picture = session.tail.catch(() => undefined).then(async () => {
+          if (!current()) throw new DOMException('视频取帧已取消。', 'AbortError')
+          if (session.lastKey === sampleKey && session.lastPicture && (reference.kind === 'video' || session.document === document)) { recordVideoEditPreparation('codeInputFrameHit', 0); return session.lastPicture }
+          // The next preparation may retire the prior target before submission.
+          // A cancelled or failed new frame must never resurrect that texture.
+          session.lastKey = undefined; session.lastPicture = undefined
+          const started = performance.now()
+          if (reference.kind === 'video' && session.sourceKey !== source.sampleKey || session.document !== document) {
+            session.lastKey = undefined; session.lastPicture = undefined
+            await session.renderer.updateDocument(source.document)
+            session.sourceKey = source.sampleKey; session.document = document
+          }
+          const result = await session.renderer.render(source.frame, sequential, false, current, undefined, { context, key: targetKey, ownerKey: session.ownerKey, path, opaqueBackground: true }, quality)
+          if (!current() || !result.presented || !result.nestedPicture) throw new DOMException('旧视频输入画面已取消。', 'AbortError')
+          await result.completion
+          if (!current()) throw new DOMException('旧视频输入画面已取消。', 'AbortError')
+          session.lastKey = sampleKey; session.lastPicture = result.nestedPicture; session.document = document
+          recordVideoEditPreparation('codeInputRender', performance.now() - started)
+          return result.nestedPicture
+        })
+        session.tail = picture; shared.set(key, picture)
+      } else recordVideoEditPreparation('codeInputFrameHit', 0)
+      inputs.set(codeMediaInputKey(clip.id, parameter), await picture)
+    }
+    for (const entry of this.codeInputs.values()) (await entry.renderer.compositor?.code())?.releaseNestedFrames(context.keys.get(entry.ownerKey) ?? new Set())
+    return inputs
+  }
   /**
    * `blankPictures` counts video layers with no picture at their source time (drawn transparent, no timestamp).
    * A sequential render without a preview width is an export frame (task 2.4): every video layer shows the exact
@@ -438,7 +505,7 @@ export class VideoEditRenderer {
     this.capturePresentation = capturePresentation
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
-    const nestedContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), bytes: 0 }
+    const nestedContext: NestedFrameContext = nestedRender?.context ?? { pictures: new Map(), keys: new Map(), inputs: new Map(), bytes: 0 }
     const path = nestedRender?.path ?? [document.id]
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
     const visible = videoEditVisibleTracks(document)
@@ -499,24 +566,9 @@ export class VideoEditRenderer {
     if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > 256 * 1024 ** 2) throw new Error('可见图片超过32份或256MiB预算，请减少同时显示的图片。')
     for (const id of this.images.keys()) if (!imageIds.has(id)) this.releaseImage(id)
     const imagesReady = (async () => {
-      const inputs = new Map(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)))
-      const owned: ImageBitmap[] = []
-      try {
-        for (const clip of active) for (const [key, value] of Object.entries(clip.code?.parameters ?? {})) {
-          if (!isCodeImageReference(value) || value.kind === 'image') continue
-          if (!canPresent()) throw new DOMException('视频取帧已取消。', 'AbortError')
-          const source = codeMediaInputComposition(document, clip, value, frame)
-          const renderer = new VideoEditRenderer(source.document, undefined, undefined, 1, this.frames, this)
-          let captured: Promise<ImageBitmap> | undefined
-          try {
-            const result = await renderer.render(source.frame, false, false, canPresent, undefined, undefined, quality, pixels => { captured = pixels.then(bitmap => { owned.push(bitmap); return bitmap }); void captured.catch(() => {}) })
-            await result.completion
-            if (!captured) throw new Error('视频图片输入没有返回画面。')
-            const bitmap = await captured; inputs.set(codeMediaInputKey(clip.id, key), bitmap)
-          } finally { if (captured) await Promise.allSettled([captured]); await renderer.dispose() }
-        }
-        return await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
-      } finally { owned.forEach(bitmap => bitmap.close()) }
+      const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)))
+      for (const [key, picture] of await this.prepareCodeInputs(document, active, frame, sequential, quality, canPresent, nestedContext, path)) inputs.set(key, picture)
+      return await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
     })()
     const imagesSettled = Promise.allSettled([imagesReady])
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
@@ -670,7 +722,10 @@ export class VideoEditRenderer {
     const decodeMs = performance.now() - decodeStart
     const gpuStart = performance.now()
     let result: { presented: boolean; completion: Promise<void> }
-    const nestedPicture = nestedRender ? await (await gpu.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
+    let nestedPicture = nestedRender ? await (await gpu.code()).target(nestedRender.key, this.canvas.width, this.canvas.height, 'rgba16float') : undefined
+    // Code media inputs previously captured the opaque program canvas. Preserve
+    // its black letterbox rather than leaking the parent's backdrop through it.
+    if (nestedPicture && nestedRender?.opaqueBackground) nestedPicture = new VideoEditCodePicture(nestedPicture.texture, nestedPicture.width, nestedPicture.height, nestedPicture.owner, nestedPicture.textureFormat, true)
     try {
       const drawn = this.drawDocument(document)
       result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), gpu, frame, canPresent, deadline, document, nestedPicture, onEffectError, quality) : await gpu.draw(drawn, active, pictures, canPresent, deadline, nestedPicture)
@@ -863,6 +918,7 @@ export class VideoEditRenderer {
     await Promise.allSettled([...this.nestedPictures.values()].map(entry => entry.renderer.dispose()))
     await Promise.allSettled([...this.nestedSounds.values()].map(renderer => renderer.dispose()))
     this.nestedPictures.clear(); this.nestedSounds.clear()
+    await this.disposeCodeInputs()
     this.cancelPresentation(); await Promise.allSettled([this.codeSources?.dispose(), this.disposePlayback()])
     await Promise.allSettled([...this.seekers.values()].map(seeker => seeker.dispose())); this.seekers.clear(); this.frameCache.clear()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))

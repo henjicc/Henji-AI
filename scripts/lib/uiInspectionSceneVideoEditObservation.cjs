@@ -192,6 +192,8 @@ function createVideoEditObservationScene() {
           assert.deepEqual(readVideoEditFile(seeded.file), unchanged)
           assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
         }
+        await observe('input-export-frame', { kind: 'program', frame: 60 })
+        evidence.inputExport = await exportFrame('input', 60, path.join(root, 'input-export-frame.png'), { left: 0, top: 0, width: 640, height: 360 }); store()
         const motionBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
         const motionCreated = await callTool(client, 'change_application_entities', operationEnvelope([motionBaseline], { summary: '创建API2运动曝光验收素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: documentRef, items: [{ properties: { 'video_edit.code_material.source': MOTION_SOURCE } }] }] }))
         assert.equal(motionCreated.verificationState, 'verified', JSON.stringify(motionCreated))
@@ -257,7 +259,20 @@ function createVideoEditObservationScene() {
         assert.deepEqual(readVideoEditFile(seeded.file), lensBefore)
         evidence.lensExport = await exportFrame('lens', 60, path.join(root, 'lens-focus-far.png'), { left: 128, top: 128, width: 320, height: 104 }); store()
         assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
-        evidence.capture = await capture('observation-review-host'); evidence.completed = true; store()
+        evidence.capture = await capture('observation-review-host'); store()
+        const assets = fs.readdirSync(path.resolve('out/renderer/assets')).filter(name => /^videoEditCodeProbe-[\w-]+\.js$/.test(name))
+        assert.equal(assets.length, 1)
+        evidence.inputPerformance = await page.evaluate(async ({ asset, video }) => {
+          const imported = await import(new URL(`./assets/${asset}`, window.location.href).href)
+          const probe = imported.runVideoEditCodeInputProbe ? imported : Object.values(imported).find(value => value && typeof value === 'object' && typeof value.runVideoEditCodeInputProbe === 'function')
+          const host = document.createElement('div'); host.dataset.codeInputProbe = ''; host.style.cssText = 'position:fixed;inset:80px 24px 40px;z-index:100'; document.body.appendChild(host)
+          try { return await probe.runVideoEditCodeInputProbe(host, video) } catch (error) { host.remove(); throw error }
+        }, { asset: assets[0], video: videoReferencePath }); store()
+        assert.equal(evidence.inputPerformance.completed, true)
+        await capture('shared-video-inputs')
+        await page.locator('[data-code-input-probe]').evaluateAll(elements => elements.forEach(element => element.remove()))
+        assert.equal(evidence.inputPerformance.disposed.codeInputSessions, 0)
+        evidence.completed = true; store()
       } catch (error) { evidence.failure = String(error.stack ?? error); store(); throw error }
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})

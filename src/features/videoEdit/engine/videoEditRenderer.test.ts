@@ -16,8 +16,8 @@ import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 
-const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, closed: 0 }))
-const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
+const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0 }))
+const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -80,10 +80,10 @@ vi.mock('./videoEditGpuCompositor', async () => {
     builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
-  async prepareImages(images: ReadonlyMap<string, ImageBitmap>) { for (const [key, image] of images) contentInputs.uploads.push([key, (image as ImageBitmap & { timestamp?: number }).timestamp]); return new Map() }
+  async prepareImages(images: ReadonlyMap<string, ImageBitmap | InstanceType<typeof VideoEditCodePicture>>) { for (const [key, image] of images) (image instanceof VideoEditCodePicture ? contentInputs.borrows : contentInputs.uploads).push([key, (image as { timestamp?: number }).timestamp]); return new Map() }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) boundary.evaluatedClips = clips; boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); if (!destination) this.capture?.()?.(Promise.resolve({ width: document.width, height: document.height, timestamp: pictures[0]?.timestamp, close: () => { contentInputs.closed++ } } as unknown as ImageBitmap)); return { presented: true, completion: Promise.resolve() } }
+  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) { boundary.evaluatedClips = clips; (destination as { timestamp?: number }).timestamp = pictures[0]?.timestamp } boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); if (destination && clips.some(clip => clip.id === boundary.failOffscreenClip)) throw new Error('离屏提交失败'); if (!destination) this.capture?.()?.(Promise.resolve({ width: document.width, height: document.height, timestamp: pictures[0]?.timestamp, close: () => { contentInputs.closed++ } } as unknown as ImageBitmap)); return { presented: true, completion: Promise.resolve() } }
   setPictureDivisor(divisor: number): void { boundary.divisors.push(divisor) }
   async dispose(): Promise<void> {}
   async invalidateFontResources(): Promise<void> {}
@@ -97,9 +97,9 @@ vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {
   async dispose() { this.cache.deleteMedia(this.path) }
 } }))
 beforeEach(() => {
-  contentInputs.uploads = []; contentInputs.closed = 0
+  contentInputs.uploads = []; contentInputs.borrows = []; contentInputs.closed = 0
   boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
-  boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
+  boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.failOffscreenClip = undefined; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
   boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
@@ -257,7 +257,7 @@ function fixture(): ReturnType<typeof videoEditComposition> {
   return videoEditComposition(document, document.sequences[0].id)
 }
 
-it('t102 视频参数经共享解码与取帧回调进入图片输入，固定和跟随时间可随机寻帧且回收画面', async () => {
+it('视频参数经共享解码与GPU画面进入图片输入，固定和跟随时间可随机寻帧', async () => {
   const document = fixture()
   const source = 'export default {apiVersion:1,languageVersion:3,name:"视频输入",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({source:ctx.params.picture,x:0,y:0,width:3840,height:2160})];}}'
   document.codeMaterials = [{ id: 'definition', name: '视频输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 3, ...testCodeManifest(source, document) }] }]
@@ -265,14 +265,100 @@ it('t102 视频参数经共享解码与取帧回调进入图片输入，固定�
   document.items.push({ id: 'code', name: '视频输入', kind: 'code', code })
   document.clips = [{ ...document.clips[0], itemId: 'code', kind: 'code', code, start: 10 }]
   const renderer = new VideoEditRenderer(document)
-  const sample = async (frame: number) => { contentInputs.uploads = []; const result = await renderer.render(frame); await result.completion; return contentInputs.uploads.find(([key]) => key.startsWith('code-input:'))?.[1] }
+  const sample = async (frame: number) => { contentInputs.borrows = []; const result = await renderer.render(frame); await result.completion; return contentInputs.borrows.find(([key]) => key.startsWith('code-input:'))?.[1] }
   try {
     expect(await sample(25)).toBe(.5)
     expect(await sample(40)).toBe(1)
     expect(await sample(25)).toBe(.5)
     await renderer.updateDocument({ ...document, clips: document.clips.map(clip => ({ ...clip, code: { ...code, parameters: { picture: { kind: 'video', mediaId: 'A', time: .25 } } } })) })
     expect(await sample(40)).toBe(.25)
-    expect(contentInputs.closed).toBe(4)
+    expect(contentInputs.closed).toBe(0)
+  } finally { await renderer.dispose() }
+})
+
+function codeInputFixture(): ReturnType<typeof fixture> {
+  const document = fixture(), base = document.clips[0]
+  const source = 'export default {apiVersion:1,languageVersion:3,name:"复用输入",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:2,seed:1,parameters:{a:{type:"image",title:"原片",default:null},b:{type:"image",title:"重复",default:null},c:{type:"image",title:"下层",default:null},d:{type:"image",title:"重复下层",default:null}},render(ctx){return [image({source:ctx.params.a,x:0,y:0,width:3840,height:2160})];}}'
+  const code = { definitionId: 'definition', versionId: 'v', parameters: { a: { kind: 'video' as const, mediaId: 'A' }, b: { kind: 'video' as const, mediaId: 'A' }, c: { kind: 'sequence' as const, mediaId: 'below' as const }, d: { kind: 'sequence' as const, mediaId: 'below' as const } } }
+  document.codeMaterials = [{ id: 'definition', name: '输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 3, ...testCodeManifest(source, document) }] }]
+  document.items.push({ id: 'code', name: '输入', kind: 'code', code })
+  document.clips = [base, { ...base, id: 'code', itemId: 'code', kind: 'code', track: 2, code }]
+  return document
+}
+it('重复视频与下层画面输入共用同源同帧GPU画面，无位图回读和重复上传', async () => {
+  const document = codeInputFixture()
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(15)
+    expect(contentInputs.closed).toBe(0)
+    expect(contentInputs.uploads.filter(([key]) => key.startsWith('code-input:'))).toHaveLength(0)
+    expect(boundary.draws.filter(draw => draw.offscreen)).toHaveLength(2)
+    const snapshots = boundary.snapshotCalls.length
+    await renderer.render(15)
+    // The ordinary top-level video still performs its own export-quality read;
+    // both code input pictures are reused without another source snapshot.
+    expect(boundary.snapshotCalls).toHaveLength(snapshots + 1)
+    expect(boundary.draws.filter(draw => draw.offscreen)).toHaveLength(2)
+    expect(contentInputs.closed).toBe(0)
+  } finally { await renderer.dispose() }
+  expect(renderer.codeDiagnostics().codeInputSessions).toBe(0)
+})
+
+it('同帧下层参数修改重绘下层输入，原视频仍复用；离开片段范围关闭全部输入会话', async () => {
+  const document = codeInputFixture(), renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(15)
+    expect(renderer.codeDiagnostics().codeInputSessions).toBe(2)
+    const before = boundary.draws.filter(draw => draw.offscreen).length
+    const next = { ...document, revision: document.revision + 1, clips: document.clips.map(clip => clip.kind === 'video' ? { ...clip, x: .2 } : clip) }
+    renderer.updateParameters(videoEditParameterUpdate(document, next)!)
+    await renderer.render(15)
+    expect(boundary.draws.filter(draw => draw.offscreen)).toHaveLength(before + 1)
+    expect(contentInputs.closed).toBe(0)
+    await renderer.render(100)
+    expect(renderer.codeDiagnostics().codeInputSessions).toBe(0)
+  } finally { await renderer.dispose() }
+})
+
+it('视频输入文件身份改变时释放原会话，同帧取到新源而非复用旧纹理', async () => {
+  const document = codeInputFixture(), renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(15)
+    const next = { ...document, revision: document.revision + 1, media: document.media.map(media => media.id === 'A' ? { ...media, path: 'D:/B.mp4', sourceRevision: 'new' } : media) }
+    await renderer.updateDocument(next)
+    expect(renderer.codeDiagnostics().codeInputSessions).toBe(0)
+    expect(boundary.disposed).toContain('D:/A.mp4')
+    await renderer.render(15)
+    expect(renderer.codeDiagnostics().codeInputSessions).toBe(2)
+  } finally { await renderer.dispose() }
+})
+
+it('取消在途视频输入后再取不同源时刻，不缓存失败画面、不沿用旧源入点', async () => {
+  const document = codeInputFixture(), renderer = new VideoEditRenderer(document)
+  let ready!: () => void, current = true
+  boundary.pendingSnapshot = new Promise<void>(resolve => { ready = resolve })
+  try {
+    const pending = renderer.render(15, false, false, () => current)
+    await vi.waitFor(() => expect(boundary.snapshotCalls.length).toBeGreaterThan(0))
+    current = false; ready()
+    expect(await pending).toMatchObject({ presented: false })
+    boundary.pendingSnapshot = undefined; contentInputs.borrows = []
+    const result = await renderer.render(30)
+    expect(result.presented).toBe(true)
+    expect(contentInputs.borrows.filter(([key]) => key.startsWith('code-input:')).map(([, timestamp]) => timestamp)).toEqual([1, 1, 1, 1])
+    expect(contentInputs.closed).toBe(0)
+  } finally { ready(); await renderer.dispose() }
+})
+it('新帧提交失败后回到旧帧重新取得输入，不借用可能已退役的旧目标', async () => {
+  const renderer = new VideoEditRenderer(codeInputFixture())
+  try {
+    await renderer.render(15)
+    boundary.failOffscreenClip = 'clip'
+    await expect(renderer.render(30)).rejects.toThrow('离屏提交失败')
+    boundary.failOffscreenClip = undefined
+    const before = boundary.draws.filter(draw => draw.offscreen).length
+    expect(await renderer.render(15)).toMatchObject({ presented: true })
+    expect(boundary.draws.filter(draw => draw.offscreen)).toHaveLength(before + 2)
   } finally { await renderer.dispose() }
 })
 

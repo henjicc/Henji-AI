@@ -286,7 +286,8 @@ export class VideoEditGpuCompositor {
     const retained = [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0) - (cached?.bytes ?? 0)
     if (source.width < 1 || source.height < 1 || source.width > 8192 || source.height > 8192 || retained + bytes > 256 * 1024 ** 2) throw new Error('图片或文字超出 GPU 单张纹理 8192 像素或驻留 256MiB 技术预算。')
     const texture = this.device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
-    try { this.device.queue.copyExternalImageToTexture({ source }, { texture, premultipliedAlpha: false }, [source.width, source.height]) }
+    const started = performance.now()
+    try { this.device.queue.copyExternalImageToTexture({ source }, { texture, premultipliedAlpha: false }, [source.width, source.height]); recordVideoEditPreparation('codeImageUpload', performance.now() - started) }
     catch (error) { texture.destroy(); throw error }
     cached?.texture.destroy(); this.textures.set(id, { texture, key, bytes }); this.imageUploads++
     return texture
@@ -295,16 +296,18 @@ export class VideoEditGpuCompositor {
     for (const [key, value] of this.textures) if (!keys.has(key)) { value.texture.destroy(); this.textures.delete(key) }
   }
   /** Ordinary image clips and code references borrow the same full-size upload. */
-  async prepareImages(pictures: ReadonlyMap<string, ImageBitmap>, shouldPresent: () => boolean, visibleText: ReadonlySet<string> = new Set(), visibleClips: ReadonlySet<string> = new Set()): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> {
+  async prepareImages(pictures: ReadonlyMap<string, ImageBitmap | VideoEditCodePicture>, shouldPresent: () => boolean, visibleText: ReadonlySet<string> = new Set(), visibleClips: ReadonlySet<string> = new Set()): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> {
     await this.ready
     if (!shouldPresent() || this.disposed) throw new DOMException('图片画面已取消。', 'AbortError')
     if (this.lost) throw new Error(`剪辑 GPU 已中断：${this.lost}`)
-    const unique = new Set(pictures.values()); const bytes = [...unique].reduce((sum, image) => sum + image.width * image.height * 4, 0)
+    const unique = new Set(pictures.values()); const bytes = [...unique].reduce((sum, image) => sum + image.width * image.height * (image instanceof VideoEditCodePicture && image.highPrecision ? 8 : 4), 0)
     if (unique.size + visibleText.size > 32 || bytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > 256 * 1024 ** 2) throw new Error('可见图片与文字超过32份或256MiB预算，请减少同时显示的素材。')
-    this.protectedImages = new Set([...unique].map(image => this.imageKey(image)).concat([...visibleText].map(id => `text:${id}`)))
+    for (const image of unique) if (image instanceof VideoEditCodePicture && image.owner !== this.device) throw new Error('视频输入画面不属于当前GPU设备。')
+    this.protectedImages = new Set([...unique].filter((image): image is ImageBitmap => !(image instanceof VideoEditCodePicture)).map(image => this.imageKey(image)).concat([...visibleText].map(id => `text:${id}`)))
     this.protectedUniforms = new Set(visibleClips)
     this.retainTextures(new Set([...this.protectedImages, ...[...visibleText].map(id => `text:${id}`)]))
-    return new Map([...pictures].map(([mediaId, picture]) => {
+    return new Map<string, VideoEditCodeImageInput>([...pictures].map(([mediaId, picture]): [string, VideoEditCodeImageInput] => {
+      if (picture instanceof VideoEditCodePicture) return [mediaId, { texture: picture.texture, width: picture.width, height: picture.height, owner: this.device, premultiplied: true }]
       const key = this.imageKey(picture)
       return [mediaId, { texture: this.texture(key, key, picture), width: picture.width, height: picture.height, owner: this.device, premultiplied: false }]
     }))
@@ -346,7 +349,7 @@ export class VideoEditGpuCompositor {
       const encoder = device.createCommandEncoder()
       const canvas = target ? undefined : this.context.getCurrentTexture()
       const composed = present ? this.preciseTarget() : undefined
-      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: (target?.texture ?? composed ?? canvas!).createView(), clearValue: { r: 0, g: 0, b: 0, a: target ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: (target?.texture ?? composed ?? canvas!).createView(), clearValue: { r: 0, g: 0, b: 0, a: target && !target.opaqueBackground ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] })
       clips.forEach((clip, index) => {
         const picture = pictures[index]
         let resource: unknown

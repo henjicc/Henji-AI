@@ -36,4 +36,4 @@ export default {apiVersion:1,languageVersion:3,name:"音频滤镜",kind:"filter"
 
 声明仍为 `picture:{type:"image",title:"输入画面",default:null}`，`image({source:ctx.params.picture,x:0,y:0,width:ctx.width,height:ctx.height})` 消费该画面。
 
-参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number}`、`{kind:"sequence",mediaId:"below"}`。视频 `time` 是源素材非负秒数；省略时随片段本地时间，不经过代码片段的源速度换算。超出视频范围明确失败。`below` 在当前序列帧合成更低轨道的画面，排除当前轨道与更高轨道、字幕覆盖，避免循环。代码没有路径或 URL 访问权；所有输入走工程媒体引用、正式解码与合成。每帧视频输入目前经标准画面回读为 8 位 RGBA 后上传；这条接口不保留 HDR 精度。
+参数值支持 `{kind:"image",mediaId}`、`{kind:"video",mediaId,time?:number}`、`{kind:"sequence",mediaId:"below"}`。视频 `time` 是源素材非负秒数；省略时随片段本地时间，不经过代码片段的源速度换算。超出视频范围明确失败。`below` 在当前序列帧合成更低轨道的画面，排除当前轨道与更高轨道、字幕覆盖，避免循环。代码没有路径或 URL 访问权；所有输入走工程媒体引用、正式解码与合成。同一来源与取样时刻复用正式GPU画面，重复参数不额外回读或上传；下层画面随当前作品修改失效，输入移除或关闭时释放，画面留白保持原输入画布黑底。输入可保留高精度纹理，但代码生成器的输出精度仍由现有渲染契约决定，不据此承诺完整HDR处理。

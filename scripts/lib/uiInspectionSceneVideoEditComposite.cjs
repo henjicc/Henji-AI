@@ -18,7 +18,8 @@ function createVideoEditCompositeScene() {
       let evidence
       try {
         evidence = await page.evaluate(async asset => {
-          const probe = await import(new URL(`./assets/${asset}`, window.location.href).href)
+          const imported = await import(new URL(`./assets/${asset}`, window.location.href).href)
+          const probe = imported.runVideoEditCompositeProbe ? imported : Object.values(imported).find(value => value && typeof value === 'object' && typeof value.runVideoEditCompositeProbe === 'function')
           const host = document.createElement('div'); host.setAttribute('data-composite-contract-probe', ''); host.style.cssText = 'position:fixed;inset:80px 24px 40px;z-index:100'
           document.body.appendChild(host); return probe.runVideoEditCompositeProbe(host)
         }, assets[0])
