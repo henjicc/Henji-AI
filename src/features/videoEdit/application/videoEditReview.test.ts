@@ -15,6 +15,21 @@ import * as tracking from './videoEditTracking'
 import * as trackReader from '../engine/videoEditTrackResults'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
+import { collectVideoEditMotionStructure } from '@/core/videoEdit/motionStructure'
+import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
+
+class MotionWorker {
+  static instances: MotionWorker[] = []
+  static automatic = true
+  onmessage: ((event: MessageEvent<VideoEditMotionReviewResponse>) => void) | null = null
+  onerror: ((event: { message: string }) => void) | null = null
+  onmessageerror: (() => void) | null = null
+  terminate = vi.fn()
+  request!: VideoEditMotionReviewRequest
+  constructor() { MotionWorker.instances.push(this) }
+  postMessage(request: VideoEditMotionReviewRequest): void { this.request = request; if (MotionWorker.automatic) queueMicrotask(() => this.respond()) }
+  respond(): void { this.onmessage?.({ data: { result: collectVideoEditMotionStructure(this.request.composition, this.request.range, this.request.policy) } } as MessageEvent<VideoEditMotionReviewResponse>) }
+}
 
 const parse = queryVideoEditReviewCapability.outputSchema.parse
 const context = () => ({ signal: new AbortController().signal })
@@ -30,7 +45,7 @@ beforeEach(() => {
   vi.spyOn(trackReader, 'readVideoEditTrackReviewHeader').mockImplementation(async () => data())
   vi.spyOn(getPlatform().tracking, 'status').mockResolvedValue({ state: 'ready', result: { path: path.resolve(path.sep, 'track.htrk'), startUs: 0, endUs: 10000000, fps: 10, summary: { tracked: 8, lost: 2 } } })
 })
-afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const owner = await createVideoEditTestProject(); const sequenceId = owner.document.sequences[0].id
   editVideoProject(owner.document.id, document => {
@@ -44,6 +59,43 @@ async function fixture() {
   })
   return { owner, input: { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequenceId}` }, from: 0, to: 120 } }
 }
+it('public native-motion review returns frame-bound evidence and local suggestions without editing the work, and pages reuse the finished computation', async () => {
+  const { owner, input } = await fixture(); const app = createApplicationHarness()
+  MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
+  editVideoProject(owner.document.id, document => {
+    document.sequences[0].clips[0].curves = { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 15, value: .5, interpolation: 'linear' }] }
+    return document
+  })
+  const before = structuredClone(owner.document), past = owner.past.length, frame = owner.frame
+  try {
+    const first = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 1 }))
+    const records = [...first.records]; let cursor = first.nextCursor
+    while (cursor) {
+      const page = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 1, cursor }))
+      records.push(...page.records); cursor = page.nextCursor
+    }
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'motion', subjectRef: { kind: 'video_edit.clip', id: `${owner.document.id}:a` }, motionEvidence: { basis: 'clip_transform', peakSpeed: expect.any(Number), suggestion: expect.any(String) } }),
+      expect.objectContaining({ kind: 'motion_hard_stop', timeline: { fromFrame: 15, toFrame: 17 } }),
+      expect.objectContaining({ kind: 'motion_hold' }),
+      expect.objectContaining({ kind: 'event_crowded', subjectRef: { kind: 'video_edit.sequence', id: input.sequenceRef.id } }),
+    ]))
+    expect(MotionWorker.instances).toHaveLength(1); expect(MotionWorker.instances[0].terminate).toHaveBeenCalledOnce()
+    expect(first.warnings.join('')).toContain('变换保持不等于画面静止')
+    expect(owner.document).toEqual(before); expect(owner.past.length).toBe(past); expect(owner.frame).toBe(frame)
+    await expect(queryVideoEditReview({ ...input, motion: { minGapSeconds: 0 }, cursor: first.nextCursor }, context())).rejects.toThrow('分页已失效')
+  } finally { app.dispose() }
+})
+it.each(['changed', 'cancelled'] as const)('a pending native-motion query %s rejects its old plan', async kind => {
+  const { owner, input } = await fixture()
+  MotionWorker.instances = []; MotionWorker.automatic = false; vi.stubGlobal('Worker', MotionWorker)
+  const controller = new AbortController(), pending = queryVideoEditReview({ ...input, motion: {} }, { signal: controller.signal })
+  await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
+  const rejected = expect(pending).rejects.toThrow()
+  if (kind === 'changed') editVideoProject(owner.document.id, document => { document.sequences[0].name = '新的剪辑'; return document })
+  else controller.abort(new Error('取消分析'))
+  MotionWorker.instances[0].respond(); await rejected
+})
 it('公共查询选出有界检查帧并区分同素材两次跟踪实例，不运行模型、不改变历史或视图', async () => {
   const { owner, input } = await fixture(); const app = createApplicationHarness()
   const before = structuredClone(owner.document); const history = owner.past.length; const frame = owner.frame

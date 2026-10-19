@@ -5,7 +5,7 @@ import { videoEditTrackFrameTime, type VideoEditTrackHeader } from './tracking'
 import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 import { activeVideoEditEffects } from './compositing'
 
-export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable'
+export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded'
 export interface VideoEditReviewRecord {
   kind: VideoEditReviewKind
   timeline: VideoEditSourceMapRange
@@ -15,8 +15,37 @@ export interface VideoEditReviewRecord {
   subjectType?: 'video_edit.clip' | 'video_edit.effect'
   confidence?: number
   source?: { fromUs: number; toUs: number }
+  motionEvidence?: { basis: 'clip_transform' | 'structural_events'; peakSpeed?: number; gapSeconds?: number; suggestion: string }
 }
 export interface VideoEditReviewStructure { records: VideoEditReviewRecord[]; tracking: Array<{ composition: VideoEditComposition; entry: VideoEditSourceMapEntry }> }
+/** Heuristic attention-event grouping; neither the count nor the gap is an aesthetic verdict. */
+export function videoEditCrowdedReviewEvents(records: readonly VideoEditReviewRecord[], fps: number, minGapSeconds: number): Array<{ from: number; to: number; gapSeconds: number }> {
+  const events: VideoEditReviewRecord[] = []
+  const lastByElement = new Map<string, VideoEditReviewRecord>()
+  const cuts = new Set<string>()
+  for (const record of [...records].sort((a, b) => a.timeline.from - b.timeline.from)) {
+    if (!['caption', 'clip_boundary', 'effect', 'transition', 'motion', 'motion_hard_stop'].includes(record.kind)) continue
+    const key = record.kind === 'caption' || record.kind === 'transition' ? JSON.stringify([record.kind, record.sequenceId, record.subjectId, record.path.map(step => step.clipId)])
+      : JSON.stringify(['element', record.sequenceId, record.path.map(step => step.clipId)])
+    if (record.kind === 'clip_boundary') {
+      // The outgoing and incoming boundaries at a cut describe one event.
+      const cutKey = JSON.stringify([record.path.slice(0, -1).map(step => step.clipId), record.sequenceId, record.timeline.from])
+      if (cuts.has(cutKey)) { lastByElement.set(key, record); continue }
+      cuts.add(cutKey)
+    }
+    const previous = lastByElement.get(key)
+    // A single entrance can drive position, scale and opacity together. Keep a
+    // separate caption/transition and don't merge different placed instances.
+    if (previous && (record.timeline.from - previous.timeline.from) / fps <= .6) continue
+    lastByElement.set(key, record); events.push(record)
+  }
+  const result: Array<{ from: number; to: number; gapSeconds: number }> = []
+  for (let i = 1; i < events.length; i++) {
+    const previous = events[i - 1], current = events[i], gapSeconds = (current.timeline.from - previous.timeline.from) / fps
+    if (gapSeconds < minGapSeconds) result.push({ from: previous.timeline.from, to: Math.max(previous.timeline.from + 1, current.timeline.from + 1), gapSeconds })
+  }
+  return result
+}
 export const VIDEO_EDIT_REVIEW_RECORD_BUDGET = 20000
 export const VIDEO_EDIT_REVIEW_TRACK_SAMPLE_BUDGET = 200000
 export function assertVideoEditReviewBudget(count: number): void {
@@ -106,7 +135,7 @@ export function videoEditTrackingReviewRanges(header: VideoEditTrackHeader, rang
 
 /** Prioritize tracking evidence, distributing a small frame budget across the requested time range. */
 export function selectVideoEditReviewFrames(records: readonly VideoEditReviewRecord[], range: VideoEditSourceMapRange, maxFrames: number, duration: number): number[] {
-  const priority = (kind: VideoEditReviewKind): number => kind.startsWith('tracking_') ? 3 : kind === 'transition' ? 2 : 1
+  const priority = (kind: VideoEditReviewKind): number => kind.startsWith('tracking_') ? 3 : ['transition', 'motion_hard_stop', 'event_crowded'].includes(kind) ? 2 : 1
   const candidates = new Map<number, number>()
   for (const record of records) for (const frame of [record.timeline.from - 1, record.timeline.from, record.timeline.to - 1, record.timeline.to]) {
     if (frame >= range.from && frame < Math.min(range.to, duration)) candidates.set(frame, Math.max(candidates.get(frame) ?? 0, priority(record.kind)))

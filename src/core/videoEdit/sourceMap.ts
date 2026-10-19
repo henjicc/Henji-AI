@@ -34,6 +34,10 @@ function nextFrame(step: VideoEditSourceMapStep, frame: number): number {
 function localFrame(path: readonly VideoEditSourceMapStep[], rootFrame: number): number {
   return path.slice(0, -1).reduce((frame, step) => nextFrame(step, frame), rootFrame)
 }
+/** Current sequence clock of the final placed clip, including nested frame quantization. */
+export function videoEditSourceMapLocalFrame(entry: Pick<VideoEditSourceMapEntry, 'path'>, rootFrame: number): number {
+  return localFrame(entry.path, rootFrame)
+}
 function localSeconds(path: readonly VideoEditSourceMapStep[], rootSeconds: number): number {
   return path.slice(0, -1).reduce((seconds, step) => videoEditClipSourceSecondsAtTime(step.clip, seconds, step.fps), rootSeconds)
 }
