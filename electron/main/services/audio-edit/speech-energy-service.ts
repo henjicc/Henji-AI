@@ -20,9 +20,9 @@ export class SpeechEnergyService {
     const content = await identifyMediaContent(source.sourcePath)
     const audio = source.audioPath === source.sourcePath ? content : await identifyMediaContent(source.audioPath)
     const key = createHash('sha256').update(JSON.stringify(['speech-energy-v1', content.identity, audio.identity, source.identity?.digest, source.audioStreamIndex, source.ownership, options])).digest('hex')
-    const assertContentCurrent = async (verificationSignal: AbortSignal): Promise<void> => {
+    const assertContentCurrent = async (verificationSignal: AbortSignal, canonical = false): Promise<void> => {
       verificationSignal.throwIfAborted()
-      if ((await identifyMediaContent(source.sourcePath)).identity !== content.identity || (await identifyMediaContent(source.audioPath)).identity !== audio.identity) throw new Error('检测期间原素材已改变，请重新分析。')
+      if ((await identifyMediaContent(canonical ? content.path : source.sourcePath)).identity !== content.identity || (await identifyMediaContent(canonical ? audio.path : source.audioPath)).identity !== audio.identity) throw new Error('检测期间原素材已改变，请重新分析。')
       verificationSignal.throwIfAborted()
     }
     const verify = async (verificationSignal: AbortSignal): Promise<void> => {
@@ -30,6 +30,7 @@ export class SpeechEnergyService {
       await verifySource(verificationSignal)
       await assertContentCurrent(verificationSignal)
     }
+    await verify(signal)
     let cached = this.memory.get(key)
     if (!cached && this.disk) {
       const bytes = await this.disk.read(key)
@@ -52,22 +53,24 @@ export class SpeechEnergyService {
       progress(1)
       return structuredClone(cached)
     }
-    return this.shared.run(key, async (sharedSignal, report) => {
+    const result = await this.shared.run(key, async (sharedSignal, report) => {
       // Another flight can finish between disk lookup and subscription.
       const ready = this.memory.get(key)
-      if (ready) { await verify(sharedSignal); report(1); return ready }
-      const result = speechEnergyAnalysisSchema.parse(await this.run(source, options, sharedSignal, report))
-      await verify(sharedSignal)
+      if (ready) { await assertContentCurrent(sharedSignal, true); report(1); return ready }
+      const result = speechEnergyAnalysisSchema.parse(await this.run({ ...source, sourcePath: content.path, audioPath: audio.path }, options, sharedSignal, report))
+      await assertContentCurrent(sharedSignal, true)
       if (this.disk) {
         try { await this.disk.write(key, Buffer.from(JSON.stringify({ version: 1, key, result }))) }
         catch (error) { this.onCacheError?.('write_failed', error) }
-        await assertContentCurrent(sharedSignal)
+        await assertContentCurrent(sharedSignal, true)
       }
       sharedSignal.throwIfAborted()
       this.remember(key, result)
       report(1)
       return result
     }, signal, progress)
+    await verify(signal)
+    return result
   }
   private remember(key: string, result: SpeechEnergyAnalysis): void {
     this.memory.delete(key); this.memory.set(key, structuredClone(result))

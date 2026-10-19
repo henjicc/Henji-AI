@@ -66,7 +66,7 @@ it('局部变化使用同一内容缓存与并发槽位，模式分开，不把�
   expect(screen).toHaveBeenCalledTimes(3)
   await expect(service.detect({ ...input, includeStillness: true }, new AbortController().signal, () => undefined)).rejects.toThrow('分别查询')
 })
-it('同一实际来源共享分析，交付前仍核对各调用方入口，拒绝被改指向的目录链接', async () => {
+it.each([false, true])('同一实际来源共享分析，目录链接先发起=%s，交付分别核对入口', async aliasFirst => {
   const { cache, request, source } = await fixture()
   const alias = path.join(path.dirname(source), 'alias'); const alternate = path.join(path.dirname(source), 'alternate')
   await fs.mkdir(alternate); await fs.writeFile(path.join(alternate, 'video'), 'another-video')
@@ -74,15 +74,18 @@ it('同一实际来源共享分析，交付前仍核对各调用方入口，拒�
   let release: () => void = () => undefined
   const run = vi.fn(async () => { await new Promise<void>(resolve => { release = resolve }); return [2] })
   const service = new SceneDetectionService(cache, run)
-  const first = service.detect(request, new AbortController().signal, () => undefined)
+  const linked = { ...request, source: path.join(alias, 'video') }
+  const first = service.detect(aliasFirst ? linked : request, new AbortController().signal, () => undefined).catch(error => error)
+  await vi.waitFor(() => expect(run).toHaveBeenCalledOnce())
   const secondProgress = vi.fn()
-  const second = service.detect({ ...request, source: path.join(alias, 'video') }, new AbortController().signal, secondProgress).catch(error => error)
+  const second = service.detect(aliasFirst ? request : linked, new AbortController().signal, secondProgress).catch(error => error)
   await vi.waitFor(() => expect(run).toHaveBeenCalledOnce())
   // Both entrances initially resolve to the same source; only the second entrance changes.
   await vi.waitFor(() => expect(secondProgress).toHaveBeenCalledWith(0))
   await fs.unlink(alias); await fs.symlink(alternate, alias, 'junction'); release()
-  expect(await first).toMatchObject({ cutsSeconds: [2] })
-  expect(await second).toMatchObject({ message: expect.stringContaining('原视频已改变') })
+  expect(await (aliasFirst ? second : first)).toMatchObject({ cutsSeconds: [2] })
+  expect(await (aliasFirst ? first : second)).toMatchObject({ message: expect.stringContaining('原视频已改变') })
+  expect(run).toHaveBeenCalledOnce()
 })
 it('内容身份、源范围及灵敏度各自失效；中途改文件不缓存；损坏缓存重算', async () => {
   const { source, cache, request } = await fixture(); const run = vi.fn(async () => [2, 4]); const service = new SceneDetectionService(cache, run)

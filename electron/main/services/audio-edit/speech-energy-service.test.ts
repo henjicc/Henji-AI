@@ -49,13 +49,14 @@ it('缓存结构合法但切点越界时重建，磁盘写入失败保留有效�
   expect(errors.mock.calls.map(call => call[0])).toEqual(['invalid', 'write_failed'])
 })
 
-it('验证期间文件改变不发布缓存，下一次分析重算', async () => {
+it('入口验证期间文件改变时不解码、不发布缓存，下一次分析重算', async () => {
   const { file, source, disk, run, service, verify } = await fixture()
   const write = vi.spyOn(disk, 'write')
   await expect(service.analyze(source, {}, new AbortController().signal, () => undefined, async () => { await fs.writeFile(file, 'changed-during-analysis') })).rejects.toThrow('已改变')
   expect(write).not.toHaveBeenCalled()
+  expect(run).not.toHaveBeenCalled()
   await service.analyze(source, {}, new AbortController().signal, () => undefined, verify)
-  expect(run).toHaveBeenCalledTimes(2)
+  expect(run).toHaveBeenCalledOnce()
 })
 
 it('同源并发只分析一次，首位取消不影响其他调用者的解码、验证与保存', async () => {
@@ -64,15 +65,40 @@ it('同源并发只分析一次，首位取消不影响其他调用者的解码�
   const run = vi.fn(async (_source, _options, signal: AbortSignal) => { sharedSignal = signal; await new Promise<void>(resolve => { finish = resolve }); signal.throwIfAborted(); return structuredClone(result) })
   const service = new SpeechEnergyService(disk, run)
   const controller = new AbortController()
-  const first = service.analyze(source, {}, controller.signal, () => undefined, verify).catch(error => error)
+  const verifyFirst = vi.fn(async () => controller.signal.throwIfAborted())
+  const first = service.analyze(source, {}, controller.signal, () => undefined, verifyFirst).catch(error => error)
   const secondProgress = vi.fn()
   const second = service.analyze(source, {}, new AbortController().signal, secondProgress, verify)
   await vi.waitFor(() => expect(run).toHaveBeenCalledOnce())
   await vi.waitFor(() => expect(secondProgress).toHaveBeenCalled())
   controller.abort(); finish()
   expect(await first).toBeInstanceOf(Error); expect(await second).toEqual(result)
-  expect(sharedSignal.aborted).toBe(false); expect(verify.mock.calls[0][0]).toBe(sharedSignal)
+  expect(sharedSignal.aborted).toBe(false)
+  expect(verifyFirst).toHaveBeenCalledOnce()
   expect(run).toHaveBeenCalledOnce()
+})
+it('目录链接先发起的共享声音分析固定真实文件，各入口交付时独立复核', async () => {
+  const { source, disk, verify } = await fixture()
+  const root = path.dirname(source.sourcePath), alias = path.join(root, 'alias'), alternate = path.join(root, 'alternate')
+  await fs.mkdir(alternate); await fs.writeFile(path.join(alternate, 'voice'), 'different-voice')
+  await fs.symlink(root, alias, 'junction')
+  let finish!: () => void
+  const run = vi.fn(async () => { await new Promise<void>(resolve => { finish = resolve }); return structuredClone(result) })
+  const service = new SpeechEnergyService(disk, run)
+  const linked = path.join(alias, 'voice')
+  const first = service.analyze({ ...source, sourcePath: linked, audioPath: linked }, {}, new AbortController().signal, () => undefined, verify).catch(error => error)
+  await vi.waitFor(() => expect(run).toHaveBeenCalledOnce())
+  const progress = vi.fn(), second = service.analyze(source, {}, new AbortController().signal, progress, verify)
+  await vi.waitFor(() => expect(progress).toHaveBeenCalledWith(0))
+  await fs.unlink(alias); await fs.symlink(alternate, alias, 'junction'); finish()
+  expect(await first).toMatchObject({ message: expect.stringContaining('原素材已改变') })
+  expect(await second).toEqual(result); expect(run).toHaveBeenCalledOnce()
+})
+it('真实文件在共享计算中改变时拒绝所有旧证据，不发布缓存', async () => {
+  const { source, disk, verify } = await fixture(), write = vi.spyOn(disk, 'write')
+  const service = new SpeechEnergyService(disk, async () => { await fs.writeFile(source.audioPath, 'changed-during-decode'); return structuredClone(result) })
+  await expect(service.analyze(source, {}, new AbortController().signal, () => undefined, verify)).rejects.toThrow('已改变')
+  expect(write).not.toHaveBeenCalled()
 })
 
 it('缓存写入等待期间源文件改变也拒绝迟到结果', async () => {
