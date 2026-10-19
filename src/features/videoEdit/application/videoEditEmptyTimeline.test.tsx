@@ -33,6 +33,7 @@ function expectVideoEditContentUnchanged(actual: { revision: number }, expected:
 
 beforeEach(() => {
   installHarnessNativeStorage()
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   useSettingsStore.getState().setVideoEditSequenceDefaults(structuredClone(VIDEO_EDIT_SEQUENCE_DEFAULTS))
   vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
 })

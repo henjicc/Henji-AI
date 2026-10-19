@@ -10,7 +10,11 @@ import { createVideoEditTestProject, closeAllVideoEdits, savedVideoEdit, failVid
 import { editVideoProject, saveVideoEdit, undoVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { generateRecordingMovie } from './recordingMovieService'
 
-beforeEach(() => { installHarnessNativeStorage() })
+const fileContent = { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) }
+beforeEach(() => {
+  installHarnessNativeStorage()
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue(fileContent)
+})
 afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 async function fixture() {
   const id = crypto.randomUUID(), content = createRecordingDocument(), path = resolve(sep, 'fixture', 'screen.mp4')
@@ -21,7 +25,7 @@ async function fixture() {
   await getPlatform().documents.createDocument({ id, kind: 'screen_recording', name: '成片测试', container: { kind: 'user' }, content })
   const owner = await createVideoEditTestProject(), documentId = owner.document.id
   editVideoProject(documentId, draft => {
-    draft.media.push({ id: 'screen', path, name: '原片', kind: 'video', width: 1920, height: 1080, durationSeconds: 10, hasAudio: false })
+    draft.media.push({ id: 'screen', path, name: '原片', kind: 'video', width: 1920, height: 1080, durationSeconds: 10, hasAudio: false, assetContent: fileContent })
     draft.items.push({ id: 'screen-item', mediaId: 'screen', name: '原片', kind: 'video' }); return draft
   })
   const recipe = { ...RECORDING_MOVIE_RECIPES.original, normalizeAudio: false }
