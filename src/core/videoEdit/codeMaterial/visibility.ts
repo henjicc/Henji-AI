@@ -13,11 +13,11 @@ export function codeOutside(box: Box, matrix: CodeMatrix, width: number, height:
   return points.every(p => p[0] < 0) || points.every(p => p[1] < 0) || points.every(p => p[0] > width) || points.every(p => p[1] > height)
 }
 export function codeEmptyGroup(command: Extract<CodeDrawCommand, { kind: 'group' }>): boolean {
-  return command.opacity === 0 || !!command.clip && (!command.clip.width || !command.clip.height)
+  return (command.motionSamples ? command.motionSamples.every(sample => !sample.pose || sample.pose.opacity === 0 || sample.weight === 0) : command.opacity === 0) || !!command.clip && (!command.clip.width || !command.clip.height)
     || !!command.mask && !command.mask.invert && codeEmptyMask(command.mask.shape, command.mask.mode)
 }
 function codeEmptyMask(command: CodeDrawCommand | null, mode: 'alpha' | 'luma'): boolean {
-  if (!command || command.opacity === 0) return true
+  if (!command || command.opacity === 0 && !(command.kind === 'group' && command.motionSamples)) return true
   if (command.kind === 'image' || command.kind === 'shader' || command.kind === 'text' && command.perChar || command.glow || command.shadow) return false
   if (command.kind === 'group') return codeEmptyGroup(command) || command.children.every(child => codeEmptyMask(child, mode))
   const empty = (paint: CodePaint): boolean => {
@@ -28,6 +28,8 @@ function codeEmptyMask(command: CodeDrawCommand | null, mode: 'alpha' | 'luma'):
   return empty(fill) && (!(command.stroke && command.strokeWidth) || empty(command.stroke))
 }
 export function codeInvisible(command: CodeDrawCommand, matrix: CodeMatrix, width: number, height: number): boolean {
+  // The supplied matrix is the frame center; it cannot prove exposure invisible.
+  if (command.kind === 'group' && command.motionSamples) return codeEmptyGroup(command)
   if (command.opacity === 0) return true
   if (command.kind === 'group') return codeEmptyGroup(command) || !!command.clip && codeOutside({ ...command.clip, width: Math.ceil(command.clip.width), height: Math.ceil(command.clip.height) }, matrix, width, height)
   if (command.kind === 'text' && command.perChar) return false
@@ -42,8 +44,8 @@ export function codeInvisible(command: CodeDrawCommand, matrix: CodeMatrix, widt
 export function hideInvisibleCodeCommands(commands: CodeDrawCommand[], width: number, height: number, parent: CodeMatrix = CODE_IDENTITY, ancestorEffect = false): CodeDrawCommand[] {
   for (const command of commands) {
     const matrix = codeMultiply(parent, codeTransform(command))
-    if (command.opacity === 0 || command.kind === 'group' && codeEmptyGroup(command) || !ancestorEffect && codeInvisible(command, matrix, width, height)) command.opacity = 0
-    else if (command.kind === 'group') hideInvisibleCodeCommands(command.children, width, height, matrix, ancestorEffect || !!command.blur || !!command.glow || !!command.shadow)
+    if ((command.kind === 'group' ? codeEmptyGroup(command) : command.opacity === 0) || !ancestorEffect && codeInvisible(command, matrix, width, height)) command.opacity = 0
+    else if (command.kind === 'group') hideInvisibleCodeCommands(command.children, width, height, matrix, ancestorEffect || !!command.motionSamples || !!command.blur || !!command.glow || !!command.shadow)
   }
   return commands
 }

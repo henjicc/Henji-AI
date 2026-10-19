@@ -1,5 +1,6 @@
 import type { AudioContentAnalysis } from '../../audioAnalysis/contentAnalysis'
 import type { ShaderGraphCustomShader, ShaderGraphSpec } from '../shaderGraph/spec'
+import type { CodeMotionSample } from './motionSampling'
 /** Closed author languages. These data structures contain no executable host values. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ sourceBytes: 65536, astNodes: 8192, depth: 64, cpuOperations: 20000, draws: 256, parameters: 32, filterScalarOperations: 128, filterSamples: 4, stringLength: 4096, textCharacters: 8192 })
 /** Work ceilings for the explicit v3 language; resident pixels remain separately budgeted by the GPU host.
@@ -94,7 +95,7 @@ export type CodeDrawCommand = CodeDrawMetadata & (
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; width: number; color: CodeColor }
   | { kind: 'text'; x: number; y: number; text: string; fontSize: number; color: CodeColor; fontFamily: string; align: 'left' | 'center' | 'right'; fontWeight?: number; fontStyle?: string; baseline?: string; letterSpacing?: number; lineHeight?: number; maxWidth?: number; wrap?: boolean; maxLines?: number; layout?: CodeTextLayout; perChar?: CodeCharacterStyle[] }
   | { kind: 'image'; source: CodeImageReference; x: number; y: number; width: number; height: number; opacity: number }
-  | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; mask?: { shape: CodeDrawCommand | null; mode: 'alpha' | 'luma'; invert: boolean }; clip?: { x: number; y: number; width: number; height: number } }
+  | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; mask?: { shape: CodeDrawCommand | null; mode: 'alpha' | 'luma'; invert: boolean }; clip?: { x: number; y: number; width: number; height: number }; /** Host-only evaluated local placements; never executable author values. */ motionSamples?: CodeMotionSample[] }
   | { kind: 'path'; points: [number, number][][]; closed: boolean; fill: CodeColor }
   | { kind: 'shader'; graph: ShaderGraphSpec; time: number; x: number; y: number; width: number; height: number }
 )

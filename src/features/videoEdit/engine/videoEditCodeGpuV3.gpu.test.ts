@@ -25,6 +25,8 @@ import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { codeMultiply, codeTextBaseBounds, codeTransform } from '@/core/videoEdit/codeMaterial/geometry'
 import { createCanvasOracle } from './videoEditCodeCanvas.testing'
+import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
+import { CodeMotionSamplingBudget, sampleCodeMotion } from '@/core/videoEdit/codeMaterial/motionSampling'
 
 let gpu: Gpu; let device: Gpu['gpu']; let wrapped: GpuDevice; let runtime: VideoEditCodeGpuV3
 let queueSubmissions = 0
@@ -58,6 +60,132 @@ async function read(texture: GpuTexture, width = W, height = H): Promise<Uint8Ar
   buffer.unmap(); buffer.destroy(); return pixels
 }
 const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels.slice((y * W + x) * 4, (y * W + x) * 4 + 4)]
+
+const motionSample = (x: number, y: number, weight: number, opacity = 1): CodeMotionSample => ({ offset: { numerator: 0, denominator: 1 }, pose: { matrix: [1, 0, 0, 1, x, y], opacity }, weight })
+const motionGroup = (samples: CodeMotionSample[]): Extract<CodeDrawCommand, { kind: 'group' }> => ({ kind: 'group', x: 0, y: 0, motionSamples: samples, children: [{ kind: 'rect', x: 0, y: 0, width: 8, height: 8, radius: 0, fill: [1, 0, 0, 128 / 255] }] })
+
+it('运动曝光由正式有界采样器驱动，形成可预测拖影并支持乱序重放', async () => {
+  const output = texture()
+  const samples = (center: number) => sampleCodeMotion({ bounds: { x: 0, y: 0, width: 8, height: 8 }, shutter: { start: { numerator: -1, denominator: 4 }, end: { numerator: 1, denominator: 4 } }, available: { start: { numerator: -10, denominator: 1 }, end: { numerator: 10, denominator: 1 } }, maxSamples: 64, budget: new CodeMotionSamplingBudget(), poseAt: offset => ({ matrix: [1, 0, 0, 1, center + offset.numerator / offset.denominator * 32, 16], opacity: 1 }) })
+  device.pushErrorScope('validation')
+  try {
+    const exposure = samples(16)
+    expect(exposure).toHaveLength(16)
+    await runtime.render(output, W, H, [motionGroup(exposure)])
+    const first = await read(output)
+    expect(pixel(first, 10, 20)).toEqual([20, 0, 0, 20])
+    expect(pixel(first, 16, 20)).toEqual([64, 0, 0, 64])
+    expect(pixel(first, 28, 20)).toEqual([28, 0, 0, 28])
+    expect(pixel(first, 33, 20)).toEqual([0, 0, 0, 0])
+    await runtime.render(output, W, H, [motionGroup(samples(32))])
+    await runtime.render(output, W, H, [motionGroup(samples(16))])
+    expect(await read(output)).toEqual(first)
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') await sharp(Buffer.from(first), { raw: { width: W, height: H, channels: 4 } }).png().toFile('.tmp/motion-gpu-exposure.png')
+  } finally { output.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('运动曝光平均预乘透明色，重叠不会重复source-over；64样本不逐次量化', async () => {
+  const output = texture()
+  device.pushErrorScope('validation')
+  try {
+    await runtime.render(output, W, H, [motionGroup([motionSample(8, 16, .5), motionSample(12, 16, .5)])])
+    const result = await read(output)
+    expect(pixel(result, 10, 20)).toEqual([64, 0, 0, 64])
+    expect(pixel(result, 14, 20)).toEqual([128, 0, 0, 128])
+    expect(pixel(result, 18, 20)).toEqual([64, 0, 0, 64])
+    expect(pixel(result, 21, 20)).toEqual([0, 0, 0, 0])
+    const many = Array.from({ length: 64 }, () => motionSample(8, 16, 1 / 64))
+    await runtime.render(output, W, H, [motionGroup(many)])
+    expect(pixel(await read(output), 10, 20)).toEqual([128, 0, 0, 128])
+    const transparent: CodeMotionSample = { offset: { numerator: 0, denominator: 1 }, pose: null, weight: .5 }
+    await runtime.render(output, W, H, [motionGroup([motionSample(8, 16, .5), transparent])])
+    expect(pixel(await read(output), 10, 20)).toEqual([64, 0, 0, 64])
+  } finally { output.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('运动曝光在分组缓存命中后仍更新位姿，正确叠背景与混合模式', async () => {
+  const output = texture()
+  const background: CodeDrawCommand = { kind: 'rect', x: 0, y: 0, width: W, height: H, radius: 0, fill: [.2, .4, .6, 1] }
+  device.pushErrorScope('validation')
+  try {
+    for (const x of [8, 12, 16, 20]) {
+      const moving = motionGroup([motionSample(x, 16, 1)])
+      moving.elementPath = ['motion-cache']; moving.blend = 'multiply'
+      await runtime.render(output, W, H, [background, moving])
+      const result = await read(output)
+      const expected = codeCompositePixel([.2, .4, .6, 1], [128 / 255, 0, 0, 128 / 255], 'multiply')
+      pixel(result, x + 2, 20).forEach((channel, index) => expect(channel).toBeCloseTo(Math.round(expected[index] * 255), 0))
+      expect(pixel(result, 2, 20)).toEqual([51, 102, 153, 255])
+    }
+    expect(runtime.reuse.subtreeHits).toBeGreaterThan(0)
+    // The frame signature contains exposure placements; returning out of order
+    // must reconstruct the earlier pixels rather than reuse the latest frame.
+    const earlier = motionGroup([motionSample(8, 16, 1)]); earlier.blend = 'multiply'
+    await runtime.render(output, W, H, [background, earlier])
+    expect(pixel(await read(output), 22, 20)).toEqual([51, 102, 153, 255])
+  } finally { output.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('运动曝光不会按中心零透明度剔除，嵌套分组包含拖影范围并遵守局部裁剪', async () => {
+  const output = texture()
+  device.pushErrorScope('validation')
+  try {
+    const inner = motionGroup([motionSample(28, 16, 1)])
+    inner.opacity = 0
+    const outer: CodeDrawCommand = { kind: 'group', x: 4, y: 0, clip: { x: 20, y: 0, width: 12, height: H }, children: [inner] }
+    await runtime.render(output, W, H, [outer])
+    const result = await read(output)
+    expect(pixel(result, 33, 20)).toEqual([128, 0, 0, 128])
+    expect(pixel(result, 37, 20)).toEqual([0, 0, 0, 0])
+  } finally { output.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('运动曝光单个位姿与普通分组合成逐像素一致，旋转与镜像不裁掉运动范围', async () => {
+  const output = texture(), expected = texture()
+  device.pushErrorScope('validation')
+  try {
+    const moving = motionGroup([motionSample(8, 16, 1)])
+    const normal = { ...moving, x: 8, y: 16, motionSamples: undefined }
+    await runtime.render(output, W, H, [moving])
+    await runtime.render(expected, W, H, [normal])
+    expect(await read(output)).toEqual(await read(expected))
+    for (const matrix of [[0, 1, -1, 0, 20, 16], [-1, 0, 0, 1, 20, 16]] as const) {
+      const rotated = motionGroup([{ ...motionSample(0, 0, 1), pose: { matrix: [...matrix], opacity: 1 } }])
+      await runtime.render(output, W, H, [rotated])
+      const result = await read(output)
+      expect(pixel(result, 14, 20)).toEqual([128, 0, 0, 128])
+      expect(pixel(result, 21, 20)).toEqual([0, 0, 0, 0])
+    }
+  } finally { output.destroy(); expected.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('运动曝光沿同一内容纹理采样局部遮罩与裁剪，资源随尺寸变化和释放收回', async () => {
+  const output = texture(), smaller = texture(48, H)
+  const owned = new Set<GpuTexture>()
+  const host = new VideoEditCodeGpuV3(wrapped, { allocate: (w, h) => { const image = texture(w, h); owned.add(image); return image }, release: image => { owned.delete(image); image.destroy() } }, rasterFixture)
+  device.pushErrorScope('validation')
+  try {
+    const moving = motionGroup([motionSample(8, 16, 1)])
+    moving.mask = { shape: { kind: 'rect', x: 0, y: 0, width: 4, height: 8, radius: 0, fill: [1, 1, 1, 1] }, mode: 'alpha', invert: false }
+    for (const width of [64, 48, 64]) {
+      const target = width === 64 ? output : smaller
+      await host.render(target, width, H, [moving])
+      const result = await read(target, width, H)
+      expect([...result.slice((20 * width + 10) * 4, (20 * width + 10) * 4 + 4)]).toEqual([128, 0, 0, 128])
+      expect([...result.slice((20 * width + 14) * 4, (20 * width + 14) * 4 + 4)]).toEqual([0, 0, 0, 0])
+    }
+    expect(owned.size).toBeGreaterThan(0)
+    await host.render(output, W, H, [])
+    expect(pixel(await read(output), 10, 20)).toEqual([0, 0, 0, 0])
+  } finally { output.destroy(); smaller.destroy(); await host.dispose() }
+  expect(owned.size).toBe(0)
+  expect(await device.popErrorScope()).toBeNull()
+})
 
 // Independent oracle: expand perChar into the original individual text draws.
 // This bypasses text batching/source reuse, retaining the same raster and filters.

@@ -5,7 +5,7 @@ import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeBlend, CodeColor, CodeDrawCommand, CodeMatrix, CodePaint } from '@/core/videoEdit/codeMaterial/contract'
-import { CODE_IDENTITY, codeElementBounds, codeLocalBounds, codeMultiply, codeTextBaseBounds, codeTransform } from '@/core/videoEdit/codeMaterial/geometry'
+import { CODE_IDENTITY, codeElementBounds, codeLocalBounds, codeMultiply, codePoint, codeTextBaseBounds, codeTransform } from '@/core/videoEdit/codeMaterial/geometry'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
 import { codeShaderFailure } from './shaderEngines/codeShaderFailure'
@@ -20,6 +20,8 @@ import { isCodeVector, supportsCodeVector } from './videoEditCodeVectorGeometry'
 import { codeHasLiveImage, codeInvisible, codeVisualCommands } from '@/core/videoEdit/codeMaterial/visibility'
 import { CodeReuseProbe } from './videoEditCodeReuse'
 import type { CodeHeavyStructure } from '@/core/videoEdit/codeMaterial/performance'
+import { CODE_MOTION_PIXEL_SAMPLE_BUDGET, CODE_MOTION_UNIFORM_BYTES, CODE_MOTION_WGSL, prepareCodeMotion } from './videoEditCodeMotion'
+import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
 
 interface Image { texture: GpuTexture; width: number; height: number; x: number; y: number; resolution?: number }
 interface CachedImage extends Image { bytes: number; used: boolean; glyph?: boolean }
@@ -122,6 +124,9 @@ export class VideoEditCodeGpuV3 {
   private instanceIndex = 0
   private readonly openPasses = new WeakMap<Encoder, { target: GpuTexture; pass: ReturnType<Encoder['beginRenderPass']> }>()
   private cachedBytes = 0; private uniformIndex = 0
+  private motionIndex = 0
+  private motionPixelSamples = 0
+  private readonly motionUniforms: GpuBuffer[] = []
   private module: unknown; private sampler: unknown; private ready: Promise<void>
   private disposed = false
   private rendering = false
@@ -154,12 +159,18 @@ export class VideoEditCodeGpuV3 {
       this.module = this.device.createShaderModule({ code: shader })
       for (const entry of ['shape', 'textured', 'composite', 'effects', 'tint', 'bright', 'masked']) pipeline(entry, { layout: 'auto', vertex: { module: this.module, entryPoint: 'vs' }, fragment: { module: this.module, entryPoint: entry, targets: [{ format: 'rgba8unorm', ...(['shape', 'textured', 'tint'].includes(entry) ? { blend: normalBlend } : {}) }] }, primitive: { topology: 'triangle-list' } })
       const instanced = this.device.createShaderModule({ code: instanceShader })
+      const motion = this.device.createShaderModule({ code: CODE_MOTION_WGSL })
+      pipeline('motion', { layout: 'auto', vertex: { module: motion, entryPoint: 'vs' }, fragment: { module: motion, entryPoint: 'motion', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
       pipeline('instances', { layout: 'auto', vertex: { module: instanced, entryPoint: 'vs', buffers: [INSTANCE_LAYOUT] }, fragment: { module: instanced, entryPoint: 'shape', targets: [{ format: 'rgba8unorm', blend: normalBlend }] }, primitive: { topology: 'triangle-list' } })
       if (this.nativeVectors) { this.vectors = new CodeVectorGpu(this.device, true); pending.push(this.vectors.ready) }
       const diffusion = this.device.createShaderModule({ code: diffusionSource })
       for (const entry of ['fragment_scatter_downsample', 'fragment_scatter_upsample']) pipeline(entry, { layout: 'auto', vertex: { module: diffusion, entryPoint: 'vertex_main' }, fragment: { module: diffusion, entryPoint: entry, targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
       await Promise.all(pending)
-    } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
+    } catch (error) {
+      const validation = await this.device.popErrorScope().catch(() => null)
+      if (validation) throw new CodeMaterialError('CONTEXT', `v3 GPU 管线失败：${validation.message}`)
+      throw error
+    }
     recordVideoEditPreparation('codePipelines', performance.now() - started)
     const error = await this.device.popErrorScope(); if (error) throw new CodeMaterialError('CONTEXT', `v3 GPU 管线失败：${error.message}`)
   }
@@ -248,6 +259,26 @@ export class VideoEditCodeGpuV3 {
     if (background) entries.push({ binding: 3, resource: background.texture.createView() })
     const pass = this.pass(encoder, target)
     pass.setPipeline(pipeline); pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries })); pass.draw(6)
+  }
+  private motion(encoder: Encoder, image: Image, target: Image, parent: CodeMatrix, samples: readonly CodeMotionSample[], key: string): Image | undefined {
+    const prepared = prepareCodeMotion(image, parent, samples, target.width, target.height, CODE_MOTION_PIXEL_SAMPLE_BUDGET - this.motionPixelSamples)
+    if (!prepared) return undefined
+    this.motionPixelSamples += prepared.pixelSamples
+    const { bounds, data } = prepared
+    const output = this.layer(`${key}:motion`, bounds.width, bounds.height, bounds.x, bounds.y)
+    const index = this.motionIndex++
+    const buffer = this.motionUniforms[index] ??= this.device.createBuffer({ size: CODE_MOTION_UNIFORM_BYTES, usage: 0x08 | 0x40 })
+    this.device.queue.writeBuffer(buffer, 0, data)
+    const pipeline = this.pipelines.get('motion')!
+    this.clear(encoder, output)
+    const pass = this.pass(encoder, output)
+    pass.setPipeline(pipeline)
+    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer, offset: 0, size: CODE_MOTION_UNIFORM_BYTES } },
+      { binding: 1, resource: image.texture.createView() }, { binding: 2, resource: this.sampler },
+    ] }))
+    pass.draw(6)
+    return output
   }
   private instances(encoder: Encoder, target: Image, shapes: { command: Extract<CodeDrawCommand, { kind: 'rect' | 'ellipse' }>; matrix: CodeMatrix; opacity: number }[]): void {
     if (!shapes.length) return
@@ -401,6 +432,31 @@ export class VideoEditCodeGpuV3 {
     return (command.kind === 'rect' || command.kind === 'ellipse') && !command.shadow && !command.glow && !command.blur && (!command.paint || Array.isArray(command.paint)) && !(command.stroke && command.strokeWidth) && !(command.kind === 'rect' && command.radii)
   }
   private groupBounds(children: readonly CodeDrawCommand[]): { x: number; y: number; width: number; height: number } {
+    const containsMotion = (commands: readonly CodeDrawCommand[]): boolean => commands.some(command => command.kind === 'group' && (!!command.motionSamples || containsMotion(command.children)))
+    if (containsMotion(children)) {
+      // Parent rasters include the complete child exposure, even when the child
+      // is transparent/offscreen at the center. Clipping remains group-local.
+      const boxes: Array<{ x: number; y: number; width: number; height: number }> = []
+      for (const command of children) {
+        if (command.kind !== 'group') { boxes.push(this.groupBounds([command])); continue }
+        let box = this.groupBounds(command.children)
+        const pad = Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0)) + 2
+        box = { x: box.x - pad, y: box.y - pad, width: box.width + pad * 2, height: box.height + pad * 2 }
+        if (command.clip) {
+          const x = Math.max(box.x, command.clip.x), y = Math.max(box.y, command.clip.y)
+          box = { x, y, width: Math.max(0, Math.min(box.x + box.width, command.clip.x + command.clip.width) - x), height: Math.max(0, Math.min(box.y + box.height, command.clip.y + command.clip.height) - y) }
+        }
+        const matrices = command.motionSamples ? command.motionSamples.flatMap(sample => sample.pose && sample.pose.opacity > 0 && sample.weight > 0 ? [sample.pose.matrix] : []) : [codeTransform(command)]
+        for (const matrix of matrices) {
+          const points = [[box.x, box.y], [box.x + box.width, box.y], [box.x, box.y + box.height], [box.x + box.width, box.y + box.height]].map(([x, y]) => codePoint(matrix, x, y))
+          const x = Math.min(...points.map(point => point[0])), y = Math.min(...points.map(point => point[1]))
+          boxes.push({ x, y, width: Math.max(...points.map(point => point[0])) - x, height: Math.max(...points.map(point => point[1])) - y })
+        }
+      }
+      if (!boxes.length) return { x: 0, y: 0, width: 0, height: 0 }
+      const x = Math.min(...boxes.map(box => box.x)), y = Math.min(...boxes.map(box => box.y))
+      return { x, y, width: Math.max(...boxes.map(box => box.x + box.width)) - x, height: Math.max(...boxes.map(box => box.y + box.height)) - y }
+    }
     // Flat vector batches need a union, not an element-inspection tree with four transformed
     // corners, source paths and intermediate arrays per primitive. Keep the general path below
     // for nesting, text, effects and transforms; the padding arithmetic is the same as geometry.ts.
@@ -469,7 +525,7 @@ export class VideoEditCodeGpuV3 {
     this.frames.delete(texture)
     const previousGroups = this.groupSignatures.get(texture); const currentGroups = new Map<string, string>()
     const previousProbes = this.groupProbes.get(texture); const currentProbes = new Map<string, CodeReuseProbe>()
-    this.uniformIndex = 0; this.instanceIndex = 0; this.cached.forEach(value => { value.used = false }); this.layers.forEach(value => { value.used = false })
+    this.uniformIndex = 0; this.instanceIndex = 0; this.motionIndex = 0; this.motionPixelSamples = 0; this.cached.forEach(value => { value.used = false }); this.layers.forEach(value => { value.used = false })
     this.glyphResults.forEach(value => { value.used = false })
     this.vectors?.beginFrame()
     const target: Image = { texture, width, height, x: 0, y: 0 }; let encoder = this.device.createCommandEncoder(); this.clear(encoder, target); let count = 0; let shaderCount = 0
@@ -503,9 +559,9 @@ export class VideoEditCodeGpuV3 {
         if (batch.length || batchTarget && batchTarget.texture !== target.texture) flushBatch()
         batchTarget = target; vectors.push({ command, matrix, opacity }); return
       }
-      return drawLayer(command, target, matrix, opacity, command.elementPath?.join('/') ?? command.elementId ?? `draw:${count}`)
+      return drawLayer(command, target, matrix, opacity, command.elementPath?.join('/') ?? command.elementId ?? `draw:${count}`, parent)
     }
-    const drawLayer = async (command: CodeDrawCommand, target: Image, matrix: CodeMatrix, opacity: number, key: string): Promise<void> => {
+    const drawLayer = async (command: CodeDrawCommand, target: Image, matrix: CodeMatrix, opacity: number, key: string, parent: CodeMatrix): Promise<void> => {
       flushBatch()
       if (command.kind === 'text' && command.perChar && command.layout) {
         const layout = command.layout
@@ -539,13 +595,13 @@ export class VideoEditCodeGpuV3 {
         const cacheKey = exact === undefined ? undefined : `subtree:${exact}`
         if (cacheKey) currentGroups.set(key, cacheKey)
         const cached = cacheKey ? this.cached.get(cacheKey) : undefined
-        if (cached) { cached.used = true; this.cached.delete(cacheKey!); this.cached.set(cacheKey!, cached); this.reuse.subtreeHits++; await composite(cached, target, matrix, opacity, command.blend ?? 'normal', key); return }
+        if (cached) { cached.used = true; this.cached.delete(cacheKey!); this.cached.set(cacheKey!, cached); this.reuse.subtreeHits++; await compositeGroup(cached, command, target, parent, matrix, opacity, key); return }
         this.reuse.subtreeMisses++
         const bounds = this.groupBounds(command.children); const pad = Math.ceil(Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0)) + 2)
         const layer = this.layer(`${key}:group`, Math.max(1, Math.ceil(bounds.width + pad * 2)), Math.max(1, Math.ceil(bounds.height + pad * 2)), Math.floor(bounds.x - pad), Math.floor(bounds.y - pad))
         this.clear(encoder, layer)
-        const parent: CodeMatrix = [1, 0, 0, 1, -layer.x, -layer.y]
-        for (const child of command.children) { const pending = draw(child, layer, parent); if (pending) await pending }
+        const contentParent: CodeMatrix = [1, 0, 0, 1, -layer.x, -layer.y]
+        for (const child of command.children) { const pending = draw(child, layer, contentParent); if (pending) await pending }
         flush(); let image = await this.effects(layer, command, key)
         if (command.mask) {
           const mask = this.layer(`${key}:mask`, layer.width, layer.height, layer.x, layer.y)
@@ -578,7 +634,7 @@ export class VideoEditCodeGpuV3 {
             this.cached.set(cacheKey, saved); this.cachedBytes += bytes
           }
         }
-        await composite(image, target, matrix, opacity, command.blend ?? 'normal', key)
+        await compositeGroup(image, command, target, parent, matrix, opacity, key)
         return
       }
       if (command.kind === 'shader') {
@@ -609,6 +665,11 @@ export class VideoEditCodeGpuV3 {
         await composite(await this.effects(layer, command, key), target, matrix, opacity, command.blend ?? 'normal', key); return
       }
       const raster = await this.raster(command, matrix); await composite(raster, target, matrix, opacity, command.blend ?? 'normal', key)
+    }
+    const compositeGroup = async (image: Image, command: Extract<CodeDrawCommand, { kind: 'group' }>, target: Image, parent: CodeMatrix, matrix: CodeMatrix, opacity: number, key: string): Promise<void> => {
+      if (!command.motionSamples) { await composite(image, target, matrix, opacity, command.blend ?? 'normal', key); return }
+      const exposure = this.motion(encoder, image, target, parent, command.motionSamples, key)
+      if (exposure) await composite(exposure, target, CODE_IDENTITY, 1, command.blend ?? 'normal', key)
     }
     const composite = async (image: Image, target: Image, matrix: CodeMatrix, opacity: number, mode: CodeBlend, key: string): Promise<void> => {
       if (mode === 'normal') { this.paint(encoder, target, image, matrix, opacity, 'textured'); return }
@@ -642,6 +703,7 @@ export class VideoEditCodeGpuV3 {
       this.rendering = false
       for (const [key, layer] of this.layers) if (!layer.used || key.startsWith('raster:')) { this.release(layer); this.layers.delete(key) }
       for (const [key, result] of this.glyphResults) if (!result.used) this.glyphResults.delete(key)
+      while (this.motionUniforms.length > this.motionIndex) this.motionUniforms.pop()!.destroy()
       this.pruneGlyphLayers()
       this.ownGraphs?.releaseIdle()
       traceVideoEditFrame('cache.cleanup', -1, cleanupStarted)
@@ -665,6 +727,6 @@ export class VideoEditCodeGpuV3 {
       if (released >= bytes) break
     }
   }
-  diagnostics(): { cachedBytes: number; cachedImages: number; glyphs: number; layers: number; uniformBytes: number; pipelines: number } { return { cachedBytes: this.cachedBytes, cachedImages: this.cached.size, glyphs: [...this.cached.values()].filter(image => image.glyph).length, layers: this.layers.size, uniformBytes: this.uniforms.length * 65536 + this.instanceBuffers.reduce((sum, entry) => sum + entry.data.byteLength, 0) + (this.vectors?.bytes ?? 0), pipelines: this.pipelines.size + (this.vectors ? 2 : 0) } }
-  async dispose(): Promise<void> { this.disposed = true; await this.ready.catch(() => {}); await this.device.queue.onSubmittedWorkDone().catch(() => {}); this.cached.forEach(value => this.release(value)); this.layers.forEach(value => this.release(value)); this.scratch.forEach(value => this.release(value)); this.scratch.length = 0; this.retired.forEach(image => this.allocator.release(image.texture)); this.retired.length = 0; this.uniforms.forEach(arena => arena.buffer.destroy()); this.glyphResults.clear(); this.instanceBuffers.forEach(entry => entry.buffer.destroy()); this.vectors?.dispose(); this.cached.clear(); this.layers.clear(); this.cachedBytes = 0; this.ownGraphs?.dispose() }
+  diagnostics(): { cachedBytes: number; cachedImages: number; glyphs: number; layers: number; uniformBytes: number; pipelines: number } { return { cachedBytes: this.cachedBytes, cachedImages: this.cached.size, glyphs: [...this.cached.values()].filter(image => image.glyph).length, layers: this.layers.size, uniformBytes: this.uniforms.length * 65536 + this.motionUniforms.length * CODE_MOTION_UNIFORM_BYTES + this.instanceBuffers.reduce((sum, entry) => sum + entry.data.byteLength, 0) + (this.vectors?.bytes ?? 0), pipelines: this.pipelines.size + (this.vectors ? 2 : 0) } }
+  async dispose(): Promise<void> { this.disposed = true; await this.ready.catch(() => {}); await this.device.queue.onSubmittedWorkDone().catch(() => {}); this.cached.forEach(value => this.release(value)); this.layers.forEach(value => this.release(value)); this.scratch.forEach(value => this.release(value)); this.scratch.length = 0; this.retired.forEach(image => this.allocator.release(image.texture)); this.retired.length = 0; this.uniforms.forEach(arena => arena.buffer.destroy()); this.motionUniforms.forEach(buffer => buffer.destroy()); this.motionUniforms.length = 0; this.glyphResults.clear(); this.instanceBuffers.forEach(entry => entry.buffer.destroy()); this.vectors?.dispose(); this.cached.clear(); this.layers.clear(); this.cachedBytes = 0; this.ownGraphs?.dispose() }
 }
