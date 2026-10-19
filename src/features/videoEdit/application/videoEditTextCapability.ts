@@ -10,6 +10,7 @@ import { editVideoEditText, restoreVideoEditText } from './videoEditTextEditing'
 import { splitVideoEditRef } from './videoEditReflection'
 import { openVideoEditDocument, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 import { readVideoEditTranscriptQuery } from './videoEditTranscriptQuery'
+import { verifyVideoEditSpeechMediaContent } from '../videoEditMediaContent'
 
 export async function handleVideoEditTextCapability(id: string, raw: unknown, signal?: AbortSignal): Promise<Record<string, unknown> | undefined> {
   if (id === queryVideoEditTranscriptCapability.id) {
@@ -25,7 +26,12 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
     signal?.throwIfAborted()
     await openVideoEditDocument({ id: projectId }, { focus: false })
     signal?.throwIfAborted()
+    const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
     const result = readVideoEditTranscriptQuery(projectId, sequence.childId, { text: input.text, from: input.from, to: input.to, clipId: child(input.clipRef), itemId: child(input.itemRef), source: input.matchSource, contextWords: input.contextWords }, { cursor: input.cursor, limit: input.limit })
+    const composition = videoEditComposition(owner.document, sequence.childId)
+    const voices = new Set(result.matches.filter(match => match.source === 'asr').map(match => match.clipRef?.id).filter(Boolean))
+    await verifyVideoEditSpeechMediaContent(composition, composition.clips.filter(clip => voices.has(`${projectId}:${clip.id}`)), signal)
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new ApplicationPreflightFailure('查询期间时间线已有修改，请重新查询。')
     return { documentRef: input.documentRef, sequenceRef: input.sequenceRef, ...result, message: `找到 ${result.total} 处内容，本次返回 ${result.matches.length} 处；原剪辑改变后请重新查询。` }
   }
   if (id === getVideoEditClipPausesCapability.id) {
@@ -48,7 +54,7 @@ export async function handleVideoEditTextCapability(id: string, raw: unknown, si
   if (definition) {
     const parsed = definition.inputSchema.parse(raw)
     const action = id === 'ripple_delete_video_edit_text' ? 'delete' : id === 'extract_video_edit_text' ? 'extract' : 'insert'
-    const result = editVideoEditText(projectId, sequence.childId, parsed.selector, action, parsed.frame, parsed.name)
+    const result = await editVideoEditText(projectId, sequence.childId, parsed.selector, action, parsed.frame, parsed.name, undefined, signal)
     ranges = result.ranges; resultSequenceId = result.sequenceId; changed = result.changed
   } else {
     const parsed = detectVideoEditTextSilenceCapability.inputSchema.parse(raw)

@@ -40,14 +40,16 @@ export function VideoEditTextPanel({ instance, sequence, onError }: { instance: 
   }
   const selector: VideoEditTextSelector | undefined = pause ? { kind: 'silence' } : from >= 0 ? { kind: 'words', ranges: wordRanges } : undefined
   const operation = (action: 'delete' | 'extract' | 'insert', selected: VideoEditTextSelector | undefined = selector): void => {
-    if (!selected) return
-    try {
-      setError('')
-      const result = editVideoEditText(instance.document.id, sequence.id, selected, action, instance.activeSequenceId === sequence.id ? instance.frame : instance.sequenceViews.get(sequence.id)?.frame ?? 0, undefined, sequence)
+    if (!selected || pending.current) return
+    const controller = new AbortController(); pending.current = controller; setBusy(true); setError('')
+    void editVideoEditText(instance.document.id, sequence.id, selected, action, instance.activeSequenceId === sequence.id ? instance.frame : instance.sequenceViews.get(sequence.id)?.frame ?? 0, undefined, sequence, controller.signal).then(result => {
+      if (current.current.instance !== instance || current.current.sequence.id !== sequence.id) return
       setSelection(undefined); setPause(false)
       if (action === 'extract' && result.changed) switchVideoEditSequence(instance.document.id, result.sequenceId)
       if (!result.changed) setError(selected.kind === 'fillers' ? '没有找到可删除的口头禅。' : '没有找到可删除的静音段，请先检测停顿。')
-    } catch (reason) { report(reason) }
+    }).catch(reason => { if (!controller.signal.aborted) report(reason) }).finally(() => {
+      if (pending.current === controller) { pending.current = undefined; setBusy(false) }
+    })
   }
   const cleanFillers = (): void => {
     const ids = new Set(audioEditFillerBlockIds(visible, composition.textTranscription?.fillers ?? [...DEFAULT_AUDIO_EDIT_SETTINGS.fillers, '啊', '那个']))

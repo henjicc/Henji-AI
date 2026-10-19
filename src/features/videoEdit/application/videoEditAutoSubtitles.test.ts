@@ -42,6 +42,8 @@ const texts = new Map<string, string>(); const files = new Set<string>()
 let owner: VideoEditInstance
 beforeEach(async () => {
   installHarnessNativeStorage(); installPaidApprovalTestBridge(); texts.clear(); files.clear(); boundary.mixes.length = 0; boundary.disposed.mockClear()
+  const fileContent = { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) }
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue(fileContent)
   const system = getPlatform().system
   vi.spyOn(system.paths, 'join').mockImplementation(async (...parts) => parts.join('/'))
   vi.spyOn(system.dialog, 'save').mockResolvedValue('D:/subtitles.henji-video')
@@ -63,7 +65,7 @@ beforeEach(async () => {
   })
   owner = (await createVideoEditProject())!
   editVideoProject(owner.document.id, document => {
-    document.media.push({ id: 'audio', name: '声音', kind: 'audio', path: 'D:/voice.wav', durationSeconds: 12, width: 0, height: 0 })
+    document.media.push({ id: 'audio', name: '声音', kind: 'audio', path: 'D:/voice.wav', durationSeconds: 12, width: 0, height: 0, assetContent: fileContent })
     document.items.push({ id: 'audio-item', name: '声音', kind: 'audio', mediaId: 'audio' })
     document.sequences[0].clips.push({ id: 'voice', itemId: 'audio-item', name: '声音', kind: 'audio', start: 0, duration: 300, track: 0, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' })
     return document
@@ -390,7 +392,7 @@ it('saved word recognition maps through later speed/trim edits and restores from
   await generateVideoEditSubtitles(owner.document.id, sequence().id, audioId)
   expect(owner.past.length).toBe(history + 1)
   expect(videoEditTranscriptWords(videoEditComposition(owner.document, sequence().id))).toMatchObject([{ text: '价格', from: 30, to: 45 }])
-  const excerpt = editVideoEditText(owner.document.id, sequence().id, { kind: 'text', text: '价格' }, 'extract')
+  const excerpt = await editVideoEditText(owner.document.id, sequence().id, { kind: 'text', text: '价格' }, 'extract')
   await restoreVideoEditText(owner.document.id, excerpt.sequenceId, audioId)
   expect(videoEditTranscriptWords(videoEditComposition(owner.document, excerpt.sequenceId))).toMatchObject([{ text: '价格', from: 0, to: 15 }])
   editVideoProject(owner.document.id, document => { document.sequences[0].clips[0] = { ...document.sequences[0].clips[0], sourceInUs: 1000000, duration: 120, speed: { numerator: 2, denominator: 1 } }; return document })

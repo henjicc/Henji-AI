@@ -11,18 +11,24 @@ import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
 import { editVideoProject, editVideoSequence, holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { resolveVideoEditTranscriptMatch } from './videoEditTranscriptQuery'
+import { verifyVideoEditSpeechMediaContent } from '../videoEditMediaContent'
 
 const logger = createLogger('features.videoEdit.textEditing')
 export async function hasSavedVideoEditText(audioDocumentId: string): Promise<boolean> { return Boolean((await loadAudioEditProject(audioDocumentId)).document.transcript.length) }
 export interface VideoEditTextEditResult { ranges: VideoEditTextRange[]; sequenceId: string; changed: boolean }
-export function editVideoEditText(projectId: string, sequenceId: string, selector: VideoEditTextSelector, action: 'delete' | 'extract' | 'insert', frame?: number, name?: string, baseline?: object): VideoEditTextEditResult {
+export async function editVideoEditText(projectId: string, sequenceId: string, selector: VideoEditTextSelector, action: 'delete' | 'extract' | 'insert', frame?: number, name?: string, baseline?: object, signal?: AbortSignal): Promise<VideoEditTextEditResult> {
   const owner = requireVideoEditInstance(projectId); const document = owner.document; const contentVersion = owner.contentVersion
   if (baseline && baseline !== document.sequences.find(sequence => sequence.id === sequenceId)) throw new Error('时间线已有修改，请重新选中文字。')
   const resolved = selector.kind === 'match' ? resolveVideoEditTranscriptMatch(projectId, sequenceId, selector.matchId) : selector
-  const ranges = resolveVideoEditTextRanges(videoEditComposition(document, sequenceId), resolved)
+  const composition = videoEditComposition(document, sequenceId)
+  const ranges = resolveVideoEditTextRanges(composition, resolved)
   if (!ranges.length) return { ranges, sequenceId, changed: false }
   logger.info('文本剪辑开始', { event: 'video_edit.text.edit.start', context: { projectId, sequenceId, action, count: ranges.length } })
+  const release = holdVideoEditActivity(projectId, '核对并剪辑文字')
   try {
+    const clips = composition.clips.filter(clip => ranges.some(range => clip.start < range.to && clip.start + clip.duration > range.from))
+    await verifyVideoEditSpeechMediaContent(composition, clips, signal)
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('核对期间时间线已有修改，请重新选择文字。')
     const metadata = readVideoEditCodeMetadata(owner, document)
     let target = sequenceId
     editVideoProject(projectId, snapshot => {
@@ -36,7 +42,12 @@ export function editVideoEditText(projectId: string, sequenceId: string, selecto
     })
     logger.info('文本剪辑完成', { event: 'video_edit.text.edit.completed', context: { projectId, sequenceId, action, ranges } })
     return { ranges, sequenceId: target, changed: owner.contentVersion !== contentVersion }
-  } catch (error) { logger.error('文本剪辑失败', { event: 'video_edit.text.edit.failed', error, context: { projectId, sequenceId, action } }); throw error }
+  } catch (error) {
+    if (signal?.aborted) logger.info('文本剪辑已取消', { event: 'video_edit.text.edit.cancelled', context: { projectId, sequenceId, action } })
+    else logger.error('文本剪辑失败', error, { event: 'video_edit.text.edit.failed', context: { projectId, sequenceId, action } })
+    throw error
+  }
+  finally { release() }
 }
 
 /** Recover paid ASR results without recognizing again. New manifests preserve the original mix clips. */
@@ -49,6 +60,7 @@ export async function restoreVideoEditText(projectId: string, sequenceId: string
   signal?.addEventListener('abort', cancel, { once: true })
   try {
     signal?.throwIfAborted()
+    await verifyVideoEditSpeechMediaContent(composition, audibleVideoEditClips(composition), signal)
     const known = composition.textTranscription?.audioDocumentIds ?? (composition.textTranscription ? [composition.textTranscription.audioDocumentId] : [])
     const documents = detectSilence && known.length ? known : [audioDocumentId]
     let textTranscription = composition.textTranscription
@@ -70,9 +82,14 @@ export async function restoreVideoEditText(projectId: string, sequenceId: string
       textTranscription = mergeVideoEditTextTranscription(textTranscription, incoming)
     }
     signal?.throwIfAborted()
+    await verifyVideoEditSpeechMediaContent(composition, audibleVideoEditClips(composition), signal)
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('整理期间剪辑已有修改，请重新整理。')
     editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, textTranscription }))
     logger.info('整理转录稿完成', { event: 'video_edit.text.restore.completed', context: { projectId, sequenceId } })
-  } catch (error) { logger.error('整理转录稿失败', { event: 'video_edit.text.restore.failed', error, context: { projectId, sequenceId } }); throw error }
+  } catch (error) {
+    if (signal?.aborted) logger.info('整理转录稿已取消', { event: 'video_edit.text.restore.cancelled', context: { projectId, sequenceId } })
+    else logger.error('整理转录稿失败', error, { event: 'video_edit.text.restore.failed', context: { projectId, sequenceId } })
+    throw error
+  }
   finally { signal?.removeEventListener('abort', cancel); release() }
 }

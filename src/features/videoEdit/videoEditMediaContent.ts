@@ -1,4 +1,4 @@
-import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
+import { audibleVideoEditClips, videoEditClipMedia, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { codeMaterialMediaIds } from '@/core/videoEdit/codeMaterialResources'
 import { getPlatform } from '@/platform/runtime'
 
@@ -23,6 +23,31 @@ export async function verifyVideoEditMediaContent(media: VideoEditMedia, signal?
     signal?.throwIfAborted()
     throw new Error(`素材“${media.name}”的源文件已改变或丢失，请重新定位源素材。`, { cause: error })
   }
+}
+
+/** Text decisions verify the actual sound files, including a nested sequence's master audio.
+ * The caller checks its document snapshot again after this asynchronous boundary. */
+export async function verifyVideoEditSpeechMediaContent(composition: VideoEditComposition, clips: readonly VideoEditClip[], signal?: AbortSignal): Promise<void> {
+  const sources = new Map<string, VideoEditMedia>()
+  const visited = new Set<string>()
+  const collect = (value: VideoEditComposition, selected?: ReadonlySet<string>): void => {
+    if (!selected && visited.has(value.id)) return
+    if (!selected) visited.add(value.id)
+    for (const clip of audibleVideoEditClips(value)) {
+      if (selected && !selected.has(clip.id) || clip.sourceComponent === 'video') continue
+      const nested = videoEditNestedComposition(value, clip)
+      if (nested) { collect(nested); continue }
+      const media = videoEditClipMedia(value, clip)
+      if (media && media.kind !== 'image') sources.set(media.id, media)
+    }
+  }
+  collect(composition, new Set(clips.map(clip => clip.id)))
+  for (const media of sources.values()) {
+    signal?.throwIfAborted()
+    if (!media.assetContent?.contentIdentity) throw new Error(`素材“${media.name}”尚未绑定原文件身份，请先重新定位源素材再按文字剪辑。`)
+    await verifyVideoEditMediaContent(media, signal)
+  }
+  signal?.throwIfAborted()
 }
 
 /** Checks belong to one display/export session, never to a global file cache. */
