@@ -230,6 +230,17 @@ const validator = applicationOutputValidator
 const uncoveredTools: Record<string, string> = {}
 
 describe('外部客户端成功输出 JSON Schema 契约', () => {
+  it('定向连续帧与参考比较的公共输出保留实际帧列表、参考时间和固定作品版本', () => {
+    const name = 'observe_video_edit_frame'; const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)!
+    const comparison = { referenceItemRef: ref('video_edit.item', 'document:reference'), referenceTimesUs: [0, 0, 0] }
+    for (const target of [{ kind: 'frames', sequenceRef, frames: [29, 30, 31] }, { kind: 'near_cut', sequenceRef, cutFrame: 30, before: 1, after: 1 }]) {
+      const data = definition.outputSchema.parse({ ...successData[name], target, comparison, contactSheet: { frames: [29, 30, 31], columns: 4, rows: 2 } }) as Record<string, unknown>
+      const raw = { ok: true, data: capabilityVerificationEnvelope(definition, input, data) }
+      const result = toMcpResult(projectApplicationToolResult(name, input, raw))
+      expect(validator.getValidator(tools.find(tool => tool.name === name)!.outputSchema!)(result.structuredContent)).toMatchObject({ valid: true })
+      expect(result.structuredContent).toMatchObject({ data: { target, comparison, contactSheet: { frames: [29, 30, 31] }, documentVersion: 'host:document:29' } })
+    }
+  })
   it('局部变化区域、复原时间与采样阶段经公共出口完整保留，拒绝未知字段', () => {
     const name = 'query_video_edit_content'; const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)!
     const screenChange = { beforeSeconds: 1, atSeconds: 1.2, lastChangeSeconds: 1.4, returnSeconds: 1.4, settledSeconds: 1.6,

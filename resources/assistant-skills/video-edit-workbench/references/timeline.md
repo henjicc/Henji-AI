@@ -38,4 +38,6 @@
 
 ## 修改后核对
 
+定向看片沿 `observe_video_edit_frame`：target.kind="frames" 给1–12个 frames，去重排序；near_cut 给 cutFrame（切入后第一帧）、before/after（各0–5，默认各2），连续取帧并限制在序列首尾。临时放大直接给 cropRegion={x,y,width,height}（归一化且完整在画面内），支持源帧、合成帧和联系表，无需创建标注；与 cropAnnotationId 二选一。reference={itemRef,offsetUs?} 取同一剪辑内的参考图片/视频与成片并排，左成片右参考；视频参考时间为成片秒数加微秒偏移，图片始终取0，检查返回 comparison.referenceTimesUs。联系表与比较只叠 cropRegion，不叠标注或元素高亮。先检查 contactSheet.frames 和 documentVersion，再读取资产图片；观察期间编辑、关闭或参考文件变化会拒绝旧结果，不移动播放头或改作品。均匀联系表不能证明不存在闪帧，切点优先连续看。
+
 回读所属序列、位置、时长、源范围、轨道与关联；涉及时间变化同时查字幕、标记和相邻片段。同目的修改进一组事务，跨返回引用分步骤。回滚前确认最近一步就是本次修改，避免撤销用户后来做的事；保存失败用 `save_video_edit` 只重试保存，不重放剪辑。

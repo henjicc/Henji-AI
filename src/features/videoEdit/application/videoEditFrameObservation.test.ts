@@ -17,6 +17,8 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
 import { videoEditContactSheetLayout } from './videoEditContactSheet'
 import { videoEditComposition } from '@/core/videoEdit/document'
+import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
+import { observeVideoEditFrame } from './videoEditFrameObservation'
 
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.
@@ -73,6 +75,107 @@ it('联系表经公共能力输出按时间顺序的网格和时间码，只发�
     const crowded = await app.call('observe_video_edit_frame', { ...input, target: { ...input.target, endFrame: 1, frameCount: 3 } })
     expect(crowded.ok).toBe(false); expect(JSON.stringify(crowded)).toContain('frameCount')
     expect(render.calls).toHaveLength(5)
+  } finally { app.dispose() }
+})
+
+async function inspectionFixture() {
+  const owner = await createVideoEditProject(); const id = owner.document.id
+  appendVideoEditMedia(id, { id: 'inspection-video', name: '原片', path: '/inspection.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 5 })
+  appendVideoEditClip(id, 'inspection-video'); setVideoEditView(id, { frame: 12 })
+  return { owner, id, documentRef: { kind: 'video_edit.document', id } }
+}
+it('任意帧列表和切点连续帧经同一观察入口，去重排序、不改播放头和文档', async () => {
+  const { owner, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  const document = structuredClone(owner.document); const history = owner.past.length
+  try {
+    const list = await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'frames', frames: [61, 59, 60, 59] } })
+    expect(list).toMatchObject({ contactSheet: { frames: [59, 60, 61] } })
+    const near = await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'near_cut', cutFrame: 60, before: 2, after: 1 } })
+    expect(near).toMatchObject({ contactSheet: { frames: [58, 59, 60, 61] }, documentVersion: list.documentVersion })
+    const first = await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'near_cut', cutFrame: 0 } })
+    expect(first).toMatchObject({ contactSheet: { frames: [0, 1, 2] } })
+    expect(render.calls.map(call => call.frame)).toEqual([59, 60, 61, 58, 59, 60, 61, 0, 1, 2])
+    expect(owner.frame).toBe(12); expect(owner.document).toEqual(document); expect(owner.past.length).toBe(history)
+  } finally { app.dispose() }
+})
+it('临时区域直接裁切合成和源画面，无需创建标注，联系表也复用同一裁切', async () => {
+  const { owner, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  const document = structuredClone(owner.document); const cropRegion = { x: .25, y: .25, width: .5, height: .5 }
+  try {
+    const program = await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'program', frame: 1 }, cropRegion, maxWidth: 960 })
+    expect(program).toMatchObject({ width: 960, height: 540, sourceWidth: 1920, sourceHeight: 1080 })
+    expect(drawn[0]).toEqual([480, 270, 960, 540, 0, 0, 960, 540])
+    const item = owner.document.items.find(item => item.mediaId === 'inspection-video')!
+    await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'source', itemRef: { kind: 'video_edit.item', id: `${owner.document.id}:${item.id}` }, timeUs: 1000000 }, cropRegion, maxWidth: 960 })
+    expect(drawn[1]).toEqual(drawn[0])
+    await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'frames', frames: [0, 1] }, cropRegion, maxWidth: 960 })
+    expect(drawn.slice(2).every(args => args.slice(0, 4).join() === '480,270,960,540')).toBe(true)
+    expect(owner.document).toEqual(document)
+  } finally { app.dispose() }
+})
+it('参考视频按成片时间加偏移逐帧并排，保持画幅、固定版本和实际源时间', async () => {
+  const { owner, id, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  appendVideoEditMedia(id, { id: 'reference-video', name: '参考片', path: '/reference.mp4', kind: 'video', width: 1080, height: 1920, durationSeconds: 5, assetId: 'reference-asset', assetContent: { sizeBytes: 100, fileModifiedAt: 1 } })
+  const item = owner.document.items.find(item => item.mediaId === 'reference-video')!
+  const reference = { itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` }, offsetUs: 500000 }
+  const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ contentIdentity: 'reference', sizeBytes: 100, fileModifiedAt: 1 })
+  const document = structuredClone(owner.document)
+  try {
+    const result = await app.requireResult('observe_video_edit_frame', { documentRef, target: { kind: 'frames', frames: [0, 30] }, reference, maxWidth: 960 })
+    expect(result).toMatchObject({ width: 960, height: 135, comparison: { referenceItemRef: reference.itemRef, referenceTimesUs: [500000, 1500000] }, contactSheet: { frames: [0, 30], columns: 4, rows: 1 } })
+    expect(render.calls.map(call => call.frame)).toEqual([0, 0, 30, 0])
+    expect(render.calls[1].document.clips[0].sourceInUs).toBe(500000)
+    expect(render.calls[1].document.media[0].sourceRevision).toBe('observe:reference')
+    expect(render.calls[3].document.clips[0].sourceInUs).toBe(1500000)
+    expect(drawn[1]).toEqual([322.03125, 0, 75.9375, 135])
+    expect(pixels.labels).toContain('参考 0.500 s'); expect(inspect).toHaveBeenCalledTimes(3)
+    expect(owner.document).toEqual(document); expect(owner.frame).toBe(12)
+  } finally { app.dispose() }
+})
+it('参考素材在渲染期间改变则拒绝旧比较，不发布图片', async () => {
+  const { owner, id, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  const item = owner.document.items.find(item => item.mediaId === 'inspection-video')!
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent')
+    .mockResolvedValueOnce({ contentIdentity: 'before', sizeBytes: 100, fileModifiedAt: 1 })
+    .mockResolvedValue({ contentIdentity: 'after', sizeBytes: 101, fileModifiedAt: 2 })
+  try {
+    const result = await app.call('observe_video_edit_frame', { documentRef, target: { kind: 'program', frame: 30 }, reference: { itemRef: { kind: 'video_edit.item', id: `${id}:${item.id}` } } })
+    expect(JSON.stringify(result)).toContain('参考素材已改变'); expect(assets.size).toBe(0)
+  } finally { app.dispose() }
+})
+it('非法区域、越界帧、跨文档参考和冲突选项明确拒绝，不渲染', async () => {
+  const { documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  try {
+    for (const input of [
+      { target: { kind: 'frames', frames: [99999] } }, { target: { kind: 'frames', frames: [] } },
+      { target: { kind: 'near_cut', cutFrame: 99999 } }, { target: { kind: 'near_cut', cutFrame: 1, before: 6 } },
+      { target: { kind: 'program', frame: 1 }, cropRegion: { x: .8, y: 0, width: .5, height: .5 } },
+      { target: { kind: 'program', frame: 1 }, cropRegion: { x: 1, y: 0, width: 1e-12, height: .5 } },
+      { target: { kind: 'program', frame: 1 }, cropRegion: { x: 0, y: 0, width: .5, height: .5 }, cropAnnotationId: 'mark' },
+      { target: { kind: 'program', frame: 1 }, reference: { itemRef: { kind: 'video_edit.item', id: 'other:item' } } },
+      { target: { kind: 'frames', frames: [0] }, overlayAnnotations: true },
+    ]) expect((await app.call('observe_video_edit_frame', { documentRef, ...input })).ok).toBe(false)
+    expect(render.calls).toHaveLength(0); expect(assets.size).toBe(0)
+  } finally { app.dispose() }
+})
+it('单帧与联系表都拒绝渲染期间改变的作品，取消及落盘期间修改不发布迟到资产', async () => {
+  const { id, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  try {
+    for (const target of [{ kind: 'program', frame: 0 }, { kind: 'frames', frames: [0, 1] }]) {
+      vi.mocked(trialVideoEditCodeFrames).mockImplementationOnce(async inputs => {
+        editVideoProject(id, document => ({ ...document, name: document.name + '修改' }))
+        return { width: inputs[0].document.width, height: inputs[0].document.height, close: vi.fn() } as unknown as ImageBitmap
+      })
+      const result = await app.call('observe_video_edit_frame', { documentRef, target })
+      expect(JSON.stringify(result)).toContain('观察期间剪辑已改变')
+    }
+    const controller = new AbortController(); controller.abort(new Error('取消观察'))
+    await expect(observeVideoEditFrame(id, { kind: 'program', frame: 0 }, 960, controller.signal)).rejects.toThrow('取消观察')
+    vi.mocked(getPlatform().image.persistImageBinary).mockImplementationOnce(async () => {
+      editVideoProject(id, document => ({ ...document, name: document.name + '落盘修改' })); return '/late.png'
+    })
+    expect((await app.call('observe_video_edit_frame', { documentRef, target: { kind: 'program', frame: 0 } })).ok).toBe(false)
+    expect(assets.size).toBe(0)
   } finally { app.dispose() }
 })
 
