@@ -22,6 +22,7 @@ import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { queryVideoEditReview } from './videoEditReview'
 import * as tracking from './videoEditTracking'
 import { videoEditObservationVersion } from './videoEditObservationVersion'
+import { invalidateCodeTextMetrics } from '../videoEditGlyphMetrics'
 
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.
@@ -104,6 +105,21 @@ it('检查计划直接交给取帧，编辑后拒绝旧版本且不启动渲染'
     const refreshed = await queryVideoEditReview({ documentRef, sequenceRef, from: 0, to: 90 }, { signal: new AbortController().signal })
     const recovered = await app.requireResult('observe_video_edit_frame', { ...input, documentVersion: refreshed.documentVersion, target: { kind: 'frames', sequenceRef, frames: (refreshed.checkpoints as { frames: number[] }).frames } })
     expect(recovered.documentVersion).toBe(refreshed.documentVersion)
+  } finally { app.dispose() }
+})
+it('font changes invalidate the inspection-to-observation plan even without a document edit', async () => {
+  const { owner, documentRef } = await inspectionFixture(), app = createApplicationHarness()
+  const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.activeSequenceId}` }
+  try {
+    const plan = await queryVideoEditReview({ documentRef, sequenceRef, from: 0, to: 90 }, { signal: new AbortController().signal })
+    const rendered = render.calls.length, revision = owner.document.revision
+    invalidateCodeTextMetrics()
+    const stale = await app.call('observe_video_edit_frame', { documentRef, documentVersion: plan.documentVersion, target: { kind: 'frames', sequenceRef, frames: (plan.checkpoints as { frames: number[] }).frames } })
+    expect(stale.ok).toBe(false); expect(JSON.stringify(stale)).toContain('重新查询检查点')
+    expect(render.calls).toHaveLength(rendered); expect(owner.document.revision).toBe(revision)
+    const fresh = await queryVideoEditReview({ documentRef, sequenceRef, from: 0, to: 90 }, { signal: new AbortController().signal })
+    const observed = await app.requireResult('observe_video_edit_frame', { documentRef, documentVersion: fresh.documentVersion, target: { kind: 'frames', sequenceRef, frames: (fresh.checkpoints as { frames: number[] }).frames } })
+    expect(observed.documentVersion).toBe(fresh.documentVersion)
   } finally { app.dispose() }
 })
 it('作品未编辑但已有跟踪结果更新时也拒绝旧观察计划，进度单独变化不影响版本', async () => {

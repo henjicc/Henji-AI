@@ -16,6 +16,11 @@ import * as trackReader from '../engine/videoEditTrackResults'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { collectVideoEditMotionStructure } from '@/core/videoEdit/motionStructure'
+import { collectVideoEditCodeMotion } from '@/core/videoEdit/codeMotionReview'
+import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
+import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
+import { invalidateCodeTextMetrics, measureCodeText } from '../videoEditGlyphMetrics'
 import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
 
 class MotionWorker {
@@ -27,8 +32,15 @@ class MotionWorker {
   terminate = vi.fn()
   request!: VideoEditMotionReviewRequest
   constructor() { MotionWorker.instances.push(this) }
-  postMessage(request: VideoEditMotionReviewRequest): void { this.request = request; if (MotionWorker.automatic) queueMicrotask(() => this.respond()) }
-  respond(): void { this.onmessage?.({ data: { result: collectVideoEditMotionStructure(this.request.composition, this.request.range, this.request.policy) } } as MessageEvent<VideoEditMotionReviewResponse>) }
+  postMessage(request: VideoEditMotionReviewRequest): void { this.request = request; if (MotionWorker.automatic) queueMicrotask(() => { void this.respond() }) }
+  async respond(): Promise<void> {
+    try {
+      const { composition, range, policy, programs } = this.request
+      const result = collectVideoEditMotionStructure(composition, range, policy)
+      if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, measureCodeText)).records)
+      this.onmessage?.({ data: { result } } as MessageEvent<VideoEditMotionReviewResponse>)
+    } catch (error) { this.onmessage?.({ data: { error: error instanceof Error ? error.message : '分析失败' } } as MessageEvent<VideoEditMotionReviewResponse>) }
+  }
 }
 
 const parse = queryVideoEditReviewCapability.outputSchema.parse
@@ -59,6 +71,40 @@ async function fixture() {
   })
   return { owner, input: { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequenceId}` }, from: 0, to: 120 } }
 }
+async function codeFixture() {
+  const data = await fixture(), { owner } = data
+  const source = 'export default {apiVersion:1,languageVersion:3,name:"代码复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:10,seed:0,parameters:{},render(ctx){return [rect({id:"moving",x:min(ctx.time,1)*300,y:10,width:100,height:100})];}}'
+  const version = { id: 'code-v', apiVersion: 1 as const, languageVersion: 3 as const, ...testCodeManifest(source, owner.document) }
+  rememberVideoEditCodeMetadata(owner, 'code-d', version, compileCodeMaterial(source))
+  editVideoProject(owner.document.id, document => {
+    document.codeMaterials = [{ id: 'code-d', name: '代码复核', defaultVersionId: version.id, versions: [version] }]
+    document.items.push({ id: 'code-item', name: '代码复核', kind: 'code', code: { definitionId: 'code-d', versionId: version.id, parameters: {} } })
+    document.sequences[0].clips.push(makeVideoEditItemClip(document, 'code-item', document.sequences[0].id, { frame: 0, duration: 120 }, readVideoEditCodeMetadata(owner, document)))
+    return document
+  })
+  MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
+  return data
+}
+it('public review reuses the checked author IR, returns code element evidence, and protects paged results from font changes', async () => {
+  const { owner, input } = await codeFixture(), app = createApplicationHarness()
+  const before = structuredClone(owner.document), past = owner.past.length, frame = owner.frame
+  try {
+    const first = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 50 }))
+    expect(first.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', motionEvidence: expect.objectContaining({ basis: 'code_structure', elementPath: ['moving/0'], peakSpeed: expect.closeTo(30, 4) }) })]))
+    expect(MotionWorker.instances).toHaveLength(1)
+    expect(MotionWorker.instances[0].request.programs).toHaveProperty('code-v.languageVersion', 3)
+    const page = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 1 }))
+    invalidateCodeTextMetrics()
+    await expect(queryVideoEditReview({ ...input, motion: {}, limit: 1, cursor: page.nextCursor }, context())).rejects.toThrow('失效')
+    expect(owner.document).toEqual(before); expect(owner.past.length).toBe(past); expect(owner.frame).toBe(frame)
+  } finally { app.dispose() }
+})
+it('rejects a code review whose font set changed while the real domain calculation was pending', async () => {
+  const { input } = await codeFixture(); MotionWorker.automatic = false
+  const pending = queryVideoEditReview({ ...input, motion: {} }, context())
+  const rejected = expect(pending).rejects.toThrow('字体已改变')
+  invalidateCodeTextMetrics(); await MotionWorker.instances[0].respond(); await rejected
+})
 it('public native-motion review returns frame-bound evidence and local suggestions without editing the work, and pages reuse the finished computation', async () => {
   const { owner, input } = await fixture(); const app = createApplicationHarness()
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)

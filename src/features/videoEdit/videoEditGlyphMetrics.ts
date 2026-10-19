@@ -55,9 +55,13 @@ const layouts = new Map<string, { layout: CodeTextLayout; bytes: number }>(); le
 let fontGeneration = 0
 /** t63 calls this after loading/importing fonts; missing-font results must never survive a font-set change. */
 export function invalidateCodeTextMetrics(): void { fontGeneration++; layouts.clear(); layoutBytes = 0; cache.clear(); cacheBytes = 0 }
+export function codeTextFontGeneration(): number {
+  if (typeof OffscreenCanvas === 'function' && canvasConstructor !== OffscreenCanvas) { invalidateCodeTextMetrics(); canvasConstructor = OffscreenCanvas; measure = undefined }
+  return fontGeneration
+}
 export function measureCodeText(request: CodeTextMeasureRequest): CodeTextLayout {
   if (typeof OffscreenCanvas !== 'function') throw new CodeMaterialError('CONTEXT', '当前环境无法测量文字字形。')
-  if (canvasConstructor !== OffscreenCanvas) { invalidateCodeTextMetrics(); canvasConstructor = OffscreenCanvas; measure = undefined }
+  codeTextFontGeneration()
   const key = JSON.stringify(request); const cached = layouts.get(key)
   if (cached) { layouts.delete(key); layouts.set(key, cached); return cached.layout }
   measure ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined

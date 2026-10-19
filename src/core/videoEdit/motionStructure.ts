@@ -5,7 +5,7 @@ import { videoEditSourceMapLocalFrame, visitVideoEditPictureInstances, type Vide
 import type { VideoEditComposition } from './document'
 
 export const VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET = 60000
-export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold'
+export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold' | 'code_change' | 'code_unavailable'
 export interface VideoEditMotionStructureFact {
   kind: VideoEditMotionStructureKind
   timeline: VideoEditSourceMapRange
@@ -13,8 +13,40 @@ export interface VideoEditMotionStructureFact {
   path: VideoEditSourceMapEntry['path']
   subjectId: string
   peakSpeed?: number
+  elementPath?: string[]
+  basis?: 'clip_transform' | 'code_structure'
+  detail?: string
 }
 export interface VideoEditMotionStructureResult { records: VideoEditMotionStructureFact[]; sampledFrames: number; sampledInstances: number }
+
+/** Shared event-to-frame conversion; exact structural jumps survive camera filters. */
+export function videoEditMotionSampleFacts(samples: readonly MotionReviewSample[], base: Pick<VideoEditMotionStructureFact, 'sequenceId' | 'path' | 'subjectId' | 'basis' | 'elementPath'>, timeline: VideoEditSourceMapRange, fps: number, policy: MotionReviewPolicy = {}, includeHolds = true): VideoEditMotionStructureFact[] {
+  const report = reviewMotionSamples(samples, policy), records: VideoEditMotionStructureFact[] = [], covered = new Set<number>()
+  const map = (fromSeconds: number, toSeconds: number): VideoEditSourceMapRange => ({ from: Math.max(timeline.from, Math.round(fromSeconds * fps)), to: Math.min(timeline.to, Math.round(toSeconds * fps)) })
+  for (const event of report.events) {
+    if (event.kind === 'change') { records.push({ ...base, kind: 'code_change', timeline: map(event.fromSeconds, event.toSeconds) }); continue }
+    if (event.kind !== 'move') continue
+    const range = map(event.fromSeconds, event.toSeconds)
+    for (let frame = range.from; frame < range.to; frame++) covered.add(frame)
+    records.push({ ...base, kind: 'motion', timeline: range, peakSpeed: event.peak })
+    if (event.hardStop) {
+      const end = Math.round(event.toSeconds * fps)
+      records.push({ ...base, kind: 'motion_hard_stop', timeline: { from: Math.max(timeline.from, end - 1), to: Math.min(timeline.to, end + 1) }, peakSpeed: event.peak })
+    }
+  }
+  let short: VideoEditMotionStructureFact | undefined
+  for (const sample of samples) {
+    const speed = sample.speed, frame = Math.round(sample.fromSeconds * fps)
+    if (speed === null || speed < 2.5 || covered.has(frame)) { short = undefined; continue }
+    if (short && short.timeline.to === frame) { short.timeline.to = frame + 1; short.peakSpeed = Math.max(short.peakSpeed!, speed) }
+    else {
+      short = { ...base, kind: 'motion', timeline: { from: Math.max(timeline.from, frame - 1), to: Math.min(timeline.to, frame + 1) }, peakSpeed: speed }
+      records.push(short)
+    }
+  }
+  if (includeHolds) for (const hold of report.stillness) records.push({ ...base, kind: 'motion_hold', timeline: map(hold.fromSeconds, hold.toSeconds) })
+  return records
+}
 
 /** Native placement evidence only. A held transform says nothing about pixels,
  * tracking, code animation, fades or source-video movement; do not call it a still image. */
@@ -49,35 +81,8 @@ export function collectVideoEditMotionStructure(root: VideoEditComposition, rang
         change: 0, cut: false, still: speed === null ? null : speed < 1e-8 })
       previous = current; previousScale = current.scale
     }
-    const report = reviewMotionSamples(samples, policy)
-    const map = (fromSeconds: number, toSeconds: number): VideoEditSourceMapRange => ({
-      from: Math.max(entry.timeline.from, Math.round(fromSeconds * root.fps)), to: Math.min(entry.timeline.to, Math.round(toSeconds * root.fps)),
-    })
     const base = { sequenceId: local.id, path: entry.path, subjectId: step.clipId }
-    const covered = new Set<number>()
-    for (const event of report.events) if (event.kind === 'move') {
-      const timeline = map(event.fromSeconds, event.toSeconds)
-      for (let frame = timeline.from; frame < timeline.to; frame++) covered.add(frame)
-      records.push({ ...base, kind: 'motion', timeline, peakSpeed: event.peak })
-      if (event.hardStop) {
-        const end = Math.round(event.toSeconds * root.fps)
-        records.push({ ...base, kind: 'motion_hard_stop', timeline: { from: Math.max(entry.timeline.from, end - 1), to: Math.min(entry.timeline.to, end + 1) }, peakSpeed: event.peak })
-      }
-    }
-    // The camera-move duration/median filters intentionally reject isolated pixel
-    // estimates. Native geometry is exact: keep short jumps as candidates instead
-    // of dropping a one-frame hold-keyframe discontinuity. Do not call it a hard stop.
-    let short: VideoEditMotionStructureFact | undefined
-    for (let i = 1; i < samples.length; i++) {
-      const speed = samples[i].speed!, frame = entry.timeline.from + i
-      if (speed < 2.5 || covered.has(frame)) { short = undefined; continue }
-      if (short && short.timeline.to === frame) { short.timeline.to = frame + 1; short.peakSpeed = Math.max(short.peakSpeed!, speed) }
-      else {
-        short = { ...base, kind: 'motion', timeline: { from: frame - 1, to: frame + 1 }, peakSpeed: speed }
-        records.push(short)
-      }
-    }
-    for (const hold of report.stillness) records.push({ ...base, kind: 'motion_hold', timeline: map(hold.fromSeconds, hold.toSeconds) })
+    records.push(...videoEditMotionSampleFacts(samples, base, entry.timeline, root.fps, policy))
   }
   return { records, sampledFrames, sampledInstances: jobs.length }
 }

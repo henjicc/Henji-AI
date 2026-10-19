@@ -6,7 +6,7 @@ import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from '../../../videoEdit/time'
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const range = z.object({ fromFrame: frame, toFrame: frame }).strict().refine(value => value.toFrame >= value.fromFrame, '检查范围不能倒置。')
-const kind = z.enum(['caption', 'clip_boundary', 'effect', 'transition', 'tracking_lost', 'tracking_low_confidence', 'tracking_uncovered', 'tracking_unavailable', 'motion', 'motion_hard_stop', 'motion_hold', 'event_crowded'])
+const kind = z.enum(['caption', 'clip_boundary', 'effect', 'transition', 'tracking_lost', 'tracking_low_confidence', 'tracking_uncovered', 'tracking_unavailable', 'motion', 'motion_hard_stop', 'motion_hold', 'event_crowded', 'code_change', 'code_unavailable'])
 const sourceRange = z.object({ fromUs: z.number().finite().nonnegative(), toUs: z.number().finite().nonnegative() }).strict()
 export const queryVideoEditReviewCapability = defineApplicationCapability({
   id: 'query_video_edit_review', version: 1, domain: 'video_edit', title: '选择剪辑检查点与运动、跟踪复核区间',
@@ -14,14 +14,14 @@ export const queryVideoEditReviewCapability = defineApplicationCapability({
   aliases: ['自动看片位置', '跟踪复核', '剪辑检查点'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false,
   timeoutMs: 60000, supportsPreview: false, supportsUndo: false, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence'], producesRefs: ['video_edit.clip', 'video_edit.tracker', 'video_edit.caption', 'video_edit.effect', 'video_edit.transition'],
   inputSchema: z.object({ documentRef: ref('video_edit.document'), sequenceRef: ref('video_edit.sequence'), from: frame, to: frame, threshold: z.number().finite().min(0).max(1).default(.5), maxFrames: z.number().int().min(1).max(12).default(8), limit: z.number().int().min(1).max(50).default(20), cursor: z.string().min(1).max(100).optional(),
-    motion: z.object({ minGapSeconds: z.number().finite().min(0).max(30).default(1.5), minimumHoldSeconds: z.number().finite().min(0).max(60).default(1) }).strict().optional().describe('显式启用片段原生变换结构复核；间隔按风格调整，保持不代表画面静止；本项不分析视频像素或代码内部动画。'),
+    motion: z.object({ minGapSeconds: z.number().finite().min(0).max(30).default(1.5), minimumHoldSeconds: z.number().finite().min(0).max(60).default(1) }).strict().optional().describe('启用原生变换及代码内部元素结构复核；elementPath 定位代码元素，父组动作去重。代码文字使用正式字体度量；字体变化后重新查询。保持不代表像素静止，视频、着色器、声音驱动及代码滤镜的内部结果仍需看图复核；按风格调整间隔。'),
   }).strict().refine(value => value.to > value.from, 'to 必须大于 from。'),
   outputSchema: z.object({ documentRef: ref('video_edit.document'), sequenceRef: ref('video_edit.sequence'), documentVersion: z.string().min(1), range,
     checkpoints: z.object({ frames: z.array(frame).max(12), selection: z.literal('prioritized_sample') }).strict(),
     records: z.array(z.object({ kind, timeline: range, sequenceRef: ref('video_edit.sequence'), subjectRef: applicationRefSchema,
       path: z.array(z.object({ sequenceRef: ref('video_edit.sequence'), clipRef: ref('video_edit.clip') }).strict()).max(8),
       confidence: z.number().finite().min(0).max(1).optional(), source: sourceRange.optional(),
-      motionEvidence: z.object({ basis: z.enum(['clip_transform', 'structural_events']), peakSpeed: z.number().finite().nonnegative().optional(), gapSeconds: z.number().finite().nonnegative().optional(), suggestion: z.string().min(1).max(1000) }).strict().optional(),
+      motionEvidence: z.object({ basis: z.enum(['clip_transform', 'structural_events', 'code_structure']), elementPath: z.array(z.string().min(1)).optional(), peakSpeed: z.number().finite().nonnegative().optional(), gapSeconds: z.number().finite().nonnegative().optional(), suggestion: z.string().min(1).max(1000) }).strict().optional(),
     }).strict()).max(50), total: z.number().int().nonnegative(), nextCursor: z.string().nullable(), warnings: z.array(z.string()).max(20), message: z.string(),
   }).strict(),
   resolveOperationTargets: input => [input.documentRef, input.sequenceRef], resolveOperationWriteTargets: () => [],

@@ -5,7 +5,7 @@ import { videoEditTrackFrameTime, type VideoEditTrackHeader } from './tracking'
 import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 import { activeVideoEditEffects } from './compositing'
 
-export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded'
+export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable'
 export interface VideoEditReviewRecord {
   kind: VideoEditReviewKind
   timeline: VideoEditSourceMapRange
@@ -15,7 +15,7 @@ export interface VideoEditReviewRecord {
   subjectType?: 'video_edit.clip' | 'video_edit.effect'
   confidence?: number
   source?: { fromUs: number; toUs: number }
-  motionEvidence?: { basis: 'clip_transform' | 'structural_events'; peakSpeed?: number; gapSeconds?: number; suggestion: string }
+  motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string }
 }
 export interface VideoEditReviewStructure { records: VideoEditReviewRecord[]; tracking: Array<{ composition: VideoEditComposition; entry: VideoEditSourceMapEntry }> }
 /** Heuristic attention-event grouping; neither the count nor the gap is an aesthetic verdict. */
@@ -23,15 +23,29 @@ export function videoEditCrowdedReviewEvents(records: readonly VideoEditReviewRe
   const events: VideoEditReviewRecord[] = []
   const lastByElement = new Map<string, VideoEditReviewRecord>()
   const cuts = new Set<string>()
+  const instanceKey = (record: VideoEditReviewRecord): string => JSON.stringify([record.sequenceId, record.path.map(step => step.clipId)])
+  const cutKey = (record: VideoEditReviewRecord): string => JSON.stringify([record.path.slice(0, -1).map(step => step.clipId), record.sequenceId, record.timeline.from])
+  const codeTimes = new Map<string, number[]>()
+  for (const record of records) if (record.motionEvidence?.basis === 'code_structure' && ['motion', 'code_change'].includes(record.kind)) {
+    const key = instanceKey(record), times = codeTimes.get(key) ?? []; times.push(record.timeline.from); codeTimes.set(key, times)
+  }
+  for (const times of codeTimes.values()) times.sort((a, b) => a - b)
+  const representedCuts = new Set<string>()
+  for (const record of records) if (record.kind === 'clip_boundary') {
+    const times = codeTimes.get(instanceKey(record)) ?? []
+    let low = 0, high = times.length
+    while (low < high) { const middle = (low + high) >>> 1; if (times[middle] < record.timeline.from) low = middle + 1; else high = middle }
+    if (low < times.length && times[low] - record.timeline.from <= .6 * fps) representedCuts.add(cutKey(record))
+  }
   for (const record of [...records].sort((a, b) => a.timeline.from - b.timeline.from)) {
-    if (!['caption', 'clip_boundary', 'effect', 'transition', 'motion', 'motion_hard_stop'].includes(record.kind)) continue
+    if (!['caption', 'clip_boundary', 'effect', 'transition', 'motion', 'motion_hard_stop', 'code_change'].includes(record.kind)) continue
     const key = record.kind === 'caption' || record.kind === 'transition' ? JSON.stringify([record.kind, record.sequenceId, record.subjectId, record.path.map(step => step.clipId)])
-      : JSON.stringify(['element', record.sequenceId, record.path.map(step => step.clipId)])
+      : JSON.stringify(['element', record.sequenceId, record.path.map(step => step.clipId), record.motionEvidence?.elementPath ?? []])
     if (record.kind === 'clip_boundary') {
       // The outgoing and incoming boundaries at a cut describe one event.
-      const cutKey = JSON.stringify([record.path.slice(0, -1).map(step => step.clipId), record.sequenceId, record.timeline.from])
-      if (cuts.has(cutKey)) { lastByElement.set(key, record); continue }
-      cuts.add(cutKey)
+      const cut = cutKey(record)
+      if (cuts.has(cut) || representedCuts.has(cut)) { lastByElement.set(key, record); continue }
+      cuts.add(cut)
     }
     const previous = lastByElement.get(key)
     // A single entrance can drive position, scale and opacity together. Keep a
