@@ -2,8 +2,11 @@ import { expect, it, vi } from 'vitest'
 import { createVideoEditDocument, createVideoEditSequence } from '@/core/videoEdit/document'
 import { createRecordingDocument } from '@/core/screenRecording/document'
 vi.mock('@/platform', () => ({ getPlatform: vi.fn() }))
-vi.mock('@/features/videoEdit/application/videoEditMedia', () => ({ importVideoEditSources: vi.fn() }))
-vi.mock('@/features/videoEdit/application/videoEditService', () => ({ openVideoEditDocument: vi.fn(), saveVideoEdit: vi.fn(), subscribeVideoEditDomain: vi.fn(() => () => undefined) }))
+vi.mock('@/features/videoEdit', async () => ({
+  ...await import('@/features/videoEdit/application/videoEditRecordingClip'),
+  importVideoEditSources: vi.fn(), openVideoEditDocument: vi.fn(), saveVideoEdit: vi.fn(),
+  createVideoEditProject: vi.fn(), appendVideoEditSequence: vi.fn(), switchVideoEditSequence: vi.fn(),
+}))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
 vi.mock('./recordingMovieSources', () => ({ recordingMovieCursorSources: vi.fn(async () => new Map()) }))
 import { placeRecordingMedia, importRecordingToVideo } from './recordingVideoImport'
