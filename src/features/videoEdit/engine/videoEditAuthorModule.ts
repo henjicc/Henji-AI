@@ -1,4 +1,5 @@
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 
 /** Executable ES module contract. These functions never cross a worker boundary. */
 export interface AuthorFrameInfo {
@@ -15,6 +16,8 @@ export interface AuthorPose {
 export interface AuthorLayer {
   id?: string
   name?: string
+  /** Resolved by the module builder; never inferred by intercepting Canvas calls. */
+  sourceSpan?: CodeSourceSpan
   bounds?: [number, number, number, number]
   clip?: [number, number, number, number]
   pose?: (time: number) => AuthorPose | null
@@ -33,7 +36,7 @@ export interface AuthorWebGPU {
 export interface AuthorModule {
   name: string
   kind?: 'generator' | 'filter'
-  params?: ReadonlyArray<{ key: string; type: string; default?: unknown; [key: string]: unknown }>
+  params?: ReadonlyArray<{ key: string; type: string; default?: unknown; layer?: string; group?: string; [key: string]: unknown }>
   motionBlur?: { shutter?: number; phase?: number; maxSamples?: number }
   draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   layers?(params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): AuthorLayer[]

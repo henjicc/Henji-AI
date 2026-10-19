@@ -1,8 +1,10 @@
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
-import { authorLayerBlur, authorLayerSamples, authorRasterScale } from './videoEditAuthorLayers'
-import type { AuthorAssets, AuthorFrameInfo, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
+import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale } from './videoEditAuthorLayers'
+import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
+import type { AuthorAssets, AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
+import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 
 interface Surface { canvas: OffscreenCanvas; texture: GpuTexture }
 
@@ -15,9 +17,11 @@ export class VideoEditAuthorRuntime {
   private gl?: WebGL2RenderingContext
   private webgl?: AuthorWebGL
   private webgpu?: AuthorWebGPU
+  private nativeOverrideTarget?: { texture: GpuTexture; width: number; height: number }
   private closed = false
   private readonly defaults: AuthorParameters
-  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule) {
+  private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; overrides?: AuthorElementOverrides }
+  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations) {
     this.defaults = Object.fromEntries((effect.params ?? []).map(parameter => [parameter.key, parameter.default]))
   }
   private texture(width: number, height: number): GpuTexture {
@@ -33,14 +37,45 @@ export class VideoEditAuthorRuntime {
     this.surfaces[index] = surface
     return surface
   }
-  async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo): Promise<void> {
+  /** Selection reads the last successful frame; normal playback builds no hit graph. */
+  observeElements(): AuthorElementObservation[] {
+    const frame = this.lastFrame
+    if (!frame) return []
+    return frame.layers.flatMap((layer, index) => {
+      const pose = layer.pose ? layer.pose(frame.time) : {}
+      const id = authorLayerId(layer, index), override = frame.overrides && Object.hasOwn(frame.overrides, id) ? frame.overrides[id] : undefined
+      if (!pose || override?.hidden || (pose.opacity ?? 1) * (override?.opacity ?? 1) <= 0) return []
+      const bounds = layer.bounds ?? [0, 0, frame.width, frame.height]
+      const matrix = authorPoseMatrix(pose)
+      const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? this.locations?.fallback
+      return [observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix)]
+    })
+  }
+  async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides): Promise<void> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     try {
       params = { ...this.defaults, ...params }
       if (!Number.isFinite(info.time) || !(info.frameDuration > 0) || !Number.isFinite(info.clip?.time) || !(info.clip.duration > 0)) throw new Error('效果需要有效的帧时间和片段时间。')
+      const whole: AuthorLayer = { id: AUTHOR_WHOLE_EFFECT_ID, name: this.effect.name, bounds: [0, 0, width, height], draw() {} }
+      if ((this.effect.createWebGPU || this.effect.createWebGL) && overrides && Object.hasOwn(overrides, AUTHOR_WHOLE_EFFECT_ID)) {
+        if (!this.nativeOverrideTarget || this.nativeOverrideTarget.width !== width || this.nativeOverrideTarget.height !== height) {
+          if (this.nativeOverrideTarget) { this.nativeOverrideTarget.texture.destroy(); this.textures.delete(this.nativeOverrideTarget.texture) }
+          const texture = this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
+          this.textures.add(texture); this.nativeOverrideTarget = { texture, width, height }
+        }
+        const picture = this.nativeOverrideTarget.texture
+        await this.render(picture, width, height, params, assets, info)
+        await this.layers.begin(target)
+        const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID])
+        this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width, height }, samples)
+        this.layers.finish()
+        this.lastFrame = { layers: [whole], width, height, time: info.time, overrides }
+        return
+      }
       if (this.effect.createWebGPU) {
         this.webgpu ??= await this.effect.createWebGPU(this.device)
         await this.webgpu.draw(target, info.time, params, width, height, assets, info)
+        this.lastFrame = { layers: [whole], width, height, time: info.time }
         return
       }
       if (this.effect.createWebGL) {
@@ -58,13 +93,15 @@ export class VideoEditAuthorRuntime {
         gl.disable(gl.SCISSOR_TEST); gl.colorMask(true, true, true, true); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
         this.webgl!.draw(info.time, params, width, height, assets, info)
         this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: target, premultipliedAlpha: true }, [width, height])
+        this.lastFrame = { layers: [whole], width, height, time: info.time }
         return
       }
-      const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
+      const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
       await this.layers.begin(target)
       for (let index = 0; index < list.length; index++) {
-        const layer = list[index]
+        const id = authorLayerId(list[index], index), override = overrides && Object.hasOwn(overrides, id) ? overrides[id] : undefined
+        const layer = override && !list[index].pose ? { ...list[index], bounds: list[index].bounds ?? [0, 0, width, height] as [number, number, number, number], pose: () => ({}) } : list[index]
         try {
           if (typeof layer.draw !== 'function') throw new Error('缺少 draw(ctx,t)。')
           // Frameflow batches adjacent untransformed layers onto one canvas.
@@ -75,7 +112,7 @@ export class VideoEditAuthorRuntime {
             if (!ctx) throw new Error('Canvas2D 不可用。')
             ctx.reset()
             let end = index
-            while (end < list.length && !list[end].pose) {
+            while (end < list.length && !list[end].pose && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) {
               const still = list[end]
               ctx.save()
               try {
@@ -94,7 +131,7 @@ export class VideoEditAuthorRuntime {
           const [x, y, right, bottom] = layer.bounds ?? [0, 0, width, height]
           if (![x, y, right, bottom].every(Number.isFinite) || right <= x || bottom <= y) throw new Error('图层范围无效。')
           const bounds = { x, y, width: right - x, height: bottom - y }
-          const samples = authorLayerSamples(layer, this.effect, info, bounds)
+          const samples = authorLayerSamples(layer, this.effect, info, bounds, override)
           if (!samples.some(sample => sample.pose)) continue
           const center = layer.pose?.(info.time) ?? samples.map(sample => layer.pose?.(info.time + sample.offset.numerator * info.frameDuration)).find(Boolean)
           const need = Math.max(1, ...samples.flatMap(sample => sample.pose ? [Math.hypot(sample.pose.matrix[0], sample.pose.matrix[1]), Math.hypot(sample.pose.matrix[2], sample.pose.matrix[3])] : []))
@@ -142,6 +179,7 @@ export class VideoEditAuthorRuntime {
         }
       }
       this.layers.finish()
+      this.lastFrame = { layers: list, width, height, time: info.time, overrides }
       while (this.surfaces.length > list.length * 2) {
         const surface = this.surfaces.pop()!
         if (!surface) continue
@@ -154,6 +192,7 @@ export class VideoEditAuthorRuntime {
   async dispose(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.lastFrame = undefined
     try { await this.webgl?.dispose?.(); await this.webgpu?.dispose?.(); await this.effect.dispose?.() }
     finally {
       await this.layerGpu?.dispose()

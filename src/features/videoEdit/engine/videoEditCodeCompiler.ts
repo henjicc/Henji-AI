@@ -1,21 +1,21 @@
 import { normalizeCodeMaterialFiles, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialProgram, CodeMaterialErrorCode, CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
+import type { AuthorBundle } from './videoEditAuthorBundle'
 
-export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ program: CodeMaterialProgram } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan } })
+export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ program: CodeMaterialProgram } | { bundle: AuthorBundle } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan } })
 export interface CodeCompilerWorker {
   onmessage: ((event: MessageEvent<CodeCompilerResponse>) => void) | null
   onerror: ((event: ErrorEvent) => void) | null
   onmessageerror: ((event: MessageEvent) => void) | null
-  postMessage(message: { id: number; files: CodeMaterialFiles }): void
+  postMessage(message: { id: number; files: CodeMaterialFiles; kind?: 'author.bundle' }): void
   terminate(): void
 }
 let sharedWorkerFactory: (() => CodeCompilerWorker) | undefined
 /** Render workers delegate to the host's existing source compiler/cache. */
 export function setVideoEditCodeCompilerWorkerFactory(factory: () => CodeCompilerWorker): void { sharedWorkerFactory = factory }
-interface Pending { resolve: (program: CodeMaterialProgram) => void; reject: (error: Error) => void; clean: () => void }
-/** Browser Worker is for thread isolation and bounded failure recovery; the AST
- * whitelist remains the execution boundary. No author JS enters this worker. */
+interface Pending { resolve: (response: CodeCompilerResponse) => void; reject: (error: Error) => void; clean: () => void }
+/** Shared compilation/linking only; executable modules run in the render worker. */
 export class VideoEditCodeCompiler {
   private worker?: CodeCompilerWorker
   private readonly pending = new Map<number, Pending>()
@@ -39,7 +39,7 @@ export class VideoEditCodeCompiler {
       if (!pending) return
       this.pending.delete(response.id); pending.clean()
       if ('error' in response) pending.reject(new CodeMaterialError(response.error.code, response.error.message, response.error.sourceSpan))
-      else { if (response.cacheHit) this.cacheHits++; pending.resolve(response.program) }
+      else { if (response.cacheHit) this.cacheHits++; pending.resolve(response) }
     }
     worker.onerror = event => { event.preventDefault?.(); if (this.worker === worker) this.reset(new Error(`源码检查线程失败：${event.message}`)) }
     worker.onmessageerror = () => { if (this.worker === worker) this.reset(new Error('源码检查结果无法读取，请重试。')) }
@@ -56,6 +56,14 @@ export class VideoEditCodeCompiler {
   /** Shared preparation waits for the existing eight-job limit. It must not
    * turn independent sessions into a new user-visible global budget failure. */
   async compileQueued(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
+    await this.waitForCapacity(signal)
+    return this.compile(source, signal)
+  }
+  async bundleQueued(files: CodeMaterialFiles, signal?: AbortSignal): Promise<AuthorBundle> {
+    await this.waitForCapacity(signal)
+    return this.bundle(files, signal)
+  }
+  private async waitForCapacity(signal?: AbortSignal): Promise<void> {
     while (this.jobs.size >= 8 && !this.disposed) {
       signal?.throwIfAborted()
       await new Promise<void>((resolve, reject) => {
@@ -65,13 +73,18 @@ export class VideoEditCodeCompiler {
         this.capacityWaiters.add(wake); signal?.addEventListener('abort', abort, { once: true })
       })
     }
-    return this.compile(source, signal)
   }
   compile(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
-    if (this.disposed) return Promise.reject(new Error('源码检查会话已关闭。'))
-    if (signal?.aborted) return Promise.reject(new DOMException('源码检查已取消。', 'AbortError'))
     let files: CodeMaterialFiles
     try { files = normalizeCodeMaterialFiles(source) } catch (error) { return Promise.reject(error) }
+    return this.request(files, undefined, signal).then(response => { if ('program' in response) return response.program; throw new Error('源码检查返回了错误的结果类型。') })
+  }
+  bundle(files: CodeMaterialFiles, signal?: AbortSignal): Promise<AuthorBundle> {
+    return this.request(files, 'author.bundle', signal).then(response => { if ('bundle' in response) return response.bundle; throw new Error('模块打包返回了错误的结果类型。') })
+  }
+  private request(files: CodeMaterialFiles, kind: 'author.bundle' | undefined, signal?: AbortSignal): Promise<CodeCompilerResponse> {
+    if (this.disposed) return Promise.reject(new Error('源码检查会话已关闭。'))
+    if (signal?.aborted) return Promise.reject(new DOMException('源码检查已取消。', 'AbortError'))
     if (this.jobs.size >= 8) return Promise.reject(new CodeMaterialError('BUDGET', '源码检查队列已满，请等待当前检查完成。'))
     let worker: CodeCompilerWorker
     try { worker = this.acquire() } catch (error) { return Promise.reject(error) }
@@ -86,7 +99,7 @@ export class VideoEditCodeCompiler {
       const timer = setTimeout(() => { if (this.pending.has(id)) this.reset(new Error('源码检查超过时限，已释放线程；最后有效版本保留，请重试。')) }, this.timeoutMs)
       const clean = (): void => { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
       this.jobs.add(id); this.pending.set(id, { resolve, reject, clean }); signal?.addEventListener('abort', abort, { once: true })
-      try { worker.postMessage({ id, files }) } catch (error) { this.reset(error instanceof Error ? error : new Error(String(error))) }
+      try { worker.postMessage({ id, files, ...(kind ? { kind } : {}) }) } catch (error) { this.reset(error instanceof Error ? error : new Error(String(error))) }
     })
   }
   dispose(): void { this.disposed = true; this.reset(new Error('源码检查会话已关闭。')) }

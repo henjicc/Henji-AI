@@ -139,6 +139,7 @@
     "better-sqlite3": "^12.5.0",
     "dockview-react": "^7.0.2",
     "electron-updater": "^6.8.9",
+    "esbuild-wasm": "0.28.2",
     "ffmpeg-ffprobe-static": "6.1.2-rc.1",
     "fit-curve": "0.2.0",
     "fontkit": "2.0.4",

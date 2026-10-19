@@ -6,6 +6,26 @@ function worker(): CodeCompilerWorker {
   return { onmessage: null, onerror: null, onmessageerror: null, postMessage: vi.fn(), terminate: vi.fn() }
 }
 afterEach(() => { vi.useRealTimers() })
+it('标准模块打包复用同一线程，取消与旧检查互不串回执', async () => {
+  const runtime = worker(); const create = vi.fn(() => runtime)
+  const compiler = new VideoEditCodeCompiler(create)
+  const files = { entry: 'main.js', files: { 'main.js': '// ' + 'x'.repeat(70000) } }
+  const controller = new AbortController()
+  const cancelled = compiler.bundle(files, controller.signal)
+  const failure = expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+  const active = compiler.bundle(files)
+  expect(runtime.postMessage).toHaveBeenCalledWith({ id: 2, kind: 'author.bundle', files })
+  controller.abort(); await failure
+  expect(runtime.terminate).not.toHaveBeenCalled()
+  const bundle = { code: 'export default {}', map: '{}', locations: { layers: {} } }
+  runtime.onmessage!({ data: { id: 1, bundle } } as MessageEvent)
+  runtime.onmessage!({ data: { id: 2, bundle, cacheHit: true } } as MessageEvent)
+  expect(await active).toBe(bundle)
+  expect(create).toHaveBeenCalledOnce()
+  expect(compiler.diagnostics().cacheHits).toBe(1)
+  compiler.dispose()
+})
+
 describe('源码检查线程与有界恢复', () => {
   it('超时终止旧线程、拒绝待完成检查，后续重新创建且旧回执不能完成新请求', async () => {
     vi.useFakeTimers()

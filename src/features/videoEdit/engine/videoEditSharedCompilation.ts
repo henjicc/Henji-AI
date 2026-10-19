@@ -1,7 +1,7 @@
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import type { CodeCompilerResponse, CodeCompilerWorker } from './videoEditCodeCompiler'
 
-export type SharedCompilationRequest = { kind: 'code.compile'; token: number; files: CodeMaterialFiles } | { kind: 'code.cancel'; token: number }
+export type SharedCompilationRequest = { kind: 'code.compile'; token: number; files: CodeMaterialFiles; operation?: 'author.bundle' } | { kind: 'code.cancel'; token: number }
 export type SharedCompilationResponse = { kind: 'code.compiled'; token: number; result: CodeCompilerResponse }
 
 /** Transport only: parsing, content-keyed IR caching, limits and cancellation
@@ -16,7 +16,7 @@ export class VideoEditSharedCompilation {
       postMessage: message => {
         const token = ++this.next
         this.pending.set(token, { worker, id: message.id })
-        this.send({ kind: 'code.compile', token, files: message.files })
+        this.send({ kind: 'code.compile', token, files: message.files, ...(message.kind ? { operation: message.kind } : {}) })
       },
       terminate: () => {
         for (const [token, entry] of this.pending) if (entry.worker === worker) {

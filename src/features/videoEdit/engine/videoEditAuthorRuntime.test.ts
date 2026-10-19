@@ -1,12 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
+const { layerDraw } = vi.hoisted(() => ({ layerDraw: vi.fn() }))
 
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
-  begin = vi.fn(); draw = vi.fn(); mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); dispose = vi.fn()
+  begin = vi.fn(); draw = layerDraw; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); dispose = vi.fn()
 } }))
 
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
 it('does not start unrelated layer pipelines for a native GPU effect and waits for disposal', async () => {
   const createShaderModule = vi.fn()
@@ -24,6 +25,49 @@ it('does not start unrelated layer pipelines for a native GPU effect and waits f
   await runtime.dispose()
   expect(createShaderModule).not.toHaveBeenCalled()
   expect(order).toEqual(['gpu', 'module'])
+})
+
+it('edits a plain draw effect as one element without Canvas interception or extra author draws', async () => {
+  const context = { reset: vi.fn(), setTransform: vi.fn() }
+  class Canvas {
+    constructor(public width: number, public height: number) {}
+    getContext(): typeof context { return context }
+  }
+  vi.stubGlobal('OffscreenCanvas', Canvas)
+  const device = { createTexture: () => ({ destroy: vi.fn() }), queue: { copyExternalImageToTexture: vi.fn() } } as unknown as GpuDevice
+  const draw = vi.fn()
+  const runtime = new VideoEditAuthorRuntime(device, { name: '整幅画面', params: [{ key: 'title', type: 'text' }], draw })
+  await runtime.render({ createView: () => ({}), destroy() {} }, 100, 50, {}, {}, { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 5 } }, { effect: { dx: 12, dy: -3, scale: 2 } })
+  expect(draw).toHaveBeenCalledOnce()
+  expect(draw.mock.calls[0][0]).toBe(context)
+  const [element] = runtime.observeElements()
+  expect(element).toMatchObject({ id: 'effect', name: '整幅画面', bounds: [0, 0, 100, 50], textParameterKeys: ['title'] })
+  element.matrix.forEach((value, index) => expect(value).toBeCloseTo([2, 0, 0, 2, -38, -28][index]))
+  expect(layerDraw).toHaveBeenCalledOnce()
+  expect(draw).toHaveBeenCalledOnce()
+  await runtime.dispose()
+  expect(runtime.observeElements()).toEqual([])
+})
+
+it('composites a native GPU whole-effect override on the same device without a Canvas allocation', async () => {
+  const canvas = vi.fn(() => { throw new Error('native override must stay on GPU') })
+  vi.stubGlobal('OffscreenCanvas', canvas)
+  const intermediate = { createView: () => ({}), destroy: vi.fn() }
+  const createTexture = vi.fn((_descriptor: unknown) => intermediate)
+  const device = { createTexture } as unknown as GpuDevice
+  const draw = vi.fn()
+  const runtime = new VideoEditAuthorRuntime(device, { name: 'GPU', createWebGPU: () => ({ draw }) })
+  const target = { createView: () => ({}), destroy() {} }
+  await runtime.render(target, 100, 50, {}, {}, { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 5 } }, { effect: { dx: 12 } })
+  expect(draw).toHaveBeenCalledOnce()
+  expect(draw.mock.calls[0][0]).toBe(intermediate)
+  expect(canvas).not.toHaveBeenCalled()
+  expect(createTexture.mock.calls[0][0]).not.toHaveProperty('mipLevelCount')
+  expect(createTexture.mock.calls[0][0]).toMatchObject({ usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
+  expect(layerDraw.mock.calls[0][0]).toBe(target)
+  expect(runtime.observeElements()[0].matrix[4]).toBe(12)
+  await runtime.dispose()
+  expect(intermediate.destroy).toHaveBeenCalledOnce()
 })
 
 it('passes the supplied context directly to one author draw and uploads the original Canvas filter result', async () => {

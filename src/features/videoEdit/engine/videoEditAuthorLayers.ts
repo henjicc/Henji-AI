@@ -1,6 +1,7 @@
 import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
 import type { AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorPose } from './videoEditAuthorModule'
+import { authorOverrideMatrix, type AuthorElementOverride } from './videoEditAuthorElements'
 
 /** Subpixel defocus must not change raster dimensions or mip sampling. */
 export function authorLayerBlur(pose: AuthorPose | null | undefined, rasterScale: number, shape: AuthorLayer['blurShape']): { radius: number; pad: number } {
@@ -25,7 +26,7 @@ export function authorPoseMatrix(pose: AuthorPose): CodeMatrix {
   return [c * sx, s * sx, -s * sy, c * sy, pose.x ?? 0, pose.y ?? 0]
 }
 
-export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }): CodeMotionSample[] {
+export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, info: AuthorFrameInfo, bounds: { x: number; y: number; width: number; height: number }, override?: AuthorElementOverride): CodeMotionSample[] {
   const shutter = effect.motionBlur?.shutter ?? 180, phase = effect.motionBlur?.phase ?? -shutter / 2
   const max = effect.motionBlur?.maxSamples ?? 64
   if (!Number.isFinite(shutter) || shutter < 0 || !Number.isFinite(phase) || !Number.isInteger(max) || max < 1 || max > 64) throw new Error('运动模糊需要非负有限快门和 1–64 个样本。')
@@ -34,7 +35,9 @@ export function authorLayerSamples(layer: AuthorLayer, effect: AuthorModule, inf
   const poseAt = (delta: number): { matrix: CodeMatrix; opacity: number } | null => {
     const pose = layer.pose ? layer.pose(info.time + delta * info.frameDuration) : {}
     if (!pose) return null
-    const matrix = authorPoseMatrix(pose), opacity = Math.min(1, pose.opacity ?? 1)
+    const authorMatrix = authorPoseMatrix(pose)
+    const matrix = override ? authorOverrideMatrix(authorMatrix, [bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height], override) : authorMatrix
+    const opacity = override?.hidden ? 0 : Math.min(1, (pose.opacity ?? 1) * (override?.opacity ?? 1))
     if (!matrix.every(Number.isFinite) || !Number.isFinite(opacity) || !Number.isFinite(pose.blur ?? 0) || (pose.blur ?? 0) < 0) throw new Error('位姿必须为有限数值，blur 不能为负。')
     if (opacity <= 0 || Math.abs(pose.scaleX ?? pose.scale ?? 1) < 1e-6 || Math.abs(pose.scaleY ?? pose.scale ?? 1) < 1e-6) return null
     return { matrix, opacity }

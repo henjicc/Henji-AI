@@ -2,6 +2,18 @@ import { expect, it, vi } from 'vitest'
 import { VideoEditSharedCompilation } from './videoEditSharedCompilation'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 
+it('直接执行模块通过共享通道打包并返回源码定位', () => {
+  const send = vi.fn(); const transport = new VideoEditSharedCompilation(send)
+  const worker = transport.worker(); worker.onmessage = vi.fn()
+  const files = { entry: 'main.js', files: { 'main.js': 'export default {}' } }
+  worker.postMessage({ id: 7, kind: 'author.bundle', files })
+  expect(send).toHaveBeenCalledWith(expect.objectContaining({ kind: 'code.compile', operation: 'author.bundle', files }))
+  const token = send.mock.calls[0][0].token
+  const bundle = { code: 'export default {}', map: '{}', locations: { layers: {} } }
+  transport.receive({ kind: 'code.compiled', token, result: { id: 1, bundle } })
+  expect(worker.onmessage).toHaveBeenCalledWith({ data: { id: 7, bundle } })
+})
+
 it('sessions multiplex independent ids and cancellation only removes that owner', () => {
   const send = vi.fn(); const transport = new VideoEditSharedCompilation(send)
   const a = transport.worker(); const b = transport.worker()

@@ -15,6 +15,8 @@ import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { loadAuthorModule, type AuthorFrameInfo, type AuthorParameters } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
+import type { AuthorSourceLocations } from './videoEditAuthorBundle'
+import type { AuthorElementObservation, AuthorElementOverrides } from './videoEditAuthorElements'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { videoEditClipTrackingQuad } from './videoEditTrackResults'
 import { videoEditCornerPinMatrix } from '@/core/videoEdit/tracking'
@@ -48,7 +50,7 @@ export class VideoEditGpuCompositor {
   private authorTarget?: { texture: GpuTexture; width: number; height: number }
 
   /** Candidate frames use the same worker/device as the timeline, before publication. */
-  async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>): Promise<{ bitmap: ImageBitmap; elapsedMs: number }> {
+  async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>, options?: { overrides?: AuthorElementOverrides; locations?: AuthorSourceLocations; observe?: boolean }): Promise<{ bitmap: ImageBitmap; elapsedMs: number; elements?: AuthorElementObservation[] }> {
     await this.ready
     if (assets) {
       for (const image of Object.values(this.authorAssets.get(url) ?? {})) image.close()
@@ -56,13 +58,13 @@ export class VideoEditGpuCompositor {
     }
     let runtime = this.authorRuntimes.get(url)
     if (!runtime) {
-      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url))
+      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url), options?.locations)
       this.authorRuntimes.set(url, runtime)
     }
     const width = this.canvas.width, height = this.canvas.height
     if (!this.authorTarget || this.authorTarget.width !== width || this.authorTarget.height !== height) {
       this.authorTarget?.texture.destroy()
-      this.authorTarget = { texture: this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 }), width, height }
+      this.authorTarget = { texture: this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 }), width, height }
     }
     if (!this.authorPresentation) {
       const module = this.device.createShaderModule({ code: `
@@ -76,7 +78,7 @@ export class VideoEditGpuCompositor {
     const started = performance.now()
     this.device.pushErrorScope('validation')
     try {
-      await runtime.render(this.authorTarget.texture, width, height, params, this.authorAssets.get(url) ?? {}, info)
+      await runtime.render(this.authorTarget.texture, width, height, params, this.authorAssets.get(url) ?? {}, info, options?.overrides)
       const encoder = this.device.createCommandEncoder(), pipeline = this.authorPresentation
       const pass = encoder.beginRenderPass({ colorAttachments: [{ view: this.context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store' }] })
       pass.setPipeline(pipeline); pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: this.authorTarget.texture.createView() }] }))
@@ -85,7 +87,7 @@ export class VideoEditGpuCompositor {
     } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`作者效果 GPU 执行失败：${error.message}`)
-    return { elapsedMs: performance.now() - started, bitmap: this.canvas.transferToImageBitmap() }
+    return { elapsedMs: performance.now() - started, bitmap: this.canvas.transferToImageBitmap(), ...(options?.observe ? { elements: runtime.observeElements() } : {}) }
   }
   private copyY!: GpuRenderPipeline
   private copyUv!: GpuRenderPipeline

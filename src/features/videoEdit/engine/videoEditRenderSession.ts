@@ -1,4 +1,4 @@
-import { prepareVideoEditCode } from '../application/videoEditCodeState'
+import { prepareVideoEditAuthorBundle, prepareVideoEditCode } from '../application/videoEditCodeState'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { SharedCompilationRequest, SharedCompilationResponse } from './videoEditSharedCompilation'
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
@@ -137,11 +137,14 @@ export class VideoEditRenderSession {
         this.compilations.get(event.data.token)?.abort(); this.compilations.delete(event.data.token); return
       }
       if ('kind' in event.data && event.data.kind === 'code.compile') {
-        const { token, files } = event.data; const controller = new AbortController()
+        const { token, files, operation } = event.data; const controller = new AbortController()
         this.compilations.set(token, controller)
         const started = performance.now()
-        void prepareVideoEditCode(files, controller.signal).then(
-          program => ({ id: token, program }),
+        const prepared = operation === 'author.bundle'
+          ? prepareVideoEditAuthorBundle(files, controller.signal).then(bundle => ({ id: token, bundle }))
+          : prepareVideoEditCode(files, controller.signal).then(program => ({ id: token, program }))
+        void prepared.then(
+          result => result,
           error => ({ id: token, error: { code: error instanceof CodeMaterialError ? error.code : 'CONTEXT' as const, message: error instanceof Error ? error.message : String(error), ...(error instanceof CodeMaterialError ? { sourceSpan: error.sourceSpan } : {}) } }),
         ).then(result => {
           this.compilations.delete(token)

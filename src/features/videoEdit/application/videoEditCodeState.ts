@@ -19,6 +19,10 @@ export function compileVideoEditCode(source: string | CodeMaterialFiles, signal?
   return compiler.compile(source, signal)
 }
 export function releaseVideoEditCodeCompiler(): void { compiler?.dispose(); compiler = undefined }
+export function prepareVideoEditAuthorBundle(files: CodeMaterialFiles, signal?: AbortSignal): Promise<import('../engine/videoEditAuthorBundle').AuthorBundle> {
+  compiler ??= new VideoEditCodeCompiler()
+  return compiler.bundleQueued(files, signal)
+}
 /** Render-session preparation shares source-keyed IR, while interactive compilation keeps its original budget. */
 export function prepareVideoEditCode(source: CodeMaterialFiles, signal: AbortSignal): Promise<CodeMaterialProgram> {
   initializeVideoEditCodeSourceRuntime()
