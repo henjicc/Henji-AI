@@ -1,12 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { advanceVideoEditClipSource, changeVideoEditClipSpeed, setVideoEditClipReverse, stretchVideoEditClip, videoEditClipContentShift, videoEditClipFrameAtSource, videoEditClipHeadRoom, videoEditClipSourceRange, videoEditClipSourceSecondsAt, videoEditClipSourceSecondsAtTime, videoEditClipSourceTimeAt, videoEditClipSpeedPercent, videoEditClipTailRoom, videoEditSpeedRatio, videoEditStretchDurationLimits, type VideoEditClipTiming } from './clipSpeed'
 import { videoEditSourceSeconds } from './time'
+import { videoEditClipSourceTimeAtFraction } from './clipSpeed'
 
 const rate = { numerator: 30, denominator: 1 }
 const clip = (fields: Partial<VideoEditClipTiming> = {}): VideoEditClipTiming => ({ start: 30, duration: 60, sourceInUs: 2_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, ...fields })
 const double = videoEditSpeedRatio(2)
 
 describe('片段速度换算（4.13）', () => {
+  it('快门子时刻沿正式速度换算，倒放保留一帧画面相位，修剪前后源时间相同', () => {
+    const ntsc = { numerator: 60000, denominator: 1001 }
+    for (const reverse of [false, true]) for (const speed of [{ numerator: 2, denominator: 1 }, { numerator: 1, denominator: 3 }]) {
+      const original = clip({ sourceInUs: 10_000_000, sourceRemainder: { numerator: 2, denominator: 6 }, reverse, speed })
+      for (const offset of [-1, 0, 5, 20]) expect(videoEditClipSourceTimeAtFraction(original, { numerator: offset, denominator: 1 }, ntsc)).toEqual(videoEditClipSourceTimeAt(original, offset, ntsc))
+      const sampled = videoEditClipSourceTimeAtFraction(original, { numerator: 41, denominator: 2 }, ntsc)
+      const expected = videoEditSourceSeconds(original) + (reverse ? -21.5 : 20.5) * (speed.numerator / speed.denominator) * ntsc.denominator / ntsc.numerator
+      expect(videoEditSourceSeconds(sampled)).toBeCloseTo(expected, 13)
+      const trimmed = { ...original, ...advanceVideoEditClipSource(original, 10, ntsc), start: original.start + 10, duration: original.duration - 10 }
+      expect(videoEditClipSourceTimeAtFraction(trimmed, { numerator: 21, denominator: 2 }, ntsc)).toEqual(sampled)
+    }
+    expect(() => videoEditClipSourceTimeAtFraction(clip({ reverse: true }), { numerator: Number.MAX_SAFE_INTEGER, denominator: 1 }, ntsc)).toThrow('安全整数范围')
+  })
   it('速度存为有理数，精度 0.01%，超出 1%–10000% 拒绝', () => {
     expect(videoEditSpeedRatio(2)).toEqual({ numerator: 2, denominator: 1 })
     expect(videoEditSpeedRatio(0.3333)).toEqual({ numerator: 3333, denominator: 10000 })

@@ -3,13 +3,54 @@ import { describe, expect, it } from 'vitest'
 import { compileCodeMaterial } from './codeMaterial/compiler'
 import { CodeMaterialError } from './codeMaterial/contract'
 import { evaluateCodeMaterial } from './codeMaterial/evaluate'
-import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
+import { codeMaterialContextForFrame, codeMaterialContextForSubframe, codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import type { CodeMaterialTimedClip } from './codeMaterialTiming'
 import { offsetVideoEditSource } from './time'
 
 const program = compileCodeMaterial('export default {apiVersion:1,name:"源时钟图形",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:90,seed:42,parameters:{},render(ctx){return [rect({x:ctx.time*20,y:100,width:200,height:80,fill:[.2,.5,1,.6]})];}}')
 const base: CodeMaterialTimedClip = { start: 11, duration: 2000, sourceInUs: 1234567, sourceRemainder: { numerator: 1, denominator: 3 } }
 const rates = [{ numerator: 30000, denominator: 1001 }, { numerator: 60000, denominator: 1001 }]
+
+describe('快门位姿子时钟', () => {
+  const clip: CodeMaterialTimedClip = { start: 60, duration: 120, sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 } }
+  const rate = rates[1]
+  it('中心样本等同整帧；源、局部与序列时间分别换算，重复和乱序无状态', () => {
+    for (const reverse of [false, true]) for (const speed of [{ numerator: 2, denominator: 1 }, { numerator: 1, denominator: 3 }]) {
+      const timed = { ...clip, reverse, speed }
+      const sample = (numerator: number) => codeMaterialContextForSubframe(timed, 75, { numerator, denominator: 4 }, rate, program)
+      expect(sample(0).context).toEqual(codeMaterialContextForFrame(timed, 75, rate, program))
+      expect(codeMaterialContextForSubframe(timed, 75, { numerator: 0, denominator: Number.MAX_SAFE_INTEGER }, rate, program).context).toEqual(sample(0).context)
+      const expected = new Map([-1, 0, 1].map(n => [n, sample(n)]))
+      for (const n of [1, -1, 0, 1]) expect(sample(n)).toEqual(expected.get(n))
+      const center = sample(0).context; const next = sample(1).context
+      expect(next.frame).toBe(75.25)
+      expect(next.time - center.time).toBeCloseTo((reverse ? -1 : 1) * .25 * speed.numerator / speed.denominator / center.fps, 14)
+      expect(next.localTime).toBe(15.25 / center.fps)
+      expect(next.sequenceTime).toBe(75.25 / center.fps)
+      const moved = codeMaterialContextForSubframe({ ...timed, start: 160 }, 175, { numerator: 1, denominator: 4 }, rate, program)
+      expect(moved.sourceTime).toEqual(sample(1).sourceTime)
+      expect(moved.context.localTime).toBe(next.localTime)
+      // Fractional contexts never enter the ordinary full-picture evaluator.
+      expect(() => evaluateCodeMaterial(program, next)).toThrow()
+    }
+  })
+  it('只允许显式片段或转场窗口，结束半开；动态源时长和负源仍受保护', () => {
+    const sample = (frame: number, numerator: number, window?: { start: number; end: number }) => codeMaterialContextForSubframe(clip, frame, { numerator, denominator: 2 }, rate, program, window)
+    expect(() => sample(60, -1)).toThrow('子时刻')
+    expect(sample(179, 1).context.frame).toBe(179.5)
+    expect(() => sample(179, 2)).toThrow('子时刻')
+    expect(sample(59, -1, { start: 58, end: 62 }).context.localTime).toBe(-1.5 / (rate.numerator / rate.denominator))
+    expect(() => sample(58, -1, { start: 58, end: 62 })).toThrow('子时刻')
+    const fromZero = { ...clip, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
+    const halfBefore = { numerator: -1, denominator: 2 }
+    const window = { start: 59, end: 62 }
+    expect(() => codeMaterialContextForSubframe(fromZero, 60, halfBefore, rate, program, window)).toThrow('素材开始')
+    expect(codeMaterialContextForSubframe(fromZero, 60, halfBefore, rate, { ...program, mode: 'static' }, window).context.time).toBe(0)
+    const short = { ...program, durationSeconds: codeMaterialContextForFrame(clip, 60, rate, program).time }
+    expect(() => codeMaterialContextForSubframe(clip, 60, { numerator: 1, denominator: 2 }, rate, short)).toThrow('声明时长')
+    for (const offset of [{ numerator: 5, denominator: 2 }, { numerator: 1, denominator: 0 }, { numerator: 1.5, denominator: 2 }, { numerator: Infinity, denominator: 1 }]) expect(() => codeMaterialContextForSubframe(clip, 75, offset, rate, program)).toThrow(CodeMaterialError)
+  })
+})
 
 describe('真实转场余量保持原片段时钟', () => {
   it('右侧提前采样保留负局部时间，普通求值仍拒绝片段外帧及未授权负时间', () => {
