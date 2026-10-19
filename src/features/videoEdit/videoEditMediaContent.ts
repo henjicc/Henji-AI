@@ -5,19 +5,25 @@ import { getPlatform } from '@/platform/runtime'
 export function videoEditMediaContentKey(media: VideoEditMedia): string {
   return JSON.stringify([media.id, media.path, media.sourceRevision, media.assetContent])
 }
+/** A cancelled read stops waiting even if the native file inspection replies late. */
+export async function inspectVideoEditMediaContent(media: VideoEditMedia, signal?: AbortSignal) {
+  signal?.throwIfAborted()
+  const operation = getPlatform().assetLibrary.inspectFileContent(media.path, media.kind)
+  let abort: (() => void) | undefined
+  const result = await (signal ? Promise.race([operation, new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) abort()
+  })]).finally(() => { if (abort) signal.removeEventListener('abort', abort) }) : operation)
+  signal?.throwIfAborted()
+  return result
+}
 export async function verifyVideoEditMediaContent(media: VideoEditMedia, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
   const expected = media.assetContent
   if (!expected?.contentIdentity) return
   try {
-    const operation = getPlatform().assetLibrary.inspectFileContent(media.path, media.kind)
-    let abort: (() => void) | undefined
-    const current = await (signal ? Promise.race([operation, new Promise<never>((_resolve, reject) => {
-      abort = () => reject(signal.reason)
-      signal.addEventListener('abort', abort, { once: true })
-      if (signal.aborted) abort()
-    })]).finally(() => { if (abort) signal.removeEventListener('abort', abort) }) : operation)
-    signal?.throwIfAborted()
+    const current = await inspectVideoEditMediaContent(media, signal)
     if (current.contentIdentity !== expected.contentIdentity || current.sizeBytes !== expected.sizeBytes || current.fileModifiedAt !== expected.fileModifiedAt) throw new Error('源文件内容已改变')
   } catch (error) {
     signal?.throwIfAborted()

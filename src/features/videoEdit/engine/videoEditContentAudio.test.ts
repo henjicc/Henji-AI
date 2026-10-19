@@ -2,7 +2,8 @@ import { expect, it, vi } from 'vitest'
 import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
-import { VideoEditContentAudio, codeAudioComposition } from './videoEditContentAudio'
+import { VideoEditContentAudio } from './videoEditContentAudio'
+import { codeAudioComposition } from '@/core/videoEdit/codeAudio'
 import { codeMediaInputComposition, codeMediaFrameParameters, codeMediaInputKey } from './videoEditCodeMediaInput'
 
 vi.mock('../application/videoEditBeatWorkerClient', () => ({ analyzeVideoEditBeatsOffThread: async (rate: number, blocks: AsyncIterable<Float32Array[]>, signal: AbortSignal, fps: number) => {
@@ -57,4 +58,28 @@ it('音频默认只取下方轨道，指定媒体去掉片段处理；视频时�
   expect(() => codeMediaInputComposition(composition, clip, { kind: 'video', mediaId: 'movie', time: 12 }, frame)).toThrow('超出')
   expect(codeMediaInputComposition(composition, clip, { kind: 'sequence', mediaId: 'below' }, frame).document.clips.map(clip => clip.id)).toEqual(['lower'])
   expect(codeMediaFrameParameters(clip, { input: { kind: 'video', mediaId: 'movie' } })).toEqual({ input: { kind: 'image', mediaId: codeMediaInputKey(clip.id, 'input') } })
+})
+it('visual-only changes reuse completed sound analysis while audible gain changes invalidate it', async () => {
+  const { composition } = fixture(), create = vi.fn(() => ({ mixAudio: async (_start: number, duration: number) => [new Float32Array(Math.round(duration * composition.sampleRate)).fill(.25)], dispose: async () => {} }))
+  const service = new VideoEditContentAudio(create), signal = new AbortController().signal
+  const original = await service.analyze(composition, 0, 1, signal)
+  const visual = { ...composition, revision: composition.revision + 1, clips: composition.clips.map(clip => ({ ...clip, x: .9, rotation: 45 })) }
+  expect(await service.analyze(visual, 0, 1, signal)).toBe(original)
+  expect(create).toHaveBeenCalledOnce()
+  await service.analyze({ ...visual, clips: visual.clips.map(clip => ({ ...clip, volume: .5 })) }, 0, 1, signal)
+  expect(create).toHaveBeenCalledTimes(2)
+})
+it('cancels a pending real mixer call immediately, disposes once and ignores its late PCM instead of caching it', async () => {
+  const { composition } = fixture(), controller = new AbortController()
+  let accept!: (planes: Float32Array[]) => void
+  const dispose = vi.fn(async () => {}), mix = vi.fn(() => new Promise<Float32Array[]>(resolve => { accept = resolve }))
+  const service = new VideoEditContentAudio(() => ({ mixAudio: mix, dispose }))
+  const pending = service.analyze(composition, 0, 1, controller.signal)
+  const rejected = expect(pending).rejects.toThrow('中止等待混音')
+  controller.abort(new Error('中止等待混音')); await rejected
+  expect(dispose).toHaveBeenCalledOnce()
+  accept([new Float32Array(composition.sampleRate).fill(.8)])
+  mix.mockImplementation(async () => [new Float32Array(composition.sampleRate).fill(.25)])
+  const fresh = await service.analyze(composition, 0, 1, new AbortController().signal)
+  expect(fresh.levels.every(value => value === .25)).toBe(true); expect(mix).toHaveBeenCalledTimes(2)
 })

@@ -14,6 +14,8 @@ import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { VideoEditSourceMapIndex } from '@/core/videoEdit/sourceMap'
 import type { VideoMotionScan } from '@/core/media/motionEvidence'
+import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
+import { codeMotionAudioKey } from '@/core/videoEdit/codeAudio'
 
 class TestWorker {
   static instances: TestWorker[] = []
@@ -149,13 +151,20 @@ it('the browser bundle evaluates real code in a background thread, round-trips h
     expect(result.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'video_pixels', peakSpeed: expect.closeTo(6, 4) })]))
     expect(measurements).toBe(1); expect(result.sampledCodeFrames).toBe(60)
     await ThreadWorker.instances[0].stopped
+    const sound = new AudioContentAnalyzer(8000, composition.fps)
+    sound.append([Float32Array.from({ length: 16000 }, (_, i) => i < 8000 ? .1 : .4)])
+    const driven = compile('return [rect({id:"sound",x:ctx.audio.level()*500,y:10,width:100,height:100})];')
+    const sounded = await analyzeVideoEditMotionStructure({ composition, range: { from: 0, to: 60 }, programs: { v: driven }, audios: { [codeMotionAudioKey(sequence.id, clip.id)]: sound.finish() }, policy: {} }, new AbortController().signal)
+    expect(sounded.records.some(record => record.kind === 'code_unavailable')).toBe(false)
+    expect(sounded.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'code_structure', elementPath: ['sound/0'], timeline: { from: 29, to: 31 } })]))
+    await ThreadWorker.instances[1].stopped
     clip.duration = 60000
     const heavy = compile('return repeat(4096,i=>rect({id:"particle",x:ctx.time+i/10,y:10,width:100,height:100}));')
     const controller = new AbortController()
     const pending = analyzeVideoEditMotionStructure({ composition: videoEditComposition(document, sequence.id), range: { from: 0, to: 60000 }, programs: { v: heavy }, policy: {} }, controller.signal)
     const rejected = expect(pending).rejects.toThrow('取消实际代码分析')
-    await ThreadWorker.instances[1].started
+    await ThreadWorker.instances[2].started
     controller.abort(new Error('取消实际代码分析')); await rejected
-    expect(ThreadWorker.instances[1].stopped).toBeDefined(); await ThreadWorker.instances[1].stopped
+    expect(ThreadWorker.instances[2].stopped).toBeDefined(); await ThreadWorker.instances[2].stopped
   } finally { await Promise.all(ThreadWorker.instances.map(worker => worker.thread.terminate())) }
 }, 15000)

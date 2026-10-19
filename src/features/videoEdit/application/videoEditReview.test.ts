@@ -24,6 +24,28 @@ import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtur
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
 import { invalidateCodeTextMetrics, measureCodeText } from '../videoEditGlyphMetrics'
 import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
+import type { VideoEditComposition } from '@/core/videoEdit/document'
+import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
+import { codeMotionAudioKey } from '@/core/videoEdit/codeAudio'
+import { readVideoEditContentQueries } from './videoEditContentQueryProgress'
+import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
+
+const soundIO = vi.hoisted(() => ({ documents: [] as VideoEditComposition[], mix: vi.fn<[number, number], Promise<Float32Array[]>>(), dispose: vi.fn(async () => {}) }))
+// Replace only PCM production and the thread boundary; keep sound selection,
+// canonical cache, real signal analysis and the public review path intact.
+vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  constructor(document: VideoEditComposition) { soundIO.documents.push(document) }
+  async mixAudio(start: number, duration: number) {
+    const planes = await soundIO.mix(start, duration)
+    return { numberOfChannels: planes.length, getChannelData: (channel: number) => planes[channel] }
+  }
+  dispose = soundIO.dispose
+} }))
+vi.mock('./videoEditBeatWorkerClient', () => ({ analyzeVideoEditBeatsOffThread: async (rate: number, blocks: AsyncIterable<Float32Array[]>, signal: AbortSignal, fps: number) => {
+  const analyzer = new AudioContentAnalyzer(rate, fps)
+  for await (const planes of blocks) { signal.throwIfAborted(); analyzer.append(planes) }
+  signal.throwIfAborted(); return analyzer.finish()
+} }))
 
 class MotionWorker {
   static instances: MotionWorker[] = []
@@ -37,10 +59,10 @@ class MotionWorker {
   postMessage(request: VideoEditMotionReviewRequest): void { this.request = request; if (MotionWorker.automatic) queueMicrotask(() => { void this.respond() }) }
   async respond(): Promise<void> {
     try {
-      const { composition, range, policy, programs, pixels } = this.request
+      const { composition, range, policy, programs, pixels, audios } = this.request
       const result = collectVideoEditMotionStructure(composition, range, policy)
       if (pixels) result.records.push(...collectVideoEditPixelMotion(pixels, composition.fps, policy))
-      if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, measureCodeText)).records)
+      if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, measureCodeText, audios)).records)
       this.onmessage?.({ data: { result } } as MessageEvent<VideoEditMotionReviewResponse>)
     } catch (error) { this.onmessage?.({ data: { error: error instanceof Error ? error.message : '分析失败' } } as MessageEvent<VideoEditMotionReviewResponse>) }
   }
@@ -54,6 +76,7 @@ let handles: ReturnType<typeof tracking.videoEditTrackResults>
 let trackingRevision: number
 const data = () => createVideoEditTrackHeader({ method: 'box', model: 'test', fps: 10, firstFrame: 0, frameCount: 10, sourceWidth: 64, sourceHeight: 64, promptFrames: [0], boxes: Array.from({ length: 10 }, (_, index) => index === 3 || index === 4 ? null : [0, 0, .5, .5, index === 6 ? .2 : .9]), summary: { tracked: 8, lost: 2 } })
 beforeEach(() => {
+  soundIO.documents = []; soundIO.mix.mockReset(); soundIO.dispose.mockClear()
   installHarnessNativeStorage(); handles = { [key]: { url: 'henji-media://track', version: '1' } }; trackingRevision = 1
   vi.spyOn(tracking, 'videoEditTrackResults').mockImplementation(() => handles)
   vi.spyOn(tracking, 'videoEditTrackingRevision').mockImplementation(() => trackingRevision)
@@ -74,9 +97,8 @@ async function fixture() {
   })
   return { owner, input: { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequenceId}` }, from: 0, to: 120 } }
 }
-async function codeFixture() {
+async function codeFixture(source = 'export default {apiVersion:1,languageVersion:3,name:"代码复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:10,seed:0,parameters:{},render(ctx){return [rect({id:"moving",x:min(ctx.time,1)*300,y:10,width:100,height:100})];}}') {
   const data = await fixture(), { owner } = data
-  const source = 'export default {apiVersion:1,languageVersion:3,name:"代码复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:10,seed:0,parameters:{},render(ctx){return [rect({id:"moving",x:min(ctx.time,1)*300,y:10,width:100,height:100})];}}'
   const version = { id: 'code-v', apiVersion: 1 as const, languageVersion: 3 as const, ...testCodeManifest(source, owner.document) }
   rememberVideoEditCodeMetadata(owner, 'code-d', version, compileCodeMaterial(source))
   editVideoProject(owner.document.id, document => {
@@ -88,6 +110,130 @@ async function codeFixture() {
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
   return data
 }
+async function soundFixture(explicit = false) {
+  const source = `export default {apiVersion:1,languageVersion:3,name:"声音复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:1000,seed:0,parameters:${explicit ? '{sound:{type:"audio",title:"声音",default:null}}' : '{}'},render(ctx){return [rect({id:"sound",x:ctx.audio.level()*500,y:10,width:100,height:100})];}}`
+  const data = await codeFixture(source), { owner } = data
+  editVideoProject(owner.document.id, document => {
+    document.media[0].hasAudio = true
+    const sequence = document.sequences[0], clip = sequence.clips.find(clip => clip.kind === 'code')!
+    addLegacyVideoEditTracks(sequence)
+    clip.track = 2
+    if (explicit) clip.code!.parameters = { sound: { kind: 'audio', mediaId: 'media' } }
+    return document
+  })
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+  const rate = owner.document.sequences[0].sampleRate
+  soundIO.mix.mockImplementation(async (start, duration) => [Float32Array.from({ length: Math.round(rate * duration) }, (_, i) => start + i / rate >= 1 && start + i / rate < 2 ? .4 : .1)])
+  return data
+}
+it.each([false, true])('public review analyzes actual %s sound selection, returns audio-driven element motion and keeps managed source pins in the query only', async explicit => {
+  const { owner, input } = await soundFixture(explicit), app = createApplicationHarness()
+  const before = structuredClone(owner.document), history = owner.past.length
+  try {
+    const result = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 50 }))
+    expect(result.records.some(record => record.kind === 'code_unavailable')).toBe(false)
+    expect(result.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', motionEvidence: expect.objectContaining({ basis: 'code_structure', elementPath: ['sound/0'] }) })]))
+    expect(result.documentVersion).toContain('|review:')
+    expect(soundIO.documents).toHaveLength(1)
+    expect(soundIO.documents[0].clips.map(clip => clip.id)).toEqual(explicit ? ['content-audio'] : ['a', 'b'])
+    expect(soundIO.mix).toHaveBeenCalledTimes(explicit ? 10 : 4)
+    expect(soundIO.dispose).toHaveBeenCalledOnce()
+    const clip = owner.document.sequences[0].clips.find(clip => clip.kind === 'code')!
+    expect(MotionWorker.instances[0].request.audios?.[codeMotionAudioKey(owner.document.sequences[0].id, clip.id)].levels).toContainEqual(expect.closeTo(.4, 5))
+    expect(owner.document).toEqual(before); expect(owner.past.length).toBe(history)
+  } finally { app.dispose() }
+})
+it('public sound review reuses completed PCM analysis across pagination and visual edits, then invalidates audible changes and replaced files', async () => {
+  const { owner, input } = await soundFixture(), query = { ...input, motion: {}, limit: 1 }
+  const first = parse(await queryVideoEditReview(query, context()))
+  expect(first.nextCursor).not.toBeNull()
+  await queryVideoEditReview({ ...query, cursor: first.nextCursor }, context())
+  await queryVideoEditReview(query, context())
+  expect(soundIO.documents).toHaveLength(1)
+  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].x = .8; return document })
+  await queryVideoEditReview(query, context()); expect(soundIO.documents).toHaveLength(1)
+  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].volume = .5; return document })
+  const changed = parse(await queryVideoEditReview(query, context())); expect(soundIO.documents).toHaveLength(2)
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'b'.repeat(64), sizeBytes: 1000, fileModifiedAt: 2000 })
+  await expect(queryVideoEditReview({ ...query, cursor: changed.nextCursor }, context())).rejects.toThrow('重新定位')
+  await queryVideoEditReview(query, context()); expect(soundIO.documents).toHaveLength(3)
+})
+it.each(['cancel', 'edit', 'close'] as const)('public pending sound review rejects %s, releases its mixer and never sends stale audio to the motion worker', async action => {
+  const { owner, input } = await soundFixture(), controller = new AbortController()
+  let accept!: (planes: Float32Array[]) => void
+  soundIO.mix.mockImplementationOnce(() => new Promise(resolve => { accept = resolve }))
+  const pending = queryVideoEditReview({ ...input, motion: {} }, { signal: controller.signal }), rejected = expect(pending).rejects.toThrow()
+  await vi.waitFor(() => expect(soundIO.mix).toHaveBeenCalledOnce())
+  if (action === 'cancel') controller.abort(new Error('取消声音复核'))
+  else if (action === 'edit') editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].volume = .2; return document })
+  else await closeAllVideoEdits()
+  await rejected
+  expect(soundIO.dispose).toHaveBeenCalledOnce(); expect(MotionWorker.instances).toHaveLength(0)
+  expect(readVideoEditContentQueries(owner, 'code-item')).toEqual(expect.arrayContaining([expect.objectContaining({ state: 'cancelled' })]))
+  accept([new Float32Array(48000).fill(.9)])
+})
+it('sound review merges equivalent code audio and rejects excessive complete contexts before decoding', async () => {
+  const { owner, input } = await soundFixture()
+  editVideoProject(owner.document.id, document => {
+    const sequence = document.sequences[0], code = sequence.clips.find(clip => clip.kind === 'code')!
+    sequence.clips.push({ ...code, id: 'same-sound', track: 3 })
+    return document
+  })
+  await queryVideoEditReview({ ...input, motion: {} }, context())
+  expect(soundIO.documents).toHaveLength(1)
+  expect(Object.keys(MotionWorker.instances[0].request.audios!)).toHaveLength(2)
+  editVideoProject(owner.document.id, document => { document.sequences[0].clips.find(clip => clip.kind === 'code')!.duration = 301 * 30; return document })
+  soundIO.mix.mockClear()
+  await expect(queryVideoEditReview({ ...input, motion: {} }, context())).rejects.toThrow('300秒完整声音上下文')
+  expect(soundIO.mix).not.toHaveBeenCalled()
+})
+it.each(['cancel', 'edit'] as const)('a first managed-file identity read stops on %s without waiting for a late native reply', async action => {
+  const { owner, input } = await soundFixture(), controller = new AbortController()
+  let accept!: (value: { contentIdentity: string; sizeBytes: number; fileModifiedAt: number }) => void
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(() => new Promise(resolve => { accept = resolve }))
+  const pending = queryVideoEditReview({ ...input, motion: {} }, { signal: controller.signal }), rejected = expect(pending).rejects.toThrow()
+  await vi.waitFor(() => expect(accept).toBeTypeOf('function'))
+  if (action === 'cancel') controller.abort(new Error('取消来源核对'))
+  else editVideoProject(owner.document.id, document => { document.sequences[0].name = '编辑后的序列'; return document })
+  await rejected
+  expect(soundIO.mix).not.toHaveBeenCalled(); expect(MotionWorker.instances).toHaveLength(0)
+  accept({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+})
+it('rejects sound evidence when the actual file is replaced during PCM production', async () => {
+  const { input } = await soundFixture()
+  soundIO.mix.mockImplementation(async (_start, duration) => {
+    vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'b'.repeat(64), sizeBytes: 1000, fileModifiedAt: 2000 })
+    return [new Float32Array(Math.round(duration * 48000)).fill(.25)]
+  })
+  await expect(queryVideoEditReview({ ...input, motion: {} }, context())).rejects.toThrow('重新定位')
+  expect(soundIO.dispose).toHaveBeenCalledOnce(); expect(MotionWorker.instances).toHaveLength(0)
+})
+it('never combines old and new file identities across two complete sound contexts in one review', async () => {
+  const { owner, input } = await soundFixture()
+  editVideoProject(owner.document.id, document => {
+    const sequence = document.sequences[0], code = sequence.clips.find(clip => clip.kind === 'code')!
+    sequence.clips.push({ ...code, id: 'later-sound', start: 30, duration: 90, track: 3 })
+    return document
+  })
+  let identity = 'a'.repeat(64)
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementation(async () => {
+    const current = identity
+    if (soundIO.dispose.mock.calls.length) identity = 'b'.repeat(64)
+    return { contentIdentity: current, sizeBytes: 1000, fileModifiedAt: 1000 }
+  })
+  await expect(queryVideoEditReview({ ...input, motion: {} }, context())).rejects.toThrow('声音审查期间已改变')
+  expect(MotionWorker.instances).toHaveLength(0)
+})
+it('rejects 33 distinct sound contexts before file inspection or PCM decoding', async () => {
+  const { owner, input } = await soundFixture()
+  editVideoProject(owner.document.id, document => {
+    const sequence = document.sequences[0], code = sequence.clips.find(clip => clip.kind === 'code')!
+    sequence.clips = [...sequence.clips.filter(clip => clip.kind !== 'code'), ...Array.from({ length: 33 }, (_, i) => ({ ...code, id: `sound-${i}`, start: i, duration: 1 }))]
+    return document
+  })
+  await expect(queryVideoEditReview({ ...input, motion: {} }, context())).rejects.toThrow('最多32组')
+  expect(getPlatform().assetLibrary.inspectFileContent).not.toHaveBeenCalled(); expect(soundIO.mix).not.toHaveBeenCalled()
+})
 async function pixelFixture() {
   const data = await fixture(), platform = getPlatform()
   editVideoProject(data.owner.document.id, document => { document.media[0].assetContent = { contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 }; document.sequences[0].clips[0].duration = 90; return document })
@@ -176,6 +322,7 @@ it('rejects a code review whose font set changed while the real domain calculati
   const { input } = await codeFixture(); MotionWorker.automatic = false
   const pending = queryVideoEditReview({ ...input, motion: {} }, context())
   const rejected = expect(pending).rejects.toThrow('字体已改变')
+  await vi.waitFor(() => expect(MotionWorker.instances).toHaveLength(1))
   invalidateCodeTextMetrics(); await MotionWorker.instances[0].respond(); await rejected
 })
 it('public native-motion review returns frame-bound evidence and local suggestions without editing the work, and pages reuse the finished computation', async () => {

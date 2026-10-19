@@ -6,6 +6,8 @@ import { createVideoEditDocument, createVideoEditSequence, videoEditComposition,
 import { addLegacyVideoEditTracks } from './testFixtures'
 import type { CodeTextMeasureRequest } from './codeMaterial/contract'
 import { collectVideoEditReviewStructure, videoEditCrowdedReviewEvents, type VideoEditReviewRecord } from './review'
+import { AudioContentAnalyzer } from '../audioAnalysis/contentAnalysis'
+import { codeMotionAudioKey } from './codeAudio'
 
 const source = (body: string): string => `export default {apiVersion:1,languageVersion:3,name:"复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:20,seed:0,parameters:{},render(ctx){${body}}}`
 const measure = (request: CodeTextMeasureRequest) => layoutCodeText(request, text => text.length * 10)
@@ -110,4 +112,32 @@ it('density coalesces a code entrance with its clip boundary and retains indepen
   const move = records.find(record => record.kind === 'motion')!
   const independent = { ...move, motionEvidence: { ...move.motionEvidence!, elementPath: ['independent/0'] } }
   expect(videoEditCrowdedReviewEvents([move, independent], root.fps, 1.5)).toHaveLength(1)
+})
+function sound(fps = 30) {
+  const analyzer = new AudioContentAnalyzer(8000, fps)
+  analyzer.append([Float32Array.from({ length: 32000 }, (_, i) => i < 8000 ? .1 : i < 16000 ? .4 : .1)])
+  return analyzer.finish()
+}
+it.each([false, true])('audio-driven geometry uses the rendering local clock despite source trim and reversal: %s', async reverse => {
+  const { document, clip, program } = fixture('return [rect({id:"sound",x:ctx.audio.level()*500,y:10,width:100,height:100})];')
+  clip.start = 60; clip.sourceInUs = 9000000; clip.speed = { numerator: 2, denominator: 1 }; clip.reverse = reverse || undefined
+  const result = await collectVideoEditCodeMotion(videoEditComposition(document, 'root'), { from: 60, to: 180 }, { version: program }, {}, measure, { [codeMotionAudioKey('root', 'code')]: sound() })
+  expect(result.records.some(record => record.kind === 'code_unavailable')).toBe(false)
+  const moves = result.records.filter(record => record.kind === 'motion')
+  expect(moves).toHaveLength(2)
+  expect(moves[0].timeline.from).toBe(89); expect(moves[1].timeline.from).toBe(119)
+  expect(moves.every(record => record.elementPath?.at(-1) === 'sound/0')).toBe(true)
+})
+it.each([false, true])('mixed-rate nested audio follows the exact child clock, with distinct repeated instances: %s', async reverse => {
+  const { document, clip, program } = fixture('return [rect({id:"sound",x:ctx.audio.level()*500,y:10,width:100,height:100})];')
+  const child = createVideoEditSequence('子'); child.id = 'child'; child.frameRate = { numerator: 60, denominator: 1 }; addLegacyVideoEditTracks(child)
+  child.clips = [clip]; clip.duration = 240; document.sequences.push(child)
+  document.items.push({ id: 'nested', name: '嵌套', kind: 'sequence', sequenceId: child.id })
+  const wrapper: VideoEditClip = { ...clip, id: 'wrapper', kind: 'sequence', code: undefined, itemId: 'nested', duration: 30, speed: { numerator: 2, denominator: 1 }, ...(reverse ? { reverse: true as const, sourceInUs: 2000000 } : {}) }
+  document.sequences[0].clips = [wrapper, { ...wrapper, id: 'again', start: 60 }]
+  const result = await collectVideoEditCodeMotion(videoEditComposition(document, 'root'), { from: 0, to: 90 }, { version: program }, {}, measure, { [codeMotionAudioKey('child', 'code')]: sound(60) })
+  const moves = result.records.filter(record => record.kind === 'motion')
+  expect(moves).toHaveLength(2)
+  expect(moves[0].timeline.from).toBe(14); expect(moves[1].timeline.from).toBe(74)
+  expect(moves.map(record => record.path.map(step => step.clipId))).toEqual([['wrapper', 'code'], ['again', 'code']])
 })

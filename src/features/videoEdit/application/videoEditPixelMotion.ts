@@ -4,7 +4,7 @@ import { VideoEditSourceMapIndex, type VideoEditSourceMapEntry, type VideoEditSo
 import type { VideoEditPixelMotionInput } from '@/core/videoEdit/pixelMotionReview'
 import { VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET } from '@/core/videoEdit/motionStructure'
 import { getPlatform } from '@/platform/runtime'
-import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
+import { inspectVideoEditMediaContent, verifyVideoEditMediaContent } from '../videoEditMediaContent'
 import { beginVideoEditContentQuery } from './videoEditContentQueryProgress'
 import type { VideoEditInstance } from './videoEditService'
 
@@ -13,9 +13,20 @@ interface Plan { media: VideoEditMedia; entries: VideoEditSourceMapEntry[]; from
 export async function verifyVideoEditMotionSources(sources: readonly VideoEditMedia[], signal: AbortSignal, assertCurrent: () => void): Promise<void> {
   for (const media of sources) {
     assertCurrent()
-    if (!media.assetContent?.contentIdentity) throw new Error(`素材“${media.name}”尚未绑定原文件身份，请先重新定位再分析视频运动。`)
+    if (!media.assetContent?.contentIdentity) throw new Error(`素材“${media.name}”尚未绑定原文件身份，请先重新定位再审查运动。`)
     await verifyVideoEditMediaContent(media, signal); assertCurrent()
   }
+}
+/** Pin fresh analysis inputs only to the current read, including managed files. */
+export async function pinVideoEditMotionSources(sources: readonly VideoEditMedia[], signal: AbortSignal, assertCurrent: () => void): Promise<VideoEditMedia[]> {
+  const pinned: VideoEditMedia[] = []
+  for (const media of sources) {
+    assertCurrent()
+    pinned.push(media.assetContent?.contentIdentity ? media : { ...media, assetContent: await inspectVideoEditMediaContent(media, signal) })
+    assertCurrent()
+  }
+  await verifyVideoEditMotionSources(pinned, signal, assertCurrent)
+  return pinned
 }
 
 /** Same scene-analysis channel, source cache and query progress as the content
@@ -45,16 +56,8 @@ export async function readVideoEditPixelMotion(owner: VideoEditInstance, composi
     }
   }
   if (plans.reduce((seconds, plan) => seconds + plan.to - plan.from, 0) > 300 + 1e-7) throw new Error('本次视频运动分析超过300秒不同源区间预算，请缩小 from/to；未截断证据。')
-  const pixels: VideoEditPixelMotionInput[] = [], platform = getPlatform(), verifiedSources: VideoEditMedia[] = []
-  for (const media of sources.values()) {
-    assertCurrent()
-    // Fresh pixel analysis does not authenticate old transcript facts. Managed
-    // project files intentionally have no asset-library pin: bind only this
-    // query snapshot to the actual file, never change the saved document.
-    const source = media.assetContent?.contentIdentity ? media : { ...media, assetContent: await platform.assetLibrary.inspectFileContent(media.path, media.kind) }
-    assertCurrent(); verifiedSources.push(source)
-  }
-  await verifyVideoEditMotionSources(verifiedSources, signal, assertCurrent)
+  const pixels: VideoEditPixelMotionInput[] = [], platform = getPlatform()
+  const verifiedSources = await pinVideoEditMotionSources([...sources.values()], signal, assertCurrent)
   for (const plan of plans) {
     assertCurrent()
     const task = beginVideoEditContentQuery(owner, plan.entries[0].path.at(-1)!.itemId, signal, ['video_edit:read']), requestId = crypto.randomUUID()

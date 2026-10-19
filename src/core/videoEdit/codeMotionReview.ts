@@ -9,16 +9,15 @@ import type { VideoEditComposition } from './document'
 import { videoEditSourceMapLocalFrame, visitVideoEditPictureInstances, type VideoEditSourceMapEntry, type VideoEditSourceMapRange } from './sourceMap'
 import { videoEditMotionSampleFacts, VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET, type VideoEditMotionStructureFact } from './motionStructure'
 import { activeVideoEditEffects } from './compositing'
+import { codeMaterialUsesAudio } from './codeMaterialResources'
+import { codeAudioTime, codeMotionAudioKey } from './codeAudio'
+import type { AudioContentAnalysis } from '../audioAnalysis/contentAnalysis'
 
 export interface CodeMotionReviewResult { records: VideoEditMotionStructureFact[]; sampledFrames: number; sampledElements: number; warnings: string[] }
 class NeedsTextMeasurement extends Error { constructor(readonly request: CodeTextMeasureRequest) { super('需要共享字体度量。') } }
 interface State { path: string[]; points: Array<[number, number]>; signature: string; visible: boolean; group: boolean; pixelsUnknown: boolean }
 interface Trace { path: string[]; samples: MotionReviewSample[]; group: boolean; pixelsUnknown: boolean }
 
-function usesAudio(program: CodeMaterialProgram): boolean {
-  const visit = (value: unknown): boolean => Boolean(value && typeof value === 'object' && (('op' in value && typeof value.op === 'string' && value.op.startsWith('audio.')) || Object.values(value).some(visit)))
-  return visit(program.result) || program.bindings.some(binding => visit(binding.expression))
-}
 function state(bound: CodeElementBounds, program: CodeMaterialProgram): State {
   const command = bound.command
   // A group's child bounds change when a child animates. Use a fixed local basis
@@ -39,7 +38,7 @@ function state(bound: CodeElementBounds, program: CodeMaterialProgram): State {
  * Text comes from the rendering host's real metrics; no guessed widths or pixels.
  * All CPU work is intended for the motion Worker, with explicit resource budgets. */
 export async function collectVideoEditCodeMotion(root: VideoEditComposition, range: VideoEditSourceMapRange, programs: Readonly<Record<string, CodeMaterialProgram>>, policy: MotionReviewPolicy,
-  measureText: (request: CodeTextMeasureRequest) => CodeTextLayout | Promise<CodeTextLayout>): Promise<CodeMotionReviewResult> {
+  measureText: (request: CodeTextMeasureRequest) => CodeTextLayout | Promise<CodeTextLayout>, audios: Readonly<Record<string, AudioContentAnalysis>> = {}): Promise<CodeMotionReviewResult> {
   const records: VideoEditMotionStructureFact[] = [], warnings = new Set<string>()
   const jobs: Array<{ local: VideoEditComposition; entry: VideoEditSourceMapEntry; program: CodeMaterialProgram }> = []
   let plannedFrames = 0, sampledFrames = 0, sampledElements = 0, operations = 0, cacheBytes = 0
@@ -51,7 +50,7 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
     if (clip.kind !== 'code' || !clip.code) return
     const program = programs[clip.code.versionId]
     if (!program || program.kind !== 'generator' || program.languageVersion !== 3) { unknown('此代码版本没有可复用的第三版元素结构；请按检查帧观察结果。'); return }
-    if (usesAudio(program)) { unknown('此代码由声音驱动，尚未提供同源声音分析，未用零值伪造动作。'); return }
+    if (codeMaterialUsesAudio(program) && !audios[codeMotionAudioKey(local.id, clip.id)]) { unknown('此代码由声音驱动，尚未提供同源声音分析，未用零值伪造动作。'); return }
     plannedFrames += entry.timeline.to - entry.timeline.from
     if (plannedFrames > VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET) throw new Error('代码运动结构超过单次60000帧实例预算，请缩小 from/to；未截断证据。')
     jobs.push({ local, entry, program })
@@ -73,6 +72,8 @@ export async function collectVideoEditCodeMotion(root: VideoEditComposition, ran
       const localFrame = videoEditSourceMapLocalFrame(entry, frame)
       const context = localFrame >= clip.start && localFrame < clip.start + clip.duration ? codeMaterialContextForFrame(clip, localFrame, local.frameRate, program)
         : codeMaterialContextForTransitionFrame(clip, localFrame, local.frameRate, program, window)
+      const audio = audios[codeMotionAudioKey(local.id, clip.id)]
+      if (audio) { context.audio = audio; context.audioTime = codeAudioTime(clip, localFrame, local.fps) }
       const sourceTime = videoEditClipSourceTimeAt(clip, localFrame - clip.start, local.frameRate, program.mode === 'static')
       const values = evaluateCodeMaterialParameters(parameters, sourceTime)
       let commands: CodeDrawCommand[]

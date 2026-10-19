@@ -7,6 +7,7 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"单帧观察验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"背景",x:0,y:0,width:640,height:360,fill:ctx.time>=.5&&ctx.time<.51?[1,0,0,1]:[0,0,1,1]})];}}'
+const SOUND_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"声音驱动验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"声音标记",x:ctx.audio.level()*500,y:80,width:60,height:40,fill:[0,1,0,1]})];}}'
 async function pixel(bytes, x, y) {
   return [...await sharp(bytes).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer()]
 }
@@ -18,6 +19,12 @@ function createVideoEditObservationScene() {
       const root = path.resolve('node_modules/.cache/video-edit-observation-review'); fs.mkdirSync(root, { recursive: true })
       const referencePath = path.join(root, 'reference.png')
       const videoReferencePath = path.join(root, 'reference.mp4')
+      const soundPath = path.join(root, 'sound.wav')
+      const pcm = Buffer.alloc(44 + 96000 * 2)
+      pcm.write('RIFF', 0); pcm.writeUInt32LE(pcm.length - 8, 4); pcm.write('WAVEfmt ', 8); pcm.writeUInt32LE(16, 16)
+      pcm.writeUInt16LE(1, 20); pcm.writeUInt16LE(1, 22); pcm.writeUInt32LE(48000, 24); pcm.writeUInt32LE(96000, 28); pcm.writeUInt16LE(2, 32); pcm.writeUInt16LE(16, 34); pcm.write('data', 36); pcm.writeUInt32LE(pcm.length - 44, 40)
+      for (let i = 0; i < 96000; i++) pcm.writeInt16LE(Math.round((i < 48000 ? .1 : .4) * 32767), 44 + i * 2)
+      fs.writeFileSync(soundPath, pcm)
       await sharp({ create: { width: 640, height: 360, channels: 3, background: { r: 0, g: 0, b: 255 } } }).png().toFile(referencePath)
       const { ffmpegPath } = require('./mediaBinaries.cjs')
       // lavfi color starts in BT.601 YUV; encode/tag the same BT.709 matrix + sRGB transfer as our frame exporter.
@@ -27,22 +34,29 @@ function createVideoEditObservationScene() {
         items: [{ id: 'reference-item', name: '蓝色参考', kind: 'image', mediaId: 'reference' }, { id: 'video-reference-item', name: '竖版变色参考', kind: 'video', mediaId: 'video-reference' }], bins: [],
         sequences: [{ id: 'main', name: '主序列', width: 640, height: 360, frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
           tracks: [track(1), track(2)], clips: [{ id: 'base', itemId: 'reference-item', name: '蓝色底图', kind: 'image', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }], captions: [{ id: 'review-caption', text: '检查', start: 30, duration: 1 }], annotations: [] }] }
+      fixture.media.push({ id: 'sound', name: '声音电平夹具', path: soundPath, kind: 'audio', width: 0, height: 0, durationSeconds: 2, hasAudio: true })
+      fixture.items.push({ id: 'sound-item', name: '声音电平夹具', kind: 'audio', mediaId: 'sound' })
+      fixture.sequences[0].tracks.push({ ...track(0), kind: 'audio', name: '声音' }, track(3))
       let client
       const evidence = { completed: false, observations: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       try {
         await showVideoEditProjects(page)
         const seeded = await seedVideoEditProject(page, fixture)
-        await page.evaluate(async ({ source, projectId, id }) => {
+        await page.evaluate(async ({ source, sound, projectId, id }) => {
           const documents = window.henjiNative.documents
           const resource = await documents.importFile({ sourcePath: source, container: { kind: 'project', projectId }, folder: 'materials' })
           const read = await documents.readDocument({ id })
           const media = read.content.media.find(value => value.id === 'video-reference')
           media.path = resource.path
           media.assetContent = await window.henjiNative.assetLibrary.inspectFileContent(resource.path, 'video')
+          const soundResource = await documents.importFile({ sourcePath: sound, container: { kind: 'project', projectId }, folder: 'materials' })
+          const soundMedia = read.content.media.find(value => value.id === 'sound')
+          soundMedia.path = soundResource.path
+          soundMedia.assetContent = await window.henjiNative.assetLibrary.inspectFileContent(soundResource.path, 'audio')
           read.content.sequences[0].clips[0].itemId = 'video-reference-item'; read.content.sequences[0].clips[0].kind = 'video'
           await documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
-        }, { source: videoReferencePath, projectId: seeded.projectId, id: seeded.documentId })
+        }, { source: videoReferencePath, sound: soundPath, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId)
         const identity = await authorizeMcpConnection(page, { name: '定向观察验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji observation Reality')
@@ -99,6 +113,27 @@ function createVideoEditObservationScene() {
         const motionObserved = await observe('motion-review', { kind: 'frames', frames: motionPlan.checkpoints.frames }, { documentVersion: motionPlan.documentVersion })
         assert.deepEqual(motionObserved.data.contactSheet.frames, motionPlan.checkpoints.frames)
         assert.deepEqual(readVideoEditFile(seeded.file), before)
+        assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
+        const soundBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        const soundCreated = await callTool(client, 'change_application_entities', operationEnvelope([soundBaseline], { summary: '创建声音驱动画面验收素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: documentRef, items: [{ properties: { 'video_edit.code_material.source': SOUND_SOURCE } }] }] }))
+        assert.equal(soundCreated.verificationState, 'verified', JSON.stringify(soundCreated))
+        const soundItem = readVideoEditFile(seeded.file).items.find(value => value.kind === 'code' && value.id !== item.id); assert.ok(soundItem)
+        const soundSeq = await callTool(client, 'read_application_entity', { ref: sequenceRef })
+        const soundPlaced = await callTool(client, 'change_application_entities', operationEnvelope([soundSeq], { summary: '放置声音与驱动画面', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [
+          { properties: { 'video_edit.clip.item_id': 'sound-item', 'video_edit.clip.name': '声音电平', 'video_edit.clip.kind': 'audio', 'video_edit.clip.track': 0, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 120 } },
+          { properties: { 'video_edit.clip.item_id': soundItem.id, 'video_edit.clip.name': '声音驱动', 'video_edit.clip.kind': 'code', 'video_edit.clip.track': 3, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 120 } },
+        ] }] }))
+        assert.equal(soundPlaced.verificationState, 'verified', JSON.stringify(soundPlaced))
+        const soundBefore = readVideoEditFile(seeded.file)
+        const soundClip = soundBefore.sequences[0].clips.find(value => value.itemId === soundItem.id)
+        const soundPlan = (await callTool(client, 'query_video_edit_review', { documentRef, sequenceRef, from: 0, to: 120, motion: { minimumHoldSeconds: .25 }, limit: 50 })).data
+        assert.ok(soundPlan.records.some(record => record.kind === 'motion' && record.motionEvidence?.basis === 'code_structure' && record.subjectRef.id.endsWith(`:${soundClip.id}`) && record.timeline.fromFrame >= 58 && record.timeline.fromFrame <= 61), JSON.stringify(soundPlan))
+        assert.ok(!soundPlan.records.some(record => record.kind === 'code_unavailable'), JSON.stringify(soundPlan))
+        evidence.soundPlan = soundPlan; store()
+        const soundObserved = await observe('sound-review', { kind: 'frames', frames: [59, 61] }, { documentVersion: soundPlan.documentVersion })
+        near(await pixel(soundObserved.bytes, 40, 50), [0, 255, 0]); near(await pixel(soundObserved.bytes, 435, 50), [0, 255, 0])
+        near(await pixel(soundObserved.bytes, 115, 50), [0, 0, 255]); near(await pixel(soundObserved.bytes, 360, 50), [0, 0, 255])
+        assert.deepEqual(readVideoEditFile(seeded.file), soundBefore)
         assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
         evidence.capture = await capture('observation-review-host'); evidence.completed = true; store()
       } catch (error) { evidence.failure = String(error.stack ?? error); store(); throw error }

@@ -1,4 +1,5 @@
-import { VideoEditContentAudio, codeAudioComposition } from '../engine/videoEditContentAudio'
+import { VideoEditContentAudio } from '../engine/videoEditContentAudio'
+import { codeAudioComposition } from '@/core/videoEdit/codeAudio'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditComposition, type VideoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import type { AudioContentAnalysis } from '@/core/audioAnalysis/contentAnalysis'

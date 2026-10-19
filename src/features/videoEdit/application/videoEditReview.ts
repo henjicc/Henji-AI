@@ -19,6 +19,7 @@ import { analyzeVideoEditMotionStructure } from './videoEditMotionReviewWorkerCl
 import { readVideoEditCodeProgram } from './videoEditCodeState'
 import { codeTextFontGeneration } from '../videoEditGlyphMetrics'
 import { readVideoEditPixelMotion, verifyVideoEditMotionSources } from './videoEditPixelMotion'
+import { readVideoEditCodeMotionAudio } from './videoEditCodeMotionAudio'
 
 interface Snapshot { key: string; version: string; baseVersion: string; records: VideoEditReviewRecord[]; frames: number[]; warnings: string[]; sources: VideoEditMedia[] }
 const snapshots = new WeakMap<VideoEditInstance, Map<string, Snapshot>>()
@@ -72,8 +73,9 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
           if (code && !programs[code.versionId]) programs[code.versionId] = readVideoEditCodeProgram(owner, owner.document, code)
         } })
         const video = input.motion.videoPixels ? await readVideoEditPixelMotion(owner, composition, range, context.signal, assertCurrent) : undefined
-        sources = video?.sources ?? []
-        const motion = await analyzeVideoEditMotionStructure({ composition, range, programs, ...(video ? { pixels: video.pixels } : {}), policy: { minGapSeconds: input.motion.minGapSeconds, minimumStillSeconds: input.motion.minimumHoldSeconds } }, context.signal)
+        const sound = await readVideoEditCodeMotionAudio(owner, composition, range, programs, context.signal, assertCurrent)
+        sources = [...(video?.sources ?? []), ...sound.sources]
+        const motion = await analyzeVideoEditMotionStructure({ composition, range, programs, audios: sound.audios, ...(video ? { pixels: video.pixels } : {}), policy: { minGapSeconds: input.motion.minGapSeconds, minimumStillSeconds: input.motion.minimumHoldSeconds } }, context.signal)
         assertCurrent()
         for (const record of motion.records) {
           assertVideoEditReviewBudget(records.length + 1)
@@ -87,8 +89,8 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
               : code ? '观察此代码元素的独立动作或内容变化是否服务当前信息；按创作意图调整原代码或元素覆盖。' : '观察这段原生变换是否服务当前信息；有意承载运动可保留，调整仍沿原片段属性与曲线。')
           records.push({ ...record, motionEvidence: { basis: record.basis ?? 'clip_transform', ...(record.elementPath ? { elementPath: [...record.elementPath] } : {}), ...(record.peakSpeed === undefined ? {} : { peakSpeed: record.peakSpeed }), suggestion: code && record.kind === 'motion_hold' ? '此元素自身结构保持；父组、输入视频或其他图层仍可能运动，请看图判断阅读停留。' : suggestion } })
         }
-        warnings.push('原生速度以所在序列画面宽为单位；代码速度以作者画幅宽为单位，均为百分比/播放秒。代码元素仅计自身动作，父组不重复计入子元素。变换保持不等于画面静止，视频、着色器、声音驱动和代码滤镜仍须观察；密集或硬停可属创作意图。', ...(motion.warnings ?? []))
-        if (video) warnings.push('视频像素证据来自原片15fps低分辨率采样，速度以原片显示画幅宽度百分比/播放秒表示，已按当前放置时钟重算；并非精确PTS或最终合成，不排除采样间的短变化。声音驱动代码、代码视频输入及着色器内部仍须观察。')
+        warnings.push('原生速度以所在序列画面宽为单位；代码速度以作者画幅宽为单位，均为百分比/播放秒。代码元素仅计自身动作，父组不重复计入子元素；声音驱动复用正式混音和分析。变换保持不等于画面静止，视频、着色器和代码滤镜仍须观察；密集或硬停可属创作意图。', ...(motion.warnings ?? []))
+        if (video) warnings.push('视频像素证据来自原片15fps低分辨率采样，速度以原片显示画幅宽度百分比/播放秒表示，已按当前放置时钟重算；并非精确PTS或最终合成，不排除采样间的短变化。代码视频输入及着色器内部仍须观察。')
         for (const event of videoEditCrowdedReviewEvents(records, composition.fps, input.motion.minGapSeconds)) {
           assertVideoEditReviewBudget(records.length + 1)
           records.push({ kind: 'event_crowded', timeline: { from: event.from, to: Math.min(range.to, event.to) }, sequenceId: childId, path: [], subjectId: childId,

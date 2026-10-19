@@ -1,8 +1,9 @@
 import { codeMediaInputKey, codeMediaInputComposition } from './videoEditCodeMediaInput'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
-import { isCodeImageReference, isCodeAudioReference } from '@/core/videoEdit/codeMaterial/contract'
+import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
-import { VideoEditContentAudio, codeAudioComposition } from './videoEditContentAudio'
+import { VideoEditContentAudio } from './videoEditContentAudio'
+import { codeAudioComposition, codeAudioReferenceMediaId, codeAudioTime } from '@/core/videoEdit/codeAudio'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { createLogger } from '@/core/logging'
 import { videoEditShaderGraphWarmSpecs } from '@/core/videoEdit/shaderGraph/effects'
@@ -522,10 +523,9 @@ export class VideoEditRenderer {
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
     const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { transitions, surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
       if (!codeMaterialUsesAudio(program)) return {}
-      const reference = Object.values(parameters).find(isCodeAudioReference)
-      const source = codeAudioComposition(document, document.clips.find(value => value.id === clip.id) ?? clip, reference?.mediaId)
+      const source = codeAudioComposition(document, document.clips.find(value => value.id === clip.id) ?? clip, codeAudioReferenceMediaId(parameters))
       const audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)
-      return { audio, audioTime: (frame - clip.start) / document.fps }
+      return { audio, audioTime: codeAudioTime(clip, frame, document.fps) }
     } })
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
