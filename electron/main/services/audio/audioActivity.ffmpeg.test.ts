@@ -1,4 +1,7 @@
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
+
+// 真实 FFmpeg 子进程：CI 冷启动首个用例常超过默认 5 秒，给集成测试留足时间。
+vi.setConfig({ testTimeout: 30_000 })
 import { AudioLoudnessSession } from './loudness'
 import fs from 'node:fs/promises'
 import os from 'node:os'
