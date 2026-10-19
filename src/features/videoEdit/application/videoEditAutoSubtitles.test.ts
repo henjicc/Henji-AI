@@ -24,6 +24,7 @@ import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { getVideoEditClipPauseMap } from './videoEditPauseMap'
 import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
+import { SpeechSubtitleTestWorker } from '@/tests/speechSubtitleWorkerTestKit'
 import { buildAutoSubtitles } from '@/core/videoEdit/autoSubtitles'
 import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
 
@@ -71,7 +72,7 @@ beforeEach(async () => {
     return document
   })
 })
-afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+afterEach(async () => { useAlertDialogStore.setState({ queue: [] }); await resetAudioEditProjectInstancesForTests(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 const sequence = () => owner.document.sequences[0]
 
 it.each(['metadata', 'content'] as const)('字幕整理期间写入 %s：元数据可继续，内容编辑拒绝迟到回填', async change => {
@@ -204,9 +205,12 @@ it('停顿图原生与已存词边界统一取整，不重叠且与字幕吸附�
     expect(captions.map(cue => [cue.caption.start, cue.caption.start + cue.caption.duration])).toEqual(expected.map(word => [word.startFrame, word.endFrame]))
   }
 })
-it('native generation timestamps create readable frame/us captions in one undo without ASR or approval', async () => {
-  const original = ' 聊天的叫AI，画画的叫AI，配音、做视频的，也叫AI。它们是同一个东西吗？\n不是。它们更像一个剧组，各管一摊。大语言模型，懂文字、会思考；图片模型，只会画；音频模型，只会出声；视频模型，负责让画面动起来。但它们能接力：你说一句话，大语言模型先听懂、拆好任务、写出指令，再交给画图的、配音的、做视频的去干活。所以，AI看着五花八门，真正把这一切串起来的，是那个听得懂人话的——大语言模型。 '
-  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = 60; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = 1800; return document })
+it.each([1, 6])('native generation timestamps create readable frame/us captions in one undo without ASR or approval, repeats=%s', async repeats => {
+  const original = ' 聊天的叫AI，画画的叫AI，配音、做视频的，也叫AI。它们是同一个东西吗？\n不是。它们更像一个剧组，各管一摊。大语言模型，懂文字、会思考；图片模型，只会画；音频模型，只会出声；视频模型，负责让画面动起来。但它们能接力：你说一句话，大语言模型先听懂、拆好任务、写出指令，再交给画图的、配音的、做视频的去干活。所以，AI看着五花八门，真正把这一切串起来的，是那个听得懂人话的——大语言模型。 '.repeat(repeats)
+  SpeechSubtitleTestWorker.instances = []; SpeechSubtitleTestWorker.autoRun = true
+  vi.stubGlobal('Worker', SpeechSubtitleTestWorker)
+  const duration = Math.max(60, Math.ceil(Array.from(original).length / 10) + 1)
+  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = duration; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = duration * 30; return document })
   vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'char', items: Array.from(original).map((text, index) => ({ text, startMs: index * 100, endMs: (index + 1) * 100 })) } }] } })
   const past = owner.past.length
   const raw = await handleVideoEditSubtitleCapability('generate_video_edit_subtitles', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, clipRef: { kind: 'video_edit.clip', id: `${owner.document.id}:voice` }, timeSource: 'native' }, { signal: new AbortController().signal })
@@ -221,7 +225,35 @@ it('native generation timestamps create readable frame/us captions in one undo w
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   expect(owner.past.length).toBe(past + 1)
+  expect(SpeechSubtitleTestWorker.instances).toHaveLength(repeats === 1 ? 0 : 1)
+  const captions = structuredClone(sequence().captions)
   undoVideoEdit(owner.document.id); expect(sequence().captions ?? []).toHaveLength(0)
+  if (repeats > 1) {
+    undoVideoEdit(owner.document.id, true)
+    owner = await reopenVideoEdit(owner.document.id)
+    expect(sequence().captions).toEqual(captions)
+  }
+})
+
+it.each(['cancel', 'changed'] as const)('long alignment %s cannot apply a stale result', async mode => {
+  const original = '打开后台查看用户设置。'.repeat(80), duration = original.length / 10 + 1
+  SpeechSubtitleTestWorker.instances = []; SpeechSubtitleTestWorker.autoRun = false
+  vi.stubGlobal('Worker', SpeechSubtitleTestWorker)
+  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = duration; document.media[0].creativeSource = { type: 'generation', recordId: 'tts-result', outputIndex: 0, prompt: original }; document.sequences[0].clips[0].duration = duration * 30; return document })
+  vi.spyOn(getPlatform().aiRuntime, 'readSavedResult').mockResolvedValue({ status: 'completed', metadata: { outputTimings: [{ outputIndex: 0, timings: { granularity: 'char', items: Array.from(original).map((text, index) => ({ text, startMs: index * 100, endMs: (index + 1) * 100 })) } }] } })
+  const controller = new AbortController()
+  const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { timeSource: 'native' }, controller.signal)
+  await vi.waitFor(() => expect(SpeechSubtitleTestWorker.instances).toHaveLength(1))
+  const worker = SpeechSubtitleTestWorker.instances[0]
+  expect(videoEditBusyReason(owner.document.id)).toBeTruthy()
+  if (mode === 'cancel') controller.abort(new Error('取消长稿对齐'))
+  else editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start += 30; return document })
+  const rejected = expect(pending).rejects.toThrow(mode === 'cancel' ? '取消长稿对齐' : '原片段已改变')
+  await worker.respond(); await rejected
+  expect(sequence().captions ?? []).toHaveLength(0)
+  expect(worker.terminate).toHaveBeenCalledOnce()
+  expect(videoEditBusyReason(owner.document.id)).toBeFalsy()
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
 })
 it('native-only mode rejects missing timings without charging or creating a caption', async () => {
   await expect(generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: '你好', timeSource: 'native' })).rejects.toThrow('没有原生时间戳')

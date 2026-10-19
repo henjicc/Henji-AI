@@ -1,5 +1,5 @@
 import { withPaidOperation, transcriptionEstimatedCny } from '@/services/paidApproval'
-import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
+import { buildVideoEditSpeechSubtitles } from './videoEditSpeechSubtitleWorkerClient'
 import type { SpeechTimings } from '@/core/media/speechTimings'
 import { autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
 import { readClipEnergyPauses } from './videoEditPauseMap'
@@ -88,7 +88,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
     }
     await assertTarget()
     const pauses = await readClipEnergyPauses(projectId, sequenceId, clipId, signal)
-    const subtitles = await buildSpeechSubtitles(originalText, timings, clip, sequence.frameRate, autoSubtitleOptionsSchema.strip().parse(options), signal, pauses)
+    const subtitles = await buildVideoEditSpeechSubtitles(originalText, timings, clip, sequence.frameRate, autoSubtitleOptionsSchema.strip().parse(options), signal, pauses)
     await assertTarget()
     appendAutoSubtitles(projectId, sequenceId, subtitles.map(value => value.caption))
     const created = new Map(requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)!.captions!.map(caption => [caption.id, caption]))

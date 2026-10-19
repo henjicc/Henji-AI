@@ -13,7 +13,7 @@ import { z } from 'zod'
 import { AudioBufferSource, Output, StreamTarget, WavOutputFormat } from 'mediabunny'
 import { createLogger } from '@/core/logging'
 import { buildAutoSubtitles, autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
-import { buildSpeechSubtitles } from '@/core/videoEdit/speechSubtitles'
+import { buildVideoEditSpeechSubtitles } from './videoEditSpeechSubtitleWorkerClient'
 import { resolveSubtitleStyle } from '@/core/videoEdit/subtitleStyleProfiles'
 import { advanceVideoEditClipSource, videoEditClipFrameBoundaryAtSource } from '@/core/videoEdit/clipSpeed'
 import { readClipSpeechTimings, readClipEnergyPauses, readSourceEnergyPauses } from './videoEditPauseMap'
@@ -289,7 +289,7 @@ export async function segmentVideoEditSubtitles(projectId: string, sequenceId: s
         const b = videoEditClipFrameBoundaryAtSource(clip, pause.endMs / 1000, fps) / fps * 1000
         return { startMs: Math.min(a, b), endMs: Math.max(a, b), evidence: pause.evidence }
       }) : []
-      const cues = timings && scopedClip ? (await buildSpeechSubtitles(text, timings, scopedClip, sequence.frameRate, settings, signal, pauses, 'clip')).map(value => value.caption)
+      const cues = timings && scopedClip ? (await buildVideoEditSpeechSubtitles(text, timings, scopedClip, sequence.frameRate, settings, signal, pauses, 'clip')).map(value => value.caption)
         : buildAutoSubtitles(group.map((caption, index) => ({ id: caption.id, text: joinCaptionText(texts[index].split('\n')), startFrame: (caption.start - first.start) * sequence.frameRate.denominator, endFrame: (caption.start + caption.duration - first.start) * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false })), sequence.frameRate.numerator, sequence.frameRate, { startFrame: first.start, endFrame }, settings, sequencePauses)
       if (!cues.length) throw new Error('已有时间信息无法覆盖这些字幕，请检查字幕与声音片段的对应位置。')
       const sourceWords = group.flatMap(caption => caption.speech?.words ?? [])
