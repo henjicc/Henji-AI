@@ -6,10 +6,12 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
 const { presented, png, pixelDifference, mediaProbe } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
 
 const SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"单帧观察验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"背景",x:0,y:0,width:640,height:360,fill:ctx.time>=.5&&ctx.time<.51?[1,0,0,1]:[0,0,1,1]})];}}'
 const SOUND_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"声音驱动验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"声音标记",x:ctx.audio.level()*500,y:80,width:60,height:40,fill:[0,1,0,1]})];}}'
 const INPUT_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"画面输入验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({id:"输入",source:ctx.params.picture,x:0,y:0,width:640,height:360})];}}'
+const SHARED_INPUT_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"四路输入",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{a:{type:"image",title:"原片",default:null},b:{type:"image",title:"重复原片",default:null},c:{type:"image",title:"下层",default:null},d:{type:"image",title:"重复下层",default:null}},render(ctx){return [image({source:ctx.params.a,x:0,y:0,width:160,height:360}),image({source:ctx.params.b,x:160,y:0,width:160,height:360}),image({source:ctx.params.c,x:320,y:0,width:160,height:360}),image({source:ctx.params.d,x:480,y:0,width:160,height:360})];}}'
 const MOTION_SOURCE = 'export default {apiVersion:2,languageVersion:3,name:"快门曝光验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{blurEnabled:{type:"boolean",title:"运动曝光",default:true}},render(ctx){return [rect({x:0,y:0,width:640,height:360,fill:[0,0,0,1]}),group({id:"运动层",x:160+(ctx.time-1)*1920,y:160,motionBlur:{enabled:ctx.params.blurEnabled,shutter:180,maxSamples:64}},[rect({x:0,y:0,width:8,height:40,fill:[1,0,0,128/255]})])];}}'
 const LENS_SOURCE = 'export default {apiVersion:3,languageVersion:3,name:"层级焦点验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{focus:{type:"number",title:"焦点",default:0,min:0,max:1,step:.01,animatable:true}},render(ctx){return [rect({x:0,y:0,width:640,height:360,fill:[0,0,0,1]}),group({x:160,y:160,blurShape:"lens",blur:ctx.params.focus*24},[rect({x:0,y:0,width:16,height:40,fill:[1,0,0,1]})]),group({x:400,y:160,blurShape:"lens",blur:(1-ctx.params.focus)*24},[rect({x:0,y:0,width:16,height:40,fill:[0,0,1,1]})])];}}'
 async function pixel(bytes, x, y) {
@@ -20,6 +22,7 @@ function near(actual, expected) { assert.ok(actual.every((value, index) => Math.
 function createVideoEditObservationScene() {
   return { id: 'video-edit-observation-review', surface: '剪辑', name: '剪辑-定向连续帧局部放大与参考比较', writesUserData: true,
     setup: async (page, app, { capture }) => {
+      assert.ok(await app.evaluate(() => Boolean(process.env.HENJI_ISOLATED_APP_DATA)), '输入性能测量只允许隔离资料目录')
       const root = path.resolve('node_modules/.cache/video-edit-observation-review'); fs.mkdirSync(root, { recursive: true })
       const referencePath = path.join(root, 'reference.png')
       const videoReferencePath = path.join(root, 'reference.mp4')
@@ -45,6 +48,7 @@ function createVideoEditObservationScene() {
       const evidence = { completed: false, observations: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       try {
+        await observeWorkers(page)
         await showVideoEditProjects(page)
         const seeded = await seedVideoEditProject(page, fixture)
         await page.evaluate(async ({ source, sound, projectId, id }) => {
@@ -62,7 +66,7 @@ function createVideoEditObservationScene() {
           await documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
         }, { source: videoReferencePath, sound: soundPath, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId)
-        const identity = await authorizeMcpConnection(page, { name: '定向观察验收', allowWrites: true })
+        const identity = await authorizeMcpConnection(page, { name: '定向观察验收', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji observation Reality')
         const documentRef = { kind: 'video_edit.document', id: seeded.documentId }
         const sequenceRef = { kind: 'video_edit.sequence', id: `${seeded.documentId}:main` }
@@ -262,16 +266,81 @@ function createVideoEditObservationScene() {
         evidence.capture = await capture('observation-review-host'); store()
         const assets = fs.readdirSync(path.resolve('out/renderer/assets')).filter(name => /^videoEditCodeProbe-[\w-]+\.js$/.test(name))
         assert.equal(assets.length, 1)
-        evidence.inputPerformance = await page.evaluate(async ({ asset, video }) => {
+        evidence.inputPerformance = await page.evaluate(async ({ asset, video, source }) => {
           const imported = await import(new URL(`./assets/${asset}`, window.location.href).href)
           const probe = imported.runVideoEditCodeInputProbe ? imported : Object.values(imported).find(value => value && typeof value === 'object' && typeof value.runVideoEditCodeInputProbe === 'function')
           const host = document.createElement('div'); host.dataset.codeInputProbe = ''; host.style.cssText = 'position:fixed;inset:80px 24px 40px;z-index:100'; document.body.appendChild(host)
-          try { return await probe.runVideoEditCodeInputProbe(host, video) } catch (error) { host.remove(); throw error }
-        }, { asset: assets[0], video: videoReferencePath }); store()
+          try { return await probe.runVideoEditCodeInputProbe(host, video, source) } catch (error) { host.remove(); throw error }
+        }, { asset: assets[0], video: videoReferencePath, source: SHARED_INPUT_SOURCE }); store()
         assert.equal(evidence.inputPerformance.completed, true)
         await capture('shared-video-inputs')
         await page.locator('[data-code-input-probe]').evaluateAll(elements => elements.forEach(element => element.remove()))
         assert.equal(evidence.inputPerformance.disposed.codeInputSessions, 0)
+        // Use the actual program monitor, its Worker and its two-frame pipeline.
+        // Completion acknowledges the GPU queue; it does not measure physical scanout.
+        const changed = async (refs, changes) => {
+          const baselines = await Promise.all(refs.map(ref => callTool(client, 'read_application_entity', { ref })))
+          const result = await callTool(client, 'change_application_entities', operationEnvelope(baselines, { summary: '测量四路视频输入正式回放', changes }))
+          assert.equal(result.verificationState, 'verified', JSON.stringify(result))
+        }
+        const oldItems = new Set(readVideoEditFile(seeded.file).items.map(item => item.id))
+        await changed([documentRef], [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: documentRef, items: [{ properties: { 'video_edit.code_material.source': SHARED_INPUT_SOURCE } }] }])
+        const sharedItem = readVideoEditFile(seeded.file).items.find(item => !oldItems.has(item.id) && item.kind === 'code'); assert.ok(sharedItem)
+        const removed = readVideoEditFile(seeded.file).sequences[0].clips.filter(clip => clip.id !== 'base').map(clip => ({ kind: 'video_edit.clip', id: `${seeded.documentId}:${clip.id}` }))
+        await changed([sequenceRef, ...removed], [
+          { kind: 'remove_items', entityType: 'video_edit.clip', parent: sequenceRef, targets: removed },
+          { kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: {
+            'video_edit.clip.item_id': sharedItem.id, 'video_edit.clip.name': '四路输入回放', 'video_edit.clip.kind': 'code', 'video_edit.clip.track': 2, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 120,
+            'video_edit.clip.code_parameters': { a: { kind: 'video', mediaId: 'video-reference' }, b: { kind: 'video', mediaId: 'video-reference' }, c: { kind: 'sequence', mediaId: 'below' }, d: { kind: 'sequence', mediaId: 'below' } },
+          } }] },
+        ])
+        const playback = (frame, playing) => changed([documentRef], [{ kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } } }])
+        const canvas = page.locator('canvas[aria-label="剪辑画面"]')
+        const stats = values => { const sorted = values.sort((a, b) => a - b); return { count: sorted.length, p50: sorted[Math.floor(sorted.length * .5)], p95: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * .95))], max: sorted.at(-1) } }
+        const playbackEvidence = { resolutions: [[640, 360], [3840, 2160]], sourceResolution: [360, 640], fps: 60, expectedFrames: 120, measurement: 'Formal program monitor; GPU completion acknowledgements, not physical display scanout. Frame 0 is already paused and presented before play. 4K means output/compositing size; the source video remains 360x640.', runs: [] }
+        evidence.inputPlayback = playbackEvidence; store()
+        for (const [width, height] of playbackEvidence.resolutions) {
+        if (width !== 640) await changed([sequenceRef], [{ kind: 'set_properties', entityType: sequenceRef.kind, target: sequenceRef, properties: { 'video_edit.sequence.width': width, 'video_edit.sequence.height': height } }])
+        for (let round = 0; round < 2; round++) {
+          await playback(0, false); await presented(page, 0)
+          await page.waitForFunction(({ width, height }) => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.width === width && canvas.height === height && canvas.dataset.renderDivisor === '1' }, { width, height }, { timeout: 15000 })
+          const marker = await page.evaluate(() => performance.now())
+          await playback(0, true)
+          await presented(page, 119)
+          const clock = await canvas.evaluate(canvas => ({ startAt: Number(canvas.dataset.playClockStartAt), phases: JSON.parse(canvas.dataset.playStartPhases || 'null') }))
+          const snapshot = await workerSnapshot(page)
+          const owners = new Set(snapshot.workers.filter(worker => worker.direct && worker.sequenceId === 'main').map(worker => worker.id))
+          const samples = snapshot.events.filter(event => owners.has(event.worker) && event.kind === 'render.completed' && event.at >= marker && event.frame > 0 && event.frame < 120 && event.presented)
+          const unique = [...new Map(samples.map(sample => [sample.frame, sample])).values()].sort((a, b) => a.frame - b.frame)
+          assert.equal(unique.length, 119, '正式回放必须完成所有后续帧，不能用跳帧提高测量帧率')
+          assert.ok(Number.isFinite(clock.startAt) && clock.startAt >= marker, '必须读取本轮正式播放时钟')
+          const first = unique[0], last = unique.at(-1), elapsedMs = last.at - clock.startAt
+          const stages = last.preparationStages; assert.ok(stages?.codeInputRender?.count, '必须捕获正式Worker输入渲染成本')
+          assert.ok(unique.every(sample => sample.codeResources?.codeInputSessions === 2), '每个正式回放帧应只保留两个共享输入会话')
+          playbackEvidence.runs.push({ resolution: [width, height], round, clock, completedFrames: unique.length + 1, elapsedMs, completedFps: 119000 / elapsedMs, hotCompletedFps: 118000 / (last.at - first.at), behindMs: Math.max(0, elapsedMs - 119000 / 60), requestMs: stats(unique.map(sample => sample.elapsedMs)), latenessMs: stats(unique.map(sample => Math.max(0, sample.at - clock.startAt - sample.frame * 1000 / 60))), samples: unique })
+          store()
+        }
+        await playback(60, false); await presented(page, 60)
+        const sharedPreview = await png(page, path.join(root, `shared-input-playback-${width}.png`), { width, height })
+        for (const x of [80, 240, 400, 560]) near(await pixel(fs.readFileSync(sharedPreview.file), x * width / 640, height / 2), [255, 255, 0])
+        near(await pixel(fs.readFileSync(sharedPreview.file), 330 * width / 640, height / 2), [0, 0, 0])
+        await capture(`shared-input-playback-${width}`)
+        }
+        playbackEvidence.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: await app.getGPUInfo('basic') }))
+        const programWorkers = (await workerSnapshot(page)).workers.filter(worker => worker.direct && worker.sequenceId === 'main')
+        assert.ok(programWorkers.length, '必须找到实际节目Worker，零样本不能证明释放')
+        await page.getByRole('button', { name: '关闭项目', exact: true }).click()
+        await page.waitForFunction(ids => window.__videoLayoutEvidence.workers.filter(worker => ids.includes(worker.id)).every(worker => worker.terminated), programWorkers.map(worker => worker.id), { timeout: 10000 })
+        const released = (await workerSnapshot(page)).events.filter(event => event.kind === 'dispose.completed' && programWorkers.some(worker => worker.id === event.worker))
+        assert.equal(released.length, programWorkers.length, '每个节目Worker都必须返回正式释放回执')
+        for (const event of released) {
+          assert.ok(event.codeResources && !event.error, '关闭后必须返回资源实测，失败或缺失不能算释放')
+          assert.equal(event.codeResources.codeInputSessions, 0)
+          assert.equal(event.codeResources.gpu?.residentBytes ?? 0, 0)
+          assert.equal(event.codeResources.gpu?.surfaces ?? 0, 0)
+          assert.equal(event.codeResources.images?.textures ?? 0, 0)
+        }
+        playbackEvidence.disposed = released
         evidence.completed = true; store()
       } catch (error) { evidence.failure = String(error.stack ?? error); store(); throw error }
       finally {

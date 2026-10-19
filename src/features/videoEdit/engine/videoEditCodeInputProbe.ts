@@ -6,14 +6,13 @@ import { videoEditPreparationSnapshot } from './videoEditPreparationTiming'
 
 /** Fixed four-input workload, only callable by the formal Electron inspection.
  * The scene supplies its own generated video; no project or user data is used. */
-export async function runVideoEditCodeInputProbe(host: HTMLElement, path: string): Promise<Record<string, unknown>> {
+export async function runVideoEditCodeInputProbe(host: HTMLElement, path: string, source: string): Promise<Record<string, unknown>> {
   if (!isUiInspectionActive()) throw new Error('视频输入测量仅由正式桌面验收运行。')
   const model = createVideoEditDocument('代码视频输入测量'), sequence = createVideoEditSequence('输入')
   model.sequences.push(sequence)
   sequence.width = 640; sequence.height = 360; sequence.frameRate = { numerator: 60, denominator: 1 }
   sequence.tracks = [1, 2].map(index => ({ id: `v${index}`, name: `视频${index}`, kind: 'video', index, locked: false, enabled: true, muted: true, solo: false }))
   model.media = [{ id: 'video', name: '测试视频', path, kind: 'video', width: 360, height: 640, durationSeconds: 2, hasAudio: false, frameRate: { numerator: 60, denominator: 1 } }]
-  const source = 'export default {apiVersion:1,languageVersion:3,name:"四路输入",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{a:{type:"image",title:"原片",default:null},b:{type:"image",title:"重复原片",default:null},c:{type:"image",title:"下层",default:null},d:{type:"image",title:"重复下层",default:null}},render(ctx){return [image({source:ctx.params.a,x:0,y:0,width:160,height:360}),image({source:ctx.params.b,x:160,y:0,width:160,height:360}),image({source:ctx.params.c,x:320,y:0,width:160,height:360}),image({source:ctx.params.d,x:480,y:0,width:160,height:360})];}}'
   const { codeSources: _sources, ...manifest } = await addressCodeMaterialFiles(source)
   void _sources
   model.codeMaterials = [{ id: 'code', name: '四路输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 3, ...manifest }] }]
@@ -33,8 +32,8 @@ export async function runVideoEditCodeInputProbe(host: HTMLElement, path: string
     phases[name] = { frames: frames.length, elapsedMs, perFrameMs: elapsedMs / frames.length, stages: Object.fromEntries(Object.entries(after).map(([stage, value]) => [stage, { count: value.count - (before[stage]?.count ?? 0), ms: value.ms - (before[stage]?.ms ?? 0) }])) }
   }
   try {
-    await measure('cold', [0]); await measure('playback', Array.from({ length: 12 }, (_, i) => i + 1))
-    await measure('seek', [60, 0, 60]); await measure('export', [60, 61, 62, 63, 64, 65], true)
+    await measure('cold', [0]); await measure('pausedFrames', Array.from({ length: 12 }, (_, i) => i + 1))
+    await measure('seek', [60, 0, 60]); await measure('exportRender', [60, 61, 62, 63, 64, 65], true)
     let captured: Promise<ImageBitmap> | undefined
     const result = await renderer.render(60, false, false, () => true, undefined, undefined, 'interactive', pixels => { captured = pixels })
     await result.completion
