@@ -17,6 +17,7 @@ export default defineConfig({
           'image-color-lut-worker': resolve(__dirname, 'electron/main/image-color-lut-worker.ts'),
           'image-registration-worker': resolve(__dirname, 'electron/main/image-registration-worker.ts'),
           'audio-waveform-worker': resolve(__dirname, 'electron/main/services/audio/waveform-worker.ts'),
+          'video-screen-change-worker': resolve(__dirname, 'electron/main/services/video/screen-change-worker.ts'),
           'font-worker': resolve(__dirname, 'electron/main/services/fonts/worker.ts'),
           // 本地模型推理后台进程（任务 4.7d，onnxruntime-node 原生推理）。
           'local-inference-utility': resolve(__dirname, 'electron/main/local-inference-utility.ts'),

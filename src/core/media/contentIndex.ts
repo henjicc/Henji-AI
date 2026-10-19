@@ -2,8 +2,9 @@ import { z } from 'zod'
 import { applicationRefSchema } from '../application-control/identifiers'
 import { findTranscriptSearchRanges, normalizeTranscriptSearch } from './transcriptSearch'
 import { joinAudioEditText } from '../audioEdit/captions'
+import { screenChangeSchema } from './screenChangeEvidence'
 
-export const mediaContentKindSchema = z.enum(['transcript', 'caption', 'description', 'chapter', 'pause', 'scene'])
+export const mediaContentKindSchema = z.enum(['transcript', 'caption', 'description', 'chapter', 'pause', 'scene', 'screen_change'])
 export type MediaContentKind = z.infer<typeof mediaContentKindSchema>
 export const mediaContentRangeSchema = z.object({ fromUs: z.number().int().nonnegative().safe(), toUs: z.number().int().nonnegative().safe() }).strict().refine(value => value.toUs >= value.fromUs, '源范围倒置。')
 export type MediaContentRange = z.infer<typeof mediaContentRangeSchema>
@@ -12,6 +13,7 @@ export const mediaContentRecordSchema = z.object({
   ranges: z.array(mediaContentRangeSchema).max(128), rangeCount: z.number().int().nonnegative(),
   basis: z.enum(['saved', 'analysis', 'timeline', 'intent']), precision: z.enum(['word', 'segment', 'caption', 'interval', 'point']),
   originRef: applicationRefSchema, recordId: z.string().min(1), sourceVerified: z.boolean(),
+  screenChange: screenChangeSchema.extend({ samplingFps: z.number().min(1).max(60), stage: z.enum(['coarse', 'refined']) }).strict().optional(),
 }).strict()
 export type MediaContentRecord = z.infer<typeof mediaContentRecordSchema>
 /** Runtime observation only; this is never saved into a media/document file. */

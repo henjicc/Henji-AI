@@ -17,6 +17,8 @@
 
 结构候选不证明像素可见或实际可听；透明外框、遮罩、混合和代码效果不能据此判定下层完全被遮挡，用 `observe_video_edit_frame` 复核。映射不提供精剪selector，按词剪辑仍用 `query_video_edit_transcript`。范围超出单次计算预算时按错误给出的上限分段查询，不假称已返回全片。
 
+录屏局部弹出、切换后复原或连续变化，用 `query_video_edit_content` 的 kinds=["screen_change"]（或来源映射的 contentKinds）免费查询；scene 仍是普通镜头检测，隐私文字另走OCR。先5fps扫描，再以30fps复核预算内的疑点，优先返回密集证据；未复核候选保留粗扫阶段，warnings 告知遗漏数量。screenChange 提供归一化 region、kind、stage、samplingFps 和前后源时间（各 Seconds 均是原文件秒，主 ranges 仍是微秒）。按变化区域和前后时间取帧判断；滚动、运镜、正常弹窗都可能是候选，不能直接判错或删除。分析采样时钟不是实际PTS，无法排除采样间隔内的更短闪动；可缩小源范围后继续复核。查询沿原进度、取消和来源核验，不改剪辑或播放头。
+
 - `video_edit.clip.start` / `video_edit.clip.duration` 是序列帧；`video_edit.clip.source_in_us` 是源微秒。30 fps 的 3 秒对应第90帧，30000/1001 fps 则按有理数换算并落到实际整数帧；不要直接把秒传给 frame。
 - 读 `video_edit.track.locked` / `video_edit.track.sync_locked`、`video_edit.clip.link_id` / `video_edit.clip.group_id` 与 `video_edit.document.timeline_view`。linkedSelection 控制链接选择，不等于忽略编组；普通属性修改不会替你对所有关联片段写同一个值。
 - 标记用 `video_edit.marker` 通用集合，创建必填 `video_edit.marker.frame` 与 `video_edit.marker.name`；关联片段时可写 `video_edit.marker.clip_id`。一镜到底的段落用标记表达，不为套节拍表硬拆连续素材。

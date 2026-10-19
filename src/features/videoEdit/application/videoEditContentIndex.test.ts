@@ -9,6 +9,7 @@ import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createRecordingDocument } from '@/core/screenRecording/document'
 import { queryVideoEditContentCapability } from '@/core/application-control/domains/videoEdit/videoEditContentIndexCapability'
+import { ScreenChangeAccumulator } from '@/core/videoEdit/screenChanges'
 import { createApplicationCallerGrant, revokeApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { createAudioEditDraft, flushAudioEditProject } from '@/features/audioEdit'
@@ -164,6 +165,29 @@ it('已取消查询不启动分析，进行中取消转交原声音任务', asyn
   expect(cancel).toHaveBeenCalledWith(expect.any(String)); expect(detect).toHaveBeenCalledTimes(1)
   await expect(readVideoEditContentIndex(query, { signal: controller.signal })).rejects.toThrow()
   expect(detect).toHaveBeenCalledTimes(1)
+})
+
+it('局部变化经正式公共入口查询，优先返回密集证据并保留未复核候选及预算提示', async () => {
+  const { owner, input } = await fixture(); const app = createApplicationHarness()
+  const coarse = new ScreenChangeAccumulator({ width: 2, height: 1, channels: 1, fps: 5, startSeconds: 1, endSeconds: 5 })
+  const dense = new ScreenChangeAccumulator({ width: 2, height: 1, channels: 1, fps: 30, startSeconds: 1, endSeconds: 2 })
+  for (let frame = 0; frame < 20; frame++) coarse.push(Uint8Array.of(frame === 3 || frame === 13 ? 255 : 0, 0))
+  for (let frame = 0; frame < 30; frame++) dense.push(Uint8Array.of(frame >= 16 && frame <= 20 ? 255 : 0, 0))
+  const detect = vi.spyOn(getPlatform().sceneDetection, 'detect').mockResolvedValue({ cutsSeconds: [], contentIdentity: 'a'.repeat(64),
+    screenChanges: { coarse: coarse.finish(), refinements: [{ fromSeconds: 1, toSeconds: 2, scan: dense.finish() }], omittedCandidates: 1 } })
+  const before = structuredClone(owner.document); const frame = owner.frame; const history = owner.past.length
+  const query = { ...input, text: undefined, kinds: ['screen_change'], discoveryScope: 'none', fromUs: 1000000, toUs: 5000000, limit: 1 }
+  try {
+    const result = parse(await app.requireResult('query_video_edit_content', query))
+    expect(result).toMatchObject({ total: 3, records: [{ kind: 'screen_change', sourceVerified: true, basis: 'analysis', screenChange: { kind: 'transient', stage: 'refined', samplingFps: 30, region: { width: .5 } } }] })
+    expect(result.warnings).toContainEqual(expect.stringContaining('1 个粗扫候选'))
+    expect(detect).toHaveBeenCalledWith(expect.objectContaining({ analysis: 'screen_changes', startSeconds: 1, endSeconds: 5 }))
+    const next = parse(await app.requireResult('query_video_edit_content', { ...query, cursor: result.nextCursor }))
+    expect(next.records[0]).toMatchObject({ screenChange: { stage: 'refined', samplingFps: 30 } })
+    expect(parse(await app.requireResult('query_video_edit_content', { ...query, cursor: next.nextCursor })).records[0]).toMatchObject({ screenChange: { stage: 'coarse', samplingFps: 5 } })
+    expect(detect).toHaveBeenCalledOnce()
+    expect(owner.document).toEqual(before); expect(owner.frame).toBe(frame); expect(owner.past.length).toBe(history)
+  } finally { app.dispose() }
 })
 
 it('画面变化使用源范围及原检测通道；分页不再次解码，取消与失败可恢复', async () => {

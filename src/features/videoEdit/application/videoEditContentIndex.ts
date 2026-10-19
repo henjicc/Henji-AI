@@ -5,7 +5,7 @@ import { videoEditItemAudioLayout } from '@/core/videoEdit/audioChannels'
 import { intersectRecordingRanges } from '@/core/screenRecording/segmentation'
 import { queryVideoEditContentCapability } from '@/core/application-control/domains/videoEdit/videoEditContentIndexCapability'
 import { queryMediaContentIndex, type MediaContentFact, type MediaContentRecord } from '@/core/media/contentIndex'
-import { audioDocumentContentFacts, recordingMediaContentFacts, videoEditSavedContentFacts } from '@/core/videoEdit/contentIndex'
+import { audioDocumentContentFacts, recordingMediaContentFacts, screenChangeContentFacts, videoEditSavedContentFacts } from '@/core/videoEdit/contentIndex'
 import { getPlatform } from '@/platform/runtime'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
@@ -107,21 +107,28 @@ export async function readVideoEditContentIndex(raw: unknown, context: Pick<Capa
           facts.push(...valleys.filter(pause => pause.endUs - pause.startUs >= 100000).map((pause, index): MediaContentFact => ({ id: `pause:${index}`, kind: 'pause', text: '当前素材声道布局共同的全频与高频声音低谷', ranges: [{ fromUs: pause.startUs, toUs: pause.endUs }], basis: 'analysis', precision: 'interval', originRef: input.itemRef, recordId: `pause:${pause.startUs}`, sourceVerified: true })))
         }
       }
-      if (toUs > fromUs && input.kinds.includes('scene')) {
+      for (const analysisKind of ['scene', 'screen_change'] as const) if (toUs > fromUs && input.kinds.includes(analysisKind)) {
         if (media.kind !== 'video') warnings.push('此素材没有视频镜头变化。')
         else {
           const requestId = crypto.randomUUID()
-          task.report({ phase: 'analyzing_video', message: '分析画面镜头变化' })
+          const message = analysisKind === 'scene' ? '分析画面镜头变化' : '扫描局部变化并复核疑点'
+          task.report({ phase: 'analyzing_video', message })
           const unsubscribe = platform.sceneDetection.onProgress(event => {
-            if (event.requestId === requestId) task.report({ phase: 'analyzing_video', message: '分析画面镜头变化', phaseProgress: event.progress })
+            if (event.requestId === requestId) task.report({ phase: 'analyzing_video', message, phaseProgress: event.progress })
           })
           const cancel = (): void => { void platform.sceneDetection.cancel(requestId).catch(error => logger.warn('取消素材画面分析失败', { event: 'video_edit.content_index.cancel_failed', error })) }
           signal.addEventListener('abort', cancel, { once: true })
           try {
             signal.throwIfAborted()
-            const scenes = await platform.sceneDetection.detect({ requestId, source: media.path, startSeconds: fromUs / 1e6, endSeconds: toUs / 1e6, sensitivity: 50 })
+            const scenes = await platform.sceneDetection.detect({ requestId, source: media.path, startSeconds: fromUs / 1e6, endSeconds: toUs / 1e6, sensitivity: 50, ...(analysisKind === 'screen_change' ? { analysis: 'screen_changes' as const } : {}) })
             signal.throwIfAborted()
-            facts.push(...scenes.cutsSeconds.map((time, index): MediaContentFact => ({ id: `scene:${index}`, kind: 'scene', text: '画面镜头变化候选', ranges: [{ fromUs: Math.round(time * 1e6), toUs: Math.round(time * 1e6) }], basis: 'analysis', precision: 'point', originRef: input.itemRef, recordId: `scene:${Math.round(time * 1e6)}`, sourceVerified: true })))
+            if (analysisKind === 'scene') facts.push(...scenes.cutsSeconds.map((time, index): MediaContentFact => ({ id: `scene:${index}`, kind: 'scene', text: '画面镜头变化候选', ranges: [{ fromUs: Math.round(time * 1e6), toUs: Math.round(time * 1e6) }], basis: 'analysis', precision: 'point', originRef: input.itemRef, recordId: `scene:${Math.round(time * 1e6)}`, sourceVerified: true })))
+            else {
+              if (!scenes.screenChanges) throw new Error('局部变化分析未返回证据，请重试。')
+              facts.push(...screenChangeContentFacts(scenes.screenChanges, input.itemRef))
+              warnings.push('局部变化是需看片的候选；5fps粗扫及30fps局部复核均为采样时钟，不是原片精确PTS，不能排除采样间隔内更短的闪动，也不能替代镜头检测或隐私OCR。')
+              if (scenes.screenChanges.omittedCandidates) warnings.push(`另有 ${scenes.screenChanges.omittedCandidates} 个粗扫候选未进入密集复核预算，可缩小源范围后重查。`)
+            }
           } finally { signal.removeEventListener('abort', cancel); unsubscribe() }
         }
       }

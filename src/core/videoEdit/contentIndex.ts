@@ -7,6 +7,32 @@ import { videoEditComposition } from './document'
 import { videoEditTextMediaIdentity } from './textTranscript'
 import { videoEditClipSourceSecondsAtTime } from './clipSpeed'
 import { videoEditFps } from './time'
+import type { ScreenChangeAnalysis } from '../media/screenChangeEvidence'
+import type { ScreenChange } from './screenChanges'
+
+/** Prefer denser observations of a coarse event, keeping unconfirmed coarse candidates explicit. */
+export function screenChangeContentFacts(analysis: ScreenChangeAnalysis, originRef: { kind: string; id: string }): MediaContentFact[] {
+  const refined = analysis.refinements.flatMap((range, index) => range.scan.candidates.map((event, eventIndex) => ({ event, samplingFps: range.scan.samplingFps, stage: 'refined' as const, id: `screen:refined:${index}:${eventIndex}` })))
+  refined.sort((a, b) => a.event.atSeconds - b.event.atSeconds)
+  const observations = [...refined, ...analysis.coarse.candidates.flatMap((event, index) => {
+    let low = 0; let high = refined.length
+    while (low < high) { const middle = (low + high) >>> 1; if (refined[middle].event.atSeconds < event.beforeSeconds - 1e-7) low = middle + 1; else high = middle }
+    let covered = false
+    const end = Math.max(event.lastChangeSeconds, event.returnSeconds ?? event.atSeconds) + 1 / analysis.coarse.samplingFps
+    for (let at = low; at < refined.length && refined[at].event.atSeconds <= end; at++) {
+      const other = refined[at].event.region
+      if (other.x < event.region.x + event.region.width && other.x + other.width > event.region.x && other.y < event.region.y + event.region.height && other.y + other.height > event.region.y) { covered = true; break }
+    }
+    return covered ? [] : [{ event, samplingFps: analysis.coarse.samplingFps, stage: 'coarse' as const, id: `screen:coarse:${index}` }]
+  })]
+  const labels: Record<ScreenChange['kind'], string> = { change: '局部变化', transient: '弹出后复原', flash: '短暂切换', burst: '同区域连续突变', continuous: '持续变化（可能为滚动或运镜）' }
+  return observations.map(({ event, samplingFps, stage, id }) => {
+    const fromUs = Math.round(event.atSeconds * 1e6); const toUs = Math.round(Math.max(event.lastChangeSeconds, event.returnSeconds ?? event.atSeconds) * 1e6)
+    return { id, kind: 'screen_change', text: `${stage === 'refined' ? '密集复核' : '粗扫'}：${labels[event.kind]}候选，需观察画面判断。`, ranges: [{ fromUs, toUs }],
+      basis: 'analysis', precision: toUs > fromUs ? 'interval' : 'point', originRef, recordId: id, sourceVerified: true,
+      screenChange: { ...event, samplingFps, stage } }
+  })
+}
 
 export function audioDocumentContentFacts(audio: AudioEditProjectDocument): MediaContentFact[] {
   let group = 0

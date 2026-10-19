@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createContentDiskCache } from '../media/content-disk-cache'
 import { SceneDetectionService } from './scene-detection'
+import { ScreenChangeAccumulator } from '../../../../src/core/videoEdit/screenChanges'
 
 const directories: string[] = []
 afterEach(async () => { await Promise.all(directories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true }))) })
@@ -13,6 +14,47 @@ async function fixture() {
   const cache = createContentDiskCache({ directory: () => path.join(directory, 'cache'), extension: '.json' })
   return { source, cache, request: { requestId: 'test', source, startSeconds: 1, endSeconds: 5, sensitivity: 50 } }
 }
+it('局部变化使用同一内容缓存与并发槽位，模式分开，不把候选变成镜头切点', async () => {
+  const { cache, request, source } = await fixture()
+  const accumulator = new ScreenChangeAccumulator({ width: 2, height: 1, channels: 1, fps: 5, startSeconds: 1, endSeconds: 5 })
+  for (let frame = 0; frame < 20; frame++) accumulator.push(Uint8Array.of(frame === 3 ? 255 : 0, 0))
+  const screenResult = { coarse: accumulator.finish(), refinements: [], omittedCandidates: 1 }
+  const run = vi.fn(async () => [2]); const screen = vi.fn(async () => structuredClone(screenResult))
+  const service = new SceneDetectionService(cache, run, screen)
+  const input = { ...request, analysis: 'screen_changes' as const }
+  expect(await service.detect(input, new AbortController().signal, () => undefined)).toMatchObject({ cutsSeconds: [], screenChanges: { coarse: { candidates: [{ kind: 'transient' }] } } })
+  await service.detect({ ...input, sensitivity: 90 }, new AbortController().signal, () => undefined)
+  expect(screen).toHaveBeenCalledOnce(); expect(run).not.toHaveBeenCalled()
+  await service.detect(request, new AbortController().signal, () => undefined); expect(run).toHaveBeenCalledOnce()
+  const read = cache.read.bind(cache)
+  vi.spyOn(cache, 'read').mockImplementationOnce(async key => {
+    const data = JSON.parse(Buffer.from((await read(key))!).toString())
+    data.screenChanges.coarse.lastSampleSeconds = 100
+    return Buffer.from(JSON.stringify(data))
+  })
+  await service.detect(input, new AbortController().signal, () => undefined); expect(screen).toHaveBeenCalledTimes(2)
+  await fs.writeFile(source, 'new-file'); await service.detect(input, new AbortController().signal, () => undefined)
+  expect(screen).toHaveBeenCalledTimes(3)
+  await expect(service.detect({ ...input, includeStillness: true }, new AbortController().signal, () => undefined)).rejects.toThrow('分别查询')
+})
+it('同一实际来源共享分析，交付前仍核对各调用方入口，拒绝被改指向的目录链接', async () => {
+  const { cache, request, source } = await fixture()
+  const alias = path.join(path.dirname(source), 'alias'); const alternate = path.join(path.dirname(source), 'alternate')
+  await fs.mkdir(alternate); await fs.writeFile(path.join(alternate, 'video'), 'another-video')
+  await fs.symlink(path.dirname(source), alias, 'junction')
+  let release: () => void = () => undefined
+  const run = vi.fn(async () => { await new Promise<void>(resolve => { release = resolve }); return [2] })
+  const service = new SceneDetectionService(cache, run)
+  const first = service.detect(request, new AbortController().signal, () => undefined)
+  const secondProgress = vi.fn()
+  const second = service.detect({ ...request, source: path.join(alias, 'video') }, new AbortController().signal, secondProgress).catch(error => error)
+  await vi.waitFor(() => expect(run).toHaveBeenCalledOnce())
+  // Both entrances initially resolve to the same source; only the second entrance changes.
+  await vi.waitFor(() => expect(secondProgress).toHaveBeenCalledWith(0))
+  await fs.unlink(alias); await fs.symlink(alternate, alias, 'junction'); release()
+  expect(await first).toMatchObject({ cutsSeconds: [2] })
+  expect(await second).toMatchObject({ message: expect.stringContaining('原视频已改变') })
+})
 it('内容身份、源范围及灵敏度各自失效；中途改文件不缓存；损坏缓存重算', async () => {
   const { source, cache, request } = await fixture(); const run = vi.fn(async () => [2, 4]); const service = new SceneDetectionService(cache, run)
   await service.detect(request, new AbortController().signal, () => undefined)

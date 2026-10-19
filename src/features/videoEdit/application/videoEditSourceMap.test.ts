@@ -8,6 +8,7 @@ import { createApplicationCapabilitySession } from '@/features/application-contr
 import { queryVideoEditSourceMapCapability } from '@/core/application-control/domains/videoEdit/videoEditSourceMapCapability'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
+import { ScreenChangeAccumulator } from '@/core/videoEdit/screenChanges'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
 import { closeAllVideoEdits, createVideoEditTestProject, reopenVideoEdit } from './videoEditDocumentTestKit'
@@ -116,6 +117,18 @@ it('显式画面证据投影到跨越切点的采样帧，点事件不伪造成�
   expect(picture.content?.records.map(value => value.timelineRanges)).toEqual([[{ fromFrame: 38, toFrame: 38 }], [{ fromFrame: 45, toFrame: 45 }]])
   const sound = result.records.find(record => record.medium === 'audio')!
   expect(sound.content?.records[0].timelineRanges).toEqual([{ fromFrame: 37.5, toFrame: 37.5 }])
+})
+it('录屏局部突变沿同一内容入口投影到重复成片实例，区域与采样证据保留', async () => {
+  const { input } = await fixture()
+  const scan = new ScreenChangeAccumulator({ width: 2, height: 1, channels: 1, fps: 5, startSeconds: 1, endSeconds: 5 })
+  for (let frame = 0; frame < 20; frame++) scan.push(Uint8Array.of(frame === 3 ? 255 : 0, 0))
+  const detect = vi.spyOn(getPlatform().sceneDetection, 'detect').mockResolvedValue({ cutsSeconds: [], contentIdentity: 'a'.repeat(64), screenChanges: { coarse: scan.finish(), refinements: [], omittedCandidates: 1 } })
+  const result = parse(await queryVideoEditSourceMap({ ...input, includeContent: true, contentKinds: ['screen_change'], discoveryScope: 'none', mediums: ['video'] }, context()))
+  const first = result.records[0].content!.records[0]; const second = result.records[1].content!.records[0]
+  expect(first.record).toMatchObject({ kind: 'screen_change', screenChange: { stage: 'coarse', region: { width: .5 } } })
+  expect(first.timelineRanges).toEqual([{ fromFrame: 39, toFrame: 42 }])
+  expect(second.timelineRanges).toEqual([{ fromFrame: 138, toFrame: 144 }])
+  expect(detect).toHaveBeenCalledWith(expect.objectContaining({ analysis: 'screen_changes' }))
 })
 it('组合证据在交付前重新核对早先已读的来源，不能把中途替换的文件继续标为核实', async () => {
   const { input } = await fixture(); let reads = 0

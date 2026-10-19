@@ -230,6 +230,19 @@ const validator = applicationOutputValidator
 const uncoveredTools: Record<string, string> = {}
 
 describe('外部客户端成功输出 JSON Schema 契约', () => {
+  it('局部变化区域、复原时间与采样阶段经公共出口完整保留，拒绝未知字段', () => {
+    const name = 'query_video_edit_content'; const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)!
+    const screenChange = { beforeSeconds: 1, atSeconds: 1.2, lastChangeSeconds: 1.4, returnSeconds: 1.4, settledSeconds: 1.6,
+      changedRatio: .05, region: { x: .1, y: .2, width: .3, height: .2 }, abrupt: true, kind: 'transient', samplingFps: 30, stage: 'refined' }
+    const data = definition.outputSchema.parse({ ...successData[name], records: [{ id: 'screen:refined:0:0', kind: 'screen_change', text: '复原候选',
+      textTruncated: false, ranges: [{ fromUs: 1200000, toUs: 1400000 }], rangeCount: 1, basis: 'analysis', precision: 'interval', originRef: ref('video_edit.item'), recordId: '0', sourceVerified: true, screenChange }] }) as Record<string, unknown>
+    const raw = { ok: true, data: capabilityVerificationEnvelope(definition, input, data), ...revisions }
+    const validate = validator.getValidator(tools.find(tool => tool.name === name)!.outputSchema!)
+    const result = toMcpResult(projectApplicationToolResult(name, input, raw))
+    expect(validate(result.structuredContent)).toMatchObject({ valid: true })
+    expect(result.structuredContent).toMatchObject({ data: { records: [{ screenChange }] } })
+    expect(definition.outputSchema.safeParse({ ...data, records: [{ ...(data.records as Record<string, unknown>[])[0], screenChange: { ...screenChange, unknown: true } }] }).success).toBe(false)
+  })
   it('来源映射保留成片零帧的点证据，公共投影不会把它扩张或删除', () => {
     const name = 'query_video_edit_source_map'
     const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)!
