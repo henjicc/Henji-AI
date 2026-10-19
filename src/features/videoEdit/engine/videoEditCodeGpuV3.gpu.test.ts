@@ -27,6 +27,9 @@ import { codeMultiply, codeTextBaseBounds, codeTransform } from '@/core/videoEdi
 import { createCanvasOracle } from './videoEditCodeCanvas.testing'
 import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
 import { CodeMotionSamplingBudget, sampleCodeMotion } from '@/core/videoEdit/codeMaterial/motionSampling'
+import { VideoEditCodeSources } from './videoEditCodeSources'
+import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
+import { codeMaterialMotionClock } from '@/core/videoEdit/codeMaterialTiming'
 
 let gpu: Gpu; let device: Gpu['gpu']; let wrapped: GpuDevice; let runtime: VideoEditCodeGpuV3
 let queueSubmissions = 0
@@ -63,6 +66,48 @@ const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels
 
 const motionSample = (x: number, y: number, weight: number, opacity = 1): CodeMotionSample => ({ offset: { numerator: 0, denominator: 1 }, pose: { matrix: [1, 0, 0, 1, x, y], opacity }, weight })
 const motionGroup = (samples: CodeMotionSample[]): Extract<CodeDrawCommand, { kind: 'group' }> => ({ kind: 'group', x: 0, y: 0, motionSamples: samples, children: [{ kind: 'rect', x: 0, y: 0, width: 8, height: 8, radius: 0, fill: [1, 0, 0, 128 / 255] }] })
+
+it('API2正式源码经过片段时钟与代码源会话到GPU，产出拖影且乱序取帧一致', async () => {
+  const code = 'export default {apiVersion:2,languageVersion:3,name:"正式快门",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:8,seed:1,parameters:{},render(ctx){return [group({x:16+(ctx.time-1)*1920,y:16,motionBlur:{shutter:180,maxSamples:64}},[rect({x:0,y:0,width:8,height:8,fill:[1,0,0,128/255]})])];}}'
+  const program = compileCodeMaterial(code), document = createVideoEditTestDocument('正式快门')
+  document.codeMaterials = [{ id: 'motion', name: '正式快门', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 2, languageVersion: 3, ...testCodeManifest(code, document) }] }]
+  document.items = [{ id: 'motion-item', name: '正式快门', kind: 'code', code: { definitionId: 'motion', versionId: 'v', parameters: {} } }]
+  const sequence = document.sequences[0]
+  Object.assign(sequence, { width: W, height: H, frameRate: { numerator: 60, denominator: 1 } })
+  sequence.clips = [makeVideoEditItemClip(document, 'motion-item', sequence.id, { frame: 0 }, () => program)]
+  const composition = videoEditComposition(document, sequence.id)
+  const host = new VideoEditCodeGpu(wrapped), sources = new VideoEditCodeSources(composition, async () => host, { compile: async contents => compileCodeMaterial(contents), dispose() {} })
+  device.pushErrorScope('validation')
+  try {
+    const render = async (frame: number): Promise<Uint8Array> => {
+      const prepared = await sources.prepare(composition, composition.clips, frame, () => true)
+      return read((prepared.pictures.get(sequence.clips[0].id)! as import('./videoEditCodeGpu').VideoEditCodePicture).texture)
+    }
+    const first = await render(60)
+    expect(pixel(first, 10, 20)).toEqual([20, 0, 0, 20])
+    expect(pixel(first, 16, 20)).toEqual([64, 0, 0, 64])
+    await render(62)
+    expect(await render(60)).toEqual(first)
+  } finally { await sources.dispose(); await host.dispose() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('作者运动蒙版在中心透明、快门内显现时仍输出曝光像素', async () => {
+  const program = compileCodeMaterial(source('return [group({mask:{shape:group({opacity:max(0,min(1,(ctx.time-1)*240)),motionBlur:{}},[rect({x:0,y:0,width:8,height:8,fill:[1,1,1,1]})])}},[rect({x:0,y:0,width:8,height:8,fill:[1,0,0,1]})])];').replace('apiVersion:1', 'apiVersion:2').replace('width:3840,height:2160', 'width:64,height:64'))
+  const at = { ...context, time: 1, localTime: 1, sequenceTime: 1, frame: 60 }
+  const motion = codeMaterialMotionClock({ start: 0, duration: 480, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }, 60, { numerator: 60, denominator: 1 }, program, () => ({}), at)
+  const commands = evaluateCodeMaterial(program, at, {}, { motion, cullInvisible: true })
+  const output = texture()
+  device.pushErrorScope('validation')
+  try {
+    await runtime.render(output, W, H, commands)
+    const rgba = pixel(await read(output), 4, 4)
+    expect(rgba[0]).toBeGreaterThanOrEqual(62)
+    expect(rgba[0]).toBeLessThanOrEqual(66)
+    expect(rgba).toEqual([rgba[0], 0, 0, rgba[0]])
+  } finally { output.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
 
 it('运动曝光由正式有界采样器驱动，形成可预测拖影并支持乱序重放', async () => {
   const output = texture()

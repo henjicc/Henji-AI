@@ -5,7 +5,7 @@ import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import type { GpuBuffer, GpuDevice, GpuRenderPipeline, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { CodeMaterialError, CODE_V3_LIMITS } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeBlend, CodeColor, CodeDrawCommand, CodeMatrix, CodePaint } from '@/core/videoEdit/codeMaterial/contract'
-import { CODE_IDENTITY, codeElementBounds, codeLocalBounds, codeMultiply, codePoint, codeTextBaseBounds, codeTransform } from '@/core/videoEdit/codeMaterial/geometry'
+import { CODE_IDENTITY, codeElementBounds, codeLocalBounds, codeMultiply, codeHasMotionSamples, codeMotionRasterBounds, codeRasterEffectPadding, codeTextBaseBounds, codeTransform } from '@/core/videoEdit/codeMaterial/geometry'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { ShaderGraphCache } from './shaderEngines/shaderGraphCache'
 import { codeShaderFailure } from './shaderEngines/codeShaderFailure'
@@ -432,31 +432,7 @@ export class VideoEditCodeGpuV3 {
     return (command.kind === 'rect' || command.kind === 'ellipse') && !command.shadow && !command.glow && !command.blur && (!command.paint || Array.isArray(command.paint)) && !(command.stroke && command.strokeWidth) && !(command.kind === 'rect' && command.radii)
   }
   private groupBounds(children: readonly CodeDrawCommand[]): { x: number; y: number; width: number; height: number } {
-    const containsMotion = (commands: readonly CodeDrawCommand[]): boolean => commands.some(command => command.kind === 'group' && (!!command.motionSamples || containsMotion(command.children)))
-    if (containsMotion(children)) {
-      // Parent rasters include the complete child exposure, even when the child
-      // is transparent/offscreen at the center. Clipping remains group-local.
-      const boxes: Array<{ x: number; y: number; width: number; height: number }> = []
-      for (const command of children) {
-        if (command.kind !== 'group') { boxes.push(this.groupBounds([command])); continue }
-        let box = this.groupBounds(command.children)
-        const pad = Math.max(command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0)) + 2
-        box = { x: box.x - pad, y: box.y - pad, width: box.width + pad * 2, height: box.height + pad * 2 }
-        if (command.clip) {
-          const x = Math.max(box.x, command.clip.x), y = Math.max(box.y, command.clip.y)
-          box = { x, y, width: Math.max(0, Math.min(box.x + box.width, command.clip.x + command.clip.width) - x), height: Math.max(0, Math.min(box.y + box.height, command.clip.y + command.clip.height) - y) }
-        }
-        const matrices = command.motionSamples ? command.motionSamples.flatMap(sample => sample.pose && sample.pose.opacity > 0 && sample.weight > 0 ? [sample.pose.matrix] : []) : [codeTransform(command)]
-        for (const matrix of matrices) {
-          const points = [[box.x, box.y], [box.x + box.width, box.y], [box.x, box.y + box.height], [box.x + box.width, box.y + box.height]].map(([x, y]) => codePoint(matrix, x, y))
-          const x = Math.min(...points.map(point => point[0])), y = Math.min(...points.map(point => point[1]))
-          boxes.push({ x, y, width: Math.max(...points.map(point => point[0])) - x, height: Math.max(...points.map(point => point[1])) - y })
-        }
-      }
-      if (!boxes.length) return { x: 0, y: 0, width: 0, height: 0 }
-      const x = Math.min(...boxes.map(box => box.x)), y = Math.min(...boxes.map(box => box.y))
-      return { x, y, width: Math.max(...boxes.map(box => box.x + box.width)) - x, height: Math.max(...boxes.map(box => box.y + box.height)) - y }
-    }
+    if (codeHasMotionSamples(children)) return codeMotionRasterBounds(children)
     // Flat vector batches need a union, not an element-inspection tree with four transformed
     // corners, source paths and intermediate arrays per primitive. Keep the general path below
     // for nesting, text, effects and transforms; the padding arithmetic is the same as geometry.ts.
@@ -472,9 +448,7 @@ export class VideoEditCodeGpuV3 {
       return { x: left, y: top, width: right - left, height: bottom - top }
     }
     const bounds = codeElementBounds(children).map(element => {
-      const command = element.command; const m = element.matrix; const scale = Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]))
-      const glyphPad = command.kind === 'text' ? Math.max(0, ...(command.perChar ?? []).map(char => Math.max(char.blur ?? command.blur ?? 0, char.glow?.radius ?? command.glow?.radius ?? 0) * Math.abs(char.scale))) : 0
-      const pad = (Math.max(glyphPad, command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0))) * scale
+      const pad = codeRasterEffectPadding(element.command, element.matrix)
       return { x: element.x - pad, y: element.y - pad, width: element.width + pad * 2, height: element.height + pad * 2 }
     })
     if (!bounds.length) return { x: 0, y: 0, width: 0, height: 0 }

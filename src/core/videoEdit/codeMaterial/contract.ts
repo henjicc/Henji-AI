@@ -81,12 +81,14 @@ export type CodeExpression = { type: CodeValueType; sourceSpan?: CodeSourceSpan 
 )
 export interface CodeMaterialProgram {
   sourceSpan?: CodeSourceSpan
-  apiVersion: 1; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
+  apiVersion: 1 | 2; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
   width: number; height: number; durationSeconds: number; seed: number
   parameters: CodeParameterDeclaration[]; bindings: { name: string; expression: CodeExpression }[]; result: CodeExpression
   types?: Record<string, CodeParameterTypeDefinition>
   /** v3：素材里自己写的着色器（WGSL 函数体），供 shader / shaderFilter 按名字使用。 */
   shaders?: ShaderGraphCustomShader[]
+  /** Rebuildable compiler flag; source content is still drawn only at frame center. */
+  motionBlur?: true
   metrics: { astNodes: number; astDepth: number; cpuOperations: number; scalarOperations: number; samples: number; draws?: number }
 }
 export type CodeDrawCommand = CodeDrawMetadata & (

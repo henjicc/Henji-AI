@@ -84,9 +84,9 @@ async function waitLevel(page, title, audible) {
   }, { title, audible }, { timeout: 15000 })
   return levels(page, title)
 }
-async function png(page, file) {
+async function png(page, file, expected = { width: 3840, height: 2160 }) {
   const image = await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ base64: canvas.toDataURL('image/png').split(',')[1], width: canvas.width, height: canvas.height, data: { ...canvas.dataset } }))
-  assert.equal(image.width, 3840); assert.equal(image.height, 2160)
+  assert.equal(image.width, expected.width); assert.equal(image.height, expected.height)
   fs.writeFileSync(file, Buffer.from(image.base64, 'base64'))
   return { file, width: image.width, height: image.height, data: image.data }
 }

@@ -81,6 +81,26 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   async dispose() { boundary.activeRenderers-- }
 } }))
 const source = `export default {apiVersion:1,name:"原创移动圆",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:4,seed:7,parameters:{amount:{type:"number",title:"透明度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return [ellipse({x:100+ctx.time*20,y:100,width:500,height:500,fill:[0,1,1,ctx.params.amount]})];}}`
+it('API2运动素材沿正式通用创建、版本读取、撤销及保存重开，不分叉发布入口', async () => {
+  const owner = await createLegacyTrackVideoEditProject(), id = owner.document.id, app = createApplicationHarness()
+  const code = 'export default {apiVersion:2,languageVersion:3,name:"快门运动",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:4,seed:1,parameters:{},render(ctx){return [group({x:ctx.time*20,motionBlur:{shutter:180,maxSamples:16}},[rect({x:0,y:0,width:8,height:8,fill:[1,0,0,1]})])];}}'
+  const create = () => app.call('change_application_entities', { summary: '创建运动画面', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: { kind: 'video_edit.document', id }, items: [{ properties: { 'video_edit.code_material.source': code } }] }] })
+  try {
+    const before = owner.past.length
+    expect(await create()).toMatchObject({ ok: true })
+    expect(owner.past).toHaveLength(before + 1)
+    expect(owner.document.codeMaterials![0].versions[0].apiVersion).toBe(2)
+    undoVideoEdit(id)
+    expect(owner.document.codeMaterials ?? []).toHaveLength(0)
+    expect(await create()).toMatchObject({ ok: true })
+    const version = owner.document.codeMaterials![0].versions[0]
+    expect((await app.read({ kind: 'video_edit.code_version', id: `${id}:${version.id}` }, ['video_edit.code_version.api_version'])).properties).toMatchObject({ 'video_edit.code_version.api_version': 2 })
+    await saveVideoEdit(id); await closeVideoEditProject(id)
+    const reopened = await reopenVideoEdit(id)
+    expect(reopened.document.codeMaterials![0].versions[0].apiVersion).toBe(2)
+    expect(testCodeSource(reopened.document, reopened.document.codeMaterials![0].versions[0])).toBe(code)
+  } finally { app.dispose() }
+})
 const files = new Map<string, string>()
 it('编译期间及源码候选等待期间的元数据不使内容检查失效或被提交覆盖', async () => {
   const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id

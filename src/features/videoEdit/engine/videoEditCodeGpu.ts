@@ -314,7 +314,8 @@ export class VideoEditCodeGpu {
     if (program.languageVersion === 3) await this.v3().prepareContent(commands, current)
   }
   async prepareEffect(version: string, program: CodeMaterialProgram): Promise<void> { await this.ready; await this.prepareFilter(version, program, false) }
-  async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false, overrides?: Pick<import('@/core/videoEdit/codeMaterial/evaluate').CodeMaterialEvaluationOptions, 'elementOverrides' | 'sourceTime'>): Promise<VideoEditCodePicture> {
+  async generator(key: string, program: CodeMaterialProgram, context: CodeMaterialContext, parameters: Readonly<Record<string, unknown>>, images?: ReadonlyMap<string, VideoEditCodeImageInput>, transitionHandles = false, overrides?: Pick<import('@/core/videoEdit/codeMaterial/evaluate').CodeMaterialEvaluationOptions, 'elementOverrides' | 'sourceTime' | 'motion'>): Promise<VideoEditCodePicture> {
+    if (program.motionBlur && !overrides?.motion) throw new CodeMaterialError('CONTEXT', '运动曝光需要片段源时钟，请从正式剪辑或试渲染入口调用。')
     const started = performance.now(); let heaviest: CodeHeavyStructure | undefined
     let evaluation: Parameters<NonNullable<import('@/core/videoEdit/codeMaterial/evaluateV3').CodeEvaluationOptions['onEvaluation']>>[0] | undefined
     const commands = evaluateCodeMaterial(program, context, parameters, { transitionHandles, ...overrides, cullInvisible: true, onEvaluation: value => { evaluation = value; heaviest = value.structures[0] }, measureText: measureCodeText, onDiagnostic: diagnostic => {

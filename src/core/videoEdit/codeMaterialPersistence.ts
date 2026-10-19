@@ -5,7 +5,9 @@ import { codeMaterialParameterKeySchema, codeMaterialParameterValueSchema } from
 export { codeMaterialImageReferenceSchema } from './codeMaterial/parameterValueSchema'
 
 const id = z.string().min(1).max(100)
-export const codeMaterialVersionSchema = z.object({ id, apiVersion: z.literal(1), languageVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]), entry: codeFilePathSchema, files: z.array(z.object({ path: codeFilePathSchema, location: z.string().min(1), hash: codeSourceHashSchema }).strict()).min(1), imports: codeComponentPinsSchema.optional(), assetOrigin: z.object({ assetId: id, contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict().superRefine((value, context) => {
+export const CODE_MATERIAL_API_VERSION = 2
+export const codeMaterialVersionSchema = z.object({ id, apiVersion: z.union([z.literal(1), z.literal(2)]), languageVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]), entry: codeFilePathSchema, files: z.array(z.object({ path: codeFilePathSchema, location: z.string().min(1), hash: codeSourceHashSchema }).strict()).min(1), imports: codeComponentPinsSchema.optional(), assetOrigin: z.object({ assetId: id, contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict().superRefine((value, context) => {
+  if (value.apiVersion === 2 && value.languageVersion !== 3) context.addIssue({ code: 'custom', message: 'API2 需要作者语言3。' })
   if (new Set(value.files.map(file => file.path)).size !== value.files.length || !value.files.some(file => file.path === value.entry)) context.addIssue({ code: 'custom', message: '版本文件重复或入口不存在。' })
   if (value.languageVersion !== 3 && (value.entry !== 'main.ts' || value.files.length !== 1)) context.addIssue({ code: 'custom', message: 'v1/v2 只能使用单文件 main.ts。' })
 })

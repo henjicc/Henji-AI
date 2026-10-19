@@ -2,8 +2,10 @@ import { CODE_V3_LIMITS, codeBinaryCost, codeBuiltinCost } from './contract'
 import { CODE_MATH_COSTS } from './expressions'
 import { CODE_EASE_NAMES } from './motion'
 import { CODE_PARAMETER_FUNCTION_COSTS } from './parameterSampling'
-import type { CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeTextMeasurer, CodeMatrix } from './contract'
+import type { CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeTextMeasurer, CodeMatrix, CodeDrawCommand } from './contract'
 import type { CodeHeavyStructure } from './performance'
+import type { CodeMotionClock, CodeMotionSamplingBudget, CodeMotionSettings, CodeMotionPose } from './motionSampling'
+import type { VideoEditFrameOffset } from '../time'
 
 export interface CodeExecutionFrame {
   context: CodeMaterialContext
@@ -29,6 +31,7 @@ export interface CodeExecutionFrame {
   parentMatrix?: CodeMatrix
   placementCullBlocked?: boolean
   culledGroups?: number
+  motion?: { clock: CodeMotionClock; budget: CodeMotionSamplingBudget; hasExposure(command: CodeDrawCommand): boolean; evaluate<T>(offset: VideoEditFrameOffset, caller: CodeExecutionFrame, run: (frame: CodeExecutionFrame) => T): T | null; register(command: Extract<CodeDrawCommand, { kind: 'group' }>, settings: CodeMotionSettings, poseAt: (offset: VideoEditFrameOffset) => CodeMotionPose | null): void }
 }
 export interface CodeExecutionPlan {
   run(frame: CodeExecutionFrame, depth: number): unknown

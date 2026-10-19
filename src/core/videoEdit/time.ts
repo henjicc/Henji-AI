@@ -28,22 +28,33 @@ export interface VideoEditFrameOffset { numerator: number; denominator: number }
 function gcd(left: bigint, right: bigint): bigint { while (right) { const remainder = left % right; left = right; right = remainder } return left }
 /** Fractional microseconds survive trims/splits, including repeated NTSC boundaries. */
 export function offsetVideoEditSource(time: VideoEditSourceTime, frames: number, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime {
-  return offsetSourceFraction(time, BigInt(frames), 1n, rate, holdBeforeZero)
+  return offsetSourceFraction(time, BigInt(frames), 1n, rate, holdBeforeZero)!
 }
 /** Transient subframe clocks, never rounded to a source microsecond or saved as clip timing. */
 export function offsetVideoEditSourceFraction(time: VideoEditSourceTime, frames: VideoEditFrameOffset, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime {
   if (!Number.isSafeInteger(frames.numerator) || !Number.isSafeInteger(frames.denominator) || frames.denominator <= 0) throw new Error('子帧偏移需要安全整数分子及正分母。')
+  validateExactSource(time, rate)
+  return offsetSourceFraction(time, BigInt(frames.numerator), BigInt(frames.denominator), rate, holdBeforeZero, true)!
+}
+function validateExactSource(time: VideoEditSourceTime, rate: VideoEditRatio): void {
   if (![time.sourceInUs, time.sourceRemainder.numerator, time.sourceRemainder.denominator, rate.numerator, rate.denominator].every(Number.isSafeInteger)
     || time.sourceInUs < 0 || time.sourceRemainder.denominator <= 0 || time.sourceRemainder.numerator < 0 || time.sourceRemainder.numerator >= time.sourceRemainder.denominator || rate.numerator <= 0 || rate.denominator <= 0) throw new Error('子帧源时间和帧率必须是有效的精确有理数。')
-  return offsetSourceFraction(time, BigInt(frames.numerator), BigInt(frames.denominator), rate, holdBeforeZero, true)
 }
-function offsetSourceFraction(time: VideoEditSourceTime, frames: bigint, frameDenominator: bigint, rate: VideoEditRatio, holdBeforeZero: boolean, exact = false): VideoEditSourceTime {
+/** Internal motion clocks keep a large frame numerator in BigInt until source
+ * reduction. Absence means the requested exposure predates the actual source. */
+export function sampleVideoEditSourceFraction(time: VideoEditSourceTime, frames: bigint, frameDenominator: bigint, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime | undefined {
+  validateExactSource(time, rate)
+  if (frameDenominator <= 0n || frameDenominator > BigInt(Number.MAX_SAFE_INTEGER) || frames < BigInt(Number.MIN_SAFE_INTEGER) * frameDenominator || frames > BigInt(Number.MAX_SAFE_INTEGER) * frameDenominator) throw new Error('子帧偏移超出精确整数范围。')
+  return offsetSourceFraction(time, frames, frameDenominator, rate, holdBeforeZero, true, true)
+}
+function offsetSourceFraction(time: VideoEditSourceTime, frames: bigint, frameDenominator: bigint, rate: VideoEditRatio, holdBeforeZero: boolean, exact = false, transparent = false): VideoEditSourceTime | undefined {
   const rateNumerator = frameDenominator === 1n ? BigInt(rate.numerator) : BigInt(rate.numerator) * frameDenominator
   const denominator = BigInt(time.sourceRemainder.denominator) * rateNumerator
   const numerator = (BigInt(time.sourceInUs) * BigInt(time.sourceRemainder.denominator) + BigInt(time.sourceRemainder.numerator)) * rateNumerator + frames * 1_000_000n * BigInt(rate.denominator) * BigInt(time.sourceRemainder.denominator)
   if (numerator < 0n) {
     // Only timeless drawings use first-point hold in a validated transition handle.
     if (holdBeforeZero) return { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
+    if (transparent) return undefined
     throw new Error('源入点不能早于素材开始。')
   }
   const whole = numerator / denominator

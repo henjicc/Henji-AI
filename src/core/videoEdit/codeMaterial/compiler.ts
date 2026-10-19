@@ -106,8 +106,10 @@ function compileLinkedCodeMaterial(file: ts.SourceFile, ast: { astNodes: number;
     if (ts.isMethodDeclaration(item)) { if (key !== 'render') fail(item, '仅允许 render(ctx) 方法。'); render = item } else { if (key === 'render') fail(item, 'render 必须声明为 render(ctx) 方法。'); metadata.set(key, item.initializer) }
   }
   const value = (key: string): unknown => { const node = metadata.get(key); if (!node) throw new CodeMaterialError('SYNTAX', `缺少定义字段：${key}`); return staticValue(node) }
-  if (value('apiVersion') !== 1) throw new CodeMaterialError('SYNTAX', '仅支持 apiVersion: 1。')
+  const apiVersion = value('apiVersion')
+  if (apiVersion !== 1 && apiVersion !== 2) throw new CodeMaterialError('SYNTAX', 'apiVersion 必须为 1 或 2。')
   const languageVersion = metadata.has('languageVersion') ? value('languageVersion') : undefined
+  if (apiVersion === 2 && languageVersion !== 3) throw new CodeMaterialError('SYNTAX', 'apiVersion:2 需要 languageVersion:3。')
   if (languageVersion !== undefined && languageVersion !== 3) fail(metadata.get('languageVersion')!, '显式作者语言版本必须为 3。')
   if (languageVersion !== 3 && file.statements.length !== 1) fail(file, '顶层 const 仅用于 v3 作者语言。')
   if (languageVersion !== 3 && ast.astNodes > CODE_MATERIAL_LIMITS.astNodes) fail(file, '源码 AST 数量超出预算。', 'BUDGET')
@@ -119,7 +121,7 @@ function compileLinkedCodeMaterial(file: ts.SourceFile, ast: { astNodes: number;
   const parameters = parseCodeMaterialParameters(value('parameters'), languageVersion === 3 ? 3 : 1, types)
   const imageParameters = parameters.some(parameter => parameter.type === 'image')
   if (imageParameters && kind !== 'generator') throw new CodeMaterialError('TYPE', '图片资源参数仅用于生成器，滤镜仍只采样当前输入。')
-  const program: CodeMaterialProgram = { apiVersion: 1, languageVersion: languageVersion === 3 ? 3 : imageParameters ? 2 : 1, name: staticString(value('name'), 'name', 160), kind, mode,
+  const program: CodeMaterialProgram = { apiVersion, languageVersion: languageVersion === 3 ? 3 : imageParameters ? 2 : 1, name: staticString(value('name'), 'name', 160), kind, mode,
     width: staticNumber(value('width'), 'width', 1, 8192, true), height: staticNumber(value('height'), 'height', 1, 8192, true), durationSeconds: staticNumber(value('durationSeconds'), 'durationSeconds', 0.000001, VIDEO_EDIT_MAX_SEQUENCE_SECONDS), seed: staticNumber(value('seed'), 'seed', 0, 4294967295, true),
     parameters, ...(types ? { types } : {}), bindings: [], result: { kind: 'literal', type: 'boolean', value: false }, metrics: { ...ast, cpuOperations: 0, scalarOperations: 0, samples: 0 } }
   if (!render?.body || render.modifiers?.length || render.asteriskToken || render.questionToken || render.type || render.typeParameters?.length || render.parameters.length !== 1) fail(render ?? definition, '需要纯 render(ctx) 方法。')

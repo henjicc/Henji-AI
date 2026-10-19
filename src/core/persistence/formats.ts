@@ -8,7 +8,7 @@ import { documentEnvelopeSchema, documentEnvelopeContract } from '../documents/e
 import { PROJECT_MANIFEST_VERSION, projectManifestSchema } from '../documents/projectManifest'
 import { videoEditDocumentSchema } from '../videoEdit/document'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../videoEdit/codeAsset'
-import { codeMaterialVersionSchema } from '../videoEdit/codeMaterialPersistence'
+import { CODE_MATERIAL_API_VERSION, codeMaterialVersionSchema } from '../videoEdit/codeMaterialPersistence'
 import { codeComponentMetadataSchema } from '../videoEdit/codeMaterial/components'
 import { codeMaterialFilesSchema } from '../videoEdit/codeMaterial/sources'
 import { styleKitSchema } from '../videoEdit/styleKit'
@@ -54,7 +54,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
     kind.contentSchema, 'file', { ...(kind.id === 'video_edit' ? { domain: videoEditDocumentSchema } : {}), ...(kind.id === 'audio_edit' ? { domain: audioEditProjectSchema } : {}) }), migrations: kind.migrations, ...(kind.id === 'image_document' ? { requiredFixtures: [{ extension: 'json' }, { extension: 'henjiimg', versionFormat: 'image-package' }] } : {}), migrationEntry: 'src/core/documents/kinds/对应类型.ts::migrations / src/core/persistence/migrations.ts::upgradePersistenceContent' })),
   format('project', '项目说明', PROJECT_MANIFEST_VERSION, 'ProjectManifest.version', 'electron/main/services/documents/workspace.ts::readManifest', projectManifestSchema),
   { ...format('project-package', '项目和文档包', PACKAGE_VERSION, 'henji-package.json.version', 'electron/main/services/documents/package-service.ts::readManifest', packageManifestSchema), requiredFixtures: [{ extension: 'json' }, { extension: 'henjipack' }] },
-  format('code-version', '代码源码版本', 1, 'CodeMaterialVersion.apiVersion（源码由父版本引用携带版本）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }),
+  format('code-version', '代码源码版本', CODE_MATERIAL_API_VERSION, 'CodeMaterialVersion.apiVersion（源码由父版本引用携带版本）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }),
   format('code-component', '项目组件说明', CODE_COMPONENT_SCHEMA_VERSION, '组件首行.schemaVersion（作品版本 version 与格式版本不同）', 'src/core/videoEdit/codeMaterial/components.ts::componentSourceMetadata', codeComponentMetadataSchema),
   format('code-asset', '可编辑代码资产', CODE_ASSET_VERSION, 'CodeAsset.version', 'src/core/videoEdit/codeAsset.ts::decodeCodeAsset', codeAssetSchema),
   format('settings', '界面设置', SETTINGS_STORAGE_VERSION, 'settings-storage.version', 'src/stores/settingsStore.ts::persist', rendererSettingsSchema, 'local-storage'),

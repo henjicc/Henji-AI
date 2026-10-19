@@ -4,9 +4,13 @@ import type { CodeDrawCommand, CodeExpression, CodeMaterialContext, CodeMaterial
 import { validateCodeMaterialParameters } from './parameters'
 import { codeExecutionCompiler, codeTextRequest } from './executionPlan'
 import { codeExecutionCache, type CodeExecutionFrame } from './executionCache'
+import { CodeMotionSamplingBudget, sampleCodeMotion, type CodeMotionClock, type CodeMotionSettings, type CodeMotionPose } from './motionSampling'
+import type { VideoEditFrameOffset } from '../time'
+import { identifyCodeElements } from '../codeElementOverrides'
+import { codeGroupRasterBounds } from './geometry'
 export { codeTextRequest } from './executionPlan'
 const array = (value: unknown): unknown[] => { if (!Array.isArray(value)) throw new CodeMaterialError('TYPE', '需要数组。'); return value }
-export interface CodeEvaluationOptions { cullInvisible?: boolean; onEvaluation?: (value: { structures: CodeHeavyStructure[]; culledGroups: number; operations: number }) => void; onProfile?: (heaviest: CodeHeavyStructure | undefined) => void; measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
+export interface CodeEvaluationOptions { motion?: CodeMotionClock; transformCommands?: (commands: CodeDrawCommand[]) => CodeDrawCommand[]; correctMotionPose?: (group: Extract<CodeDrawCommand, { kind: 'group' }>, pose: CodeMotionPose, offset: VideoEditFrameOffset) => CodeMotionPose; cullInvisible?: boolean; onEvaluation?: (value: { structures: CodeHeavyStructure[]; culledGroups: number; operations: number }) => void; onProfile?: (heaviest: CodeHeavyStructure | undefined) => void; measureText?: CodeTextMeasurer; onDiagnostic?: (diagnostic: { code: 'MISSING_FONT'; fontFamily: string; elementId?: string }) => void }
 function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}, root?: CodeExpression): unknown {
   const profile = new Map<string, CodeHeavyStructure>()
   const parameters = validateCodeMaterialParameters(program, values); const bindings: unknown[] = []; const locals = new Map<number, unknown>()
@@ -22,6 +26,26 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
   const compile = codeExecutionCompiler(program)
   const cache = codeExecutionCache(program, parameters, context)
   const frame: CodeExecutionFrame = { context, parameters, bindings, locals, indices, draws: 0, characters: 0, operations: 0, prepaid: false, charge, measure, profile: options.onProfile ? profile : undefined, bindingsReady: false, cache, epoch: cache.epoch }
+  type MotionPlan = { settings: CodeMotionSettings; poseAt(offset: VideoEditFrameOffset): CodeMotionPose | null }
+  const motionPlans = new WeakMap<CodeDrawCommand, MotionPlan>()
+  const hasExposure = (command: CodeDrawCommand): boolean => motionPlans.has(command) || command.kind === 'group' && (command.children.some(hasExposure) || !!command.mask?.shape && hasExposure(command.mask.shape))
+  if (options.motion) frame.motion = {
+    clock: options.motion, budget: new CodeMotionSamplingBudget(),
+    hasExposure,
+    register(command, settings, poseAt) { motionPlans.set(command, { settings, poseAt }) },
+    evaluate(offset, caller, run) {
+      const sampled = options.motion!.at(offset)
+      if (!sampled) return null
+      const c = sampled.context
+      if (![c.time, c.localTime, c.sequenceTime, c.frame, c.fps, c.width, c.height].every(Number.isFinite) || c.time < 0 || c.sequenceTime < 0 || c.width !== context.width || c.height !== context.height || c.fps !== context.fps) throw new CodeMaterialError('CONTEXT', '快门位姿时钟无效或与中心画幅不一致。')
+      const parameters = validateCodeMaterialParameters(program, sampled.parameters)
+      const cache = codeExecutionCache(program, parameters, c)
+      const sample: CodeExecutionFrame = { ...caller, context: c, parameters, bindings: [], bindingsReady: false, lazyDrawBindings: true, locals: new Map(caller.locals), indices: [...caller.indices], cache, epoch: cache.epoch, prepaid: false, profile: undefined, profileEntries: undefined, motion: undefined }
+      Object.defineProperty(sample, 'operations', { get: () => frame.operations, set: (value: number) => { frame.operations = value } })
+      sample.charge = (cost = 1): void => { if (sample.prepaid) return; frame.operations += cost; if (frame.operations > CODE_V3_LIMITS.cpuOperations) throw new CodeMaterialError('BUDGET', '运动位姿表达式超出本帧 CPU 工作预算。') }
+      return run(sample)
+    },
+  }
   const evaluate = (expression: CodeExpression): unknown => compile(expression).run(frame, 0)
   frame.cullInvisible = options.cullInvisible; frame.culledGroups = 0
   if (options.onEvaluation) { frame.profile = profile; frame.profileCached = !options.onProfile }
@@ -53,11 +77,28 @@ function evaluateV3(program: CodeMaterialProgram, context: CodeMaterialContext, 
   const seen = new WeakSet<CodeDrawCommand>()
   const clone = (commands: CodeDrawCommand[]): CodeDrawCommand[] => commands.filter(Boolean).map(command => {
     const next = seen.has(command) ? { ...command } : command; seen.add(command); seen.add(next)
+    const motion = motionPlans.get(command); if (motion) motionPlans.set(next, motion)
     if (next.kind === 'group') { next.children = clone(next.children); if (next.mask) next.mask = { ...next.mask, shape: next.mask.shape ? clone([next.mask.shape])[0] : null } }
     return next
   })
-  const commands = clone(output); assign(commands, [])
-  report(); return commands
+  const commands = clone(output); assign(commands, []); if (frame.motion) identifyCodeElements(commands, true)
+  const plansById = new Map<string, MotionPlan>()
+  const collect = (commands: CodeDrawCommand[]): void => { for (const command of commands) { const plan = motionPlans.get(command); if (plan) plansById.set(command.elementId!, plan); if (command.kind === 'group') { collect(command.children); if (command.mask?.shape) collect([command.mask.shape]) } } }
+  if (frame.motion) collect(commands)
+  const corrected = options.transformCommands ? options.transformCommands(commands) : commands
+  const expose = (commands: CodeDrawCommand[]): void => { for (const command of commands) if (command.kind === 'group') {
+    expose(command.children); if (command.mask?.shape) expose([command.mask.shape])
+    const plan = plansById.get(command.elementId!)
+    if (!plan || !frame.motion) continue
+    const started = performance.now()
+    command.motionSamples = sampleCodeMotion({ bounds: codeGroupRasterBounds(command), shutter: plan.settings.shutter, maxSamples: plan.settings.maxSamples, available: frame.motion.clock.available, budget: frame.motion.budget, poseAt: offset => {
+      const pose = plan.poseAt(offset)
+      return pose && options.correctMotionPose ? options.correctMotionPose(command, pose, offset) : pose
+    } })
+    if (frame.profile && command.sourceSpan) { const key = `motion:${command.sourceSpan.file}:${command.sourceSpan.start}:${command.sourceSpan.end}`; const previous = frame.profile.get(key); frame.profile.set(key, { kind: 'group', sourceSpan: command.sourceSpan, cpuMs: (previous?.cpuMs ?? 0) + performance.now() - started }) }
+  } }
+  if (frame.motion) expose(corrected)
+  report(); return corrected
 }
 
 export function evaluateCodeMaterialV3(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeEvaluationOptions = {}): CodeDrawCommand[] {

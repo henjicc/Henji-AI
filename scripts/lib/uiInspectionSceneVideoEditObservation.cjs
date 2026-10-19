@@ -5,10 +5,12 @@ const sharp = require('sharp')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
+const { presented, png, pixelDifference, mediaProbe } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 
 const SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"单帧观察验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"背景",x:0,y:0,width:640,height:360,fill:ctx.time>=.5&&ctx.time<.51?[1,0,0,1]:[0,0,1,1]})];}}'
 const SOUND_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"声音驱动验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"声音标记",x:ctx.audio.level()*500,y:80,width:60,height:40,fill:[0,1,0,1]})];}}'
 const INPUT_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"画面输入验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({id:"输入",source:ctx.params.picture,x:0,y:0,width:640,height:360})];}}'
+const MOTION_SOURCE = 'export default {apiVersion:2,languageVersion:3,name:"快门曝光验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{blurEnabled:{type:"boolean",title:"运动曝光",default:true}},render(ctx){return [rect({x:0,y:0,width:640,height:360,fill:[0,0,0,1]}),group({id:"运动层",x:160+(ctx.time-1)*1920,y:160,motionBlur:{enabled:ctx.params.blurEnabled,shutter:180,maxSamples:64}},[rect({x:0,y:0,width:8,height:40,fill:[1,0,0,128/255]})])];}}'
 async function pixel(bytes, x, y) {
   return [...await sharp(bytes).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer()]
 }
@@ -37,7 +39,7 @@ function createVideoEditObservationScene() {
           tracks: [track(1), track(2)], clips: [{ id: 'base', itemId: 'reference-item', name: '蓝色底图', kind: 'image', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }], captions: [{ id: 'review-caption', text: '检查', start: 30, duration: 1 }], annotations: [] }] }
       fixture.media.push({ id: 'sound', name: '声音电平夹具', path: soundPath, kind: 'audio', width: 0, height: 0, durationSeconds: 2, hasAudio: true })
       fixture.items.push({ id: 'sound-item', name: '声音电平夹具', kind: 'audio', mediaId: 'sound' })
-      fixture.sequences[0].tracks.push({ ...track(0), kind: 'audio', name: '声音' }, track(3), track(4))
+      fixture.sequences[0].tracks.push({ ...track(0), kind: 'audio', name: '声音' }, track(3), track(4), track(5))
       let client
       const evidence = { completed: false, observations: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -167,6 +169,67 @@ function createVideoEditObservationScene() {
           assert.deepEqual(readVideoEditFile(seeded.file), unchanged)
           assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
         }
+        const motionBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        const motionCreated = await callTool(client, 'change_application_entities', operationEnvelope([motionBaseline], { summary: '创建API2运动曝光验收素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: documentRef, items: [{ properties: { 'video_edit.code_material.source': MOTION_SOURCE } }] }] }))
+        assert.equal(motionCreated.verificationState, 'verified', JSON.stringify(motionCreated))
+        const motionItem = readVideoEditFile(seeded.file).items.find(value => value.name === '快门曝光验收' && value.kind === 'code'); assert.ok(motionItem)
+        const motionSeq = await callTool(client, 'read_application_entity', { ref: sequenceRef })
+        const motionPlaced = await callTool(client, 'change_application_entities', operationEnvelope([motionSeq], { summary: '放置运动曝光画面', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: {
+          'video_edit.clip.item_id': motionItem.id, 'video_edit.clip.name': '运动曝光', 'video_edit.clip.kind': 'code', 'video_edit.clip.track': 5, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 120,
+        } }] }] }))
+        assert.equal(motionPlaced.verificationState, 'verified', JSON.stringify(motionPlaced))
+        const motionBefore = readVideoEditFile(seeded.file)
+        const blurred = await observe('motion-enabled', { kind: 'program', frame: 60 })
+        const left = await pixel(blurred.bytes, 154, 180), center = await pixel(blurred.bytes, 162, 180)
+        assert.ok(left[0] > 0 && left[0] < center[0], `曝光应有渐变拖影：${left}/${center}`)
+        near(await pixel(blurred.bytes, 178, 180), [0, 0, 0])
+        await observe('motion-seek', { kind: 'program', frame: 61 })
+        const replay = await observe('motion-replay', { kind: 'program', frame: 60 })
+        assert.deepEqual(await sharp(replay.bytes).ensureAlpha().raw().toBuffer(), await sharp(blurred.bytes).ensureAlpha().raw().toBuffer())
+        assert.deepEqual(readVideoEditFile(seeded.file), motionBefore)
+        const playbackBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        const seeked = await callTool(client, 'change_application_entities', operationEnvelope([playbackBaseline], { summary: '核对运动曝光真实节目预览', changes: [{ kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.program_playback': { frame: 60, playing: false, playbackDirection: 1 } } }] }))
+        assert.equal(seeked.verificationState, 'verified', JSON.stringify(seeked)); await presented(page, 60)
+        const preview = await png(page, path.join(root, 'motion-preview.png'), { width: 640, height: 360 })
+        const previewDifference = await pixelDifference(preview.file, path.join(root, 'motion-enabled.png'))
+        assert.ok(previewDifference.equal, `节目预览与观察像素须一致：${JSON.stringify(previewDifference)}`)
+        evidence.motionPreviewCapture = await capture('motion-exposure-preview'); store()
+        const exportBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        const exported = await callTool(client, 'export_video_edit', operationEnvelope([exportBaseline], { documentRef, range: { startFrame: 60, endFrame: 61 }, settings: { format: 'mp4', width: 640, height: 360, fps: 60, videoBitrateMbps: 20, audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: 'software', audioEnabled: false, addToLibrary: false } }))
+        const exportData = exported.data ?? exported.result?.data
+        const jobId = exportData?.queue?.[0]?.id; assert.ok(jobId, JSON.stringify(exported))
+        let job
+        for (let attempt = 0; attempt < 120; attempt++) {
+          const progress = await callTool(client, 'query_video_edit_export', { documentRef, taskId: jobId, detail: 'full' })
+          job = progress.data.queue.find(value => value.id === jobId)
+          if (job && ['completed', 'failed', 'cancelled'].includes(job.state)) break
+          await page.waitForTimeout(500)
+        }
+        assert.equal(job?.state, 'completed', JSON.stringify(job)); assert.ok(job.outputReady && job.path && fs.existsSync(job.path), JSON.stringify(job))
+        const { ffprobePath } = require('./mediaBinaries.cjs')
+        const video = mediaProbe(ffprobePath, job.path).streams.find(value => value.codec_type === 'video')
+        assert.equal(video.width, 640); assert.equal(video.height, 360); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 1)
+        const decoded = path.join(root, 'motion-export.png')
+        execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', job.path, '-frames:v', '1', decoded], { windowsHide: true, timeout: 30000 })
+        const exportDifference = await pixelDifference(decoded, preview.file, { left: 140, top: 160, width: 48, height: 40 })
+        assert.ok(exportDifference.psnr === null || exportDifference.psnr >= 30, `实际成片运动区域须与预览匹配：${JSON.stringify(exportDifference)}`)
+        evidence.motionExport = { path: job.path, frameCount: Number(video.nb_frames), previewDifference, exportDifference }; store()
+        const restoreBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        const restored = await callTool(client, 'change_application_entities', operationEnvelope([restoreBaseline], { summary: '恢复验收前播放头', changes: [{ kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.program_playback': { frame: stateBefore['video_edit.document.frame'], playing: false, playbackDirection: 1 } } }] }))
+        assert.equal(restored.verificationState, 'verified', JSON.stringify(restored)); await presented(page, stateBefore['video_edit.document.frame'])
+        const motionClip = motionBefore.sequences[0].clips.find(value => value.itemId === motionItem.id)
+        const motionRef = { kind: 'video_edit.clip', id: `${seeded.documentId}:${motionClip.id}` }
+        const motionRead = await callTool(client, 'read_application_entity', { ref: motionRef })
+        const disabled = await callTool(client, 'change_application_entities', operationEnvelope([motionRead], { summary: '关闭运动曝光比较原画面', changes: [{ kind: 'set_properties', entityType: motionRef.kind, target: motionRef, properties: { 'video_edit.clip.code_parameters': { blurEnabled: false } } }] }))
+        assert.equal(disabled.verificationState, 'verified', JSON.stringify(disabled))
+        const disabledBefore = readVideoEditFile(seeded.file)
+        const sharpFrame = await observe('motion-disabled', { kind: 'program', frame: 60 })
+        near(await pixel(sharpFrame.bytes, 154, 180), [0, 0, 0])
+        const sharpCenter = await pixel(sharpFrame.bytes, 162, 180)
+        assert.ok(sharpCenter[0] > center[0], `关闭后应保留清晰中心：${sharpCenter}/${center}`)
+        assert.deepEqual(readVideoEditFile(seeded.file), disabledBefore)
+        assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
+        evidence.motionExposure = { apiVersion: 2, left, center, disabledCenter: sharpCenter, replayExact: true }; store()
         evidence.capture = await capture('observation-review-host'); evidence.completed = true; store()
       } catch (error) { evidence.failure = String(error.stack ?? error); store(); throw error }
       finally {

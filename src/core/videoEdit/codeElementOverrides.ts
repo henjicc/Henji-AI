@@ -114,8 +114,8 @@ export function applyCodeElementOverrides(commands: readonly CodeDrawCommand[], 
   if (characters > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', '本帧覆盖后文字超出文字绘制预算。')
   return result
 }
-export function codeElementCorrection(command: CodeDrawCommand, value: CodeElementOverrideValues): CodeMatrix {
-  const next = { ...command, elementTransform: undefined }; const local = codeLocalBounds(next); const base = codeTransform(next)
+export function codeElementCorrection(command: CodeDrawCommand, value: CodeElementOverrideValues, authorMatrix?: CodeMatrix): CodeMatrix {
+  const next = { ...command, elementTransform: undefined }; const local = codeLocalBounds(next); const base = authorMatrix ?? codeTransform(next)
   const center = next.authorAnchor ? [(next.anchorX ?? 0) + (next.kind !== 'group' && 'x' in next ? next.x : 0), (next.anchorY ?? 0) + (next.kind !== 'group' && 'y' in next ? next.y : 0)] : [local.x + local.width / 2, local.y + local.height / 2]
   const angle = (value.rotation ?? 0) * Math.PI / 180; const c = Math.cos(angle); const s = Math.sin(angle)
   const sx = (value.scale ?? 1) * (value.scaleX ?? 1); const sy = (value.scale ?? 1) * (value.scaleY ?? 1)

@@ -14,7 +14,7 @@ export async function makeCodeMaterialDefinition(source: string | CodeMaterialFi
   const program = await compile(expandPinnedCodeComponents(contents, publication.imports, documentCodeSourceResolver()))
   const id = identity?.id ?? crypto.randomUUID(); const name = publication.name ?? program.name
   const stored = await publication.write(id, name, contents, identity?.folder)
-  const version = { id: crypto.randomUUID(), apiVersion: 1, languageVersion: program.languageVersion, entry: addressed.entry, files: stored.files, ...(publication.imports.length ? { imports: publication.imports } : {}) }
+  const version = { id: crypto.randomUUID(), apiVersion: program.apiVersion, languageVersion: program.languageVersion, entry: addressed.entry, files: stored.files, ...(publication.imports.length ? { imports: publication.imports } : {}) }
   const definition = codeMaterialDefinitionSchema.parse({ id, name, ...(stored.folder ? { folder: stored.folder } : {}), defaultVersionId: version.id, versions: [version] })
   return { definition, program }
 }

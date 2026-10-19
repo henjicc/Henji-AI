@@ -23,7 +23,8 @@ import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMateri
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
-import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } from '@/core/videoEdit/codeMaterialTiming'
+import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame, codeMaterialMotionClock } from '@/core/videoEdit/codeMaterialTiming'
+import type { CodeMotionClock } from '@/core/videoEdit/codeMaterial/motionSampling'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
@@ -49,7 +50,7 @@ type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Parti
 type Compiler = Pick<VideoEditCodeCompiler, 'compile' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
-interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
+interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock }
 export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
 /** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d）。 */
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask }
@@ -167,14 +168,16 @@ export class VideoEditCodeSources {
     const effects = new Map<string, PreparedVideoEditEffect[]>()
     const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
-    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram): Promise<Pick<Plan, 'context' | 'parameters' | 'transitionHandles'>> => {
+    const animated = async (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram): Promise<Pick<Plan, 'context' | 'parameters' | 'transitionHandles' | 'motion'>> => {
       let animation = this.parameters.get(instance)
       if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation) }
       const window = transitionByClip.get(clip.id)
       const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window) : codeMaterialContextForFrame(clip, frame, document.frameRate, program)
       const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
       Object.assign(context, await options.audio?.(clip, program, parameters, controller.signal)); assertCurrent()
-      return { context, parameters: codeMediaFrameParameters(clip, parameters), transitionHandles: Boolean(window) }
+      const prepared = animation.prepared
+      const motion = program.motionBlur ? codeMaterialMotionClock(clip, frame, document.frameRate, program, time => codeMediaFrameParameters(clip, evaluateCodeMaterialParameters(prepared, time)), context, window) : undefined
+      return { context, parameters: codeMediaFrameParameters(clip, parameters), transitionHandles: Boolean(window), ...(motion ? { motion } : {}) }
     }
     try {
       for (const clip of clips) {
@@ -244,14 +247,14 @@ export class VideoEditCodeSources {
         const key = identity(clip.code.definitionId, clip.code.versionId)
         const program = await this.program(key, version, controller.signal, pinned); assertCurrent()
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
-        const { parameters, context, transitionHandles } = await animated(clip, clip.code, program)
+        const { parameters, context, transitionHandles, motion } = await animated(clip, clip.code, program)
         const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind)); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
         const sourceTime = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionHandles && program.mode === 'static')
         const overrideValues = clip.elementOverrides ? Object.fromEntries(Object.entries(clip.elementOverrides).map(([id, value]) => [id, evaluateCodeElementOverride(value, sourceTime)])) : undefined
-        const isStatic = program.mode === 'static' && !codeMaterialUsesAudio(program) && !Object.values(clip.code.parameters).some(value => isCodeImageReference(value) && value.kind !== 'image')
+        const isStatic = program.mode === 'static' && !program.motionBlur && !codeMaterialUsesAudio(program) && !Object.values(clip.code.parameters).some(value => isCodeImageReference(value) && value.kind !== 'image')
         const target = isStatic ? `code:static:${JSON.stringify([key, parameters, imageSources, documentFontRevision(), overrideValues])}` : `code:dynamic:${clip.id}`
         keys.add(target)
-        plans.push({ clip, key: target, static: isStatic, program, parameters, context, transitionHandles })
+        plans.push({ clip, key: target, static: isStatic, program, parameters, context, transitionHandles, ...(motion ? { motion } : {}) })
       }
       assertCurrent(); if (!options.preparationOnly) this.protectedKeys = keys
       const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }
@@ -295,7 +298,7 @@ export class VideoEditCodeSources {
             if (plan.draws) {
               if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
               picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws, undefined, Math.min(document.width / plan.context.width, document.height / plan.context.height) * plan.clip.scale)
-            } else picture = await this.runtime!.generator(plan.key, plan.program!, plan.context, plan.parameters, inputs, plan.transitionHandles, plan.clip.elementOverrides ? { elementOverrides: plan.clip.elementOverrides, sourceTime: videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static') } : undefined)
+            } else picture = await this.runtime!.generator(plan.key, plan.program!, plan.context, plan.parameters, inputs, plan.transitionHandles, plan.clip.elementOverrides || plan.motion ? { ...(plan.motion ? { motion: plan.motion } : {}), ...(plan.clip.elementOverrides ? { elementOverrides: plan.clip.elementOverrides, sourceTime: videoEditClipSourceTimeAt(plan.clip, frame - plan.clip.start, document.frameRate, plan.transitionHandles && plan.program!.mode === 'static') } : {}) } : undefined)
             assertCurrent()
             if (plan.static) this.staticPictures.set(plan.key, picture)
           }

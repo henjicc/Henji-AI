@@ -14,6 +14,15 @@ const rates = [{ numerator: 30000, denominator: 1001 }, { numerator: 60000, deno
 describe('快门位姿子时钟', () => {
   const clip: CodeMaterialTimedClip = { start: 60, duration: 120, sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 } }
   const rate = rates[1]
+  it('长序列的细分帧在BigInt中运算后才约分，不因中间帧分子超过安全整数而拒绝合法源时间', () => {
+    const long = { start: 0, duration: 8_000_001, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
+    const rate = { numerator: 120000, denominator: 1001 }, declared = { ...program, durationSeconds: 86400 }
+    const center = codeMaterialContextForSubframe(long, 8_000_000, { numerator: 0, denominator: 1 }, rate, declared)
+    const sampled = codeMaterialContextForSubframe(long, 8_000_000, { numerator: 1, denominator: 92_160_000_000 }, rate, declared)
+    expect(sampled.sourceTime).not.toEqual(center.sourceTime)
+    expect(sampled.sourceTime.sourceRemainder.denominator).toBeGreaterThan(1_000_000)
+    expect(Object.values(sampled.sourceTime.sourceRemainder).every(Number.isSafeInteger)).toBe(true)
+  })
   it('中心样本等同整帧；源、局部与序列时间分别换算，重复和乱序无状态', () => {
     for (const reverse of [false, true]) for (const speed of [{ numerator: 2, denominator: 1 }, { numerator: 1, denominator: 3 }]) {
       const timed = { ...clip, reverse, speed }

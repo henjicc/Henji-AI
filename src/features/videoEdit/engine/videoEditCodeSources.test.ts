@@ -42,6 +42,23 @@ function boundaries(document: VideoEditComposition) {
 function changedVersion(document: VideoEditComposition, id: string): VideoEditComposition {
   return { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: id } })) }
 }
+it('API2运动层把正式源时钟和子帧参数交给GPU，静态声明不复用只有中心参数相同的旧曝光', async () => {
+  const code = 'export default {apiVersion:2,languageVersion:3,name:"参数运动",kind:"generator",mode:"static",width:64,height:64,durationSeconds:3,seed:1,parameters:{amount:{type:"number",title:"位置",default:0,min:0,max:100,step:1,animatable:true}},render(ctx){return [group({x:ctx.params.amount,motionBlur:{}},[rect({x:0,y:0,width:8,height:8,fill:[1,0,0,1]})])];}}'
+  const document = fixture(code)
+  Object.assign(document.codeMaterials![0].versions[0], { apiVersion: 2, languageVersion: 3 })
+  document.clips[0].code!.curves = { amount: [{ id: 'a', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'b', sourceInUs: 1_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 100, interpolation: 'linear' }] }
+  const boundary = boundaries(document)
+  try {
+    await boundary.sources.prepare(document, document.clips, 15, () => true)
+    await boundary.sources.prepare(document, document.clips, 15, () => true)
+    expect(boundary.generator).toHaveBeenCalledTimes(2)
+    const options = (boundary.generator.mock.calls[0] as unknown as Parameters<VideoEditCodeGpu['generator']>)[6]!
+    const before = options.motion!.at({ numerator: -1, denominator: 4 })!, after = options.motion!.at({ numerator: 1, denominator: 4 })!
+    expect(Number(after.parameters.amount)).toBeGreaterThan(Number(before.parameters.amount))
+    expect(after.context.frame - before.context.frame).toBe(.5)
+    expect(after.sourceTime!.sourceInUs).toBeGreaterThan(before.sourceTime!.sourceInUs)
+  } finally { await boundary.sources.dispose() }
+})
 
 it('t102 静态声明读取音频元数据仍随来源更新，视频参数按片段改写为当前帧输入', async () => {
   const code = 'export default {apiVersion:1,languageVersion:3,name:"音频",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:3,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [rect({x:ctx.audio.bpm,y:0,width:10,height:10,fill:[1,1,1,1]}),image({source:ctx.params.picture,x:0,y:0,width:10,height:10})];}}'

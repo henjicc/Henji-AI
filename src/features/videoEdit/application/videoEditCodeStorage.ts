@@ -57,7 +57,7 @@ export async function publishProjectCodeComponent(projectId: string, input: { na
   const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
   const source = input.source.startsWith('// henji-component ') ? componentSourceMetadata(input.source).source : input.source
   const exports = codeComponentExportNames(source)
-  const contents: CodeMaterialFiles = { entry: '__check.ts', files: { '__check.ts': 'export default {languageVersion:3,apiVersion:1,name:"组件检查",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [];}}', 'component.ts': source } }
+  const contents: CodeMaterialFiles = { entry: '__check.ts', files: { '__check.ts': 'export default {languageVersion:3,apiVersion:2,name:"组件检查",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [];}}', 'component.ts': source } }
   const imports = pinCodeComponentImports(contents, await projectCodeComponents(projectId), name)
   initializeVideoEditCodeSourceRuntime()
   await loadCodeSourceReferences({ files: [], imports }); signal?.throwIfAborted()

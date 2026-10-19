@@ -40,7 +40,7 @@ const shapeFields: Record<CodeDrawKind, string[]> = {
   path: [...common, ...stroke, ...trim, 'd', 'points', 'closed', 'fill'],
   text: [...common, ...stroke, 'x', 'y', 'text', 'fontFamily', 'fontWeight', 'fontStyle', 'fontSize', 'color', 'fill', 'align', 'baseline', 'letterSpacing', 'lineHeight', 'maxWidth', 'wrap', 'maxLines', 'perChar'],
   shader: [...common.filter(key => !['shadow', 'glow', 'blur'].includes(key)), 'name', 'params', 'layers', 'time', 'x', 'y', 'width', 'height'],
-  group: [...common, 'x', 'y', 'clip', 'mask'], image: [...common, 'source', 'x', 'y', 'width', 'height'],
+  group: [...common, 'x', 'y', 'clip', 'mask', 'motionBlur'], image: [...common, 'source', 'x', 'y', 'width', 'height'],
 }
 const operators: Partial<Record<ts.SyntaxKind, CodeBinaryOperator>> = {
   [ts.SyntaxKind.AsteriskAsteriskToken]: '**', [ts.SyntaxKind.PlusToken]: '+', [ts.SyntaxKind.MinusToken]: '-', [ts.SyntaxKind.AsteriskToken]: '*', [ts.SyntaxKind.SlashToken]: '/', [ts.SyntaxKind.PercentToken]: '%',
@@ -313,12 +313,19 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
         if (numeric.includes(key) || shape === 'shader' && key === 'time') type(input, value, 'number')
         else if (['fill', 'color', 'stroke'].includes(key)) type(input, value, ['color', 'paint'])
         else if (['closed', 'wrap'].includes(key)) type(input, value, 'boolean')
-        else if (['shadow', 'glow', 'clip', 'mask', 'params'].includes(key)) type(input, value, 'object')
+        else if (['shadow', 'glow', 'clip', 'mask', 'params', 'motionBlur'].includes(key)) type(input, value, 'object')
         else if (['points', 'dash', 'radii'].includes(key)) type(input, value, ['array', 'color'])
         else if (shape === 'shader' && key === 'layers') type(input, value, 'array')
         else if (key === 'source') type(input, value, 'image')
         else type(input, value, 'string')
         properties[key] = value
+      }
+      if (properties.motionBlur) {
+        if (program.apiVersion !== 2) fail(node, '运动曝光需要 apiVersion:2，languageVersion:3。', 'TYPE')
+        const blur = unwrap(properties.motionBlur)
+        if (blur.kind !== 'object' || Object.keys(blur.properties).some(key => !['enabled', 'shutter', 'phase', 'maxSamples'].includes(key))) fail(node, 'motionBlur 允许 enabled/shutter/phase/maxSamples。', 'TYPE')
+        for (const [key, value] of Object.entries(blur.properties)) type(node, value, key === 'enabled' ? 'boolean' : 'number')
+        program.motionBlur = true
       }
       const required = shape === 'group' ? [] : shape === 'path' ? [] : shape === 'line' ? ['x1', 'y1', 'x2', 'y2'] : shape === 'text' ? ['x', 'y', 'text', 'fontSize'] : ['x', 'y', 'width', 'height']
       if (required.some(key => !properties[key]) || shape === 'image' && !properties.source || shape === 'path' && (!properties.d === !properties.points)) fail(node, `${shape} 缺少字段，或 path 未选择唯一的 d/points。`)

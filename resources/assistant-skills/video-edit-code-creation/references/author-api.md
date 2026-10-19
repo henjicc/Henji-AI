@@ -1,20 +1,20 @@
 # 作者语言 v3：核心与图形
 
-同时声明 `apiVersion: 1`（素材契约）与 `languageVersion: 3`（作者语言）；省略后者不会启用 v3。文字与动效读 author-text-motion，着色器与滤镜读 author-shaders，参数实例读 parameters-curves。
+同时声明素材契约 `apiVersion: 1` 或 `2` 与作者语言 `languageVersion: 3`；运动曝光使用 API2，省略语言版本不会启用 v3。文字与动效读 author-text-motion，着色器与滤镜读 author-shaders，参数实例读 parameters-curves。
 
 ## 完整最小源码
 
-本技能所有 ts 围栏必须是可独立编译的完整作者源码，测试直接读取；调用片段用 text，工具输入用 json。
+ts 围栏须为完整作者源码，测试直接编译；调用片段用 text，工具输入用 json。
 
 ```ts
 export default {
-  apiVersion: 1, languageVersion: 3,
+  apiVersion: 2, languageVersion: 3,
   name: "图形核心", kind: "generator", mode: "dynamic",
   width: 1920, height: 1080, durationSeconds: 5, seed: 42,
   parameters: {},
   render(ctx) {
     const p = smoothstep(0, 1, clamp(ctx.time, 0, 1));
-    return [group({id: "card", x: 120, y: 120, opacity: p}, [
+    return [group({id: "card", x: 120 + p * 80, y: 120, opacity: p, motionBlur: {shutter: 180}}, [
       rect({id: "plate", x: 0, y: 0, width: 680, height: 180,
         radius: 16, fill: [0.13, 0.15, 0.19, 1]}),
       line({id: "rule", x1: 32, y1: 144, x2: 648, y2: 144,
@@ -33,6 +33,8 @@ name 为 1–160 个 UTF-16 单元；kind 为 generator/filter；可选 shaders 
 允许字面量、数组、静态字段对象，`+ - * / %`、比较、同类型标量 `=== !==`、`&& || !`、同类型两支的三元表达式（“不画”的一支写 `group({}, [])`，不写 `[]`）；`ctx.params` 不能赋给别名。可读数组下标、允许的对象字段、颜色 `.r/.g/.b/.a`；CPU 生成器支持经过检查的动态索引，滤镜索引须静态确定。不支持 if/for/while、let/var、赋值、递归、class/new、默认导入或动态 import（具名相对导入与 @组件 导入见 [多文件与项目组件库](multifile-components.md)）、任意方法及浏览器/Node/网络/文件访问。
 
 ctx：time 源秒、localTime 片段内秒、sequenceTime 序列秒、frame、fps、width/height；参数为 `ctx.params.key`。u/v 仅滤镜可用，表示当前输入归一化像素坐标。关键帧按 time，不把三种时间混用；frame 由宿主提供，不假定总等于源秒乘帧率。
+
+API2 的组可写 `motionBlur:{shutter:180}`；内容只画一次，位姿在快门内求值。开关、相位、边界与嵌套语义见 [文字与动效](author-text-motion.md)。
 
 
 生成器 return 图形数组或 repeat 结果，嵌套数组展开。`repeat(count, i => expression)` 从零计数，可返回图形/数组/值；count 是非负整数常量或有非负 min、整数 max 的 number 参数，运行值也必须为整数。时间/随机数不能决定展开上界。辅助函数展开最多 16 层，repeat 嵌套最多 4 层。

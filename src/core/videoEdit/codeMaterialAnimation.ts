@@ -25,7 +25,7 @@ interface PreparedCurve { declaration: CodeParameterDeclaration; points: CodeMat
 export interface PreparedCodeMaterialParameters { values: CodeParameterValues; curves: ReadonlyMap<string, PreparedCurve> }
 
 function rational(time: VideoEditSourceTime): { numerator: bigint; denominator: bigint } {
-  if (!Number.isSafeInteger(time.sourceInUs) || time.sourceInUs < 0 || !Number.isInteger(time.sourceRemainder.numerator) || !Number.isInteger(time.sourceRemainder.denominator) || time.sourceRemainder.denominator < 1 || time.sourceRemainder.denominator > 1_000_000 || time.sourceRemainder.numerator < 0 || time.sourceRemainder.numerator >= time.sourceRemainder.denominator) throw new CodeMaterialError('CONTEXT', '关键帧需要有效的连续源时刻。')
+  if (!Number.isSafeInteger(time.sourceInUs) || time.sourceInUs < 0 || !Number.isSafeInteger(time.sourceRemainder.numerator) || !Number.isSafeInteger(time.sourceRemainder.denominator) || time.sourceRemainder.denominator < 1 || time.sourceRemainder.numerator < 0 || time.sourceRemainder.numerator >= time.sourceRemainder.denominator) throw new CodeMaterialError('CONTEXT', '关键帧需要有效的连续源时刻。')
   const denominator = BigInt(time.sourceRemainder.denominator)
   return { numerator: BigInt(time.sourceInUs) * denominator + BigInt(time.sourceRemainder.numerator), denominator }
 }

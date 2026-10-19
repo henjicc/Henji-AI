@@ -3,8 +3,8 @@ import { CODE_MATERIAL_LIMITS, CodeMaterialError, codeBinaryCost, codeBuiltinCos
 import type { CodeColor, CodeDrawCommand, CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeParameterValue } from './contract'
 import { validateCodeMaterialParameters } from './parameters'
 import { evaluateCodeMaterialV3, type CodeEvaluationOptions } from './evaluateV3'
-import { codeElementBounds, hitCodeCommands, type CodeElementBounds } from './geometry'
-import { applyCodeElementOverrides, identifyCodeElements, type CodeElementOverrides } from '../codeElementOverrides'
+import { codeElementBounds, codeMultiply, hitCodeCommands, type CodeElementBounds } from './geometry'
+import { applyCodeElementOverrides, identifyCodeElements, codeElementCorrection, readCodeElementOverride, evaluateCodeElementOverride, type CodeElementOverrides } from '../codeElementOverrides'
 import type { VideoEditSourceTime } from '../time'
 import { hideInvisibleCodeCommands } from './visibility'
 
@@ -38,14 +38,24 @@ export function evaluateCodeMaterial(program: CodeMaterialProgram, context: Code
   }
 }
 function evaluateCodeMaterialProgram(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeMaterialEvaluationOptions): CodeDrawCommand[] {
-  if (program.languageVersion === 3 && program.kind === 'generator' && program.apiVersion === 1) {
+  if (program.languageVersion === 3 && program.kind === 'generator' && (program.apiVersion === 1 || program.apiVersion === 2)) {
     validateContext(context, options.transitionHandles === true); codeMaterialRandom(context.seed ?? program.seed, 0)
     // Overrides may reveal or move a previously invisible element. Resolve IDs
     // against the complete author tree before applying them.
-    const commands = identifyCodeElements(evaluateCodeMaterialV3(program, context, values, { ...options, cullInvisible: options.cullInvisible && !Object.keys(options.elementOverrides ?? {}).length }), true)
-    if (!options.elementOverrides || !Object.keys(options.elementOverrides).length) return commands
-    if (!options.measureText || !options.sourceTime) throw new CodeMaterialError('CONTEXT', '元素覆盖需要源时刻与共享文字度量。')
-    return applyCodeElementOverrides(commands, options.elementOverrides, options.sourceTime, options.measureText)
+    const overrides = options.elementOverrides && Object.keys(options.elementOverrides).length ? options.elementOverrides : undefined
+    if (overrides && (!options.measureText || !options.sourceTime)) throw new CodeMaterialError('CONTEXT', '元素覆盖需要源时刻与共享文字度量。')
+    const commands = evaluateCodeMaterialV3(program, context, values, { ...options, cullInvisible: options.cullInvisible && !overrides,
+      ...(overrides ? { transformCommands: commands => applyCodeElementOverrides(options.motion ? commands : identifyCodeElements(commands, true), overrides, options.sourceTime!, options.measureText!), correctMotionPose: (group, pose, offset) => {
+        const raw = readCodeElementOverride(overrides, group.elementId!)
+        if (!raw) return pose
+        const time = options.motion?.at(offset)?.sourceTime
+        if (!time) throw new CodeMaterialError('CONTEXT', '快门元素覆盖缺少精确源时刻。')
+        const value = evaluateCodeElementOverride(raw, time)
+        const placed = pose.anchor ? { ...group, anchorX: pose.anchor[0], anchorY: pose.anchor[1] } : group
+        return { matrix: codeMultiply(codeElementCorrection(placed, value, pose.matrix), pose.matrix), opacity: value.hidden ? 0 : value.opacity ?? pose.opacity }
+      } } : {}),
+    })
+    return options.motion || overrides ? commands : identifyCodeElements(commands, true)
   }
   if (program.kind !== 'generator' || program.apiVersion !== 1 || ![1, 2].includes(program.languageVersion)) throw new CodeMaterialError('TYPE', 'CPU 求值仅支持版本 1 或 2 的生成器；滤镜由可信 GPU emitter 消费。')
   if (program.languageVersion !== (program.parameters.some(parameter => parameter.type === 'image') ? 2 : 1)) throw new CodeMaterialError('TYPE', '图片参数与作者语言版本不一致。')

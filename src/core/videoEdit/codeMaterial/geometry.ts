@@ -9,6 +9,41 @@ export function codeMultiply(a: CodeMatrix, b: CodeMatrix): CodeMatrix {
   return [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]]
 }
 export const codePoint = (matrix: CodeMatrix, x: number, y: number): CodePoint => [matrix[0] * x + matrix[2] * y + matrix[4], matrix[1] * x + matrix[3] * y + matrix[5]]
+type RasterBox = { x: number; y: number; width: number; height: number }
+export function codeRasterEffectPadding(command: CodeDrawCommand, matrix: CodeMatrix): number {
+  const scale = Math.max(Math.hypot(matrix[0], matrix[1]), Math.hypot(matrix[2], matrix[3]))
+  const glyphPad = command.kind === 'text' ? Math.max(0, ...(command.perChar ?? []).map(char => Math.max(char.blur ?? command.blur ?? 0, char.glow?.radius ?? command.glow?.radius ?? 0) * Math.abs(char.scale))) : 0
+  return (Math.max(glyphPad, command.blur ?? 0, command.glow?.radius ?? 0, command.shadow?.blur ?? 0) * 4 + Math.max(Math.abs(command.shadow?.x ?? 0), Math.abs(command.shadow?.y ?? 0))) * scale
+}
+export function codeHasMotionSamples(commands: readonly CodeDrawCommand[]): boolean { return commands.some(command => command.kind === 'group' && (!!command.motionSamples || codeHasMotionSamples(command.children))) }
+/** Shared conservative support for child exposure and frozen spatial effects.
+ * The evaluator uses it to choose samples; GPU allocation uses the same box. */
+export function codeMotionRasterBounds(commands: readonly CodeDrawCommand[]): RasterBox {
+  const boxes: RasterBox[] = []
+  for (const command of commands) {
+    if (command.kind !== 'group') {
+      const element = codeElementBounds([command])[0], pad = codeRasterEffectPadding(command, element.matrix)
+      boxes.push({ x: element.x - pad, y: element.y - pad, width: element.width + pad * 2, height: element.height + pad * 2 }); continue
+    }
+    const box = codeGroupRasterBounds(command)
+    const matrices = command.motionSamples ? command.motionSamples.flatMap(sample => sample.pose && sample.pose.opacity > 0 && sample.weight > 0 ? [sample.pose.matrix] : []) : [codeTransform(command)]
+    for (const matrix of matrices) {
+      const points = [[box.x, box.y], [box.x + box.width, box.y], [box.x, box.y + box.height], [box.x + box.width, box.y + box.height]].map(([x, y]) => codePoint(matrix, x, y))
+      if (points.some(point => !point.every(Number.isFinite))) throw new CodeMaterialError('NON_FINITE', '运动内容边界超出有限范围。')
+      const x = Math.min(...points.map(point => point[0])), y = Math.min(...points.map(point => point[1]))
+      boxes.push({ x, y, width: Math.max(...points.map(point => point[0])) - x, height: Math.max(...points.map(point => point[1])) - y })
+    }
+  }
+  if (!boxes.length) return { x: 0, y: 0, width: 0, height: 0 }
+  const x = Math.min(...boxes.map(box => box.x)), y = Math.min(...boxes.map(box => box.y))
+  return { x, y, width: Math.max(...boxes.map(box => box.x + box.width)) - x, height: Math.max(...boxes.map(box => box.y + box.height)) - y }
+}
+export function codeGroupRasterBounds(command: Extract<CodeDrawCommand, { kind: 'group' }>): RasterBox {
+  if (command.clip) return { ...command.clip, width: Math.ceil(command.clip.width), height: Math.ceil(command.clip.height) }
+  const box = codeMotionRasterBounds(command.children)
+  const pad = Math.ceil(codeRasterEffectPadding(command, CODE_IDENTITY) + 2)
+  return { x: Math.floor(box.x - pad), y: Math.floor(box.y - pad), width: Math.max(1, Math.ceil(box.width + pad * 2)), height: Math.max(1, Math.ceil(box.height + pad * 2)) }
+}
 export function codeTransform(command: CodeDrawCommand): CodeMatrix {
   const angle = (command.rotation ?? 0) * Math.PI / 180; const c = Math.cos(angle); const s = Math.sin(angle)
   const sx = command.scaleX ?? 1; const sy = command.scaleY ?? 1

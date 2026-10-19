@@ -7,6 +7,7 @@ import { CODE_EASE_NAMES, codeCubicBezier, codeEase, codeNoise, codeProgress } f
 import { CODE_MATH_COSTS, codeString, codeStringPart, codeMathOperation, formatCodeNumber, formatCodeTime } from './expressions'
 import { parseCodePath } from './geometry'
 import { CODE_IDENTITY, codeMultiply, codeTransform } from './geometry'
+import { codeMotionSettings } from './motionSampling'
 import { codeEmptyGroup, codeInvisible } from './visibility'
 import { codeShaderGraph, codeShaderTime } from './shaders'
 import { CODE_PARAMETER_FUNCTION_COSTS, easeCodeParameter, sampleCodeCurve, sampleCodeGradient } from './parameterSampling'
@@ -427,6 +428,7 @@ function compileCall(expression: Extract<CodeExpression, { kind: 'call' | 'v3cal
 function compileDraw(expression: Extract<CodeExpression, { kind: 'draw' }>, child: (value: CodeExpression) => Run, program: CodeMaterialProgram): Run {
   const propertyNames = Object.keys(expression.properties).filter(key => key !== 'perChar')
   const properties = propertyNames.map(key => child(expression.properties[key]))
+  const poseProperties = propertyNames.map((key, index) => ({ key, run: properties[index] })).filter(({ key }) => ['x', 'y', 'opacity', 'rotation', 'scale', 'scaleX', 'scaleY', 'skewX', 'skewY', 'anchorX', 'anchorY'].includes(key))
   const runChildren = expression.children ? child(expression.children) : undefined
   const animation = expression.properties.perChar
   const animate = animation?.kind === 'textAnimation' ? child(animation.body) : undefined
@@ -444,18 +446,32 @@ function compileDraw(expression: Extract<CodeExpression, { kind: 'draw' }>, chil
     meta.elementId = elementId;
     meta.sourceSpan = expression.sourceSpan;
     meta.elementPath = []
-    return draw(fields, meta, frame, depth)
+    const settings = expression.shape === 'group' && fields.motionBlur !== undefined ? codeMotionSettings(fields.motionBlur) : undefined
+    const motion = settings?.enabled ? frame.motion : undefined
+    const command = draw(fields, meta, frame, depth, !!motion)
+    if (motion && settings && command && typeof command === 'object' && 'kind' in command && command.kind === 'group') {
+      const group = command as Extract<CodeDrawCommand, { kind: 'group' }>
+      // Repeat/local bindings are lexical snapshots; sampling happens after
+      // occurrence IDs and center-frame content corrections have been resolved.
+      const caller = { ...frame, locals: new Map(frame.locals), indices: [...frame.indices] }
+      motion.register(group, settings, offset => motion.evaluate(offset, caller, sampled => {
+          const fields = Object.fromEntries(poseProperties.map(({ key, run }) => [key, run(sampled, depth + 1)]))
+          const pose: Extract<CodeDrawCommand, { kind: 'group' }> = { ...metadata(fields), kind: 'group', x: coordinate(fields, 'x'), y: coordinate(fields, 'y'), children: [] }
+          return { matrix: codeTransform(pose), opacity: pose.opacity ?? 1, ...(pose.authorAnchor ? { anchor: [pose.anchorX ?? 0, pose.anchorY ?? 0] as [number, number] } : {}) }
+        }))
+    }
+    return command
   }
 }
 const coordinate = (fields: Record<string, unknown>, key: string): number => bounded(fields[key] ?? 0, -32768, 32768, key)
 const size = (fields: Record<string, unknown>, key: string): number => bounded(fields[key], 0, 32768, key)
 const drawFill = (fields: Record<string, unknown>, meta: CodeDrawMetadata): CodeColor => fields.fill === undefined ? [0, 0, 0, 0] : Array.isArray(meta.paint) ? meta.paint : [1, 1, 1, 1]
-function compileDrawShape(expression: Extract<CodeExpression, { kind: 'draw' }>, program: CodeMaterialProgram, runChildren: Run | undefined, animate: Run | undefined): (fields: Record<string, unknown>, meta: CodeDrawMetadata, frame: CodeExecutionFrame, depth: number) => unknown {
+function compileDrawShape(expression: Extract<CodeExpression, { kind: 'draw' }>, program: CodeMaterialProgram, runChildren: Run | undefined, animate: Run | undefined): (fields: Record<string, unknown>, meta: CodeDrawMetadata, frame: CodeExecutionFrame, depth: number, moving: boolean) => unknown {
   const animation = expression.properties.perChar
   if (expression.shape === 'shader') return (fields, meta, _frame, _depth) => {
     return { ...meta, kind: 'shader', graph: codeShaderGraph(program, { name: fields.name, params: fields.params, layers: fields.layers }, 'layer'), time: codeShaderTime(fields.time), x: coordinate(fields, 'x'), y: coordinate(fields, 'y'), width: size(fields, 'width'), height: size(fields, 'height') }
   }
-  if (expression.shape === 'group') return (fields, meta, frame, depth) => {
+  if (expression.shape === 'group') return (fields, meta, frame, depth, moving) => {
     let clip: { x: number; y: number; width: number; height: number } | undefined
     if (fields.clip !== undefined) { const raw = object(fields.clip); keys(raw, ['x', 'y', 'width', 'height']); clip = { x: n(raw.x), y: n(raw.y), width: bounded(raw.width, 0, 32768, 'clip.width'), height: bounded(raw.height, 0, 32768, 'clip.height') } }
     let mask: Extract<CodeDrawCommand, { kind: 'group' }>['mask']
@@ -470,13 +486,16 @@ function compileDrawShape(expression: Extract<CodeExpression, { kind: 'draw' }>,
     // spread pixels. Only direct result-tree placement is known here.
     const parent = frame.parentMatrix
     const matrix = codeMultiply(parent ?? CODE_IDENTITY, codeTransform(command))
-    if (frame.cullInvisible && (codeEmptyGroup(command) || frame.bindingsReady && !frame.placementCullBlocked && codeInvisible(command, matrix, frame.context.width, frame.context.height))) {
+    // A mask's exposure is resolved only after the center tree. Its center
+    // opacity cannot prove this group's content empty during the shutter.
+    const culling = mask?.shape && frame.motion?.hasExposure(mask.shape) ? { ...command, mask: undefined } : command
+    if (!moving && frame.cullInvisible && (codeEmptyGroup(culling) || frame.bindingsReady && !frame.placementCullBlocked && codeInvisible(culling, matrix, frame.context.width, frame.context.height))) {
       frame.culledGroups = (frame.culledGroups ?? 0) + 1
       return command
     }
     const blocked = frame.placementCullBlocked
     frame.parentMatrix = matrix
-    frame.placementCullBlocked = blocked || !!command.blur || !!command.shadow || !!command.glow
+    frame.placementCullBlocked = blocked || moving || !!command.blur || !!command.shadow || !!command.glow
     try { command.children = array(runChildren!(frame, depth + 1)) as CodeDrawCommand[] }
     finally { frame.parentMatrix = parent; frame.placementCullBlocked = blocked }
     return command

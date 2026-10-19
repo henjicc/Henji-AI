@@ -1,11 +1,28 @@
 import { CodeMaterialError } from './contract'
 import type { CodeMatrix } from './contract'
-import type { VideoEditFrameOffset } from '../time'
+import type { VideoEditFrameOffset, VideoEditSourceTime } from '../time'
+import type { CodeMaterialContext } from './contract'
 
 /** Transient renderer data, not an author-language or persistence format. */
-export interface CodeMotionPose { matrix: CodeMatrix; opacity: number }
+export interface CodeMotionPose { matrix: CodeMatrix; opacity: number; /** Used before exposure validation by element corrections, never by the GPU. */ anchor?: [number, number] }
 export interface CodeMotionSample { offset: VideoEditFrameOffset; pose: CodeMotionPose | null; weight: number }
 export interface CodeMotionInterval { start: VideoEditFrameOffset; end: VideoEditFrameOffset }
+export interface CodeMotionClock {
+  available: CodeMotionInterval
+  at(offset: VideoEditFrameOffset): { context: CodeMaterialContext; parameters: Readonly<Record<string, unknown>>; sourceTime?: VideoEditSourceTime } | null
+}
+export interface CodeMotionSettings { enabled: boolean; maxSamples: number; shutter: CodeMotionInterval }
+/** Angles use microdegree precision; timing itself stays rational. */
+export function codeMotionSettings(value: unknown): CodeMotionSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CodeMaterialError('TYPE', 'motionBlur 需要配置对象。')
+  const raw = value as Record<string, unknown>
+  if (Object.keys(raw).some(key => !['enabled', 'shutter', 'phase', 'maxSamples'].includes(key))) throw new CodeMaterialError('TYPE', 'motionBlur 允许 enabled/shutter/phase/maxSamples。')
+  const shutter = raw.shutter ?? 180, phase = raw.phase ?? (typeof shutter === 'number' ? -shutter / 2 : 0), maxSamples = raw.maxSamples ?? 64, enabled = raw.enabled ?? true
+  if (typeof enabled !== 'boolean' || typeof shutter !== 'number' || !Number.isFinite(shutter) || shutter < 0 || shutter > 720 || typeof phase !== 'number' || !Number.isFinite(phase) || phase < -720 || phase + shutter > 720) throw new CodeMaterialError('TYPE', 'motionBlur 快门角度须在 0–720 度之间，曝光时刻须在中心前后两帧以内。')
+  if (typeof maxSamples !== 'number' || !Number.isSafeInteger(maxSamples) || maxSamples < 1 || maxSamples > 64) throw new CodeMaterialError('BUDGET', 'motionBlur.maxSamples 须为 1–64 的整数。')
+  const start = Math.round(phase * 2_000_000), end = start + Math.round(shutter * 2_000_000)
+  return { enabled: enabled && shutter > 0, maxSamples, shutter: { start: { numerator: start, denominator: 720_000_000 }, end: { numerator: end, denominator: 720_000_000 } } }
+}
 type Fraction = { n: bigint; d: bigint }
 const PROBES = 16
 const MAX_SAMPLES = 64
