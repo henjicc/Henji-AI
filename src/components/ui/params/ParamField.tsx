@@ -22,6 +22,8 @@ import { hexColor, type ParamFieldSpec } from './fieldSpec'
 import { TypographyPanel } from '@/components/typography/TypographyPanel'
 import type { TextStyle } from '@/core/imaging/vectorContent/text'
 import { UiError } from '../states'
+import { UiRecordItem, UiRecordList } from '../UiRecordList'
+import type { CodeParameterTableRow } from '@/core/imaging/parameterTypes'
 
 export interface ParamGesture {
   begin: () => void
@@ -112,6 +114,16 @@ function Custom({ field, value, gesture, font }: ParamFieldProps & { field: Para
   return <div className={layoutClass} data-param-layout={field.layout}>{ordered.map(child => <CustomMember key={child.key} field={child} value={(value as CodeParameterObject)[child.key]} parent={parent} />)}</div>
 }
 
+function Table({ field, value, gesture, font, onError }: ParamFieldProps & { field: ParamFieldSpec & { type: 'table' } }): React.ReactElement {
+  const current = useRef(value); current.current = value
+  const write = (index: number, key: string, next: CodeParameterValue): CodeParameterValue => (current.current as CodeParameterTableRow[]).map((row, rowIndex) => rowIndex === index ? { ...row, [key]: next } : row) as CodeParameterTableRow[]
+  return <UiRecordList>{(value as CodeParameterTableRow[]).map((row, index) => <UiRecordItem key={index} index={index} density="compact" title={`第 ${index + 1} 项`}>
+    {field.children?.map(child => <div key={child.key} className="min-w-0"><span className="text-xs text-text2">{child.title}</span><ParamField field={child} value={row[child.key]} label={`${field.title}第 ${index + 1} 项${child.title}`} onError={onError}
+      gesture={{ ...gesture, write: next => gesture.write(write(index, child.key, next)), atomic: next => gesture.atomic(write(index, child.key, next)) }}
+      font={font && { ...font, onPreview: (name, path = []) => font.onPreview(name, [String(index), child.key, ...path]) }} /></div>)}
+  </UiRecordItem>)}</UiRecordList>
+}
+
 /** A single controlled renderer for instance and keyframe values, from either source. */
 export const ParamField = memo(function ParamField({ field, value, gesture, label = field.title, font, image, resource, disabled, onError }: ParamFieldProps): React.ReactElement {
   const [cancelEpoch, setCancelEpoch] = useState(0)
@@ -137,6 +149,7 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
     case 'text': control = <UiTextArea aria-label={label} rows={field.multiline ? 3 : 2} maxLength={field.maxLength} value={value as string} onChange={event => gesture.write(event.target.value)} textHistory={{ onValueChange: gesture.write, onEditStart: gesture.begin, onEditEnd: gesture.finish }} />; break
     case 'font': control = <UiFontPicker ariaLabel={label} value={value as string} projectFonts={font?.projectFonts} onPreview={face => font?.onPreview(face?.fullName ?? null)} onSelect={gesture.atomic} />; break
     case 'textStyle': control = <TextStyleField field={field} value={value} gesture={gesture} font={font} onError={onError} />; break
+    case 'table': control = <Table field={field} value={value} gesture={gesture} font={font} onError={onError} />; break
     case 'audio': case 'image': control = image; break
     case 'custom': control = <Custom field={field} value={value} gesture={gesture} font={font} />; break
     case 'lut': control = resource ?? <span className="text-xs text-text3">在 全能调色面板选择</span>; break

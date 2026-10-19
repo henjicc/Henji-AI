@@ -34,4 +34,18 @@ describe('作者 JS 参数适配', () => {
     expect(authorParameterMetadata({ params }).parameters[0]).toMatchObject({ type: 'choice', options: ['a'], optionLabels: { a: '甲' } })
     expect(() => authorParameterMetadata({ params: [...params, ...params] })).toThrow('重复')
   })
+
+  it('数据表保存文字和完整样式，键唯一，内容修改不改变其他行', () => {
+    const metadata = authorParameterMetadata({ params: [{ key: 'nodes', type: 'table', rowKey: 'id', fields: {
+      id: { type: 'text', title: '键', default: '', maxLength: 64 },
+      title: { type: 'text', title: '文案', default: '节点', maxLength: 200 },
+      style: { type: 'textStyle', title: '样式', default: { fontSize: 48 } },
+    }, default: [{ id: 'a' }, { id: 'b', title: '第二项' }] }] })
+    const table = metadata.parameters[0]
+    expect(table.default).toMatchObject([{ id: 'a', title: '节点', style: { fontSize: 48 } }, { id: 'b', title: '第二项' }])
+    expect(codeMaterialAnimatedParameterValueSchema.parse(table.default)).toEqual(table.default)
+    expect(() => validateCodeMaterialParameterValue(table, [{ id: 'a', title: '一', style: {} }, { id: 'a', title: '二', style: {} }])).toThrow('唯一')
+    expect(() => validateCodeMaterialParameterValue(table, [{ id: 'a' }])).toThrow()
+    expect(codeMaterialAnimatedParameterValueSchema.safeParse([]).success).toBe(true)
+  })
 })

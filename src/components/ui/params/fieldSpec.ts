@@ -19,6 +19,10 @@ export type ParamFieldSpec = (DisplayDeclaration<CodeParameterDeclaration> | { t
 export function codeParameterFields(parameters: readonly CodeParameterDeclaration[], types: Record<string, CodeParameterTypeDefinition> = {}): ParamFieldSpec[] {
   return parameters.map(parameter => {
     const { description: _description, ...display } = parameter
+    if (display.type === 'table') {
+      const { fields: members, ...table } = display
+      return { ...table, source: 'code', bindingKeys: [parameter.key], children: codeParameterFields(Object.values(members), types) }
+    }
     if (display.type === 'custom') {
       const { fields: _fields, ...custom } = display
       return { ...custom, source: 'code', bindingKeys: [parameter.key], layout: types[display.typeName]?.layout ?? 'stack', children: codeParameterFields(Object.values(display.fields), types) }

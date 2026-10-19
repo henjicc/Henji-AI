@@ -27,7 +27,9 @@ import { parseImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentCodec
 import { IMAGE_EDIT_HISTORY_CHECKPOINT_VERSION_V3 } from '../src/core/imageEdit/v3/historyPaging/schema'
 import { createImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { getImageLayoutFixtureResources } from './generate-persistence-fixtures'
-import { creativeIntentsSchema } from '../src/core/creativeIntent/persistence'
+import { creativeIntentsSchema, MOTION_CANDIDATE_VERSION } from '../src/core/creativeIntent/persistence'
+import { creativeIntentPageSchema } from '../src/core/creativeIntent/pages'
+import { optimizeMotionDraft, type OptimizeMotionInput } from '../src/core/creativeIntent/candidates'
 import { rehomeVideoMotionResources } from '../electron/main/services/documents/video-motion-resources'
 import { CODE_ASSET_VERSION } from '../src/core/videoEdit/codeAsset'
 
@@ -155,11 +157,26 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     // The motion fixture owns additional semantic evidence; newer minimal JSON samples must not erase it from the archive.
     const motion = parseDocumentText(fs.readFileSync(fixture('document.video_edit', 'v2.json'), 'utf8'))
     const head = creativeIntentsSchema.parse((motion.content as { creativeIntents: unknown }).creativeIntents)
+    const samplePage = creativeIntentPageSchema.parse(read('creative-intent-page'))
+    if (samplePage.kind !== 'samples') throw new Error('黄金运动页必须包含原始采样')
+    const recordedCandidate = read('creative-intent-candidate') as { identity: { requestKey: string } }
+    const request = JSON.parse(recordedCandidate.identity.requestKey) as { mappings: [string, OptimizeMotionInput['mappings'][string]][] }
+    const candidate = { version: MOTION_CANDIDATE_VERSION, ...optimizeMotionDraft({
+      draft: head.drafts[0], samples: samplePage.entries, mappings: Object.fromEntries(request.mappings),
+    }).candidates[0] }
     for (const resource of head.resources) {
       const file = path.join(project.path, '素材', `${resource.resourceId}.json`)
       await fsp.mkdir(path.dirname(file), { recursive: true })
-      await fsp.writeFile(file, JSON.stringify(read(resource.kind === 'page' ? 'creative-intent-page' : 'creative-intent-candidate')))
+      const bytes = Buffer.from(JSON.stringify(resource.kind === 'page' ? read('creative-intent-page') : candidate))
+      await fsp.writeFile(file, bytes)
+      resource.bytes = bytes.byteLength
+      resource.digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
       resource.path = file
+      for (const draft of head.drafts) {
+        for (const ref of [...draft.candidateRefs, ...draft.takes.flatMap(take => take.samplePages)]) {
+          if (ref.resourceId === resource.resourceId) { ref.bytes = resource.bytes; ref.digest = resource.digest }
+        }
+      }
     }
     golden.creativeIntents = head
     const content = await rehomeVideoMotionResources(golden, motion.id, current.meta.id, project.path)

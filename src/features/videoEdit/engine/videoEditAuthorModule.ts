@@ -18,6 +18,10 @@ export interface AuthorLayer {
   name?: string
   /** Resolved by the module builder; never inferred by intercepting Canvas calls. */
   sourceSpan?: CodeSourceSpan
+  /** Optional navigation for layers produced by a reusable factory. */
+  factory?: { file: string; name: string }
+  /** Bind the selected layer to one editable row; a stable key survives reordering. */
+  data?: { parameter: string; index: number } | { parameter: string; key: string | number; keyField: string }
   bounds?: [number, number, number, number]
   clip?: [number, number, number, number]
   pose?: (time: number) => AuthorPose | null

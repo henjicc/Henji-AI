@@ -22,6 +22,9 @@ export function collectVideoEditFonts(document: VideoEditDocument | VideoEditCom
     const collect = (parameter: CodeParameterDeclaration, value: unknown, id: string, title: string): void => {
       if (parameter.type === 'font') add(value, id, title)
       if (parameter.type === 'textStyle' && value && typeof value === 'object' && 'fontFamily' in value) add(value.fontFamily, id, title)
+      if (parameter.type === 'table' && Array.isArray(value)) value.forEach((row: unknown, index: number) => {
+        if (row && typeof row === 'object') for (const [key, field] of Object.entries(parameter.fields)) collect(field, (row as Record<string, unknown>)[key], `${id}:${index}:${key}`, title)
+      })
       if (parameter.type === 'custom' && value && typeof value === 'object' && !Array.isArray(value)) {
         for (const [key, field] of Object.entries(parameter.fields)) collect(field, (value as Record<string, unknown>)[key], `${id}:${key}`, title)
       }

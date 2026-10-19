@@ -18,19 +18,24 @@ const fixtureVersions = Object.fromEntries(ids.map(id => [id, resourcePersistenc
 const fixture = (id: PersistenceResourceId): Record<string, unknown> => JSON.parse(fs.readFileSync(path.resolve('tests/fixtures/persistence', id, `v${fixtureVersions[id]}.json`), 'utf8')) as Record<string, unknown>
 
 describe('不可变资源统一解码', () => {
-  it('v1 动作候选按唯一迁移链读取，保留曲线、身份与原始字节', async () => {
-    const bytes = fs.readFileSync('tests/fixtures/persistence/creative-intent-candidate/v1.json')
+  it('当前动作候选通过正式读入口，保留曲线、身份与原始字节；开发期旧候选明确拒绝', async () => {
+    const file = path.resolve('tests/fixtures/persistence/creative-intent-candidate', `v${fixtureVersions['creative-intent-candidate']}.json`)
+    const bytes = fs.readFileSync(file)
     const raw = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
     const before = structuredClone(raw)
     const upgraded = decodePersistenceResource('creative-intent-candidate', raw)
-    expect(upgraded).toEqual({ ...before, version: 2 })
+    expect(upgraded).toEqual(before)
     expect(raw).toEqual(before)
     readFile.mockResolvedValue(bytes)
-    const resource = { resourceId: 'old-candidate', path: 'synthetic.json', kind: 'candidate' as const, bytes: bytes.length,
+    const resource = { resourceId: 'current-candidate', path: 'synthetic.json', kind: 'candidate' as const, bytes: bytes.length,
       digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` }
     vi.stubGlobal('crypto', webcrypto)
     expect(await readMotionResource(resource)).toEqual(upgraded)
-    expect(fs.readFileSync('tests/fixtures/persistence/creative-intent-candidate/v1.json')).toEqual(bytes)
+    expect(fs.readFileSync(file)).toEqual(bytes)
+    const oldFile = 'tests/fixtures/persistence/creative-intent-candidate/v1.json'
+    const oldBytes = fs.readFileSync(oldFile)
+    expect(() => decodePersistenceResource('creative-intent-candidate', JSON.parse(oldBytes.toString('utf8')))).toThrowError(expect.objectContaining({ code: 'unsupported-version' }))
+    expect(fs.readFileSync(oldFile)).toEqual(oldBytes)
   })
   it.each(ids)('%s 预检版本、完整迁移链和最终schema，不修改原值', id => {
     const raw = fixture(id)

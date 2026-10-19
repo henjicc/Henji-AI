@@ -627,7 +627,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 字体选择与样式预览 | `UiFontPicker`（本机/导入字体、中英文搜索、分类与虚拟列表、真实样式、收藏/最近/工程字体；`onPreview(null)` 恢复，`onSelect` 提交） | 手动输入字体名、三种通用族固定下拉、另造字体弹层 |
 | 音频播放 | `@/components/AudioPlayer` | 再写一个播放器 |
 | 全能调色曲线 / 色轮 | `UiCurveEditor` / `UiGradeWheel`（`@/components/ui`，受控值与开始/结束/取消手势；曲线可传领域采样器保留样条显示；色相区间用 `UiRangeSlider wrap`） | 自写曲线、色轮或区间控件 |
-| 参数面板（效果/调整/代码参数，按分组、更多折叠、条件显示渲染字段） | `ParamList` / `ParamField`（`@/components/ui/params`，中立字段描述 + 手势适配器；剪辑效果、代码参数与图片调整层共用） | 每个面板自写参数行、各自处理拖动撤销 |
+| 参数面板（效果/调整/代码参数，按分组、更多折叠、条件显示渲染字段） | `ParamList` / `ParamField`（`@/components/ui/params`，中立字段描述 + 手势适配器；textStyle 复用文字面板，table 用记录列表承载逐项字段；剪辑效果、代码参数与图片调整层共用） | 每个面板自写参数行、各自处理拖动撤销 |
 | 长列表 / 网格 | `UiVirtualList` / `UiVirtualGrid`（`@/components/ui`，基于 react-virtuoso；有限高度、单滚动容器、稳定键、空态和高亮 scrollIntoView；可变高度卡片按行测量） | 全量 map 渲染上百项；普通目录另用 tanstack，自写窗口计算 |
 | 指针事件合帧 / 延后一次测量 | `useRafCallback`（`@/hooks/useRafCallback`）/ `createRafScheduler`（`@/utils/createRafScheduler`；最新样本、cancel、flush，传 ownerWindow） | 各自管理 rAF id；结束/卸载后还有待执行帧 |
 | 音频播放位置 | `usePlaybackClock`（`@/hooks/usePlaybackClock`；单个播放循环，波形与秒读数叶子订阅，AudioPlayer / AudioNode 已接入） | 播放帧 setState 重渲染整个播放器或节点 |

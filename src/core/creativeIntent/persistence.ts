@@ -12,7 +12,7 @@ export const creativeIntentResourceSchema = resourceRefSchema.extend({
   sourceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
 }).strict()
 export type StoredCreativeIntentResource = z.infer<typeof creativeIntentResourceSchema>
-export const MOTION_CANDIDATE_VERSION = 3
+export const MOTION_CANDIDATE_VERSION = 4
 export const storedMotionCandidateSchema = z.object({
   version: z.literal(MOTION_CANDIDATE_VERSION), id: z.string().min(1), label: z.string(), identity: candidateIdentitySchema,
   motions: z.array(z.object({ takeId: z.string().min(1), curves: videoEditClipCurvesSchema,

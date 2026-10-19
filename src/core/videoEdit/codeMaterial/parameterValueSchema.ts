@@ -12,7 +12,8 @@ export const codeMaterialParameterKeySchema = z.string().regex(/^[A-Za-z][A-Za-z
 // Four-number tuples also carry cubic Bézier values; declaration validation distinguishes them from RGBA.
 export const codeMaterialBasicParameterValueSchema = z.union([finite, z.boolean(), z.string().max(4096), z.tuple([finite, finite, finite, finite]), z.tuple([finite, finite]).refine(value => value[0] <= value[1], 'range 必须 a≤b。'), point, codeMaterialGradeValueSchema, gradient, curve])
 const structure = z.record(codeMaterialParameterKeySchema, codeMaterialBasicParameterValueSchema).refine(value => Object.keys(value).length >= 1 && Object.keys(value).length <= 16, '自定义参数结构必须有 1–16 个基础字段，不能嵌套。')
-export const codeMaterialAnimatedParameterValueSchema = z.union([codeMaterialBasicParameterValueSchema, structure, textStyleSchema])
+export const codeMaterialTableValueSchema = z.array(z.record(codeMaterialParameterKeySchema, z.union([codeMaterialBasicParameterValueSchema, textStyleSchema])))
+export const codeMaterialAnimatedParameterValueSchema = z.union([codeMaterialBasicParameterValueSchema, structure, textStyleSchema, codeMaterialTableValueSchema])
 export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), z.object({ kind: z.literal('video'), mediaId: z.string().min(1).max(100), time: finite.nonnegative().optional() }).strict(), z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict()])
 export const codeMaterialAudioReferenceSchema = z.object({ kind: z.literal('audio'), mediaId: z.string().min(1).max(100) }).strict()
 export const codeMaterialParameterValueSchema = z.union([codeMaterialAnimatedParameterValueSchema, codeMaterialImageReferenceSchema, codeMaterialAudioReferenceSchema, z.null()])

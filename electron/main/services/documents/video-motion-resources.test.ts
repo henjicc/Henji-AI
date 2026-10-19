@@ -4,9 +4,9 @@ import os from 'node:os'
 import { createHash } from 'node:crypto'
 import { expect, it } from 'vitest'
 import { rehomeVideoMotionResources } from './video-motion-resources'
-import { creativeIntentsSchema } from '../../../../src/core/creativeIntent/persistence'
+import { creativeIntentsSchema, MOTION_CANDIDATE_VERSION } from '../../../../src/core/creativeIntent/persistence'
 import { creativeIntentPageSchema } from '../../../../src/core/creativeIntent/pages'
-import { assertCandidateCurrent, motionCandidateIdentity } from '../../../../src/core/creativeIntent/candidates'
+import { assertCandidateCurrent, motionCandidateIdentity, optimizeMotionDraft } from '../../../../src/core/creativeIntent/candidates'
 import { createTestEnvironment, silentLogger } from './documents.test-support'
 import { VIDEO_EDIT_CONTENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { PACKAGE_VERSION } from '../../../../src/core/persistence/storedSchemas'
@@ -15,7 +15,23 @@ it('复制或项目包重配身份时，页和候选完整改绑；源文件和�
   try {
     const envelope = JSON.parse(await fs.readFile('tests/fixtures/persistence/document.video_edit/v2.json', 'utf8'))
     const pages = JSON.parse(await fs.readFile('tests/fixtures/persistence/creative-intent-page/v1.json', 'utf8'))
-    const candidate = JSON.parse(await fs.readFile('tests/fixtures/persistence/creative-intent-candidate/v1.json', 'utf8'))
+    const recordedCandidate = JSON.parse(await fs.readFile('tests/fixtures/persistence/creative-intent-candidate/v1.json', 'utf8'))
+    // 保留黄金录制的原始采样和映射，用正式算法生成当前候选，不依赖旧候选格式迁移。
+    const candidate = { version: MOTION_CANDIDATE_VERSION, ...optimizeMotionDraft({
+      draft: creativeIntentsSchema.parse(envelope.content.creativeIntents).drafts[0],
+      samples: pages.entries,
+      mappings: Object.fromEntries(JSON.parse(recordedCandidate.identity.requestKey).mappings),
+    }).candidates[0] }
+    const candidateBytes = Buffer.from(JSON.stringify(candidate))
+    const candidateDigest = `sha256:${createHash('sha256').update(candidateBytes).digest('hex')}`
+    const initialHead = creativeIntentsSchema.parse(envelope.content.creativeIntents)
+    for (const resource of initialHead.resources) if (resource.kind === 'candidate') {
+      resource.bytes = candidateBytes.length; resource.digest = candidateDigest
+    }
+    for (const draft of initialHead.drafts) for (const ref of draft.candidateRefs) {
+      ref.bytes = candidateBytes.length; ref.digest = candidateDigest
+    }
+    envelope.content.creativeIntents = initialHead
     envelope.content.creativeIntents.drafts[0].applications.push({ candidateRef: 'golden-motion-candidate', operationRef: { kind: 'creative_intent.application', id: 'application' }, receiptRef: { kind: 'video_edit.document', id: envelope.id }, saved: true })
     await fs.mkdir(path.join(root, '素材'))
     const original = JSON.stringify(envelope.content)

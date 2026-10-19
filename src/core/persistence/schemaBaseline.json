@@ -113,9 +113,9 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 15,
-      "fingerprint": "80b8f26996bebec3da9b726e716873363cfb0d64388aefc24695d099af333dae",
-      "supportedFrom": 15
+      "version": 16,
+      "fingerprint": "1bf2fc86252df5cce90d13cab295bfd3f0e4ee7f5a4c164b43d33240534084d5",
+      "supportedFrom": 16
     },
     "document.canvas": {
       "version": 1,
@@ -158,9 +158,9 @@
       "supportedFrom": 1
     },
     "code-asset": {
-      "version": 5,
-      "fingerprint": "4dcc4b1e095e1e24661b102132f1c6c7c7a421826f4fc95665aed379d577f02b",
-      "supportedFrom": 5
+      "version": 6,
+      "fingerprint": "f028595eaf46840c713458b7cac2b7bbaa2cd95eac4104bfbcd2e13f05feadb6",
+      "supportedFrom": 6
     },
     "image-header": {
       "version": 1,
@@ -193,9 +193,9 @@
       "supportedFrom": 1
     },
     "title-templates": {
-      "version": 5,
-      "fingerprint": "c265bc4b68a8d27ae147af11bdb91673efcf10267b8eb65d76a538ba337c3bb7",
-      "supportedFrom": 5
+      "version": 6,
+      "fingerprint": "b1459696a7ffd3889bbd90bfd40655b894ba4ed5933396eb5b049f61d4398381",
+      "supportedFrom": 6
     },
     "text-presets": {
       "version": 1,
@@ -283,9 +283,9 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 9,
-      "fingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
-      "supportedFrom": 9
+      "version": 10,
+      "fingerprint": "985ff24614e0f773527e99bd32e768409e87a7fb832c83e0452af05baa17fce9",
+      "supportedFrom": 10
     },
     "storyboard-metadata": {
       "version": 1,
@@ -303,9 +303,9 @@
       "supportedFrom": 1
     },
     "creative-intent-candidate": {
-      "version": 3,
-      "fingerprint": "9bcd34b1fb0cdd4fa7121bef291dd547ad50fa1c3f015c524c23e88683a0ea96",
-      "supportedFrom": 3
+      "version": 4,
+      "fingerprint": "44b96df9f304200d0ba33fbeef6e1c34b868796850ba857490292a09346f3078",
+      "supportedFrom": 4
     },
     "image-layout-page": {
       "version": 1,
@@ -348,9 +348,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 17,
-      "fingerprint": "feef38c65530bb0ba66ca37553fd40ed9007f55f43b75337b24403c8618a51f9",
-      "supportedFrom": 17
+      "version": 18,
+      "fingerprint": "c5ff45f44a8256ad6c3f8c0e4e721c6d061101ea1c9b2843115b8efaca5185d5",
+      "supportedFrom": 18
     },
     "recording-setup": {
       "version": 1,
@@ -363,9 +363,9 @@
       "supportedFrom": 1
     },
     "video-preset-package": {
-      "version": 4,
-      "fingerprint": "5f20068998e2e3261e8142370fff6f81e9be816ad6cfe7b634edeb794d6f0b04",
-      "supportedFrom": 4
+      "version": 5,
+      "fingerprint": "d6662b432c4f16e12d5bd87438850a8ed9c9f0c945a458e468e201546ac3ae75",
+      "supportedFrom": 5
     }
   },
   "devBreaks": [
@@ -1774,6 +1774,69 @@
       "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
       "previousFingerprint": "940e7d9b37100162c653a45dcaea5e66bc91e9900fb304d50a84604452ad478d",
       "fingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:16:33.046Z",
+      "format": "creative-intent-candidate",
+      "version": 4,
+      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
+      "previousFingerprint": "9bcd34b1fb0cdd4fa7121bef291dd547ad50fa1c3f015c524c23e88683a0ea96",
+      "fingerprint": "44b96df9f304200d0ba33fbeef6e1c34b868796850ba857490292a09346f3078",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:16:33.047Z",
+      "format": "document.video_edit",
+      "version": 16,
+      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
+      "previousFingerprint": "80b8f26996bebec3da9b726e716873363cfb0d64388aefc24695d099af333dae",
+      "fingerprint": "1bf2fc86252df5cce90d13cab295bfd3f0e4ee7f5a4c164b43d33240534084d5",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:16:33.047Z",
+      "format": "document.screen_recording",
+      "version": 18,
+      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
+      "previousFingerprint": "feef38c65530bb0ba66ca37553fd40ed9007f55f43b75337b24403c8618a51f9",
+      "fingerprint": "c5ff45f44a8256ad6c3f8c0e4e721c6d061101ea1c9b2843115b8efaca5185d5",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:16:33.047Z",
+      "format": "code-asset",
+      "version": 6,
+      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
+      "previousFingerprint": "4dcc4b1e095e1e24661b102132f1c6c7c7a421826f4fc95665aed379d577f02b",
+      "fingerprint": "f028595eaf46840c713458b7cac2b7bbaa2cd95eac4104bfbcd2e13f05feadb6",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:16:33.047Z",
+      "format": "title-templates",
+      "version": 6,
+      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
+      "previousFingerprint": "c265bc4b68a8d27ae147af11bdb91673efcf10267b8eb65d76a538ba337c3bb7",
+      "fingerprint": "b1459696a7ffd3889bbd90bfd40655b894ba4ed5933396eb5b049f61d4398381",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:16:33.047Z",
+      "format": "video-preset-package",
+      "version": 5,
+      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
+      "previousFingerprint": "5f20068998e2e3261e8142370fff6f81e9be816ad6cfe7b634edeb794d6f0b04",
+      "fingerprint": "d6662b432c4f16e12d5bd87438850a8ed9c9f0c945a458e468e201546ac3ae75",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:16:33.047Z",
+      "format": "subtitle-manifest",
+      "version": 10,
+      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
+      "previousFingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
+      "fingerprint": "985ff24614e0f773527e99bd32e768409e87a7fb832c83e0452af05baa17fce9",
       "waivedFixtureVersions": []
     }
   ],

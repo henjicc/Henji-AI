@@ -21,7 +21,7 @@ export class VideoEditAuthorRuntime {
   private nativeOverrideTarget?: { texture: GpuTexture; width: number; height: number }
   private closed = false
   readonly parameterMetadata: AuthorParameterMetadata
-  private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; overrides?: AuthorElementOverrides }
+  private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides }
   constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations) {
     this.parameterMetadata = authorParameterMetadata(effect)
   }
@@ -48,8 +48,8 @@ export class VideoEditAuthorRuntime {
       if (!pose || override?.hidden || (pose.opacity ?? 1) * (override?.opacity ?? 1) <= 0) return []
       const bounds = layer.bounds ?? [0, 0, frame.width, frame.height]
       const matrix = authorPoseMatrix(pose)
-      const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? this.locations?.fallback
-      return [observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix)]
+      const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? (layer.factory && this.locations?.factories?.[layer.factory.file]?.[layer.factory.name]) ?? this.locations?.fallback
+      return [observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters)]
     })
   }
   async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides): Promise<void> {
@@ -70,13 +70,13 @@ export class VideoEditAuthorRuntime {
         const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID])
         this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width, height }, samples)
         this.layers.finish()
-        this.lastFrame = { layers: [whole], width, height, time: info.time, overrides }
+        this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params, overrides }
         return
       }
       if (this.effect.createWebGPU) {
         this.webgpu ??= await this.effect.createWebGPU(this.device)
         await this.webgpu.draw(target, info.time, params, width, height, assets, info)
-        this.lastFrame = { layers: [whole], width, height, time: info.time }
+        this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return
       }
       if (this.effect.createWebGL) {
@@ -94,7 +94,7 @@ export class VideoEditAuthorRuntime {
         gl.disable(gl.SCISSOR_TEST); gl.colorMask(true, true, true, true); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
         this.webgl!.draw(info.time, params, width, height, assets, info)
         this.device.queue.copyExternalImageToTexture({ source: canvas }, { texture: target, premultipliedAlpha: true }, [width, height])
-        this.lastFrame = { layers: [whole], width, height, time: info.time }
+        this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return
       }
       const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
@@ -180,7 +180,7 @@ export class VideoEditAuthorRuntime {
         }
       }
       this.layers.finish()
-      this.lastFrame = { layers: list, width, height, time: info.time, overrides }
+      this.lastFrame = { layers: list, width, height, time: info.time, parameters: params, overrides }
       while (this.surfaces.length > list.length * 2) {
         const surface = this.surfaces.pop()!
         if (!surface) continue

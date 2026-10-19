@@ -33,14 +33,14 @@ function point(value: unknown, label: string): CodePoint {
 }
 const extras: Record<string, string[]> = {
   number: ['min', 'max', 'step', 'unit', 'control'], angle: ['min', 'max'], point: ['space', 'min', 'max'], range: ['min', 'max', 'step', 'unit'], color: ['alpha'],
-  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], textStyle: [], font: [], image: [], audio: [], easing: [], seed: [],
+  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], textStyle: [], table: ['fields', 'rowKey'], font: [], image: [], audio: [], easing: [], seed: [],
 }
-function declaration(key: string, raw: unknown, types: Record<string, CodeParameterTypeDefinition>, field = false): CodeParameterDeclaration {
+function declaration(key: string, raw: unknown, types: Record<string, CodeParameterTypeDefinition>, field: false | 'custom' | 'table' = false): CodeParameterDeclaration {
   assertCodeMaterialKey(key)
   const item = object(raw, key); const type = text(item.type, `${key}.type`, 64)
   const custom = Object.prototype.hasOwnProperty.call(types, type) ? types[type] : undefined
   if (!Object.prototype.hasOwnProperty.call(extras, type) && !custom) fail(`${key}.type`, `基础类型或已声明自定义类型（${[...CODE_PARAMETER_TYPES, ...Object.keys(types)].join('、')}）`)
-  if (field && (type === 'image' || type === 'audio' || type === 'textStyle' || custom)) fail(`${key}.type`, '基础参数类型，不允许媒体、文字样式或嵌套自定义类型')
+  if (field && (type === 'image' || type === 'audio' || type === 'table' || type === 'textStyle' && field === 'custom' || custom)) fail(`${key}.type`, '基础参数类型；数据表字段也可使用文字样式，不允许媒体或嵌套结构')
   fields(item, ['type', 'title', 'description', 'tooltip', 'default', 'animatable', ...(field ? [] : ['group', 'layer', 'advanced', 'visibleWhen']), ...(extras[type] ?? [])], key)
   const base = { key, title: text(item.title, `${key}.title`, 80), description: text(item.description ?? '', `${key}.description`, 1000, true), animatable: bool(item.animatable ?? false, `${key}.animatable`),
     ...(item.tooltip === undefined ? {} : { tooltip: text(item.tooltip, `${key}.tooltip`, 200, true) }),
@@ -51,6 +51,18 @@ function declaration(key: string, raw: unknown, types: Record<string, CodeParame
     const partial = object(item.default, `${key}.default`); fields(partial, Object.keys(custom.fields), `${key}.default`)
     const defaults: CodeParameterObject = Object.fromEntries(Object.entries(custom.fields).map(([name, field]) => [name, validateCodeMaterialV3ParameterValue(field, Object.prototype.hasOwnProperty.call(partial, name) ? partial[name] : field.default) as CodeBasicParameterValue]))
     result = { ...base, type: 'custom', typeName: type, fields: custom.fields, default: defaults }
+  } else if (type === 'table') {
+    const entries = Object.entries(object(item.fields, `${key}.fields`))
+    if (!entries.length) fail(`${key}.fields`, '至少一个字段')
+    const members = Object.fromEntries(entries.map(([name, raw]) => [name, declaration(name, raw, {}, 'table')])) as Extract<CodeParameterDeclaration, { type: 'table' }>['fields']
+    const rowKey = item.rowKey === undefined ? undefined : text(item.rowKey, `${key}.rowKey`, 64)
+    if (rowKey && (!Object.hasOwn(members, rowKey) || !['text', 'number', 'seed'].includes(members[rowKey].type))) fail(`${key}.rowKey`, '已声明的文字或数值字段')
+    if (!Array.isArray(item.default)) fail(`${key}.default`, '数据项数组')
+    const defaults = item.default.map((row, index) => {
+      const raw = object(row, `${key}[${index}]`); fields(raw, Object.keys(members), `${key}[${index}]`)
+      return Object.fromEntries(Object.entries(members).map(([name, field]) => [name, Object.hasOwn(raw, name) ? raw[name] : field.default]))
+    })
+    result = { ...base, type, fields: members, default: defaults as Extract<CodeParameterDeclaration, { type: 'table' }>['default'], ...(rowKey ? { rowKey } : {}) }
   } else if (type === 'textStyle') result = { ...base, type, default: textStyleSchema.parse(item.default) }
   else if (type === 'number' || type === 'range') {
     const min = finiteCodeNumber(item.min, `${key}.min`); const max = number(item.max, `${key}.max`, min, Number.MAX_VALUE); const step = number(item.step, `${key}.step`, Number.MIN_VALUE, Number.MAX_VALUE)
@@ -101,7 +113,7 @@ export function parseCodeMaterialTypes(raw: unknown): Record<string, CodeParamet
     const members = Object.entries(object(item.fields, `types.${name}.fields`))
     if (!members.length || members.length > 16) fail(`types.${name}.fields`, '1–16 个基础类型字段')
     const layout = enumValue(item.layout, ['stack', 'row', 'grid', 'wheel'], `types.${name}.layout`)
-    const parsed = Object.fromEntries(members.map(([key, value]) => [key, declaration(key, value, {}, true) as CodeBasicParameterDeclaration]))
+    const parsed = Object.fromEntries(members.map(([key, value]) => [key, declaration(key, value, {}, 'custom') as CodeBasicParameterDeclaration]))
     if (layout === 'wheel' && Object.values(parsed).filter(field => field.type === 'grade').length !== 1) fail(`types.${name}.layout`, 'wheel 恰好包含一个 grade 字段')
     result[name] = { title: text(item.title, `types.${name}.title`, 80), layout, fields: parsed }
   }
@@ -130,6 +142,15 @@ export function parseCodeMaterialV3Parameters(raw: unknown, types: Record<string
 export function validateCodeMaterialV3ParameterValue(declaration: CodeParameterDeclaration, value: unknown): CodeParameterValue {
   const key = declaration.key
   switch (declaration.type) {
+    case 'table': {
+      if (!Array.isArray(value)) fail(key, '数据项数组')
+      const rows = value.map((row, index) => {
+        const raw = object(row, `${key}[${index}]`); fields(raw, Object.keys(declaration.fields), `${key}[${index}]`)
+        return Object.fromEntries(Object.entries(declaration.fields).map(([name, field]) => [name, validateCodeMaterialV3ParameterValue({ ...field, key: `${key}[${index}].${name}` }, raw[name])])) as Extract<CodeParameterDeclaration, { type: 'table' }>['default'][number]
+      })
+      if (declaration.rowKey && new Set(rows.map(row => row[declaration.rowKey!])).size !== rows.length) fail(`${key}.${declaration.rowKey}`, '每项唯一的键')
+      return rows
+    }
     case 'textStyle': return textStyleSchema.parse(value)
     case 'number': case 'angle': return number(value, key, declaration.min, declaration.max)
     case 'seed': return number(value, key, 0, 4294967295, true)
@@ -174,7 +195,7 @@ export function codeParameterValueType(parameter: CodeParameterDeclaration): Cod
   if (['number', 'angle', 'seed'].includes(parameter.type)) return 'number'
   if (['choice', 'text', 'font'].includes(parameter.type)) return 'string'
   if (['point', 'grade', 'custom', 'textStyle'].includes(parameter.type)) return 'object'
-  if (['range', 'gradient', 'curve'].includes(parameter.type)) return 'array'
+  if (['range', 'gradient', 'curve', 'table'].includes(parameter.type)) return 'array'
   if (parameter.type === 'easing') return typeof parameter.default === 'string' ? 'string' : 'array'
   return parameter.type as 'boolean' | 'color' | 'image' | 'audio'
 }

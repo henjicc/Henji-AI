@@ -9,7 +9,8 @@ export type CodeRange = [number, number]
 export type CodeEasing = string | CodeColor
 export type CodeBasicParameterValue = number | boolean | string | CodeColor | CodeRange | CodePoint | CodeGrade | CodeGradientStop[] | CodePoint[]
 export type CodeParameterObject = Record<string, CodeBasicParameterValue>
-export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | TextStyle | CodeImageReference | CodeAudioReference | null
+export type CodeParameterTableRow = Record<string, CodeBasicParameterValue | TextStyle>
+export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeParameterTableRow[] | TextStyle | CodeImageReference | CodeAudioReference | null
 export type CodeParameterValues = Record<string, CodeParameterValue>
 export interface CodeParameterVisibility { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
 interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; layer?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
@@ -30,10 +31,11 @@ export type CodeBasicParameterDeclaration = ParameterBase & (
   | { type: 'seed'; default: number }
 )
 export interface CodeParameterTypeDefinition { title: string; layout: 'stack' | 'row' | 'grid' | 'wheel'; fields: Record<string, CodeBasicParameterDeclaration> }
+export type CodeTextStyleParameterDeclaration = ParameterBase & { type: 'textStyle'; default: TextStyle }
 /** A closed IR tag keeps consumers exhaustive; typeName retains the author's open type name. */
-export type CodeParameterDeclaration = CodeBasicParameterDeclaration | (ParameterBase & (
+export type CodeParameterDeclaration = CodeBasicParameterDeclaration | CodeTextStyleParameterDeclaration | (ParameterBase & (
   | { type: 'image'; default: null; animatable: false }
   | { type: 'audio'; default: null; animatable: false }
-  | { type: 'textStyle'; default: TextStyle }
+  | { type: 'table'; default: CodeParameterTableRow[]; fields: Record<string, CodeBasicParameterDeclaration | CodeTextStyleParameterDeclaration>; rowKey?: string }
   | { type: 'custom'; typeName: string; default: CodeParameterObject; fields: Record<string, CodeBasicParameterDeclaration> }
 ))

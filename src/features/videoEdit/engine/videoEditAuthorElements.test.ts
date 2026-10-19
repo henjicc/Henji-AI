@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { authorLayerSamples } from './videoEditAuthorLayers'
-import { authorOverrideMatrix, observeAuthorElement } from './videoEditAuthorElements'
+import { authorLayerData, authorOverrideMatrix, observeAuthorElement } from './videoEditAuthorElements'
 import type { AuthorLayer, AuthorModule } from './videoEditAuthorModule'
 
 it('keeps author animation and overlays local scale/rotation with composition-space translation', () => {
@@ -32,4 +32,18 @@ it('returns only layer-bound parameters and a source span without inspecting dra
   const result = observeAuthorElement(effect, layer, 0, [0, 0, 100, 20], [1, 0, 0, 1, 30, 50])
   expect(result).toMatchObject({ id: 'title', name: '标题', sourceSpan: span, parameterKeys: ['text', 'size'], textParameterKeys: ['text'], corners: [[30, 50], [130, 50], [130, 70], [30, 70]] })
   expect(observeAuthorElement(effect, { ...layer, id: 'effect' }, 0, [0, 0, 100, 20], [1, 0, 0, 1, 0, 0]).parameterKeys).toEqual(['text', 'size', 'background'])
+})
+
+it('resolves a dynamic layer to its current data row by stable key, without calling draw', () => {
+  const layer: AuthorLayer = { id: 'node-b', data: { parameter: 'nodes', key: 'b', keyField: 'id' }, draw() { throw new Error('must not draw') } }
+  const effect: AuthorModule = { name: '节点', params: [{ key: 'nodes', type: 'table' }, { key: 'other', type: 'text' }] }
+  const values = { nodes: [{ id: 'b', title: '乙' }, { id: 'a', title: '甲' }] }
+  const observed = observeAuthorElement(effect, layer, 0, [0, 0, 20, 20], [1, 0, 0, 1, 0, 0], values)
+  expect(observed).toMatchObject({ parameterKeys: ['nodes'], data: { parameter: 'nodes', index: 0, key: 'b', keyField: 'id', value: { id: 'b', title: '乙' } } })
+  values.nodes[0].title = '修改'
+  expect(observed.data?.value).toEqual({ id: 'b', title: '乙' })
+  expect(authorLayerData({ ...layer, data: { parameter: 'nodes', index: 1 } }, values)?.value).toEqual({ id: 'a', title: '甲' })
+  expect(() => authorLayerData(layer, { nodes: [{ id: 'b' }, { id: 'b' }] })).toThrow('不唯一')
+  expect(() => authorLayerData(layer, { nodes: [] })).toThrow('不存在')
+  expect(() => authorLayerData(layer, { nodes: 'wrong' })).toThrow('不是数据表')
 })

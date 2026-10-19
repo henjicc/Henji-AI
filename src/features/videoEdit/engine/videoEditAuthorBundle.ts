@@ -4,7 +4,7 @@ import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 
-export interface AuthorSourceLocations { layers: Record<string, CodeSourceSpan>; fallback?: CodeSourceSpan }
+export interface AuthorSourceLocations { layers: Record<string, CodeSourceSpan>; factories?: Record<string, Record<string, CodeSourceSpan>>; fallback?: CodeSourceSpan }
 export interface AuthorBundle { code: string; map: string; locations: AuthorSourceLocations }
 type Build = (options: BuildOptions) => Promise<BuildResult>
 
@@ -12,16 +12,25 @@ type Build = (options: BuildOptions) => Promise<BuildResult>
 export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLocations {
   const layers: Record<string, CodeSourceSpan> = Object.create(null)
   const duplicates = new Set<string>()
+  const factories: Record<string, Record<string, CodeSourceSpan>> = Object.create(null)
   let fallback: CodeSourceSpan | undefined
   for (const [file, text] of Object.entries(input.files)) {
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /\.tsx?$/.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS)
+    const functions: Record<string, CodeSourceSpan> = Object.create(null)
+    const repeatedFunctions = new Set<string>()
     const span = (node: ts.Node): CodeSourceSpan => {
       const start = node.getStart(source), end = node.getEnd()
       const a = source.getLineAndCharacterOfPosition(start), b = source.getLineAndCharacterOfPosition(end)
       return { file, start, end, startLine: a.line + 1, startColumn: a.character + 1, endLine: b.line + 1, endColumn: b.character + 1 }
     }
     const visit = (node: ts.Node): void => {
+      const functionName = ts.isFunctionDeclaration(node) ? node.name?.text
+        : ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) ? node.name.text : undefined
+      if (functionName) {
+        if (Object.hasOwn(functions, functionName)) repeatedFunctions.add(functionName)
+        else functions[functionName] = span(node)
+      }
       if (ts.isObjectLiteralExpression(node)) {
         const key = (property: ts.ObjectLiteralElementLike): string | undefined => property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : undefined
         const draw = node.properties.find(property => key(property) === 'draw')
@@ -39,10 +48,12 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
       ts.forEachChild(node, visit)
     }
     visit(source)
+    for (const name of repeatedFunctions) delete functions[name]
+    if (Object.keys(functions).length) factories[file] = functions
   }
   // Ambiguous/dynamic IDs use the defining entry span; never point to an arbitrary duplicate.
   for (const id of duplicates) delete layers[id]
-  return { layers, ...(fallback ? { fallback } : {}) }
+  return { layers, factories, ...(fallback ? { fallback } : {}) }
 }
 
 /** esbuild owns ESM linking, cycles, syntax and source maps. The host supplies an

@@ -16,7 +16,7 @@ export const CODE_V3_LIMITS = Object.freeze({ astNodes: 16384, depth: 64, cpuOpe
   gradientStops: 32, textCharacters: 8192 })
 export type { CodeColor, CodeImageReference, CodeAudioReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
-export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'font', 'image', 'audio', 'easing', 'seed'] as const
+export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'table', 'font', 'image', 'audio', 'easing', 'seed'] as const
 export type CodeValueType = 'number' | 'boolean' | 'string' | 'color' | 'image' | 'audio' | 'draw' | 'draws' | 'array' | 'object' | 'paint'
 export type CodeContextKey = 'time' | 'localTime' | 'sequenceTime' | 'width' | 'height' | 'frame' | 'fps' | 'u' | 'v'
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; audio?: AudioContentAnalysis; audioTime?: number }

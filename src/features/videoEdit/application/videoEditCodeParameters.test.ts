@@ -19,6 +19,7 @@ import { createVideoEditMaskShape, isShapesMask } from '@/core/videoEdit/effectM
 import { videoEditBuiltinDefaults, requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 import { reopenVideoEdit } from './videoEditDocumentTestKit'
 import { VideoEditCodeCompiler } from '../engine/videoEditCodeCompiler'
+import { replaceParameterPath } from '@/core/imaging/parameterPath'
 
 const source = `export default {apiVersion:1,name:"参数",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1,animatable:true},other:{type:"boolean",title:"开关",default:false}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:100,height:100,fill:[1,0,0,1]})];}}`
 const files = new Map<string, string>()
@@ -28,17 +29,34 @@ beforeEach(() => {
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
 })
 afterEach(async () => { for (const owner of listVideoEditInstances()) await closeVideoEditProject(owner.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
-async function setup() {
-  const owner = (await createVideoEditProject())!; const program = compileCodeMaterial(source); const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 1 as const, languageVersion: 1 as const }
+async function setup(sourceText = source) {
+  const owner = (await createVideoEditProject())!; const program = compileCodeMaterial(sourceText); const version = { id: 'v', ...testCodeManifest(sourceText, owner.document), apiVersion: program.apiVersion, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
   editVideoProject(owner.document.id, document => {
     document.codeMaterials = [{ id: 'd', name: program.name, defaultVersionId: 'v', versions: [version] }]
-    document.items.push({ id: 'i', name: program.name, kind: 'code', code: { definitionId: 'd', versionId: 'v', parameters: { amount: 5, other: false } } })
+    document.items.push({ id: 'i', name: program.name, kind: 'code', code: { definitionId: 'd', versionId: 'v', parameters: validateCodeMaterialParameters(program) } })
     document.sequences[0].clips.push(makeVideoEditItemClip(document, 'i', document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))
     return document
   })
   return { owner, target: readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, getActiveVideoEditSequence(owner).clips[0].id).target }
 }
+
+it('数据表文字样式修改立即读回、保存并由同一撤销恢复，不写源码', async () => {
+  const { owner, target } = await setup('export default {apiVersion:1,languageVersion:3,name:"表格",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,parameters:{rows:{type:"table",title:"节点",fields:{text:{type:"text",title:"文案",default:"原文",maxLength:200},style:{type:"textStyle",title:"样式",default:{fontSize:48}}},default:[{},{}]}},render(ctx){return [];}}')
+  const read = () => readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId)
+  const original = read().parameters.rows
+  const next = replaceParameterPath(replaceParameterPath(original, ['1', 'text'], '新文案'), ['1', 'style', 'fontSize'], 72)
+  const versions = structuredClone(owner.document.codeMaterials)
+  const history = owner.past.length
+  setVideoEditCodeParameter(target, 'rows', next)
+  expect(read().parameters.rows).toMatchObject([{ text: '原文', style: { fontSize: 48 } }, { text: '新文案', style: { fontSize: 72 } }])
+  expect(owner.past).toHaveLength(history + 1)
+  expect(owner.document.codeMaterials).toEqual(versions)
+  await saveVideoEdit(target.projectId)
+  expect(savedVideoEdit(owner).sequences[0].clips[0].code!.parameters.rows).toEqual(read().parameters.rows)
+  undoVideoEdit(target.projectId)
+  expect(read().parameters.rows).toEqual(original)
+})
 
 it('code animation candidate is isolated, stale-safe, one undo and persists through the formal document', async () => {
   const { owner, target } = await setup()

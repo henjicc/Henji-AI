@@ -142,11 +142,14 @@ describe('参数采样、动画及持久化', () => {
       expect(() => prepareCodeMaterialParameters(program, codeMaterialInstanceSchema.parse({ ...instance, curves: { [key]: [point] } }))).toThrow('保持')
       expect(prepareCodeMaterialParameters(program, codeMaterialInstanceSchema.parse({ ...instance, curves: { [key]: [{ ...point, interpolation: 'hold' }] } })).curves.has(key)).toBe(true)
     }
-    const bad: unknown[] = ['x'.repeat(4097), Infinity, { x: NaN, y: 1 }, { nested: { inner: 1 } }, Array.from({ length: 33 }, (_, i) => ({ at: i / 32, color: [1, 1, 1, 1] })), Array.from({ length: 65 }, (_, i) => ({ x: i / 64, y: .5 }))]
+    const bad: unknown[] = ['x'.repeat(4097), Infinity, { x: NaN, y: 1 }, { nested: { inner: 1 } }]
     for (const value of bad) {
       expect(codeMaterialInstanceSchema.safeParse({ definitionId: 'd', versionId: 'v', parameters: { p: value } }).success).toBe(false)
       expect(codeMaterialKeyframeSchema.safeParse({ id: 'p', ...time(0), value, interpolation: 'hold' }).success).toBe(false)
     }
+    // These arrays can now be data tables. A bound gradient/curve still enforces its own limits.
+    expect(() => validateCodeMaterialParameterValue(program.parameters.find(p => p.key === 'gradient')!, Array.from({ length: 33 }, (_, i) => ({ at: i / 32, color: [1, 1, 1, 1] })))).toThrow()
+    expect(() => validateCodeMaterialParameterValue(program.parameters.find(p => p.key === 'curve')!, Array.from({ length: 65 }, (_, i) => ({ x: i / 64, y: .5 })))).toThrow()
     const many = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`p${i}`, i]))
     expect(codeMaterialInstanceSchema.parse({ definitionId: 'd', versionId: 'v', parameters: many }).parameters).toEqual(many)
   })

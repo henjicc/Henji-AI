@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
-import type { CodeParameterObject, CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
+import { replaceParameterPath } from '@/core/imaging/parameterPath'
 import type { VideoEditSourceTime } from '@/core/videoEdit/time'
 import { readVideoEditCodeEditor, readVideoEditGraphicEditor, type VideoEditParameterTarget } from '../../application/videoEditCodeParameters'
 import { requireVideoEditInstance, type VideoEditGesture } from '../../application/videoEditService'
@@ -19,9 +20,9 @@ export function CodeParamField({ target, field, value, time, label, pointId, onE
     const editor = 'objectId' in target ? readVideoEditGraphicEditor(target.projectId, target.sequenceId, target.clipId, target.objectId) : readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId, target.effectId)
     const restored = pointId ? editor.curves[field.key]?.find(point => point.id === pointId)?.value : editor.parameters[field.key]
     if (!restored) throw new Error('原字体参数已移除，请重新选择。')
-    onWrite({ ...(restored as CodeParameterObject), [path.current[0]]: name }, handle, time)
+    onWrite(replaceParameterPath(restored, path.current, name), handle, time)
   })
-  const hasFont = field.type === 'font' || field.type === 'textStyle' || field.children?.some(child => child.type === 'font')
+  const hasFont = field.type === 'font' || field.type === 'textStyle' || field.children?.some(child => child.type === 'font' || child.type === 'textStyle')
   return <ParamField field={field} value={value} label={label} onError={onError} gesture={{ ...gesture, write: next => gesture.write((handle, at) => onWrite(next, handle, at)), atomic: next => gesture.atomic((handle, at) => onWrite(next, handle, at)) }}
     font={hasFont ? { projectFonts: collectVideoEditFonts(requireVideoEditInstance(target.projectId).document).map(use => use.font), onPreview: (name, childPath) => { path.current = childPath; preview(name) } } : undefined} />
 }

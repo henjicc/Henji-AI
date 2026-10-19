@@ -34,3 +34,16 @@ it('locates explicit layers and falls back for ambiguous IDs without evaluating 
   expect(result.layers.same).toBeUndefined()
   expect(result.fallback).toMatchObject({ file: 'main.js', startLine: 1, endLine: 3 })
 })
+
+it('indexes named factories once and does not guess among same-name nested functions', () => {
+  const factory = 'export function node(row,index) { return {id:`node-${index}`,draw(ctx){ctx.fillText(row.title,0,0)}} }'
+  const result = authorSourceLocations({ entry: 'main.js', files: {
+    'main.js': 'export default {layers(){return []}}',
+    'nodes.js': factory + '\nexport const tag = row => ({id:row.id, draw(){}});\nfunction duplicate(){}; function outer(){function duplicate(){}}',
+  } })
+  const span = result.factories!['nodes.js']
+  expect(span.node.startLine).toBe(1)
+  expect((factory + '\n').slice(span.node.start, span.node.end)).toBe(factory)
+  expect(span.tag.startLine).toBe(2)
+  expect(span.duplicate).toBeUndefined()
+})

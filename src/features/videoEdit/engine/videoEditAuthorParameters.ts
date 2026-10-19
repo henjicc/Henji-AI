@@ -36,6 +36,7 @@ export function authorParameterMetadata(effect: Pick<AuthorModule, 'params' | 't
     if (item.type === 'text') { item.default ??= ''; item.maxLength ??= 4096 }
     if (item.type === 'image' || item.type === 'audio') item.default = null
     if (item.type === 'textStyle') item.default ??= {}
+    if (item.type === 'table') item.default ??= []
     Object.defineProperty(parameters, key, { value: item, enumerable: true })
   }
   return { parameters: parseCodeMaterialV3Parameters(parameters, types), types, hexColors }
