@@ -7,6 +7,8 @@ import { SharedMediaAnalysis } from '../media/shared-analysis'
 import { loadFfmpegPath } from './ffmpeg-loader'
 import { analyzeScreenChanges } from './screen-change-analysis'
 import { validateScreenChangeAnalysis } from '../../../../src/core/media/screenChangeEvidence'
+import { validateVideoMotionScan } from '../../../../src/core/media/motionEvidence'
+import { analyzeVideoMotion } from './motion-analysis'
 
 /** Streaming metadata only. Decode, scale and scene scoring run outside Electron's event loop. */
 export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal: AbortSignal, progress: (value: number) => void, binary?: string, onStillness?: (ranges: NonNullable<SceneDetectionResult['stillness']>) => void): Promise<number[]> {
@@ -67,13 +69,14 @@ export async function detectScenesFfmpeg(request: SceneDetectionRequest, signal:
 
 export class SceneDetectionService {
   private readonly shared = new SharedMediaAnalysis<SceneDetectionResult>()
-  constructor(private readonly cache: ContentDiskCache, private readonly run = detectScenesFfmpeg, private readonly runScreenChanges = analyzeScreenChanges) {}
+  constructor(private readonly cache: ContentDiskCache, private readonly run = detectScenesFfmpeg, private readonly runScreenChanges = analyzeScreenChanges, private readonly runMotion = analyzeVideoMotion) {}
   async detect(raw: SceneDetectionRequest, signal: AbortSignal, progress: (value: number) => void): Promise<SceneDetectionResult> {
     const request = sceneDetectionRequestSchema.parse(raw)
     signal.throwIfAborted()
     const content = await identifyMediaContent(request.source)
     const screen = request.analysis === 'screen_changes'
-    const key = createHash('sha256').update(JSON.stringify([screen ? 'screen-local-rgb-v1' : 'scdet-512-v2', content.identity, request.startSeconds, request.endSeconds, screen ? null : request.sensitivity, request.includeStillness === true])).digest('hex')
+    const motion = request.analysis === 'motion'
+    const key = createHash('sha256').update(JSON.stringify([motion ? 'motion-opencv-affine-v1' : screen ? 'screen-local-rgb-v1' : 'scdet-512-v2', content.identity, request.startSeconds, request.endSeconds, screen || motion ? null : request.sensitivity, request.includeStillness === true])).digest('hex')
     const bytes = await this.cache.read(key)
     if (bytes) {
       if ((await identifyMediaContent(request.source)).identity !== content.identity) throw new Error('读取缓存期间原视频已改变，请重新检测。')
@@ -85,6 +88,10 @@ export class SceneDetectionService {
           if (!result.screenChanges || result.cutsSeconds.length) throw new Error('局部变化缓存无效。')
           validateScreenChangeAnalysis(result.screenChanges, request.startSeconds, request.endSeconds)
         }
+        if (motion) {
+          if (!result.motionScan || result.cutsSeconds.length) throw new Error('运动分析缓存无效。')
+          validateVideoMotionScan(result.motionScan, request.startSeconds, request.endSeconds)
+        }
         signal.throwIfAborted(); progress(1); return result
       } catch (error) { if (signal.aborted) throw error; await this.cache.remove(key) }
     }
@@ -92,13 +99,16 @@ export class SceneDetectionService {
     const result = await this.shared.run(key, async (sharedSignal, report) => {
       let stillness: SceneDetectionResult['stillness']
       const screenChanges = screen ? await this.runScreenChanges({ ...request, source: content.path }, sharedSignal, report) : undefined
+      const motionScan = motion ? await this.runMotion({ ...request, source: content.path }, sharedSignal, report) : undefined
       if (screen && !screenChanges) throw new Error('局部变化分析未返回证据。')
-      const cutsSeconds = screen ? [] : await this.run({ ...request, source: content.path }, sharedSignal, report, undefined, ranges => { stillness = ranges })
+      if (motion && !motionScan) throw new Error('运动分析未返回证据。')
+      const cutsSeconds = screen || motion ? [] : await this.run({ ...request, source: content.path }, sharedSignal, report, undefined, ranges => { stillness = ranges })
       sharedSignal.throwIfAborted()
       if ((await identifyMediaContent(request.source)).identity !== content.identity) throw new Error('检测期间原视频已改变，请重新检测。')
       if (request.includeStillness && !stillness) throw new Error('静止检测未返回证据。')
       if (screenChanges) validateScreenChangeAnalysis(screenChanges, request.startSeconds, request.endSeconds)
-      const result = sceneDetectionResultSchema.parse({ cutsSeconds, contentIdentity: content.identity, ...(request.includeStillness ? { stillness } : {}), ...(screenChanges ? { screenChanges } : {}) })
+      if (motionScan) validateVideoMotionScan(motionScan, request.startSeconds, request.endSeconds)
+      const result = sceneDetectionResultSchema.parse({ cutsSeconds, contentIdentity: content.identity, ...(request.includeStillness ? { stillness } : {}), ...(screenChanges ? { screenChanges } : {}), ...(motionScan ? { motionScan } : {}) })
       await this.cache.write(key, Buffer.from(JSON.stringify(result)))
       if ((await identifyMediaContent(request.source)).identity !== content.identity) throw new Error('保存分析缓存期间原视频已改变，请重新检测。')
       sharedSignal.throwIfAborted(); return result

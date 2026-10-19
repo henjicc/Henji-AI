@@ -7,6 +7,8 @@ import { loadFfmpegPath } from './ffmpeg-loader'
 import { runLoudnessFfmpeg } from '../audio/loudness'
 import { ScreenChangeWorker } from './screen-change-worker-client'
 import { analyzeScreenChanges } from './screen-change-analysis'
+import { analyzeVideoMotion } from './motion-analysis'
+import { reviewMotionSamples } from '../../../../src/core/media/motionReview'
 
 let directory: string; let workerPath: string; let source: string; let binary: string
 beforeAll(async () => {
@@ -14,7 +16,7 @@ beforeAll(async () => {
   workerPath = process.env.HENJI_TEST_SCREEN_CHANGE_WORKER ? path.resolve(process.env.HENJI_TEST_SCREEN_CHANGE_WORKER) : path.join(directory, 'worker.cjs')
   source = path.join(directory, 'popup.mkv'); binary = await loadFfmpegPath()
   if (process.env.HENJI_TEST_SCREEN_CHANGE_WORKER) await fs.access(workerPath)
-  else await build({ entryPoints: [path.resolve('electron/main/services/video/screen-change-worker.ts')], outfile: workerPath, bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent' })
+  else await build({ entryPoints: [path.resolve('electron/main/services/video/screen-change-worker.ts')], outfile: workerPath, bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', define: { __filename: JSON.stringify(path.resolve('package.json')) } })
   await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', "color=black:s=480x270:r=30:d=4,drawbox=x=100:y=50:w=100:h=60:color=white:t=fill:enable='between(t,1,1.2)'", '-c:v', 'ffv1', source], new AbortController().signal, binary)
 }, 20000)
 afterAll(async () => { if (directory) await fs.rm(directory, { recursive: true, force: true }) })
@@ -36,6 +38,21 @@ it('真实FFmpeg和Worker粗扫局部弹出，再按30fps复核，保持非零�
   expect(Math.abs(refined.candidates[0].returnSeconds! - 1.233333333)).toBeLessThanOrEqual(1 / 30 + 1e-7)
   expect(progress.at(-1)).toBe(1)
   expect(progress.every((value, index) => value >= 0 && value <= 1 && (!index || value >= progress[index - 1]))).toBe(true)
+}, 20000)
+it('运动分析复用实际解码与Worker，保留源偏移、局部弹出及静止证据', async () => {
+  const progress: number[] = []
+  const request = { requestId: 'motion', source, startSeconds: .5, endSeconds: 3.5, sensitivity: 50, analysis: 'motion' as const }
+  const scan = await analyzeVideoMotion(request, new AbortController().signal, value => progress.push(value), binary, workerPath)
+  expect(scan).toMatchObject({ samplingFps: 15, sampledFrames: 45, startSeconds: .5, endSeconds: 3.5 })
+  const report = reviewMotionSamples(scan.samples)
+  expect(report.events.some(event => event.fromSeconds >= .9 && event.fromSeconds < 1.2)).toBe(true)
+  expect(report.events.some(event => event.kind === 'move')).toBe(false)
+  expect(report.stillness.some(range => range.fromSeconds >= 1.2 && range.toSeconds === 3.5)).toBe(true)
+  expect(progress.at(-1)).toBe(1)
+  expect(progress.every((value, i) => value >= 0 && value <= 1 && (!i || value >= progress[i - 1]))).toBe(true)
+  await expect(analyzeVideoMotion({ ...request, endSeconds: 10 }, new AbortController().signal, () => undefined, binary, workerPath)).rejects.toThrow('完整覆盖')
+  const controller = new AbortController()
+  await expect(analyzeVideoMotion(request, controller.signal, value => { if (value > 0) controller.abort(new Error('取消运动分析')) }, binary, workerPath)).rejects.toThrow()
 }, 20000)
 it('取消真实解码后等待子进程与Worker释放；读取失败和不完整范围明确失败', async () => {
   const request = { requestId: 'cancel', source, startSeconds: 0, endSeconds: 4, sensitivity: 50, analysis: 'screen_changes' as const }

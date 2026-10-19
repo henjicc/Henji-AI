@@ -3,6 +3,7 @@ import { Worker } from 'node:worker_threads'
 import type { ScreenChangeOptions, ScreenChangeScan } from '../../../../src/core/videoEdit/screenChanges'
 import { screenChangeScanSchema } from '../../../../src/core/media/screenChangeEvidence'
 import type { ScreenChangeWorkerRequest } from './screen-change-worker'
+import { validateVideoMotionScan, type VideoMotionOptions, type VideoMotionScan } from '../../../../src/core/media/motionEvidence'
 
 export class ScreenChangeWorker {
   private readonly worker: Worker
@@ -10,7 +11,7 @@ export class ScreenChangeWorker {
   private pending?: { id: number; resolve: (value: unknown) => void; reject: (error: Error) => void }
   private closed = false
   private closing?: Promise<void>
-  constructor(options: ScreenChangeOptions, workerPath: string | URL = path.join(__dirname, 'video-screen-change-worker.cjs')) {
+  constructor(private readonly options: ScreenChangeOptions | VideoMotionOptions, workerPath: string | URL = path.join(__dirname, 'video-screen-change-worker.cjs')) {
     this.worker = new Worker(workerPath, { name: 'henji-video-screen-change', workerData: options })
     this.worker.on('message', (reply: { id: number; ok: boolean; message?: string; scan?: unknown }) => {
       const pending = this.pending
@@ -38,6 +39,7 @@ export class ScreenChangeWorker {
     await this.call({ type: 'chunk', bytes: Uint8Array.from(bytes) })
   }
   async finish(): Promise<ScreenChangeScan> { return screenChangeScanSchema.parse(await this.call({ type: 'finish' })) }
+  async finishMotion(): Promise<VideoMotionScan> { return validateVideoMotionScan(await this.call({ type: 'finish' }), this.options.startSeconds, this.options.endSeconds) }
   dispose(): Promise<void> {
     if (this.closing) return this.closing
     this.closed = true; this.fail(new DOMException('局部变化分析已取消。', 'AbortError'))

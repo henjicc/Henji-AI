@@ -5,6 +5,7 @@ import path from 'node:path'
 import { createContentDiskCache } from '../media/content-disk-cache'
 import { SceneDetectionService } from './scene-detection'
 import { ScreenChangeAccumulator } from '../../../../src/core/videoEdit/screenChanges'
+import type { VideoMotionScan } from '../../../../src/core/media/motionEvidence'
 
 const directories: string[] = []
 afterEach(async () => { await Promise.all(directories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true }))) })
@@ -14,6 +15,34 @@ async function fixture() {
   const cache = createContentDiskCache({ directory: () => path.join(directory, 'cache'), extension: '.json' })
   return { source, cache, request: { requestId: 'test', source, startSeconds: 1, endSeconds: 5, sensitivity: 50 } }
 }
+function motionScan(start = 1, end = 5): VideoMotionScan {
+  const frames = Math.ceil((end - start) * 15)
+  return { startSeconds: start, endSeconds: end, samplingFps: 15, width: 320, height: 180, sampledFrames: frames,
+    samples: Array.from({ length: frames }, (_, i) => ({ fromSeconds: start + i / 15, toSeconds: Math.min(end, start + (i + 1) / 15), speed: i === 0 ? null : 0, zoom: i === 0 ? null : 0, change: i === 0 ? null : 0, cut: false, still: i === 0 ? null : true })) }
+}
+it('运动分析复用内容缓存且模式隔离，损坏时钟重算，文件变化与超范围拒绝旧结果', async () => {
+  const { cache, request, source } = await fixture()
+  const run = vi.fn(async () => [2]), screen = vi.fn(), motion = vi.fn(async () => motionScan())
+  const service = new SceneDetectionService(cache, run, screen, motion)
+  const input = { ...request, analysis: 'motion' as const }
+  expect(await service.detect(input, new AbortController().signal, () => undefined)).toMatchObject({ cutsSeconds: [], motionScan: { sampledFrames: 60 } })
+  await service.detect({ ...input, sensitivity: 90 }, new AbortController().signal, () => undefined)
+  expect(motion).toHaveBeenCalledOnce(); expect(run).not.toHaveBeenCalled(); expect(screen).not.toHaveBeenCalled()
+  await service.detect(request, new AbortController().signal, () => undefined)
+  expect(run).toHaveBeenCalledOnce()
+  const read = cache.read.bind(cache)
+  vi.spyOn(cache, 'read').mockImplementationOnce(async key => {
+    const data = JSON.parse(Buffer.from((await read(key))!).toString()); data.motionScan.samples[5].fromSeconds += .01
+    return Buffer.from(JSON.stringify(data))
+  })
+  await service.detect(input, new AbortController().signal, () => undefined); expect(motion).toHaveBeenCalledTimes(2)
+  await fs.writeFile(source, 'updated-motion-source')
+  await service.detect(input, new AbortController().signal, () => undefined); expect(motion).toHaveBeenCalledTimes(3)
+  await expect(service.detect({ ...input, endSeconds: 400 }, new AbortController().signal, () => undefined)).rejects.toThrow('300秒')
+  await expect(service.detect({ ...input, includeStillness: true }, new AbortController().signal, () => undefined)).rejects.toThrow('分别查询')
+  const incomplete = new SceneDetectionService(cache, run, screen, async () => ({ ...motionScan(), samples: [] }))
+  await expect(incomplete.detect({ ...input, startSeconds: 2 }, new AbortController().signal, () => undefined)).rejects.toThrow()
+})
 it('局部变化使用同一内容缓存与并发槽位，模式分开，不把候选变成镜头切点', async () => {
   const { cache, request, source } = await fixture()
   const accumulator = new ScreenChangeAccumulator({ width: 2, height: 1, channels: 1, fps: 5, startSeconds: 1, endSeconds: 5 })

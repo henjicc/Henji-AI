@@ -6,7 +6,7 @@ import type { TrackingJobPrompt } from './trackingProtocol'
 
 type Cv = typeof OpenCv
 let ready: Promise<{ cv: Cv }> | undefined
-/** Loaded only inside the existing utility process; wrap cv to avoid assimilating Emscripten's thenable. */
+/** Shared by tracking utility and motion Worker; wrap cv to avoid assimilating Emscripten's thenable. */
 export function loadTrackingOpenCv(): Promise<{ cv: Cv }> {
   return ready ??= new Promise<{ cv: Cv }>((resolve, reject) => {
     // Native require bypasses Emscripten's non-Promise `then`, which ESM loaders may assimilate forever.
