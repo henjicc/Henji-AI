@@ -11,10 +11,12 @@ export const mediaContentRecordSchema = z.object({
   id: z.string().min(1), kind: mediaContentKindSchema, text: z.string().max(4000), textTruncated: z.boolean(),
   ranges: z.array(mediaContentRangeSchema).max(128), rangeCount: z.number().int().nonnegative(),
   basis: z.enum(['saved', 'analysis', 'timeline', 'intent']), precision: z.enum(['word', 'segment', 'caption', 'interval', 'point']),
-  originRef: applicationRefSchema, recordId: z.string().min(1),
+  originRef: applicationRefSchema, recordId: z.string().min(1), sourceVerified: z.boolean(),
 }).strict()
 export type MediaContentRecord = z.infer<typeof mediaContentRecordSchema>
-export interface MediaContentFact extends Omit<MediaContentRecord, 'textTruncated' | 'rangeCount'> {
+export interface MediaContentFact extends Omit<MediaContentRecord, 'textTruncated' | 'rangeCount' | 'sourceVerified'> {
+  /** True only after this fact's source has been checked against the actual file. */
+  sourceVerified?: boolean
   /** Only consecutive included words from the same source/stream share a phrase-search group. */
   transcriptGroup?: string
 }
@@ -34,7 +36,7 @@ export function mergeMediaContentRanges(values: readonly MediaContentRange[]): M
 function combine(facts: readonly MediaContentFact[]): MediaContentFact {
   const first = facts[0]
   return { ...first, id: `${first.id}..${facts.at(-1)!.id}`, text: facts.reduce((text, fact) => joinAudioEditText(text, fact.text), ''),
-    ranges: mergeMediaContentRanges(facts.flatMap(fact => fact.ranges)), precision: facts.every(fact => fact.precision === 'word') ? 'word' : 'segment' }
+    ranges: mergeMediaContentRanges(facts.flatMap(fact => fact.ranges)), sourceVerified: facts.every(fact => fact.sourceVerified === true), precision: facts.every(fact => fact.precision === 'word') ? 'word' : 'segment' }
 }
 
 /** Source facts and document projections share one bounded query model, not another persistence model. */
@@ -65,5 +67,5 @@ export function queryMediaContentIndex(facts: readonly MediaContentFact[], query
   const fromUs = query.fromUs ?? 0; const toUs = query.toUs ?? Infinity
   return selected.filter(fact => fact.ranges.some(range => range.fromUs === range.toUs ? range.fromUs >= fromUs && range.fromUs < toUs : range.toUs > fromUs && range.fromUs < toUs))
     .sort((a, b) => (a.ranges[0]?.fromUs ?? 0) - (b.ranges[0]?.fromUs ?? 0) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id))
-    .map(({ transcriptGroup: _group, ...fact }) => ({ ...fact, text: fact.text.slice(0, 4000), textTruncated: fact.text.length > 4000, rangeCount: fact.ranges.length, ranges: fact.ranges.slice(0, 128) }))
+    .map(({ transcriptGroup: _group, ...fact }) => ({ ...fact, sourceVerified: fact.sourceVerified === true, text: fact.text.slice(0, 4000), textTruncated: fact.text.length > 4000, rangeCount: fact.ranges.length, ranges: fact.ranges.slice(0, 128) }))
 }

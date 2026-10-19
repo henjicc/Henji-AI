@@ -6,6 +6,12 @@ function word(text: string, index: number, group = 'voice'): MediaContentFact {
 }
 
 describe('素材内容统一查询', () => {
+  it('逐条核实状态默认未知，跨词合并只有全部来源已核实时才为真', () => {
+    const facts = [word('打开', 0), { ...word('后台', 1), sourceVerified: true }]
+    expect(queryMediaContentIndex(facts, { text: '打开后台' })[0].sourceVerified).toBe(false)
+    facts[0].sourceVerified = true
+    expect(queryMediaContentIndex(facts, { text: '打开后台' })[0].sourceVerified).toBe(true)
+  })
   it('跨词规范化检索保留原文与不连续源范围，不串接被排除的内容', () => {
     const facts = [word('打开，', 0), word('ＡＩ', 2), word('后台', 3), word('打开', 4, 'after-exclusion'), word('后台', 6, 'another-source')]
     expect(queryMediaContentIndex(facts, { text: '打开 ai 后台' })).toMatchObject([{ text: '打开，ＡＩ后台', ranges: [{ fromUs: 0, toUs: 100000 }, { fromUs: 200000, toUs: 400000 }], precision: 'word' }])

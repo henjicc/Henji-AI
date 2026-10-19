@@ -6,7 +6,9 @@
 
 准备混音、生成原文字幕和回填识别字幕都会复核原始文件；嵌套声音按实际来源检查。源文件改变或缺少身份时先重新定位。识别完成后才发现原文件变化，会保留口播文档与真实计费事实并阻止回填；读取返回的 audioDocumentRef 和当前来源，确认可复用后恢复，不重放已完成识别。
 
-查询原素材已有内容时用 `query_video_edit_content(documentRef,itemRef)`，按 `text`、`fromUs/toUs`、`kinds` 筛选，`limit` 为1–50，保持原条件带 `nextCursor` 翻页。时间始终为原文件微秒；`saved` 是保存的文本，`timeline` 是字幕投影，`intent` 是创作提示词，均不能冒充声音或画面检测。可显式提供同源 `audioDocumentRef` 或 `recordingRef`，分别需要口播/录制只读权限；不同来源的文本可以并列返回，按 `originRef` 区分校对版本。默认不识别、不分析、不修改作品。`sourceVerified=false` 表示未保存原文件身份，旧文字只能参考。此入口不提供精剪候选；按文字剪辑仍使用下述转录检索。
+查询原素材已有内容时用 `query_video_edit_content(documentRef,itemRef)`，按 `text`、`fromUs/toUs`、`kinds` 筛选，`limit` 为1–50，保持原条件带 `nextCursor` 翻页。默认在当前项目发现同源口播和录制（独立作品查独立作品目录）；需要跨项目时显式指定 `discoveryScope=all`，只查剪辑与显式引用时用 `none`。可显式提供同源 `audioDocumentRef` 或 `recordingRef`。口播和录制分别受对应只读权限限制；`discovery.complete=false` 或 warnings 表示查询不完整，不能声称没有相关内容。未保存的口播校对会参与查询，关联目录、文档、文件或实例改变会使旧分页失效。
+
+时间始终为原文件微秒；`saved` 是保存的文本，`timeline` 是字幕投影，`intent` 是创作提示词，均不能冒充声音或画面检测。不同来源按 `originRef` 区分校对版本。顶层 `sourceVerified` 只说明目标素材的导入身份是否核实；逐条检查每条记录的 `sourceVerified`，仅按路径关联、没有原文件身份的录制记录仍为 false，不能继承顶层 true。默认不识别、不分析、不修改作品。此入口不提供精剪候选；按文字剪辑仍使用下述转录检索。
 
 1. 先用 `query_video_edit_transcript` 局部查已有口播与校对字幕，需要完整编辑时再读 `video_edit.caption` 或序列转录稿；已有可用文本不重复识别。需要识别时 `prepare_video_edit_subtitle_audio` 给 documentRef、sequenceRef，scope=sequence/in-out/selection，可给 trackRef 指定人声轨。
 2. 准备是本地混音，不计识别费；selection 保持选中声音之间的序列空隙，in-out 需要完整入出点。背景音乐太强时选清楚的人声轨。

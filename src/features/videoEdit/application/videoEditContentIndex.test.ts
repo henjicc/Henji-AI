@@ -11,7 +11,7 @@ import { createRecordingDocument } from '@/core/screenRecording/document'
 import { queryVideoEditContentCapability } from '@/core/application-control/domains/videoEdit/videoEditContentIndexCapability'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
-import { createAudioEditDraft } from '@/features/audioEdit'
+import { createAudioEditDraft, flushAudioEditProject } from '@/features/audioEdit'
 import { editAudioEditProject, releaseAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { closeAllVideoEdits, createVideoEditTestProject, reopenVideoEdit } from './videoEditDocumentTestKit'
 import { editVideoProject, saveVideoEdit } from './videoEditService'
@@ -132,7 +132,8 @@ it('录制步骤与章节按同源媒体投影；改过的理解结果使分页�
   const meta = harnessDocumentStore().seed({ kind: 'screen_recording', name: '录制', content: recording })
   const query = { ...input, text: '步骤', recordingRef: { kind: 'screen_recording.session', id: meta.id } }
   const first = parse(await readVideoEditContentIndex(query, context()))
-  expect(first.records[0]).toMatchObject({ text: '步骤0', ranges: [{ fromUs: 0, toUs: 500000 }], basis: 'saved' })
+  expect(first).toMatchObject({ sourceVerified: true, warnings: [expect.stringContaining('未保存文件身份')] })
+  expect(first.records[0]).toMatchObject({ text: '步骤0', ranges: [{ fromUs: 0, toUs: 500000 }], basis: 'saved', sourceVerified: false })
   const stored = harnessDocumentStore().stored(meta.id)!
   stored.meta.revision++
   await expect(readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
@@ -216,4 +217,136 @@ it('已核实素材不吸收同路径未绑定的旧词源，显式查询旧项�
   })
   expect(parse(await readVideoEditContentIndex({ ...input, text: '旧转录' }, context()))).toMatchObject({ sourceVerified: true, records: [], warnings: [expect.stringContaining('已排除')] })
   expect(parse(await readVideoEditContentIndex({ ...input, itemRef: { ...input.itemRef, id: `${owner.document.id}:unverified-item` }, text: '旧转录' }, context()))).toMatchObject({ sourceVerified: false, records: [{ text: '未核实的旧转录' }] })
+})
+
+function seedRelatedRecording(owner: Awaited<ReturnType<typeof fixture>>['owner'], sourcePath: string, name = '关联录制', inProject = true) {
+  const content = createRecordingDocument(); content.status = 'stopped'
+  content.media = [{ id: 'screen', kind: 'screen', path: sourcePath, monoUs: 1000000, durationUs: 10000000 }]
+  content.understanding.steps = Array.from({ length: 3 }, (_, i) => ({ id: `step-${i}`, title: `自动发现${i}`, description: '', startUs: 1000000 + i * 1000000, endUs: 1500000 + i * 1000000, signal: 'click' as const, eventIds: [] }))
+  const container = owner.session.documentMeta.container
+  return harnessDocumentStore().seed({ kind: 'screen_recording', name, content, ...(inProject && container.kind === 'project' ? { projectId: container.projectId } : {}) })
+}
+
+it('默认只发现项目内文档，显式全局可扩大范围，none 不扫描目录', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  const local = seedRelatedRecording(owner, sourcePath)
+  const external = seedRelatedRecording(owner, sourcePath, '独立录制', false)
+  seedRelatedRecording(owner, path.resolve(path.sep, 'different-source.mp4'), '其他文件')
+  const query = { ...input, text: '自动发现', kinds: ['description'], limit: 50 }
+  const localResult = parse(await readVideoEditContentIndex(query, context()))
+  expect(localResult).toMatchObject({ discovery: { scope: 'project', complete: true, scannedDocuments: 2, matchedDocuments: 1 }, total: 3 })
+  expect(localResult.records.every(record => record.originRef.id === local.id && !record.sourceVerified)).toBe(true)
+  const global = parse(await readVideoEditContentIndex({ ...query, discoveryScope: 'all' }, context()))
+  expect(new Set(global.records.map(record => record.originRef.id))).toEqual(new Set([local.id, external.id]))
+  const list = vi.spyOn(getPlatform().documents, 'listDocumentsPage')
+  expect(parse(await readVideoEditContentIndex({ ...query, discoveryScope: 'none' }, context()))).toMatchObject({ records: [], discovery: { scope: 'none', complete: true, scannedDocuments: 0 } })
+  expect(list).not.toHaveBeenCalled()
+})
+
+it('项目自动发现当前未保存口播；不把剪后导出音频当成原文件', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  const audio = await createAudioEditDraft({ sourcePath, audioPath: sourcePath, mediaType: 'video', durationFrames: 10000, sampleRate: 1000, channels: 1 }, owner.session.documentMeta.container)
+  audioIds.push(audio.document.id)
+  const verify = vi.spyOn(getPlatform().audioEdit, 'verifySource').mockResolvedValue()
+  editAudioEditProject(audio.document.id, document => ({ ...document, transcript: Array.from({ length: 3 }, (_, i) => ({ id: `word${i}`, text: `口播校对${i}`, startFrame: i * 1000, endFrame: i * 1000 + 500, granularity: 'word' as const, included: true, locked: false })) }))
+  const query = { ...input, text: '口播校对', limit: 1 }
+  const first = parse(await readVideoEditContentIndex(query, context()))
+  expect(first).toMatchObject({ total: 3, records: [{ sourceVerified: true, originRef: { id: audio.document.id } }] })
+  expect(verify).toHaveBeenCalledWith(audio.document.id)
+  expect(parse(await readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).records[0].text).toBe('口播校对1')
+  editAudioEditProject(audio.document.id, document => ({ ...document, transcript: document.transcript.map(block => ({ ...block, text: '再次校对' })) }))
+  await expect(readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
+  editVideoProject(owner.document.id, document => {
+    document.media[0].path = path.resolve(path.sep, 'edited-export.wav')
+    document.media[0].creativeSource = { type: 'document', docRef: { docId: audio.document.id, path: audio.session.documentMeta.path } }
+    return document
+  })
+  expect(parse(await readVideoEditContentIndex({ ...query, text: '再次校对' }, context())).total).toBe(0)
+})
+
+it('冷口播加载后可继续翻页，关闭重开同版本实例使旧分页失效', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  const audio = await createAudioEditDraft({ sourcePath, audioPath: sourcePath, mediaType: 'video', durationFrames: 10000, sampleRate: 1000, channels: 1 }, owner.session.documentMeta.container)
+  audioIds.push(audio.document.id)
+  editAudioEditProject(audio.document.id, document => ({ ...document, transcript: [0, 1, 2].map(i => ({ id: `w${i}`, text: `冷文档${i}`, startFrame: i * 1000, endFrame: i * 1000 + 500, granularity: 'word' as const, included: true, locked: false })) }))
+  await flushAudioEditProject(audio.document.id); await releaseAudioEditProject(audio.document.id)
+  const verify = vi.spyOn(getPlatform().audioEdit, 'verifySource').mockResolvedValue()
+  const query = { ...input, text: '冷文档', limit: 1 }
+  verify.mockRejectedValueOnce(new Error('SOURCE_CHANGED'))
+  expect(parse(await readVideoEditContentIndex(query, context()))).toMatchObject({ total: 0, discovery: { complete: false }, warnings: [expect.stringContaining('不完整')] })
+  const first = parse(await readVideoEditContentIndex(query, context()))
+  expect(first.total).toBe(3)
+  expect(parse(await readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).records[0].text).toBe('冷文档1')
+  await releaseAudioEditProject(audio.document.id)
+  await expect(readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
+})
+
+it('只有录制只读授权时仅发现录制，不读取口播目录或正文', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  seedRelatedRecording(owner, sourcePath)
+  harnessDocumentStore().seed({ kind: 'audio_edit', name: '无授权口播', content: { source: { sourcePath } }, projectId: owner.session.documentMeta.container.kind === 'project' ? owner.session.documentMeta.container.projectId : undefined })
+  const list = vi.spyOn(getPlatform().documents, 'listDocumentsPage')
+  const callerGrant = createApplicationCallerGrant({ callerId: 'recording-read', capabilityIds: ['query_video_edit_content'], permissions: ['video_edit:read', 'screen_recording:read'], allowWrites: false, allowDestructive: false })
+  const result = parse(await readVideoEditContentIndex({ ...input, text: '自动发现' }, { ...context(), callerGrant }))
+  expect(result).toMatchObject({ total: 3, discovery: { complete: false, scannedDocuments: 1, matchedDocuments: 1 } })
+  expect(list.mock.calls.every(([request]) => request?.kind === 'screen_recording')).toBe(true)
+})
+
+it('关联目录按页扫描，不重复读取未改变的无关正文；新增、删除和改动使分页失效', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  const target = seedRelatedRecording(owner, sourcePath)
+  for (let i = 0; i < 103; i++) seedRelatedRecording(owner, path.resolve(path.sep, `other-${i}.mp4`), `无关录制${i}`)
+  const list = vi.spyOn(getPlatform().documents, 'listDocumentsPage')
+  const read = vi.spyOn(getPlatform().documents, 'readDocument')
+  const query = { ...input, text: '自动发现', limit: 1 }
+  const first = parse(await readVideoEditContentIndex(query, context()))
+  expect(first.discovery.scannedDocuments).toBe(104)
+  expect(list.mock.calls.some(([request]) => request?.cursor)).toBe(true)
+  read.mockClear()
+  expect(parse(await readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).records[0].text).toBe('自动发现1')
+  expect(read.mock.calls.every(([request]) => request.id === target.id)).toBe(true)
+  const added = seedRelatedRecording(owner, sourcePath, '新录制')
+  await expect(readVideoEditContentIndex({ ...query, cursor: first.nextCursor }, context())).rejects.toThrow('失效')
+  const fresh = parse(await readVideoEditContentIndex(query, context()))
+  harnessDocumentStore().documents.delete(added.id)
+  await expect(readVideoEditContentIndex({ ...query, cursor: fresh.nextCursor }, context())).rejects.toThrow('失效')
+  const next = parse(await readVideoEditContentIndex(query, context()))
+  harnessDocumentStore().stored(target.id)!.meta.revision++
+  await expect(readVideoEditContentIndex({ ...query, cursor: next.nextCursor }, context())).rejects.toThrow('失效')
+})
+
+it('缺跨域权限不扫描正文，自动发现损坏文档明确不完整且修复后可重试', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  const recording = seedRelatedRecording(owner, sourcePath)
+  const read = vi.spyOn(getPlatform().documents, 'readDocument')
+  const list = vi.spyOn(getPlatform().documents, 'listDocumentsPage')
+  const callerGrant = createApplicationCallerGrant({ callerId: 'index-limited', capabilityIds: ['query_video_edit_content'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
+  const query = { ...input, text: '自动发现' }
+  expect(parse(await readVideoEditContentIndex(query, { ...context(), callerGrant }))).toMatchObject({ total: 0, discovery: { complete: false, scannedDocuments: 0 }, warnings: [expect.stringContaining('口播'), expect.stringContaining('录制')] })
+  expect(read).not.toHaveBeenCalled(); expect(list).not.toHaveBeenCalled()
+  const stored = harnessDocumentStore().stored(recording.id)!; const content = stored.content
+  stored.content = { media: 'broken' }
+  expect(parse(await readVideoEditContentIndex(query, context()))).toMatchObject({ total: 0, discovery: { complete: false }, warnings: [expect.stringContaining('不完整')] })
+  stored.content = content
+  expect(parse(await readVideoEditContentIndex(query, context()))).toMatchObject({ total: 3, discovery: { complete: true } })
+})
+
+it('目录读取失败保留已有结果并报告不完整，发现期间取消或变化不返回迟到结果', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  seedRelatedRecording(owner, sourcePath)
+  const original = getPlatform().documents.listDocumentsPage.bind(getPlatform().documents)
+  const list = vi.spyOn(getPlatform().documents, 'listDocumentsPage')
+  list.mockImplementation(async request => {
+    if (request?.kind === 'audio_edit') throw new Error('无法读取目录')
+    return original(request)
+  })
+  expect(parse(await readVideoEditContentIndex({ ...input, text: '自动发现' }, context()))).toMatchObject({ total: 3, discovery: { complete: false } })
+  list.mockImplementation(original)
+  const controller = new AbortController()
+  list.mockImplementationOnce(async request => { const page = await original(request); controller.abort(); return page })
+  await expect(readVideoEditContentIndex(input, { signal: controller.signal })).rejects.toThrow()
+  const readOriginal = getPlatform().documents.readDocument.bind(getPlatform().documents)
+  const read = vi.spyOn(getPlatform().documents, 'readDocument')
+  read.mockImplementationOnce(async target => { const result = await readOriginal(target); seedRelatedRecording(owner, sourcePath, '查询中新建'); return result })
+  await expect(readVideoEditContentIndex(input, context())).rejects.toThrow('目录或内容已改变')
 })
