@@ -107,9 +107,9 @@ function compileLinkedCodeMaterial(file: ts.SourceFile, ast: { astNodes: number;
   }
   const value = (key: string): unknown => { const node = metadata.get(key); if (!node) throw new CodeMaterialError('SYNTAX', `缺少定义字段：${key}`); return staticValue(node) }
   const apiVersion = value('apiVersion')
-  if (apiVersion !== 1 && apiVersion !== 2) throw new CodeMaterialError('SYNTAX', 'apiVersion 必须为 1 或 2。')
+  if (apiVersion !== 1 && apiVersion !== 2 && apiVersion !== 3) throw new CodeMaterialError('SYNTAX', 'apiVersion 必须为 1、2 或 3。')
   const languageVersion = metadata.has('languageVersion') ? value('languageVersion') : undefined
-  if (apiVersion === 2 && languageVersion !== 3) throw new CodeMaterialError('SYNTAX', 'apiVersion:2 需要 languageVersion:3。')
+  if (apiVersion >= 2 && languageVersion !== 3) throw new CodeMaterialError('SYNTAX', `apiVersion:${apiVersion} 需要 languageVersion:3。`)
   if (languageVersion !== undefined && languageVersion !== 3) fail(metadata.get('languageVersion')!, '显式作者语言版本必须为 3。')
   if (languageVersion !== 3 && file.statements.length !== 1) fail(file, '顶层 const 仅用于 v3 作者语言。')
   if (languageVersion !== 3 && ast.astNodes > CODE_MATERIAL_LIMITS.astNodes) fail(file, '源码 AST 数量超出预算。', 'BUDGET')

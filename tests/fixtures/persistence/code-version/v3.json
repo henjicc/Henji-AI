@@ -1,0 +1,14 @@
+{
+  "id": "code-version",
+  "apiVersion": 3,
+  "languageVersion": 3,
+  "entry": "main.ts",
+  "files": [
+    {
+      "path": "main.ts",
+      "location": "/persistence-project/代码/标题/v1/main.ts",
+      "hash": "0bb1cda91a8041254a9b7e4addbac1dd944ef268c7a5e32799dfefdaecb1b4fb"
+    }
+  ],
+  "imports": []
+}

@@ -81,7 +81,7 @@ export type CodeExpression = { type: CodeValueType; sourceSpan?: CodeSourceSpan 
 )
 export interface CodeMaterialProgram {
   sourceSpan?: CodeSourceSpan
-  apiVersion: 1 | 2; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
+  apiVersion: 1 | 2 | 3; languageVersion: 1 | 2 | 3; name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'
   width: number; height: number; durationSeconds: number; seed: number
   parameters: CodeParameterDeclaration[]; bindings: { name: string; expression: CodeExpression }[]; result: CodeExpression
   types?: Record<string, CodeParameterTypeDefinition>
@@ -97,7 +97,7 @@ export type CodeDrawCommand = CodeDrawMetadata & (
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; width: number; color: CodeColor }
   | { kind: 'text'; x: number; y: number; text: string; fontSize: number; color: CodeColor; fontFamily: string; align: 'left' | 'center' | 'right'; fontWeight?: number; fontStyle?: string; baseline?: string; letterSpacing?: number; lineHeight?: number; maxWidth?: number; wrap?: boolean; maxLines?: number; layout?: CodeTextLayout; perChar?: CodeCharacterStyle[] }
   | { kind: 'image'; source: CodeImageReference; x: number; y: number; width: number; height: number; opacity: number }
-  | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; mask?: { shape: CodeDrawCommand | null; mode: 'alpha' | 'luma'; invert: boolean }; clip?: { x: number; y: number; width: number; height: number }; /** Host-only evaluated local placements; never executable author values. */ motionSamples?: CodeMotionSample[] }
+  | { kind: 'group'; x: number; y: number; children: CodeDrawCommand[]; blurShape?: 'gaussian' | 'lens'; mask?: { shape: CodeDrawCommand | null; mode: 'alpha' | 'luma'; invert: boolean }; clip?: { x: number; y: number; width: number; height: number }; /** Host-only evaluated local placements; never executable author values. */ motionSamples?: CodeMotionSample[] }
   | { kind: 'path'; points: [number, number][][]; closed: boolean; fill: CodeColor }
   | { kind: 'shader'; graph: ShaderGraphSpec; time: number; x: number; y: number; width: number; height: number }
 )

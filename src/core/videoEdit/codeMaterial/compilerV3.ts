@@ -40,7 +40,7 @@ const shapeFields: Record<CodeDrawKind, string[]> = {
   path: [...common, ...stroke, ...trim, 'd', 'points', 'closed', 'fill'],
   text: [...common, ...stroke, 'x', 'y', 'text', 'fontFamily', 'fontWeight', 'fontStyle', 'fontSize', 'color', 'fill', 'align', 'baseline', 'letterSpacing', 'lineHeight', 'maxWidth', 'wrap', 'maxLines', 'perChar'],
   shader: [...common.filter(key => !['shadow', 'glow', 'blur'].includes(key)), 'name', 'params', 'layers', 'time', 'x', 'y', 'width', 'height'],
-  group: [...common, 'x', 'y', 'clip', 'mask', 'motionBlur'], image: [...common, 'source', 'x', 'y', 'width', 'height'],
+  group: [...common, 'x', 'y', 'clip', 'mask', 'motionBlur', 'blurShape'], image: [...common, 'source', 'x', 'y', 'width', 'height'],
 }
 const operators: Partial<Record<ts.SyntaxKind, CodeBinaryOperator>> = {
   [ts.SyntaxKind.AsteriskAsteriskToken]: '**', [ts.SyntaxKind.PlusToken]: '+', [ts.SyntaxKind.MinusToken]: '-', [ts.SyntaxKind.AsteriskToken]: '*', [ts.SyntaxKind.SlashToken]: '/', [ts.SyntaxKind.PercentToken]: '%',
@@ -320,8 +320,13 @@ export function compileCodeMaterialV3(program: CodeMaterialProgram, file: ts.Sou
         else type(input, value, 'string')
         properties[key] = value
       }
+      if (properties.blurShape) {
+        if (program.apiVersion !== 3) fail(node, '镜头虚化需要 apiVersion:3，languageVersion:3。', 'TYPE')
+        const shape = unwrap(properties.blurShape)
+        if (shape.kind !== 'literal' || !['gaussian', 'lens'].includes(String(shape.value))) fail(node, 'blurShape 须为静态 gaussian/lens；用 blur 数值表达焦点动画。', 'TYPE')
+      }
       if (properties.motionBlur) {
-        if (program.apiVersion !== 2) fail(node, '运动曝光需要 apiVersion:2，languageVersion:3。', 'TYPE')
+        if (program.apiVersion < 2) fail(node, '运动曝光需要 apiVersion:2 或 3，languageVersion:3。', 'TYPE')
         const blur = unwrap(properties.motionBlur)
         if (blur.kind !== 'object' || Object.keys(blur.properties).some(key => !['enabled', 'shutter', 'phase', 'maxSamples'].includes(key))) fail(node, 'motionBlur 允许 enabled/shutter/phase/maxSamples。', 'TYPE')
         for (const [key, value] of Object.entries(blur.properties)) type(node, value, key === 'enabled' ? 'boolean' : 'number')

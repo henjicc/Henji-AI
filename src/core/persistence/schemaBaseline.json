@@ -113,9 +113,9 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 13,
-      "fingerprint": "950e1857acdd30f50324f32352c1870c0b884723dd18d8de3ab528bf6aac3992",
-      "supportedFrom": 13
+      "version": 14,
+      "fingerprint": "57f457b7a93d9e300e07127d4b5fdbdba0b2768e2793fc11a53bba984b1b8fbe",
+      "supportedFrom": 14
     },
     "document.canvas": {
       "version": 1,
@@ -148,9 +148,9 @@
       "supportedFrom": 1
     },
     "code-version": {
-      "version": 2,
-      "fingerprint": "8de25d276d2edb19b513d14a7113dad5a9e38abc27b9bd7d24737350590e8328",
-      "supportedFrom": 2
+      "version": 3,
+      "fingerprint": "fc77fd5053c7b8a9219e471de1f2ce9691d7294a454d699ff7a675e2ac5907cb",
+      "supportedFrom": 3
     },
     "code-component": {
       "version": 1,
@@ -158,9 +158,9 @@
       "supportedFrom": 1
     },
     "code-asset": {
-      "version": 3,
-      "fingerprint": "819597f36bca79a55930143929097650c817d5524afebd886a2d6e191e216ff8",
-      "supportedFrom": 3
+      "version": 4,
+      "fingerprint": "735e47745cb17cf78ef96948332566cc6e56fa7cd3bec87536c65130cec16e29",
+      "supportedFrom": 4
     },
     "image-header": {
       "version": 1,
@@ -348,9 +348,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 15,
-      "fingerprint": "abbf3aae002d8414d1d4f879f44e3113fc5838f41b41914961909f02a51a21a6",
-      "supportedFrom": 15
+      "version": 16,
+      "fingerprint": "59286126b2663d2a88c685d80b5c7ef03b2582279f1a056ff8fefd552ae1e73d",
+      "supportedFrom": 16
     },
     "recording-setup": {
       "version": 1,
@@ -1675,6 +1675,42 @@
       "reason": "API2新增分组快门曝光语义及代码版本声明，开发期按新契约保存，录制内嵌剪辑同步升级；不新增旧数据迁移分支。",
       "previousFingerprint": "c527337e08f3102019f3dd9763c4c5e8d0147e439599d1f78ec73e65593e9d0e",
       "fingerprint": "819597f36bca79a55930143929097650c817d5524afebd886a2d6e191e216ff8",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T15:13:47.023Z",
+      "format": "document.video_edit",
+      "version": 14,
+      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
+      "previousFingerprint": "950e1857acdd30f50324f32352c1870c0b884723dd18d8de3ab528bf6aac3992",
+      "fingerprint": "57f457b7a93d9e300e07127d4b5fdbdba0b2768e2793fc11a53bba984b1b8fbe",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T15:13:47.025Z",
+      "format": "document.screen_recording",
+      "version": 16,
+      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
+      "previousFingerprint": "abbf3aae002d8414d1d4f879f44e3113fc5838f41b41914961909f02a51a21a6",
+      "fingerprint": "59286126b2663d2a88c685d80b5c7ef03b2582279f1a056ff8fefd552ae1e73d",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T15:13:47.025Z",
+      "format": "code-version",
+      "version": 3,
+      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
+      "previousFingerprint": "8de25d276d2edb19b513d14a7113dad5a9e38abc27b9bd7d24737350590e8328",
+      "fingerprint": "fc77fd5053c7b8a9219e471de1f2ce9691d7294a454d699ff7a675e2ac5907cb",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T15:13:47.025Z",
+      "format": "code-asset",
+      "version": 4,
+      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
+      "previousFingerprint": "819597f36bca79a55930143929097650c817d5524afebd886a2d6e191e216ff8",
+      "fingerprint": "735e47745cb17cf78ef96948332566cc6e56fa7cd3bec87536c65130cec16e29",
       "waivedFixtureVersions": []
     }
   ],

@@ -22,6 +22,7 @@ import { CodeReuseProbe } from './videoEditCodeReuse'
 import type { CodeHeavyStructure } from '@/core/videoEdit/codeMaterial/performance'
 import { CODE_MOTION_PIXEL_SAMPLE_BUDGET, CODE_MOTION_UNIFORM_BYTES, CODE_MOTION_WGSL, prepareCodeMotion } from './videoEditCodeMotion'
 import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
+import { CODE_LENS_PIXEL_SAMPLE_BUDGET, CODE_LENS_WGSL, codeLensPlan } from './videoEditCodeLens'
 
 interface Image { texture: GpuTexture; width: number; height: number; x: number; y: number; resolution?: number }
 interface CachedImage extends Image { bytes: number; used: boolean; glyph?: boolean }
@@ -126,6 +127,7 @@ export class VideoEditCodeGpuV3 {
   private cachedBytes = 0; private uniformIndex = 0
   private motionIndex = 0
   private motionPixelSamples = 0
+  private lensPixelSamples = 0
   private readonly motionUniforms: GpuBuffer[] = []
   private module: unknown; private sampler: unknown; private ready: Promise<void>
   private disposed = false
@@ -161,6 +163,8 @@ export class VideoEditCodeGpuV3 {
       const instanced = this.device.createShaderModule({ code: instanceShader })
       const motion = this.device.createShaderModule({ code: CODE_MOTION_WGSL })
       pipeline('motion', { layout: 'auto', vertex: { module: motion, entryPoint: 'vs' }, fragment: { module: motion, entryPoint: 'motion', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
+      const lens = this.device.createShaderModule({ code: CODE_LENS_WGSL })
+      for (const entry of ['downsample', 'lens']) pipeline(`lens:${entry}`, { layout: 'auto', vertex: { module: lens, entryPoint: 'vs' }, fragment: { module: lens, entryPoint: entry, targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
       pipeline('instances', { layout: 'auto', vertex: { module: instanced, entryPoint: 'vs', buffers: [INSTANCE_LAYOUT] }, fragment: { module: instanced, entryPoint: 'shape', targets: [{ format: 'rgba8unorm', blend: normalBlend }] }, primitive: { topology: 'triangle-list' } })
       if (this.nativeVectors) { this.vectors = new CodeVectorGpu(this.device, true); pending.push(this.vectors.ready) }
       const diffusion = this.device.createShaderModule({ code: diffusionSource })
@@ -332,12 +336,30 @@ export class VideoEditCodeGpuV3 {
       return { texture: result.image.texture, release: () => { result.release(); if (bright) this.release(bright) } }
     } catch (error) { if (bright) this.release(bright); throw error }
   }
+  private lensBlur(source: Image, radius: number, key: string): Image {
+    const plan = codeLensPlan(source.width, source.height, radius, CODE_LENS_PIXEL_SAMPLE_BUDGET - this.lensPixelSamples)
+    this.lensPixelSamples += plan.pixelSamples
+    const pass = (entry: string, picture: Image, target: Image): void => {
+      const pipeline = this.pipelines.get(`lens:${entry}`)!, encoder = this.encoder()
+      this.clear(encoder, target)
+      const uniform = this.uniform([target.width, target.height, radius / source.width, radius / source.height, plan.taps, 0, 0, 0])
+      const render = this.pass(encoder, target)
+      render.setPipeline(pipeline)
+      render.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: uniform }, { binding: 1, resource: picture.texture.createView() }, { binding: 2, resource: this.sampler }] }))
+      render.draw(6); this.submit(encoder)
+    }
+    let current = source
+    plan.levels.forEach((size, index) => { const target = this.layer(`${key}:lens-mip:${index}`, size.width, size.height); pass('downsample', current, target); current = target })
+    const result = this.layer(`${key}:lens-result`, plan.width, plan.height)
+    pass('lens', current, result)
+    return { ...source, texture: result.texture }
+  }
   private async effects(image: Image, command: CodeDrawCommand, key: string): Promise<Image> {
     let current = image
     const temporaries: (() => void)[] = []
     try {
       if (command.blur) {
-        const blurred = await this.blur(current, command.blur); temporaries.push(blurred.release)
+        const blurred = command.kind === 'group' && command.blurShape === 'lens' ? { image: this.lensBlur(current, command.blur, key), release: () => {} } : await this.blur(current, command.blur); temporaries.push(blurred.release)
         const target = this.layer(`${key}:blur`, image.width, image.height, image.x, image.y); const encoder = this.encoder(); this.clear(encoder, target)
         this.paint(encoder, target, { ...blurred.image, x: 0, y: 0 }, CODE_IDENTITY, 1, 'textured'); this.submit(encoder); current = target
       }
@@ -499,7 +521,7 @@ export class VideoEditCodeGpuV3 {
     this.frames.delete(texture)
     const previousGroups = this.groupSignatures.get(texture); const currentGroups = new Map<string, string>()
     const previousProbes = this.groupProbes.get(texture); const currentProbes = new Map<string, CodeReuseProbe>()
-    this.uniformIndex = 0; this.instanceIndex = 0; this.motionIndex = 0; this.motionPixelSamples = 0; this.cached.forEach(value => { value.used = false }); this.layers.forEach(value => { value.used = false })
+    this.uniformIndex = 0; this.instanceIndex = 0; this.motionIndex = 0; this.motionPixelSamples = 0; this.lensPixelSamples = 0; this.cached.forEach(value => { value.used = false }); this.layers.forEach(value => { value.used = false })
     this.glyphResults.forEach(value => { value.used = false })
     this.vectors?.beginFrame()
     const target: Image = { texture, width, height, x: 0, y: 0 }; let encoder = this.device.createCommandEncoder(); this.clear(encoder, target); let count = 0; let shaderCount = 0
@@ -564,7 +586,7 @@ export class VideoEditCodeGpuV3 {
         // Placement, opacity and blending are applied only when composing the
         // finished layer; moving/fading a static group does not repaint it.
         const probe = previousProbes?.get(key) ?? new CodeReuseProbe(); currentProbes.set(key, probe)
-        const fields = (content: typeof command): unknown[] => [revision, content.children, content.clip, content.mask, content.blur, content.shadow, content.glow]
+        const fields = (content: typeof command): unknown[] => [revision, content.children, content.clip, content.mask, content.blur, content.blurShape, content.shadow, content.glow]
         const exact = codeHasLiveImage([command]) ? undefined : probe.signature(fields(command), () => JSON.stringify(fields(visualCommands().groups.get(command) ?? command)))
         const cacheKey = exact === undefined ? undefined : `subtree:${exact}`
         if (cacheKey) currentGroups.set(key, cacheKey)

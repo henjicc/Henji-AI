@@ -481,7 +481,9 @@ function compileDrawShape(expression: Extract<CodeExpression, { kind: 'draw' }>,
       if (!['alpha', 'luma'].includes(mode) || raw.invert !== undefined && typeof raw.invert !== 'boolean') throw new CodeMaterialError('TYPE', 'mask.mode 须为 alpha/luma，invert 须为 boolean。')
       mask = { shape: raw.shape as CodeDrawCommand | null, mode: mode as 'alpha' | 'luma', invert: raw.invert === true }
     }
-    const command: Extract<CodeDrawCommand, { kind: 'group' }> = { ...meta, kind: 'group', x: coordinate(fields, 'x'), y: coordinate(fields, 'y'), children: [], ...(clip ? { clip } : {}), ...(mask ? { mask } : {}) }
+    const blurShape = fields.blurShape === undefined ? undefined : string(fields.blurShape)
+    if (blurShape !== undefined && blurShape !== 'gaussian' && blurShape !== 'lens') throw new CodeMaterialError('TYPE', 'blurShape 须为 gaussian/lens。')
+    const command: Extract<CodeDrawCommand, { kind: 'group' }> = { ...meta, kind: 'group', x: coordinate(fields, 'x'), y: coordinate(fields, 'y'), children: [], ...(blurShape ? { blurShape } : {}), ...(clip ? { clip } : {}), ...(mask ? { mask } : {}) }
     // Bindings can later be reused under another transform; ancestor effects can
     // spread pixels. Only direct result-tree placement is known here.
     const parent = frame.parentMatrix

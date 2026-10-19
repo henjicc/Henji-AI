@@ -11,6 +11,7 @@ const SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"单帧观�
 const SOUND_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"声音驱动验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"声音标记",x:ctx.audio.level()*500,y:80,width:60,height:40,fill:[0,1,0,1]})];}}'
 const INPUT_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"画面输入验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({id:"输入",source:ctx.params.picture,x:0,y:0,width:640,height:360})];}}'
 const MOTION_SOURCE = 'export default {apiVersion:2,languageVersion:3,name:"快门曝光验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{blurEnabled:{type:"boolean",title:"运动曝光",default:true}},render(ctx){return [rect({x:0,y:0,width:640,height:360,fill:[0,0,0,1]}),group({id:"运动层",x:160+(ctx.time-1)*1920,y:160,motionBlur:{enabled:ctx.params.blurEnabled,shutter:180,maxSamples:64}},[rect({x:0,y:0,width:8,height:40,fill:[1,0,0,128/255]})])];}}'
+const LENS_SOURCE = 'export default {apiVersion:3,languageVersion:3,name:"层级焦点验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{focus:{type:"number",title:"焦点",default:0,min:0,max:1,step:.01,animatable:true}},render(ctx){return [rect({x:0,y:0,width:640,height:360,fill:[0,0,0,1]}),group({x:160,y:160,blurShape:"lens",blur:ctx.params.focus*24},[rect({x:0,y:0,width:16,height:40,fill:[1,0,0,1]})]),group({x:400,y:160,blurShape:"lens",blur:(1-ctx.params.focus)*24},[rect({x:0,y:0,width:16,height:40,fill:[0,0,1,1]})])];}}'
 async function pixel(bytes, x, y) {
   return [...await sharp(bytes).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer()]
 }
@@ -39,7 +40,7 @@ function createVideoEditObservationScene() {
           tracks: [track(1), track(2)], clips: [{ id: 'base', itemId: 'reference-item', name: '蓝色底图', kind: 'image', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }], captions: [{ id: 'review-caption', text: '检查', start: 30, duration: 1 }], annotations: [] }] }
       fixture.media.push({ id: 'sound', name: '声音电平夹具', path: soundPath, kind: 'audio', width: 0, height: 0, durationSeconds: 2, hasAudio: true })
       fixture.items.push({ id: 'sound-item', name: '声音电平夹具', kind: 'audio', mediaId: 'sound' })
-      fixture.sequences[0].tracks.push({ ...track(0), kind: 'audio', name: '声音' }, track(3), track(4), track(5))
+      fixture.sequences[0].tracks.push({ ...track(0), kind: 'audio', name: '声音' }, track(3), track(4), track(5), track(6))
       let client
       const evidence = { completed: false, observations: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -84,6 +85,28 @@ function createVideoEditObservationScene() {
           fs.writeFileSync(path.join(root, `${name}.png`), media.bytes)
           evidence.observations.push({ name, ...data }); store()
           return { data, bytes: media.bytes }
+        }
+        const exportFrame = async (name, frame, reference, roi) => {
+          const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+          const exported = await callTool(client, 'export_video_edit', operationEnvelope([baseline], { documentRef, range: { startFrame: frame, endFrame: frame + 1 }, settings: { format: 'mp4', width: 640, height: 360, fps: 60, videoBitrateMbps: 20, audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: 'software', audioEnabled: false, addToLibrary: false } }))
+          const exportData = exported.data ?? exported.result?.data
+          const jobId = exportData?.queue?.[0]?.id; assert.ok(jobId, JSON.stringify(exported))
+          let job
+          for (let attempt = 0; attempt < 120; attempt++) {
+            const progress = await callTool(client, 'query_video_edit_export', { documentRef, taskId: jobId, detail: 'full' })
+            job = progress.data.queue.find(value => value.id === jobId)
+            if (job && ['completed', 'failed', 'cancelled'].includes(job.state)) break
+            await page.waitForTimeout(500)
+          }
+          assert.equal(job?.state, 'completed', JSON.stringify(job)); assert.ok(job.outputReady && job.path && fs.existsSync(job.path), JSON.stringify(job))
+          const { ffprobePath } = require('./mediaBinaries.cjs')
+          const video = mediaProbe(ffprobePath, job.path).streams.find(value => value.codec_type === 'video')
+          assert.equal(video.width, 640); assert.equal(video.height, 360); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 1)
+          const decoded = path.join(root, `${name}-export.png`)
+          execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', job.path, '-frames:v', '1', decoded], { windowsHide: true, timeout: 30000 })
+          const exportDifference = await pixelDifference(decoded, reference, roi)
+          assert.ok(exportDifference.psnr === null || exportDifference.psnr >= 30, `实际成片效果区域须与预览匹配：${JSON.stringify(exportDifference)}`)
+          return { path: job.path, frameCount: Number(video.nb_frames), exportDifference }
         }
         const list = await observe('frames', { kind: 'frames', frames: [31, 29, 30, 29] })
         assert.deepEqual(list.data.contactSheet.frames, [29, 30, 31])
@@ -194,26 +217,7 @@ function createVideoEditObservationScene() {
         const previewDifference = await pixelDifference(preview.file, path.join(root, 'motion-enabled.png'))
         assert.ok(previewDifference.equal, `节目预览与观察像素须一致：${JSON.stringify(previewDifference)}`)
         evidence.motionPreviewCapture = await capture('motion-exposure-preview'); store()
-        const exportBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
-        const exported = await callTool(client, 'export_video_edit', operationEnvelope([exportBaseline], { documentRef, range: { startFrame: 60, endFrame: 61 }, settings: { format: 'mp4', width: 640, height: 360, fps: 60, videoBitrateMbps: 20, audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: 'software', audioEnabled: false, addToLibrary: false } }))
-        const exportData = exported.data ?? exported.result?.data
-        const jobId = exportData?.queue?.[0]?.id; assert.ok(jobId, JSON.stringify(exported))
-        let job
-        for (let attempt = 0; attempt < 120; attempt++) {
-          const progress = await callTool(client, 'query_video_edit_export', { documentRef, taskId: jobId, detail: 'full' })
-          job = progress.data.queue.find(value => value.id === jobId)
-          if (job && ['completed', 'failed', 'cancelled'].includes(job.state)) break
-          await page.waitForTimeout(500)
-        }
-        assert.equal(job?.state, 'completed', JSON.stringify(job)); assert.ok(job.outputReady && job.path && fs.existsSync(job.path), JSON.stringify(job))
-        const { ffprobePath } = require('./mediaBinaries.cjs')
-        const video = mediaProbe(ffprobePath, job.path).streams.find(value => value.codec_type === 'video')
-        assert.equal(video.width, 640); assert.equal(video.height, 360); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 1)
-        const decoded = path.join(root, 'motion-export.png')
-        execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', job.path, '-frames:v', '1', decoded], { windowsHide: true, timeout: 30000 })
-        const exportDifference = await pixelDifference(decoded, preview.file, { left: 140, top: 160, width: 48, height: 40 })
-        assert.ok(exportDifference.psnr === null || exportDifference.psnr >= 30, `实际成片运动区域须与预览匹配：${JSON.stringify(exportDifference)}`)
-        evidence.motionExport = { path: job.path, frameCount: Number(video.nb_frames), previewDifference, exportDifference }; store()
+        evidence.motionExport = { ...await exportFrame('motion', 60, preview.file, { left: 140, top: 160, width: 48, height: 40 }), previewDifference }; store()
         const restoreBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
         const restored = await callTool(client, 'change_application_entities', operationEnvelope([restoreBaseline], { summary: '恢复验收前播放头', changes: [{ kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.program_playback': { frame: stateBefore['video_edit.document.frame'], playing: false, playbackDirection: 1 } } }] }))
         assert.equal(restored.verificationState, 'verified', JSON.stringify(restored)); await presented(page, stateBefore['video_edit.document.frame'])
@@ -230,6 +234,29 @@ function createVideoEditObservationScene() {
         assert.deepEqual(readVideoEditFile(seeded.file), disabledBefore)
         assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
         evidence.motionExposure = { apiVersion: 2, left, center, disabledCenter: sharpCenter, replayExact: true }; store()
+        const lensBaseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        const lensCreated = await callTool(client, 'change_application_entities', operationEnvelope([lensBaseline], { summary: '创建分层焦点验收素材', changes: [{ kind: 'create_items', entityType: 'video_edit.code_material', parent: documentRef, items: [{ properties: { 'video_edit.code_material.source': LENS_SOURCE } }] }] }))
+        assert.equal(lensCreated.verificationState, 'verified', JSON.stringify(lensCreated))
+        const lensItem = readVideoEditFile(seeded.file).items.find(value => value.name === '层级焦点验收'); assert.ok(lensItem)
+        const lensSequence = await callTool(client, 'read_application_entity', { ref: sequenceRef })
+        const lensPlaced = await callTool(client, 'change_application_entities', operationEnvelope([lensSequence], { summary: '用参数曲线交换前后景焦点', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: {
+          'video_edit.clip.item_id': lensItem.id, 'video_edit.clip.name': '层级焦点', 'video_edit.clip.kind': 'code', 'video_edit.clip.track': 6, 'video_edit.clip.start': 0, 'video_edit.clip.duration': 120,
+          'video_edit.clip.code_curves': { focus: [{ id: 'near', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'far', sourceInUs: 1000000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 1, interpolation: 'linear' }] },
+        } }] }] }))
+        assert.equal(lensPlaced.verificationState, 'verified', JSON.stringify(lensPlaced))
+        const lensBefore = readVideoEditFile(seeded.file)
+        const nearFocus = await observe('lens-focus-near', { kind: 'program', frame: 0 })
+        const farFocus = await observe('lens-focus-far', { kind: 'program', frame: 60 })
+        near(await pixel(nearFocus.bytes, 162, 180), [255, 0, 0]); near(await pixel(farFocus.bytes, 402, 180), [0, 0, 255])
+        assert.ok((await pixel(farFocus.bytes, 162, 180))[0] < 200)
+        assert.ok((await pixel(nearFocus.bytes, 402, 180))[2] < 200)
+        near(await pixel(nearFocus.bytes, 150, 180), [0, 0, 0]); near(await pixel(farFocus.bytes, 390, 180), [0, 0, 0])
+        assert.ok((await pixel(farFocus.bytes, 150, 180))[0] > 10); assert.ok((await pixel(nearFocus.bytes, 390, 180))[2] > 10)
+        const replayLens = await observe('lens-replay', { kind: 'program', frame: 0 })
+        assert.deepEqual(await sharp(replayLens.bytes).raw().toBuffer(), await sharp(nearFocus.bytes).raw().toBuffer())
+        assert.deepEqual(readVideoEditFile(seeded.file), lensBefore)
+        evidence.lensExport = await exportFrame('lens', 60, path.join(root, 'lens-focus-far.png'), { left: 128, top: 128, width: 320, height: 104 }); store()
+        assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
         evidence.capture = await capture('observation-review-host'); evidence.completed = true; store()
       } catch (error) { evidence.failure = String(error.stack ?? error); store(); throw error }
       finally {

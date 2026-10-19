@@ -29,6 +29,7 @@ import { createImageEditDocumentV3 } from '../src/core/imageEdit/v3/documentFact
 import { getImageLayoutFixtureResources } from './generate-persistence-fixtures'
 import { creativeIntentsSchema } from '../src/core/creativeIntent/persistence'
 import { rehomeVideoMotionResources } from '../electron/main/services/documents/video-motion-resources'
+import { CODE_ASSET_VERSION } from '../src/core/videoEdit/codeAsset'
 
 /** 由正式保存与 ZIP 导出器生成分页历史黄金样本，不改写已有版本。 */
 export async function generateImageHistoryPersistenceFixtures(sourceFixture: string, root = process.cwd()): Promise<void> {
@@ -121,7 +122,7 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     if (!only) {
       await generateImagePersistencePackages(root)
     }
-    const code = read('code-asset') as { codeSources: { source: string }[] }
+    const code = read('code-asset', `v${CODE_ASSET_VERSION}.json`) as { codeSources: { source: string }[] }
     const source = code.codeSources[0].source
     if (!only) await fsp.writeFile(fixture('code-version', 'v1.ts'), source, { flag: 'wx' })
     if (!only) await fsp.writeFile(fixture('code-component', 'v1.ts'), packageComponentSource('export const value = 1;\n', read('code-component') as CodeComponentMetadata), { flag: 'wx' })

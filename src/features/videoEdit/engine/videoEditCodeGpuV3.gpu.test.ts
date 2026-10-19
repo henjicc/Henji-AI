@@ -30,6 +30,7 @@ import { CodeMotionSamplingBudget, sampleCodeMotion } from '@/core/videoEdit/cod
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { codeMaterialMotionClock } from '@/core/videoEdit/codeMaterialTiming'
+import { codeLensPlan } from './videoEditCodeLens'
 
 let gpu: Gpu; let device: Gpu['gpu']; let wrapped: GpuDevice; let runtime: VideoEditCodeGpuV3
 let queueSubmissions = 0
@@ -106,6 +107,62 @@ it('作者运动蒙版在中心透明、快门内显现时仍输出曝光像素'
     expect(rgba[0]).toBeLessThanOrEqual(66)
     expect(rgba).toEqual([rgba[0], 0, 0, rgba[0]])
   } finally { output.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('层级镜头散焦保留圆盘轮廓和预乘透明边缘，切换普通柔化不复用错误缓存', async () => {
+  const output = texture()
+  const commands = (shape: string, radius = 8) => evaluateCodeMaterial(compileCodeMaterial(source(`return [group({blurShape:"${shape}",blur:${radius}},[rect({x:24,y:24,width:16,height:16,fill:[1,0,0,1]})])];`).replace('apiVersion:1', 'apiVersion:3')), context)
+  // Independent dense-area integration of a circular aperture and bilinear
+  // reconstruction of the source rectangle; no golden-angle sampler reuse.
+  const diskOracle = (x: number, y: number): number => {
+    let sum = 0, count = 0
+    const coverage = (v: number) => Math.min(1, Math.max(0, v - 23.5)) * Math.min(1, Math.max(0, 40.5 - v))
+    for (let dy = -8; dy <= 8; dy += .125) for (let dx = -8; dx <= 8; dx += .125) if (dx * dx + dy * dy <= 64) { sum += coverage(x + .5 + dx) * coverage(y + .5 + dy); count++ }
+    return sum / count * 255
+  }
+  device.pushErrorScope('validation')
+  try {
+    await runtime.render(output, W, H, commands('lens'))
+    const lens = await read(output)
+    for (const [x, y] of [[16, 32], [20, 32], [24, 32], [28, 32], [32, 32], [24, 24], [18, 18]]) expect(Math.abs(pixel(lens, x, y)[0] - diskOracle(x, y))).toBeLessThanOrEqual(18)
+    let energy = 0
+    for (let i = 0; i < lens.length; i += 4) { expect([...lens.slice(i, i + 4)]).toEqual([lens[i], 0, 0, lens[i]]); energy += lens[i] }
+    expect(Math.abs(energy / (16 * 16 * 255) - 1)).toBeLessThan(.02)
+    await runtime.render(output, W, H, commands('lens'))
+    await runtime.render(output, W, H, commands('gaussian'))
+    const gaussian = await read(output)
+    expect(pixel(lens, 32, 32)[0]).toBeGreaterThan(pixel(gaussian, 32, 32)[0] + 40)
+    await runtime.render(output, W, H, commands('lens'))
+    expect(await read(output)).toEqual(lens)
+    await runtime.render(output, W, H, commands('lens', 0))
+    expect(pixel(await read(output), 24, 24)).toEqual([255, 0, 0, 255])
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') await sharp(Buffer.from(lens), { raw: { width: W, height: H, channels: 4 } }).png().toFile('.tmp/lens-disk.png')
+  } finally { output.destroy() }
+  expect(await device.popErrorScope()).toBeNull()
+})
+
+it('镜头散焦焦点与尺寸连续切换使用有界层资源，释放后不遗留纹理', async () => {
+  const textures = new Set<GpuTexture>()
+  const renderer = new VideoEditCodeGpuV3(wrapped, { allocate: (width, height) => { const image = texture(width, height); textures.add(image); return image }, release: image => { expect(textures.delete(image)).toBe(true); image.destroy() } }, rasterFixture)
+  device.pushErrorScope('validation')
+  try {
+    for (const size of [64, 96, 65, 128, 64]) {
+      const output = texture(size, size)
+      try {
+        for (const radius of [0, 8, 24, 64, 8]) {
+          await renderer.render(output, size, size, [{ kind: 'group', x: 0, y: 0, blur: radius, blurShape: 'lens', children: [{ kind: 'rect', x: 16, y: 16, width: size / 2, height: size / 2, radius: 0, fill: [1, 0, 0, .5] }] }])
+          expect(renderer.diagnostics().layers).toBeLessThanOrEqual(10)
+          const result = await read(output, size, size)
+          expect(result.some(value => value > 0)).toBe(true)
+        }
+      } finally { output.destroy() }
+    }
+    const plan = codeLensPlan(3840, 2160, 128)
+    expect(plan.pixelSamples).toBeLessThan(3840 * 2160 * 4)
+    expect(() => codeLensPlan(3840, 2160, 128, plan.pixelSamples - 1)).toThrow('预算')
+  } finally { await renderer.dispose() }
+  expect(textures.size).toBe(0)
   expect(await device.popErrorScope()).toBeNull()
 })
 

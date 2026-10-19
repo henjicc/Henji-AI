@@ -38,7 +38,7 @@ export function evaluateCodeMaterial(program: CodeMaterialProgram, context: Code
   }
 }
 function evaluateCodeMaterialProgram(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>>, options: CodeMaterialEvaluationOptions): CodeDrawCommand[] {
-  if (program.languageVersion === 3 && program.kind === 'generator' && (program.apiVersion === 1 || program.apiVersion === 2)) {
+  if (program.languageVersion === 3 && program.kind === 'generator' && [1, 2, 3].includes(program.apiVersion)) {
     validateContext(context, options.transitionHandles === true); codeMaterialRandom(context.seed ?? program.seed, 0)
     // Overrides may reveal or move a previously invisible element. Resolve IDs
     // against the complete author tree before applying them.

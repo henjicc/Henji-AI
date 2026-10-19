@@ -1,6 +1,6 @@
 # 作者语言 v3：核心与图形
 
-同时声明素材契约 `apiVersion: 1` 或 `2` 与作者语言 `languageVersion: 3`；运动曝光使用 API2，省略语言版本不会启用 v3。文字与动效读 author-text-motion，着色器与滤镜读 author-shaders，参数实例读 parameters-curves。
+声明素材契约 `apiVersion: 3` 与作者语言 `languageVersion: 3`；API2支持运动曝光，API3增加分层镜头散焦，省略语言版本不会启用 v3。文字与动效读 author-text-motion，着色器与滤镜读 author-shaders，参数实例读 parameters-curves。
 
 ## 完整最小源码
 
@@ -8,7 +8,7 @@ ts 围栏须为完整作者源码，测试直接编译；调用片段用 text，
 
 ```ts
 export default {
-  apiVersion: 2, languageVersion: 3,
+  apiVersion: 3, languageVersion: 3,
   name: "图形核心", kind: "generator", mode: "dynamic",
   width: 1920, height: 1080, durationSeconds: 5, seed: 42,
   parameters: {},

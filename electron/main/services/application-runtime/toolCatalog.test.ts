@@ -83,6 +83,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.39.0'] = 'a0864e9f0a043143224f44786314e5f3e94eb0a7a3f5f57a1491c716e2e64828'
     // API2 is exposed through the existing code-version entity, without new tools.
     fingerprints['2.40.0'] = 'a0864e9f0a043143224f44786314e5f3e94eb0a7a3f5f57a1491c716e2e64828'
+    fingerprints['2.41.0'] = 'a0864e9f0a043143224f44786314e5f3e94eb0a7a3f5f57a1491c716e2e64828'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

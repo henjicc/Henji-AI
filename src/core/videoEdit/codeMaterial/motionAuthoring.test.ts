@@ -45,7 +45,7 @@ describe('API2 作者运动层', () => {
     expect(at).not.toHaveBeenCalled()
     expect(groups(evaluateCodeMaterial(compileCodeMaterial(source(`return [group({motionBlur:{}},[${rect}])];`)), context))[0].motionSamples).toBeUndefined()
     expect(() => compileCodeMaterial(source(body).replace('apiVersion:2', 'apiVersion:1'))).toThrow('apiVersion:2')
-    expect(() => compileCodeMaterial(source(body).replace('apiVersion:2', 'apiVersion:3'))).toThrow('apiVersion')
+    expect(() => compileCodeMaterial(source(body).replace('apiVersion:2', 'apiVersion:4'))).toThrow('apiVersion')
     for (const config of [{ shutter: 721 }, { phase: 720, shutter: 1 }, { maxSamples: 0 }, { maxSamples: 1.5 }, { enabled: 'yes' }, { unknown: 1 }]) expect(() => codeMotionSettings(config)).toThrow()
   })
   it('子时刻沿精确源曲线读取；微秒余数可比持久关键帧更细，但落盘schema仍拒绝超范围余数', () => {
