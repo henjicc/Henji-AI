@@ -1,3 +1,4 @@
+import type { TextStyle } from './vectorContent/text'
 export type CodeColor = [number, number, number, number]
 export type CodeImageReference = { kind: 'image'; mediaId: string; time?: never } | { kind: 'video'; mediaId: string; time?: number } | { kind: 'sequence'; mediaId: 'below'; time?: never }
 export interface CodeAudioReference { kind: 'audio'; mediaId: string }
@@ -8,10 +9,10 @@ export type CodeRange = [number, number]
 export type CodeEasing = string | CodeColor
 export type CodeBasicParameterValue = number | boolean | string | CodeColor | CodeRange | CodePoint | CodeGrade | CodeGradientStop[] | CodePoint[]
 export type CodeParameterObject = Record<string, CodeBasicParameterValue>
-export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeImageReference | CodeAudioReference | null
+export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | TextStyle | CodeImageReference | CodeAudioReference | null
 export type CodeParameterValues = Record<string, CodeParameterValue>
 export interface CodeParameterVisibility { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
-interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
+interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; layer?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
 export type CodeBasicParameterDeclaration = ParameterBase & (
   | { type: 'number'; default: number; min: number; max: number; step: number; unit: string; control?: 'slider' | 'knob' | 'input' }
   | { type: 'angle'; default: number; min: number; max: number }
@@ -33,5 +34,6 @@ export interface CodeParameterTypeDefinition { title: string; layout: 'stack' | 
 export type CodeParameterDeclaration = CodeBasicParameterDeclaration | (ParameterBase & (
   | { type: 'image'; default: null; animatable: false }
   | { type: 'audio'; default: null; animatable: false }
+  | { type: 'textStyle'; default: TextStyle }
   | { type: 'custom'; typeName: string; default: CodeParameterObject; fields: Record<string, CodeBasicParameterDeclaration> }
 ))

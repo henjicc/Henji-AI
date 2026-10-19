@@ -1,6 +1,7 @@
 import { CODE_PARAMETER_TYPES, CodeMaterialError, assertCodeMaterialKey, codeColor, finiteCodeNumber } from './contract'
 import type { CodeBasicParameterDeclaration, CodeBasicParameterValue, CodeParameterDeclaration, CodeParameterObject, CodeParameterTypeDefinition, CodeParameterValue, CodeParameterVisibility, CodePoint, CodeValueType } from './contract'
 import { CODE_EASE_NAMES } from './motion'
+import { textStyleSchema } from '../../imaging/vectorContent/text'
 
 function fail(label: string, expected: string): never { throw new CodeMaterialError('PARAMETERS', `${label} 期望${expected}。`) }
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -32,25 +33,27 @@ function point(value: unknown, label: string): CodePoint {
 }
 const extras: Record<string, string[]> = {
   number: ['min', 'max', 'step', 'unit', 'control'], angle: ['min', 'max'], point: ['space', 'min', 'max'], range: ['min', 'max', 'step', 'unit'], color: ['alpha'],
-  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], font: [], image: [], audio: [], easing: [], seed: [],
+  gradient: ['maxStops'], curve: ['kind'], grade: [], choice: ['options', 'control'], boolean: [], text: ['maxLength', 'multiline'], textStyle: [], font: [], image: [], audio: [], easing: [], seed: [],
 }
 function declaration(key: string, raw: unknown, types: Record<string, CodeParameterTypeDefinition>, field = false): CodeParameterDeclaration {
   assertCodeMaterialKey(key)
   const item = object(raw, key); const type = text(item.type, `${key}.type`, 64)
   const custom = Object.prototype.hasOwnProperty.call(types, type) ? types[type] : undefined
   if (!Object.prototype.hasOwnProperty.call(extras, type) && !custom) fail(`${key}.type`, `基础类型或已声明自定义类型（${[...CODE_PARAMETER_TYPES, ...Object.keys(types)].join('、')}）`)
-  if (field && (type === 'image' || type === 'audio' || custom)) fail(`${key}.type`, '除 image 外的基础类型，不允许嵌套自定义类型')
-  fields(item, ['type', 'title', 'description', 'tooltip', 'default', 'animatable', ...(field ? [] : ['group', 'advanced', 'visibleWhen']), ...(extras[type] ?? [])], key)
+  if (field && (type === 'image' || type === 'audio' || type === 'textStyle' || custom)) fail(`${key}.type`, '基础参数类型，不允许媒体、文字样式或嵌套自定义类型')
+  fields(item, ['type', 'title', 'description', 'tooltip', 'default', 'animatable', ...(field ? [] : ['group', 'layer', 'advanced', 'visibleWhen']), ...(extras[type] ?? [])], key)
   const base = { key, title: text(item.title, `${key}.title`, 80), description: text(item.description ?? '', `${key}.description`, 1000, true), animatable: bool(item.animatable ?? false, `${key}.animatable`),
     ...(item.tooltip === undefined ? {} : { tooltip: text(item.tooltip, `${key}.tooltip`, 200, true) }),
+    ...(item.layer === undefined ? {} : { layer: text(item.layer, `${key}.layer`, Number.MAX_SAFE_INTEGER) }),
     ...(field ? {} : { advanced: bool(item.advanced ?? false, `${key}.advanced`), ...(item.group === undefined ? {} : { group: text(item.group, `${key}.group`, 40) }) }) }
   let result: CodeParameterDeclaration
   if (custom) {
     const partial = object(item.default, `${key}.default`); fields(partial, Object.keys(custom.fields), `${key}.default`)
     const defaults: CodeParameterObject = Object.fromEntries(Object.entries(custom.fields).map(([name, field]) => [name, validateCodeMaterialV3ParameterValue(field, Object.prototype.hasOwnProperty.call(partial, name) ? partial[name] : field.default) as CodeBasicParameterValue]))
     result = { ...base, type: 'custom', typeName: type, fields: custom.fields, default: defaults }
-  } else if (type === 'number' || type === 'range') {
-    const min = number(item.min, `${key}.min`, -1e9, 1e9); const max = number(item.max, `${key}.max`, min, 1e9); const step = number(item.step, `${key}.step`, Number.MIN_VALUE, 1e9)
+  } else if (type === 'textStyle') result = { ...base, type, default: textStyleSchema.parse(item.default) }
+  else if (type === 'number' || type === 'range') {
+    const min = finiteCodeNumber(item.min, `${key}.min`); const max = number(item.max, `${key}.max`, min, Number.MAX_VALUE); const step = number(item.step, `${key}.step`, Number.MIN_VALUE, Number.MAX_VALUE)
     const bounds = { min, max, step, unit: text(item.unit ?? '', `${key}.unit`, 32, true) }
     result = type === 'number' ? { ...base, type, ...bounds, default: finiteCodeNumber(item.default, `${key}.default`), ...(item.control === undefined ? {} : { control: enumValue(item.control, ['slider', 'knob', 'input'] as const, `${key}.control`) }) }
       : { ...base, type, ...bounds, default: item.default as [number, number] }
@@ -127,6 +130,7 @@ export function parseCodeMaterialV3Parameters(raw: unknown, types: Record<string
 export function validateCodeMaterialV3ParameterValue(declaration: CodeParameterDeclaration, value: unknown): CodeParameterValue {
   const key = declaration.key
   switch (declaration.type) {
+    case 'textStyle': return textStyleSchema.parse(value)
     case 'number': case 'angle': return number(value, key, declaration.min, declaration.max)
     case 'seed': return number(value, key, 0, 4294967295, true)
     case 'point': { const v = point(value, key); number(v.x, `${key}.x`, declaration.min.x, declaration.max.x); number(v.y, `${key}.y`, declaration.min.y, declaration.max.y); return v }
@@ -169,7 +173,7 @@ export function validateCodeMaterialV3ParameterValue(declaration: CodeParameterD
 export function codeParameterValueType(parameter: CodeParameterDeclaration): CodeValueType {
   if (['number', 'angle', 'seed'].includes(parameter.type)) return 'number'
   if (['choice', 'text', 'font'].includes(parameter.type)) return 'string'
-  if (['point', 'grade', 'custom'].includes(parameter.type)) return 'object'
+  if (['point', 'grade', 'custom', 'textStyle'].includes(parameter.type)) return 'object'
   if (['range', 'gradient', 'curve'].includes(parameter.type)) return 'array'
   if (parameter.type === 'easing') return typeof parameter.default === 'string' ? 'string' : 'array'
   return parameter.type as 'boolean' | 'color' | 'image' | 'audio'

@@ -19,6 +19,9 @@ import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import type { CodeColor, CodeGrade, CodeGradientStop, CodeParameterObject, CodeParameterValue, CodePoint, CodeRange } from '@/core/imaging/parameterTypes'
 import { PARAM_EASE_NAMES as CODE_EASE_NAMES } from '@/core/imaging/easing'
 import { hexColor, type ParamFieldSpec } from './fieldSpec'
+import { TypographyPanel } from '@/components/typography/TypographyPanel'
+import type { TextStyle } from '@/core/imaging/vectorContent/text'
+import { UiError } from '../states'
 
 export interface ParamGesture {
   begin: () => void
@@ -33,7 +36,16 @@ export interface ParamFontOptions {
   projectFonts: React.ComponentProps<typeof UiFontPicker>['projectFonts']
   onPreview: (name: string | null, path?: readonly string[]) => void
 }
-export interface ParamFieldProps { field: ParamFieldSpec; value: CodeParameterValue; gesture: ParamGesture; label?: string; font?: ParamFontOptions; image?: ReactNode; resource?: ReactNode; disabled?: boolean }
+export interface ParamFieldProps { field: ParamFieldSpec; value: CodeParameterValue; gesture: ParamGesture; label?: string; font?: ParamFontOptions; image?: ReactNode; resource?: ReactNode; disabled?: boolean; onError?: (error: unknown) => void }
+
+function TextStyleField({ value, gesture, font, onError }: ParamFieldProps): React.ReactElement {
+  const [error, setError] = useState<string>()
+  return <><TypographyPanel style={value as TextStyle} fields="author-text" projectFonts={font?.projectFonts}
+    onChange={next => { setError(undefined); if (gesture.active()) gesture.write(next); else gesture.atomic(next) }}
+    onBegin={gesture.begin} onEnd={commit => commit ? gesture.finish() : gesture.cancel()}
+    onFontPreview={name => font?.onPreview(name, ['fontFamily'])}
+    onError={reason => { setError(reason instanceof Error ? reason.message : String(reason)); onError?.(reason) }} />{error && <UiError message={error} />}</>
+}
 
 function Numeric({ value, min, max, step = 1, label, gesture, unit }: { value: number; min?: number; max?: number; step?: number; label: string; gesture: ParamGesture; unit?: string }) {
   const touched = useRef(false)
@@ -101,7 +113,7 @@ function Custom({ field, value, gesture, font }: ParamFieldProps & { field: Para
 }
 
 /** A single controlled renderer for instance and keyframe values, from either source. */
-export const ParamField = memo(function ParamField({ field, value, gesture, label = field.title, font, image, resource, disabled }: ParamFieldProps): React.ReactElement {
+export const ParamField = memo(function ParamField({ field, value, gesture, label = field.title, font, image, resource, disabled, onError }: ParamFieldProps): React.ReactElement {
   const [cancelEpoch, setCancelEpoch] = useState(0)
   const cancel = (): void => { gesture.cancel(); setCancelEpoch(epoch => epoch + 1) }
   const shared = { 'aria-label': label, size: 'sm' as const, onBegin: gesture.begin, onFinish: gesture.finish, onCancel: cancel }
@@ -124,6 +136,7 @@ export const ParamField = memo(function ParamField({ field, value, gesture, labe
     case 'choice': control = field.control === 'segmented' ? <UiSegmented ariaLabel={label} size="sm" value={value as string} onChange={gesture.atomic} options={field.options.map(option => ({ value: option, label: field.optionLabels?.[option] ?? option }))} /> : <Dropdown size="sm" ariaLabel={label} value={value as string} options={field.options.map(option => ({ label: field.optionLabels?.[option] ?? option, value: option }))} onSelect={gesture.atomic} />; break
     case 'text': control = <UiTextArea aria-label={label} rows={field.multiline ? 3 : 2} maxLength={field.maxLength} value={value as string} onChange={event => gesture.write(event.target.value)} textHistory={{ onValueChange: gesture.write, onEditStart: gesture.begin, onEditEnd: gesture.finish }} />; break
     case 'font': control = <UiFontPicker ariaLabel={label} value={value as string} projectFonts={font?.projectFonts} onPreview={face => font?.onPreview(face?.fullName ?? null)} onSelect={gesture.atomic} />; break
+    case 'textStyle': control = <TextStyleField field={field} value={value} gesture={gesture} font={font} onError={onError} />; break
     case 'audio': case 'image': control = image; break
     case 'custom': control = <Custom field={field} value={value} gesture={gesture} font={font} />; break
     case 'lut': control = resource ?? <span className="text-xs text-text3">在 全能调色面板选择</span>; break

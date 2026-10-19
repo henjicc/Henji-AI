@@ -36,14 +36,14 @@ import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
 import { BLACK_HEX, DEFAULT_THEME_COLOR_SCHEME_HEX, RECORDING_FRAME_SOLID_DEFAULT_HEX, SETTINGS_ACCENT_HEX } from '../src/core/theme/colorTokens'
 
 const timestamp = '2026-10-09T00:00:00.000Z'
-const source = "export default {apiVersion:3,languageVersion:3,name:\"黄金代码\",kind:\"generator\",mode:\"dynamic\",width:1920,height:1080,durationSeconds:4,seed:1,parameters:{label:{type:\"text\",title:\"标题\",default:\"黄金样本\",maxLength:200},size:{type:\"number\",title:\"字号\",default:24,min:1,max:72,step:1,unit:\"px\"}},render(ctx){return [group({id:\"golden-motion\",x:ctx.time*10,blurShape:\"lens\",blur:8,motionBlur:{shutter:180,maxSamples:16}},[rect({id:\"golden-box\",x:0,y:0,width:100,height:100,fill:[0,0,0,1]})])];}}\n"
+const source = "export default {apiVersion:3,languageVersion:3,name:\"黄金代码\",kind:\"generator\",mode:\"dynamic\",width:1920,height:1080,durationSeconds:4,seed:1,parameters:{titleStyle:{type:\"textStyle\",title:\"文字样式\",layer:\"golden-motion\",default:{fontFamily:\"sans-serif\",fontSize:64}},label:{type:\"text\",title:\"标题\",default:\"黄金样本\",maxLength:200},size:{type:\"number\",title:\"字号\",default:24,min:1,max:72,step:1,unit:\"px\"}},render(ctx){return [group({id:\"golden-motion\",x:ctx.time*10,blurShape:\"lens\",blur:8,motionBlur:{shutter:180,maxSamples:16}},[rect({id:\"golden-box\",x:0,y:0,width:100,height:100,fill:[0,0,0,1]})])];}}\n"
 const program = compileCodeMaterial(source)
 const hash = createHash('sha256').update(source).digest('hex')
 const sourceVersion = { apiVersion: 3 as const, languageVersion: 3 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: '/persistence-project/代码/标题/v1/main.ts', hash }], imports: [] }
 const document = createVideoEditDocument('持久格式黄金样本')
 document.id = 'golden-video'
 document.codeMaterials = [{ id: 'code-definition', name: '代码标题', defaultVersionId: 'code-version', versions: [{ id: 'code-version', ...sourceVersion }] }]
-document.items.push({ id: 'code-item', name: '代码标题', kind: 'code', code: { definitionId: 'code-definition', versionId: 'code-version', parameters: { label: '黄金样本', size: 24 }, curves: { size: [{ id: 'source-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 24, interpolation: 'linear' }] } } })
+document.items.push({ id: 'code-item', name: '代码标题', kind: 'code', code: { definitionId: 'code-definition', versionId: 'code-version', parameters: { label: '黄金样本', size: 24, titleStyle: videoEditTextStyleSchema.parse({ fontSize: 64 }) }, curves: { size: [{ id: 'source-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 24, interpolation: 'linear' }] } } })
 const sequence = createVideoEditSequence()
 sequence.id = 'golden-sequence'
 document.sequences.push(sequence)

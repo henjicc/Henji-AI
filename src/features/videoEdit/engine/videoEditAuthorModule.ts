@@ -37,6 +37,7 @@ export interface AuthorModule {
   name: string
   kind?: 'generator' | 'filter'
   params?: ReadonlyArray<{ key: string; type: string; default?: unknown; layer?: string; group?: string; [key: string]: unknown }>
+  types?: Readonly<Record<string, unknown>>
   motionBlur?: { shutter?: number; phase?: number; maxSamples?: number }
   draw?(ctx: OffscreenCanvasRenderingContext2D, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void
   layers?(params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): AuthorLayer[]

@@ -6,6 +6,7 @@ import { videoEditSubtitleStyleSchema } from './subtitleStyle'
 import { collectVideoEditFonts, missingVideoEditFonts } from './fonts'
 import { GENERIC_FONT_FACES } from '../fonts/catalog'
 import { compileCodeMaterial } from './codeMaterial/compiler'
+import { textStyleSchema } from '../imaging/vectorContent/text'
 
 it('任意字体名贯通文字、图形标题、字幕和嵌套序列；缺字体说明引用片段和回退', () => {
   const document = createVideoEditDocument('字体工程'); const sequence = createVideoEditSequence()
@@ -38,4 +39,13 @@ it('v3字体参数及自定义组件字体字段的默认、实例和关键帧�
   const uses = collectVideoEditFonts(document, () => program)
   expect(uses.map(use => use.font)).toEqual(['Missing Font', 'Missing Default', 'Missing Keyframe'])
   expect(missingVideoEditFonts(uses, []).map(use => use.font)).toEqual(['Missing Font', 'Missing Default', 'Missing Keyframe'])
+})
+
+it('文字样式参数的默认值、实例及关键帧字体进入共享缺失检测', () => {
+  const program = compileCodeMaterial('export default {apiVersion:1,languageVersion:3,name:"文字",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,parameters:{style:{type:"textStyle",title:"样式",default:{fontFamily:"Style Default"},animatable:true}},render(ctx){return [];}}')
+  const document = createVideoEditDocument('样式字体')
+  document.items.push({ id: 'item', kind: 'code', name: '文字', code: { definitionId: 'd', versionId: 'v', parameters: {}, curves: { style: [{ id: 'key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: textStyleSchema.parse({ fontFamily: 'Style Keyframe' }), interpolation: 'hold' }] } } })
+  expect(collectVideoEditFonts(document, () => program).map(use => use.font)).toEqual(['Style Default', 'Style Keyframe'])
+  document.items[0].code!.parameters.style = textStyleSchema.parse({ fontFamily: 'Style Instance' })
+  expect(collectVideoEditFonts(document, () => program).map(use => use.font)).toEqual(['Style Instance', 'Style Keyframe'])
 })

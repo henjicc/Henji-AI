@@ -1,7 +1,12 @@
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { AlignCenter, AlignLeft, AlignRight, AlignJustify, Bold, Italic, CaseUpper, CaseSensitive, Superscript, Subscript, Underline, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, Pipette, Plus, Trash2, Wrench } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiError, UiCheckbox, UiColorInput, UiFontPicker, UiFormRow, UiGroup, UiIconButton, UiRangeInput } from '@/components/ui'
+import Dropdown from '@/components/ui/Dropdown'
+import PanelTrigger from '@/components/ui/PanelTrigger'
+import { UiButton, UiCheckbox, UiColorInput, UiIconButton, UiRangeInput } from '@/components/ui/primitives'
+import { UiError } from '@/components/ui/states'
+import { UiFontPicker } from '@/components/ui/UiFontPicker'
+import { UiFormRow, UiGroup } from '@/components/ui/layout'
 import NumberInput from '@/components/ui/NumberInput'
 import { defaultTextStyle, textStyleSchema, type TextStyle } from '@/core/imaging/vectorContent/text'
 import { BLACK_HEX } from '@/core/theme/colorTokens'
@@ -19,7 +24,7 @@ export interface TypographyPanelProps {
   fontLabel?: string
   transform?: ReactNode
   footer?: ReactNode
-  fields?: 'all' | 'rich-text' | 'code-element' | 'appearance'
+  fields?: 'all' | 'rich-text' | 'code-element' | 'author-text' | 'appearance'
 }
 /** All four hosts edit this schema; placement is supplied only by hosts that support it. */
 export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFontPreview, projectFonts, fontLabel = '文字字体', transform, footer, fields = 'all' }: TypographyPanelProps): React.ReactElement {
@@ -51,15 +56,23 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
   const faces = library.faces.filter(face => face.family === currentFont?.family && !face.id.startsWith('generic:'))
   const selectedFace = faces.find(face => face.fullName === style.fontFamily) ?? faces.find(face => face.weight === style.fontWeight && face.italic === (style.fontStyle !== 'normal')) ?? currentFont
   const fontPicker = <UiFontPicker size="sm" ariaLabel={fontLabel} value={style.fontFamily} projectFonts={projectFonts} onPreview={face => onFontPreview?.(face?.fullName ?? null)} onSelect={fontFamily => { onEnd?.(false); write({ fontFamily, fontWeight: 400, fontStyle: 'normal' }) }} />
+  const strokeControls = <UiGroup title="描边" titleTone="compact" actions={<UiIconButton size="xs" aria-label="添加描边" onClick={() => write({ strokes: [...style.strokes, { enabled: true, color: BLACK_HEX, width: 2, position: 'outside' }] })}><Plus  /></UiIconButton>}>
+        {style.strokes.map((stroke, index) => <div key={index} className="flex flex-col gap-2">
+          {row(t('surfaceGrammar.strokeColor'), <div className="flex items-center justify-end gap-2"><UiCheckbox aria-label={`启用描边${index + 1}`} checked={stroke.enabled} onCheckedChange={enabled => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, enabled } : entry) })} />{color(`描边${index + 1}颜色`, stroke.color, value => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, color: value } : entry) }))}<UiIconButton size="xs" tone="danger" aria-label={`删除描边${index + 1}`} onClick={() => write({ strokes: style.strokes.filter((_, i) => i !== index) })}><Trash2  /></UiIconButton></div>)}
+          {row(t('surfaceGrammar.strokeWidth'), number(`描边${index + 1}宽度`, stroke.width, width => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, width } : entry) })))}
+          {row(t('surfaceGrammar.strokePosition'), <Dropdown size="sm" ariaLabel={`描边${index + 1}位置`} value={stroke.position} options={[{ value: 'outside', label: '外侧' }, { value: 'inside', label: '内侧' }, { value: 'center', label: '居中' }]} onSelect={position => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, position } : entry) })} />)}
+        </div>)}
+      </UiGroup>
   // The v3 author model exposes this finite subset. Do not offer controls that the command stream cannot store.
-  if (fields === 'code-element') return <UiGroup title="文字" titleTone="compact" labelWidth={120}>
+  if (fields === 'code-element' || fields === 'author-text') return <UiGroup title="文字" titleTone="compact" labelWidth={120}>
     {row('字体', fontPicker)}
     {row('字重', number('文字字重', style.fontWeight, fontWeight => write({ fontWeight }), 1, 1000))}
-    {row('字号', number('文字字号', style.fontSize, fontSize => write({ fontSize }), 1, 1024))}
+    {row('字号', number('文字字号', style.fontSize, fontSize => write({ fontSize }), 1, fields === 'code-element' ? 1024 : undefined))}
     {row('颜色', color('文字填充颜色', style.fill.color, value => write({ fill: { ...style.fill, color: value } })))}
     {row('字距', number('字距', style.tracking, tracking => write({ tracking }), -1000, 10000))}
-    {row('行距', number('行距', style.leading, leading => write({ leading }), 1))}
-    {style.strokes.length > 0 && row('描边颜色', color('文字描边颜色', style.strokes[0].color, color => write({ strokes: [{ ...style.strokes[0], color }] })))}
+    {row('行距', number('行距', style.leading, leading => write({ leading }), fields === 'code-element' ? 1 : 0))}
+    {fields === 'author-text' && row('启用填充', <UiCheckbox aria-label="启用填充" checked={style.fill.enabled} onCheckedChange={enabled => write({ fill: { ...style.fill, enabled } })} />)}
+    {fields === 'author-text' ? strokeControls : style.strokes.length > 0 && row('描边颜色', color('文字描边颜色', style.strokes[0].color, color => write({ strokes: [{ ...style.strokes[0], color }] })))}
   </UiGroup>
   return <UiGroup labelWidth={120} className="min-w-0" gap="stack" data-typography>
     {fields !== 'appearance' && !library.loading && !currentFont && <UiError message={`字体“${style.fontFamily}”不可用。请选择已安装字体或导入原字体；作品保留原字体名称。`} /> }
@@ -84,13 +97,7 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
     </UiGroup>}
     <UiGroup title="外观" titleTone="compact" divided>
       {row('填充', <span className="flex items-center gap-2"><UiCheckbox aria-label="启用填充" checked={style.fill.enabled} onCheckedChange={enabled => write({ fill: { ...style.fill, enabled } })} />{color('文字填充颜色', style.fill.color, value => write({ fill: { ...style.fill, color: value } }))}</span>)}
-      <UiGroup title="描边" titleTone="compact" actions={<UiIconButton size="xs" aria-label="添加描边" onClick={() => write({ strokes: [...style.strokes, { enabled: true, color: BLACK_HEX, width: 2, position: 'outside' }] })}><Plus  /></UiIconButton>}>
-        {style.strokes.map((stroke, index) => <div key={index} className="flex flex-col gap-2">
-          {row(t('surfaceGrammar.strokeColor'), <div className="flex items-center justify-end gap-2"><UiCheckbox aria-label={`启用描边${index + 1}`} checked={stroke.enabled} onCheckedChange={enabled => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, enabled } : entry) })} />{color(`描边${index + 1}颜色`, stroke.color, value => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, color: value } : entry) }))}<UiIconButton size="xs" tone="danger" aria-label={`删除描边${index + 1}`} onClick={() => write({ strokes: style.strokes.filter((_, i) => i !== index) })}><Trash2  /></UiIconButton></div>)}
-          {row(t('surfaceGrammar.strokeWidth'), number(`描边${index + 1}宽度`, stroke.width, width => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, width } : entry) })))}
-          {row(t('surfaceGrammar.strokePosition'), <Dropdown size="sm" ariaLabel={`描边${index + 1}位置`} value={stroke.position} options={[{ value: 'outside', label: '外侧' }, { value: 'inside', label: '内侧' }, { value: 'center', label: '居中' }]} onSelect={position => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, position } : entry) })} />)}
-        </div>)}
-      </UiGroup>
+      {strokeControls}
       {fields !== 'appearance' && row('背景', <span className="flex items-center gap-2"><UiCheckbox aria-label="启用背景" checked={style.background.enabled} onCheckedChange={enabled => write({ background: { ...style.background, enabled } })} />{color('背景颜色', style.background.color, value => write({ background: { ...style.background, color: value } }))}</span>)}
       {fields !== 'appearance' && style.background.enabled && <>{row('背景不透明度（%）', number('背景不透明度百分比', style.background.opacity * 100, value => write({ background: { ...style.background, opacity: value / 100 } }), 0, 100))}{row('背景大小', number('背景内边距', style.background.padding, padding => write({ background: { ...style.background, padding } })))}{row('背景圆角', number('背景圆角', style.background.radius, radius => write({ background: { ...style.background, radius } })))}</>}
       <UiGroup title="阴影" titleTone="compact" actions={<UiIconButton size="xs" aria-label="添加阴影" onClick={() => write({ shadows: [...style.shadows, { enabled: true, color: BLACK_HEX, opacity: .7, angle: 45, distance: 4, size: 0, blur: 4 }] })}><Plus  /></UiIconButton>}>

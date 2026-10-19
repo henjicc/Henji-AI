@@ -1,0 +1,292 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "kind": "screen_recording",
+  "kindVersion": 17,
+  "id": "golden-screen_recording",
+  "name": "录制",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "directorRun": {
+      "takes": [
+        {
+          "stepId": "step",
+          "identity": "golden",
+          "path": "/persistence-project/素材/voice.wav",
+          "durationUs": 1000000
+        }
+      ],
+      "redubs": [
+        {
+          "clipId": "clip",
+          "documentId": "video",
+          "identity": "redub",
+          "taskId": "task"
+        }
+      ]
+    },
+    "sessionId": "00000000-0000-4000-8000-000000000005",
+    "originUs": 1000000,
+    "startUs": 3000000,
+    "endUs": 13000000,
+    "pauses": [
+      {
+        "startUs": 6000000,
+        "endUs": 7000000
+      }
+    ],
+    "status": "stopped",
+    "source": {
+      "name": "合成显示器",
+      "options": {
+        "sourceId": "screen:1:0",
+        "backend": "auto",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "bitrate": 12000000
+      },
+      "cursorEmbedded": false,
+      "cursor": {
+        "size": 1.4,
+        "style": "light"
+      }
+    },
+    "devices": {
+      "systemAudio": false
+    },
+    "media": [
+      {
+        "id": "screen-0",
+        "kind": "screen",
+        "path": "/persistence-project/素材/screen.mp4",
+        "monoUs": 3000000,
+        "durationUs": 10000000
+      }
+    ],
+    "tracks": null,
+    "eventPages": [
+      {
+        "path": "/persistence-project/素材/0000000000000000-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.capture.json",
+        "firstSequence": 0,
+        "lastSequence": 2
+      }
+    ],
+    "markers": [
+      {
+        "id": "golden-mark",
+        "monoUs": 4000000,
+        "note": "重点"
+      }
+    ],
+    "understanding": {
+      "director": {
+        "goal": "演示编辑器",
+        "narration": [
+          {
+            "stepId": "step",
+            "text": "打开编辑器",
+            "picture": "剪辑工作区"
+          }
+        ],
+        "voice": {
+          "modelId": "golden-tts",
+          "options": {
+            "voice_id": "speaker"
+          }
+        },
+        "confirmed": true
+      },
+      "operationScript": {
+        "steps": [
+          {
+            "id": "step",
+            "title": "打开编辑器",
+            "startUs": 3000000,
+            "endUs": 13000000,
+            "operations": [
+              {
+                "target": {
+                  "kind": "video_edit.sequence",
+                  "id": "golden-replay:golden-replay-sequence"
+                },
+                "properties": {
+                  "video_edit.sequence.name": "演示序列"
+                }
+              }
+            ],
+            "narrationIds": [
+              "word"
+            ],
+            "wait": {
+              "kind": "capability_completed",
+              "settleMs": 700
+            },
+            "blockedReason": null
+          }
+        ]
+      },
+      "privacy": {
+        "candidates": [
+          {
+            "id": "privacy",
+            "mediaId": "screen-0",
+            "kind": "email",
+            "hint": "••••",
+            "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "startUs": 3000000,
+            "endUs": 5000000,
+            "status": "accepted",
+            "samples": [
+              {
+                "monoUs": 3000000,
+                "box": [
+                  0.1,
+                  0.2,
+                  0.4,
+                  0.1
+                ],
+                "confidence": 0.99
+              },
+              {
+                "monoUs": 4000000,
+                "box": [
+                  0.1,
+                  0.3,
+                  0.4,
+                  0.1
+                ],
+                "confidence": 0.98
+              }
+            ]
+          }
+        ],
+        "warnings": []
+      },
+      "transcript": [
+        {
+          "id": "word",
+          "startUs": 3000000,
+          "endUs": 4000000,
+          "text": "打开编辑器",
+          "granularity": "word",
+          "audioDocumentId": "audio",
+          "mediaId": "mic",
+          "protected": false
+        }
+      ],
+      "steps": [
+        {
+          "id": "step",
+          "startUs": 3000000,
+          "endUs": 13000000,
+          "title": "打开编辑器",
+          "description": "进入编辑器",
+          "signal": "capability",
+          "eventIds": [
+            "event"
+          ]
+        }
+      ],
+      "candidates": [
+        {
+          "id": "wait",
+          "startUs": 5000000,
+          "endUs": 9000000,
+          "kind": "wait",
+          "reason": "画面静止、无输入、无旁白",
+          "status": "pending",
+          "eventIds": []
+        }
+      ],
+      "chapters": [
+        {
+          "id": "chapter",
+          "title": "编辑",
+          "stepIds": [
+            "step"
+          ]
+        }
+      ],
+      "warnings": []
+    },
+    "scriptCapture": {
+      "baselines": [
+        {
+          "documentId": "golden-replay",
+          "content": {
+            "format": "henji-video-project",
+            "version": 8,
+            "id": "golden-replay",
+            "name": "重放起点",
+            "revision": 0,
+            "media": [],
+            "bins": [],
+            "items": [],
+            "sequences": [
+              {
+                "id": "golden-replay-sequence",
+                "name": "原始序列",
+                "width": 1920,
+                "height": 1080,
+                "frameRate": {
+                  "numerator": 30,
+                  "denominator": 1
+                },
+                "pixelAspectRatio": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "sampleRate": 48000,
+                "channels": 2,
+                "tracks": [
+                  {
+                    "id": "bcbd90d3-9f1a-4b5d-8dbe-f2c378b83b61",
+                    "name": "音频 1",
+                    "index": 0,
+                    "kind": "audio",
+                    "locked": false,
+                    "enabled": true,
+                    "muted": false,
+                    "solo": false
+                  },
+                  {
+                    "id": "02948079-6303-49e8-a3eb-08a8cc46a94b",
+                    "name": "视频 1",
+                    "index": 1,
+                    "kind": "video",
+                    "locked": false,
+                    "enabled": true,
+                    "muted": false,
+                    "solo": false
+                  }
+                ],
+                "clips": [],
+                "annotations": []
+              }
+            ]
+          }
+        }
+      ],
+      "calls": [
+        {
+          "callId": "00000000-0000-4000-8000-000000000006",
+          "operations": [
+            {
+              "target": {
+                "kind": "video_edit.sequence",
+                "id": "golden-replay:golden-replay-sequence"
+              },
+              "properties": {
+                "video_edit.sequence.name": "演示序列"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "compositions": []
+  }
+}

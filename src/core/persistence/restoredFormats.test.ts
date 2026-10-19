@@ -13,13 +13,17 @@ function fixture(id: string, version: number): string {
 }
 
 describe('同源 dev-break 的无损恢复', () => {
-  it.each([1, 2])('标题模板 v%s 保留内容，先备份后迁移且能再次保存', version => {
+  it.each([1, 2])('标题模板 v%s 历史迁移保留内容，当前版本明确拒绝且不写原文件', version => {
     const text = fixture('title-templates', version)
     const raw = JSON.parse(text) as { content: unknown }
     const key = 'video-edit-title-templates'
     const values = new Map([[key, text]])
     const storage = { getItem: (name: string) => values.get(name) ?? null, setItem: (name: string, value: string) => { values.set(name, value) } }
-    const contract = PERSISTENCE_FORMATS.find(format => format.id === 'title-templates')!
+    const current = PERSISTENCE_FORMATS.find(format => format.id === 'title-templates')!
+    expect(() => readLocalPersistenceJson(text, key, current, storage)).toThrowError(expect.objectContaining({ code: 'unsupported-version' }))
+    expect([...values]).toEqual([[key, text]])
+    // Preserve evidence for the historical migration without promising support in the current format.
+    const contract = { ...current, version: 4 }
     const upgraded = readLocalPersistenceJson(text, key, contract, storage)
     expect(upgraded).toEqual(raw.content)
     expect(storage.getItem(key)).toBe(text)

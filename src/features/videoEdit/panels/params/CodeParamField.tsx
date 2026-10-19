@@ -21,7 +21,7 @@ export function CodeParamField({ target, field, value, time, label, pointId, onE
     if (!restored) throw new Error('原字体参数已移除，请重新选择。')
     onWrite({ ...(restored as CodeParameterObject), [path.current[0]]: name }, handle, time)
   })
-  const hasFont = field.type === 'font' || field.children?.some(child => child.type === 'font')
-  return <ParamField field={field} value={value} label={label} gesture={{ ...gesture, write: next => gesture.write((handle, at) => onWrite(next, handle, at)), atomic: next => gesture.atomic((handle, at) => onWrite(next, handle, at)) }}
+  const hasFont = field.type === 'font' || field.type === 'textStyle' || field.children?.some(child => child.type === 'font')
+  return <ParamField field={field} value={value} label={label} onError={onError} gesture={{ ...gesture, write: next => gesture.write((handle, at) => onWrite(next, handle, at)), atomic: next => gesture.atomic((handle, at) => onWrite(next, handle, at)) }}
     font={hasFont ? { projectFonts: collectVideoEditFonts(requireVideoEditInstance(target.projectId).document).map(use => use.font), onPreview: (name, childPath) => { path.current = childPath; preview(name) } } : undefined} />
 }

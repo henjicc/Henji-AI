@@ -113,9 +113,9 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 14,
-      "fingerprint": "57f457b7a93d9e300e07127d4b5fdbdba0b2768e2793fc11a53bba984b1b8fbe",
-      "supportedFrom": 14
+      "version": 15,
+      "fingerprint": "80b8f26996bebec3da9b726e716873363cfb0d64388aefc24695d099af333dae",
+      "supportedFrom": 15
     },
     "document.canvas": {
       "version": 1,
@@ -158,9 +158,9 @@
       "supportedFrom": 1
     },
     "code-asset": {
-      "version": 4,
-      "fingerprint": "735e47745cb17cf78ef96948332566cc6e56fa7cd3bec87536c65130cec16e29",
-      "supportedFrom": 4
+      "version": 5,
+      "fingerprint": "4dcc4b1e095e1e24661b102132f1c6c7c7a421826f4fc95665aed379d577f02b",
+      "supportedFrom": 5
     },
     "image-header": {
       "version": 1,
@@ -193,9 +193,9 @@
       "supportedFrom": 1
     },
     "title-templates": {
-      "version": 4,
-      "fingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
-      "supportedFrom": 1
+      "version": 5,
+      "fingerprint": "c265bc4b68a8d27ae147af11bdb91673efcf10267b8eb65d76a538ba337c3bb7",
+      "supportedFrom": 5
     },
     "text-presets": {
       "version": 1,
@@ -283,9 +283,9 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 8,
-      "fingerprint": "940e7d9b37100162c653a45dcaea5e66bc91e9900fb304d50a84604452ad478d",
-      "supportedFrom": 8
+      "version": 9,
+      "fingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
+      "supportedFrom": 9
     },
     "storyboard-metadata": {
       "version": 1,
@@ -303,9 +303,9 @@
       "supportedFrom": 1
     },
     "creative-intent-candidate": {
-      "version": 2,
-      "fingerprint": "a902a12e001aaff8d583069fa423c75ab121f299338822d787f0632962600f87",
-      "supportedFrom": 1
+      "version": 3,
+      "fingerprint": "9bcd34b1fb0cdd4fa7121bef291dd547ad50fa1c3f015c524c23e88683a0ea96",
+      "supportedFrom": 3
     },
     "image-layout-page": {
       "version": 1,
@@ -348,9 +348,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 16,
-      "fingerprint": "59286126b2663d2a88c685d80b5c7ef03b2582279f1a056ff8fefd552ae1e73d",
-      "supportedFrom": 16
+      "version": 17,
+      "fingerprint": "feef38c65530bb0ba66ca37553fd40ed9007f55f43b75337b24403c8618a51f9",
+      "supportedFrom": 17
     },
     "recording-setup": {
       "version": 1,
@@ -363,9 +363,9 @@
       "supportedFrom": 1
     },
     "video-preset-package": {
-      "version": 3,
-      "fingerprint": "98e1d776ad0d10523958e78a6f3446e91178567b6b269863547239dbf6eeca04",
-      "supportedFrom": 1
+      "version": 4,
+      "fingerprint": "5f20068998e2e3261e8142370fff6f81e9be816ad6cfe7b634edeb794d6f0b04",
+      "supportedFrom": 4
     }
   },
   "devBreaks": [
@@ -1711,6 +1711,69 @@
       "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
       "previousFingerprint": "819597f36bca79a55930143929097650c817d5524afebd886a2d6e191e216ff8",
       "fingerprint": "735e47745cb17cf78ef96948332566cc6e56fa7cd3bec87536c65130cec16e29",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:06:13.663Z",
+      "format": "creative-intent-candidate",
+      "version": 3,
+      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
+      "previousFingerprint": "a902a12e001aaff8d583069fa423c75ab121f299338822d787f0632962600f87",
+      "fingerprint": "9bcd34b1fb0cdd4fa7121bef291dd547ad50fa1c3f015c524c23e88683a0ea96",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:06:13.665Z",
+      "format": "document.video_edit",
+      "version": 15,
+      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
+      "previousFingerprint": "57f457b7a93d9e300e07127d4b5fdbdba0b2768e2793fc11a53bba984b1b8fbe",
+      "fingerprint": "80b8f26996bebec3da9b726e716873363cfb0d64388aefc24695d099af333dae",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:06:13.665Z",
+      "format": "document.screen_recording",
+      "version": 17,
+      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
+      "previousFingerprint": "59286126b2663d2a88c685d80b5c7ef03b2582279f1a056ff8fefd552ae1e73d",
+      "fingerprint": "feef38c65530bb0ba66ca37553fd40ed9007f55f43b75337b24403c8618a51f9",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:06:13.665Z",
+      "format": "code-asset",
+      "version": 5,
+      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
+      "previousFingerprint": "735e47745cb17cf78ef96948332566cc6e56fa7cd3bec87536c65130cec16e29",
+      "fingerprint": "4dcc4b1e095e1e24661b102132f1c6c7c7a421826f4fc95665aed379d577f02b",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:06:13.665Z",
+      "format": "title-templates",
+      "version": 5,
+      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
+      "previousFingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
+      "fingerprint": "c265bc4b68a8d27ae147af11bdb91673efcf10267b8eb65d76a538ba337c3bb7",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:06:13.665Z",
+      "format": "video-preset-package",
+      "version": 4,
+      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
+      "previousFingerprint": "98e1d776ad0d10523958e78a6f3446e91178567b6b269863547239dbf6eeca04",
+      "fingerprint": "5f20068998e2e3261e8142370fff6f81e9be816ad6cfe7b634edeb794d6f0b04",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-19T22:06:13.665Z",
+      "format": "subtitle-manifest",
+      "version": 9,
+      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
+      "previousFingerprint": "940e7d9b37100162c653a45dcaea5e66bc91e9900fb304d50a84604452ad478d",
+      "fingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
       "waivedFixtureVersions": []
     }
   ],
