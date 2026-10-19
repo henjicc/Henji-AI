@@ -101,7 +101,8 @@ async function readAllMedia(client, ref, { chunkBytes = 4096, maxChunks = 4096 }
   let totalBytes = 0
   // 刻意用远小于 256 KiB 的块，逼出 offset/eof 续读协议本身；一次读完证明不了分块。
   for (let guard = 0; guard < maxChunks; guard += 1) {
-    const chunk = (await callTool(client, 'read_application_media', { ref, offset, length: chunkBytes })).data
+    const chunk = (await callTool(client, 'read_application_media', { ref, mode: 'chunk', offset, length: chunkBytes })).data
+    assert.equal(typeof chunk.base64, 'string', 'read_application_media 字节模式必须返回 base64，图片附件不能替代分块字节。')
     mimeType = chunk.mimeType
     totalBytes = chunk.totalBytes
     const bytes = Buffer.from(chunk.base64, 'base64')
