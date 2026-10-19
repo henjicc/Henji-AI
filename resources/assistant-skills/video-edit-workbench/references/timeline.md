@@ -11,6 +11,12 @@
 
 ## 时间与关联
 
+按成片区间找来源用 `query_video_edit_source_map`，给 documentRef、sequenceRef、半开整数帧 from/to；mediums 选择 video/audio，limit 为1–50。每次放置各自保留 path，重复素材和嵌套不能合并为同一次使用。timeline 中声音边界可能是小数帧；source 为原素材微秒，不要混作序列帧。画面的 sampled_envelope 是取帧请求包络，高速跳过的源帧不算已显示；firstSample 也不是解码器核实的实际PTS。图片指向资产点0，生成内容只有生成时钟。
+
+默认只读结构。includeContent=true 才查本页来源内容，contentLimit 为1–5，contentKinds 默认已有文字/描述/章节；显式 pause/scene 才免费分析。content.records 中的 timelineRanges 已按这次放置投影，点事件的 fromFrame=toFrame；检查每条 record 的 sourceVerified、basis、precision。初次读不到文件时保留结构并给 content.error；组合交付前再次核实所有已读来源，中途改变则拒绝旧证据。证据每页按当前来源读取，content.nextCursor 属于原素材内容查询，续查时沿此项源范围和原内容条件；映射分页保持原筛选，剪辑改变或关闭重开后重新查询。
+
+结构候选不证明像素可见或实际可听；透明外框、遮罩、混合和代码效果不能据此判定下层完全被遮挡，用 `observe_video_edit_frame` 复核。映射不提供精剪selector，按词剪辑仍用 `query_video_edit_transcript`。范围超出单次计算预算时按错误给出的上限分段查询，不假称已返回全片。
+
 - `video_edit.clip.start` / `video_edit.clip.duration` 是序列帧；`video_edit.clip.source_in_us` 是源微秒。30 fps 的 3 秒对应第90帧，30000/1001 fps 则按有理数换算并落到实际整数帧；不要直接把秒传给 frame。
 - 读 `video_edit.track.locked` / `video_edit.track.sync_locked`、`video_edit.clip.link_id` / `video_edit.clip.group_id` 与 `video_edit.document.timeline_view`。linkedSelection 控制链接选择，不等于忽略编组；普通属性修改不会替你对所有关联片段写同一个值。
 - 标记用 `video_edit.marker` 通用集合，创建必填 `video_edit.marker.frame` 与 `video_edit.marker.name`；关联片段时可写 `video_edit.marker.clip_id`。一镜到底的段落用标记表达，不为套节拍表硬拆连续素材。

@@ -37,6 +37,7 @@ const successData: Record<string, Record<string, unknown>> = {
   get_video_edit_clip_pauses: { clipRef, source: 'words_and_energy', pauses: [{ startFrame: 30, endFrame: 42, durationMs: 200, kind: 'silence', cutFrame: 36 }], words: [{ text: '你好', startFrame: 0, endFrame: 30 }], cutCandidates: [{ boundary: 'end', targetFrame: 30, cutFrame: 36, retainedFromFrame: 32, retainedToFrame: 40 }], message },
   query_video_edit_transcript: { documentRef, sequenceRef, total: 1, nextCursor: null, matches: [{ matchId: 'query:match', text: '你好', before: '', after: '欢迎', from: 0, to: 30, source: 'asr', precision: 'word', editable: true, clipRef, sourceRange: { startUs: 0, endUs: 1000000 }, selector: { kind: 'match', matchId: 'query:match' } }], message },
   query_video_edit_content: { documentRef, itemRef: ref('video_edit.item', 'document:item'), clock: 'source_microseconds', sourceVerified: true, discovery: { scope: 'project', complete: true, scannedDocuments: 1, matchedDocuments: 1 }, records: [{ id: 'source:word', kind: 'transcript', text: '你好', textTruncated: false, ranges: [{ fromUs: 0, toUs: 1000000 }], rangeCount: 1, basis: 'saved', precision: 'word', originRef: sequenceRef, recordId: 'word', sourceVerified: true }], total: 1, nextCursor: null, warnings: [], message },
+  query_video_edit_source_map: { documentRef, sequenceRef, clock: 'sequence_frames', coverageBasis: 'timeline_structure', visibilityVerified: false, range: { fromFrame: 0, toFrame: 30 }, records: [{ id: 'audio:sequence/clip:0:30', medium: 'audio', kind: 'audio', timeline: { fromFrame: 0, toFrame: 30 }, path: [{ sequenceRef, clipRef, itemRef: ref('video_edit.item', 'document:item'), track: 0 }], sourceKind: 'media', mediaRef: ref('video_edit.media', 'document:media'), source: { fromUs: 1000000, toUs: 2000000, direction: 'forward', basis: 'continuous_audio' }, content: null }], total: 1, nextCursor: null, warnings: ['结构候选仍需观察复核。'], message },
   translate_video_edit_subtitles: { documentRef, captionRefs: [ref('video_edit.caption')], ...verified },
   segment_video_edit_subtitles: { documentRef, captionRefs: [ref('video_edit.caption')], createdCaptionRefs: [ref('video_edit.caption')], updatedCaptionRefs: [ref('video_edit.caption')], removedCaptionRefs: [], ...verified },
   observe_video_edit_frame: { byteLength: 26670, resultRef: assetRef, documentRef, target: { kind: 'program', sequenceRef, frame: 60 }, width: 1280, height: 720, sourceWidth: 1920, sourceHeight: 1080, documentRevision: 29, documentVersion: 'host:document:29', message, verification: { verified: true, condition: '已保存合成帧', target: assetRef } },
@@ -229,6 +230,27 @@ const validator = applicationOutputValidator
 const uncoveredTools: Record<string, string> = {}
 
 describe('外部客户端成功输出 JSON Schema 契约', () => {
+  it('来源映射保留成片零帧的点证据，公共投影不会把它扩张或删除', () => {
+    const name = 'query_video_edit_source_map'
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)!
+    const data = definition.outputSchema.parse({ ...successData[name], records: [{
+      id: 'video:sequence/clip:0:30', medium: 'video', kind: 'video', timeline: { fromFrame: 0, toFrame: 30 },
+      path: [{ sequenceRef, clipRef, itemRef: ref('video_edit.item', 'document:item'), track: 0 }],
+      sourceKind: 'media', mediaRef: ref('video_edit.media', 'document:media'),
+      source: { fromUs: 0, toUs: 1000000, direction: 'forward', basis: 'sampled_envelope' }, firstSample: { frame: 0, sourceUs: 0 },
+      content: { records: [{ record: { id: 'scene:0', kind: 'scene', text: '画面变化', textTruncated: false,
+        ranges: [{ fromUs: 0, toUs: 0 }], rangeCount: 1, basis: 'analysis', precision: 'point',
+        originRef: ref('video_edit.media', 'document:media'), recordId: '0', sourceVerified: true },
+      timelineRanges: [{ fromFrame: 0, toFrame: 0 }] }], total: 1, nextCursor: null, complete: true },
+    }] }) as Record<string, unknown>
+    const raw = { ok: true, data: capabilityVerificationEnvelope(definition, input, data), ...revisions, revisionEpoch: 'host' }
+    const validate = validator.getValidator(tools.find(tool => tool.name === name)!.outputSchema!)
+    for (const options of [{}, { includeRevisions: true, includeEvidence: true, includeDetails: true }]) {
+      const result = toMcpResult(projectApplicationToolResult(name, input, raw, options))
+      expect(validate(result.structuredContent)).toMatchObject({ valid: true })
+      expect(result.structuredContent).toMatchObject({ data: { records: [{ content: { records: [{ timelineRanges: [{ fromFrame: 0, toFrame: 0 }] }] } }] } })
+    }
+  })
   it.each(['external', 'embedded'] as const)('%s 的真实派发出口拒绝投影后多余字段', async kind => {
     const dispatcher = new ApplicationToolDispatcher({ assertActive() {}, access: () => ({ allowWrites: true, allowPaid: true, allowDestructive: true }) }, host, undefined, 0, kind)
     const execute = vi.spyOn(host, 'execute').mockResolvedValueOnce({ ok: true, data: { ...successData.read_application_entity, ref: { ...documentRef, unexpected: true } } })

@@ -21,8 +21,10 @@ type RelatedDocuments = Awaited<ReturnType<typeof readVideoEditContentDocuments>
 interface QuerySnapshot { key: string; records: MediaContentRecord[]; warnings: string[]; sourceVerified: boolean; audioOwners: RelatedDocuments['audios'][number]['owner'][]; discovery: RelatedDocuments['discovery'] }
 const queries = new WeakMap<VideoEditInstance, Map<string, QuerySnapshot>>()
 const fileIdentity = (value: AssetFileContent) => [value.contentIdentity, value.sizeBytes, value.fileModifiedAt]
+/** Trusted domain composition can recheck an already-read source before returning a combined result. */
+export interface VideoEditContentValidation { assertCurrent: () => Promise<void>; assertCurrentSync: () => void }
 
-export async function readVideoEditContentIndex(raw: unknown, context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>): Promise<Record<string, unknown>> {
+export async function readVideoEditContentIndex(raw: unknown, context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>, options?: { captureValidation?: (validation: VideoEditContentValidation) => void }): Promise<Record<string, unknown>> {
   const input = queryVideoEditContentCapability.inputSchema.parse(raw)
   const { projectId, childId } = splitVideoEditRef(input.itemRef)
   if (projectId !== input.documentRef.id || !childId) throw new Error('itemRef 必须属于 documentRef，请使用完整素材引用。')
@@ -54,13 +56,13 @@ export async function readVideoEditContentIndex(raw: unknown, context: Pick<Capa
     let retained = queries.get(owner)
     if (!retained) { retained = new Map(); queries.set(owner, retained) }
     let queryId: string; let offset = 0; let snapshot: QuerySnapshot
+    const assertDocumentsCurrent = (): void => {
+      signal.throwIfAborted(); context.signal.throwIfAborted()
+      if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
+      if (!isVideoEditContentCurrent(owner, version)) throw new Error('查询期间关联内容已改变，请重新查询。')
+      related.assertCurrentSync()
+    }
     const current = async (): Promise<void> => {
-      signal.throwIfAborted()
-      const assertDocumentsCurrent = (): void => {
-        if (context.callerGrant) assertApplicationCallerGrant(context.callerGrant)
-        if (!isVideoEditContentCurrent(owner, version)) throw new Error('查询期间关联内容已改变，请重新查询。')
-        related.assertCurrentSync()
-      }
       assertDocumentsCurrent()
       await related.assertCurrent()
       const now = await platform.assetLibrary.inspectFileContent(media.path, media.kind)
@@ -130,6 +132,7 @@ export async function readVideoEditContentIndex(raw: unknown, context: Pick<Capa
     }
     task.report({ phase: 'verifying_result', message: '复核文件与关联内容' })
     await current()
+    options?.captureValidation?.({ assertCurrent: current, assertCurrentSync: assertDocumentsCurrent })
     const records = structuredClone(snapshot.records.slice(offset, offset + input.limit))
     logger.info('素材内容索引查询完成', { event: 'video_edit.content_index.query.completed', requestId: context.requestId, context: { projectId, itemId: childId, total: snapshot.records.length, returned: records.length } })
     task.finish('completed')
