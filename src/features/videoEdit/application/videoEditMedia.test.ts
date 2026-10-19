@@ -6,7 +6,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
 import { appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, undoVideoEdit } from './videoEditService'
-import { ensureVideoEditMediaAudioStreams, importVideoEditSources, relinkVideoEditMedia, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
+import { ensureVideoEditMediaAudioStreams, importVideoEditSources, inspectVideoEditMedia, relinkVideoEditMedia, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
 import { inferLocalMediaKind } from '@/services/localMediaImport'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { dropVideoEditInput, readVideoEditDrop, videoEditDropPaths } from './videoEditDrop'
@@ -16,13 +16,15 @@ import { planVideoEditInPlaceGeneration } from '@/core/videoEdit/inPlaceGenerati
 import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import type { VideoEditInPlaceRecord } from '@/core/videoEdit/inPlacePersistence'
 import { resolve } from 'node:path'
+import { videoEditComposition } from '@/core/videoEdit/document'
+import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
 
 const files = new Map<string, string>()
-const video = vi.hoisted(() => ({ duration: 3, fps: 60, hasAudio: false, decodable: true }))
+const video = vi.hoisted(() => ({ duration: 3, fps: 60, hasAudio: false, decodable: true, audioOnly: false }))
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], UrlSource: class {},
   Input: class {
-    async getPrimaryVideoTrack() { return { codec: null, displayWidth: 3840, displayHeight: 2160, canDecode: async () => video.decodable, computeFrameRateMetrics: async () => ({ probedPacketCount: 256, bestGuessFrameRate: video.fps, frameRateIsConstant: true }) } }
+    async getPrimaryVideoTrack() { return video.audioOnly ? null : { codec: null, displayWidth: 3840, displayHeight: 2160, canDecode: async () => video.decodable, computeFrameRateMetrics: async () => ({ probedPacketCount: 256, bestGuessFrameRate: video.fps, frameRateIsConstant: true }) } }
     async getPrimaryAudioTrack() { return video.hasAudio ? { canDecode: async () => true } : null }
     async getAudioTracks() { return video.hasAudio ? [{ numberOfChannels: 2, sampleRate: 48000 }] : [] }
     async computeDuration() { return video.duration }
@@ -59,10 +61,11 @@ it('导入复核保留导出、讲解及其他生成记录，只合并本次落�
 })
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   // 测试环境没有原生解码服务：按“不可用”走后备探测，而不是让替身抛错再记一条探测异常。
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
-  Object.assign(video, { duration: 3, fps: 60, hasAudio: false, decodable: true })
+  Object.assign(video, { duration: 3, fps: 60, hasAudio: false, decodable: true, audioOnly: false })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/asset-reference.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, content) => { files.set(path, content) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
@@ -210,11 +213,11 @@ it('导入先问原生探测：只有原生能解的专业格式按原生元数�
   await importVideoEditSources(id, [{ path: 'D:/media/lotus.mov' }])
   expect(native).toHaveBeenCalledWith('D:/media/lotus.mov', expect.any(AbortSignal))
   expect(owner.document.media[0]).toMatchObject({ path: 'D:/media/lotus.mov', kind: 'video', width: 2560, height: 2560, durationSeconds: 14.283, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
-  expect(Object.keys(owner.document.media[0]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
+  expect(Object.keys(owner.document.media[0]).sort()).toEqual(['assetContent', 'durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
   video.decodable = true; native.mockRejectedValue(new Error('服务崩溃'))
   await importVideoEditSources(id, [{ path: 'D:/media/clip.mp4' }])
   expect(owner.document.media[1]).toMatchObject({ path: 'D:/media/clip.mp4', width: 3840, height: 2160, durationSeconds: 3, frameRateMode: 'sampled-constant' })
-  expect(Object.keys(owner.document.media[1]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
+  expect(Object.keys(owner.document.media[1]).sort()).toEqual(['assetContent', 'durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
 })
 it('诊断变量强制浏览器时不调用原生探测', async () => {
   const owner = (await createLegacyTrackVideoEditProject())
@@ -268,4 +271,88 @@ it('旧剪辑素材没有声音流清单：打开音频声道设置时按需读�
   video.hasAudio = false
   expect(await ensureVideoEditMediaAudioStreams(id, 'old')).toEqual([{ channels: 2, sampleRate: 48000 }])
   await expect(ensureVideoEditMediaAudioStreams(id, 'other')).rejects.toThrow('没有可用的声音')
+})
+
+it('直接路径导入固定文件身份，保存重开后内容查询可核实；替换原文件拒绝旧证据', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const sourcePath = resolve('fixture', 'indexed-source.mp4')
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  const inspect = vi.mocked(getPlatform().assetLibrary.inspectFileContent)
+  const history = owner.past.length
+  const [itemId] = await importVideoEditSources(id, [{ path: sourcePath }])
+  expect(owner.document.media[0]).toMatchObject({ path: sourcePath, assetContent: { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) } })
+  expect(owner.past.length).toBe(history + 1)
+  editVideoProject(id, document => {
+    document.sequences[0].textTranscription = { audioDocumentId: 'recognized', sources: [{ itemId, mediaIdentity: videoEditTextMediaIdentity(videoEditComposition(document, document.sequences[0].id), itemId), silences: [], blocks: [{ id: 'old-word', text: '旧句', startFrame: 0, endFrame: 1000000, granularity: 'word', included: true, locked: false }] }] }
+    return document
+  })
+  await saveVideoEdit(id); const reopened = await reopenVideoEdit(id)
+  expect(reopened.document.media[0].assetContent).toEqual(owner.document.media[0].assetContent)
+  const app = createApplicationHarness()
+  const input = { documentRef: { kind: 'video_edit.document', id }, itemRef: { kind: 'video_edit.item', id: `${id}:${itemId}` }, text: '旧句' }
+  try {
+    expect(await app.call('query_video_edit_content', input)).toMatchObject({ ok: true, data: { total: 1, sourceVerified: true, warnings: [] } })
+    inspect.mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'b'.repeat(64) })
+    expect(await app.call('query_video_edit_content', input)).toMatchObject({ ok: false })
+    const baseline = reopened.document
+    await expect(importVideoEditSources(id, [{ path: sourcePath }])).rejects.toThrow('重新定位')
+    expect(reopened.document).toBe(baseline)
+    vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(sourcePath)
+    await relinkVideoEditMedia(id, reopened.document.media[0].id)
+    expect(await app.call('query_video_edit_content', input)).toMatchObject({ ok: true, data: { total: 0, sourceVerified: true } })
+  } finally { app.dispose() }
+})
+
+it.each(['probe', 'publish'] as const)('原文件在%s阶段变化，整批导入原子拒绝，不留下错误元数据或历史', async phase => {
+  const owner = await createLegacyTrackVideoEditProject(); const baseline = owner.document; const history = owner.past.length
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  const replace = () => vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'b'.repeat(64) })
+  if (phase === 'probe') vi.mocked(videoEditNativeMediaProbe.probe).mockImplementationOnce(async () => { replace(); return { status: 'unavailable' } })
+  await expect(importVideoEditSources(owner.document.id, [{ path: resolve('fixture', 'changing.mp4') }], undefined, undefined, document => {
+    if (phase === 'publish') replace()
+    return document
+  })).rejects.toThrow(phase === 'probe' ? '素材探测期间已改变' : '重新定位')
+  expect(owner.document).toBe(baseline); expect(owner.past.length).toBe(history)
+})
+
+it('重新定位直接路径会重新绑定身份；未绑定的旧引用不能静默补认证', async () => {
+  const owner = await createLegacyTrackVideoEditProject(); const id = owner.document.id
+  const oldPath = resolve('fixture', 'old-image.png'); const newPath = resolve('fixture', 'new-image.png')
+  appendVideoEditMedia(id, { id: 'unbound', kind: 'image', name: '旧图', path: oldPath, width: 64, height: 64, durationSeconds: 0 })
+  const baseline = owner.document
+  await expect(importVideoEditSources(id, [{ path: oldPath }])).rejects.toThrow('尚未绑定原文件身份')
+  expect(owner.document).toBe(baseline)
+  vi.spyOn(getPlatform().system.dialog, 'open').mockResolvedValue(newPath)
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const close = vi.fn()
+  vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 64, height: 64, close }))
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementation(async (_path, kind) => ({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: (kind === 'image' ? 'c' : 'a').repeat(64) }))
+  await relinkVideoEditMedia(id, 'unbound')
+  expect(owner.document.media[0]).toMatchObject({ path: newPath, assetContent: { contentIdentity: 'c'.repeat(64) }, sourceRevision: expect.any(String) })
+  expect(owner.document.media[0].assetId).toBeUndefined(); expect(close).toHaveBeenCalledOnce()
+  undoVideoEdit(id); expect(owner.document.media).toEqual(baseline.media)
+})
+
+it('图片探测期间替换文件仍拒绝并释放位图，不把另一文件类型的身份存入文档', async () => {
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const close = vi.fn()
+  vi.stubGlobal('createImageBitmap', vi.fn().mockImplementation(async () => {
+    vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'b'.repeat(64) })
+    return { width: 64, height: 64, close }
+  }))
+  await expect(inspectVideoEditMedia(resolve('fixture', 'changing-image.png'))).rejects.toThrow('素材探测期间已改变')
+  expect(close).toHaveBeenCalledOnce()
+})
+
+it('纯声音容器以实际媒体种类保存身份，探测前后仍比较同一命名空间', async () => {
+  const owner = await createLegacyTrackVideoEditProject()
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  video.audioOnly = true; video.hasAudio = true
+  const inspect = vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementation(async (_path, kind) => ({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: (kind === 'audio' ? 'c' : 'a').repeat(64) }))
+  const sourcePath = resolve('fixture', 'audio-only.mp4')
+  await importVideoEditSources(owner.document.id, [{ path: sourcePath }])
+  expect(owner.document.media[0]).toMatchObject({ kind: 'audio', assetContent: { contentIdentity: 'c'.repeat(64) } })
+  expect(inspect.mock.calls.map(call => call[1])).toEqual(['video', 'audio', 'video', 'audio'])
 })

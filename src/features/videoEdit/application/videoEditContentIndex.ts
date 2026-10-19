@@ -74,8 +74,10 @@ export async function readVideoEditContentIndex(raw: unknown, context: Pick<Capa
       queryId = parsed[1]; offset = Number(parsed[2]); snapshot = known
       if (!Number.isSafeInteger(offset) || offset >= known.records.length) throw new Error('索引分页位置无效，请重新查询。')
     } else {
-      const relatedMediaIds = new Set(document.media.filter(source => sameVideoEditMediaPath(source.path, media.path)
-        && (!source.assetContent?.contentIdentity || source.assetContent.contentIdentity === identity.contentIdentity)).map(source => source.id))
+      const samePathMedia = document.media.filter(source => sameVideoEditMediaPath(source.path, media.path))
+      const relatedMediaIds = new Set(samePathMedia.filter(source => source.id === media.id || source.assetContent?.contentIdentity === identity.contentIdentity
+        && source.assetContent.sizeBytes === identity.sizeBytes && source.assetContent.fileModifiedAt === identity.fileModifiedAt).map(source => source.id))
+      if (relatedMediaIds.size < samePathMedia.length) warnings.push('已排除同路径但未绑定当前文件身份的其他素材项。')
       const relatedItems = document.items.filter(value => value.mediaId && relatedMediaIds.has(value.mediaId)).map(value => value.id)
       const facts = videoEditSavedContentFacts(document, relatedItems, media)
       if (audio) facts.push(...audioDocumentContentFacts(audio.document))

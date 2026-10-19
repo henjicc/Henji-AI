@@ -204,3 +204,16 @@ it('静态图片可查询创作提示词，意图不冒充画面识别且不启�
   expect(result.warnings).toHaveLength(2)
   expect(detect).not.toHaveBeenCalled(); expect(audio).not.toHaveBeenCalled()
 })
+
+it('已核实素材不吸收同路径未绑定的旧词源，显式查询旧项仍明确未核实', async () => {
+  const { owner, input } = await fixture()
+  editVideoProject(owner.document.id, document => {
+    document.media.push({ ...document.media[0], id: 'unverified-media', assetContent: undefined })
+    document.items.push({ ...document.items[0], id: 'unverified-item', mediaId: 'unverified-media' })
+    const sequence = document.sequences[0]
+    sequence.textTranscription!.sources.push({ itemId: 'unverified-item', mediaIdentity: videoEditTextMediaIdentity(videoEditComposition(document, sequence.id), 'unverified-item'), silences: [], blocks: [{ id: 'old-word', text: '未核实的旧转录', startFrame: 0, endFrame: 1000000, included: true, locked: false, granularity: 'word' }] })
+    return document
+  })
+  expect(parse(await readVideoEditContentIndex({ ...input, text: '旧转录' }, context()))).toMatchObject({ sourceVerified: true, records: [], warnings: [expect.stringContaining('已排除')] })
+  expect(parse(await readVideoEditContentIndex({ ...input, itemRef: { ...input.itemRef, id: `${owner.document.id}:unverified-item` }, text: '旧转录' }, context()))).toMatchObject({ sourceVerified: false, records: [{ text: '未核实的旧转录' }] })
+})

@@ -39,6 +39,7 @@ beforeEach(() => {
   useSettingsStore.getState().setVideoEditImportFolderBins(true)
   useSettingsStore.getState().setVideoEditDuplicatePolicy('skip')
   installHarnessNativeStorage()
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/drop/folders.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/drop')

@@ -8,7 +8,7 @@ import type { VideoEditMedia, VideoEditDocument } from '@/core/videoEdit/documen
 import { createLogger } from '@/core/logging'
 import { generatedMediaName } from '@/core/documents/generatedMediaName'
 import { matchVideoEditFrameRate, resolveVideoEditMediaInspection, videoEditNativeMediaProbe, type VideoEditBrowserInspection, type VideoEditNativeProbeOutcome } from './videoEditMediaProbe'
-import type { AssetRecord } from '@/platform/contracts/assetLibrary'
+import type { AssetRecord, AssetFileContent } from '@/platform/contracts/assetLibrary'
 import { resolveVideoEditAssetReference, sameVideoEditAssetContent, videoEditAssetContentSnapshot } from './videoEditAssetReferences'
 import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -49,11 +49,23 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
   const platform = getPlatform()
   if (!await platform.system.fs.exists(path)) throw new Error('源文件已移动或丢失，请重新定位素材。')
   await platform.media.allowRoot(await platform.system.paths.dirname(path))
+  // The file kind is only known after probing. A fixed kind gives the before/after stat identity
+  // the same namespace, including for audio-only containers and still images.
+  const before = await platform.assetLibrary.inspectFileContent(path, 'video')
+  signal?.throwIfAborted()
+  const bindContent = async (media: VideoEditMedia): Promise<VideoEditMedia> => {
+    signal?.throwIfAborted()
+    const content = await platform.assetLibrary.inspectFileContent(path, media.kind)
+    const after = media.kind === 'video' ? content : await platform.assetLibrary.inspectFileContent(path, 'video')
+    signal?.throwIfAborted()
+    if (!sameFileContent(before, after) || content.sizeBytes !== after.sizeBytes || content.fileModifiedAt !== after.fileModifiedAt) throw new Error('源文件在素材探测期间已改变，请重新导入。')
+    return { ...media, assetContent: content }
+  }
   const base = { id: crypto.randomUUID(), path, name: path.split(/[\\/]/).at(-1) || '素材' }
   if (/\.(png|jpe?g|webp|bmp|avif)$/i.test(path)) {
     const response = await fetch(toFetchableMediaUrl(path), { signal }); if (!response.ok) throw new Error('无法读取图片。')
     const bitmap = await createImageBitmap(await response.blob())
-    try { signal?.throwIfAborted(); return { ...base, kind: 'image', width: bitmap.width, height: bitmap.height, durationSeconds: 0 } } finally { bitmap.close() }
+    try { signal?.throwIfAborted(); return await bindContent({ ...base, kind: 'image', width: bitmap.width, height: bitmap.height, durationSeconds: 0 }) } finally { bitmap.close() }
   }
   signal?.throwIfAborted()
   // Native first for the decoding decision; the browser inspection runs alongside as fallback and metadata source.
@@ -73,9 +85,13 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
     throw error
   }
   const { backend, nativeDecodes, fields } = resolved
+  const media = await bindContent({ ...base, ...fields })
   // `backend` is the decoder that plays the file; `nativeDecodes` only reports the native probe's finding.
   logger.info('剪辑素材探测完成', { event: 'video_edit.media.inspect.completed', context: { kind: fields.kind, backend, native: native.status, nativeDecodes, browserDecodes, ...(forced ? { forced } : {}) } })
-  return { ...base, ...fields }
+  return media
+}
+function sameFileContent(left: AssetFileContent, right: AssetFileContent): boolean {
+  return left.contentIdentity === right.contentIdentity && left.sizeBytes === right.sizeBytes && left.fileModifiedAt === right.fileModifiedAt
 }
 /** Chromium's view of the file; an unreadable or undecodable file is a result, not an error. */
 async function inspectBrowserMedia(path: string, signal?: AbortSignal): Promise<VideoEditBrowserInspection> {
@@ -119,15 +135,16 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   const results = await settleImportBatches(unique, async input => {
     signal?.throwIfAborted()
     const fixed = !input.assetId && input.path ? existingByPath.get(videoEditMediaPathKey(input.path)) : undefined
+    if (fixed && !fixed.assetContent?.contentIdentity) throw new Error('已有素材尚未绑定原文件身份，请先重新定位源素材，再重复引用。')
     if (fixed?.assetContent?.contentIdentity) await boundedMetadata(() => verifyVideoEditMediaContent(fixed, signal))
     const asset = input.assetId ? await boundedMetadata(() => resolveVideoEditAssetReference(input.assetId!)) : undefined
     const path = asset?.filePath ?? input.path
     if (!path) throw new Error('请引用素材库素材或本地源文件。')
-    return { path, ...(asset ? { asset } : {}), ...(fixed?.assetContent?.contentIdentity ? { fixed } : {}) }
+    return { path, ...(asset ? { asset } : {}) }
   }, signal)
   const failed = results.find(result => result.status === 'rejected')
   if (failed?.status === 'rejected') throw failed.reason
-  const resolved: Array<{ path: string; asset?: AssetRecord; fixed?: VideoEditMedia }> = []
+  const resolved: Array<{ path: string; asset?: AssetRecord }> = []
   const resolvedByPath = new Map<string, typeof resolved[number]>()
   for (const result of results) if (result.status === 'fulfilled') {
     const key = videoEditMediaPathKey(result.value.path)
@@ -188,10 +205,10 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
       ids.push(item.id)
     }
   const next = afterImport ? await afterImport(document, ids) : document
-  const rechecks = await settleImportBatches(inspected, async ({ source }) => source.asset ? boundedMetadata(async () => {
+  const rechecks = await settleImportBatches(inspected, async ({ source, media }) => source.asset ? boundedMetadata(async () => {
     signal?.throwIfAborted()
     if (!sameVideoEditAssetContent(source.asset!, await resolveVideoEditAssetReference(source.asset!.id))) throw new Error('素材库源文件在导入期间已改变，请重新引用该素材。')
-  }) : source.fixed ? boundedMetadata(() => verifyVideoEditMediaContent(source.fixed!, signal)) : undefined, signal)
+  }) : boundedMetadata(() => verifyVideoEditMediaContent(media, signal)), signal)
   const recheckFailure = rechecks.find(result => result.status === 'rejected')
   if (recheckFailure?.status === 'rejected') throw recheckFailure.reason
   signal?.throwIfAborted()
@@ -233,17 +250,11 @@ export async function relinkVideoEditMedia(projectId: string, mediaId: string): 
   const path = await getPlatform().system.dialog.open()
   if (!path || Array.isArray(path)) return
   const linked = sameVideoEditMediaPath(previous.path, path) && previous.assetId
-  const content = linked ? await getPlatform().assetLibrary.inspectFileContent(path, previous.kind) : undefined
   const media = await inspectVideoEditMedia(path)
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，请重新定位素材。')
   if (media.kind !== previous.kind) throw new Error('重新定位的文件类型必须与原素材一致。')
-  if (content) {
-    const current = await getPlatform().assetLibrary.inspectFileContent(path, media.kind)
-    if (current.contentIdentity !== content.contentIdentity || current.sizeBytes !== content.sizeBytes || current.fileModifiedAt !== content.fileModifiedAt) throw new Error('源文件在重新定位期间已改变，请重新选择。')
-  }
-  if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑已关闭，请重新定位素材。')
   if (owner.document.media.find(item => item.id === mediaId) !== previous) throw new Error('源素材在重新定位期间已改变，请重新选择。')
-  editVideoProject(projectId, document => ({ ...document, media: document.media.map(item => item.id === mediaId ? { ...media, id: mediaId, sourceRevision: media.id, ...(content ? { assetId: previous.assetId, assetContent: content } : {}) } : item) }))
+  editVideoProject(projectId, document => ({ ...document, media: document.media.map(item => item.id === mediaId ? { ...media, id: mediaId, sourceRevision: media.id, ...(linked ? { assetId: previous.assetId } : {}) } : item) }))
 }
 /**
  * The sound streams of one media file (task 2.6). Media imported before the stream list existed is read once on

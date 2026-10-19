@@ -61,6 +61,7 @@ it('公共移除素材项与手动删除同样清除孤儿媒体，并以声明�
 beforeEach(() => {
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const width = text.length * Number.parseFloat(this.font); return { width, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width } } } } })
   installHarnessNativeStorage(); files.clear()
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-items.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)

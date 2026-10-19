@@ -626,6 +626,7 @@ it('图片参数引用原媒体，经同一候选检查后写入；失败无半�
     undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].code!.parameters.logo).toBeNull()
     vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
     vi.spyOn(getPlatform().system.paths, 'dirname').mockResolvedValue('D:/')
+    vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
     vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
     const close = vi.fn(); vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 3840, height: 2160, close }))

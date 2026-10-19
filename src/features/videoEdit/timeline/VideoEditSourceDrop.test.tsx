@@ -86,6 +86,7 @@ let unregister: () => void
 beforeEach(async () => {
   clearLogEvents()
   installHarnessNativeStorage()
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   vi.stubGlobal('DragEvent', class extends MouseEvent {
     readonly dataTransfer: DataTransfer | null
     constructor(type: string, init: DragEventInit = {}) { super(type, init); this.dataTransfer = init.dataTransfer ?? null }

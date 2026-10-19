@@ -39,6 +39,7 @@ async function placeSource(): Promise<void> {
 }
 beforeEach(async () => {
   installHarnessNativeStorage()
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   useSettingsStore.getState().setVideoEditDuplicatePolicy('skip')
   useSettingsStore.getState().setVideoEditImportFolderBins(true)
   vi.spyOn(getPlatform().system.fs, 'readDirPage').mockRejectedValue(new Error('ENOTDIR'))

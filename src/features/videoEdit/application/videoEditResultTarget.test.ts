@@ -32,6 +32,7 @@ function asset(patch: Partial<AssetRecord> = {}): AssetRecord {
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { resolve, promise } }
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear(); mediaMode.video = false
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ sizeBytes: 1024, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) })
   // 测试环境没有原生解码服务：按“不可用”走后备探测，而不是让替身抛错再记一条探测异常。
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
   vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
@@ -179,6 +180,7 @@ it('已拆分的纯画面片段替换为有声视频仍只用画面，完成来�
   const first = await commitVideoEditCreativeResult(target, { asset: original, origin })
   editVideoProject(owner.document.id, doc => ({ ...doc, sequences: doc.sequences.map(seq => ({ ...seq, clips: seq.clips.map(clip => ({ ...clip, sourceComponent: 'video' as const })) })) }))
   const next = asset({ ...original, id: 'new-video', filePath: 'D:/results/new.mp4', contentIdentity: 'b'.repeat(64) }); vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValue(next)
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ sizeBytes: 1024, fileModifiedAt: 1000, contentIdentity: 'b'.repeat(64) })
   const replacement = captureVideoEditResultTarget(owner.document.id, owner.activeSequenceId, { mode: 'replace', clipId: first.clipId })
   await commitVideoEditCreativeResult(replacement, { asset: next, origin: { ...origin, outputIndex: 2 } })
   expect(owner.document.sequences[0].clips[0].sourceComponent).toBe('video')
