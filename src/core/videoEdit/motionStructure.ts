@@ -5,7 +5,7 @@ import { videoEditSourceMapLocalFrame, visitVideoEditPictureInstances, type Vide
 import type { VideoEditComposition } from './document'
 
 export const VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET = 60000
-export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold' | 'code_change' | 'code_unavailable'
+export type VideoEditMotionStructureKind = 'motion' | 'motion_hard_stop' | 'motion_hold' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown'
 export interface VideoEditMotionStructureFact {
   kind: VideoEditMotionStructureKind
   timeline: VideoEditSourceMapRange
@@ -14,8 +14,9 @@ export interface VideoEditMotionStructureFact {
   subjectId: string
   peakSpeed?: number
   elementPath?: string[]
-  basis?: 'clip_transform' | 'code_structure'
+  basis?: 'clip_transform' | 'code_structure' | 'video_pixels'
   detail?: string
+  source?: { fromUs: number; toUs: number }
 }
 export interface VideoEditMotionStructureResult { records: VideoEditMotionStructureFact[]; sampledFrames: number; sampledInstances: number }
 

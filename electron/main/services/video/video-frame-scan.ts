@@ -15,7 +15,7 @@ export async function scanVideoFrames(source: string, options: ScreenChangeOptio
   const motion = 'analysis' in options && options.analysis === 'motion'
   const frameBytes = width * height * channels
   const worker = new ScreenChangeWorker(options, workerPath)
-  const args = ['-hide_banner', '-nostdin', '-v', 'error', '-ss', String(startSeconds), '-threads', '2', '-i', source,
+  const args = ['-hide_banner', '-nostdin', '-v', 'error', '-ss', String(startSeconds), '-threads', '2', ...(motion ? ['-noautorotate'] : []), '-i', source,
     '-t', String(endSeconds - startSeconds), '-map', '0:v:0', '-an', '-sn', '-dn',
     '-vf', `setpts=PTS-STARTPTS,fps=${fps}:start_time=0:eof_action=pass,scale=${width}:${height}:flags=area,format=${channels === 1 ? 'gray' : 'rgb24'}`,
     '-frames:v', String(Math.ceil((endSeconds - startSeconds) * fps - 1e-9)), '-threads', '2', '-filter_threads', '2', '-f', 'rawvideo', 'pipe:1']

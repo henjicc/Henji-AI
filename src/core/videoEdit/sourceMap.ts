@@ -48,6 +48,8 @@ function sampledSource(entry: Pick<VideoEditSourceMapEntry, 'path' | 'mediaDurat
   const leaf = entry.path.at(-1)!
   return videoEditClipSourceSecondsAt(leaf.clip, videoEditHandleFrame(leaf.clip, localFrame(entry.path, rootFrame), leaf.fps, entry.mediaDuration), leaf.fps)
 }
+/** Same clamped source clock as the picture renderer, including transition handles. */
+export function videoEditSourceMapSampleSeconds(entry: VideoEditSourceMapEntry, rootFrame: number): number { return sampledSource(entry, rootFrame) }
 /** A monotonic clock may skip or repeat child frames. Never walk every output frame. */
 function firstTrue(range: VideoEditSourceMapRange, predicate: (frame: number) => boolean): number {
   let low = range.from; let high = range.to

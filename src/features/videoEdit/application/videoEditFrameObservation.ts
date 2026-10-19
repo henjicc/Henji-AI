@@ -17,6 +17,7 @@ import { codeElementLabel } from '@/core/videoEdit/codeElementSelection'
 import { renderVideoEditContactSheet, type VideoEditContactSheetRange } from './videoEditContactSheet'
 import { videoEditObservationPixelCrop, videoEditObservationRegionSchema, type VideoEditObservationRegion } from '@/core/videoEdit/frameObservation'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { verifyVideoEditReviewObservationSources } from './videoEditReview'
 
 const logger = createLogger('features.videoEdit.frameObservation')
 export type VideoEditFrameObservationTarget =
@@ -74,9 +75,10 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   if (maxWidth !== null && (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840)) throw new Error('观察宽度须为256到3840之间的整数像素。')
   const owner = requireVideoEditInstance(projectId); const document = owner.document
   const contentVersion = owner.contentVersion
-  const documentVersion = videoEditObservationVersion(owner, document.revision)
-  if (annotations.documentVersion !== undefined && annotations.documentVersion !== documentVersion) throw new Error('检查计划对应的剪辑或跟踪结果已改变，请重新查询检查点后取帧。')
-  const assertCurrent = (): void => { signal.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion) || videoEditObservationVersion(owner, document.revision) !== documentVersion) throw new Error('观察期间剪辑已改变、关闭或跟踪结果更新，请重新取帧。') }
+  const baseVersion = videoEditObservationVersion(owner, document.revision), documentVersion = annotations.documentVersion ?? baseVersion
+  if (documentVersion !== baseVersion && !documentVersion.startsWith(`${baseVersion}|review:`)) throw new Error('检查计划对应的剪辑或跟踪结果已改变，请重新查询检查点后取帧。')
+  if (documentVersion !== baseVersion && target.kind === 'source') throw new Error('视频检查计划用于序列画面，请按返回序列与检查帧观察。')
+  const assertCurrent = (): void => { signal.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion) || videoEditObservationVersion(owner, document.revision) !== baseVersion) throw new Error('观察期间剪辑已改变、关闭或跟踪结果更新，请重新取帧。') }
   assertCurrent()
   if (annotations.cropRegion) videoEditObservationRegionSchema.parse(annotations.cropRegion)
   if (annotations.cropRegion && annotations.cropAnnotationId) throw new Error('cropRegion 与 cropAnnotationId 只能选择一种裁切方式。')
@@ -93,6 +95,18 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
       frame = target.frame
     }
   } else composition = videoEditSourceComposition(document, target.itemId, target.timeUs)
+  const reviewSources = annotations.documentVersion && target.kind !== 'source' ? await verifyVideoEditReviewObservationSources(owner, annotations.documentVersion, composition.id, signal, assertCurrent) : []
+  if (reviewSources.length) {
+    const sources = new Map(reviewSources.map(media => [media.id, media]))
+    composition = { ...composition, media: composition.media.map(media => {
+      const pinned = sources.get(media.id)
+      return pinned ? { ...media, assetContent: pinned.assetContent, sourceRevision: `${media.sourceRevision ?? ''}:review:${pinned.assetContent!.contentIdentity}` } : media
+    }) }
+  }
+  const verifyReviewSources = async (): Promise<void> => {
+    if (reviewSources.length) await verifyVideoEditReviewObservationSources(owner, documentVersion, composition.id, signal, assertCurrent)
+    assertCurrent()
+  }
   logger.info('剪辑指定画面观察开始', { event: 'video_edit.frame_observation.start', context: { projectId, kind: target.kind, revision: document.revision } })
   if (target.kind !== 'program' && (annotations.overlayAnnotations || annotations.annotationIds?.length || annotations.cropAnnotationId || annotations.highlightElement)) throw new Error('标注叠加、元素高亮与放大只用于序列合成帧。')
   if (target.kind === 'source' && annotations.reference) throw new Error('reference 用于成片与参考比较，请选择序列合成帧或联系表。')
@@ -123,9 +137,9 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
         return { document: source, frame: 0, label: `参考 ${(timeUs / 1e6).toFixed(3)} s` }
       } } : {}),
     })
-    await verifyReference()
+    await verifyReference(); await verifyReviewSources()
     const asset = await publishObservationImage(sheet.bytes, sheet.width, sheet.height, `${document.name} · ${composition.name} · ${reference ? '参考比较' : '联系表'}`, signal, assertCurrent)
-    await verifyReference()
+    await verifyReference(); await verifyReviewSources()
     logger.info('剪辑联系表观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width: sheet.width, height: sheet.height, durationMs: Math.round(performance.now() - started) } })
     return { ...(measurements.length ? { performance: measurements } : {}), asset, width: sheet.width, height: sheet.height, byteLength: sheet.bytes.byteLength, sourceWidth: composition.width, sourceHeight: composition.height,
       documentRevision: document.revision, documentVersion, sequenceId: composition.id, contactSheet: { frames: sheet.frames, columns: sheet.columns, rows: sheet.rows },
@@ -163,7 +177,9 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   } finally { bitmap.close() }
   const label = target.kind === 'program' ? `帧 ${frame}` : `源 ${(target.timeUs / 1e6).toFixed(3)} 秒`
   assertCurrent()
+  await verifyReviewSources()
   const asset = await publishObservationImage(bytes, width, height, `${document.name} · ${composition.name} · ${label} 观察`, signal, assertCurrent)
+  await verifyReviewSources()
   logger.info('剪辑指定画面观察完成', { event: 'video_edit.frame_observation.completed', context: { projectId, kind: target.kind, assetId: asset.id, width, height, durationMs: Math.round(performance.now() - started) } })
   return { ...(measurements.length ? { performance: measurements } : {}), asset, width, height, byteLength: bytes.byteLength, sourceWidth, sourceHeight, documentRevision: document.revision, documentVersion, ...(target.kind === 'program' ? { sequenceId: composition.id, frame } : { timeUs: target.timeUs }) }
 }

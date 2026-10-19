@@ -3,6 +3,13 @@ import { validateVideoMotionScan, type VideoMotionOptions, type VideoMotionScan 
 import type { MotionReviewSample } from '../../../../src/core/media/motionReview'
 
 type Cv = typeof OpenCv
+export function videoMotionDisplaySpeed(affine: readonly [number, number, number, number, number, number], options: VideoMotionOptions): number {
+  const [a, b, tx, c, d, ty] = affine, { width, height, fps } = options
+  const aspect = options.sourceAspectRatio ?? width / height, angle = (options.displayRotation ?? 0) * Math.PI / 180
+  const displayWidth = Math.abs(Math.cos(angle)) + Math.abs(Math.sin(angle)) / aspect
+  const displacement = Math.max(...[[0, 0], [width, 0], [0, height], [width, height]].map(([x, y]) => Math.hypot((a * x + b * y + tx - x) / width, (c * x + d * y + ty - y) / height / aspect)))
+  return displacement / displayWidth * fps * 100
+}
 
 /** OpenCV Shi–Tomasi + pyramidal LK + RANSAC affine fit, used only in a Worker.
  * Spatial coverage rejects tiny moving subjects as evidence of whole-frame motion.
@@ -15,6 +22,7 @@ export class VideoMotionAccumulator {
   constructor(private readonly cv: Cv, private readonly options: VideoMotionOptions) {
     const { width, height, fps, startSeconds, endSeconds } = options
     this.expectedFrames = Math.ceil((endSeconds - startSeconds) * fps - 1e-9)
+    if (options.sourceAspectRatio !== undefined && (!Number.isFinite(options.sourceAspectRatio) || options.sourceAspectRatio <= 0) || options.displayRotation !== undefined && !Number.isFinite(options.displayRotation)) throw new Error('运动分析的显示比例或旋转无效。')
     if (![width, height, fps].every(Number.isSafeInteger) || width < 32 || width > 1024 || height < 32 || height > 1024 || fps < 1 || fps > 60 || !Number.isFinite(startSeconds) || startSeconds < 0 || !Number.isFinite(endSeconds) || endSeconds <= startSeconds || endSeconds > 86400 || this.expectedFrames > 60000 || options.channels !== 1) throw new Error('运动分析范围、尺寸或采样率无效，请缩小范围。')
   }
   push(gray: Uint8Array): void {
@@ -94,8 +102,7 @@ export class VideoMotionAccumulator {
       if (count < width * height * .6) return unknown()
       const change = residual / count
       if (change > .3) return unknown()
-      const displacement = Math.max(...[[0, 0], [width, 0], [0, height], [width, height]].map(([x, y]) => Math.hypot(a * x + b * y + tx - x, c * x + d * y + ty - y)))
-      return { speed: displacement / width * fps * 100, zoom: Math.log(Math.sqrt(determinant)) * fps * 100, change, cut: false }
+      return { speed: videoMotionDisplaySpeed([a, b, tx, c, d, ty], this.options), zoom: Math.log(Math.sqrt(determinant)) * fps * 100, change, cut: false }
     } finally { for (const value of allocated) value.delete() }
   }
   finish(): VideoMotionScan {

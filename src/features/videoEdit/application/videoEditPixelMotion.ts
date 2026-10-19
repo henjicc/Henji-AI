@@ -1,0 +1,79 @@
+import { createLogger } from '@/core/logging'
+import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
+import { VideoEditSourceMapIndex, type VideoEditSourceMapEntry, type VideoEditSourceMapRange } from '@/core/videoEdit/sourceMap'
+import type { VideoEditPixelMotionInput } from '@/core/videoEdit/pixelMotionReview'
+import { VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET } from '@/core/videoEdit/motionStructure'
+import { getPlatform } from '@/platform/runtime'
+import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
+import { beginVideoEditContentQuery } from './videoEditContentQueryProgress'
+import type { VideoEditInstance } from './videoEditService'
+
+const logger = createLogger('features.videoEdit.review')
+interface Plan { media: VideoEditMedia; entries: VideoEditSourceMapEntry[]; from: number; to: number }
+export async function verifyVideoEditMotionSources(sources: readonly VideoEditMedia[], signal: AbortSignal, assertCurrent: () => void): Promise<void> {
+  for (const media of sources) {
+    assertCurrent()
+    if (!media.assetContent?.contentIdentity) throw new Error(`素材“${media.name}”尚未绑定原文件身份，请先重新定位再分析视频运动。`)
+    await verifyVideoEditMediaContent(media, signal); assertCurrent()
+  }
+}
+
+/** Same scene-analysis channel, source cache and query progress as the content
+ * index. Merge overlapping source scans while retaining each placed instance. */
+export async function readVideoEditPixelMotion(owner: VideoEditInstance, composition: VideoEditComposition, range: VideoEditSourceMapRange, signal: AbortSignal, assertCurrent: () => void): Promise<{ pixels: VideoEditPixelMotionInput[]; sources: VideoEditMedia[] }> {
+  assertCurrent()
+  const entries = new VideoEditSourceMapIndex().query(composition, range, ['video'])
+  const groups = new Map<string, Plan[]>(), sources = new Map<string, VideoEditMedia>()
+  const mediaById = new Map(composition.media.map(media => [media.id, media]))
+  let frames = 0
+  for (const entry of entries) {
+    const media = entry.mediaId ? mediaById.get(entry.mediaId) : undefined
+    if (!media || media.kind !== 'video') continue
+    frames += entry.timeline.to - entry.timeline.from
+    if (frames > VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET) throw new Error('视频运动超过60000帧实例预算，请缩小 from/to；未截断实例。')
+    const key = JSON.stringify([media.assetContent?.contentIdentity ?? media.path, media.assetContent?.sizeBytes, media.assetContent?.fileModifiedAt]), group = groups.get(key) ?? []
+    const from = Math.floor(entry.source.fromUs / 1e6 * 15 + 1e-8) / 15, to = Math.min(media.durationSeconds, Math.ceil(entry.source.toUs / 1e6 * 15 - 1e-8) / 15)
+    if (to <= from) throw new Error('原视频运动范围无效，请核对素材时长与源入点。')
+    group.push({ media, entries: [entry], from, to }); groups.set(key, group); sources.set(media.id, media)
+  }
+  const plans: Plan[] = []
+  for (const group of groups.values()) {
+    let previous: Plan | undefined
+    for (const plan of group.sort((a, b) => a.from - b.from)) {
+      if (previous && plan.from <= previous.to + 1e-7) { previous.to = Math.max(previous.to, plan.to); previous.entries.push(...plan.entries) }
+      else { previous = plan; plans.push(plan) }
+    }
+  }
+  if (plans.reduce((seconds, plan) => seconds + plan.to - plan.from, 0) > 300 + 1e-7) throw new Error('本次视频运动分析超过300秒不同源区间预算，请缩小 from/to；未截断证据。')
+  const pixels: VideoEditPixelMotionInput[] = [], platform = getPlatform(), verifiedSources: VideoEditMedia[] = []
+  for (const media of sources.values()) {
+    assertCurrent()
+    // Fresh pixel analysis does not authenticate old transcript facts. Managed
+    // project files intentionally have no asset-library pin: bind only this
+    // query snapshot to the actual file, never change the saved document.
+    const source = media.assetContent?.contentIdentity ? media : { ...media, assetContent: await platform.assetLibrary.inspectFileContent(media.path, media.kind) }
+    assertCurrent(); verifiedSources.push(source)
+  }
+  await verifyVideoEditMotionSources(verifiedSources, signal, assertCurrent)
+  for (const plan of plans) {
+    assertCurrent()
+    const task = beginVideoEditContentQuery(owner, plan.entries[0].path.at(-1)!.itemId, signal, ['video_edit:read']), requestId = crypto.randomUUID()
+    let unsubscribe = (): void => undefined
+    const cancel = (): void => { void platform.sceneDetection.cancel(requestId).catch(error => logger.warn('取消视频运动分析失败', { event: 'video_edit.review.motion.cancel_failed', error })) }
+    task.signal.addEventListener('abort', cancel, { once: true })
+    try {
+      task.report({ phase: 'analyzing_video', message: '分析原视频运动与局部变化' })
+      unsubscribe = platform.sceneDetection.onProgress(event => { if (event.requestId === requestId) task.report({ phase: 'analyzing_video', message: '分析原视频运动与局部变化', phaseProgress: event.progress }) })
+      task.signal.throwIfAborted()
+      const result = await platform.sceneDetection.detect({ requestId, source: plan.media.path, startSeconds: plan.from, endSeconds: plan.to, sensitivity: 50, analysis: 'motion' })
+      task.signal.throwIfAborted(); assertCurrent()
+      if (!result.motionScan) throw new Error('视频运动分析未返回采样证据，请重试。')
+      if (result.motionScan.startSeconds !== plan.from || result.motionScan.endSeconds !== plan.to) throw new Error('视频运动证据与请求范围不符，请重新分析。')
+      for (const entry of plan.entries) pixels.push({ entry, scan: result.motionScan })
+      task.finish('completed')
+    } catch (error) { task.finish('failed', error); throw error }
+    finally { task.signal.removeEventListener('abort', cancel); unsubscribe() }
+  }
+  await verifyVideoEditMotionSources(verifiedSources, signal, assertCurrent)
+  return { pixels, sources: verifiedSources }
+}

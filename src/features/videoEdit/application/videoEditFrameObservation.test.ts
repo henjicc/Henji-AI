@@ -23,6 +23,8 @@ import { queryVideoEditReview } from './videoEditReview'
 import * as tracking from './videoEditTracking'
 import { videoEditObservationVersion } from './videoEditObservationVersion'
 import { invalidateCodeTextMetrics } from '../videoEditGlyphMetrics'
+import { collectVideoEditPixelMotion } from '@/core/videoEdit/pixelMotionReview'
+import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
 
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.
@@ -120,6 +122,38 @@ it('font changes invalidate the inspection-to-observation plan even without a do
     const fresh = await queryVideoEditReview({ documentRef, sequenceRef, from: 0, to: 90 }, { signal: new AbortController().signal })
     const observed = await app.requireResult('observe_video_edit_frame', { documentRef, documentVersion: fresh.documentVersion, target: { kind: 'frames', sequenceRef, frames: (fresh.checkpoints as { frames: number[] }).frames } })
     expect(observed.documentVersion).toBe(fresh.documentVersion)
+  } finally { app.dispose() }
+})
+it('pixel plans pin managed files only for observation, reject replacement before rendering, and recover with a fresh plan', async () => {
+  const { owner, documentRef } = await inspectionFixture(), app = createApplicationHarness(), platform = getPlatform()
+  const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.activeSequenceId}` }
+  let identity = 'a'.repeat(64)
+  vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockImplementation(async () => ({ contentIdentity: identity, sizeBytes: 1000, fileModifiedAt: 1000 }))
+  vi.spyOn(platform.sceneDetection, 'onProgress').mockReturnValue(() => undefined)
+  vi.spyOn(platform.sceneDetection, 'detect').mockImplementation(async request => ({ cutsSeconds: [], contentIdentity: 'd'.repeat(64), motionScan: {
+    startSeconds: request.startSeconds, endSeconds: request.endSeconds, samplingFps: 15, width: 320, height: 180, sampledFrames: Math.ceil((request.endSeconds - request.startSeconds) * 15),
+    samples: Array.from({ length: Math.ceil((request.endSeconds - request.startSeconds) * 15) }, (_, i) => ({ fromSeconds: request.startSeconds + i / 15, toSeconds: Math.min(request.endSeconds, request.startSeconds + (i + 1) / 15), speed: 10, zoom: 0, change: 0, cut: false, still: false })),
+  } }))
+  vi.stubGlobal('Worker', class {
+    onmessage: ((event: MessageEvent<VideoEditMotionReviewResponse>) => void) | null = null
+    terminate(): void {}
+    postMessage(request: VideoEditMotionReviewRequest): void { queueMicrotask(() => this.onmessage?.({ data: { result: { records: collectVideoEditPixelMotion(request.pixels ?? [], request.composition.fps, request.policy), sampledFrames: 0, sampledInstances: 0 } } } as MessageEvent<VideoEditMotionReviewResponse>)) }
+  })
+  const query = () => queryVideoEditReview({ documentRef, sequenceRef, from: 0, to: 90, motion: { videoPixels: true } }, { signal: new AbortController().signal })
+  const observe = (plan: Record<string, unknown>) => app.call('observe_video_edit_frame', { documentRef, documentVersion: plan.documentVersion, target: { kind: 'frames', sequenceRef, frames: (plan.checkpoints as { frames: number[] }).frames } })
+  try {
+    const plan = await query(), revision = owner.document.revision
+    expect((await observe(plan)).ok).toBe(true)
+    expect(render.calls[0].document.media[0]).toMatchObject({ assetContent: { contentIdentity: identity }, sourceRevision: expect.stringContaining(':review:') })
+    expect(owner.document.media[0].assetContent).toBeUndefined()
+    const count = render.calls.length; identity = 'b'.repeat(64)
+    expect((await observe(plan)).ok).toBe(false); expect(render.calls).toHaveLength(count)
+    const fresh = await query()
+    expect(fresh.documentVersion).not.toBe(plan.documentVersion)
+    expect((await observe(fresh)).ok).toBe(true)
+    expect(owner.document.revision).toBe(revision); expect(owner.document.media[0].assetContent).toBeUndefined()
+    vi.mocked(trialVideoEditCodeFrames).mockImplementationOnce(async frames => { identity = 'c'.repeat(64); return { width: frames[0].document.width, height: frames[0].document.height, close: vi.fn() } as unknown as ImageBitmap })
+    expect((await observe(fresh)).ok).toBe(false)
   } finally { app.dispose() }
 })
 it('作品未编辑但已有跟踪结果更新时也拒绝旧观察计划，进度单独变化不影响版本', async () => {

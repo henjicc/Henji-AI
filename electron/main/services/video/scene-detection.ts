@@ -76,7 +76,7 @@ export class SceneDetectionService {
     const content = await identifyMediaContent(request.source)
     const screen = request.analysis === 'screen_changes'
     const motion = request.analysis === 'motion'
-    const key = createHash('sha256').update(JSON.stringify([motion ? 'motion-opencv-affine-v1' : screen ? 'screen-local-rgb-v1' : 'scdet-512-v2', content.identity, request.startSeconds, request.endSeconds, screen || motion ? null : request.sensitivity, request.includeStillness === true])).digest('hex')
+    const key = createHash('sha256').update(JSON.stringify([motion ? 'motion-opencv-display-v2' : screen ? 'screen-local-rgb-v1' : 'scdet-512-v2', content.identity, request.startSeconds, request.endSeconds, screen || motion ? null : request.sensitivity, request.includeStillness === true])).digest('hex')
     const bytes = await this.cache.read(key)
     if (bytes) {
       if ((await identifyMediaContent(request.source)).identity !== content.identity) throw new Error('读取缓存期间原视频已改变，请重新检测。')

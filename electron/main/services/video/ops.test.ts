@@ -11,7 +11,7 @@ vi.mock('../media-recycle/queue', () => ({ registerOwnedMedia: vi.fn() }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('./ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg', loadFfprobePath: async () => 'ffprobe' }))
 vi.mock('./hwaccel', () => ({ getPreferredEncoder: async () => ({ id: state.hardware ? 'gpu' : 'cpu', buildEncodeArgs: () => [] }), isHardwareEncoder: () => state.hardware, invalidateEncoderCache: state.retry }))
-import { compressVideoToFit, trimVideoSource } from './ops'
+import { compressVideoToFit, trimVideoSource, readVideoAnalysisGeometry, readVideoInfo } from './ops'
 
 type Options = { signal?: AbortSignal; timeout?: number }
 type Callback = (error: Error | null, stdout: string, stderr: string) => void
@@ -47,6 +47,15 @@ function run(mode: typeof modes[number], signal?: AbortSignal) {
     : compressVideoToFit({ source, maxSizeMB: 0.001 }, signal)
 }
 const encodes = () => state.exec.mock.calls.filter(call => call[0] === 'ffmpeg')
+it('analysis geometry shares the probe while preserving coded metadata and calibrating SAR and display rotation', async () => {
+  expect(await readVideoInfo(source)).toEqual({ durationSeconds: 10, width: 640, height: 480, hasAudio: false })
+  state.exec.mockImplementationOnce((_binary: string, _args: string[], _options: Options, callback: Callback) => callback(null, JSON.stringify({ streams: [{ codec_type: 'video', width: 720, height: 576, sample_aspect_ratio: '16:15', side_data_list: [{ rotation: 90 }] }] }), ''))
+  expect(await readVideoAnalysisGeometry(source)).toEqual({ aspectRatio: 4 / 3, rotation: 90 })
+  state.exec.mockImplementationOnce((_binary: string, _args: string[], _options: Options, callback: Callback) => callback(null, JSON.stringify({ streams: [{ codec_type: 'video', width: 1080, height: 1920, sample_aspect_ratio: '0:1' }] }), ''))
+  expect(await readVideoAnalysisGeometry(source)).toEqual({ aspectRatio: 9 / 16, rotation: 0 })
+  state.exec.mockImplementationOnce((_binary: string, _args: string[], _options: Options, callback: Callback) => callback(null, JSON.stringify({ streams: [{ codec_type: 'video', width: 640, height: 480, sample_aspect_ratio: '16:0' }] }), ''))
+  await expect(readVideoAnalysisGeometry(source)).rejects.toThrow('比例或旋转')
+})
 it.each(modes)('%s 失败不发布半成品，重试重新编码且临时文件保留容器后缀', async mode => {
   state.fail = true
   await expect(run(mode)).rejects.toThrow('encoder failed')

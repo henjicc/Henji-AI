@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { assertApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { queryVideoEditReviewCapability } from '@/core/application-control/domains/videoEdit/videoEditReviewCapability'
-import { videoEditComposition, videoEditDuration } from '@/core/videoEdit/document'
+import { videoEditComposition, videoEditDuration, type VideoEditMedia } from '@/core/videoEdit/document'
 import { assertVideoEditReviewBudget, collectVideoEditReviewStructure, selectVideoEditReviewFrames, videoEditReviewRange, videoEditTrackingReviewRanges, videoEditCrowdedReviewEvents, VIDEO_EDIT_REVIEW_TRACK_SAMPLE_BUDGET, type VideoEditReviewRecord } from '@/core/videoEdit/review'
 import { projectVideoEditTrackingRanges, videoEditSourceMapTrackingRange, visitVideoEditPictureInstances } from '@/core/videoEdit/sourceMap'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
@@ -18,10 +18,20 @@ import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { analyzeVideoEditMotionStructure } from './videoEditMotionReviewWorkerClient'
 import { readVideoEditCodeProgram } from './videoEditCodeState'
 import { codeTextFontGeneration } from '../videoEditGlyphMetrics'
+import { readVideoEditPixelMotion, verifyVideoEditMotionSources } from './videoEditPixelMotion'
 
-interface Snapshot { key: string; version: string; records: VideoEditReviewRecord[]; frames: number[]; warnings: string[] }
+interface Snapshot { key: string; version: string; baseVersion: string; records: VideoEditReviewRecord[]; frames: number[]; warnings: string[]; sources: VideoEditMedia[] }
 const snapshots = new WeakMap<VideoEditInstance, Map<string, Snapshot>>()
 const logger = createLogger('features.videoEdit.review')
+/** Recheck the file snapshots used by pixel review before observing its plan. */
+export async function verifyVideoEditReviewObservationSources(owner: VideoEditInstance, version: string, sequenceId: string, signal: AbortSignal, assertCurrent: () => void): Promise<VideoEditMedia[]> {
+  const marker = version.lastIndexOf('|review:')
+  if (marker < 0) return []
+  const snapshot = snapshots.get(owner)?.get(version.slice(marker + 8))
+  if (!snapshot || snapshot.version !== version || snapshot.baseVersion !== videoEditObservationVersion(owner, owner.document.revision) || JSON.parse(snapshot.key)[0] !== sequenceId) throw new Error('检查计划已失效，请重新查询检查点后取帧。')
+  await verifyVideoEditMotionSources(snapshot.sources, signal, assertCurrent)
+  return snapshot.sources
+}
 
 export async function queryVideoEditReview(raw: unknown, context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>): Promise<Record<string, unknown>> {
   const input = queryVideoEditReviewCapability.inputSchema.parse(raw)
@@ -53,6 +63,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       id = crypto.randomUUID()
       const { records, tracking } = collectVideoEditReviewStructure(composition, range)
       const results = videoEditTrackResults(composition)
+      let sources: VideoEditMedia[] = []
       const warnings = ['检查点是结构候选和优先抽样，不证明实际像素可见或其余时段无问题。', '跟踪区间来自原始采样；渲染可能插值或借用附近有效位置，跟丢不等于画面空白。']
       if (input.motion) {
         const programs: Record<string, CodeMaterialProgram> = {}
@@ -60,17 +71,24 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
           const code = entry.path.at(-1)!.clip.code
           if (code && !programs[code.versionId]) programs[code.versionId] = readVideoEditCodeProgram(owner, owner.document, code)
         } })
-        const motion = await analyzeVideoEditMotionStructure({ composition, range, programs, policy: { minGapSeconds: input.motion.minGapSeconds, minimumStillSeconds: input.motion.minimumHoldSeconds } }, context.signal)
+        const video = input.motion.videoPixels ? await readVideoEditPixelMotion(owner, composition, range, context.signal, assertCurrent) : undefined
+        sources = video?.sources ?? []
+        const motion = await analyzeVideoEditMotionStructure({ composition, range, programs, ...(video ? { pixels: video.pixels } : {}), policy: { minGapSeconds: input.motion.minGapSeconds, minimumStillSeconds: input.motion.minimumHoldSeconds } }, context.signal)
         assertCurrent()
         for (const record of motion.records) {
           assertVideoEditReviewBudget(records.length + 1)
           const code = record.basis === 'code_structure'
-          const suggestion = record.detail ?? (record.kind === 'motion_hard_stop' ? '观察运动结束前后连续帧；若非有意硬停，可调整原生曲线或代码动画的减速尾段。'
+          const pixel = record.basis === 'video_pixels'
+          const suggestion = record.detail ?? (pixel ? record.kind === 'pixel_unknown' ? '此区间的运动估计不足；请看连续画面，不能沿用邻近速度或据此判静止。'
+            : record.kind === 'pixel_still' ? '这是原视频的采样静止候选；结合阅读停留和其他图层动作判断，不自动补动画。'
+              : '观察原视频的运动、切换或局部变化是否符合创作意图；此证据不包含叠加效果和最终合成可见性。'
+            : record.kind === 'motion_hard_stop' ? '观察运动结束前后连续帧；若非有意硬停，可调整原生曲线或代码动画的减速尾段。'
             : record.kind === 'motion_hold' ? '这是片段变换保持区间；结合阅读、留白及素材内部动作判断是否需要调整，不自动补动画。'
               : code ? '观察此代码元素的独立动作或内容变化是否服务当前信息；按创作意图调整原代码或元素覆盖。' : '观察这段原生变换是否服务当前信息；有意承载运动可保留，调整仍沿原片段属性与曲线。')
           records.push({ ...record, motionEvidence: { basis: record.basis ?? 'clip_transform', ...(record.elementPath ? { elementPath: [...record.elementPath] } : {}), ...(record.peakSpeed === undefined ? {} : { peakSpeed: record.peakSpeed }), suggestion: code && record.kind === 'motion_hold' ? '此元素自身结构保持；父组、输入视频或其他图层仍可能运动，请看图判断阅读停留。' : suggestion } })
         }
         warnings.push('原生速度以所在序列画面宽为单位；代码速度以作者画幅宽为单位，均为百分比/播放秒。代码元素仅计自身动作，父组不重复计入子元素。变换保持不等于画面静止，视频、着色器、声音驱动和代码滤镜仍须观察；密集或硬停可属创作意图。', ...(motion.warnings ?? []))
+        if (video) warnings.push('视频像素证据来自原片15fps低分辨率采样，速度以原片显示画幅宽度百分比/播放秒表示，已按当前放置时钟重算；并非精确PTS或最终合成，不排除采样间的短变化。声音驱动代码、代码视频输入及着色器内部仍须观察。')
         for (const event of videoEditCrowdedReviewEvents(records, composition.fps, input.motion.minGapSeconds)) {
           assertVideoEditReviewBudget(records.length + 1)
           records.push({ kind: 'event_crowded', timeline: { from: event.from, to: Math.min(range.to, event.to) }, sequenceId: childId, path: [], subjectId: childId,
@@ -109,7 +127,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
         }
       }
       records.sort((a, b) => a.timeline.from - b.timeline.from || a.kind.localeCompare(b.kind) || a.subjectId.localeCompare(b.subjectId))
-      snapshot = { key, version, records, warnings, frames: selectVideoEditReviewFrames(records, range, input.maxFrames, videoEditDuration(composition)) }
+      snapshot = { key, baseVersion: version, version: sources.length ? `${version}|review:${id}` : version, records, warnings, sources, frames: selectVideoEditReviewFrames(records, range, input.maxFrames, videoEditDuration(composition)) }
       assertCurrent()
       while (saved.size >= 4) saved.delete(saved.keys().next().value!)
       saved.set(id, snapshot)
@@ -122,6 +140,7 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       ...(record.confidence === undefined ? {} : { confidence: record.confidence }), ...(record.source ? { source: { ...record.source } } : {}),
       ...(record.motionEvidence ? { motionEvidence: { ...record.motionEvidence, ...(record.motionEvidence.elementPath ? { elementPath: [...record.motionEvidence.elementPath] } : {}) } } : {}),
     }))
+    await verifyVideoEditMotionSources(snapshot.sources, context.signal, assertCurrent)
     assertCurrent()
     logger.info('剪辑检查点查询完成', { event: 'video_edit.review.completed', requestId: context.requestId, context: { documentId: projectId, sequenceId: childId, total: snapshot.records.length, frames: snapshot.frames.length } })
     return { documentRef: input.documentRef, sequenceRef: input.sequenceRef, documentVersion: snapshot.version, range: { fromFrame: range.from, toFrame: range.to }, checkpoints: { frames: [...snapshot.frames], selection: 'prioritized_sample' }, records, total: snapshot.records.length,

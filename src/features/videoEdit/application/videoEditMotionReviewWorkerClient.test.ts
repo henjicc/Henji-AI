@@ -12,6 +12,8 @@ import { buildSync } from 'esbuild'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import type { VideoEditClip } from '@/core/videoEdit/document'
+import { VideoEditSourceMapIndex } from '@/core/videoEdit/sourceMap'
+import type { VideoMotionScan } from '@/core/media/motionEvidence'
 
 class TestWorker {
   static instances: TestWorker[] = []
@@ -138,8 +140,13 @@ it('the browser bundle evaluates real code in a background thread, round-trips h
   const compile = (body: string) => compileCodeMaterial(`export default {apiVersion:1,languageVersion:3,name:"线程",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:2000,seed:0,parameters:{},render(ctx){${body}}}`)
   try {
     const program = compile('return [text({id:"moving",x:ctx.time*100,y:10,text:"真实线程",fontSize:20})];')
-    const result = await analyzeVideoEditMotionStructure({ composition: videoEditComposition(document, sequence.id), range: { from: 0, to: 60 }, programs: { v: program }, policy: {} }, new AbortController().signal)
+    const composition = videoEditComposition(document, sequence.id)
+    const scan: VideoMotionScan = { startSeconds: 0, endSeconds: 2, samplingFps: 15, width: 320, height: 180, sampledFrames: 30,
+      samples: Array.from({ length: 30 }, (_, i) => ({ fromSeconds: i / 15, toSeconds: (i + 1) / 15, speed: 6, zoom: 0, change: 0, cut: false, still: false })) }
+    const pixels = new VideoEditSourceMapIndex().query(composition, { from: 0, to: 60 }, ['video']).map(entry => ({ entry, scan }))
+    const result = await analyzeVideoEditMotionStructure({ composition, range: { from: 0, to: 60 }, programs: { v: program }, pixels, policy: {} }, new AbortController().signal)
     expect(result.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'code_structure', peakSpeed: expect.closeTo(10, 4) })]))
+    expect(result.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'video_pixels', peakSpeed: expect.closeTo(6, 4) })]))
     expect(measurements).toBe(1); expect(result.sampledCodeFrames).toBe(60)
     await ThreadWorker.instances[0].stopped
     clip.duration = 60000

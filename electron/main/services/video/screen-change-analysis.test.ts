@@ -9,6 +9,7 @@ import { ScreenChangeWorker } from './screen-change-worker-client'
 import { analyzeScreenChanges } from './screen-change-analysis'
 import { analyzeVideoMotion } from './motion-analysis'
 import { reviewMotionSamples } from '../../../../src/core/media/motionReview'
+import { readVideoAnalysisGeometry } from './ops'
 
 let directory: string; let workerPath: string; let source: string; let binary: string
 beforeAll(async () => {
@@ -53,6 +54,20 @@ it('运动分析复用实际解码与Worker，保留源偏移、局部弹出及�
   await expect(analyzeVideoMotion({ ...request, endSeconds: 10 }, new AbortController().signal, () => undefined, binary, workerPath)).rejects.toThrow('完整覆盖')
   const controller = new AbortController()
   await expect(analyzeVideoMotion(request, controller.signal, value => { if (value > 0) controller.abort(new Error('取消运动分析')) }, binary, workerPath)).rejects.toThrow()
+}, 20000)
+it('motion decode preserves portrait and non-square-pixel picture proportions', async () => {
+  const portrait = path.join(directory, 'portrait.mkv'), anamorphic = path.join(directory, 'anamorphic.mkv')
+  await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=270x480:rate=15:duration=1', '-c:v', 'ffv1', portrait], new AbortController().signal, binary)
+  await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=480x270:rate=15:duration=1', '-vf', 'setsar=3/4', '-c:v', 'ffv1', anamorphic], new AbortController().signal, binary)
+  const scan = async (source: string) => analyzeVideoMotion({ requestId: 'geometry', source, startSeconds: 0, endSeconds: 1, sensitivity: 50, analysis: 'motion' }, new AbortController().signal, () => undefined, binary, workerPath)
+  expect(await scan(portrait)).toMatchObject({ width: 180, height: 320, sampledFrames: 15 })
+  expect(await scan(anamorphic)).toMatchObject({ width: 320, height: 240, sampledFrames: 15 })
+  const normal = path.join(directory, 'normal.mp4'), rotated = path.join(directory, 'rotated.mp4')
+  await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=480x270:rate=15:duration=1', '-c:v', 'mpeg4', normal], new AbortController().signal, binary)
+  await runLoudnessFfmpeg(['-y', '-display_rotation:v:0', '90', '-i', normal, '-c', 'copy', rotated], new AbortController().signal, binary)
+  const geometry = await readVideoAnalysisGeometry(rotated)
+  expect(geometry.aspectRatio).toBeCloseTo(16 / 9, 6); expect(Math.abs(geometry.rotation)).toBe(90)
+  expect(await scan(rotated)).toMatchObject({ width: 320, height: 180, sampledFrames: 15 })
 }, 20000)
 it('取消真实解码后等待子进程与Worker释放；读取失败和不完整范围明确失败', async () => {
   const request = { requestId: 'cancel', source, startSeconds: 0, endSeconds: 4, sensitivity: 50, analysis: 'screen_changes' as const }

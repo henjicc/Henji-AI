@@ -1,7 +1,8 @@
 import { beforeAll, expect, it } from 'vitest'
 import { loadTrackingOpenCv } from '../local-inference/tracking/openCvTracking'
-import { VideoMotionAccumulator } from './motion-pixels'
+import { VideoMotionAccumulator, videoMotionDisplaySpeed } from './motion-pixels'
 import { reviewMotionSamples } from '../../../../src/core/media/motionReview'
+import type { VideoMotionOptions } from '../../../../src/core/media/motionEvidence'
 
 let cv: Awaited<ReturnType<typeof loadTrackingOpenCv>>['cv']
 beforeAll(async () => { cv = (await loadTrackingOpenCv()).cv })
@@ -19,6 +20,15 @@ function analyze(frames: Uint8Array[]) {
   try { for (const value of frames) analyzer.push(value); return analyzer.finish() }
   finally { analyzer.dispose() }
 }
+it('calibrates a known fitted displacement for non-square pixels and rotated display width', () => {
+  const options: VideoMotionOptions = { analysis: 'motion', width, height, channels: 1, fps, startSeconds: 0, endSeconds: 1 }
+  // Use an exact displacement to isolate calibration from the noisy LK/RANSAC
+  // estimate; the following real-CV tests independently constrain that estimate.
+  expect(videoMotionDisplaySpeed([1, 0, 0, 0, 1, 2], options)).toBeCloseTo(2 / width * fps * 100, 6)
+  expect(videoMotionDisplaySpeed([1, 0, 0, 0, 1, 2], { ...options, sourceAspectRatio: 1 })).toBeCloseTo(2 / height * fps * 100, 6)
+  expect(videoMotionDisplaySpeed([1, 0, 0, 0, 1, 2], { ...options, displayRotation: 90 })).toBeCloseTo(2 / height * fps * 100, 6)
+  expect(videoMotionDisplaySpeed([1, 0, 2, 0, 1, 0], { ...options, displayRotation: 90 })).toBeCloseTo(2 / height * fps * 100, 6)
+})
 
 it('real OpenCV estimates pan, push and a hard stop without turning compensated camera motion into local changes', () => {
   const scan = analyze(Array.from({ length: 35 }, (_, i) => frame(Math.min(i, 20) * 2)))

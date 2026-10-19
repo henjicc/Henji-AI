@@ -7,7 +7,7 @@ export const videoMotionScanSchema = z.object({
   sampledFrames: z.number().int().positive().max(60000), samples: z.array(motionReviewSampleSchema).min(1).max(60000),
 }).strict()
 export type VideoMotionScan = z.infer<typeof videoMotionScanSchema>
-export interface VideoMotionOptions { analysis: 'motion'; width: number; height: number; channels: 1; fps: number; startSeconds: number; endSeconds: number }
+export interface VideoMotionOptions { analysis: 'motion'; width: number; height: number; channels: 1; fps: number; startSeconds: number; endSeconds: number; sourceAspectRatio?: number; displayRotation?: number }
 
 /** Rebuildable evidence must cover its declared range, not just be valid JSON. */
 export function validateVideoMotionScan(raw: unknown, startSeconds: number, endSeconds: number): VideoMotionScan {

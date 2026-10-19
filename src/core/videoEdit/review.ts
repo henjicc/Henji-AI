@@ -5,7 +5,7 @@ import { videoEditTrackFrameTime, type VideoEditTrackHeader } from './tracking'
 import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 import { activeVideoEditEffects } from './compositing'
 
-export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable'
+export type VideoEditReviewKind = 'caption' | 'clip_boundary' | 'effect' | 'transition' | 'tracking_lost' | 'tracking_low_confidence' | 'tracking_uncovered' | 'tracking_unavailable' | 'motion' | 'motion_hard_stop' | 'motion_hold' | 'event_crowded' | 'code_change' | 'code_unavailable' | 'pixel_cut' | 'pixel_change' | 'pixel_still' | 'pixel_unknown'
 export interface VideoEditReviewRecord {
   kind: VideoEditReviewKind
   timeline: VideoEditSourceMapRange
@@ -15,7 +15,7 @@ export interface VideoEditReviewRecord {
   subjectType?: 'video_edit.clip' | 'video_edit.effect'
   confidence?: number
   source?: { fromUs: number; toUs: number }
-  motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string }
+  motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure' | 'video_pixels'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string }
 }
 export interface VideoEditReviewStructure { records: VideoEditReviewRecord[]; tracking: Array<{ composition: VideoEditComposition; entry: VideoEditSourceMapEntry }> }
 /** Heuristic attention-event grouping; neither the count nor the gap is an aesthetic verdict. */
@@ -38,7 +38,7 @@ export function videoEditCrowdedReviewEvents(records: readonly VideoEditReviewRe
     if (low < times.length && times[low] - record.timeline.from <= .6 * fps) representedCuts.add(cutKey(record))
   }
   for (const record of [...records].sort((a, b) => a.timeline.from - b.timeline.from)) {
-    if (!['caption', 'clip_boundary', 'effect', 'transition', 'motion', 'motion_hard_stop', 'code_change'].includes(record.kind)) continue
+    if (!['caption', 'clip_boundary', 'effect', 'transition', 'motion', 'motion_hard_stop', 'code_change', 'pixel_cut', 'pixel_change'].includes(record.kind)) continue
     const key = record.kind === 'caption' || record.kind === 'transition' ? JSON.stringify([record.kind, record.sequenceId, record.subjectId, record.path.map(step => step.clipId)])
       : JSON.stringify(['element', record.sequenceId, record.path.map(step => step.clipId), record.motionEvidence?.elementPath ?? []])
     if (record.kind === 'clip_boundary') {

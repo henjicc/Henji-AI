@@ -17,6 +17,8 @@ import { createApplicationCallerGrant } from '@/core/application-control/callerC
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { collectVideoEditMotionStructure } from '@/core/videoEdit/motionStructure'
 import { collectVideoEditCodeMotion } from '@/core/videoEdit/codeMotionReview'
+import { collectVideoEditPixelMotion } from '@/core/videoEdit/pixelMotionReview'
+import type { VideoMotionScan } from '@/core/media/motionEvidence'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
@@ -35,8 +37,9 @@ class MotionWorker {
   postMessage(request: VideoEditMotionReviewRequest): void { this.request = request; if (MotionWorker.automatic) queueMicrotask(() => { void this.respond() }) }
   async respond(): Promise<void> {
     try {
-      const { composition, range, policy, programs } = this.request
+      const { composition, range, policy, programs, pixels } = this.request
       const result = collectVideoEditMotionStructure(composition, range, policy)
+      if (pixels) result.records.push(...collectVideoEditPixelMotion(pixels, composition.fps, policy))
       if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, measureCodeText)).records)
       this.onmessage?.({ data: { result } } as MessageEvent<VideoEditMotionReviewResponse>)
     } catch (error) { this.onmessage?.({ data: { error: error instanceof Error ? error.message : '分析失败' } } as MessageEvent<VideoEditMotionReviewResponse>) }
@@ -85,6 +88,76 @@ async function codeFixture() {
   MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
   return data
 }
+async function pixelFixture() {
+  const data = await fixture(), platform = getPlatform()
+  editVideoProject(data.owner.document.id, document => { document.media[0].assetContent = { contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 }; document.sequences[0].clips[0].duration = 90; return document })
+  vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockResolvedValue({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+  const unsubscribe = vi.fn(); vi.spyOn(platform.sceneDetection, 'onProgress').mockReturnValue(unsubscribe)
+  const result = (from: number, to: number): VideoMotionScan => ({ startSeconds: from, endSeconds: to, samplingFps: 15, width: 320, height: 180, sampledFrames: Math.ceil((to - from) * 15),
+    samples: Array.from({ length: Math.ceil((to - from) * 15) }, (_, i) => ({ fromSeconds: from + i / 15, toSeconds: Math.min(to, from + (i + 1) / 15), speed: i < 15 ? 10 : 0, zoom: 0, change: 0, cut: false, still: i >= 15 })) })
+  vi.spyOn(platform.sceneDetection, 'detect').mockImplementation(async request => ({ cutsSeconds: [], contentIdentity: 'b'.repeat(64), motionScan: result(request.startSeconds, request.endSeconds) }))
+  const cancel = vi.spyOn(platform.sceneDetection, 'cancel').mockResolvedValue()
+  MotionWorker.instances = []; MotionWorker.automatic = true; vi.stubGlobal('Worker', MotionWorker)
+  return { ...data, platform, unsubscribe, cancel, result }
+}
+it('public pixel review scans overlapping source use once, retains both placements and pages without decoding again', async () => {
+  const { owner, input, platform, unsubscribe } = await pixelFixture(), app = createApplicationHarness()
+  const before = structuredClone(owner.document), past = owner.past.length, frame = owner.frame
+  try {
+    const first = parse(await app.requireResult('query_video_edit_review', { ...input, motion: { videoPixels: true }, limit: 1 }))
+    const records = [...first.records]; let cursor = first.nextCursor
+    while (cursor) { const page = parse(await app.requireResult('query_video_edit_review', { ...input, motion: { videoPixels: true }, limit: 1, cursor })); records.push(...page.records); cursor = page.nextCursor }
+    expect(platform.sceneDetection.detect).toHaveBeenCalledTimes(1)
+    expect(platform.sceneDetection.detect).toHaveBeenCalledWith(expect.objectContaining({ analysis: 'motion', startSeconds: 0, endSeconds: 3 }))
+    const pixel = records.filter(record => record.motionEvidence?.basis === 'video_pixels')
+    expect(new Set(pixel.map(record => record.subjectRef.id))).toEqual(new Set([`${owner.document.id}:a`, `${owner.document.id}:b`]))
+    expect(pixel.some(record => record.kind === 'motion' && record.source && record.motionEvidence?.peakSpeed)).toBe(true)
+    expect(pixel.some(record => record.kind === 'pixel_still')).toBe(true)
+    expect(unsubscribe).toHaveBeenCalledOnce(); expect(MotionWorker.instances).toHaveLength(1)
+    expect(owner.document).toEqual(before); expect(owner.past.length).toBe(past); expect(owner.frame).toBe(frame)
+    vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'c'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+    await expect(queryVideoEditReview({ ...input, motion: { videoPixels: true }, limit: 1, cursor: first.nextCursor }, context())).rejects.toThrow('重新定位')
+  } finally { app.dispose() }
+})
+it('fresh pixel analysis binds an unpinned project source only to its query snapshot and rejects changed files or malformed scans', async () => {
+  const { owner, input, platform, result } = await pixelFixture()
+  editVideoProject(owner.document.id, document => { delete document.media[0].assetContent; return document })
+  const fresh = parse(await queryVideoEditReview({ ...input, motion: { videoPixels: true }, limit: 1 }, context()))
+  expect(fresh.records.length).toBe(1)
+  expect(owner.document.media[0].assetContent).toBeUndefined()
+  expect(platform.sceneDetection.detect).toHaveBeenCalledOnce()
+  vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'c'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+  await expect(queryVideoEditReview({ ...input, motion: { videoPixels: true }, limit: 1, cursor: fresh.nextCursor }, context())).rejects.toThrow('重新定位')
+  vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+  editVideoProject(owner.document.id, document => { document.media[0].assetContent = { contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 }; return document })
+  vi.mocked(platform.sceneDetection.detect).mockImplementationOnce(async request => {
+    vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'c'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+    return { cutsSeconds: [], contentIdentity: 'b'.repeat(64), motionScan: result(request.startSeconds, request.endSeconds) }
+  })
+  await expect(queryVideoEditReview({ ...input, motion: { videoPixels: true } }, context())).rejects.toThrow('重新定位')
+  vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ contentIdentity: 'a'.repeat(64), sizeBytes: 1000, fileModifiedAt: 1000 })
+  vi.mocked(platform.sceneDetection.detect).mockImplementationOnce(async request => ({ cutsSeconds: [], contentIdentity: 'b'.repeat(64), motionScan: { ...result(request.startSeconds, request.endSeconds), samples: [] } }))
+  await expect(queryVideoEditReview({ ...input, motion: { videoPixels: true } }, context())).rejects.toThrow()
+})
+it.each(['cancel', 'edit'] as const)('a pending pixel scan %s cancels the shared native request, releases progress, and rejects the old plan', async kind => {
+  const { owner, input, platform, cancel, unsubscribe, result } = await pixelFixture(), controller = new AbortController()
+  let accept!: (value: Awaited<ReturnType<typeof platform.sceneDetection.detect>>) => void, ready!: () => void
+  const started = new Promise<void>(resolve => { ready = resolve })
+  vi.mocked(platform.sceneDetection.detect).mockImplementationOnce(() => { ready(); return new Promise(resolve => { accept = resolve }) })
+  const pending = queryVideoEditReview({ ...input, motion: { videoPixels: true } }, { signal: controller.signal }), rejected = expect(pending).rejects.toThrow()
+  await started
+  if (kind === 'cancel') controller.abort(new Error('取消视频像素分析'))
+  else editVideoProject(owner.document.id, document => { document.sequences[0].name = '已编辑'; return document })
+  expect(cancel).toHaveBeenCalledOnce()
+  accept({ cutsSeconds: [], contentIdentity: 'b'.repeat(64), motionScan: result(0, 3) }); await rejected
+  expect(unsubscribe).toHaveBeenCalledOnce(); expect(MotionWorker.instances).toHaveLength(0)
+})
+it.each([12000, 60001])('pixel budgets preflight the whole query before decoding: %s placed frames', async frames => {
+  const { owner, input, platform } = await pixelFixture()
+  editVideoProject(owner.document.id, document => { document.media[0].durationSeconds = 10000; document.sequences[0].clips[0].duration = frames; return document })
+  await expect(queryVideoEditReview({ ...input, to: frames, motion: { videoPixels: true } }, context())).rejects.toThrow(frames > 60000 ? '60000' : '300秒')
+  expect(platform.sceneDetection.detect).not.toHaveBeenCalled()
+})
 it('public review reuses the checked author IR, returns code element evidence, and protects paged results from font changes', async () => {
   const { owner, input } = await codeFixture(), app = createApplicationHarness()
   const before = structuredClone(owner.document), past = owner.past.length, frame = owner.frame

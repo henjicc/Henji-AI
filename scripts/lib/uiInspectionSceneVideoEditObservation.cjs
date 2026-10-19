@@ -33,6 +33,16 @@ function createVideoEditObservationScene() {
       try {
         await showVideoEditProjects(page)
         const seeded = await seedVideoEditProject(page, fixture)
+        await page.evaluate(async ({ source, projectId, id }) => {
+          const documents = window.henjiNative.documents
+          const resource = await documents.importFile({ sourcePath: source, container: { kind: 'project', projectId }, folder: 'materials' })
+          const read = await documents.readDocument({ id })
+          const media = read.content.media.find(value => value.id === 'video-reference')
+          media.path = resource.path
+          media.assetContent = await window.henjiNative.assetLibrary.inspectFileContent(resource.path, 'video')
+          read.content.sequences[0].clips[0].itemId = 'video-reference-item'; read.content.sequences[0].clips[0].kind = 'video'
+          await documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
+        }, { source: videoReferencePath, projectId: seeded.projectId, id: seeded.documentId })
         await openVideoEditProjectCard(page, seeded.projectId)
         const identity = await authorizeMcpConnection(page, { name: '定向观察验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji observation Reality')
@@ -78,6 +88,16 @@ function createVideoEditObservationScene() {
         near(await pixel(videoCompare.bytes, 400, 45), [255, 0, 0]); near(await pixel(videoCompare.bytes, 560, 45), [255, 255, 0])
         assert.notDeepEqual(await pixel(videoCompare.bytes, 170, 45), await pixel(videoCompare.bytes, 240, 45), '竖版参考应保留画幅并留边')
         for (const observation of evidence.observations) assert.equal(observation.documentVersion, list.data.documentVersion)
+        assert.deepEqual(readVideoEditFile(seeded.file), before)
+        assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
+        const motionPlan = (await callTool(client, 'query_video_edit_review', { documentRef, sequenceRef, from: 0, to: 120, motion: { videoPixels: true, minimumHoldSeconds: .25 }, limit: 50 })).data
+        assert.ok(motionPlan.records.some(record => record.kind === 'code_change' && record.motionEvidence?.basis === 'code_structure' && record.timeline.fromFrame === 30), JSON.stringify(motionPlan))
+        assert.ok(motionPlan.records.some(record => record.kind === 'pixel_cut' && record.motionEvidence?.basis === 'video_pixels' && record.timeline.fromFrame >= 55 && record.timeline.fromFrame <= 65), JSON.stringify(motionPlan))
+        assert.ok(motionPlan.records.some(record => record.kind === 'pixel_still'), JSON.stringify(motionPlan))
+        assert.ok(motionPlan.records.filter(record => record.motionEvidence?.basis === 'video_pixels').every(record => record.subjectRef.id.endsWith(':base') && record.source), JSON.stringify(motionPlan))
+        evidence.motionPlan = motionPlan; store()
+        const motionObserved = await observe('motion-review', { kind: 'frames', frames: motionPlan.checkpoints.frames }, { documentVersion: motionPlan.documentVersion })
+        assert.deepEqual(motionObserved.data.contactSheet.frames, motionPlan.checkpoints.frames)
         assert.deepEqual(readVideoEditFile(seeded.file), before)
         assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)
         evidence.capture = await capture('observation-review-host'); evidence.completed = true; store()
