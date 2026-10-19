@@ -10,6 +10,8 @@
 
 时间始终为原文件微秒；`saved` 是保存的文本，`timeline` 是字幕投影，`intent` 是创作提示词，均不能冒充声音或画面检测。不同来源按 `originRef` 区分校对版本。顶层 `sourceVerified` 只说明目标素材的导入身份是否核实；逐条检查每条记录的 `sourceVerified`，仅按路径关联、没有原文件身份的录制记录仍为 false，不能继承顶层 true。默认不识别、不分析、不修改作品。此入口不提供精剪候选；按文字剪辑仍使用下述转录检索。
 
+查询由原读取请求持有，可并行用 `read_application_entity({ref:itemRef,propertyIds:["video_edit.item.content_queries"]})` 查阶段和终态，仅返回当前领域权限覆盖的查询。phaseProgress 是本阶段实测比例，null 表示未知；声音按完成声道路数、文档按已检查数量、画面按检测器回报。取消原请求或编辑/关闭剪辑会取消旧查询，迟到结果不恢复它。失败后读 error 再沿原入口重试，复用缓存、不重新识别或计费。进度只读、有界、不入作品和撤销，关闭重开清空。
+
 1. 先用 `query_video_edit_transcript` 局部查已有口播与校对字幕，需要完整编辑时再读 `video_edit.caption` 或序列转录稿；已有可用文本不重复识别。需要识别时 `prepare_video_edit_subtitle_audio` 给 documentRef、sequenceRef，scope=sequence/in-out/selection，可给 trackRef 指定人声轨。
 2. 准备是本地混音，不计识别费；selection 保持选中声音之间的序列空隙，in-out 需要完整入出点。背景音乐太强时选清楚的人声轨。
 3. 拿返回 audioDocumentRef 调 `generate_video_edit_subtitles`，给同一 documentRef/sequenceRef/audioDocumentRef，按需 modelId、language=zh/en 及分段参数。识别可能计费，先走正式审批。修改声音或时序后重新准备，迟到结果不能填进已变目标。

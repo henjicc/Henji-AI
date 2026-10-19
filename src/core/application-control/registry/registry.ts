@@ -313,7 +313,7 @@ export class ApplicationReflectionRegistry {
      */
     let raw: unknown
     try {
-      raw = await this.requireProvider(entity.id).readEntity(ref, { propertyIds: allowed })
+      raw = await this.requireProvider(entity.id).readEntity(ref, { propertyIds: allowed }, context)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (!/NOT_FOUND/.test(message)) throw error

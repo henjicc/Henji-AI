@@ -6,6 +6,7 @@ import { getAudioEditProjectInstance, loadAudioEditProject } from '@/features/au
 import { getPlatform } from '@/platform/runtime'
 import type { DocumentsPlatform } from '@/platform/contracts/documents'
 import type { CapabilityExecutionContext } from '@/features/application-control'
+import type { MediaContentQueryProgressUpdate } from '@/core/media/contentIndex'
 import { sameVideoEditMediaPath } from './videoEditMedia'
 
 type AudioOwner = Awaited<ReturnType<typeof loadAudioEditProject>>
@@ -26,7 +27,7 @@ const activeToken = (value: DocumentSummary): unknown => {
 
 /** Discover authorized documents without opening unrelated editors or cloning their full word tables. */
 export async function readVideoEditContentDocuments(options: Options, container: DocumentContainerRef, mediaPath: string,
-  context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>) {
+  context: Pick<CapabilityExecutionContext, 'signal' | 'callerGrant' | 'requestId'>, onProgress?: (update: MediaContentQueryProgressUpdate) => void) {
   const platform = getPlatform(); const signal = context.signal
   const permissions = context.callerGrant?.permissions
   const permitted = (permission: 'audio_edit:read' | 'screen_recording:read'): boolean => !permissions || permissions.includes(permission)
@@ -35,7 +36,7 @@ export async function readVideoEditContentDocuments(options: Options, container:
   const warnFailure = (id: string, error: unknown): void => {
     logger.warn('素材关联文档发现不完整', { event: 'video_edit.content_index.discovery.incomplete', requestId: context.requestId, context: { documentId: id }, error })
   }
-  const catalog = async (): Promise<Catalog> => {
+  const catalog = async (report = true): Promise<Catalog> => {
     const entries: DocumentSummary[] = []; const warnings: string[] = []; const failures: string[] = []
     if (options.discoveryScope !== 'none') for (const [kind, permission] of [['audio_edit', 'audio_edit:read'], ['screen_recording', 'screen_recording:read']] as const) {
       if (!permitted(permission)) { warnings.push(`没有${kind === 'audio_edit' ? '口播' : '录制'}读取权限，未发现这类关联文档。`); failures.push(kind); continue }
@@ -47,6 +48,7 @@ export async function readVideoEditContentDocuments(options: Options, container:
           const page = await platform.documents.listDocumentsPage({ kind, container: options.discoveryScope === 'all' ? { kind: 'any' } : container, includeDrafts: true, includeMissing: false, pageSize: 100, ...(cursor ? { cursor } : {}) })
           signal.throwIfAborted()
           entries.push(...page.items)
+          if (report) onProgress?.({ phase: 'listing_documents', message: '查找关联文档', completedUnits: entries.length, totalUnits: null })
           cursor = page.nextCursor ?? undefined
           if (cursor && seen.has(cursor)) throw new Error('关联文档列表分页未推进。')
           if (cursor) seen.add(cursor)
@@ -58,11 +60,14 @@ export async function readVideoEditContentDocuments(options: Options, container:
     const unique = [...new Map(entries.map(entry => [entry.id, entry])).values()].sort((a, b) => a.id.localeCompare(b.id))
     return { entries: unique, active: new Map(unique.map(entry => [entry.id, activeToken(entry)])), complete: !failures.length, warnings }
   }
+  onProgress?.({ phase: 'listing_documents', message: '查找关联文档', completedUnits: 0, totalUnits: null })
   const initial = await catalog(); const warnings = [...initial.warnings]
   let complete = initial.complete; let failedDocuments = 0
   let cache = pathCaches.get(platform.documents)
   if (!cache) { cache = new Map(); pathCaches.set(platform.documents, cache) }
   const discovered = new Map<string, DocumentSummary>()
+  let scanned = 0
+  onProgress?.({ phase: 'reading_documents', message: '检查关联文档的来源', completedUnits: 0, totalUnits: initial.entries.length })
   for (const entry of initial.entries) {
     signal.throwIfAborted()
     try {
@@ -86,6 +91,7 @@ export async function readVideoEditContentDocuments(options: Options, container:
       }
       if (paths.some(path => sameVideoEditMediaPath(path, mediaPath))) discovered.set(entry.id, entry)
     } catch (error) { signal.throwIfAborted(); complete = false; failedDocuments++; warnFailure(entry.id, error) }
+    onProgress?.({ phase: 'reading_documents', message: '检查关联文档的来源', completedUnits: ++scanned, totalUnits: initial.entries.length })
   }
   const audioIds = new Set([...discovered.values()].filter(entry => entry.kind === 'audio_edit').map(entry => entry.id))
   const recordingIds = new Set([...discovered.values()].filter(entry => entry.kind === 'screen_recording').map(entry => entry.id))
@@ -94,6 +100,8 @@ export async function readVideoEditContentDocuments(options: Options, container:
   const audios: Array<{ owner: AudioOwner; version: number }> = []
   const loadedAudioTokens = new Map<string, unknown>()
   const recordings: RecordingOwner[] = []
+  const totalAssociated = audioIds.size + recordingIds.size; let checked = 0
+  onProgress?.({ phase: 'checking_associated_sources', message: '核对匹配的口播与录制', completedUnits: 0, totalUnits: totalAssociated })
   for (const id of audioIds) {
     signal.throwIfAborted()
     try {
@@ -108,6 +116,7 @@ export async function readVideoEditContentDocuments(options: Options, container:
       if (id === options.audioDocumentRef?.id) throw error
       complete = false; failedDocuments++; warnFailure(id, error)
     }
+    onProgress?.({ phase: 'checking_associated_sources', message: '核对匹配的口播与录制', completedUnits: ++checked, totalUnits: totalAssociated })
   }
   const recordingApi = recordingIds.size ? await import('@/features/screenRecording') : undefined
   for (const id of recordingIds) {
@@ -121,6 +130,7 @@ export async function readVideoEditContentDocuments(options: Options, container:
       if (id === options.recordingRef?.id) throw error
       complete = false; failedDocuments++; warnFailure(id, error)
     }
+    onProgress?.({ phase: 'checking_associated_sources', message: '核对匹配的口播与录制', completedUnits: ++checked, totalUnits: totalAssociated })
   }
   if (failedDocuments) warnings.push(`有 ${failedDocuments} 份文档未能读取或核实，关联内容不完整；可修复来源后重新查询。`)
   if (recordings.length) warnings.push('关联录制仅保存了原文件路径，未保存文件身份；这些记录的来源尚未核实，请结合实际画面复核。')
@@ -136,7 +146,7 @@ export async function readVideoEditContentDocuments(options: Options, container:
     assertCurrentSync: assertAudioCurrent,
     async assertCurrent(): Promise<void> {
       signal.throwIfAborted(); assertAudioCurrent()
-      const latest = await catalog()
+      const latest = await catalog(false)
       if (JSON.stringify(latest.warnings) !== JSON.stringify(initial.warnings) || JSON.stringify(latest.entries.map(entry => [summaryToken(entry), latest.active.get(entry.id)])) !== expectedCatalog) throw new Error('查询期间关联文档目录或内容已改变，请重新查询。')
       for (const read of recordings) if ((await recordingApi!.readRecordingUnderstanding(read.meta.id)).meta.revision !== read.meta.revision) throw new Error('查询期间录制理解已改变，请重新查询。')
       assertAudioCurrent(); signal.throwIfAborted()

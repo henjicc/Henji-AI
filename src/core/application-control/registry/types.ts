@@ -59,7 +59,9 @@ export interface ApplicationEntityProvider {
   listEntities(request: ApplicationEntityListRequest): Promise<ApplicationEntityListResult>
   readEntity(
     ref: ApplicationRef,
-    request: ApplicationEntityReadRequest
+    request: ApplicationEntityReadRequest,
+    /** Trusted registry access, for projections containing facts from more than one domain. */
+    context?: ApplicationControlAccessContext
   ): Promise<ApplicationEntitySnapshot>
   getPropertyAvailability(
     ref: ApplicationRef,

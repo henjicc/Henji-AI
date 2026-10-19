@@ -9,13 +9,15 @@ import { videoEditTextMediaIdentity } from '@/core/videoEdit/textTranscript'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createRecordingDocument } from '@/core/screenRecording/document'
 import { queryVideoEditContentCapability } from '@/core/application-control/domains/videoEdit/videoEditContentIndexCapability'
-import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
+import { createApplicationCallerGrant, revokeApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { createAudioEditDraft, flushAudioEditProject } from '@/features/audioEdit'
 import { editAudioEditProject, releaseAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { closeAllVideoEdits, createVideoEditTestProject, reopenVideoEdit } from './videoEditDocumentTestKit'
-import { editVideoProject, saveVideoEdit } from './videoEditService'
+import { editVideoProject, saveVideoEdit, subscribeVideoEdit } from './videoEditService'
 import { readVideoEditContentIndex } from './videoEditContentIndex'
+import { readVideoEditContentQueries } from './videoEditContentQueryProgress'
+import { mediaContentQueryProgressSchema } from '@/core/media/contentIndex'
 
 const identity = { sizeBytes: 123, fileModifiedAt: 1234, contentIdentity: 'original' }
 const context = () => ({ signal: new AbortController().signal })
@@ -23,6 +25,7 @@ const audioIds: string[] = []
 beforeEach(() => {
   installHarnessNativeStorage()
   vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue(identity)
+  vi.spyOn(getPlatform().sceneDetection, 'onProgress').mockReturnValue(() => undefined)
 })
 afterEach(async () => {
   await closeAllVideoEdits()
@@ -349,4 +352,126 @@ it('目录读取失败保留已有结果并报告不完整，发现期间取消�
   const read = vi.spyOn(getPlatform().documents, 'readDocument')
   read.mockImplementationOnce(async target => { const result = await readOriginal(target); seedRelatedRecording(owner, sourcePath, '查询中新建'); return result })
   await expect(readVideoEditContentIndex(input, context())).rejects.toThrow('目录或内容已改变')
+})
+
+it('查询期间经正式素材属性读到真实阶段进度，查询完成不改变作品或历史；进度不可伪造', async () => {
+  const { owner, input } = await fixture()
+  const app = createApplicationHarness(); const before = structuredClone(owner.document); const past = owner.past.length
+  let report!: (event: { requestId: string; progress: number }) => void
+  const unsubscribe = vi.fn()
+  vi.mocked(getPlatform().sceneDetection.onProgress).mockImplementation(listener => { report = listener; return unsubscribe })
+  let accept!: (value: { cutsSeconds: number[]; contentIdentity: string }) => void
+  let started!: (id: string) => void
+  const ready = new Promise<string>(resolve => { started = resolve })
+  vi.spyOn(getPlatform().sceneDetection, 'detect').mockImplementation(request => { started(request.requestId); return new Promise(resolve => { accept = resolve }) })
+  const query = app.requireResult('query_video_edit_content', { ...input, kinds: ['scene'], text: undefined })
+  const requestId = await ready
+  const read = async () => await app.requireResult('read_application_entity', { ref: input.itemRef, propertyIds: ['video_edit.item.content_queries'] })
+  try {
+    report({ requestId: 'unrelated-request', progress: .9 })
+    expect(readVideoEditContentQueries(owner, 'item')[0]).toMatchObject({ state: 'running', phase: 'analyzing_video', phaseProgress: null })
+    report({ requestId, progress: .4 })
+    const result = await read()
+    expect(result).toMatchObject({ properties: { 'video_edit.item.content_queries': [{ state: 'running', phase: 'analyzing_video', phaseProgress: .4, totalUnits: null }] } })
+    const reader = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'progress-video-only', capabilityIds: ['read_application_entity'], permissions: ['application:read', 'video_edit:read'], allowWrites: false, allowDestructive: false }))
+    expect(await reader.execute({ id: 'read_application_entity', version: 1, input: { ref: input.itemRef, propertyIds: ['video_edit.item.content_queries'] } }, { ...context(), requestId: crypto.randomUUID() })).toMatchObject({ ok: true, data: { properties: { 'video_edit.item.content_queries': [] } } })
+    const rejected = await app.call('change_application_entities', { summary: '伪造进度', changes: [{ kind: 'set_properties', target: input.itemRef, entityType: 'video_edit.item', properties: { 'video_edit.item.content_queries': [] } }] })
+    expect(rejected.ok).toBe(false)
+    accept({ cutsSeconds: [1], contentIdentity: 'a'.repeat(64) })
+    expect(parse(await query).total).toBe(1)
+    expect(readVideoEditContentQueries(owner, 'item')[0]).toMatchObject({ state: 'completed', phase: 'finished', phaseProgress: 1 })
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(owner.document).toEqual(before); expect(owner.past.length).toBe(past)
+    await saveVideoEdit(owner.document.id); const reopened = await reopenVideoEdit(owner.document.id)
+    expect(readVideoEditContentQueries(reopened, 'item')).toEqual([])
+  } finally { app.dispose() }
+})
+
+it('文档扫描与声音声道路数进度可读，失败状态保留后原入口可重试', async () => {
+  const { owner, input, sourcePath } = await fixture()
+  seedRelatedRecording(owner, sourcePath)
+  editVideoProject(owner.document.id, document => { document.items[0].audioChannels = [{ format: 'mono', sources: [{ stream: 0, channel: 0 }] }, { format: 'mono', sources: [{ stream: 1, channel: 0 }] }]; return document })
+  const seen: ReturnType<typeof readVideoEditContentQueries> = []
+  const unsubscribe = subscribeVideoEdit(() => { const last = readVideoEditContentQueries(owner, 'item').at(-1); if (last) seen.push(last) })
+  const detect = vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async () => {
+    const current = readVideoEditContentQueries(owner, 'item').at(-1)
+    if (current) seen.push(current)
+    return { revision: 0, suggestions: [], energy: { resolutionMs: 10, thresholdDb: -40, highThresholdDb: -45, pauses: [] } }
+  })
+  try {
+    const query = { ...input, text: undefined, kinds: ['pause'] }
+    await readVideoEditContentIndex(query, context())
+    expect(seen.some(value => value.phase === 'reading_documents' && value.totalUnits === 1 && value.completedUnits === 1)).toBe(true)
+    expect(seen.some(value => value.phase === 'analyzing_audio' && value.totalUnits === 2 && value.completedUnits === 1 && value.phaseProgress === .5)).toBe(true)
+    detect.mockRejectedValueOnce(new Error('解码失败'))
+    await expect(readVideoEditContentIndex(query, context())).rejects.toThrow('解码失败')
+    expect(readVideoEditContentQueries(owner, 'item').at(-1)).toMatchObject({ state: 'failed', phase: 'analyzing_audio', error: '解码失败' })
+    await readVideoEditContentIndex(query, context())
+    expect(readVideoEditContentQueries(owner, 'item').at(-1)?.state).toBe('completed')
+    expect(seen.every(value => mediaContentQueryProgressSchema.safeParse(value).success)).toBe(true)
+  } finally { unsubscribe() }
+})
+
+it('取消与等待期间编辑立即阻断旧分析，迟到进度与结果不能复活已取消查询', async () => {
+  const { owner, input } = await fixture()
+  const controller = new AbortController()
+  let accept!: (value: { cutsSeconds: number[]; contentIdentity: string }) => void
+  let report!: (event: { requestId: string; progress: number }) => void
+  let started!: (id: string) => void
+  const ready = new Promise<string>(resolve => { started = resolve })
+  vi.mocked(getPlatform().sceneDetection.onProgress).mockImplementation(listener => { report = listener; return () => undefined })
+  vi.spyOn(getPlatform().sceneDetection, 'detect').mockImplementation(request => { started(request.requestId); return new Promise(resolve => { accept = resolve }) })
+  const cancel = vi.spyOn(getPlatform().sceneDetection, 'cancel').mockResolvedValue()
+  const query = readVideoEditContentIndex({ ...input, text: undefined, kinds: ['scene'] }, { signal: controller.signal })
+  const rejected = expect(query).rejects.toThrow('关联内容已改变')
+  const requestId = await ready
+  editVideoProject(owner.document.id, document => { document.sequences[0].name = '人工修改'; return document })
+  expect(cancel).toHaveBeenCalledWith(requestId)
+  const stopped = readVideoEditContentQueries(owner, 'item').at(-1)!
+  expect(stopped.state).toBe('cancelled')
+  report({ requestId, progress: .9 })
+  expect(readVideoEditContentQueries(owner, 'item').at(-1)).toEqual(stopped)
+  accept({ cutsSeconds: [1], contentIdentity: 'a'.repeat(64) })
+  await rejected
+  expect(readVideoEditContentQueries(owner, 'item').at(-1)?.state).toBe('cancelled')
+})
+
+it('进度只保留有界副本且按素材项隔离；读取授权撤销不交付分析结果', async () => {
+  const { owner, input } = await fixture()
+  for (let i = 0; i < 10; i++) await readVideoEditContentIndex({ ...input, discoveryScope: 'none' }, context())
+  const statuses = readVideoEditContentQueries(owner, 'item')
+  expect(statuses).toHaveLength(8)
+  statuses[0].message = 'polluted'
+  expect(readVideoEditContentQueries(owner, 'item')[0].message).not.toBe('polluted')
+  expect(readVideoEditContentQueries(owner, 'other')).toEqual([])
+  const grant = createApplicationCallerGrant({ callerId: 'revoked-content', capabilityIds: ['query_video_edit_content'], permissions: ['video_edit:read'], allowWrites: false, allowDestructive: false })
+  const session = createApplicationCapabilitySession(grant)
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => { revokeApplicationCallerGrant(grant); return identity })
+  expect(await session.execute({ id: 'query_video_edit_content', version: 1, input: { ...input, discoveryScope: 'none' } }, { ...context(), requestId: crypto.randomUUID() })).toMatchObject({ ok: false })
+})
+
+it('并发查询有界，取消尚未落定时不让新分析越过容量，结束后可重试', async () => {
+  const { owner, input } = await fixture()
+  const controllers = Array.from({ length: 8 }, () => new AbortController())
+  const accepts: Array<(value: { cutsSeconds: number[]; contentIdentity: string }) => void> = []
+  let started!: () => void
+  const ready = new Promise<void>(resolve => { started = resolve })
+  const detect = vi.spyOn(getPlatform().sceneDetection, 'detect').mockImplementation(() => new Promise(resolve => {
+    accepts.push(resolve); if (accepts.length === 8) started()
+  }))
+  vi.spyOn(getPlatform().sceneDetection, 'cancel').mockResolvedValue()
+  const query = { ...input, text: undefined, discoveryScope: 'none', kinds: ['scene'] }
+  const running = controllers.map(controller => readVideoEditContentIndex(query, { signal: controller.signal }).then(() => 'completed', () => 'cancelled'))
+  await ready
+  await expect(readVideoEditContentIndex(query, context())).rejects.toThrow('八项')
+  controllers[0].abort()
+  await expect(readVideoEditContentIndex(query, context())).rejects.toThrow('八项')
+  expect(detect).toHaveBeenCalledTimes(8)
+  accepts[0]({ cutsSeconds: [], contentIdentity: 'a'.repeat(64) })
+  expect(await running[0]).toBe('cancelled')
+  detect.mockResolvedValueOnce({ cutsSeconds: [], contentIdentity: 'a'.repeat(64) })
+  await readVideoEditContentIndex(query, context())
+  for (const accept of accepts.slice(1)) accept({ cutsSeconds: [], contentIdentity: 'a'.repeat(64) })
+  expect((await Promise.all(running)).slice(1)).toEqual(Array(7).fill('completed'))
+  expect(readVideoEditContentQueries(owner, 'item')).toHaveLength(8)
 })

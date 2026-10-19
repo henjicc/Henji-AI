@@ -14,6 +14,15 @@ export const mediaContentRecordSchema = z.object({
   originRef: applicationRefSchema, recordId: z.string().min(1), sourceVerified: z.boolean(),
 }).strict()
 export type MediaContentRecord = z.infer<typeof mediaContentRecordSchema>
+/** Runtime observation only; this is never saved into a media/document file. */
+export const mediaContentQueryProgressSchema = z.object({
+  id: z.string().uuid(), state: z.enum(['running', 'completed', 'failed', 'cancelled']),
+  phase: z.enum(['checking_source', 'listing_documents', 'reading_documents', 'checking_associated_sources', 'reading_text', 'analyzing_audio', 'analyzing_video', 'verifying_result', 'finished']),
+  message: z.string().max(1000), completedUnits: z.number().int().nonnegative(), totalUnits: z.number().int().nonnegative().nullable(),
+  phaseProgress: z.number().min(0).max(1).nullable(), updatedAt: z.string().datetime(), error: z.string().max(2000).optional(),
+}).strict()
+export type MediaContentQueryProgress = z.infer<typeof mediaContentQueryProgressSchema>
+export type MediaContentQueryProgressUpdate = Pick<MediaContentQueryProgress, 'phase' | 'message'> & Partial<Pick<MediaContentQueryProgress, 'completedUnits' | 'totalUnits' | 'phaseProgress'>>
 export interface MediaContentFact extends Omit<MediaContentRecord, 'textTruncated' | 'rangeCount' | 'sourceVerified'> {
   /** True only after this fact's source has been checked against the actual file. */
   sourceVerified?: boolean

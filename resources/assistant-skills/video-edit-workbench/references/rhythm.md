@@ -35,7 +35,9 @@
 
 ## 按文字剪口播
 
-还未放进时间线的素材可用 `query_video_edit_content` 查原文件内容，给 documentRef、itemRef 及可选文字/源微秒范围。默认发现当前项目的同源口播/录制，跨项目须用 `discoveryScope=all`；`none` 关闭自动发现。只有显式请求 `kinds` 含 `pause` 或 `scene` 才启动免费本地分析；声音低谷按素材声道布局各路共同低谷返回，画面切点只是镜头变化候选。已有分析由内容缓存复用，翻页不重新解码。检查 `discovery.complete`、逐条 `sourceVerified`、`basis`、`precision` 与 warnings；顶层文件核实不能证明仅按路径关联的录制记录同源。查询结果不是已试听或看片的质量结论，也不是可直接剪辑的 selector。
+原素材用 `query_video_edit_content(documentRef,itemRef)` 按文字和源微秒范围查询。默认发现项目内同源文档，跨项目用 `discoveryScope=all`，`none` 关闭。显式请求 `pause/scene` 才免费分析，翻页复用缓存。检查 `discovery.complete`、逐条 `sourceVerified`、`basis`、`precision` 和 warnings；仅按路径关联的录制记录不算核实。结果是候选，不能直接作精剪 selector；来源与分页规则见 [captions.md](captions.md)。
+
+进度读素材项只读属性 `video_edit.item.content_queries`：phaseProgress 是实测阶段比例，null 表示未知；取消原请求或编辑/关闭剪辑会取消旧查询。失败沿原入口重试，进度不保存。
 
 优先用 `query_video_edit_transcript` 按 text 或 from/to 局部查已有口播与校对字幕，可限定 clipRef（含链接声音）或 itemRef。from/to 是半开序列帧；matchSource 可选 asr/caption/all；limit 为1–50，contextWords 为0–20。分页时重复原条件并带 nextCursor，不把整份长稿读进上下文。没有转录时走 captions 的准备与审批流程。
 
@@ -44,9 +46,7 @@
 - 需要原始词表时再读 `video_edit.sequence.transcript`。selector.kind=words 的 start/end 为含首尾词索引；kind=text 忽略标点、空白、全半角与英文大小写，occurrence 从0开始，省略匹配全部。重复观点仍需根据实际内容选择，不能把文字检索当语义判断。
 - 编辑会改变词索引；每组删除后回读新稿，不沿用旧索引。波纹会影响其他轨道，先看锁轨、配乐、字幕和时间锚点，再核对实际返回 ranges。
 
-局部词源查询、文字剪辑及恢复保存稿会复核当前原声音文件；嵌套候选沿实际叶子声音检查。源文件被替换、丢失或尚未绑定身份时，先按错误提示重新定位；不要换成手算时间绕过失败。查询后文件变化也会阻止旧 selector 执行。核对期间取消或文档被其他编辑改变，应用不会继续提交旧文字范围。
-
-设置 `video_edit.clip.content_anchor` 或创建带关联的片段，也会核对来源文件；直接指定源范围与检索候选遵守相同规则。来源是纯画面或静音片段时同样核对。原文件失效仍可用 `null` 解除现有关联；等待核对时发生新编辑，旧关联事务拒绝提交。
+局部词源查询、文字剪辑、恢复保存稿，以及设置/创建 `video_edit.clip.content_anchor` 都会复核真实来源；嵌套按叶子文件检查，纯画面、静音及直接指定源范围也不例外。文件被替换、丢失或未绑定身份时先重新定位，不用手算绕过。查询后换文件、核对期间取消或编辑，旧候选/关联不会提交。文件失效仍可用 `null` 解除关联。
 
 选声音切点时，把转录查询结果的 from/to 作为 `get_video_edit_clip_pauses` 的 range，clipRef 指向其声音片段；searchMs 默认300、retainedMs 默认120，单位均为播放毫秒。返回 cutCandidates 最多包含目标首尾各一个候选，cutFrame 和 retainedFromFrame/retainedToFrame 均为序列帧；保留区间不会越过检测低谷。没有候选就说明附近缺乏足够声音证据，不按标点补造切点。结果只读且未改作品，修改前后需试听；同一素材分析按内容和声道复用，不能将候选当作已通过听感验收。
 

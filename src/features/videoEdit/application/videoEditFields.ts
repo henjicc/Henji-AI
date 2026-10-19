@@ -6,6 +6,7 @@ import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 import { recordingZoomRegionsSchema } from '@/core/videoEdit/recordingZoom'
 import { VIDEO_EDIT_TEXT_STYLE_DESCRIPTION, videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { z } from 'zod'
+import { mediaContentQueryProgressSchema } from '@/core/media/contentIndex'
 import { videoEditContentAnchorInputSchema } from '@/core/videoEdit/contentAnchors'
 import { type ApplicationFieldDefinition, type JsonValue, type ApplicationSchemaRef } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
@@ -270,10 +271,13 @@ function defaultFieldDescription(key: string): string {
 Object.assign(labels, { amount: '效果强度', sourceText: '原句', source: '作者源码', files: '源码文件', entry: '源码入口', apiVersion: '代码接口版本', languageVersion: '代码语言版本', defaultVersionId: '默认源码版本', versionIds: '源码版本列表', types: '自定义参数类型', visible: '可见', anchorX: '水平锚点', anchorY: '垂直锚点', method: '跟踪方法', prompts: '跟踪提示', styleKitId: '风格', proxyPreference: '代理媒体偏好', proxyState: '代理媒体状态', follow: '跟随跟踪器', trackers: '跟踪器', sourceRange: '初始源范围', creativeSource: '生成来源', elementOverrides: '元素覆盖', color: '颜色', scaleX: '水平缩放', scaleY: '垂直缩放', flipX: '水平翻转', flipY: '垂直翻转', endFrame: '结束帧', author: '批注作者', createdAt: '创建时间', addressedBy: '处理操作', target: '批注目标', thread: '讨论记录', code: '代码实例' })
 Object.assign(labels, { speech: '来源文字', reviewReasons: '待复核内容' })
 Object.assign(labels, { contentAnchor: '关联内容' })
+Object.assign(labels, { contentQueries: '素材内容查询进度' })
+schemas['video_edit.item'].contentQueries = z.array(mediaContentQueryProgressSchema).max(8)
+descriptions['video_edit.item.content_queries'] = '当前剪辑实例中此素材项最近的内容查询，最多八项；只读运行状态，不保存到作品、不进入撤销。phaseProgress 只代表当前阶段的实测进度，null 表示尚无可计数进度，不是整项任务百分比。completedUnits/totalUnits 表示本阶段已检查文档或已分析声道路数；无可靠总量时 totalUnits 为 null。取消原读取请求会取消实际分析；失败后可重新 query_video_edit_content，不识别、不计费。关闭重开剪辑后清空。'
 schemas['video_edit.caption'].speech = videoEditCaptionSchema.shape.speech.unwrap().nullable()
 export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityType => [entityType, Object.entries(schemas[entityType]).map(([key, schema]): ApplicationFieldDefinition<VideoEditFieldData, VideoEditFieldData> => {
   const id = `${entityType}.${videoEditPropertyKey(key)}`
-  const controlled = VIDEO_EDIT_CONTROLLED_AGGREGATES.some(value => value === key) || entityType === 'video_edit.caption' && key === 'speech'
+  const controlled = VIDEO_EDIT_CONTROLLED_AGGREGATES.some(value => value === key) || entityType === 'video_edit.caption' && key === 'speech' || key === 'contentQueries'
   const child = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === entityType)
   const curveKey = key.endsWith('.keyframes') ? key.split('.').at(-2)! : undefined
   const curveDataKey = entityType === 'video_edit.clip' ? 'curves' : 'frameCurves'
@@ -302,6 +306,7 @@ export function videoEditCollectionValues(entityType: VideoEditEntityType, prope
     const suffix = propertyId.slice(entityType.length + 1)
     const key = Object.keys(schemas[entityType]).find(key => videoEditPropertyKey(key) === suffix)
     if (!key) throw new Error('创建属性未登记。')
+    if (key === 'contentQueries') throw new Error('内容查询进度由运行中的查询维护，不能手动创建或修改。')
     if (entityType === 'video_edit.caption' && key === 'speech') throw new Error('字幕来源只由自动字幕与对齐服务维护；手动创建请省略 speech，建立独立字幕。')
     const schema = schemas[entityType][key]
     if (entityType === 'video_edit.annotation' && schema.isOptional() && value === null) continue

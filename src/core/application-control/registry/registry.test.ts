@@ -197,6 +197,14 @@ const multiProvider: ApplicationEntityProvider = {
 }
 
 describe('ApplicationReflectionRegistry', () => {
+  it('提供者只在通过授权后收到注册表的可信读取上下文', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    const read = vi.fn(provider.readEntity)
+    registry.register({ ...registration(), provider: { ...provider, readEntity: read } })
+    const target = { kind: 'sample.item', id: 'one' }
+    await registry.readEntity(target, [], assistantContext)
+    expect(read).toHaveBeenCalledWith(target, { propertyIds: [] }, assistantContext)
+  })
   it('不可见实体在读取和动态可用性之前拒绝，不调用私有提供者', async () => {
     const registry = new ApplicationReflectionRegistry(catalogVersion)
     const read = vi.fn(provider.readEntity)

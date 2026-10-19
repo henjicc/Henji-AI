@@ -5,6 +5,8 @@ import { createVideoEditExplanationRegistration } from './videoEditExplanationRe
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { createVideoEditTextPresetRegistration } from './videoEditTextPresetReflection'
 import { videoEditImportTask } from './videoEditImportTask'
+import { readVideoEditContentQueries } from './videoEditContentQueryProgress'
+import type { ApplicationControlAccessContext } from '@/core/application-control'
 import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import { videoEditSelectedCodeElementContext } from './videoEditCodeElements'
 import { ensureVideoEditProxyState, getVideoEditProxyPreference, readVideoEditProxyState } from './videoEditProxy'
@@ -53,7 +55,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
     case 'video_edit.builtin_effect': return [...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name })), ...VIDEO_EDIT_TRANSITION_PRESETS.map(preset => ({ id: `${VIDEO_EDIT_TRANSITION_REF_PREFIX}${preset.kind}`, name: preset.name }))]
   }
 }
-export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, propertyIds?: readonly string[]): VideoEditFieldData {
+export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, propertyIds?: readonly string[], permissions?: ReadonlySet<string>): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
   if (ref.kind === 'video_edit.document') return { audioAnalysisProgress: videoEditContentAudioProgress(projectId), selectedCodeElement: JSON.parse(JSON.stringify(videoEditSelectedCodeElementContext(instance))), mediaImport: (() => { const task = videoEditImportTask(projectId); return task ? { phase: task.phase, completed: task.completed, total: task.total, totalKnown: task.totalKnown ?? false, discovered: task.discovered ?? task.total, queued: task.queued, requests: task.requests, imported: task.imported, skipped: task.skipped } : null })(), proxyPreference: { ...getVideoEditProxyPreference(projectId) }, colorLuts: (instance.document.colorLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
@@ -117,6 +119,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
   if (ref.kind === 'video_edit.item') {
     const item = instance.document.items.find(item => item.id === childId)!
     Object.assign(data, { graphicKind: item.graphic?.objects[0]?.kind ?? null, graphicWidth: item.graphic?.width ?? null, graphicHeight: item.graphic?.height ?? null })
+    data.contentQueries = readVideoEditContentQueries(instance, childId, permissions)
   }
   return data
 }
@@ -127,7 +130,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
     const offset = Math.max(0, Number(request.cursor) || 0)
     return { refs: all.slice(offset, offset + request.limit), nextCursor: offset + request.limit < all.length ? String(offset + request.limit) : null, revisions: { video_edit: videoEditRevision() } }
   }
-  async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
+  async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }, context?: ApplicationControlAccessContext) {
     if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(ref).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(ref).projectId }, { focus: false })
     if (this.entityType === 'video_edit.media' && (!request.propertyIds?.length || request.propertyIds.includes('video_edit.media.proxy_state'))) { const target = splitVideoEditRef(ref); await ensureVideoEditProxyState(target.projectId, target.childId) }
     const needsMetadata = ['video_edit.code_material', 'video_edit.code_version'].includes(this.entityType)
@@ -138,7 +141,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
       await ensureVideoEditCodeParameterMetadata(owner, owner.document, definition.id, this.entityType === 'video_edit.code_material' ? definition.defaultVersionId : childId)
     }
     const fields = request.propertyIds?.length ? VIDEO_EDIT_FIELDS[this.entityType].filter(field => request.propertyIds!.includes(field.propertyId)) : VIDEO_EDIT_FIELDS[this.entityType]
-    const data = fieldReadValues(fields, readVideoEditData(ref, needsMetadata, request.propertyIds))
+    const data = fieldReadValues(fields, readVideoEditData(ref, needsMetadata, request.propertyIds, context?.permissions))
     return { ref, entityType: this.entityType, revisions: { video_edit: videoEditRevision() }, properties: request.propertyIds?.length ? Object.fromEntries(Object.entries(data).filter(([key]) => request.propertyIds!.includes(key))) : data, capturedAt: new Date().toISOString() }
   }
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {

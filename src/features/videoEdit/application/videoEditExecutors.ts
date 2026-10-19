@@ -211,7 +211,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     }
     if (!isVideoEditContentCurrent(owner, contentVersion) || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('剪辑或浏览会话已有后续修改，请重读当前状态。')
     if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => mutation.propertyId === 'video_edit.clip.source_in_us')) data.sourceRemainder = { numerator: 0, denominator: 1 }
-    if (this.entityType === 'video_edit.item') for (const key of ['graphicKind', 'graphicWidth', 'graphicHeight']) delete data[key]
+    if (this.entityType === 'video_edit.item') for (const key of ['graphicKind', 'graphicWidth', 'graphicHeight', 'contentQueries']) delete data[key]
     if (data.label === null) delete data.label
     if (this.entityType === 'video_edit.document') {
       // Validate view writes before any persistent rename; a failed transaction cannot leave half an edit.
