@@ -28,6 +28,7 @@ import { createAudioEditDraft, flushAudioEditProject, loadAudioEditProject, tran
 import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts } from '@/core/audioEdit/transcriptionFailure'
 import { editVideoSequence, requireVideoEditInstance, videoEditDocumentOperations, saveVideoEdit, verifyVideoEditSaved, holdVideoEditActivity, type VideoEditInstance } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { verifyVideoEditSpeechMediaContent } from '../videoEditMediaContent'
 
 const logger = createLogger('features.videoEdit.autoSubtitles')
 export type SubtitleScope = 'sequence' | 'in-out' | 'selection'
@@ -77,6 +78,8 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
     if (trackId && !track) throw new Error('指定声音轨道已移除。')
     const sound = { ...snapshot, clips: snapshot.clips.filter(clip => (!track || clip.track === track.index) && (scope !== 'selection' || selected.has(clip.id))) }
     if (!audibleVideoEditClips(sound).some(clip => clip.start < range.endFrame && clip.start + clip.duration > range.startFrame)) throw new Error('所选范围没有可听声音，请检查静音、独奏或音轨选择。')
+    const soundClips = audibleVideoEditClips(sound).filter(clip => clip.start < range.endFrame && clip.start + clip.duration > range.startFrame)
+    await verifyVideoEditSpeechMediaContent(sound, soundClips, signal)
     const container = owner.session.documentMeta.container
     if (container.kind !== 'project') throw new Error('请先把剪辑保存到项目，再生成字幕。')
     const project = await videoEditDocumentOperations().findProject(container.projectId)
@@ -101,6 +104,7 @@ export async function prepareVideoEditSubtitleAudio(projectId: string, sequenceI
     }
     await output.finalize(); output = undefined
     signal?.throwIfAborted()
+    await verifyVideoEditSpeechMediaContent(sound, soundClips, signal)
     if (requireVideoEditInstance(projectId) !== owner || await sequenceSignature(current(projectId, sequenceId)) !== signature) throw new Error('剪辑声音在准备期间已改变，请重新准备。')
     const source = await platform.audioEdit.probeSource(path)
     // Save the source identity before registering its document; a failed first write leaves no orphan draft.
@@ -158,7 +162,12 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     if (manifest.projectId !== projectId || manifest.sequenceId !== sequenceId) throw new Error('此转录声音不属于目标剪辑序列。')
     const assertTarget = async (): Promise<void> => {
       signal?.throwIfAborted()
-      if (requireVideoEditInstance(projectId) !== owner || await sequenceSignature(current(projectId, sequenceId)) !== manifest.signature) throw new Error('原序列声音已有修改；识别结果保留在口播文档，不会覆盖当前剪辑。')
+      const composition = current(projectId, sequenceId)
+      const changed = (): Error => new Error('原序列声音已有修改；识别结果保留在口播文档，不会覆盖当前剪辑。')
+      if (requireVideoEditInstance(projectId) !== owner || await sequenceSignature(composition) !== manifest.signature) throw changed()
+      await verifyVideoEditSpeechMediaContent(composition, manifest.soundClips ?? audibleVideoEditClips(composition), signal)
+      signal?.throwIfAborted()
+      if (requireVideoEditInstance(projectId) !== owner || videoEditAudioContent(current(projectId, sequenceId)) !== videoEditAudioContent(composition)) throw changed()
     }
     await assertTarget()
     const ids = manifest.captions?.map(caption => caption.id)
@@ -194,7 +203,7 @@ export async function generateVideoEditSubtitles(projectId: string, sequenceId: 
     logger.info('字幕生成完成', { event: 'video_edit.subtitle.transcribe.completed', requestId, context: { projectId, sequenceId, count: result.length } })
     return result
   } catch (error) {
-    logger.error('字幕生成失败，已完成转录保留供恢复', { event: 'video_edit.subtitle.transcribe.failed', requestId, error, context: { projectId, sequenceId, audioDocumentId } })
+    logger.error('字幕生成失败，已完成转录保留供恢复', error, { event: 'video_edit.subtitle.transcribe.failed', requestId, context: { projectId, sequenceId, audioDocumentId } })
     throw new TranscriptionFailure(error, { billing: readTranscriptionFacts(error)?.billing ?? billing, targetMutation: applied ? 'applied' : 'none', audioDocumentId })
   }
   finally { if (cancel) signal?.removeEventListener('abort', cancel); active.delete(owner); release() }

@@ -11,6 +11,8 @@ import { createLogger } from '@/core/logging'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { appendAutoSubtitles } from './videoEditAutoSubtitles'
 import { holdVideoEditActivity, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
+import { videoEditComposition } from '@/core/videoEdit/document'
+import { verifyVideoEditSpeechMediaContent } from '../videoEditMediaContent'
 
 const logger = createLogger('features.videoEdit.speechSubtitles')
 export async function generateClipSpeechSubtitles(projectId: string, sequenceId: string, clipId: string,
@@ -26,11 +28,16 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
   const originalText = options.originalText ?? (origin?.type === 'generation' ? origin.prompt : undefined)
   if (!originalText?.trim()) throw new ApplicationPreflightFailure('请提供这段声音的原文；此片段没有生成原文。')
   const fingerprint = JSON.stringify([sequence.frameRate, clip, media])
-  const assertTarget = () => {
+  const assertTargetState = () => {
     signal?.throwIfAborted()
     const current = requireVideoEditInstance(projectId)
     const next = current.document.sequences.find(value => value.id === sequenceId)
     if (current !== owner || JSON.stringify([next?.frameRate, next?.clips.find(value => value.id === clipId), current.document.media.find(value => value.id === media.id)]) !== fingerprint) throw new Error('字幕准备期间原片段已改变，已阻止回填；识别结果保留。')
+  }
+  const assertTarget = async (): Promise<void> => {
+    assertTargetState()
+    await verifyVideoEditSpeechMediaContent(videoEditComposition(owner.document, sequenceId), [clip], signal)
+    assertTargetState()
   }
   const release = holdVideoEditActivity(projectId, '原文字幕')
   let audioDocumentId: string | undefined
@@ -38,7 +45,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
   let billing: TranscriptionFacts['billing'] = 'not_charged'
   let applied = false
   try {
-    assertTarget()
+    await assertTarget()
     let timings = origin?.type === 'generation' ? (await readGenerationResultTimings(origin.recordId)).find(value => value.outputIndex === origin.outputIndex)?.timings : undefined
     let timingSource: 'native' | 'recognition' = 'native'
     if (!timings?.items.length) {
@@ -52,7 +59,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
         const source = audio?.document.source ?? await platform.audioEdit.probeSource(media.path)
         const prepared = await platform.audioEdit.preflightTranscription({ sourcePath: media.path, durationMs: source.durationFrames * 1000 / source.sampleRate, modelId: options.modelId, language: options.language, audioDocumentId })
         const transcribe = async (paidSignal?: AbortSignal) => {
-        assertTarget()
+        await assertTarget()
         audio ??= await createAudioEditDraft(source, owner.session.documentMeta.container)
         audioDocumentId = audio.document.id
         await flushAudioEditProject(audioDocumentId)
@@ -79,10 +86,10 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
       timings = { granularity: audio.document.transcript.every(block => block.granularity === 'word') ? 'word' : 'sentence', items: audio.document.transcript.map(block => ({ text: block.text,
         startMs: block.startFrame * 1000 / sampleRate, endMs: block.endFrame * 1000 / sampleRate, ...(block.confidence === undefined ? {} : { confidence: block.confidence }) })) } satisfies SpeechTimings
     }
-    assertTarget()
+    await assertTarget()
     const pauses = await readClipEnergyPauses(projectId, sequenceId, clipId, signal)
     const subtitles = await buildSpeechSubtitles(originalText, timings, clip, sequence.frameRate, autoSubtitleOptionsSchema.strip().parse(options), signal, pauses)
-    assertTarget()
+    await assertTarget()
     appendAutoSubtitles(projectId, sequenceId, subtitles.map(value => value.caption))
     const created = new Map(requireVideoEditInstance(projectId).document.sequences.find(value => value.id === sequenceId)!.captions!.map(caption => [caption.id, caption]))
     subtitles.forEach(subtitle => { subtitle.caption = created.get(subtitle.caption.id)! })
@@ -91,7 +98,7 @@ export async function generateClipSpeechSubtitles(projectId: string, sequenceId:
     logger.info('原文字幕已保存', { event: 'video_edit.speech_subtitles.completed', requestId, context: { projectId, clipId, timingSource, count: subtitles.length } })
     return { subtitles, timingSource, audioDocumentId }
   } catch (error) {
-    logger.error('原文字幕失败', { event: 'video_edit.speech_subtitles.failed', requestId, error, context: { projectId, clipId, audioDocumentId } })
+    logger.error('原文字幕失败', error, { event: 'video_edit.speech_subtitles.failed', requestId, context: { projectId, clipId, audioDocumentId } })
     const facts = readTranscriptionFacts(error)
     throw new TranscriptionFailure(error, { billing: facts?.billing ?? billing, targetMutation: applied ? 'applied' : 'none', ...(audioDocumentId ? { audioDocumentId } : {}) })
   } finally { if (cancel) signal?.removeEventListener('abort', cancel); release() }

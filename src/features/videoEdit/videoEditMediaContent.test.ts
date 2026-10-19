@@ -11,7 +11,7 @@ import { appendVideoEditMedia, closeVideoEditProject, listVideoEditInstances, sa
 import { closeVideoEditSource, registerVideoEditSourcePresenter, updateVideoEditSource, type VideoEditSourceRequest } from './application/videoEditSource'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import type { RenderRequest, RenderResponse } from './engine/videoEditWorker'
-import { VideoEditMediaContentVerifier } from './videoEditMediaContent'
+import { VideoEditMediaContentVerifier, verifyVideoEditClipMediaContent } from './videoEditMediaContent'
 import { reopenVideoEdit } from './application/videoEditDocumentTestKit'
 
 const original: VideoEditMedia = { id: 'original', path: 'D:/original.png', name: '原图', kind: 'image', width: 3840, height: 2160, durationSeconds: 0, assetId: 'deleted-asset', sourceRevision: 'fixed-source', assetContent: { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) } }
@@ -32,6 +32,14 @@ class WorkerBoundary {
     queueMicrotask(() => this.onmessage?.({ data: { id: request.id, presented: true } } as MessageEvent<RenderResponse>))
   }
 }
+it('关联来源复核包含静音轨上的纯画面，不按声音可听性跳过原文件', async () => {
+  const snapshot = composition()
+  snapshot.tracks.forEach(track => { track.muted = true })
+  snapshot.clips[0].volume = 0; snapshot.clips[0].sourceComponent = 'video'
+  const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ ...original.assetContent!, contentIdentity: 'b'.repeat(64) })
+  await expect(verifyVideoEditClipMediaContent(snapshot, snapshot.clips)).rejects.toThrow('重新定位')
+  expect(inspect).toHaveBeenCalledWith(original.path, original.kind)
+})
 function composition() {
   const document = createVideoEditDocument('原路径')
   document.media = [structuredClone(original)]

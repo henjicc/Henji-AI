@@ -7,7 +7,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { getPlatform } from '@/platform/runtime'
 import { closeVideoEditProject, listVideoEditInstances, editVideoProject, undoVideoEdit, videoEditBusyReason, setVideoEditTimelineView, videoEditDocumentOperations, videoEditDocumentContent, videoEditDocumentFromContent, recordVideoEditExport, type VideoEditInstance } from './videoEditService'
 import { VIDEO_EDIT_EXPORT_PRESETS } from '@/core/videoEdit/exportPresets'
-import { loadAudioEditProject, resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { editAudioEditProject, loadAudioEditProject, resetAudioEditProjectInstancesForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { prepareVideoEditSubtitleAudio, generateVideoEditSubtitles, appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles, styleVideoEditSubtitles, segmentVideoEditSubtitles, subtitleRange } from './videoEditAutoSubtitles'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { createVideoEditCaption, updateVideoEditTimedContent, exportVideoEditSubtitles } from './videoEditTimedContent'
@@ -436,6 +436,50 @@ it('分块混音复用渲染器，指定入出点换算后生成一笔历史，�
   expect(sequence().captions).toHaveLength(1); expect(getPlatform().audioEdit.transcribe).toHaveBeenCalledTimes(1)
   undoVideoEdit(owner.document.id); expect(sequence().captions).toBeUndefined()
   await expect(generateVideoEditSubtitles(owner.document.id, sequence().id, id)).rejects.toThrow('已生成后被移除')
+})
+
+it('准备混音前原文件已替换时不解码、不识别，也不留下未完成文件', async () => {
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'b'.repeat(64) })
+  await expect(prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')).rejects.toThrow('重新定位')
+  expect(boundary.mixes).toEqual([]); expect(files.size).toBe(0); expect(texts.size).toBe(0)
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+})
+
+it.each(['sequence', 'clip'] as const)('%s识别完成后原文件替换，保留已付费结果但不回填、不重复识别', async mode => {
+  const platform = getPlatform()
+  const audioId = mode === 'sequence' ? await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence') : undefined
+  if (mode === 'clip') vi.mocked(platform.audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: owner.document.media[0].path, audioPath: owner.document.media[0].path, sampleRate: 1000, channels: 1, durationFrames: 12000 })
+  const transcribe = vi.mocked(platform.audioEdit.transcribe).getMockImplementation()!
+  vi.mocked(platform.audioEdit.transcribe).mockImplementationOnce(async request => {
+    const result = await transcribe(request)
+    vi.mocked(platform.assetLibrary.inspectFileContent).mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'b'.repeat(64) })
+    return result
+  })
+  const before = owner.document; const history = owner.past.length
+  const generate = (saved?: string) => mode === 'sequence'
+    ? generateVideoEditSubtitles(owner.document.id, sequence().id, audioId!)
+    : generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello', ...(saved ? { audioDocumentId: saved } : {}) })
+  const failure = await generate().catch(error => error as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure)
+  expect(failure).toMatchObject({ transcriptionFacts: { billing: 'completed', targetMutation: 'none', audioDocumentId: expect.any(String) } })
+  const saved = (failure as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure).transcriptionFacts.audioDocumentId!
+  expect((await loadAudioEditProject(saved)).document.transcript).toHaveLength(1)
+  expect(owner.document).toBe(before); expect(owner.past.length).toBe(history)
+  await expect(generate(saved)).rejects.toThrow('重新定位')
+  expect(platform.audioEdit.transcribe).toHaveBeenCalledOnce()
+})
+
+it('保存字幕草案期间换文件仍阻止最终回填；使用保存识别不再计费', async () => {
+  const audioId = await prepareVideoEditSubtitleAudio(owner.document.id, sequence().id, 'sequence')
+  editAudioEditProject(audioId, document => ({ ...document, transcript: [{ id: 'saved-word', text: '已有识别', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' }] }))
+  const write = vi.mocked(getPlatform().system.fs.writeTextFile).getMockImplementation()!
+  vi.mocked(getPlatform().system.fs.writeTextFile).mockImplementation(async (path, text) => {
+    await write(path, text)
+    if (text.includes('"captions"')) vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'b'.repeat(64) })
+  })
+  const before = owner.document; const history = owner.past.length
+  await expect(generateVideoEditSubtitles(owner.document.id, sequence().id, audioId)).rejects.toThrow('重新定位')
+  expect(owner.document).toBe(before); expect(owner.past.length).toBe(history)
+  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
 })
 it('整序列分块、选择范围、静音和错误轨道拒绝均不进入付费识别', async () => {
   expect(subtitleRange(owner, sequence().id, 'sequence')).toEqual({ startFrame: 0, endFrame: 300 })

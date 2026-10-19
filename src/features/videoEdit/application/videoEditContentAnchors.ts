@@ -5,6 +5,8 @@ import { editVideoProject, requireVideoEditInstance } from './videoEditService'
 import { resolveVideoEditTranscriptAnchorMatch } from './videoEditTranscriptQuery'
 import { videoEditTranscriptWords } from '@/core/videoEdit/textTranscript'
 import { createLogger } from '@/core/logging'
+import { verifyVideoEditClipMediaContent } from '../videoEditMediaContent'
+import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 
 const logger = createLogger('features.videoEdit.contentAnchor')
 
@@ -29,20 +31,37 @@ export function resolveVideoEditContentAnchor(projectId: string, sequenceId: str
   return result
 }
 
-export function setVideoEditClipContentAnchors(projectId: string, sequenceId: string, clipIds: readonly string[], raw: unknown, baseline?: object): void {
+export async function verifyVideoEditContentAnchorSources(projectId: string, sequenceId: string, anchors: readonly (VideoEditContentAnchor | undefined)[], signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  const ids = new Set(anchors.flatMap(anchor => anchor?.ranges.map(range => range.clipId) ?? []))
+  if (!ids.size) return
+  const owner = requireVideoEditInstance(projectId); const version = owner.contentVersion
+  const composition = videoEditComposition(owner.document, sequenceId)
+  await verifyVideoEditClipMediaContent(composition, composition.clips.filter(clip => ids.has(clip.id)), signal)
+  if (!isVideoEditContentCurrent(owner, version)) throw new Error('核对期间内容已改变，请重新选择关联来源。')
+}
+
+export async function setVideoEditClipContentAnchors(projectId: string, sequenceId: string, clipIds: readonly string[], raw: unknown, baseline?: object, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(projectId)
+  const version = owner.contentVersion
   const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence || baseline && baseline !== sequence) throw new Error('时间线已有修改，请重新选择文字和画面。')
   if (!clipIds.length || clipIds.some(id => !sequence.clips.some(clip => clip.id === id && clip.kind !== 'audio'))) throw new Error('请在时间线上选择要关联的画面片段。')
   logger.info('关联画面内容开始', { event: 'video_edit.content_anchor.start', context: { projectId, sequenceId, count: clipIds.length } })
   try {
     const values = new Map(clipIds.map(id => [id, resolveVideoEditContentAnchor(projectId, sequenceId, id, raw)]))
+    await verifyVideoEditContentAnchorSources(projectId, sequenceId, [...values.values()], signal)
+    if (!isVideoEditContentCurrent(owner, version)) throw new Error('核对期间时间线已有修改，请重新选择文字和画面。')
     editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: value.clips.map(clip => values.has(clip.id) ? { ...clip, contentAnchor: values.get(clip.id) } : clip) } : value) }))
     logger.info('关联画面内容完成', { event: 'video_edit.content_anchor.completed', context: { projectId, sequenceId, count: clipIds.length } })
-  } catch (error) { logger.error('关联画面内容失败', { event: 'video_edit.content_anchor.failed', context: { projectId, sequenceId }, error }); throw error }
+  } catch (error) {
+    if (signal?.aborted) logger.info('关联画面内容已取消', { event: 'video_edit.content_anchor.cancelled', context: { projectId, sequenceId } })
+    else logger.error('关联画面内容失败', error, { event: 'video_edit.content_anchor.failed', context: { projectId, sequenceId } })
+    throw error
+  }
 }
 
-export function bindVideoEditClipsToWords(projectId: string, sequenceId: string, clipIds: readonly string[], ranges: readonly { start: number; end: number }[], baseline: object): void {
+export async function bindVideoEditClipsToWords(projectId: string, sequenceId: string, clipIds: readonly string[], ranges: readonly { start: number; end: number }[], baseline: object, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence || sequence !== baseline) throw new Error('时间线已有修改，请重新选择文字和画面。')
   const words = videoEditTranscriptWords(videoEditComposition(owner.document, sequenceId))
@@ -56,5 +75,5 @@ export function bindVideoEditClipsToWords(projectId: string, sequenceId: string,
     else targetRanges.push({ clipId: word.clipId, from: word.from, to: word.to })
     previousIndex = word.index
   }
-  setVideoEditClipContentAnchors(projectId, sequenceId, clipIds, videoEditContentAnchorAtRanges(sequence, targetRanges), baseline)
+  await setVideoEditClipContentAnchors(projectId, sequenceId, clipIds, videoEditContentAnchorAtRanges(sequence, targetRanges), baseline, signal)
 }

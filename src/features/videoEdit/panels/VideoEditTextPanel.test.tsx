@@ -94,6 +94,7 @@ it('选中画面可关联文字并定位到词范围，一次撤销解除关联'
   let bind = view.queryByRole('button', { name: '选中画面随这段内容' })
   if (!bind) { fireEvent.click(view.getByRole('button', { name: '更多文本剪辑操作' })); bind = await view.findByRole('button', { name: '选中画面随这段内容' }) }
   fireEvent.click(bind)
+  await waitFor(() => expect(owner.past.length).toBe(history + 1))
   expect(owner.document.sequences[0].clips.find(clip => clip.id === 'label')).toMatchObject({ start: 30, duration: 30, contentAnchor: { ranges: [{ fromUs: 1000000, toUs: 2000000 }] } })
   expect(owner.past.length).toBe(history + 1)
   act(() => undoVideoEdit(owner.document.id)); expect(owner.document.sequences).toEqual(before)

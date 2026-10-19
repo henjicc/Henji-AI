@@ -76,11 +76,17 @@ export function VideoEditTextPanel({ instance, sequence, onError }: { instance: 
   const silences = useMemo(() => resolveVideoEditTextRanges(composition, { kind: 'silence' }), [composition])
   const pictures = sequence.clips.filter(clip => instance.selectedClipIds.includes(clip.id) && !all.some(word => word.clipId === clip.id) && clip.kind !== 'audio')
   const bindPictures = (clear = false): void => {
-    try {
-      if (clear) setVideoEditClipContentAnchors(instance.document.id, sequence.id, pictures.map(clip => clip.id), null, sequence)
-      else bindVideoEditClipsToWords(instance.document.id, sequence.id, pictures.map(clip => clip.id), wordRanges, sequence)
+    if (pending.current) return
+    const controller = new AbortController(); pending.current = controller; setBusy(true); setError('')
+    const binding = clear
+      ? setVideoEditClipContentAnchors(instance.document.id, sequence.id, pictures.map(clip => clip.id), null, sequence, controller.signal)
+      : bindVideoEditClipsToWords(instance.document.id, sequence.id, pictures.map(clip => clip.id), wordRanges, sequence, controller.signal)
+    void binding.then(() => {
+      if (current.current.instance !== instance || current.current.sequence.id !== sequence.id) return
       setSelection(undefined); setPause(false); setError('')
-    } catch (reason) { report(reason) }
+    }).catch(reason => { if (!controller.signal.aborted) report(reason) }).finally(() => {
+      if (pending.current === controller) { pending.current = undefined; setBusy(false) }
+    })
   }
   const items: UiOverflowRowItem[] = [
     { id: 'scope', priority: 10, pinned: true, node: <Dropdown ariaLabel="转录稿范围" size="sm" value={scope} onSelect={value => { setScope(value); setSelection(undefined); setPause(false) }} options={[{ value: 'sequence', label: '整个序列' }, { value: 'selection', label: '选中片段' }]} /> },

@@ -27,27 +27,43 @@ export async function verifyVideoEditMediaContent(media: VideoEditMedia, signal?
 
 /** Text decisions verify the actual sound files, including a nested sequence's master audio.
  * The caller checks its document snapshot again after this asynchronous boundary. */
-export async function verifyVideoEditSpeechMediaContent(composition: VideoEditComposition, clips: readonly VideoEditClip[], signal?: AbortSignal): Promise<void> {
+async function verifyClipSources(composition: VideoEditComposition, clips: readonly VideoEditClip[], soundOnly: boolean, signal?: AbortSignal): Promise<void> {
   const sources = new Map<string, VideoEditMedia>()
   const visited = new Set<string>()
   const collect = (value: VideoEditComposition, selected?: ReadonlySet<string>): void => {
     if (!selected && visited.has(value.id)) return
     if (!selected) visited.add(value.id)
-    for (const clip of audibleVideoEditClips(value)) {
-      if (selected && !selected.has(clip.id) || clip.sourceComponent === 'video') continue
+    const mediaById = new Map(value.media.map(media => [media.id, media]))
+    for (const clip of soundOnly ? audibleVideoEditClips(value) : value.clips) {
+      if (selected && !selected.has(clip.id) || soundOnly && clip.sourceComponent === 'video') continue
       const nested = videoEditNestedComposition(value, clip)
-      if (nested) { collect(nested); continue }
-      const media = videoEditClipMedia(value, clip)
-      if (media && media.kind !== 'image') sources.set(media.id, media)
+      if (nested) collect(nested)
+      else {
+        const media = videoEditClipMedia(value, clip)
+        if (media && (!soundOnly || media.kind !== 'image')) sources.set(media.id, media)
+      }
+      if (!soundOnly) for (const id of [clip.code, ...(clip.effects ?? []).map(effect => effect.code)].flatMap(code => [...codeMaterialMediaIds(code)])) {
+        const media = mediaById.get(id)
+        if (media) sources.set(media.id, media)
+      }
     }
   }
   collect(composition, new Set(clips.map(clip => clip.id)))
   for (const media of sources.values()) {
     signal?.throwIfAborted()
-    if (!media.assetContent?.contentIdentity) throw new Error(`素材“${media.name}”尚未绑定原文件身份，请先重新定位源素材再按文字剪辑。`)
+    if (!media.assetContent?.contentIdentity) throw new Error(`素材“${media.name}”尚未绑定原文件身份，请先重新定位源素材再使用来源内容。`)
     await verifyVideoEditMediaContent(media, signal)
   }
   signal?.throwIfAborted()
+}
+
+export async function verifyVideoEditSpeechMediaContent(composition: VideoEditComposition, clips: readonly VideoEditClip[], signal?: AbortSignal): Promise<void> {
+  return verifyClipSources(composition, clips, true, signal)
+}
+
+/** Content ranges may refer to visual-only or muted sources as well as speech. */
+export async function verifyVideoEditClipMediaContent(composition: VideoEditComposition, clips: readonly VideoEditClip[], signal?: AbortSignal): Promise<void> {
+  return verifyClipSources(composition, clips, false, signal)
 }
 
 /** Checks belong to one display/export session, never to a global file cache. */

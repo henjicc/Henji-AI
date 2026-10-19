@@ -4,6 +4,8 @@
 
 ## 识别和生成
 
+准备混音、生成原文字幕和回填识别字幕都会复核原始文件；嵌套声音按实际来源检查。源文件改变或缺少身份时先重新定位。识别完成后才发现原文件变化，会保留口播文档与真实计费事实并阻止回填；读取返回的 audioDocumentRef 和当前来源，确认可复用后恢复，不重放已完成识别。
+
 查询原素材已有内容时用 `query_video_edit_content(documentRef,itemRef)`，按 `text`、`fromUs/toUs`、`kinds` 筛选，`limit` 为1–50，保持原条件带 `nextCursor` 翻页。时间始终为原文件微秒；`saved` 是保存的文本，`timeline` 是字幕投影，`intent` 是创作提示词，均不能冒充声音或画面检测。可显式提供同源 `audioDocumentRef` 或 `recordingRef`，分别需要口播/录制只读权限；不同来源的文本可以并列返回，按 `originRef` 区分校对版本。默认不识别、不分析、不修改作品。`sourceVerified=false` 表示未保存原文件身份，旧文字只能参考。此入口不提供精剪候选；按文字剪辑仍使用下述转录检索。
 
 1. 先用 `query_video_edit_transcript` 局部查已有口播与校对字幕，需要完整编辑时再读 `video_edit.caption` 或序列转录稿；已有可用文本不重复识别。需要识别时 `prepare_video_edit_subtitle_audio` 给 documentRef、sequenceRef，scope=sequence/in-out/selection，可给 trackRef 指定人声轨。

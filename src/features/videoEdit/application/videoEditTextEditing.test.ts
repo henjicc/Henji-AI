@@ -18,6 +18,7 @@ import * as transcriptFunctions from '@/core/videoEdit/textTranscript'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
 import { appendAutoSubtitles, splitVideoEditSubtitle, mergeVideoEditSubtitles } from './videoEditAutoSubtitles'
+import { bindVideoEditClipsToWords } from './videoEditContentAnchors'
 
 const fileContent = { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) }
 beforeEach(() => {
@@ -330,5 +331,66 @@ it('同一候选可关联多个包装，正文改变后拒绝旧候选；公共�
     editVideoProject(id, document => { document.sequences[0].textTranscription!.sources[0].blocks[1].text = '已改价'; return document })
     const stale = await create('不应插入'); expect(stale).toMatchObject({ ok: false })
     expect(owner.past.length).toBe(oldHistory + 1)
+  } finally { app.dispose() }
+})
+
+it.each(['set', 'create', 'manual'] as const)('%s内容关联在文件替换后拒绝旧词源，不留下部分关联', async mode => {
+  const owner = await fixture(); const id = owner.document.id; const sequenceId = owner.document.sequences[0].id
+  editVideoProject(id, document => {
+    document.items.push({ id: 'label-item', name: '重点', kind: 'text' })
+    document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })
+    document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequenceId, { frame: 0, duration: 30, track: 2 }), id: 'label', text: '重点' })
+    return document
+  })
+  const app = createApplicationHarness()
+  const documentRef = { kind: 'video_edit.document', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${sequenceId}` }
+  try {
+    const query = queryVideoEditTranscriptCapability.outputSchema.parse(await app.requireResult('query_video_edit_transcript', { documentRef, sequenceRef, text: '价格九元', matchSource: 'asr' }))
+    const before = owner.document; const history = owner.past.length
+    vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValue({ ...fileContent, contentIdentity: 'b'.repeat(64) })
+    if (mode === 'set') expect(await app.change({ kind: 'video_edit.clip', id: `${id}:label` }, { 'video_edit.clip.content_anchor': { matchId: query.matches[0].matchId } })).toMatchObject({ ok: false })
+    else if (mode === 'create') {
+      const baseline = await app.read(sequenceRef, ['video_edit.sequence.name'])
+      expect(await app.call('change_application_entities', { summary: '关联重点', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: { 'video_edit.clip.item_id': 'label-item', 'video_edit.clip.kind': 'text', 'video_edit.clip.name': '新重点', 'video_edit.clip.text': '新重点', 'video_edit.clip.track': 2, 'video_edit.clip.content_anchor': { matchId: query.matches[0].matchId } } }] }] }, baseline.revisions as Record<string, number>)).toMatchObject({ ok: false })
+    } else await expect(bindVideoEditClipsToWords(id, sequenceId, ['label'], [{ start: 1, end: 1 }], before.sequences[0])).rejects.toThrow('重新定位')
+    expect(owner.document.sequences).toEqual(before.sequences); expect(owner.past.length).toBe(history)
+  } finally { app.dispose() }
+})
+
+it('原文件失效也能解除已有内容关联，不再读取失效文件', async () => {
+  const owner = await fixture(); const id = owner.document.id; const sequenceId = owner.document.sequences[0].id
+  editVideoProject(id, document => {
+    document.items.push({ id: 'label-item', name: '重点', kind: 'text' })
+    document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })
+    document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequenceId, { frame: 30, duration: 30, track: 2 }), id: 'label', text: '重点', contentAnchor: { ranges: [{ clipId: 'a', itemId: 'item', fromUs: 1000000, toUs: 2000000 }], startOffsetSeconds: 0, endOffsetSeconds: 0 } })
+    return document
+  })
+  const inspect = vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockRejectedValue(new Error('原文件丢失')); inspect.mockClear()
+  const app = createApplicationHarness()
+  try {
+    expect(await app.change({ kind: 'video_edit.clip', id: `${id}:label` }, { 'video_edit.clip.content_anchor': null })).toMatchObject({ ok: true })
+    expect(owner.document.sequences[0].clips.find(clip => clip.id === 'label')!.contentAnchor).toBeUndefined()
+    expect(inspect).not.toHaveBeenCalled()
+  } finally { app.dispose() }
+})
+
+it('公共关联等待核对时的人工编辑保留，旧属性事务不覆盖新内容', async () => {
+  const owner = await fixture(); const id = owner.document.id; const sequenceId = owner.document.sequences[0].id
+  editVideoProject(id, document => {
+    document.items.push({ id: 'label-item', name: '重点', kind: 'text' })
+    document.sequences[0].tracks.push({ ...document.sequences[0].tracks.find(track => track.kind === 'video')!, id: 'label-track', index: 2 })
+    document.sequences[0].clips.push({ ...makeVideoEditItemClip(document, 'label-item', sequenceId, { frame: 0, duration: 30, track: 2 }), id: 'label', text: '重点' })
+    return document
+  })
+  const history = owner.past.length; const app = createApplicationHarness()
+  vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockImplementationOnce(async () => {
+    editVideoProject(id, document => { document.sequences[0].name = '核对期间人工编辑'; return document })
+    return fileContent
+  })
+  try {
+    expect(await app.change({ kind: 'video_edit.clip', id: `${id}:label` }, { 'video_edit.clip.content_anchor': { ranges: [{ clipId: 'a', itemId: 'item', fromUs: 1000000, toUs: 2000000 }] } })).toMatchObject({ ok: false })
+    expect(owner.document.sequences[0].name).toBe('核对期间人工编辑')
+    expect(owner.document.sequences[0].clips.find(clip => clip.id === 'label')!.contentAnchor).toBeUndefined()
+    expect(owner.past.length).toBe(history + 1)
   } finally { app.dispose() }
 })

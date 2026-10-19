@@ -37,7 +37,7 @@ import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tra
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 import { prepareVideoEditCaption } from './videoEditCaptionCreation'
 import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
-import { resolveVideoEditContentAnchor } from './videoEditContentAnchors'
+import { resolveVideoEditContentAnchor, verifyVideoEditContentAnchorSources } from './videoEditContentAnchors'
 import { retimeVideoEditContentClips } from '@/core/videoEdit/contentAnchors'
 import { defaultVideoEditStyleBinding } from './videoEditDefaultStyle'
 
@@ -296,6 +296,10 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
         throw error
       }
     }
+    if (anchorSequence) {
+      await verifyVideoEditContentAnchorSources(projectId, anchorSequence.id, [expectedAnchor], context?.signal)
+      if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('核对期间剪辑已有后续修改，请重读当前状态。')
+    }
     const after = editVideoProject(projectId, update)
     if (anchorSequence) {
       const sequence = after.sequences.find(sequence => sequence.id === anchorSequence.id)!
@@ -477,6 +481,14 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       const added = new Set(refs.map(ref => splitVideoEditRef(ref).childId))
       for (const clip of sequence.clips) if (added.has(clip.id) && clip.code && (codeMaterialMediaIds(clip.code).size > 0 || next.items.find(item => item.id === clip.itemId)?.code?.versionId !== clip.code.versionId)) {
         await trialVideoEditCodeDocument(instance, contentVersion, next, sequence.id, clip.start, context?.signal, [{ sequenceId: sequence.id, clipId: clip.id }])
+      }
+    }
+    if (this.entityType === 'video_edit.clip' && step.operation.kind === 'create') {
+      const added = new Set(refs.map(ref => splitVideoEditRef(ref).childId))
+      const anchors = next.sequences.find(sequence => sequence.id === parsed.childId)!.clips.filter(clip => added.has(clip.id)).map(clip => clip.contentAnchor)
+      if (anchors.some(Boolean)) {
+        await verifyVideoEditContentAnchorSources(before.id, parsed.childId, anchors, context?.signal)
+        if (!isVideoEditContentCurrent(instance, contentVersion)) throw new Error('核对期间剪辑已有后续修改，请重读当前状态。')
       }
     }
     const after = editVideoProject(before.id, current => withVideoEditCurrentMetadata(next, current))
