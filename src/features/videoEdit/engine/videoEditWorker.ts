@@ -38,6 +38,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'scale'; divisor: number }
   | { kind: 'arm'; frame: number }
   | { kind: 'prepareGpu' }
+  | { kind: 'authorMetadata'; url: string; locations?: import('./videoEditAuthorBundle').AuthorSourceLocations }
   | { kind: 'authorFrame'; assets?: Record<string, ImageBitmap>; url: string; params: import('./videoEditAuthorModule').AuthorParameters; info: import('./videoEditAuthorModule').AuthorFrameInfo; options?: Parameters<VideoEditRenderer['renderAuthorFrame']>[4] }
   | { kind: 'preopen'; media: VideoEditComposition['media']; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
@@ -48,7 +49,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -166,6 +167,10 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         // Every borrowed native frame goes back before the session may terminate this worker (record 002).
         await nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined
         self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
+      } else if (request.kind === 'authorMetadata') {
+        if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
+        const authorMetadata = await renderer.readAuthorMetadata(request.url, request.locations)
+        self.postMessage({ id: request.id, authorMetadata } satisfies RenderResponse)
       } else if (request.kind === 'authorFrame') {
         if (!renderer) throw new Error('剪辑渲染会话尚未初始化。')
         const result = await renderer.renderAuthorFrame(request.url, request.params, request.info, request.assets, request.options)

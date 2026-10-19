@@ -71,7 +71,7 @@ export async function bundleAuthorFiles(input: CodeMaterialFiles, build: Build):
         if (!file || !Object.hasOwn(input.files, file)) return { errors: [{ text: `找不到模块 ${args.path}${args.importer ? `（由 ${args.importer} 导入）` : ''}。请将模块或打包好的第三方库加入项目源码。` }] }
         return { path: file, namespace: 'author-project' }
       })
-      api.onLoad({ filter: /.*/, namespace: 'author-project' }, args => ({ contents: input.files[args.path], loader: /\.json$/.test(args.path) ? 'json' : /\.tsx$/.test(args.path) ? 'tsx' : /\.ts$/.test(args.path) ? 'ts' : 'js' }))
+      api.onLoad({ filter: /.*/, namespace: 'author-project' }, args => ({ contents: input.files[args.path], loader: /\.(?:wgsl|glsl)$/.test(args.path) ? 'text' : /\.json$/.test(args.path) ? 'json' : /\.tsx$/.test(args.path) ? 'tsx' : /\.ts$/.test(args.path) ? 'ts' : 'js' }))
     },
   }
   let result: BuildResult

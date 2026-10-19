@@ -116,6 +116,9 @@ export class VideoEditRenderer {
   async renderAuthorFrame(...args: Parameters<VideoEditGpuCompositor['renderAuthorFrame']>): ReturnType<VideoEditGpuCompositor['renderAuthorFrame']> {
     return this.ensureCompositor().renderAuthorFrame(...args)
   }
+  async readAuthorMetadata(...args: Parameters<VideoEditGpuCompositor['readAuthorMetadata']>): ReturnType<VideoEditGpuCompositor['readAuthorMetadata']> {
+    return this.ensureCompositor().readAuthorMetadata(...args)
+  }
   async prepareContent(frame: number, current: () => boolean): Promise<void> {
     const document = this.document
     const clips = activeVideoEditClips(document, frame).filter(clip => clip.kind === 'code' || activeVideoEditEffects(clip).some(effect => effect.code))

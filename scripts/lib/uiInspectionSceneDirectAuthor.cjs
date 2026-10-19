@@ -76,6 +76,7 @@ function createDirectAuthorScene() {
         let elements
         try {
           await request({ kind: 'init', document: composition, previewWidth: spec.width })
+          const metadata = spec.readMetadata ? (await request({ kind: 'authorMetadata', url, locations })).authorMetadata : undefined
           const images = Object.fromEntries(await Promise.all(Object.entries(imageSources).map(async ([key, source]) => [key, await createImageBitmap(await (await fetch(source)).blob(), { colorSpaceConversion: spec.rawAssets?.includes(key) ? 'none' : 'default' })])))
           for (let index = 0; index < spec.frames; index++) {
             const time = spec.sampleTimes?.[index] ?? spec.time + index / 60
@@ -86,7 +87,7 @@ function createDirectAuthorScene() {
             if (spec.captureAll || index === 0 || index === spec.frames - 1) snapshots.push(canvas.toDataURL('image/png'))
           }
           await request({ kind: 'dispose' })
-          return { durations, snapshots, elements, compileMs, compileCacheHit }
+          return { durations, snapshots, elements, metadata, compileMs, compileCacheHit }
         } finally {
           worker.terminate(); URL.revokeObjectURL(url)
           for (const job of pending.values()) clearTimeout(job.timer)
@@ -94,9 +95,13 @@ function createDirectAuthorScene() {
       }, { source: result?.outputFiles[0].text, sourceFiles, composition, workerFile, compilerFile, spec, imageSources })
       if (sourceFiles) assert.equal(evidence.compileCacheHit, true, '正式共享打包缓存未命中')
       if (spec.expectedElements) assert.deepEqual(evidence.elements?.map(element => element.id), spec.expectedElements)
+      if (spec.readMetadata) {
+        assert.ok(evidence.metadata?.name, '现有渲染 Worker 未读回作者声明')
+        if (spec.expectedParameters) assert.deepEqual(evidence.metadata.parameters.map(parameter => parameter.key), spec.expectedParameters)
+      }
       for (let index = 0; index < evidence.snapshots.length; index++) fs.writeFileSync(path.join(root, `frame-${index}.png`), Buffer.from(evidence.snapshots[index].split(',')[1], 'base64'))
       const warm = evidence.durations.slice(1).sort((a, b) => a - b)
-      fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify({ host, adaptations, durations: evidence.durations, elements: evidence.elements, compileMs: evidence.compileMs, compileCacheHit: evidence.compileCacheHit, warmP95Ms: warm[Math.ceil(warm.length * .95) - 1], note: '同一节目Worker/GPU的逐帧候选执行；不代表正式时间线热播放或PR对比通过。' }, null, 2))
+      fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify({ host, adaptations, durations: evidence.durations, elements: evidence.elements, metadata: evidence.metadata, compileMs: evidence.compileMs, compileCacheHit: evidence.compileCacheHit, warmP95Ms: warm[Math.ceil(warm.length * .95) - 1], note: '同一节目Worker/GPU的逐帧候选执行；不代表正式时间线热播放或PR对比通过。' }, null, 2))
       await capture('direct-author-frame')
     },
   }

@@ -74,6 +74,23 @@ beforeEach(() => {
 })
 afterEach(() => { vi.useRealTimers() })
 
+it('作者声明由现有渲染会话读取，不创建额外 Worker 或请求画面', async () => {
+  const session = new VideoEditRenderSession(composition())
+  await session.prepareGpu()
+  const worker = workers[0]; worker.respond = false
+  const pending = session.readAuthorMetadata('blob:author', { layers: {} })
+  await Promise.resolve()
+  const request = worker.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'authorMetadata' }>
+  expect(request).toMatchObject({ kind: 'authorMetadata', url: 'blob:author', locations: { layers: {} } })
+  const metadata = { name: '原效果', kind: 'generator', mode: 'dynamic', parameters: [], types: {}, hexColors: [] }
+  worker.onmessage!({ data: { id: request.id, authorMetadata: metadata } } as MessageEvent)
+  expect(await pending).toEqual(metadata)
+  expect(workers).toHaveLength(1)
+  expect(worker.messages.some(entry => ['render', 'authorFrame'].includes(entry.message.kind))).toBe(false)
+  worker.respond = true
+  await session.dispose()
+})
+
 it('卡死渲染终止共享会话、释放全部等待和原生通道，显式重建可继续出画', async () => {
   const session = new VideoEditRenderSession(composition(), undefined, undefined, undefined, undefined, undefined, false, 50)
   await session.prepareGpu()

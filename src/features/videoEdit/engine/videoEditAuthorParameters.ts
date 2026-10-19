@@ -8,6 +8,33 @@ export interface AuthorParameterMetadata {
   hexColors: string[]
 }
 
+export interface AuthorEffectMetadata extends AuthorParameterMetadata {
+  name: string
+  kind: 'generator' | 'filter'
+  mode: 'static' | 'dynamic'
+  width?: number
+  height?: number
+  durationSeconds?: number
+  frames: number[]
+}
+
+/** Read from the executed module in the render worker; absent placement hints
+ * remain absent, rather than silently imposing a canvas or source duration. */
+export function authorEffectMetadata(effect: AuthorModule): AuthorEffectMetadata {
+  if (effect.kind !== undefined && effect.kind !== 'generator' && effect.kind !== 'filter') throw new Error('效果 kind 必须为 generator 或 filter。')
+  if (effect.mode !== undefined && effect.mode !== 'static' && effect.mode !== 'dynamic') throw new Error('效果 mode 必须为 static 或 dynamic。')
+  const hints: Pick<AuthorEffectMetadata, 'width' | 'height' | 'durationSeconds'> = {}
+  for (const key of ['width', 'height', 'durationSeconds'] as const) {
+    const value = effect[key]
+    if (value === undefined) continue
+    if (!Number.isFinite(value) || value <= 0 || key !== 'durationSeconds' && !Number.isSafeInteger(value)) throw new Error(`效果 ${key} 必须为有效正数。`)
+    hints[key] = value
+  }
+  const frames = [...(effect.frames ?? [])]
+  if (frames.some(offset => !Number.isFinite(offset) || offset === 0) || new Set(frames).size !== frames.length) throw new Error('相邻帧偏移必须为不重复的非零有限数值。')
+  return { name: effect.name, kind: effect.kind ?? 'generator', mode: effect.mode ?? 'dynamic', frames, ...hints, ...authorParameterMetadata(effect) }
+}
+
 /** Only control metadata is normalized. The author module has already executed
  * as ordinary JS; none of its drawing or control flow is parsed here. */
 export function authorParameterMetadata(effect: Pick<AuthorModule, 'params' | 'types'>): AuthorParameterMetadata {

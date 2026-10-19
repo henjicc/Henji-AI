@@ -49,6 +49,20 @@ export class VideoEditGpuCompositor {
   private authorPresentation?: GpuRenderPipeline
   private authorTarget?: { texture: GpuTexture; width: number; height: number }
 
+  private async authorRuntime(url: string, locations?: AuthorSourceLocations): Promise<VideoEditAuthorRuntime> {
+    await this.ready
+    let runtime = this.authorRuntimes.get(url)
+    if (!runtime) {
+      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url), locations)
+      this.authorRuntimes.set(url, runtime)
+    }
+    return runtime
+  }
+  /** Metadata and candidate drawing share the executed module and its lifetime. */
+  async readAuthorMetadata(url: string, locations?: AuthorSourceLocations): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
+    return structuredClone((await this.authorRuntime(url, locations)).parameterMetadata)
+  }
+
   /** Candidate frames use the same worker/device as the timeline, before publication. */
   async renderAuthorFrame(url: string, params: AuthorParameters, info: AuthorFrameInfo, assets?: Record<string, ImageBitmap>, options?: { overrides?: AuthorElementOverrides; locations?: AuthorSourceLocations; observe?: boolean }): Promise<{ bitmap: ImageBitmap; elapsedMs: number; elements?: AuthorElementObservation[] }> {
     await this.ready
@@ -56,11 +70,7 @@ export class VideoEditGpuCompositor {
       for (const image of Object.values(this.authorAssets.get(url) ?? {})) image.close()
       this.authorAssets.set(url, assets)
     }
-    let runtime = this.authorRuntimes.get(url)
-    if (!runtime) {
-      runtime = new VideoEditAuthorRuntime(this.device, await loadAuthorModule(url), options?.locations)
-      this.authorRuntimes.set(url, runtime)
-    }
+    const runtime = await this.authorRuntime(url, options?.locations)
     const width = this.canvas.width, height = this.canvas.height
     if (!this.authorTarget || this.authorTarget.width !== width || this.authorTarget.height !== height) {
       this.authorTarget?.texture.destroy()

@@ -180,6 +180,12 @@ export class VideoEditRenderSession {
     this.proxyProjectId = projectId
   }
   async prepareGpu(): Promise<void> { await this.ready; await this.request({ kind: 'prepareGpu' }) }
+  async readAuthorMetadata(url: string, locations?: import('./videoEditAuthorBundle').AuthorSourceLocations): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
+    await this.ready
+    const result = await this.request({ kind: 'authorMetadata', url, locations })
+    if (!result.authorMetadata) throw new Error('作者模块未返回参数声明，请重新检查源码。')
+    return result.authorMetadata
+  }
   /** An unresponsive author shares this worker; terminate the whole session and
    * let its existing owner/pool rebuild. Never automatically replay hung source. */
   private fail(error: Error): void {

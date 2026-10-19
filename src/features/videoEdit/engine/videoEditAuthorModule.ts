@@ -34,12 +34,25 @@ export interface AuthorWebGL {
   dispose?(): void | Promise<void>
 }
 export interface AuthorWebGPU {
-  draw(target: GpuTexture, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo): void | Promise<void>
+  draw(target: GpuTexture, time: number, params: AuthorParameters, width: number, height: number, assets: AuthorAssets, info: AuthorFrameInfo, inputs?: AuthorGpuInputs): void | Promise<void>
   dispose?(): void | Promise<void>
+}
+/** Borrowed for this call on the compositor's device. Authors own their pass
+ * targets; current/neighbour textures remain owned by the timeline. */
+export interface AuthorGpuInputs {
+  current: GpuTexture
+  frames: ReadonlyArray<{ offset: number; texture: GpuTexture; available: boolean }>
 }
 export interface AuthorModule {
   name: string
   kind?: 'generator' | 'filter'
+  /** Optional placement hints. Rendering dimensions/time still belong to the host. */
+  width?: number
+  height?: number
+  durationSeconds?: number
+  mode?: 'static' | 'dynamic'
+  /** Additional source frames, in host-frame units, in declaration order. */
+  frames?: readonly number[]
   params?: ReadonlyArray<{ key: string; type: string; default?: unknown; layer?: string; group?: string; [key: string]: unknown }>
   types?: Readonly<Record<string, unknown>>
   motionBlur?: { shutter?: number; phase?: number; maxSamples?: number }

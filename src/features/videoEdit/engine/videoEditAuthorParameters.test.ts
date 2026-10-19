@@ -1,11 +1,21 @@
 import { APP_ACCENT_HEX, BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { describe, expect, it } from 'vitest'
-import { authorParameterMetadata, authorParameterValues } from './videoEditAuthorParameters'
+import { authorEffectMetadata, authorParameterMetadata, authorParameterValues } from './videoEditAuthorParameters'
 import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMaterial/parameters'
 import { parseCodeMaterialTypes } from '@/core/videoEdit/codeMaterial/parameterTypes'
 import { codeMaterialAnimatedParameterValueSchema } from '@/core/videoEdit/codeMaterial/parameterValueSchema'
 
 describe('作者 JS 参数适配', () => {
+  it('不为原作者模块虚构尺寸和源时长；有效放置提示原样读回', () => {
+    const metadata = authorEffectMetadata({ name: '原模块', draw() {} })
+    expect(metadata).toMatchObject({ name: '原模块', kind: 'generator', mode: 'dynamic', parameters: [] })
+    expect(metadata).not.toHaveProperty('width')
+    expect(metadata).not.toHaveProperty('height')
+    expect(metadata).not.toHaveProperty('durationSeconds')
+    expect(authorEffectMetadata({ name: '提示', width: 4096, height: 2160, durationSeconds: .25, mode: 'static', draw() {} })).toMatchObject({ width: 4096, height: 2160, durationSeconds: .25, mode: 'static' })
+    expect(() => authorEffectMetadata({ name: '错误', width: NaN, draw() {} })).toThrow('width')
+    expect(() => authorEffectMetadata({ name: '错误', durationSeconds: 0, draw() {} })).toThrow('durationSeconds')
+  })
   it('保留 Frameflow 范围和颜色语义，不改动原声明', () => {
     const params = [{ key: 'power', label: '强度', type: 'range', min: -1e15, max: 1e15, step: .001, default: 2 }, { key: 'color', type: 'color', default: `${APP_ACCENT_HEX}80` }]
     const metadata = authorParameterMetadata({ params })

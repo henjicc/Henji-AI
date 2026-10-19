@@ -9,6 +9,26 @@ vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
+it('passes borrowed current and neighbouring GPU textures directly and never destroys them', async () => {
+  const current = { createView: vi.fn(), destroy: vi.fn() }
+  const previous = { createView: vi.fn(), destroy: vi.fn() }
+  const target = { createView: vi.fn(), destroy: vi.fn() }
+  const device = { queue: { copyExternalImageToTexture: vi.fn() } } as unknown as GpuDevice
+  const draw = vi.fn()
+  const runtime = new VideoEditAuthorRuntime(device, { name: 'GPU 输入', kind: 'filter', frames: [-1, .5], createWebGPU: () => ({ draw }) })
+  const info = { time: 1, frameDuration: 1 / 60, clip: { time: .5, duration: 3 } }
+  const inputs = { current, frames: [{ offset: -1, texture: previous, available: true }, { offset: .5, texture: current, available: false }] }
+  await runtime.render(target, 10, 10, {}, {}, info, undefined, inputs)
+  expect(draw.mock.calls[0][0]).toBe(target)
+  expect(draw.mock.calls[0][7]).toBe(inputs)
+  expect(runtime.parameterMetadata.frames).toEqual([-1, .5])
+  expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
+  await runtime.dispose()
+  expect(current.destroy).not.toHaveBeenCalled()
+  expect(previous.destroy).not.toHaveBeenCalled()
+  expect(target.destroy).not.toHaveBeenCalled()
+})
+
 it('does not start unrelated layer pipelines for a native GPU effect and waits for disposal', async () => {
   const createShaderModule = vi.fn()
   const device = { createShaderModule } as unknown as GpuDevice

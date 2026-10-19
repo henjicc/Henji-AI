@@ -3,9 +3,9 @@ import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
 import { VideoEditAuthorGpu } from './videoEditAuthorGpu'
 import { authorLayerBlur, authorLayerSamples, authorPoseMatrix, authorRasterScale } from './videoEditAuthorLayers'
 import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAuthorElement, type AuthorElementObservation, type AuthorElementOverrides } from './videoEditAuthorElements'
-import type { AuthorAssets, AuthorFrameInfo, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
+import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
-import { authorParameterMetadata, authorParameterValues, type AuthorParameterMetadata } from './videoEditAuthorParameters'
+import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 
 interface Surface { canvas: OffscreenCanvas; texture: GpuTexture }
 
@@ -20,10 +20,10 @@ export class VideoEditAuthorRuntime {
   private webgpu?: AuthorWebGPU
   private nativeOverrideTarget?: { texture: GpuTexture; width: number; height: number }
   private closed = false
-  readonly parameterMetadata: AuthorParameterMetadata
+  readonly parameterMetadata: AuthorEffectMetadata
   private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides }
   constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations) {
-    this.parameterMetadata = authorParameterMetadata(effect)
+    this.parameterMetadata = authorEffectMetadata(effect)
   }
   private texture(width: number, height: number): GpuTexture {
     const texture = this.device.createTexture({ size: [width, height], mipLevelCount: 1 + Math.floor(Math.log2(Math.max(width, height))), format: 'rgba8unorm', usage: 0x01 | 0x02 | 0x04 | 0x10 })
@@ -52,7 +52,7 @@ export class VideoEditAuthorRuntime {
       return [observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters)]
     })
   }
-  async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides): Promise<void> {
+  async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     try {
       params = authorParameterValues(this.parameterMetadata, params)
@@ -65,7 +65,7 @@ export class VideoEditAuthorRuntime {
           this.textures.add(texture); this.nativeOverrideTarget = { texture, width, height }
         }
         const picture = this.nativeOverrideTarget.texture
-        await this.render(picture, width, height, params, assets, info)
+        await this.render(picture, width, height, params, assets, info, undefined, inputs)
         await this.layers.begin(target)
         const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID])
         this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width, height }, samples)
@@ -75,7 +75,7 @@ export class VideoEditAuthorRuntime {
       }
       if (this.effect.createWebGPU) {
         this.webgpu ??= await this.effect.createWebGPU(this.device)
-        await this.webgpu.draw(target, info.time, params, width, height, assets, info)
+        await this.webgpu.draw(target, info.time, params, width, height, assets, info, inputs)
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return
       }

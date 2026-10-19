@@ -26,6 +26,17 @@ it('reports the missing import and original syntax location', async () => {
   }
 })
 
+it('imports raw shader files as text and preserves ordinary async JS metadata', async () => {
+  const shader = '@compute @workgroup_size(8,8) fn main() {}'
+  const bundle = await bundleAuthorFiles({ entry: 'main.js', files: {
+    'main.js': 'import source from "./effect.wgsl"; const names=await Promise.resolve(["原始","着色器"]); export default {name:names.join(""),createWebGPU(device){return {draw(){device.createShaderModule({code:source})}}}};',
+    'effect.wgsl': shader,
+  } }, build)
+  expect(bundle.code).toContain(shader)
+  expect(bundle.code).toContain('await Promise.resolve')
+  expect(bundle.code).toContain('device.createShaderModule')
+})
+
 it('locates explicit layers and falls back for ambiguous IDs without evaluating factories', () => {
   const source = 'export default { layers() {\n return [{ id:"title", draw(ctx){} }, {id:"same",draw(){}}, {id:"same",draw(){}}];\n} };'
   const result = authorSourceLocations({ entry: 'main.js', files: { 'main.js': source } })
