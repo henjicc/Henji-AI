@@ -3,7 +3,7 @@ import { deflateRawSync } from 'node:zlib'
 import { createVideoEditSequence, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { encodeSmartRegionSegment } from '@/core/videoEdit/smartRegions'
 import { createVideoEditTrackHeader, encodeVideoEditTrackRecord, encodeVideoEditTrackGeometry, videoEditTrackerKey, type VideoEditTrackHeader, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
-import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask, videoEditTrackerGeometry, videoEditClipTrackingQuad } from './videoEditTrackResults'
+import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask, videoEditTrackerGeometry, videoEditClipTrackingQuad, readVideoEditTrackReviewHeader } from './videoEditTrackResults'
 import { videoEditEffectMask } from './videoEditEffectMasks'
 
 afterEach(() => { vi.unstubAllGlobals(); setVideoEditTrackResults({}) })
@@ -24,6 +24,25 @@ it('平面 Range 记录插值驱动角点贴合；丢失帧不外推，定义不
   expect(videoEditClipTrackingQuad((await applyVideoEditClipFollow(document,[pinned],6))[0])).toBeUndefined()
 })
 const header = (patch: Partial<VideoEditTrackHeader> = {}) => createVideoEditTrackHeader({ method: 'box', model: 'vittrack', fps: 10, firstFrame: 0, frameCount: 2, sourceWidth: 64, sourceHeight: 64, promptFrames: [0], boxes: [[0.1, 0.2, 0.2, 0.2, 1], [0.5, 0.6, 0.4, 0.4, 1]], summary: { tracked: 2, lost: 0 }, ...patch })
+it('复核直接读取明确结果句柄，独立取消不影响同一头部读取或当前渲染绑定', async () => {
+  const files = { active: encodeSmartRegionSegment(header()), review: encodeSmartRegionSegment(header({ boxes: [null, null] })) }
+  const fetcher = serve(files)
+  setVideoEditTrackResults({ active: { url: 'active', version: '1' } })
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const nativeFetch = globalThis.fetch
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: { headers?: { Range: string } }) => { if (url === 'review') await gate; return nativeFetch(url, options) }))
+  const controller = new AbortController(); const handle = { url: 'review', version: '1' }
+  const cancelled = readVideoEditTrackReviewHeader(handle, controller.signal)
+  const retained = readVideoEditTrackReviewHeader(handle, new AbortController().signal)
+  controller.abort(); await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+  release(); expect((await retained).boxes).toEqual([null, null])
+  expect(await videoEditTrackerBox('active', 0)).toEqual(header().boxes[0])
+  expect(await videoEditTrackerBox('review', 0)).toBeUndefined()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  files.review = encodeSmartRegionSegment(header())
+  expect((await readVideoEditTrackReviewHeader({ ...handle, version: '2' }, new AbortController().signal)).boxes[0]).not.toBeNull()
+})
 function serve(files: Record<string, Uint8Array>) {
   const fetcher = vi.fn(async (url: string, options?: { headers?: { Range: string } }) => {
     const bytes = files[url]; if (!bytes) return new Response(null, { status: 404 })

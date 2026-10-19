@@ -26,6 +26,7 @@ export type VideoEditFrameObservationTarget =
   | { kind: 'frames'; sequenceId?: string; frames: number[] }
   | { kind: 'near_cut'; sequenceId?: string; cutFrame: number; before: number; after: number }
 export interface VideoEditFrameObservationOptions extends VideoEditAnnotationObservationOptions {
+  documentVersion?: string
   cropRegion?: VideoEditObservationRegion
   reference?: { itemId: string; offsetUs: number }
 }
@@ -73,11 +74,12 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   if (maxWidth !== null && (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840)) throw new Error('观察宽度须为256到3840之间的整数像素。')
   const owner = requireVideoEditInstance(projectId); const document = owner.document
   const contentVersion = owner.contentVersion
-  const assertCurrent = (): void => { signal.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('观察期间剪辑已改变或关闭，请重新取帧。') }
+  const documentVersion = videoEditObservationVersion(owner, document.revision)
+  if (annotations.documentVersion !== undefined && annotations.documentVersion !== documentVersion) throw new Error('检查计划对应的剪辑或跟踪结果已改变，请重新查询检查点后取帧。')
+  const assertCurrent = (): void => { signal.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion) || videoEditObservationVersion(owner, document.revision) !== documentVersion) throw new Error('观察期间剪辑已改变、关闭或跟踪结果更新，请重新取帧。') }
   assertCurrent()
   if (annotations.cropRegion) videoEditObservationRegionSchema.parse(annotations.cropRegion)
   if (annotations.cropRegion && annotations.cropAnnotationId) throw new Error('cropRegion 与 cropAnnotationId 只能选择一种裁切方式。')
-  const documentVersion = videoEditObservationVersion(owner, document.revision)
   const measurements: CodeFramePerformance[] = []
   const started = performance.now()
   let composition: VideoEditComposition; let frame = 0

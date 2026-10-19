@@ -9,6 +9,7 @@ import { deleteVideoEditTextRanges, extractVideoEditTextRanges, insertVideoEditT
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
 import { createVideoEditSpeechCaptionRetimer } from './captionSpeech'
 import { nestVideoEditClips } from './nestedSequences'
+import { videoEditNestedCaptionSourceId } from './nestedCaptions'
 
 function fixture() {
   const document = createVideoEditTestDocument('字幕来源'); const sequence = document.sequences[0]
@@ -111,6 +112,7 @@ describe('字幕来源随内容剪辑', () => {
     expect(edited.sequences.find(value => value.id === nested.sequence.id)).toEqual(original)
     expect(videoEditNestedComposition(parent, { ...nested.clip, start: 180 })!.captions!.map(caption => caption.text)).toEqual(['先打开后台查看价格然后保存'])
     expect(videoEditNestedComposition(parent, parent.clips[0])!.captions).toBe(videoEditNestedComposition(parent, parent.clips[0])!.captions)
+    for (const clip of parent.clips) for (const caption of videoEditNestedComposition(parent, clip)!.captions!) expect(original.captions!.some(saved => saved.id === videoEditNestedCaptionSourceId(caption))).toBe(true)
   })
   it('替换声音来源后撤销旧词关联，后续剪辑不能把旧词套到新声音上', () => {
     const { document, sequence } = fixture()

@@ -38,6 +38,8 @@
 
 ## 修改后核对
 
+自动选位置用 `query_video_edit_review`，给 documentRef、sequenceRef、半开整数帧 from/to；maxFrames 为1–12、默认8，threshold 默认0.5是复核阈值。records 分页返回字幕/效果/转场及已有跟踪疑点，path 区分嵌套与重复实例。将 documentVersion 与 checkpoints.frames 交给观察入口，并传同一 sequenceRef；编辑、重开或跟踪结果更新后重查，进度不影响版本。查询不重新跟踪；渲染可能借帧补位，需看图确认；优先抽样不证明其余时段正常。纠正时读 subjectRef（跟踪器）的 `video_edit.tracker.prompts`，沿通用事务补锚点并保留其他提示。
+
 定向看片沿 `observe_video_edit_frame`：target.kind="frames" 给1–12个 frames，去重排序；near_cut 给 cutFrame（切入后第一帧）、before/after（各0–5，默认各2），连续取帧并限制在序列首尾。临时放大直接给 cropRegion={x,y,width,height}（归一化且完整在画面内），支持源帧、合成帧和联系表，无需创建标注；与 cropAnnotationId 二选一。reference={itemRef,offsetUs?} 取同一剪辑内的参考图片/视频与成片并排，左成片右参考；视频参考时间为成片秒数加微秒偏移，图片始终取0，检查返回 comparison.referenceTimesUs。联系表与比较只叠 cropRegion，不叠标注或元素高亮。先检查 contactSheet.frames 和 documentVersion，再读取资产图片；观察期间编辑、关闭或参考文件变化会拒绝旧结果，不移动播放头或改作品。均匀联系表不能证明不存在闪帧，切点优先连续看。
 
 回读所属序列、位置、时长、源范围、轨道与关联；涉及时间变化同时查字幕、标记和相邻片段。同目的修改进一组事务，跨返回引用分步骤。回滚前确认最近一步就是本次修改，避免撤销用户后来做的事；保存失败用 `save_video_edit` 只重试保存，不重放剪辑。

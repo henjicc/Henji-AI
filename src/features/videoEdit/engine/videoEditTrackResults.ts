@@ -62,6 +62,17 @@ function layoutOf(result: VideoEditTrackResult): Promise<SmartRegionSegmentLayou
   return remember(layouts, key, pending, MAX_LAYOUTS)
 }
 
+/** Explicit result handle: reviewing never replaces the renderer's active result table. */
+export async function readVideoEditTrackReviewHeader(result: VideoEditTrackResult, signal: AbortSignal): Promise<VideoEditTrackHeader> {
+  signal.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const abort = (): void => { signal.removeEventListener('abort', abort); reject(signal.reason ?? new DOMException('已取消', 'AbortError')) }
+    signal.addEventListener('abort', abort, { once: true })
+    // The small shared header request can also serve rendering/other callers; do not abort it.
+    layoutOf(result).then(layout => { signal.removeEventListener('abort', abort); if (signal.aborted) abort(); else resolve(layout.header) }, error => { signal.removeEventListener('abort', abort); reject(error) })
+  })
+}
+
 function recordOf(result: VideoEditTrackResult, layout: SmartRegionSegmentLayout<VideoEditTrackHeader>, index: number): Promise<Uint8Array> {
   const key = `${cacheKey(result)}\u0001${index}`
   const cached = records.get(key)

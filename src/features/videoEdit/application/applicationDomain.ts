@@ -18,6 +18,8 @@ import { handleVideoEditTextCapability } from './videoEditTextCapability'
 import { queryVideoEditContentCapability } from '@/core/application-control/domains/videoEdit/videoEditContentIndexCapability'
 import { queryVideoEditSourceMapCapability } from '@/core/application-control/domains/videoEdit/videoEditSourceMapCapability'
 import { queryVideoEditSourceMap } from './videoEditSourceMap'
+import { queryVideoEditReviewCapability } from '@/core/application-control/domains/videoEdit/videoEditReviewCapability'
+import { queryVideoEditReview } from './videoEditReview'
 import { readVideoEditContentIndex } from './videoEditContentIndex'
 import { executeVideoEditReframeCapability } from './videoEditReframeCapability'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
@@ -150,6 +152,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const textEdit = await handleVideoEditTextCapability(definition.id, raw, context.signal)
       if (definition.id === queryVideoEditContentCapability.id) return readVideoEditContentIndex(raw, context)
       if (definition.id === queryVideoEditSourceMapCapability.id) return queryVideoEditSourceMap(raw, context)
+      if (definition.id === queryVideoEditReviewCapability.id) return queryVideoEditReview(raw, context)
       if (textEdit) return textEdit
       const transfer = await handleVideoEditWorkspaceTransfer(definition.id, raw, context.signal)
       if (transfer) return transfer
@@ -184,7 +187,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (definition.id === observeVideoEditFrameCapability.id) {
         const input = observeVideoEditFrameCapability.inputSchema.parse(raw); const id = input.documentRef.id
         const child = (ref: { kind: string; id: string }): string => { const value = splitVideoEditRef(ref); if (value.projectId !== id || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑。`); return value.childId }
-        const observed = await observeVideoEditFrame(id, input.target.kind === 'source' ? { kind: 'source', itemId: child(input.target.itemRef), timeUs: input.target.timeUs } : { ...input.target, ...(input.target.sequenceRef ? { sequenceId: child(input.target.sequenceRef) } : {}) }, input.maxWidth, context.signal, undefined, { overlayAnnotations: input.overlayAnnotations, annotationIds: input.annotationIds, cropAnnotationId: input.cropAnnotationId, cropRegion: input.cropRegion, ...(input.reference ? { reference: { itemId: child(input.reference.itemRef), offsetUs: input.reference.offsetUs } } : {}), ...(input.highlightElement ? { highlightElement: { clipId: child(input.highlightElement.clipRef), elementId: input.highlightElement.elementId } } : {}) })
+        const observed = await observeVideoEditFrame(id, input.target.kind === 'source' ? { kind: 'source', itemId: child(input.target.itemRef), timeUs: input.target.timeUs } : { ...input.target, ...(input.target.sequenceRef ? { sequenceId: child(input.target.sequenceRef) } : {}) }, input.maxWidth, context.signal, undefined, { documentVersion: input.documentVersion, overlayAnnotations: input.overlayAnnotations, annotationIds: input.annotationIds, cropAnnotationId: input.cropAnnotationId, cropRegion: input.cropRegion, ...(input.reference ? { reference: { itemId: child(input.reference.itemRef), offsetUs: input.reference.offsetUs } } : {}), ...(input.highlightElement ? { highlightElement: { clipId: child(input.highlightElement.clipRef), elementId: input.highlightElement.elementId } } : {}) })
         const resultRef = { kind: 'asset' as const, id: observed.asset.id }
         return { resultRef, ...(observed.comparison ? { comparison: { referenceItemRef: { kind: 'video_edit.item', id: `${id}:${observed.comparison.referenceItemId}` }, referenceTimesUs: observed.comparison.referenceTimesUs } } : {}), ...(observed.performance?.length ? { performance: observed.performance } : {}), ...(observed.contactSheet ? { contactSheet: observed.contactSheet } : {}), byteLength: observed.byteLength, documentRef: input.documentRef, target: input.target, width: observed.width, height: observed.height, sourceWidth: observed.sourceWidth, sourceHeight: observed.sourceHeight, documentRevision: observed.documentRevision, documentVersion: observed.documentVersion,
           message: `已渲染${observed.comparison ? '参考比较' : observed.contactSheet ? '联系表' : input.target.kind === 'program' ? `序列帧 ${input.target.frame}` : '源素材画面'}（${observed.width}×${observed.height}），用 read_application_media 并设置 mode="image" 直接查看该资产画面。`,

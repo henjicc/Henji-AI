@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const sharp = require('sharp')
+const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
 
@@ -16,12 +17,16 @@ function createVideoEditObservationScene() {
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-observation-review'); fs.mkdirSync(root, { recursive: true })
       const referencePath = path.join(root, 'reference.png')
+      const videoReferencePath = path.join(root, 'reference.mp4')
       await sharp({ create: { width: 640, height: 360, channels: 3, background: { r: 0, g: 0, b: 255 } } }).png().toFile(referencePath)
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
+      // lavfi color starts in BT.601 YUV; encode/tag the same BT.709 matrix + sRGB transfer as our frame exporter.
+      execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', "color=c=green:s=360x640:r=60:d=2,drawbox=color=yellow:t=fill:enable='gte(t,1)'", '-vf', 'scale=in_range=limited:out_range=limited:in_color_matrix=bt601:out_color_matrix=bt709', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'iec61966-2-1', videoReferencePath], { windowsHide: true, timeout: 30000 })
       const track = index => ({ id: `v${index}`, name: `视频 ${index}`, index, kind: 'video', locked: false, enabled: true, muted: false, solo: false })
-      const fixture = { id: 'video-edit-observation-review', name: '定向观察验收', media: [{ id: 'reference', name: '蓝色参考', path: referencePath, kind: 'image', width: 640, height: 360, durationSeconds: 0 }],
-        items: [{ id: 'reference-item', name: '蓝色参考', kind: 'image', mediaId: 'reference' }], bins: [],
+      const fixture = { id: 'video-edit-observation-review', name: '定向观察验收', media: [{ id: 'reference', name: '蓝色参考', path: referencePath, kind: 'image', width: 640, height: 360, durationSeconds: 0 }, { id: 'video-reference', name: '竖版变色参考', path: videoReferencePath, kind: 'video', width: 360, height: 640, durationSeconds: 2, hasAudio: false, frameRate: { numerator: 60, denominator: 1 } }],
+        items: [{ id: 'reference-item', name: '蓝色参考', kind: 'image', mediaId: 'reference' }, { id: 'video-reference-item', name: '竖版变色参考', kind: 'video', mediaId: 'video-reference' }], bins: [],
         sequences: [{ id: 'main', name: '主序列', width: 640, height: 360, frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
-          tracks: [track(1), track(2)], clips: [{ id: 'base', itemId: 'reference-item', name: '蓝色底图', kind: 'image', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }], annotations: [] }] }
+          tracks: [track(1), track(2)], clips: [{ id: 'base', itemId: 'reference-item', name: '蓝色底图', kind: 'image', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }], captions: [{ id: 'review-caption', text: '检查', start: 30, duration: 1 }], annotations: [] }] }
       let client
       const evidence = { completed: false, observations: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -63,6 +68,15 @@ function createVideoEditObservationScene() {
         const compare = await observe('compare', { kind: 'program', frame: 30 }, { reference: { itemRef: { kind: 'video_edit.item', id: `${seeded.documentId}:reference-item` } } })
         near(await pixel(compare.bytes, 160, 90), [255, 0, 0]); near(await pixel(compare.bytes, 480, 90), [0, 0, 255])
         assert.deepEqual(compare.data.comparison.referenceTimesUs, [0])
+        const plan = (await callTool(client, 'query_video_edit_review', { documentRef, sequenceRef, from: 0, to: 120 })).data
+        assert.ok(plan.checkpoints.frames.includes(30), JSON.stringify(plan)); evidence.plan = plan
+        const automatic = await observe('automatic', { kind: 'frames', frames: plan.checkpoints.frames }, { documentVersion: plan.documentVersion })
+        assert.deepEqual(automatic.data.contactSheet.frames, plan.checkpoints.frames)
+        const videoCompare = await observe('compare-video', { kind: 'frames', frames: [0, 30] }, { documentVersion: plan.documentVersion, reference: { itemRef: { kind: 'video_edit.item', id: `${seeded.documentId}:video-reference-item` }, offsetUs: 500000 } })
+        assert.deepEqual(videoCompare.data.comparison.referenceTimesUs, [500000, 1000000])
+        near(await pixel(videoCompare.bytes, 80, 45), [0, 0, 255]); near(await pixel(videoCompare.bytes, 240, 45), [0, 128, 0])
+        near(await pixel(videoCompare.bytes, 400, 45), [255, 0, 0]); near(await pixel(videoCompare.bytes, 560, 45), [255, 255, 0])
+        assert.notDeepEqual(await pixel(videoCompare.bytes, 170, 45), await pixel(videoCompare.bytes, 240, 45), '竖版参考应保留画幅并留边')
         for (const observation of evidence.observations) assert.equal(observation.documentVersion, list.data.documentVersion)
         assert.deepEqual(readVideoEditFile(seeded.file), before)
         assert.deepEqual((await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.frame', 'video_edit.document.selection'] })).data.properties, stateBefore)

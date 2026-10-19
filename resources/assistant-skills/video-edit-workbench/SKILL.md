@@ -20,7 +20,7 @@ description: 在痕迹AI剪辑工作台做粗剪、整理时间线、节奏、�
 4. 同目的独立修改合并事务，依赖新返回引用才分调用；删除先读目标与父集合，外部 MCP 写入带 operationId，删除带相关 baselineIds。结果未知用 `get_application_operation` 查原操作，不能换标识重放。
 5. 尊重锁轨、链接、编组、用户手调和来源身份。失败先读动态可用性与恢复提示；不要为绕过拒绝自动解锁、删关联内容或手算整个波纹链。`undo_video_edit` / `redo_video_edit` 仅作用于明确剪辑的一步历史。
 6. 识别、翻译、模型生成可能计费，遵守正式审批与授权；准备不等于付费提交，不能代替用户批准。已有生成或已完成导出只复用，不重新付费。
-7. 修改后回读结构；画面用 `observe_video_edit_frame` 离屏出帧并用 `read_application_media` 真读图。静帧不能证明节奏、听感或编码成片质量；没看到或没听到就说明证据边界。
+7. 修改后回读结构；需要应用挑选看片位置时用 `query_video_edit_review`，将返回的 `documentVersion`、序列引用及 `checkpoints.frames` 交给 `observe_video_edit_frame`（target.kind=frames），再用 `read_application_media` 真读图。作品或已有跟踪结果更新后重查计划；静帧不能证明节奏、听感或编码成片质量；没看到或没听到就说明证据边界。
 
 ## 拒绝与保存恢复
 

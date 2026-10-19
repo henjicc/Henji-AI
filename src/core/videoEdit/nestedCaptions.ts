@@ -7,6 +7,9 @@ import { retimeVideoEditContentClips } from './contentAnchors'
 
 const projections = new WeakMap<VideoEditSequence, Map<string, VideoEditCaption[]>>()
 const clipProjections = new WeakMap<VideoEditSequence, Map<string, VideoEditSequence['clips']>>()
+const captionOrigins = new WeakMap<VideoEditCaption, string>()
+/** Resolve a render-only split back to the saved caption, without parsing generated IDs. */
+export function videoEditNestedCaptionSourceId(caption: VideoEditCaption): string { return captionOrigins.get(caption) ?? caption.id }
 
 export function projectVideoEditNestedContentClips(sequence: VideoEditSequence, timing: VideoEditClipTiming, parentFps: number): VideoEditSequence['clips'] {
   if (!sequence.clips.some(clip => clip.contentAnchor)) return sequence.clips
@@ -46,7 +49,11 @@ export function projectVideoEditNestedCaptions(sequence: VideoEditSequence, timi
     return end > start ? [{ ...clip, ...advanceVideoEditClipSource(clip, start - clip.start, sequence.frameRate), start, duration: end - start }] : []
   })
   const retime = createVideoEditSpeechCaptionRetimer(sequence, { ...sequence, clips }, new Map())
-  const captions = sequence.captions.flatMap(caption => caption.speech ? retime(caption).map((value, index) => ({ ...value, id: index ? `${caption.id}:view:${index}` : caption.id })) : [caption])
+  const captions = sequence.captions.flatMap(caption => caption.speech ? retime(caption).map((value, index) => {
+    const projected = { ...value, id: index ? `${caption.id}:view:${index}` : caption.id }
+    captionOrigins.set(projected, caption.id)
+    return projected
+  }) : [caption])
   while (cache.size >= 8) cache.delete(cache.keys().next().value!)
   cache.set(key, captions)
   return captions

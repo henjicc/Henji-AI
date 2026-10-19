@@ -138,7 +138,7 @@ it('发送独立视频保留裁切、速度、关键帧与链接音频，并导�
   expect(pixel.trial).not.toHaveBeenCalled()
 })
 
-it.each(['source', 'canvas'] as const)('取帧期间 %s 修改时拒绝迟到新增，保留已有修改与输出', async changed => {
+it.each(['source', 'canvas'] as const)('取帧期间 %s 修改时拒绝迟到新增；过期来源不发布资产，已完成输出保留', async changed => {
   const owner = await createVideoEditProject(); const id = owner.document.id
   pixel.trial.mockImplementationOnce(async (frames: Array<{ document: VideoEditComposition }>) => {
     if (changed === 'source') editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, name: '后来修改' })) }))
@@ -147,7 +147,8 @@ it.each(['source', 'canvas'] as const)('取帧期间 %s 修改时拒绝迟到新
   })
   await expect(sendVideoEditToCanvas({ projectId: id, sequenceId: owner.activeSequenceId, canvasId, source: { kind: 'frame', frame: 0 } })).rejects.toThrow()
   expect(readCanvasTestProject(canvasId)!.nodes).toHaveLength(changed === 'source' ? 0 : 1)
-  expect(assets.size).toBe(1)
+  expect(assets.size).toBe(changed === 'source' ? 0 : 1)
+  if (changed === 'source') expect(owner.document.sequences[0].name).toBe('后来修改')
 })
 
 it('外来片段引用与取消均拒绝落位，不触发像素或文件生成', async () => {

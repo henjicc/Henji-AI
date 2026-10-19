@@ -19,6 +19,9 @@ import { videoEditContactSheetLayout } from './videoEditContactSheet'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
+import { queryVideoEditReview } from './videoEditReview'
+import * as tracking from './videoEditTracking'
+import { videoEditObservationVersion } from './videoEditObservationVersion'
 
 // The production renderer is the replaced pixel boundary; composition building, scaling,
 // library collection and the public capability are real.
@@ -84,6 +87,42 @@ async function inspectionFixture() {
   appendVideoEditClip(id, 'inspection-video'); setVideoEditView(id, { frame: 12 })
   return { owner, id, documentRef: { kind: 'video_edit.document', id } }
 }
+it('检查计划直接交给取帧，编辑后拒绝旧版本且不启动渲染', async () => {
+  const { owner, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.activeSequenceId}` }
+  try {
+    const plan = await queryVideoEditReview({ documentRef, sequenceRef, from: 0, to: 90 }, { signal: new AbortController().signal })
+    const checkpoints = plan.checkpoints as { frames: number[] }
+    const input = { documentRef, documentVersion: plan.documentVersion, target: { kind: 'frames', sequenceRef, frames: checkpoints.frames } }
+    const observed = await app.requireResult('observe_video_edit_frame', input)
+    expect(observed.documentVersion).toBe(plan.documentVersion)
+    const rendered = render.calls.length
+    editVideoProject(owner.document.id, document => { document.sequences[0].name = '改变作品'; return document })
+    const stale = await app.call('observe_video_edit_frame', input)
+    expect(stale.ok).toBe(false); expect(JSON.stringify(stale)).toContain('重新查询检查点')
+    expect(render.calls).toHaveLength(rendered); expect(owner.frame).toBe(12)
+    const refreshed = await queryVideoEditReview({ documentRef, sequenceRef, from: 0, to: 90 }, { signal: new AbortController().signal })
+    const recovered = await app.requireResult('observe_video_edit_frame', { ...input, documentVersion: refreshed.documentVersion, target: { kind: 'frames', sequenceRef, frames: (refreshed.checkpoints as { frames: number[] }).frames } })
+    expect(recovered.documentVersion).toBe(refreshed.documentVersion)
+  } finally { app.dispose() }
+})
+it('作品未编辑但已有跟踪结果更新时也拒绝旧观察计划，进度单独变化不影响版本', async () => {
+  const { owner, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
+  let revision = 1; let handles: ReturnType<typeof tracking.videoEditTrackResults> = {}
+  vi.spyOn(tracking, 'videoEditTrackingRevision').mockImplementation(() => revision)
+  vi.spyOn(tracking, 'videoEditTrackResults').mockImplementation(() => handles)
+  vi.spyOn(getPlatform().tracking, 'status').mockResolvedValue({ state: 'failed', reason: 'decode' })
+  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].trackers = [{ id: 't', name: '跟踪', method: 'box', prompts: [{ timeUs: 0, box: [.1, .1, .5, .5] }] }]; return document })
+  const version = videoEditObservationVersion(owner, owner.document.revision)
+  const documentRevision = owner.document.revision
+  try {
+    revision++; expect(videoEditObservationVersion(owner, owner.document.revision)).toBe(version)
+    handles = { changed: { url: 'henji-media://tracking', version: 'new' } }; revision++
+    const rejected = await app.call('observe_video_edit_frame', { documentRef, documentVersion: version, target: { kind: 'program', frame: 0 } })
+    expect(rejected.ok).toBe(false); expect(JSON.stringify(rejected)).toContain('跟踪结果已改变')
+    expect(owner.document.revision).toBe(documentRevision); expect(render.calls).toHaveLength(0)
+  } finally { app.dispose() }
+})
 it('任意帧列表和切点连续帧经同一观察入口，去重排序、不改播放头和文档', async () => {
   const { owner, documentRef } = await inspectionFixture(); const app = createApplicationHarness()
   const document = structuredClone(owner.document); const history = owner.past.length

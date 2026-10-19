@@ -106,10 +106,11 @@ function leafEntry(composition: VideoEditComposition, clip: VideoEditClip, mediu
 }
 
 /** Structural contributions only: no alpha, mask, blend, spatial occlusion or audibility claim. */
-function buildBranch(root: VideoEditComposition, rootClip: VideoEditClip, medium: VideoEditSourceMapMedium, range: VideoEditSourceMapRange): VideoEditSourceMapEntry[] {
+function buildBranch(root: VideoEditComposition, rootClip: VideoEditClip, medium: VideoEditSourceMapMedium, range: VideoEditSourceMapRange, visitor?: VideoEditPictureVisitor): VideoEditSourceMapEntry[] {
   const result: VideoEditSourceMapEntry[] = []
   function visit(composition: VideoEditComposition, clips: readonly VideoEditClip[], ancestors: readonly VideoEditSourceMapStep[], window: VideoEditSourceMapRange, sequenceIds: readonly string[]): void {
     if (sequenceIds.includes(composition.id) || sequenceIds.length >= VIDEO_EDIT_MAX_SEQUENCE_DEPTH) throw new Error('来源映射遇到循环嵌套或超过八层，请检查序列引用。')
+    if (ancestors.length) visitor?.sequence({ composition, path: ancestors, timeline: window })
     const windows = clipWindows(composition, medium)
     const descending = ancestors.reduce((direction, step) => step.clip.reverse ? -direction : direction, 1) < 0
     for (const clip of clips) {
@@ -124,6 +125,10 @@ function buildBranch(root: VideoEditComposition, rootClip: VideoEditClip, medium
       }
       if (selected.to <= selected.from) continue
       const child = videoEditNestedComposition(composition, clip)
+      if (visitor) {
+        const entry = leafEntry(composition, clip, medium, path, selected, root.fps)
+        if (entry) visitor.clip(composition, entry, window)
+      }
       if (child) {
         step.childFps = child.fps; step.childDuration = videoEditDuration(child)
         // Nested picture handles hold the child's last frame outside the parent clip, while a
@@ -146,6 +151,42 @@ function buildBranch(root: VideoEditComposition, rootClip: VideoEditClip, medium
   }
   visit(root, [rootClip], [], range, [])
   return result
+}
+
+export interface VideoEditSequenceMapInstance {
+  composition: VideoEditComposition
+  /** Placed wrappers from the queried sequence to this sequence, excluding its own clips. */
+  path: readonly VideoEditSourceMapStep[]
+  timeline: VideoEditSourceMapRange
+}
+interface VideoEditPictureVisitor {
+  sequence(instance: VideoEditSequenceMapInstance): void
+  clip(composition: VideoEditComposition, entry: VideoEditSourceMapEntry, window: VideoEditSourceMapRange): void
+}
+
+/** Uses the picture clock including transition holds; visits caption-only nested sequences too. */
+export function visitVideoEditPictureInstances(root: VideoEditComposition, range: VideoEditSourceMapRange, visitor: VideoEditPictureVisitor): void {
+  let count = 0
+  const bounded: VideoEditPictureVisitor = {
+    sequence: instance => { assertEntryBudget(++count); visitor.sequence(instance) },
+    clip: (composition, entry, window) => { assertEntryBudget(++count); visitor.clip(composition, entry, window) },
+  }
+  bounded.sequence({ composition: root, path: [], timeline: range })
+  for (const clip of candidateClips(root, 'video')) buildBranch(root, clip, 'video', range, bounded)
+}
+
+/** Project sequence events through the same quantized nested clock as rendered picture. */
+export function projectVideoEditSequenceMapRange(instance: VideoEditSequenceMapInstance, local: VideoEditSourceMapRange): VideoEditSourceMapRange | undefined {
+  const at = (frame: number): number => instance.path.reduce((value, step) => nextFrame(step, value), frame)
+  const descending = instance.path.reduce((direction, step) => step.clip.reverse ? -direction : direction, 1) < 0
+  if (local.from === local.to) {
+    const first = at(instance.timeline.from); const last = at(instance.timeline.to - 1)
+    if (local.from < Math.min(first, last) || local.from > Math.max(first, last) + (descending ? 0 : 1)) return undefined
+    const frame = firstTrue(instance.timeline, frame => descending ? at(frame) < local.from : at(frame) >= local.from)
+    return frame < instance.timeline.to ? { from: frame, to: frame } : undefined
+  }
+  const range = intersectFrames(instance.timeline, at, local.from, local.to, descending)
+  return range.to > range.from ? range : undefined
 }
 
 function clockStamp(clip: VideoEditClip): unknown {
@@ -243,4 +284,36 @@ export function projectVideoEditSourceMapRanges(entry: VideoEditSourceMapEntry, 
     const selected = intersectFrames(entry.timeline, frame => sampledSource(entry, frame), low - 1e-9, high - 1e-9, entry.source.direction === 'reverse')
     return selected.to > selected.from ? [selected] : []
   }).sort((a, b) => a.from - b.from || a.to - b.to)
+}
+
+/** Track rendering clamps to the placed clip's endpoints, independently of transition picture handles. */
+function trackingTimeUs(entry: VideoEditSourceMapEntry, frame: number): number {
+  if (entry.sourceKind === 'static') return 0
+  const leaf = entry.path.at(-1)!
+  const local = Math.max(leaf.clip.start, Math.min(leaf.clip.start + leaf.clip.duration - 1, localFrame(entry.path, frame)))
+  return micros(videoEditClipSourceSecondsAt(leaf.clip, local, leaf.fps))
+}
+export function videoEditSourceMapTrackingRange(entry: VideoEditSourceMapEntry): { fromUs: number; toUs: number } {
+  const first = trackingTimeUs(entry, entry.timeline.from); const last = trackingTimeUs(entry, entry.timeline.to - 1)
+  // The header scan is half-open; include the last exact sample without claiming an extra source frame.
+  return { fromUs: Math.min(first, last), toUs: Math.max(first, last) + 1 }
+}
+export function projectVideoEditTrackingRanges(entry: VideoEditSourceMapEntry, ranges: readonly { fromUs: number; toUs: number }[]): VideoEditSourceMapRange[] {
+  const descending = entry.path.reduce((direction, step) => step.clip.reverse ? -direction : direction, 1) < 0
+  return ranges.flatMap(range => {
+    const selected = intersectFrames(entry.timeline, frame => trackingTimeUs(entry, frame), range.fromUs, range.toUs, descending)
+    return selected.to > selected.from ? [selected] : []
+  })
+}
+
+/** Image pixels are static, but a code effect on that image still runs on its author/source clock. */
+export function projectVideoEditSourceMapAuthorTimes(entry: VideoEditSourceMapEntry, timesUs: readonly number[]): VideoEditSourceMapRange[] {
+  if (entry.sourceKind !== 'static') return projectVideoEditSourceMapRanges(entry, timesUs.map(time => ({ fromUs: time, toUs: time })))
+  const first = sampledSource(entry, entry.timeline.from); const last = sampledSource(entry, entry.timeline.to - 1)
+  const leaf = entry.path.at(-1)!
+  const moving: VideoEditSourceMapEntry = { ...entry, sourceKind: 'generated', source: {
+    fromUs: micros(Math.min(first, last)), toUs: micros(Math.max(first, last) + videoEditClipSpeedValue(leaf.clip) / leaf.fps),
+    direction: entry.path.reduce((direction, step) => step.clip.reverse ? -direction : direction, 1) < 0 ? 'reverse' : 'forward', basis: 'generated_clock',
+  } }
+  return projectVideoEditSourceMapRanges(moving, timesUs.map(time => ({ fromUs: time, toUs: time })))
 }

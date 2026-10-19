@@ -23,6 +23,8 @@
 
 `observe_video_edit_frame` 输入：
 
+- 自动选检查点先用 `query_video_edit_review`，给 documentRef、sequenceRef、半开整数帧 from/to；把返回 documentVersion 和 checkpoints.frames 交给本观察入口的 documentVersion 与 target={kind:"frames",sequenceRef,frames}。字幕/效果/转场候选不代表错误，跟踪区间来自已有原始采样，不会重新跟踪；低置信度/跟丢需实际看图，超出抽样的时段仍可能有问题。编辑、重开或已有跟踪结果更新后重新查询计划，进度变化不影响版本。
+
 - `documentRef`：`{kind:"video_edit.document", id}`
 - `target`：合成帧 `{kind:"program", sequenceRef, frame}`（frame 是序列整数帧）；源画面 `{kind:"source", itemRef, timeUs}`（timeUs 是素材项源素材的微秒时间）
 - `maxWidth` 可选，256–3840，默认 1920；常规核对用 960 左右即可。
