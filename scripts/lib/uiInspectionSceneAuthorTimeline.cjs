@@ -47,7 +47,7 @@ async function runAuthorTimeline(page, app, { capture, root, spec, project, sour
     assert.ok(material, '正式创建未写入代码素材')
     await change([{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: {
       'video_edit.clip.item_id': material.id, 'video_edit.clip.name': material.name, 'video_edit.clip.kind': material.kind,
-      'video_edit.clip.start': 0, 'video_edit.clip.duration': Math.ceil(spec.duration * 60), 'video_edit.clip.track': 1,
+      'video_edit.clip.start': 0, 'video_edit.clip.duration': Math.round(spec.duration * 60), 'video_edit.clip.track': 1,
       ...(!spec.filterInput ? { 'video_edit.clip.code_parameters': parameters } : {}),
     } }] }])
     if (spec.filterInput) {

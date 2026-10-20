@@ -4,7 +4,11 @@ const crypto = require('node:crypto')
 const assert = require('node:assert/strict')
 
 // Planned inputs, not acceptance results; each entry needs the native timeline evidence.
-const YOGA_AUTHOR_BATCHES = [['11105410', '14937101', '14027410', '6921525', '2094695']]
+const YOGA_AUTHOR_BATCHES = [
+  ['11105410', '14937101', '14027410', '6921525', '2094695'],
+  // First five remaining effects in the actual main sequence's appearance order.
+  ['6314410', '13815500', '146814', '7701821', '9642704'],
+]
 const digest = source => crypto.createHash('sha256').update(source).digest('hex')
 
 /** Read the runtime bundles actually consumed by PR, not possibly stale editable directories. */
@@ -50,23 +54,36 @@ function yogaInstanceParameters(effect, bridge, root) {
 }
 
 /** A reproducible batch input for the existing candidate + formal Electron scene. */
-async function prepareYogaAuthorBatch(root, graph, output, batch = 0) {
+async function prepareYogaAuthorBatch(root, graph, output, batch = 0, options = {}) {
   const effects = await readYogaAuthors(root)
   const selected = YOGA_AUTHOR_BATCHES[batch]; assert.ok(selected, '未登记的迁移批次')
   const entries = []
   for (const id of selected) {
     const effect = effects.find(effect => effect.id === id); assert.ok(effect)
-    assert.equal(effect.kind, 'generator', '处理型必须先翻译原 GPU 算法')
     const uses = graph.sequences.flatMap(sequence => sequence.tracks.flatMap(track => track.clips.flatMap(clip => (clip.effects ?? []).filter(bridge => bridge.matchName === 'AE.FrameFlow Bridge' && bridge.parameters.some(parameter => parameter.Name === '实例 ID' && parameter.StartKeyframe?.split(',')[1] === id)).map(bridge => ({ sequence, clip, bridge })))))
+    uses.sort((a, b) => Number(b.sequence.id === graph.mainSequenceId) - Number(a.sequence.id === graph.mainSequenceId) || Number(a.clip.start) - Number(b.clip.start))
     const use = uses[0]
     const duration = use ? (Number(use.clip.end) - Number(use.clip.start)) / 254016000000 : 6
     const bindings = use ? yogaInstanceParameters(effect, use.bridge, root) : { params: {}, assets: {} }
     const directory = path.join(output, id); fs.mkdirSync(directory, { recursive: true })
     const sourceFile = path.join(directory, 'original.js'); fs.writeFileSync(sourceFile, effect.source)
     assert.equal(digest(fs.readFileSync(sourceFile)), effect.hash, '复制改变了原作者源码')
-    const spec = { entry: 'original.js', sourceFiles: { 'original.js': sourceFile }, width: 3840, height: 2160, duration, time: Math.min(2, duration / 2), frames: 30, ...bindings }
+    const spec = { entry: 'original.js', sourceFiles: { 'original.js': sourceFile }, width: 3840, height: 2160, duration, time: options.times?.[id] ?? Math.min(2, duration / 2), frames: 30, ...bindings }
+    const adaptations = []
+    if (effect.kind === 'filter') {
+      assert.ok(options.filterInput && fs.existsSync(options.filterInput), '处理型独立场景需要明确的真实输入帧')
+      const translated = await require('./yogaAuthorFilters.cjs').translateYogaFilter(effect)
+      const adaptedFile = path.join(directory, 'adapted.js')
+      fs.writeFileSync(adaptedFile, translated)
+      spec.sourceFiles['adapted.js'] = adaptedFile
+      spec.entry = 'adapted.js'
+      spec.filterInput = options.filterInput
+      spec.formal = true
+      adaptations.push({ file: 'adapted.js', changes: ['原 CUDA 算法逐算子翻译 WGSL，保留原常数、采样、时间表和 pass 顺序', 'createWebGPU 借用正式输入与输出，独立管理中间纹理及释放'] })
+    }
+    spec.adaptations = adaptations
     fs.writeFileSync(path.join(directory, 'input.json'), JSON.stringify(spec, null, 2))
-    entries.push({ id, name: effect.name, original: path.join(root, effect.file), sha256: effect.hash, directory, adaptations: [], uses: uses.map(({ sequence, clip }) => ({ sequence: sequence.id, clip: clip.id, startTicks: clip.start, endTicks: clip.end })) })
+    entries.push({ id, name: effect.name, kind: effect.kind, original: path.join(root, effect.file), sha256: effect.hash, directory, adaptations, uses: uses.map(({ sequence, clip }) => ({ sequence: sequence.id, clip: clip.id, startTicks: clip.start, endTicks: clip.end })) })
   }
   fs.writeFileSync(path.join(output, `batch-${batch + 1}.json`), JSON.stringify({ source: graph.source, entries }, null, 2))
   return entries
