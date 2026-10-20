@@ -7,7 +7,7 @@ const { ffprobePath } = require('./mediaBinaries.cjs')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
-const { compareFrames, internalComparisonPasses } = require('./uiInspectionSceneAuthorTimeline.cjs')
+const { compareFrames, internalComparisonPasses, prComparisonPasses } = require('./uiInspectionSceneAuthorTimeline.cjs')
 
 /** Whole-project acceptance through the same persisted sources and native application APIs. */
 async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
@@ -74,7 +74,13 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         entry.difference = await compareFrames(output, file)
         entry.internalPass = internalComparisonPasses(entry.difference)
         save()
-        assert.ok(entry.internalPass, `第 ${frame} 帧内部一致性超出用户标准`)
+        if (!spec.collectDifferences) assert.ok(entry.internalPass, `第 ${frame} 帧内部一致性超出用户标准`)
+      }
+      if (spec.prReferences) {
+        const reference = path.join(spec.prReferences, `caption-${frame}0.png`)
+        entry.prDifference = await compareFrames(output, reference)
+        entry.prNumericPass = prComparisonPasses(entry.prDifference)
+        save()
       }
     }
     const before = readVideoEditFile(created.file)
