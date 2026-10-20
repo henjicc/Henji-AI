@@ -8,8 +8,11 @@ const YOGA_AUTHOR_BATCHES = [
   ['11105410', '14937101', '14027410', '6921525', '2094695'],
   // First five remaining effects in the actual main sequence's appearance order.
   ['6314410', '13815500', '146814', '7701821', '9642704'],
+  ['9049942', '13119842', '1845381', '4715265', '8250556'],
 ]
 const digest = source => crypto.createHash('sha256').update(source).digest('hex')
+// Exercise the image panel after its entrance, not just the opening title.
+const ACTIVE_SAMPLE_TIMES = { '9049942': 7.5 }
 
 /** Read the runtime bundles actually consumed by PR, not possibly stale editable directories. */
 async function readYogaAuthors(root) {
@@ -63,13 +66,26 @@ async function prepareYogaAuthorBatch(root, graph, output, batch = 0, options = 
     const uses = graph.sequences.flatMap(sequence => sequence.tracks.flatMap(track => track.clips.flatMap(clip => (clip.effects ?? []).filter(bridge => bridge.matchName === 'AE.FrameFlow Bridge' && bridge.parameters.some(parameter => parameter.Name === '实例 ID' && parameter.StartKeyframe?.split(',')[1] === id)).map(bridge => ({ sequence, clip, bridge })))))
     uses.sort((a, b) => Number(b.sequence.id === graph.mainSequenceId) - Number(a.sequence.id === graph.mainSequenceId) || Number(a.clip.start) - Number(b.clip.start))
     const use = uses[0]
-    const duration = use ? (Number(use.clip.end) - Number(use.clip.start)) / 254016000000 : 6
+    // Isolated filters may sample the global sequence clock beyond their first clip's duration.
+    const duration = options.durations?.[id] ?? (use ? (Number(use.clip.end) - Number(use.clip.start)) / 254016000000 : 6)
     const bindings = use ? yogaInstanceParameters(effect, use.bridge, root) : { params: {}, assets: {} }
     const directory = path.join(output, id); fs.mkdirSync(directory, { recursive: true })
     const sourceFile = path.join(directory, 'original.js'); fs.writeFileSync(sourceFile, effect.source)
     assert.equal(digest(fs.readFileSync(sourceFile)), effect.hash, '复制改变了原作者源码')
-    const spec = { entry: 'original.js', sourceFiles: { 'original.js': sourceFile }, width: 3840, height: 2160, duration, time: options.times?.[id] ?? Math.min(2, duration / 2), frames: 30, ...bindings }
+    const spec = { entry: 'original.js', sourceFiles: { 'original.js': sourceFile }, width: 3840, height: 2160, duration, time: options.times?.[id] ?? ACTIVE_SAMPLE_TIMES[id] ?? Math.min(2, duration / 2), frames: 30, ...bindings }
     const adaptations = []
+    if (id === '4715265') {
+      const canvas = 'const c2 = document.createElement("canvas");'
+      const renderer = 'new ca2({ antialias: true,'
+      assert.equal(effect.source.split(canvas).length, 2, '芯片 CanvasTexture 接口已变')
+      assert.equal(effect.source.split(renderer).length, 2, '芯片 WebGLRenderer 接口已变')
+      const adapted = effect.source.replace(canvas, 'const c2 = new OffscreenCanvas(w2,h2);').replace(renderer, 'new ca2({ canvas: new OffscreenCanvas(1,1), antialias: true,')
+      const adaptedFile = path.join(directory, 'adapted.js')
+      fs.writeFileSync(adaptedFile, adapted)
+      spec.sourceFiles['adapted.js'] = adaptedFile
+      spec.entry = 'adapted.js'
+      adaptations.push({ file: 'adapted.js', changes: ['CanvasTexture 使用 OffscreenCanvas(w2,h2)', 'WebGLRenderer 显式传入 OffscreenCanvas；原 Three.js WebGL 和绘制算法不变'] })
+    }
     if (effect.kind === 'filter') {
       assert.ok(options.filterInput && fs.existsSync(options.filterInput), '处理型独立场景需要明确的真实输入帧')
       const translated = await require('./yogaAuthorFilters.cjs').translateYogaFilter(effect)

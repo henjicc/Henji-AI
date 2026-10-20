@@ -100,7 +100,7 @@ const shader=${JSON.stringify(shader)};
 const entries=${JSON.stringify(entries)};
 export default {name:original.name,kind:'filter',params:original.params??[],async createWebGPU(device){
  const module=device.createShaderModule({code:shader});
- const layout=device.createBindGroupLayout({entries:[{binding:0,visibility:2,buffer:{type:'uniform'}},...[1,2].map(binding=>({binding,visibility:2,texture:{sampleType:'unfilterable-float'}}))]});
+ const layout=device.createBindGroupLayout({entries:[{binding:0,visibility:2,buffer:{type:'uniform'}},...[1,2,3].map(binding=>({binding,visibility:2,texture:{sampleType:'unfilterable-float'}}))]});
  const pipelineLayout=device.createPipelineLayout({bindGroupLayouts:[layout]});
  const buffer=device.createBuffer({size:16,usage:72});
  const cache=new Map();let images=[],size='';
@@ -114,9 +114,10 @@ export default {name:original.name,kind:'filter',params:original.params??[],asyn
   const encoder=device.createCommandEncoder();
   for(let i=0;i<entries.length;i++){
    const output=i<images.length?images[i]:target;
-   const previous=i>0?images[i-1]:inputs.current;
+   const previous=i>0?images[0]:inputs.current;
+   const previous1=i>1?images[1]:inputs.current;
    const pass=encoder.beginRenderPass({colorAttachments:[{view:output.createView(),loadOp:'clear',storeOp:'store'}]});
-   pass.setPipeline(pipelines[i]);pass.setBindGroup(0,device.createBindGroup({layout,entries:[{binding:0,resource:{buffer}},{binding:1,resource:inputs.current.createView()},{binding:2,resource:previous.createView()}]}));
+   pass.setPipeline(pipelines[i]);pass.setBindGroup(0,device.createBindGroup({layout,entries:[{binding:0,resource:{buffer}},{binding:1,resource:inputs.current.createView()},{binding:2,resource:previous.createView()},{binding:3,resource:previous1.createView()}]}));
    pass.draw(3);pass.end();
   }
   device.queue.submit([encoder.finish()]);
@@ -129,6 +130,7 @@ async function translateYogaFilter(effect) {
   assert.equal(original.gpu?.abi, 'cuda-v1')
   if (['6314410', '13815500'].includes(effect.id)) return moduleSource(windowShader(effect.id), ['window'])
   if (effect.id === '9642704') return moduleSource(huaziShader(original), ['blur_x', 'blur_y'])
+  if (effect.id === '13119842') return moduleSource(require('./yogaAuthorFocus.cjs').focusShader(original), ['gaussian_x', 'gaussian_y', 'focus'])
   throw new Error(`尚未翻译的 CUDA 效果：${effect.id} ${effect.name}`)
 }
 
