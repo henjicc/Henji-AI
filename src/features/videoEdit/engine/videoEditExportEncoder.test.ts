@@ -16,7 +16,8 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals() })
 it('8K/120与竖屏优先HEVC，探测实际原生尺寸、帧率、码率', async () => {
   expect(await selectVideoEditExportEncoder(spec)).toBe('hevc')
-  expect(video).toHaveBeenCalledWith(expect.objectContaining({ codec: expect.stringMatching(/^hev1\./), width: 7680, height: 4320, displayWidth: 7680, displayHeight: 4320, framerate: 120, bitrate: 80_000_000, latencyMode: 'quality', hardwareAcceleration: 'prefer-hardware' }))
+  expect(video).toHaveBeenCalledWith(expect.objectContaining({ codec: expect.stringMatching(/^hev1\./), width: 7680, height: 4320, displayWidth: 7680, displayHeight: 4320, bitrate: 20_000_000, latencyMode: 'quality', hardwareAcceleration: 'prefer-hardware' }))
+  expect(video.mock.calls[0][0]).not.toHaveProperty('framerate')
   expect(await selectVideoEditExportEncoder({ ...spec, width: 4320, height: 7680 })).toBe('hevc')
 })
 it('普通规格H264优先，不支持才试HEVC；显式编码不静默替换', async () => {
@@ -55,10 +56,10 @@ it('按H264硬件/软件、HEVC硬件/软件尝试VBR/CBR，再尝试推荐码�
     ['avc1', 'prefer-hardware', 'variable'], ['avc1', 'prefer-hardware', 'constant'], ['avc1', 'prefer-software', 'variable'], ['avc1', 'prefer-software', 'constant'],
     ['hev1', 'prefer-hardware', 'variable'], ['hev1', 'prefer-hardware', 'constant'], ['hev1', 'prefer-software', 'variable'], ['hev1', 'prefer-software', 'constant'],
   ])
-  expect(video.mock.calls.slice(0, 8).every(([config]) => config.bitrate === 50_000_000)).toBe(true)
+  expect(video.mock.calls.slice(0, 8).every(([config]) => config.bitrate === (config.hardwareAcceleration === 'prefer-software' ? 50_000_000 : 25_000_000))).toBe(true)
 })
 it('面板4K30硬件缓存不污染4K60适配；相同settings入队解析前后配置不变', async () => {
-  video.mockImplementation(async config => (config.codec === 'avc1.640033' && config.framerate === 30) || (config.codec === 'avc1.640034' && config.hardwareAcceleration === 'prefer-software'))
+  video.mockImplementation(async config => (config.codec === 'avc1.640033' && config.hardwareAcceleration === 'prefer-hardware') || (config.codec === 'avc1.640034' && config.hardwareAcceleration === 'prefer-software'))
   expect((await probeVideoEditExport({ ...fourK(), fps: 30 })).supported).toBe(true)
   const adapted = await adaptVideoEditExportPreset(fourK())
   expect(adapted.encoderPreference).toBe('software')
@@ -109,12 +110,13 @@ it('完整快照键包含所有设置，音视频严格探测与舍入码率一�
   const settings = { ...fourK(), videoBitrateMbps: 50.1234567, keyframeInterval: 2 as const }
   const key = videoEditExportProbeKey(settings)
   const patches: Partial<VideoEditExportSettings>[] = [
-    { codec: 'hevc' }, { width: 1920 }, { height: 1080 }, { fps: 30 }, { videoBitrateMbps: 45 }, { bitrateMode: 'cbr' }, { keyframeInterval: 'auto' }, { encoderPreference: 'software' },
+    { codec: 'hevc' }, { width: 1920 }, { height: 1080 }, { fps: 30 }, { fps: 59 }, { videoBitrateMbps: 45 }, { bitrateMode: 'cbr' }, { keyframeInterval: 'auto' }, { encoderPreference: 'software' },
     { audioEnabled: false }, { audioCodec: 'wav' }, { sampleRate: 44100 }, { channels: 1 }, { audioBitrateKbps: 128 }, { videoEnabled: false }, { format: 'wav' },
   ]
   for (const patch of patches) expect(videoEditExportProbeKey({ ...settings, ...patch })).not.toBe(key)
   expect((await probeVideoEditExport(settings)).supported).toBe(true)
-  expect(video).toHaveBeenCalledWith(expect.objectContaining({ bitrate: 50_123_457, framerate: 60 }))
+  expect(video).toHaveBeenCalledWith(expect.objectContaining({ bitrate: 25_061_729, codec: 'avc1.640034' }))
+  expect(video.mock.calls[0][0]).not.toHaveProperty('framerate')
   expect(audio).toHaveBeenCalledWith({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 192000, bitrateMode: undefined, aac: { format: 'aac' } })
 })
 it('原生探测异常不向用户露英文，失败不缓存可重试；底层AAC拒绝保留cause', async () => {

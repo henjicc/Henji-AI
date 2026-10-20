@@ -1,5 +1,8 @@
 import type { AudioEncodingConfig, VideoEncodingConfig } from 'mediabunny'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('features.videoEdit.exportEncoder')
 
 /* Codec level data and selection adapted from Mediabunny 1.61.0 src/codec.ts.
  * Copyright (c) 2026-present, Vanilagy and contributors. MPL-2.0:
@@ -45,8 +48,14 @@ export function videoEditExportVideoEncoderConfig(spec: VideoEditExportEncoderSp
   // CanvasSource's VideoSample has square pixels. These display dimensions are absent in canEncodeVideo's default probe.
   return { codec: spec.codec === 'avc' ? `avc1.6400${avc[2].toString(16).padStart(2, '0')}` : `hev1.1.6.${hevc[2]}${hevc[3]}.B0`,
     width: spec.width, height: spec.height, displayWidth: spec.width, displayHeight: spec.height,
-    bitrate: spec.bitrate, bitrateMode: spec.bitrateMode === 'cbr' ? 'constant' : 'variable', alpha: 'discard',
-    framerate: spec.frameRate, latencyMode: 'quality', hardwareAcceleration: spec.encoderPreference === 'software' ? 'prefer-software' : 'prefer-hardware',
+    // Chromium's VideoEncodeAcceleratorAdapter uses 30fps when framerate is absent.
+    // Preserve bits per output frame; level selection above uses the requested bitrate.
+    bitrate: spec.encoderPreference === 'software' ? spec.bitrate : Math.round(spec.bitrate * 30 / spec.frameRate),
+    bitrateMode: spec.bitrateMode === 'cbr' ? 'constant' : 'variable', alpha: 'discard',
+    // Windows Chromium advertises only 30fps at 4K for capable hardware encoders.
+    // Keep the real throughput in the codec level; samples carry the actual timing.
+    ...(spec.encoderPreference === 'software' ? { framerate: spec.frameRate } : {}),
+    latencyMode: 'quality', hardwareAcceleration: spec.encoderPreference === 'software' ? 'prefer-software' : 'prefer-hardware',
     scalabilityMode: undefined, contentHint: undefined,
     ...(spec.codec === 'avc' ? { avc: { format: 'avc' as const } } : { hevc: { format: 'hevc' as const } }) }
 }
@@ -60,6 +69,13 @@ export function videoEditExportVideoOptions(settings: Pick<VideoEditExportSettin
   const config = videoEditExportVideoEncoderConfig({ ...settings, frameRate: settings.fps, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000) })
   return { codec: settings.codec, bitrate: config.bitrate, bitrateMode: config.bitrateMode as 'constant' | 'variable',
     fullCodecString: config.codec, hardwareAcceleration: config.hardwareAcceleration, latencyMode: config.latencyMode, alpha: config.alpha,
+    onEncoderConfig: actual => {
+      // Mediabunny adds track frameRate back before its own support probe. Apply
+      // the same native config at that boundary, before both probing/configure.
+      Object.assign(actual, config)
+      if (config.framerate === undefined) delete actual.framerate
+      logger.info('导出原生视频编码配置', { event: 'video_edit.export.encoder_config', context: { configuration: { ...actual }, outputFrameRate: settings.fps } })
+    },
     ...(settings.keyframeInterval === 'auto' ? {} : { keyFrameInterval: settings.keyframeInterval }) }
 }
 export function videoEditExportAudioOptions(settings: Pick<VideoEditExportSettings, 'audioCodec' | 'audioBitrateKbps' | 'sampleRate' | 'channels'>): AudioEncodingConfig {

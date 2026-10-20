@@ -89,10 +89,12 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       assert.ok(Number.isSafeInteger(range.startFrame) && Number.isSafeInteger(range.endFrame)
         && range.startFrame >= 0 && range.endFrame > range.startFrame && range.endFrame <= endFrame, '验收导出范围无效')
       const started = performance.now()
+      const afterTimestamp = new Date().toISOString()
+      const videoBitrateMbps = spec.videoBitrateMbps ?? 60
       const exported = await callTool(client, 'export_video_edit', operationEnvelope([baseline], {
         documentRef, range,
-        settings: { format: 'mp4', width: 3840, height: 2160, fps: 60, videoBitrateMbps: 60,
-          audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: 'software',
+        settings: { format: 'mp4', width: 3840, height: 2160, fps: 60, videoBitrateMbps, bitrateMode: spec.bitrateMode ?? 'vbr',
+          audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: spec.encoderPreference ?? 'software',
           audioEnabled: true, captionMode: 'burn', addToLibrary: false },
       }))
       const jobId = (exported.data ?? exported.result?.data)?.queue?.[0]?.id
@@ -112,9 +114,23 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
           assert.equal(Number(video.nb_frames), range.endFrame - range.startFrame)
           assert.equal(video.width, 3840); assert.equal(video.height, 2160)
           assert.equal(video.avg_frame_rate, '60/1')
+          assert.ok(Math.abs(Number(video.duration) - (range.endFrame - range.startFrame) / 60) < 0.001, '导出时长不符合帧范围')
+          evidence.export.bitrateDeviation = Number(video.bit_rate) / (videoBitrateMbps * 1_000_000) - 1
+          evidence.export.encoderPreference = spec.encoderPreference ?? 'software'
+          evidence.export.encoderLogs = await page.evaluate(async afterTimestamp => {
+            const result = await window.henjiNative.logging.queryLogEvents({
+              date: afterTimestamp.slice(0, 10), afterTimestamp,
+              domainPrefix: 'features.videoEdit.exportEncoder', limit: 500,
+            })
+            return result.events.filter(event => event.event === 'video_edit.export.encoder_config')
+          }, afterTimestamp)
+          assert.ok(evidence.export.encoderLogs.some(event => event.context?.configuration?.hardwareAcceleration ===
+            (spec.encoderPreference === 'hardware' ? 'prefer-hardware' : 'prefer-software')), '缺少实际编码配置日志')
           assert.ok(streams.some(stream => stream.codec_type === 'audio'), '导出文件缺少音轨')
           evidence.export.video = video
           evidence.export.fullTimeline = range.startFrame === 0 && range.endFrame === endFrame
+          save()
+          if (spec.bitrateMode === 'cbr') assert.ok(Math.abs(evidence.export.bitrateDeviation) <= .2, '恒定码率偏差超过20%')
           break
         }
         assert.ok(performance.now() - started < 2 * 60 * 60 * 1000, '完整导出超过两小时，保留任务状态供排查')

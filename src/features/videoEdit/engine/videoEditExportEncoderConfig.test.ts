@@ -5,6 +5,13 @@ import { adaptVideoEditExportPreset, assertVideoEditExportSupported, canEncodeVi
 import { videoEditExportVideoEncoderConfig } from './videoEditExportEncoderConfig'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+it.each([24, 30, 60, 120])('硬件省略帧率时按 Chromium 的30fps默认值保持 %ifps 每帧码率预算', frameRate => {
+  const spec = { codec: 'avc' as const, width: 3840, height: 2160, frameRate, bitrate: 60_000_000 }
+  const hardware = videoEditExportVideoEncoderConfig(spec)
+  expect(hardware).not.toHaveProperty('framerate')
+  expect(hardware.bitrate! / 30).toBe(spec.bitrate / frameRate)
+  expect(videoEditExportVideoEncoderConfig({ ...spec, encoderPreference: 'software' })).toMatchObject({ bitrate: spec.bitrate, framerate: frameRate })
+})
 it.each([
   ['avc', 1920, 1080, 30, 'avc1.640028'], ['avc', 1920, 1080, 60, 'avc1.64002a'],
   ['avc', 3840, 2160, 30, 'avc1.640033'], ['avc', 3840, 2160, 60, 'avc1.640034'],
@@ -68,7 +75,30 @@ it.each([
     expect(nativeProbe.mock.calls[1][0]).toStrictEqual(probed)
     expect(configure).toHaveBeenCalledOnce()
     expect(configure.mock.calls[0][0]).toStrictEqual(probed)
-    expect(probed).toMatchObject({ framerate: 60, bitrate: 12_123_457, latencyMode: 'quality', displayWidth: 3840, displayHeight: 2160 })
+    expect(probed).toMatchObject({ bitrate: encoderPreference === 'hardware' ? 6_061_729 : 12_123_457, latencyMode: 'quality', displayWidth: 3840, displayHeight: 2160 })
+    if (encoderPreference === 'hardware') expect(probed).not.toHaveProperty('framerate')
+    else expect(probed.framerate).toBe(60)
+  } finally { sample.close(); await output.cancel() }
+})
+it.each(['avc', 'hevc'] as const)('4K60 %s硬件绕过错误帧率能力上限，实际configure仍使用60fps level', async codec => {
+  const settings = { ...videoEditSequenceExportSettings({ width: 3840, height: 2160, fps: 60, sampleRate: 48000, channels: 2 }), codec, encoderPreference: 'hardware' as const, videoBitrateMbps: 12 }
+  const probe = vi.fn(async (config: VideoEncoderConfig) => ({ config, supported: !('framerate' in config) }))
+  const configure = vi.fn((_config: VideoEncoderConfig) => { throw new Error('native boundary reached') })
+  vi.stubGlobal('VideoEncoder', class { static isConfigSupported = probe; configure = configure; state = 'unconfigured'; close() {} })
+  expect(await canEncodeVideoEditExport({ ...settings, frameRate: 60, bitrate: 12_000_000 })).toBe(true)
+  const expected = probe.mock.calls[0][0]
+  expect(expected.codec).toBe(codec === 'avc' ? 'avc1.640034' : 'hev1.1.6.L153.B0')
+  expect(expected).not.toHaveProperty('framerate')
+  expect(expected.bitrate).toBe(6_000_000)
+  const source = new VideoSampleSource(videoEditExportVideoOptions(settings))
+  const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() })
+  output.addVideoTrack(source, { frameRate: 60 })
+  const sample = new VideoSample(new Uint8Array(3840 * 2160 * 4), { format: 'RGBA', codedWidth: 3840, codedHeight: 2160, timestamp: 2 / 60, duration: 1 / 60 })
+  try {
+    await output.start()
+    await expect(source.add(sample)).rejects.toThrow('native boundary reached')
+    expect(probe.mock.calls.at(-1)![0]).toStrictEqual(expected)
+    expect(configure.mock.calls[0][0]).toStrictEqual(expected)
   } finally { sample.close(); await output.cancel() }
 })
 it.each([[44100, 1], [44100, 2], [48000, 1], [48000, 2]] as const)('AAC %iHz/%i声道探测配置与实际configure逐字段一致', async (sampleRate, channels) => {

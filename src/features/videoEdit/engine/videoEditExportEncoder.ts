@@ -83,7 +83,7 @@ export async function canEncodeVideoEditExport(spec: VideoEditExportEncoderSpec 
  * invalidate the panel's configuration snapshot; it is not a VideoEncoderConfig field.
  */
 export function videoEditExportProbeKey(settings: VideoEditExportSettings): string {
-  return JSON.stringify({ format: settings.format, videoEnabled: settings.videoEnabled,
+  return JSON.stringify({ format: settings.format, videoEnabled: settings.videoEnabled, frameRate: settings.fps,
     video: videoEditExportVideoEncoderConfig({ ...settings, frameRate: settings.fps ?? 0, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000) }), keyframeInterval: settings.keyframeInterval,
     audioEnabled: settings.audioEnabled, audioCodec: settings.audioCodec,
     audio: videoEditExportAudioEncoderConfig({ codec: settings.audioCodec === 'wav' ? 'pcm-s24' : 'aac', sampleRate: settings.sampleRate, numberOfChannels: settings.channels, bitrate: settings.audioBitrateKbps * 1000 }) })
