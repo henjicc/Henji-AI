@@ -28,7 +28,7 @@ function checkComponentMemory(value: unknown, context: z.RefinementCtx): unknown
 }
 export const codeComponentPinSchema: z.ZodType<CodeComponentPin> = z.preprocess(checkComponentMemory, rawComponentPinSchema)
 export const codeComponentPinsSchema = z.preprocess(checkComponentMemory, z.array(rawComponentPinSchema))
-export const codeFilePathSchema = z.string().min(1).refine(value => /^[a-zA-Z0-9_\-.\u3400-\u9fff/]+\.ts$/.test(value) && value.split('/').every(part => part !== '.' && part !== '..' && part.length > 0), '文件路径须为版本内的相对 .ts 路径，只能使用字母、数字、中文、_、-、. 和 /。')
+export const codeFilePathSchema = z.string().min(1).refine(value => /^[a-zA-Z0-9_\-.\u3400-\u9fff/]+\.(?:[cm]?[jt]sx?|json|wgsl|glsl)$/.test(value) && value.split('/').every(part => part !== '.' && part !== '..' && part.length > 0), '文件路径须为版本内的相对 JS、TS、JSON 或着色器路径，只能使用字母、数字、中文、_、-、. 和 /。')
 export const codeSourceHashSchema = z.string().regex(/^[a-f0-9]{64}$/)
 export const codeSourceTextSchema = z.string().max(CODE_MATERIAL_LIMITS.sourceBytes).refine(value => new TextEncoder().encode(value).byteLength <= CODE_MATERIAL_LIMITS.sourceBytes, '单文件源码最多64KiB。')
 export const codeMaterialFilesSchema = z.object({ entry: codeFilePathSchema, files: z.record(codeFilePathSchema, codeSourceTextSchema), resolvedImports: z.record(z.string(), z.record(z.string(), z.string())).optional() }).strict().refine(value => Object.prototype.hasOwnProperty.call(value.files, value.entry), '入口文件不存在。')
