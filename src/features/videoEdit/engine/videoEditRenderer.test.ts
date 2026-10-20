@@ -1153,6 +1153,26 @@ it('缓存起播前被驱逐时精确取回当前画面；零散短缓存不跳�
   }
 })
 
+it('预渲染窗口在正向播放时整帧取自预览文件，与实时合成段同一条解码计划交接；暂停与导出仍实时合成', async () => {
+  boundary.scheduled = []
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 10 }))
+  document.clips = [{ ...document.clips[0], duration: 120 }, { ...document.clips[0], id: 'top', track: 2, duration: 120 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  renderer.setRenderCache([{ key: 'w1', startFrame: 60, endFrame: 120, url: 'D:/cache/w1.mp4', width: 3840, height: 2160, fps: 60 }])
+  try {
+    for (let frame = 58; frame <= 61; frame++) { boundary.draws = []; await (await renderer.render(frame, true)).completion; expect(boundary.draws.at(-1)?.ids).toEqual(frame < 60 ? ['clip', 'top'] : ['render-cache:w1']) }
+    // Window frames come from the file at their offset; source layers schedule only the frames outside it.
+    expect(us(boundary.draws.at(-1)!.timestamps)).toEqual(us([1 / 60]))
+    expect(boundary.scheduled.find(value => value.path === 'D:/cache/w1.mp4')?.timestamps[0]).toBe(videoEditPictureSeconds(0))
+    expect(boundary.scheduled.filter(value => value.path === 'D:/A.mp4').every(value => value.timestamps.length === 2)).toBe(true)
+    boundary.draws = []; await (await renderer.render(61, false)).completion
+    expect(boundary.draws.at(-1)?.ids).toEqual(['clip', 'top'])
+    const exporter = new VideoEditRenderer(document); exporter.setRenderCache([{ key: 'w1', startFrame: 60, endFrame: 120, url: 'D:/cache/w1.mp4', width: 3840, height: 2160, fps: 60 }])
+    boundary.draws = []; await (await exporter.render(61, true)).completion; await exporter.dispose()
+    expect(boundary.draws.at(-1)?.ids).toEqual(['clip', 'top'])
+  } finally { await renderer.dispose() }
+})
 it('剪到另一个已排程文件前半秒开始解码它的首帧，剪辑点那一帧不再现场打开定位', async () => {
   boundary.scheduled = []
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }

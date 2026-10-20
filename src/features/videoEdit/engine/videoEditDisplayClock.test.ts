@@ -25,6 +25,8 @@ it('示范即时重画不推进未来帧，慢速、倒放和起播预留时间�
 it('正向播放跟得上时逐帧前进，落后于时钟时跳到下一张来得及呈现的帧，不越过片尾', () => {
   expect(videoEditPlaybackTarget(11, 9, 0, 600)).toBe(11)
   expect(videoEditPlaybackTarget(11, 10, 0, 600)).toBe(11)
+  expect(videoEditPlaybackTarget(11, 11, 0, 600)).toBe(11)
+  expect(videoEditPlaybackTarget(11, 12, 0, 600)).toBe(13)
   expect(videoEditPlaybackTarget(11, 14, 0, 600)).toBe(15)
   expect(videoEditPlaybackTarget(11, 900, 0, 600)).toBe(599)
   expect(videoEditPlaybackTarget(3, -1, 5, 600)).toBe(5)
@@ -35,6 +37,11 @@ it('画面时钟以声音实际输出为准：换算含输出延迟的起点，�
   expect(videoEditAudioClockOrigin({ contextTime: 1.95, performanceTime: 1000 }, 2, 1000)).toBeCloseTo(1050)
   expect(videoEditAudioClockOrigin({ contextTime: 1.95, performanceTime: 990 }, 2, 1000)).toBeCloseTo(1040)
   expect(videoEditAudioClockOrigin({ contextTime: 0, performanceTime: 0 }, 2, 1000)).toBeUndefined()
-  expect(followVideoEditAudioClock(1000, 1150)).toBe(1150)
-  expect(followVideoEditAudioClock(1000, 1010)).toBeCloseTo(1001)
+  const period = 1000 / 60
+  expect(followVideoEditAudioClock(1000, 1010, period, 0)).toBe(1000)
+  expect(followVideoEditAudioClock(1000, 984, period, 0)).toBe(1000)
+  const snapped = followVideoEditAudioClock(1000, 1040, period, 0)
+  expect(snapped).toBeGreaterThanOrEqual(1040); expect(snapped - 1040).toBeLessThan(period)
+  expect(((snapped % period) + period) % period).toBeCloseTo(period / 2, 6)
+  expect(followVideoEditAudioClock(1000, 1040, period)).toBe(1040)
 })

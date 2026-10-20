@@ -41,6 +41,7 @@ import { VideoEditTimelinePlayhead, VideoEditTimelinePlayheadHead, VideoEditTime
 import { useTimelinePointer } from './useTimelinePointer'
 import { clearTimelineSnap, snapTimelineFrame, timelineSnapPoints, TIMELINE_SNAP_PIXELS, useTimelineSnapIndicator } from './timelineSnap'
 import { VideoEditTimelineInOut } from './VideoEditTimelineInOut'
+import { VideoEditRenderBar } from './VideoEditRenderBar'
 import { useTimelineMenu } from './useTimelineMenu'
 import { VideoEditSpeedDialog } from '../panels/VideoEditSpeedDialog'
 import { VideoEditSceneDetectionDialog } from '../panels/VideoEditSceneDetectionDialog'
@@ -504,6 +505,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />
             {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 菱形图形），不是按钮档位（3.5 确认保留） */}
             {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" tooltip={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { selectVideoEditSubtitle(projectId, sequence.id, null); setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond  fill="currentColor"  aria-hidden="true" /></UiButton>)}
+            <VideoEditRenderBar instance={instance} pixels={pixels} />
             <VideoEditTimelineInOut instance={instance} sequence={sequence} fps={fps} duration={duration} pixels={pixels} onError={onError} />
           </VideoEditTimelinePosition>
         </div>

@@ -48,6 +48,8 @@ interface PlaybackStream {
   abort: AbortController
   entries: Array<{ frame: number; clipId: string }>
   cursor: number
+  /** The decoder file was handed back after the stream's last picture. */
+  released?: boolean
   /** Initial contiguous pictures already owned by the bounded seek cache. */
   cachedUntilFrame: number
   samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
@@ -57,7 +59,9 @@ interface PlaybackStream {
   tail: Promise<unknown>
 }
 /** `plan`: the planned frames of a nested schedule (ascending) and the parent clip they belong to; undefined means every frame in [start, endFrame). */
-interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream>; plan?: { key: string; frames: readonly number[] } }
+interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream>; plan?: { key: string; frames: readonly number[] }; cacheRevision: number }
+/** A ready pre-rendered window: its file (fetchable URL for the worker) and the frames it covers. */
+export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string }
 interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number }
 interface NestedRender {
@@ -77,10 +81,10 @@ const logger = createLogger('features.videoEdit.effects')
 const NEAREST_SAMPLE_EDGE = 0.5 + 1e-6
 /** Separates a clip id from the sound stream number in a mapped clip's sound source key (`audio:<clip>\0<stream>`). */
 const AUDIO_STREAM_KEY = '\u0000'
-/** Files decoded through one long-lived decoder each during forward playback. */
-const PLAYBACK_SCHEDULE_FILES = 4
 // Bound per-frame timestamp allocation independently of sequence duration. Rebuild as playback crosses this rolling window.
-const PLAYBACK_SCHEDULE_SECONDS = 30
+// Rebuilding repositions every decoder at once (a visible stall), so the window spans a whole long-form edit; a file's
+// stream opens its decoder half a second before its first frame and releases it after its last.
+const PLAYBACK_SCHEDULE_SECONDS = 1800
 const PLAYBACK_ARM_IDLE_MS = 2500
 /** A playback clock that fell behind skips ahead this far at most inside one schedule; the skipped pictures are released unused. */
 const PLAYBACK_MAX_SKIP_SECONDS = 1
@@ -121,6 +125,38 @@ export class VideoEditRenderer {
   private codeSources?: VideoEditCodeSources
   private readonly contentAudio = new VideoEditContentAudio(document => new VideoEditRenderer(document, 1, undefined, 1, this.frames))
   private presentationEpoch = 0
+  /** Pre-rendered preview windows (forward playback of the top-level program only), as full-frame clips of their files. */
+  private renderCache: Array<{ startFrame: number; endFrame: number; clip: VideoEditClip; media: VideoEditMedia }> = []
+  private renderCacheRevision = 0
+  /**
+   * Replaces the ready pre-rendered windows. Playback shows a window's file instead of composing its layers;
+   * paused frames, scrubbing, observation and export always compose live.
+   */
+  setRenderCache(windows: ReadonlyArray<VideoEditRenderCacheWindow>): void {
+    this.renderCache = windows.map(window => {
+      const id = `render-cache:${window.key}`
+      const media: VideoEditMedia = { id, name: '预渲染', path: window.url, kind: 'video', width: window.width, height: window.height, durationSeconds: (window.endFrame - window.startFrame) / window.fps, hasAudio: false }
+      const clip: VideoEditClip = { id, itemId: id, name: '预渲染', kind: 'video', track: Number.MAX_SAFE_INTEGER, start: window.startFrame, duration: window.endFrame - window.startFrame, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }
+      return { startFrame: window.startFrame, endFrame: window.endFrame, clip, media }
+    }).sort((a, b) => a.startFrame - b.startFrame)
+    this.renderCacheRevision++
+  }
+  /** The ready window drawing this frame during forward playback of the program, if any. */
+  private cachedWindow(frame: number): { clip: VideoEditClip; media: VideoEditMedia } | undefined {
+    if (!this.previewWidth || this.nestedOwner) return undefined
+    let low = 0, high = this.renderCache.length - 1
+    while (low <= high) {
+      const middle = (low + high) >> 1, window = this.renderCache[middle]
+      if (frame < window.startFrame) high = middle - 1
+      else if (frame >= window.endFrame) low = middle + 1
+      else return window
+    }
+    return undefined
+  }
+  /** A clip's source media, including the files of pre-rendered windows. */
+  private clipMedia(document: VideoEditComposition, clip: VideoEditClip): VideoEditMedia | undefined {
+    return clip.id.startsWith('render-cache:') ? this.renderCache.find(window => window.clip.id === clip.id)?.media : videoEditClipMedia(document, clip)
+  }
   private ensureCompositor(): VideoEditGpuCompositor {
     if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
     if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
@@ -338,10 +374,11 @@ export class VideoEditRenderer {
     const frames = plan?.frames().filter(value => value >= frame)
     const endFrame = frames ? (frames.at(-1) ?? frame) + 1 : frame + Math.ceil(document.fps * PLAYBACK_SCHEDULE_SECONDS)
     const groups = new Map<string, { media: VideoEditMedia; clips: VideoEditClip[] }>()
-    for (const clip of document.clips) {
+    const cached = this.previewWidth && !this.nestedOwner ? this.renderCache : []
+    for (const clip of [...document.clips, ...cached.map(window => window.clip)]) {
       // 倒放片段的源时间逐帧后退，不进前向解码排程，走定位路径（GOP 缓存，4.13）。
-      if (clip.kind !== 'video' || clip.reverse || !visible.has(clip.track) || clip.start + clip.duration <= frame || clip.start >= endFrame) continue
-      const media = videoEditClipMedia(document, clip)
+      if (clip.kind !== 'video' || clip.reverse || !(visible.has(clip.track) || clip.id.startsWith('render-cache:')) || clip.start + clip.duration <= frame || clip.start >= endFrame) continue
+      const media = this.clipMedia(document, clip)
       if (!media || media.kind !== 'video') continue
       const key = `${media.path}\u0000${media.sourceRevision ?? ''}`
       const group = groups.get(key) ?? { media, clips: [] }; group.clips.push(clip); groups.set(key, group)
@@ -349,7 +386,7 @@ export class VideoEditRenderer {
     const streams: PlaybackStream[] = []; const byClip = new Map<string, PlaybackStream>()
     const ordered = [...groups.values()].map(group => ({ ...group, clips: group.clips.sort((a, b) => a.start - b.start) }))
       .filter(group => group.clips.every((clip, index) => index === 0 || group.clips[index - 1].start + group.clips[index - 1].duration <= clip.start))
-      .sort((a, b) => a.clips[0].start - b.clips[0].start).slice(0, PLAYBACK_SCHEDULE_FILES)
+      .sort((a, b) => a.clips[0].start - b.clips[0].start)
     // A source reused after a timeline gap must not retain its prefetched native frames through that gap.
     const runs = ordered.flatMap(group => {
       const chunks: VideoEditClip[][] = []
@@ -362,7 +399,11 @@ export class VideoEditRenderer {
     })
     for (const group of runs) {
       const entries: PlaybackStream['entries'] = []; const timestamps: number[] = []
-      const add = (clip: VideoEditClip, at: number): void => { entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps))) }
+      const add = (clip: VideoEditClip, at: number): void => {
+        // A pre-rendered window replaces every layer at its frames; its own clip is scheduled only there.
+        if (!clip.id.startsWith('render-cache:') && this.cachedWindow(at)) return
+        entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
+      }
       for (const clip of group.clips) {
         if (frames) { for (const at of frames) if (at >= clip.start && at < clip.start + clip.duration) add(clip, at) }
         else for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) add(clip, at)
@@ -390,7 +431,7 @@ export class VideoEditRenderer {
       }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
-    this.playback = { document, endFrame, streams, byClip, ...(plan && frames ? { plan: { key: plan.key, frames } } : {}) }
+    this.playback = { document, endFrame, streams, byClip, cacheRevision: this.renderCacheRevision, ...(plan && frames ? { plan: { key: plan.key, frames } } : {}) }
   }
   /** The frames this renderer will be asked for next while playing forward (the parent's plan when nested and retimed). */
   private upcomingFrames(frame: number, end: number): number[] {
@@ -401,7 +442,7 @@ export class VideoEditRenderer {
   /** Whether a sequential frame continues the current schedule: the next frame, a repeat, or a skip ahead within it. */
   private continuesPlayback(frame: number, planKey?: string): boolean {
     const last = this.lastForwardFrame, playback = this.playback
-    if (last === undefined || !playback || frame < last || frame >= playback.endFrame || playback.plan?.key !== planKey) return false
+    if (last === undefined || !playback || frame < last || frame >= playback.endFrame || playback.plan?.key !== planKey || playback.cacheRevision !== this.renderCacheRevision) return false
     return frame - last <= 1 || !!playback.plan || frame - last <= Math.ceil(this.document.fps * PLAYBACK_MAX_SKIP_SECONDS)
   }
   /** Briefly position the active decoder ahead of play, including the handoff after the scrub cache.
@@ -430,7 +471,7 @@ export class VideoEditRenderer {
       await stream.tail.catch(() => undefined)
       const primed = stream.primed; stream.primed = undefined
       if (primed) (await primed.catch(() => undefined))?.value?.close()
-      await stream.samples.return(); this.release(stream)
+      await stream.samples.return(); if (!stream.released) this.release(stream)
     }))
   }
   /**
@@ -443,6 +484,8 @@ export class VideoEditRenderer {
     for (const stream of this.playback?.streams ?? []) {
       const first = stream.entries[0]
       if (stream.primed || stream.cursor !== 0 || !first || first.frame <= frame || first.frame > horizon) continue
+      // One file has one playback decoder: a new run must not cancel a run of the same file still being shown.
+      if (this.playback!.streams.some(other => other !== stream && other.demux === stream.demux && !other.released && (other.cursor > 0 || other.primed))) continue
       stream.primed = stream.samples.next()
       void stream.primed.catch(() => undefined)
     }
@@ -462,7 +505,7 @@ export class VideoEditRenderer {
       stream.cursor++
       const result = await pull()
       // Finish the generator before the timeline leaves this contiguous run; its last picture belongs to the caller.
-      if (stream.cursor === stream.entries.length) await stream.samples.return()
+      if (stream.cursor === stream.entries.length) { await stream.samples.return(); stream.released = true; this.release(stream) }
       return result.done || !result.value ? undefined : result.value
     })
     stream.tail = next
@@ -630,7 +673,7 @@ export class VideoEditRenderer {
       const missingPrefix = this.playback && document.clips.some(clip => {
         const stream = this.playback?.byClip.get(clip.id)
         if (!stream || frame >= stream.cachedUntilFrame || frame < clip.start || frame >= clip.start + clip.duration) return false
-        const media = videoEditClipMedia(document, clip)
+        const media = this.clipMedia(document, clip)
         return !media || !(this.frameCache.get(media.path, videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps))) instanceof VideoEditGpuFrame)
       })
       if (this.playback && (this.playback.document !== document || !forward || missingPrefix)) await this.disposePlayback()
@@ -644,9 +687,10 @@ export class VideoEditRenderer {
       this.lastForwardFrame = frame; this.armedFrame = undefined
       this.primeUpcomingStreams(frame)
     } else if (this.armedFrame !== frame || this.playback?.document !== document) { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
-    const rawTransitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
+    const cachedWindow = sequential && !nestedRender ? this.cachedWindow(frame) : undefined
+    const rawTransitions = cachedWindow ? [] : videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
-    const candidates = new Map(activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio').map(clip => [clip.id, clip]))
+    const candidates = new Map(cachedWindow ? [[cachedWindow.clip.id, cachedWindow.clip]] : activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio').map(clip => [clip.id, clip]))
     // A predecessor render needs the owner's source handle, not the outgoing /
     // incoming transition mix (which belongs after the complete effect chain).
     const filterHandles = nestedRender?.filterHandles
@@ -662,7 +706,7 @@ export class VideoEditRenderer {
     }).filter(clip => !['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length || transitionIds.has(clip.id))
     const byId = new Map(active.map(clip => [clip.id, clip]))
     const transitions = rawTransitions.map(window => ({ ...window, left: byId.get(window.left.id)!, right: byId.get(window.right.id)! }))
-    active.push(...videoEditCaptionClips(document, frame))
+    if (!cachedWindow) active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
     const gpu = this.ensureCompositor()
@@ -702,7 +746,7 @@ export class VideoEditRenderer {
     } })
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
-      const media = videoEditClipMedia(document, clip)
+      const media = this.clipMedia(document, clip)
       return clip.kind === 'video' && media ? [{ mediaId: media.path, time: videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, frame, document.fps, media.durationSeconds), document.fps)) }] : []
     }))
     // A cut opens a new demuxer/decoder; doing that on the boundary frame stalls playback.
@@ -759,7 +803,7 @@ export class VideoEditRenderer {
         } else cacheHits++
         return picture
       }
-      const media = videoEditClipMedia(document, clip)
+      const media = this.clipMedia(document, clip)
       if (clip.kind === 'text' || clip.kind === 'adjustment') return null
       if (clip.kind === 'code' || clip.kind === 'graphic') {
         const picture = (await codeReady)?.pictures.get(clip.id)
@@ -882,7 +926,7 @@ export class VideoEditRenderer {
     }
     const activeImages = new Set(canPresent() ? imageIds : this.images.keys())
     for (const key of this.images.keys()) if (!activeImages.has(key)) this.releaseImage(key)
-    const activePaths = new Set(canPresent() ? active.map(clip => videoEditClipMedia(document, clip)?.path) : this.seekers.keys())
+    const activePaths = new Set(canPresent() ? active.map(clip => this.clipMedia(document, clip)?.path) : this.seekers.keys())
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
     if (!nestedRender) for (const [id, entry] of this.nestedPictures) {
       if (!nestedContext.keys.has(id)) { this.nestedPictures.delete(id); await entry.renderer.dispose() }

@@ -46,6 +46,8 @@ export type RenderRequest = { id: number } & (
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
+  /** 已就绪的预渲染窗口与它们的本地文件；不进渲染队列，下一次正向播放的渲染即使用。 */
+  | { kind: 'renderCache'; windows: import('./videoEditRenderer').VideoEditRenderCacheWindow[]; localPaths: Record<string, string> }
   | { kind: 'dispose' }
   | { kind: 'render'; observeElements?: boolean; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
   | { kind: 'audio'; start: number; duration: number }
@@ -103,6 +105,8 @@ let effectWarnings = new Set<string>()
 const proxies = new Map<string, VideoProxyResult>()
 function setProxies(values: Record<string, VideoProxyResult> | undefined): void { proxies.clear(); for (const [id, result] of Object.entries(values ?? {})) proxies.set(id, result) }
 const localPaths = new Map<string, string>()
+const renderCachePaths = new Map<string, string>()
+let renderCacheWindows: import('./videoEditRenderer').VideoEditRenderCacheWindow[] = []
 function setLocalPaths(paths: Record<string, string> | undefined): void { if (!paths) return; localPaths.clear(); for (const [url, path] of Object.entries(paths)) localPaths.set(url, path) }
 const log = (level: RenderLogMessage['level'], message: string, event: string, context: Record<string, unknown>): void => { self.postMessage({ kind: 'log', level, message, event, context } satisfies RenderLogMessage) }
 setVideoEditMaskTimingObserver(context => log('debug', '遮罩栅格化', 'video_edit.mask.raster.completed', context))
@@ -112,7 +116,7 @@ function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFr
   setLocalPaths(decode?.localPaths)
   const channel = decode?.nativeAvailable && decode.forced !== 'browser' ? nativeFrames : undefined
   // Runtime native failures are recovered per read by the router (task 3.1).
-  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) }) : undefined
+  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) ?? renderCachePaths.get(media.path) }) : undefined
   router = new VideoEditFrameRouter(new VideoEditBrowserFrames(), nativeBackend, { nativeAvailable: !!nativeBackend, ...(decode?.forced ? { forced: decode.forced } : {}) }, log)
   return new VideoEditProxyFrames(router, proxies)
 }
@@ -155,6 +159,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   if (request.kind === 'preopen') { preopenMedia(request); return }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
+  if (request.kind === 'renderCache') { renderCachePaths.clear(); for (const [url, path] of Object.entries(request.localPaths)) renderCachePaths.set(url, path); renderCacheWindows = request.windows; renderer?.setRenderCache(renderCacheWindows); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { contentWarmup.cancel(); revision = request.revision; renderer?.cancelPresentation() } return }
   if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
   if (request.kind === 'init' || request.kind === 'update' || request.kind === 'replaceContent') { timing = 'timing' in request ? request.timing : undefined; timedStages.clear(); timingEvent(`worker.${request.kind}`); receiveCodeSourceTexts(request.codeSources) }
@@ -193,6 +198,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
         await disposeRenderer(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent); direct = !!request.surface
+        renderer.setRenderCache(renderCacheWindows)
         if (direct) warmContent(request.document)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'replaceContent') {

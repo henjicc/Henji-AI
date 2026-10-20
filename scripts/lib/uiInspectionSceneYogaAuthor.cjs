@@ -197,6 +197,23 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       }] }))
     }
     const presentedFrame = async () => Number(await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-presented-frame'))
+    // Pre-render through the formal assistant capability, then wait until the render bar reports every requested window ready.
+    if (spec.prerender) {
+      const started = performance.now()
+      const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+      const startedResult = await callTool(client, 'render_video_edit_preview', operationEnvelope([baseline], { documentRef, scope: spec.prerender.scope ?? 'needed', ...(spec.prerender.range ? { range: spec.prerender.range } : {}) }))
+      evidence.prerender = { started: startedResult.data ?? startedResult.result?.data }; save()
+      for (;;) {
+        await page.waitForTimeout(5000)
+        const read = await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.render_cache'] })
+        const cache = read.data.properties['video_edit.document.render_cache']
+        evidence.prerender.progress = { elapsedMs: performance.now() - started, rendering: cache.rendering, readyFrames: cache.readyFrames, needsRenderFrames: cache.needsRenderFrames, totalFrames: cache.totalFrames }; save()
+        if (!cache.rendering) { evidence.prerender.final = { ...evidence.prerender.progress, windows: cache.windows }; break }
+        assert.ok(performance.now() - started < 2 * 60 * 60 * 1000, '预渲染超过两小时')
+      }
+      await capture('yoga-prerendered')
+      save()
+    }
     // Regression gate: the slowest known ranges played at normal speed, each from a settled paused frame.
     if (spec.playbackRanges) {
       await setPlaybackResolution()
