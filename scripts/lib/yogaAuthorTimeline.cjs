@@ -13,7 +13,9 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
   document.id = stable('document', `yoga-author:${graph.source.sha256}`)
   document.name = '联想YOGA · 作者原代码'
   const effects = await readYogaAuthors(sourceRoot)
+  const { videoEditDocumentSchema, videoEditTransitionAlignmentFields } = loadTypeScript('scripts/lib/premiereMigrationModel.ts')
   const packages = [], instances = []
+  const restoredTransitions = new Set()
   document.codeMaterials = []
   document.bins.push({ id: 'yoga-authors', name: '原代码效果' })
   for (const rawSequence of graph.sequences) {
@@ -89,10 +91,26 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
       }
       sequence.annotations = sequence.annotations.filter(annotation => !annotation.text.startsWith('待迁移代码画面') && !(annotation.frame === clip.start && annotation.text.startsWith('待重建生成画面')))
     }
+    for (const track of rawSequence.tracks) for (const raw of track.transitions) {
+      if (raw.matchName !== 'AE.ADBE Cross Dissolve New') continue
+      const left = track.clips.find(value => value.tailTransition === raw.id)
+      const right = track.clips.find(value => value.headTransition === raw.id)
+      const leftClip = left && sequence.clips.find(value => value.id === stable('clip', left.id))
+      const rightClip = right && sequence.clips.find(value => value.id === stable('clip', right.id))
+      assert.ok(leftClip || rightClip, `交叉溶解缺少片段：${raw.id}`)
+      const frames = ticks => Math.round(Number(ticks) / 254016000000 * fps)
+      const durationFrames = frames(raw.end) - frames(raw.start)
+      ;(sequence.transitions ??= []).push({
+        id: stable('transition', raw.id), kind: 'cross_dissolve', durationFrames,
+        ...videoEditTransitionAlignmentFields(durationFrames, frames(raw.alignment)),
+        ...(leftClip ? { leftClipId: leftClip.id } : {}), ...(rightClip ? { rightClipId: rightClip.id } : {}),
+      })
+      restoredTransitions.add(raw.id)
+      sequence.annotations = sequence.annotations.filter(value => value.id !== stable('annotation', `${sequence.id}:${raw.id}:待还原原工程转场。:${frames(raw.start)}`))
+    }
   }
-  const { videoEditDocumentSchema } = loadTypeScript('scripts/lib/premiereMigrationModel.ts')
   return { document: videoEditDocumentSchema.parse(document), packages, instances,
-    remaining: base.evidence.limitations.filter(value => !/待迁移代码画面|待重建生成画面/.test(value.text)), source: graph.source }
+    remaining: base.evidence.limitations.filter(value => !/待迁移代码画面|待重建生成画面/.test(value.text) && !restoredTransitions.has(value.sourceClipId)), source: graph.source }
 }
 
 module.exports = { buildYogaAuthorTimeline }
