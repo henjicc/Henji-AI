@@ -2,6 +2,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
+const { execFileSync } = require('node:child_process')
+const { ffprobePath } = require('./mediaBinaries.cjs')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
@@ -72,6 +74,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         entry.difference = await compareFrames(output, file)
         entry.internalPass = internalComparisonPasses(entry.difference)
         save()
+        assert.ok(entry.internalPass, `第 ${frame} 帧内部一致性超出用户标准`)
       }
     }
     const before = readVideoEditFile(created.file)
@@ -79,6 +82,45 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
     await openVideoEditProjectCard(page, created.projectId)
     assert.deepEqual(readVideoEditFile(created.file), before, '关闭重开改变工程内容')
     evidence.reopened = true
+    if (spec.exportTimeline) {
+      const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+      const endFrame = Math.max(...model.sequences[0].clips.map(clip => clip.start + clip.duration))
+      const range = spec.exportRange ?? { startFrame: 0, endFrame }
+      assert.ok(Number.isSafeInteger(range.startFrame) && Number.isSafeInteger(range.endFrame)
+        && range.startFrame >= 0 && range.endFrame > range.startFrame && range.endFrame <= endFrame, '验收导出范围无效')
+      const started = performance.now()
+      const exported = await callTool(client, 'export_video_edit', operationEnvelope([baseline], {
+        documentRef, range,
+        settings: { format: 'mp4', width: 3840, height: 2160, fps: 60, videoBitrateMbps: 60,
+          audioBitrateKbps: 192, fit: 'fit', loudness: null, encoderPreference: 'software',
+          audioEnabled: true, captionMode: 'burn', addToLibrary: false },
+      }))
+      const jobId = (exported.data ?? exported.result?.data)?.queue?.[0]?.id
+      assert.ok(jobId, JSON.stringify(exported))
+      for (;;) {
+        const result = await callTool(client, 'query_video_edit_export', { documentRef, taskId: jobId, detail: 'full' })
+        const job = result.data.queue.find(value => value.id === jobId)
+        assert.ok(job, '正式导出队列丢失本次任务')
+        evidence.export = { ...job, elapsedMs: performance.now() - started }; save()
+        if (job && ['completed', 'failed', 'cancelled'].includes(job.state)) {
+          assert.equal(job.state, 'completed', JSON.stringify(job))
+          const output = path.join(root, 'YOGA-author-timeline.mp4')
+          fs.copyFileSync(job.path, output); evidence.export.output = output
+          const streams = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-of', 'json', output], { encoding: 'utf8', windowsHide: true, timeout: 60000 })).streams
+          const video = streams.find(stream => stream.codec_type === 'video')
+          assert.ok(video, '导出文件缺少视频轨')
+          assert.equal(Number(video.nb_frames), range.endFrame - range.startFrame)
+          assert.equal(video.width, 3840); assert.equal(video.height, 2160)
+          assert.equal(video.avg_frame_rate, '60/1')
+          assert.ok(streams.some(stream => stream.codec_type === 'audio'), '导出文件缺少音轨')
+          evidence.export.video = video
+          evidence.export.fullTimeline = range.startFrame === 0 && range.endFrame === endFrame
+          break
+        }
+        assert.ok(performance.now() - started < 2 * 60 * 60 * 1000, '完整导出超过两小时，保留任务状态供排查')
+        await page.waitForTimeout(5000)
+      }
+    }
     evidence.completed = true
   } finally { save(); await client?.close(); await disableMcp(page) }
 }
