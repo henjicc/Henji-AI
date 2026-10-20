@@ -113,14 +113,16 @@ async function runAuthorTimeline(page, app, { capture, root, spec, project, sour
     execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', output, '-frames:v', '1', exportFrame], { windowsHide: true, timeout: 60000 })
     evidence.export = { ...job, path: output, elapsedMs: performance.now() - exportStarted, video }
     evidence.previewObservation = await compareFrames(path.join(root, 'formal-preview.png'), path.join(root, 'formal-observation.png'))
-    assert.equal(evidence.previewObservation.maximumDelta, 0, '正式观察与节目预览的同帧像素必须一致')
     evidence.exportDifference = await compareFrames(exportFrame, path.join(root, 'formal-observation.png'))
-    assert.ok(evidence.exportDifference.psnr === null || evidence.exportDifference.psnr >= 30, '有损成片应与正式观察保持同帧内容')
     if (spec.reference) {
       evidence.candidateDifference = await compareFrames(path.join(root, 'formal-observation.png'), spec.reference)
-      assert.equal(evidence.candidateDifference.maximumDelta, 0, '正式节目与候选必须在相同黑底上逐像素一致')
     }
     if (spec.prReference) evidence.prDifference = await compareFrames(path.join(root, 'formal-observation.png'), spec.prReference)
+    // Keep all comparisons when one fails, so the failure can be localized without rerendering.
+    store()
+    assert.equal(evidence.previewObservation.maximumDelta, 0, '正式观察与节目预览的同帧像素必须一致')
+    assert.ok(evidence.exportDifference.psnr === null || evidence.exportDifference.psnr >= 30, '有损成片应与正式观察保持同帧内容')
+    if (spec.reference) assert.equal(evidence.candidateDifference.maximumDelta, 0, '正式节目与候选必须在相同黑底上逐像素一致')
     evidence.completed = true; store()
   } finally { store(); await client?.close(); await disableMcp(page) }
 }
