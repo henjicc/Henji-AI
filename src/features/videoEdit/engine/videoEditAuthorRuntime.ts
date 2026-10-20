@@ -7,14 +7,24 @@ import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, Autho
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { AuthorCanvasAsset, AuthorCanvasUnrecordable, recordAuthorCanvas, replayAuthorCanvas, type AuthorCanvasRecording } from './videoEditAuthorCanvasRecorder'
 
-interface Surface { canvas: OffscreenCanvas; texture: GpuTexture }
+interface Surface { canvas: OffscreenCanvas; texture: GpuTexture; /** Recorded commands whose raster the texture holds. */ signature?: string }
+type Matrix = [number, number, number, number, number, number]
+/** An image read outside a recorded draw before its bitmap of this frame exists. */
+class AuthorAssetPending extends Error { constructor(readonly key: string) { super(`作者图片 ${key} 尚未准备`) } }
 
 /** One instance per effect instance, owned by the existing render worker/device. */
 export class VideoEditAuthorRuntime {
   private readonly surfaces: Surface[] = []
   private readonly textures = new Set<GpuTexture>()
-  private readonly canvasImages = new Map<string, { source: ImageBitmap; pixels: ImageData }>()
+  private readonly canvasImages = new Map<string, { source: ImageBitmap; pixels: ImageData; version: number }>()
+  private assetVersion = 0
+  /** Images the author reads outside recorded canvas draws (e.g. for its own WebGL scene): made every frame up front. */
+  private readonly eagerAssets = new Set<string>()
+  /** Layers whose drawing cannot be recorded; they draw directly every frame. */
+  private readonly directLayers = new Set<string>()
+  private measureContext?: OffscreenCanvasRenderingContext2D
   private layerGpu?: VideoEditAuthorGpu
   private get layers(): VideoEditAuthorGpu { return this.layerGpu ??= new VideoEditAuthorGpu(this.device) }
   private gl?: WebGL2RenderingContext
@@ -101,30 +111,73 @@ export class VideoEditAuthorRuntime {
         return
       }
       for (const [key, cached] of this.canvasImages) if (assets[key] !== cached.source) {
-        this.canvasImages.delete(key)
+        this.canvasImages.delete(key); this.eagerAssets.delete(key)
       }
-      const canvasAssets: Record<string, CanvasImageSource> = {}
       for (const [key, source] of Object.entries(assets)) {
-        if (!(source instanceof ImageBitmap)) { canvasAssets[key] = source; continue }
-        let cached = this.canvasImages.get(key)
-        if (!cached) {
-          const canvas = new OffscreenCanvas(source.width, source.height)
-          const context = canvas.getContext('2d', { willReadFrequently: true })
-          if (!context) throw new Error('Canvas2D 不可用。')
-          context.drawImage(source, 0, 0)
-          cached = { source, pixels: context.getImageData(0, 0, source.width, source.height) }
-          this.canvasImages.set(key, cached)
-          canvas.width = canvas.height = 1
-        }
-        // Reusing a bitmap lets Chromium change its low-quality downsampling
-        // after GPU promotion. Keep immutable pixels, with a fresh image each frame.
+        if (!(source instanceof ImageBitmap) || this.canvasImages.has(key)) continue
+        const canvas = new OffscreenCanvas(source.width, source.height)
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+        if (!context) throw new Error('Canvas2D 不可用。')
+        context.drawImage(source, 0, 0)
+        this.canvasImages.set(key, { source, pixels: context.getImageData(0, 0, source.width, source.height), version: ++this.assetVersion })
+        canvas.width = canvas.height = 1
+      }
+      // Reusing a bitmap lets Chromium change its low-quality downsampling
+      // after GPU promotion. Keep immutable pixels, with a fresh image each frame,
+      // created only when this frame actually draws the image (a reused layer raster needs none).
+      const fresh = new Map<string, ImageBitmap>()
+      const freshAsset = async (key: string): Promise<void> => {
+        const cached = this.canvasImages.get(key)
+        if (!cached || fresh.has(key)) return
         const copyStarted = performance.now()
         const copy = await createImageBitmap(cached.pixels)
         recordVideoEditPreparation('authorAssetCopy', performance.now() - copyStarted)
-        frameImages.push(copy)
-        canvasAssets[key] = copy
+        frameImages.push(copy); fresh.set(key, copy)
+      }
+      let recording = false
+      const canvasAssets: Record<string, CanvasImageSource> = {}
+      for (const [key, source] of Object.entries(assets)) {
+        const cached = this.canvasImages.get(key)
+        if (!cached) { canvasAssets[key] = source; continue }
+        const standIn = new AuthorCanvasAsset(key, cached.pixels.width, cached.pixels.height)
+        Object.defineProperty(canvasAssets, key, { enumerable: true, get: () => {
+          if (recording) return standIn
+          const image = fresh.get(key)
+          if (!image) { this.eagerAssets.add(key); throw new AuthorAssetPending(key) }
+          return image
+        } })
       }
       assets = canvasAssets
+      const assetSignature = (keys: Iterable<string>): string => JSON.stringify([...keys].sort().map(key => [key, this.canvasImages.get(key)?.version]))
+      const measure = this.measureContext ??= new OffscreenCanvas(1, 1).getContext('2d') ?? undefined
+      /** Draws into a surface unless the recorded commands equal the ones its texture already holds. */
+      const paint = async (surface: Surface, slot: string, setup: Matrix, draw: (ctx: OffscreenCanvasRenderingContext2D) => void): Promise<boolean> => {
+        let recorded: AuthorCanvasRecording | undefined
+        if (measure && !this.directLayers.has(slot)) {
+          recording = true
+          try { recorded = recordAuthorCanvas(surface.canvas, measure, setup, draw) } catch (error) {
+            if (!(error instanceof AuthorCanvasUnrecordable) && !(error instanceof TypeError)) throw error
+            // Images handed outside the canvas, pixel reads, unknown APIs: this layer draws directly from now on.
+            this.directLayers.add(slot)
+          } finally { recording = false }
+        }
+        const signature = recorded?.comparable ? `${slot}\u0000${surface.canvas.width}x${surface.canvas.height}\u0000${setup.join(',')}\u0000${assetSignature(recorded.assets)}\u0000${recorded.signature}` : undefined
+        if (signature && surface.signature === signature) { recordVideoEditPreparation('authorRasterReused', 0); return false }
+        for (const key of recorded?.assets ?? []) await freshAsset(key)
+        const ctx = surface.canvas.getContext('2d')
+        if (!ctx) throw new Error('Canvas2D 不可用。')
+        ctx.reset(); ctx.setTransform(...setup)
+        const rasterStarted = performance.now()
+        surface.signature = undefined
+        if (recorded) replayAuthorCanvas(recorded, ctx, key => fresh.get(key)!)
+        else draw(ctx)
+        recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
+        surface.signature = signature
+        return true
+      }
+      for (let attempt = 0; ; attempt++) {
+        for (const key of this.eagerAssets) await freshAsset(key)
+        try {
       const listStarted = performance.now()
       const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
       recordVideoEditPreparation('authorLayerList', performance.now() - listStarted)
@@ -139,25 +192,24 @@ export class VideoEditAuthorRuntime {
           // This also preserves Canvas compositing between those layers.
           if (!layer.pose) {
             const flat = this.surface(index * 2, width, height)
-            const ctx = flat.canvas.getContext('2d')
-            if (!ctx) throw new Error('Canvas2D 不可用。')
-            ctx.reset()
-            const flatRaster = performance.now()
             let end = index
-            while (end < list.length && !list[end].pose && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) {
-              const still = list[end]
-              ctx.save()
-              try {
-                if (still.clip) { const [x0, y0, x1, y1] = still.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() }
-                still.draw(ctx, info.time)
-              } catch (cause) { throw new Error(`静态层 ${end + 1}：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
-              finally { ctx.restore() }
-              end++
+            while (end < list.length && !list[end].pose && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) end++
+            const stills = list.slice(index, end), first = index
+            const changed = await paint(flat, `flat:${index}:${end}`, [1, 0, 0, 1, 0, 0], ctx => {
+              stills.forEach((still, offset) => {
+                ctx.save()
+                try {
+                  if (still.clip) { const [x0, y0, x1, y1] = still.clip; ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip() }
+                  still.draw(ctx, info.time)
+                } catch (cause) { throw cause instanceof AuthorCanvasUnrecordable || cause instanceof AuthorAssetPending || cause instanceof TypeError ? cause : new Error(`静态层 ${first + offset + 1}：${cause instanceof Error ? cause.message : String(cause)}`, { cause }) }
+                finally { ctx.restore() }
+              })
+            })
+            if (changed) {
+              const flatUpload = performance.now()
+              this.device.queue.copyExternalImageToTexture({ source: flat.canvas }, { texture: flat.texture, premultipliedAlpha: true }, [width, height])
+              recordVideoEditPreparation('authorUpload', performance.now() - flatUpload)
             }
-            recordVideoEditPreparation('authorRaster', performance.now() - flatRaster)
-            const flatUpload = performance.now()
-            this.device.queue.copyExternalImageToTexture({ source: flat.canvas }, { texture: flat.texture, premultipliedAlpha: true }, [width, height])
-            recordVideoEditPreparation('authorUpload', performance.now() - flatUpload)
             this.layers.draw(target, width, height, { texture: flat.texture, x: 0, y: 0, width, height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
             index = end - 1
             continue
@@ -176,26 +228,25 @@ export class VideoEditAuthorRuntime {
           const resolution = authorRasterScale(need, limit)
           const { radius, pad } = authorLayerBlur(center, resolution, layer.blurShape)
           const surface = this.surface(index * 2, Math.ceil(bounds.width * resolution) + pad * 2, Math.ceil(bounds.height * resolution) + pad * 2)
-          const ctx = surface.canvas.getContext('2d')
-          if (!ctx) throw new Error('Canvas2D 不可用。')
-          ctx.reset(); ctx.setTransform(resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution)
-          const rasterStarted = performance.now()
-          layer.draw(ctx, info.time)
-          recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
+          const changed = await paint(surface, `layer:${index}:${id}`, [resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution], ctx => layer.draw(ctx, info.time))
           const uploadStarted = performance.now()
           let picture = surface.texture
           if (radius > 0 && layer.blurShape !== 'lens') {
             // Use the original Canvas/Skia blur operator, without pixel readback
             // or a second author draw. Do not substitute a different blur kernel.
             const blurred = this.surface(index * 2 + 1, surface.canvas.width, surface.canvas.height)
-            const blurContext = blurred.canvas.getContext('2d')
-            if (!blurContext) throw new Error('Canvas2D 不可用。')
-            blurContext.reset(); blurContext.filter = `blur(${radius}px)`
-            blurContext.drawImage(surface.canvas, 0, 0); blurContext.filter = 'none'
-            this.device.queue.copyExternalImageToTexture({ source: blurred.canvas }, { texture: blurred.texture, premultipliedAlpha: true }, [surface.canvas.width, surface.canvas.height])
-            this.layers.mipmaps(blurred.texture, surface.canvas.width, surface.canvas.height)
+            const blurSignature = surface.signature && `${surface.signature}\u0000blur:${radius}`
+            if (changed || !blurSignature || blurred.signature !== blurSignature) {
+              const blurContext = blurred.canvas.getContext('2d')
+              if (!blurContext) throw new Error('Canvas2D 不可用。')
+              blurContext.reset(); blurContext.filter = `blur(${radius}px)`
+              blurContext.drawImage(surface.canvas, 0, 0); blurContext.filter = 'none'
+              this.device.queue.copyExternalImageToTexture({ source: blurred.canvas }, { texture: blurred.texture, premultipliedAlpha: true }, [surface.canvas.width, surface.canvas.height])
+              this.layers.mipmaps(blurred.texture, surface.canvas.width, surface.canvas.height)
+              blurred.signature = blurSignature
+            }
             picture = blurred.texture
-          } else {
+          } else if (changed) {
             this.device.queue.copyExternalImageToTexture({ source: surface.canvas }, { texture: surface.texture, premultipliedAlpha: true }, [surface.canvas.width, surface.canvas.height])
             this.layers.mipmaps(surface.texture, surface.canvas.width, surface.canvas.height)
           }
@@ -204,6 +255,7 @@ export class VideoEditAuthorRuntime {
             const blurred = this.surface(index * 2 + 1, surface.canvas.width, surface.canvas.height)
             this.layers.lens(surface.texture, blurred.texture, surface.canvas.width, surface.canvas.height, radius)
             this.layers.mipmaps(blurred.texture, surface.canvas.width, surface.canvas.height)
+            blurred.signature = undefined
             picture = blurred.texture
           }
           const poses = samples.map(sample => {
@@ -214,6 +266,7 @@ export class VideoEditAuthorRuntime {
           })
           this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width: surface.canvas.width, height: surface.canvas.height }, poses, layer.clip)
         } catch (cause) {
+          if (cause instanceof AuthorAssetPending) throw cause
           throw new Error(`第 ${index + 1} 层${layer.name ? `「${layer.name}」` : ''}：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
         }
       }
@@ -223,6 +276,13 @@ export class VideoEditAuthorRuntime {
         const surface = this.surfaces.pop()!
         if (!surface) continue
         surface.texture.destroy(); this.textures.delete(surface.texture); surface.canvas.width = surface.canvas.height = 1
+      }
+      break
+        } catch (error) {
+          // An image read outside a recorded canvas draw needs its bitmap before the author code runs: draw the frame again.
+          if (!(error instanceof AuthorAssetPending) || attempt > Object.keys(assets).length) throw error
+          this.layers.abandon()
+        }
       }
     } catch (cause) {
       throw new Error(`代码效果「${this.effect.name}」在 ${info.time} 秒执行失败：${cause instanceof Error ? cause.message : String(cause)}`, { cause })

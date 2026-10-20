@@ -4,17 +4,17 @@ import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 const { layerDraw } = vi.hoisted(() => ({ layerDraw: vi.fn() }))
 
 vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
-  begin = vi.fn(); draw = layerDraw; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); dispose = vi.fn()
+  begin = vi.fn(); draw = layerDraw; mipmaps = vi.fn(); lens = vi.fn(); finish = vi.fn(); abandon = vi.fn(); dispose = vi.fn()
 } }))
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
-it('keeps Canvas image sampling independent of shared GPU uploads and releases only owned copies', async () => {
+it('keeps Canvas image sampling independent of shared GPU uploads: a fresh image only when the layer is drawn again', async () => {
   class Bitmap {
     width = 32; height = 16
     close = vi.fn()
   }
-  const context = { reset: vi.fn(), save: vi.fn(), restore: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(() => ({})) }
+  const context = { reset: vi.fn(), save: vi.fn(), restore: vi.fn(), setTransform: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(() => ({ width: 32, height: 16 })) }
   class Canvas {
     constructor(public width: number, public height: number) {}
     getContext(): typeof context { return context }
@@ -22,31 +22,60 @@ it('keeps Canvas image sampling independent of shared GPU uploads and releases o
   vi.stubGlobal('ImageBitmap', Bitmap); vi.stubGlobal('OffscreenCanvas', Canvas)
   const createBitmap = vi.fn(async () => new Bitmap())
   vi.stubGlobal('createImageBitmap', createBitmap)
+  const upload = vi.fn()
   const source = new Bitmap(), replacement = new Bitmap()
-  const draw = vi.fn()
+  const draw = vi.fn((ctx: OffscreenCanvasRenderingContext2D, _time: number, _params: unknown, _width: number, _height: number, assets: Record<string, CanvasImageSource>) => ctx.drawImage(assets.logo, 0, 0))
   const runtime = new VideoEditAuthorRuntime({
     createTexture: () => ({ destroy: vi.fn() }),
-    queue: { copyExternalImageToTexture: vi.fn() },
+    queue: { copyExternalImageToTexture: upload },
   } as unknown as GpuDevice, { name: '图片采样', draw })
   const target = { createView: () => ({}), destroy() {} }
   const info = { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } }
   const render = (image: Bitmap) => runtime.render(target, 100, 50, {}, { logo: image as unknown as ImageBitmap }, info)
-  await render(source); await render(source)
-  expect(createBitmap).toHaveBeenCalledTimes(2)
-  expect(context.getImageData).toHaveBeenCalledOnce()
+  await render(source)
   const first = await createBitmap.mock.results[0].value
-  expect(draw.mock.calls[0][5].logo).toBe(first)
-  expect(draw.mock.calls[1][5].logo).not.toBe(first)
-  expect(first).not.toBe(source)
+  // The author draw is replayed with this frame's own bitmap, never the shared source.
+  expect(context.drawImage).toHaveBeenLastCalledWith(first, 0, 0)
+  expect(first).not.toBe(source); expect(first.close).toHaveBeenCalledOnce()
+  // The same commands on the same pixels: the uploaded raster is reused, no copy, raster or upload.
+  await render(source)
+  expect(draw).toHaveBeenCalledTimes(2); expect(createBitmap).toHaveBeenCalledOnce()
+  expect(context.drawImage).toHaveBeenCalledTimes(2); expect(upload).toHaveBeenCalledOnce()
+  expect(context.getImageData).toHaveBeenCalledOnce()
+  // A replaced image changes the content: new pixels, a fresh image and a new upload.
   await render(replacement)
-  expect(first.close).toHaveBeenCalledOnce()
-  expect(createBitmap).toHaveBeenCalledTimes(3)
-  expect(context.getImageData).toHaveBeenCalledTimes(2)
-  const second = await createBitmap.mock.results[2].value
+  expect(createBitmap).toHaveBeenCalledTimes(2); expect(context.getImageData).toHaveBeenCalledTimes(2)
+  expect(context.drawImage).toHaveBeenLastCalledWith(await createBitmap.mock.results[1].value, 0, 0)
+  expect(upload).toHaveBeenCalledTimes(2)
   await runtime.dispose()
-  expect(second.close).toHaveBeenCalledOnce()
   expect(source.close).not.toHaveBeenCalled()
   expect(replacement.close).not.toHaveBeenCalled()
+})
+
+it('gives images read outside a canvas draw a real bitmap every frame and draws unrecordable layers directly', async () => {
+  class Bitmap { width = 8; height = 8; close = vi.fn() }
+  const context = { reset: vi.fn(), save: vi.fn(), restore: vi.fn(), setTransform: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(() => ({ width: 8, height: 8 })) }
+  class Canvas { constructor(public width: number, public height: number) {} getContext(): typeof context { return context } }
+  vi.stubGlobal('ImageBitmap', Bitmap); vi.stubGlobal('OffscreenCanvas', Canvas)
+  const createBitmap = vi.fn(async () => new Bitmap())
+  vi.stubGlobal('createImageBitmap', createBitmap)
+  const upload = vi.fn()
+  const seen: unknown[] = []
+  const readsPixels = vi.fn((ctx: OffscreenCanvasRenderingContext2D) => { ctx.getImageData(0, 0, 1, 1) })
+  const runtime = new VideoEditAuthorRuntime({ createTexture: () => ({ destroy: vi.fn() }), queue: { copyExternalImageToTexture: upload } } as unknown as GpuDevice, {
+    name: '外部图片',
+    layers: (_params, _width, _height, assets) => { seen.push(assets.scene); return [{ draw: readsPixels }] },
+  })
+  const target = { createView: () => ({}), destroy() {} }
+  const info = { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } }
+  const source = new Bitmap()
+  for (let frame = 0; frame < 2; frame++) await runtime.render(target, 100, 50, {}, { scene: source as unknown as ImageBitmap }, info)
+  expect(seen.every(value => value instanceof Bitmap && value !== source)).toBe(true)
+  expect(createBitmap).toHaveBeenCalledTimes(2)
+  // A pixel read cannot be recorded: the layer draws on the real canvas every frame.
+  expect(readsPixels.mock.calls.filter(([ctx]) => (ctx as unknown) === context)).toHaveLength(2)
+  expect(upload).toHaveBeenCalledTimes(2)
+  await runtime.dispose()
 })
 
 it('releases the module even when an instance disposer fails, without retrying disposal', async () => {
@@ -112,7 +141,6 @@ it('edits a plain draw effect as one element without Canvas interception or extr
   const runtime = new VideoEditAuthorRuntime(device, { name: '整幅画面', params: [{ key: 'title', type: 'text' }], draw })
   await runtime.render({ createView: () => ({}), destroy() {} }, 100, 50, {}, {}, { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 5 } }, { effect: { dx: 12, dy: -3, scale: 2 } })
   expect(draw).toHaveBeenCalledOnce()
-  expect(draw.mock.calls[0][0]).toBe(context)
   const [element] = runtime.observeElements()
   expect(element).toMatchObject({ id: 'effect', name: '整幅画面', bounds: [0, 0, 100, 50], textParameterKeys: ['title'] })
   element.matrix.forEach((value, index) => expect(value).toBeCloseTo([2, 0, 0, 2, -38, -28][index]))
@@ -143,7 +171,7 @@ it('composites a native GPU whole-effect override on the same device without a C
   expect(intermediate.destroy).toHaveBeenCalledOnce()
 })
 
-it('passes the supplied context directly to one author draw and uploads the original Canvas filter result', async () => {
+it('records one author draw per frame and uploads the original Canvas filter result', async () => {
   const contexts: Array<{ reset: ReturnType<typeof vi.fn>; setTransform: ReturnType<typeof vi.fn>; drawImage: ReturnType<typeof vi.fn>; filter: string }> = []
   class Canvas {
     context = { reset: vi.fn(), setTransform: vi.fn(), drawImage: vi.fn(), filter: 'none' }
@@ -159,10 +187,11 @@ it('passes the supplied context directly to one author draw and uploads the orig
   try {
     await runtime.render(target, 3840, 2160, {}, {}, { time: 1, frameDuration: 1 / 60, clip: { time: 1, duration: 5 } })
     expect(draw).toHaveBeenCalledOnce()
-    expect(draw).toHaveBeenCalledWith(contexts[0], 1)
-    expect(contexts[1].drawImage).toHaveBeenCalledOnce()
+    expect(draw).toHaveBeenCalledWith(expect.anything(), 1)
+    // contexts[0] only measures text; [1] is the layer raster and [2] its Canvas blur.
+    expect(contexts[2].drawImage).toHaveBeenCalledOnce()
     expect(upload).toHaveBeenCalledOnce()
-    expect(upload.mock.calls[0][0].source.context).toBe(contexts[1])
-    expect(contexts[1].filter).toBe('none')
+    expect(upload.mock.calls[0][0].source.context).toBe(contexts[2])
+    expect(contexts[2].filter).toBe('none')
   } finally { await runtime.dispose() }
 })
