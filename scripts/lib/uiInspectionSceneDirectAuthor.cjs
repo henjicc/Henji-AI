@@ -12,6 +12,7 @@ function createDirectAuthorScene() {
     async setup(page, app, { capture }) {
       const root = path.resolve(process.env.HENJI_DIRECT_AUTHOR_PROBE)
       const spec = JSON.parse(fs.readFileSync(path.join(root, 'input.json'), 'utf8').replace(/^\uFEFF/, ''))
+      if (spec.yogaTimeline) return require('./uiInspectionSceneYogaAuthor.cjs').runYogaAuthorTimeline(page, app, { capture, root, spec })
       const host = await app.evaluate(({ app }) => ({ features: app.getGPUFeatureStatus(), versions: { electron: process.versions.electron, chrome: process.versions.chrome } }))
       const adaptations = [...(spec.adaptations ?? [])]
       const imageSources = Object.fromEntries(Object.entries(spec.assets ?? {}).map(([key, file]) => [key, `data:image/png;base64,${fs.readFileSync(file).toString('base64')}`]))
