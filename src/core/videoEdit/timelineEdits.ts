@@ -6,7 +6,7 @@ import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { expandVideoEditSelection, type VideoEditRelations } from './timelineSelection'
 import { rescaleVideoEditFrame, type VideoEditRatio, type VideoEditSourceTime } from './time'
-import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipSpeedValue, videoEditClipWithinSource } from './clipSpeed'
+import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipSourceTimeAt, videoEditClipSpeedValue, videoEditClipWithinSource } from './clipSpeed'
 import { videoEditSyncCorrections } from './linkSync'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
 import { remapVideoEditCaptionSpeech, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
@@ -36,6 +36,7 @@ export type VideoEditTimelineEdit =
   /** `newTracks`: tracks created by dragging above the top video track or below the bottom audio track (one edit, one undo). */
   | { kind: 'adjust'; clipIds: string[]; linked?: VideoEditRelations; mode: 'move' | 'in' | 'out'; delta: number; trackMap?: Record<number, number>; snapThreshold?: number; snapFrames?: number[]; newTracks?: VideoEditSequence['tracks'] }
   | { kind: 'split'; clipIds: string[]; linked?: VideoEditRelations; frame: number }
+  | { kind: 'frame_hold'; clipIds: string[]; linked?: VideoEditRelations; frame: number }
   | { kind: 'delete'; clipIds: string[]; linked?: VideoEditRelations; ripple?: boolean; targetTracks?: number[] }
   | { kind: 'link' | 'unlink' | 'group' | 'ungroup'; clipIds: string[]; linked?: VideoEditRelations }
   | { kind: 'separate_audio'; clipIds: string[]; linked?: VideoEditRelations; audioTrack: number }
@@ -142,6 +143,30 @@ function splitClips(sequence: VideoEditSequence, ids: string[], frame: number): 
   if (next === sequence) throw new Error('请将播放头置于所选片段内部再拆分。')
   return { ...next, clips: separateRightRelations(sequence, next.clips, rights, frame) }
 }
+function holdFrame(sequence: VideoEditSequence, ids: string[], frame: number): VideoEditSequence {
+  integer(frame)
+  const originals = sequence.clips.filter(clip => ids.includes(clip.id))
+  if (originals.some(clip => clip.frameHold || !['video', 'sequence'].includes(clip.kind) || clip.sourceComponent === 'audio'
+    || frame < clip.start || frame >= clip.start + clip.duration)) throw new Error('请将播放头放在未定格的视频或序列片段内。')
+  let next = sequence
+  for (const original of originals) {
+    const source = videoEditClipSourceTimeAt(original, frame - original.start, sequence.frameRate)
+    if (frame > original.start) next = splitClips(next, [original.id], frame)
+    const middle = next.clips.find(clip => clip.track === original.track && clip.start === frame && clip.itemId === original.itemId)!
+    if (middle.duration > 1) next = splitClips(next, [middle.id], frame + 1)
+    next = { ...next, clips: next.clips.map(clip => {
+      if (clip.track === original.track && clip.itemId === original.itemId && clip.start === frame + 1 && clip.start < original.start + original.duration) {
+        const right = { ...clip }; delete right.linkId; delete right.groupId; return right
+      }
+      if (clip.id !== middle.id) return clip
+      const held: VideoEditClip = { ...clip, ...source, frameHold: true }
+      delete held.speed; delete held.reverse; delete held.preservePitch
+      delete held.linkId; delete held.groupId
+      return held
+    }) }
+  }
+  return next
+}
 function shiftAnnotations(sequence: VideoEditSequence, clips: VideoEditClip[]): VideoEditAnnotation[] {
   const before = new Map(sequence.clips.map(clip => [clip.id, clip])); const after = new Map(clips.map(clip => [clip.id, clip]))
   return sequence.annotations.flatMap(mark => {
@@ -200,10 +225,11 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
 }
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
   if (edit.kind === 'adjust' && edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
-  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence }
+  const result: { sequence: VideoEditSequence; selectedClipIds?: string[] } = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence }
     : edit.kind === 'speed' ? { sequence: applyVideoEditSpeedChange(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.change, metadata) }
     : edit.kind === 'stretch' ? { sequence: applyVideoEditRateStretch(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.edge, edit.delta).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
   result.sequence = { ...result.sequence, clips: retimeVideoEditContentClips(sequenceOf(document, sequenceId), result.sequence, new Map()) }
+  if (edit.kind === 'frame_hold') result.selectedClipIds = result.sequence.clips.filter(clip => clip.frameHold && clip.start === edit.frame && edit.clipIds.some(id => sequenceOf(document, sequenceId).clips.find(original => original.id === id)?.itemId === clip.itemId)).map(clip => clip.id)
   if (result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * VIDEO_EDIT_MAX_SEQUENCE_SECONDS))) throw new Error('编辑结果超出序列时间边界。')
   validateVideoEditAdjustmentRanges(result.sequence)
   validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
@@ -258,6 +284,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
   assertVideoEditClipsEditable(sequence, ids)
   const clips = sequence.clips.filter(clip => selected.has(clip.id))
   if (edit.kind === 'split') return splitClips(sequence, ids, edit.frame)
+  if (edit.kind === 'frame_hold') return holdFrame(sequence, ids, edit.frame)
   if (edit.kind === 'sync') return syncClips(document, sequence, ids, edit.mode)
   if (edit.kind === 'adjust') {
     integer(edit.delta)

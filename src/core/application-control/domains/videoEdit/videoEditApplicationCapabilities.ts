@@ -32,7 +32,7 @@ const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.do
 const clipRef = applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict()
 const input = z.object({ documentRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict().optional(), frame: z.number().int().nonnegative().optional(), assetRef: applicationRefSchema.extend({ kind: z.literal('asset') }).strict().optional() }).strict()
 function operationInput(id: string): z.ZodType<z.infer<typeof input>> {
-  if (id === 'split_video_edit') return input.pick({ documentRef: true, clipRef: true, frame: true }).required({ clipRef: true, frame: true })
+  if (id === 'split_video_edit' || id === 'add_video_edit_frame_hold') return input.pick({ documentRef: true, clipRef: true, frame: true }).required({ clipRef: true, frame: true })
   if (id === 'import_video_edit_asset') return input.pick({ documentRef: true, assetRef: true, clipRef: true }).required({ assetRef: true })
   return input.pick({ documentRef: true })
 }
@@ -160,10 +160,11 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['undo_video_edit', '撤销剪辑修改', '撤销目标剪辑的一步手动或助手修改。'],
   ['redo_video_edit', '重做剪辑修改', '恢复目标剪辑刚撤销的一步修改。'],
   ['split_video_edit', '拆分剪辑片段', '在指定剪辑帧拆分片段，正确换算源时间并迁移后半段标注。'],
+  ['add_video_edit_frame_hold', '添加帧定格', '在指定视频或嵌套序列片段的 frame 处切出一帧长的定格，前后为独立片段。定格引用原素材，不生成图片；可用片段持续时间与修剪操作延长，后段可独立移动。定格本身静音，独立声音片段不改动。整次操作一步撤销。'],
   ['import_video_edit_asset', '引用素材库素材', '从现有素材库引用原媒体或可编辑代码到剪辑，不复制原文件。代码生成器保留参数、关键帧和原图片依赖；代码滤镜需要明确目标clipRef并应用到该原片段。'],
   ['import_video_edit_folder', '导入文件夹素材', '请用户通过本机文件夹选择窗口选择目录，递归导入任意层级的子文件夹并建立同名素材箱，引用原媒体、不复制原文件。没有文件数量限制；读不出的文件、不支持的格式和目录回环跳过汇总。导入队列与进度可读取 video_edit.document.media_import，追加请求排队，每个请求一步撤销。目录立即建素材箱，素材分批出现；取消整个队列保留已完成部分、清理本次新建的空素材箱。按剪辑设置保留目录层级或平铺，同一父素材箱下复用来源目录对应的素材箱，默认跳过重复文件、只补入新增文件。不要提供原始路径。'],
 ].map(([id, title, description]) => defineApplicationCapability({
-  id, title, description, version: 1, domain: 'video_edit', aliases: [title], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: id === 'save_video_edit', destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: id === 'import_video_edit_folder', requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', ...(id === 'import_video_edit_asset' ? ['asset'] : [])], producesRefs: ['video_edit.document'], concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`, resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: parsed => [parsed.documentRef], control: capabilityControl('execute', ['video_edit.document'], { cancelable: true, revisionScopes: ['video_edit'] }), inputSchema: operationInput(id), outputSchema: output, summarize: result => result.message,
+  id, title, description, version: 1, domain: 'video_edit', aliases: [title], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: id === 'save_video_edit', destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: ['import_video_edit_folder', 'add_video_edit_frame_hold'].includes(id), requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', ...(id === 'import_video_edit_asset' ? ['asset'] : [])], producesRefs: ['video_edit.document'], concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`, resolveOperationTargets: parsed => [parsed.documentRef], resolveOperationWriteTargets: parsed => [parsed.documentRef], control: capabilityControl('execute', ['video_edit.document'], { cancelable: true, revisionScopes: ['video_edit'] }), inputSchema: operationInput(id), outputSchema: output, summarize: result => result.message,
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input: z.infer<typeof input>, result: z.infer<typeof output>) => [{
     effect: 'execute' as const,

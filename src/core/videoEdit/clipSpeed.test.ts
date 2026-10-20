@@ -7,6 +7,20 @@ const rate = { numerator: 30, denominator: 1 }
 const clip = (fields: Partial<VideoEditClipTiming> = {}): VideoEditClipTiming => ({ start: 30, duration: 60, sourceInUs: 2_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, ...fields })
 const double = videoEditSpeedRatio(2)
 
+it('定格的修剪、子帧、连续时间和拉伸始终引用同一源时刻', () => {
+  const held = clip({ frameHold: true, sourceRemainder: { numerator: 1, denominator: 3 } })
+  const source = { sourceInUs: held.sourceInUs, sourceRemainder: held.sourceRemainder }
+  for (const offset of [-60, 0, 1, 600]) {
+    expect(advanceVideoEditClipSource(held, offset, rate)).toEqual(source)
+    expect(videoEditClipSourceTimeAt(held, offset, rate)).toEqual(source)
+    expect(videoEditClipSourceTimeAtFraction(held, { numerator: offset * 2 + 1, denominator: 2 }, rate)).toEqual(source)
+    expect(videoEditClipSourceSecondsAtTime(held, offset, 30)).toBe(videoEditSourceSeconds(held))
+  }
+  expect(videoEditClipHeadRoom(held, 30, 3)).toBe(Infinity)
+  expect(videoEditClipTailRoom(held, 30, 3)).toBe(Infinity)
+  expect(stretchVideoEditClip(held, 600)).toMatchObject({ ...source, duration: 600, frameHold: true })
+})
+
 describe('片段速度换算（4.13）', () => {
   it('快门子时刻沿正式速度换算，倒放保留一帧画面相位，修剪前后源时间相同', () => {
     const ntsc = { numerator: 60000, denominator: 1001 }

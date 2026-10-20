@@ -1,0 +1,98 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "kind": "video_edit",
+  "kindVersion": 17,
+  "id": "golden-frame-hold",
+  "name": "帧定格黄金样本",
+  "createdAt": "2026-10-20T00:00:00.000Z",
+  "updatedAt": "2026-10-20T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "media": [
+      {
+        "id": "media",
+        "name": "视频",
+        "path": "/fixtures/video.mp4",
+        "kind": "video",
+        "durationSeconds": 3,
+        "width": 1920,
+        "height": 1080
+      }
+    ],
+    "bins": [],
+    "items": [
+      {
+        "id": "item",
+        "name": "视频",
+        "kind": "video",
+        "mediaId": "media"
+      }
+    ],
+    "sequences": [
+      {
+        "id": "0922185d-d358-4de1-a7d5-5db6aeeb055e",
+        "name": "定格序列",
+        "width": 1920,
+        "height": 1080,
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "pixelAspectRatio": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sampleRate": 48000,
+        "channels": 2,
+        "tracks": [
+          {
+            "id": "e3c49c35-bf61-4d9b-b88b-24838c3dfc32",
+            "name": "音频 1",
+            "index": 0,
+            "kind": "audio",
+            "locked": false,
+            "enabled": true,
+            "muted": false,
+            "solo": false
+          },
+          {
+            "id": "5d17f9d0-2d20-4094-b212-5345387a0104",
+            "name": "视频 1",
+            "index": 1,
+            "kind": "video",
+            "locked": false,
+            "enabled": true,
+            "muted": false,
+            "solo": false
+          }
+        ],
+        "clips": [
+          {
+            "id": "held",
+            "itemId": "item",
+            "name": "视频定格",
+            "kind": "video",
+            "track": 1,
+            "start": 0,
+            "duration": 120,
+            "sourceInUs": 1000000,
+            "sourceRemainder": {
+              "numerator": 1,
+              "denominator": 3
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "frameHold": true
+          }
+        ],
+        "annotations": []
+      }
+    ]
+  }
+}

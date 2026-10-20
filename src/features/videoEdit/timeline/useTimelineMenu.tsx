@@ -1,7 +1,7 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { videoEditMulticamSource } from '@/core/videoEdit/multicam'
 import { switchVideoEditMulticam, autoSwitchVideoEditMulticam } from '../application/videoEditMulticam'
-import { Crop, Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2, Gauge } from 'lucide-react'
+import { Crop, Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2, Gauge, Pause } from 'lucide-react'
 import { expandVideoEditSelection, videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -20,7 +20,7 @@ import { VideoEditCanvasSendDialog, type VideoEditCanvasSendRequest } from '../p
 import type { VideoEditNestTarget } from '../application/videoEditNesting'
 import { analyzeVideoEditBeats } from '../application/videoEditBeatAnalysis'
 
-const actionIcons = { audio_gain: AudioLines, clip_speed: Gauge, copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
+const actionIcons = { audio_gain: AudioLines, clip_speed: Gauge, copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, frame_hold: Pause, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
 
 /** 原地生成（4.12）：按右键落点（轨道、帧、片段）给出菜单最前面的生成项。 */
@@ -44,7 +44,7 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       // Freeze at menu opening. The shared menu executes its callback after closing, not at this event.
       const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: ids })
       const optional = (id: MenuCommand): MenuCommand[] => videoEditCommandState(context, id).enabled ? [id] : []
-      const commands: MenuCommand[] = clipId ? ['locate_source', 'locate_project', 'locate_effects', ...optional('clip_speed'), ...optional('audio_gain'), 'copy', 'paste', 'split', 'split_tracks', 'delete', 'ripple_delete', 'link', ...optional('unlink'), 'group', ...optional('ungroup'), 'separate_audio', ...optional('move_into_sync'), ...optional('slip_into_sync')] : ['paste', 'insert', 'overwrite', 'select_all']
+      const commands: MenuCommand[] = clipId ? ['locate_source', 'locate_project', 'locate_effects', ...optional('clip_speed'), ...optional('audio_gain'), 'copy', 'paste', 'split', 'frame_hold', 'split_tracks', 'delete', 'ripple_delete', 'link', ...optional('unlink'), 'group', ...optional('ungroup'), 'separate_audio', ...optional('move_into_sync'), ...optional('slip_into_sync')] : ['paste', 'insert', 'overwrite', 'select_all']
       const dividers = new Set<VideoEditCommandId>(['locate_effects', 'paste', 'split_tracks', 'ripple_delete', 'ungroup', 'separate_audio'])
       const items: MenuItem[] = commands.map(id => {
         const presentation = timelineCommandPresentation(context, id, shortcuts); const Icon = actionIcons[id]

@@ -266,6 +266,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         case 'undo_video_edit': undoVideoEdit(id); await saveVideoEdit(id); break
         case 'redo_video_edit': undoVideoEdit(id, true); await saveVideoEdit(id); break
         case 'save_video_edit': await saveVideoEdit(id); break
+        case 'add_video_edit_frame_hold':
         case 'split_video_edit': {
           if (!input.clipRef?.id.startsWith(`${id}:`) || input.frame === undefined) throw new Error('拆分需要本剪辑 clipRef 与整数 frame。')
           const clipId = input.clipRef.id.slice(id.length + 1)
@@ -274,7 +275,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           // Same razor semantics as the timeline: linked portions are cut together unless Linked Selection is off.
           const current = requireVideoEditInstance(id)
           const linked = videoEditPickRelations((current.activeSequenceId === sequence.id ? current : current.sequenceViews.get(sequence.id))?.linkedSelection !== false)
-          executeVideoEditTimelineEdit(id, sequence.id, { kind: 'split', clipIds: [clipId], linked, frame: input.frame! }); await saveVideoEdit(id); break
+          executeVideoEditTimelineEdit(id, sequence.id, { kind: definition.id === 'add_video_edit_frame_hold' ? 'frame_hold' : 'split', clipIds: [clipId], linked: definition.id === 'add_video_edit_frame_hold' ? false : linked, frame: input.frame! }); await saveVideoEdit(id); break
         }
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')

@@ -8,6 +8,7 @@ import { expandVideoEditSelection, selectVideoEditRegion } from './timelineSelec
 import { assertVideoEditLockedTracks } from './lockedTracks'
 import { videoEditSyncOffsets } from './linkSync'
 import { offsetVideoEditSource } from './time'
+import { videoEditClipSourceTimeAt } from './clipSpeed'
 import { addLegacyVideoEditTracks } from './testFixtures'
 
 function fixture() {
@@ -24,6 +25,36 @@ function apply(document: ReturnType<typeof createVideoEditDocument>, edit: Param
   const sequence = applyVideoEditTimelineEdit(document, document.sequences[0].id, edit)
   return videoEditDocumentSchema.parse({ ...document, sequences: [sequence] })
 }
+it('添加帧定格切出独立的一帧，保留前后源时间及原视频引用', () => {
+  const { document, sequence } = fixture()
+  sequence.clips[1].start = 300
+  const original = sequence.clips[0]
+  original.speed = { numerator: 2, denominator: 1 }
+  const expected = videoEditClipSourceTimeAt(original, 20, sequence.frameRate)
+  const result = apply(document, { kind: 'frame_hold', clipIds: ['a'], linked: false, frame: 30 })
+  const pieces = result.sequences[0].clips.filter(clip => clip.start < 100).sort((a, b) => a.start - b.start)
+  expect(pieces.map(clip => [clip.start, clip.duration])).toEqual([[10, 20], [30, 1], [31, 39]])
+  expect(pieces[1]).toMatchObject({ ...expected, frameHold: true, itemId: original.itemId, kind: 'video' })
+  expect(pieces[1].speed).toBeUndefined()
+  expect(videoEditClipSourceTimeAt(pieces[2], 0, sequence.frameRate)).toEqual(videoEditClipSourceTimeAt(original, 21, sequence.frameRate))
+  const moved = apply(result, { kind: 'adjust', clipIds: [pieces[2].id], linked: false, mode: 'move', delta: 100 })
+  const stretched = apply(moved, { kind: 'adjust', clipIds: [pieces[1].id], linked: false, mode: 'out', delta: 90 })
+  expect(stretched.sequences[0].clips.find(clip => clip.id === pieces[1].id)).toMatchObject({ ...expected, duration: 91 })
+  expect(result.media).toEqual(document.media)
+})
+it.each([10, 69])('倒放片段在边界 %i 定格，不生成零时长片段', frame => {
+  const { document, sequence } = fixture()
+  const original = sequence.clips[0]
+  original.sourceInUs = 5_000_000
+  original.reverse = true
+  const expected = videoEditClipSourceTimeAt(original, frame - original.start, sequence.frameRate)
+  const result = apply(document, { kind: 'frame_hold', clipIds: ['a'], linked: false, frame })
+  const held = result.sequences[0].clips.find(clip => clip.frameHold)!
+  expect(held).toMatchObject({ ...expected, start: frame, duration: 1 })
+  expect(held.reverse).toBeUndefined()
+  expect(result.sequences[0].clips.filter(clip => clip.start < 100).map(clip => clip.duration).sort((a, b) => a - b)).toEqual([1, 59])
+  expect(() => apply(result, { kind: 'frame_hold', clipIds: [held.id], linked: false, frame })).toThrow('未定格')
+})
 it('覆盖切段裁剪片段与内置效果曲线，并保留外侧淡入淡出', () => {
   const { document, sequence } = fixture()
   const curve = [{ time: 0, value: 0, interpolation: 'linear' as const }, { time: 59, value: 1, interpolation: 'linear' as const }]

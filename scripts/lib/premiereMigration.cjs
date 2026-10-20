@@ -186,8 +186,13 @@ function buildPremiereMigration(graph, probes, options) {
     if (!isAudio && picture?.width) clip.scale = 1 / Math.min(sequence.width / picture.width, sequence.height / picture.height)
     const speed = Number(raw.speed)
     if (speed !== 1) clip.speed = videoEditSpeedRatio(Math.abs(speed))
-    if (raw.reverse) clip.reverse = true
-    if (raw.preservePitch) clip.preservePitch = true
+    if (raw.frameHold) {
+      if (raw.frameHold.mode !== '4' || !raw.frameHold.sourceTicks || !['video', 'sequence'].includes(clip.kind)) throw new Error(`Unsupported frame hold on ${raw.id}`)
+      Object.assign(clip, sourceTime(raw.frameHold.sourceTicks), { frameHold: true })
+      delete clip.speed
+    }
+    if (raw.reverse && !raw.frameHold) clip.reverse = true
+    if (raw.preservePitch && !raw.frameHold) clip.preservePitch = true
     if (raw.muted) { clip.opacity = 0; clip.volume = 0 }
     applyEffects(sequence, raw, clip, picture)
     // A PR video sequence source never also plays the sequence's sound.

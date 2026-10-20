@@ -12,6 +12,7 @@ const captionOrigins = new WeakMap<VideoEditCaption, string>()
 export function videoEditNestedCaptionSourceId(caption: VideoEditCaption): string { return captionOrigins.get(caption) ?? caption.id }
 
 export function projectVideoEditNestedContentClips(sequence: VideoEditSequence, timing: VideoEditClipTiming, parentFps: number): VideoEditSequence['clips'] {
+  if (timing.frameHold) return sequence.clips
   if (!sequence.clips.some(clip => clip.contentAnchor)) return sequence.clips
   const range = videoEditClipSourceRange(timing, parentFps); const fps = videoEditFps(sequence.frameRate)
   const from = Math.floor(range.from * fps + 1e-6); const to = Math.ceil(range.to * fps - 1e-6)
@@ -35,6 +36,7 @@ export function projectVideoEditNestedContentClips(sequence: VideoEditSequence, 
 
 /** A trimmed nested instance presents only its retained speech, without editing the shared child. */
 export function projectVideoEditNestedCaptions(sequence: VideoEditSequence, timing: VideoEditClipTiming, parentFps: number): VideoEditCaption[] | undefined {
+  if (timing.frameHold) return sequence.captions
   if (!sequence.captions?.some(caption => caption.speech)) return sequence.captions
   const range = videoEditClipSourceRange(timing, parentFps); const fps = videoEditFps(sequence.frameRate)
   const from = Math.floor(range.from * fps + 1e-6); const to = Math.ceil(range.to * fps - 1e-6)

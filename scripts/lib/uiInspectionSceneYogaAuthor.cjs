@@ -8,6 +8,7 @@ const { loadTypeScript } = require('../check-persistence-compat.cjs')
 const { openVideoEditProjectCard, leaveVideoEditProject, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 const { compareFrames, internalComparisonPasses, prComparisonPasses } = require('./uiInspectionSceneAuthorTimeline.cjs')
+const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
 
 /** Whole-project acceptance through the same persisted sources and native application APIs. */
 async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
@@ -38,10 +39,15 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       return { projectId: project.id, documentId: id, file: result.meta.path, projectPath: project.path }
     }, { model, emptyContent, packages: prepared.packages })
     evidence.project = created; save()
+    if (spec.playFullTimeline) await observeWorkers(page)
     try { await openVideoEditProjectCard(page, created.projectId) } catch (error) {
       await capture('yoga-open-failed')
       evidence.openText = await page.locator('body').innerText()
       throw error
+    }
+    if (spec.mcpPort) {
+      await disableMcp(page)
+      await page.evaluate(port => window.henjiNative.mcp.configure({ enabled: true, port }), spec.mcpPort)
     }
     const identity = await authorizeMcpConnection(page, { name: 'YOGA 完整时间线验收', allowWrites: true, allowDestructive: false })
     client = await connectMcpClient(identity.config, 'Henji YOGA author timeline')
@@ -55,6 +61,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       }] }))
     }
     for (const frame of spec.timelineFrames) {
+      try {
       await playback(frame)
       await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame, { timeout: 120000 })
       const canvas = page.locator('canvas[aria-label="剪辑画面"]')
@@ -82,12 +89,104 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         entry.prNumericPass = prComparisonPasses(entry.prDifference)
         save()
       }
+      } catch (error) {
+        if (!spec.collectDifferences) throw error
+        let entry = evidence.frames.find(value => value.frame === frame)
+        if (!entry) { entry = { frame }; evidence.frames.push(entry) }
+        entry.error = String(error); entry.internalPass = false
+        await capture(`yoga-failed-${frame}`)
+        save()
+      }
+    }
+    if (spec.checkFrameHoldMenu) {
+      const original = model.sequences[0].clips.find(clip => clip.kind === 'sequence' && clip.start === 0 && clip.duration > 60)
+      assert.ok(original)
+      await playback(30)
+      const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+      const view = baseline.data.properties['video_edit.document.timeline_view']
+      await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '检查帧定格右键入口', changes: [{
+        kind: 'set_properties', entityType: documentRef.kind, target: documentRef,
+        properties: { 'video_edit.document.timeline_view': { ...view, zoom: 2, selectedClipIds: [original.id] } },
+      }] }))
+      await page.locator(`[data-video-edit-clip="${original.id}"]`).click({ button: 'right' })
+      await page.getByText('添加帧定格', { exact: true }).click()
+      const saveCurrent = async () => {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          await page.waitForTimeout(300)
+          const baseline = await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: [] })
+          try {
+            await callTool(client, 'save_video_edit', operationEnvelope([baseline], { documentRef }))
+            return readVideoEditFile(created.file)
+          } catch (error) {
+            if (!String(error).includes('CONFLICT') || attempt === 3) throw error
+          }
+        }
+      }
+      const split = await saveCurrent()
+      const pieces = split.sequences[0].clips.filter(clip => clip.track === original.track && clip.start < original.duration).sort((a, b) => a.start - b.start)
+      assert.deepEqual(pieces.map(clip => [clip.start, clip.duration]), [[0, 30], [30, 1], [31, original.duration - 31]])
+      assert.equal(pieces[1].frameHold, true)
+      assert.ok(pieces.every(clip => clip.itemId === original.itemId && clip.kind === 'sequence'))
+      const clipRef = clip => ({ kind: 'video_edit.clip', id: `${created.documentId}:${clip.id}` })
+      const heldRef = clipRef(pieces[1]), tailRef = clipRef(pieces[2])
+      const baselines = await Promise.all([heldRef, tailRef].map(ref => callTool(client, 'read_application_entity', { ref })))
+      await callTool(client, 'change_application_entities', operationEnvelope(baselines, { summary: '独立移动后段并延长定格', changes: [
+        { kind: 'set_properties', entityType: tailRef.kind, target: tailRef, properties: { 'video_edit.clip.start': 61, 'video_edit.clip.duration': original.duration - 61 } },
+        { kind: 'set_properties', entityType: heldRef.kind, target: heldRef, properties: { 'video_edit.clip.duration': 31 } },
+      ] }))
+      const extended = await saveCurrent()
+      assert.equal(extended.sequences[0].clips.find(clip => clip.id === pieces[1].id).duration, 31)
+      await playback(45)
+      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '45')
+      await capture('frame-hold-extended')
+      evidence.frameHoldMenu = { split: pieces.map(clip => ({ id: clip.id, start: clip.start, duration: clip.duration, frameHold: clip.frameHold })), extended: true }
+      for (let i = 0; i < 2; i++) {
+        const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        await callTool(client, 'undo_video_edit', operationEnvelope([baseline], { documentRef }))
+      }
+      const restored = await saveCurrent()
+      assert.deepEqual(restored.sequences[0].clips, model.sequences[0].clips)
+      evidence.frameHoldMenu.undoRestored = true; save()
     }
     const before = readVideoEditFile(created.file)
     await leaveVideoEditProject(page, null)
     await openVideoEditProjectCard(page, created.projectId)
     assert.deepEqual(readVideoEditFile(created.file), before, '关闭重开改变工程内容')
     evidence.reopened = true
+    if (spec.playFullTimeline) {
+      const endFrame = Math.max(...model.sequences[0].clips.map(clip => clip.start + clip.duration))
+      await playback(0)
+      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0')
+      await page.evaluate(() => {
+        window.__videoLayoutEvidence.frames.length = 0
+        window.__videoLayoutEvidence.events.length = 0
+        window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]'))
+      })
+      const started = performance.now()
+      await playback(0, true)
+      let nextCapture = 30000
+      while (performance.now() - started < endFrame / 60 * 1000 + 30000) {
+        await page.waitForTimeout(1000)
+        const frame = await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-presented-frame')
+        evidence.playbackProgress = { frame: Number(frame), elapsedMs: performance.now() - started }; save()
+        if (performance.now() - started >= nextCapture) {
+          await capture(`yoga-playing-${Math.round(nextCapture / 1000)}`)
+          nextCapture += 30000
+        }
+        if (Number(frame) >= endFrame - 1) break
+      }
+      const elapsedMs = performance.now() - started
+      const trace = await workerSnapshot(page)
+      fs.writeFileSync(path.join(root, 'playback-trace.json'), JSON.stringify(trace))
+      const frames = trace.frames.filter(value => !value.initial && Number.isFinite(value.frame))
+      let skippedFrames = 0
+      for (let i = 1; i < frames.length; i++) skippedFrames += Math.max(0, frames[i].frame - frames[i - 1].frame - 1)
+      evidence.fullPlayback = { elapsedMs, presentedFrames: frames.length, skippedFrames, endFrame,
+        lastPresentedFrame: frames.at(-1)?.frame, renderErrors: trace.events.filter(value => value.error),
+        noSkippedFrames: skippedFrames === 0 && frames.length >= endFrame - 1 }
+      save()
+      await playback(Math.min(endFrame - 1, frames.at(-1)?.frame ?? 0), false)
+    }
     if (spec.exportTimeline) {
       const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
       const endFrame = Math.max(...model.sequences[0].clips.map(clip => clip.start + clip.duration))

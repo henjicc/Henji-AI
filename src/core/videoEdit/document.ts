@@ -85,8 +85,10 @@ const videoEditClipStateSchema = z.object({
    * 源时间与时间线的换算只在 `clipSpeed.ts`。
    */
   speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
+  frameHold: z.literal(true).optional(),
 }).strict()
 export const videoEditClipTakeSchema = z.object({
+  frameHold: z.literal(true).optional(),
   itemId: identifier, name, kind: z.enum(['video', 'audio', 'image']), duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
   speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
@@ -239,6 +241,7 @@ export const videoEditDocumentSchema = z.object({
       if (!track || track.kind !== (clip.kind === 'audio' ? 'audio' : 'video')) issue(`片段 ${clip.name} 的轨道类型不匹配。`)
       if (clip.start + clip.duration > Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) issue('序列最长为 24 小时。')
       if ((clip.speed || clip.reverse || clip.preservePitch) && !videoEditClipSpeedSupported(clip.kind)) issue(`片段 ${clip.name} 不能改速度或倒放。`)
+      if (clip.frameHold && (clip.kind !== 'video' && clip.kind !== 'sequence' || clip.sourceComponent === 'audio' || clip.speed || clip.reverse || clip.preservePitch)) issue('定格必须引用视频或序列画面，且不能同时变速、倒放或保持音调。')
       if (media && media.kind !== 'image' && !videoEditClipWithinSource(clip, fps, media.durationSeconds, Math.max(1, videoEditClipSpeedValue(clip)) / fps)) issue(`片段 ${clip.name} 超出源素材范围。`)
     }
     for (const annotation of sequence.annotations) {
@@ -304,7 +307,7 @@ export function videoEditNestedComposition(document: VideoEditComposition, clip:
   if (!sequence) throw new Error('嵌套序列已移除或未包含在渲染快照中。')
   const composition = composeVideoEditSequence(document, sequence)
   if (clip.start !== undefined && clip.duration !== undefined && clip.sourceInUs !== undefined) {
-    const timing = { start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder ?? { numerator: 0, denominator: 1 }, speed: clip.speed, reverse: clip.reverse }
+    const timing = { start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder ?? { numerator: 0, denominator: 1 }, speed: clip.speed, reverse: clip.reverse, frameHold: clip.frameHold }
     composition.captions = projectVideoEditNestedCaptions(sequence, timing, document.fps)
     composition.clips = projectVideoEditNestedContentClips(sequence, timing, document.fps)
   }
@@ -350,7 +353,7 @@ export function activeVideoEditClips(document: VideoEditComposition, at: number)
   return document.clips.filter(clip => at >= clip.start && at < clip.start + clip.duration && visible.has(clip.track)).sort((a, b) => a.track - b.track)
 }
 export function audibleVideoEditClips(document: VideoEditComposition): VideoEditClip[] {
-  let candidates = document.clips.filter(clip => ['video', 'audio', 'sequence'].includes(clip.kind) && clip.sourceComponent !== 'video' && (clip.disabledIntrinsicSections?.includes('audio') || clip.volume > 0 || clip.curves?.volume?.some(point => typeof point.value === 'number' && point.value > 0)))
+  let candidates = document.clips.filter(clip => !clip.frameHold && ['video', 'audio', 'sequence'].includes(clip.kind) && clip.sourceComponent !== 'video' && (clip.disabledIntrinsicSections?.includes('audio') || clip.volume > 0 || clip.curves?.volume?.some(point => typeof point.value === 'number' && point.value > 0)))
   // Source-sequence audition/export uses the same chosen master as placed multicamera segments.
   if (document.multicam && candidates.some(clip => document.multicam!.cameras.some(camera => camera.clipId === clip.id))) {
     const master = document.multicam.cameras.find(camera => camera.id === document.multicam!.audioCameraId)

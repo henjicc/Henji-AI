@@ -158,6 +158,7 @@ function timelineIntent(context: VideoEditCommandContext, id: VideoEditCommandId
     return { kind: 'place', clipboard, mode: id === 'paste_insert' ? 'insert' : id, frame: context.frame, ...(context.scope === 'source' || context.scope === 'project' ? newTracks ? { newTracks } : {} : { trackMap: clipboardTrackMap(context, clipboard) }), targetTracks: contextTargetTracks(context) }
   }
   if (id === 'split') return { kind: 'split', clipIds: clips, linked: false, frame: context.frame }
+  if (id === 'frame_hold') return { kind: 'frame_hold', clipIds: clips.slice(0, 1), linked: false, frame: context.frame }
   if (id === 'split_tracks') return { kind: 'split', clipIds: getActiveVideoEditSequence(stateOf(context).owner!).clips.filter(clip => contextTargetTracks(context).includes(clip.track) && context.frame > clip.start && context.frame < clip.start + clip.duration).map(clip => clip.id), linked: videoEditPickRelations(stateOf(context).owner!.linkedSelection !== false), frame: context.frame }
   if (id === 'delete' || id === 'ripple_delete') return { kind: 'delete', clipIds: clips, linked: false, ripple: id === 'ripple_delete', targetTracks: contextTargetTracks(context) }
   if (id === 'link' || id === 'unlink' || id === 'group' || id === 'ungroup') return { kind: id, clipIds: clips, linked: false }
@@ -214,6 +215,13 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'delete' && selectedVideoEditSubtitleId(owner, sequence.id)) return { enabled: !sequence.captionTrackLocked, reason: '字幕轨道已锁定，请先解锁再编辑。' }
     // 选中时间线上的过渡块（没有选中片段）时，Delete／Backspace 删除这个过渡（PR）。
     if ((id === 'delete' || id === 'ripple_delete') && !context.clipIds.length && selectedVideoEditTransitionId(owner)) return { enabled: true }
+    if (id === 'frame_hold') {
+      const clip = selection(context).find(clip => clip.id === context.clipIds[0])
+      if (!clip || clip.frameHold || !['video', 'sequence'].includes(clip.kind) || clip.sourceComponent === 'audio'
+        || context.frame < clip.start || context.frame >= clip.start + clip.duration) return { enabled: false, reason: '请将播放头放在未定格的视频或序列片段内。' }
+      assertVideoEditClipsEditable(sequence, [clip.id])
+      return { enabled: true }
+    }
     if (['split', 'delete', 'ripple_delete', 'link', 'unlink', 'group', 'ungroup', 'separate_audio'].includes(id)) {
       const clips = selection(context)
       if (!clips.length) return { enabled: false, reason: '请先选择片段。' }
@@ -243,7 +251,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     }
     if (id === 'clip_speed') {
       // 速度/持续时间（4.13）：所选片段里有源时间的那些（视频、音频、代码素材）。
-      const clips = selection(context).filter(clip => videoEditClipSpeedSupported(clip.kind))
+      const clips = selection(context).filter(clip => !clip.frameHold && videoEditClipSpeedSupported(clip.kind))
       if (!clips.length) return { enabled: false, reason: selection(context).length ? '所选片段没有可变速的源时间（图片、文字、图形不能改速度）。' : '请先选择片段。' }
       assertVideoEditClipsEditable(sequence, clips.map(clip => clip.id))
       return { enabled: true }
@@ -316,7 +324,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'separate_audio': await separateVideoEditAudio(projectId, sequenceId, [...context.clipIds], sequence.tracks.find(track => track.kind === 'audio' && !track.locked && stateOf(context).targetTrackIds.includes(track.id))?.index ?? sequence.tracks.find(track => track.kind === 'audio' && !track.locked)!.index, undefined, false); return
     case 'locate_project': { const item = owner!.document.items.find(item => item.id === sourceItem(context))!; setVideoEditProjectView(projectId, { selectedItemIds: [item.id], selectedBinId: item.binId ?? '' }); focusVideoEditPanel(projectId, 'project'); return }
     case 'locate_source': await updateVideoEditSource(projectId, { itemId: sourceItem(context), playing: false }); focusVideoEditPanel(projectId, 'source'); return
-    case 'clip_speed': openVideoEditSpeedDialog({ projectId, sequenceId, clipIds: selection(context).filter(clip => videoEditClipSpeedSupported(clip.kind)).map(clip => clip.id) }); return
+    case 'clip_speed': openVideoEditSpeedDialog({ projectId, sequenceId, clipIds: selection(context).filter(clip => !clip.frameHold && videoEditClipSpeedSupported(clip.kind)).map(clip => clip.id) }); return
     case 'audio_gain': openVideoEditAudioGainDialog({ projectId, sequenceId, clipIds: selection(context).filter(clip => videoEditClipHasSound(getActiveVideoEditSequence(owner!), clip)).map(clip => clip.id) }); return
     case 'locate_effects': setVideoEditTimelineView(projectId, { selectedClipIds: [...context.clipIds] }, context.clipIds[0]); focusVideoEditPanel(projectId, 'effects'); return
     case 'mark_in': case 'mark_out': {

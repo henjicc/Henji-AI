@@ -4,7 +4,7 @@ import { dropVideoEditStyleKits } from './videoEdit'
 import { emptyRecordingPrivacy } from '../../screenRecording/privacy'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 18,
+  id: 'screen_recording', extension: '.henji-recording', storage: 'json', version: 19,
   migrations: {
     // 2 → 3：旧会话尚未检测隐私区域，补空待审列表，不改变原有理解结果。
     2: migrateRecordingContentV2,

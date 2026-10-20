@@ -106,6 +106,8 @@ class ProjectGraph:
             if source_chain is not None:
                 result["sourceEffects"] = self.chain_effects(self.ref(source_chain))
         source_clip = self.ref(sub.find("Clip"))
+        if source_clip.find("FrameHold") is not None:
+            result["frameHold"] = {"mode": source_clip.findtext("FrameHold"), "sourceTicks": source_clip.findtext("FrameHoldStart")}
         clip = source_clip.find(".//Clip")
         if clip is None:
             raise ValueError(f"Missing Clip in {source_clip.tag}")

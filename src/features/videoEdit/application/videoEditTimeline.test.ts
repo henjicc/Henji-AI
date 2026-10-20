@@ -228,6 +228,27 @@ it('助手修剪能力与时间线修剪工具同一份编辑：链接音画一�
     expect(owner.past.length).toBe(past + 2)
   } finally { app.dispose() }
 })
+it('助手帧定格走正式切割和撤销，保留原视频且不切独立声音', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  appendVideoEditMedia(id, { id: 'media', name: '原视频', path: 'D:/original.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true })
+  appendVideoEditClip(id, 'media')
+  const sequence = getActiveVideoEditSequence(owner)
+  await separateVideoEditAudio(id, sequence.id, [sequence.clips[0].id], 0)
+  const picture = getActiveVideoEditSequence(owner).clips.find(clip => clip.kind === 'video')!
+  const before = structuredClone(owner.document)
+  const app = createApplicationHarness(); const documentRef = { kind: 'video_edit.document', id }
+  try {
+    await app.requireResult('add_video_edit_frame_hold', { documentRef, clipRef: { kind: 'video_edit.clip', id: `${id}:${picture.id}` }, frame: 30 })
+    const clips = getActiveVideoEditSequence(owner).clips
+    expect(clips.filter(clip => clip.kind === 'audio')).toHaveLength(1)
+    expect(clips.filter(clip => clip.kind === 'video')).toHaveLength(3)
+    const hold = clips.find(clip => clip.frameHold)!
+    expect(hold).toMatchObject({ start: 30, duration: 1, itemId: picture.itemId })
+    expect((await app.read({ kind: 'video_edit.clip', id: `${id}:${hold.id}` }, ['video_edit.clip.frame_hold']) as { properties: Record<string, unknown> }).properties['video_edit.clip.frame_hold']).toBe(true)
+    await app.requireResult('undo_video_edit', { documentRef })
+    expect(getActiveVideoEditSequence(owner).clips).toEqual(before.sequences[0].clips)
+  } finally { app.dispose() }
+})
 it('助手经时间线视图读写链接选择；拆分能力与剃刀同语义，选区写入按原样保存不再扩展', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditMedia(id, { id: 'media', name: '原视频', path: 'D:/original.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true })

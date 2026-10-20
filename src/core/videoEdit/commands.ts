@@ -75,6 +75,7 @@ export const VIDEO_EDIT_COMMANDS = [
   command('prev_marker', '转到上一个标记', editScopes, key('KeyM', true, true), true),
   command('select_clip_at_playhead', '选择播放头处的片段', editScopes, key('KeyD')),
   command('split', '在播放头拆分', editScopes, key('KeyK', true)),
+  command('frame_hold', '添加帧定格', editScopes),
   command('split_tracks', '拆分全部目标轨道', editScopes, key('KeyK', true, true)),
   command('delete', '删除片段', editScopes, key('Delete'), false, [key('Backspace')]),
   command('delete_effect', '删除所选效果', ['effects'], key('Delete'), false, [key('Backspace')]),

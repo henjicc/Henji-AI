@@ -171,7 +171,7 @@ function takeOf(clip: VideoEditClip, sequence: VideoEditSequence): VideoEditClip
       const { takes: _takes, ...state } = value
       return { clip: structuredClone(state), offset: value.start - clip.start }
     }) } : {}),
-    ...(clip.speed ? { speed: { ...clip.speed } } : {}), ...(clip.reverse ? { reverse: true as const } : {}), ...(clip.preservePitch ? { preservePitch: true as const } : {}) }
+    ...(clip.frameHold ? { frameHold: true as const } : {}), ...(clip.speed ? { speed: { ...clip.speed } } : {}), ...(clip.reverse ? { reverse: true as const } : {}), ...(clip.preservePitch ? { preservePitch: true as const } : {}) }
 }
 /** 复用普通素材拆分/链接；原地生成仅补充“空闲音频轨”策略，保护生成期间的后续剪辑。 */
 function placeGeneratedItem(document: VideoEditDocument, sequence: VideoEditSequence, itemId: string, frame: number, duration: number, track: number, preferredAudio?: number, metadata?: CodeMaterialMetadataReader) {
@@ -234,7 +234,7 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
     if (prior.kind !== 'audio') { if (made.linkId) clip.linkId = made.linkId; else delete clip.linkId }
     if (origin) clip.creativeSource = structuredClone(origin); else delete clip.creativeSource
     // 生成结果按原速放进来（4.13）：原片段的速度随版本保存，切回时恢复。
-    delete clip.audioMapping; delete clip.speed; delete clip.reverse; delete clip.preservePitch
+    delete clip.audioMapping; delete clip.speed; delete clip.reverse; delete clip.preservePitch; delete clip.frameHold
     if (clip.fadeInFrames && clip.fadeInFrames > duration) clip.fadeInFrames = duration
     if (clip.fadeOutFrames && clip.fadeOutFrames > duration) clip.fadeOutFrames = duration
     const audio = placement.clips.slice(1).map(value => origin ? { ...value, creativeSource: structuredClone(origin) } : value)
@@ -291,11 +291,12 @@ export function switchVideoEditClipTake(document: VideoEditDocument, sequenceId:
   const next: VideoEditClip = { ...clip, itemId: take.itemId, name: take.name, kind: take.kind, duration, sourceInUs: take.sourceInUs, sourceRemainder: { ...take.sourceRemainder }, takes }
   if (take.sourceComponent) next.sourceComponent = take.sourceComponent; else delete next.sourceComponent
   if (take.creativeSource) next.creativeSource = structuredClone(take.creativeSource); else delete next.creativeSource
-  delete next.audioMapping; delete next.speed; delete next.reverse; delete next.preservePitch
+  delete next.audioMapping; delete next.speed; delete next.reverse; delete next.preservePitch; delete next.frameHold
   if (take.audioMapping) next.audioMapping = structuredClone(take.audioMapping)
   if (take.speed) next.speed = { ...take.speed }
   if (take.reverse) next.reverse = true
   if (take.preservePitch) next.preservePitch = true
+  if (take.frameHold) next.frameHold = true
   if (next.fadeInFrames && next.fadeInFrames > duration) next.fadeInFrames = duration
   if (next.fadeOutFrames && next.fadeOutFrames > duration) next.fadeOutFrames = duration
   if (take.linkedAudio === undefined || clip.kind === 'audio') return replaceSequence(document, { ...sequence, clips: sequence.clips.map(value => value.id === clip.id ? next : value) })

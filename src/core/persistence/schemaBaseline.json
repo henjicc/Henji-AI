@@ -113,9 +113,9 @@
   ],
   "formats": {
     "document.video_edit": {
-      "version": 16,
-      "fingerprint": "1bf2fc86252df5cce90d13cab295bfd3f0e4ee7f5a4c164b43d33240534084d5",
-      "supportedFrom": 16
+      "version": 17,
+      "fingerprint": "c95b9eaa921a612cf0d21b15181a58c69b65111a0671fbb4eee0845204ebba64",
+      "supportedFrom": 17
     },
     "document.canvas": {
       "version": 1,
@@ -283,9 +283,9 @@
       "supportedFrom": 2
     },
     "subtitle-manifest": {
-      "version": 10,
-      "fingerprint": "985ff24614e0f773527e99bd32e768409e87a7fb832c83e0452af05baa17fce9",
-      "supportedFrom": 10
+      "version": 11,
+      "fingerprint": "5c5cbc7875326b7c3edd63615d7db5e1ca11667ad8abd4d5168e8bd919d779ce",
+      "supportedFrom": 11
     },
     "storyboard-metadata": {
       "version": 1,
@@ -348,9 +348,9 @@
       "supportedFrom": 1
     },
     "document.screen_recording": {
-      "version": 18,
-      "fingerprint": "c5ff45f44a8256ad6c3f8c0e4e721c6d061101ea1c9b2843115b8efaca5185d5",
-      "supportedFrom": 18
+      "version": 19,
+      "fingerprint": "b3593db6c06ce464ae1846376d63532da298efbef4a4c87b23c7570f5afda475",
+      "supportedFrom": 19
     },
     "recording-setup": {
       "version": 1,
@@ -1837,6 +1837,33 @@
       "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
       "previousFingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
       "fingerprint": "985ff24614e0f773527e99bd32e768409e87a7fb832c83e0452af05baa17fce9",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-20T13:39:14.386Z",
+      "format": "document.video_edit",
+      "version": 17,
+      "reason": "开发期新增引用原视频的帧定格及镜头版本状态；剪辑及嵌入快照同步登记，不增加旧格式迁移。",
+      "previousFingerprint": "1bf2fc86252df5cce90d13cab295bfd3f0e4ee7f5a4c164b43d33240534084d5",
+      "fingerprint": "c95b9eaa921a612cf0d21b15181a58c69b65111a0671fbb4eee0845204ebba64",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-20T13:39:14.387Z",
+      "format": "document.screen_recording",
+      "version": 19,
+      "reason": "开发期新增引用原视频的帧定格及镜头版本状态；剪辑及嵌入快照同步登记，不增加旧格式迁移。",
+      "previousFingerprint": "c5ff45f44a8256ad6c3f8c0e4e721c6d061101ea1c9b2843115b8efaca5185d5",
+      "fingerprint": "b3593db6c06ce464ae1846376d63532da298efbef4a4c87b23c7570f5afda475",
+      "waivedFixtureVersions": []
+    },
+    {
+      "at": "2026-10-20T13:39:14.387Z",
+      "format": "subtitle-manifest",
+      "version": 11,
+      "reason": "开发期新增引用原视频的帧定格及镜头版本状态；剪辑及嵌入快照同步登记，不增加旧格式迁移。",
+      "previousFingerprint": "985ff24614e0f773527e99bd32e768409e87a7fb832c83e0452af05baa17fce9",
+      "fingerprint": "5c5cbc7875326b7c3edd63615d7db5e1ca11667ad8abd4d5168e8bd919d779ce",
       "waivedFixtureVersions": []
     }
   ],

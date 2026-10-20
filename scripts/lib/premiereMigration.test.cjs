@@ -67,6 +67,18 @@ test('source effects retain grading and compose centered zoom with clip motion',
   assert.equal(result.evidence.limitations.length, 0)
 })
 
+test('PR frame hold preserves the exact source timestamp without producing an image', () => {
+  const raw = clip('held', 0, 5, { type: 'VideoClipTrackItem', preservePitch: true, frameHold: { mode: '4', sourceTicks: '9522646923415' } })
+  const result = build([seq('main', [{ ...track([raw]), kind: 'video' }])],
+    [{ id: 'media', name: 'source.mp4', path: file, streams: {} }],
+    new Map([[file, { streams: [{ codec_type: 'video', width: 3840, height: 2160, avg_frame_rate: '60/1' }], format: { duration: '60' } }]]))
+  assert.deepEqual(result.document.sequences[0].clips[0].sourceRemainder, sourceTime(raw.frameHold.sourceTicks).sourceRemainder)
+  assert.equal(result.document.sequences[0].clips[0].frameHold, true)
+  assert.equal(result.document.sequences[0].clips[0].kind, 'video')
+  assert.equal(result.document.sequences[0].clips[0].preservePitch, undefined)
+  assert.equal(result.document.media.length, 1)
+})
+
 test('extractor includes master source effects separately from timeline effects', () => {
   const python = process.platform === 'win32' ? 'python' : 'python3'
   const code = `

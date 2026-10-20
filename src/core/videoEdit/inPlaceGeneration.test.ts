@@ -171,6 +171,18 @@ describe('原地生成落位', () => {
     expect(videoEditSourceSeconds(back)).toBe(5)
     expect(back.takes).toEqual([expect.objectContaining({ itemId: 'gen-item' })])
   })
+  it('替换定格片段恢复播放，切回版本恢复同一源帧', () => {
+    const { document, sequenceId } = fixture()
+    sequenceOf(document).clips[1].frameHold = true
+    const plan = planVideoEditInPlaceGeneration(document, sequenceId, { action: 'replace_shot', clipId: 'b' })
+    const replaced = valid(landVideoEditInPlaceResult(document, plan, 'gen-item').document)
+    const clip = sequenceOf(replaced).clips.find(value => value.id === 'b')!
+    expect(clip.frameHold).toBeUndefined()
+    expect(clip.takes?.[0]).toMatchObject({ frameHold: true, sourceInUs: 5_000_000 })
+    const restored = valid(switchVideoEditClipTake(replaced, sequenceId, 'b', 0))
+    expect(sequenceOf(restored).clips.find(value => value.id === 'b')).toMatchObject({ frameHold: true, sourceInUs: 5_000_000, duration: 60 })
+    expect(sequenceOf(valid(switchVideoEditClipTake(restored, sequenceId, 'b', 0))).clips.find(value => value.id === 'b')!.frameHold).toBeUndefined()
+  })
   it('切回时素材已移除则拒绝；配音替换声音片段', () => {
     const { document, sequenceId, audio } = fixture()
     const replaced = landVideoEditInPlaceResult(document, planVideoEditInPlaceGeneration(document, sequenceId, { action: 'replace_shot', clipId: 'b' }), 'gen-item').document
