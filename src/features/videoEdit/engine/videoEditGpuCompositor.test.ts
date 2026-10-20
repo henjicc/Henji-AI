@@ -13,12 +13,22 @@ import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoE
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0 }))
 it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有权，跨设备及取消明确拒绝', async () => {
   const { compositor, device } = copyFixture(async () => {})
+  const bitmap = { width: 640, height: 360, close: vi.fn() }
+  const transfer = vi.fn(() => bitmap)
+  vi.stubGlobal('OffscreenCanvas', class {
+    constructor(public width: number, public height: number) {}
+    getContext() { return { configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) } }
+    transferToImageBitmap = transfer
+  })
   const texture = { createView: () => ({}), destroy: vi.fn() }
   const picture = new VideoEditCodePicture(texture, 640, 360, device, 'rgba16float')
   try {
     const inputs = await compositor.prepareImages(new Map([['one', picture], ['two', picture]]), () => true)
     expect(inputs.get('one')).toMatchObject({ texture, owner: device, premultiplied: true })
     expect(inputs.get('two')!.texture).toBe(inputs.get('one')!.texture)
+    expect(inputs.get('one')!.source).toBe(bitmap)
+    expect(inputs.get('two')!.source).toBe(bitmap)
+    expect(transfer).toHaveBeenCalledOnce()
     expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
     expect(compositor.imageDiagnostics()).toMatchObject({ textures: 0, bytes: 0, uploads: 0 })
     const foreign = new VideoEditCodePicture(texture, 640, 360, {} as GpuDevice)
@@ -27,6 +37,7 @@ it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有�
     expect(texture.destroy).not.toHaveBeenCalled()
   } finally { await compositor.dispose() }
   expect(texture.destroy).not.toHaveBeenCalled()
+  expect(bitmap.close).toHaveBeenCalledOnce()
 })
 it('输入画面保持原节目画布黑底，普通嵌套目标仍保留透明背景', async () => {
   const { compositor, device } = copyFixture(async () => {}), model = createVideoEditDocument('输入黑底')

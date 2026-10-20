@@ -41,8 +41,12 @@ vi.mock('@/core/services/GenerationService', () => ({ generationService: { getCo
 vi.mock('@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), subscribeVisibleGenerationTaskChanges: (listener: () => void) => { state.listeners.add(listener); return () => state.listeners.delete(listener) } }))
 vi.mock('@/features/generation/application/generationResultSource', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), readGenerationResultMedia: async (id: string) => ({ mediaType: 'image', source: `D:/generated/${id}.png`, name: id }) }))
 vi.mock('../engine/videoEditCodeCompiler', async () => {
-  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
-  return { VideoEditCodeCompiler: class { async compile(source: string) { return compileCodeMaterial(source) } dispose() {} } }
+  const { testAuthorBundle } = await import('../engine/videoEditAuthorTestFixtures')
+  return { VideoEditCodeCompiler: class { async bundleQueued(source: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) { return testAuthorBundle(source) } dispose() {} } }
+})
+vi.mock('./videoEditAuthorInspection', async () => {
+  const { testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures')
+  return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle) }
 })
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   async updateDocument() {} async replaceContent() {} async dispose() {}
@@ -57,7 +61,7 @@ vi.mock('@/components/ui/PriceEstimate', () => ({ default: () => <span>预计费
 vi.mock('react-virtuoso', () => ({ Virtuoso: ({ data, itemContent }: { data: NonNullable<VideoEditInstance['document']['media']>; itemContent: (index: number, item: VideoEditInstance['document']['media'][number]) => React.ReactNode }) => <div>{data.map((item, index) => <div key={item.id}>{itemContent(index, item)}</div>)}</div> }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
 
-const source = 'export default {apiVersion:1,name:"产品画面",kind:"generator",mode:"static",width:640,height:360,durationSeconds:4,seed:1,parameters:{photo:{type:"image",title:"产品图",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.photo,x:0,y:0,width:200,height:100})];}}'
+const source = 'export default {name:"产品画面",kind:"generator",mode:"static",width:640,height:360,durationSeconds:4,params:[{key:"photo",type:"image",title:"产品图",default:null,animatable:false}],draw(ctx,t,p,W,H,assets){if(assets.photo)ctx.drawImage(assets.photo,0,0,200,100)}}'
 let owner: VideoEditInstance
 const target = () => readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, owner.document.sequences[0].clips[0].id).target
 const bound = () => owner.document.sequences[0].clips[0].code!.parameters.photo
@@ -101,13 +105,13 @@ beforeEach(async () => {
 })
 afterEach(async () => { cleanup(); images.resetCodeImageGenerationForTest(); await new Promise(resolve => setTimeout(resolve, 0)); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
-it('默认KIE GPT image，画幅来自图片绘制矩形而非整个画布；提交前只准备不付费', async () => {
+it('默认KIE GPT image，未声明图层的作者效果使用画布画幅；提交前只准备不付费', async () => {
   const context = await images.prepareCodeImageGenerationContext(target(), 'photo')
-  expect(context).toEqual({ prompt: '为「产品画面」创作「产品图」图片素材', width: 200, height: 100 })
-  expect(images.codeImageGenerationDefaultParams(images.VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL, context)).toMatchObject({ kieGptImage2AspectRatio: '2:1' })
+  expect(context).toEqual({ prompt: '为「产品画面」创作「产品图」图片素材', width: 640, height: 360 })
+  expect(images.codeImageGenerationDefaultParams(images.VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL, context)).toMatchObject({ kieGptImage2AspectRatio: '16:9' })
   expect(submit).not.toHaveBeenCalled()
   const job = await images.startCodeImageGeneration(request())
-  expect(job.modelId).toBe('kie-gpt-image-2'); expect(submit).toHaveBeenCalledWith(expect.objectContaining({ modelId: 'kie-gpt-image-2', mediaType: 'image', options: expect.objectContaining({ kieGptImage2AspectRatio: '2:1' }) }), job.taskId)
+  expect(job.modelId).toBe('kie-gpt-image-2'); expect(submit).toHaveBeenCalledWith(expect.objectContaining({ modelId: 'kie-gpt-image-2', mediaType: 'image', options: expect.objectContaining({ kieGptImage2AspectRatio: '16:9' }) }), job.taskId)
 })
 it('无密钥安全拒绝；浮层提示并打开供应商设置，费用和默认模型复用现有组件', async () => {
   state.providers = []
@@ -119,14 +123,6 @@ it('无密钥安全拒绝；浮层提示并打开供应商设置，费用和默�
   expect(submit).not.toHaveBeenCalled()
   expect(view.getByTestId('model').textContent).toBe('kie-gpt-image-2'); expect(view.getByText('预计费用')).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: '去设置' })); expect(useUiStore.getState().settingsTarget).toEqual({ tab: 'providers', sectionId: 'providers' })
-})
-it('v3 图片与测量文字混排仍按图片矩形推断画幅', async () => {
-  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText: (text: string) => ({ width: text.length * 20 }) } } })
-  const mixed = source.replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,').replace('return [image(', 'const m=measureText({text:"产品",fontSize:20});return [text({text:"产品",x:0,y:0,fontSize:20,color:[1,1,1,1]}),image(')
-  const [item] = await createVideoEditCodeItems(owner.document.id, [{ source: mixed }])
-  const [clipId] = appendVideoEditItems(owner.document.id, [item], owner.activeSequenceId)
-  const editor = readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, clipId)
-  expect(await images.prepareCodeImageGenerationContext(editor.target, 'photo')).toMatchObject({ width: 200, height: 100 })
 })
 it('进度取消走正式任务；迟到成功不导入、不绑定', async () => {
   const view = render(<View />)
