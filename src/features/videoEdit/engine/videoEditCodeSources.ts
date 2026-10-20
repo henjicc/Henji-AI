@@ -133,13 +133,15 @@ export class VideoEditCodeSources {
   updateParameters(document: VideoEditComposition): void { this.cancel(); this.document = document }
   cancel(): void { this.epoch++; this.controller?.abort(); this.controller = undefined }
   private async program(key: string, version: CodeMaterialVersion, signal: AbortSignal, pinned: ReadonlySet<string>): Promise<CodeMaterialProgram> {
-    await loadCodeSourceReferences(version); signal.throwIfAborted()
-    const resolver = documentCodeSourceResolver(); const files = expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver); const source = codeMaterialFilesKey(files)
+    signal.throwIfAborted()
     const cached = this.programs.get(key)
     if (cached) {
-      if (cached.source !== source) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被改写，请创建新版本。')
+      // checkVersions validates immutable manifests at document updates. Do not
+      // reread, parse module imports or serialize bundled libraries every frame.
       this.programs.delete(key); this.programs.set(key, cached); return cached.program
     }
+    await loadCodeSourceReferences(version); signal.throwIfAborted()
+    const resolver = documentCodeSourceResolver(); const files = expandPinnedCodeComponents(resolveCodeMaterialFiles(version, resolver), version.imports ?? [], resolver); const source = codeMaterialFilesKey(files)
     logger.debug('可见代码源码检查开始', { event: 'video_edit.code.compile.start', context: { sequenceId: this.document.id, version: key } })
     try {
       const started = performance.now()

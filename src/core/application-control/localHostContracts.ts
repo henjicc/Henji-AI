@@ -90,7 +90,8 @@ export const EXTERNAL_PROTOCOL_VERSIONS = ['2026-07-28'] as const
 export const EXTERNAL_SDK_VERSION = '2.0.0' as const
 export const EXTERNAL_SERVER_INFO = { name: 'henji', version: '2.0.0' } as const
 export const EXTERNAL_LIMITS = {
-  requestBytes: 256 * 1024, resultBytes: 2 * 1024 * 1024, mediaChunkBytes: 256 * 1024,
+  // Author modules may include bundled libraries; allow source plus JSON framing.
+  requestBytes: 32 * 1024 * 1024, resultBytes: 2 * 1024 * 1024, mediaChunkBytes: 256 * 1024,
   concurrentRequests: 8, requestTimeoutMs: 30_000,
 } as const
 export const EXTERNAL_DEPRECATION_POLICY = '当前仅支持 application contract 2 与 MCP 2026-07-28；旧工具接口和旧协议不兼容，客户端需按当前声明调用。'

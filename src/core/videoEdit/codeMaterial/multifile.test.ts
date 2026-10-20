@@ -10,6 +10,10 @@ export const width = 30;`
 const validCard = card.replace('const width=20;', 'const height=20;').replace('height:width', 'height:height')
 const input = (module = validCard) => ({ entry: 'main.ts', files: { 'main.ts': main, 'parts/card.ts': module } })
 describe('代码多文件与内容寻址', () => {
+  it('作者模块允许超过旧 DSL 大小的打包库，并保留原文字节', () => {
+    const source = `export default {};\n/*${'library'.repeat(20_000)}*/`
+    expect(codeFilesFromInput({ source }).files['main.ts']).toBe(source)
+  })
 
 
 

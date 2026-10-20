@@ -168,7 +168,7 @@ it('部分写盘失败会回收本次源码及组件 sidecar，不删除原有�
   await expect(service.writeCodeVersion({ target, definitionId: 'bad', name: '失败', contents: { entry: 'main.ts', files: { 'main.ts': 'good', 'nested/bad.ts': 'bad' } } })).rejects.toThrow('磁盘失败')
   failure.mockRestore()
   expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([first.folder])
-  await expect(service.publishCodeComponent({ target, name: '超限', source: 'x'.repeat(65536), description: '', exports: [], imports: [] })).rejects.toThrow('64KiB')
+  await expect(service.publishCodeComponent({ target, name: '超限', source: 'x'.repeat(16 * 1024 ** 2), description: '', exports: [], imports: [] })).rejects.toThrow('16MiB')
   expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([first.folder])
 })
 

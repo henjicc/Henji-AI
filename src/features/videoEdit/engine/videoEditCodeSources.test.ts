@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
 import type { CodeAuthorProgram as CodeMaterialProgram, CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import * as codeComponents from '@/core/videoEdit/codeMaterial/components'
 import { videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeSources, type PreparedVideoEditCodeEffect } from './videoEditCodeSources'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
@@ -308,6 +309,26 @@ describe('可见代码源与固定内容复用', () => {
 })
 
 describe('失效、身份与资源上限', () => {
+  it('动态作者热播放不重复解析库源码，换固定版本才重新准备模块', async () => {
+    const expand = vi.spyOn(codeComponents, 'expandPinnedCodeComponents')
+    const document = fixture(source('dynamic'))
+    const boundary = boundaries(document)
+    try {
+      await boundary.sources.prepare(document, document.clips, 0, () => true)
+      const initialCalls = expand.mock.calls.length
+      expect(initialCalls).toBeGreaterThan(0)
+      for (let frame = 1; frame < 4; frame++) await boundary.sources.prepare(document, document.clips, frame, () => true)
+      expect(expand).toHaveBeenCalledTimes(initialCalls)
+      expect(boundary.generator).toHaveBeenCalledTimes(4)
+      const next = structuredClone(document)
+      next.codeMaterials![0].versions.push({ id: 'v1', apiVersion: 4, languageVersion: 4, ...testCodeManifest(source('dynamic', '新版本'), next) })
+      next.clips[0].code!.versionId = 'v1'
+      boundary.sources.updateDocument(next)
+      await boundary.sources.prepare(next, next.clips, 4, () => true)
+      expect(expand.mock.calls.length).toBeGreaterThan(initialCalls)
+      expect(boundary.compiler.bundle).toHaveBeenCalledTimes(2)
+    } finally { expand.mockRestore(); await boundary.sources.dispose() }
+  })
   it('作者模块缓存逐出后可重新加载，仍拒绝固定版本改写', async () => {
     let document = fixture(source(), 33)
     const boundary = boundaries(document)

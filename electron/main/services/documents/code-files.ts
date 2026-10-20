@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { DocumentTarget } from '../../../../src/core/documents/types'
-import { codeFilePathSchema, componentFileReferences, type CodeComponentPin, type CodeFileReference } from '../../../../src/core/videoEdit/codeMaterial/sources'
+import { CODE_AUTHOR_SOURCE_MAX_BYTES, codeFilePathSchema, componentFileReferences, type CodeComponentPin, type CodeFileReference } from '../../../../src/core/videoEdit/codeMaterial/sources'
 import { componentSourceMetadata, packageComponentSource, type CodeComponent, type CodeComponentVersion } from '../../../../src/core/videoEdit/codeMaterial/components'
 import type { DiscardCodeFilesRequest, PublishCodeComponentRequest, WriteCodeVersionRequest, WithdrawCodeComponentRequest } from '../../../../src/core/videoEdit/codeMaterial/storageContract'
 import { isPathInside, type PathStyle } from '../../../../src/core/storage/pathSyntax'
@@ -121,7 +121,7 @@ export class DocumentCodeFiles {
     try {
       await this.safe(root, location)
       const stat = await fsp.stat(location)
-      if (!stat.isFile() || stat.size > 64 * 1024) throw new Error(`${file.path} 不是可读取的源码文件或超过64KiB，请恢复原文件。`)
+      if (!stat.isFile() || stat.size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error(`${file.path} 不是可读取的源码文件或超过16MiB，请恢复原文件。`)
       const bytes = await fsp.readFile(location); const hash = createHash('sha256').update(bytes).digest('hex')
       if (hash !== file.hash) throw new Error(`${file.path} 已被外部修改，请先从项目备份恢复原文件；要保留改动，再将改动粘贴到源码编辑器保存为新版本。`)
       const known = this.cache.get(hash)
@@ -211,7 +211,7 @@ export class DocumentCodeFiles {
       for (const file of await fsp.readdir(path.join(library, directory.name))) {
         if (!/^v\d+(?: \(\d+\))?\.ts$/.test(file)) continue
         const location = path.join(library, directory.name, file); await this.safe(root, location)
-        const stat = await fsp.stat(location); if (stat.size > 64 * 1024) throw new Error('项目组件源码超过64KiB，请恢复原文件。')
+        const stat = await fsp.stat(location); if (stat.size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error('项目组件源码超过16MiB，请恢复原文件。')
         const source = await fsp.readFile(location, 'utf8'); const hash = digest(source)
         const integrity = `${location}.sha256`; await this.safe(root, integrity)
         const expected = await fsp.readFile(integrity, 'utf8').catch(() => null)
@@ -259,7 +259,7 @@ export class DocumentCodeFiles {
       }
       const location = path.join(root, '代码', '组件库', name, `v${version}.ts`)
       const source = packageComponentSource(request.source, { name, version, exports: request.exports, description: request.description, imports: request.imports.map(({ name, version, hash }) => ({ name, version, hash })) })
-      if (Buffer.byteLength(source, 'utf8') > 64 * 1024) throw new Error('项目组件含说明的源码文件超过64KiB，请拆分为多个组件。')
+      if (Buffer.byteLength(source, 'utf8') > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error('项目组件含说明的源码文件超过16MiB，请拆分为多个组件。')
       await this.safe(root, location, true, group.directories)
       await createFileExclusively(`${location}.sha256`, Buffer.from(digest(source)))
       group.owned.push(`${location}.sha256`)

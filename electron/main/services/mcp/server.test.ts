@@ -8,7 +8,7 @@ import { LocalMcpServer } from './server'
 import { McpConnections } from './connections'
 import { ApplicationResourceSubscriptions } from './resourceSubscriptions'
 import { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
-import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
+import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, EXTERNAL_LIMITS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
 import { readApplicationMediaResource } from '../application-runtime/mediaResources'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { z } from 'zod'
@@ -395,7 +395,7 @@ describe('本地 MCP 协议与边界', () => {
     expect((await fetch(f.url(), { headers: { ...headers, Origin: 'http://evil.test' } })).status).toBe(403)
     const badHostStatus = await new Promise<number | undefined>((resolve, reject) => { const request = httpRequest(f.url(), { headers: { ...headers, Host: 'evil.test' } }, (response) => { response.resume(); resolve(response.statusCode) }); request.on('error', reject); request.end() })
     expect(badHostStatus).toBe(403)
-    expect((await fetch(f.url(), { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: 'x'.repeat(262145) })).status).toBe(413)
+    expect((await fetch(f.url(), { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: 'x'.repeat(EXTERNAL_LIMITS.requestBytes + 1) })).status).toBe(413)
     expect(f.calls).toHaveLength(0)
   })
   it('无协议会话；撤销和到期逐请求生效', async () => {
