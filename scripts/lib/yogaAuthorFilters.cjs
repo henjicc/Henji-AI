@@ -29,13 +29,14 @@ function windowShader(id) {
   const values = {
     '6314410': ['694.', '452.', '1440.'],
     '13815500': ['136.825', '446.35', '1422.'],
+    '5880153': ['340.', '600.', '1440.'],
   }[id]
   assert.ok(values, `未翻译的窗口滤镜：${id}`)
   const [left, width, sourceWidth] = values
   return COMMON + `
 @fragment fn window(@builtin(position) pos:vec4f)->@location(0) vec4f {
  let p=pos.xy;let u=f.size.y/720.;
- let x=(p.x/u-${left})/${width};let y=(p.y/u-170.)/339.;
+ let x=(p.x/u-${left})/${width};let y=(p.y/u-${id === '5880153' ? '118.' : '170.'})/${id === '5880153' ? '450.' : '339.'};
  if(x<0.||x>1.||y<0.||y>1.){return vec4f(0);}
  let k=f.size.y/2160.;
  return sampleImage(current,vec2f(f.size.x*.5+(x-.5)*${sourceWidth}*k,f.size.y*.5+(y-.5)*1080.*k));
@@ -185,11 +186,15 @@ export default {name:original.name,kind:'filter',params:original.params??[],asyn
 async function translateYogaFilter(effect) {
   const original = (await import(`data:text/javascript;base64,${Buffer.from(effect.source).toString('base64')}`)).default
   assert.equal(original.gpu?.abi, 'cuda-v1')
-  if (['6314410', '13815500'].includes(effect.id)) return moduleSource(windowShader(effect.id), ['window'])
+  if (['6314410', '13815500', '5880153'].includes(effect.id)) return moduleSource(windowShader(effect.id), ['window'])
   if (effect.id === '9642704') return moduleSource(huaziShader(original), ['blur_x', 'blur_y'])
   if (effect.id === '1270546') return moduleSource(nodeGlassShader(original), ['blur_x', 'blur_y'])
-  if (effect.id === '13119842') return moduleSource(require('./yogaAuthorFocus.cjs').focusShader(original), ['gaussian_x', 'gaussian_y', 'focus'])
+  if (['13119842', '8335157'].includes(effect.id)) return moduleSource(require('./yogaAuthorFocus.cjs').focusShader(original), ['gaussian_x', 'gaussian_y', 'focus'])
   if (['15969942', '15934198'].includes(effect.id)) return moduleSource(pairedWindowShader(original, effect.id), ['window'])
+  if (effect.id === '16756797') return moduleSource(COMMON + `
+@fragment fn fit(@builtin(position) p:vec4f)->@location(0) vec4f {
+ let center=f.size*.5;return sampleImage(current,center+(p.xy-center)/2.25);
+}`, ['fit'])
   throw new Error(`尚未翻译的 CUDA 效果：${effect.id} ${effect.name}`)
 }
 

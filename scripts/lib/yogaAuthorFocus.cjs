@@ -4,7 +4,9 @@ const { createHash } = require('node:crypto')
 function focusShader(original) {
  const source=original.gpu.passes.at(-1).source
  // The numeric appearance constants below belong to this exact emitted CUDA version.
- assert.equal(createHash('sha256').update(source).digest('hex'), '2888e2223872b69f4fca3708cfcebf58056eef07d772c92de0aa6c9b179780eb', '聚焦原算法已改变，须重新核对 WGSL 常数')
+ const hash = createHash('sha256').update(source).digest('hex')
+ const trial = hash === '373cb297a269b937fabf011e088d1fe6284264506d59258c67f4519fd1f0b686'
+ assert.ok(trial || hash === '2888e2223872b69f4fca3708cfcebf58056eef07d772c92de0aa6c9b179780eb', '聚焦原算法已改变，须重新核对 WGSL 常数')
  const rows=name=>{const block=new RegExp(name+'\\[[^\\]]+\\]\\[\\d+\\]=\\{([\\s\\S]*?)\\};').exec(source)?.[1];assert.ok(block,'缺少原聚焦表 '+name);return [...block.matchAll(/\{([^{}]+)\}/g)].map(m=>m[1].split(',').map(v=>Number(v.replace(/f/g,''))))}
  const cuts=/CUT\[K\]=\{([^}]+)\}/.exec(source);assert.ok(cuts,'缺少硬切表')
  const D={SHOT:rows('SHOT'),CAMERA:rows('CAMERA'),TRACK:rows('TRACK'),CUT:cuts[1].split(',').map(v=>Number(v.replace(/f/g,''))),focus:{boxOut:.25,boxIn:.3,grow:24,chamfer:22,stroke:2.5,strokeAlpha:.85,strokeColor:[.95,.955,.945],tick:{offset:7,width:3,color:[.4627,.7255,0]}},curves:{move:[.32,0,.12,1],rise:[.2,0,0,1]},shutter:180};
@@ -64,7 +66,9 @@ fn shade(uv:vec2f,scale:f32,s:f32,b:vec4f,look:vec2f)->vec4f{
  var c=sampleImage(current,uv);if(s<=0.){return c;}let u=f.size.y/2160./scale;let grow=(1.-s)*${number(F.grow)}*u;
  let x0=b.x*f.size.x-grow;let y0=b.y*f.size.y-grow;let x1=(b.x+b.z)*f.size.x+grow;let y1=(b.y+b.w)*f.size.y+grow;let cut=${number(F.chamfer)}*u;
  let d=chamferBox(uv,x0,y0,x1,y1,cut);let outside=clamp01((d+3.*u)/(6.*u))*s;
- if(outside>0.){let r=look.y*u*s;if(r>.35){c=mix(c,sampleImage(previous1,uv),outside);}let black=clamp01(look.x)*outside;c=vec4f(c.rgb*(1.-black),c.a);}
+ if(outside>0.){let r=look.y*u*s;${trial
+  ? 'if(r>.5){if(f.time>=82.4&&f.time<85.75){c=mix(c,sampleImage(previous1,uv),outside);}else{var acc=c;for(var k=0;k<12;k++){let a=f32(k)*2.39996323;let rr=r*select(1.,.5,k<6);acc+=sampleImage(current,uv+vec2f(cos(a),sin(a))*rr);}c=mix(c,acc/13.,outside);}}'
+  : 'if(r>.35){c=mix(c,sampleImage(previous1,uv),outside);}'}let black=clamp01(look.x)*outside;c=vec4f(c.rgb*(1.-black),c.a);}
  let stroke=max(0.,1.-abs(d)/(${number(F.stroke/2)}*u))*${number(F.strokeAlpha)}*s;c=mix(c,vec4f(vec3f(${F.strokeColor.map(number)})*c.a,c.a),stroke);
  let o=${number(F.tick.offset)}*u;let q=o*.7071;let tick=min(segDist(uv,vec2f(x0-q,y0+cut-q),vec2f(x0+cut-q,y0-q)),segDist(uv,vec2f(x1-cut+q,y1+q),vec2f(x1+q,y1-cut+q)));
  let tk=max(0.,1.-max(0.,tick-${number(F.tick.width/2)}*u)/u)*s;return mix(c,vec4f(vec3f(${F.tick.color.map(number)})*c.a,c.a),tk);
@@ -78,7 +82,8 @@ fn sideOfCut(t0:f32,center:f32)->f32{var t=t0;for(var j=0;j<${D.CUT.length};j++)
  return sum/f32(count);
 }
 fn gaussian(p:vec2f,vertical:bool)->vec4f{
- let box=boxAt(f.time);let sg=max(0.,box.look.y)*(f.size.y/2160.)/max(1.,camAt(f.time).x)*box.opacity;
+ ${trial ? 'if(f.time<82.4||f.time>=85.75){if(vertical){return sampleImage(previous0,p);}return sampleImage(current,p);}' : ''}
+ let box=boxAt(f.time);let sg=${trial ? '7.' : 'max(0.,box.look.y)'}*(f.size.y/2160.)/max(1.,camAt(f.time).x)*box.opacity;
  if(sg<=.35){if(vertical){return sampleImage(previous0,p);}return sampleImage(current,p);}
  let radius=i32(ceil(3.*sg));var sum=vec4f(0);var weight=0.;
  for(var k=-radius;k<=radius;k++){let d=f32(k);let w=exp(-d*d/(2.*sg*sg));var q=p+vec2f(d,0);if(vertical){q=p+vec2f(0,d);sum+=sampleImage(previous0,q)*w;}else{sum+=sampleImage(current,q)*w;}weight+=w;}

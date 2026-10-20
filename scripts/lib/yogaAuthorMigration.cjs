@@ -10,6 +10,7 @@ const YOGA_AUTHOR_BATCHES = [
   ['6314410', '13815500', '146814', '7701821', '9642704'],
   ['9049942', '13119842', '1845381', '4715265', '8250556'],
   ['764366', '15048341', '1270546', '3295436', '15969942'],
+  ['15934198', '11711573', '16756797', '5880153', '8335157'],
 ]
 const digest = source => crypto.createHash('sha256').update(source).digest('hex')
 // Exercise the image panel after its entrance, not just the opening title.
