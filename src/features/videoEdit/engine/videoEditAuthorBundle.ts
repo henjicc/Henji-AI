@@ -3,9 +3,10 @@ import ts from 'typescript'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'
 
-export interface AuthorSourceLocations { layers: Record<string, CodeSourceSpan>; factories?: Record<string, Record<string, CodeSourceSpan>>; fallback?: CodeSourceSpan }
-export interface AuthorBundle { code: string; map: string; locations: AuthorSourceLocations }
+export type { CodeAuthorSourceLocations as AuthorSourceLocations, CodeAuthorBundle as AuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
+import type { CodeAuthorSourceLocations as AuthorSourceLocations, CodeAuthorBundle as AuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
 type Build = (options: BuildOptions) => Promise<BuildResult>
 
 /** Syntax is read for navigation only, never to approve/reject author JS. */
@@ -59,15 +60,12 @@ export function authorSourceLocations(input: CodeMaterialFiles): AuthorSourceLoc
 /** esbuild owns ESM linking, cycles, syntax and source maps. The host supplies an
  * immutable file snapshot, so imports cannot silently drift between frames. */
 export async function bundleAuthorFiles(input: CodeMaterialFiles, build: Build): Promise<AuthorBundle> {
-  const root = 'file:///author-project/'
-  const paths = new Map(Object.keys(input.files).map(path => [new URL(path, root).href, path]))
   const plugin: Plugin = {
     name: 'author-project',
     setup(api) {
       api.onResolve({ filter: /.*/ }, args => {
         if (/^(?:https?:|data:|blob:)/.test(args.path)) return { path: args.path, external: true }
-        const mapped = input.resolvedImports?.[args.importer]?.[args.path]
-        const file = mapped ?? (args.kind === 'entry-point' ? input.entry : paths.get(new URL(args.path, new URL(args.importer || input.entry, root)).href) ?? (Object.hasOwn(input.files, args.path) ? args.path : undefined))
+        const file = args.kind === 'entry-point' ? input.entry : resolveAuthorProjectImport(input, args.importer || input.entry, args.path)
         if (!file || !Object.hasOwn(input.files, file)) return { errors: [{ text: `找不到模块 ${args.path}${args.importer ? `（由 ${args.importer} 导入）` : ''}。请将模块或打包好的第三方库加入项目源码。` }] }
         return { path: file, namespace: 'author-project' }
       })

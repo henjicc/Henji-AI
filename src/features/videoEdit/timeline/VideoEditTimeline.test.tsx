@@ -6,7 +6,9 @@ import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { createPortal } from 'react-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTestFixtures'
+const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
+vi.mock('../application/videoEditAuthorInspection', () => ({ inspectVideoEditAuthor: async (bundle: ReturnType<typeof testAuthorBundle>) => testAuthorProgram(bundle) }))
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -30,7 +32,7 @@ import { selectedVideoEditSubtitleId } from '../application/videoEditSubtitleSel
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-const source = 'export default {apiVersion:1,name:"代码",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:30,seed:1,parameters:{},render(ctx){return [rect({x:0,y:0,width:10,height:10,fill:[1,0,0,1]})];}}'
+const source = "export default {name:\"代码\",kind:\"generator\",mode:\"dynamic\",width:64,height:64,durationSeconds:30,params:[],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
 let owner: VideoEditInstance
 let ids: string[]
 let onError: ReturnType<typeof vi.fn>
@@ -182,10 +184,10 @@ beforeEach(async () => {
   })
   owner = (await createVideoEditProject())!
   const program = compileCodeMaterial(source)
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 1 }, program)
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }, program)
   editVideoProject(owner.document.id, document => {
     document.media.push({ id: 'media', name: '视频', path: 'D:/fixture/video.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 30, hasAudio: false })
-    document.codeMaterials = [{ id: 'definition', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 1 }] }]
+    document.codeMaterials = [{ id: 'definition', name: '代码', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }] }]
     document.items.push({ id: 'video-item', name: '视频', kind: 'video', mediaId: 'media' }, { id: 'code-item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
     // 多轨编辑用例沿用八条轨道（A1 + V1–V7）；新序列默认只有 V1/A1。
     addLegacyVideoEditTracks(document.sequences[0])

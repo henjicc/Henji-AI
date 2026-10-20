@@ -22,7 +22,7 @@ export class VideoEditAuthorRuntime {
   private closed = false
   readonly parameterMetadata: AuthorEffectMetadata
   private lastFrame?: { layers: AuthorLayer[]; width: number; height: number; time: number; parameters: AuthorParameters; overrides?: AuthorElementOverrides }
-  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations) {
+  constructor(private readonly device: GpuDevice, private readonly effect: AuthorModule, private readonly locations?: AuthorSourceLocations, private readonly ownsModule = true) {
     this.parameterMetadata = authorEffectMetadata(effect)
   }
   private texture(width: number, height: number): GpuTexture {
@@ -49,7 +49,7 @@ export class VideoEditAuthorRuntime {
       const bounds = layer.bounds ?? [0, 0, frame.width, frame.height]
       const matrix = authorPoseMatrix(pose)
       const sourceSpan = layer.sourceSpan ?? this.locations?.layers[id] ?? (layer.factory && this.locations?.factories?.[layer.factory.file]?.[layer.factory.name]) ?? this.locations?.fallback
-      return [observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters)]
+      return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1) }]
     })
   }
   async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
@@ -194,14 +194,19 @@ export class VideoEditAuthorRuntime {
     if (this.closed) return
     this.closed = true
     this.lastFrame = undefined
-    try { await this.webgl?.dispose?.(); await this.webgpu?.dispose?.(); await this.effect.dispose?.() }
-    finally {
-      await this.layerGpu?.dispose()
-      for (const texture of this.textures) texture.destroy()
-      this.textures.clear()
-      for (const surface of this.surfaces) if (surface) surface.canvas.width = surface.canvas.height = 1
-      this.surfaces.length = 0
-      this.gl?.getExtension('WEBGL_lose_context')?.loseContext()
+    const errors: unknown[] = []
+    const release = async (action: () => unknown): Promise<void> => {
+      try { await action() } catch (error) { errors.push(error) }
     }
+    await release(() => this.webgl?.dispose?.())
+    await release(() => this.webgpu?.dispose?.())
+    if (this.ownsModule) await release(() => this.effect.dispose?.())
+    await release(() => this.layerGpu?.dispose())
+    for (const texture of this.textures) await release(() => texture.destroy())
+    this.textures.clear()
+    for (const surface of this.surfaces) if (surface) await release(() => { surface.canvas.width = surface.canvas.height = 1 })
+    this.surfaces.length = 0
+    await release(() => this.gl?.getExtension('WEBGL_lose_context')?.loseContext())
+    if (errors.length) throw new AggregateError(errors, '代码效果资源释放失败。')
   }
 }

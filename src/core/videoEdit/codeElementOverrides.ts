@@ -6,14 +6,11 @@ import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe } from './ke
 import type { VideoEditSourceTime } from './time'
 
 const number = z.number().finite()
-const color = z.tuple([number.min(0).max(1), number.min(0).max(1), number.min(0).max(1), number.min(0).max(1)])
 export const codeElementOverrideValuesSchema = z.object({
   dx: number.min(-32768).max(32768).optional(), dy: number.min(-32768).max(32768).optional(),
   scale: number.min(.001).max(1024).optional(), scaleX: number.min(.001).max(1024).optional(), scaleY: number.min(.001).max(1024).optional(),
   rotation: number.min(-32768).max(32768).optional(), opacity: number.min(0).max(1).optional(),
-  fill: color.optional(), stroke: color.optional(), text: z.string().max(4096).optional(),
-  fontFamily: z.string().min(1).max(200).regex(/^[^\r\n;{}]+$/).optional(), fontWeight: number.min(1).max(1000).optional(),
-  fontSize: number.min(1).max(1024).optional(), letterSpacing: number.min(-1024).max(1024).optional(), lineHeight: number.min(.1).max(10).optional(), hidden: z.boolean().optional(),
+  hidden: z.boolean().optional(),
 }).strict()
 export type CodeElementOverrideValues = z.infer<typeof codeElementOverrideValuesSchema>
 export type CodeElementOverrideKey = keyof CodeElementOverrideValues
@@ -93,16 +90,8 @@ export function applyCodeElementOverrides(commands: readonly CodeDrawCommand[], 
     const value = evaluateCodeElementOverride(raw, time)
     if (value.hidden) next.opacity = 0
     else if (value.opacity !== undefined) next.opacity = value.opacity
-    if (value.fill) {
-      next.paint = value.fill
-      if ('fill' in next) next.fill = value.fill
-      if ('color' in next) next.color = value.fill
-    }
-    if (value.stroke) next.stroke = value.stroke
     if (next.kind === 'text') {
-      for (const key of ['text', 'fontFamily', 'fontWeight', 'fontSize', 'letterSpacing', 'lineHeight'] as const) if (value[key] !== undefined) Object.assign(next, { [key]: value[key] })
       next.layout = measureText({ text: next.text, fontFamily: next.fontFamily, fontWeight: next.fontWeight ?? 400, fontStyle: next.fontStyle ?? 'normal', fontSize: next.fontSize, letterSpacing: next.letterSpacing ?? 0, lineHeight: next.lineHeight ?? 1.2, maxWidth: next.maxWidth ?? 0, wrap: next.wrap ?? false, maxLines: next.maxLines ?? 0 })
-      if (value.text !== undefined) next.perChar = undefined
     }
     next.elementTransform = codeElementCorrection(next, value)
     return next

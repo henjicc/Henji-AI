@@ -16,7 +16,7 @@ it('4K多层文字纹理跨帧及片段运动复用，样式/字体资源变化�
   graphic.objects[0].textStyle!.shadows = Array.from({ length: 4 }, (_, index) => ({ enabled: true, color: graphic.objects[0].textStyle!.background.color, opacity: .5, angle: index * 90, distance: 10, size: 2, blur: 8 }))
   original.items.push({ id: 'graphic', name: '多层文字', kind: 'graphic', graphic }); const clip = makeVideoEditItemClip(original, 'graphic', original.sequences[0].id, { frame: 0 }); original.sequences[0].clips.push(clip)
   let document = videoEditComposition(original, original.sequences[0].id)
-  const runtime = { generator: vi.fn(), draw: vi.fn(), releaseUnused: vi.fn() }; const sources = new VideoEditCodeSources(document, async () => runtime)
+  const runtime = { authorGenerator: vi.fn(), inspectAuthor: vi.fn(), retainAuthorInstances: vi.fn(), observeAuthor: vi.fn(), draw: vi.fn(), releaseUnused: vi.fn() }; const sources = new VideoEditCodeSources(document, async () => runtime)
   try {
     runtime.draw.mockImplementation(async () => new Bitmap())
     const first = await sources.prepare(document, document.clips, 0, () => true); const bitmap = first.pictures.get(clip.id) as unknown as Bitmap

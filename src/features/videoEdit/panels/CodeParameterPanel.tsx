@@ -22,7 +22,7 @@ export function VideoEditParameterFields({ editor, onError }: { editor: VideoEdi
   const selected = 'code' in editor && !editor.target.effectId ? selectedVideoEditCodeElement(requireVideoEditInstance(editor.target.projectId)) : undefined
   const chosen = selected?.entry.clip.id === editor.target.clipId ? selected : undefined
   const title = 'code' in editor ? editor.target.effectId ? '效果参数' : '代码参数' : '对象参数'
-  const fields = codeParameterFields(editor.metadata.parameters, editor.metadata.types)
+  const fields = codeParameterFields(chosen ? editor.metadata.parameters.filter(parameter => chosen.parameterKeys.includes(parameter.key)) : editor.metadata.parameters, editor.metadata.types)
   return <UiGroup title={title} titleTone="compact" divided data-video-edit-code-parameters={editor.target.clipId}>
     {chosen && <div className="text-xs text-accent-text" aria-label="已选元素">已选元素：{chosen.label}</div>}
     <ParamList key={videoEditParameterTargetIdentity(editor.target)} fields={fields} values={editor.parameters} extras={editor.curves} contextKey={JSON.stringify(editor.sourceTime)} highlightedKeys={chosen?.parameterKeys}

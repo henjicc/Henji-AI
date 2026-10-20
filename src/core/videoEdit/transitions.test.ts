@@ -81,7 +81,7 @@ it.each(['caption', 'transition'] as const)('降帧率导致 %s 过短时给出�
 const source = (kind: 'generator' | 'filter', mode = 'dynamic', duration = 10): string => `export default {apiVersion:1,name:"时间验证",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:${duration},seed:0,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return ${kind === 'generator' ? '[rect({x:0,y:0,width:100,height:100,fill:[1,0,0,ctx.params.amount]})]' : 'sample(ctx.u,ctx.v)'};}}`
 function addEffect(document: VideoEditDocument, mode = 'static', duration = 10) {
   const text = source('filter', mode, duration); const program = compileCodeMaterial(text)
-  document.codeMaterials = [{ id: 'filter', name: '滤镜', defaultVersionId: 'filter-version', versions: [{ id: 'filter-version', ...testCodeManifest(text, document), apiVersion: 1, languageVersion: 1 }] }]
+  document.codeMaterials = [{ id: 'filter', name: '滤镜', defaultVersionId: 'filter-version', versions: [{ id: 'filter-version', ...testCodeManifest(text, document), apiVersion: 4, languageVersion: 4 }] }]
   document.sequences[0].clips[0].effects = [{ id: 'effect', name: '效果', enabled: true, amount: .5, code: { definitionId: 'filter', versionId: 'filter-version', parameters: { amount: .4 } } }]
   return program
 }
@@ -95,6 +95,9 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
       expect(window).toMatchObject({ cut: 90, start: 90 - Math.floor(durationFrames / 2), end: 90 + Math.ceil(durationFrames / 2) })
       expect(videoEditTransitionAmount(window, window.start)).toBe(0)
       expect(videoEditTransitionAmount(window, window.end - 1)).toBe(1)
+      expect(videoEditTransitionAmount(window, window.start + .5)).toBeCloseTo(.5 / (window.end - window.start - 1))
+      expect(videoEditTransitionAmount(window, window.end - .5)).toBe(1)
+      expect(() => videoEditTransitionAmount(window, NaN)).toThrow('半开')
       expect(videoEditTransitionsAt(sequence, window.start - 1)).toEqual([])
       expect(videoEditTransitionsAt(sequence, window.end)).toEqual([])
       expect(videoEditTransitionsAt(sequence, window.end - 1)).toHaveLength(1)
@@ -188,7 +191,7 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     const { document, sequence } = fixture(); const program = addEffect(document, 'dynamic', 2.24)
     expect(() => validateCodeMaterialDocument(document, () => program)).toThrow('余量不足')
     const text = source('generator', 'dynamic', 2.24); const generator = compileCodeMaterial(text)
-    document.codeMaterials = [{ id: 'generator', name: '生成器', defaultVersionId: 'generator-version', versions: [{ id: 'generator-version', ...testCodeManifest(text, document), apiVersion: 1, languageVersion: 1 }] }]
+    document.codeMaterials = [{ id: 'generator', name: '生成器', defaultVersionId: 'generator-version', versions: [{ id: 'generator-version', ...testCodeManifest(text, document), apiVersion: 4, languageVersion: 4 }] }]
     document.items = [{ id: 'item', name: '代码', kind: 'code', code: { definitionId: 'generator', versionId: 'generator-version', parameters: {} } }]
     sequence.clips.forEach(clip => { clip.kind = 'code'; clip.code = structuredClone(document.items[0].code); delete clip.effects })
     expect(() => validateCodeMaterialDocument(document, () => generator)).toThrow('余量不足')

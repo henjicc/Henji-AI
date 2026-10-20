@@ -3,7 +3,7 @@ import { videoEditAudioContent } from '@/core/videoEdit/audioContent'
 import { codeAudioComposition, codeAudioReferenceMediaId, codeMotionAudioKey, type CodeAudioComposition } from '@/core/videoEdit/codeAudio'
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import { codeMaterialUsesAudio } from '@/core/videoEdit/codeMaterialResources'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
 import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
 import { VideoEditSourceMapIndex, visitVideoEditPictureInstances, type VideoEditSourceMapRange } from '@/core/videoEdit/sourceMap'
 import { VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET } from '@/core/videoEdit/motionStructure'
@@ -23,7 +23,7 @@ export async function readVideoEditCodeMotionAudio(owner: VideoEditInstance, com
   let frames = 0
   visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(local, entry) {
     const clip = entry.path.at(-1)!.clip, program = clip.code && programs[clip.code.versionId]
-    if (clip.kind !== 'code' || !clip.code || !program || program.languageVersion !== 3 || !codeMaterialUsesAudio(program)) return
+    if (clip.kind !== 'code' || !clip.code || !program || program.languageVersion !== 4 || !codeMaterialUsesAudio(program)) return
     frames += entry.timeline.to - entry.timeline.from
     if (frames > VIDEO_EDIT_MOTION_STRUCTURE_SAMPLE_BUDGET) throw new Error('声音驱动运动审查超过60000帧实例预算，请缩小 from/to。')
     const key = codeMotionAudioKey(local.id, clip.id)

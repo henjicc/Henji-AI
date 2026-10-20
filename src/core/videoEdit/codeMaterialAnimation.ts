@@ -53,7 +53,7 @@ export function prepareCodeMaterialParameters(program: CodeMaterialMetadata, ins
       if (index && compareCodeMaterialTime(points[index - 1], point) === 0) throw new CodeMaterialError('PARAMETERS', `参数 ${key} 在同一源时刻有重复关键帧。`)
       if (!codeParameterSupportsInterpolation(declaration) && point.interpolation !== 'hold') throw new CodeMaterialError('PARAMETERS', `参数 ${key} 只能使用保持插值。`)
       const seconds = (point.sourceInUs + point.sourceRemainder.numerator / point.sourceRemainder.denominator) / 1e6
-      if (program.mode === 'dynamic' && seconds > program.durationSeconds && seconds - program.durationSeconds > 4 * Number.EPSILON * Math.max(1, seconds, program.durationSeconds)) throw new CodeMaterialError('PARAMETERS', `参数 ${key} 的关键帧超出源码声明时长。`)
+      if (program.mode === 'dynamic' && program.durationSeconds !== undefined && seconds > program.durationSeconds && seconds - program.durationSeconds > 4 * Number.EPSILON * Math.max(1, seconds, program.durationSeconds)) throw new CodeMaterialError('PARAMETERS', `参数 ${key} 的关键帧超出源码声明时长。`)
     }
     curves.set(key, { declaration, points })
   }

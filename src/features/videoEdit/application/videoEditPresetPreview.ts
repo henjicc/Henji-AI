@@ -2,7 +2,6 @@ import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { addressCodeMaterialFiles, normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { createVideoEditSequence, videoEditComposition, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { resizeCodeMaterialCanvas } from '@/core/videoEdit/codeElementBake'
 import { instantiateTitleTemplate } from '@/core/videoEdit/titleTemplates'
 import type { StyleKit } from '@/core/videoEdit/styleKit'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
@@ -12,23 +11,33 @@ import type { VideoEditPresetSource } from './videoEditPresetCatalog'
 
 export const PRESET_PREVIEW_FPS = 30
 /** Shared moving footage, so every effect, caption, transition and style is judged on the same picture. */
-const BACKDROP = `export default { apiVersion: 1, languageVersion: 3, name: "预设样片", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 8, seed: 7,
-  parameters: { hue: { type: "number", title: "色相", default: 0.58, min: 0, max: 1, step: 0.01 }, sat: { type: "number", title: "饱和", default: 1, min: 0, max: 2, step: 0.01 }, label: { type: "text", title: "文字", default: "", maxLength: 40 } },
-  render(ctx) {
-    const h = ctx.params.hue; const k = ctx.params.sat; const W = ctx.width; const H = ctx.height; const t = ctx.time;
-    return [
-      group({ id: "camera", x: W / 2, y: H / 2, scale: 1 + 0.06 * progress(t, 0, 8) }, [
-        rect({ id: "sky", x: -W / 2, y: -H / 2, width: W, height: H, fill: linearGradient({ x1: 0, y1: -H / 2, x2: 0, y2: H / 2, stops: [[0, hsv(h, 0.5 * k, 0.18)], [0.58, hsv(h + 0.05, 0.42 * k, 0.46)], [1, hsv(h + 0.08, 0.5 * k, 0.1)]] }) }),
-        rect({ id: "dawn", x: -W / 2, y: -H / 2, width: W, height: H, blend: "screen", opacity: 0.7, fill: radialGradient({ cx: W * (0.18 * sin(t * 0.25) - 0.08), cy: H * 0.1, r: W * 0.42, stops: [[0, hsv(h + 0.5, 0.42 * k, 0.85)], [1, [0, 0, 0, 0]]] }) }),
-        repeat(12, i => ellipse({ id: "bokeh", x: -W * 0.6 + W * 1.2 * random(i) + t * W * 0.012 * (1 + random(i + 30)) - H * (0.02 + 0.05 * random(i + 60)), y: -H * 0.45 + H * 0.6 * random(i + 90) - H * (0.02 + 0.05 * random(i + 60)), width: H * (0.04 + 0.1 * random(i + 60)), height: H * (0.04 + 0.1 * random(i + 60)), fill: hsv(h + 0.42 + 0.16 * random(i + 120), 0.3 * k, 1), opacity: 0.12 + 0.22 * random(i + 150), blur: H * 0.012, blend: "screen" })),
-        path({ id: "ridge", closed: true, fill: hsv(h + 0.08, 0.45 * k, 0.13), points: [[-W * 0.6, H * 0.5], [-W * 0.6, H * 0.12], [-W * 0.32, -H * 0.02], [-W * 0.1, H * 0.1], [W * 0.14, -H * 0.04], [W * 0.38, H * 0.08], [W * 0.6, H * 0.0], [W * 0.6, H * 0.5]] }),
-        path({ id: "front", closed: true, fill: hsv(h + 0.1, 0.5 * k, 0.06), points: [[-W * 0.6, H * 0.5], [-W * 0.6, H * 0.3], [-W * 0.2, H * 0.22], [W * 0.18, H * 0.3], [W * 0.6, H * 0.2], [W * 0.6, H * 0.5]] })
-      ]),
-      rect({ id: "vignette", x: 0, y: 0, width: W, height: H, fill: radialGradient({ cx: W / 2, cy: H / 2, r: W * 0.72, stops: [[0.5, [0, 0, 0, 0]], [1, [0, 0, 0, 0.6]]] }) }),
-      text({ id: "label", x: W / 2, y: H * 0.5, text: ctx.params.label, fontSize: H * 0.12, fontWeight: 700, color: [1, 1, 1, 0.9], align: "center", baseline: "middle" })
-    ];
-  }
-}`
+const BACKDROP = `
+const color = (h,s,v,a=1) => {
+  const rgb = [0,4,2].map(n => { const k=(n+h*6)%6; return Math.round((v-v*s*Math.max(0,Math.min(k,4-k,1)))*255) });
+  return 'rgba('+rgb.join(',')+','+a+')';
+};
+const random = i => { const x=Math.sin(i*127.1+7*311.7)*43758.5453; return x-Math.floor(x) };
+export default { name:'预设样片', mode:'dynamic', params:[
+ {key:'hue',type:'number',title:'色相',default:.58,min:0,max:1,step:.01,layer:'backdrop'},
+ {key:'sat',type:'number',title:'饱和',default:1,min:0,max:2,step:.01,layer:'backdrop'},
+ {key:'label',type:'text',title:'文字',default:'',layer:'label'},
+ {key:'labelStyle',type:'textStyle',title:'文字样式',default:{fontFamily:'sans-serif',fontSize:130,fontWeight:700},layer:'label'}
+], layers(p,W,H) { return [
+ {id:'backdrop',name:'背景',bounds:[0,0,W,H],draw(ctx,t) {
+  const h=p.hue,k=p.sat; ctx.save(); ctx.translate(W/2,H/2); const zoom=1+.06*Math.min(1,Math.max(0,t/8)); ctx.scale(zoom,zoom);
+  const sky=ctx.createLinearGradient(0,-H/2,0,H/2); [[0,color(h,.5*k,.18)],[.58,color(h+.05,.42*k,.46)],[1,color(h+.08,.5*k,.1)]].forEach(([at,c])=>sky.addColorStop(at,c));
+  ctx.fillStyle=sky;ctx.fillRect(-W/2,-H/2,W,H);
+  ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=.7;
+  const x=W*(.18*Math.sin(t*.25)-.08),y=H*.1;const dawn=ctx.createRadialGradient(x,y,0,x,y,W*.42);dawn.addColorStop(0,color(h+.5,.42*k,.85));dawn.addColorStop(1,color(h+.5,.42*k,.85,0));ctx.fillStyle=dawn;ctx.fillRect(-W/2,-H/2,W,H);
+  ctx.filter='blur('+H*.012+'px)';
+  for(let i=0;i<12;i++){const r=H*(.02+.05*random(i+60));ctx.globalAlpha=.12+.22*random(i+150);ctx.fillStyle=color(h+.42+.16*random(i+120),.3*k,1);ctx.beginPath();ctx.arc(-W*.6+W*1.2*random(i)+t*W*.012*(1+random(i+30)),-H*.45+H*.6*random(i+90),r,0,Math.PI*2);ctx.fill()}
+  ctx.restore();
+  for(const [points,c] of [[[[ -.6,.5],[-.6,.12],[-.32,-.02],[-.1,.1],[.14,-.04],[.38,.08],[.6,0],[.6,.5]],color(h+.08,.45*k,.13)],[[[-.6,.5],[-.6,.3],[-.2,.22],[.18,.3],[.6,.2],[.6,.5]],color(h+.1,.5*k,.06)]]){ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x*W,y*H):ctx.moveTo(x*W,y*H));ctx.closePath();ctx.fillStyle=c;ctx.fill()}
+  ctx.restore();const vignette=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.72);vignette.addColorStop(.5,'rgba(0,0,0,0)');vignette.addColorStop(1,'rgba(0,0,0,.6)');ctx.fillStyle=vignette;ctx.fillRect(0,0,W,H);
+ }},
+ {id:'label',name:'标题',bounds:[0,H*.35,W,H*.65],draw(ctx){const s=p.labelStyle;ctx.font=s.fontWeight+' '+s.fontSize+'px '+s.fontFamily;ctx.fillStyle=s.fill.enabled?s.fill.color:'transparent';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.label,W/2,H/2)}}
+]}};`
+
 const CAPTIONS = ['先把一件事做好', '然后，再把它做得更好']
 interface Builder { document: VideoEditDocument; sequence: VideoEditSequence }
 /** Every preview reuses one document identity, so the shared render session only receives updates. */
@@ -42,18 +51,16 @@ function start(size: { width: number; height: number }): Builder {
   return { document, sequence }
 }
 async function codeClip(builder: Builder, source: Parameters<typeof normalizeCodeMaterialFiles>[0], parameters: CodeParameterValues, placement: { frame: number; track: number; seconds: number; sourceInSeconds?: number }, signal: AbortSignal): Promise<string> {
-  const { width, height } = builder.sequence
   const files = normalizeCodeMaterialFiles(source)
-  const resized = { ...files, files: { ...files.files, [files.entry]: resizeCodeMaterialCanvas(files.files[files.entry], { width, height }) } }
-  const { codeSources: _sources, ...manifest } = await addressCodeMaterialFiles(resized)
-  const program = await compileVideoEditCode(resized, signal); signal.throwIfAborted()
+  const { codeSources: _sources, ...manifest } = await addressCodeMaterialFiles(files)
+  const program = await compileVideoEditCode(files, signal); signal.throwIfAborted()
   const versionId = crypto.randomUUID(); const definitionId = crypto.randomUUID(); const itemId = crypto.randomUUID()
-  builder.document.codeMaterials!.push({ id: definitionId, name: '预设样片', defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 1, languageVersion: 3 }] })
+  builder.document.codeMaterials!.push({ id: definitionId, name: '预设样片', defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 4, languageVersion: 4 }] })
   // A personal copy may have dropped a parameter the reel sets; pass only what the component declares.
   const declared = Object.fromEntries(Object.entries(parameters).filter(([key]) => program.parameters.some(value => value.key === key)))
   builder.document.items.push({ id: itemId, name: '预设样片', kind: 'code', code: { definitionId, versionId, parameters: declared } })
   // Never ask for more frames than the component has after its source-in point.
-  const available = Math.floor((program.durationSeconds - (placement.sourceInSeconds ?? 0)) * PRESET_PREVIEW_FPS)
+  const available = program.durationSeconds === undefined ? Infinity : Math.floor((program.durationSeconds - (placement.sourceInSeconds ?? 0)) * PRESET_PREVIEW_FPS)
   const duration = Math.max(1, Math.min(Math.round(placement.seconds * PRESET_PREVIEW_FPS), available))
   // Source ranges are for media items; a generator clip just starts later in its own clock (transition handles).
   const clip = makeVideoEditItemClip(builder.document, itemId, builder.sequence.id, { frame: placement.frame, track: placement.track, duration }, () => program)

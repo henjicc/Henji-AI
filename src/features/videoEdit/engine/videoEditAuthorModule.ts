@@ -6,6 +6,9 @@ export interface AuthorFrameInfo {
   time: number
   frameDuration: number
   clip: { time: number; duration: number }
+  /** Existing host analysis for explicitly declared audio parameters. */
+  audio?: import('@/core/audioAnalysis/contentAnalysis').AudioContentAnalysis
+  audioTime?: number
 }
 export type AuthorParameters = Readonly<Record<string, unknown>>
 export type AuthorAssets = Readonly<Record<string, CanvasImageSource>>

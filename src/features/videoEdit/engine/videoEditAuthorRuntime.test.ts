@@ -9,6 +9,19 @@ vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
+it('releases the module even when an instance disposer fails, without retrying disposal', async () => {
+  const dispose = vi.fn(() => { throw new Error('instance cleanup') })
+  const moduleDispose = vi.fn()
+  const runtime = new VideoEditAuthorRuntime({} as GpuDevice, {
+    name: '失败清理', createWebGPU: () => ({ draw() {}, dispose }), dispose: moduleDispose,
+  })
+  await runtime.render({ createView: () => ({}), destroy() {} }, 10, 10, {}, {}, { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } })
+  await expect(runtime.dispose()).rejects.toThrow('代码效果资源释放失败')
+  expect(moduleDispose).toHaveBeenCalledOnce()
+  await runtime.dispose()
+  expect(dispose).toHaveBeenCalledOnce()
+})
+
 it('passes borrowed current and neighbouring GPU textures directly and never destroys them', async () => {
   const current = { createView: vi.fn(), destroy: vi.fn() }
   const previous = { createView: vi.fn(), destroy: vi.fn() }

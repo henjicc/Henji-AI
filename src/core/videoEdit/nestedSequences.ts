@@ -12,9 +12,10 @@ import type { VideoEditCaption } from './timedContent'
 export function videoEditSequenceFrameAtSeconds(seconds: number, fps: number): number {
   return Math.max(0, Math.min(Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) - 1, Math.floor(seconds * fps + 1e-7)))
 }
-export function videoEditNestedFrame(parent: Pick<VideoEditComposition, 'fps'>, clip: VideoEditClip, child: Pick<VideoEditComposition, 'fps'>, frame: number): number {
+export function videoEditNestedFrame(parent: Pick<VideoEditComposition, 'fps'>, clip: VideoEditClip, child: Pick<VideoEditComposition, 'fps'>, frame: number, continuous = false): number {
   // A child may be shortened after nesting. Keep the parent's edit and source clock; its now-empty tail is transparent.
-  return videoEditSequenceFrameAtSeconds(clipSourceSeconds(clip, frame, parent.fps), child.fps)
+  const seconds = clipSourceSeconds(clip, frame, parent.fps)
+  return continuous ? Math.max(0, seconds * child.fps) : videoEditSequenceFrameAtSeconds(seconds, child.fps)
 }
 /** Existing sequence rows are a projection; create a persisted item only when it is actually placed. */
 export function ensureVideoEditSequenceItem(document: VideoEditDocument, sequenceId: string): { document: VideoEditDocument; itemId: string } {

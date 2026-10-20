@@ -1,11 +1,10 @@
+import { codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
+import { videoEditCodeElementFrames } from './videoEditCodeElements'
 import { registry } from '@/core/ModelRegistry'
 import { createLogger } from '@/core/logging'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { generationService } from '@/core/services/GenerationService'
-import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
-import type { CodeDrawCommand } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditDocument, VideoEditMedia } from '@/core/videoEdit/document'
-import { videoEditFps } from '@/core/videoEdit/time'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { readVideoEditCodeEditor, type VideoEditCodeTarget } from './videoEditCodeParameters'
 import { compileVideoEditCode } from './videoEditCodeState'
@@ -15,7 +14,6 @@ import { prepareVideoEditCreativeResult } from './videoEditCreativeSources'
 import { placeVideoEditFileInProject } from './videoEditResultTarget'
 import { importVideoEditSources } from './videoEditMedia'
 import { holdVideoEditActivity, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
-import { measureCodeText } from '../videoEditGlyphMetrics'
 
 export const VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL = 'kie-gpt-image-2'
 const logger = createLogger('features.videoEdit.codeImageGeneration')
@@ -47,7 +45,7 @@ export function codeImageGenerationJobs(target: VideoEditCodeTarget, key: string
 export function codeImageGenerationCandidates(target: VideoEditCodeTarget, key: string): VideoEditMedia[] {
   return requireVideoEditInstance(target.projectId).document.media.filter(media => media.kind === 'image' && media.codeImageGeneration && sameCodeImageParameter(target, key, media.codeImageGeneration))
 }
-/** 仅在已检查的作者 IR 上求当前绘制矩形，不执行作者 JavaScript。 */
+/** Use declared layer bounds from the rendered frame; no Canvas interception. */
 export async function prepareCodeImageGenerationContext(target: VideoEditCodeTarget, key: string, signal?: AbortSignal): Promise<CodeImageGenerationContext> {
   const editor = readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId, target.effectId)
   if (editor.target.versionId !== target.versionId) throw new Error('原代码版本已改变，请重新打开生成面板。')
@@ -57,21 +55,9 @@ export async function prepareCodeImageGenerationContext(target: VideoEditCodeTar
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(target.projectId)
   const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!
-  let width = program.width; let height = program.height
-  if (program.kind === 'generator') {
-    const marker = `image-parameter-${key}`
-    const values = { ...editor.parameters, [key]: { kind: 'image', mediaId: marker } }
-    const time = (editor.sourceTime.sourceInUs + editor.sourceTime.sourceRemainder.numerator / editor.sourceTime.sourceRemainder.denominator) / 1e6
-    const fps = videoEditFps(sequence.frameRate)
-    const draws = evaluateCodeMaterial(program, { time, localTime: time, sequenceTime: editor.frame / fps, width, height, frame: Math.floor(time * fps), fps }, values, { measureText: measureCodeText })
-    const visit = (draws: CodeDrawCommand[]): void => {
-      for (const draw of draws) {
-        if (draw.kind === 'group') visit(draw.children)
-        else if (draw.kind === 'image' && draw.source.mediaId === marker && draw.width > 0 && draw.height > 0 && (!found || draw.width * draw.height > width * height)) { width = draw.width; height = draw.height; found = true }
-      }
-    }
-    let found = false; visit(draws)
-  }
+  let { width, height } = codeMaterialSize(program, sequence)
+  const bound = parameter.layer ? videoEditCodeElementFrames(owner, sequence.id, editor.frame).get(target.clipId)?.index.byId.get(parameter.layer)?.author?.bounds : undefined
+  if (bound) { width = bound[2] - bound[0]; height = bound[3] - bound[1] }
   return { prompt: `为「${editor.metadata.name}」创作「${parameter.title}」图片素材`, width, height }
 }
 /** 比例借用正式原地生成的语义参数换算，不认识模型的私有字段。 */

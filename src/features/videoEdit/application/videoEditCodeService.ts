@@ -5,7 +5,7 @@ import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { importAssetCodeComponents, discardProjectCodeComponents, discardVideoEditCodeFiles } from './videoEditCodeStorage'
 import { assetCodeSourceResolver, rememberCodeAssetSources } from '@/core/videoEdit/codeAsset'
 import { prepareCodeVersionPublication } from './videoEditCodeStorage'
-import { loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
+import { addressCodeMaterialFiles, loadCodeSourceReferences, codeFilesFromInput, componentFileReferences, verifyCodeSourceReferences, documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeFileReference } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
 import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
@@ -14,7 +14,7 @@ import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema 
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import type { VideoEditDocument, VideoEditItem, VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
 import type { CodeMaterialDefinition, CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { compileVideoEditCode, forgetVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -25,6 +25,7 @@ import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersist
 import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeAsset } from '@/core/videoEdit/codeAsset'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
+import { codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 
 const logger = createLogger('features.videoEdit.code')
 export interface VideoEditCodeInput { source?: string; files?: Record<string, string>; entry?: string; name?: string; binId?: string }
@@ -36,28 +37,29 @@ interface CodeAssetPublication {
   afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument
   beforePublish(): Promise<void>
 }
-function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProgram, input: { name?: string; binId?: string }, initial?: Pick<CodeMaterialInstance, 'parameters' | 'curves'>): Candidate {
+function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProgram, input: { name?: string; binId?: string }, initial?: Pick<CodeMaterialInstance, 'parameters' | 'curves'>, host = createVideoEditSequence()): Candidate {
   const code = codeMaterialInstanceSchema.parse({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: validateCodeMaterialParameters(program, initial?.parameters), ...(initial?.curves ? { curves: initial.curves } : {}) })
   prepareCodeMaterialParameters(program, code)
   const name = input.name ?? program.name
   if (program.kind === 'generator') return { definition, item: { id: crypto.randomUUID(), name, kind: 'code', ...(input.binId ? { binId: input.binId } : {}), code } }
   if (input.binId) throw new Error('滤镜从效果控件使用，不属于素材箱。')
-  const graphic = createVideoEditGraphic('solid', program.width, program.height); graphic.objects[0].parameters.fill = [1, 1, 1, 1]
+  const size = codeMaterialSize(program, host)
+  const graphic = createVideoEditGraphic('solid', size.width, size.height); graphic.objects[0].parameters.fill = [1, 1, 1, 1]
   // The graphic is only an isolated trial input. Filters publish a definition,
   // never a fake generating item or a stored duplicate of the input image.
   return { definition, item: { id: crypto.randomUUID(), name, kind: 'graphic', graphic }, filter: code }
 }
 /** Trial uses the same full-resolution source/compiler/GPU path as preview and
  * export. Its bounded temporary session is always released before publication. */
-function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false): Array<{ document: VideoEditComposition; frame: number }> {
-  const sequence = createVideoEditSequence('源码候选检查')
+function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false, host = createVideoEditSequence()): Array<{ document: VideoEditComposition; frame: number }> {
+  const sequence = { ...createVideoEditSequence('源码候选检查'), width: host.width, height: host.height, frameRate: host.frameRate }
   const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
   const frames = candidates.flatMap(candidate => {
     const program = read(candidate.filter ?? candidate.item.code!)
-    sequence.width = program.width; sequence.height = program.height
+    Object.assign(sequence, codeMaterialSize(program, sequence))
     const clip = makeVideoEditItemClip(document, candidate.item.id, sequence.id, { frame: 0 }, read)
     if (candidate.filter) {
-      if (program.mode === 'dynamic') clip.duration = Math.min(clip.duration, Math.max(1, Math.floor(program.durationSeconds * 30)))
+      if (program.mode === 'dynamic' && program.durationSeconds !== undefined) clip.duration = Math.min(clip.duration, Math.max(1, Math.floor(program.durationSeconds * host.frameRate.numerator / host.frameRate.denominator)))
       clip.effects = [{ id: crypto.randomUUID(), name: candidate.item.name, enabled: true, amount: 1, code: candidate.filter }]
     }
     sequence.clips = [clip]
@@ -67,8 +69,17 @@ function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataRead
   })
   return frames
 }
+/** Exercise examples through the same timeline path without publishing a project. */
+export async function trialVideoEditAuthorSource(source: Parameters<typeof addressCodeMaterialFiles>[0], program: CodeMaterialProgram, signal: AbortSignal): Promise<void> {
+  const { codeSources: _texts, ...manifest } = await addressCodeMaterialFiles(source)
+  const versionId = crypto.randomUUID()
+  const definition: CodeMaterialDefinition = { id: crypto.randomUUID(), name: program.name, defaultVersionId: versionId, versions: [{ id: versionId, ...manifest, apiVersion: 4, languageVersion: 4 }] }
+  const samples = candidateFrames([candidate(definition, program, {})], () => program, [], true)
+  if (samples.length > 1) samples.splice(1, 0, { ...samples[0], frame: Math.floor(samples.at(-1)!.frame / 2) })
+  await trialVideoEditCodeFrames(samples, signal)
+}
 /** Creation is an algorithmic collection operation: raw source is checked,
- * trial-rendered, then becomes one atomic domain edit. It never executes JS. */
+ * executed in the render worker, trial-rendered, then becomes one atomic domain edit. */
 async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication, afterCreate?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument, measurements?: CodeFramePerformance[]): Promise<Candidate[]> {
   signal?.throwIfAborted()
   if (!inputs.length) throw new Error('请提供要创建的代码素材。')
@@ -105,9 +116,9 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
         }
         initial = { parameters, ...(publication.asset.curves ? { curves: structuredClone(publication.asset.curves) } : {}) }
       }
-      const checked = candidate(definition, program, publication && program.kind === 'filter' ? { name: input.name } : input, initial)
+      const checked = candidate(definition, program, publication && program.kind === 'filter' ? { name: input.name } : input, initial, baseline.sequences.find(sequence => sequence.id === owner.activeSequenceId))
       if (publication?.asset.elementOverrides) {
-        if (program.kind !== 'generator' || program.languageVersion !== 3) throw new Error('元素覆盖需要第三版代码生成素材。')
+        if (program.kind !== 'generator') throw new Error('元素覆盖需要代码生成素材。')
         checked.item.elementOverrides = structuredClone(publication.asset.elementOverrides)
       }
       candidates.push(checked)
@@ -135,7 +146,7 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
     const read = readVideoEditCodeMetadata(owner, candidateDocument)
     validateCodeMaterialDocument(candidateDocument, read)
     const placements = publication || afterCreate ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
-    const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication))
+    const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication), owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))
     await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal, false, undefined, measurements)
     if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
@@ -211,7 +222,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     const read = readVideoEditCodeMetadata(owner, document)
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.
-    await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false)), controller.signal, false, undefined, measurements)
+    await trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))), controller.signal, false, undefined, measurements)
     controller.signal.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))

@@ -51,13 +51,13 @@ export async function prepareCodeVersionPublication(projectId: string, files: Co
     return result
   } }
 }
-/** Publishing never executes author JS; the same restricted AST/IR compiler checks the module. */
+/** Validate imports and module initialization through the same author worker as effects. */
 export async function publishProjectCodeComponent(projectId: string, input: { name: string; source: string; description?: string }, signal?: AbortSignal, keepBoth = false): Promise<CodeComponentVersion> {
   const name = codeComponentNameSchema.parse(input.name)
   const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
   const source = input.source.startsWith('// henji-component ') ? componentSourceMetadata(input.source).source : input.source
   const exports = codeComponentExportNames(source)
-  const contents: CodeMaterialFiles = { entry: '__check.ts', files: { '__check.ts': 'export default {languageVersion:3,apiVersion:2,name:"组件检查",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [];}}', 'component.ts': source } }
+  const contents: CodeMaterialFiles = { entry: '__check.js', files: { '__check.js': 'import * as component from "./component.js"; export default {name:"组件检查",mode:"static",draw(){void component;}}', 'component.js': source } }
   const imports = pinCodeComponentImports(contents, await projectCodeComponents(projectId), name)
   initializeVideoEditCodeSourceRuntime()
   await loadCodeSourceReferences({ files: [], imports }); signal?.throwIfAborted()

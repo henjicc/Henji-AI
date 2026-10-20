@@ -1,6 +1,7 @@
 import { codeMaterialDefinitionSchema } from './codeMaterialPersistence'
 import type { CodeMaterialDefinition } from './codeMaterialPersistence'
-import { CodeMaterialError, type CodeMaterialProgram } from './codeMaterial/contract'
+import { CodeMaterialError } from './codeMaterial/contract'
+import type { CodeAuthorProgram as CodeMaterialProgram } from './codeAuthorProgram'
 import { addressCodeMaterialFiles, codeVersionContentKey, resolveCodeMaterialFiles, documentCodeSourceResolver, type CodeMaterialFiles, type CodeSourceResolver, type CodeComponentPin, type CodeFileReference } from './codeMaterial/sources'
 import { expandPinnedCodeComponents } from './codeMaterial/components'
 

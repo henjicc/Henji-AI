@@ -3,24 +3,25 @@ import { testCodeSource, testSetCodeSource } from '@/core/videoEdit/codeMaterial
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { describe, expect, it, vi } from 'vitest'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
+import type { CodeAuthorProgram as CodeMaterialProgram, CodeAuthorBundle } from '@/core/videoEdit/codeAuthorProgram'
+import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeSources, type PreparedVideoEditCodeEffect } from './videoEditCodeSources'
-import { VideoEditCodeGpu } from './videoEditCodeGpu'
-import type { VideoEditCodePicture } from './videoEditCodeGpu'
-import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import type { VideoEditCodeGpu } from './videoEditCodeGpu'
+import type { VideoEditCodePicture, VideoEditCodeImageInput } from './videoEditCodeGpu'
+
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { createVideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 function source(mode: 'static' | 'dynamic' = 'static', name = '新图形', kind = 'generator'): string {
-  return `export default {apiVersion:1,name:"${name}",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){return ${kind === 'filter' ? 'sample(ctx.u,ctx.v)' : `[rect({x:${mode === 'dynamic' ? 'ctx.time*20+' : ''}ctx.params.amount*100,y:0,width:200,height:100,fill:[1,0,0,.5]})]`};}}`
+  return `export default {name:"${name}",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:10,params:[{key:"amount",type:"number",title:"强度",default:.5,min:0,max:1,step:.01}],${kind === 'filter' ? 'createWebGPU(){return {draw(){}};}' : `draw(ctx,t,p){ctx.fillStyle="rgba(255,0,0,.5)";ctx.fillRect(${mode === 'dynamic' ? 't*20+' : ''}p.amount*100,0,200,100);}`}}`
 }
 function fixture(code = source(), count = 1): VideoEditComposition {
   const document = createVideoEditDocument('代码源生命周期')
-  document.codeMaterials = [{ id: 'definition', name: '图形', defaultVersionId: 'v0', versions: Array.from({ length: count }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, ...testCodeManifest(count === 1 ? code : source('static', `版本${index}`), document) })) }]
+  document.codeMaterials = [{ id: 'definition', name: '图形', defaultVersionId: 'v0', versions: Array.from({ length: count }, (_, index) => ({ id: `v${index}`, apiVersion: 4, languageVersion: 4, ...testCodeManifest(count === 1 ? code : source('static', `版本${index}`), document) })) }]
   document.items = [{ id: 'item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'v0', parameters: {} } }]
   const clip: VideoEditClip = { id: 'clip', itemId: 'item', name: '代码', kind: 'code', code: { definitionId: 'definition', versionId: 'v0', parameters: {} }, track: 1, start: 0, duration: 90, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   document.sequences[0].clips = [clip]
@@ -28,42 +29,41 @@ function fixture(code = source(), count = 1): VideoEditComposition {
 }
 function boundaries(document: VideoEditComposition) {
   const pictures = new Map<string, VideoEditCodePicture>()
-  const generator = vi.fn(async (key: string, program: CodeMaterialProgram) => {
+  const generator = vi.fn(async (key: string, _instance: string, program: CodeMaterialProgram) => {
     let picture = pictures.get(key)
     if (!picture) { picture = { width: program.width, height: program.height } as VideoEditCodePicture; pictures.set(key, picture) }
     return picture
   })
   const releaseUnused = vi.fn((keys: ReadonlySet<string>) => { for (const key of pictures.keys()) if (!keys.has(key)) pictures.delete(key) })
-  const runtime: Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> = { generator, releaseUnused }
+  const runtime = { authorGenerator: generator, inspectAuthor: vi.fn(async (bundle: CodeAuthorBundle) => testAuthorProgram(bundle)), retainAuthorInstances: vi.fn(), observeAuthor: vi.fn(), releaseUnused }
   const acquire = vi.fn(async () => runtime)
-  const compiler = { compile: vi.fn(async (code: string | import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles, _signal?: AbortSignal) => compileCodeMaterial(code)), dispose: vi.fn() }
+  const compiler = { bundle: vi.fn(async (code: string | import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles, _signal?: AbortSignal) => testAuthorBundle(code)), dispose: vi.fn() }
   return { sources: new VideoEditCodeSources(document, acquire, compiler), compiler, acquire, generator, releaseUnused, pictures }
 }
 function changedVersion(document: VideoEditComposition, id: string): VideoEditComposition {
   return { ...document, revision: document.revision + 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, versionId: id } })) }
 }
-it('API2运动层把正式源时钟和子帧参数交给GPU，静态声明不复用只有中心参数相同的旧曝光', async () => {
-  const code = 'export default {apiVersion:2,languageVersion:3,name:"参数运动",kind:"generator",mode:"static",width:64,height:64,durationSeconds:3,seed:1,parameters:{amount:{type:"number",title:"位置",default:0,min:0,max:100,step:1,animatable:true}},render(ctx){return [group({x:ctx.params.amount,motionBlur:{}},[rect({x:0,y:0,width:8,height:8,fill:[1,0,0,1]})])];}}'
+const imageInputs = (id: string): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> => Promise.resolve(new Map([[id, { source: {}, width: 100, height: 100 } as VideoEditCodeImageInput]]))
+it('分层作者收到正式源时钟、参数和片段局部信息，动态曝光不误用静态缓存', async () => {
+  const code = 'export default {name:"参数运动",width:64,height:64,durationSeconds:3,params:[{key:"amount",type:"number",title:"位置",default:0,min:0,max:100,step:1,animatable:true}],motionBlur:{},layers(p){return [{id:"box",bounds:[0,0,8,8],pose:t=>({x:p.amount+t}),draw(ctx){ctx.fillRect(0,0,8,8);}}];}}'
   const document = fixture(code)
-  Object.assign(document.codeMaterials![0].versions[0], { apiVersion: 2, languageVersion: 3 })
   document.clips[0].code!.curves = { amount: [{ id: 'a', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'b', sourceInUs: 1_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 100, interpolation: 'linear' }] }
   const boundary = boundaries(document)
   try {
     await boundary.sources.prepare(document, document.clips, 15, () => true)
     await boundary.sources.prepare(document, document.clips, 15, () => true)
     expect(boundary.generator).toHaveBeenCalledTimes(2)
-    const options = (boundary.generator.mock.calls[0] as unknown as Parameters<VideoEditCodeGpu['generator']>)[6]!
-    const before = options.motion!.at({ numerator: -1, denominator: 4 })!, after = options.motion!.at({ numerator: 1, denominator: 4 })!
-    expect(Number(after.parameters.amount)).toBeGreaterThan(Number(before.parameters.amount))
-    expect(after.context.frame - before.context.frame).toBe(.5)
-    expect(after.sourceTime!.sourceInUs).toBeGreaterThan(before.sourceTime!.sourceInUs)
+    const options = boundary.generator.mock.calls[0] as unknown as Parameters<VideoEditCodeGpu['authorGenerator']>
+    expect(options[3]).toMatchObject({ time: .5, frame: 15, localTime: .5 })
+    expect(options[4]).toEqual({ amount: 50 })
+    expect(options[6]).toMatchObject({ time: .5, frameDuration: 1 / 30, clip: { time: .5, duration: 3 } })
   } finally { await boundary.sources.dispose() }
 })
 
 it('t102 静态声明读取音频元数据仍随来源更新，视频参数按片段改写为当前帧输入', async () => {
-  const code = 'export default {apiVersion:1,languageVersion:3,name:"音频",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:3,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [rect({x:ctx.audio.bpm,y:0,width:10,height:10,fill:[1,1,1,1]}),image({source:ctx.params.picture,x:0,y:0,width:10,height:10})];}}'
+  const code = 'export default {name:"音频",mode:"static",width:3840,height:2160,durationSeconds:3,params:[{key:"picture",type:"image",title:"画面",default:null},{key:"sound",type:"audio",title:"声音",default:null}],draw(ctx,t,p,w,h,assets,info){ctx.fillRect(info.audio.bpm,0,10,10);}}'
   const document = fixture(code)
-  document.codeMaterials![0].versions[0].languageVersion = 3
+  document.codeMaterials![0].versions[0].languageVersion = 4
   document.media.push({ id: 'video', name: '视频', path: 'D:/movie.mp4', kind: 'video', width: 64, height: 64, durationSeconds: 3 })
   const boundary = boundaries(document), audio = { fps: 30, duration: 3, bpm: 120, beats: [0, .5], onsets: [0, .5], beatsPerBar: 4, barOrigin: 0, levels: [], bands: { bass: [], mid: [], treble: [] } }
   const options = { audio: vi.fn(async () => ({ audio, audioTime: .5 })) }
@@ -73,8 +73,8 @@ it('t102 静态声明读取音频元数据仍随来源更新，视频参数按�
     expect(boundary.generator).toHaveBeenCalledTimes(2)
     const next = { ...document, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, parameters: { picture: { kind: 'video' as const, mediaId: 'video' } } } })) }
     boundary.sources.updateParameters(next)
-    await boundary.sources.prepare(next, next.clips, 15, () => true, undefined, options)
-    expect(boundary.generator).toHaveBeenLastCalledWith(expect.any(String), expect.anything(), expect.objectContaining({ audio, audioTime: .5 }), expect.objectContaining({ picture: { kind: 'image', mediaId: 'code-input:["clip","picture"]' } }), undefined, false, undefined)
+    await boundary.sources.prepare(next, next.clips, 15, () => true, imageInputs('code-input:["clip","picture"]'), options)
+    expect(boundary.generator).toHaveBeenLastCalledWith(expect.any(String), 'clip', expect.anything(), expect.objectContaining({ audio, audioTime: .5 }), expect.objectContaining({ picture: { kind: 'image', mediaId: 'code-input:["clip","picture"]' } }), expect.any(Object), expect.objectContaining({ audio, audioTime: .5 }), undefined)
   } finally { await boundary.sources.dispose() }
 })
 
@@ -99,7 +99,7 @@ it('static code picture cache does not freeze its native animated effect mask', 
 describe('可见代码源与固定内容复用', () => {
   it('静态v3生成器覆盖动画使用源时间，缓存按求值结果复用，覆盖修改后不复用旧画面', async () => {
     const document = fixture(source().replace('apiVersion:1,', 'apiVersion:1,languageVersion:3,').replace('rect({x:', 'rect({id:"box",x:'))
-    document.codeMaterials![0].versions[0].languageVersion = 3
+    document.codeMaterials![0].versions[0].languageVersion = 4
     const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
     document.clips[0].elementOverrides = { box: { curves: { dx: [{ id: 'first', ...time(0), value: 0, interpolation: 'linear' }, { id: 'last', ...time(1e6), value: 100, interpolation: 'linear' }] } } }
     const boundary = boundaries(document)
@@ -108,9 +108,9 @@ describe('可见代码源与固定内容复用', () => {
       await boundary.sources.prepare(document, document.clips, 15, () => true)
       expect(boundary.generator).toHaveBeenCalledTimes(2)
       expect(boundary.generator.mock.calls[0][0]).not.toBe(boundary.generator.mock.calls[1][0])
-      expect((boundary.generator.mock.calls[1] as unknown[])[6]).toMatchObject({ elementOverrides: document.clips[0].elementOverrides, sourceTime: time(500000) })
+      expect((boundary.generator.mock.calls[1] as unknown[])[7]).toEqual({ box: { dx: 50 } })
       await boundary.sources.prepare(document, document.clips, 15, () => true); expect(boundary.generator).toHaveBeenCalledTimes(2)
-      const next = { ...document, clips: [{ ...document.clips[0], elementOverrides: { box: { fill: [0,1,0,1] as [number, number, number, number] } } }] }
+      const next = { ...document, clips: [{ ...document.clips[0], elementOverrides: { box: { dx: 100 } } }] }
       boundary.sources.updateDocument(next); await boundary.sources.prepare(next, next.clips, 15, () => true); expect(boundary.generator).toHaveBeenCalledTimes(3)
     } finally { await boundary.sources.dispose() }
   })
@@ -121,7 +121,7 @@ describe('可见代码源与固定内容复用', () => {
       { id: 'good', name: '锐化', enabled: true, amount: 1, builtin: { id: 'sharpen', params: {} } },
     ] }]
     const boundary = boundaries(document)
-    boundary.compiler.compile.mockRejectedValue(new Error('编译失败'))
+    boundary.compiler.bundle.mockRejectedValue(new Error('编译失败'))
     const failures = vi.fn()
     try {
       const prepared = await boundary.sources.prepare(document, document.clips, 0, () => true, undefined, { onEffectError: failures })
@@ -141,9 +141,9 @@ describe('可见代码源与固定内容复用', () => {
         const prepared = await boundary.sources.prepare(document, document.clips, frame, () => true)
         expect(prepared.effects.get('clip')).toHaveLength(40)
       }
-      expect(boundary.compiler.compile).toHaveBeenCalledTimes(40)
+      expect(boundary.compiler.bundle).toHaveBeenCalledTimes(40)
       expect(boundary.sources.diagnostics().programs).toBe(40)
-      const next = { ...document, clips: [{ ...document.clips[0], effects: document.clips[0].effects!.slice(0, 1) }], codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'new', apiVersion: 1 as const, languageVersion: 1 as const, ...testCodeManifest(source('static', '新滤镜', 'filter'), document) }] }] }
+      const next = { ...document, clips: [{ ...document.clips[0], effects: document.clips[0].effects!.slice(0, 1) }], codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'new', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source('static', '新滤镜', 'filter'), document) }] }] }
       next.clips[0].effects.push({ id: 'new', name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: 'new', parameters: {} } })
       boundary.sources.updateDocument(next)
       await boundary.sources.prepare(next, next.clips, 2, () => true)
@@ -158,7 +158,7 @@ describe('可见代码源与固定内容复用', () => {
     const boundary = boundaries(document)
     try {
       const prepared = await boundary.sources.prepare(document, document.clips, 0, () => true)
-      expect(prepared.effects.size).toBe(0); expect(boundary.compiler.compile).not.toHaveBeenCalled(); expect(boundary.acquire).not.toHaveBeenCalled()
+      expect(prepared.effects.size).toBe(0); expect(boundary.compiler.bundle).not.toHaveBeenCalled(); expect(boundary.acquire).not.toHaveBeenCalled()
     } finally { await boundary.sources.dispose() }
   })
   it('静态滤镜参数曲线在一小时源入点继续按真实源时钟求值', async () => {
@@ -182,7 +182,7 @@ describe('可见代码源与固定内容复用', () => {
     const boundary = boundaries(document)
     try {
       const prepared = await boundary.sources.prepare(document, document.clips, 0, () => true)
-      expect(prepared.effects.size).toBe(0); expect(boundary.compiler.compile).not.toHaveBeenCalled(); expect(boundary.acquire).not.toHaveBeenCalled()
+      expect(prepared.effects.size).toBe(0); expect(boundary.compiler.bundle).not.toHaveBeenCalled(); expect(boundary.acquire).not.toHaveBeenCalled()
       expect(boundary.sources.diagnostics().programs).toBe(0)
     } finally { await boundary.sources.dispose() }
   })
@@ -193,15 +193,15 @@ describe('可见代码源与固定内容复用', () => {
     const pictures = new Map<string, VideoEditCodePicture>()
     const draw = vi.fn(async (key: string, width: number, height: number) => { const picture = { width, height } as VideoEditCodePicture; pictures.set(key, picture); return picture })
     const releaseUnused = vi.fn((keys: ReadonlySet<string>) => { for (const key of pictures.keys()) if (!keys.has(key)) pictures.delete(key) })
-    const compiler = { compile: vi.fn(async (text: string) => compileCodeMaterial(text)), dispose: vi.fn() }
-    const sources = new VideoEditCodeSources(document, async () => ({ generator: vi.fn(), draw, releaseUnused }), compiler)
+    const compiler = { bundle: vi.fn(async (text: CodeMaterialFiles) => testAuthorBundle(text)), dispose: vi.fn() }
+    const sources = new VideoEditCodeSources(document, async () => ({ authorGenerator: vi.fn(), inspectAuthor: vi.fn(), retainAuthorInstances: vi.fn(), observeAuthor: vi.fn(), draw, releaseUnused }), compiler)
     try {
       const reserved = new Set(['composite:clip:clip:0', 'composite:clip:clip:1', 'composite:clip:clip:2'])
       const first = await sources.prepare(document, document.clips, 0, () => true, undefined, { surfaceKeys: reserved })
       const moved = { ...document, clips: [{ ...document.clips[0], x: .5 }] }; sources.updateDocument(moved); document = moved
       const second = await sources.prepare(document, document.clips, 30, () => true, undefined, { surfaceKeys: reserved })
       expect(second.pictures.get('clip')).toBe(first.pictures.get('clip')); expect(second.cacheHits).toBe(1)
-      expect(draw).toHaveBeenCalledOnce(); expect(compiler.compile).not.toHaveBeenCalled()
+      expect(draw).toHaveBeenCalledOnce(); expect(compiler.bundle).not.toHaveBeenCalled()
       expect([...releaseUnused.mock.lastCall![0]]).toEqual(expect.arrayContaining([...reserved]))
       const animated = structuredClone(graphic)
       animated.objects[0].curves = { x: [{ id: 'p0', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'p1', sourceInUs: 1_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 300, interpolation: 'linear' }] }
@@ -215,7 +215,7 @@ describe('可见代码源与固定内容复用', () => {
   it('滤镜与生成器共用固定program缓存，转场保留原局部时钟、真实源参数及同帧保留键', async () => {
     const document = fixture(source('dynamic'))
     const filter = source('static', '附加滤镜', 'filter')
-    document.codeMaterials!.push({ id: 'filter', name: '滤镜', defaultVersionId: 'fv', versions: [{ id: 'fv', apiVersion: 1, languageVersion: 1, ...testCodeManifest(filter, document) }] })
+    document.codeMaterials!.push({ id: 'filter', name: '滤镜', defaultVersionId: 'fv', versions: [{ id: 'fv', apiVersion: 4, languageVersion: 4, ...testCodeManifest(filter, document) }] })
     const base = document.clips[0]
     document.clips = [{ ...base, start: 0, duration: 60, sourceInUs: 1_000_000 }, { ...structuredClone(base), id: 'right', start: 60, duration: 60, sourceInUs: 1_000_000 }]
     document.clips[1].effects = [{ id: 'effect', name: '滤镜', enabled: true, amount: .5, code: { definitionId: 'filter', versionId: 'fv', parameters: { amount: .8 } } }]
@@ -224,25 +224,25 @@ describe('可见代码源与固定内容复用', () => {
     try {
       const first = await boundary.sources.prepare(document, document.clips, 55, () => true, undefined, { transitions: [window], surfaceKeys: new Set(['composite:transition:transition']) })
       expect(first.effects.get('right')![0]).toMatchObject({ effect: { id: 'effect' }, parameters: { amount: .8 }, transitionHandles: true, context: { localTime: -5 / 30, time: 1 - 5 / 30, frame: 55 } })
-      expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
+      expect(boundary.compiler.bundle).toHaveBeenCalledTimes(2)
       const effects = first.effects.get('right')![0] as PreparedVideoEditCodeEffect
       expect(Object.isFrozen(effects.program)).toBe(true)
       expect([...boundary.releaseUnused.mock.lastCall![0]]).toContain('composite:transition:transition')
       const second = await boundary.sources.prepare(document, document.clips, 60, () => true, undefined, { transitions: [window] })
       expect((second.effects.get('right')![0] as PreparedVideoEditCodeEffect).context.localTime).toBe(0)
       expect((second.effects.get('right')![0] as PreparedVideoEditCodeEffect).program).toBe(effects.program)
-      expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
+      expect(boundary.compiler.bundle).toHaveBeenCalledTimes(2)
     } finally { await boundary.sources.dispose() }
   })
   it('附加滤镜迟到编译在关闭后不能获取GPU或发布效果', async () => {
     const document = fixture(); document.clips[0].kind = 'text'; delete document.clips[0].code
     testSetCodeSource(document, document.codeMaterials![0].versions[0], source('static', '滤镜', 'filter'))
     document.clips[0].effects = [{ id: 'effect', name: '效果', enabled: true, amount: 1, code: { definitionId: 'definition', versionId: 'v0', parameters: {} } }]
-    const boundary = boundaries(document); let finish!: (program: CodeMaterialProgram) => void
-    boundary.compiler.compile.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const boundary = boundaries(document); let finish!: (program: CodeAuthorBundle) => void
+    boundary.compiler.bundle.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
     const pending = boundary.sources.prepare(document, document.clips, 0, () => true)
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    await vi.waitFor(() => expect(finish).toBeTypeOf('function')); await boundary.sources.dispose(); finish(compileCodeMaterial(testCodeSource(document, document.codeMaterials![0].versions[0]))); await rejected
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function')); await boundary.sources.dispose(); finish(testAuthorBundle(testCodeSource(document, document.codeMaterials![0].versions[0]))); await rejected
     expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.generator).not.toHaveBeenCalled()
     expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0 })
   })
@@ -251,18 +251,18 @@ describe('可见代码源与固定内容复用', () => {
     try {
       const first = await boundary.sources.prepare(document, document.clips, 0, () => true)
       const picture = first.pictures.get('clip')
-      const program = boundary.generator.mock.calls[0][1]
-      expect(Object.isFrozen(program)).toBe(true); expect(Object.isFrozen(program.result)).toBe(true)
+      const program = boundary.generator.mock.calls[0][2]
+      expect(Object.isFrozen(program)).toBe(true); expect(Object.isFrozen(program.bundle)).toBe(true)
       const copy = { ...document.clips[0], id: 'copy', x: .4, code: { ...document.clips[0].code!, parameters: { amount: .5 } } }
       document = { ...document, revision: 7, clips: [{ ...document.clips[0], rotation: 30, opacity: .4 }, copy] }
       boundary.sources.updateDocument(document)
       const second = await boundary.sources.prepare(document, document.clips, 60, () => true)
       expect(second.pictures.get('clip')).toBe(picture); expect(second.pictures.get('copy')).toBe(picture)
-      expect(second.cacheHits).toBe(2); expect(boundary.compiler.compile).toHaveBeenCalledOnce(); expect(boundary.generator).toHaveBeenCalledOnce()
+      expect(second.cacheHits).toBe(2); expect(boundary.compiler.bundle).toHaveBeenCalledOnce(); expect(boundary.generator).toHaveBeenCalledOnce()
       expect(boundary.releaseUnused.mock.calls.at(-1)![0].size).toBe(1)
       document = { ...document, clips: [{ ...document.clips[0], code: { ...document.clips[0].code!, parameters: { amount: .8 } } }] }
       boundary.sources.updateDocument(document); await boundary.sources.prepare(document, document.clips, 10, () => true)
-      expect(boundary.generator).toHaveBeenCalledTimes(2); expect(boundary.generator.mock.calls[1][1]).toBe(program)
+      expect(boundary.generator).toHaveBeenCalledTimes(2); expect(boundary.generator.mock.calls[1][2]).toBe(program)
       expect(boundary.pictures.size).toBe(1)
     } finally { await boundary.sources.dispose() }
   })
@@ -274,27 +274,27 @@ describe('可见代码源与固定内容复用', () => {
       const times: number[] = []
       for (const frame of [60, 0, 30, 60]) times.push((await boundary.sources.prepare(document, document.clips, frame, () => true)).sourceTimestamps[0])
       expect(times[0]).toBe(times[3]); expect(times[1]).toBeCloseTo(.123456 + 1 / 3e6)
-      expect(boundary.compiler.compile).toHaveBeenCalledOnce(); expect(boundary.generator).toHaveBeenCalledTimes(4)
+      expect(boundary.compiler.bundle).toHaveBeenCalledOnce(); expect(boundary.generator).toHaveBeenCalledTimes(4)
       expect(new Set(boundary.generator.mock.calls.map(call => call[0])).size).toBe(1)
       expect(new Set(boundary.generator.mock.calls.map(call => call[1])).size).toBe(1)
     } finally { await boundary.sources.dispose() }
   })
   it('不可见版本不编译，离开所有代码片段释放目标，滤镜拒绝生成入口', async () => {
-    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'invalid-hidden', apiVersion: 1, languageVersion: 1, ...testCodeManifest('never execute this', document) })
+    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'invalid-hidden', apiVersion: 4, languageVersion: 4, ...testCodeManifest('never execute this', document) })
     const boundary = boundaries(document)
     try {
-      await boundary.sources.prepare(document, [], 0, () => true); expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.compiler.compile).not.toHaveBeenCalled()
+      await boundary.sources.prepare(document, [], 0, () => true); expect(boundary.acquire).not.toHaveBeenCalled(); expect(boundary.compiler.bundle).not.toHaveBeenCalled()
       await boundary.sources.prepare(document, document.clips, 0, () => true)
       await boundary.sources.prepare(document, [], 90, () => true)
       expect(boundary.pictures.size).toBe(0); expect(boundary.sources.diagnostics().staticPictures).toBe(0)
-      const filter = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'filter', apiVersion: 1 as const, languageVersion: 1 as const, ...testCodeManifest(source('dynamic', '滤镜', 'filter'), document) }] }] }
+      const filter = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: [...document.codeMaterials![0].versions, { id: 'filter', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source('dynamic', '滤镜', 'filter'), document) }] }] }
       boundary.sources.updateDocument(filter)
       await expect(boundary.sources.prepare(filter, changedVersion(filter, 'filter').clips, 0, () => true)).rejects.toThrow('单输入滤镜')
       expect(boundary.generator).toHaveBeenCalledOnce()
     } finally { await boundary.sources.dispose() }
   })
   it('编译失败不替换旧静态目标，恢复旧有效版本不重求值', async () => {
-    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'bad', apiVersion: 1, languageVersion: 1, ...testCodeManifest('invalid', document) })
+    const document = fixture(); document.codeMaterials![0].versions.push({ id: 'bad', apiVersion: 4, languageVersion: 4, ...testCodeManifest('invalid', document) })
     const boundary = boundaries(document)
     try {
       const old = (await boundary.sources.prepare(document, document.clips, 0, () => true)).pictures.get('clip')
@@ -308,45 +308,25 @@ describe('可见代码源与固定内容复用', () => {
 })
 
 describe('失效、身份与资源上限', () => {
-  it('IR缓存逐出同步GPU滤镜管线，返回未改写旧版本可重新编译渲染', async () => {
+  it('作者模块缓存逐出后可重新加载，仍拒绝固定版本改写', async () => {
     let document = fixture(source(), 33)
-    document.codeMaterials!.push({ id: 'filter', name: '滤镜', defaultVersionId: 'fv', versions: [{ id: 'fv', apiVersion: 1, languageVersion: 1, ...testCodeManifest(source('static', '旧滤镜', 'filter'), document) }] })
-    const original = document.clips[0]
-    const filterClip: VideoEditClip = { ...original, kind: 'image', code: undefined, effects: [{ id: 'fx', name: '滤镜', enabled: true, amount: 1, code: { definitionId: 'filter', versionId: 'fv', parameters: {} } }] }
-    document = { ...document, clips: [filterClip] }
-    const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
-    const layouts = { createBindGroupLayout: vi.fn(), createPipelineLayout: vi.fn() }
-    const device: GpuDevice & typeof layouts = {
-      ...layouts,
-      queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: async () => {} }, lost: new Promise(() => {}),
-      createShaderModule: vi.fn(), createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createSampler: vi.fn(),
-      createTexture: () => ({ createView: () => ({}), destroy: vi.fn() }), createBuffer: () => ({ destroy: vi.fn() }), createBindGroup: vi.fn(),
-      createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}) }), pushErrorScope: vi.fn(), popErrorScope: async () => null, destroy: vi.fn(),
-    }
-    const runtime = new VideoEditCodeGpu(device)
-    const compiler = { compile: vi.fn(async (text: string) => compileCodeMaterial(text)), dispose: vi.fn() }
-    const sources = new VideoEditCodeSources(document, async () => runtime, compiler)
-    const prepareFilter = async () => {
-      const prepared = await sources.prepare(document, document.clips, 0, () => true, undefined, { surfaceKeys: new Set(['input', 'effect']) })
-      const effect = prepared.effects.get('clip')![0] as PreparedVideoEditCodeEffect; const input = await runtime.target('input', 3840, 2160)
-      await runtime.filter('effect', effect.version, effect.program, effect.context, effect.parameters, input)
-      return effect.program
-    }
+    const boundary = boundaries(document)
     try {
-      const before = await prepareFilter()
-      for (let index = 0; index < 32; index++) {
-        document = { ...document, clips: [{ ...original, code: { ...original.code!, versionId: `v${index}` } }] }; sources.updateDocument(document)
-        await sources.prepare(document, document.clips, 0, () => true)
+      await boundary.sources.prepare(document, document.clips, 0, () => true)
+      const before = boundary.generator.mock.calls[0][2]
+      for (let index = 1; index < 33; index++) {
+        document = changedVersion(document, `v${index}`); boundary.sources.updateDocument(document)
+        await boundary.sources.prepare(document, document.clips, 0, () => true)
       }
-      expect(sources.diagnostics()).toMatchObject({ programs: 32, seenVersions: 34 })
-      document = { ...document, clips: [filterClip] }; sources.updateDocument(document)
-      const after = await prepareFilter()
-      expect(after).not.toBe(before); expect(runtime.diagnostics().filterFrames).toBe(2)
-      expect(compiler.compile).toHaveBeenCalledTimes(34)
-      const changed = { ...document, codeMaterials: document.codeMaterials!.map(definition => definition.id === 'filter' ? { ...definition, versions: definition.versions.map(version => ({ ...version, ...testCodeManifest(source('static', '冒用', 'filter'), document) })) } : definition) }
-      expect(() => sources.updateDocument(changed)).toThrow('不可变代码版本')
-    } finally { await sources.dispose(); await runtime.dispose() }
-    expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, pipelines: 0 })
+      expect(boundary.sources.diagnostics()).toMatchObject({ programs: 32, seenVersions: 33 })
+      document = changedVersion(document, 'v0'); boundary.sources.updateDocument(document)
+      await boundary.sources.prepare(document, document.clips, 0, () => true)
+      expect(boundary.generator.mock.lastCall![2]).not.toBe(before)
+      expect(boundary.compiler.bundle).toHaveBeenCalledTimes(34)
+      const changed = { ...document, codeMaterials: document.codeMaterials!.map(definition => ({ ...definition, versions: definition.versions.map(version => ({ ...version, ...testCodeManifest(source('static', '冒用'), document) })) })) }
+      expect(() => boundary.sources.updateDocument(changed)).toThrow('不可变代码版本')
+    } finally { await boundary.sources.dispose() }
+    expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0, seenVersions: 0 })
   })
   it('图片准备失败或取消同步回收静态索引，恢复原参数不命中已销毁目标', async () => {
     for (const failure of ['reject', 'cancel'] as const) {
@@ -371,26 +351,26 @@ describe('失效、身份与资源上限', () => {
     }
   })
   it('同路径显式资源刷新只失效静态图片结果，标量外的版本变换复用源码', async () => {
-    const code = 'export default {apiVersion:1,name:"图片",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
+    const code = 'export default {name:"图片",mode:"static",width:3840,height:2160,durationSeconds:10,params:[{key:"logo",type:"image",title:"徽标",default:null}],draw(ctx,t,p,w,h,assets){if(assets.logo)ctx.drawImage(assets.logo,0,0,100,100);}}'
     const document = fixture(code)
-    document.codeMaterials![0].versions[0].languageVersion = 2
+    document.codeMaterials![0].versions[0].languageVersion = 4
     document.media = [{ id: 'image', path: 'D:/original.png', name: '原图', kind: 'image', width: 100, height: 100, durationSeconds: 0 }]
     document.clips[0].code!.parameters = { logo: { kind: 'image', mediaId: 'image' } }
     const boundary = boundaries(document)
     try {
-      const first = await boundary.sources.prepare(document, document.clips, 0, () => true)
+      const first = await boundary.sources.prepare(document, document.clips, 0, () => true, imageInputs('image'))
       const transformed = { ...document, revision: 1, clips: document.clips.map(clip => ({ ...clip, scale: 2 })) }
-      boundary.sources.updateDocument(transformed); expect((await boundary.sources.prepare(transformed, transformed.clips, 1, () => true)).cacheHits).toBe(1)
+      boundary.sources.updateDocument(transformed); expect((await boundary.sources.prepare(transformed, transformed.clips, 1, () => true, imageInputs('image'))).cacheHits).toBe(1)
       const refreshed = { ...transformed, revision: 2, media: transformed.media.map(media => ({ ...media, sourceRevision: 'explicit-relink' })) }
-      boundary.sources.updateDocument(refreshed); const fresh = await boundary.sources.prepare(refreshed, refreshed.clips, 1, () => true)
-      expect(fresh.cacheHits).toBe(0); expect(fresh.pictures.get('clip')).not.toBe(first.pictures.get('clip')); expect(boundary.compiler.compile).toHaveBeenCalledOnce()
+      boundary.sources.updateDocument(refreshed); const fresh = await boundary.sources.prepare(refreshed, refreshed.clips, 1, () => true, imageInputs('image'))
+      expect(fresh.cacheHits).toBe(0); expect(fresh.pictures.get('clip')).not.toBe(first.pictures.get('clip')); expect(boundary.compiler.bundle).toHaveBeenCalledOnce()
     } finally { await boundary.sources.dispose() }
   })
   it('晚到GPU生成串行回收，旧批次失败不破坏新批次完整保护集合', async () => {
     const document = fixture(); const boundary = boundaries(document)
     let finishOld!: () => void; let started!: () => void
     const entered = new Promise<void>(done => { started = done })
-    boundary.generator.mockImplementationOnce((key, program) => new Promise(done => {
+    boundary.generator.mockImplementationOnce((key, _instance, program) => new Promise(done => {
       finishOld = () => { const picture = { width: program.width, height: program.height } as VideoEditCodePicture; boundary.pictures.set(key, picture); done(picture) }
       started()
     }))
@@ -413,19 +393,19 @@ describe('失效、身份与资源上限', () => {
   })
   it('晚到编译不能生成旧剪辑，取消/更新/关闭清理观察与compiler', async () => {
     const document = fixture(); const boundary = boundaries(document)
-    let resolve!: (program: CodeMaterialProgram) => void
-    boundary.compiler.compile.mockImplementationOnce(() => new Promise<CodeMaterialProgram>(done => { resolve = done }))
+    let resolve!: (program: CodeAuthorBundle) => void
+    boundary.compiler.bundle.mockImplementationOnce(() => new Promise<CodeAuthorBundle>(done => { resolve = done }))
     const pending = boundary.sources.prepare(document, document.clips, 0, () => true); const failed = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     await vi.waitFor(() => expect(resolve).toBeTypeOf('function')); const next = { ...document, revision: 1 }; boundary.sources.updateDocument(next)
-    resolve(compileCodeMaterial(source())); await failed
+    resolve(testAuthorBundle(source())); await failed
     expect(boundary.generator).not.toHaveBeenCalled(); expect(boundary.sources.diagnostics().programs).toBe(0)
     await boundary.sources.prepare(next, next.clips, 0, () => true)
-    let late!: (program: CodeMaterialProgram) => void
-    const other = { ...next, codeMaterials: [{ ...next.codeMaterials![0], versions: [...next.codeMaterials![0].versions, { id: 'later', apiVersion: 1 as const, languageVersion: 1 as const, ...testCodeManifest(source('static', '晚到'), document) }] }] }
+    let late!: (program: CodeAuthorBundle) => void
+    const other = { ...next, codeMaterials: [{ ...next.codeMaterials![0], versions: [...next.codeMaterials![0].versions, { id: 'later', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source('static', '晚到'), document) }] }] }
     const changed = changedVersion(other, 'later'); boundary.sources.updateDocument(changed)
-    boundary.compiler.compile.mockImplementationOnce(() => new Promise<CodeMaterialProgram>(done => { late = done }))
+    boundary.compiler.bundle.mockImplementationOnce(() => new Promise<CodeAuthorBundle>(done => { late = done }))
     const last = boundary.sources.prepare(changed, changed.clips, 0, () => true); const lastFailed = expect(last).rejects.toMatchObject({ name: 'AbortError' })
-    await vi.waitFor(() => expect(late).toBeTypeOf('function')); await boundary.sources.dispose(); late(compileCodeMaterial(source('static', '晚到'))); await lastFailed
+    await vi.waitFor(() => expect(late).toBeTypeOf('function')); await boundary.sources.dispose(); late(testAuthorBundle(source('static', '晚到'))); await lastFailed
     expect(boundary.compiler.dispose).toHaveBeenCalledOnce(); expect(boundary.pictures.size).toBe(0)
     expect(boundary.sources.diagnostics()).toMatchObject({ programs: 0, staticPictures: 0, seenVersions: 0 })
   })
@@ -437,13 +417,13 @@ describe('失效、身份与资源上限', () => {
       expect(boundary.sources.diagnostics().programBytes).toBeLessThanOrEqual(16 * 1024 ** 2)
       const rewritten = { ...document, codeMaterials: [{ ...document.codeMaterials![0], versions: document.codeMaterials![0].versions.map(version => version.id === 'v0' ? { ...version, ...testCodeManifest(source('static', '冒用旧ID'), document) } : version) }] }
       expect(() => boundary.sources.updateDocument(rewritten)).toThrow('不可变代码版本')
-      expect(boundary.compiler.compile).toHaveBeenCalledTimes(36)
+      expect(boundary.compiler.bundle).toHaveBeenCalledTimes(36)
     } finally { await boundary.sources.dispose() }
   })
   it('不可变身份历史不限制数量或总源码字节，编译资源仍按缓存预算分配', async () => {
     const atCountLimit = fixture(source(), 4096); const counted = boundaries(atCountLimit)
     const atByteLimit = fixture()
-    atByteLimit.codeMaterials![0].versions = Array.from({ length: 128 }, (_, index) => ({ id: `v${index}`, apiVersion: 1, languageVersion: 1, ...testCodeManifest(' '.repeat(65536), atByteLimit) }))
+    atByteLimit.codeMaterials![0].versions = Array.from({ length: 128 }, (_, index) => ({ id: `v${index}`, apiVersion: 4, languageVersion: 4, ...testCodeManifest(' '.repeat(65536), atByteLimit) }))
     const sized = boundaries(atByteLimit)
     try {
       expect(counted.sources.diagnostics().seenVersions).toBe(4096)
@@ -455,7 +435,7 @@ describe('失效、身份与资源上限', () => {
       oneNew.id = atByteLimit.id
       expect(() => sized.sources.updateDocument(oneNew)).not.toThrow()
       expect(sized.sources.diagnostics().seenManifestBytes).toBeGreaterThan(manifestBytes)
-      expect(counted.compiler.compile).not.toHaveBeenCalled(); expect(sized.compiler.compile).not.toHaveBeenCalled()
+      expect(counted.compiler.bundle).not.toHaveBeenCalled(); expect(sized.compiler.bundle).not.toHaveBeenCalled()
       expect(counted.acquire).not.toHaveBeenCalled(); expect(sized.acquire).not.toHaveBeenCalled()
     } finally { await counted.sources.dispose(); await sized.sources.dispose() }
   })
@@ -498,7 +478,7 @@ it('录制光标用原片源时钟：移位、裁切与两倍速后点击同帧�
     const zoomed = (await boundary.sources.prepare(document, [zoom], 105, () => true)).effects.get(clip.id)![0].builtin!.cursorDraws!
     expect(zoomed[1].size).toBeCloseTo(draws[1].size * 2)
     expect(zoomed[1].point[0]).toBeCloseTo(0.5 + 0.25 + (200 / 1920 - 0.5) * 2)
-    expect(boundary.compiler.compile).not.toHaveBeenCalled()
+    expect(boundary.compiler.bundle).not.toHaveBeenCalled()
     const changed = { ...document, revision: document.revision + 1 }; boundary.sources.updateDocument(changed)
     fetcher.mockResolvedValue(new Response('{}'))
     await expect(boundary.sources.prepare(changed, [clip], 105, () => true)).rejects.toThrow('校验')
@@ -570,10 +550,10 @@ it('离屏租约允许同名版本属于不同候选，清理旧画面并按源�
     await boundary.sources.prepare(first, first.clips, 0, () => true)
     await boundary.sources.replaceContent(second); boundary.sources.updateDocument(second)
     await boundary.sources.prepare(second, second.clips, 0, () => true)
-    expect(boundary.generator.mock.calls.map(call => call[1].name)).toEqual(['A', 'B'])
-    expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
+    expect(boundary.generator.mock.calls.map(call => call[2].name)).toEqual(['A', 'B'])
+    expect(boundary.compiler.bundle).toHaveBeenCalledTimes(2)
     await boundary.sources.replaceContent(second); boundary.sources.updateDocument(second)
     await boundary.sources.prepare(second, second.clips, 0, () => true)
-    expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
+    expect(boundary.compiler.bundle).toHaveBeenCalledTimes(2)
   } finally { await boundary.sources.dispose() }
 })

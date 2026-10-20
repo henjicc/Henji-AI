@@ -11,8 +11,8 @@ export function testCodeSource(document: unknown, version: { entry: string; file
   const contents = resolveCodeMaterialFiles(version, documentCodeSourceResolver(document)); return contents.files[contents.entry]
 }
 export function testSetCodeSource(document: unknown, version: { entry: string; files: CodeFileReference[] }, source: string): void { Object.assign(version, testCodeManifest(source, document)) }
-export function testCodeAssetSource(source: string, languageVersion: 1 | 2 | 3): { codeSources: CodeSource[]; sourceVersion: { apiVersion: 1; languageVersion: 1 | 2 | 3; entry: string; files: CodeFileReference[] } } {
+export function testCodeAssetSource(source: string): { codeSources: CodeSource[]; sourceVersion: { apiVersion: 4; languageVersion: 4; entry: string; files: CodeFileReference[] } } {
   const manifest = testCodeManifest(source, {})
-  return { sourceVersion: { apiVersion: 1, languageVersion, ...manifest, files: manifest.files.map(file => ({...file, location: `asset:${file.hash}`})) }, codeSources: [{ hash: createHash('sha256').update(source).digest('hex'), source }] }
+  return { sourceVersion: { apiVersion: 4, languageVersion: 4, ...manifest, files: manifest.files.map(file => ({...file, location: `asset:${file.hash}`})) }, codeSources: [{ hash: createHash('sha256').update(source).digest('hex'), source }] }
 }
 export function testFilesSource(input: string | CodeMaterialFiles): string { return typeof input === 'string' ? input : input.files[input.entry] }

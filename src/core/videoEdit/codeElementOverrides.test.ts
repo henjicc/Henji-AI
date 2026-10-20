@@ -5,7 +5,6 @@ import { evaluateCodeMaterial } from './codeMaterial/evaluate'
 import { layoutCodeText } from './codeMaterial/textLayout'
 import { codeElementBounds, codePoint, hitCodeCommands } from './codeMaterial/geometry'
 import { codeElementOverrideStatus, codeElementOverridesSchema, evaluateCodeElementOverride, readCodeElementOverride } from './codeElementOverrides'
-import { codeElementSourceIds } from './codeElementBake'
 import { resizeCodeElement, snapCodeElementMove } from './codeElementManipulation'
 import { CODE_ASSET_VERSION, decodeCodeAsset, encodeCodeAsset } from './codeAsset'
 import { createVideoEditTestDocument } from './testFixtures'
@@ -35,26 +34,24 @@ it('分组父变换、作者锚点、覆盖隐藏与透明度共享命中契约'
   const hidden = evaluateCodeMaterial(program, context, {}, { measureText: measure, sourceTime: time(0), elementOverrides: { box: { hidden: true } } })
   expect(codeElementBounds(hidden).find(value => value.elementId === 'box')!.opacity).toBe(0); expect(hitCodeCommands(hidden, 260, 220)).toBeUndefined()
 })
-it('曲线使用源时间、保持字符串和bool、RGBA和ease插值；非法属性/重复时刻拒绝', () => {
+it('曲线使用源时间、保持bool和ease插值；非法属性/重复时刻拒绝', () => {
   const curve = (value: number, id: string, sourceInUs: number) => ({ id, ...time(sourceInUs), value, interpolation: 'ease' as const })
-  const override = codeElementOverridesSchema.parse({ box: { dx: 10, curves: { dx: [curve(0, 'a', 0), curve(100, 'b', 1e6)], text: [{ id: 'text', ...time(0), value: 'A', interpolation: 'hold' }] } } }).box
+  const override = codeElementOverridesSchema.parse({ box: { dx: 10, curves: { dx: [curve(0, 'a', 0), curve(100, 'b', 1e6)], hidden: [{ id: 'hidden', ...time(0), value: true, interpolation: 'hold' }] } } }).box
   expect(evaluateCodeElementOverride(override, time(250000)).dx).toBeCloseTo(15.625)
-  expect(evaluateCodeElementOverride(override, time(2e6))).toMatchObject({ dx: 100, text: 'A' })
+  expect(evaluateCodeElementOverride(override, time(2e6))).toMatchObject({ dx: 100, hidden: true })
   expect(codeElementOverridesSchema.safeParse({ box: { curves: { unknown: [curve(0, 'x', 0)] } } }).success).toBe(false)
   expect(codeElementOverridesSchema.safeParse({ box: { curves: { dx: [curve(0, 'x', 0), curve(1, 'y', 0)] } } }).success).toBe(false)
   expect(codeElementOverridesSchema.safeParse({ box: { curves: { text: [curve(0, 'x', 0)] } } }).success).toBe(false)
 })
-it('替换文字/字号/字体/字距/行距重新度量；重复别名只改选中实例', () => {
-  const program = compileCodeMaterial(source('const title=text({id:"title",x:100,y:100,text:"A",fontSize:20,fill:[1,1,1,1]});return [title,title];'))
-  const initial = evaluateCodeMaterial(program, context, {}, { measureText: measure }); const id = initial[0].elementId!
-  const commands = evaluateCodeMaterial(program, context, {}, { measureText: measure, sourceTime: time(0), elementOverrides: { [id]: { text: 'new', fontSize: 40, fontFamily: 'serif', letterSpacing: 2, lineHeight: 2, fill: [1,0,0,1] } } })
-  expect(commands[0]).toMatchObject({ text: 'new', fontSize: 40, fontFamily: 'serif', color: [1,0,0,1] })
-  expect(commands[1]).toMatchObject({ text: 'A', fontSize: 20 }); expect(codeElementBounds(commands)[0].width).toBeGreaterThan(codeElementBounds(initial)[0].width)
+it('未声明的外观覆盖与曲线必须拒绝，不允许保存后静默忽略', () => {
+  for (const [key, value] of Object.entries({ fill: [1,0,0,1], stroke: [0,0,0,1], text: 'new', fontSize: 40, fontFamily: 'serif', fontWeight: 700, letterSpacing: 2, lineHeight: 2 })) {
+    expect(codeElementOverridesSchema.safeParse({ box: { [key]: value } }).success).toBe(false)
+    expect(codeElementOverridesSchema.safeParse({ box: { curves: { [key]: [{ id: key, ...time(0), value, interpolation: 'hold' }] } } }).success).toBe(false)
+  }
 })
-it('源码移除才标记失效，动态隐藏帧和repeat仍保留覆盖', () => {
-  const program = compileCodeMaterial(source(`return ctx.time>1?[${rect}]:[];`))
-  const ids = codeElementSourceIds(program, ['box', 'gone'])
-  expect(codeElementOverrideStatus({ box: { dx: 1 }, gone: { fill: [1,0,0,1] } }, ids)).toEqual([{ elementId: 'box', missing: false }, { elementId: 'gone', missing: true }])
+it('只有明确的源码身份列表才标记失效，缺失元素仍保留覆盖', () => {
+  const ids = new Set(['box'])
+  expect(codeElementOverrideStatus({ box: { dx: 1 }, gone: { hidden: true } }, ids)).toEqual([{ elementId: 'box', missing: false }, { elementId: 'gone', missing: true }])
 })
 it('任意作者ID不读取字典原型；危险对象保留名称显式拒绝', () => {
   expect(readCodeElementOverride({}, 'constructor')).toBeUndefined()
@@ -83,14 +80,14 @@ it('作者已有旋转时非等比角点缩放沿元素轴，固定对角且不�
   expect(values.scaleX).toBeCloseTo(2); expect(values.scaleY).toBeCloseTo(1)
   expect(next.matrix[0] * next.matrix[2] + next.matrix[1] * next.matrix[3]).toBeCloseTo(0)
 })
-it('元素贝塞尔过冲按已有数字与RGBA范围夹取，不中断绘制', () => {
+it('元素贝塞尔过冲按透明度范围夹取，不中断绘制', () => {
   const curve = [{ id: 'a', ...time(0), value: 0, interpolation: 'bezier' as const, bezier: [1 / 3, 3, 2 / 3, 3] as [number, number, number, number] }, { id: 'b', ...time(1000000), value: 1, interpolation: 'linear' as const }]
-  const value = codeElementOverridesSchema.parse({ box: { curves: { opacity: curve, fill: curve.map((point, i) => ({ ...point, id: `fill${i}`, value: i ? [1, 1, 1, 1] : [0, 0, 0, 0] })) } } }).box
-  expect(evaluateCodeElementOverride(value, time(500000))).toMatchObject({ opacity: 1, fill: [1, 1, 1, 1] })
+  const value = codeElementOverridesSchema.parse({ box: { curves: { opacity: curve } } }).box
+  expect(evaluateCodeElementOverride(value, time(500000))).toMatchObject({ opacity: 1 })
 })
 it('代码资产编码/导入默认值/新片段复制保留覆盖，并保持片段编辑独立', () => {
   const code = source(`return [${rect}];`); const program = compileCodeMaterial(code)
-  const asset = decodeCodeAsset(encodeCodeAsset({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '编辑', ...testCodeAssetSource(code, 3), parameters: {}, images: [], elementOverrides: { box: { dx: 20 } } }))
+  const asset = decodeCodeAsset(encodeCodeAsset({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '编辑', ...testCodeAssetSource(code), parameters: {}, images: [], elementOverrides: { box: { dx: 20 } } }))
   const document = createVideoEditTestDocument('导入'); document.codeMaterials = [{ id: 'd', name: '编辑', defaultVersionId: 'v', versions: [{ id: 'v', ...asset.sourceVersion }] }]; document.items.push({ id: 'i', name: '编辑', kind: 'code', code: { definitionId: 'd', versionId: 'v', parameters: {} }, elementOverrides: asset.elementOverrides })
   const clip = makeVideoEditItemClip(document, 'i', document.sequences[0].id, { frame: 0 }, () => program)
   expect(clip.elementOverrides).toEqual(asset.elementOverrides); clip.elementOverrides!.box.dx = 90; expect(asset.elementOverrides!.box.dx).toBe(20)

@@ -1,5 +1,7 @@
-import type { CodeMatrix, CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
-import { codeMultiply, codePoint } from '@/core/videoEdit/codeMaterial/geometry'
+import type { CodeMatrix } from '@/core/videoEdit/codeMaterial/contract'
+import type { AuthorElementObservation } from '@/core/videoEdit/codeAuthorProgram'
+export type { AuthorElementObservation } from '@/core/videoEdit/codeAuthorProgram'
+import { codePoint } from '@/core/videoEdit/codeMaterial/geometry'
 import type { CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
 import type { AuthorLayer, AuthorModule, AuthorParameters } from './videoEditAuthorModule'
 
@@ -10,30 +12,7 @@ export const AUTHOR_WHOLE_EFFECT_ID = 'effect'
 
 export function authorLayerId(layer: AuthorLayer, index: number): string { return layer.id ?? `layer:${index}` }
 
-/** Same local-axis/center convention as existing direct manipulation; translation
- * stays in composition coordinates. Called only when an override exists. */
-export function authorOverrideMatrix(matrix: CodeMatrix, bounds: readonly number[], value: AuthorElementOverride): CodeMatrix {
-  const x = (bounds[0] + bounds[2]) / 2, y = (bounds[1] + bounds[3]) / 2
-  const angle = (value.rotation ?? 0) * Math.PI / 180, c = Math.cos(angle), s = Math.sin(angle)
-  const sx = (value.scale ?? 1) * (value.scaleX ?? 1), sy = (value.scale ?? 1) * (value.scaleY ?? 1)
-  const local: CodeMatrix = [c * sx, s * sx, -s * sy, c * sy, x - c * sx * x + s * sy * y, y - s * sx * x - c * sy * y]
-  const result = codeMultiply(matrix, local)
-  result[4] += value.dx ?? 0; result[5] += value.dy ?? 0
-  return result
-}
-
-export interface AuthorElementObservation {
-  id: string
-  name: string
-  bounds: [number, number, number, number]
-  matrix: CodeMatrix
-  corners: [number, number][]
-  sourceSpan?: CodeSourceSpan
-  factory?: { file: string; name: string }
-  parameterKeys: string[]
-  textParameterKeys: string[]
-  data?: { parameter: string; index: number; key?: string | number; keyField?: string; value: unknown }
-}
+export { authorOverrideMatrix } from '@/core/videoEdit/codeAuthorGeometry'
 
 /** Resolve only when observed, against the parameters of the rendered frame. */
 export function authorLayerData(layer: AuthorLayer, values: AuthorParameters): AuthorElementObservation['data'] {

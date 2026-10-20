@@ -5,7 +5,7 @@ import { CODE_ASSET_VERSION, CODE_ASSET_LIMITS, decodeCodeAsset, encodeCodeAsset
 import { videoEditDocumentSchema } from './document'
 
 const content = { sizeBytes: 123, fileModifiedAt: 456, contentIdentity: 'a'.repeat(64) }
-const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '透明标题', ...testCodeAssetSource('source', 2), parameters: { label: '中文', size: 20, tint: [1, 0, 0, 1], image: { kind: 'image', mediaId: 'old-image' } }, curves: { size: [{ id: 'key', sourceInUs: 1, sourceRemainder: { numerator: 1, denominator: 3 }, value: 21, interpolation: 'ease' }] }, images: [{ kind: 'image', id: 'old-image', path: 'D:/original.png', content, assetId: 'original' }] })
+const fixture = (): CodeAsset => ({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '透明标题', ...testCodeAssetSource('source'), parameters: { label: '中文', size: 20, tint: [1, 0, 0, 1], image: { kind: 'image', mediaId: 'old-image' } }, curves: { size: [{ id: 'key', sourceInUs: 1, sourceRemainder: { numerator: 1, denominator: 3 }, value: 21, interpolation: 'ease' }] }, images: [{ kind: 'image', id: 'old-image', path: 'D:/original.png', content, assetId: 'original' }] })
 describe('可编辑代码资产文件契约', () => {
   it('音频、视频固定时间和下方画面无损往返，拒绝依赖种类错配', () => {
     const asset: CodeAsset = { ...fixture(), parameters: { sound: { kind: 'audio', mediaId: 'video' }, picture: { kind: 'video', mediaId: 'video', time: .25 }, lower: { kind: 'sequence', mediaId: 'below' } }, images: [{ id: 'video', kind: 'video', path: 'D:/original.mp4', content }] }
@@ -34,7 +34,7 @@ describe('可编辑代码资产文件契约', () => {
   })
   it('按UTF-8源字节、整体文件、声明及曲线预算拒绝越界', () => {
     const input = fixture()
-    expect(() => encodeCodeAsset({ ...input, ...testCodeAssetSource('汉'.repeat(30_000), 2) })).toThrow()
+    expect(() => encodeCodeAsset({ ...input, ...testCodeAssetSource('汉'.repeat(30_000)) })).toThrow()
     expect(() => decodeCodeAsset(new Uint8Array(CODE_ASSET_LIMITS.bytes + 1))).toThrow()
     const parameters = { ...input.parameters, ...Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`p${index}`, index])) }
     expect(decodeCodeAsset(encodeCodeAsset({ ...input, parameters })).parameters).toEqual(parameters)

@@ -1,8 +1,16 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { resolveObjectURL } from 'node:buffer'
+import { testAuthorBundle, testAuthorProgram, testAuthorModule } from './videoEditAuthorTestFixtures'
+vi.mock('./videoEditAuthorModule', async importOriginal => {
+  const actual = await importOriginal<typeof import('./videoEditAuthorModule')>()
+  return { ...actual, loadAuthorModule: async (url: string) => {
+    const source = await resolveObjectURL(url)!.text()
+    return testAuthorModule(source)
+  } }
+})
 import { buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { createVideoEditSequence, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
@@ -81,8 +89,8 @@ describe('剪辑智能区域混合（真实设备）', () => {
     const mask = new Uint8Array(W * H)
     for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) mask[y * W + x] = 255
     for (let index = 0; index < 40; index++) {
-      const program = compileCodeMaterial(`export default {apiVersion:1,name:"旋转通道${index}",kind:"filter",mode:"static",width:16,height:8,durationSeconds:4,seed:0,parameters:{},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.g,c.b,c.r,c.a);}}`)
-      plans.push({ effect: { id: `code-${index}`, name: '旋转通道', enabled: true, amount: 1, code: { definitionId: 'rotate', versionId: `v${index}`, parameters: {} } }, version: `v${index}`, program, parameters: {}, context, transitionHandles: false })
+      const program = testAuthorProgram(testAuthorBundle("export default { name: '旋转通道', kind: 'filter', createWebGPU(device) {\n const module = device.createShaderModule({code: `@group(0) @binding(0) var source: texture_2d<f32>;\n @vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f { let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3)); return vec4f(p[i],0,1); }\n @fragment fn fs(@builtin(position) p:vec4f)->@location(0) vec4f { let c=textureLoad(source,vec2i(p.xy),0); return c.gbra; }`});\n const pipelines = new Map();\n return {draw(target,t,p,w,h,assets,info,inputs) {\n let pipeline=pipelines.get(target.format); if(!pipeline){pipeline=device.createRenderPipeline({layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:target.format}]}});pipelines.set(target.format,pipeline);}\n const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:inputs.current.createView()}]});\n const encoder=device.createCommandEncoder(); const pass=encoder.beginRenderPass({colorAttachments:[{view:target.createView(),loadOp:'clear',storeOp:'store'}]});pass.setPipeline(pipeline);pass.setBindGroup(0,bind);pass.draw(3);pass.end();device.queue.submit([encoder.finish()]);\n }};\n}}"))
+      plans.push({ effect: { id: `code-${index}`, name: '旋转通道', enabled: true, amount: 1, code: { definitionId: 'rotate', versionId: `v${index}`, parameters: {} } }, version: `v${index}`, program, parameters: {}, context, instanceKey: `code-${index}`, info: { time: 0, frameDuration: 1 / 30, clip: { time: 0, duration: 4 } }, transitionHandles: false })
       if (index % 2 === 0) {
         const masked = index % 4 === 0
         plans.push({ effect: { id: `invert-${index}`, name: '反相', enabled: true, amount: .25, builtin: { id: 'invert', params: {} }, ...(masked ? { mask: { regionId: 'shapes', shapes: [{ id: 'left', kind: 'rect', points: [[0,0,0,0,0,0],[.5,0,0,0,0,0],[.5,1,0,0,0,0],[0,1,0,0,0,0]] }] } } : {}) }, builtin: { id: 'invert', params: {} }, ...(masked ? { mask: { width: W, height: H, data: mask } } : {}) })

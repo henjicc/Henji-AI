@@ -2,7 +2,9 @@
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, within, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTestFixtures'
+const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
+vi.mock('../application/videoEditAuthorInspection', () => ({ inspectVideoEditAuthor: async (bundle: ReturnType<typeof testAuthorBundle>) => testAuthorProgram(bundle) }))
 import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
@@ -22,8 +24,8 @@ import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
-const source = `export default {apiVersion:1,name:"标量",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",description:"绘制强度",default:5,min:0,max:10,step:0.25,unit:"倍",animatable:true},ink:{type:"color",title:"颜色",default:[0.1,0.2,0.3,0.4],animatable:true},flag:{type:"boolean",title:"开关",default:false,animatable:true},style:{type:"choice",title:"样式",default:"A",options:["A","B"]},caption:{type:"text",title:"文字",default:"旧",maxLength:12,animatable:true}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:10,height:10,fill:ctx.params.ink})];}}`
-const alternate = `export default {apiVersion:1,name:"尺寸素材",kind:"generator",mode:"static",width:64,height:64,durationSeconds:10,seed:1,parameters:{size:{type:"number",title:"尺寸",default:20,min:1,max:100,step:1}},render(ctx){return [rect({x:0,y:0,width:ctx.params.size,height:10,fill:[1,0,0,1]})];}}`
+const source = "export default {name:\"标量\",kind:\"generator\",mode:\"dynamic\",width:64,height:64,durationSeconds:10,params:[{key:\"amount\",type:\"number\",title:\"强度\",description:\"绘制强度\",default:5,min:0,max:10,step:0.25,unit:\"倍\",animatable:true},{key:\"ink\",type:\"color\",title:\"颜色\",default:[0.1,0.2,0.3,0.4],animatable:true},{key:\"flag\",type:\"boolean\",title:\"开关\",default:false,animatable:true},{key:\"style\",type:\"choice\",title:\"样式\",default:\"A\",options:[\"A\",\"B\"]},{key:\"caption\",type:\"text\",title:\"文字\",default:\"旧\",maxLength:12,animatable:true}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
+const alternate = "export default {name:\"尺寸素材\",kind:\"generator\",mode:\"static\",width:64,height:64,durationSeconds:10,params:[{key:\"size\",type:\"number\",title:\"尺寸\",default:20,min:1,max:100,step:1}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
 let owner: VideoEditInstance
 let onError: ReturnType<typeof vi.fn>
 let sequenceId: string
@@ -114,9 +116,9 @@ beforeEach(async () => {
   owner = (await createLegacyTrackVideoEditProject())
   const programs = [source, alternate].map(compileCodeMaterial)
   const persisted = await Promise.all([source, alternate].map(text => addressCodeMaterialFiles(text)))
-  for (const [index, program] of programs.entries()) rememberVideoEditCodeMetadata(owner, `d${index}`, { id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 1, languageVersion: 1 }, program)
+  for (const [index, program] of programs.entries()) rememberVideoEditCodeMetadata(owner, `d${index}`, { id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 4, languageVersion: 4 }, program)
   editVideoProject(owner.document.id, document => {
-    document.codeMaterials = programs.map((program, index) => ({ id: `d${index}`, name: program.name, defaultVersionId: `v${index}`, versions: [{ id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 1, languageVersion: 1 }] }))
+    document.codeMaterials = programs.map((program, index) => ({ id: `d${index}`, name: program.name, defaultVersionId: `v${index}`, versions: [{ id: `v${index}`, entry: persisted[index].entry, files: persisted[index].files, apiVersion: 4, languageVersion: 4 }] }))
     for (const [index, program] of programs.entries()) {
       document.items.push({ id: `i${index}`, name: program.name, kind: 'code', code: { definitionId: `d${index}`, versionId: `v${index}`, parameters: Object.fromEntries(program.parameters.map(parameter => [parameter.key, parameter.default])) } })
       document.sequences[0].clips.push(makeVideoEditItemClip(document, `i${index}`, document.sequences[0].id, { frame: 0 }, readVideoEditCodeMetadata(owner, document)))
@@ -279,9 +281,9 @@ it('已有关键帧按需展开，取消后未聚焦的数值步进仍可开始�
 })
 
 it('新角度和点位在实例/关键帧共用控件，自定义字体悬停回滚完整组件值', async () => {
-  const rich = `export default {apiVersion:1,languageVersion:3,name:"丰富参数",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,types:{typography:{title:"文字组件",layout:"stack",fields:{face:{type:"font",title:"组件字体",default:"sans-serif"},size:{type:"number",title:"组件字号",default:12,min:1,max:100,step:1}}}},parameters:{angle:{type:"angle",title:"转角",default:0,min:-180,max:180,animatable:true},point:{type:"point",title:"位置",default:{x:0.5,y:0.5},animatable:true},type:{type:"typography",title:"字体组合",default:{}}},render(ctx){return [rect({x:0,y:0,width:10,height:10,fill:[1,0,0,1]})];}}`
+  const rich = "export default {name:\"丰富参数\",kind:\"generator\",mode:\"dynamic\",width:64,height:64,durationSeconds:10,types:{typography:{title:\"文字组件\",layout:\"stack\",fields:{face:{type:\"font\",title:\"组件字体\",default:\"sans-serif\"},size:{type:\"number\",title:\"组件字号\",default:12,min:1,max:100,step:1}}}},params:[{key:\"angle\",type:\"angle\",title:\"转角\",default:0,min:-180,max:180,animatable:true},{key:\"point\",type:\"point\",title:\"位置\",default:{x:0.5,y:0.5},animatable:true},{key:\"type\",type:\"typography\",title:\"字体组合\",default:{}}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
   const program = compileCodeMaterial(rich); const persisted = await addressCodeMaterialFiles(rich)
-  const version = { id: 'rich-version', entry: persisted.entry, files: persisted.files, apiVersion: 1 as const, languageVersion: 3 as const }
+  const version = { id: 'rich-version', entry: persisted.entry, files: persisted.files, apiVersion: 4 as const, languageVersion: 4 as const }
   rememberVideoEditCodeMetadata(owner, 'rich-definition', version, program)
   editVideoProject(owner.document.id, document => {
     document.codeMaterials!.push({ id: 'rich-definition', name: program.name, defaultVersionId: version.id, versions: [version] })

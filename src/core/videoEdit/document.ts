@@ -375,7 +375,7 @@ export function adjustVideoEditClip(document: VideoEditComposition, clip: VideoE
   if (clip.kind === 'code' && !program) throw new Error('代码片段尚未完成源码检查。')
   const timed = ['video', 'audio', 'code', 'graphic', 'adjustment', 'sequence'].includes(clip.kind) || Boolean(clip.effects?.length)
   if (adjustment.mode === 'out') {
-    const limit = Math.min(Math.floor(document.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) - clip.start, program?.mode === 'dynamic' ? clip.duration + videoEditClipTailRoom(clip, document.fps, program.durationSeconds) + 1 : timed && sourceDuration !== undefined ? clip.duration + videoEditClipTailRoom(clip, document.fps, sourceDuration) : Infinity)
+    const limit = Math.min(Math.floor(document.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS) - clip.start, program?.mode === 'dynamic' && program.durationSeconds !== undefined ? clip.duration + videoEditClipTailRoom(clip, document.fps, program.durationSeconds) + 1 : timed && sourceDuration !== undefined ? clip.duration + videoEditClipTailRoom(clip, document.fps, sourceDuration) : Infinity)
     const duration = Math.max(1, Math.min(limit, clip.duration + adjustment.delta))
     return { ...sliceVideoEditClipKeyframes(clip, 0, duration), duration }
   }

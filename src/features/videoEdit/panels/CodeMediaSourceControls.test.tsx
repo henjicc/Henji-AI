@@ -5,7 +5,9 @@ import { createVideoEditTestProject as createVideoEditProject } from '../applica
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTestFixtures'
+const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
+vi.mock('../application/videoEditAuthorInspection', () => ({ inspectVideoEditAuthor: async (bundle: ReturnType<typeof testAuthorBundle>) => testAuthorProgram(bundle) }))
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
 import { getPlatform } from '@/platform/runtime'
@@ -26,7 +28,7 @@ vi.mock('@/stores/navigationStore', () => ({ openAssetLibrary: vi.fn() }))
 vi.mock('../application/videoEditCodeImages', () => ({ bindVideoEditCodeImage: vi.fn(), chooseVideoEditCodeImage: vi.fn() }))
 vi.mock('../application/videoEditCodeCandidates', () => ({ prepareVideoEditCodeCandidate: vi.fn(), commitVideoEditCodeCandidate: vi.fn(), disposeVideoEditCodeCandidate: vi.fn() }))
 // Domain compilation/import/trial is tested at its facade. These tests isolate UI authority and resource ownership.
-const source = `export default {apiVersion:1,name:"图片代码",kind:"generator",mode:"static",width:64,height:64,durationSeconds:5,seed:1,parameters:{logo:{type:"image",title:"图片",default:null},amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:64,height:64})];}}`
+const source = "export default {name:\"图片代码\",kind:\"generator\",mode:\"static\",width:64,height:64,durationSeconds:5,params:[{key:\"logo\",type:\"image\",title:\"图片\",default:null},{key:\"amount\",type:\"number\",title:\"强度\",default:5,min:0,max:10,step:1}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
 let owner: VideoEditInstance
 let sequenceId: string
 let clipIds: string[]
@@ -75,7 +77,7 @@ beforeEach(async () => {
   vi.mocked(disposeVideoEditCodeCandidate).mockReset().mockImplementation(proof => { if (!disposed.has(proof)) { disposed.add(proof); proof.bitmap.close() } })
   vi.mocked(openAssetLibrary).mockClear()
   owner = (await createVideoEditProject())!
-  const program = compileCodeMaterial(source); const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 1 as const, languageVersion: program.languageVersion }
+  const program = compileCodeMaterial(source); const version = { id: 'v', ...testCodeManifest(source, owner.document), apiVersion: 4 as const, languageVersion: program.languageVersion }
   rememberVideoEditCodeMetadata(owner, 'd', version, program)
   editVideoProject(owner.document.id, document => {
     document.codeMaterials = [{ id: 'd', name: program.name, defaultVersionId: 'v', versions: [version] }]

@@ -15,6 +15,18 @@ export const VIDEO_EDIT_FRAME_RATES: VideoEditRatio[] = [
   { numerator: 120000, denominator: 1001 }, { numerator: 120, denominator: 1 },
 ]
 export function videoEditFps(rate: VideoEditRatio): number { return rate.numerator / rate.denominator }
+/** Preserve a declared decimal frame without rounding it to an integer picture. */
+export function videoEditFrameFraction(frame: number): { numerator: bigint; denominator: bigint } {
+  if (!Number.isFinite(frame) || Math.abs(frame) > Number.MAX_SAFE_INTEGER) throw new Error('取帧时刻必须是范围内的有限数值。')
+  const [mantissa, exponent = '0'] = String(frame).split('e')
+  const power = Number(exponent) - (mantissa.split('.')[1]?.length ?? 0)
+  let numerator = BigInt(mantissa.replace('.', '')), denominator = 1n
+  if (power < 0) denominator = 10n ** BigInt(-power)
+  else numerator *= 10n ** BigInt(power)
+  let divisor = numerator < 0n ? -numerator : numerator, remainder = denominator
+  while (remainder) { const next = divisor % remainder; divisor = remainder; remainder = next }
+  return { numerator: numerator / divisor, denominator: denominator / divisor }
+}
 /** Round once from an absolute boundary; never accumulate rounded frame durations. */
 export function rescaleVideoEditFrame(frame: number, from: VideoEditRatio, to: VideoEditRatio): number {
   const numerator = BigInt(frame) * BigInt(from.denominator) * BigInt(to.numerator)

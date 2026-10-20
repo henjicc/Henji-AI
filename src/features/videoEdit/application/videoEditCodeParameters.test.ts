@@ -2,7 +2,9 @@ import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtur
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTestFixtures'
+const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
+vi.mock('./videoEditAuthorInspection', () => ({ inspectVideoEditAuthor: async (bundle: ReturnType<typeof testAuthorBundle>) => testAuthorProgram(bundle) }))
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -21,7 +23,7 @@ import { reopenVideoEdit } from './videoEditDocumentTestKit'
 import { VideoEditCodeCompiler } from '../engine/videoEditCodeCompiler'
 import { replaceParameterPath } from '@/core/imaging/parameterPath'
 
-const source = `export default {apiVersion:1,name:"参数",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1,animatable:true},other:{type:"boolean",title:"开关",default:false}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:100,height:100,fill:[1,0,0,1]})];}}`
+const source = "export default {name:\"参数\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:10,params:[{key:\"amount\",type:\"number\",title:\"强度\",default:5,min:0,max:10,step:1,animatable:true},{key:\"other\",type:\"boolean\",title:\"开关\",default:false}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
 const files = new Map<string, string>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
@@ -42,7 +44,7 @@ async function setup(sourceText = source) {
 }
 
 it('数据表文字样式修改立即读回、保存并由同一撤销恢复，不写源码', async () => {
-  const { owner, target } = await setup('export default {apiVersion:1,languageVersion:3,name:"表格",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,parameters:{rows:{type:"table",title:"节点",fields:{text:{type:"text",title:"文案",default:"原文",maxLength:200},style:{type:"textStyle",title:"样式",default:{fontSize:48}}},default:[{},{}]}},render(ctx){return [];}}')
+  const { owner, target } = await setup("export default {name:\"表格\",kind:\"generator\",mode:\"dynamic\",width:64,height:64,durationSeconds:10,params:[{key:\"rows\",type:\"table\",title:\"节点\",fields:{text:{type:\"text\",title:\"文案\",default:\"原文\",maxLength:200},style:{type:\"textStyle\",title:\"样式\",default:{fontSize:48}}},default:[{},{}]}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}")
   const read = () => readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId)
   const original = read().parameters.rows
   const next = replaceParameterPath(replaceParameterPath(original, ['1', 'text'], '新文案'), ['1', 'style', 'fontSize'], 72)
@@ -105,7 +107,7 @@ it('mask path candidate commits through the native effect and public read/write,
     expect((await app.read(ref, ['video_edit.effect.mask'])).properties).toMatchObject({ 'video_edit.effect.mask': changed })
   } finally { app.dispose() }
   await saveVideoEdit(target.projectId)
-  vi.spyOn(VideoEditCodeCompiler.prototype, 'compile').mockResolvedValue(compileCodeMaterial(source))
+  vi.spyOn(VideoEditCodeCompiler.prototype, 'bundleQueued').mockResolvedValue(testAuthorBundle(source))
   const reopened = await reopenVideoEdit(target.projectId)
   const persisted = reopened.document.sequences[0].clips[0].effects![0].mask!
   expect(isShapesMask(persisted) && persisted.shapes[0].pathAnimation?.pointIds).toEqual(pointIds)
@@ -132,8 +134,8 @@ it('60 code parameter previews only copy the target branch; cancel restores valu
 })
 it('v3新形状沿公共片段与素材项写入、校验、读回、撤销及保存；元数据保留组件名和显示条件', async () => {
   const owner = (await createVideoEditProject())!; const app = createApplicationHarness()
-  const src = 'export default {apiVersion:1,languageVersion:3,name:"参数化灯光",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,types:{light:{title:"灯光",layout:"row",fields:{power:{type:"number",title:"强度",default:1,min:0,max:2,step:.01},position:{type:"point",title:"位置",default:{x:.5,y:.5}},font:{type:"font",title:"字体",default:"sans-serif"}}}},parameters:{enabled:{type:"boolean",title:"启用",default:true},lamp:{type:"light",title:"主光",group:"照明",advanced:true,visibleWhen:{param:"enabled",equals:true},tooltip:"调整主光",description:"主体照明",default:{power:1.4},animatable:true},curve:{type:"curve",title:"映射",default:[{x:0,y:0},{x:1,y:1}],animatable:true}},render(ctx){return [rect({x:ctx.params.lamp.position.x,y:0,width:100,height:100,fill:[1,0,0,1]})];}}'
-  const program = compileCodeMaterial(src); const version = { id: 'v3', ...testCodeManifest(src, owner.document), apiVersion: 1 as const, languageVersion: 3 as const }
+  const src = "export default {name:\"参数化灯光\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:10,types:{light:{title:\"灯光\",layout:\"row\",fields:{power:{type:\"number\",title:\"强度\",default:1,min:0,max:2,step:.01},position:{type:\"point\",title:\"位置\",default:{x:.5,y:.5}},font:{type:\"font\",title:\"字体\",default:\"sans-serif\"}}}},params:[{key:\"enabled\",type:\"boolean\",title:\"启用\",default:true},{key:\"lamp\",type:\"light\",title:\"主光\",group:\"照明\",advanced:true,visibleWhen:{param:\"enabled\",equals:true},tooltip:\"调整主光\",description:\"主体照明\",default:{power:1.4},animatable:true},{key:\"curve\",type:\"curve\",title:\"映射\",default:[{x:0,y:0},{x:1,y:1}],animatable:true}],draw(ctx,t,p){ctx.fillRect(p.amount ?? 0,0,100,100);}}"
+  const program = compileCodeMaterial(src); const version = { id: 'v3', ...testCodeManifest(src, owner.document), apiVersion: 4 as const, languageVersion: 4 as const }
   rememberVideoEditCodeMetadata(owner, 'v3d', version, program)
   editVideoProject(owner.document.id, document => {
     document.codeMaterials = [{ id: 'v3d', name: program.name, defaultVersionId: version.id, versions: [version] }]
@@ -218,8 +220,8 @@ it('命名图形对象复用参数曲线和单笔手势，不伪造代码版本�
 })
 it('同片段多个效果按稳定id分别调参、动画和撤销，静态效果保留长源入点', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
-  const text = 'export default {apiVersion:1,name:"滤镜",kind:"filter",mode:"static",width:1920,height:1080,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
-  const program = compileCodeMaterial(text); const version = { id: 'filter-v', ...testCodeManifest(text, owner.document), apiVersion: 1 as const, languageVersion: 1 as const }
+  const text = "export default {name:\"滤镜\",kind:\"filter\",mode:\"static\",width:1920,height:1080,durationSeconds:10,params:[{key:\"gain\",type:\"number\",title:\"强度\",default:.5,min:0,max:1,step:.01,animatable:true}],createWebGPU(){return {draw(){}};}}"
+  const program = compileCodeMaterial(text); const version = { id: 'filter-v', ...testCodeManifest(text, owner.document), apiVersion: 4 as const, languageVersion: 4 as const }
   rememberVideoEditCodeMetadata(owner, 'filter-d', version, program)
   const itemId = createVideoEditGraphicItem(id, { kind: 'solid' }); const [clipId] = appendVideoEditItems(id, [itemId], sequenceId)
   editVideoProject(id, document => {

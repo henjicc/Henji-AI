@@ -176,8 +176,8 @@ export function videoEditTransitionsAt(sequence: Pick<VideoEditSequence, 'clips'
   return sequence.transitions.filter(transition => videoEditTransitionMedium(transition.kind) === medium).map(transition => videoEditTransitionWindow(sequence, transition, index)).filter(window => frame >= window.start && frame < window.end)
 }
 export function videoEditTransitionAmount(window: Pick<VideoEditTransitionWindow, 'start' | 'end'>, frame: number): number {
-  if (!Number.isInteger(window.start) || !Number.isInteger(window.end) || window.end - window.start < 2 || !Number.isInteger(frame) || frame < window.start || frame >= window.end) throw new Error('请求帧不在转场半开窗口内。')
-  return (frame - window.start) / (window.end - window.start - 1)
+  if (!Number.isInteger(window.start) || !Number.isInteger(window.end) || window.end - window.start < 2 || !Number.isFinite(frame) || frame < window.start || frame >= window.end) throw new Error('请求帧不在转场半开窗口内。')
+  return Math.min(1, (frame - window.start) / (window.end - window.start - 1))
 }
 /**
  * 画面过渡交给混合着色器的参数（`mix(left, right, amount, through)`，through 为经过的预乘纯色）。
@@ -241,11 +241,11 @@ function assertSourceHandles(document: VideoEditDocument, sequence: VideoEditSeq
     if (clip.kind === 'code') {
       if (!clip.code) throw new Error('转场代码片段缺少固定源码。')
       const program = read?.(clip.code)
-      if (program?.mode === 'dynamic') durations.push(program.durationSeconds)
+      if (program?.mode === 'dynamic' && program.durationSeconds !== undefined) durations.push(program.durationSeconds)
     }
     for (const effect of clip.effects ?? []) {
       const program = effect.code && read?.(effect.code)
-      if (program?.mode === 'dynamic') durations.push(program.durationSeconds)
+      if (program?.mode === 'dynamic' && program.durationSeconds !== undefined) durations.push(program.durationSeconds)
     }
     if (!durations.length) continue // The source-authorized metadata stage checks deferred code handles.
     // This exact rational operation rejects a negative first sample. No frame allowance.

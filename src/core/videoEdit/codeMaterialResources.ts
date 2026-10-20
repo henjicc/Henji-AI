@@ -2,8 +2,10 @@ import type { CodeMaterialInstance } from './codeMaterialPersistence'
 import { isCodeImageReference, isCodeAudioReference } from './codeMaterial/contract'
 import type { CodeExpression, CodeMaterialProgram } from './codeMaterial/contract'
 import { codeExpressionChildren } from './codeMaterial/filterFrameExpressions'
+import type { CodeAuthorProgram } from './codeAuthorProgram'
 
-export function codeMaterialUsesAudio(program: CodeMaterialProgram): boolean {
+export function codeMaterialUsesAudio(program: CodeMaterialProgram | CodeAuthorProgram): boolean {
+  if ('bundle' in program) return program.parameters.some(parameter => parameter.type === 'audio')
   const uses = (value: CodeExpression): boolean => value.kind === 'v3call' && value.op.startsWith('audio.') || codeExpressionChildren(value).some(uses)
   return uses(program.result) || program.bindings.some(binding => uses(binding.expression))
 }

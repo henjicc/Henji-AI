@@ -31,9 +31,9 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 } }))
 // 本测试验证正式领域与真实 Dockview 的接线，jsdom 不运行源码检查 Worker。
 vi.mock('../engine/videoEditCodeCompiler', async () => {
-  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
+  const { testAuthorBundle } = await import('../engine/videoEditAuthorTestFixtures')
   return { VideoEditCodeCompiler: class {
-    async compile(source: string) { return compileCodeMaterial(source) }
+    async bundleQueued(source: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) { return testAuthorBundle(source) }
     dispose() {}
   } }
 })
@@ -191,7 +191,7 @@ it.each(['style_kits', 'title_templates', 'annotations', 'effects_library', 'pre
   try {
     const document = createVideoEditDocument('检查器切换')
     const code = { definitionId: 'definition', versionId: 'version', parameters: {} }
-    document.codeMaterials = [{ id: code.definitionId, name: '代码画面', defaultVersionId: code.versionId, versions: [{ id: code.versionId, apiVersion: 1, languageVersion: 3, ...testCodeManifest('export default {apiVersion:1,languageVersion:3,name:"代码画面",kind:"generator",mode:"static",width:1920,height:1080,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"box",x:0,y:0,width:100,height:100,fill:[0.3, 0.75, 0.86, 1]})];}}', document) }] }]
+    document.codeMaterials = [{ id: code.definitionId, name: '代码画面', defaultVersionId: code.versionId, versions: [{ id: code.versionId, apiVersion: 4, languageVersion: 4, ...testCodeManifest("export default {name:\"代码画面\",kind:\"generator\",mode:\"static\",width:1920,height:1080,durationSeconds:2,params:[],draw(){}}", document) }] }]
     document.items.push({ id: 'item', name: '代码画面', kind: 'code', code })
     document.sequences[0].clips.push(videoEditClipSchema.parse({ id: 'clip', itemId: 'item', name: '代码画面', kind: 'code', track: 1, start: 0, duration: 60, code, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }))
     const instance = await openSeededVideoEdit(document)
@@ -531,3 +531,5 @@ it('宿主重复发布不重绘隐藏素材面板，重新显示时读到最新�
   expect(view.getByText('素材面板 隐藏后更新')).toBeTruthy()
   expect(projectRenders).toHaveBeenCalledOnce()
 })
+
+vi.mock('../application/videoEditAuthorInspection', async () => { const { testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures'); return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle) } })

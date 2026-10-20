@@ -1,3 +1,4 @@
+import { AUTHOR_GAIN_SOURCE } from './videoEditAuthorProbeSources'
 import { expect, it, vi } from 'vitest'
 import { writeFileSync } from 'node:fs'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
@@ -40,7 +41,7 @@ export function parameterBenchmark(setDevice: (device: GpuDevice) => void): void
     const shader = SHADER_GRAPH_EFFECT_DEFINITIONS.find(value => value.id === 'shaders.Pixelate')!
     expect(shader).toBeDefined()
     const shaderParam = shader.params.find(value => value.type === 'number')!
-    const filter = 'export default {apiVersion:1,name:"增益",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"增益",default:.8,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
+    const filter = AUTHOR_GAIN_SOURCE
     const reports: object[] = []
     try {
       for (const [width, height] of [[1920, 1080], [3840, 2160]]) for (const tracks of [1, 3]) for (const kind of ['grade', 'hsl', 'glow', 'shader', 'code']) {
@@ -49,7 +50,7 @@ export function parameterBenchmark(setDevice: (device: GpuDevice) => void): void
         sequence.tracks = Array.from({ length: tracks }, (_, index) => ({ ...sequence.tracks.find(value => value.kind === 'video')!, id: `track${index}`, index: index + 1 }))
         project.media = [{ id: 'media', name: 'GPU fixture', kind: 'video', path: '/fixture.mp4', width, height, durationSeconds: 10 }]
         project.items = [{ id: 'item', name: 'GPU fixture', kind: 'video', mediaId: 'media' }]
-        project.codeMaterials = [{ id: 'filter', name: '增益', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 1, ...testCodeManifest(filter, project) }] }]
+        project.codeMaterials = [{ id: 'filter', name: '增益', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...testCodeManifest(filter, project) }] }]
         sequence.clips = Array.from({ length: tracks }, (_, i) => ({ ...makeVideoEditItemClip(project, 'item', sequence.id, { frame: 0, track: i + 1 }), id: `clip${i}`, duration: 120, ...(i ? { scale: .4, x: .15 * i, y: .15 * i } : {}), effects: [videoEditEffectSchema.parse({ id: `effect${i}`, name: kind, enabled: true, amount: 1, ...(kind === 'code' ? { code: { definitionId: 'filter', versionId: 'v', parameters: { gain: .8 } } } : { builtin: { id: kind === 'glow' ? 'glow_pro' : kind === 'shader' ? shader.id : 'color_grade', params: kind === 'hsl' ? { exposure: .2, hsl_saturation: 30, hsl_denoise: 30, hsl_blur: 30 } : kind === 'grade' ? { exposure: .2 } : {} } }) })] }))
         for (const clip of sequence.clips.slice(1)) delete clip.effects
         const source = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 4 | 16 })

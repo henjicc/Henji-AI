@@ -85,19 +85,19 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     event.stopPropagation(); event.preventDefault()
     const tapped = !current.gesture && current.mode === 'move'
     finish(true)
-    if (tapped && (event.altKey || current.selected.element.command.kind !== 'text')) { const hit = hitVideoEditCodeElement(instance, framePoint(current.rect, event.clientX, event.clientY), true); if (hit) selectVideoEditCodeElement(instance, hit.clipId, hit.element.elementId) }
+    if (tapped && (event.altKey || !readVideoEditCodeElementEdit(current.target).textBinding)) { const hit = hitVideoEditCodeElement(instance, framePoint(current.rect, event.clientX, event.clientY), true); if (hit) selectVideoEditCodeElement(instance, hit.clipId, hit.element.elementId) }
   }
   const editText = (): void => {
-    if (selected.element.command.kind !== 'text') return
     finish(true); endNudge(true)
     const current = readVideoEditCodeElementEdit(target)
-    setText({ target, value: selected.element.command.text, time: current.time })
+    if (!current.textBinding) return
+    setText({ target, value: current.textBinding.value, time: current.time })
   }
   const run = (operation: () => void): void => { try { finish(true); endNudge(true); operation() } catch (error) { onError(error) } }
-  const bake = (): void => {
+  const requestAssistant = (bake = false): void => {
     if (pending.current) return
     const controller = new AbortController(); pending.current = controller; setBusy(true)
-    void bakeVideoEditCodeElement(target, controller.signal).catch(error => { if (!controller.signal.aborted) onError(error) }).finally(() => { if (pending.current === controller) { pending.current = undefined; setBusy(false) } })
+    void (bake ? bakeVideoEditCodeElement(target, controller.signal) : askAssistantForVideoEditCodeElement(target, false, controller.signal)).catch(error => { if (!controller.signal.aborted) onError(error) }).finally(() => { if (pending.current === controller) { pending.current = undefined; setBusy(false) } })
   }
   const cornerStyle = (point: CodeEditPoint) => ({ left: `${point.x * 100}%`, top: `${point.y * 100}%` })
   const rotationPoint = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }
@@ -119,10 +119,10 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
     {/* icon-token-allow: 选框与吸附线由当前作者几何计算，不是图标。 */}
     <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className="absolute inset-0 h-full w-full" aria-hidden>
       <polygon data-code-element-edit-body data-code-element-selected points={points.map(point => `${point.x * 1000},${point.y * 1000}`).join(' ')} className="pointer-events-auto cursor-move fill-transparent stroke-accent" strokeWidth={2} vectorEffect="non-scaling-stroke" onPointerDown={event => start(event, 'move')} onDoubleClick={event => { event.stopPropagation(); run(editText) }} onContextMenu={event => menu.showMenu(event, [
-        { id: 'ask', label: '让助手改这里', icon: <MessageSquare size={UI_ICON_SIZE.sm} />, onClick: () => run(() => askAssistantForVideoEditCodeElement(target)) },
+        { id: 'ask', label: '让助手改这里', icon: <MessageSquare size={UI_ICON_SIZE.sm} />, disabled: busy, onClick: () => run(() => requestAssistant()) },
         { id: 'hide', label: '隐藏元素', icon: <EyeOff size={UI_ICON_SIZE.sm} />, onClick: () => run(() => updateVideoEditCodeElement(target, { hidden: true })) },
         { id: 'reset', label: '重置该元素的覆盖', icon: <RotateCcw size={UI_ICON_SIZE.sm} />, onClick: () => run(() => resetVideoEditCodeElement(target)) },
-        { id: 'bake', label: busy ? '正在写回源码' : '写回源码', icon: <CornerUpLeft size={UI_ICON_SIZE.sm} />, disabled: busy || !readCodeElementOverride(selected.entry.clip.elementOverrides, target.elementId), onClick: () => run(bake) },
+        { id: 'bake', label: busy ? '正在准备画面' : '写回源码', icon: <CornerUpLeft size={UI_ICON_SIZE.sm} />, disabled: busy || !readCodeElementOverride(selected.entry.clip.elementOverrides, target.elementId), onClick: () => run(() => requestAssistant(true)) },
         { id: 'source', label: '在源码中查看', icon: <FileCode size={UI_ICON_SIZE.sm} />, onClick: () => run(() => showVideoEditCodeElementSource(target)) },
       ])} />
       {guides.x !== undefined && <line data-code-element-guide="x" x1={guides.x * 1000} x2={guides.x * 1000} y1={0} y2={1000} className="stroke-accent" vectorEffect="non-scaling-stroke" />}

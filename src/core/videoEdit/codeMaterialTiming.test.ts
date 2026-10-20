@@ -11,9 +11,29 @@ const program = compileCodeMaterial('export default {apiVersion:1,name:"源时�
 const base: CodeMaterialTimedClip = { start: 11, duration: 2000, sourceInUs: 1234567, sourceRemainder: { numerator: 1, denominator: 3 } }
 const rates = [{ numerator: 30000, denominator: 1001 }, { numerator: 60000, denominator: 1001 }]
 
+it('无放置提示的作者使用宿主尺寸与真实源时钟，不捏造源码时长', () => {
+  const author = { mode: 'dynamic' as const }
+  const host = { width: 1080, height: 1920 }
+  const clip = { ...base, speed: { numerator: 2, denominator: 1 } }
+  const result = codeMaterialContextForFrame(clip, 1000, rates[0], author, host)
+  expect(result).toMatchObject(host)
+  expect(result.time).toBeGreaterThan(60)
+  expect(result).toEqual(codeMaterialContextForFrame(clip, 1000, rates[0], { ...author, ...host }))
+  expect(author).toEqual({ mode: 'dynamic' })
+  expect(() => codeMaterialContextForFrame(clip, 1000, rates[0], author)).toThrow('宿主序列尺寸')
+  const sample = codeMaterialContextForSubframe(clip, 1000, { numerator: 1, denominator: 2 }, rates[0], author, undefined, host)
+  expect(sample.context.time - result.time).toBeCloseTo(1 / result.fps)
+  expect(codeMaterialContextForFrame(base, base.start, { numerator: 480, denominator: 1 }, author, host).fps).toBe(480)
+})
+
 describe('快门位姿子时钟', () => {
   const clip: CodeMaterialTimedClip = { start: 60, duration: 120, sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 } }
   const rate = rates[1]
+  it('相邻半帧上的快门采样保留中心时刻，不截断或重复偏移', () => {
+    const fractional = codeMaterialContextForSubframe(clip, 75.5, { numerator: 1, denominator: 4 }, rate, program)
+    const integer = codeMaterialContextForSubframe(clip, 75, { numerator: 3, denominator: 4 }, rate, program)
+    expect(fractional).toEqual(integer)
+  })
   it('长序列的细分帧在BigInt中运算后才约分，不因中间帧分子超过安全整数而拒绝合法源时间', () => {
     const long = { start: 0, duration: 8_000_001, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
     const rate = { numerator: 120000, denominator: 1001 }, declared = { ...program, durationSeconds: 86400 }
@@ -150,8 +170,8 @@ describe('片段与时钟输入边界', () => {
     for (const clip of [{ ...base, start: -1 }, { ...base, duration: 0 }, { ...base, duration: .5 }, { ...base, start: Number.MAX_SAFE_INTEGER, duration: 2 }]) expect(() => codeMaterialContextForFrame(clip, clip.start, rate, program)).toThrow(CodeMaterialError)
   })
   it('拒绝无效比例、源余数、尺寸及声明时长', () => {
-    for (const rate of [{ numerator: 0, denominator: 1 }, { numerator: 30, denominator: 0 }, { numerator: .5, denominator: 1 }, { numerator: Number.POSITIVE_INFINITY, denominator: 1 }, { numerator: 241, denominator: 1 }, { numerator: 1_000_001, denominator: 1 }]) expect(() => codeMaterialContextForFrame(base, base.start, rate, program)).toThrow(CodeMaterialError)
+    for (const rate of [{ numerator: 0, denominator: 1 }, { numerator: 30, denominator: 0 }, { numerator: .5, denominator: 1 }, { numerator: Number.POSITIVE_INFINITY, denominator: 1 }, { numerator: 1_000_001, denominator: 1 }]) expect(() => codeMaterialContextForFrame(base, base.start, rate, program)).toThrow(CodeMaterialError)
     for (const clip of [{ ...base, sourceInUs: -1 }, { ...base, sourceInUs: .1 }, { ...base, sourceRemainder: { numerator: -1, denominator: 3 } }, { ...base, sourceRemainder: { numerator: 3, denominator: 3 } }, { ...base, sourceRemainder: { numerator: 0, denominator: 0 } }, { ...base, sourceRemainder: { numerator: 1, denominator: 1.5 } }, { ...base, sourceRemainder: { numerator: 1, denominator: 1_000_001 } }]) expect(() => codeMaterialContextForFrame(clip, base.start, rates[0], program)).toThrow(CodeMaterialError)
-    for (const definition of [{ ...program, width: 0 }, { ...program, height: 8193 }, { ...program, durationSeconds: 0 }, { ...program, durationSeconds: Number.NaN }, { ...program, durationSeconds: VIDEO_EDIT_MAX_SEQUENCE_SECONDS + 1 }]) expect(() => codeMaterialContextForFrame(base, base.start, rates[0], definition)).toThrow(CodeMaterialError)
+    for (const definition of [{ ...program, width: 0 }, { ...program, height: NaN }, { ...program, durationSeconds: 0 }, { ...program, durationSeconds: Number.NaN }]) expect(() => codeMaterialContextForFrame(base, base.start, rates[0], definition)).toThrow(CodeMaterialError)
   })
 })

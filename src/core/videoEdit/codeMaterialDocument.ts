@@ -10,7 +10,7 @@ import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } fr
 import { validateVideoEditTransitions, videoEditTransitionWindow } from './transitions'
 import { videoEditEffectCodes } from './compositing'
 
-export type CodeMaterialMetadata = Pick<CodeMaterialProgram, 'name' | 'kind' | 'mode' | 'width' | 'height' | 'durationSeconds' | 'seed' | 'parameters' | 'types'>
+export type CodeMaterialMetadata = Pick<CodeMaterialProgram, 'name' | 'kind' | 'mode' | 'seed' | 'parameters' | 'types'> & Partial<Pick<CodeMaterialProgram, 'width' | 'height' | 'durationSeconds'>>
 export type CodeMaterialMetadataReader = (instance: CodeMaterialInstance) => CodeMaterialMetadata
 export function videoEditCodeReferences(document: VideoEditDocument): CodeMaterialInstance[] {
   return [
@@ -40,7 +40,6 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   }
   for (const definition of document.codeMaterials ?? []) read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })
   for (const item of document.items) if (item.code) {
-    if (item.elementOverrides && codeMaterialVersion(document, item.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
     const program = read(item.code)
     if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜应作为附加效果使用，不能直接创建生成素材项。')
     validate(item.code, program)
@@ -48,25 +47,24 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
   for (const sequence of document.sequences) {
     for (const clip of sequence.clips) {
       if (clip.code) {
-        if (clip.elementOverrides && codeMaterialVersion(document, clip.code).languageVersion !== 3) throw new CodeMaterialError('TYPE', '元素覆盖需要第三版代码生成素材。')
         const program = read(clip.code)
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '代码片段需要生成素材。')
         validate(clip.code, program)
-        codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program)
+        codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program, sequence)
       }
       for (const code of videoEditEffectCodes(clip.effects)) {
         const program = read(code)
         if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
         validate(code, program)
-        codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program)
+        codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program, sequence)
       }
     }
     for (const transition of sequence.transitions ?? []) {
       const window = videoEditTransitionWindow(sequence, transition)
       for (const clip of [window.left, window.right]) for (const instance of [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(clip.effects)]) {
         const program = read(instance)
-        codeMaterialContextForTransitionFrame(clip, window.start, sequence.frameRate, program, window)
-        codeMaterialContextForTransitionFrame(clip, window.end - 1, sequence.frameRate, program, window)
+        codeMaterialContextForTransitionFrame(clip, window.start, sequence.frameRate, program, window, sequence)
+        codeMaterialContextForTransitionFrame(clip, window.end - 1, sequence.frameRate, program, window, sequence)
       }
     }
   }

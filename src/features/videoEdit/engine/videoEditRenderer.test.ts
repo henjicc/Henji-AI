@@ -6,8 +6,9 @@ import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { VideoEditRenderer } from './videoEditRenderer'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
+import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
+const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
 import type { VideoSample } from 'mediabunny'
 import type { VideoEditFrameBackend } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './videoEditNativeAudio'
@@ -24,9 +25,9 @@ const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.fl
 const us = (values: ReadonlyArray<number | undefined>): Array<number | undefined> => values.map(value => value === undefined ? undefined : Math.round(value * 1e6))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./videoEditCodeCompiler', async () => {
-  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
+  const { testAuthorBundle } = await import('./videoEditAuthorTestFixtures')
   return { VideoEditCodeCompiler: class {
-    async compile(source: string): Promise<CodeMaterialProgram> { boundary.compilerCalls++; return boundary.pendingCode ?? compileCodeMaterial(source) }
+    async bundle(source: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) { boundary.compilerCalls++; return boundary.pendingCode ? (await boundary.pendingCode).bundle : testAuthorBundle(source) }
     dispose(): void { boundary.compilerDisposed++ }
   } }
 })
@@ -75,12 +76,12 @@ vi.mock('./videoEditGpuCompositor', async () => {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
   }
-  async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) },
+  async code() { return { inspectAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle), retainAuthorInstances: async () => undefined, observeAuthor: () => [], authorGenerator: async (_key: string, _instance: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) },
     target: async (_key: string, width: number, height: number) => target(width, height), releaseNestedFrames: vi.fn(),
     builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
-  async prepareImages(images: ReadonlyMap<string, ImageBitmap | InstanceType<typeof VideoEditCodePicture>>) { for (const [key, image] of images) (image instanceof VideoEditCodePicture ? contentInputs.borrows : contentInputs.uploads).push([key, (image as { timestamp?: number }).timestamp]); return new Map() }
+  async prepareImages(images: ReadonlyMap<string, ImageBitmap | InstanceType<typeof VideoEditCodePicture>>) { for (const [key, image] of images) (image instanceof VideoEditCodePicture ? contentInputs.borrows : contentInputs.uploads).push([key, (image as { timestamp?: number }).timestamp]); return new Map([...images].map(([key, source]) => [key, { source }])) }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
   async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) { boundary.evaluatedClips = clips; (destination as { timestamp?: number }).timestamp = pictures[0]?.timestamp } boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); if (destination && clips.some(clip => clip.id === boundary.failOffscreenClip)) throw new Error('离屏提交失败'); if (!destination) this.capture?.()?.(Promise.resolve({ width: document.width, height: document.height, timestamp: pictures[0]?.timestamp, close: () => { contentInputs.closed++ } } as unknown as ImageBitmap)); return { presented: true, completion: Promise.resolve() } }
@@ -259,8 +260,8 @@ function fixture(): ReturnType<typeof videoEditComposition> {
 
 it('视频参数经共享解码与GPU画面进入图片输入，固定和跟随时间可随机寻帧', async () => {
   const document = fixture()
-  const source = 'export default {apiVersion:1,languageVersion:3,name:"视频输入",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({source:ctx.params.picture,x:0,y:0,width:3840,height:2160})];}}'
-  document.codeMaterials = [{ id: 'definition', name: '视频输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 3, ...testCodeManifest(source, document) }] }]
+  const source = "export default {name:\"视频输入\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:2,params:[{key:\"picture\",type:\"image\",title:\"画面\",default:null}],draw(){}}"
+  document.codeMaterials = [{ id: 'definition', name: '视频输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...testCodeManifest(source, document) }] }]
   const code = { definitionId: 'definition', versionId: 'v', parameters: { picture: { kind: 'video' as const, mediaId: 'A' } } }
   document.items.push({ id: 'code', name: '视频输入', kind: 'code', code })
   document.clips = [{ ...document.clips[0], itemId: 'code', kind: 'code', code, start: 10 }]
@@ -278,9 +279,9 @@ it('视频参数经共享解码与GPU画面进入图片输入，固定和跟随�
 
 function codeInputFixture(): ReturnType<typeof fixture> {
   const document = fixture(), base = document.clips[0]
-  const source = 'export default {apiVersion:1,languageVersion:3,name:"复用输入",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:2,seed:1,parameters:{a:{type:"image",title:"原片",default:null},b:{type:"image",title:"重复",default:null},c:{type:"image",title:"下层",default:null},d:{type:"image",title:"重复下层",default:null}},render(ctx){return [image({source:ctx.params.a,x:0,y:0,width:3840,height:2160})];}}'
+  const source = "export default {name:\"复用输入\",kind:\"generator\",mode:\"dynamic\",width:3840,height:2160,durationSeconds:2,params:[{key:\"a\",type:\"image\",title:\"原片\",default:null},{key:\"b\",type:\"image\",title:\"重复\",default:null},{key:\"c\",type:\"image\",title:\"下层\",default:null},{key:\"d\",type:\"image\",title:\"重复下层\",default:null}],draw(){}}"
   const code = { definitionId: 'definition', versionId: 'v', parameters: { a: { kind: 'video' as const, mediaId: 'A' }, b: { kind: 'video' as const, mediaId: 'A' }, c: { kind: 'sequence' as const, mediaId: 'below' as const }, d: { kind: 'sequence' as const, mediaId: 'below' as const } } }
-  document.codeMaterials = [{ id: 'definition', name: '输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 3, ...testCodeManifest(source, document) }] }]
+  document.codeMaterials = [{ id: 'definition', name: '输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...testCodeManifest(source, document) }] }]
   document.items.push({ id: 'code', name: '输入', kind: 'code', code })
   document.clips = [base, { ...base, id: 'code', itemId: 'code', kind: 'code', track: 2, code }]
   return document
@@ -528,10 +529,10 @@ it('拆出的音画共用原引用且混音逐样本不增倍，纯画面独奏�
     expect((await renderer.mixAudio(0, .01))[0].every(sample => sample === 0)).toBe(true)
   } finally { await renderer.dispose() }
 })
-const codeSource = 'export default {apiVersion:1,name:"原创透明图形",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:10,seed:42,parameters:{},render(ctx){return [rect({x:0,y:0,width:100,height:100,fill:[1,0,0,.5]})];}}'
+const codeSource = "export default {name:\"原创透明图形\",kind:\"generator\",mode:\"static\",width:3840,height:2160,durationSeconds:10,params:[],draw(){}}"
 function mixedFixture(): ReturnType<typeof videoEditComposition> {
   const document = fixture()
-  document.codeMaterials = [{ id: 'definition', name: '原创图形', defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 1, languageVersion: 1, ...testCodeManifest(codeSource, document) }] }]
+  document.codeMaterials = [{ id: 'definition', name: '原创图形', defaultVersionId: 'version', versions: [{ id: 'version', apiVersion: 4, languageVersion: 4, ...testCodeManifest(codeSource, document) }] }]
   const instance = { definitionId: 'definition', versionId: 'version', parameters: {} }
   document.items.push({ id: 'code-item', name: '原创图形', kind: 'code', code: instance })
   document.clips.push({ ...document.clips[0], id: 'code-clip', itemId: 'code-item', name: '原创图形', kind: 'code', track: 2, code: instance })

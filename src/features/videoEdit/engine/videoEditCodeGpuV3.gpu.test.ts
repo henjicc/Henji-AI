@@ -8,17 +8,16 @@ import sharp from 'sharp'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
 import { layoutCodeText } from '@/core/videoEdit/codeMaterial/textLayout'
-import { codeFont } from '@/core/videoEdit/codeMaterial/textLayout'
+
 import type { CodeDrawCommand, CodeTextMeasurer } from '@/core/videoEdit/codeMaterial/contract'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditCodeGpuV3 } from './videoEditCodeGpuV3'
-import { VideoEditCodeGpu } from './videoEditCodeGpu'
-import { emitCodeMaterialFilter } from './codeGpuFilter'
+
 import { readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as fontFaces from '@/platform/fontFaces'
-import { codeFramePerformanceSchema } from '@/core/videoEdit/codeMaterial/performance'
+
 import { ContactSheetBitmap, ContactSheetCanvas } from '@/tests/videoEditContactSheetCanvas'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
@@ -27,8 +26,8 @@ import { codeMultiply, codeTextBaseBounds, codeTransform } from '@/core/videoEdi
 import { createCanvasOracle } from './videoEditCodeCanvas.testing'
 import type { CodeMotionSample } from '@/core/videoEdit/codeMaterial/motionSampling'
 import { CodeMotionSamplingBudget, sampleCodeMotion } from '@/core/videoEdit/codeMaterial/motionSampling'
-import { VideoEditCodeSources } from './videoEditCodeSources'
-import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
+
+
 import { codeMaterialMotionClock } from '@/core/videoEdit/codeMaterialTiming'
 import { codeLensPlan } from './videoEditCodeLens'
 
@@ -68,30 +67,7 @@ const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels
 const motionSample = (x: number, y: number, weight: number, opacity = 1): CodeMotionSample => ({ offset: { numerator: 0, denominator: 1 }, pose: { matrix: [1, 0, 0, 1, x, y], opacity }, weight })
 const motionGroup = (samples: CodeMotionSample[]): Extract<CodeDrawCommand, { kind: 'group' }> => ({ kind: 'group', x: 0, y: 0, motionSamples: samples, children: [{ kind: 'rect', x: 0, y: 0, width: 8, height: 8, radius: 0, fill: [1, 0, 0, 128 / 255] }] })
 
-it('API2正式源码经过片段时钟与代码源会话到GPU，产出拖影且乱序取帧一致', async () => {
-  const code = 'export default {apiVersion:2,languageVersion:3,name:"正式快门",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:8,seed:1,parameters:{},render(ctx){return [group({x:16+(ctx.time-1)*1920,y:16,motionBlur:{shutter:180,maxSamples:64}},[rect({x:0,y:0,width:8,height:8,fill:[1,0,0,128/255]})])];}}'
-  const program = compileCodeMaterial(code), document = createVideoEditTestDocument('正式快门')
-  document.codeMaterials = [{ id: 'motion', name: '正式快门', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 2, languageVersion: 3, ...testCodeManifest(code, document) }] }]
-  document.items = [{ id: 'motion-item', name: '正式快门', kind: 'code', code: { definitionId: 'motion', versionId: 'v', parameters: {} } }]
-  const sequence = document.sequences[0]
-  Object.assign(sequence, { width: W, height: H, frameRate: { numerator: 60, denominator: 1 } })
-  sequence.clips = [makeVideoEditItemClip(document, 'motion-item', sequence.id, { frame: 0 }, () => program)]
-  const composition = videoEditComposition(document, sequence.id)
-  const host = new VideoEditCodeGpu(wrapped), sources = new VideoEditCodeSources(composition, async () => host, { compile: async contents => compileCodeMaterial(contents), dispose() {} })
-  device.pushErrorScope('validation')
-  try {
-    const render = async (frame: number): Promise<Uint8Array> => {
-      const prepared = await sources.prepare(composition, composition.clips, frame, () => true)
-      return read((prepared.pictures.get(sequence.clips[0].id)! as import('./videoEditCodeGpu').VideoEditCodePicture).texture)
-    }
-    const first = await render(60)
-    expect(pixel(first, 10, 20)).toEqual([20, 0, 0, 20])
-    expect(pixel(first, 16, 20)).toEqual([64, 0, 0, 64])
-    await render(62)
-    expect(await render(60)).toEqual(first)
-  } finally { await sources.dispose(); await host.dispose() }
-  expect(await device.popErrorScope()).toBeNull()
-})
+
 
 it('作者运动蒙版在中心透明、快门内显现时仍输出曝光像素', async () => {
   const program = compileCodeMaterial(source('return [group({mask:{shape:group({opacity:max(0,min(1,(ctx.time-1)*240)),motionBlur:{}},[rect({x:0,y:0,width:8,height:8,fill:[1,1,1,1]})])}},[rect({x:0,y:0,width:8,height:8,fill:[1,0,0,1]})])];').replace('apiVersion:1', 'apiVersion:2').replace('width:3840,height:2160', 'width:64,height:64'))
@@ -417,31 +393,7 @@ it('t109 整帧复用、微小变化、外部写入、尺寸与目标隔离', as
   } finally { output.destroy(); other.destroy() }
 })
 
-it('t109 正式宿主成本结果经过队列完成并合并，多目标及其他写入失效同源', async () => {
-  const host = new VideoEditCodeGpu(wrapped)
-  const program = compileCodeMaterial(source('return [group({opacity:0},repeat(100,i=>rect({x:i,y:0,width:1,height:1,fill:[1,0,0,1]}))),rect({x:4,y:4,width:20,height:20,fill:[1,0,0,1]})];'))
-  try {
-    await host.generator('t109-cost', program, context, {})
-    await device.queue.onSubmittedWorkDone()
-    const [first] = host.framePerformance()
-    expect(codeFramePerformanceSchema.safeParse(first).success).toBe(true)
-    expect(first.reuse?.culledGroups).toBe(1)
-    expect(first.structures?.some(value => value.gpuMs > 0 && value.cpuMs > 0 && value.sourceSpan.startLine > 0)).toBe(true)
-    const captured = host.captureFramePerformance()
-    host.resetFramePerformance()
-    expect(host.framePerformance()).toEqual([])
-    expect(captured()[0]).toEqual(first)
-    await host.generator('t109-cost', program, context, {}); await device.queue.onSubmittedWorkDone()
-    expect(host.framePerformance()[0].reuse?.frameHits).toBe(1)
-    await host.draw('t109-cost', W, H, [])
-    const restored = await host.generator('t109-cost', program, context, {}); await device.queue.onSubmittedWorkDone()
-    expect(host.framePerformance()[0].reuse?.frameHits).toBe(0)
-    expect(pixel(await read(restored.texture), 10, 10)).toEqual([255, 0, 0, 255])
-    await host.generator('t109-other', program, context, {}); await device.queue.onSubmittedWorkDone()
-    expect(codeFramePerformanceSchema.safeParse(host.framePerformance()[0]).success).toBe(true)
-  } finally { await host.dispose() }
-  expect(host.diagnostics().residentBytes).toBe(0)
-})
+
 
 it('性能归因不拆散矢量批次，开启与关闭采样像素完全一致', async () => {
   const program = compileCodeMaterial(source('return repeat(180,i=>rect({x:i%8*7,y:floor(i/8)%8*7,width:6,height:6,fill:[.2,.6,1,.3]}));'))
@@ -575,52 +527,8 @@ async function run(body: string): Promise<Uint8Array> {
   } finally { target.destroy() }
 }
 describe('v3 真实 GPU 像素与工作预算', () => {
-  it('t102 音频帧级 uniform 像素值与随机寻帧一致', async () => {
-    const host = new VideoEditCodeGpu(wrapped), input = await host.target('t102:input', W, H)
-    const program = compileCodeMaterial(source('return rgba(ctx.audio.level(),ctx.audio.band("bass"),ctx.audio.beatPhase(),1);', 'filter'))
-    const audio = { fps: 2, duration: 2, levels: [.25, .75, .5, 0], bands: { bass: [.5, .25, .75, 0], mid: [0,0,0,0], treble: [0,0,0,0] }, beats: [0, .5, 1, 1.5], onsets: [0, .5, 1, 1.5], bpm: 120, beatsPerBar: 4 as const, barOrigin: 0 }
-    const render = async (localTime: number) => {
-      const picture = await host.filter('t102:output', 't102:audio', program, { ...context, localTime, audio }, {}, input)
-      return read(picture.texture)
-    }
-    try {
-      const first = await render(.25)
-      ;[64, 128, 128, 255].forEach((value, i) => expect(Math.abs(pixel(first, 32, 32)[i] - value)).toBeLessThanOrEqual(1))
-      await render(1.25)
-      expect(await render(.25)).toEqual(first)
-    } finally { await host.dispose() }
-  })
-  it('t84新参数和结构字段uniform上传与WGSL读取一致，64槽边界真实编译与像素回读', async () => {
-    const host = new VideoEditCodeGpu(wrapped); const input = await host.target('t84:input', W, H)
-    const data = new Uint8Array(W * H * 4); data.fill(255)
-    device.queue.writeTexture({ texture: input.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
-    const point = { type: 'point', title: '位置', default: { x: .25, y: .25 } }
-    const number = { type: 'number', title: '强度', default: .25, min: 0, max: 1, step: .01 }
-    const color = { type: 'color', title: '颜色', default: [0, 0, 1, 1] }
-    const types = { light: { title: '灯光', layout: 'row', fields: { power: number, position: point, color } } }
-    const parameters = { p: point, r: { type: 'range', title: '区间', min: 0, max: 1, step: .01, default: [.25, .75] }, g: { type: 'grade', title: '调色', default: { hue: 180, strength: .5, luminance: 0 } }, a: { type: 'angle', title: '角度', default: 0 }, seed: { type: 'seed', title: '种子', default: 4294967295 }, flag: { type: 'boolean', title: '开关', default: true }, ink: { ...color, default: [.25, .75, .5, 1] }, lamp: { type: 'light', title: '灯', default: {} } }
-    const body = 'const lamp=ctx.params.lamp; return rgba(clamp(ctx.params.p.x+lamp.power,0,1),ctx.params.r[1],clamp(ctx.params.g.strength+ctx.params.a/180+ctx.params.seed/4294967295*.05+lamp.color.b*.05+lamp.position.y*.1,0,1),ctx.params.flag?ctx.params.ink.a:.5);'
-    const program = compileCodeMaterial(source(body, 'filter').replace('parameters:{}', `parameters:${JSON.stringify(parameters)},types:${JSON.stringify(types)}`))
-    try {
-      device.pushErrorScope('validation')
-      const first = await host.filter('t84:output', 't84:mixed', program, context, {}, input)
-      const rgba = pixel(await read(first.texture), 32, 32)
-      expect(await device.popErrorScope()).toBeNull()
-      // RGBA8 attachment conversion may round a half-integer either way; permit one quantization unit.
-      ;[128, 191, 159, 255].forEach((channel, i) => expect(Math.abs(rgba[i] - channel)).toBeLessThanOrEqual(1))
-      const changed = await host.filter('t84:output', 't84:mixed', program, context, { p: { x: 0, y: 0 }, r: [.1, .2], g: { hue: 0, strength: .1, luminance: 0 }, a: 18, seed: 0, flag: false, lamp: { power: 0, position: { x: 0, y: 0 }, color: [0, 0, 0, 1] } }, input)
-      const changedRgba = pixel(await read(changed.texture), 32, 32)
-      ;[0, 26, 26, 128].forEach((channel, i) => expect(Math.abs(changedRgba[i] - channel)).toBeLessThanOrEqual(1))
-      const many = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`p${i}`, number]))
-      const sum = (names: string[]): string => names.length === 1 ? names[0] : `(${sum(names.slice(0, names.length / 2))}+${sum(names.slice(names.length / 2))})`
-      const large = compileCodeMaterial(source(`return rgba(clamp(${sum(Object.keys(many).map(key => `ctx.params.${key}`))}/64,0,1),0,0,1);`, 'filter').replace('parameters:{}', `parameters:${JSON.stringify(many)}`))
-      device.pushErrorScope('validation')
-      const last = await host.filter('t84:output', 't84:64', large, context, { p63: 1 }, input)
-      const lastRgba = pixel(await read(last.texture), 32, 32)
-      ;[67, 0, 0, 255].forEach((channel, i) => expect(Math.abs(lastRgba[i] - channel)).toBeLessThanOrEqual(1))
-      expect(await device.popErrorScope()).toBeNull()
-    } finally { await host.dispose() }
-  })
+
+
   it('4K180帧文字加形状动画复用局部字形，分辨率分档提升且预览/导出像素一致', async () => {
     const calls: Array<{ width: number; height: number; ms: number }> = []
     const host = new VideoEditCodeGpuV3(wrapped, { allocate: (width, height) => texture(width, height), release: texture => texture.destroy() }, async (command, image) => {
@@ -686,170 +594,17 @@ describe('v3 真实 GPU 像素与工作预算', () => {
     const before = runtime.counts.uploads; await run(body); expect(runtime.counts.uploads).toBe(before)
     const blur = await run('return [rect({x:24,y:24,width:16,height:16,fill:[1,1,1,1],blur:4})];'); expect(pixel(blur, 22, 32)[3]).toBeGreaterThan(0)
   })
-  it('滤镜 repeat 展开 64 次采样，模糊/辉光/色彩原语在真实设备编译', async () => {
-    const host = new VideoEditCodeGpu(wrapped); const input = await host.target('input', W, H)
-    const data = new Uint8Array(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) data.set([x < 32 ? 255 : 0, 0, 0, 255], (y * W + x) * 4)
-    device.queue.writeTexture({ texture: input.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
-    try {
-      for (const body of ['return average(repeat(64,i=>sampleOffset(i-32,0)));', 'return blur(4);', 'return glow(.1,4,1);', 'return saturate(contrast(sampleOffset(0,0),1.2),.5);', 'return hsv(noise(.1,.2,.3),.5,.8);', 'return hsl(.6,.8,.4);', 'return toHsv(sampleOffset(0,0));', 'return toHsl(sampleOffset(0,0));', 'return rgba(progress(ctx.time,0,1),cubicBezier(.2,0,.8,1,.5),tween(ctx.time,0,1,0,1,"expoOut"),1);']) {
-        const program = compileCodeMaterial(source(body, 'filter')); expect(emitCodeMaterialFilter(program)).toContain('@fragment')
-        device.pushErrorScope('validation'); const output = await host.filter('filter', body, program, context, {}, input); const pixels = await read(output.texture); expect(await device.popErrorScope()).toBeNull(); expect(pixel(pixels, 32, 32)[3], body).toBe(255)
-      }
-      data.fill(0); data.set([0, 0, 0, 255], (32 * W + 32) * 4); device.queue.writeTexture({ texture: input.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
-      const black = await host.filter('filter', 'zero-threshold-black', compileCodeMaterial(source('return glow(0,4,1);', 'filter')), context, {}, input)
-      const blackPixels = await read(black.texture); expect(pixel(blackPixels, 32, 32)[3]).toBe(255); expect(pixel(blackPixels, 34, 32)[3]).toBe(0)
-    } finally { await host.dispose() }
-  })
-  it('逐字错峰与径向渐变有效；图片同样接受组裁切、混合与GPU发光', async () => {
-    const pixels = await run('return [text({x:10,y:20,text:"AB",fontSize:20,baseline:"top",fill:radialGradient({cx:20,cy:20,r:30,stops:[[0,[1,0,0,1]],[1,[0,0,1,1]]]}),perChar:(i,n)=>({x:12,opacity:i===0?0:1}),glow:{radius:2,intensity:1,color:[0,1,0,1]}})];')
-    expect(pixels.filter((_, i) => i % 4 === 3).some(a => a > 0)).toBe(true)
-    expect(pixel(pixels, 12, 20)[3]).toBe(0)
-    const input = texture(8, 8); const output = texture(); const data = new Uint8Array(8 * 8 * 4).fill(255)
-    device.queue.writeTexture({ texture: input as never }, data, { bytesPerRow: 32 }, [8, 8])
-    const commands: CodeDrawCommand[] = [{ kind: 'image', source: { kind: 'image', mediaId: 'test-image' }, x: 24, y: 24, width: 16, height: 16, opacity: 1, glow: { radius: 4, intensity: 2, color: [0, 1, 0, 1] }, blend: 'screen', elementId: 'image' }]
-    device.pushErrorScope('validation')
-    try {
-      await runtime.render(output, W, H, commands, new Map([['test-image', { texture: input, width: 8, height: 8, owner: wrapped, premultiplied: true }]]))
-      const result = await read(output); expect(pixel(result, 41, 32)[3]).toBeGreaterThan(0); expect(await device.popErrorScope()).toBeNull()
-    } finally { input.destroy(); output.destroy() }
-  }, 30_000)
-  it('正式生成器入口调用v3合成器，并在多帧滤镜后复用资源与释放驻留字节', async () => {
-    const host = new VideoEditCodeGpu(wrapped)
-    try {
-      const generator = compileCodeMaterial(source('return [group({x:8,y:8,opacity:.5},[rect({x:0,y:0,width:32,height:32,fill:[1,0,0,1]})])];'))
-      const output = await host.generator('generator', generator, context, {})
-      expect(pixel(await read(output.texture), 16, 16)[3]).toBeCloseTo(128, -1)
-      const filter = compileCodeMaterial(source('return glow(.2,8,1);', 'filter'))
-      for (let frame = 0; frame < 3; frame++) await host.filter('filtered', 'glow-version', filter, { ...context, frame }, {}, output)
-      const resident = host.diagnostics().residentBytes
-      for (let frame = 3; frame < 6; frame++) await host.filter('filtered', 'glow-version', filter, { ...context, frame }, {}, output)
-      expect(host.diagnostics().residentBytes).toBe(resident); expect(host.diagnostics().pipelines).toBeGreaterThan(9)
-    } finally { await host.dispose(); expect(host.diagnostics().residentBytes).toBe(0) }
-  })
-  it('4K 标题约50元素与1000粒子的 CPU 求值、GPU提交和完成实测', async () => {
-    if (process.env.HENJI_CODE_V3_BENCH !== '1') return
-    const width = 3840; const height = 2160; const target = texture(width, height)
-    const scenes = [
-      source('return [group({x:tween(ctx.time,0,.6,-800,100,"expoOut"),y:200,glow:{radius:18,intensity:1.5,color:[.2,.6,1,1]}},[rect({x:0,y:0,width:1900,height:200,fill:[.05,.1,.2,1]}),text({x:30,y:100,text:"HENJI AI MOTION TITLE 012345678901234567890123456789",fontSize:50,color:[1,1,1,1],perChar:(i,n)=>({y:tween(ctx.time,stagger(i,.04),.6,100,0,"expoOut"),opacity:progress(ctx.time,stagger(i,.04),.3)})})])];'),
-      source('return repeat(1000,i=>ellipse({x:(random(i)*ctx.width+ctx.time*120+noise(i*.03,ctx.time)*180)%ctx.width,y:(random(i+1000)*ctx.height+sin(ctx.time+i*.1)*50+ctx.height)%ctx.height,width:6,height:6,fill:mix([.1,.4,1,.7],[.8,.2,1,.7],random(i+2000))}));'),
-      source('return repeat(4096,i=>rect({x:(i%128)*30,y:floor(i/128)*30,width:6,height:6,fill:[.2,.6,1,1]}));'),
-    ]
-    const evidence: unknown[] = []
-    try {
-      for (const [index, code] of scenes.entries()) {
-        const program = compileCodeMaterial(code); const frameContext = { ...context, width, height, time: .15 }
-        await runtime.render(target, width, height, evaluateCodeMaterial(program, frameContext, {}, { measureText: testMeasure })); await device.queue.onSubmittedWorkDone()
-        const cpu: number[] = []; const submit: number[] = []; const completed: number[] = []
-        const before = { ...runtime.counts }
-        for (let frame = 0; frame < 60; frame++) {
-          const t = performance.now(); const commands = evaluateCodeMaterial(program, { ...frameContext, time: .15 + frame / 60 }, {}, { measureText: testMeasure }); const afterCpu = performance.now()
-          await runtime.render(target, width, height, commands); const afterSubmit = performance.now(); await device.queue.onSubmittedWorkDone()
-          cpu.push(afterCpu - t); submit.push(afterSubmit - afterCpu); completed.push(performance.now() - t)
-        }
-        const statistics = (values: number[]) => ({ mean: values.reduce((a, b) => a + b, 0) / values.length, p95: [...values].sort((a, b) => a - b)[Math.floor(values.length * .95)], max: Math.max(...values) })
-        evidence.push({ scene: ['title50', 'particles1000', 'simple4096'][index], resolution: [width, height], frames: 60, cpuMs: statistics(cpu), submitMs: statistics(submit), completedMs: statistics(completed), before, after: { ...runtime.counts }, resident: runtime.diagnostics(), program: program.metrics })
-      }
-      const host = new VideoEditCodeGpu(wrapped); const input = await host.target('sample-input', width, height)
-      try {
-        for (const [name, body] of [['sample64', 'return average(repeat(64,i=>sampleOffset(i-32,0)));'], ['glow4K', 'return glow(.2,32,1.5);']]) {
-        const program = compileCodeMaterial(source(body, 'filter'))
-        const times: number[] = []; const submissions: number[] = []
-        await host.filter('sample-output', name, program, { ...context, width, height }, {}, input); await device.queue.onSubmittedWorkDone()
-        for (let frame = 0; frame < 60; frame++) {
-          const start = performance.now(); await host.filter('sample-output', name, program, { ...context, width, height, frame }, {}, input); submissions.push(performance.now() - start); await device.queue.onSubmittedWorkDone(); times.push(performance.now() - start)
-        }
-        const stats = (values: number[]) => ({ mean: values.reduce((a, b) => a + b, 0) / values.length, p95: [...values].sort((a, b) => a - b)[Math.floor(values.length * .95)], max: Math.max(...values) })
-        evidence.push({ scene: name, resolution: [width, height], frames: 60, submitMs: stats(submissions), completedMs: stats(times), program: program.metrics, resident: host.diagnostics() })
-        }
-      } finally { await host.dispose() }
-      const adapter = gpu.device.adapterInfo
-      process.stdout.write(`CODE_V3_BENCH ${JSON.stringify({ adapter: { vendor: adapter.vendor, architecture: adapter.architecture, device: adapter.device, description: adapter.description }, scenes: evidence })}\n`)
-    } finally { target.destroy() }
-    // Measures submission and completion only; this is not an Electron presentation benchmark.
-    expect(codeFont({ text: '', fontFamily: 'sans-serif', fontWeight: 400, fontStyle: 'normal', fontSize: 50, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, maxLines: 0, wrap: false })).toContain('50px')
-  }, 120_000)
+
+
+
+
 })
 
 
 describe('作者语言着色器GPU接线（shaders 框架）', () => {
-  it('真实编译渲染极光逐字标题、光束产品卡；旋转裁切与帧内复用有像素证据', async () => {
-    const aurora = 'shader({id:"sky",name:"Aurora",params:{colorB:[.1,.8,.6,1]},x:0,y:0,width:64,height:64})'
-    const sky = await run(`return [${aurora}];`)
-    const title = await run(`return [${aurora},text({x:5,y:30,text:"AI",fontSize:22,color:[1,1,1,1],perChar:(i,n)=>({y:tween(ctx.time,stagger(i,.04),.3,8,0,"expoOut"),opacity:progress(ctx.time,stagger(i,.04),.3)})})];`)
-    expect(sky.some((v,i)=>i%4!==3 && v>10)).toBe(true)
-    expect(title.filter((v,i)=>i%4!==3 && v>200).length).toBeGreaterThan(sky.filter((v,i)=>i%4!==3 && v>200).length)
-    const card = await run('return [rect({x:0,y:0,width:64,height:64,fill:[.1,.1,.1,1]}),group({x:32,y:10,rotation:15,opacity:.8,clip:{x:0,y:0,width:24,height:40}},[rect({x:0,y:0,width:24,height:40,radius:3,fill:[.2,.2,.3,1]}),shader({name:"Beam",params:{startPosition:[.5,0],endPosition:[.5+sin(ctx.time)*.2,1]},x:0,y:0,width:24,height:40,blend:"add"})])];')
-    expect(card.some((v,i)=>i%4!==3 && v>80)).toBe(true); expect(pixel(card,0,0)[0]).toBeCloseTo(26,-1)
-    const clipped = await run('return [group({x:32,y:32,rotation:90,clip:{x:0,y:0,width:16,height:16}},[shader({name:"LinearGradient",params:{colorA:[1,0,0,1],colorB:[0,0,1,1]},x:0,y:0,width:32,height:32})])];')
-    expect(pixel(clipped,24,40)[3]).toBe(255); expect(pixel(clipped,8,40)[3]).toBe(0)
-    const before = runtime.counts.allocations
-    await run(`return [${aurora},${aurora}];`)
-    const allocations = runtime.counts.allocations-before
-    // Changing element position/id does not allocate another shader-result layer in the same frame.
-    const before2 = runtime.counts.allocations
-    await run(`return [${aurora},${aurora.replace('id:"sky"','id:"copy"').replace('x:0','x:4')}];`)
-    expect(runtime.counts.allocations-before2).toBe(0); expect(allocations).toBeLessThanOrEqual(1)
-  }, 30000)
-  it('色差+颗粒串接，玻璃与原画/模糊组合，透明/同帧缓存与失败释放', async () => {
-    const host = new VideoEditCodeGpu(wrapped); const input = await host.target('t74:input',W,H)
-    const data = new Uint8Array(W*H*4)
-    for(let y=0;y<H;y++) for(let x=0;x<W;x++) data.set([x<32?220:20,y<32?140:50,80,x<4?0:255],(y*W+x)*4)
-    device.queue.writeTexture({texture:input.texture as never},data,{bytesPerRow:W*4},[W,H])
-    try {
-      let index=0
-      for(const body of ['const a=shaderFilter("ChromaticAberration",{strength:.9}); return shaderFilter("FilmGrain",{strength:.7},a);','return clamp(mix(shaderFilter("FlutedGlass",{frequency:20}),blur(2),.5),0,1);']) {
-        const program=compileCodeMaterial(source(body,'filter')); device.pushErrorScope('validation')
-        const output=await host.filter('t74:output',`t74:${index++}`,program,context,{},input)
-        const pixels=await read(output.texture); expect(await device.popErrorScope()).toBeNull()
-        expect(pixels.some((v,i)=>i%4!==3 && v>100)).toBe(true); expect(pixels).not.toEqual(data)
-        if(index===1) expect(pixel(pixels,0,20)[3]).toBe(0)
-      }
-      const repeated=compileCodeMaterial(source('return clamp(mix(shaderFilter("FilmGrain",{strength:.5}),shaderFilter("FilmGrain",{strength:.5}),.5),0,1);','filter'))
-      const allocation=host.diagnostics().textureAllocations
-      const one=await host.filter('t74:output','t74:repeated',repeated,context,{},input); const pixels=await read(one.texture)
-      expect(host.diagnostics().textureAllocations-allocation).toBe(1)
-      const again=await host.filter('t74:output','t74:repeated',repeated,context,{},input); expect(await read(again.texture)).toEqual(pixels)
-      const bad=compileCodeMaterial(source('return shaderFilter("Tint",{color:ctx.time},shaderFilter("ChromaticAberration",{}));','filter'))
-      const resident=host.diagnostics().residentBytes
-      await expect(host.filter('t74:output','t74:bad',bad,{...context,time:5}, {},input)).rejects.toMatchObject({code:'PARAMETERS',sourceSpan:expect.objectContaining({startLine:1})})
-      expect(host.diagnostics().residentBytes).toBe(resident)
-    } finally {await host.dispose()}
-  },30000)
-  it('素材里自写的 WGSL 生成器与滤镜真实出图；WGSL 报错换算到素材源码行', async () => {
-    const shaders = [
-      '{',
-      '  stripes: {kind: "generator", props: {count: {default: 4}, tint: {type: "color", default: "rgb(0, 255, 0)"}}, wgsl: `',
-      '    let band = step(0.5, fract(uv.x * count));',
-      '    return vec4f(tint.rgb * band, 1.0);`},',
-      '  shift: {kind: "filter", props: {amount: {default: .25}}, wgsl: `',
-      '    return textureSample(childTexture, childSampler, fract(uv + vec2f(amount, 0.0)));`}',
-      '}',
-    ].join('\n')
-    const target = texture()
-    try {
-      const program = compileCodeMaterial(source('return [shader({name:"stripes",params:{count:2,tint:rgba(0,1,0,1)},x:0,y:0,width:64,height:64})];', 'generator', shaders))
-      await runtime.render(target, W, H, evaluateCodeMaterial(program, context, {}, { measureText: testMeasure }))
-      const pixels = await read(target)
-      expect(pixel(pixels, 5, 5)).toEqual([0, 0, 0, 255]); expect(pixel(pixels, 20, 5)).toEqual([0, 255, 0, 255])
-    } finally { target.destroy() }
-    const host = new VideoEditCodeGpu(wrapped); const input = await host.target('own:input', W, H)
-    const data = new Uint8Array(W * H * 4)
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) data.set(x < 32 ? [255, 0, 0, 255] : [0, 0, 255, 255], (y * W + x) * 4)
-    device.queue.writeTexture({ texture: input.texture as never }, data, { bytesPerRow: W * 4 }, [W, H])
-    try {
-      const filter = compileCodeMaterial(source('return shaderFilter("shift",{amount:.5});', 'filter', shaders))
-      const shifted = await read((await host.filter('own:output', 'own:shift', filter, context, {}, input)).texture)
-      expect(pixel(shifted, 5, 5)).toEqual([0, 0, 255, 255]); expect(pixel(shifted, 40, 5)).toEqual([255, 0, 0, 255])
-      const broken = compileCodeMaterial(source('return shaderFilter("bad",{});', 'filter', ['{', '  bad: {kind: "filter", wgsl: `', '    let a = child;', '    return vec4f(nope);`}', '}'].join('\n')))
-      await expect(host.filter('own:output', 'own:bad', broken, context, {}, input)).rejects.toMatchObject({ code: 'TYPE', message: expect.stringMatching(/nope[\s\S]*素材源码第 4 行/) })
-      const linked = { entry: 'main.ts', files: { 'main.ts': 'import {body} from "./parts/wgsl";'+source('return shaderFilter("bad",{});', 'filter', '{bad:{kind:"filter",wgsl:body}}'), 'parts/wgsl.ts': 'export const body=`\nreturn vec4f(nope);`;' } }
-      const multi = compileCodeMaterial(linked)
-      await expect(host.filter('own:output', 'own:bad-module', multi, context, {}, input)).rejects.toMatchObject({ code: 'TYPE', sourceSpan: expect.objectContaining({file:'parts/wgsl.ts',startLine:2}), message: expect.stringContaining('parts/wgsl.ts 素材源码第 2 行') })
-      linked.files['parts/wgsl.ts']='export const body=`return vec4f(0.0,1.0,0.0,1.0);`;'
-      const green=await host.filter('own:output','own:good-module',compileCodeMaterial(linked),context,{},input)
-      expect(pixel(await read(green.texture),5,5)).toEqual([0,255,0,255])
-    } finally { await host.dispose() }
-  }, 60000)
+
+
+
   it('五种类别至少一个真实像素输出',async()=>{
     for(const name of ['LinearGradient','Aurora','Beam','Plasma','StudioBackground']) {
       const pixels=await run(`return [shader({name:"${name}",x:0,y:0,width:64,height:64})];`)
@@ -857,40 +612,7 @@ describe('作者语言着色器GPU接线（shaders 框架）', () => {
     }
     // Style and optical categories are covered above by FilmGrain/ChromaticAberration and FlutedGlass.
   },30000)
-  it('4K四层/四工序边界与旋转开销实测（显式启用）',async()=>{
-    if(process.env.HENJI_CODE_SHADER_BENCH!=='1') return
-    const width=3840;const height=2160;const target=texture(width,height)
-    const frame={...context,width,height}; const report:Record<string,unknown>={adapter:gpu.device.adapterInfo, width,height,method:'CPU evaluate + queue completion, warmup3, frames20'}
-    const measure=async(name:string,render:(frame:number)=>Promise<void>):Promise<void>=>{
-      for(let i=0;i<3;i++){await render(i);await device.queue.onSubmittedWorkDone()}
-      const times:number[]=[]
-      for(let i=0;i<20;i++){const start=performance.now();await render(i+3);await device.queue.onSubmittedWorkDone();times.push(performance.now()-start)}
-      times.sort((a,b)=>a-b);report[name]={medianMs:times[10],p95Ms:times[18],maxMs:times[19]}
-    }
-    try {
-      for(const rotation of [0,15]) {
-        const program=compileCodeMaterial(source(`return [group({rotation:${rotation}},repeat(4,i=>shader({name:"Aurora",params:{seed:i*20},time:ctx.time+i,x:0,y:0,width:ctx.width,height:ctx.height,opacity:.3})))];`))
-        await measure(`layers4_rotation${rotation}`, async i=>{const ctx={...frame,time:i/60};await runtime.render(target,width,height,evaluateCodeMaterial(program,ctx))})
-      }
-      let peakResidentBytes = 0
-      const measuredDevice = new Proxy(wrapped, { get(target, key) {
-        if (key === 'createCommandEncoder') return () => { peakResidentBytes = Math.max(peakResidentBytes, host?.diagnostics().residentBytes ?? 0); return target.createCommandEncoder() }
-        const value = Reflect.get(target, key) as unknown; return value instanceof Function ? value.bind(target) : value
-      } })
-      const host=new VideoEditCodeGpu(measuredDevice)
-      try {
-        const input=await host.target('t74:bench:input',width,height)
-        const data = new Uint8Array(width * height * 4)
-        for(let y=0;y<height;y++) for(let x=0;x<width;x++) data.set([Math.round(x/width*255),Math.round(y/height*255),x%120<60?255:40,255],(y*width+x)*4)
-        device.queue.writeTexture({texture:input.texture as never},data,{bytesPerRow:width*4},[width,height])
-        const program=compileCodeMaterial(source('return shaderFilter("Glow",{},shaderFilter("ZoomBlur",{},shaderFilter("FilmGrain",{},shaderFilter("ChromaticAberration",{}))));','filter'))
-        await measure('filters4_heavy',async i=>{await host!.filter('t74:bench:out','t74:bench:filter',program,{...frame,time:i/60}, {},input)})
-        report.filterResidentBytes=host.diagnostics().residentBytes; report.filterPeakResidentBytes=peakResidentBytes
-        expect(peakResidentBytes).toBeLessThanOrEqual(256 * 1024 ** 2)
-      } finally{await host?.dispose()}
-      const fs=await import('node:fs/promises');await fs.mkdir('node_modules/.cache/t74',{recursive:true});await fs.writeFile('node_modules/.cache/t74/performance.json',JSON.stringify(report,null,2))
-    } finally{target.destroy()}
-  },120000)
+
 })
 
 describe('t101 CPU/GPU 像素契约', () => {
@@ -948,19 +670,7 @@ describe('t101 CPU/GPU 像素契约', () => {
       actual.forEach((value,i)=>{if(!seam(i))expect(Math.abs(value-reference.pixels[i])).toBeLessThanOrEqual(1)})
     }finally{target.destroy()}
   })
-  it('时间uniform、动态半径、回弹、参数repeat与负底数幂真实GPU运行并保留测量',async()=>{
-    const host=new VideoEditCodeGpu(wrapped);const input=await host.target('t101:in',W,H)
-    device.queue.writeTexture({texture:input.texture as never},new Uint8Array(W*H*4).fill(255),{bytesPerRow:W*4},[W,H])
-    try {
-      for(const [i,body] of ['return rgba(sin(ctx.time),0,0,1);','return blur(4+sin(ctx.time));','return mix(sample(ctx.u,ctx.v),rgba(0,0,0,1),tween(ctx.time,0,1,0,1,"backOut"));','return rgba(pow(ctx.u-.5,ctx.params.count),0,0,1);','return rgba(tween(ctx.u,0,1,0,1,[.2,-1,.8,2]),0,0,1);','return average(repeat(ctx.params.count,i=>sampleOffset(i,0)));'].entries()) {
-        const program=compileCodeMaterial(source(body,'filter').replace('parameters:{}','parameters:{count:{type:"number",title:"次数",default:2,min:1,max:4,step:1}}'))
-        for(const frame of [20,40]) {
-          device.pushErrorScope('validation');await host.filter('t101:out',`t101:${i}`,program,{...context,frame,time:frame/60},{},input);await device.queue.onSubmittedWorkDone();expect(await device.popErrorScope()).toBeNull()
-          expect(host.framePerformance()[0]).toMatchObject({frame,cpuMs:expect.any(Number),gpuMs:expect.any(Number)})
-        }
-      }
-    }finally{await host.dispose()}
-  })
+
   it('8/32色标求值与GPU完成性能实测',async()=>{
     const target=texture();const report:unknown[]=[]
     try {for(const count of [8,32]) {
@@ -973,25 +683,7 @@ describe('t101 CPU/GPU 像素契约', () => {
   })
 })
 
-it('GPU预算溢出真实回读处理行对齐与预乘，释放后可重建',async()=>{
-  const host=new VideoEditCodeGpu(wrapped); const width=67; const height=3
-  const captured:Uint8ClampedArray[]=[]
-  vi.stubGlobal('ImageData',class {constructor(readonly data:Uint8ClampedArray,readonly width:number,readonly height:number){captured.push(data)}})
-  vi.stubGlobal('createImageBitmap',vi.fn(async()=>({width,height,close:vi.fn()})))
-  try {
-    const target=await host.target('spill',width,height); const data=new Uint8Array(width*height*4)
-    for(let i=0;i<data.length;i+=4)data.set([64,32,0,128],i)
-    device.queue.writeTexture({texture:target.texture as never},data,{bytesPerRow:width*4},[width,height])
-    const before=host.diagnostics().residentBytes
-    const bitmap=await host.spillGeneratorTarget('spill')
-    expect(host.diagnostics().residentBytes).toBe(before-width*height*4)
-    for(let i=0;i<data.length;i+=4)expect([...captured[0].slice(i,i+4)]).toEqual([128,64,0,128])
-    expect((await host.target('spill',width,height)).texture).not.toBe(target.texture)
-    expect(host.generatorTargetCapacity(3840,2160)).toBe(4)
-    expect(host.generatorTargetCapacity(64,64)).toBeGreaterThan(16)
-    bitmap.close()
-  }finally{await host.dispose();vi.unstubAllGlobals()}
-})
+
 it('逐字颜色、倾斜、模糊与发光在组内保留，缺省字继承父级填充',async()=>{
   const pixels=await run('return [group({x:4,y:4,skewY:5},[text({x:8,y:16,text:"AB",fontSize:24,fill:[0,1,0,1],perChar:(i,n)=>({fill:i===0?rgba(1,0,0,1):rgba(0,1,0,1),blur:i,skewX:i*15,glow:{radius:3,intensity:1,color:[0,0,1,1]}})})])];')
   expect(pixels.some((v,i)=>i%4===0&&v>100)).toBe(true)

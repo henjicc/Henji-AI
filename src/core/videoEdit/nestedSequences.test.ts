@@ -82,6 +82,8 @@ it('变速、倒放与不同帧率统一换算；F 与渲染使用同一子帧',
   const inner = videoEditComposition(result.document, child.id)
   expect(videoEditNestedFrame(composition, clip, inner, 30)).toBe(116)
   expect(videoEditNestedFrame(composition, clip, inner, 40)).toBe(76)
+  expect(videoEditNestedFrame(composition, clip, inner, 40.125, true)).toBeCloseTo(75.5)
+  expect(videoEditNestedFrame(composition, clip, inner, 40.125)).toBe(75)
   expect(videoEditMatchFrameTarget(result.document, parent, { clipIds: [clip.id], frame: 40, targetTracks: [] })).toMatchObject({ sequenceId: child.id, frame: 76 })
 })
 it('循环带路径拒绝，共享 DAG 合法，超过八层拒绝', () => {

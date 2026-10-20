@@ -1,7 +1,16 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { expect, it } from 'vitest'
 import { type VideoEditDocument } from './document'
-import { removeVideoEditItems } from './projectItems'
+import { makeVideoEditItemClip, removeVideoEditItems } from './projectItems'
+
+it('未声明时长的动态作者可按放置长度创建片段，不把默认放置长度当作源上限', () => {
+  const document = createVideoEditDocument('宿主放置')
+  document.items = [{ id: 'code', name: '作者 JS', kind: 'code', code: { definitionId: 'effect', versionId: 'version', parameters: {} } }]
+  const metadata = { name: '作者 JS', kind: 'generator' as const, mode: 'dynamic' as const, parameters: [], seed: 0 }
+  const clip = makeVideoEditItemClip(document, 'code', document.sequences[0].id, { frame: 0, duration: 1800 }, () => metadata)
+  expect(clip.duration).toBe(1800)
+  expect(() => makeVideoEditItemClip(document, 'code', document.sequences[0].id, { frame: 0, duration: 1800 }, () => ({ ...metadata, durationSeconds: 1 }))).toThrow('源范围')
+})
 
 it('删除图片素材项保留代码图片引用，随后移除最后代码素材项回收原媒体', () => {
   const document = createVideoEditDocument('引用回收')

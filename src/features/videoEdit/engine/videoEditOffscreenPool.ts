@@ -1,11 +1,11 @@
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { createLogger } from '@/core/logging'
 import { getPlatform } from '@/platform/runtime'
-import type { VideoEditRenderSession } from './videoEditRenderSession'
+import type { VideoEditRenderTransport } from './videoEditRenderTransport'
 
 const logger = createLogger('features.videoEdit.offscreenPool')
 export interface VideoEditOffscreenLease {
-  session: VideoEditRenderSession
+  session: VideoEditRenderTransport
   reused: boolean
   release(discard?: boolean): Promise<void>
 }
@@ -13,14 +13,14 @@ export interface VideoEditOffscreenLease {
 /** One exclusive document lease, including update, sampling and bitmap ownership.
  * Export/audio/trackers keep independent sessions: their long streams must not block observations. */
 export class VideoEditOffscreenPool {
-  private session?: VideoEditRenderSession
+  private session?: VideoEditRenderTransport
   private tail: Promise<void> = Promise.resolve()
   private idle?: ReturnType<typeof setTimeout>
   private memoryTimer?: ReturnType<typeof setInterval>
   private active = false
   private retiring: Promise<void> = Promise.resolve()
   constructor(
-    private readonly create?: (document: VideoEditComposition) => Promise<VideoEditRenderSession>,
+    private readonly create?: (document: VideoEditComposition) => Promise<VideoEditRenderTransport>,
     private readonly memoryAvailable: () => Promise<boolean> = async () => {
       const memory = await getPlatform().system.memoryInfo()
       return memory.availableBytes >= Math.max(512 * 1024 ** 2, memory.totalBytes * .05)

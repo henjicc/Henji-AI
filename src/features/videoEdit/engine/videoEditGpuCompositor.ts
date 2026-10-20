@@ -1,3 +1,4 @@
+import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { documentFontRevision } from '@/platform/fontFaces'
@@ -45,6 +46,8 @@ export class VideoEditGpuCompositor {
   private codeImage!: GpuRenderPipeline
   private codeRuntime?: VideoEditCodeGpu
   private readonly authorRuntimes = new Map<string, VideoEditAuthorRuntime>()
+  private bitmapBridge?: VideoEditGpuBitmapBridge
+  private readonly inputBitmaps = new Set<ImageBitmap>()
   private readonly authorAssets = new Map<string, Record<string, ImageBitmap>>()
   private authorPresentation?: GpuRenderPipeline
   private authorTarget?: { texture: GpuTexture; width: number; height: number }
@@ -61,6 +64,14 @@ export class VideoEditGpuCompositor {
   /** Metadata and candidate drawing share the executed module and its lifetime. */
   async readAuthorMetadata(url: string, locations?: AuthorSourceLocations): Promise<import('./videoEditAuthorParameters').AuthorEffectMetadata> {
     return structuredClone((await this.authorRuntime(url, locations)).parameterMetadata)
+  }
+  async releaseAuthor(url: string): Promise<void> {
+    const runtime = this.authorRuntimes.get(url)
+    this.authorRuntimes.delete(url)
+    const assets = this.authorAssets.get(url)
+    this.authorAssets.delete(url)
+    try { await runtime?.dispose() }
+    finally { if (assets) for (const image of Object.values(assets)) image.close() }
   }
 
   /** Candidate frames use the same worker/device as the timeline, before publication. */
@@ -365,10 +376,21 @@ export class VideoEditGpuCompositor {
     this.protectedImages = new Set([...unique].filter((image): image is ImageBitmap => !(image instanceof VideoEditCodePicture)).map(image => this.imageKey(image)).concat([...visibleText].map(id => `text:${id}`)))
     this.protectedUniforms = new Set(visibleClips)
     this.retainTextures(new Set([...this.protectedImages, ...[...visibleText].map(id => `text:${id}`)]))
+    for (const bitmap of this.inputBitmaps) bitmap.close()
+    this.inputBitmaps.clear()
+    const sources = new Map<VideoEditCodePicture, ImageBitmap>()
     return new Map<string, VideoEditCodeImageInput>([...pictures].map(([mediaId, picture]): [string, VideoEditCodeImageInput] => {
-      if (picture instanceof VideoEditCodePicture) return [mediaId, { texture: picture.texture, width: picture.width, height: picture.height, owner: this.device, premultiplied: true }]
+      if (picture instanceof VideoEditCodePicture) {
+        let source = sources.get(picture)
+        if (!source) {
+          this.bitmapBridge ??= new VideoEditGpuBitmapBridge(this.device)
+          source = this.bitmapBridge.copy(picture.texture, picture.width, picture.height)
+          sources.set(picture, source); this.inputBitmaps.add(source)
+        }
+        return [mediaId, { texture: picture.texture, width: picture.width, height: picture.height, owner: this.device, premultiplied: true, source }]
+      }
       const key = this.imageKey(picture)
-      return [mediaId, { texture: this.texture(key, key, picture), width: picture.width, height: picture.height, owner: this.device, premultiplied: false }]
+      return [mediaId, { texture: this.texture(key, key, picture), width: picture.width, height: picture.height, owner: this.device, premultiplied: false, source: picture }]
     }))
   }
   async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: VideoEditPicture[], shouldPresent: () => boolean, deadline?: number, target?: VideoEditCodePicture): Promise<{ presented: boolean; completion: Promise<void> }> {
@@ -520,13 +542,18 @@ export class VideoEditGpuCompositor {
     } catch (error) { historyBuffer?.destroy(); if (scopeOpen) await device.popErrorScope(); frames.forEach(frame => frame.close()); throw error }
   }
   async dispose(): Promise<void> {
+    if (this.disposed) return
+    const failures: unknown[] = []
+    for (const bitmap of this.inputBitmaps) bitmap.close()
+    this.inputBitmaps.clear(); this.bitmapBridge?.dispose(); this.bitmapBridge = undefined
     this.disposed = true
     this.cancelPresentation()
     await this.ready.catch(() => {})
     await Promise.allSettled([...this.offscreen.values(), this.presentReady, ...this.downscale.values()])
     await Promise.allSettled([...this.uploads, ...this.copies])
-    await this.codeRuntime?.dispose()
-    await Promise.allSettled([...this.authorRuntimes.values()].map(runtime => runtime.dispose()))
+    try { await this.codeRuntime?.dispose() } catch (error) { failures.push(error) }
+    const released = await Promise.allSettled([...this.authorRuntimes.values()].map(runtime => runtime.dispose()))
+    for (const result of released) if (result.status === 'rejected') failures.push(result.reason)
     for (const assets of this.authorAssets.values()) for (const image of Object.values(assets)) image.close()
     this.authorAssets.clear()
     this.authorRuntimes.clear(); this.authorTarget?.texture.destroy(); this.authorTarget = undefined
@@ -536,6 +563,7 @@ export class VideoEditGpuCompositor {
     this.pool.length = 0; this.blankTexture?.destroy(); this.blankTexture = undefined
     this.precise?.texture.destroy(); this.precise = undefined
     this.textures.clear(); this.uniforms.clear(); if (!this.shared) this.manager.destroy()
+    if (failures.length) throw new AggregateError(failures, '剪辑渲染资源释放失败。')
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }
   /** Font changes retire glyph/generated surfaces, while decoded pictures keep their owning device. */

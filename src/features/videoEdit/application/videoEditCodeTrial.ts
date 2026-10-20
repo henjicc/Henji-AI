@@ -57,7 +57,7 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
 /** One serial queue for creation, source candidates and explicit version binds.
  * Every trial holds an exclusive lease on the production offscreen worker. */
 /** `collect` receives every presented frame (caller owns and closes them); used for short animated previews. */
-export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[]): Promise<ImageBitmap | undefined> {
+export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEditComposition; frame: number }>, signal: AbortSignal, keepLast = false, collect?: ImageBitmap[], measurements?: CodeFramePerformance[], observe?: (value: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation) => void): Promise<ImageBitmap | undefined> {
   if (!frames.length) throw new Error('源码检查需要边界画面。')
   signal.throwIfAborted()
   let renderer: VideoEditRenderSession | undefined; let lease: VideoEditOffscreenLease | undefined; let bitmap: ImageBitmap | undefined
@@ -98,8 +98,9 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
         signal.throwIfAborted()
         clearTimeout(timer)
         timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
-        return await Promise.race([renderer!.present(frame).then(result => {
+        return await Promise.race([renderer!.present(frame, false, false, undefined, undefined, undefined, 'interactive', false, Boolean(observe)).then(result => {
           if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
+          if (result.authorElements && frame === input.frame) observe?.(result.authorElements)
           return result
         }), deadline])
       }

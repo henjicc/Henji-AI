@@ -19,7 +19,7 @@ it('sessions multiplex independent ids and cancellation only removes that owner'
   const a = transport.worker(); const b = transport.worker()
   a.onmessage = vi.fn(); b.onmessage = vi.fn()
   const files: CodeMaterialFiles = { entry: 'main.ts', files: { 'main.ts': 'content' } }
-  a.postMessage({ id: 1, files }); b.postMessage({ id: 1, files })
+  a.postMessage({ id: 1, files, kind: 'author.bundle' }); b.postMessage({ id: 1, files, kind: 'author.bundle' })
   const first = send.mock.calls[0][0].token; const second = send.mock.calls[1][0].token
   expect(first).not.toBe(second)
   a.terminate()

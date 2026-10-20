@@ -2,17 +2,17 @@ import { addressCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { isUiInspectionActive } from '@/platform/runtime'
 import { buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
-import { createVideoEditDocument, videoEditComposition } from '@/core/videoEdit/document'
+import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
+import { AUTHOR_GAIN_SOURCE, authorProbeFilter } from './videoEditAuthorProbeSources'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 
-const source = (body: string, mode = 'static', parameters = '{}'): string => `export default {apiVersion:1,name:"有限合成检查",kind:"filter",mode:"${mode}",width:3840,height:2160,durationSeconds:10,seed:1,parameters:${parameters},render(ctx){${body}}}`
 const check = (value: boolean, message: string): void => { if (!value) throw new Error(message) }
 const percent = (values: number[], p: number): number => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) * p)]
 
@@ -23,14 +23,14 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
   canvas.setAttribute('aria-label', '基础图层全分辨率实验'); canvas.style.cssText = 'width:100%;max-height:65vh;object-fit:contain'
   host.replaceChildren(canvas)
   const output = canvas.transferControlToOffscreen(); const compositor = new VideoEditGpuCompositor(output); const compiler = new VideoEditCodeCompiler()
-  const model = createVideoEditDocument('有限合成检查'); const sequence = model.sequences[0]
+  const model = createVideoEditDocument('有限合成检查'); const sequence = createVideoEditSequence('检查'); model.sequences = [sequence]
   sequence.width = 3840; sequence.height = 2160; sequence.frameRate = { numerator: 60, denominator: 1 }
   sequence.tracks.push(...[2, 3].map(index => ({ ...sequence.tracks.find(track => track.kind === 'video')!, id: `visual-${index}`, index, name: `画面${index}` })))
-  const { codeSources: _greenSources, ...greenManifest } = await addressCodeMaterialFiles(source('return rgba(0,1,0,.5);'))
-  const { codeSources: _gainSources, ...gainManifest } = await addressCodeMaterialFiles(source('const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);', 'static', '{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}}'))
+  const { codeSources: _greenSources, ...greenManifest } = await addressCodeMaterialFiles(authorProbeFilter('绿色', 'vec4f(0,.5,0,.5)'))
+  const { codeSources: _gainSources, ...gainManifest } = await addressCodeMaterialFiles(AUTHOR_GAIN_SOURCE)
   model.codeMaterials = [
-    { id: 'green', name: '绿色滤镜', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 1, ...greenManifest }] },
-    { id: 'gain', name: '红色强度', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 1, ...gainManifest }] },
+    { id: 'green', name: '绿色滤镜', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...greenManifest }] },
+    { id: 'gain', name: '红色强度', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...gainManifest }] },
   ]
   const effect = (id: string, definitionId: string, amount = 1): VideoEditEffect => ({ id, name: id, enabled: true, amount, code: { definitionId, versionId: 'v', parameters: {} } })
   const graphic = (id: string, track: number, fill: [number, number, number, number], patch: Partial<VideoEditClip> = {}): VideoEditClip => {
@@ -99,16 +99,6 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     const long = graphic('长源入点', 1, [1, 0, 0, .5], { sourceInUs: 3_600_000_000, effects: [effect('长源滤镜', 'gain')] })
     long.effects![0].code!.curves = { gain: [{ id: 'k0', sourceInUs: 3_600_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'k1', sourceInUs: 3_601_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 1, interpolation: 'linear' }] }
     update([long]); await render(30, true); pixel('一小时源入点参数曲线继续真实求值', 100, 100, [64, 0, 0, 255])
-    const unsafe = await compiler.compile(source('return rgba(clamp(1/(ctx.localTime+.5),0,1),0,0,1);', 'dynamic'))
-    const safe = await compiler.compile(source('return rgba(clamp(1/(max(ctx.localTime,0)+.5),0,1),0,0,1);', 'dynamic'))
-    const input = await runtime.target('proof-input', 3840, 2160)
-    const time = { time: 1, localTime: 0, sequenceTime: 1, frame: 60, fps: 60, width: 3840, height: 2160 }
-    await runtime.filter('proof-output', 'ordinary-proof', unsafe, time, {}, input)
-    const proofBefore = runtime.diagnostics(); let rejected = false
-    try { await runtime.filter('unsafe-output', 'ordinary-proof', unsafe, { ...time, localTime: -.5 }, {}, input, true) } catch (error) { rejected = error instanceof Error && error.message.includes('除数') }
-    check(rejected && JSON.stringify(proofBefore) === JSON.stringify(runtime.diagnostics()), '负时钟证明失败应先于GPU提交/分配')
-    await runtime.filter('proof-output', 'safe-proof', safe, { ...time, localTime: -.5 }, {}, input, true)
-    const proof = { rejected, before: proofBefore, after: runtime.diagnostics() }
     const hotClip = graphic('热帧', 1, [1, .2, .1, .5], { duration: 240, effects: [effect('热帧滤镜', 'gain')] })
     update([hotClip]); await render(0)
     const before = runtime.diagnostics(); const hot: number[] = []; let hits = 0
@@ -122,6 +112,6 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     const inspection = document.createElement('canvas'); inspection.width = 3840; inspection.height = 2160; inspection.style.cssText = canvas.style.cssText
     inspection.setAttribute('aria-label', '基础图层全分辨率实验结果'); inspection.getContext('2d')!.drawImage(snapshot!, 0, 0); host.replaceChildren(inspection)
     await sources.dispose(); await compositor.dispose()
-    return { completed: true, resolution: [3840, 2160], pixels, coldMs: cold.elapsed, cacheHitMs: cached.elapsed, cacheHits: hits, hotFrames: hot.length, completedGpuFrameMs: { mean: hot.reduce((sum, value) => sum + value, 0) / hot.length, p95: percent(hot, .95), max: Math.max(...hot) }, parameterResponseMs: response.elapsed, before, after, proof, compiler: compiler.diagnostics(), disposed: runtime.diagnostics() }
+    return { completed: true, resolution: [3840, 2160], pixels, coldMs: cold.elapsed, cacheHitMs: cached.elapsed, cacheHits: hits, hotFrames: hot.length, completedGpuFrameMs: { mean: hot.reduce((sum, value) => sum + value, 0) / hot.length, p95: percent(hot, .95), max: Math.max(...hot) }, parameterResponseMs: response.elapsed, before, after, compiler: compiler.diagnostics(), disposed: runtime.diagnostics() }
   } finally { snapshot?.close(); await sources.dispose(); await compositor.dispose() }
 }

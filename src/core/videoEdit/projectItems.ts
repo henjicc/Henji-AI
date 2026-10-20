@@ -5,6 +5,7 @@ import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from './time'
 import { clampVideoEditSequenceSize } from './sequenceSize'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { codeMaterialMediaIds } from './codeMaterialResources'
+import { codeMaterialSize } from './codeMaterialTiming'
 
 export type VideoEditSequenceSettings = Partial<Pick<VideoEditSequence, 'name' | 'width' | 'height' | 'frameRate' | 'pixelAspectRatio' | 'sampleRate' | 'channels'>> & { binId?: string | null }
 export class VideoEditSequenceFrameRateRequired extends Error {
@@ -56,10 +57,11 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   const sourceOutUs = placement.sourceOutUs ?? item.sourceRange?.outUs ?? (sourceDuration !== undefined ? Math.round(sourceDuration * 1e6) : undefined)
   const ranged = placement.sourceInUs !== undefined || placement.sourceOutUs !== undefined || item.sourceRange !== undefined
   if (ranged && (sourceDuration === undefined || !Number.isSafeInteger(sourceInUs) || sourceInUs < 0 || !Number.isSafeInteger(sourceOutUs) || sourceOutUs! <= sourceInUs || sourceOutUs! > Math.round(sourceDuration * 1e6))) throw new Error('源范围须为音视频素材或序列内的正向整数微秒区间。')
-  const availableDuration = ranged ? Math.floor((sourceOutUs! - sourceInUs) / 1e6 * sequence.fps + 1e-6) : program?.mode === 'dynamic' ? Math.max(1, Math.floor(program.durationSeconds * sequence.fps + 1e-6)) : sourceDuration !== undefined ? Math.max(1, Math.floor(sourceDuration * sequence.fps + 1e-6)) : Math.round(sequence.fps * 3)
+  const codeDuration = program?.mode === 'dynamic' ? program.durationSeconds : undefined
+  const availableDuration = ranged ? Math.floor((sourceOutUs! - sourceInUs) / 1e6 * sequence.fps + 1e-6) : codeDuration !== undefined ? Math.max(1, Math.floor(codeDuration * sequence.fps + 1e-6)) : sourceDuration !== undefined ? Math.max(1, Math.floor(sourceDuration * sequence.fps + 1e-6)) : Math.round(sequence.fps * 3)
   const duration = placement.duration ?? availableDuration
   if (availableDuration < 1) throw new Error('源选区短于一个序列帧。')
-  if (!Number.isSafeInteger(duration) || duration < 1 || (sourceDuration !== undefined || program?.mode === 'dynamic') && duration > availableDuration) throw new Error('片段时长必须为源范围内的正整数帧。')
+  if (!Number.isSafeInteger(duration) || duration < 1 || (sourceDuration !== undefined || codeDuration !== undefined) && duration > availableDuration) throw new Error('片段时长必须为源范围内的正整数帧。')
   if (duration < 1) throw new Error('源选区短于一个序列帧。')
   if (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame + duration > Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) throw new Error('素材落点或长度超出序列的 24 小时范围，请先裁剪素材。')
   return { id: crypto.randomUUID(), itemId, name: item.name, kind, ...(placement.sourceComponent ? { sourceComponent: placement.sourceComponent } : {}), ...(placement.audioMapping ? { audioMapping: structuredClone(placement.audioMapping) } : {}), ...(item.code ? { code: structuredClone(item.code) } : {}), ...(item.elementOverrides ? { elementOverrides: structuredClone(item.elementOverrides) } : {}), ...(item.graphic ? { graphic: structuredClone(item.graphic) } : {}), ...(kind === 'adjustment' ? { adjustment: { fromTrack: Math.min(...lowerVisualTracks(track).map(track => track.index)) } } : {}), track, start: placement.frame, duration, sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: kind === 'adjustment' ? 0 : 1, text: item.kind === 'text' ? '输入文字' : '' }
@@ -145,7 +147,7 @@ export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: s
   const nested = item.kind === 'sequence' ? document.sequences.find(sequence => sequence.id === item.sequenceId) : undefined
   const supportedRate = nested?.frameRate ?? (sourceRate && VIDEO_EDIT_FRAME_RATES.find(rate => Math.abs(videoEditFps(rate) - videoEditFps(sourceRate)) < 0.01))
   if (media?.kind === 'video' && (!supportedRate || media.frameRateMode !== 'sampled-constant') && !settings.frameRate) throw new VideoEditSequenceFrameRateRequired({ name: item.name, ...clampVideoEditSequenceSize(media), ...(item.binId ? { binId: item.binId } : {}) })
-  return { ...createVideoEditSequence(item.name), ...(nested ? { width: nested.width, height: nested.height, pixelAspectRatio: nested.pixelAspectRatio, sampleRate: nested.sampleRate, channels: nested.channels } : program ? clampVideoEditSequenceSize(program) : item.graphic ? clampVideoEditSequenceSize(item.graphic) : media && media.width >= 16 && media.height >= 16 ? clampVideoEditSequenceSize(media) : {}), ...(supportedRate ? { frameRate: supportedRate } : media?.kind === 'image' ? { frameRate: { numerator: 60, denominator: 1 } } : {}), ...(item.binId ? { binId: item.binId } : {}), ...sequenceSettings, ...(binId !== undefined ? { binId: binId || undefined } : {}) }
+  return { ...createVideoEditSequence(item.name), ...(nested ? { width: nested.width, height: nested.height, pixelAspectRatio: nested.pixelAspectRatio, sampleRate: nested.sampleRate, channels: nested.channels } : program ? clampVideoEditSequenceSize(codeMaterialSize(program, createVideoEditSequence(item.name))) : item.graphic ? clampVideoEditSequenceSize(item.graphic) : media && media.width >= 16 && media.height >= 16 ? clampVideoEditSequenceSize(media) : {}), ...(supportedRate ? { frameRate: supportedRate } : media?.kind === 'image' ? { frameRate: { numerator: 60, denominator: 1 } } : {}), ...(item.binId ? { binId: item.binId } : {}), ...sequenceSettings, ...(binId !== undefined ? { binId: binId || undefined } : {}) }
 }
 export function makeVideoEditItemSequence(document: VideoEditDocument, itemIds: string[], settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   if (!itemIds.length) throw new Error('请选择至少一个素材项。')

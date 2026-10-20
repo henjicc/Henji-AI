@@ -13,7 +13,7 @@ import { inspectMedia } from './mediaInspection'
 
 beforeEach(() => { vi.resetAllMocks(); boundary.stat.mockResolvedValue({ isFile: () => true, size: 200, mtimeMs: 100 }) })
 it('代码原生检查有界读取并只验证清单；不编译源码、不解码图片或执行探测进程', async () => {
-  const bytes = encodeCodeAsset({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '待创作源码', ...testCodeAssetSource('throw new Error("must never execute")', 1), parameters: {}, images: [] })
+  const bytes = encodeCodeAsset({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '待创作源码', ...testCodeAssetSource('throw new Error("must never execute")'), parameters: {}, images: [] })
   boundary.read.mockResolvedValue(bytes)
   expect(await inspectMedia('D:/source.henji-code', 'code')).toEqual({ mimeType: CODE_ASSET_MIME, sizeBytes: 200, fileModifiedAt: 100, width: null, height: null, durationSeconds: null })
   expect(boundary.read).toHaveBeenCalledWith('D:/source.henji-code', { maxBytes: CODE_ASSET_LIMITS.bytes })

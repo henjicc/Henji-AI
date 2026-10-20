@@ -15,7 +15,7 @@ export async function runVideoEditCodeInputProbe(host: HTMLElement, path: string
   model.media = [{ id: 'video', name: '测试视频', path, kind: 'video', width: 360, height: 640, durationSeconds: 2, hasAudio: false, frameRate: { numerator: 60, denominator: 1 } }]
   const { codeSources: _sources, ...manifest } = await addressCodeMaterialFiles(source)
   void _sources
-  model.codeMaterials = [{ id: 'code', name: '四路输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 1, languageVersion: 3, ...manifest }] }]
+  model.codeMaterials = [{ id: 'code', name: '四路输入', defaultVersionId: 'v', versions: [{ id: 'v', apiVersion: 4, languageVersion: 4, ...manifest }] }]
   const code = { definitionId: 'code', versionId: 'v', parameters: { a: { kind: 'video' as const, mediaId: 'video' }, b: { kind: 'video' as const, mediaId: 'video' }, c: { kind: 'sequence' as const, mediaId: 'below' as const }, d: { kind: 'sequence' as const, mediaId: 'below' as const } } }
   model.items = [{ id: 'video-item', name: '原片', kind: 'video', mediaId: 'video' }, { id: 'code-item', name: '四路输入', kind: 'code', code }]
   const base: VideoEditClip = { id: 'base', itemId: 'video-item', name: '原片', kind: 'video', start: 0, duration: 120, track: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, text: '' }

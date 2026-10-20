@@ -37,7 +37,7 @@ const asset: AssetRecord = {
   inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [],
 }
 const manifest: CodeAsset = {
-  format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '可调图案', ...testCodeAssetSource('not-executed-in-preview', 1),
+  format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '可调图案', ...testCodeAssetSource('not-executed-in-preview'),
   parameters: { size: 100 }, images: [],
 }
 function owner(id = 'project-a'): VideoEditInstance {

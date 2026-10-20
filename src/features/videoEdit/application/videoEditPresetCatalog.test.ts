@@ -20,13 +20,15 @@ import { BLACK_HEX } from '@/core/theme/colorTokens'
 
 const trial = vi.hoisted(() => ({ documents: [] as VideoEditComposition[], frames: [] as number[] }))
 vi.mock('../engine/videoEditCodeCompiler', async () => {
-  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
-  return { VideoEditCodeCompiler: class { async compile(source: string) { return compileCodeMaterial(source) } dispose() {} } }
+ const { testAuthorBundle } = await import('../engine/videoEditAuthorTestFixtures')
+ return { VideoEditCodeCompiler: class { async bundleQueued(files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) { return testAuthorBundle(files) } dispose() {} } }
+})
+vi.mock('./videoEditAuthorInspection', async () => {
+ const { testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures')
+ return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle) }
 })
 vi.mock('../engine/videoEditRenderSession', async () => {
-  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
-  const { evaluateCodeMaterial } = await import('@/core/videoEdit/codeMaterial/evaluate')
-  const { measureCodeText } = await import('../videoEditGlyphMetrics')
+  const { testAuthorBundle, testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures')
   return { VideoEditRenderSession: class {
     constructor(private document: VideoEditComposition) {}
     async updateDocument(document: VideoEditComposition) { this.document = document }
@@ -35,8 +37,7 @@ vi.mock('../engine/videoEditRenderSession', async () => {
       // Real compile and evaluation of every code clip proves the preview documents are valid inputs.
       for (const clip of this.document.clips) if (clip.code) {
         const version = this.document.codeMaterials!.find(value => value.id === clip.code!.definitionId)!.versions.find(value => value.id === clip.code!.versionId)!
-        const program = compileCodeMaterial(testCodeSource(this.document, version)); const time = Math.max(0, (frame - clip.start) / this.document.fps)
-        evaluateCodeMaterial(program, { time, localTime: time, sequenceTime: frame / this.document.fps, width: program.width, height: program.height, frame, fps: this.document.fps }, clip.code.parameters, { measureText: measureCodeText })
+        testAuthorProgram(testAuthorBundle(testCodeSource(this.document, version)))
       }
       return { presented: true, bitmap: { close() {}, width: 320, height: 180 } }
     }
@@ -67,12 +68,12 @@ it('默认排第一，其余按喜爱程度排序；未设默认的类别推荐�
 })
 it('默认风格自动套到新建序列，默认文字样式用于新字幕', async () => {
   const owner = await createVideoEditTestProject(); const projectId = owner.document.id
-  setVideoEditPresetDefault('style', BUILTIN_STYLE_KITS[1].id)
+  setVideoEditPresetDefault('style', BUILTIN_STYLE_KITS[0].id)
   const first = appendVideoEditSequence(projectId); const second = appendVideoEditSequence(projectId)
   const document = requireVideoEditInstance(projectId).document
   const bound = document.sequences.filter(sequence => [first, second].includes(sequence.id)).map(sequence => sequence.styleKitId)
   expect(bound[0]).toBeTruthy(); expect(bound[1]).toBe(bound[0]); expect(document.styleKits).toHaveLength(1)
-  expect(document.styleKits![0].name).toBe(BUILTIN_STYLE_KITS[1].name)
+  expect(document.styleKits![0].name).toBe(BUILTIN_STYLE_KITS[0].name)
   const custom = videoEditTextPresetLibrary.save('大号黄字', videoEditTextStyleSchema.parse({ fontSize: 72, fill: { enabled: true, color: BLACK_HEX } }))
   setVideoEditPresetDefault('text', custom.id)
   const caption = createVideoEditCaption(projectId, first, { start: 0, duration: 30, text: '默认样式' })
@@ -111,9 +112,9 @@ it('通用实体读写评分与默认，可撤销；效果没有默认；省略�
   } finally { app.dispose() }
 })
 it('预设预览时间线：风格依次播放参考示例，转场两段相接', async () => {
-  const style = await presetPreviewTimeline(videoEditPresetSource('style', BUILTIN_STYLE_KITS[2].id), { width: 320, height: 180 })
-  // A style shows its reference examples back to back over the shared footage: three examples, three seconds each.
-  expect(style.composition.clips.filter(clip => clip.code).length).toBe(4); expect(style.composition.captions ?? []).toEqual([]); expect(style.frames).toBe(270)
+  const style = await presetPreviewTimeline(videoEditPresetSource('style', BUILTIN_STYLE_KITS[0].id), { width: 320, height: 180 })
+  // The empty style placeholder only shows the shared backdrop.
+  expect(style.composition.clips.filter(clip => clip.code).length).toBe(1); expect(style.composition.captions ?? []).toEqual([]); expect(style.frames).toBe(60)
   const transition = await presetPreviewTimeline(videoEditPresetSource('transition', 'push'), { width: 320, height: 180 })
   expect(transition.composition.transitions?.[0]).toMatchObject({ kind: 'push' })
 })

@@ -3,8 +3,12 @@ import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtur
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
-import { BLACK_HEX } from '@/core/theme/colorTokens'
+import { testAuthorBundle, testAuthorProgram } from './engine/videoEditAuthorTestFixtures'
+import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { authorOverrideMatrix } from '@/core/videoEdit/codeAuthorGeometry'
+import { codePoint } from '@/core/videoEdit/codeMaterial/geometry'
+import { evaluateCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
+import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import { codeElementOrientedPolygon } from '@/core/videoEdit/codeElementManipulation'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -12,19 +16,24 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createVideoEditTestProject, reopenVideoEdit } from './application/videoEditDocumentTestKit'
 import { closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, setVideoEditView, undoVideoEdit, type VideoEditInstance } from './application/videoEditService'
 import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from './application/videoEditCodeState'
-import { selectVideoEditCodeElement, selectedVideoEditCodeElement } from './application/videoEditCodeElements'
+import { installVideoEditCodeElements, selectVideoEditCodeElement, selectedVideoEditCodeElement } from './application/videoEditCodeElements'
 import { bakeVideoEditCodeElement, readVideoEditCodeElementEdit, resetVideoEditCodeElement, setVideoEditCodeElementAutoKeyframes, showVideoEditCodeElementSource, updateVideoEditCodeElement, videoEditCodeElementHostSummary, videoEditCodeElementOverrideSummary } from './application/videoEditCodeElementEditing'
 import { readVideoEditCodeEditor } from './application/videoEditCodeParameters'
 import { CodeSourceEditor } from './panels/CodeSourceEditor'
-import { VideoEditCodeElementsPanel } from './panels/VideoEditCodeElementsPanel'
+import { CodeParameterPanel } from './panels/CodeParameterPanel'
 import { VideoEditCodeElementOverlay } from './VideoEditCodeElementOverlay'
 
 // Only compiler-worker/GPU trial boundaries are substituted; parsing, document,
 // application registry, gestures, immutable versions and storage are real.
 vi.mock('./engine/videoEditCodeCompiler', async () => ({ VideoEditCodeCompiler: class {
-  async compile(source: string) { return compileCodeMaterial(source) }
+  async bundleQueued(source: CodeMaterialFiles) { return testAuthorBundle(source) }
   dispose() {}
 } }))
+vi.mock('./application/videoEditAuthorInspection', () => ({ inspectVideoEditAuthor: async (bundle: ReturnType<typeof testAuthorBundle>) => testAuthorProgram(bundle) }))
+const observation = vi.hoisted(() => ({ snapshot: vi.fn(), assistant: vi.fn() }))
+vi.mock('./application/videoEditFrameObservation', () => ({ observeVideoEditFrame: observation.snapshot }))
+vi.mock('@/features/assistant/store/assistantUiStore', () => ({ openAssistant: observation.assistant }))
+vi.mock('@/features/assistant/conversation/assistantAttachments', () => ({ assetToAgentAttachment: (asset: unknown) => asset }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {}
   async updateDocument() {}
@@ -32,21 +41,31 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   async present() { return { presented: true, bitmap: { close() {} } } }
   async dispose() {}
 } }))
-const source = 'export default {apiVersion:1,languageVersion:3,name:"元素编辑",kind:"generator",mode:"static",width:1920,height:1080,durationSeconds:10,seed:1,parameters:{title:{type:"text",title:"文字",default:"原文",maxLength:100,animatable:false}},render(ctx){return [rect({id:"box",x:100,y:100,width:200,height:100,fill:[1,1,1,1]}),text({id:"title",x:400,y:100,text:ctx.params.title,fontSize:40,baseline:"top",fill:[1,1,1,1]})];}}'
+const source = 'export default {name:"元素编辑",mode:"static",width:1920,height:1080,durationSeconds:10,params:[{key:"title",type:"text",title:"文字",default:"原文",maxLength:100,layer:"title"},{key:"style",type:"textStyle",title:"文字样式",layer:"title",default:{fontSize:40}}],layers(p){return [{id:"box",bounds:[100,100,300,200],draw(ctx){ctx.fillRect(100,100,200,100);}},{id:"title",bounds:[400,100,600,140],draw(ctx){ctx.font=p.style.fontSize+"px sans-serif";ctx.fillText(p.title,400,100);}}];}}'
 let owner: VideoEditInstance; let clipId: string
 const target = (elementId = 'box') => ({ projectId: owner.document.id, sequenceId: owner.activeSequenceId, clipId, versionId: 'version', elementId })
 const clip = () => getActiveVideoEditSequence(owner).clips.find(value => value.id === clipId)!
+function observe(): void {
+  const current = clip(), program = testAuthorProgram(testAuthorBundle(source))
+  const time = videoEditClipSourceTimeAt(current, owner.frame - current.start, getActiveVideoEditSequence(owner).frameRate)
+  installVideoEditCodeElements(owner, { revision: owner.document.revision, sequenceId: owner.activeSequenceId, frame: owner.frame, clips: [{ clipId, versionId: current.code!.versionId, width: 1920, height: 1080, elements: ['box', 'title'].map(id => {
+    const bounds: [number, number, number, number] = id === 'box' ? [100, 100, 300, 200] : [400, 100, 600, 140]
+    const matrix = authorOverrideMatrix([1, 0, 0, 1, 0, 0], bounds, evaluateCodeElementOverride(current.elementOverrides?.[id] ?? {}, time))
+    return { id, name: id, bounds, matrix, baseMatrix: [1, 0, 0, 1, 0, 0], baseOpacity: 1, corners: [[bounds[0], bounds[1]], [bounds[2], bounds[1]], [bounds[2], bounds[3]], [bounds[0], bounds[3]]].map(([x,y]) => codePoint(matrix,x,y)), sourceSpan: program.bundle.locations.layers[id], parameterKeys: id === 'title' ? ['title','style'] : [], textParameterKeys: id === 'title' ? ['title'] : [] }
+  }) }] })
+}
 beforeEach(async () => {
   installHarnessNativeStorage()
+  observation.snapshot.mockReset().mockResolvedValue({ asset: { id: 'frame', displayUrl: 'blob:frame' } }); observation.assistant.mockReset()
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const size = Number(this.font.match(/([\d.]+)px/)?.[1] ?? 16); return { width: text.length * size, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * size } } } } })
   owner = await createVideoEditTestProject()
-  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 3 }, compileCodeMaterial(source))
+  rememberVideoEditCodeMetadata(owner, 'definition', { id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }, testAuthorProgram(testAuthorBundle(source)))
   editVideoProject(owner.document.id, document => {
-    document.codeMaterials = [{ id: 'definition', name: '元素编辑', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 1, languageVersion: 3 }] }]
+    document.codeMaterials = [{ id: 'definition', name: '元素编辑', defaultVersionId: 'version', versions: [{ id: 'version', ...testCodeManifest(source, owner.document), apiVersion: 4, languageVersion: 4 }] }]
     document.items.push({ id: 'item', name: '元素编辑', kind: 'code', code: { definitionId: 'definition', versionId: 'version', parameters: {} } })
     const value = makeVideoEditItemClip(document, 'item', owner.activeSequenceId, { frame: 0 }, readVideoEditCodeMetadata(owner, document)); clipId = value.id; document.sequences[0].clips.push(value); return document
   })
-  setVideoEditView(owner.document.id, { selection: clipId }); selectVideoEditCodeElement(owner, clipId, 'box')
+  setVideoEditView(owner.document.id, { selection: clipId }); observe(); selectVideoEditCodeElement(owner, clipId, 'box')
 })
 afterEach(async () => { cleanup(); for (const value of listVideoEditInstances()) await closeVideoEditProject(value.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 function view() {
@@ -88,25 +107,24 @@ it('双击参数文字直接写参数；Enter提交、Esc取消，与覆盖共�
   selectVideoEditCodeElement(owner, clipId, 'title'); const result = view(); const body = result.container.querySelector('[data-code-element-edit-body]')!; const before = owner.past.length
   fireEvent.doubleClick(body); const input = result.getByLabelText('原地编辑代码文字'); fireEvent.change(input, { target: { value: '改文案' } }); fireEvent.keyDown(input, { key: 'Enter' })
   expect(clip().code!.parameters.title).toBe('改文案'); expect(clip().elementOverrides).toBeUndefined(); expect(owner.past).toHaveLength(before + 1)
-  fireEvent.doubleClick(body); fireEvent.change(result.getByLabelText('原地编辑代码文字'), { target: { value: '取消' } }); fireEvent.keyDown(result.getByLabelText('原地编辑代码文字'), { key: 'Escape' }); expect(clip().code!.parameters.title).toBe('改文案')
+  act(observe); fireEvent.doubleClick(result.container.querySelector('[data-code-element-edit-body]')!); fireEvent.change(result.getByLabelText('原地编辑代码文字'), { target: { value: '取消' } }); fireEvent.keyDown(result.getByLabelText('原地编辑代码文字'), { key: 'Escape' }); expect(clip().code!.parameters.title).toBe('改文案')
   act(() => undoVideoEdit(owner.document.id)); expect(clip().code!.parameters.title).toBeUndefined(); expect(result.onError).not.toHaveBeenCalled()
 })
 it('默认静态，显式开启的属性按当前源时刻打帧；关闭冻结当前值', () => {
   updateVideoEditCodeElement(target(), { dx: 10 }); expect(clip().elementOverrides?.box.curves).toBeUndefined()
-  setVideoEditCodeElementAutoKeyframes(target(), true); setVideoEditView(owner.document.id, { frame: 30 }); updateVideoEditCodeElement(target(), { dx: 110 })
+  setVideoEditCodeElementAutoKeyframes(target(), true); setVideoEditView(owner.document.id, { frame: 30 }); observe(); updateVideoEditCodeElement(target(), { dx: 110 })
   expect(clip().elementOverrides?.box.curves?.dx).toHaveLength(2)
   setVideoEditView(owner.document.id, { frame: 15 }); expect(readVideoEditCodeElementEdit(target()).values.dx).toBeCloseTo(60)
   setVideoEditCodeElementAutoKeyframes(target(), false); expect(clip().elementOverrides?.box).toMatchObject({ dx: 60 }); expect(clip().elementOverrides?.box.curves).toBeUndefined()
 })
-it('效果控件复用文字面板，字号/字重/颜色写覆盖并可撤销，不改参数文字', () => {
+it('绑定的文字样式复用通用面板，字号和字重写参数并可撤销', () => {
   selectVideoEditCodeElement(owner, clipId, 'title'); const onError = vi.fn()
-  const result = render(<VideoEditCodeElementsPanel instance={owner} clipId={clipId} onError={onError} />)
-  expect(result.queryByLabelText('全部大写')).toBeNull()
+  const result = render(<CodeParameterPanel projectId={owner.document.id} sequenceId={owner.activeSequenceId} clipId={clipId} onError={onError} />)
   const size = result.getByLabelText('文字字号'); fireEvent.focus(size); fireEvent.change(size, { target: { value: '80' } }); fireEvent.blur(size)
+  act(observe)
   const weight = result.getByLabelText('文字字重'); fireEvent.focus(weight); fireEvent.change(weight, { target: { value: '700' } }); fireEvent.blur(weight)
-  const beforeColor = owner.past.length; const color = result.getByLabelText('文字填充颜色'); fireEvent.focus(color); fireEvent.change(color, { target: { value: BLACK_HEX } }); fireEvent.blur(color)
-  expect(clip().elementOverrides?.title).toMatchObject({ fontSize: 80, fontWeight: 700, fill: [0,0,0,1] }); expect(clip().code!.parameters.title).toBeUndefined(); expect(owner.past).toHaveLength(beforeColor + 1)
-  act(() => undoVideoEdit(owner.document.id)); expect(clip().elementOverrides?.title.fill).toBeUndefined(); expect(onError).not.toHaveBeenCalled()
+  expect(clip().code!.parameters.style).toMatchObject({ fontSize: 80, fontWeight: 700 }); expect(clip().code!.parameters.title).toBeUndefined(); expect(clip().elementOverrides).toBeUndefined()
+  act(() => undoVideoEdit(owner.document.id)); expect(clip().code!.parameters.style).toMatchObject({ fontSize: 80, fontWeight: 400 }); expect(onError).not.toHaveBeenCalled()
 })
 it('查看源码可等待效果控件挂载，并展开及定位当前元素', () => {
   showVideoEditCodeElementSource(target())
@@ -116,20 +134,40 @@ it('查看源码可等待效果控件挂载，并展开及定位当前元素', (
 })
 it('助手通用实体原子读写、拒绝无效值与锁定、撤销和保存重开；失效覆盖可清除', async () => {
   const app = createApplicationHarness(); const ref = { kind: 'video_edit.clip', id: `${owner.document.id}:${clipId}` }; const before = owner.past.length
-  expect(await app.change(ref, { 'video_edit.clip.element_overrides': { box: { dx: 20, fill: [1,0,0,1] }, gone: { hidden: true } } })).toMatchObject({ ok: true })
+  expect(await app.change(ref, { 'video_edit.clip.element_overrides': { box: { dx: 20 }, gone: { hidden: true } } })).toMatchObject({ ok: true })
   expect((await app.read(ref, ['video_edit.clip.element_overrides'])).properties).toMatchObject({ 'video_edit.clip.element_overrides': { box: { dx: 20 } } }); expect(owner.past).toHaveLength(before + 1)
-  expect(videoEditCodeElementHostSummary(owner.document.id)).toMatchObject({ count: 2, items: [{ elementId: 'box', missing: false }, { elementId: 'gone', missing: true }] })
+  expect(videoEditCodeElementHostSummary(owner.document.id)).toMatchObject({ count: 2, items: [{ elementId: 'box', missing: false }, { elementId: 'gone', missing: false }] })
   expect((await app.change(ref, { 'video_edit.clip.element_overrides': { box: { scale: -2 } } })).ok).toBe(false)
+  for (const patch of [{ fill: [1,0,0,1] }, { text: '忽略不得成功' }, { fontSize: 40 }, { curves: { fill: [{ id: 'bad', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: [1,0,0,1], interpolation: 'hold' }] } }]) {
+    expect((await app.change(ref, { 'video_edit.clip.element_overrides': { box: patch } })).ok).toBe(false)
+    expect(owner.past).toHaveLength(before + 1)
+  }
   editVideoProject(owner.document.id, document => { document.sequences[0].tracks.find(track => track.index === clip().track)!.locked = true; return document })
   expect((await app.change(ref, { 'video_edit.clip.element_overrides': {} })).ok).toBe(false); undoVideoEdit(owner.document.id)
-  await saveVideoEdit(owner.document.id); owner = await reopenVideoEdit(owner.document.id)
-  expect(clip().elementOverrides?.box.dx).toBe(20); expect(videoEditCodeElementOverrideSummary(owner.document.id, owner.activeSequenceId, clipId).find(value => value.elementId === 'gone')?.missing).toBe(true)
+  await saveVideoEdit(owner.document.id); owner = await reopenVideoEdit(owner.document.id); observe()
+  expect(clip().elementOverrides?.box.dx).toBe(20); expect(videoEditCodeElementOverrideSummary(owner.document.id, owner.activeSequenceId, clipId).find(value => value.elementId === 'gone')).toMatchObject({ missing: false, visible: false })
   resetVideoEditCodeElement(target('gone')); expect(clip().elementOverrides?.gone).toBeUndefined(); undoVideoEdit(owner.document.id); expect(clip().elementOverrides?.gone).toEqual({ hidden: true })
 })
-it('确定性写回创建新版本并清除覆盖同一步撤销；复杂坐标创建助手标注', async () => {
-  updateVideoEditCodeElement(target(), { dx: 20, fill: [1,0,0,1] }); const before = owner.past.length
-  expect(await bakeVideoEditCodeElement(target())).toBe('baked'); expect(clip().elementOverrides).toBeUndefined(); expect(clip().code!.versionId).not.toBe('version'); expect(testCodeSource(owner.document, owner.document.codeMaterials![0].versions[0])).toBe(source); expect(owner.past).toHaveLength(before + 1)
-  undoVideoEdit(owner.document.id); expect(clip().code!.versionId).toBe('version'); expect(clip().elementOverrides?.box.dx).toBe(20)
-  updateVideoEditCodeElement(target(), { scale: 2 }); expect(await bakeVideoEditCodeElement(target())).toBe('assistant')
+it('可选写回附真实截图和局部源码，等待助手处理时覆盖长期有效', async () => {
+  updateVideoEditCodeElement(target(), { dx: 20, scale: 2 })
+  expect(await bakeVideoEditCodeElement(target())).toBe('assistant')
+  expect(clip().code!.versionId).toBe('version'); expect(testCodeSource(owner.document, owner.document.codeMaterials![0].versions[0])).toBe(source)
+  expect(clip().elementOverrides?.box.dx).toBe(20)
+  expect(observation.snapshot).toHaveBeenCalledWith(owner.document.id, { kind: 'program', sequenceId: owner.activeSequenceId, frame: 0 }, 1920, undefined)
+  expect(observation.assistant).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ attachments: [{ attachment: { id: 'frame', displayUrl: 'blob:frame' }, previewSrc: 'blob:frame' }], context: expect.stringContaining('局部源码') }))
   const mark = getActiveVideoEditSequence(owner).annotations.at(-1)!; expect(mark.text).toContain('请把这些覆盖写回源码'); expect(mark.target).toMatchObject({ kind: 'element', elementId: 'box' }); expect(clip().elementOverrides?.box.scale).toBe(2)
+})
+it('截图期间切帧或取消不创建迟到标注，不打开助手，不清除覆盖', async () => {
+  updateVideoEditCodeElement(target(), { dx: 20 })
+  let finish!: (value: unknown) => void
+  observation.snapshot.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  const pending = bakeVideoEditCodeElement(target())
+  setVideoEditView(owner.document.id, { frame: 1 })
+  finish({ asset: { id: 'stale', displayUrl: 'blob:stale' } })
+  await expect(pending).rejects.toThrow('原画面已改变')
+  expect(observation.assistant).not.toHaveBeenCalled(); expect(getActiveVideoEditSequence(owner).annotations).toHaveLength(0)
+  expect(clip().elementOverrides?.box.dx).toBe(20)
+  const controller = new AbortController(); controller.abort()
+  await expect(bakeVideoEditCodeElement(target(), controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+  expect(observation.snapshot).toHaveBeenCalledOnce()
 })

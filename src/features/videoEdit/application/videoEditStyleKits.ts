@@ -4,8 +4,7 @@ import { compileVideoEditCode, readVideoEditCodeProgram } from './videoEditCodeS
 import { editVideoProject, requireVideoEditInstance } from './videoEditService'
 import { videoEditStyleKitLibrary } from './videoEditStyleKitLibrary'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
-import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
-import { measureCodeText } from '../videoEditGlyphMetrics'
+import { trialVideoEditAuthorSource } from './videoEditCodeService'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { portableCodeComponentFiles } from '@/core/videoEdit/codeMaterial/components'
 
@@ -30,9 +29,9 @@ export async function checkStyleKit(kit: StyleKit, signal?: AbortSignal): Promis
   const checked = styleKitSchema.parse(kit)
   for (const example of checked.examples) {
     signal?.throwIfAborted(); const program = await compileVideoEditCode(example.source, signal)
-    if (program.kind !== 'generator' || program.languageVersion !== 3) throw new Error(`示例“${example.title}”必须使用 v3 生成器。`)
+    if (program.kind !== 'generator') throw new Error(`示例“${example.title}”必须使用 JS 生成器。`)
     signal?.throwIfAborted()
-    try { for (const time of [0, program.durationSeconds / 2, program.durationSeconds]) evaluateCodeMaterial(program, { time, localTime: time, sequenceTime: time, width: program.width, height: program.height, frame: Math.round(time * 30), fps: 30 }, {}, { measureText: measureCodeText }) }
+    try { await trialVideoEditAuthorSource(example.source, program, signal ?? new AbortController().signal) }
     catch (error) { throw new Error(`示例“${example.title}”无法绘制：${error instanceof Error ? error.message : String(error)}`, { cause: error }) }
   }
   return checked
@@ -58,7 +57,7 @@ export function captureVideoEditStyleExample(projectId: string, sequenceId: stri
   const clip = sequence?.clips.find(value => value.id === owner.selection)
   if (!clip?.code) throw new Error('请先在时间线上选择一个代码片段。')
   const program = readVideoEditCodeProgram(owner, owner.document, clip.code)
-  if (program.kind !== 'generator' || program.languageVersion !== 3) throw new Error('参考示例需要 v3 生成器。')
+  if (program.kind !== 'generator') throw new Error('参考示例需要 JS 生成器。')
   return styleKitSchema.parse({ ...kit, examples: [...kit.examples, { id: crypto.randomUUID(), title: clip.name.slice(0, 80), note: '', source: portableCodeComponentFiles(codeMaterialSource(owner.document, clip.code).compilation) }] })
 }
 /** Host context: the bound guide in full (examples are read through the entity), or the personal styles to recommend from. */

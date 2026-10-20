@@ -1,61 +1,72 @@
 import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { evaluateVideoEditClip } from '@/core/videoEdit/keyframes'
-import { codeMaterialContextForFrame } from '@/core/videoEdit/codeMaterialTiming'
-import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
-import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import { videoEditFadeOpacity } from '@/core/videoEdit/fades'
 import { videoEditClipPictureSize, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
-import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareCodeElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
+import { codeElementAuthorPoint, codeElementFramePolygon, codeElementLabel, cycleCodeElement, hitCodeElementIndex, prepareAuthorElementIndex, type CodeElementIndex } from '@/core/videoEdit/codeElementSelection'
 import type { CodeElementBounds } from '@/core/videoEdit/codeMaterial/geometry'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
+import { authorOverrideMatrix } from '@/core/videoEdit/codeAuthorGeometry'
+import { codePoint } from '@/core/videoEdit/codeMaterial/geometry'
+import { evaluateCodeElementOverride, readCodeElementOverride } from '@/core/videoEdit/codeElementOverrides'
+import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import type { VideoEditAnnotation, VideoEditAnnotationTarget } from '@/core/videoEdit/annotations'
-import { measureCodeText } from '../videoEditGlyphMetrics'
-import { readVideoEditCodeProgram } from './videoEditCodeState'
-import { getActiveVideoEditSequence, setVideoEditView, type VideoEditInstance } from './videoEditService'
+import { getActiveVideoEditSequence, publishVideoEdit, setVideoEditView, type VideoEditInstance } from './videoEditService'
 
 export interface VideoEditCodeElementFrame { clip: VideoEditClip; index: CodeElementIndex; picture: { width: number; height: number }; files: CodeMaterialFiles }
-interface FrameCache { document: object; sequenceId: string; frame: number; fontGeneration?: number; elements: Map<string, VideoEditCodeElementFrame> }
+interface FrameCache { document: object; sequenceId: string; frame: number; elements: Map<string, VideoEditCodeElementFrame> }
 const frames = new WeakMap<VideoEditInstance, FrameCache>()
-interface EvaluatedIndex {
-  program: CodeMaterialProgram; code: NonNullable<VideoEditClip['code']>; overrides: VideoEditClip['elementOverrides']
-  context: string; fontGeneration?: number; index: CodeElementIndex
-}
-// Only keep the latest visible frame per instance. Placement/effects change presentation,
-// not author geometry; time, parameters, overrides and fonts invalidate it.
-const indices = new WeakMap<VideoEditInstance, Map<string, EvaluatedIndex>>()
-const fontGeneration = (): number | undefined => measureCodeText({ text: '', fontFamily: 'sans-serif', fontWeight: 400, fontStyle: 'normal', fontSize: 12, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, wrap: false, maxLines: 1 }).fontGeneration
 
-export function videoEditCodeElementFrames(instance: VideoEditInstance, sequenceId = instance.activeSequenceId, frame = instance.frame): Map<string, VideoEditCodeElementFrame> {
-  const old = frames.get(instance)
-  if (old?.document === instance.document && old.sequenceId === sequenceId && old.frame === frame && (!old.elements.size || old.fontGeneration === fontGeneration())) return old.elements
-  const sequence = instance.document.sequences.find(sequence => sequence.id === sequenceId)
-  if (!sequence) return new Map()
-  const visible = videoEditVisibleTracks(sequence); const elements = new Map<string, VideoEditCodeElementFrame>()
-  const previous = indices.get(instance); const evaluatedIndices = new Map<string, EvaluatedIndex>()
-  let generation: number | undefined; let measuredGeneration = false
-  for (const raw of sequence.clips) {
-    if (raw.kind !== 'code' || !raw.code || frame < raw.start || frame >= raw.start + raw.duration || !visible.has(raw.track)) continue
-    const evaluated = evaluateVideoEditClip(raw, frame); const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, frame) }; if (clip.opacity <= 0) continue
-    const program = readVideoEditCodeProgram(instance, instance.document, raw.code)
-    if (program.languageVersion !== 3) continue
-    if (!measuredGeneration) { generation = fontGeneration(); measuredGeneration = true }
-    const context = codeMaterialContextForFrame(raw, frame, sequence.frameRate, program)
-    const sourceTime = videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate)
-    const key = JSON.stringify([context.time, context.localTime, context.sequenceTime, context.frame, context.fps, context.width, context.height, sourceTime.sourceInUs, sourceTime.sourceRemainder.numerator, sourceTime.sourceRemainder.denominator])
-    const cached = previous?.get(raw.id)
-    let index: CodeElementIndex
-    if (cached && cached.program === program && cached.code === raw.code && cached.overrides === raw.elementOverrides && cached.context === key && cached.fontGeneration === generation) index = cached.index
-    else {
-      const parameters = evaluateCodeMaterialParameters(prepareCodeMaterialParameters(program, raw.code), sourceTime)
-      index = prepareCodeElementIndex(program, context, parameters, measureCodeText, { elementOverrides: raw.elementOverrides, sourceTime })
-    }
-    evaluatedIndices.set(raw.id, { program, code: raw.code, overrides: raw.elementOverrides, context: key, fontGeneration: generation, index })
-    elements.set(raw.id, { clip, picture: { width: context.width, height: context.height }, index, files: codeMaterialSource(instance.document, raw.code).contents })
+/** Install only observations from the exact document revision that produced the picture. */
+export function installVideoEditCodeElements(instance: VideoEditInstance, observation: CodeAuthorFrameObservation): boolean {
+  if (observation.revision !== instance.document.revision) return false
+  const sequence = instance.document.sequences.find(value => value.id === observation.sequenceId)
+  if (!sequence) return false
+  const visible = videoEditVisibleTracks(sequence), elements = new Map<string, VideoEditCodeElementFrame>()
+  for (const observed of observation.clips) {
+    const raw = sequence.clips.find(clip => clip.id === observed.clipId)
+    if (!raw?.code || raw.kind !== 'code' || raw.code.versionId !== observed.versionId || !visible.has(raw.track) || observation.frame < raw.start || observation.frame >= raw.start + raw.duration) continue
+    const evaluated = evaluateVideoEditClip(raw, observation.frame)
+    const clip = { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(raw, observation.frame) }
+    if (clip.opacity <= 0) continue
+    elements.set(raw.id, { clip, picture: { width: observed.width, height: observed.height }, index: prepareAuthorElementIndex(observed.elements), files: codeMaterialSource(instance.document, raw.code).contents })
   }
-  indices.set(instance, evaluatedIndices)
-  frames.set(instance, { document: instance.document, sequenceId, frame, fontGeneration: elements.size ? fontGeneration() : undefined, elements }); return elements
+  frames.set(instance, { document: instance.document, sequenceId: observation.sequenceId, frame: observation.frame, elements })
+  publishVideoEdit()
+  return true
+}
+export function videoEditCodeElementFrames(instance: VideoEditInstance, sequenceId = instance.activeSequenceId, frame = instance.frame): Map<string, VideoEditCodeElementFrame> {
+  const cached = frames.get(instance)
+  if (!cached || cached.sequenceId !== sequenceId || cached.frame !== frame) return new Map()
+  if (cached.document === instance.document) return cached.elements
+  const sequence = instance.document.sequences.find(value => value.id === sequenceId)
+  if (!sequence) return new Map()
+  const visible = videoEditVisibleTracks(sequence)
+  const result = new Map<string, VideoEditCodeElementFrame>()
+  // Direct manipulation must remain responsive while the next frame is rendering.
+  // Reuse only the exact same source time and parameter state; apply host transforms,
+  // never call author code or infer drawing operations on the UI thread.
+  for (const [id, entry] of cached.elements) {
+    const raw = sequence.clips.find(clip => clip.id === id)
+    if (!raw || raw.kind !== 'code' || !visible.has(raw.track) || frame < raw.start || frame >= raw.start + raw.duration || JSON.stringify(raw.code) !== JSON.stringify(entry.clip.code)) continue
+    const time = videoEditClipSourceTimeAt(raw, frame - raw.start, sequence.frameRate)
+    if (JSON.stringify(time) !== JSON.stringify(videoEditClipSourceTimeAt(entry.clip, frame - entry.clip.start, sequence.frameRate))) continue
+    const observations = entry.index.bounds.flatMap(bound => {
+      const author = bound.author
+      if (!author?.baseMatrix) return []
+      const override = evaluateCodeElementOverride(readCodeElementOverride(raw.elementOverrides, author.id) ?? {}, time)
+      if (override.hidden) return []
+      const matrix = authorOverrideMatrix(author.baseMatrix, author.bounds, override)
+      const [x, y, right, bottom] = author.bounds
+      return [{ ...author, matrix, opacity: (author.baseOpacity ?? 1) * (override.opacity ?? 1), corners: [[x, y], [right, y], [right, bottom], [x, bottom]].map(([x, y]) => codePoint(matrix, x, y)) }]
+    })
+    const evaluated = evaluateVideoEditClip(raw, frame)
+    const opacity = evaluated.opacity * videoEditFadeOpacity(raw, frame)
+    if (opacity <= 0) continue
+    result.set(id, { ...entry, clip: { ...evaluated, opacity }, index: prepareAuthorElementIndex(observations) })
+  }
+  return result
 }
 /** Pick only within the top visible picture. A non-code clip occludes code beneath it. */
 export function videoEditProgramClipAt(instance: VideoEditInstance, point: { x: number; y: number }): { clip: VideoEditClip; picture: { width: number; height: number }; entry?: VideoEditCodeElementFrame } | undefined {

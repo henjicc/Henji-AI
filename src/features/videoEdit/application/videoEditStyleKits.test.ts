@@ -13,28 +13,30 @@ import { composeStyleGuide, parseStyleGuide, styleKitContent } from '@/core/vide
 import { undoVideoEdit, saveVideoEdit, updateVideoEditCreativeIntents } from './videoEditService'
 import { releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
-import { evaluateCodeMaterial } from '@/core/videoEdit/codeMaterial/evaluate'
-import { measureCodeText } from '../videoEditGlyphMetrics'
 import { createVideoEditCodeItems } from './videoEditCodeService'
 import { appendVideoEditItems } from './videoEditProjectItems'
 const trial = vi.hoisted(() => ({ fail: false, documents: [] as VideoEditComposition[], beforeCompile: undefined as (() => void) | undefined }))
 vi.mock('../engine/videoEditCodeCompiler', async () => {
-  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
-  return { VideoEditCodeCompiler: class { async compile(source: string) { trial.beforeCompile?.(); return compileCodeMaterial(source) } dispose() {} } }
+ const { testAuthorBundle } = await import('../engine/videoEditAuthorTestFixtures')
+ return { VideoEditCodeCompiler: class { async bundleQueued(files: import('@/core/videoEdit/codeMaterial/sources').CodeMaterialFiles) { trial.beforeCompile?.(); return testAuthorBundle(files) } dispose() {} } }
+})
+vi.mock('./videoEditAuthorInspection', async () => {
+ const { testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures')
+ return { inspectVideoEditAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle) }
 })
 vi.mock('../engine/videoEditRenderSession', async () => {
-  const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
+  const { testAuthorBundle, testAuthorProgram } = await import('../engine/videoEditAuthorTestFixtures')
   return { VideoEditRenderSession: class {
     constructor(private document: VideoEditComposition) {}
     setTracks() {}
     async updateDocument(document: VideoEditComposition) { this.document = document }
-    async present(frame: number) {
+    async replaceContent(document: VideoEditComposition) { this.document = document }
+    async present(_frame: number) {
       if (trial.fail) throw new Error('试绘失败')
       trial.documents.push(this.document)
       for (const clip of this.document.clips) if (clip.code) {
         const version = this.document.codeMaterials!.find(value => value.id === clip.code!.definitionId)!.versions.find(value => value.id === clip.code!.versionId)!
-        const program = compileCodeMaterial(testCodeSource(this.document, version)); const time = (frame - clip.start) / this.document.fps
-        evaluateCodeMaterial(program, { time, localTime: time, sequenceTime: frame / this.document.fps, width: program.width, height: program.height, frame, fps: this.document.fps }, clip.code.parameters, { measureText: measureCodeText })
+        testAuthorProgram(testAuthorBundle(testCodeSource(this.document, version)))
       }
       return { presented: true, bitmap: { close() {} } }
     }
@@ -43,7 +45,7 @@ vi.mock('../engine/videoEditRenderSession', async () => {
 })
 beforeEach(() => { installHarnessNativeStorage(); videoEditStyleKitLibrary.replace([]); trial.fail = false; trial.documents = []; trial.beforeCompile = undefined; vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { return { width: text.length * 20, actualBoundingBoxLeft: 0, actualBoundingBoxRight: text.length * 20 } } } } }) })
 afterEach(async () => { await closeAllVideoEdits(); releaseVideoEditCodeCompiler(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
-const available = () => copyStyleKit(BUILTIN_STYLE_KITS[0])
+const available = () => copyStyleKit({ ...BUILTIN_STYLE_KITS[0], examples: [{ id: 'fixture', title: '测试参考', note: '', source: 'export default {name:"测试参考",draw(){}}' }] })
 it('公共风格校验期间仅写元数据不使文档快照校验失效', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; const app = createApplicationHarness()
   trial.beforeCompile = () => updateVideoEditCreativeIntents(id, { drafts: [], sessions: [], resources: [] })
@@ -82,7 +84,7 @@ it('绑定序列可撤销、不改时间线；宿主上下文给出整份说明�
 it('所选代码片段加为参考示例，未选代码时明确拒绝', async () => {
   const owner = await createVideoEditTestProject()
   expect(() => captureVideoEditStyleExample(owner.document.id, owner.activeSequenceId, available())).toThrow('请先在时间线上选择一个代码片段')
-  const items = await createVideoEditCodeItems(owner.document.id, [{ source: testFilesSource(BUILTIN_STYLE_KITS[1].examples[0].source) }])
+  const items = await createVideoEditCodeItems(owner.document.id, [{ source: 'export default {name:"测试画面",width:1920,height:1080,durationSeconds:3,draw(){}}' }])
   appendVideoEditItems(owner.document.id, items, owner.activeSequenceId)
   owner.selection = owner.document.sequences[0].clips.at(-1)!.id
   const captured = captureVideoEditStyleExample(owner.document.id, owner.activeSequenceId, available())
@@ -92,7 +94,7 @@ it('所选代码片段加为参考示例，未选代码时明确拒绝', async (
 it('通用实体创建/绑定/整体改写说明书，缺章节被点名拒绝，内置只读，仍被使用的风格不能删除', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id; const app = createApplicationHarness()
   try {
-    expect((await app.requireResult('list_application_entities', { entityType: 'video_edit.style_preset', limit: 20 })).refs).toHaveLength(3)
+    expect((await app.requireResult('list_application_entities', { entityType: 'video_edit.style_preset', limit: 20 })).refs).toHaveLength(1)
     const content = styleKitContent(available())
     await app.requireResult('change_application_entities', { summary: '创建风格', changes: [{ kind: 'create_items', entityType: 'video_edit.style_kit', parent: { kind: 'video_edit.document', id }, items: [{ properties: { 'video_edit.style_kit.name': '新风格', 'video_edit.style_kit.content': content } }] }] })
     const kit = owner.document.styleKits![0]; const ref = { kind: 'video_edit.style_kit', id: `${id}:${kit.id}` }; const seqRef = { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }
@@ -102,13 +104,13 @@ it('通用实体创建/绑定/整体改写说明书，缺章节被点名拒绝�
     expect(owner.document.styleKits![0].guide).toContain('- 标题用衬线体')
     const missing = await app.change(ref, { 'video_edit.style_kit.content': { guide: '## 定位\n只写了定位', examples: [] } })
     expect(missing.ok).toBe(false); expect(JSON.stringify(missing)).toContain('核心理念')
-    const presetRef = { kind: 'video_edit.style_preset', id: 'builtin:style:0' }
+    const presetRef = { kind: 'video_edit.style_preset', id: BUILTIN_STYLE_KITS[0].id }
     expect((await app.change(presetRef, { 'video_edit.style_preset.name': '禁止覆盖' })).ok).toBe(false)
     expect((await app.call('change_application_entities', { summary: '删除仍使用的风格', changes: [{ kind: 'remove_items', entityType: ref.kind, parent: { kind: 'video_edit.document', id }, targets: [ref] }] })).ok).toBe(false)
   } finally { app.dispose() }
 })
 it('无效参考示例在编译/求值时阻断保存', async () => {
-  const example = available().examples[0]; const broken = testFilesSource(example.source).replace(/fill: s\.palette\.bg/, 'fill: 1 / ctx.time')
+  const example = available().examples[0]; const broken = testFilesSource(example.source) + '{'
   expect(broken).not.toBe(testFilesSource(example.source))
   await expect(checkStyleKit({ ...available(), examples: [{ ...example, source: broken }] })).rejects.toThrow()
 })

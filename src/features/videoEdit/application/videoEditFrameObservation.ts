@@ -12,7 +12,7 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { requireVideoEditInstance } from './videoEditService'
 import { videoEditObservationVersion } from './videoEditObservationVersion'
-import { resolveVideoEditElementAnnotation, videoEditCodeElementFrames, videoEditCodeElementRegion } from './videoEditCodeElements'
+import { installVideoEditCodeElements, resolveVideoEditElementAnnotation, videoEditCodeElementFrames, videoEditCodeElementRegion } from './videoEditCodeElements'
 import { codeElementLabel } from '@/core/videoEdit/codeElementSelection'
 import { renderVideoEditContactSheet, type VideoEditContactSheetRange } from './videoEditContactSheet'
 import { videoEditObservationPixelCrop, videoEditObservationRegionSchema, type VideoEditObservationRegion } from '@/core/videoEdit/frameObservation'
@@ -145,6 +145,16 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
       documentRevision: document.revision, documentVersion, sequenceId: composition.id, contactSheet: { frames: sheet.frames, columns: sheet.columns, rows: sheet.rows },
       ...(reference ? { comparison: { referenceItemId: reference.itemId, referenceTimesUs } } : {}) }
   }
+  // Membership and frame validity do not depend on rendering. Only an element's
+  // current crop bounds must wait for the worker's observation.
+  const dynamicCrop = composition.annotations.find(mark => mark.id === annotations.cropAnnotationId)?.target.kind === 'element'
+  prepareVideoEditAnnotationObservation(composition.annotations, frame, dynamicCrop
+    ? { ...annotations, cropAnnotationId: undefined, annotationIds: [...(annotations.annotationIds ?? []), annotations.cropAnnotationId!] }
+    : annotations)
+  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements, target.kind === 'program' ? value => { assertCurrent(); installVideoEditCodeElements(owner, value) } : undefined)
+  if (!bitmap) throw new Error('指定画面没有渲染结果，请重试。')
+  let bytes: Uint8Array; let width: number; let height: number; const sourceWidth = bitmap.width; const sourceHeight = bitmap.height
+  try {
   const marks = target.kind === 'program' ? composition.annotations.map(mark => resolveVideoEditElementAnnotation(owner, mark, composition.id, frame).mark) : composition.annotations
   const observation = prepareVideoEditAnnotationObservation(marks, frame, annotations)
   const highlight = annotations.highlightElement
@@ -152,10 +162,6 @@ export async function observeVideoEditFrame(projectId: string, target: VideoEdit
   const element = entry?.index.byId.get(highlight?.elementId ?? '')
   const elementRegion = entry && element ? videoEditCodeElementRegion(entry, element, composition) : undefined
   if (highlight && (!element || !elementRegion || element.opacity < .01)) throw new Error('要高亮的代码元素在指定帧不可见或已不存在，请检查片段和源码位置。')
-  const bitmap = await trialVideoEditCodeFrames([{ document: composition, frame }], signal, true, undefined, measurements)
-  if (!bitmap) throw new Error('指定画面没有渲染结果，请重试。')
-  let bytes: Uint8Array; let width: number; let height: number; const sourceWidth = bitmap.width; const sourceHeight = bitmap.height
-  try {
     const crop = annotations.cropRegion ?? observation.crop
     const { x: sourceX, y: sourceY, width: cropWidth, height: cropHeight } = videoEditObservationPixelCrop(bitmap.width, bitmap.height, crop)
     width = maxWidth === null ? cropWidth : crop ? Math.max(1, Math.round(cropWidth * Math.min(maxWidth, Math.max(bitmap.width, bitmap.height)) / Math.max(cropWidth, cropHeight))) : Math.min(maxWidth, bitmap.width); height = Math.max(1, Math.round(cropHeight * width / cropWidth))

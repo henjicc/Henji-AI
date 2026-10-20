@@ -9,6 +9,10 @@ import type { VideoEditCodePicture, VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCompositor'
 import { VIDEO_EDIT_PRECISE_FORMAT, videoEditPictureHighPrecision } from './videoEditGpuFrame'
 import type { VideoEditTrackedClip } from './videoEditTrackResults'
+import type { AuthorGpuInputs } from './videoEditAuthorModule'
+import type { PreparedVideoEditCodeEffect } from './videoEditCodeSources'
+
+export type VideoEditFilterFrameReader = (clip: VideoEditClip, plan: PreparedVideoEditCodeEffect, input: VideoEditCodePicture) => Promise<AuthorGpuInputs['frames']>
 
 interface Layer { clip: VideoEditClip; picture: VideoEditPicture }
 const effective = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).length > 0
@@ -49,7 +53,7 @@ function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditT
  * playback resolution (task 4.9): code filters then still read the sequence size (a `1/width` offset stays the same
  * fraction of the picture) and built-in effects learn the scale for the few amounts that cannot shrink below a pixel.
  */
-export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document, target?: VideoEditCodePicture, onEffectError?: (effect: VideoEditEffect, error: unknown) => void, quality: EffectQuality = 'interactive'): Promise<{ presented: boolean; completion: Promise<void> }> {
+export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document, target?: VideoEditCodePicture, onEffectError?: (effect: VideoEditEffect, error: unknown) => void, quality: EffectQuality = 'interactive', readFilterFrames?: VideoEditFilterFrameReader): Promise<{ presented: boolean; completion: Promise<void> }> {
   const renderScale = document.height / logical.height
   let runtime: VideoEditCodeGpu | undefined
   const submissions: Array<Promise<PromiseSettledResult<void>>> = []
@@ -79,7 +83,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
         const builtin = plan.builtin && { ...plan.builtin, shaderTimeSeconds: (frame - clip.start) / document.fps }
         const filtered = plan.builtin
           ? await runtime.builtin(free[0], builtin!, result, frame, renderScale, document.colorLuts, quality, logical)
-          : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
+          : await runtime.authorFilter(free[0], plan.instanceKey, plan.program, plan.parameters, result, plan.info, plan.program.frames.length ? await readFilterFrames?.(clip, plan, result) : [])
         current()
         if (plan.builtin && plan.mask) {
           // 区域蒙版按片段自己的位置、缩放、旋转画到序列尺寸，与片段画面逐像素对齐；只在区域内混入效果。

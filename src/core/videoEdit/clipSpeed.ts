@@ -1,4 +1,4 @@
-import { offsetVideoEditSource, offsetVideoEditSourceFraction, sampleVideoEditSourceFraction, videoEditRatioSchema, videoEditSourceSeconds, type VideoEditFrameOffset, type VideoEditRatio, type VideoEditSourceTime } from './time'
+import { offsetVideoEditSource, offsetVideoEditSourceFraction, sampleVideoEditSourceFraction, videoEditFrameFraction, videoEditRatioSchema, videoEditSourceSeconds, type VideoEditFrameOffset, type VideoEditRatio, type VideoEditSourceTime } from './time'
 
 /**
  * 片段速度（4.13，PR 的“速度/持续时间”与比率拉伸工具 R）：源时间与时间线时长的换算全部在这里，时间线编辑、修剪、
@@ -59,6 +59,12 @@ export function advanceVideoEditClipSource(clip: VideoEditClipTiming, frames: nu
 }
 /** 时间线上片段第 `offset` 帧（相对片段起点，可以在片段外：过渡余量）显示的源时间，精确有理数。 */
 export function videoEditClipSourceTimeAt(clip: VideoEditClipTiming, offset: number, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime {
+  if (!Number.isInteger(offset)) {
+    const { numerator, denominator } = videoEditFrameFraction(offset)
+    const sampled = videoEditClipMotionSourceTimeAt(clip, numerator, denominator, rate, holdBeforeZero)
+    if (!sampled) throw new Error('源入点不能早于素材开始。')
+    return sampled
+  }
   return advanceVideoEditClipSource(clip, clip.reverse ? offset + 1 : offset, rate, holdBeforeZero)
 }
 /** Continuous pose sampling retains the normal reverse picture's one-frame phase. */

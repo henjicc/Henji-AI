@@ -19,10 +19,11 @@ import { collectVideoEditMotionStructure } from '@/core/videoEdit/motionStructur
 import { collectVideoEditCodeMotion } from '@/core/videoEdit/codeMotionReview'
 import { collectVideoEditPixelMotion } from '@/core/videoEdit/pixelMotionReview'
 import type { VideoMotionScan } from '@/core/media/motionEvidence'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTestFixtures'
+const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
 import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtures'
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
-import { invalidateCodeTextMetrics, measureCodeText } from '../videoEditGlyphMetrics'
+import { invalidateCodeTextMetrics } from '../videoEditGlyphMetrics'
 import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse } from '../engine/videoEditMotionReviewWorker'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
@@ -64,7 +65,11 @@ class MotionWorker {
       if (this.request.planInputsOnly) { this.onmessage?.(new MessageEvent<VideoEditMotionReviewResponse>('message', { data: { result: { records: [], sampledFrames: 0, sampledInstances: 0, inputPlacements: videoEditCodeInputMotionPlacements(composition, range) } } })); return }
       const result = collectVideoEditMotionStructure(composition, range, policy)
       if (pixels) result.records.push(...collectVideoEditPixelMotion(pixels, composition.fps, policy))
-      if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, measureCodeText, audios)).records)
+      if (programs) result.records.push(...(await collectVideoEditCodeMotion(composition, range, programs, policy, async (local, frame) => ({ sequenceId: local.id, revision: local.revision, frame, clips: local.clips.filter(clip => clip.code).map(clip => {
+        const audio = audios?.[codeMotionAudioKey(local.id, clip.id)]
+        const x = audio ? (audio.levels[Math.min(frame, audio.levels.length - 1)] ?? 0) * 500 : frame * 10
+        return { clipId: clip.id, versionId: clip.code!.versionId, width: 1000, height: 1000, elements: [{ id: audio ? 'sound/0' : 'moving', name: '观察图层', bounds: [0,0,100,100], matrix: [1,0,0,1,x,10], corners: [[x,10],[x+100,10],[x+100,110],[x,110]], parameterKeys: [], textParameterKeys: [] }] }
+      }) }))).records)
       this.onmessage?.({ data: { result } } as MessageEvent<VideoEditMotionReviewResponse>)
     } catch (error) { this.onmessage?.({ data: { error: error instanceof Error ? error.message : '分析失败' } } as MessageEvent<VideoEditMotionReviewResponse>) }
   }
@@ -99,9 +104,9 @@ async function fixture() {
   })
   return { owner, input: { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequenceId}` }, from: 0, to: 120 } }
 }
-async function codeFixture(source = 'export default {apiVersion:1,languageVersion:3,name:"代码复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:10,seed:0,parameters:{},render(ctx){return [rect({id:"moving",x:min(ctx.time,1)*300,y:10,width:100,height:100})];}}') {
+async function codeFixture(source = 'export default {name:"代码复核",width:1000,height:1000,durationSeconds:10,draw(){}}') {
   const data = await fixture(), { owner } = data
-  const version = { id: 'code-v', apiVersion: 1 as const, languageVersion: 3 as const, ...testCodeManifest(source, owner.document) }
+  const version = { id: 'code-v', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source, owner.document) }
   rememberVideoEditCodeMetadata(owner, 'code-d', version, compileCodeMaterial(source))
   editVideoProject(owner.document.id, document => {
     document.codeMaterials = [{ id: 'code-d', name: '代码复核', defaultVersionId: version.id, versions: [version] }]
@@ -113,7 +118,7 @@ async function codeFixture(source = 'export default {apiVersion:1,languageVersio
   return data
 }
 async function soundFixture(explicit = false) {
-  const source = `export default {apiVersion:1,languageVersion:3,name:"声音复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:1000,seed:0,parameters:${explicit ? '{sound:{type:"audio",title:"声音",default:null}}' : '{}'},render(ctx){return [rect({id:"sound",x:ctx.audio.level()*500,y:10,width:100,height:100})];}}`
+  const source = 'export default {name:"声音复核",width:1000,height:1000,durationSeconds:1000,params:[{key:"sound",type:"audio",title:"声音",default:null}],draw(){}}'
   const data = await codeFixture(source), { owner } = data
   editVideoProject(owner.document.id, document => {
     document.media[0].hasAudio = true
@@ -128,13 +133,12 @@ async function soundFixture(explicit = false) {
   soundIO.mix.mockImplementation(async (start, duration) => [Float32Array.from({ length: Math.round(rate * duration) }, (_, i) => start + i / rate >= 1 && start + i / rate < 2 ? .4 : .1)])
   return data
 }
-it.each([false, true])('public review analyzes actual %s sound selection, returns audio-driven element motion and keeps managed source pins in the query only', async explicit => {
+it.each([false, true])('public review analyzes actual %s sound selection, marks opaque draw motion unavailable and keeps managed source pins in the query only', async explicit => {
   const { owner, input } = await soundFixture(explicit), app = createApplicationHarness()
   const before = structuredClone(owner.document), history = owner.past.length
   try {
     const result = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 50 }))
-    expect(result.records.some(record => record.kind === 'code_unavailable')).toBe(false)
-    expect(result.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', motionEvidence: expect.objectContaining({ basis: 'code_structure', elementPath: ['sound/0'] }) })]))
+    expect(result.records.some(record => record.kind === 'code_unavailable')).toBe(true)
     expect(result.documentVersion).toContain('|review:')
     expect(soundIO.documents).toHaveLength(1)
     expect(soundIO.documents[0].clips.map(clip => clip.id)).toEqual(explicit ? ['content-audio'] : ['a', 'b'])
@@ -250,8 +254,8 @@ async function pixelFixture() {
 }
 async function inputPixelFixture(kind: 'video' | 'fixed' | 'sequence') {
   const data = await pixelFixture(), { owner } = data
-  const source = 'export default {apiVersion:1,languageVersion:3,name:"输入复核",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:10,seed:0,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({id:"input",source:ctx.params.picture,x:0,y:0,width:1000,height:1000})];}}'
-  const version = { id: 'input-v', apiVersion: 1 as const, languageVersion: 3 as const, ...testCodeManifest(source, owner.document) }
+  const source = 'export default {name:"输入复核",width:1000,height:1000,durationSeconds:10,params:[{key:"picture",type:"image",title:"画面",default:null}],draw(){}}'
+  const version = { id: 'input-v', apiVersion: 4 as const, languageVersion: 4 as const, ...testCodeManifest(source, owner.document) }
   rememberVideoEditCodeMetadata(owner, 'input-d', version, compileCodeMaterial(source))
   editVideoProject(owner.document.id, document => {
     const sequence = document.sequences[0]; addLegacyVideoEditTracks(sequence)
@@ -354,20 +358,7 @@ it.each([12000, 60001])('pixel budgets preflight the whole query before decoding
   await expect(queryVideoEditReview({ ...input, to: frames, motion: { videoPixels: true } }, context())).rejects.toThrow(frames > 60000 ? '60000' : '300秒')
   expect(platform.sceneDetection.detect).not.toHaveBeenCalled()
 })
-it('public review reuses the checked author IR, returns code element evidence, and protects paged results from font changes', async () => {
-  const { owner, input } = await codeFixture(), app = createApplicationHarness()
-  const before = structuredClone(owner.document), past = owner.past.length, frame = owner.frame
-  try {
-    const first = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 50 }))
-    expect(first.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', motionEvidence: expect.objectContaining({ basis: 'code_structure', elementPath: ['moving/0'], peakSpeed: expect.closeTo(30, 4) }) })]))
-    expect(MotionWorker.instances).toHaveLength(1)
-    expect(MotionWorker.instances[0].request.programs).toHaveProperty('code-v.languageVersion', 3)
-    const page = parse(await app.requireResult('query_video_edit_review', { ...input, motion: {}, limit: 1 }))
-    invalidateCodeTextMetrics()
-    await expect(queryVideoEditReview({ ...input, motion: {}, limit: 1, cursor: page.nextCursor }, context())).rejects.toThrow('失效')
-    expect(owner.document).toEqual(before); expect(owner.past.length).toBe(past); expect(owner.frame).toBe(frame)
-  } finally { app.dispose() }
-})
+
 it('rejects a code review whose font set changed while the real domain calculation was pending', async () => {
   const { input } = await codeFixture(); MotionWorker.automatic = false
   const pending = queryVideoEditReview({ ...input, motion: {} }, context())

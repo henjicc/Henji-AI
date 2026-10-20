@@ -1,3 +1,4 @@
+import { installVideoEditCodeElements } from './application/videoEditCodeElements'
 import { createVideoEditProgramSurface as createProgramSurface, retainVideoEditProgramWarmup, takeVideoEditProgram } from './engine/videoEditProgramPool'
 import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -330,6 +331,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     const recordPresentation = (target: number, result: Awaited<ReturnType<VideoEditRenderSession['present']>>, requestedAt: number, scrubbing: boolean, composition: VideoEditComposition): boolean => {
       const revision = composition.revision
       if (stopped || !listVideoEditInstances().includes(instance) || instance.activeSequenceId !== composition.id || session.current !== renderer || canvas.current !== surface || requestedAt < lastPresentation) { result.history?.close(); return false }
+      if (result.authorElements && result.presented && !instance.playing && !scrubbing && target === instance.frame) installVideoEditCodeElements(instance, result.authorElements)
       if (result.history) {
         explanationSurface ??= window.document.createElement('canvas')
         explanationSurface.className = 'pointer-events-none absolute inset-0 h-full w-full object-contain'
@@ -511,7 +513,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const result = await renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
             if (pipelined) { submittedFrame = target; if (playbackInFlight >= 2) return }
             if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
-          } : undefined, undefined, 'interactive', historyEnabled).finally(() => { if (pipelined) playbackInFlight-- })
+          } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing).finally(() => { if (pipelined) playbackInFlight-- })
           if (submittedFrame === target) submittedFrame = -1
           {
             // A completed seek is useful while the pointer keeps moving. Only a different

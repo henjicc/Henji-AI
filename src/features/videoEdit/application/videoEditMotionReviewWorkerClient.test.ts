@@ -3,19 +3,15 @@ import { analyzeVideoEditMotionStructure } from './videoEditMotionReviewWorkerCl
 import { collectVideoEditMotionStructure } from '@/core/videoEdit/motionStructure'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditMotionReviewRequest, VideoEditMotionReviewResponse, VideoEditMotionReviewMessage } from '../engine/videoEditMotionReviewWorker'
+import type { CodeAuthorProgram, CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
 import * as glyphs from '../videoEditGlyphMetrics'
-import { layoutCodeText } from '@/core/videoEdit/codeMaterial/textLayout'
-import type { CodeTextMeasureRequest } from '@/core/videoEdit/codeMaterial/contract'
 import { Worker as NodeWorker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { buildSync } from 'esbuild'
-import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { VideoEditSourceMapIndex } from '@/core/videoEdit/sourceMap'
 import type { VideoMotionScan } from '@/core/media/motionEvidence'
-import { AudioContentAnalyzer } from '@/core/audioAnalysis/contentAnalysis'
-import { codeMotionAudioKey } from '@/core/videoEdit/codeAudio'
 
 class TestWorker {
   static instances: TestWorker[] = []
@@ -74,39 +70,49 @@ it('the real worker entry uses the same domain kernel and returns domain failure
   scope.onmessage(new MessageEvent('message', { data: request }))
   expect(posted[0]).toHaveProperty('result.sampledInstances', 0)
 })
-const textRequest: CodeTextMeasureRequest = { text: '测量', fontFamily: 'sans-serif', fontStyle: 'normal', fontWeight: 400, fontSize: 20, letterSpacing: 0, lineHeight: 1.2, maxWidth: 0, wrap: false, maxLines: 0 }
-it('routes text measurement through the production host and keeps the worker alive until its final result', async () => {
-  const layout = layoutCodeText(textRequest, () => 73)
-  vi.spyOn(glyphs, 'measureCodeText').mockReturnValue(layout)
-  const pending = analyzeVideoEditMotionStructure(request, new AbortController().signal), worker = TestWorker.instances[0]
+const observation = (composition = request.composition, frame = 0): CodeAuthorFrameObservation => ({ sequenceId: composition.id, revision: composition.revision, frame, clips: [] })
+it('round-trips actual render observations and keeps the analysis worker alive until completion', async () => {
+  const observe = vi.fn(async () => observation())
+  const pending = analyzeVideoEditMotionStructure(request, new AbortController().signal, observe), worker = TestWorker.instances[0]
   const post = vi.spyOn(worker, 'postMessage')
-  worker.onmessage?.(new MessageEvent('message', { data: { measureText: { id: 7, request: textRequest } } }))
-  expect(glyphs.measureCodeText).toHaveBeenCalledWith(textRequest)
-  expect(post).toHaveBeenCalledWith({ measurement: { id: 7, layout } })
+  await worker.onmessage?.(new MessageEvent('message', { data: { observeFrame: { id: 7, composition: request.composition, frame: 0 } } }))
+  expect(observe).toHaveBeenCalledWith(request.composition, 0)
+  expect(post).toHaveBeenCalledWith({ observation: { id: 7, value: observation() } })
   expect(worker.terminate).not.toHaveBeenCalled()
   worker.respond(); await pending
   expect(worker.terminate).toHaveBeenCalledOnce()
 })
-it('rejects font changes before a late result or a measurement reply and releases the worker', async () => {
+it('rejects font changes before a late result and releases the worker', async () => {
   const pending = analyzeVideoEditMotionStructure(request, new AbortController().signal)
   glyphs.invalidateCodeTextMetrics(); TestWorker.instances[0].respond()
   await expect(pending).rejects.toThrow('字体已改变')
   expect(TestWorker.instances[0].terminate).toHaveBeenCalledOnce()
 })
-it('fails closed on unavailable text metrics and ignores text requests received after cancellation', async () => {
-  vi.spyOn(glyphs, 'measureCodeText').mockImplementation(() => { throw new Error('正式字体不可用') })
-  const pending = analyzeVideoEditMotionStructure(request, new AbortController().signal)
-  TestWorker.instances[0].onmessage?.(new MessageEvent('message', { data: { measureText: { id: 0, request: textRequest } } }))
-  await expect(pending).rejects.toThrow('正式字体不可用')
-  const controller = new AbortController(), cancelled = analyzeVideoEditMotionStructure(request, controller.signal), worker = TestWorker.instances[1], late = worker.onmessage!
-  const post = vi.spyOn(worker, 'postMessage'); controller.abort()
-  late(new MessageEvent('message', { data: { measureText: { id: 1, request: textRequest } } }))
-  await expect(cancelled).rejects.toThrow()
-  expect(post).not.toHaveBeenCalled()
-  expect(glyphs.measureCodeText).toHaveBeenCalledTimes(1)
+it.each(['failure', 'stale', 'missing'] as const)('rejects %s render evidence without fabricating geometry', async kind => {
+  const observe = kind === 'missing' ? undefined : vi.fn(async () => {
+    if (kind === 'failure') throw new Error('作者执行失败')
+    return { ...observation(), revision: request.composition.revision + 1 }
+  })
+  const pending = analyzeVideoEditMotionStructure(request, new AbortController().signal, observe)
+  const rejected = expect(pending).rejects.toThrow(kind === 'failure' ? '作者执行失败' : kind === 'stale' ? '画面已改变' : '正式渲染观察入口')
+  await TestWorker.instances[0].onmessage?.(new MessageEvent('message', { data: { observeFrame: { id: 0, composition: request.composition, frame: 0 } } }))
+  await rejected
+  expect(TestWorker.instances[0].terminate).toHaveBeenCalledOnce()
 })
-it('the browser bundle evaluates real code in a background thread, round-trips host text metrics and cancels running work', async () => {
-  let measurements = 0
+it('ignores an in-flight observation after cancellation', async () => {
+  let resolve!: (value: CodeAuthorFrameObservation) => void
+  const observe = vi.fn(() => new Promise<CodeAuthorFrameObservation>(done => { resolve = done }))
+  const controller = new AbortController()
+  const pending = analyzeVideoEditMotionStructure(request, controller.signal, observe)
+  const rejected = expect(pending).rejects.toThrow('取消观察')
+  const worker = TestWorker.instances[0], post = vi.spyOn(worker, 'postMessage')
+  const reading = worker.onmessage?.(new MessageEvent('message', { data: { observeFrame: { id: 1, composition: request.composition, frame: 0 } } }))
+  controller.abort(new Error('取消观察')); resolve(observation()); await reading; await rejected
+  expect(post).not.toHaveBeenCalled()
+  expect(worker.terminate).toHaveBeenCalledOnce()
+})
+it('the browser bundle analyzes observed layers in a background thread and cancels running work', async () => {
+  let observations = 0
   class ThreadWorker {
     static instances: ThreadWorker[] = []
     onmessage: ((event: MessageEvent<VideoEditMotionReviewResponse>) => void) | null = null
@@ -125,7 +131,7 @@ it('the browser bundle evaluates real code in a background thread, round-trips h
       this.started = new Promise(resolve => { started = resolve })
       this.thread.on('message', (data: VideoEditMotionReviewResponse | { started: true }) => {
         if ('started' in data) started()
-        else { if ('measureText' in data) measurements++; this.onmessage?.(new MessageEvent('message', { data })) }
+        else { if ('observeFrame' in data) observations++; this.onmessage?.(new MessageEvent('message', { data })) }
       })
       this.thread.on('error', error => this.onerror?.({ message: error.message }))
       this.thread.on('messageerror', () => this.onmessageerror?.())
@@ -135,29 +141,21 @@ it('the browser bundle evaluates real code in a background thread, round-trips h
     terminate(): void { this.stopped = this.thread.terminate() }
   }
   vi.stubGlobal('Worker', ThreadWorker)
-  vi.spyOn(glyphs, 'measureCodeText').mockImplementation(value => layoutCodeText(value, text => text.length * 20))
   const document = createVideoEditDocument('线程复核'), sequence = createVideoEditSequence('主'); addLegacyVideoEditTracks(sequence); document.sequences = [sequence]
   const clip: VideoEditClip = { id: 'code', itemId: 'code-item', name: '代码', kind: 'code', track: 1, start: 0, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: .5, y: .5, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '', code: { definitionId: 'd', versionId: 'v', parameters: {} } }
   sequence.clips = [clip]
-  const compile = (body: string) => compileCodeMaterial(`export default {apiVersion:1,languageVersion:3,name:"线程",kind:"generator",mode:"dynamic",width:1000,height:1000,durationSeconds:2000,seed:0,parameters:{},render(ctx){${body}}}`)
+  const program: CodeAuthorProgram = { apiVersion: 4, languageVersion: 4, name: '线程', kind: 'generator', mode: 'dynamic', seed: 0, parameters: [], types: {}, frames: [], hexColors: [], bundle: { code: '', map: '', locations: { layers: {} } } }
+  const observe = async (composition: typeof request.composition, frame: number): Promise<CodeAuthorFrameObservation> => ({ ...observation(composition, frame), clips: [{ clipId: 'code', versionId: 'v', width: 1000, height: 1000, elements: [{ id: 'moving', name: '文字', bounds: [0, 0, 100, 100], matrix: [1, 0, 0, 1, frame * 100 / 30, 0], corners: [[frame * 100 / 30, 0], [frame * 100 / 30 + 100, 0], [frame * 100 / 30 + 100, 100], [frame * 100 / 30, 100]], parameterKeys: [], textParameterKeys: [] }] }] })
   try {
-    const program = compile('return [text({id:"moving",x:ctx.time*100,y:10,text:"真实线程",fontSize:20})];')
     const composition = videoEditComposition(document, sequence.id)
     const scan: VideoMotionScan = { startSeconds: 0, endSeconds: 2, samplingFps: 15, width: 320, height: 180, sampledFrames: 30,
       samples: Array.from({ length: 30 }, (_, i) => ({ fromSeconds: i / 15, toSeconds: (i + 1) / 15, speed: 6, zoom: 0, change: 0, cut: false, still: false })) }
     const pixels = new VideoEditSourceMapIndex().query(composition, { from: 0, to: 60 }, ['video']).map(entry => ({ entry, scan }))
-    const result = await analyzeVideoEditMotionStructure({ composition, range: { from: 0, to: 60 }, programs: { v: program }, pixels, policy: {} }, new AbortController().signal)
+    const result = await analyzeVideoEditMotionStructure({ composition, range: { from: 0, to: 60 }, programs: { v: program }, pixels, policy: {} }, new AbortController().signal, observe)
     expect(result.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'code_structure', peakSpeed: expect.closeTo(10, 4) })]))
     expect(result.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'video_pixels', peakSpeed: expect.closeTo(6, 4) })]))
-    expect(measurements).toBe(1); expect(result.sampledCodeFrames).toBe(60)
+    expect(observations).toBe(60); expect(result.sampledCodeFrames).toBe(60)
     await ThreadWorker.instances[0].stopped
-    const sound = new AudioContentAnalyzer(8000, composition.fps)
-    sound.append([Float32Array.from({ length: 16000 }, (_, i) => i < 8000 ? .1 : .4)])
-    const driven = compile('return [rect({id:"sound",x:ctx.audio.level()*500,y:10,width:100,height:100})];')
-    const sounded = await analyzeVideoEditMotionStructure({ composition, range: { from: 0, to: 60 }, programs: { v: driven }, audios: { [codeMotionAudioKey(sequence.id, clip.id)]: sound.finish() }, policy: {} }, new AbortController().signal)
-    expect(sounded.records.some(record => record.kind === 'code_unavailable')).toBe(false)
-    expect(sounded.records).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'motion', basis: 'code_structure', elementPath: ['sound/0'], timeline: { from: 29, to: 31 } })]))
-    await ThreadWorker.instances[1].stopped
     document.media = [{ id: 'input-media', kind: 'video', name: '输入', path: fileURLToPath(new URL('./input.mp4', import.meta.url)), width: 320, height: 180, durationSeconds: 2 }]
     document.items = [{ id: 'input-item', name: '输入', kind: 'video', mediaId: 'input-media' }]
     clip.code!.parameters = { picture: { kind: 'video', mediaId: 'input-media' } }
@@ -165,15 +163,14 @@ it('the browser bundle evaluates real code in a background thread, round-trips h
     expect(planned.inputPlacements).toHaveLength(1)
     expect(planned.inputPlacements![0].sourceTimes![29]).toBeCloseTo(29 / 30)
     expect(planned.inputPlacements![0].input).toEqual({ parameter: 'picture', kind: 'video', mediaId: 'input-media' })
-    await ThreadWorker.instances[2].stopped
+    await ThreadWorker.instances[1].stopped
     clip.code!.parameters = {}
     clip.duration = 60000
-    const heavy = compile('return repeat(4096,i=>rect({id:"particle",x:ctx.time+i/10,y:10,width:100,height:100}));')
     const controller = new AbortController()
-    const pending = analyzeVideoEditMotionStructure({ composition: videoEditComposition(document, sequence.id), range: { from: 0, to: 60000 }, programs: { v: heavy }, policy: {} }, controller.signal)
+    const pending = analyzeVideoEditMotionStructure({ composition: videoEditComposition(document, sequence.id), range: { from: 0, to: 60000 }, programs: { v: program }, policy: {} }, controller.signal, observe)
     const rejected = expect(pending).rejects.toThrow('取消实际代码分析')
-    await ThreadWorker.instances[3].started
+    await ThreadWorker.instances[2].started
     controller.abort(new Error('取消实际代码分析')); await rejected
-    expect(ThreadWorker.instances[3].stopped).toBeDefined(); await ThreadWorker.instances[3].stopped
+    expect(ThreadWorker.instances[2].stopped).toBeDefined(); await ThreadWorker.instances[2].stopped
   } finally { await Promise.all(ThreadWorker.instances.map(worker => worker.thread.terminate())) }
 }, 15000)

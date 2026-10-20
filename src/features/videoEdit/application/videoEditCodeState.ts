@@ -1,9 +1,11 @@
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
-import { codeVersionContentKey, documentCodeSourceResolver, verifyCodeSourceReferences, loadCodeSourceReferences, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
-import { VideoEditCodeCompiler } from '../engine/videoEditCodeCompiler'
+import { codeMaterialFilesKey, normalizeCodeMaterialFiles, codeVersionContentKey, documentCodeSourceResolver, verifyCodeSourceReferences, loadCodeSourceReferences, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
+import { prepareVideoEditAuthorBundle, releaseSharedVideoEditCompiler } from '../engine/videoEditSharedCompiler'
+export { prepareVideoEditAuthorBundle } from '../engine/videoEditSharedCompiler'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import { codeParameterMetadata } from '@/core/videoEdit/codeMaterial/parameterTypes'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
+import { inspectVideoEditAuthor } from './videoEditAuthorInspection'
 import { codeMaterialSource, codeMaterialVersion, validateCodeMaterialDocument, videoEditCodeReferences } from '@/core/videoEdit/codeMaterialDocument'
 import type { CodeMaterialMetadata, CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
@@ -12,23 +14,22 @@ import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersisten
 interface Checked { definitionId: string; source: string; apiVersion: number; languageVersion: number; metadata: CodeMaterialMetadata; program: CodeMaterialProgram; bytes: number }
 export type VideoEditCodeMetadata = Map<string, Checked>
 const states = new WeakMap<object, VideoEditCodeMetadata>()
-let compiler: VideoEditCodeCompiler | undefined
-export function compileVideoEditCode(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
+const checkedPrograms = new Map<string, CodeMaterialProgram>()
+export async function compileVideoEditCode(source: string | CodeMaterialFiles, signal?: AbortSignal): Promise<CodeMaterialProgram> {
   initializeVideoEditCodeSourceRuntime()
-  compiler ??= new VideoEditCodeCompiler()
-  return compiler.compile(source, signal)
+  signal?.throwIfAborted()
+  const files = normalizeCodeMaterialFiles(source), key = codeMaterialFilesKey(files)
+  const cached = checkedPrograms.get(key)
+  if (cached) { checkedPrograms.delete(key); checkedPrograms.set(key, cached); return cached }
+  const bundle = await prepareVideoEditAuthorBundle(files, signal)
+  const program = await inspectVideoEditAuthor(bundle, signal)
+  signal?.throwIfAborted()
+  while (checkedPrograms.size >= 32) checkedPrograms.delete(checkedPrograms.keys().next().value!)
+  checkedPrograms.set(key, program)
+  return program
 }
-export function releaseVideoEditCodeCompiler(): void { compiler?.dispose(); compiler = undefined }
-export function prepareVideoEditAuthorBundle(files: CodeMaterialFiles, signal?: AbortSignal): Promise<import('../engine/videoEditAuthorBundle').AuthorBundle> {
-  compiler ??= new VideoEditCodeCompiler()
-  return compiler.bundleQueued(files, signal)
-}
-/** Render-session preparation shares source-keyed IR, while interactive compilation keeps its original budget. */
-export function prepareVideoEditCode(source: CodeMaterialFiles, signal: AbortSignal): Promise<CodeMaterialProgram> {
-  initializeVideoEditCodeSourceRuntime()
-  compiler ??= new VideoEditCodeCompiler()
-  return compiler.compileQueued(source, signal)
-}
+export function releaseVideoEditCodeCompiler(): void { releaseSharedVideoEditCompiler(); checkedPrograms.clear() }
+
 export function installVideoEditCodeMetadata(owner: object, metadata: VideoEditCodeMetadata): void { states.set(owner, metadata) }
 export function readVideoEditCodeMetadata(owner: object, document: VideoEditDocument): CodeMaterialMetadataReader {
   for (const definition of document.codeMaterials ?? []) for (const version of definition.versions) {
@@ -48,9 +49,9 @@ export function rememberVideoEditCodeMetadata(owner: object, definitionId: strin
   put(metadata, definitionId, version, program)
 }
 export function forgetVideoEditCodeMetadata(owner: object, versionId: string): void { states.get(owner)?.delete(versionId) }
-/** 已检查版本的 IR；未缓存时返回 undefined，不触发编译。 */
+/** 已检查版本的执行模块；未缓存时返回 undefined，不触发编译。 */
 export function peekVideoEditCodeProgram(owner: object, versionId: string): CodeMaterialProgram | undefined { return states.get(owner)?.get(versionId)?.program }
-/** Reuse the worker-checked IR; monitor picking never recompiles author source. */
+/** Reuse the worker-checked module; monitor picking never recompiles author source. */
 export function readVideoEditCodeProgram(owner: object, document: VideoEditDocument, instance: Parameters<CodeMaterialMetadataReader>[0]): CodeMaterialProgram {
   readVideoEditCodeMetadata(owner, document)(instance)
   return states.get(owner)!.get(instance.versionId)!.program

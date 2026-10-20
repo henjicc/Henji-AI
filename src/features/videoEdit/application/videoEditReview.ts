@@ -4,7 +4,7 @@ import { queryVideoEditReviewCapability } from '@/core/application-control/domai
 import { videoEditComposition, videoEditDuration, type VideoEditMedia } from '@/core/videoEdit/document'
 import { assertVideoEditReviewBudget, collectVideoEditReviewStructure, selectVideoEditReviewFrames, videoEditReviewRange, videoEditTrackingReviewRanges, videoEditCrowdedReviewEvents, VIDEO_EDIT_REVIEW_TRACK_SAMPLE_BUDGET, type VideoEditReviewRecord } from '@/core/videoEdit/review'
 import { projectVideoEditTrackingRanges, videoEditSourceMapTrackingRange, visitVideoEditPictureInstances } from '@/core/videoEdit/sourceMap'
-import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
+import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
 import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
 import { videoEditTrackingSourceId } from '@/core/videoEdit/trackingSource'
 import type { CapabilityExecutionContext } from '@/features/application-control'
@@ -20,6 +20,8 @@ import { readVideoEditCodeProgram } from './videoEditCodeState'
 import { codeTextFontGeneration } from '../videoEditGlyphMetrics'
 import { readVideoEditPixelMotion, verifyVideoEditMotionSources } from './videoEditPixelMotion'
 import { readVideoEditCodeMotionAudio } from './videoEditCodeMotionAudio'
+import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
+import type { CodeAuthorFrameObservation } from '@/core/videoEdit/codeAuthorProgram'
 
 interface Snapshot { key: string; version: string; baseVersion: string; records: VideoEditReviewRecord[]; frames: number[]; warnings: string[]; sources: VideoEditMedia[] }
 const snapshots = new WeakMap<VideoEditInstance, Map<string, Snapshot>>()
@@ -75,7 +77,14 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
         const video = input.motion.videoPixels ? await readVideoEditPixelMotion(owner, composition, range, context.signal, assertCurrent) : undefined
         const sound = await readVideoEditCodeMotionAudio(owner, composition, range, programs, context.signal, assertCurrent)
         sources = [...(video?.sources ?? []), ...sound.sources]
-        const motion = await analyzeVideoEditMotionStructure({ composition, range, programs, audios: sound.audios, ...(video ? { pixels: video.pixels } : {}), policy: { minGapSeconds: input.motion.minGapSeconds, minimumStillSeconds: input.motion.minimumHoldSeconds } }, context.signal)
+        const motion = await analyzeVideoEditMotionStructure({ composition, range, programs, audios: sound.audios, ...(video ? { pixels: video.pixels } : {}), policy: { minGapSeconds: input.motion.minGapSeconds, minimumStillSeconds: input.motion.minimumHoldSeconds } }, context.signal, async (document, frame) => {
+          assertCurrent()
+          let observation: CodeAuthorFrameObservation | undefined
+          await trialVideoEditCodeFrames([{ document, frame }], context.signal, false, undefined, undefined, value => { observation = value })
+          assertCurrent()
+          if (!observation) throw new Error('渲染会话没有返回作者图层观察。')
+          return observation
+        })
         assertCurrent()
         for (const record of motion.records) {
           assertVideoEditReviewBudget(records.length + 1)
