@@ -7,6 +7,19 @@ const { stable, sourceTime } = require('./premiereMigration.cjs')
 const { readYogaAuthors, yogaInstanceParameters } = require('./yogaAuthorMigration.cjs')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 
+/** This controlled migration recognizes the actual PR track style, not a guessed default. */
+function yogaCaptionStyle(source) {
+  const hash = crypto.createHash('sha256').update(Buffer.from(source?.template ?? '', 'base64')).digest('hex')
+  assert.equal(hash, '5246207d563afa2220a457a0cb8c1eab5b2d37fc090ea26c6912c22f50668efa', 'YOGA 字幕轨道样式已变化，需要重新核对原工程')
+  assert.ok(Math.abs(source.metadata.mCaptionsAreaRatio - .8) < 1e-6, 'YOGA 字幕安全框已变化')
+  // PR's 4K_50 style: HarmonyOS medium, white fill, gray 8px centered
+  // outline. Our outside width is its visible half, in 1080p reference units.
+  // PR's bottom baseline differs from our centered line-box baseline by 26px at 4K.
+  return { fontFamily: 'HarmonyOS Sans SC Medium', fontSize: 50,
+    strokes: [{ enabled: true, color: '#4d4d4d', width: 2, position: 'outside' }],
+    bottomMargin: .1, baselineShift: -13 }
+}
+
 /** Assemble the actual PR instances using the already verified author bundles. */
 async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
   const document = structuredClone(base.document)
@@ -23,6 +36,14 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
     const sequence = document.sequences.find(value => value.id === stable('sequence', rawSequence.id))
     if (!sequence) continue
     const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
+    for (const track of rawSequence.tracks.filter(value => value.kind === 'caption' && value.clips.length)) {
+      const style = yogaCaptionStyle(track.captionStyle)
+      for (const raw of track.clips) {
+        const caption = sequence.captions?.find(value => value.id === stable('caption', raw.id))
+        assert.ok(caption, `字幕正文未迁入：${raw.id}`)
+        caption.style = structuredClone(style)
+      }
+    }
     for (const track of rawSequence.tracks) for (const raw of track.clips) {
       const bridges = raw.effects.filter(effect => effect.matchName === 'AE.FrameFlow Bridge')
       if (!bridges.length) continue
@@ -131,4 +152,4 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
     remaining: base.evidence.limitations.filter(value => !/待迁移代码画面|待重建生成画面/.test(value.text) && !restoredTransitions.has(value.sourceClipId) && !restoredVolume.has(value.sourceClipId)), source: graph.source }
 }
 
-module.exports = { buildYogaAuthorTimeline }
+module.exports = { buildYogaAuthorTimeline, yogaCaptionStyle }

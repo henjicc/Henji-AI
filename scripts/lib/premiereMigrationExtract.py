@@ -140,6 +140,11 @@ class ProjectGraph:
                                "xml": ET.tostring(base, encoding="unicode"), "effects": self.effects(track.find("AudioTrack")) if track.find("AudioTrack") is not None else [],
                                "clips": [self.clip(self.ref(ref)) for ref in ct.findall("ClipItems/TrackItems/TrackItem")],
                                "transitions": []})
+                if kind == "caption":
+                    tracks[-1]["captionStyle"] = {
+                        "template": track.findtext("CaptionDataTemplateStyle"),
+                        "metadata": json.loads(track.findtext("Metadata", "{}")),
+                    }
                 for ref in ct.findall("TransitionItems/TrackItems/TrackItem"):
                     transition = self.ref(ref).find("TransitionTrackItem")
                     tracks[-1]["transitions"].append({"id": ref.get("ObjectRef"),
