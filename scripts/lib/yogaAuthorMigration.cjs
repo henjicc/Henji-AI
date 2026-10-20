@@ -9,6 +9,7 @@ const YOGA_AUTHOR_BATCHES = [
   // First five remaining effects in the actual main sequence's appearance order.
   ['6314410', '13815500', '146814', '7701821', '9642704'],
   ['9049942', '13119842', '1845381', '4715265', '8250556'],
+  ['764366', '15048341', '1270546', '3295436', '15969942'],
 ]
 const digest = source => crypto.createHash('sha256').update(source).digest('hex')
 // Exercise the image panel after its entrance, not just the opening title.
@@ -73,6 +74,8 @@ async function prepareYogaAuthorBatch(root, graph, output, batch = 0, options = 
     const sourceFile = path.join(directory, 'original.js'); fs.writeFileSync(sourceFile, effect.source)
     assert.equal(digest(fs.readFileSync(sourceFile)), effect.hash, '复制改变了原作者源码')
     const spec = { entry: 'original.js', sourceFiles: { 'original.js': sourceFile }, width: 3840, height: 2160, duration, time: options.times?.[id] ?? ACTIVE_SAMPLE_TIMES[id] ?? Math.min(2, duration / 2), frames: 30, ...bindings }
+    // Candidate seconds and the formal integer-frame playhead must describe the same instant.
+    spec.time = Math.round(spec.time * 60) / 60
     const adaptations = []
     if (id === '4715265') {
       const canvas = 'const c2 = document.createElement("canvas");'

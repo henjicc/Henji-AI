@@ -53,7 +53,7 @@ function huaziShader(original) {
   assert.ok(rows.every(row => row.length === 9 && row.every(Number.isFinite)))
   const number = value => Number.isInteger(value) ? `${value}.0` : String(value)
   const table = `const BLOCK=array<array<f32,9>,${count}>(${rows.map(row => `array<f32,9>(${row.map(number).join(',')})`).join(',')});`
-  return COMMON + table + `
+  const pose = `
 struct Pose { center:vec2f, halfSize:vec2f, chamfer:f32, opacity:f32 }
 fn poseAt(i:i32)->Pose {
  let T=f.time;let b=BLOCK[i];
@@ -67,7 +67,35 @@ fn poseAt(i:i32)->Pose {
  if(a<=.001){return Pose(vec2f(0),vec2f(0),0.,0.);}
  let u=f.size.y/720.;
  return Pose(f.size*.5+vec2f(b[0]+ox+fx,b[1]+fy)*u,vec2f(b[2],b[3])*.5*sc*u,b[4]*sc*u,a);
+}`
+  return maskedBlurShader(count, table, pose)
 }
+
+function nodeGlassShader(original) {
+  const source = original.gpu.passes[0].source
+  const block = /NODE\[N\]\[5\]=\{([\s\S]*?)\};/.exec(source)?.[1]
+  assert.ok(block, '原毛玻璃底缺少 NODE 表')
+  const rows = [...block.matchAll(/\{([^{}]+)\}/g)].map(m => m[1].split(',').map(v => Number(v.replace(/f/g, ''))))
+  assert.equal(rows.length, 3)
+  const table = `const NODE=array<array<f32,5>,3>(${rows.map(row => `array<f32,5>(${row.map(n => Number.isInteger(n) ? `${n}.0` : n).join(',')})`).join(',')});`
+  const offset = Number(/float T=float\(f.time\)-([\d.]+)f/.exec(source)?.[1])
+  assert.ok(Number.isFinite(offset))
+  return maskedBlurShader(3, table, `
+struct Pose { center:vec2f, halfSize:vec2f, chamfer:f32, opacity:f32 }
+fn poseAt(i:i32)->Pose {
+ let T=f.time-${offset};let n=NODE[i];let k=bez((T-n[4])/.8,.2,0.,0.,1.);
+ if(k<=0.){return Pose(vec2f(0),vec2f(0),0.,0.);}
+ let cam=vec2f(8.*sin(T*.6),4.*sin(T*.8));let camz=1.+.012*sin(T*.45);
+ let fl=1.5*sin(T*1.1+n[4]*3.);let world=vec2f(n[0]+n[2]*.5,n[1]+n[3]*.5+(1.-k)*18.+fl);
+ let s=f.size.y/720.*camz;let sc=s*(.95+.05*k);
+ let a=min(1.,k*1.5)*clamp01((10.85-T)/.45);
+ if(a<=.001){return Pose(vec2f(0),vec2f(0),0.,0.);}
+ return Pose((world-cam)*s+f.size*.5,vec2f(n[2],n[3])*.5*sc,16.*sc,a);
+}`)
+}
+
+function maskedBlurShader(count, table, pose) {
+  return COMMON + table + pose + `
 fn shapeDist(q:vec2f,p:Pose)->f32 {
  let low=p.center-p.halfSize;let high=p.center+p.halfSize;
  let d=max(max(low.x-q.x,q.x-high.x),max(low.y-q.y,q.y-high.y));
@@ -90,6 +118,35 @@ fn shapeDist(q:vec2f,p:Pose)->f32 {
  let sg=28.*f.size.y/2160.;let step=3.*sg/16.;var acc=vec4f(0);var wsum=0.;
  for(var k=-16;k<=16;k++){let y=f32(k)*step;let w=exp(-y*y/(2.*sg*sg));acc+=sampleImage(previous,p+vec2f(0,y))*w;wsum+=w;}
  return mix(src,acc/wsum,m);
+}`
+}
+
+function pairedWindowShader(original, id) {
+  const source = original.gpu.passes[0].source
+  const offset = Number(/float T=float\(f.time\)-\(([\d.]+)f\)/.exec(source)?.[1])
+  assert.ok(Number.isFinite(offset), '对比窗缺少原时钟偏移')
+  const right = id === '15934198'
+  return COMMON + `
+fn at(T:f32,p:vec2f)->vec4f {
+ let start=${right ? '.3' : '0.'};let k=bez((T-start)/.8,.2,0.,0.,1.);
+ if(k<=0.){return vec4f(0);}
+ let m=bez((T+.4)/3.2,.32,0.,.12,1.);
+ let cam=vec2f(8.*sin(T*.6),4.*sin(T*.8));let cz=(.96+.04*m)*(1.+.012*sin(T*.45));
+ let s=f.size.y/720.*cz;let fl=1.5*sin(T*1.1+${right ? '.9' : '0.'});
+ let world=vec2f(${right ? '280.' : '-280.'},(1.-k)*18.+fl);let sc=s*(.95+.05*k);
+ let ck=bez((T-start-.1)/.75,.2,0.,0.,1.);if(ck<=0.){return vec4f(0);}
+ let center=(world-cam)*s+f.size*.5+vec2f(0,12.*(1.-ck)*sc);
+ let op=min(1.,k*1.5)*ck*clamp01((3.2-T)/.45);if(op<=.001){return vec4f(0);}
+ let uv=((p-center)/sc+vec2f(206.,164.))/vec2f(412.,309.);
+ let edge=vec2f(1.)/(sc*vec2f(412.,309.));let dist=min(uv,1.-uv)/edge;
+ let mask=clamp01(min(dist.x,dist.y)+.5);if(mask<=0.){return vec4f(0);}
+ let src=vec2f(${right ? '1600.' : '1604.'},840.)+(vec2f(.5)+(uv-.5)*vec2f(1.,${right ? '1.' : '.9875'}))*vec2f(${right ? '640.' : '632.'},480.);
+ return sampleImage(current,src*f.size.y/2160.)*mask*op;
+}
+@fragment fn window(@builtin(position) p:vec4f)->@location(0) vec4f {
+ let T=f.time-${offset};var count=1;if(T<${right ? '1.3' : '1.'}||T>2.7){count=8;}
+ var sum=vec4f(0);for(var i=0;i<count;i++){var dt=0.;if(count>1){dt=((f32(i)+.5)/f32(count)-.5)*.008333;}sum+=at(T+dt,p.xy);}
+ return sum/f32(count);
 }`
 }
 
@@ -130,7 +187,9 @@ async function translateYogaFilter(effect) {
   assert.equal(original.gpu?.abi, 'cuda-v1')
   if (['6314410', '13815500'].includes(effect.id)) return moduleSource(windowShader(effect.id), ['window'])
   if (effect.id === '9642704') return moduleSource(huaziShader(original), ['blur_x', 'blur_y'])
+  if (effect.id === '1270546') return moduleSource(nodeGlassShader(original), ['blur_x', 'blur_y'])
   if (effect.id === '13119842') return moduleSource(require('./yogaAuthorFocus.cjs').focusShader(original), ['gaussian_x', 'gaussian_y', 'focus'])
+  if (['15969942', '15934198'].includes(effect.id)) return moduleSource(pairedWindowShader(original, effect.id), ['window'])
   throw new Error(`尚未翻译的 CUDA 效果：${effect.id} ${effect.name}`)
 }
 
