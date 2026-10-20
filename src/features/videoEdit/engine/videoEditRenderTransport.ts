@@ -1,4 +1,5 @@
 import { prepareVideoEditAuthorBundle } from './videoEditSharedCompiler'
+import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { SharedCompilationRequest, SharedCompilationResponse } from './videoEditSharedCompilation'
 import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
@@ -160,7 +161,7 @@ export class VideoEditRenderTransport {
       this.pending.delete(value.id)
       if (!pending) { value.bitmap?.close(); value.history?.close(); return }
       clearTimeout(pending.timer)
-      if (value.error) pending.reject(new Error(value.error)); else pending.resolve(value)
+      if (value.error) pending.reject(value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : new Error(value.error)); else pending.resolve(value)
     }
     this.worker.onerror = event => { event.preventDefault?.(); this.fail(new Error(`剪辑渲染中断：${event.message}。请重新加载预览。`)) }
     this.worker.onmessageerror = () => this.fail(new Error('剪辑画面结果无法读取，请重新加载预览。'))

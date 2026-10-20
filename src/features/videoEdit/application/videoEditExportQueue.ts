@@ -19,6 +19,7 @@ export interface VideoEditExportJob {
   range: { startFrame: number; endFrame: number }; rangeSource: 'explicit' | 'in-out' | 'content'; path: string
   state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; error?: string; task?: VideoEditExportTask
   controller: AbortController; release: () => void
+  startedAt?: number; finishedAt?: number
   loudnessRequested?: boolean
 }
 export class VideoEditExportQueue {
@@ -46,7 +47,7 @@ export class VideoEditExportQueue {
   retry(id: string, release: () => void): void {
     const job = this.require(id)
     if (job.state !== 'failed' || job.task?.state === 'completed') throw new Error('只可重试未发布文件的失败项；已保存的成片请直接使用文件。')
-    job.controller = new AbortController(); job.release = release; job.task = undefined; job.error = undefined; job.state = 'queued'
+    job.controller = new AbortController(); job.release = release; job.task = undefined; job.error = undefined; job.startedAt = undefined; job.finishedAt = undefined; job.state = 'queued'
     // Explicit retries join the tail, preserving the order of already submitted work.
     this.jobs = [...this.jobs.filter(value => value !== job), job]; this.publish(); void this.drain()
   }
@@ -68,7 +69,7 @@ export class VideoEditExportQueue {
     try {
       let job: VideoEditExportJob | undefined
       while ((job = this.jobs.find(value => value.state === 'queued'))) {
-        const current = job; current.state = 'running'; this.publish()
+        const current = job; current.state = 'running'; current.startedAt = Date.now(); this.publish()
         logger.info('开始队列导出', { event: 'video_edit.export_queue.start', context: { jobId: current.id, projectId: current.owner.document.id } })
         try {
           await this.run(current)
@@ -78,7 +79,7 @@ export class VideoEditExportQueue {
           current.state = current.controller.signal.aborted && current.task?.state !== 'completed' ? 'cancelled' : 'failed'
           current.error = error instanceof Error ? error.message : '导出失败，请重试。'
           logger.error('队列导出失败', { event: 'video_edit.export_queue.failed', error, context: { jobId: current.id } })
-        } finally { current.release(); this.publish() }
+        } finally { current.finishedAt = Date.now(); current.release(); this.publish() }
       }
     } finally { this.draining = false }
   }

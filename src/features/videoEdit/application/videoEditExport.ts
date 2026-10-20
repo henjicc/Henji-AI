@@ -86,6 +86,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   let singleFrameReads = 0
   let failedFrame: number | undefined
   const started = performance.now()
+  const phases = { audioMs: 0, renderMs: 0, copyMs: 0, encodeMs: 0, frames: 0 }
+  let measuredAt = started
   logger.info('开始导出剪辑', { event: 'video_edit.export.start', context: { projectId, taskId: task.id, ...range } })
   try {
     const encoding = videoEditExportEncoding(settings, document.fps)
@@ -155,22 +157,35 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     for (let index = 0; index < steps; index++) {
       const frame = video ? Math.min(endFrame - 1, startFrame + Math.floor(index * document.fps / encoding.fps + 1e-7)) : audioFrame
       task.controller.signal.throwIfAborted()
+      const audioStarted = performance.now()
       await addSoundUntil(Math.min(endFrame, frame + 1))
+      phases.audioMs += performance.now() - audioStarted
       if (video) {
+        const renderStarted = performance.now()
         singleFrameReads += (await exact(frame, renderer.render(frame, true))).singleFrameReads
+        phases.renderMs += performance.now() - renderStarted
+        const copyStarted = performance.now()
         if (adapted && geometry) {
           const ctx = adapted.getContext('2d')!
           ctx.fillStyle = BLACK_HEX; ctx.fillRect(0, 0, adapted.width, adapted.height)
           const s = geometry.source; const d = geometry.destination
           ctx.drawImage(renderer.canvas, s.x, s.y, s.width, s.height, d.x, d.y, d.width, d.height)
         }
+        phases.copyMs += performance.now() - copyStarted
+        const encodeStarted = performance.now()
         await video.add(index / encoding.fps, Math.min(1 / encoding.fps, frames / document.fps - index / encoding.fps))
+        phases.encodeMs += performance.now() - encodeStarted; phases.frames++
+      }
+      if (performance.now() - measuredAt >= 10_000 || index === steps - 1) {
+        measuredAt = performance.now()
+        logger.info('剪辑导出阶段耗时', { event: 'video_edit.export.performance', context: { projectId, taskId: task.id, ...phases, elapsedMs: measuredAt - started } })
       }
       task.progress = (loudness ? .1 : 0) + (index + 1) / steps * (loudness ? .9 : 1)
       if (index % 5 === 0) { publishVideoEdit(); await new Promise(resolve => setTimeout(resolve, 0)) }
     }
     await addSoundUntil(endFrame)
     task.controller.signal.throwIfAborted()
+    publishVideoEdit()
     await output.finalize()
     task.controller.signal.throwIfAborted()
     if (captionPath && (settings.captionMode === 'srt' || settings.captionMode === 'vtt')) {

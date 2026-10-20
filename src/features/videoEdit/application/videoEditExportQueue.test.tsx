@@ -18,6 +18,7 @@ import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editV
 import { VideoEditExportQueue, enqueueVideoEditExports, videoEditExportQueue, retryVideoEditExportJob, videoEditQueuedExportTask, type VideoEditExportJob } from './videoEditExportQueue'
 import { VideoEditExportPresetLibrary, videoEditExportPresetLibrary } from './videoEditExportPresets'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
+import { VideoEditExportProgress } from '../panels/VideoEditExportProgress'
 import { VideoEditExportDialog } from '../panels/VideoEditExportDialog'
 import { exportVideoEdit, videoEditExportTask } from './videoEditExport'
 import { applyVideoEditBuiltinEffect } from './videoEditCompositing'
@@ -144,6 +145,46 @@ it('全部路径与范围确认后才批量提交；取消第二次选择不产�
   await expect(enqueueVideoEditExports([{ projectId, range: { startFrame: 0, endFrame: 5 } }])).rejects.toThrow('范围')
   await expect(closeVideoEditProject(projectId)).resolves.toBeUndefined()
 })
+it('无设置面板的导出也显示进度，确认取消并完成清理后才可关闭；失败重试重新显示', async () => {
+  const owner = await project()
+  const gate = deferred<void>()
+  encoding.finalize.mockImplementationOnce(() => gate.promise)
+  const view = render(<VideoEditExportProgress />)
+  let job!: VideoEditExportJob
+  await act(async () => { [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('progress.mp4') }]) })
+  try {
+  await waitFor(() => expect(encoding.finalize).toHaveBeenCalledOnce())
+  expect(view.getByRole('dialog', { name: '正在导出' })).toBeTruthy()
+  expect(view.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('100')
+  expect(view.getByText(`保存位置：${file('progress.mp4')}`)).toBeTruthy()
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(view.getByRole('dialog')).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: '取消导出' }))
+  expect(job.controller.signal.aborted).toBe(false)
+  fireEvent.click(view.getByRole('button', { name: '确认取消导出' }))
+  expect(job.controller.signal.aborted).toBe(true)
+  await expect(runApplicationCloseGuards()).rejects.toThrow('导出')
+  } finally { gate.resolve() }
+  await act(async () => { gate.resolve(); await videoEditExportQueue.wait(job.id) })
+  expect(view.getByRole('dialog', { name: '导出已取消' })).toBeTruthy()
+  expect(job.finishedAt).toBeGreaterThanOrEqual(job.startedAt!)
+  expect(getPlatform().system.fs.remove).toHaveBeenCalledWith(file('progress.mp4'))
+  fireEvent.click(view.getByRole('button', { name: '完成' }))
+  expect(view.queryByRole('dialog')).toBeNull()
+  encoding.finalize.mockRejectedValueOnce(new Error('编码器中断'))
+  await act(async () => {
+    [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('retry-progress.mp4') }])
+    await videoEditExportQueue.wait(job.id)
+  })
+  expect(view.getByRole('dialog', { name: '导出失败' })).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: '完成' }))
+  const retryGate = deferred<void>()
+  encoding.finalize.mockImplementationOnce(() => retryGate.promise)
+  act(() => retryVideoEditExportJob(job.id))
+  expect(view.getByRole('dialog', { name: '正在导出' })).toBeTruthy()
+  await act(async () => { retryGate.resolve(); await videoEditExportQueue.wait(job.id) })
+  expect(view.getByRole('dialog', { name: '导出完成' })).toBeTruthy()
+})
 it('正式编码固定序列快照；输出帧率只影响画面；历史队列回执仍可收录，待处理阻止关闭', async () => {
   const owner = await project(); const projectId = owner.document.id; const gate = deferred<void>(); encoding.finalize.mockImplementationOnce(() => gate.promise)
   const settings = { ...VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:douyin')!.settings, fps: 60, loudness: null, addToLibrary: false }
@@ -269,7 +310,7 @@ it('8K120帧母版导出实际选HEVC并保持120帧时钟', async () => {
   const jobs = await enqueueVideoEditExports([{ projectId: owner.document.id, presetId: 'builtin:master', path: file('8k.mp4') }])
   const job = await videoEditExportQueue.wait(jobs[0].id)
   expect(job.state).toBe('completed')
-  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 80_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', fullCodecString: 'hev1.1.6.L186.B0', latencyMode: 'quality', alpha: 'discard' }])
+  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 20_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', fullCodecString: 'hev1.1.6.L186.B0', latencyMode: 'quality', alpha: 'discard', onEncoderConfig: expect.any(Function) }])
   expect(encoding.videoTimes).toEqual([0, 1 / 120, 2 / 120, 3 / 120])
 })
 it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格的恢复方式', async () => {
@@ -488,7 +529,7 @@ it('4K60面板默认回落HEVC且保留与序列一致，提交的完整配置�
   expect(view.getByRole('button', { name: '导出预设' }).textContent).toContain('与序列一致')
   expect(view.getByRole('button', { name: '导出格式' }).textContent).toContain('HEVC')
   expect(view.getByText(/HEVC · 3840 × 2160 · 60 帧 · 50 Mbps/)).toBeTruthy()
-  const panelConfig = { width: 3840, height: 2160, framerate: 60, bitrate: 50_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' }
+  const panelConfig = { width: 3840, height: 2160, bitrate: 25_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' }
   expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining(panelConfig))
   await act(async () => fireEvent.click(view.getByRole('button', { name: '导出' })))
   const job = videoEditExportQueue.list()[0]
@@ -496,11 +537,11 @@ it('4K60面板默认回落HEVC且保留与序列一致，提交的完整配置�
   expect(job.state).toBe('completed'); expect(onClose).toHaveBeenCalledOnce()
   expect(job.settings).toMatchObject({ codec: 'hevc', width: 3840, height: 2160, fps: 60, videoBitrateMbps: 50 })
   expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining(panelConfig))
-  expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'hevc', bitrate: 50_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' })
+  expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'hevc', bitrate: 25_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' })
 })
 it('序列从1080p变为4K60会重新适配；手动把码率调到不可用时禁用导出且不静默替换', async () => {
   const owner = await project()
-  vi.mocked(canEncodeVideo).mockImplementation(async config => Number(config?.bitrate) <= 50_000_000 && (config?.width === 1920 || config.codec.startsWith('hev1')))
+  vi.mocked(canEncodeVideo).mockImplementation(async config => Number(config?.bitrate) <= (config?.width === 1920 ? 50_000_000 : 25_000_000) && (config?.width === 1920 || config.codec.startsWith('hev1')))
   const view = render(<VideoEditExportDialog projectId={owner.document.id} onClose={vi.fn()} />)
   await waitFor(() => expectButtonEnabled(view.getByRole('button', { name: '导出' })))
   expect(view.getByRole('button', { name: '导出格式' }).textContent).toContain('H.264')
@@ -548,7 +589,7 @@ it('本机4K60约束：format-only走软件适配；内置预设完整settings�
     // The monitor scenario passes these explicit 12 Mbps hardware settings, which skip adaptation.
     const explicit = await app.call('export_video_edit', { documentRef, exports: [{ settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, loudness: null, captionMode: 'burn' } }] })
     expect(explicit.ok).toBe(false); expect(JSON.stringify(explicit)).toContain('当前设备不支持所选编码设置')
-    expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining({ codec: 'avc1.640034', width: 3840, height: 2160, framerate: 60, bitrate: 12_000_000, hardwareAcceleration: 'prefer-hardware' }))
+    expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining({ codec: 'avc1.640034', width: 3840, height: 2160, bitrate: 6_000_000, hardwareAcceleration: 'prefer-hardware' }))
     expect(videoEditExportQueue.list()).toHaveLength(0); expect(getPlatform().system.dialog.save).not.toHaveBeenCalled()
     vi.mocked(getPlatform().audioEdit.loudness.read).mockImplementation(async (_id, _start, frames) => [new Float32Array(frames)])
     await app.requireResult('export_video_edit', { documentRef, format: 'mp4' })

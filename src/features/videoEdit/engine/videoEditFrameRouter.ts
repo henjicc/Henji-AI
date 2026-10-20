@@ -2,6 +2,7 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
 import { resolveVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PRIMARY, type VideoEditAudioChunk, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditDecodeBackend, type VideoEditDecodeSupport, type VideoEditDecodedPicture, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
 import { videoEditNativeFailureCode, videoEditNativeFailureKind } from './videoEditNativeFailure'
+import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 
 /** What the render worker knows about native decoding when it starts: the service state and the diagnostic setting. */
 export interface VideoEditDecodeSettings {
@@ -137,6 +138,7 @@ export class VideoEditFrameRouter implements VideoEditFrameBackend {
    * recovery per read, so a failure on the recovered backend is reported, never looped.
    */
   async recover(decision: Decision, media: VideoEditMedia, failed: VideoEditDecodeBackend, error: unknown, attempt: number): Promise<Recovery> {
+    if (error instanceof VideoEditGpuDeviceLostError) return { error }
     const kind = videoEditNativeFailureKind(error)
     if (failed === 'browser') {
       // The browser is the only reader here (native unavailable or not this file): name the format problem in user

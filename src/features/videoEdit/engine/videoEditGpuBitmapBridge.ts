@@ -6,7 +6,29 @@ export class VideoEditGpuBitmapBridge {
   private canvas?: OffscreenCanvas
   private context?: GpuCanvasContext
   private pipeline?: GpuRenderPipeline
+  private captureCanvas?: OffscreenCanvas
+  private captureContext?: GpuCanvasContext
+  private captureFormat?: string
   constructor(private readonly device: GpuDevice) {}
+  /** Copy the current presentation before any await can expire its canvas texture.
+   * The detached bitmap keeps GPU storage alive for transfer to the encoder host. */
+  capture(texture: GpuTexture, width: number, height: number, format: string): ImageBitmap {
+    if (!this.captureCanvas) {
+      this.captureCanvas = new OffscreenCanvas(width, height)
+      this.captureContext = getWebGpuContext(this.captureCanvas)
+    }
+    if (this.captureCanvas.width !== width) this.captureCanvas.width = width
+    if (this.captureCanvas.height !== height) this.captureCanvas.height = height
+    if (this.captureFormat !== format) {
+      this.captureContext!.configure({ device: this.device, format, alphaMode: 'opaque', usage: 0x02 | 0x10 })
+      this.captureFormat = format
+    }
+    const encoder = this.device.createCommandEncoder()
+    ;(encoder as typeof encoder & { copyTextureToTexture(source: unknown, destination: unknown, size: unknown): void })
+      .copyTextureToTexture({ texture }, { texture: this.captureContext!.getCurrentTexture() }, { width, height, depthOrArrayLayers: 1 })
+    this.device.queue.submit([encoder.finish()])
+    return this.captureCanvas.transferToImageBitmap()
+  }
   copy(texture: GpuTexture, width: number, height: number): ImageBitmap {
     if (!this.canvas) {
       this.canvas = new OffscreenCanvas(width, height)
@@ -31,6 +53,8 @@ export class VideoEditGpuBitmapBridge {
   }
   dispose(): void {
     if (this.canvas) this.canvas.width = this.canvas.height = 1
+    if (this.captureCanvas) this.captureCanvas.width = this.captureCanvas.height = 1
+    this.captureCanvas = undefined; this.captureContext = undefined; this.captureFormat = undefined
     this.canvas = undefined; this.context = undefined; this.pipeline = undefined
   }
 }

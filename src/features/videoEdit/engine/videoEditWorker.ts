@@ -1,4 +1,5 @@
 import { VideoEditContentWarmup } from './videoEditContentWarmup'
+import { videoEditRenderFailure } from './videoEditGpuFailure'
 import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrameTrace'
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
 import { setVideoEditCodeCompilerWorkerFactory } from './videoEditCodeCompiler'
@@ -50,7 +51,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'audio'; start: number; duration: number }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
-export type RenderResponse = { authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
+export type RenderResponse = { gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'debug' | 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -220,7 +221,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {})
           snapshot = pixels
           void snapshot.catch(() => {})
-        }, { maxPixels: needsPixels ? Infinity : 1280 * 720 }) : undefined
+        }, { maxPixels: needsPixels ? Infinity : 1280 * 720, gpu: !direct && !request.readRgb && !request.history }) : undefined
         const result = await renderer.render(request.frame, request.sequential, request.scrubbing, () => renderer?.document.revision === revision, request.deadline, undefined, request.quality, capture).catch(error => { if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {}); throw error })
         const readCodePerformance = renderer.captureCodePerformance()
         const authorElements = request.observeElements && result.presented ? renderer.observeAuthorElements(request.frame) : undefined
@@ -259,7 +260,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         // 拖动与正向播放：提交后先回执，下一帧不必等这一帧的 GPU 完成（节目监视器两帧流水）。
         if (direct && !request.history && (request.scrubbing || (request.sequential && request.deadline !== undefined))) {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)
-          void finish().catch(error => self.postMessage({ id: request.id, error: String(error) } satisfies RenderResponse))
+          void finish().catch(error => self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse))
         } else await finish()
       } else if (request.kind === 'prepareGpu') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
@@ -279,7 +280,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         const channels = await renderer.mixAudio(request.start, request.duration)
         self.postMessage({ id: request.id, channels } satisfies RenderResponse, { transfer: channels.map(channel => channel.buffer as ArrayBuffer) })
       }
-    } catch (error) { self.postMessage({ id: request.id, error: error instanceof Error ? error.message : String(error) } satisfies RenderResponse) }
+    } catch (error) { self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse) }
   })
 }
 

@@ -4,13 +4,45 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
+import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 import type { VideoSample } from 'mediabunny'
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 
-const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0 }))
+const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm', acquisitions: 0, destroyedManagers: 0, loss: undefined as ((reason: string) => void) | undefined }))
+it('导出捕获在画布纹理过期前复制到 GPU 位图，不映射 CPU 缓冲区', async () => {
+  const capture = Object.assign(vi.fn(), { gpu: true, maxPixels: Infinity })
+  const bitmap = { close: vi.fn() }
+  const transfer = vi.fn(() => bitmap)
+  const destination = { createView: () => ({}) }
+  vi.stubGlobal('OffscreenCanvas', class {
+    constructor(public width: number, public height: number) {}
+    getContext() { return { configure: vi.fn(), getCurrentTexture: () => destination } }
+    transferToImageBitmap = transfer
+  })
+  const { compositor, device } = copyFixture(async () => {}, () => capture)
+  const project = createVideoEditDocument('GPU 捕获')
+  await (await compositor.draw(videoEditComposition(project, project.sequences[0].id), [], [], () => true)).completion
+  expect(await capture.mock.calls[0][0]).toBe(bitmap)
+  expect(transfer).toHaveBeenCalledOnce()
+  const copies = device.createCommandEncoder.mock.results.map(result => result.value)
+  expect(copies.some(encoder => encoder.copyTextureToTexture.mock.calls.length === 1)).toBe(true)
+  expect(copies.every(encoder => encoder.copyTextureToBuffer.mock.calls.length === 0)).toBe(true)
+  await compositor.dispose()
+})
+it('设备丢失必须交给会话重建，父设备丢失同样使嵌套画面失效', async () => {
+  const { compositor, output } = copyFixture(async () => {})
+  await compositor.prepare()
+  const lost = state.loss!
+  const child = compositor.fork(output)
+  await child.prepare()
+  lost('Device was destroyed.')
+  await expect(compositor.snapshot({} as VideoSample, false)).rejects.toBeInstanceOf(VideoEditGpuDeviceLostError)
+  await expect(child.prepare()).rejects.toBeInstanceOf(VideoEditGpuDeviceLostError)
+  await child.dispose(); await compositor.dispose()
+})
 it('代码视频输入借用同设备预乘纹理，不上传、不夺取所有权，跨设备及取消明确拒绝', async () => {
   const { compositor, device } = copyFixture(async () => {})
   const bitmap = { width: 640, height: 360, close: vi.fn() }
@@ -166,7 +198,7 @@ it('GPU validation failure rejects the frame receipt instead of reporting a blan
   await compositor.dispose()
 })
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
-  onDeviceLost() {}
+  onDeviceLost(callback: (reason: string) => void) { state.loss = callback }
   async acquire() { state.acquisitions++; return { device: state.device!, provider: { getPreferredCanvasFormat: () => state.format } } }
   destroy() { state.destroyedManagers++ }
 } }))
@@ -189,7 +221,7 @@ function copyFixture(fence: () => Promise<void>, capture?: () => ((pixels: Promi
     queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: fence },
     lost: new Promise<{ reason?: string; message?: string }>(() => {}), createShaderModule: vi.fn(), createRenderPipeline: vi.fn((descriptor: unknown) => ({ descriptor, getBindGroupLayout: () => ({}) })), createSampler: vi.fn(),
     createTexture: vi.fn((descriptor: unknown) => ({ descriptor, createView: () => ({ descriptor }), destroy: destroyed })), createBuffer: vi.fn((): { destroy: ReturnType<typeof vi.fn>; mapAsync?: (mode: number) => Promise<void>; getMappedRange?: () => ArrayBuffer; unmap?: () => void } => ({ destroy: vi.fn() })),
-    createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), copyTextureToBuffer: vi.fn(), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
+    createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), copyTextureToBuffer: vi.fn(), copyTextureToTexture: vi.fn(), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
   }
   state.device = device
   const canvasView = { canvas: true }

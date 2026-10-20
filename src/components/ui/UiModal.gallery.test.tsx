@@ -6,6 +6,18 @@ import { UiButton } from './primitives'
 
 afterEach(cleanup)
 
+it('长任务弹窗不能通过 Esc、遮罩或关闭按钮离开，结束后恢复正常关闭', () => {
+  const close = vi.fn()
+  const view = render(<UiModal isOpen title="导出" dismissible={false} onClose={close}>内容</UiModal>)
+  fireEvent.keyDown(document, { key: 'Escape' })
+  fireEvent.click(view.getByRole('dialog').querySelector('.ui-glass-scrim')!)
+  expect(view.queryByRole('button', { name: '导出 - 关闭' })).toBeNull()
+  expect(close).not.toHaveBeenCalled()
+  view.rerender(<UiModal isOpen title="导出" onClose={close}>内容</UiModal>)
+  fireEvent.click(view.getByRole('button', { name: '导出 - 关闭' }))
+  expect(close).toHaveBeenCalledOnce()
+})
+
 it('容器样张原位渲染，不抢焦点、不锁滚动、不参与模态或 Escape 栈', () => {
   const close = vi.fn()
   const view = render(<div data-testid="preview"><UiButton>外部焦点</UiButton><UiModal isOpen scope="container" title="样张" onClose={close}>内容</UiModal></div>)

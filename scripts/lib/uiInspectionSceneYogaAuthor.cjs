@@ -60,6 +60,28 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         properties: { 'video_edit.document.program_playback': { frame, playing, playbackDirection: 1 } },
       }] }))
     }
+    if (spec.losePreviewGpu) {
+      const workers = page.workers().filter(worker => worker.url().includes('videoEditWorker-'))
+      assert.ok(workers.length, '未找到真实节目渲染 Worker')
+      const afterTimestamp = new Date().toISOString()
+      for (const worker of workers) await worker.evaluate(() => {
+        const prototype = GPUCanvasContext.prototype
+        const original = prototype.getCurrentTexture
+        prototype.getCurrentTexture = function () {
+          prototype.getCurrentTexture = original
+          const texture = original.call(this)
+          this.getConfiguration().device.destroy()
+          return texture
+        }
+      })
+      const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+      await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '验证节目 GPU 中断后的恢复', changes: [{ kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.program_playback': { frame: 1, playing: false, playbackDirection: 1 } } }] }))
+      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '1', undefined, { timeout: 60000 })
+      const events = await page.evaluate(async afterTimestamp => (await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, domainPrefix: 'features.videoEdit.preview', limit: 50 })).events, afterTimestamp)
+      assert.ok(events.some(event => event.event === 'video_edit.preview.gpu_recover'), '未发生预期的 GPU 设备恢复')
+      evidence.gpuRecovery = { recoveredFrame: 1, events }; save()
+      await capture('gpu-recovered')
+    }
     for (const frame of spec.timelineFrames) {
       try {
       await playback(frame)
@@ -155,6 +177,13 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
     evidence.reopened = true
     if (spec.playFullTimeline) {
       const endFrame = Math.max(...model.sequences[0].clips.map(clip => clip.start + clip.duration))
+      if (spec.playbackResolution) {
+        const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+        await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '按正常看片分辨率验收播放', changes: [{
+          kind: 'set_properties', entityType: documentRef.kind, target: documentRef,
+          properties: { 'video_edit.document.playback_resolution': { resolution: spec.playbackResolution, fullWhenPaused: true } },
+        }] }))
+      }
       await playback(0)
       await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0')
       await page.evaluate(() => {
@@ -165,7 +194,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       const started = performance.now()
       await playback(0, true)
       let nextCapture = 30000
-      while (performance.now() - started < endFrame / 60 * 1000 + 30000) {
+      while (performance.now() - started < (spec.playbackTimeoutMs ?? endFrame / 60 * 1000 + 30000)) {
         await page.waitForTimeout(1000)
         const frame = await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-presented-frame')
         evidence.playbackProgress = { frame: Number(frame), elapsedMs: performance.now() - started }; save()
@@ -178,14 +207,18 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       const elapsedMs = performance.now() - started
       const trace = await workerSnapshot(page)
       fs.writeFileSync(path.join(root, 'playback-trace.json'), JSON.stringify(trace))
-      const frames = trace.frames.filter(value => !value.initial && Number.isFinite(value.frame))
+      const frames = trace.frames.filter((value, index, all) => !value.initial && Number.isFinite(value.frame) && value.frame !== all[index - 1]?.frame)
       let skippedFrames = 0
       for (let i = 1; i < frames.length; i++) skippedFrames += Math.max(0, frames[i].frame - frames[i - 1].frame - 1)
-      evidence.fullPlayback = { elapsedMs, presentedFrames: frames.length, skippedFrames, endFrame,
+      const completedPlayback = frames.at(-1)?.frame >= endFrame - 1
+      evidence.fullPlayback = { elapsedMs, resolution: spec.playbackResolution ?? 'full', presentedFrames: frames.length, skippedFrames, endFrame,
         lastPresentedFrame: frames.at(-1)?.frame, renderErrors: trace.events.filter(value => value.error),
-        noSkippedFrames: skippedFrames === 0 && frames.length >= endFrame - 1 }
+        noSkippedFrames: skippedFrames === 0 && frames.length >= endFrame - 1,
+        completedPlayback, realTimePass: completedPlayback && elapsedMs <= endFrame / 60 * 1000 + 1000 }
       save()
       await playback(Math.min(endFrame - 1, frames.at(-1)?.frame ?? 0), false)
+      if (!spec.collectDifferences) assert.ok(evidence.fullPlayback.noSkippedFrames && evidence.fullPlayback.realTimePass
+        && evidence.fullPlayback.renderErrors.length === 0, '完整播放未通过实时无跳帧验收')
     }
     if (spec.exportTimeline) {
       const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
@@ -204,15 +237,42 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       }))
       const jobId = (exported.data ?? exported.result?.data)?.queue?.[0]?.id
       assert.ok(jobId, JSON.stringify(exported))
+      if (spec.checkExportProgress) {
+        const dialog = page.getByRole('dialog', { name: '正在导出', exact: true })
+        await dialog.waitFor({ timeout: 30000 })
+        await page.keyboard.press('Escape')
+        assert.ok(await dialog.isVisible(), 'Esc 不得隐藏正在运行的导出')
+        assert.equal(await dialog.getByRole('button', { name: '正在导出 - 关闭' }).count(), 0)
+        assert.ok(await dialog.getByRole('progressbar', { name: '导出进度' }).isVisible())
+        const navigation = await page.getByText('生成', { exact: true }).first().boundingBox()
+        assert.ok(navigation)
+        assert.ok(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('[role="dialog"]'), { x: navigation.x + navigation.width / 2, y: navigation.y + navigation.height / 2 }), '导出遮罩必须保护顶部工作区切换')
+        await capture('export-progress')
+        evidence.exportProgress = { visible: true, escapeProtected: true }
+        if (spec.cancelExport) {
+          await page.waitForFunction(() => Number(document.querySelector('[aria-label="导出进度"]')?.getAttribute('aria-valuenow')) > 0, undefined, { timeout: 60000 })
+          await dialog.getByRole('button', { name: '取消导出', exact: true }).click()
+          await dialog.getByRole('button', { name: '确认取消导出', exact: true }).click()
+        }
+      }
       for (;;) {
         const result = await callTool(client, 'query_video_edit_export', { documentRef, taskId: jobId, detail: 'full' })
         const job = result.data.queue.find(value => value.id === jobId)
         assert.ok(job, '正式导出队列丢失本次任务')
         evidence.export = { ...job, elapsedMs: performance.now() - started }; save()
         if (job && ['completed', 'failed', 'cancelled'].includes(job.state)) {
+          if (spec.cancelExport) {
+            assert.equal(job.state, 'cancelled', JSON.stringify(job))
+            assert.equal(fs.existsSync(job.path), false, '取消后未完成成片应清理')
+            await page.getByRole('dialog', { name: '导出已取消', exact: true }).getByRole('button', { name: '完成', exact: true }).click()
+            evidence.exportProgress.cancelledAndClosed = true; save()
+            break
+          }
           assert.equal(job.state, 'completed', JSON.stringify(job))
-          const output = path.join(root, 'YOGA-author-timeline.mp4')
-          fs.copyFileSync(job.path, output); evidence.export.output = output
+          const output = spec.exportOutput ?? path.join(root, 'YOGA-author-timeline.mp4')
+          assert.ok(path.isAbsolute(output), '导出交付位置必须是绝对路径')
+          fs.mkdirSync(path.dirname(output), { recursive: true })
+          fs.copyFileSync(job.path, output, fs.constants.COPYFILE_EXCL); evidence.export.output = output
           const streams = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-of', 'json', output], { encoding: 'utf8', windowsHide: true, timeout: 60000 })).streams
           const video = streams.find(stream => stream.codec_type === 'video')
           assert.ok(video, '导出文件缺少视频轨')
@@ -222,6 +282,10 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
           assert.ok(Math.abs(Number(video.duration) - (range.endFrame - range.startFrame) / 60) < 0.001, '导出时长不符合帧范围')
           evidence.export.bitrateDeviation = Number(video.bit_rate) / (videoBitrateMbps * 1_000_000) - 1
           evidence.export.encoderPreference = spec.encoderPreference ?? 'software'
+          evidence.export.performanceLogs = await page.evaluate(async afterTimestamp => {
+            const result = await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, domainPrefix: 'features.videoEdit.export', limit: 500 })
+            return result.events.filter(event => event.event === 'video_edit.export.performance')
+          }, afterTimestamp)
           evidence.export.encoderLogs = await page.evaluate(async afterTimestamp => {
             const result = await window.henjiNative.logging.queryLogEvents({
               date: afterTimestamp.slice(0, 10), afterTimestamp,

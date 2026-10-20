@@ -8,6 +8,7 @@ import { getPlatform } from '@/platform/runtime'
 import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit, beginVideoEditGesture, finishVideoEditGesture, updateVideoEditCreativeIntents } from './application/videoEditService'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './application/videoEditCompositing'
 import { VideoEditPreview } from './VideoEditPreview'
+import { VideoEditGpuDeviceLostError } from './engine/videoEditGpuFailure'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
 import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
@@ -446,6 +447,20 @@ it('节目面板重挂载（停靠与浮窗间迁移）必须等旧渲染会话�
   await act(async () => { finishDispose(); await Promise.resolve(); await Promise.resolve() })
   expect(pixel.sessions).toBe(2); expect(moved.getByLabelText('剪辑画面')).toBeTruthy()
   moved.unmount()
+})
+it('GPU 丢失释放旧会话后重建；连续失效停止自动重试，避免反复占用资源', async () => {
+  const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await act(async () => { pixel.requests.at(-1)!.reject(new VideoEditGpuDeviceLostError('device destroyed')); await vi.advanceTimersByTimeAsync(1) })
+  }
+  expect(pixel.sessions).toBe(3)
+  expect(pixel.dispose).toHaveBeenCalledTimes(3)
+  expect(view.getByText(/画面处理连续中断/)).toBeTruthy()
+  await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+  expect(pixel.sessions).toBe(3)
+  view.unmount()
 })
 it('节目渲染失败在监视器上就地提示，不转交全局错误；序列改变后自动重试并清除提示', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)

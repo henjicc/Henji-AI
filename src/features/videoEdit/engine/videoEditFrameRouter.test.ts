@@ -4,6 +4,7 @@ import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditFrameRouter, type VideoEditNativeCapableBackend } from './videoEditFrameRouter'
 import type { VideoEditAudioChunk, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditNativeFailure } from './videoEditNativeFailure'
+import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 
 /** A backend that records opens/releases; `decodable` is the browser's answer for the file. */
 function fakeBackend(name: string, options: { decodable?: boolean; unreadable?: boolean; reads?: boolean } = {}) {
@@ -25,6 +26,17 @@ function fakeBackend(name: string, options: { decodable?: boolean; unreadable?: 
 const media = (id = 'a'): VideoEditMedia => ({ id, name: '素材', path: `henji-media://local/${id}`, kind: 'video', width: 1920, height: 1080, durationSeconds: 5 })
 
 describe('剪辑渲染的解码路由', () => {
+  it('GPU 上传设备丢失不误判为解码故障，不更换解码器重试', async () => {
+    const browser = fakeBackend('browser'); const native = fakeBackend('native')
+    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true })
+    const source = media(); const decision = router.decide(source)
+    await decision.backend
+    const error = new VideoEditGpuDeviceLostError('lost')
+    const opened = browser.log.length
+    expect(await router.recover(decision, source, 'native', error, 0)).toEqual({ error })
+    expect(browser.log).toHaveLength(opened)
+    expect(native.log).toHaveLength(0)
+  })
   it('原生不是主路径时：浏览器能完整解的文件整体走浏览器，并复用询问时打开的同一次解析；决定只做一次并记日志', async () => {
     const browser = fakeBackend('browser'); const native = fakeBackend('native'); const log = vi.fn()
     const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, log, false)

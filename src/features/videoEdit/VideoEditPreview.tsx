@@ -1,4 +1,5 @@
 import { installVideoEditCodeElements } from './application/videoEditCodeElements'
+import { VideoEditGpuDeviceLostError } from './engine/videoEditGpuFailure'
 import { createVideoEditProgramSurface as createProgramSurface, retainVideoEditProgramWarmup, takeVideoEditProgram } from './engine/videoEditProgramPool'
 import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -179,6 +180,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   }, [instance, visible, onError, changeMode])
   const [preparing, setPreparing] = useState(false)
   const [retry, setRetry] = useState(0)
+  const gpuRecoveryTimes = useRef<number[]>([])
   const [effectFailure, setEffectFailure] = useState<string | null>(null)
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
   const [collecting, setCollecting] = useState(false)
@@ -550,6 +552,19 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         setVideoEditView(instance.document.id, { playing: false }, true)
         // Shown on the program monitor itself and cleared by the next presented frame.
         logger.warn('节目画面渲染失败', { event: 'video_edit.preview.render_failed', error, context: { projectId: instance.document.id, revision: requestDocument.revision, cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined } })
+        if (error instanceof VideoEditGpuDeviceLostError) {
+          const now = Date.now()
+          gpuRecoveryTimes.current = gpuRecoveryTimes.current.filter(at => now - at < 30_000)
+          // A lost device cannot execute another draw. Retire the complete owner (including
+          // nested pictures and decoders) before mounting a fresh session on a fresh canvas.
+          stop()
+          if (gpuRecoveryTimes.current.length < 2) {
+            gpuRecoveryTimes.current.push(now)
+            logger.info('重新建立节目画面', { event: 'video_edit.preview.gpu_recover', context: { projectId: instance.document.id, attempt: gpuRecoveryTimes.current.length } })
+            setRetry(value => value + 1)
+          } else setRenderFailure('画面处理连续中断，请重新加载预览；如果仍无法显示，请重启软件。')
+          return
+        }
         failedDocument = requestDocument; failedFrame = instance.frame; lastFrame = -1; lastRequested = -1
         failedRetryAt = Date.now() + failedRetryMs; failedRetryMs = Math.min(10_000, failedRetryMs * 2)
         setRenderFailure(error instanceof Error ? error.message : String(error))

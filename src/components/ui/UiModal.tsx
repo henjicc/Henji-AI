@@ -24,6 +24,8 @@ interface UiModalProps {
   title: string;
   ariaLabel?: string;
   onClose: () => void;
+  /** 必须完成或显式取消的任务不能通过遮罩、Esc 或关闭按钮离开。 */
+  dismissible?: boolean;
   children: ReactNode;
   footer?: ReactNode;
   /** 与标题同排的轻量上下文动作，例如语言或视图切换。 */
@@ -62,6 +64,7 @@ export function UiModal({
   title,
   ariaLabel,
   onClose,
+  dismissible = true,
   children,
   footer,
   headerActions,
@@ -93,10 +96,11 @@ export function UiModal({
   // 模态层（任务 4.3 浮层归属）：从浮层里打开的弹窗内点击不关闭那个浮层，打开期间父浮层不响应点外与 Escape
   const overlay = useUiOverlayLayer(!inContainer && isOpen && shouldRender, { modal: true });
   const resolvedAriaLabel = hideHeader || ariaLabel ? ariaLabel ?? title : undefined;
+  const requestClose = (): void => { if (dismissible) onClose(); };
   useDialogFocusTrap({
     active: !inContainer && isOpen && shouldRender && host !== null,
     dialogRef,
-    onClose,
+    onClose: requestClose,
   });
 
   if (!shouldRender) {
@@ -120,7 +124,7 @@ export function UiModal({
       aria-label={resolvedAriaLabel}
       aria-labelledby={resolvedAriaLabel ? undefined : titleId}
       tabIndex={-1}
-      className={`${inContainer ? 'absolute inset-0' : `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS}`} z-modal flex items-center justify-center outline-none ${overlayClassName}`}
+      className={`${inContainer ? 'absolute inset-0 z-modal' : dismissible ? `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal` : 'fixed inset-0 z-titlebar'} flex items-center justify-center outline-none ${overlayClassName}`}
       // 收起中的弹窗已经关闭：不再接收指针与键盘、对读屏隐藏（同 PanelTrigger / Dropdown，任务 5.8）
       aria-hidden={closing || undefined}
       {...(closing ? { inert: '' } : {})}
@@ -129,7 +133,7 @@ export function UiModal({
       <UiOverlayLayerProvider id={overlay.id}>
       <div
         className={`ui-glass-scrim ${isGlass ? 'ui-glass-scrim-soft' : ''} absolute inset-0 transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-        onClick={onClose}
+        onClick={requestClose}
       />
       <UiPanel
         variant={isGlass ? 'glass' : 'panel'}
@@ -142,12 +146,12 @@ export function UiModal({
               <h2 id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</h2>
               {headerActions}
             </div>
-            <UiIconButton size="md"
+            {dismissible && <UiIconButton size="md"
               aria-label={`${title} - 关闭`}
-              onClick={onClose}
+              onClick={requestClose}
             >
               <X  />
-            </UiIconButton>
+            </UiIconButton>}
           </div>
         )}
 

@@ -1,4 +1,5 @@
 import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
+import { VideoEditGpuDeviceLostError } from './videoEditGpuFailure'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { traceVideoEditFrame } from './videoEditFrameTrace'
 import { documentFontRevision } from '@/platform/fontFaces'
@@ -27,7 +28,7 @@ interface VideoGpuDevice extends GpuDevice {
 }
 export type VideoEditPicture = VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null
 interface LayerPipelines { video: GpuRenderPipeline; image: GpuRenderPipeline; codeImage: GpuRenderPipeline; cachedVideo: GpuRenderPipeline }
-export type VideoEditPresentationCapture = ((pixels: Promise<ImageBitmap>) => void) & { maxPixels?: number }
+export type VideoEditPresentationCapture = ((pixels: Promise<ImageBitmap>) => void) & { maxPixels?: number; gpu?: boolean }
 interface PresentationBuffer extends GpuBuffer { mapAsync(mode: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void }
 interface PresentationEncoder { copyTextureToBuffer(source: unknown, destination: unknown, size: unknown): void }
 /** Full resolution composition, shared by preview and export. VideoFrames stay on
@@ -150,7 +151,12 @@ export class VideoEditGpuCompositor {
   }
   async prepare(): Promise<void> {
     await this.ready
+    this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
+  }
+  private assertDevice(): void {
+    this.shared?.assertDevice()
+    if (this.lost) throw new VideoEditGpuDeviceLostError(this.lost)
   }
   private async initialize(timing?: (durationMs: number, stage?: string) => void): Promise<void> {
     const deviceStarted = performance.now()
@@ -199,6 +205,7 @@ export class VideoEditGpuCompositor {
   }
   private async compiled<T>(build: () => T, failure: string): Promise<T> {
     await this.ready
+    this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
     this.device.pushErrorScope('validation')
     let result: T
@@ -206,6 +213,7 @@ export class VideoEditGpuCompositor {
     catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`${failure}：${error.message}`)
+    this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
     return result
   }
@@ -253,11 +261,11 @@ export class VideoEditGpuCompositor {
   async snapshot(sample: VideoSample | VideoEditNativePicture, compact: boolean, deferCompletion = false): Promise<VideoEditGpuFrame> {
     await this.ready
     if (this.disposed) throw new Error('剪辑预览已关闭。')
-    if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+    this.assertDevice()
     while (this.copies.size >= 2) {
       await Promise.race(this.copies)
       if (this.disposed) throw new Error('剪辑预览已关闭。')
-      if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+      this.assertDevice()
     }
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     // A reduced playback resolution copies a box-averaged picture of 1/divisor size (task 4.9); the frame keeps its
@@ -317,15 +325,18 @@ export class VideoEditGpuCompositor {
    */
   async blank(width: number, height: number, timestamp: number, duration: number): Promise<VideoEditGpuFrame> {
     await this.ready
+    this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
     this.blankTexture ??= this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x04 })
     return new VideoEditGpuFrame({ timestamp, duration, displayWidth: Math.max(1, width), displayHeight: Math.max(1, height), rotation: 0, flip: false }, this.blankTexture, undefined, 4, () => {})
   }
   async code(): Promise<VideoEditCodeGpu> {
     await this.ready
+    this.assertDevice()
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
     if (!this.codeRuntime) {
       const { VideoEditCodeGpu } = await import('./videoEditCodeGpu')
+      this.assertDevice()
       if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
       this.codeRuntime ??= new VideoEditCodeGpu(this.device)
     }
@@ -373,7 +384,7 @@ export class VideoEditGpuCompositor {
   async prepareImages(pictures: ReadonlyMap<string, ImageBitmap | VideoEditCodePicture>, shouldPresent: () => boolean, visibleText: ReadonlySet<string> = new Set(), visibleClips: ReadonlySet<string> = new Set()): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> {
     await this.ready
     if (!shouldPresent() || this.disposed) throw new DOMException('图片画面已取消。', 'AbortError')
-    if (this.lost) throw new Error(`剪辑 GPU 已中断：${this.lost}`)
+    this.assertDevice()
     const unique = new Set(pictures.values()); const bytes = [...unique].reduce((sum, image) => sum + image.width * image.height * (image instanceof VideoEditCodePicture && image.highPrecision ? 8 : 4), 0)
     if (unique.size + visibleText.size > 32 || bytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > 256 * 1024 ** 2) throw new Error('可见图片与文字超过32份或256MiB预算，请减少同时显示的素材。')
     for (const image of unique) if (image instanceof VideoEditCodePicture && image.owner !== this.device) throw new Error('视频输入画面不属于当前GPU设备。')
@@ -415,7 +426,7 @@ export class VideoEditGpuCompositor {
     })
     traceVideoEditFrame('compositor.deadline', -1, deadlineStarted)
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
-    if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+    this.assertDevice()
     const inflightStarted = performance.now()
     while (this.uploads.size >= 2) await Promise.race(this.uploads)
     traceVideoEditFrame('compositor.inflight', -1, inflightStarted)
@@ -509,12 +520,16 @@ export class VideoEditGpuCompositor {
       }
       const capture = target ? undefined : this.capturePresentation?.()
       const bytesPerRow = Math.ceil(this.canvas.width * 4 / 256) * 256
-      if (capture) {
+      if (capture && !capture.gpu) {
         historyBuffer = device.createBuffer({ size: bytesPerRow * this.canvas.height, usage: 0x01 | 0x08 }) as PresentationBuffer
         // Encode the copy in this submission: canvas expiry cannot clear the owned buffer afterwards.
         ;(encoder as unknown as PresentationEncoder).copyTextureToBuffer({ texture: canvas }, { buffer: historyBuffer, bytesPerRow }, { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 })
       }
       device.queue.submit([encoder.finish()])
+      if (capture?.gpu && canvas) {
+        this.bitmapBridge ??= new VideoEditGpuBitmapBridge(device)
+        capture(Promise.resolve(this.bitmapBridge.capture(canvas, this.canvas.width, this.canvas.height, this.canvasFormat)))
+      }
       if (capture && historyBuffer) {
         const buffer = historyBuffer; historyBuffer = undefined
         const width = this.canvas.width; const height = this.canvas.height; const bgra = this.canvasFormat === 'bgra8unorm'
@@ -536,6 +551,7 @@ export class VideoEditGpuCompositor {
       }
       const validation = device.popErrorScope(); scopeOpen = false
       const completion = Promise.all([device.queue.onSubmittedWorkDone(), validation]).then(([, error]) => {
+        this.assertDevice()
         if (error) throw new Error(`剪辑 GPU 合成失败：${error.message}`)
       }).finally(() => { frames.forEach(frame => frame.close()); this.uploads.delete(completion) })
       this.uploads.add(completion)

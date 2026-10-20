@@ -24,6 +24,7 @@ import { NotificationProvider } from '@/contexts/NotificationContext'
 import { useUiStore } from '@/stores/uiStore'
 import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
+import { VideoEditExportProgress } from '@/features/videoEdit/panels/VideoEditExportProgress'
 import { DocumentSessionDialogs } from '@/features/documents/DocumentSessionDialogs'
 import {
   closeAssetLibrary,
@@ -346,6 +347,7 @@ const App: React.FC = () => {
         </Suspense>
         <LargeUploadChoiceDialog />
         <GlobalAlertDialog />
+        <VideoEditExportProgress />
         <RecordingDirectorCursor />
         <DocumentSessionDialogs />
         <OnboardingHints />
