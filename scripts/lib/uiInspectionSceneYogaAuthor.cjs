@@ -10,6 +10,19 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { compareFrames, internalComparisonPasses, prComparisonPasses } = require('./uiInspectionSceneAuthorTimeline.cjs')
 const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
 
+/** Presented-frame statistics of one forward play run: skipped frames, presentation intervals and real-time pace. */
+function playbackStats(trace, startFrame, endFrame, elapsedMs) {
+  const frames = trace.frames.filter((value, index, all) => !value.initial && Number.isFinite(value.frame) && value.frame >= startFrame && value.frame < endFrame && value.frame !== all[index - 1]?.frame)
+  let skippedFrames = 0
+  for (let i = 1; i < frames.length; i++) skippedFrames += Math.max(0, frames[i].frame - frames[i - 1].frame - 1)
+  const intervals = frames.slice(1).map((value, index) => value.at - frames[index].at).sort((a, b) => a - b)
+  const quantile = q => intervals.length ? Math.round(intervals[Math.min(intervals.length - 1, Math.floor((intervals.length - 1) * q))] * 100) / 100 : null
+  const expected = endFrame - startFrame
+  return { startFrame, endFrame, elapsedMs: Math.round(elapsedMs), presentedFrames: frames.length, skippedFrames, dropRate: expected > 1 ? skippedFrames / (expected - 1) : 0,
+    lastPresentedFrame: frames.at(-1)?.frame, intervalMs: { p50: quantile(.5), p95: quantile(.95), p99: quantile(.99), max: quantile(1) },
+    longFrames: intervals.filter(value => value > 1000 / 60 * 1.5).length, realTimeRatio: elapsedMs / (expected / 60 * 1000) }
+}
+
 /** Whole-project acceptance through the same persisted sources and native application APIs. */
 async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
   assert.ok(await app.evaluate(() => Boolean(process.env.HENJI_ISOLATED_APP_DATA)), '先在隔离资料目录验收完整工程')
@@ -39,7 +52,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       return { projectId: project.id, documentId: id, file: result.meta.path, projectPath: project.path }
     }, { model, emptyContent, packages: prepared.packages })
     evidence.project = created; save()
-    if (spec.playFullTimeline) await observeWorkers(page)
+    if (spec.playFullTimeline || spec.playbackRanges) await observeWorkers(page)
     try { await openVideoEditProjectCard(page, created.projectId) } catch (error) {
       await capture('yoga-open-failed')
       evidence.openText = await page.locator('body').innerText()
@@ -175,6 +188,58 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
     await openVideoEditProjectCard(page, created.projectId)
     assert.deepEqual(readVideoEditFile(created.file), before, '关闭重开改变工程内容')
     evidence.reopened = true
+    const setPlaybackResolution = async () => {
+      if (!spec.playbackResolution) return
+      const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+      await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '按正常看片分辨率验收播放', changes: [{
+        kind: 'set_properties', entityType: documentRef.kind, target: documentRef,
+        properties: { 'video_edit.document.playback_resolution': { resolution: spec.playbackResolution, fullWhenPaused: true } },
+      }] }))
+    }
+    const presentedFrame = async () => Number(await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-presented-frame'))
+    // Regression gate: the slowest known ranges played at normal speed, each from a settled paused frame.
+    if (spec.playbackRanges) {
+      await setPlaybackResolution()
+      evidence.rangePlayback = []
+      for (const range of spec.playbackRanges) {
+        await playback(range.from)
+        await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), range.from, { timeout: 120000 })
+        await page.waitForTimeout(range.settleMs ?? 1500)
+        await page.evaluate(() => {
+          window.__videoLayoutEvidence.frames.length = 0
+          window.__videoLayoutEvidence.events.length = 0
+          window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]'))
+        })
+        const started = performance.now()
+        await playback(range.from, true)
+        const captures = new Set(range.captureAt ?? [])
+        while (performance.now() - started < (range.to - range.from) / 60 * 1000 * 4 + 20000) {
+          await page.waitForTimeout(100)
+          const frame = await presentedFrame()
+          for (const at of captures) if (frame >= at) { captures.delete(at); await capture(`yoga-range-${range.from}-${at}`) }
+          if (frame >= range.to - 1) break
+        }
+        const elapsedMs = performance.now() - started
+        await playback(Math.min(range.to - 1, await presentedFrame()), false)
+        const trace = await workerSnapshot(page)
+        const droppedFrames = Number(await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-dropped-frames'))
+        const renders = trace.events.filter(event => event.kind === 'render.completed' && event.frame >= range.from && event.frame < range.to)
+        const quantile = (values, q) => { const sorted = values.filter(Number.isFinite).sort((a, b) => a - b); return sorted.length ? Math.round(sorted[Math.floor((sorted.length - 1) * q)] * 10) / 10 : null }
+        evidence.rangePlayback.push({ ...range, ...playbackStats(trace, range.from, range.to, elapsedMs), droppedFrames,
+          workerMs: { p50: quantile(renders.map(e => e.elapsedMs), .5), p95: quantile(renders.map(e => e.elapsedMs), .95) },
+          decodeMs: { p50: quantile(renders.map(e => e.decodeMs), .5), p95: quantile(renders.map(e => e.decodeMs), .95) },
+          gpuMs: { p50: quantile(renders.map(e => e.gpuMs), .5), p95: quantile(renders.map(e => e.gpuMs), .95) },
+          codeCpuMs: { p50: quantile(renders.map(e => (e.codePerformance ?? []).reduce((sum, value) => sum + value.cpuMs, 0)), .5), p95: quantile(renders.map(e => (e.codePerformance ?? []).reduce((sum, value) => sum + value.cpuMs, 0)), .95) },
+          renderErrors: trace.events.filter(value => value.error).length,
+          // Worker-local cumulative stage timers between the first and last render of the range, per rendered frame.
+          stagesPerFrame: (() => {
+            const first = renders[0]?.preparationStages ?? {}, last = renders.at(-1)?.preparationStages ?? {}
+            return Object.fromEntries(Object.entries(last).map(([key, value]) => [key, Math.round((value.ms - (first[key]?.ms ?? 0)) / Math.max(1, renders.length - 1) * 100) / 100]).filter(([, value]) => value > 0.05))
+          })() })
+        if (spec.saveRangeTraces) fs.writeFileSync(path.join(root, `range-trace-${range.from}.json`), JSON.stringify(trace))
+        save()
+      }
+    }
     if (spec.playFullTimeline) {
       const endFrame = Math.max(...model.sequences[0].clips.map(clip => clip.start + clip.duration))
       if (spec.playbackResolution) {
@@ -211,7 +276,8 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       let skippedFrames = 0
       for (let i = 1; i < frames.length; i++) skippedFrames += Math.max(0, frames[i].frame - frames[i - 1].frame - 1)
       const completedPlayback = frames.at(-1)?.frame >= endFrame - 1
-      evidence.fullPlayback = { elapsedMs, resolution: spec.playbackResolution ?? 'full', presentedFrames: frames.length, skippedFrames, endFrame,
+      evidence.fullPlayback = { elapsedMs, resolution: spec.playbackResolution ?? 'full', presentedFrames: frames.length, skippedFrames, endFrame, stats: playbackStats(trace, 0, endFrame, elapsedMs),
+        droppedFrames: Number(await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-dropped-frames')),
         lastPresentedFrame: frames.at(-1)?.frame, renderErrors: trace.events.filter(value => value.error),
         noSkippedFrames: skippedFrames === 0 && frames.length >= endFrame - 1,
         completedPlayback, realTimePass: completedPlayback && elapsedMs <= endFrame / 60 * 1000 + 1000 }

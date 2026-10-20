@@ -31,7 +31,7 @@ import { subscribeVideoEditTracking, videoEditTrackResults } from './application
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
-import { alignVideoEditClockToDisplay, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditLiveFrame } from './engine/videoEditDisplayClock'
+import { alignVideoEditClockToDisplay, followVideoEditAudioClock, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditAudioClockOrigin, videoEditLiveFrame, videoEditPlaybackTarget } from './engine/videoEditDisplayClock'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
 import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
@@ -274,6 +274,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     /** 已提交给 GPU、结果还没回来的正向播放帧（两帧流水，见下方 present）。 */
     let submittedFrame = -1
     let playbackInFlight = 0
+    /** 本次播放因跟不上时钟而跳过的帧数（播放验收读取）。 */
+    let droppedFrames = 0
     // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
     let displayPeriod: number | undefined
     let lastParameterUpdate = -Infinity
@@ -481,10 +483,16 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           logger.info('节目起播准备完成', { event: 'video_edit.program.play_start', context: { projectId: instance.document.id, sequenceId: document.id, frame: initialFrame, ...phases } })
           surface.dataset.playClockStartAt = String(clockPerformanceStart)
           surface.dataset.playStartFrame = String(startFrame)
+          droppedFrames = 0; surface.dataset.droppedFrames = '0'
         }
         if (!current.playing && wasPlaying) stopAudio()
         wasPlaying = current.playing
         if (current.playing) {
+          // 声音为主时钟：正常速度正放有声音时，画面按扬声器实际输出的时刻呈现，长时间播放不因两套时钟的频差漂移。
+          if (direction === 1 && (current.playbackRate ?? 1) === 1 && audio && meter && typeof audio.getOutputTimestamp === 'function' && audibleVideoEditClips(document).length) {
+            const origin = videoEditAudioClockOrigin(audio.getOutputTimestamp(), clockStart, performance.now())
+            if (origin !== undefined) clockPerformanceStart = followVideoEditAudioClock(clockPerformanceStart, origin)
+          }
           const timelineTime = startFrame / document.fps + direction * (current.playbackRate ?? 1) * (performance.now() - clockPerformanceStart) / 1000
           if (direction === 1 ? timelineTime >= videoEditDuration(document) / document.fps && lastFrame >= videoEditDuration(document) - 1 : timelineTime <= 0 && lastFrame <= 0) { setVideoEditView(instance.document.id, { playing: false }, true); stopAudio() }
           if (direction === 1 && (current.playbackRate ?? 1) === 1 && audio && meter && audibleVideoEditClips(document).length) {
@@ -501,7 +509,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         }
         const playing = current.playing
         const liveRecording = playing && videoMotionState(current)?.status === 'recording'
-        const target = liveRecording ? videoEditLiveFrame(startFrame, performance.now() - clockPerformanceStart, document.fps, current.playbackRate ?? 1, direction, videoEditDuration(document)) : playing ? direction === 1 ? Math.max(startFrame, Math.min(videoEditDuration(document) - 1, Math.max(lastFrame, submittedFrame) + 1)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
+        const due = playing ? videoEditLiveFrame(startFrame, performance.now() - clockPerformanceStart, document.fps, current.playbackRate ?? 1, direction, videoEditDuration(document)) : current.frame
+        const next = Math.max(lastFrame, submittedFrame) + 1
+        const target = liveRecording ? due : playing ? direction === 1 ? videoEditPlaybackTarget(next, due, startFrame, videoEditDuration(document)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
+        if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame) && target !== lastRequested) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
         if (target !== lastRequested || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
           const scrubbing = !!current.scrubbing
           const requestedAt = performance.now()

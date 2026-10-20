@@ -6,6 +6,7 @@ import { AUTHOR_WHOLE_EFFECT_ID, authorLayerId, authorOverrideMatrix, observeAut
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs, AuthorLayer, AuthorModule, AuthorParameters, AuthorWebGL, AuthorWebGPU } from './videoEditAuthorModule'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
 import { authorEffectMetadata, authorParameterValues, type AuthorEffectMetadata } from './videoEditAuthorParameters'
+import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 
 interface Surface { canvas: OffscreenCanvas; texture: GpuTexture }
 
@@ -117,12 +118,16 @@ export class VideoEditAuthorRuntime {
         }
         // Reusing a bitmap lets Chromium change its low-quality downsampling
         // after GPU promotion. Keep immutable pixels, with a fresh image each frame.
+        const copyStarted = performance.now()
         const copy = await createImageBitmap(cached.pixels)
+        recordVideoEditPreparation('authorAssetCopy', performance.now() - copyStarted)
         frameImages.push(copy)
         canvasAssets[key] = copy
       }
       assets = canvasAssets
+      const listStarted = performance.now()
       const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
+      recordVideoEditPreparation('authorLayerList', performance.now() - listStarted)
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
       await this.layers.begin(target)
       for (let index = 0; index < list.length; index++) {
@@ -137,6 +142,7 @@ export class VideoEditAuthorRuntime {
             const ctx = flat.canvas.getContext('2d')
             if (!ctx) throw new Error('Canvas2D 不可用。')
             ctx.reset()
+            const flatRaster = performance.now()
             let end = index
             while (end < list.length && !list[end].pose && !(overrides && Object.hasOwn(overrides, authorLayerId(list[end], end)))) {
               const still = list[end]
@@ -148,7 +154,10 @@ export class VideoEditAuthorRuntime {
               finally { ctx.restore() }
               end++
             }
+            recordVideoEditPreparation('authorRaster', performance.now() - flatRaster)
+            const flatUpload = performance.now()
             this.device.queue.copyExternalImageToTexture({ source: flat.canvas }, { texture: flat.texture, premultipliedAlpha: true }, [width, height])
+            recordVideoEditPreparation('authorUpload', performance.now() - flatUpload)
             this.layers.draw(target, width, height, { texture: flat.texture, x: 0, y: 0, width, height }, [{ offset: { numerator: 0, denominator: 1 }, weight: 1, pose: { matrix: [1, 0, 0, 1, 0, 0], opacity: 1 } }])
             index = end - 1
             continue
@@ -170,7 +179,10 @@ export class VideoEditAuthorRuntime {
           const ctx = surface.canvas.getContext('2d')
           if (!ctx) throw new Error('Canvas2D 不可用。')
           ctx.reset(); ctx.setTransform(resolution, 0, 0, resolution, pad - x * resolution, pad - y * resolution)
+          const rasterStarted = performance.now()
           layer.draw(ctx, info.time)
+          recordVideoEditPreparation('authorRaster', performance.now() - rasterStarted)
+          const uploadStarted = performance.now()
           let picture = surface.texture
           if (radius > 0 && layer.blurShape !== 'lens') {
             // Use the original Canvas/Skia blur operator, without pixel readback
@@ -187,6 +199,7 @@ export class VideoEditAuthorRuntime {
             this.device.queue.copyExternalImageToTexture({ source: surface.canvas }, { texture: surface.texture, premultipliedAlpha: true }, [surface.canvas.width, surface.canvas.height])
             this.layers.mipmaps(surface.texture, surface.canvas.width, surface.canvas.height)
           }
+          recordVideoEditPreparation('authorUpload', performance.now() - uploadStarted)
           if (radius > 0 && layer.blurShape === 'lens') {
             const blurred = this.surface(index * 2 + 1, surface.canvas.width, surface.canvas.height)
             this.layers.lens(surface.texture, blurred.texture, surface.canvas.width, surface.canvas.height, radius)

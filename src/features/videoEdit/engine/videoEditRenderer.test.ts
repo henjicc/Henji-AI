@@ -440,6 +440,46 @@ it('嵌套逐帧渲染：同一子序列同一帧只合成一次，父片段变�
     expect(us((await renderer.render(5, true)).sourceTimestamps)).toEqual([1600000])
   } finally { await renderer.dispose() }
 })
+it('变速嵌套片段正向播放：子序列只建一条按父片段速度取帧的计划，跳帧、慢放重复与时钟追帧都不重新定位', async () => {
+  boundary.scheduled = []
+  const document = { ...nestedFixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const child = document.sequences!.find(sequence => sequence.id !== document.id)!
+  child.clips[0].duration = 600; child.frameRate = { numerator: 60, denominator: 1 }; document.media = document.media.map(media => ({ ...media, durationSeconds: 20 }))
+  document.clips = [{ ...document.clips[0], duration: 120, speed: { numerator: 5, denominator: 2 } }, { ...document.clips[0], id: 'slow', start: 120, duration: 60, speed: { numerator: 1, denominator: 2 } }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    for (const frame of [0, 1, 2, 3, 6, 7]) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us(result.sourceTimestamps)).toEqual(us([Math.floor(frame * 2.5) / 60]))
+    }
+    // One child decoder plan with exactly the 2.5× child frames: 0, 2, 5, 7, 10, 12…
+    expect(boundary.scheduled).toHaveLength(1)
+    expect(boundary.scheduled[0].timestamps.slice(0, 6)).toEqual([0, 2, 5, 7, 10, 12].map(frame => videoEditPictureSeconds(frame / 60)))
+    // The slow clip shows every child frame twice; the repeat reuses the current picture.
+    for (let frame = 120; frame < 126; frame++) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us(result.sourceTimestamps)).toEqual(us([Math.floor((frame - 120) / 2) / 60]))
+    }
+    expect(boundary.scheduled).toHaveLength(2)
+    expect(boundary.scheduled[1].timestamps.slice(0, 3)).toEqual([0, 1, 2].map(frame => videoEditPictureSeconds(frame / 60)))
+  } finally { await renderer.dispose() }
+})
+it('正向播放时钟落后时在同一计划内跳帧追上，不重新定位；跳得太远才重建', async () => {
+  boundary.scheduled = []
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 10 }))
+  document.clips = [{ ...document.clips[0], duration: 600 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    for (const frame of [0, 1, 4, 9, 10]) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us(result.sourceTimestamps)).toEqual(us([frame / 60]))
+    }
+    expect(boundary.scheduled).toHaveLength(1)
+    await (await renderer.render(200, true)).completion
+    expect(boundary.scheduled).toHaveLength(2)
+  } finally { await renderer.dispose() }
+})
 it('嵌套画面作为普通一层参与父效果与运动/不透明度关键帧', async () => {
   const document = nestedFixture()
   document.clips[0].effects = [{ id: 'nested-blur', name: '模糊', enabled: true, amount: .5, builtin: { id: 'gaussian_blur', params: {} } }]
@@ -1113,6 +1153,23 @@ it('缓存起播前被驱逐时精确取回当前画面；零散短缓存不跳�
   }
 })
 
+it('剪到另一个已排程文件前半秒开始解码它的首帧，剪辑点那一帧不再现场打开定位', async () => {
+  boundary.scheduled = []
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.clips = [{ ...document.clips[0], duration: 60 }, { ...document.clips[0], id: 'next', itemId: 'item-B', start: 60, duration: 60 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    for (let frame = 0; frame < 29; frame++) await (await renderer.render(frame, true)).completion
+    expect(boundary.scheduled.map(value => value.path)).toEqual(['D:/A.mp4'])
+    await (await renderer.render(30, true)).completion
+    expect(boundary.scheduled.map(value => value.path)).toEqual(['D:/A.mp4', 'D:/B.mp4'])
+    for (let frame = 31; frame <= 61; frame++) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us(result.sourceTimestamps)).toEqual(us([frame < 60 ? frame / 60 : (frame - 60) / 60]))
+    }
+    expect(boundary.scheduled).toHaveLength(2)
+  } finally { await renderer.dispose() }
+})
 it('未来剪辑不提前借用原生帧池，到该素材首个实际播放帧才开始解码', async () => {
   boundary.scheduled = []
   const document = fixture()

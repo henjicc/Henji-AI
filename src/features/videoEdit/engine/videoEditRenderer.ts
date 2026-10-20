@@ -56,10 +56,19 @@ interface PlaybackStream {
   /** Serializes pulls; one file never serves two clips at the same frame. */
   tail: Promise<unknown>
 }
-interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream> }
+/** `plan`: the planned frames of a nested schedule (ascending) and the parent clip they belong to; undefined means every frame in [start, endFrame). */
+interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream>; plan?: { key: string; frames: readonly number[] } }
 interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string }
 interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number }
-interface NestedRender { context: NestedFrameContext; key: string; path: string[]; ownerKey?: string; opaqueBackground?: boolean; format?: VideoEditCodePicture['textureFormat']; sourceDocument?: VideoEditComposition; filterHandles?: { clipId: string; windows: VideoEditTransitionWindow[] } }
+interface NestedRender {
+  context: NestedFrameContext; key: string; path: string[]; ownerKey?: string; opaqueBackground?: boolean; format?: VideoEditCodePicture['textureFormat']; sourceDocument?: VideoEditComposition; filterHandles?: { clipId: string; windows: VideoEditTransitionWindow[] }
+  /**
+   * Forward playback of a retimed parent clip visits child frames with gaps (2× speed: 0, 2, 4…) or repeats
+   * (slow motion, frame holds). The ascending child frames the parent will ask for next, so the child schedules
+   * exactly those pictures instead of re-positioning its decoder on every non-consecutive frame.
+   */
+  playbackPlan?: { key: string; frames: () => readonly number[] }
+}
 /**
  * Rounding edge of nearest-sample reads: half a sample plus a margin far above floating-point noise, so a clip whose
  * phase lies exactly half-way between two samples picks the same neighbour in every mix block.
@@ -73,6 +82,8 @@ const PLAYBACK_SCHEDULE_FILES = 4
 // Bound per-frame timestamp allocation independently of sequence duration. Rebuild as playback crosses this rolling window.
 const PLAYBACK_SCHEDULE_SECONDS = 30
 const PLAYBACK_ARM_IDLE_MS = 2500
+/** A playback clock that fell behind skips ahead this far at most inside one schedule; the skipped pictures are released unused. */
+const PLAYBACK_MAX_SKIP_SECONDS = 1
 interface VideoSource {
   /** Key of the shared opened source this clip's own readers read from. */
   demux: string
@@ -323,8 +334,9 @@ export class VideoEditRenderer {
    * (a new D3D11 decoder blocks the GPU main thread for tens of milliseconds while it creates picture buffers).
    * Built at the first frame of a play run, so that frame is the first scheduled picture (one positioning, one GOP).
    */
-  private buildPlayback(document: VideoEditComposition, frame: number, visible: Set<number>): void {
-    const endFrame = frame + Math.ceil(document.fps * PLAYBACK_SCHEDULE_SECONDS)
+  private buildPlayback(document: VideoEditComposition, frame: number, visible: Set<number>, plan?: NestedRender['playbackPlan']): void {
+    const frames = plan?.frames().filter(value => value >= frame)
+    const endFrame = frames ? (frames.at(-1) ?? frame) + 1 : frame + Math.ceil(document.fps * PLAYBACK_SCHEDULE_SECONDS)
     const groups = new Map<string, { media: VideoEditMedia; clips: VideoEditClip[] }>()
     for (const clip of document.clips) {
       // 倒放片段的源时间逐帧后退，不进前向解码排程，走定位路径（GOP 缓存，4.13）。
@@ -350,8 +362,10 @@ export class VideoEditRenderer {
     })
     for (const group of runs) {
       const entries: PlaybackStream['entries'] = []; const timestamps: number[] = []
-      for (const clip of group.clips) for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) {
-        entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
+      const add = (clip: VideoEditClip, at: number): void => { entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps))) }
+      for (const clip of group.clips) {
+        if (frames) { for (const at of frames) if (at >= clip.start && at < clip.start + clip.duration) add(clip, at) }
+        else for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) add(clip, at)
       }
       // A scrub already decoded this prefix. Play those exact pictures while the existing decoder
       // positions at the first uncached picture, instead of decoding the same GOP before moving at all.
@@ -376,7 +390,19 @@ export class VideoEditRenderer {
       }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
     }
-    this.playback = { document, endFrame, streams, byClip }
+    this.playback = { document, endFrame, streams, byClip, ...(plan && frames ? { plan: { key: plan.key, frames } } : {}) }
+  }
+  /** The frames this renderer will be asked for next while playing forward (the parent's plan when nested and retimed). */
+  private upcomingFrames(frame: number, end: number): number[] {
+    const planned = this.playback?.plan?.frames
+    if (planned) return planned.filter(value => value >= frame && value < end)
+    return Array.from({ length: Math.max(0, Math.min(end, frame + Math.ceil(this.document.fps * PLAYBACK_SCHEDULE_SECONDS)) - frame) }, (_, index) => frame + index)
+  }
+  /** Whether a sequential frame continues the current schedule: the next frame, a repeat, or a skip ahead within it. */
+  private continuesPlayback(frame: number, planKey?: string): boolean {
+    const last = this.lastForwardFrame, playback = this.playback
+    if (last === undefined || !playback || frame < last || frame >= playback.endFrame || playback.plan?.key !== planKey) return false
+    return frame - last <= 1 || !!playback.plan || frame - last <= Math.ceil(this.document.fps * PLAYBACK_MAX_SKIP_SECONDS)
   }
   /** Briefly position the active decoder ahead of play, including the handoff after the scrub cache.
    * Expiry retires the entire armed schedule; a long pause and future runs hold no borrowed frames. */
@@ -406,6 +432,20 @@ export class VideoEditRenderer {
       if (primed) (await primed.catch(() => undefined))?.value?.close()
       await stream.samples.return(); this.release(stream)
     }))
+  }
+  /**
+   * A cut onto another scheduled file must not open and position its decoder on the boundary frame (a 4K long-GOP
+   * start costs tens of milliseconds). Start decoding its first picture half a second ahead; runs further away
+   * still borrow nothing from the native frame pool.
+   */
+  private primeUpcomingStreams(frame: number): void {
+    const horizon = frame + Math.ceil(this.document.fps / 2)
+    for (const stream of this.playback?.streams ?? []) {
+      const first = stream.entries[0]
+      if (stream.primed || stream.cursor !== 0 || !first || first.frame <= frame || first.frame > horizon) continue
+      stream.primed = stream.samples.next()
+      void stream.primed.catch(() => undefined)
+    }
   }
   /** The scheduled picture for exactly this frame and clip, or undefined to use the regular path. */
   private takeScheduled(stream: PlaybackStream, frame: number, clipId: string): Promise<VideoEditDecodedPicture | undefined> {
@@ -584,7 +624,7 @@ export class VideoEditRenderer {
     const visible = videoEditVisibleTracks(document)
     if (this.previewWidth && sequential) {
       clearTimeout(this.armExpiry); this.armExpiry = undefined
-      const forward = this.lastForwardFrame === frame - 1
+      const forward = this.continuesPlayback(frame, nestedRender?.playbackPlan?.key)
       // Resolution changes and cache pressure can remove a prefix after arming. Rebuild the
       // same playback plan at this frame instead of opening a second reader for the missing prefix.
       const missingPrefix = this.playback && document.clips.some(clip => {
@@ -593,15 +633,16 @@ export class VideoEditRenderer {
         const media = videoEditClipMedia(document, clip)
         return !media || !(this.frameCache.get(media.path, videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps))) instanceof VideoEditGpuFrame)
       })
-      if (this.playback && (this.playback.document !== document || frame >= this.playback.endFrame || !forward || missingPrefix)) await this.disposePlayback()
+      if (this.playback && (this.playback.document !== document || !forward || missingPrefix)) await this.disposePlayback()
       // A sequential preview render is always forward playback (reverse play, single steps and scrubbing render
       // non-sequentially), so its first frame already builds the schedules and takes its picture from them. Waiting for
       // a second consecutive frame made the first one open a sequential reader that decoded the GOP up to the start,
       // and then the schedule decoded the same GOP again on its own session (task 3.6 F1: 0.6–2.4s mid-file start-up
       // of long-GOP 4K material). A sequential frame before the previous one is not playback: it keeps the seek path
       // and its frame cache.
-      if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, visible)
+      if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, visible, nestedRender?.playbackPlan)
       this.lastForwardFrame = frame; this.armedFrame = undefined
+      this.primeUpcomingStreams(frame)
     } else if (this.armedFrame !== frame || this.playback?.document !== document) { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
     const rawTransitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
@@ -694,8 +735,21 @@ export class VideoEditRenderer {
           const targetKey = `nested:frame:${childFrame}`
           const keys = nestedContext.keys.get(childKey) ?? new Set<string>(); keys.add(targetKey); nestedContext.keys.set(childKey, keys)
           const renderer = entry.renderer
+          const playing = sequential && !clip.reverse
+          // The parent's upcoming frames mapped through this clip's speed: the child schedules exactly the pictures it will show.
+          const playbackPlan = playing && this.previewWidth ? {
+            key: JSON.stringify([nestedRender?.playbackPlan?.key, clip.id, clip.start, clip.duration, clip.sourceInUs, clip.sourceRemainder, clip.speed]),
+            frames: (): number[] => {
+              const frames: number[] = []
+              for (const at of this.upcomingFrames(frame, clip.start + clip.duration)) {
+                const mapped = videoEditNestedFrame(document, clip, child, at)
+                if (mapped > (frames.at(-1) ?? -1)) frames.push(mapped)
+              }
+              return frames
+            },
+          } : undefined
           picture = entry.tail.catch(() => undefined).then(async () => {
-            const result = await renderer.render(childFrame, sequential && !clip.reverse, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: childKey }, quality)
+            const result = await renderer.render(childFrame, playing, _scrubbing, canPresent, undefined, { context: nestedContext, key: targetKey, path: [...path, child.id], ownerKey: childKey, ...(playbackPlan ? { playbackPlan } : {}) }, quality)
             if (!result.presented || !result.nestedPicture) throw new DOMException('旧嵌套画面已取消。', 'AbortError')
             effectErrors.push(...(result.effectErrors ?? []))
             timestamps.push(...result.sourceTimestamps); blankPictures += result.blankPictures; singleFrameReads += result.singleFrameReads
@@ -740,6 +794,8 @@ export class VideoEditRenderer {
       if (scheduled) {
         await source.iterator?.return(); source.iterator = undefined
         source.current?.close(); source.current = scheduled
+      } else if (scheduledStream && source.current && source.current.timestamp <= time + 1e-6 && time < source.current.timestamp + source.current.duration - 1e-7) {
+        // A slowed or held parent clip asks for the same source picture again: it is already the current one.
       } else if ((this.previewWidth || clip.reverse) && (!sequential || time < source.previousTime)) {
         // 倒放（4.13）：导出也走定位路径——整段 GOP 解码一次、按时间取“开始于该时刻或之前的最后一幅”（与导出的精确画面同一定义），
         // 不为每一帧重新从关键帧顺序解码。
