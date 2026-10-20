@@ -59,6 +59,16 @@ test('AudioFader mute survives direct tracks and flattened audio nesting', () =>
   assert.equal(nested.document.sequences[0].clips[0].volume, 0)
 })
 
+test('PR normalized volume and channel volume are converted to linear gain once each', () => {
+  const effects = [
+    { matchName: 'Internal Volume Stereo', parameters: [{ Name: '级别', StartKeyframe: '0,0.082963548601,0' }] },
+    { matchName: 'Internal Channel Volume Stereo', parameters: [{ Name: '左侧', StartKeyframe: '0,0.177827939391,0' }, { Name: '右侧', StartKeyframe: '0,0.177827939391,0' }] },
+  ]
+  const result = build([seq('main', [track([clip('music', 0, 5, { effects }), clip('neutral', 5, 10, { effects: [{ matchName: 'Internal Volume Stereo', parameters: [{ Name: '级别' }] }] })])])])
+  assert.ok(Math.abs(result.document.sequences[0].clips[0].volume - .4665384) < 1e-5)
+  assert.equal(result.document.sequences[0].clips[1].volume, 1)
+})
+
 test('virtual carrier creates an explicit pending range, not a missing-file error', () => {
   const raw = { ...clip('black', 0, 5), type: 'VideoClipTrackItem', name: '黑场载体' }
   const result = build([seq('main', [{ ...track([raw]), kind: 'video' }])], [{ id: 'media', name: '虚拟', path: '1112293707', streams: {} }], new Map())

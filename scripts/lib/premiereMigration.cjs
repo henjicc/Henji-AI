@@ -12,6 +12,9 @@ const seconds = ticks => Number(BigInt(ticks)) / Number(TICKS)
 const rateOf = seq => ({ numerator: 254016000000 / Number(seq.frameTicks), denominator: 1 })
 const frameAt = (ticks, rate) => Math.round(seconds(ticks) * rate.numerator / rate.denominator)
 const initial = (parameter, fallback) => parameter?.StartKeyframe?.split(',')[1] ?? fallback
+// PR volume controls encode dB as 10^((dB - 15) / 20); neutral is 0.177828.
+// An absent keyframe is the neutral default, not a stored normalized value of 1.
+const audioGain = parameter => parameter?.StartKeyframe ? Number(initial(parameter)) * 10 ** (15 / 20) : 1
 const trackMuted = track => /<(?:IsMuted|Mute)>true<\//.test(track.xml)
   || (track.effects ?? []).some(effect => effect.matchName === 'AudioFader'
     && initial(effect.parameters.find(parameter => parameter.Name === '静音'), 'false') === 'true')
@@ -136,11 +139,11 @@ function buildPremiereMigration(graph, probes, options) {
         ;(clip.effects ??= []).push({ id: stable('effect', effect.id), name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params } })
       } else if (effect.matchName === 'Internal Volume Stereo') {
         const level = effect.parameters.find(param => param.Name === '级别')
-        volume *= Number(initial(level, '1'))
+        volume *= audioGain(level)
         if (level?.Keyframes) mark(sequence, raw, '音乐音量自动化尚待还原，目前保留起始音量。', clip)
       } else if (effect.matchName === 'Internal Channel Volume Stereo') {
-        const left = Number(initial(effect.parameters.find(param => param.Name === '左侧'), '1'))
-        const right = Number(initial(effect.parameters.find(param => param.Name === '右侧'), '1'))
+        const left = audioGain(effect.parameters.find(param => param.Name === '左侧'))
+        const right = audioGain(effect.parameters.find(param => param.Name === '右侧'))
         if (left !== right) mark(sequence, raw, '左右声道音量不同，尚待还原声道平衡。', clip)
         volume *= left
       } else mark(sequence, raw, effect.matchName === 'AE.FrameFlow Bridge' ? '待迁移代码画面：保留原始素材与时间，尚未还原此处的生成画面或聚焦效果。' : `待适配画面效果：${effect.name}。`, clip)
