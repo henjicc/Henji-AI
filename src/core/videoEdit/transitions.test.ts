@@ -22,7 +22,7 @@ it('内置与 shaders 转场按内部帧求参数，校验范围/时刻/离散�
   const feather: VideoEditKeyframes = [{ time: 0, value: 0, interpolation: 'bezier', bezier: [1 / 3, 0, 2 / 3, 0] }, { time: 8, value: 80, interpolation: 'linear' }]
   const transition = videoEditTransitionSchema.parse({ ...sequence.transitions![0], kind: 'wipe', durationFrames: 9, frameCurves: { feather } })
   const window = videoEditTransitionWindow(sequence, transition)
-  expect(videoEditTransitionRender(window, window.start + 4)).toMatchObject({ kind: 'builtin', input: { params: { feather: expect.closeTo(10, 5) }, progress: .5 } })
+  expect(videoEditTransitionRender(window, window.start + 4)).toMatchObject({ kind: 'builtin', input: { params: { feather: expect.closeTo(10, 5) }, progress: 4 / 9 } })
   const invalid = (frameCurves: unknown) => videoEditTransitionSchema.safeParse({ ...transition, frameCurves }).success
   expect(invalid({ feather: [{ time: 9, value: 10, interpolation: 'linear' }] })).toBe(false)
   expect(invalid({ feather: [{ time: 0, value: 500, interpolation: 'linear' }] })).toBe(false)
@@ -87,16 +87,16 @@ function addEffect(document: VideoEditDocument, mode = 'static', duration = 10) 
 }
 
 describe('真实转场窗口、源余量和编辑持久契约', () => {
-  it('偶数/奇数半开窗口以原切点居中，端点预乘混合强度完整到0/1', () => {
+  it('偶数/奇数半开窗口按真实时长插值，不提前一帧到终点', () => {
     const { sequence } = fixture(); const transition = sequence.transitions![0]
     for (const durationFrames of [2, 5, 30]) {
       transition.durationFrames = durationFrames
       const window = videoEditTransitionWindow(sequence, transition)
       expect(window).toMatchObject({ cut: 90, start: 90 - Math.floor(durationFrames / 2), end: 90 + Math.ceil(durationFrames / 2) })
       expect(videoEditTransitionAmount(window, window.start)).toBe(0)
-      expect(videoEditTransitionAmount(window, window.end - 1)).toBe(1)
-      expect(videoEditTransitionAmount(window, window.start + .5)).toBeCloseTo(.5 / (window.end - window.start - 1))
-      expect(videoEditTransitionAmount(window, window.end - .5)).toBe(1)
+      expect(videoEditTransitionAmount(window, window.end - 1)).toBeCloseTo(1 - 1 / durationFrames)
+      expect(videoEditTransitionAmount(window, window.start + .5)).toBeCloseTo(.5 / (window.end - window.start))
+      expect(videoEditTransitionAmount(window, window.end - .5)).toBeCloseTo(1 - .5 / durationFrames)
       expect(() => videoEditTransitionAmount(window, NaN)).toThrow('半开')
       expect(videoEditTransitionsAt(sequence, window.start - 1)).toEqual([])
       expect(videoEditTransitionsAt(sequence, window.end)).toEqual([])
@@ -259,12 +259,12 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
   it('单侧过渡的画面混合与声音增益：从透明或纯色淡入、淡出到透明或纯色（4.4）', () => {
     const { sequence } = fixture()
     const head = videoEditTransitionWindow(sequence, { id: 'head', kind: 'cross_dissolve', rightClipId: 'right', durationFrames: 11 })
-    // 交叉溶解借“经过纯色”的后半段，纯色为预乘透明：开头全透明、结尾全是片段
+    // 交叉溶解借“经过纯色”的后半段，纯色为预乘透明：开头全透明，出窗口才全是片段
     expect(videoEditTransitionMix(head, head.start)).toEqual({ amount: .5, through: [0, 0, 0, 0] })
-    expect(videoEditTransitionMix(head, head.end - 1)).toEqual({ amount: 1, through: [0, 0, 0, 0] })
+    expect(videoEditTransitionMix(head, head.end - 1)).toEqual({ amount: .5 + 5 / 11, through: [0, 0, 0, 0] })
     const tail = videoEditTransitionWindow(sequence, { id: 'tail', kind: 'dip_to_white', leftClipId: 'left', durationFrames: 11 })
     expect(videoEditTransitionMix(tail, tail.start)).toEqual({ amount: 0, through: [1, 1, 1, 1] })
-    expect(videoEditTransitionMix(tail, tail.end - 1)).toEqual({ amount: .5, through: [1, 1, 1, 1] })
+    expect(videoEditTransitionMix(tail, tail.end - 1)).toEqual({ amount: 5 / 11, through: [1, 1, 1, 1] })
     // 普通过渡保持原参数
     const both = videoEditTransitionWindow(sequence, sequence.transitions![0])
     expect(videoEditTransitionMix(both, both.start)).toEqual({ amount: 0, through: undefined })
@@ -303,7 +303,7 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     const window = videoEditTransitionWindow(sequence, sequence.transitions[0])
     expect(videoEditTransitionRender(window, window.start)).toEqual({ kind: 'builtin', input: { kind: 'wipe', params: { direction: 'from_top', feather: 10, border: 0, border_color: WHITE_HEX }, progress: 0 } })
     const head = videoEditTransitionWindow(sequence, { id: 'head', kind: 'flash', rightClipId: 'right', durationFrames: 11 })
-    expect(videoEditTransitionRender(head, head.end - 1)).toMatchObject({ kind: 'builtin', input: { progress: 1, emptyOutgoing: true } })
+    expect(videoEditTransitionRender(head, head.end - 1)).toMatchObject({ kind: 'builtin', input: { progress: 10 / 11, emptyOutgoing: true } })
     const tail = videoEditTransitionWindow(sequence, { id: 'tail', kind: 'slide', leftClipId: 'left', durationFrames: 11 })
     expect(videoEditTransitionRender(tail, tail.start)).toMatchObject({ kind: 'builtin', input: { progress: 0, emptyIncoming: true } })
     expect(videoEditTransitionRender(videoEditTransitionWindow(sequence, { id: 'd', kind: 'cross_dissolve', leftClipId: 'left', rightClipId: 'right', durationFrames: 10 }), 85)).toMatchObject({ kind: 'mix' })

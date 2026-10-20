@@ -177,7 +177,8 @@ export function videoEditTransitionsAt(sequence: Pick<VideoEditSequence, 'clips'
 }
 export function videoEditTransitionAmount(window: Pick<VideoEditTransitionWindow, 'start' | 'end'>, frame: number): number {
   if (!Number.isInteger(window.start) || !Number.isInteger(window.end) || window.end - window.start < 2 || !Number.isFinite(frame) || frame < window.start || frame >= window.end) throw new Error('请求帧不在转场半开窗口内。')
-  return Math.min(1, (frame - window.start) / (window.end - window.start - 1))
+  // end 是半开窗口之后的时刻；最后显示帧仍保留一帧的剩余混合量。
+  return (frame - window.start) / (window.end - window.start)
 }
 /**
  * 画面过渡交给混合着色器的参数（`mix(left, right, amount, through)`，through 为经过的预乘纯色）。
