@@ -117,8 +117,8 @@ export class VideoEditGpuCompositor {
   private cachedVideo!: GpuRenderPipeline
   /** Reduced playback resolution (task 4.9): decoded pictures enter owned memory at 1/divisor size; export keeps 1. */
   private pictureDivisor: VideoEditRenderDivisor = 1
-  /** Box-average copies per divisor, compiled on first use: [y, uv, rgba by owned format]. */
-  private readonly downscale = new Map<number, Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }>>()
+  /** Copies per divisor and source transfer, compiled on first use: [y, uv, rgba by owned format]. */
+  private readonly downscale = new Map<string, Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }>>()
   private canvasFormat = 'bgra8unorm'
   /** Layer pipelines for owned targets, per target format; compiled on first use. */
   private readonly offscreen = new Map<VideoEditGpuColorFormat, Promise<LayerPipelines>>()
@@ -217,16 +217,17 @@ export class VideoEditGpuCompositor {
   }
   /** Pictures snapshotted from now on are stored at 1/divisor of their decoded size; the layer shader samples them by UV. */
   setPictureDivisor(divisor: VideoEditRenderDivisor): void { this.pictureDivisor = divisor }
-  private downscalePipelines(divisor: 2 | 4 | 8): Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }> {
-    let ready = this.downscale.get(divisor)
+  private downscalePipelines(divisor: 1 | 2 | 4 | 8, srgb = false): Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }> {
+    const key = `${divisor}:${srgb}`
+    let ready = this.downscale.get(key)
     if (!ready) {
       ready = this.compiled(() => {
-        const module = this.device.createShaderModule({ code: videoEditDownscaleCopyShader(divisor) })
-        const copy = (entryPoint: string, format: string): GpuRenderPipeline => this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+        const module = this.device.createShaderModule({ code: divisor === 1 ? VIDEO_EDIT_COPY_SHADER : videoEditDownscaleCopyShader(divisor) })
+        const copy = (entryPoint: string, format: string): GpuRenderPipeline => this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint, constants: { SRGB_TO_REC709: Number(srgb) }, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
         return { y: copy('y', 'r8unorm'), uv: copy('uv', 'rg8unorm'), rgba: new Map((['rgba8unorm', 'rgb10a2unorm', 'rgba16float'] as const).map(format => [format, copy('rgba', format)])) }
       }, '缩小回放分辨率的复制管线初始化失败')
-      this.downscale.set(divisor, ready)
-      ready.catch(() => { if (this.downscale.get(divisor) === ready) this.downscale.delete(divisor) })
+      this.downscale.set(key, ready)
+      ready.catch(() => { if (this.downscale.get(key) === ready) this.downscale.delete(key) })
     }
     return ready
   }
@@ -262,7 +263,7 @@ export class VideoEditGpuCompositor {
     // A reduced playback resolution copies a box-averaged picture of 1/divisor size (task 4.9); the frame keeps its
     // display size, so placement, fit and effects are unchanged and only the stored pixels shrink.
     const divisor = this.pictureDivisor
-    const reduced = divisor === 1 ? undefined : await this.downscalePipelines(divisor)
+    let reduced = divisor === 1 ? undefined : await this.downscalePipelines(divisor)
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     // Copy on the compositor's device; no Skia canvas or cross-context fences.
     const borrowed = sample instanceof VideoEditNativePicture
@@ -282,6 +283,7 @@ export class VideoEditGpuCompositor {
     const bytes = compact ? width * height + uvWidth * uvHeight * 2 : width * height * (owned === 'rgba16float' ? 8 : 4)
     let retained = false
     try {
+      if (frame.colorSpace?.transfer === 'iec61966-2-1') reduced = await this.downscalePipelines(divisor, true)
       const encoder = this.device.createCommandEncoder()
       const resource = this.device.importExternalTexture({ source: frame })
       const planes: Array<readonly [GpuTexture, GpuRenderPipeline]> = reduced

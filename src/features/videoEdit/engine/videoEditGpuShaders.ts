@@ -51,23 +51,39 @@ export const VIDEO_EDIT_CACHED_YUV_SHADER = VIDEO_EDIT_LAYER_VERTEX + `
  return vec4f(clamp(rgb, vec3f(0), vec3f(1)) * p.opacity, p.opacity);
 }`
 
+/**
+ * Tagged sRGB media enters the SDR Rec.709 display working space (gamma 2.4) before
+ * effects or resampling. Ordinary BT.709 media keeps its existing values. Alpha is
+ * coverage, not colour: do not transform it or move this operation after compositing.
+ */
+const VIDEO_EDIT_MEDIA_TRANSFER = `
+override SRGB_TO_REC709: bool = false;
+fn workingColor(c: vec4f) -> vec4f {
+ if (!SRGB_TO_REC709) { return c; }
+ let encoded = max(c.rgb, vec3f(0));
+ let linear = select(pow((encoded + 0.055) / 1.055, vec3f(2.4)), encoded / 12.92, encoded <= vec3f(0.04045));
+ return vec4f(pow(linear, vec3f(1.0 / 2.4)), c.a);
+}
+`
+
 /** Snapshot copies of a decoder frame into owned memory; `rgba` writes either `rgba8unorm` or `rgba16float`. */
-export const VIDEO_EDIT_COPY_SHADER = `
+export const VIDEO_EDIT_COPY_SHADER = VIDEO_EDIT_MEDIA_TRANSFER + `
+
 struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
  let uv = array<vec2f, 3>(vec2f(0,0), vec2f(0,2), vec2f(2,0))[i];
  return Vertex(vec4f(uv.x * 2 - 1, 1 - uv.y * 2, 0, 1), uv);
 }
 @group(0) @binding(0) var t: texture_external;
-@fragment fn rgba(v: Vertex) -> @location(0) vec4f { return textureLoad(t, vec2u(v.position.xy)); }
+@fragment fn rgba(v: Vertex) -> @location(0) vec4f { return workingColor(textureLoad(t, vec2u(v.position.xy))); }
 @fragment fn y(v: Vertex) -> @location(0) vec4f {
- let c = textureLoad(t, vec2u(v.position.xy)).rgb;
+ let c = workingColor(textureLoad(t, vec2u(v.position.xy))).rgb;
  return vec4f(dot(c, vec3f(0.2126, 0.7152, 0.0722)), 0, 0, 1);
 }
 @fragment fn uv(v: Vertex) -> @location(0) vec4f {
  let point = vec2u(v.position.xy) * 2u;
  let edge = textureDimensions(t) - 1u;
- let c = (textureLoad(t, min(point, edge)).rgb + textureLoad(t, min(point + vec2u(1,0), edge)).rgb + textureLoad(t, min(point + vec2u(0,1), edge)).rgb + textureLoad(t, min(point + vec2u(1,1), edge)).rgb) * 0.25;
+ let c = (workingColor(textureLoad(t, min(point, edge))).rgb + workingColor(textureLoad(t, min(point + vec2u(1,0), edge))).rgb + workingColor(textureLoad(t, min(point + vec2u(0,1), edge))).rgb + workingColor(textureLoad(t, min(point + vec2u(1,1), edge))).rgb) * 0.25;
  let luma = dot(c, vec3f(0.2126, 0.7152, 0.0722));
  return vec4f((c.b - luma) / 1.8556 + 0.5, (c.r - luma) / 1.5748 + 0.5, 0, 1);
 }
@@ -82,7 +98,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
  */
 export function videoEditDownscaleCopyShader(step: 2 | 4 | 8, source: 'external' | 'texture' = 'external'): string {
   const external = source === 'external'
-  return `
+  return VIDEO_EDIT_MEDIA_TRANSFER + `
 struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
  let uv = array<vec2f, 3>(vec2f(0,0), vec2f(0,2), vec2f(2,0))[i];
@@ -95,7 +111,7 @@ fn box(origin: vec2u, size: u32) -> vec4f {
  var sum = vec4f(0);
  for (var y = 0u; y < size; y++) {
   for (var x = 0u; x < size; x++) {
-   let c = textureLoad(t, min(origin + vec2u(x, y), edge)${external ? '' : ', 0'});
+   let c = workingColor(textureLoad(t, min(origin + vec2u(x, y), edge)${external ? '' : ', 0'}));
    sum += vec4f(c.rgb * c.a, c.a);
   }
  }

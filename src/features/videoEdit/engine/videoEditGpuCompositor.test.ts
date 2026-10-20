@@ -319,6 +319,26 @@ it('原生共享纹理帧按原样导入、绝不在 Worker 里关闭：复制�
   expect(frame.close).not.toHaveBeenCalled()
   copy.close(); await compositor.dispose()
 })
+it.each([1, 2] as const)('sRGB 视频在 %s 分辨率的 RGBA 与紧凑 YUV 复制阶段转换；BT.709 保持原路径', async divisor => {
+  const { compositor, device } = copyFixture(async () => {})
+  compositor.setPictureDivisor(divisor)
+  const frame = { codedWidth: 3840, codedHeight: 2160, format: 'NV12', colorSpace: { transfer: 'bt709' } }
+  const native = { frame, meta: { timestampUs: 0 }, release: vi.fn() } as unknown as NativeVideoFrame
+  const picture = new VideoEditNativePicture(native, 0, 1 / 60, { bitDepth: 8, hasAlpha: false })
+  for (const compact of [false, true]) (await compositor.snapshot(picture, compact)).close()
+  const before = device.createRenderPipeline.mock.calls.length
+  frame.colorSpace.transfer = 'iec61966-2-1'
+  for (const compact of [false, true]) (await compositor.snapshot(picture, compact)).close()
+  const added = device.createRenderPipeline.mock.calls.slice(before).map(call => call[0] as { fragment: { entryPoint: string; constants: Record<string, number> } })
+  expect(added.map(value => value.fragment.entryPoint)).toEqual(['y', 'uv', 'rgba', 'rgba', 'rgba'])
+  expect(added.every(value => value.fragment.constants.SRGB_TO_REC709)).toBe(true)
+  const compiled = device.createRenderPipeline.mock.calls.length
+  frame.colorSpace.transfer = 'bt709'
+  ;(await compositor.snapshot(picture, true)).close()
+  expect(device.createRenderPipeline.mock.calls).toHaveLength(compiled)
+  picture.close()
+  await compositor.dispose()
+})
 it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后突破两份外部帧预算', async () => {
   const finish: Array<() => void> = []
   const { compositor, sample, device, closed } = copyFixture(() => new Promise<void>(resolve => { finish.push(resolve) }))

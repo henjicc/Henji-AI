@@ -20,11 +20,11 @@ function source(pixels: number[][][]): Texture {
   device.queue.writeTexture({ texture }, new Uint8Array(pixels.flat(2)), { bytesPerRow: width * 4 }, [width, height])
   return texture
 }
-async function run(step: 2 | 4 | 8, entryPoint: 'rgba' | 'y' | 'uv', input: Texture, width: number, height: number): Promise<number[][]> {
+async function run(step: 2 | 4 | 8, entryPoint: 'rgba' | 'y' | 'uv', input: Texture, width: number, height: number, srgb = false): Promise<number[][]> {
   const format = entryPoint === 'y' ? 'r8unorm' : entryPoint === 'uv' ? 'rg8unorm' : 'rgba8unorm'
   const channels = entryPoint === 'y' ? 1 : entryPoint === 'uv' ? 2 : 4
   const module = device.createShaderModule({ code: videoEditDownscaleCopyShader(step, 'texture') })
-  const pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+  const pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint, constants: { SRGB_TO_REC709: Number(srgb) }, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
   const target = device.createTexture({ size: [width, height], format, usage: RENDER_ATTACHMENT | TEXTURE_COPY_SRC })
   const bytesPerRow = 256
   const buffer = device.createBuffer({ size: bytesPerRow * height, usage: BUFFER_MAP_READ | BUFFER_COPY_DST })
@@ -92,4 +92,19 @@ it('1/8 复制整格平均一个 8×8 棋盘，得到均匀的中灰而不是取
   for (const channel of [0, 1, 2]) expect(Math.abs(cell[channel] - 128)).toBeLessThanOrEqual(1)
   expect(cell[3]).toBe(255)
   input.destroy()
+})
+
+it('sRGB 转换先于盒平均与 YUV 打包，保持 alpha；未标记路径不改变像素', async () => {
+  const grey = [64, 64, 64, 128], black = [0, 0, 0, 255], white = [255, 255, 255, 255]
+  const input = source([[grey, grey, black, white], [grey, grey, black, white]])
+  try {
+    expect((await run(2, 'rgba', input, 2, 1))[0]).toEqual(grey)
+    const [converted, averaged] = await run(2, 'rgba', input, 2, 1, true)
+    // sRGB 64/255 -> linear 0.051269 -> Rec.709 display gamma 2.4: 74/255.
+    expect(converted).toEqual([74, 74, 74, 128])
+    for (const channel of averaged.slice(0, 3)) expect(Math.abs(channel - 128)).toBeLessThanOrEqual(1)
+    expect(averaged[3]).toBe(255)
+    expect((await run(2, 'y', input, 2, 1, true))[0][0]).toBe(74)
+    for (const channel of (await run(2, 'uv', input, 1, 1, true))[0]) expect(Math.abs(channel - 128)).toBeLessThanOrEqual(1)
+  } finally { input.destroy() }
 })
