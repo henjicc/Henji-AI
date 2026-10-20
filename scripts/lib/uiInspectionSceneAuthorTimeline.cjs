@@ -120,9 +120,10 @@ async function runAuthorTimeline(page, app, { capture, root, spec, project, sour
     if (spec.prReference) evidence.prDifference = await compareFrames(path.join(root, 'formal-observation.png'), spec.prReference)
     // Keep all comparisons when one fails, so the failure can be localized without rerendering.
     store()
-    assert.equal(evidence.previewObservation.maximumDelta, 0, '正式观察与节目预览的同帧像素必须一致')
+    assert.ok(internalComparisonPasses(evidence.previewObservation), '内部一致性超出用户标准：最大差 2/255、差异像素 0.01%')
     assert.ok(evidence.exportDifference.psnr === null || evidence.exportDifference.psnr >= 30, '有损成片应与正式观察保持同帧内容')
-    if (spec.reference) assert.equal(evidence.candidateDifference.maximumDelta, 0, '正式节目与候选必须在相同黑底上逐像素一致')
+    if (spec.reference) assert.ok(internalComparisonPasses(evidence.candidateDifference), '候选与正式链路超出用户内部一致性标准')
+    if (spec.prReference) assert.ok(prComparisonPasses(evidence.prDifference), 'PR 对照超出用户数值标准；仍需检查边缘分布、目视画面及正常速度播放')
     evidence.completed = true; store()
   } finally { store(); await client?.close(); await disableMcp(page) }
 }
@@ -145,4 +146,12 @@ async function compareFrames(actual, expected) {
   const channels = a.data.length * 3 / 4
   return { comparison: 'RGB composited over opaque black (nearest 8-bit)', maximumDelta, meanAbsoluteDelta: absolute / channels, identicalPixelPercent: equalPixels * 400 / a.data.length, psnr: squared ? 10 * Math.log10(255 ** 2 / (squared / channels)) : null }
 }
-module.exports = { runAuthorTimeline, compareFrames }
+// User-authorized 2026-10-20 tolerances. These numeric gates do not certify
+// spatial visibility, normal-speed flicker or unmeasured encoded-export fidelity.
+function internalComparisonPasses(value) {
+  return value.maximumDelta <= 2 && value.identicalPixelPercent >= 99.99
+}
+function prComparisonPasses(value) {
+  return value.meanAbsoluteDelta <= .1 && value.identicalPixelPercent >= 95 && value.maximumDelta <= 16
+}
+module.exports = { runAuthorTimeline, compareFrames, internalComparisonPasses, prComparisonPasses }
