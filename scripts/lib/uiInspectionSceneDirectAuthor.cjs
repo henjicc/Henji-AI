@@ -4,10 +4,11 @@ const assert = require('node:assert/strict')
 const { build } = require('esbuild')
 const { loadTypeScript } = require('../check-persistence-compat.cjs')
 
-/** Candidate execution only: no user project or original effect is changed. */
+/** Candidate probes or isolated production-timeline acceptance; original effects stay untouched. */
 function createDirectAuthorScene() {
+  const formal = JSON.parse(fs.readFileSync(path.join(path.resolve(process.env.HENJI_DIRECT_AUTHOR_PROBE), 'input.json'), 'utf8').replace(/^\uFEFF/, '')).formal === true
   return {
-    id: 'video-edit-direct-author', surface: '剪辑', name: '剪辑-作者JS原效果候选帧', writesUserData: false,
+    id: 'video-edit-direct-author', surface: '剪辑', name: formal ? '剪辑-作者JS正式链路' : '剪辑-作者JS原效果候选帧', writesUserData: formal,
     async setup(page, app, { capture }) {
       const root = path.resolve(process.env.HENJI_DIRECT_AUTHOR_PROBE)
       const spec = JSON.parse(fs.readFileSync(path.join(root, 'input.json'), 'utf8').replace(/^\uFEFF/, ''))
@@ -27,9 +28,12 @@ function createDirectAuthorScene() {
       } }] })
       const fixture = loadTypeScript('src/core/videoEdit/testFixtures.ts')
       const { videoEditComposition } = loadTypeScript('src/core/videoEdit/document.ts')
-      const project = fixture.createVideoEditTestDocument('作者 JS 候选验证')
+      const project = fixture.createVideoEditTestDocument(spec.formal ? '作者 JS 正式链路验证' : '作者 JS 候选验证')
       Object.assign(project.sequences[0], { width: spec.width, height: spec.height, frameRate: { numerator: 60, denominator: 1 } })
       const composition = videoEditComposition(project, project.sequences[0].id)
+      if (spec.formal) {
+        return require('./uiInspectionSceneAuthorTimeline.cjs').runAuthorTimeline(page, app, { capture, root, spec, project, sourceFiles, source: result?.outputFiles[0].text, adaptations })
+      }
       const assets = path.resolve('out/renderer/assets')
       const workerFile = fs.readdirSync(assets).find(file => /^videoEditWorker-.*\.js$/.test(file))
       const compilerFile = fs.readdirSync(assets).find(file => /^videoEditCodeCompiler.worker-.*\.js$/.test(file))

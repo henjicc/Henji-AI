@@ -378,6 +378,8 @@ describe('合成器共享图片候选生命周期', () => {
       const picture = { width, height } as ImageBitmap
       const inputs = await compositor.prepareImages(new Map([['original', picture], ['same-original', picture]]), () => true)
       expect(inputs.get('original')!.texture).toBe(inputs.get('same-original')!.texture)
+      expect(inputs.get('original')!.premultiplied).toBe(true)
+      expect(device.queue.copyExternalImageToTexture).toHaveBeenLastCalledWith({ source: picture }, { texture: inputs.get('original')!.texture, premultipliedAlpha: true }, [width, height])
       expect(destroyed).toHaveBeenCalledTimes(count)
       await (await compositor.draw(composition, [base, { ...base, id: 'copy' }], [picture, picture], () => true)).completion
       expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(count + 1)
