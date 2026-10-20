@@ -13,6 +13,7 @@ interface Surface { canvas: OffscreenCanvas; texture: GpuTexture }
 export class VideoEditAuthorRuntime {
   private readonly surfaces: Surface[] = []
   private readonly textures = new Set<GpuTexture>()
+  private readonly canvasImages = new Map<string, { source: ImageBitmap; pixels: ImageData }>()
   private layerGpu?: VideoEditAuthorGpu
   private get layers(): VideoEditAuthorGpu { return this.layerGpu ??= new VideoEditAuthorGpu(this.device) }
   private gl?: WebGL2RenderingContext
@@ -54,6 +55,7 @@ export class VideoEditAuthorRuntime {
   }
   async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
+    const frameImages: ImageBitmap[] = []
     try {
       params = authorParameterValues(this.parameterMetadata, params)
       if (!Number.isFinite(info.time) || !(info.frameDuration > 0) || !Number.isFinite(info.clip?.time) || !(info.clip.duration > 0)) throw new Error('效果需要有效的帧时间和片段时间。')
@@ -97,6 +99,29 @@ export class VideoEditAuthorRuntime {
         this.lastFrame = { layers: [whole], width, height, time: info.time, parameters: params }
         return
       }
+      for (const [key, cached] of this.canvasImages) if (assets[key] !== cached.source) {
+        this.canvasImages.delete(key)
+      }
+      const canvasAssets: Record<string, CanvasImageSource> = {}
+      for (const [key, source] of Object.entries(assets)) {
+        if (!(source instanceof ImageBitmap)) { canvasAssets[key] = source; continue }
+        let cached = this.canvasImages.get(key)
+        if (!cached) {
+          const canvas = new OffscreenCanvas(source.width, source.height)
+          const context = canvas.getContext('2d', { willReadFrequently: true })
+          if (!context) throw new Error('Canvas2D 不可用。')
+          context.drawImage(source, 0, 0)
+          cached = { source, pixels: context.getImageData(0, 0, source.width, source.height) }
+          this.canvasImages.set(key, cached)
+          canvas.width = canvas.height = 1
+        }
+        // Reusing a bitmap lets Chromium change its low-quality downsampling
+        // after GPU promotion. Keep immutable pixels, with a fresh image each frame.
+        const copy = await createImageBitmap(cached.pixels)
+        frameImages.push(copy)
+        canvasAssets[key] = copy
+      }
+      assets = canvasAssets
       const list = this.effect.layers ? this.effect.layers(params, width, height, assets, info) : [{ ...whole, draw: (ctx: OffscreenCanvasRenderingContext2D, time: number): void => this.effect.draw!(ctx, time, params, width, height, assets, info) }]
       if (!Array.isArray(list)) throw new Error('layers() 必须返回图层数组。')
       await this.layers.begin(target)
@@ -188,6 +213,8 @@ export class VideoEditAuthorRuntime {
       }
     } catch (cause) {
       throw new Error(`代码效果「${this.effect.name}」在 ${info.time} 秒执行失败：${cause instanceof Error ? cause.message : String(cause)}`, { cause })
+    } finally {
+      frameImages.forEach(image => image.close())
     }
   }
   async dispose(): Promise<void> {
@@ -204,6 +231,7 @@ export class VideoEditAuthorRuntime {
     await release(() => this.layerGpu?.dispose())
     for (const texture of this.textures) await release(() => texture.destroy())
     this.textures.clear()
+    this.canvasImages.clear()
     for (const surface of this.surfaces) if (surface) await release(() => { surface.canvas.width = surface.canvas.height = 1 })
     this.surfaces.length = 0
     await release(() => this.gl?.getExtension('WEBGL_lose_context')?.loseContext())

@@ -9,6 +9,46 @@ vi.mock('./videoEditAuthorGpu', () => ({ VideoEditAuthorGpu: class {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
+it('keeps Canvas image sampling independent of shared GPU uploads and releases only owned copies', async () => {
+  class Bitmap {
+    width = 32; height = 16
+    close = vi.fn()
+  }
+  const context = { reset: vi.fn(), save: vi.fn(), restore: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(() => ({})) }
+  class Canvas {
+    constructor(public width: number, public height: number) {}
+    getContext(): typeof context { return context }
+  }
+  vi.stubGlobal('ImageBitmap', Bitmap); vi.stubGlobal('OffscreenCanvas', Canvas)
+  const createBitmap = vi.fn(async () => new Bitmap())
+  vi.stubGlobal('createImageBitmap', createBitmap)
+  const source = new Bitmap(), replacement = new Bitmap()
+  const draw = vi.fn()
+  const runtime = new VideoEditAuthorRuntime({
+    createTexture: () => ({ destroy: vi.fn() }),
+    queue: { copyExternalImageToTexture: vi.fn() },
+  } as unknown as GpuDevice, { name: '图片采样', draw })
+  const target = { createView: () => ({}), destroy() {} }
+  const info = { time: 0, frameDuration: 1 / 60, clip: { time: 0, duration: 1 } }
+  const render = (image: Bitmap) => runtime.render(target, 100, 50, {}, { logo: image as unknown as ImageBitmap }, info)
+  await render(source); await render(source)
+  expect(createBitmap).toHaveBeenCalledTimes(2)
+  expect(context.getImageData).toHaveBeenCalledOnce()
+  const first = await createBitmap.mock.results[0].value
+  expect(draw.mock.calls[0][5].logo).toBe(first)
+  expect(draw.mock.calls[1][5].logo).not.toBe(first)
+  expect(first).not.toBe(source)
+  await render(replacement)
+  expect(first.close).toHaveBeenCalledOnce()
+  expect(createBitmap).toHaveBeenCalledTimes(3)
+  expect(context.getImageData).toHaveBeenCalledTimes(2)
+  const second = await createBitmap.mock.results[2].value
+  await runtime.dispose()
+  expect(second.close).toHaveBeenCalledOnce()
+  expect(source.close).not.toHaveBeenCalled()
+  expect(replacement.close).not.toHaveBeenCalled()
+})
+
 it('releases the module even when an instance disposer fails, without retrying disposal', async () => {
   const dispose = vi.fn(() => { throw new Error('instance cleanup') })
   const moduleDispose = vi.fn()
