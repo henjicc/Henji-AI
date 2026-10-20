@@ -1,6 +1,7 @@
 import type { AudioEncodingConfig, VideoEncodingConfig } from 'mediabunny'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { createLogger } from '@/core/logging'
+import { videoEditExportAvcLevel } from './videoEditExportAvcLevel'
 
 const logger = createLogger('features.videoEdit.exportEncoder')
 
@@ -69,6 +70,7 @@ export function videoEditExportVideoOptions(settings: Pick<VideoEditExportSettin
   const config = videoEditExportVideoEncoderConfig({ ...settings, frameRate: settings.fps, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000) })
   return { codec: settings.codec, bitrate: config.bitrate, bitrateMode: config.bitrateMode as 'constant' | 'variable',
     fullCodecString: config.codec, hardwareAcceleration: config.hardwareAcceleration, latencyMode: config.latencyMode, alpha: config.alpha,
+    ...(settings.codec === 'avc' ? { onEncodedPacket: videoEditExportAvcLevel(Number.parseInt(config.codec.slice(-2), 16)) } : {}),
     onEncoderConfig: actual => {
       // Mediabunny adds track frameRate back before its own support probe. Apply
       // the same native config at that boundary, before both probing/configure.
