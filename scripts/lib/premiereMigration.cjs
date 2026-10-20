@@ -118,7 +118,8 @@ function buildPremiereMigration(graph, probes, options) {
   }
   const applyEffects = (sequence, raw, clip, picture) => {
     let volume = raw.muted ? 0 : 1
-    for (const effect of raw.effects) {
+    let sourceScale = 1
+    for (const effect of [...(raw.sourceEffects ?? []), ...raw.effects]) {
       if (effect.matchName === 'AE.ADBE Motion') {
         const params = effect.parameters, get = (label, fallback) => initial(params.find(param => param.Name === label), fallback)
         const fit = Math.min(sequence.width / picture.width, sequence.height / picture.height)
@@ -126,6 +127,15 @@ function buildPremiereMigration(graph, probes, options) {
         const [anchorX, anchorY] = get('锚点', '0.5:0.5').split(':').map(Number)
         Object.assign(clip, { x: x - .5, y: y - .5, anchorX, anchorY, scale: Number(get('缩放', '100')) / 100 / fit, rotation: Number(get('旋转', '0')) })
         if (params.some(param => param.Keyframes) || get(' ', 'true') !== 'true' || params.some(param => param.Name?.startsWith('裁剪') && Number(initial(param, '0')) !== 0)) mark(sequence, raw, '复核原运动效果的动画、裁剪或非等比缩放。', clip)
+      } else if (effect.matchName === 'AE.ADBE Geometry2' && raw.sourceEffects?.includes(effect)) {
+        const get = (id, fallback) => initial(effect.parameters.find(param => param.ParameterID === String(id)), fallback)
+        // A centered, uniform source transform composes with the clip's motion
+        // scale. Other transforms require an actual pre-motion effect stage.
+        if (get(1, '0.5:0.5') !== '0.5:0.5' || get(2, '0.5:0.5') !== '0.5:0.5'
+          || get(11, 'true') !== 'true' || Number(get(5, '0')) !== 0
+          || Number(get(7, '0')) !== 0 || Number(get(8, '100')) !== 100
+          || effect.parameters.some(param => param.Keyframes)) throw new Error(`Unsupported source transform on ${raw.id}`)
+        sourceScale *= Number(get(3, '100')) / 100
       } else if (effect.matchName === 'AE.ADBE Lumetri') {
         const basic = { 7: 'temperature', 8: 'tint', 11: 'exposure', 12: 'contrast', 13: 'highlights', 14: 'shadows', 15: 'whites', 16: 'blacks', 20: 'saturation' }
         const params = {}
@@ -136,7 +146,8 @@ function buildPremiereMigration(graph, probes, options) {
           params[key] = key === 'saturation' ? value - 100 : value
           if (parameter?.Keyframes) mark(sequence, raw, `Lumetri ${parameter.Name} 动画尚待还原。`, clip)
         }
-        ;(clip.effects ??= []).push({ id: stable('effect', effect.id), name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params } })
+        const identity = raw.sourceEffects?.includes(effect) ? `${effect.id}:${clip.id}` : effect.id
+        ;(clip.effects ??= []).push({ id: stable('effect', identity), name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params } })
       } else if (effect.matchName === 'Internal Volume Stereo') {
         const level = effect.parameters.find(param => param.Name === '级别')
         volume *= audioGain(level)
@@ -148,6 +159,7 @@ function buildPremiereMigration(graph, probes, options) {
         volume *= left
       } else mark(sequence, raw, effect.matchName === 'AE.FrameFlow Bridge' ? '待迁移代码画面：保留原始素材与时间，尚未还原此处的生成画面或聚焦效果。' : `待适配画面效果：${effect.name}。`, clip)
     }
+    clip.scale *= sourceScale
     clip.volume = raw.muted ? 0 : volume
     if (raw.muted) clip.opacity = 0
   }

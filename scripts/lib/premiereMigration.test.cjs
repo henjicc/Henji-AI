@@ -51,6 +51,47 @@ test('same-name music sequence becomes editable grouped clips with its transitio
   assert.ok(result.evidence.limitations.some(item => item.text.includes('试听')))
 })
 
+test('source effects retain grading and compose centered zoom with clip motion', () => {
+  const sourceEffects = [
+    { id: 'source-transform', matchName: 'AE.ADBE Geometry2', parameters: [{ ParameterID: '3', StartKeyframe: '0,118,0' }] },
+    { id: 'source-grade', matchName: 'AE.ADBE Lumetri', parameters: [{ ParameterID: '11', StartKeyframe: '0,.8,0' }] },
+  ]
+  const effects = [{ matchName: 'AE.ADBE Motion', parameters: [{ Name: '缩放', StartKeyframe: '0,80,0' }] }]
+  const raw = clip('source', 0, 5, { type: 'VideoClipTrackItem', sourceEffects, effects })
+  const result = build([seq('main', [{ ...track([raw]), kind: 'video' }])],
+    [{ id: 'media', name: 'source.mp4', path: file, streams: {} }],
+    new Map([[file, { streams: [{ codec_type: 'video', width: 3840, height: 2160, avg_frame_rate: '60/1' }], format: { duration: '30' } }]]))
+  const migrated = result.document.sequences[0].clips[0]
+  assert.equal(migrated.scale, .8 * 1.18)
+  assert.equal(migrated.effects[0].builtin.params.exposure, .8)
+  assert.equal(result.evidence.limitations.length, 0)
+})
+
+test('extractor includes master source effects separately from timeline effects', () => {
+  const python = process.platform === 'win32' ? 'python' : 'python3'
+  const code = `
+import sys
+sys.path.insert(0, 'scripts/lib')
+from premiereMigrationExtract import ProjectGraph
+g=ProjectGraph(b'''<PremiereData>
+<VideoClipTrackItem ObjectID="item"><ClipTrackItem><TrackItem><Start>0</Start><End>1</End></TrackItem><SubClip ObjectRef="sub"/></ClipTrackItem></VideoClipTrackItem>
+<SubClip ObjectID="sub"><MasterClip ObjectURef="master"/><Clip ObjectRef="clip"/></SubClip>
+<MasterClip ObjectUID="master"><VideoComponentChain ObjectRef="chain"/></MasterClip>
+<VideoComponentChain ObjectID="chain"><ComponentChain><Components><Component ObjectRef="effect"/></Components></ComponentChain></VideoComponentChain>
+<VideoFilterComponent ObjectID="effect"><MatchName>AE.ADBE Lumetri</MatchName><Component><Params><Param ObjectRef="exposure"/></Params></Component></VideoFilterComponent>
+<Parameter ObjectID="exposure"><ParameterID>11</ParameterID><StartKeyframe>0,.8,0</StartKeyframe></Parameter>
+<VideoClip ObjectID="clip"><Clip><Source ObjectRef="source"/></Clip></VideoClip>
+<VideoMediaSource ObjectID="source"><MediaSource><Media ObjectURef="media"/></MediaSource></VideoMediaSource>
+<Media ObjectUID="media"/>
+</PremiereData>''')
+c=g.clip(g.ids['item'])
+assert c['effects']==[]
+assert c['sourceEffects'][0]['matchName']=='AE.ADBE Lumetri'
+assert c['sourceEffects'][0]['parameters'][0]['StartKeyframe']=='0,.8,0'
+`
+  execFileSync(python, ['-B', '-c', code], { windowsHide: true })
+})
+
 test('AudioFader mute survives direct tracks and flattened audio nesting', () => {
   const muted = { ...track([clip('sound', 0, 5)]), effects: [{ matchName: 'AudioFader', parameters: [{ Name: '静音', StartKeyframe: '0,true,0' }] }] }
   const direct = build([seq('main', [muted])])

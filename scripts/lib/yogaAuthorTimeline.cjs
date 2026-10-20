@@ -35,10 +35,10 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
   // User accepts a perceptual Lumetri match. These existing basic controls were
   // calibrated against the lossless PR screen close-up (excluding graphics/text).
   // Keep this source-specific translation out of the shared grader/author code.
-  for (const sequence of document.sequences) for (const clip of sequence.clips) {
-    if (clip.id !== stable('clip', '3092')) continue
-    const grade = clip.effects?.find(effect => effect.id === stable('effect', '6746'))
-    assert.equal(grade?.builtin?.id, 'color_grade', '屏幕特写的原 Lumetri 效果已变化')
+  for (const sequence of document.sequences) for (const clip of sequence.clips) for (const grade of clip.effects ?? []) {
+    const calibratedGrades = new Set([stable('effect', '6746'), ...['1025', '1038', '1017'].map(id => stable('effect', `${id}:${clip.id}`))])
+    if (!calibratedGrades.has(grade.id)) continue
+    assert.equal(grade?.builtin?.id, 'color_grade', '原 Lumetri 效果已变化')
     assert.ok(Math.abs(grade.builtin.params.exposure - .8) < 1e-6 && grade.builtin.params.contrast === -19 && grade.builtin.params.blacks === -3, '屏幕特写的原 Lumetri 参数已变化')
     Object.assign(grade.builtin.params, { exposure: .7292, contrast: -18.7531, highlights: 20.7425, shadows: 15.2712, whites: -32.759, blacks: -75.2134 })
   }

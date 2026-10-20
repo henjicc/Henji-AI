@@ -39,7 +39,9 @@ class ProjectGraph:
         link = owner.find("ComponentOwner/Components")
         if link is None:
             return []
-        chain = self.ref(link)
+        return self.chain_effects(self.ref(link))
+
+    def chain_effects(self, chain):
         result = []
         for ref in chain.findall("ComponentChain/Components/Component"):
             effect = self.ref(ref)
@@ -97,6 +99,12 @@ class ProjectGraph:
             result["text"] = self.caption(item)
             return result
         sub = self.ref(core.find("SubClip"))
+        master_ref = sub.find("MasterClip")
+        if master_ref is not None and item.tag == "VideoClipTrackItem":
+            master = self.ref(master_ref)
+            source_chain = master.find("VideoComponentChain")
+            if source_chain is not None:
+                result["sourceEffects"] = self.chain_effects(self.ref(source_chain))
         source_clip = self.ref(sub.find("Clip"))
         clip = source_clip.find(".//Clip")
         if clip is None:
