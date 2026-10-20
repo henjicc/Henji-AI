@@ -16,6 +16,7 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
   const { videoEditDocumentSchema, videoEditTransitionAlignmentFields } = loadTypeScript('scripts/lib/premiereMigrationModel.ts')
   const packages = [], instances = []
   const restoredTransitions = new Set()
+  const restoredVolume = new Set()
   document.codeMaterials = []
   document.bins.push({ id: 'yoga-authors', name: '原代码效果' })
   for (const rawSequence of graph.sequences) {
@@ -108,9 +109,26 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
       restoredTransitions.add(raw.id)
       sequence.annotations = sequence.annotations.filter(value => value.id !== stable('annotation', `${sequence.id}:${raw.id}:待还原原工程转场。:${frames(raw.start)}`))
     }
+    for (const track of rawSequence.tracks.filter(value => value.kind === 'audio')) for (const raw of track.clips) {
+      const level = raw.effects.find(value => value.matchName === 'Internal Volume Stereo')?.parameters.find(value => value.Name === '级别')
+      if (!level?.Keyframes) continue
+      const clip = sequence.clips.find(value => value.id === stable('clip', raw.id))
+      assert.ok(clip, `音量自动化未找到直接声音片段：${raw.id}`)
+      const rows = level.Keyframes.split(';').filter(Boolean).map(row => row.split(',').map(Number))
+      assert.equal(rows.length, 2, '当前 YOGA 音量包络应为两个关键帧')
+      const slope = (rows[1][1] - rows[0][1]) / ((rows[1][0] - rows[0][0]) / 254016000000)
+      assert.ok(Math.abs(rows[0][6] - slope) < 1e-9 && Math.abs(rows[1][4] - slope) < 1e-9, '非线性音量曲线需要另行适配')
+      const gain = clip.volume / Number(level.StartKeyframe.split(',')[1])
+      clip.curves = { ...clip.curves, volume: rows.map(row => ({
+        time: Math.round((row[0] - Number(raw.in)) / 254016000000 * fps),
+        value: row[1] * gain, interpolation: 'linear',
+      })) }
+      restoredVolume.add(raw.id)
+      sequence.annotations = sequence.annotations.filter(value => value.clipId !== clip.id || !value.text.startsWith('音乐音量自动化'))
+    }
   }
   return { document: videoEditDocumentSchema.parse(document), packages, instances,
-    remaining: base.evidence.limitations.filter(value => !/待迁移代码画面|待重建生成画面/.test(value.text) && !restoredTransitions.has(value.sourceClipId)), source: graph.source }
+    remaining: base.evidence.limitations.filter(value => !/待迁移代码画面|待重建生成画面/.test(value.text) && !restoredTransitions.has(value.sourceClipId) && !restoredVolume.has(value.sourceClipId)), source: graph.source }
 }
 
 module.exports = { buildYogaAuthorTimeline }
