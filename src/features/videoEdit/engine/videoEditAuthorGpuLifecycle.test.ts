@@ -109,13 +109,13 @@ it('作者导入失败不分配候选目标，修正版本后恢复且原输入�
   } finally { await runtime.dispose() }
 })
 
-it('作者目标共享256MiB预算，回收不可见目标后恢复且不降低分辨率', async () => {
+it('作者目标共享512MiB预算，回收不可见目标后恢复且不降低分辨率', async () => {
   const { runtime, program } = fixture()
   const size = { width: 3840, height: 2160 }
   try {
-    for (let i = 0; i < 8; i++) await runtime.authorGenerator(String(i), String(i), program, size, {}, {}, info)
-    await expect(runtime.authorGenerator('overflow', 'overflow', program, size, {}, {}, info)).rejects.toThrow('256MiB')
-    expect(runtime.diagnostics().surfaces).toBe(8)
+    for (let i = 0; i < 16; i++) await runtime.authorGenerator(String(i), String(i), program, size, {}, {}, info)
+    await expect(runtime.authorGenerator('overflow', 'overflow', program, size, {}, {}, info)).rejects.toThrow('512MiB')
+    expect(runtime.diagnostics().surfaces).toBe(16)
     runtime.releaseUnused(new Set(['0']))
     const output = await runtime.authorGenerator('overflow', 'overflow', program, size, {}, {}, info)
     expect([output.width, output.height]).toEqual([3840, 2160])

@@ -199,7 +199,7 @@ describe('代码GPU会话复用与资源边界', () => {
 
 
 
-  it('高精度目标有独立的512MiB上限，不挤占八位256MiB预算', async () => {
+  it('高精度目标有独立的512MiB上限，不挤占八位512MiB预算', async () => {
     const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
     for (let index = 0; index < 8; index++) await runtime.target(`deep-${index}`, 3840, 2160, 'rgba16float')
     await expect(runtime.target('deep-8', 3840, 2160, 'rgba16float')).rejects.toThrow('512MiB')

@@ -98,6 +98,13 @@ const plan = new Planner(width, height)
         }
       }
       if (n('vignette_amount')) draw({ entry: 'color_grade_vignette', a: [n('vignette_amount') / 100, n('vignette_midpoint') / 100, n('vignette_roundness') / 100, n('vignette_feather') / 100], b: [referenceSize[0] / referenceSize[1], 0, 0, 0] })
+      // A pointwise single stage can write straight to the supplied output.
+      // Avoid reserving two full-size ping-pong textures for basic correction.
+      if (plan.passes.length === 1 && plan.passes[0].source === 'input' && plan.passes[0].target === current) {
+        plan.passes[0].target = 'output'
+        plan.scratch.length = 0
+        return plan
+      }
       plan.pass('copy', current, 'output')
       if (current === 'input') plan.scratch.length = 0
       return plan

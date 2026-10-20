@@ -5,6 +5,12 @@ import { VIDEO_EDIT_COLOR_GRADE, colorGradeLinear, colorGradeSrgb, colorGradeWhi
 import { planVideoEditBuiltinEffect } from '../../features/videoEdit/engine/videoEditBuiltinEffectPasses'
 
 describe('ColorGrade 参数与自动校色', () => {
+  it('4K 单步基本校正直接输出，不占用两张多余的全尺寸纹理', () => {
+    const plan = planVideoEditBuiltinEffect({ id: 'color_grade', params: { exposure: .8, contrast: -19, blacks: -3 } }, { width: 3840, height: 2160, frame: 0 })
+    expect(plan.scratch).toEqual([])
+    expect(plan.passes).toHaveLength(1)
+    expect(plan.passes[0]).toMatchObject({ entry: 'color_grade_basic', source: 'input', target: 'output' })
+  })
   it('中性只复制，不分配临时纹理；每项都有界面与助手语义，通用参数拒绝未知及越界值', () => {
     expect(videoEditBuiltinEffect('color_grade')).toBe(VIDEO_EDIT_COLOR_GRADE)
     const plan = planVideoEditBuiltinEffect({ id: VIDEO_EDIT_COLOR_GRADE.id, params: videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE) }, { width: 1920, height: 1080, frame: 0 })

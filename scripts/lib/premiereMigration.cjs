@@ -12,6 +12,9 @@ const seconds = ticks => Number(BigInt(ticks)) / Number(TICKS)
 const rateOf = seq => ({ numerator: 254016000000 / Number(seq.frameTicks), denominator: 1 })
 const frameAt = (ticks, rate) => Math.round(seconds(ticks) * rate.numerator / rate.denominator)
 const initial = (parameter, fallback) => parameter?.StartKeyframe?.split(',')[1] ?? fallback
+const trackMuted = track => /<(?:IsMuted|Mute)>true<\//.test(track.xml)
+  || (track.effects ?? []).some(effect => effect.matchName === 'AudioFader'
+    && initial(effect.parameters.find(parameter => parameter.Name === '静音'), 'false') === 'true')
 
 function sourceTime(ticks) {
   const scaled = BigInt(ticks) * 1000000n
@@ -105,7 +108,7 @@ function buildPremiereMigration(graph, probes, options) {
     sequence.tracks = raw.tracks.filter(track => track.kind !== 'caption').map(track => ({
       id: stable('track', track.id), index: track.kind === 'audio' ? track.index : raw.tracks.filter(value => value.kind === 'audio').length + track.index,
       name: track.name ?? `${track.kind === 'audio' ? '声音' : '画面'} ${track.index + 1}`, kind: track.kind,
-      enabled: true, locked: false, muted: /<(?:IsMuted|Mute)>true<\//.test(track.xml), solo: false,
+      enabled: true, locked: false, muted: trackMuted(track), solo: false,
     }))
     document.sequences.push(sequence)
     document.items.push({ id: stable('sequence-item', raw.id), name: raw.name, kind: 'sequence', sequenceId: sequence.id, binId: 'migration-sequences' })
@@ -120,6 +123,17 @@ function buildPremiereMigration(graph, probes, options) {
         const [anchorX, anchorY] = get('锚点', '0.5:0.5').split(':').map(Number)
         Object.assign(clip, { x: x - .5, y: y - .5, anchorX, anchorY, scale: Number(get('缩放', '100')) / 100 / fit, rotation: Number(get('旋转', '0')) })
         if (params.some(param => param.Keyframes) || get(' ', 'true') !== 'true' || params.some(param => param.Name?.startsWith('裁剪') && Number(initial(param, '0')) !== 0)) mark(sequence, raw, '复核原运动效果的动画、裁剪或非等比缩放。', clip)
+      } else if (effect.matchName === 'AE.ADBE Lumetri') {
+        const basic = { 7: 'temperature', 8: 'tint', 11: 'exposure', 12: 'contrast', 13: 'highlights', 14: 'shadows', 15: 'whites', 16: 'blacks', 20: 'saturation' }
+        const params = {}
+        for (const [id, key] of Object.entries(basic)) {
+          const parameter = effect.parameters.find(value => value.ParameterID === id)
+          const value = Number(initial(parameter, key === 'saturation' ? '100' : '0'))
+          if (!Number.isFinite(value)) throw new Error(`Invalid Lumetri ${id} on ${raw.id}`)
+          params[key] = key === 'saturation' ? value - 100 : value
+          if (parameter?.Keyframes) mark(sequence, raw, `Lumetri ${parameter.Name} 动画尚待还原。`, clip)
+        }
+        ;(clip.effects ??= []).push({ id: stable('effect', effect.id), name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params } })
       } else if (effect.matchName === 'Internal Volume Stereo') {
         const level = effect.parameters.find(param => param.Name === '级别')
         volume *= Number(initial(level, '1'))
@@ -208,7 +222,7 @@ function buildPremiereMigration(graph, probes, options) {
             const to = BigInt(child.end) < endTick ? BigInt(child.end) : endTick
             if (to <= from) continue
             if (child.sequenceId || Number(child.speed) !== 1 || child.reverse) throw new Error(`Recursive/retimed audio nesting needs explicit adaptation: ${child.id}`)
-            const moved = { ...child, muted: child.muted || raw.muted, start: String(BigInt(raw.start) + from - inTick), end: String(BigInt(raw.start) + to - inTick), in: String(BigInt(child.in) + from - BigInt(child.start)), effects: [...child.effects, ...raw.effects] }
+            const moved = { ...child, muted: child.muted || raw.muted || trackMuted(childTrack), start: String(BigInt(raw.start) + from - inTick), end: String(BigInt(raw.start) + to - inTick), in: String(BigInt(child.in) + from - BigInt(child.start)), effects: [...child.effects, ...raw.effects] }
             const clip = makeClip(sequence, moved, nativeTrack.index, `${raw.id}:${child.id}`)
             if (clip) { clip.groupId = stable('music-group', raw.id); childByRaw.set(child.id, clip) }
           }

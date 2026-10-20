@@ -20,6 +20,22 @@ test('source ticks retain exact fractional microseconds', () => {
   assert.ok(result.sourceRemainder.denominator <= 1000000)
 })
 
+test('Lumetri basic correction uses the existing color grader and preserves source values', () => {
+  const effects = [{ id: 'lumetri', matchName: 'AE.ADBE Lumetri', parameters: [
+    { ParameterID: '11', StartKeyframe: '0,0.7999998927116394,0', CurrentValue: '2' },
+    { ParameterID: '12', StartKeyframe: '0,-19,0' },
+    { ParameterID: '16', StartKeyframe: '0,-3,0' },
+    { ParameterID: '20', StartKeyframe: '0,110,0' },
+  ] }]
+  const result = build([seq('main', [{ ...track([clip('graded', 0, 5, { type: 'VideoClipTrackItem', effects })]), kind: 'video' }])],
+    [{ id: 'media', name: 'source.mp4', path: file, streams: {} }],
+    new Map([[file, { streams: [{ codec_type: 'video', width: 3840, height: 2160, avg_frame_rate: '60/1' }], format: { duration: '30' } }]]))
+  const grade = result.document.sequences[0].clips[0].effects[0]
+  assert.equal(grade.builtin.id, 'color_grade')
+  assert.deepEqual(grade.builtin.params, { temperature: 0, tint: 0, exposure: .7999998927116394, contrast: -19, highlights: 0, shadows: 0, whites: 0, blacks: -3, saturation: 10 })
+  assert.ok(!result.evidence.limitations.some(item => item.text.includes('待适配画面效果')))
+})
+
 test('same-name music sequence becomes editable grouped clips with its transition', () => {
   const transition = { id: 'fade', start: tick(4), end: tick(6), alignment: tick(1), matchName: 'Constant Power' }
   const nested = seq('music', [track([clip('a', 0, 5, { tailTransition: 'fade' }), clip('b', 5, 10, { headTransition: 'fade' })], [transition])])
@@ -33,6 +49,14 @@ test('same-name music sequence becomes editable grouped clips with its transitio
   assert.equal(main.transitions[0].rightClipId, main.clips[1].id)
   assert.equal(main.transitions[0].durationFrames, 120)
   assert.ok(result.evidence.limitations.some(item => item.text.includes('试听')))
+})
+
+test('AudioFader mute survives direct tracks and flattened audio nesting', () => {
+  const muted = { ...track([clip('sound', 0, 5)]), effects: [{ matchName: 'AudioFader', parameters: [{ Name: '静音', StartKeyframe: '0,true,0' }] }] }
+  const direct = build([seq('main', [muted])])
+  assert.equal(direct.document.sequences[0].tracks[0].muted, true)
+  const nested = build([seq('main', [track([clip('parent', 0, 5, { sequenceId: 'nested', mediaId: undefined })])]), seq('nested', [muted])])
+  assert.equal(nested.document.sequences[0].clips[0].volume, 0)
 })
 
 test('virtual carrier creates an explicit pending range, not a missing-file error', () => {

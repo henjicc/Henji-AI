@@ -27,7 +27,9 @@ import type { CodeAuthorBundle, CodeAuthorProgram } from '@/core/videoEdit/codeA
 import type { AuthorAssets, AuthorFrameInfo, AuthorGpuInputs } from './videoEditAuthorModule'
 import type { AuthorElementOverrides } from './videoEditAuthorElements'
 
-const MAX_RESIDENT_BYTES = 256 * 1024 ** 2
+// 4K media + grading + author filters need more than eight RGBA8 surfaces.
+// Allocate on demand, with a bounded 512MiB tier independent of precise targets.
+const MAX_RESIDENT_BYTES = 512 * 1024 ** 2
 interface Glyph { texture: GpuTexture; width: number; height: number; bytes: number; x?: number; y?: number }
 /**
  * Separate budget of `rgba16float` surfaces (task 2.7): effects and transitions on 10-bit and deeper material. Two
@@ -207,8 +209,8 @@ export class VideoEditCodeGpu {
   private texture(width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm'): GpuTexture {
     const bytes = width * height * videoEditGpuBytesPerPixel(format)
     const precise = format === VIDEO_EDIT_PRECISE_FORMAT
-    if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或256MiB会话预算。')
-    if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或256MiB会话预算。')
+    if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或512MiB会话预算。')
+    if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或512MiB会话预算。')
     const textureStarted = performance.now()
     const texture = this.device.createTexture({ size: [width, height], format, usage: 0x01 | 0x02 | 0x04 | 0x08 | 0x10 })
     recordVideoEditPreparation('textureAllocation', performance.now() - textureStarted)
