@@ -1,4 +1,5 @@
 import { isUiInspectionActive } from '@/platform/runtime'
+import { VIDEO_EDIT_AUTHOR_CONTENT_COLORS } from '@/core/theme/colorTokens'
 import { addressCodeMaterialFiles, normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -9,7 +10,7 @@ import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract
 export { runVideoEditCompositeProbe } from './videoEditCompositeProbe'
 export { runVideoEditCodeInputProbe } from './videoEditCodeInputProbe'
 
-const staticSource = `export default {name:"透明形状",mode:"static",draw(ctx){ctx.fillStyle="rgba(255,0,0,.5)";ctx.beginPath();ctx.roundRect(80,100,800,600,40);ctx.fill();ctx.fillStyle="rgba(0,255,0,.75)";ctx.beginPath();ctx.ellipse(1280,400,300,300,0,0,Math.PI*2);ctx.fill();}}`
+const staticSource = `export default {name:"透明形状",mode:"static",draw(ctx){ctx.fillStyle=${JSON.stringify(VIDEO_EDIT_AUTHOR_CONTENT_COLORS.probeRectangle)};ctx.beginPath();ctx.roundRect(80,100,800,600,40);ctx.fill();ctx.fillStyle=${JSON.stringify(VIDEO_EDIT_AUTHOR_CONTENT_COLORS.probeEllipse)};ctx.beginPath();ctx.ellipse(1280,400,300,300,0,0,Math.PI*2);ctx.fill();}}`
 const titleSource = `export default {name:"原生代码",params:[{key:"title",type:"text",title:"标题",default:"原生代码 · 4K"},{key:"ink",type:"color",title:"颜色",default:[1,.3,.1,.7]},{key:"fail",type:"boolean",title:"错误测试",default:false}],draw(ctx,t,p){if(p.fail)throw new Error("作者测试异常");const c=p.ink;ctx.fillStyle="rgba("+c.slice(0,3).map(v=>v*255).join(",")+","+c[3]+")";ctx.beginPath();ctx.roundRect(80+t*200,100,800,600,40);ctx.fill();ctx.fillStyle="white";ctx.font="180px sans-serif";ctx.textAlign="center";ctx.fillText(p.title,1920,1200);}}`
 function percentile(values: number[], percent: number): number { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * percent))] }
 

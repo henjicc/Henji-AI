@@ -1,4 +1,5 @@
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
+import { VIDEO_EDIT_AUTHOR_CONTENT_COLORS } from '@/core/theme/colorTokens'
 import { addressCodeMaterialFiles, normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { createVideoEditSequence, videoEditComposition, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -33,7 +34,7 @@ export default { name:'预设样片', mode:'dynamic', params:[
   for(let i=0;i<12;i++){const r=H*(.02+.05*random(i+60));ctx.globalAlpha=.12+.22*random(i+150);ctx.fillStyle=color(h+.42+.16*random(i+120),.3*k,1);ctx.beginPath();ctx.arc(-W*.6+W*1.2*random(i)+t*W*.012*(1+random(i+30)),-H*.45+H*.6*random(i+90),r,0,Math.PI*2);ctx.fill()}
   ctx.restore();
   for(const [points,c] of [[[[ -.6,.5],[-.6,.12],[-.32,-.02],[-.1,.1],[.14,-.04],[.38,.08],[.6,0],[.6,.5]],color(h+.08,.45*k,.13)],[[[-.6,.5],[-.6,.3],[-.2,.22],[.18,.3],[.6,.2],[.6,.5]],color(h+.1,.5*k,.06)]]){ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x*W,y*H):ctx.moveTo(x*W,y*H));ctx.closePath();ctx.fillStyle=c;ctx.fill()}
-  ctx.restore();const vignette=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.72);vignette.addColorStop(.5,'rgba(0,0,0,0)');vignette.addColorStop(1,'rgba(0,0,0,.6)');ctx.fillStyle=vignette;ctx.fillRect(0,0,W,H);
+  ctx.restore();const vignette=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.72);vignette.addColorStop(.5,${JSON.stringify(VIDEO_EDIT_AUTHOR_CONTENT_COLORS.vignetteCenter)});vignette.addColorStop(1,${JSON.stringify(VIDEO_EDIT_AUTHOR_CONTENT_COLORS.vignetteEdge)});ctx.fillStyle=vignette;ctx.fillRect(0,0,W,H);
  }},
  {id:'label',name:'标题',bounds:[0,H*.35,W,H*.65],draw(ctx){const s=p.labelStyle;ctx.font=s.fontWeight+' '+s.fontSize+'px '+s.fontFamily;ctx.fillStyle=s.fill.enabled?s.fill.color:'transparent';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.label,W/2,H/2)}}
 ]}};`

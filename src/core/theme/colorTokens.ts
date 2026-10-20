@@ -23,6 +23,13 @@ export const RECORDING_FRAME_BACKGROUND_HEX = {
 /** “录屏画框”纯色背景的默认颜色（画面内容色）。 */
 export const RECORDING_FRAME_SOLID_DEFAULT_HEX = '#1b1d22';
 export const BLACK_HEX = '#000000';
+/** 剪辑预设样片的暗角与代码渲染验收形状颜色，属于画面内容，不随界面主题变化。 */
+export const VIDEO_EDIT_AUTHOR_CONTENT_COLORS = {
+  vignetteCenter: 'rgba(0,0,0,0)',
+  vignetteEdge: 'rgba(0,0,0,.6)',
+  probeRectangle: 'rgba(255,0,0,.5)',
+  probeEllipse: 'rgba(0,255,0,.75)',
+} as const;
 export const TEXT_LIGHT_HEX = '#E5E5E5';
 
 export const CANVAS_BG_HEX = '#0A0A0A';
