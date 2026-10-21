@@ -111,11 +111,11 @@ async function documentNamed(page, name) {
 
 async function openAudioEditList(page) {
   await page.getByRole('button', { name: /^(工具|Tools)$/ }).filter({ visible: true }).first().click()
-  for (const title of ['返回口播列表', '返回工具']) {
+  for (const title of ['返回音频列表', '返回工具']) {
     const back = page.locator(`[aria-label="${title}"]:visible`).first()
     if (await back.count()) await back.click()
   }
-  await page.getByRole('button', { name: /^口播剪辑/ }).filter({ visible: true }).first().click()
+  await page.getByRole('button', { name: /^音频编辑/ }).filter({ visible: true }).first().click()
   await button(page, '新建口播').waitFor({ state: 'visible', timeout: 15000 })
   await page.waitForTimeout(500)
 }
@@ -136,7 +136,7 @@ async function typeReferenceScript(page, text) {
 }
 
 async function clickBack(page) {
-  await page.locator('[aria-label="返回口播列表"]:visible').first().click()
+  await page.locator('[aria-label="返回音频列表"]:visible').first().click()
 }
 
 async function leavePrompt(page) {

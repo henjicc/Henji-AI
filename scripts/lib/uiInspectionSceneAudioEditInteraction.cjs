@@ -16,7 +16,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       if (!current) return
       try {
         // 先经正式入口离开编辑器（会保存），再删口播文件，避免删掉仍在编辑的口播。
-        const leave = page.getByRole('button', { name: '返回口播列表', exact: true })
+        const leave = page.getByRole('button', { name: '返回音频列表', exact: true })
         if (await leave.isVisible().catch(() => false)) {
           await leave.click()
           await page.getByRole('button', { name: '返回工具', exact: true }).waitFor({ timeout: 10000 })
@@ -48,7 +48,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       const { id } = await createAudioEditDocument(page, { sourcePath, name: '口播直接剪辑验收', patch: { transcript } })
       fixture.id = id
       await setupToolbox(page)
-      await clickNamedButton(page, /^(口播剪辑)/)
+      await clickNamedButton(page, /^(音频编辑)/)
       await page.evaluate(() => {
         const original = AudioNode.prototype.connect
         window.__restoreAudioInteractionTap = () => { AudioNode.prototype.connect = original }

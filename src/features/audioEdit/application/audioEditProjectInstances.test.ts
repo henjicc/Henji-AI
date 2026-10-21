@@ -168,7 +168,7 @@ describe('口播草稿', () => {
     const instance = await createAudioEditDraft(source)
     const meta = instance.session.documentMeta
     expect(meta.draft).toBe(true)
-    expect(meta.name).toBe('未命名口播 1')
+    expect(meta.name).toBe('未命名音频 1')
     expect((stored(meta.id).source as AudioEditSourceMetadata).sourcePath).toBe(source.sourcePath)
     expect(await leaveAudioEditProject(meta.id)).toBe('discarded')
     expect(commands.calls).toContain('deleteEmptyDraft')

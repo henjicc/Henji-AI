@@ -281,8 +281,8 @@
       "description": "Record your screen, audio and camera, mark highlights and edit."
     },
     "audioEdit": {
-      "title": "Speech editing",
-      "description": "Edit speech by transcript: remove pauses and fillers, keep the sentences you want, then export or send to video editing"
+      "title": "Audio editing",
+      "description": "Refine sound on the waveform and spectrum, repair noises, or edit speech by transcript, then export or send to video editing"
     },
     "imageMark": {
       "title": "Image editing",
@@ -1748,7 +1748,7 @@
       "screen_recording": "Recording",
       "video_edit": "Edit",
       "canvas": "Canvas",
-      "audio_edit": "Voiceover",
+      "audio_edit": "Audio",
       "camera_stage": "Camera Stage",
       "image_document": "Image Document"
     },

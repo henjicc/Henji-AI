@@ -11,7 +11,7 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
     id: 'toolbox-audio-edit-home', surface: '工具箱', name: '口播剪辑-口播列表', writesUserData: true,
     setup: async (page) => {
       await setupToolbox(page)
-      await clickNamedButton(page, /^(口播剪辑)/)
+      await clickNamedButton(page, /^(音频编辑)/)
       await page.getByText('还没有口播', { exact: true }).waitFor()
       assert.equal(await page.getByRole('textbox', { name: '搜索口播' }).count(), 0)
       const assertImportLayout = async () => {
@@ -43,7 +43,7 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
           ids.push((await createAudioEditDocument(page, { sourcePath, name })).id)
         }
         await page.getByRole('button', { name: '返回工具', exact: true }).click()
-        await clickNamedButton(page, /^(口播剪辑)/)
+        await clickNamedButton(page, /^(音频编辑)/)
         await page.locator('[data-project-library-state="items"]').waitFor()
         await page.getByText('产品介绍 · 第一版', { exact: true }).waitFor()
         await assertImportLayout()
@@ -63,7 +63,7 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
         fs.rmdirSync(directory)
       }
       await page.getByRole('button', { name: '返回工具', exact: true }).click()
-      await clickNamedButton(page, /^(口播剪辑)/)
+      await clickNamedButton(page, /^(音频编辑)/)
       await page.getByText('还没有口播', { exact: true }).waitFor()
     },
   }

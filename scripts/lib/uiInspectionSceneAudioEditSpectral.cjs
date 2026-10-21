@@ -38,7 +38,7 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       fixture = null
       if (!current) return
       try {
-        const leave = page.getByRole('button', { name: '返回口播列表', exact: true })
+        const leave = page.getByRole('button', { name: '返回音频列表', exact: true })
         if (await leave.isVisible().catch(() => false)) {
           await leave.click()
           await page.getByRole('button', { name: '返回工具', exact: true }).waitFor({ timeout: 10000 })
@@ -55,7 +55,7 @@ function createAudioEditSpectralScene({ setupToolbox, clickNamedButton }) {
       const project = await createAudioEditDocument(page, { sourcePath: file, name: '波形频谱验收' })
       fixture = { id: project.id, directory }
       await setupToolbox(page)
-      await clickNamedButton(page, /^(口播剪辑|音频编辑)/)
+      await clickNamedButton(page, /^(音频编辑)/)
       await page.locator(`[data-project-id="${project.id}"]:visible`).first().click()
 
       // 没有转写稿：直接是波形视图，频谱按屏幕列取数后画出。

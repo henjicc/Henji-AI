@@ -111,7 +111,7 @@
       "canvas": "画布",
       "video_edit": "剪辑",
       "image_edit": "图片",
-      "audio_edit": "口播",
+      "audio_edit": "音频",
       "camera_stage": "镜头参考"
     },
     "saveFailedTitle": "核对结果未保存",

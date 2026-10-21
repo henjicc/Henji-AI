@@ -193,7 +193,7 @@ function createVideoEditCreativeResultsScene(context) {
         ] })
         audioProjectId = created.id
         await playhead(60)
-        await context.setupToolbox(page); await context.clickNamedButton(page, /^(口播剪辑)/)
+        await context.setupToolbox(page); await context.clickNamedButton(page, /^(音频编辑)/)
         await page.getByRole('button', { name: /回填口播/ }).first().click()
         // 4.1：剪后声音直接写进剪辑所在项目的“生成结果”（不再弹保存对话框）
         await page.getByRole('button', { name: /加入剪辑/ }).click(); const voiceAdd = page.getByRole('menuitem', { name: /加入播放头/ })

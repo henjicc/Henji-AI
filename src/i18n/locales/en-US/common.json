@@ -111,7 +111,7 @@
       "canvas": "canvas",
       "video_edit": "edit",
       "image_edit": "image",
-      "audio_edit": "voice project",
+      "audio_edit": "audio project",
       "camera_stage": "camera reference"
     },
     "saveFailedTitle": "Review result could not be saved",

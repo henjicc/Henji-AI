@@ -378,13 +378,13 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     return (
       <DocumentLibraryPage
         kind="audio_edit"
-        title="口播剪辑"
+        title="音频编辑"
         onBack={onBack}
         backLabel="返回工具"
         icon={ICON_TOOL_AUDIO_EDIT}
         describe={describeAudioEditDocument}
         busy={disabled}
-        labels={{ emptyDescription: '导入音频或视频，压缩停顿、清理语气词，再导出到 Premiere 或达芬奇继续编辑。口播直接引用原素材。' }}
+        labels={{ emptyDescription: '导入音频或视频，在波形和频谱上精修、修掉杂音，或压缩停顿、清理语气词，再导出或交给剪辑。直接引用原素材，不改原文件。' }}
         create={{ kind: 'direct', onCreate: () => void importMedia() }}
         onOpen={(document) => openDocument({ id: document.id, path: document.path })}
       />
@@ -436,7 +436,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     if (event.target instanceof HTMLElement && (event.target.closest('input,textarea,[contenteditable="true"]'))) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) state.redo(); else state.undo() }
   }}>
-    <ApplicationOperationReviewBanner documentId={project.id} domain="audio_edit" label="口播" />
+    <ApplicationOperationReviewBanner documentId={project.id} domain="audio_edit" label="音频" />
     <UiToolbar
       variant="command"
       center={<div className={`flex items-center ${UI_INLINE_GAP_CLASS.group}`}>
@@ -471,7 +471,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     >
       {embeddedHost
         ? <UiButton onClick={() => void leave()}><ArrowLeft  />{`返回剪辑 · ${embeddedHost.label}`}</UiButton>
-        : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回口播列表" tooltip="返回口播列表"><ArrowLeft  /></UiIconButton>}
+        : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回音频列表" tooltip="返回音频列表"><ArrowLeft  /></UiIconButton>}
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">

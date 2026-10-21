@@ -333,7 +333,7 @@
         "proxy": "Proxies",
         "analysis": "Smart Analysis",
         "preview": "Thumbnails & Waveforms",
-        "audio_edit": "Voiceover Processing"
+        "audio_edit": "Audio Editing"
       },
       "categoryInfo": {
         "render": "Rendered preview files for demanding parts of an edit, for smoother playback.",

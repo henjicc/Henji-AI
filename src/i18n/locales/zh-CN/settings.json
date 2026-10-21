@@ -333,14 +333,14 @@
         "proxy": "代理",
         "analysis": "智能分析",
         "preview": "缩略图与波形",
-        "audio_edit": "口播处理"
+        "audio_edit": "音频编辑"
       },
       "categoryInfo": {
         "render": "剪辑里吃力段落渲染好的预览文件，让播放更流畅。",
         "proxy": "高分辨率素材的低分辨率替身，用于流畅预览。",
         "analysis": "人物抠像、跟踪、镜头检测与声音分析的结果。",
         "preview": "时间线上的缩略图条与音频波形。",
-        "audio_edit": "口播的解码音频与处理结果。"
+        "audio_edit": "音频编辑的解码音频与处理结果。"
       }
     },
     "language": {
