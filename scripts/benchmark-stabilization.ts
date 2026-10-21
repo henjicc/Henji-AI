@@ -51,7 +51,7 @@ const scenarios: Record<string, (t: number, n: () => number, state: { wx: number
 }
 
 async function encode(file: string, frames: AsyncIterable<Uint8Array> | Iterable<Uint8Array>, width = W, height = H): Promise<void> {
-  const child = spawn(ffmpeg, ['-y', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-r', String(FPS), '-i', '-', '-c:v', 'libx264', '-crf', '14', '-preset', 'fast', '-pix_fmt', 'yuv420p', file])
+  const child = spawn(ffmpeg, ['-y', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-video_size', `${width}x${height}`, '-r', String(FPS), '-i', '-', '-c:v', 'libx264', '-crf', '14', '-preset', 'fast', '-pix_fmt', 'yuv420p', file])
   const done = new Promise<void>((resolve, reject) => { child.on('exit', code => code === 0 ? resolve() : reject(new Error(`ffmpeg ${code}`))); child.on('error', reject) })
   for await (const frame of frames) if (!child.stdin.write(frame)) await new Promise(resolve => child.stdin.once('drain', resolve))
   child.stdin.end(); await done
