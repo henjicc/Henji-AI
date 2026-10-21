@@ -125,6 +125,8 @@ function createVideoEditStylesScene() {
         await dock('模板')
         const [paramTemplate, nameTemplate] = source.templates
         const paramCard = page.locator(`[data-video-edit-template="library:${paramTemplate.id}"]`); await paramCard.waitFor({ state: 'visible', timeout: 30000 })
+        // 模板卡片的预览铺统一的实拍背景图；等两张卡片都出图再截图，否则只能看到“正在准备预览”。
+        await page.waitForFunction(() => { const cards = [...document.querySelectorAll('[data-video-edit-template] [data-preset-preview]')]; return cards.length >= 2 && cards.every(card => card.getAttribute('data-preset-preview') === 'ready') }, null, { timeout: 60000 })
         evidence.steps.templatesPanel = { capture: await capture('styles-06-templates-panel') }
         await paramCard.click()
         let project = await savedProject(value => value.templates?.length === 1 && value.sequences[0].clips.length === 1)

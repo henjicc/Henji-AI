@@ -6,12 +6,13 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { instantiateNativeTemplate } from '@/core/videoEdit/styles/nativeTemplates'
 import type { VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
+import { getBundledResourcePath } from '@/platform/desktopApi'
 import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
 import { compileVideoEditCode } from './videoEditCodeState'
 import type { VideoEditPresetSource } from './videoEditPresetCatalog'
 
 export const PRESET_PREVIEW_FPS = 30
-/** Shared moving footage, so every effect, caption, transition and style is judged on the same picture. */
+/** 转场预览的 A/B 两个镜头：同一段动态画面按两种色相区分前后镜头。 */
 const BACKDROP = `
 const color = (h,s,v,a=1) => {
   const rgb = [0,4,2].map(n => { const k=(n+h*6)%6; return Math.round((v-v*s*Math.max(0,Math.min(k,4-k,1)))*255) });
@@ -38,6 +39,33 @@ export default { name:'预设样片', mode:'dynamic', params:[
  }},
  {id:'label',name:'标题',bounds:[0,H*.35,W,H*.65],draw(ctx){const s=p.labelStyle;ctx.font=s.fontWeight+' '+s.fontSize+'px '+s.fontFamily;ctx.fillStyle=s.fill.enabled?s.fill.color:'transparent';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.label,W/2,H/2)}}
 ]}};`
+
+/**
+ * 模板、文字与效果预览的统一背景：随包分发的实拍照片（resources/video-edit-preview/template-backdrop.webp）。
+ * 字幕条、人名条这类只有前景的模板需要一张背景才看得出效果，一律用这张；风格样片自己画满底，不加背景。
+ */
+const BACKDROP_PHOTO = { relativePath: 'video-edit-preview/template-backdrop.webp', width: 2048, height: 2048 }
+let backdropPhotoPath: Promise<string> | undefined
+function resolveBackdropPhoto(): Promise<string> {
+  backdropPhotoPath ??= getBundledResourcePath(BACKDROP_PHOTO.relativePath).then(path => {
+    if (!path) throw new Error('预览背景图缺失，请重新安装。')
+    return path
+  })
+  backdropPhotoPath.catch(() => { backdropPhotoPath = undefined })
+  return backdropPhotoPath
+}
+async function backdropClip(builder: Builder, seconds: number): Promise<string> {
+  const mediaId = 'preview-backdrop'; const itemId = 'preview-backdrop-item'
+  if (!builder.document.media.some(media => media.id === mediaId)) {
+    builder.document.media.push({ id: mediaId, name: '预览背景', path: await resolveBackdropPhoto(), kind: 'image', width: BACKDROP_PHOTO.width, height: BACKDROP_PHOTO.height, durationSeconds: 0 })
+    builder.document.items.push({ id: itemId, name: '预览背景', kind: 'image', mediaId })
+  }
+  const { width, height } = builder.sequence
+  // 图片片段默认按完整显示放入画面，这里放大到铺满，任何画幅都不留黑边。
+  const cover = Math.max(width / BACKDROP_PHOTO.width, height / BACKDROP_PHOTO.height) / Math.min(width / BACKDROP_PHOTO.width, height / BACKDROP_PHOTO.height)
+  const clip = { ...makeVideoEditItemClip(builder.document, itemId, builder.sequence.id, { frame: 0, track: 1, duration: Math.round(seconds * PRESET_PREVIEW_FPS) }), scale: cover }
+  builder.sequence.clips.push(clip); return clip.id
+}
 
 const CAPTIONS = ['先把一件事做好', '然后，再把它做得更好']
 interface Builder { document: VideoEditDocument; sequence: VideoEditSequence }
@@ -81,7 +109,7 @@ async function build(source: VideoEditPresetSource, size: { width: number; heigh
     case 'style': return styleSample(source.sample, size, signal)
     case 'template': {
       const builder = start(size)
-      await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: 4 }, signal)
+      await backdropClip(builder, 4)
       if (source.body.kind === 'code') { await codeClip(builder, source.body.code, {}, { frame: 0, track: 2, seconds: source.body.durationSeconds ?? 4 }, signal); return builder }
       for (const snapshot of instantiateNativeTemplate(source.body.content, builder.sequence)) {
         const itemId = crypto.randomUUID(); const track = 2 + snapshot.track
@@ -92,14 +120,14 @@ async function build(source: VideoEditPresetSource, size: { width: number; heigh
     }
     case 'text': {
       const builder = start(size)
-      await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: 8 }, signal)
+      await backdropClip(builder, 8)
       builder.sequence.captions = [{ id: 'preview-caption', start: 0, duration: 8 * PRESET_PREVIEW_FPS, text: `${CAPTIONS[0]}，${CAPTIONS[1]}`, style: structuredClone(source.preset.style) }]
       return builder
     }
     case 'effect': {
       if (source.preset.media !== 'video') throw new Error('声音效果没有画面预览。')
       const builder = start(size)
-      const id = await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: 8 }, signal)
+      const id = await backdropClip(builder, 8)
       builder.sequence.clips.find(value => value.id === id)!.effects = source.preset.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() }))
       return builder
     }

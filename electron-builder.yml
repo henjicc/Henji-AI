@@ -21,6 +21,8 @@ extraResources:
   # 剪辑内置的六套风格（说明书、样片代码、预览视频、缩略图与锚点帧），风格库只读读取。
   - from: resources/video-edit-styles
     to: resources/video-edit-styles
+  - from: resources/video-edit-preview
+    to: resources/video-edit-preview
   - from: native/audio-worker/target/release/henji-audio-worker.exe
     to: resources/henji-audio-worker.exe
   # 许可说明（任务 3.3）：README、项目 LICENSE、THIRD-PARTY-NOTICES（与“设置 → 关于”同源），Windows 另含
