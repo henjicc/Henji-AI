@@ -1,3 +1,5 @@
+2026-10-22：剪辑新增时间重映射：片段 time_remap（速度曲线，点按素材位置 offsetUs + 倍率 speed + 关键帧插值）、frame_interpolation（nearest/blend，optical_flow 预留按 blend）、pitch_semitones（变调半音）三个通用属性，写入与速度对话框、效果控件“时间重映射”面板同一速度编辑（时长随曲线变化、与 speed_percent 互斥）；新增算法能力 ramp_video_edit_clip_speed（按序列秒或吸附节拍/标记做速度坡道，或套用蒙太奇/英雄时刻/子弹时间/跳接/闪进/闪出预设，默认波纹、链接声音同曲线、慢放自动帧混合）。保持音调改由 Signalsmith Stretch 时间拉伸（变速默认保持音调）。外部契约 2.47.0。精确结果测试（公共入口坡道吸附节拍、保存回读、一步撤销、通用属性互斥与无节拍时的改道）通过；真实 Pi/MCP 模型任务未验收。
+
 2026-10-21：用户确认取消“不向模型暴露本地路径”的限制（效率、效果、性能优先），推翻此前路径一律藏在引用后面的结论：add_sound_library_folder 可直接传 path（不给时仍弹选择框）；文档/项目、生成结果（generation.result.file_paths）、音效库文件夹与音效实体返回本机绝对路径；download_canvas_media 回执带保存目录；下载目录与快速下载目录改为普通可读写设置，作品目录可读路径；录屏素材不再剥离路径；界面观察只遮挡密钥与令牌，诊断包不再隐藏路径。密钥仍不进入模型上下文。外部契约 2.46.0。
 
 2026-10-21：新增音效库领域 sound_library（音效库单例 / 登记文件夹 / 音效三个只读实体，文件夹可按通用集合取消登记）与三个算法能力：add_sound_library_folder（系统选择框由用户选择，不接受路径）、search_sound_effects（名字匹配 + 时长/击中点/明暗过滤，听音模型 audio_understanding_clap 已下载时融合英文描述的听音分，结果不足返回 noGoodMatch）、place_video_edit_sound_effects（击中点或起音点按微秒对齐到帧、标记或切点，一步撤销并保存回读）。设置“文件与下载 › 音效库”与助手同源；外部 MCP 自动投影，外部契约 2.44.0。精确结果测试与真实音效库（669 个文件）主进程服务实测通过；真实 Pi/MCP 模型任务与 Electron 后台推理进程链路未验收。
