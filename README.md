@@ -156,6 +156,7 @@ docs/rules/          架构、界面、测试等项目规则
 - **图形与 3D**：[Three.js](https://threejs.org/) / [React Three Fiber](https://r3f.docs.pmnd.rs/)、[Konva](https://konvajs.org/)、[VGPU](https://vgpu.sh/)、[OpenCV.js](https://opencv.org/)
 - **音视频**：[FFmpeg](https://ffmpeg.org/)、[Mediabunny](https://mediabunny.dev/)、[RNNoise](https://github.com/xiph/rnnoise)
 - **本地模型与数据**：[ONNX Runtime](https://onnxruntime.ai/)、[SQLite](https://sqlite.org/) / [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)、[sharp](https://sharp.pixelplumbing.com/)
+- **音效理解**：[CLAP](https://huggingface.co/laion/larger_clap_general)（LAION，听音检索模型）、[Tokenizers.js](https://github.com/huggingface/tokenizers.js)；音效库“听音挑选、按击中点卡点”的思路来自 [earshot](https://github.com/Leonxlnx/earshot)
 - **智能助手**：[Pi](https://github.com/earendil-works/pi)、[Model Context Protocol](https://modelcontextprotocol.io/)
 
 完整依赖及其许可证见应用内「设置 → 关于」。
