@@ -1,7 +1,7 @@
 import { CanvasSource, Mp4OutputFormat, Output, StreamTarget } from 'mediabunny'
 import { z } from 'zod'
 import { videoEditRenderWindows, type VideoEditRenderWindow } from '@/core/videoEdit/renderCache'
-import { renderBitrateMbps } from '@/core/videoEdit/renderBitrate'
+import { videoEditRenderEncoding, type VideoEditRenderEncoding } from '@/core/videoEdit/renderBitrate'
 import type { VideoRenderCacheStoredEntry } from '@/core/videoEdit/renderCacheStore'
 import { getMediaCacheSettings, subscribeMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
 import { resolveRenderCacheCodec } from '@/services/mediaCache/hardwareCapabilities'
@@ -53,11 +53,9 @@ interface ProjectCache { entries: Map<string, Entry> }
 const caches = new Map<string, Promise<ProjectCache>>()
 
 /** 序列的编码档案：编码格式（自动时按本机硬件）、画质与按分辨率帧率计算的码率。 */
-export function videoEditRenderProfile(composition: Pick<VideoEditComposition, 'width' | 'height' | 'fps'>): { codec: 'avc' | 'hevc'; bitrateMbps: number; profile: string } {
+export function videoEditRenderProfile(composition: Pick<VideoEditComposition, 'width' | 'height' | 'fps'>): VideoEditRenderEncoding {
   const settings = getMediaCacheSettings()
-  const codec = resolveRenderCacheCodec(settings.renderFormat)
-  const bitrateMbps = renderBitrateMbps({ width: composition.width, height: composition.height, fps: composition.fps, codec, quality: settings.renderQuality })
-  return { codec, bitrateMbps, profile: `${codec}:${settings.renderQuality}:${bitrateMbps}` }
+  return videoEditRenderEncoding(composition, resolveRenderCacheCodec(settings.renderFormat), settings.renderQuality)
 }
 // Format or quality changes make other profiles stale: the render bar and the idle scheduler pick it up.
 subscribeMediaCacheSettings(() => publishVideoEdit())
@@ -235,7 +233,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
       const path = await platform.mediaCache.renderBegin({ projectId, windowKey: window.key, profile: encoding.profile })
       const output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 4 * 1024 * 1024 }) })
       try {
-        const video = new CanvasSource(session!.canvas, videoEditExportVideoOptions({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: 'vbr', encoderPreference: 'hardware', keyframeInterval: 1 }))
+        const video = new CanvasSource(session!.canvas, videoEditExportVideoOptions({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: encoding.bitrateMode, encoderPreference: encoding.encoderPreference, keyframeInterval: encoding.keyframeInterval }))
         output.addVideoTrack(video, { frameRate: composition.fps })
         await output.start()
         for (let frame = window.startFrame; frame < window.endFrame; frame++) {

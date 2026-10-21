@@ -226,6 +226,15 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       }
       await capture('yoga-auto-rendered')
       evidence.mediaCache = { usage: await page.evaluate(() => window.henjiNative.mediaCache.usage()), settings: await page.evaluate(() => window.henjiNative.mediaCache.getSettings()) }
+      // Keep the produced pre-render files for ffprobe (GOP, colour tags) and colour comparison against paused real-time frames.
+      if (spec.copyRenderFiles) {
+        const entries = await page.evaluate(id => window.henjiNative.mediaCache.renderList(id), created.documentId)
+        const folder = path.join(root, 'render-files'); fs.mkdirSync(folder, { recursive: true })
+        evidence.renderFiles = entries.sort((a, b) => a.startFrame - b.startFrame).slice(0, spec.copyRenderFiles).map(entry => {
+          const target = path.join(folder, `${entry.startFrame}-${entry.endFrame}.mp4`); fs.copyFileSync(entry.path, target)
+          return { startFrame: entry.startFrame, endFrame: entry.endFrame, profile: entry.profile, bytes: entry.bytes, file: target }
+        })
+      }
       save()
     }
     // Pre-render through the formal assistant capability, then wait until the render bar reports every requested window ready.

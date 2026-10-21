@@ -192,7 +192,7 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
     target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => getMediaCacheSettings().renderFormat, renderFormat => writeMediaCacheSetting({ renderFormat })),
   storeSetting({
-    id: 'video_edit.render_quality', title: '预渲染画质', description: '剪辑预渲染的画质：standard（默认）按序列分辨率与帧率计算码率（H.264 4K60 约 40Mbps），high 为其 1.5 倍；改动后旧段落在空闲时重新渲染。',
+    id: 'video_edit.render_quality', title: '预渲染画质', description: '剪辑预渲染的画质：standard（默认）按序列分辨率与帧率查码率表（H.264 4K60 50Mbps、4K30 40、1440p60 30、1080p 20，HEVC ×0.7，最低 20Mbps），high 为其 1.3 倍；改动后旧段落在空闲时重新渲染。',
     aliases: ['预渲染画质', '渲染画质', 'render quality'], schema: z.enum(VIDEO_RENDER_CACHE_QUALITIES), defaultValue: DEFAULT_MEDIA_CACHE_SETTINGS.renderQuality,
     target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => getMediaCacheSettings().renderQuality, renderQuality => writeMediaCacheSetting({ renderQuality })),
