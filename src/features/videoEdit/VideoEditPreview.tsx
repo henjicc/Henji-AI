@@ -247,7 +247,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
     })
     let audioRenderer: VideoEditRenderSession | undefined
-    let appliedProxy = videoEditProxySignature(instance.document.id)
+    // No available proxy means the session already plays the originals: both read as 'original', so starting paused does not rebuild.
+    const proxyState = (signature: string): string => signature === '[]' ? 'original' : signature
+    let appliedProxy = proxyState(videoEditProxySignature(instance.document.id))
     let appliedDocument = initialDocument
     let appliedSequence = instance.document.sequences.find(sequence => sequence.id === initialDocument.id)
     const unsubscribeMotion = subscribeVideoMotion(() => {
@@ -434,11 +436,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
-          await renderer.updateDocument(document, useOriginal); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; appliedProxy = useOriginal ? 'original' : availableProxies; lastRequested = -1
+          await renderer.updateDocument(document, useOriginal); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; appliedProxy = useOriginal ? 'original' : proxyState(availableProxies); lastRequested = -1
           if (!parameterUpdate && !liveProjection) lastFrame = -1
           if (stopped) return
         }
-        const proxySignature = useOriginal ? 'original' : availableProxies
+        const proxySignature = useOriginal ? 'original' : proxyState(availableProxies)
         if (appliedProxy !== proxySignature) {
           stopAudio(); wasPlaying = false; await renderer.updateDocument(document, useOriginal); appliedProxy = proxySignature; lastFrame = -1; lastRequested = -1
           if (stopped) return

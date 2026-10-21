@@ -222,7 +222,8 @@ export class VideoEditRenderTransport {
   async updateDocument(document: VideoEditComposition, original = false): Promise<void> {
     await this.ready
     this.timing = videoEditTimingContext(this.proxyProjectId, document.id)
-    const update = !original && videoEditParameterUpdate(this.document, document)
+    // Asking for originals only needs a rebuild when proxies are loaded; otherwise a parameter edit keeps the fast path.
+    const update = (!original || Object.keys(this.proxies).length === 0) && videoEditParameterUpdate(this.document, document)
     if (update) {
       if (videoEditParameterNeedsFonts(this.document, update)) await this.syncFonts(document)
       await this.request({ kind: 'parameters', update }); this.document = document; return

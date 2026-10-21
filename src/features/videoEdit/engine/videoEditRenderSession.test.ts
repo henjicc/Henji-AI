@@ -5,7 +5,9 @@ import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest } from './videoEditWorker'
 import { recordVideoEditMaskUpdate } from '../application/videoEditMaskEditing'
-import { videoEditClipSchema } from '@/core/videoEdit/document'
+import { videoEditClipSchema, videoEditComposition } from '@/core/videoEdit/document'
+import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
+import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
 vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
@@ -330,4 +332,24 @@ it('录制日志在会话边界授权和转换，预览与导出共用原始时�
     await session.render(60, true)
     expect(workers[0].messages.at(-1)!.message).toMatchObject({ kind: 'render', quality: 'final' })
   } finally { await session.dispose() }
+})
+
+it('要求原片且当前没有加载代理时，参数修改仍走增量更新；已加载代理时才整体更新并卸掉代理', async () => {
+  const project = createVideoEditTestDocument('参数更新')
+  project.items = [{ id: 'item', name: '画面', kind: 'text' }]
+  project.sequences[0].clips = [makeVideoEditItemClip(project, 'item', project.sequences[0].id, { frame: 0 })]
+  const before = videoEditComposition(project, project.sequences[0].id)
+  const moved = { ...before, revision: 1, clips: [{ ...before.clips[0], opacity: .5 }] }
+  const plain = new VideoEditRenderSession(before, undefined, undefined, undefined, undefined, 'project')
+  await plain.prepareGpu()
+  await plain.updateDocument(moved, true)
+  expect(workers.at(-1)!.messages.at(-1)!.message.kind).toBe('parameters')
+  await plain.dispose()
+  proxyState.sources = { pro: { key: 'k', path: 'D:/proxy.mp4', width: 960, height: 540 } as unknown as import('@/core/videoEdit/proxy').VideoProxyResult }
+  const proxied = new VideoEditRenderSession(before, undefined, undefined, undefined, undefined, 'project')
+  await proxied.prepareGpu()
+  await proxied.updateDocument(moved, true)
+  const update = workers.at(-1)!.messages.at(-1)!.message as Extract<RenderRequest, { kind: 'update' }>
+  expect(update.kind).toBe('update'); expect(update.proxies).toEqual({})
+  await proxied.dispose()
 })
