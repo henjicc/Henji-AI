@@ -205,6 +205,7 @@ for (const domain of ['image_edit', 'video_edit']) {
 for (const name of ['import_video_edit_asset', 'import_video_edit_folder', 'save_video_edit', 'split_video_edit', 'add_video_edit_frame_hold', 'trim_video_edit_clip', 'undo_video_edit', 'redo_video_edit']) {
   successData[name] = { resultRef: documentRef, message, verification: verification() }
 }
+successData.render_video_edit_preview = { documentRef, pendingWindows: 2, readyFrames: 1800, requestedFrames: 3600, verified: true, message }
 for (const name of ['collect_video_edit_code_asset', 'collect_video_edit_output']) {
   successData[name] = { resultRef: assetRef, documentRef, message, verification: verification(assetRef) }
 }

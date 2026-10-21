@@ -86,6 +86,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.41.0'] = 'a0864e9f0a043143224f44786314e5f3e94eb0a7a3f5f57a1491c716e2e64828'
     // add_video_edit_frame_hold: new tool, declared to create clips.
     fingerprints['2.42.0'] = '67834fb9a8b01b9d92d00399e67adc023e41bc0c87d8f981f48988574ef188c4'
+    // render_video_edit_preview: new tool that starts background preview rendering.
+    fingerprints['2.43.0'] = '3b9842320c147772f238f5bc68cef197f83cef64bba54354860c7491a9b73cf0'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

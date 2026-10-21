@@ -3,7 +3,7 @@ import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from '../audi
 import { applyAudioEditSuggestion, audioEditFillerBlockIds, DEFAULT_AUDIO_EDIT_SETTINGS } from '../audioEdit/edits'
 import { findTranscriptSearchRanges } from '../media/transcriptSearch'
 import { videoEditClipSourceRange, videoEditClipFrameBoundaryAtSource, videoEditClipSourceSecondsAtTime } from './clipSpeed'
-import { audibleVideoEditClips, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition } from './document'
+import { audibleVideoEditClips, videoEditComposition, videoEditNestedComposition, type VideoEditClip, type VideoEditComposition, type VideoEditDocument } from './document'
 import { videoEditAudioContent } from './audioContent'
 
 const blockSchema = z.object({ id: z.string(), text: z.string().max(20000), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive(), included: z.boolean(), locked: z.boolean(), granularity: z.enum(['word', 'segment']) }).strict().refine(value => value.endFrame > value.startFrame)
@@ -38,6 +38,43 @@ export function videoEditTextMediaIdentity(composition: VideoEditComposition, it
   const media = composition.media.find(value => value.id === item?.mediaId)
   if (item?.kind === 'sequence') return JSON.stringify([item.sequenceId, videoEditAudioContent(videoEditNestedComposition(composition, { itemId, kind: 'sequence' })!)])
   return JSON.stringify([item?.mediaId, media?.path, media?.sourceRevision, media?.assetContent, item?.sequenceId])
+}
+
+/**
+ * Media inside the project folder is referenced by location only: opening drops its asset-library
+ * snapshot, and moving or copying the project changes its absolute path. Words recognised for such
+ * media stay bound when the media id, source revision, nested sequence and project-relative location
+ * are unchanged. Returns the rebound document, or null when nothing changed.
+ */
+export function rebindVideoEditProjectTextIdentities(document: VideoEditDocument, projectRoot: string): VideoEditDocument | null {
+  const normalize = (value: string): string => value.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase()
+  const root = `${normalize(projectRoot)}/`
+  let changed = false
+  const sequences = document.sequences.map(sequence => {
+    const transcription = sequence.textTranscription
+    if (!transcription?.sources.length) return sequence
+    const composition = videoEditComposition(document, sequence.id)
+    let touched = false
+    const sources = transcription.sources.map(source => {
+      const current = videoEditTextMediaIdentity(composition, source.itemId)
+      if (source.mediaIdentity === current) return source
+      const item = document.items.find(value => value.id === source.itemId)
+      const media = document.media.find(value => value.id === item?.mediaId)
+      if (!item || !media || item.kind === 'sequence' || !normalize(media.path).startsWith(root)) return source
+      let stored: unknown
+      try { stored = JSON.parse(source.mediaIdentity) } catch { return source }
+      if (!Array.isArray(stored) || stored.length !== 5 || typeof stored[1] !== 'string') return source
+      const relative = normalize(media.path).slice(root.length)
+      if (stored[0] !== item.mediaId || !normalize(stored[1]).endsWith(`/${relative}`)
+        || (stored[2] ?? null) !== (media.sourceRevision ?? null) || (stored[4] ?? null) !== (item.sequenceId ?? null)) return source
+      touched = true
+      return { ...source, mediaIdentity: current }
+    })
+    if (!touched) return sequence
+    changed = true
+    return { ...sequence, textTranscription: { ...transcription, sources } }
+  })
+  return changed ? { ...document, sequences } : null
 }
 function sourceForClip(composition: VideoEditComposition, clip: VideoEditClip): VideoEditTextTranscription['sources'][number] | undefined {
   return composition.textTranscription?.sources.find(value => value.itemId === clip.itemId && value.mediaIdentity === videoEditTextMediaIdentity(composition, clip.itemId) && (value.audioMappingIdentity === undefined || value.audioMappingIdentity === JSON.stringify(clip.audioMapping ?? null)))

@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DocumentOperations } from '@/features/documents/documentOperations'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, fakeKindOf, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
 import { createVideoEditProject, appendVideoEditSequence, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, collectVideoEditMedia, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, releaseVideoEditDocument, saveVideoEdit, setVideoEditDocumentServicesForTests, undoVideoEdit } from './videoEditService'
+
+const { FRESH_CONTENT } = vi.hoisted(() => ({ FRESH_CONTENT: { sizeBytes: 2, fileModifiedAt: 2, contentIdentity: 'b'.repeat(64) } }))
+// Project-local files are re-identified at their current location; a missing one has no identity.
+vi.mock('../videoEditMediaContent', async original => ({ ...await original<typeof import('../videoEditMediaContent')>(),
+  inspectVideoEditMediaContent: async (media: { path: string }) => { if (media.path.includes('/生成结果/')) return FRESH_CONTENT; throw new Error('missing') } }))
 
 /*
  * 3.1 剪辑接入：项目 = 文件夹 + 主剪辑，打开 / 自动保存 / 离开全部走通用文档会话。
@@ -123,21 +128,24 @@ describe('收集素材与后台释放', () => {
     expect(await collectVideoEditMedia(id)).toEqual({ copiedFiles: 0, copiedDocuments: 0, missing: 0 })
   })
 
-  it('项目文件夹里的素材只按位置引用：打开时去掉素材库关联并写回，外部素材的关联保留', async () => {
+  it('项目文件夹里的素材只按位置引用：打开时去掉素材库关联、按当前位置重新读取文件身份并写回；文件不在时去掉旧身份；外部素材的关联保留', async () => {
     const project = commands.seedProject({ name: '拷来的项目' })
     const content = fakeKindOf('video_edit').createEmptyContent() as { media: unknown[] }
     const linked = { assetId: 'asset-1', assetContent: { sizeBytes: 1, fileModifiedAt: 1, contentIdentity: 'a'.repeat(64) } }
     content.media = [
       { id: 'inside', name: '结果.png', path: `${project.path}/生成结果/结果.png`, kind: 'image', durationSeconds: 0, width: 64, height: 64, ...linked },
+      { id: 'gone', name: '丢失.png', path: `${project.path}/素材/丢失.png`, kind: 'image', durationSeconds: 0, width: 64, height: 64, ...linked },
       { id: 'outside', name: '外部.png', path: 'E:/外部/外部.png', kind: 'image', durationSeconds: 0, width: 64, height: 64, ...linked, assetId: 'asset-2' },
     ]
     const edit = commands.seed({ kind: 'video_edit', name: '拷来的项目', content, projectId: project.id, folder: project.path })
     const { openVideoEditDocument } = await import('./videoEditService')
     const opened = await openVideoEditDocument({ id: edit.id })
-    expect(opened.document.media[0]).not.toHaveProperty('assetContent'); expect(opened.document.media[0]).not.toHaveProperty('assetId')
-    expect(opened.document.media[1]).toMatchObject({ assetId: 'asset-2' })
+    expect(opened.document.media[0]).not.toHaveProperty('assetId'); expect(opened.document.media[0].assetContent).toEqual(FRESH_CONTENT)
+    expect(opened.document.media[1]).not.toHaveProperty('assetContent'); expect(opened.document.media[1]).not.toHaveProperty('assetId')
+    expect(opened.document.media[2]).toMatchObject({ assetId: 'asset-2', assetContent: linked.assetContent })
     await saveVideoEdit(edit.id)
-    expect((commands.stored(edit.id)!.content as { media: Array<Record<string, unknown>> }).media[0]).not.toHaveProperty('assetContent')
+    const stored = (commands.stored(edit.id)!.content as { media: Array<Record<string, unknown>> }).media
+    expect(stored[0].assetContent).toEqual(FRESH_CONTENT); expect(stored[1]).not.toHaveProperty('assetContent')
   })
 
   it('界面正在显示的剪辑不能被后台释放；没在显示的写完关闭', async () => {
