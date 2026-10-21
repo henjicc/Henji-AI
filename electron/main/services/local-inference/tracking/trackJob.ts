@@ -11,6 +11,8 @@ import { VitTracker, type VitFrame, type VitRect } from './vitTrack'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobPrompt, TrackingJobResult } from './trackingProtocol'
 import { decodeVideoEditTrackGeometry, encodeVideoEditTrackGeometry, type VideoEditTrackGeometryRecord } from '../../../../../src/core/videoEdit/tracking'
 import { loadTrackingOpenCv, OpenCvTracker } from './openCvTracking'
+import { CameraMotionEstimator, cameraFrameSize } from './cameraMotion'
+import { composeVideoEditSimilarity } from '../../../../../src/core/videoEdit/trackTransform'
 
 /*
  * 一次跟踪（本地推理后台进程里运行，任务 4.10）：读已有结果 → 从覆盖范围的边界接着跟 → 写出合并后的结果。
@@ -48,7 +50,8 @@ export function vitFrameSize(display: { width: number; height: number }): { widt
   return { width: Math.max(16, Math.round(display.width * scale)), height: Math.max(16, Math.round(display.height * scale)) }
 }
 
-interface Stored { box: VideoEditTrackBox | null; record?: { logits: Float32Array; score: number; pointer: Float32Array }; geometry?: VideoEditTrackGeometryRecord }
+type CameraSample = [number, number, number, number, number]
+interface Stored { box: VideoEditTrackBox | null; record?: { logits: Float32Array; score: number; pointer: Float32Array }; geometry?: VideoEditTrackGeometryRecord; camera?: CameraSample }
 
 function modelOf(job: { models: LocalInferenceModelFile[] }, name: LocalInferenceModelName): LocalInferenceModelFile {
   const model = job.models.find(entry => entry.name === name)
@@ -76,6 +79,11 @@ function readExisting(job: TrackingJob, bytes: Uint8Array | undefined, inflate: 
         const frame = layout.frames[index]
         if (!frame) return new Map()
         entry.geometry = decodeVideoEditTrackGeometry(inflate(bytes.subarray(layout.dataOffset + frame.offset, layout.dataOffset + frame.offset + frame.length)))
+      }
+      if (job.method === 'camera') {
+        const sample = header.camera?.[index]
+        if (!sample) return new Map()
+        entry.camera = sample
       }
       stored.set(header.firstFrame + index, entry)
     }
@@ -152,7 +160,8 @@ export async function runTracking(job: TrackingJob, deps: TrackingDependencies):
   }
 
   let model: string; let provider: LocalExecutionProvider; let stopped = false
-  if (job.method === 'point' || job.method === 'planar') ({ model, provider, stopped } = await trackGeometry(job, stored, decodeOne, walk, targets))
+  if (job.method === 'camera') ({ model, provider, stopped } = await trackCamera(job, stored, decodeOne, walk, targets))
+  else if (job.method === 'point' || job.method === 'planar') ({ model, provider, stopped } = await trackGeometry(job, stored, decodeOne, walk, targets))
   else if (job.method === 'box') ({ model, provider, stopped } = await trackBoxes(job, deps, stored, decodeOne, walk, targets))
   else ({ model, provider, stopped } = await trackShape(job, deps, stored, range, decodeOne, walk, targets))
 
@@ -168,11 +177,14 @@ export async function runTracking(job: TrackingJob, deps: TrackingDependencies):
       records.push(deps.deflate(encodeVideoEditTrackRecord(record)))
     }
     if (job.method === 'point' || job.method === 'planar') records.push(deps.deflate(encodeVideoEditTrackGeometry(entry?.geometry ?? { confidence: 0 })))
+    if (job.method === 'camera') records.push(deps.deflate(encodeVideoEditTrackGeometry({ confidence: entry?.camera?.[4] ?? 0 })))
   }
+  const camera = job.method === 'camera' ? Array.from({ length: last - first + 1 }, (_, index) => stored.get(first + index)?.camera ?? [1, 0, 0, 0, 0] as CameraSample) : undefined
   const header = createVideoEditTrackHeader({
     method: job.method, model, fps: job.fps, firstFrame: first, frameCount: last - first + 1, sourceWidth: job.display.width, sourceHeight: job.display.height,
     promptFrames: job.prompts.map(prompt => prompt.frame), boxes, summary: { tracked: last - first + 1 - lost, lost },
     ...(job.method === 'shape' ? { logits: { width: VIDEO_EDIT_TRACK_LOGIT_SIZE, height: VIDEO_EDIT_TRACK_LOGIT_SIZE, scale: VIDEO_EDIT_TRACK_LOGIT_SCALE } } : {}),
+    ...(camera ? { camera } : {}),
   })
   try { await deps.writeFile(job.outputPath, encodeSmartRegionSegment(header, records)) }
   catch (error) { throw new TrackingError('output', '跟踪结果写入缓存失败。', { cause: error }) }
@@ -212,6 +224,34 @@ async function trackGeometry(job: TrackingJob, stored: Map<number, Stored>, deco
     }
     return {model:'opencv-4.12-lk-ransac',provider:'cpu',stopped}
   } finally { tracker.dispose() }
+}
+
+// ==================== 相机运动（防抖） ====================
+
+/** 每帧到锚定帧的累计相似变换：C_t = C_{t∓1} ∘ S（S 为这一帧到相邻已知帧），向前、向后同一个公式。 */
+async function trackCamera(job: TrackingJob, stored: Map<number, Stored>, decodeOne: (frame: number, width: number, height: number) => Promise<Uint8Array>, walk: Walk, targets: Targets): Promise<{ model: string; provider: LocalExecutionProvider; stopped: boolean }> {
+  const { cv } = await loadTrackingOpenCv()
+  const size = cameraFrameSize(job.display)
+  const estimator = new CameraMotionEstimator(cv, size.width, size.height)
+  const full: VideoEditTrackBox = [0, 0, 1, 1, 1]
+  try {
+    if (!stored.size) stored.set(job.prompts[0].frame, { box: full, camera: [1, 0, 0, 0, 1] })
+    const plan = targets(); let stopped = false
+    for (const [segment, direction] of [[plan.forward, 1], [plan.backward, -1]] as const) {
+      if (!segment || stopped) continue
+      const [from, to] = segment
+      let known = from - direction
+      estimator.reset(await decodeOne(known, size.width, size.height))
+      stopped = await walk(from, to, direction, size.width, size.height, async (frame, rgb) => {
+        const { motion, confidence } = estimator.step(rgb)
+        const [a, b, tx, ty] = stored.get(known)!.camera!
+        const next = composeVideoEditSimilarity({ a, b, tx, ty }, motion)
+        stored.set(frame, { box: confidence > 0 ? [0, 0, 1, 1, confidence] : null, camera: [next.a, next.b, next.tx, next.ty, confidence] })
+        known = frame
+      })
+    }
+    return { model: 'opencv-4.12-lk-similarity-ransac', provider: 'cpu', stopped }
+  } finally { estimator.dispose() }
 }
 
 // ==================== 物体框（VitTrack） ====================

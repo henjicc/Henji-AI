@@ -1,6 +1,6 @@
 import type { LocalInferenceModelFile } from '../protocol'
 import type { LocalExecutionProvider } from '../providers'
-import type { VideoEditTrackMethod, VideoEditTrackQuad, VideoEditTrackPrompt } from '../../../../../src/core/videoEdit/tracking'
+import type { VideoEditAnalysisMethod, VideoEditTrackQuad, VideoEditTrackPrompt } from '../../../../../src/core/videoEdit/tracking'
 import type { TrackingSource } from '../../../../../src/platform/contracts/tracking'
 
 /*
@@ -19,7 +19,7 @@ export interface TrackingJobPrompt {
 
 export interface TrackingJob {
   id: string
-  method: VideoEditTrackMethod
+  method: VideoEditAnalysisMethod
   models: LocalInferenceModelFile[]
   ffmpegPath: string
   source: TrackingSource

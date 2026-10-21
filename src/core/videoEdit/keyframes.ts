@@ -105,12 +105,14 @@ export function evaluateVideoEditClip(clip: VideoEditClip, timelineFrame: number
   const values: Partial<Record<VideoEditAnimatableKey, number>> = {}
   for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) if (clip.disabledIntrinsicSections?.includes(key === 'volume' ? 'audio' : key === 'opacity' ? 'opacity' : 'motion') || clip.curves?.[key]?.length) {
     const value = videoEditClipValue(clip, key, timelineFrame)
-    values[key] = !clip.disabledIntrinsicSections?.includes('motion') && clip.follow && (key === 'x' || key === 'y') ? clip[key] + value : !clip.disabledIntrinsicSections?.includes('motion') && clip.follow && key === 'scale' ? clip.scale * value : value
+    const followed = !clip.disabledIntrinsicSections?.includes('motion') && clip.follow
+    // 跟随带来的旋转增量（变换跟随）叠加在旋转关键帧之上，与 x/y 偏移、缩放倍率同一规则。
+    values[key] = followed && (key === 'x' || key === 'y') ? clip[key] + value : followed && key === 'scale' ? clip.scale * value : followed && key === 'rotation' ? value + ((clip as VideoEditClip & { trackingRotation?: number }).trackingRotation ?? 0) : value
   }
   const result = { ...clip, ...values, ...(clip.effects ? { effects: clip.effects.map(effect => evaluateVideoEditEffect(effect, timelineFrame - clip.start)) } : {}) }
   if (clip.disabledIntrinsicSections?.includes('text')) result.text = ''
   if (clip.disabledIntrinsicSections?.includes('textStyle')) delete result.textStyle
-  if (clip.disabledIntrinsicSections?.includes('motion')) { delete result.follow; delete (result as VideoEditClip & { trackingQuad?: unknown }).trackingQuad }
+  if (clip.disabledIntrinsicSections?.includes('motion')) { delete result.follow; delete (result as VideoEditClip & { trackingQuad?: unknown }).trackingQuad; delete (result as VideoEditClip & { trackingRotation?: unknown }).trackingRotation }
   return result
 }
 export function assertVideoEditKeyframeTimes(curves: VideoEditCurves | undefined, duration: number, title: string): void {

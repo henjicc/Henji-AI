@@ -19,6 +19,11 @@ it('IPC严格解析合成源/候选，拒绝伪路径对象及帧回复上限', 
   expect(() => parseTrackingFrameReply({ id: 'reply', frames: Array.from({ length: 9 }, () => new Uint8Array()) })).toThrow()
   expect(() => parseTrackingFrameReply({ id: 'reply', frames: [new Uint8Array(16 * 1024 ** 2 + 1)] })).toThrow('过大')
 })
+it('防抖的相机运动分析经同一 IPC：方式 camera 不带提示，带提示或未知方式拒绝', () => {
+  expect(parseTrackingRun({ ...input, definition: { source, method: 'camera', prompts: [] } }).definition).toEqual({ source, method: 'camera', prompts: [] })
+  expect(() => parseTrackingRun({ ...input, definition: { source, method: 'camera', prompts: definition.prompts } })).toThrow('不带提示')
+  expect(() => parseTrackingRun({ ...input, definition: { source, method: 'stabilize', prompts: [] } })).toThrow('无效的跟踪方式')
+})
 it('preload/PAL语义走原跟踪IPC，主进程只向原窗口拉帧且拒绝另一窗口回复', async () => {
   ipc.handle.mockClear(); registerTrackingIpc()
   const handlers = new Map(ipc.handle.mock.calls.map(([name, handle]) => [name, handle]))

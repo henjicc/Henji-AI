@@ -64,6 +64,8 @@ export class TrackingService {
   constructor(private readonly deps: TrackingServiceDependencies) {}
 
   private normalize(definition: TrackingDefinition): TrackingDefinition {
+    // 相机运动（防抖）没有提示：结果只由素材与范围决定。
+    if (definition.method === 'camera') return { source: definition.source, method: 'camera', prompts: [] }
     return { source: definition.source, method: definition.method, prompts: normalizeVideoEditTracker(videoEditTrackerSchema.parse({ id: 'x', name: 'x', method: definition.method, prompts: definition.prompts })).prompts }
   }
 
@@ -177,7 +179,7 @@ export class TrackingService {
   }
 
   private async models(method: TrackingDefinition['method']): Promise<LocalInferenceModelFile[]> {
-    if (method === 'point' || method === 'planar') return []
+    if (method === 'point' || method === 'planar' || method === 'camera') return []
     try {
       if (method === 'box') {
         const [file] = await this.deps.ensureModel('object_tracking_vittrack')
@@ -196,7 +198,7 @@ export class TrackingService {
     this.deps.emit({ definition: job.definition, status })
   }
 
-  private async execute(job: Job, prepared: Prepared, range: TrackingRange, options: TrackingRunOptions, found: { path: string } | undefined, frames?: TrackingFrameProvider): Promise<{ ref: TrackingResultRef; stopped: boolean }> {
+  private async execute(job: Job, prepared: Prepared, range: TrackingRange, options: TrackingRunOptions, found: { path: string; result: TrackingResultRef } | undefined, frames?: TrackingFrameProvider): Promise<{ ref: TrackingResultRef; stopped: boolean }> {
     const { definition } = job
     const started = Date.now()
     this.deps.log('info', '跟踪开始', 'tracking.run.start', { method: definition.method, prompts: definition.prompts.length, direction: options.direction, limit: options.limit ?? null, resume: Boolean(found) })
@@ -209,7 +211,8 @@ export class TrackingService {
     const trackingJob: TrackingJob = {
       id: job.id, method: definition.method, models, ffmpegPath, source: definition.source,
       containerStartUs: Math.round(prepared.probe.startSeconds * 1e6), fps, display: { width: prepared.probe.width, height: prepared.probe.height },
-      prompts: definition.prompts.map(({timeUs, ...prompt}) => ({...prompt, frame: videoEditTrackFrame(timeUs, fps)})),
+      // 相机运动从已有结果的起点（或范围起点）累计，续跟时锚定帧不变。
+      prompts: definition.method === 'camera' ? [{ frame: found ? videoEditTrackFrame(found.result.startUs, fps) : videoEditTrackFrame(range.startUs, fps) }] : definition.prompts.map(({timeUs, ...prompt}) => ({...prompt, frame: videoEditTrackFrame(timeUs, fps)})),
       range: { first: videoEditTrackFrame(range.startUs, fps), last: Math.max(videoEditTrackFrame(range.startUs, fps), Math.ceil(range.endUs * fps / 1e6) - 1) },
       direction: options.direction, ...(options.limit ? { limit: options.limit } : {}), ...(found ? { existingPath: found.path } : {}), outputPath: output, providers: this.deps.providers,
     }

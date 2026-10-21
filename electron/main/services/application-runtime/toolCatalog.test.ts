@@ -96,6 +96,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.46.0'] = '611a5a557f4f7975d97ed23fe4c6edb4dca6f15fe1dfe2972468e3c056bd9fdc'
     // Time remapping: ramp_video_edit_clip_speed (speed ramps at moments/beats, curve presets); clip time_remap / frame_interpolation / pitch_semitones.
     fingerprints['2.47.0'] = '7d90fd86180e07cd0c3746ba7493b75c0085e6cd3c52711c01195274b16bf3ae'
+    // Tracking and stabilization: follow_video_edit_tracker, stabilize_video_edit_clip, track_video_edit_recording; clip.stabilization, tracker.recording, follow.motion.
+    fingerprints['2.48.0'] = '16b6db7b72216e5fb9e8d2adbd5fa4e6d2f0eef159408c994f197887bd4db873'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
