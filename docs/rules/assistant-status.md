@@ -1,3 +1,5 @@
+2026-10-21：剪辑新增 render_video_edit_preview（对标 PR 渲染入点到出点），后台按 30 秒分段预渲染吃力段落；状态由 video_edit.document.render_cache 读取，自动预渲染偏好走 video_edit.document.render_preference 通用属性；UI 渲染条、Pi、MCP 同源，外部契约 2.43.0。打开项目内素材的剪辑时改为按当前位置重读文件身份并重新绑定转录来源，修复重开后字幕生成、按文字剪辑与转录检索全部报“尚未绑定原文件身份”；真实 Electron 外部 MCP 局部检索删重说场景通过。
+
 2026-10-21：旧作者语言整体退役：AST 编译器、求值器、V3 GPU 栅格/矢量/滤镜路径及其测试与夹具删除，代码素材只走标准 ES 模块。运行时技能 video-edit-code-creation 的作者接口、文字动效、GPU/滤镜、音频与画面输入、参数类型、示例与全部配方改写为作者 JS（Canvas2D 图层、pose、createWebGPU/createWebGL），删除旧表达式参考；技能测试改为加载每个源码围栏并解析参数。Reality 验收场景的旧源码夹具统一改为作者模块（未逐场景重跑真实 Electron）。助手按新文档创作的端到端质量尚未重新验证。
 
 2026-10-20：剪辑新增 add_video_edit_frame_hold，沿正式时间线原子切出播放头一帧并固定原视频/嵌套序列源时间；UI、Pi、MCP 同源，公开只读 frame_hold 状态，时长/位置沿通用属性修改，复用撤销与保存。精确应用调用/撤销测试及真实 Electron 右键、延长、后段移动、撤销、重开通过；外部契约2.42.0。YOGA三处原生定格已进入该模型；全片B/C和最终整片导出仍未通过。
