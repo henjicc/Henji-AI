@@ -13,7 +13,7 @@ import {
  * - 编码：WebCodecs 只在渲染层可用，结果由渲染层带来一起写入。
  */
 export interface GpuDeviceInfo { vendorId: number; deviceId: number; driverVersion?: string; active?: boolean }
-export interface DecoderAdapterInfo { description: string; vendorId: string; deviceId: string; dedicatedVideoMemoryMiB: number; software: boolean }
+export interface DecoderAdapterInfo { description: string; vendorId: string; deviceId: string; dedicatedVideoMemoryMiB: number; software: boolean; luid?: string }
 
 export interface HardwareCapabilitiesHost {
   gpuDevices(): Promise<GpuDeviceInfo[]>
@@ -63,11 +63,17 @@ export class HardwareCapabilitiesService {
     try { ({ adapters, active } = await this.host.decoder.adapters()) } catch (error) {
       this.host.logger.warn('原生解码服务不可用，解码能力按不支持记录', { event: 'hardware.capabilities.decoder_unavailable', error })
     }
-    const gpus: HardwareGpu[] = adapters.filter(adapter => !adapter.software).map(adapter => {
+    // 虚拟显示器（远程桌面、串流软件）会让同一块显卡在适配器列表里出现多次：按型号与显存合并成一项。
+    const gpus: HardwareGpu[] = []
+    for (const adapter of adapters.filter(value => !value.software)) {
       const vendorId = parseId(adapter.vendorId), deviceId = parseId(adapter.deviceId)
       const device = devices.find(value => value.vendorId === vendorId && value.deviceId === deviceId)
-      return { name: adapter.description.trim(), vendor: vendorOf(vendorId), driverVersion: device?.driverVersion || null, dedicatedMemoryMiB: adapter.dedicatedVideoMemoryMiB, decodes: active?.description === adapter.description && active.deviceId === adapter.deviceId }
-    })
+      const decodes = !!active && (active.luid && adapter.luid ? active.luid === adapter.luid : active.description === adapter.description && active.deviceId === adapter.deviceId)
+      const gpu: HardwareGpu = { name: adapter.description.trim(), vendor: vendorOf(vendorId), driverVersion: device?.driverVersion || null, dedicatedMemoryMiB: adapter.dedicatedVideoMemoryMiB, decodes }
+      const same = gpus.find(value => value.name === gpu.name && value.dedicatedMemoryMiB === gpu.dedicatedMemoryMiB)
+      if (same) same.decodes ||= gpu.decodes
+      else gpus.push(gpu)
+    }
     const decode: HardwareDecodeResult[] = []
     for (const variant of HARDWARE_DECODE_VARIANTS) {
       const clip = this.host.probeClip(hardwareProbeClipName(variant))

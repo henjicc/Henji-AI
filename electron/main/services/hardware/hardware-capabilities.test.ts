@@ -12,8 +12,8 @@ async function host(overrides: Partial<HardwareCapabilitiesHost> = {}): Promise<
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-hardware-'))
   directories.push(directory)
   const driver = { version: '32.0.16.1047' }
-  const nvidia = { description: 'NVIDIA GeForce RTX 4090', vendorId: '0x10de', deviceId: '0x2684', dedicatedVideoMemoryMiB: 24000, software: false }
-  const intel = { description: 'Intel(R) UHD Graphics 770', vendorId: '0x8086', deviceId: '0x4680', dedicatedVideoMemoryMiB: 128, software: false }
+  const nvidia = { description: 'NVIDIA GeForce RTX 4090', vendorId: '0x10de', deviceId: '0x2684', dedicatedVideoMemoryMiB: 24000, software: false, luid: '0x1' }
+  const intel = { description: 'Intel(R) UHD Graphics 770', vendorId: '0x8086', deviceId: '0x4680', dedicatedVideoMemoryMiB: 128, software: false, luid: '0x3' }
   return {
     driver,
     gpuDevices: async () => [{ vendorId: 0x10de, deviceId: 0x2684, driverVersion: driver.version, active: true }, { vendorId: 0x8086, deviceId: 0x4680, driverVersion: '31.0' }],
@@ -21,7 +21,7 @@ async function host(overrides: Partial<HardwareCapabilitiesHost> = {}): Promise<
     reportFile: () => path.join(directory, 'hardware-capabilities.json'),
     probeClip: name => `/clips/${name}`,
     decoder: {
-      adapters: async () => ({ adapters: [nvidia, intel, { description: 'Microsoft Basic Render Driver', vendorId: '0x1414', deviceId: '0x8c', dedicatedVideoMemoryMiB: 0, software: true }], active: nvidia }),
+      adapters: async () => ({ adapters: [nvidia, { ...nvidia, luid: '0x2' }, intel, { description: 'Microsoft Basic Render Driver', vendorId: '0x1414', deviceId: '0x8c', dedicatedVideoMemoryMiB: 0, software: true }], active: nvidia }),
       // Ada decodes 4:2:0 in hardware; 4:2:2 H.264/HEVC falls back to software (RTX 50 adds it).
       decodeFirstFrame: async clip => ({ hardware: clip.includes('-420') }),
     },
