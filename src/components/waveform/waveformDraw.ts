@@ -30,6 +30,8 @@ export interface WaveformDrawOptions {
   playedFrame?: number
   cutRanges?: ReadonlyArray<readonly [number, number]>
   detail?: WaveformDetailWindow
+  /** 振幅倍数，覆盖数据自带的显示增益；音频编辑按真实电平（1 = 0 dBFS 顶到行高）再乘纵向缩放。超出行高的部分被裁掉。 */
+  gain?: number
 }
 
 const OPACITY = { neutral: { peak: 0.45, rms: 1 }, clip: { peak: 0.38, rms: 0.85 } } as const
@@ -117,12 +119,13 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
   const peak = new Float32Array(columns)
   const rms = new Float32Array(columns)
   const level = selectWaveformLevel(pyramid.levels, framesPerColumn)
+  const gain = options.gain ?? data.gain
   lanes.forEach((channel, lane) => {
     const top = lane * laneHeight
     const mid = top + laneHeight / 2
     const amplitude = Math.max(0, laneHeight / 2 - pad)
     if (mode === 'points') {
-      drawPoints(ctx, options, detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, data.gain, top, laneHeight, mid, amplitude, segments, sampleSpacingCss)
+      drawPoints(ctx, options, detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, gain, top, laneHeight, mid, amplitude, segments, sampleSpacingCss)
       return
     }
     if (mode === 'samples') aggregateWaveformSamples(detail!.channels[channel] ?? detail!.channels[0], detail!.firstFrame, startFrame, endFrame, columns, peak, rms)
@@ -132,11 +135,11 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, options: WaveformDra
       clipTo(ctx, parts, top, laneHeight)
       ctx.fillStyle = colorOf(kind, tone, palette)
       ctx.globalAlpha = opacity.peak
-      traceArea(ctx, peak, data.gain, mid, amplitude)
+      traceArea(ctx, peak, gain, mid, amplitude)
       ctx.fill()
       if (tier === 'standard') {
         ctx.globalAlpha = opacity.rms
-        traceArea(ctx, rms, data.gain, mid, amplitude)
+        traceArea(ctx, rms, gain, mid, amplitude)
         ctx.fill()
       }
       ctx.restore()

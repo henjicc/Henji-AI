@@ -23,6 +23,11 @@ export const RECORDING_FRAME_BACKGROUND_HEX = {
 /** “录屏画框”纯色背景的默认颜色（画面内容色）。 */
 export const RECORDING_FRAME_SOLID_DEFAULT_HEX = '#1b1d22';
 export const BLACK_HEX = '#000000';
+/**
+ * 音频编辑频谱图的色表（声音能量的可视化，属于内容色，不随界面主题变化）：从静音到最响依次取色，
+ * 与 Audition 的频谱显示同一观感（深紫 → 品红 → 橙 → 亮黄）。
+ */
+export const SPECTROGRAM_COLORMAP_HEX = ['#000004', '#1b0c41', '#4a0c6b', '#781c6d', '#a52c60', '#cf4446', '#ed6925', '#fb9b06', '#f7d13d', '#fcffa4'] as const;
 /** 剪辑预设样片的暗角与代码渲染验收形状颜色，属于画面内容，不随界面主题变化。 */
 export const VIDEO_EDIT_AUTHOR_CONTENT_COLORS = {
   vignetteCenter: 'rgba(0,0,0,0)',

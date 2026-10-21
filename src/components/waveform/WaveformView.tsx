@@ -24,6 +24,8 @@ export interface WaveformViewProps {
   /** 固定高度（CSS 像素）；不传则填满父元素。 */
   height?: number
   className?: string
+  /** 振幅倍数，覆盖自动显示增益（音频编辑按真实电平显示并支持纵向缩放）。 */
+  gain?: number
   /** 可访问名称；不传时视为装饰。 */
   label?: string
   /** 悬停读数使用的总时长（秒）；默认可见区间长度。 */
@@ -39,7 +41,7 @@ function readout(seconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-export const WaveformView = React.memo(function WaveformView({ waveform, startSeconds, endSeconds, lanes, tier = 'standard', tone = 'neutral', playedSeconds, cutRanges, height, className, label, durationSeconds, onSeek, onSeekStart, onSeekMove, onSeekEnd }: WaveformViewProps) {
+export const WaveformView = React.memo(function WaveformView({ waveform, startSeconds, endSeconds, lanes, tier = 'standard', tone = 'neutral', playedSeconds, cutRanges, gain, height, className, label, durationSeconds, onSeek, onSeekStart, onSeekMove, onSeekEnd }: WaveformViewProps) {
   const host = React.useRef<HTMLDivElement | null>(null)
   const canvas = React.useRef<HTMLCanvasElement | null>(null)
   const [size, setSize] = React.useState({ width: 0, height: 0 })
@@ -91,10 +93,11 @@ export const WaveformView = React.memo(function WaveformView({ waveform, startSe
       ...(playedSeconds !== undefined ? { playedFrame: playedSeconds * rate } : {}),
       ...(cutRanges?.length ? { cutRanges: cutRanges.map(range => [range.start * rate, range.end * rate] as const) } : {}),
       ...(detail ? { detail } : {}),
+      ...(gain !== undefined ? { gain } : {}),
     })
     element.dataset.waveformMode = mode
   // eslint-disable-next-line react-hooks/exhaustive-deps -- cutKey / laneKey stand for the arrays' contents
-  }, [size, pixelRatio, data, laneKey, startFrame, endFrame, tier, tone, palette, playedSeconds, rate, cutKey, detail])
+  }, [size, pixelRatio, data, laneKey, startFrame, endFrame, tier, tone, palette, playedSeconds, rate, cutKey, detail, gain])
 
   const interactive = !!(onSeek || onSeekStart || onSeekMove || onSeekEnd)
   const ratioAt = (event: React.MouseEvent<HTMLDivElement>): number => {
