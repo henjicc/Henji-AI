@@ -11,6 +11,8 @@ import { previewImageEditSelectionIntentV3, applyImageEditSelectionPreviewV3 } f
 import { snapshotImageEditFilterSelectionV3 } from '../v3/filterWorkspace/service'
 import { splitImageEditV3FilterRef, imageEditV3FilterRef } from '../v3/application/imageEditDocumentRefs'
 import { selectImageEditRegionCapability } from '@/core/application-control/domains/imageEdit/imageEditSubjectCapabilities'
+import { observeImageEditColorCapability } from '@/core/application-control/domains/imageEdit/imageEditColorCapabilities'
+import { observeImageEditColorV3 } from '../v3/application/imageEditColorObservationV3'
 import { selectImageEditRegionV3 } from '../v3/application/imageEditSubjectSelectionServiceV3'
 import { retryImageEditDocumentSaveV3 } from '@/features/imageEdit/v3/application/imageEditPersistenceOperations'
 import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
@@ -127,6 +129,16 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
       return { ref, status: result.status, candidates: result.candidates,
         verification: { verified: result.status === 'candidates' ? result.candidates.length > 1 : JSON.stringify(bus.getSnapshot().selection) === JSON.stringify(result.selection) } }
     })
+  })
+  registrar.registerHandler(observeImageEditColorCapability.id, async (input, context) => {
+    const parsed = observeImageEditColorCapability.inputSchema.parse(input)
+    const { documentId } = splitImageEditV3DocumentRef(parsed.documentRef)
+    const layer = parsed.layerRef ? splitImageEditV3LayerRef(parsed.layerRef) : undefined
+    if (layer && layer.documentId !== documentId) throw new Error('调整层必须属于目标图片文档')
+    const result = await observeImageEditColorV3(documentId, { layerId: layer?.layerId, stage: parsed.stage, scopes: parsed.includeScopes, signal: context.signal })
+    const { readout, scopes } = result.statistics
+    return { resultRef: parsed.documentRef, stage: result.stage, revision: result.revision, readout, ...(scopes ? { scopes } : {}),
+      message: `中灰偏差 ${readout.exposure.middleGrayOffsetEv} EV，高光溢出 ${readout.clipping.highlightsPercent}%，估计光源 ${readout.whiteBalance.kelvin} K（可信度 ${readout.whiteBalance.confidence}）。` }
   })
   for (const capability of IMAGE_EDIT_REPAIR_CAPABILITIES) registrar.registerHandler(capability.id, async (input, context) => {
     const parsed = capability.inputSchema.parse(input)

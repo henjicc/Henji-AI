@@ -11,6 +11,7 @@ import { videoEditObservationVersion } from './videoEditObservationVersion'
 import { colorGradeSampleFrames } from '@/core/videoEdit/colorGradeMatch'
 import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 import { analyzeVideoEditColorGradeOffThread } from './videoEditColorLutClient'
+import { computeColorStatistics, type ColorStatistics } from '@/core/imaging/adjustments/colorStatistics'
 
 export interface ColorGradeAnalysisOptions { sampleCount?: number; referenceClipId?: string; matchMethod?: 'moments' | 'histogram' }
 export interface ColorGradeAnalysisResult { parameters: VideoEditBuiltinParams; frame: number; frames: number[]; documentRevision: number; documentVersion: string }
@@ -38,6 +39,62 @@ export function editVideoEditColorGrade(target: VideoEditCompositeTarget, change
   if (gesture) updateVideoEditGesture(gesture, update); else editVideoProject(target.projectId, update)
 }
 
+/** Production renderer frames at ≤256 px, stacked vertically (same width). Throws when the edit changes mid-sample. */
+async function sampleVideoEditFrames(owner: ReturnType<typeof requireVideoEditInstance>, contentVersion: number, document: VideoEditComposition, times: readonly number[], signal: AbortSignal, staleMessage = '片段已发生修改，请重新读取颜色。'): Promise<{ pixels: Uint8ClampedArray; width: number; height: number }> {
+  const chunks: Uint8ClampedArray[] = []; let width = 0; let height = 0
+  for (const time of times) {
+    signal.throwIfAborted()
+    const bitmap = await trialVideoEditCodeFrames([{ document, frame: time }], signal, true)
+    if (!bitmap) throw new Error('无法读取片段画面，请换一帧重试。')
+    try {
+      signal.throwIfAborted()
+      const w = width || Math.min(256, bitmap.width); const h = Math.max(1, Math.min(256, Math.round(bitmap.height * w / bitmap.width)))
+      const canvas = new OffscreenCanvas(w, h); const context = canvas.getContext('2d')
+      if (!context) throw new Error('无法分析画面颜色，请手动校色。')
+      context.drawImage(bitmap, 0, 0, w, h)
+      chunks.push(context.getImageData(0, 0, w, h).data); width = w; height += h
+    } finally { bitmap.close() }
+    if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error(staleMessage)
+  }
+  const pixels = new Uint8ClampedArray(chunks.reduce((size, chunk) => size + chunk.length, 0)); let offset = 0
+  for (const chunk of chunks) { pixels.set(chunk, offset); offset += chunk.length }
+  return { pixels, width, height }
+}
+
+export type VideoEditColorObservationStage = 'before_grade' | 'after_grade' | 'program'
+export interface VideoEditColorObservation { statistics: ColorStatistics; frame: number; frames: number[]; stage: VideoEditColorObservationStage; documentRevision: number; documentVersion: string }
+/**
+ * Read-only color readout (exposure, clipping, white balance, chroma, skin) and optional scope data for the same frames the
+ * panel scopes show. `before_grade`/`after_grade` isolate the clip around its ColorGrade; `program` reads the composed frame.
+ */
+export async function observeVideoEditColor(target: Omit<VideoEditCompositeTarget, 'clipId'> & { clipId?: string }, options: { frame?: number; stage?: VideoEditColorObservationStage; sampleCount?: number; scopes?: boolean; effectId?: string } = {}, signal = new AbortController().signal): Promise<VideoEditColorObservation> {
+  const owner = requireVideoEditInstance(target.projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion
+  const documentVersion = videoEditObservationVersion(owner, snapshot.revision)
+  const sequence = snapshot.sequences.find(value => value.id === target.sequenceId)
+  if (!sequence) throw new Error('原序列已移除，请重新读取剪辑。')
+  const composition = videoEditComposition(snapshot, sequence.id)
+  const stage = options.stage ?? (target.clipId ? 'after_grade' : 'program')
+  const clip = target.clipId ? sequence.clips.find(value => value.id === target.clipId) : undefined
+  if (stage !== 'program' && (!clip || clip.kind === 'audio' || clip.kind === 'adjustment')) throw new Error('调色前后读数需要一个带画面的片段；整个画面请用 program。')
+  const at = options.frame ?? (clip && (owner.frame < clip.start || owner.frame >= clip.start + clip.duration) ? clip.start + Math.floor(clip.duration / 2) : owner.frame)
+  if (clip && (at < clip.start || at >= clip.start + clip.duration)) throw new Error('读取帧必须在目标片段的时间范围内。')
+  let document: VideoEditComposition = composition
+  if (clip && stage !== 'program') {
+    const index = clip.effects?.findIndex(effect => options.effectId ? effect.id === options.effectId : effect.builtin?.id === 'color_grade') ?? -1
+    if (options.effectId && index < 0) throw new Error('原全能调色效果已移除。')
+    const effects = index < 0 ? clip.effects : clip.effects?.slice(0, stage === 'before_grade' ? index : index + 1)
+    document = { ...composition, annotations: [], captions: [], transitions: [], clips: [{ ...analysisClip(clip), effects }], tracks: composition.tracks.map(value => ({ ...value, enabled: value.index === clip.track, solo: false })) }
+  }
+  const frames = options.frame === undefined && clip && (options.sampleCount ?? 1) > 1 ? colorGradeSampleFrames(clip.start, clip.duration, options.sampleCount ?? 1) : [at]
+  logger.info('颜色读数开始', { event: 'video_edit.color.observe.start', context: { projectId: target.projectId, clipId: clip?.id, stage, frames: frames.length } })
+  try {
+    const sampled = await sampleVideoEditFrames(owner, contentVersion, document, frames, signal)
+    const statistics = computeColorStatistics(sampled.pixels, sampled.width, sampled.height, { scopes: options.scopes })
+    logger.info('颜色读数完成', { event: 'video_edit.color.observe.completed', context: { projectId: target.projectId, stage } })
+    return { statistics, frame: at, frames, stage, documentRevision: snapshot.revision, documentVersion }
+  } catch (error) { logger.warn('颜色读数失败', { event: 'video_edit.color.observe.failed', error, context: { projectId: target.projectId } }); throw error }
+}
+
 /** Same production renderer/trial queue as preview/export; isolate the selected clip before its selected ColorGrade.
  * No asset/file writes, no changes to transport. Suggestions are absolute basic-correction values. */
 export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarget, frame?: number, signal = new AbortController().signal, effectId?: string, options: ColorGradeAnalysisOptions = {}): Promise<ColorGradeAnalysisResult> {
@@ -56,26 +113,7 @@ export async function analyzeVideoEditColorGrade(target: VideoEditCompositeTarge
   logger.info('自动校色分析开始', { event: 'video_edit.color_grade.analyze.start', context: { projectId: target.projectId, clipId: clip.id, frame: at } })
   try {
     const frames = frame === undefined ? colorGradeSampleFrames(clip.start, clip.duration, options.sampleCount ?? 5) : [at]
-    const sample = async (document: VideoEditComposition, times: readonly number[]): Promise<Uint8ClampedArray> => {
-      const chunks: Uint8ClampedArray[] = []
-      for (const time of times) {
-        signal.throwIfAborted()
-        const bitmap = await trialVideoEditCodeFrames([{ document, frame: time }], signal, true)
-        if (!bitmap) throw new Error('无法读取片段画面，请换一帧重试。')
-        try {
-          signal.throwIfAborted()
-          const width = Math.min(256, bitmap.width); const height = Math.max(1, Math.min(256, Math.round(bitmap.height * width / bitmap.width)))
-          const canvas = new OffscreenCanvas(width, height); const context = canvas.getContext('2d')
-          if (!context) throw new Error('无法分析画面颜色，请手动校色。')
-          context.drawImage(bitmap, 0, 0, width, height)
-          chunks.push(context.getImageData(0, 0, width, height).data)
-        } finally { bitmap.close() }
-        if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('片段已发生修改，请重新自动校色。')
-      }
-      const pixels = new Uint8ClampedArray(chunks.reduce((size, chunk) => size + chunk.length, 0)); let offset = 0
-      for (const chunk of chunks) { pixels.set(chunk, offset); offset += chunk.length }
-      return pixels
-    }
+    const sample = async (document: VideoEditComposition, times: readonly number[]): Promise<Uint8ClampedArray> => (await sampleVideoEditFrames(owner, contentVersion, document, times, signal, '片段已发生修改，请重新自动校色。')).pixels
     const pixels = await sample(isolated, frames)
     let parameters: VideoEditBuiltinParams
     if (reference) {

@@ -9,6 +9,7 @@ import { toMcpResult } from '../mcp/resultProjection'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { capabilityVerificationEnvelope } from '../../../../src/core/application-control/capabilityVerification'
 import { APPLICATION_WRITE_CAPABILITY_IDS, EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
+import { BLACK_HEX } from '../../../../src/core/theme/colorTokens'
 const contractLog = vi.hoisted(() => vi.fn())
 vi.mock('../logging', () => ({ createMainLogger: () => ({ error: contractLog, info: vi.fn(), warn: vi.fn() }) }))
 
@@ -45,6 +46,12 @@ const successData: Record<string, Record<string, unknown>> = {
   segment_video_edit_subtitles: { documentRef, captionRefs: [ref('video_edit.caption')], createdCaptionRefs: [ref('video_edit.caption')], updatedCaptionRefs: [ref('video_edit.caption')], removedCaptionRefs: [], ...verified },
   observe_video_edit_frame: { byteLength: 26670, resultRef: assetRef, documentRef, target: { kind: 'program', sequenceRef, frame: 60 }, width: 1280, height: 720, sourceWidth: 1920, sourceHeight: 1080, documentRevision: 29, documentVersion: 'host:document:29', message, verification: { verified: true, condition: '已保存合成帧', target: assetRef } },
   analyze_video_edit_color: { resultRef: clipRef, parameters: { exposure: 0 }, frame: 60, frames: [60], documentRevision: 29, documentVersion: 'host:document:29', message },
+  observe_video_edit_color: { resultRef: sequenceRef, stage: 'after_grade', frame: 60, frames: [60], documentRevision: 29, documentVersion: 'host:document:29', message,
+    readout: { exposure: { middleGrayOffsetEv: -.4, key: 'normal' }, clipping: { highlightsPercent: .2, shadowsPercent: 0 }, tone: { p2: 4, p50: 41, p98: 93 }, whiteBalance: { kelvin: 5400, tint: 2, confidence: .7, neutralPercent: 35 },
+      color: { chromaMedian: .05, chromaP95: .14, oversaturatedPercent: 0, palette: [{ hex: BLACK_HEX, percent: 30 }] }, skin: { candidatePercent: 12, hueOffsetDegrees: 3 } } },
+  observe_image_edit_color: { resultRef: { kind: 'image_edit.document', id: 'v3:doc' }, stage: 'document', revision: 4, message,
+    readout: { exposure: { middleGrayOffsetEv: -.4, key: 'normal' }, clipping: { highlightsPercent: .2, shadowsPercent: 0 }, tone: { p2: 4, p50: 41, p98: 93 }, whiteBalance: { kelvin: 5400, tint: 2, confidence: .7, neutralPercent: 35 },
+      color: { chromaMedian: .05, chromaP95: .14, oversaturatedPercent: 0, palette: [{ hex: BLACK_HEX, percent: 30 }] }, skin: { candidatePercent: 12, hueOffsetDegrees: 3 } } },
   analyze_video_edit_beats: { resultRef: documentRef, markerRefs: [ref('video_edit.marker')], ...verified },
   apply_video_edit_title_template: { resultRef: documentRef, clipRefs: [clipRef], ...verified },
   generate_video_edit_title_from_description: { resultRef: documentRef, clipRefs: [clipRef], ...verified },

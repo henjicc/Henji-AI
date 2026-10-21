@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import { VIDEO_EDIT_COLOR_GRADE } from '../../../videoEdit/colorGrade'
+import { colorReadoutSchema, colorScopesSchema } from '../shared/colorReadoutSchema'
 
 const suggestedParameters = z.object(Object.fromEntries(VIDEO_EDIT_COLOR_GRADE.params.map(param => [param.key, param.type === 'number' ? z.number().min(param.min).max(param.max).optional() : param.type === 'boolean' ? z.boolean().optional() : z.string().max(4096).optional()]))).strict()
 
@@ -16,4 +17,16 @@ export const analyzeVideoEditColorGradeCapability = defineApplicationCapability(
   concurrencyKey: 'video_edit_color_grade', resolveConcurrencyKey: input => `video_edit_color_grade:${input.documentRef.id}`,
   resolveOperationTargets: input => [input.documentRef], resolveOperationWriteTargets: () => [],
   control: capabilityControl('observe', ['video_edit.clip'], { cancelable: true, revisionScopes: ['video_edit'] }), summarize: result => result.message,
+})
+
+export const observeVideoEditColorCapability = defineApplicationCapability({
+  id: 'observe_video_edit_color', title: '读取画面颜色读数', description: '读取片段或节目画面的颜色读数：中灰曝光偏差（EV）、高光/暗部溢出百分比、亮度分位、估计光源色温与可信度、彩度与主色、肤色候选。调色前后各读一次即可核对结果：stage=before_grade 为该片段全能调色之前，after_grade 为之后（默认），program 为整个合成画面（不传 clipRef 时默认）。includeScopes=true 时附直方图、波形与矢量示波器数组（与调色面板示波器同一份数据）。只读，不修改剪辑。比看截图判断偏色、曝光更准。',
+  version: 1, domain: 'video_edit', aliases: ['颜色读数', '示波器', '直方图', '曝光检查', '白平衡检查', 'color scopes', 'histogram', 'waveform'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.clip'], producesRefs: ['video_edit.sequence'],
+  successEvidence: ['返回实际渲染画面的统计读数；数值来自正式渲染帧。'], failureRecovery: ['片段修改后重新读取；纯透明或空白画面换一帧。'],
+  inputSchema: z.object({ documentRef: ref('video_edit.document'), sequenceRef: ref('video_edit.sequence'), clipRef: ref('video_edit.clip').optional(), frame: z.number().int().nonnegative().optional(), stage: z.enum(['before_grade', 'after_grade', 'program']).optional(), sampleCount: z.number().int().min(1).max(9).optional().describe('不指定 frame 时在片段内均匀采样的帧数，默认 1（播放头或片段中点）'), includeScopes: z.boolean().optional() }).strict(),
+  outputSchema: z.object({ resultRef: ref('video_edit.sequence'), stage: z.enum(['before_grade', 'after_grade', 'program']), frame: z.number().int().nonnegative(), frames: z.array(z.number().int().nonnegative()).min(1).max(9), readout: colorReadoutSchema, scopes: colorScopesSchema.optional(), documentRevision: z.number().int().nonnegative(), documentVersion: z.string().min(1), message: z.string() }).strict(),
+  concurrencyKey: 'video_edit_color_observe', resolveConcurrencyKey: input => `video_edit_color_observe:${input.documentRef.id}`,
+  resolveOperationTargets: input => [input.documentRef], resolveOperationWriteTargets: () => [],
+  control: capabilityControl('observe', ['video_edit.sequence'], { cancelable: true, revisionScopes: ['video_edit'] }), summarize: result => result.message,
 })
