@@ -1,4 +1,4 @@
-2026-10-21：全能调色参数格式 v2（剪辑与图片共用）：白平衡改为 temperature_kelvin（光源色温，6500 不变）+ Duv 色调，新增参数曲线 tone_*、8 色混色器 mixer_*、全局色轮与 wheel_mode（分级/一级 LGG）、grade_blending/grade_balance；creative_* 分离色调并入色轮。旧工程逐版本迁移（剪辑 17→18 等）。参数仍走 video_edit.effect.parameters / image_edit.layer.params 通用写入；analyze_video_edit_color 输出改为新键，外部契约 2.44.0。自动校色算法本身未改进（评测基线见 docs/task/全能调色完善），助手调色端到端未重新验证。
+2026-10-21：全能调色参数格式 v2（剪辑与图片共用）：白平衡改为 temperature_kelvin（光源色温，6500 不变）+ Duv 色调，新增参数曲线 tone_*、8 色混色器 mixer_*、全局色轮与 wheel_mode（分级/一级 LGG）、grade_blending/grade_balance；creative_* 分离色调并入色轮。旧工程逐版本迁移（剪辑 17→18 等）。参数仍走 video_edit.effect.parameters / image_edit.layer.params 通用写入。新增只读读数 observe_video_edit_color / observe_image_edit_color（与面板示波器同源）与图片自动校色 analyze_image_edit_color；analyze_video_edit_color 改为四估计投票并默认 mkl 匹配回滑块；新增技能 color-grading 与风格词典；外部契约 2.44.0。assistant:cli 只验证了理解与规划，读取真实剪辑后调色的端到端未验证。
 
 2026-10-21：剪辑新增 render_video_edit_preview（对标 PR 渲染入点到出点），后台按 30 秒分段预渲染吃力段落；状态由 video_edit.document.render_cache 读取，自动预渲染偏好走 video_edit.document.render_preference 通用属性；UI 渲染条、Pi、MCP 同源，外部契约 2.43.0。打开项目内素材的剪辑时改为按当前位置重读文件身份并重新绑定转录来源，修复重开后字幕生成、按文字剪辑与转录检索全部报“尚未绑定原文件身份”；真实 Electron 外部 MCP 局部检索删重说场景通过。
 
