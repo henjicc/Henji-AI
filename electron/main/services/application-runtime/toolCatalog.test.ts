@@ -94,6 +94,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.45.0'] = '8db0b496e74490d0b8b610ded4cad2e6f49686106dcb4676c6558bf0a85f45c1'
     // Sound library tools (add_sound_library_folder takes a path); download_canvas_media returns its directory.
     fingerprints['2.46.0'] = '611a5a557f4f7975d97ed23fe4c6edb4dca6f15fe1dfe2972468e3c056bd9fdc'
+    // Time remapping: ramp_video_edit_clip_speed (speed ramps at moments/beats, curve presets); clip time_remap / frame_interpolation / pitch_semitones.
+    fingerprints['2.47.0'] = '7d90fd86180e07cd0c3746ba7493b75c0085e6cd3c52711c01195274b16bf3ae'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

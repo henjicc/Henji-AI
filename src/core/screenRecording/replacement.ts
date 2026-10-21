@@ -23,7 +23,7 @@ export function replaceRecordingSteps(draft: VideoEditDocument, recording: Recor
         const range = videoEditClipSourceRange(original, fps)
         const from = Math.max(step.startUs, source.monoUs + range.from * 1e6), to = Math.min(step.endUs, source.monoUs + range.to * 1e6)
         if (to <= from) continue
-        if (original.reverse || sequence.tracks.some(v => v.index === original.track && v.locked) || sequence.transitions?.some(v => v.leftClipId === original.id || v.rightClipId === original.id)) throw new Error('目标步骤包含锁定、倒放或转场片段，请先解除这些编辑再重录。')
+        if (original.reverse || original.timeRemap || sequence.tracks.some(v => v.index === original.track && v.locked) || sequence.transitions?.some(v => v.leftClipId === original.id || v.rightClipId === original.id)) throw new Error('目标步骤包含锁定、倒放、速度曲线或转场片段，请先解除这些编辑再重录。')
         const speed = videoEditClipSpeedValue(original)
         const start = Math.max(original.start, original.start + Math.round((from - source.monoUs - range.from * 1e6) * fps / (1e6 * speed)))
         const end = Math.min(original.start + original.duration, original.start + Math.round((to - source.monoUs - range.from * 1e6) * fps / (1e6 * speed)))

@@ -175,6 +175,12 @@ describe('所有登记格式的黄金样本', () => {
           }
           if (version >= 12) expect(clip.contentAnchor).toEqual({ ranges: [{ clipId: 'golden-sound-clip', itemId: 'golden-sound-item', fromUs: 0, toUs: 3000000 }], startOffsetSeconds: 0, endOffsetSeconds: 0 })
           expect(document.sequences[0].transitions?.[0].rightClipId).toBe(clip.id)
+          // v19：速度曲线、帧混合与变调原样读回；更早的样本没有这些字段，片段仍是常数速度。
+          const remapped = document.sequences[0].clips.find(value => value.id === 'golden-time-remap')
+          if (version >= 19) {
+            expect(remapped?.timeRemap?.points.map(point => [point.offsetUs, point.speed, point.interpolation])).toEqual([[0, 1, 'ease'], [600000, 0.25, 'hold'], [900000, 0.25, 'linear'], [1500000, 2, 'linear']])
+            expect([remapped?.frameInterpolation, remapped?.pitchSemitones, remapped?.preservePitch, remapped?.speed]).toEqual(['blend', 2, true, undefined])
+          } else expect(document.sequences.flatMap(sequence => sequence.clips).some(value => value.timeRemap || value.frameInterpolation || value.pitchSemitones)).toBe(false)
           // v7：自动缩放的缩放区间（源时间、档位、跟随/固定焦点）与录屏画框参数原样读回。
           if (version >= 7) {
             const effects = document.sequences[0].clips.find(value => value.id === 'golden-cursor-clip')?.effects ?? []

@@ -111,7 +111,7 @@ export function createVideoEditSpeechCaptionRetimer(before: VideoEditSequence, a
     // Unrelated edits cannot change a cue's ownership, layout or authored timing.
     if (groups.size && speech.words.every(word => {
       const previous = oldClips.get(word.clipId); const next = newClips.get(word.clipId)
-      return previous && next && previous.itemId === next.itemId && previous.start === next.start && previous.duration === next.duration && previous.sourceInUs === next.sourceInUs && JSON.stringify(previous.speed) === JSON.stringify(next.speed) && previous.reverse === next.reverse
+      return previous && next && previous.itemId === next.itemId && previous.start === next.start && previous.duration === next.duration && previous.sourceInUs === next.sourceInUs && JSON.stringify(previous.speed) === JSON.stringify(next.speed) && JSON.stringify(previous.timeRemap) === JSON.stringify(next.timeRemap) && previous.reverse === next.reverse
     })) return [caption]
     return outputs.sort((left, right) => left.start - right.start)
   }

@@ -196,7 +196,7 @@ export function projectVideoEditSequenceMapRange(instance: VideoEditSequenceMapI
 }
 
 function clockStamp(clip: VideoEditClip): unknown {
-  return [clip.id, clip.kind, clip.itemId, clip.track, clip.start, clip.duration, clip.sourceInUs, clip.sourceRemainder, clip.speed, clip.reverse, clip.frameHold, clip.sourceComponent,
+  return [clip.id, clip.kind, clip.itemId, clip.track, clip.start, clip.duration, clip.sourceInUs, clip.sourceRemainder, clip.speed, clip.timeRemap, clip.reverse, clip.frameHold, clip.sourceComponent,
     clip.volume, clip.curves?.volume, clip.disabledIntrinsicSections?.includes('audio'), clip.multicamCameraId, clip.contentAnchor]
 }
 /** Per-root-instance cache. A changed child invalidates its parents, not unrelated root clips. */

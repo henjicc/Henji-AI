@@ -1,3 +1,4 @@
+import { videoEditTimeRemapSchema, mirrorVideoEditTimeRemap, scaleVideoEditTimeRemap, shiftVideoEditTimeRemap, videoEditTimeRemapElapsedAt, videoEditTimeRemapSourceAt, videoEditTimeRemapSpeedRange, VIDEO_EDIT_TIME_REMAP_SPEED_MAX, VIDEO_EDIT_TIME_REMAP_SPEED_MIN, type VideoEditTimeRemap } from './timeRemap'
 import { offsetVideoEditSource, offsetVideoEditSourceFraction, sampleVideoEditSourceFraction, videoEditFrameFraction, videoEditRatioSchema, videoEditSourceSeconds, type VideoEditFrameOffset, type VideoEditRatio, type VideoEditSourceTime } from './time'
 
 /**
@@ -12,7 +13,10 @@ import { offsetVideoEditSource, offsetVideoEditSourceFraction, sampleVideoEditSo
  * - 画面按“帧采样”取（PR 默认）：时间线第 k 帧显示这一帧所覆盖源区间的起点处的画面——正放是
  *   `sourceIn + k·speed/fps`，倒放是 `sourceIn - (k+1)·speed/fps`（倒放一帧覆盖的区间的较早一端），
  *   高倍速时跳过中间的源画面，不做帧混合。
- * - 声音按连续时间换算（`videoEditClipSourceSecondsAtTime`），变速由混音按位置重采样。
+ * - 声音按连续时间换算（`videoEditClipSourceSecondsAtTime`），变速由混音按位置重采样或经拉伸器保持音调。
+ * - 时间重映射（`timeRemap`，速度曲线，见 timeRemap.ts）：源位置由速度曲线积分得到，下面每个换算都有对应分支，
+ *   与常数 `speed`、定格 `frameHold` 互斥。曲线点按源位置记录，修剪入点/拆分右段时随开头移动（`advanceVideoEditClipSource`
+ *   一并返回移动后的曲线）。
  */
 export const VIDEO_EDIT_SPEED_MIN = 0.01
 export const VIDEO_EDIT_SPEED_MAX = 100
@@ -23,7 +27,7 @@ export const VIDEO_EDIT_SPEED_KINDS = ['video', 'audio', 'code', 'sequence'] as 
 export function videoEditClipSpeedSupported(kind: string): boolean { return (VIDEO_EDIT_SPEED_KINDS as readonly string[]).includes(kind) }
 export const videoEditClipSpeedSchema = videoEditRatioSchema.refine(ratio => ratio.numerator / ratio.denominator >= VIDEO_EDIT_SPEED_MIN - 1e-12 && ratio.numerator / ratio.denominator <= VIDEO_EDIT_SPEED_MAX + 1e-12, '速度须在 1% 到 10000% 之间。')
 
-export interface VideoEditClipTiming extends VideoEditSourceTime { start: number; duration: number; speed?: VideoEditRatio; reverse?: boolean; frameHold?: true }
+export interface VideoEditClipTiming extends VideoEditSourceTime { start: number; duration: number; speed?: VideoEditRatio; reverse?: boolean; frameHold?: true; timeRemap?: VideoEditTimeRemap }
 const ONE: VideoEditRatio = { numerator: 1, denominator: 1 }
 function gcd(left: number, right: number): number { while (right) [left, right] = [right, left % right]; return left }
 function reduce(numerator: number, denominator: number): VideoEditRatio { const divisor = gcd(numerator, denominator); return { numerator: numerator / divisor, denominator: denominator / divisor } }
@@ -34,16 +38,72 @@ export function videoEditSpeedRatio(value: number): VideoEditRatio {
   return reduce(Math.max(1, Math.round(value * SPEED_RESOLUTION)), SPEED_RESOLUTION)
 }
 export function videoEditClipSpeed(clip: Pick<VideoEditClipTiming, 'speed'>): VideoEditRatio { return clip.speed ?? ONE }
-export function videoEditClipSpeedValue(clip: Pick<VideoEditClipTiming, 'speed'>): number { const speed = videoEditClipSpeed(clip); return speed.numerator / speed.denominator }
+/** 常数速度倍率；速度曲线片段给出曲线上的最高速度（只用于容差、取帧步长上限这类保守估计，换算请用下面的函数）。 */
+export function videoEditClipSpeedValue(clip: Pick<VideoEditClipTiming, 'speed' | 'timeRemap'>): number {
+  if (clip.timeRemap) return videoEditTimeRemapSpeedRange(clip.timeRemap).max
+  const speed = videoEditClipSpeed(clip); return speed.numerator / speed.denominator
+}
 /** 速度百分比（显示用，保留两位小数）。 */
 export function videoEditClipSpeedPercent(clip: Pick<VideoEditClipTiming, 'speed'>): number { return Math.round(videoEditClipSpeedValue(clip) * 10_000) / 100 }
 /** 片段是否改过速度或倒放（时间线上的速度标记、渲染换算路径据此区分）。 */
-export function videoEditClipRetimed(clip: Pick<VideoEditClipTiming, 'speed' | 'reverse' | 'frameHold'>): boolean {
-  return Boolean(clip.frameHold || clip.reverse) || (clip.speed !== undefined && clip.speed.numerator !== clip.speed.denominator)
+export function videoEditClipRetimed(clip: Pick<VideoEditClipTiming, 'speed' | 'reverse' | 'frameHold' | 'timeRemap'>): boolean {
+  return Boolean(clip.frameHold || clip.reverse || clip.timeRemap) || (clip.speed !== undefined && clip.speed.numerator !== clip.speed.denominator)
+}
+/** 保持音调与变调的时间拉伸器（混音与声音内容指纹共用；换引擎或预设时修改）。 */
+export const VIDEO_EDIT_AUDIO_STRETCH_ENGINE = 'signalsmith-stretch@1.3.2/preset-default'
+/** 保持音调的速度范围（时间拉伸器）：超出时声音降级为磁带式重采样，音调随速度变化。 */
+export const VIDEO_EDIT_PITCH_STRETCH_MIN = 0.25
+export const VIDEO_EDIT_PITCH_STRETCH_MAX = 4
+export type VideoEditClipAudioMode = 'direct' | 'resample' | 'stretch'
+/** 片段用到的速度范围（常数速度时两端相同；定格为 0）。 */
+export function videoEditClipSpeedRange(clip: Pick<VideoEditClipTiming, 'speed' | 'frameHold' | 'timeRemap'>): { min: number; max: number } {
+  if (clip.frameHold) return { min: 0, max: 0 }
+  if (clip.timeRemap) return videoEditTimeRemapSpeedRange(clip.timeRemap)
+  const value = videoEditClipSpeedValue(clip)
+  return { min: value, max: value }
+}
+/** 变速保持音调或变调时速度是否超出拉伸范围（界面提示与混音降级同一判断）。 */
+export function videoEditClipPitchStretchOutOfRange(clip: Pick<VideoEditClipTiming, 'speed' | 'frameHold' | 'timeRemap'>): boolean {
+  const range = videoEditClipSpeedRange(clip)
+  return range.min < VIDEO_EDIT_PITCH_STRETCH_MIN - 1e-9 || range.max > VIDEO_EDIT_PITCH_STRETCH_MAX + 1e-9
+}
+/**
+ * 声音怎么跟随速度：`direct` 原速直读；`resample` 按位置重采样（磁带式，音调随速度变化）；`stretch` 时间拉伸器
+ * （保持音调或变调）。保持音调在速度超出 25%–400% 时降级为重采样。
+ */
+export function videoEditClipAudioMode(clip: Pick<VideoEditClipTiming, 'speed' | 'reverse' | 'frameHold' | 'timeRemap'> & { preservePitch?: boolean; pitchSemitones?: number }): VideoEditClipAudioMode {
+  const retimed = videoEditClipRetimed(clip)
+  const wantsStretch = Boolean(clip.pitchSemitones) || retimed && Boolean(clip.preservePitch)
+  if (wantsStretch && !clip.frameHold && !videoEditClipPitchStretchOutOfRange(clip)) return 'stretch'
+  return retimed ? 'resample' : 'direct'
 }
 /** 速度为 1 时去掉字段（旧文件与未变速片段保持原样）。 */
 function speedFields(speed: VideoEditRatio): { speed?: VideoEditRatio } { return speed.numerator === speed.denominator ? {} : { speed } }
 
+const headSeconds = (clip: VideoEditSourceTime): number => videoEditSourceSeconds(clip)
+const fpsOf = (rate: VideoEditRatio): number => rate.numerator / rate.denominator
+/** 源秒转成存储用的源时间（微秒 + 纳秒级余数）；早于素材开头时按 holdBeforeZero 处理。 */
+function remapSourceTime(seconds: number, holdBeforeZero: boolean, transparent = false): VideoEditSourceTime | undefined {
+  const total = seconds * 1e6
+  if (total < -1e-6) {
+    if (holdBeforeZero) return { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
+    if (transparent) return undefined
+    throw new Error('源入点不能早于素材开始。')
+  }
+  let whole = Math.floor(Math.max(0, total) + 1e-9); let nanos = Math.round((Math.max(0, total) - whole) * 1000)
+  if (nanos >= 1000) { whole += 1; nanos -= 1000 }
+  return { sourceInUs: whole, sourceRemainder: nanos > 0 ? reduce(nanos, 1000) : { numerator: 0, denominator: 1 } }
+}
+/** 速度曲线片段：时间线经过 `elapsed` 秒（相对片段开头）时的源秒（绝对）。 */
+function remapSeconds(clip: VideoEditClipTiming & { timeRemap: VideoEditTimeRemap }, elapsed: number): number {
+  const along = videoEditTimeRemapSourceAt(clip.timeRemap, elapsed)
+  return clip.reverse ? headSeconds(clip) - along : headSeconds(clip) + along
+}
+/** 速度曲线片段：源秒（绝对）对应的时间线经过秒数（相对片段开头）。 */
+function remapElapsed(clip: VideoEditClipTiming & { timeRemap: VideoEditTimeRemap }, seconds: number): number {
+  return videoEditTimeRemapElapsedAt(clip.timeRemap, clip.reverse ? headSeconds(clip) - seconds : seconds - headSeconds(clip))
+}
+function remapped(clip: VideoEditClipTiming): clip is VideoEditClipTiming & { timeRemap: VideoEditTimeRemap } { return Boolean(clip.timeRemap) && !clip.frameHold }
 /** 时间线一帧在源素材里走多远：等效“帧率” = 序列帧率 / 速度。 */
 function sourceStep(rate: VideoEditRatio, speed: VideoEditRatio): VideoEditRatio {
   return { numerator: rate.numerator * speed.denominator, denominator: rate.denominator * speed.numerator }
@@ -52,13 +112,19 @@ function sourceStep(rate: VideoEditRatio, speed: VideoEditRatio): VideoEditRatio
  * 沿播放方向前进 `frames` 个时间线帧后的源时间（负数后退）：正放向后、倒放向前。修剪入点、拆分出的右段、
  * 外滑、覆盖切出的后半段都用它。`holdBeforeZero` 同 `offsetVideoEditSource`（只给静态绘制的过渡余量用）。
  */
-export function advanceVideoEditClipSource(clip: VideoEditClipTiming, frames: number, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime {
+export function advanceVideoEditClipSource(clip: VideoEditClipTiming, frames: number, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime & { timeRemap?: VideoEditTimeRemap } {
   if (!frames || clip.frameHold) return { sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder }
+  if (remapped(clip)) {
+    // 开头沿播放方向移动：曲线点随源内容留在原处（相对新开头平移）。
+    const along = videoEditTimeRemapSourceAt(clip.timeRemap, frames / fpsOf(rate))
+    return { ...remapSourceTime(clip.reverse ? headSeconds(clip) - along : headSeconds(clip) + along, holdBeforeZero)!, timeRemap: shiftVideoEditTimeRemap(clip.timeRemap, along) }
+  }
   const source = { sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder }
   return offsetVideoEditSource(source, clip.reverse ? -frames : frames, sourceStep(rate, videoEditClipSpeed(clip)), holdBeforeZero)
 }
 /** 时间线上片段第 `offset` 帧（相对片段起点，可以在片段外：过渡余量）显示的源时间，精确有理数。 */
 export function videoEditClipSourceTimeAt(clip: VideoEditClipTiming, offset: number, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime {
+  if (remapped(clip)) return remapSourceTime(remapSeconds(clip, (clip.reverse ? offset + 1 : offset) / fpsOf(rate)), holdBeforeZero)!
   if (!Number.isInteger(offset)) {
     const { numerator, denominator } = videoEditFrameFraction(offset)
     const sampled = videoEditClipMotionSourceTimeAt(clip, numerator, denominator, rate, holdBeforeZero)
@@ -71,6 +137,7 @@ export function videoEditClipSourceTimeAt(clip: VideoEditClipTiming, offset: num
 export function videoEditClipSourceTimeAtFraction(clip: VideoEditClipTiming, offset: VideoEditFrameOffset, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime {
   if (!Number.isSafeInteger(offset.numerator) || !Number.isSafeInteger(offset.denominator) || offset.denominator <= 0) throw new Error('子帧偏移需要安全整数分子及正分母。')
   if (clip.frameHold) return { sourceInUs: clip.sourceInUs, sourceRemainder: { ...clip.sourceRemainder } }
+  if (remapped(clip)) return offset.numerator === 0 && !clip.reverse ? { sourceInUs: clip.sourceInUs, sourceRemainder: { ...clip.sourceRemainder } } : remapSourceTime(remapSeconds(clip, (offset.numerator / offset.denominator + (clip.reverse ? 1 : 0)) / fpsOf(rate)), holdBeforeZero)!
   const numerator = clip.reverse ? -(BigInt(offset.numerator) + BigInt(offset.denominator)) : BigInt(offset.numerator)
   if (numerator < BigInt(Number.MIN_SAFE_INTEGER) || numerator > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('子帧偏移超出安全整数范围。')
   const source = offsetVideoEditSourceFraction(clip, { numerator: Number(numerator), denominator: offset.denominator }, sourceStep(rate, videoEditClipSpeed(clip)), holdBeforeZero)
@@ -82,6 +149,10 @@ export function videoEditClipSourceTimeAtFraction(clip: VideoEditClipTiming, off
  * editing APIs remain strict. Reverse retains the same one-frame phase. */
 export function videoEditClipMotionSourceTimeAt(clip: VideoEditClipTiming, numerator: bigint, denominator: bigint, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime | undefined {
   if (clip.frameHold) return { sourceInUs: clip.sourceInUs, sourceRemainder: { ...clip.sourceRemainder } }
+  if (remapped(clip)) {
+    if (numerator === 0n && !clip.reverse) return { sourceInUs: clip.sourceInUs, sourceRemainder: { ...clip.sourceRemainder } }
+    return remapSourceTime(remapSeconds(clip, (Number(numerator) / Number(denominator) + (clip.reverse ? 1 : 0)) / fpsOf(rate)), holdBeforeZero, true)
+  }
   const frames = clip.reverse ? -(numerator + denominator) : numerator
   const source = sampleVideoEditSourceFraction(clip, frames, denominator, sourceStep(rate, videoEditClipSpeed(clip)), holdBeforeZero)
   return source && frames === 0n ? { sourceInUs: clip.sourceInUs, sourceRemainder: { ...clip.sourceRemainder } } : source
@@ -89,29 +160,44 @@ export function videoEditClipMotionSourceTimeAt(clip: VideoEditClipTiming, numer
 /** 同上，浮点秒；`frame` 是序列帧号。 */
 export function videoEditClipSourceSecondsAt(clip: VideoEditClipTiming, frame: number, fps: number): number {
   if (clip.frameHold) return videoEditSourceSeconds(clip)
+  if (remapped(clip)) return remapSeconds(clip, (frame - clip.start + (clip.reverse ? 1 : 0)) / fps)
   const offset = frame - clip.start; const step = videoEditClipSpeedValue(clip) / fps
   return clip.reverse ? videoEditSourceSeconds(clip) - (offset + 1) * step : videoEditSourceSeconds(clip) + offset * step
 }
 /** 时间线一帧所覆盖源区间的中点（秒）：取参考画面时落在源帧中间，避免解码成前一帧。 */
 export function videoEditClipSourceMidSecondsAt(clip: VideoEditClipTiming, frame: number, fps: number): number {
   if (clip.frameHold) return videoEditSourceSeconds(clip)
+  if (remapped(clip)) return remapSeconds(clip, (frame - clip.start + 0.5) / fps)
   return videoEditClipSourceSecondsAt(clip, frame, fps) + 0.5 * videoEditClipSpeedValue(clip) / fps
 }
 /** 连续时间（声音）：序列时间 `seconds` 对应的源时间；倒放时随序列时间减小。 */
 export function videoEditClipSourceSecondsAtTime(clip: VideoEditClipTiming, seconds: number, fps: number): number {
   if (clip.frameHold) return videoEditSourceSeconds(clip)
+  if (remapped(clip)) return remapSeconds(clip, seconds - clip.start / fps)
   const elapsed = (seconds - clip.start / fps) * videoEditClipSpeedValue(clip)
   return clip.reverse ? videoEditSourceSeconds(clip) - elapsed : videoEditSourceSeconds(clip) + elapsed
 }
 /** 片段用掉的源时长（秒）。 */
-export function videoEditClipSourceSpanSeconds(clip: Pick<VideoEditClipTiming, 'duration' | 'speed' | 'frameHold'>, fps: number): number { return clip.frameHold ? 0 : clip.duration * videoEditClipSpeedValue(clip) / fps }
+export function videoEditClipSourceSpanSeconds(clip: Pick<VideoEditClipTiming, 'duration' | 'speed' | 'frameHold' | 'timeRemap'>, fps: number): number {
+  if (clip.frameHold) return 0
+  return clip.timeRemap ? videoEditTimeRemapSourceAt(clip.timeRemap, clip.duration / fps) : clip.duration * videoEditClipSpeedValue(clip) / fps
+}
+/** 平均速度（源时长 / 时间线时长）：常数速度片段就是其速度。 */
+export function videoEditClipAverageSpeed(clip: Pick<VideoEditClipTiming, 'duration' | 'speed' | 'frameHold' | 'timeRemap'>, fps: number): number {
+  return clip.timeRemap && !clip.frameHold ? videoEditClipSourceSpanSeconds(clip, fps) * fps / clip.duration : videoEditClipSpeedValue(clip)
+}
 /** 片段用到的源范围 [较早, 较晚]（秒）。 */
 export function videoEditClipSourceRange(clip: VideoEditClipTiming, fps: number): { from: number; to: number } {
   const head = videoEditSourceSeconds(clip); const span = videoEditClipSourceSpanSeconds(clip, fps)
   return clip.reverse ? { from: head - span, to: head } : { from: head, to: head + span }
 }
-/** 一段源时长（秒）在这个片段的速度下占多少个完整时间线帧。 */
-function sourceToFrames(clip: Pick<VideoEditClipTiming, 'speed'>, seconds: number, fps: number): number {
+/** 一段源时长（秒）在这个片段的速度下占多少个完整时间线帧；速度曲线片段按开头之前（head）或结尾之后（tail）的外延速度。 */
+function sourceToFrames(clip: VideoEditClipTiming, seconds: number, fps: number, edge: 'head' | 'tail' = 'head'): number {
+  if (remapped(clip)) {
+    const span = videoEditClipSourceSpanSeconds(clip, fps)
+    const elapsed = edge === 'head' ? -videoEditTimeRemapElapsedAt(clip.timeRemap, -seconds) : videoEditTimeRemapElapsedAt(clip.timeRemap, span + seconds) - clip.duration / fps
+    return Math.max(0, Math.floor(elapsed * fps + 1e-6))
+  }
   return Math.max(0, Math.floor(seconds * fps / videoEditClipSpeedValue(clip) + 1e-6))
 }
 /**
@@ -127,13 +213,17 @@ export function videoEditClipHeadRoom(clip: VideoEditClipTiming, fps: number, so
 export function videoEditClipTailRoom(clip: VideoEditClipTiming, fps: number, sourceDurationSeconds?: number): number {
   if (clip.frameHold) return Infinity
   const range = videoEditClipSourceRange(clip, fps)
-  if (clip.reverse) return sourceToFrames(clip, range.from, fps)
-  return sourceDurationSeconds === undefined ? Infinity : sourceToFrames(clip, sourceDurationSeconds - range.to, fps)
+  if (clip.reverse) return sourceToFrames(clip, range.from, fps, 'tail')
+  return sourceDurationSeconds === undefined ? Infinity : sourceToFrames(clip, sourceDurationSeconds - range.to, fps, 'tail')
 }
 /** 片段开头之前能露出的源内容按秒计（声音在入点前余量不足的部分静音）。 */
 export function videoEditClipHeadRoomSeconds(clip: VideoEditClipTiming, sourceDurationSeconds?: number): number {
   if (clip.frameHold) return Infinity
   const head = videoEditSourceSeconds(clip)
+  if (remapped(clip)) {
+    const room = clip.reverse ? sourceDurationSeconds === undefined ? Infinity : Math.max(0, sourceDurationSeconds - head) : head
+    return Number.isFinite(room) ? -videoEditTimeRemapElapsedAt(clip.timeRemap, -room) : Infinity
+  }
   if (!clip.reverse) return head / videoEditClipSpeedValue(clip)
   return sourceDurationSeconds === undefined ? Infinity : Math.max(0, sourceDurationSeconds - head) / videoEditClipSpeedValue(clip)
 }
@@ -147,6 +237,7 @@ export function videoEditClipWithinSource(clip: VideoEditClipTiming, fps: number
  * 倒放 `start + 源入点·fps/速度`；两个状态锚点之差就是内容在时间线上的位移。
  */
 export function videoEditClipSourceAnchor(clip: VideoEditClipTiming, fps: number): number {
+  if (remapped(clip)) return clip.start + remapElapsed(clip, 0) * fps
   const frames = videoEditSourceSeconds(clip) * fps / videoEditClipSpeedValue(clip)
   return clip.reverse ? clip.start + frames : clip.start - frames
 }
@@ -158,7 +249,7 @@ export function videoEditClipContentShift(previous: VideoEditClipTiming, current
 export function videoEditClipFrameAtSource(clip: VideoEditClipTiming, seconds: number, fps: number): number | undefined {
   if (clip.frameHold) return Math.abs(seconds - videoEditSourceSeconds(clip)) < 1e-6 ? clip.start : undefined
   const step = videoEditClipSpeedValue(clip) / fps
-  const offset = clip.reverse ? Math.ceil((videoEditSourceSeconds(clip) - seconds) / step - 1e-6) - 1 : Math.floor((seconds - videoEditSourceSeconds(clip)) / step + 1e-6)
+  const offset = remapped(clip) ? clip.reverse ? Math.ceil(remapElapsed(clip, seconds) * fps - 1e-6) - 1 : Math.floor(remapElapsed(clip, seconds) * fps + 1e-6) : clip.reverse ? Math.ceil((videoEditSourceSeconds(clip) - seconds) / step - 1e-6) - 1 : Math.floor((seconds - videoEditSourceSeconds(clip)) / step + 1e-6)
   const range = videoEditClipSourceRange(clip, fps)
   // 半开区间：用到的范围末端那一刻不属于片段。
   if (seconds < range.from - 1e-6 || seconds >= range.to - 1e-9) return undefined
@@ -166,6 +257,7 @@ export function videoEditClipFrameAtSource(clip: VideoEditClipTiming, seconds: n
 }
 /** Continuous boundary mapping for source intervals (text editing); unlike frame sampling this has no reverse-frame offset. */
 export function videoEditClipFrameBoundaryAtSource(clip: VideoEditClipTiming, seconds: number, fps: number): number {
+  if (remapped(clip)) return clip.start + remapElapsed(clip, seconds) * fps
   const elapsed = (seconds - videoEditSourceSeconds(clip)) * fps / videoEditClipSpeedValue(clip)
   return clip.start + (clip.reverse ? -elapsed : elapsed)
 }
@@ -173,8 +265,13 @@ export function videoEditClipFrameBoundaryAtSource(clip: VideoEditClipTiming, se
 export function splitVideoEditClipSource(clip: VideoEditClipTiming, left: number, rate: VideoEditRatio): VideoEditSourceTime { return advanceVideoEditClipSource(clip, left, rate) }
 
 /** 比率拉伸（R）的时长范围：拉伸后速度须在 1%–10000% 之间。 */
-export function videoEditStretchDurationLimits(clip: Pick<VideoEditClipTiming, 'duration' | 'speed' | 'frameHold'>): { min: number; max: number } {
+export function videoEditStretchDurationLimits(clip: Pick<VideoEditClipTiming, 'duration' | 'speed' | 'frameHold' | 'timeRemap'>): { min: number; max: number } {
   if (clip.frameHold) return { min: 1, max: Number.MAX_SAFE_INTEGER }
+  if (clip.timeRemap) {
+    // 曲线整体缩放：最快处不超过 10000%，最慢处不低于 1%。
+    const range = videoEditTimeRemapSpeedRange(clip.timeRemap)
+    return { min: Math.max(1, Math.ceil(clip.duration * range.max / VIDEO_EDIT_TIME_REMAP_SPEED_MAX - 1e-9)), max: Math.max(1, Math.floor(clip.duration * range.min / VIDEO_EDIT_TIME_REMAP_SPEED_MIN + 1e-9)) }
+  }
   const work = clip.duration * videoEditClipSpeedValue(clip)
   return { min: Math.max(1, Math.ceil(work / VIDEO_EDIT_SPEED_MAX - 1e-9)), max: Math.max(1, Math.floor(work / VIDEO_EDIT_SPEED_MIN + 1e-9)) }
 }
@@ -186,6 +283,7 @@ export function stretchVideoEditClip<T extends VideoEditClipTiming>(clip: T, dur
   if (clip.frameHold) return { ...clip, duration: Math.max(1, Math.round(duration)) }
   const limits = videoEditStretchDurationLimits(clip)
   const target = Math.max(limits.min, Math.min(limits.max, Math.round(duration)))
+  if (clip.timeRemap) return { ...clip, duration: target, timeRemap: scaleVideoEditTimeRemap(clip.timeRemap, clip.duration / target) }
   const speed = videoEditClipSpeed(clip)
   let next = reduce(speed.numerator * clip.duration, speed.denominator * target)
   if (next.numerator > 1_000_000 || next.denominator > 1_000_000) next = reduce(Math.max(1, Math.floor(next.numerator / next.denominator * SPEED_RESOLUTION + 1e-9)), SPEED_RESOLUTION)
@@ -204,18 +302,42 @@ export function changeVideoEditClipSpeed<T extends VideoEditClipTiming>(clip: T,
   if (clip.frameHold) throw new Error('定格片段不播放源内容，请调整其持续时间。')
   const value = speed.numerator / speed.denominator
   if (!(value >= VIDEO_EDIT_SPEED_MIN - 1e-12 && value <= VIDEO_EDIT_SPEED_MAX + 1e-12)) throw new Error('速度须在 1% 到 10000% 之间。')
+  // 速度曲线与常数速度互斥：设常数速度即取代曲线，用到的源内容从开头算起不变。
   const retimed = { ...clip, ...speedFields(speed) }
   if (!speedFields(speed).speed) delete retimed.speed
-  const ideal = Math.max(1, Math.round(clip.duration * videoEditClipSpeedValue(clip) / value))
+  delete retimed.timeRemap
+  const ideal = Math.max(1, Math.round(videoEditClipSourceSpanSeconds(clip, fps) * fps / value))
   const head = videoEditSourceSeconds(clip)
   const available = clip.reverse ? head : options.sourceDurationSeconds === undefined ? Infinity : options.sourceDurationSeconds - head
   const fit = Number.isFinite(available) ? Math.floor(available * fps / value + 1e-6) : Infinity
   return { ...retimed, duration: Math.max(1, Math.min(ideal, fit, options.maxDuration ?? Infinity)) }
 }
+/**
+ * 设置或移除速度曲线（时间重映射）：用到的源内容不变，时长按新曲线重新积分（移除时回到 100% 原速）；
+ * 曲线取代常数速度。`maxDuration` 为后面片段让出的空间，放不下时从结尾截短。
+ */
+export function setVideoEditClipTimeRemap<T extends VideoEditClipTiming>(clip: T, remap: VideoEditTimeRemap | null, fps: number, maxDuration = Infinity): T {
+  if (clip.frameHold) throw new Error('定格片段不播放源内容，不能设置速度曲线。')
+  const span = videoEditClipSourceSpanSeconds(clip, fps)
+  const next = { ...clip }
+  delete next.speed; delete next.timeRemap
+  if (remap) next.timeRemap = videoEditTimeRemapSchema.parse(remap)
+  const ideal = remap ? videoEditTimeRemapElapsedAt(next.timeRemap!, span) * fps : span * fps
+  // 向下取整：时长对应的素材不超过原来用到的范围（不会越过素材结尾）。
+  return { ...next, duration: Math.max(1, Math.min(Math.floor(ideal + 1e-6), maxDuration)) }
+}
 /** 切换倒放：用到的源范围不变，只换播放方向（源入点移到范围的另一端）。 */
 export function setVideoEditClipReverse<T extends VideoEditClipTiming>(clip: T, reverse: boolean, rate: VideoEditRatio): T {
   if (clip.frameHold) throw new Error('定格片段没有播放方向。')
   if (Boolean(clip.reverse) === reverse) return clip
+  if (remapped(clip)) {
+    // 用到的源范围不变；曲线点按源位置镜像，速度在每个源位置保持不变。
+    const span = videoEditClipSourceSpanSeconds(clip, fpsOf(rate))
+    const head = remapSourceTime(clip.reverse ? headSeconds(clip) - span : headSeconds(clip) + span, false)!
+    const mirrored = { ...clip, ...head, timeRemap: mirrorVideoEditTimeRemap(clip.timeRemap, span), ...(reverse ? { reverse: true } : {}) }
+    if (!reverse) delete mirrored.reverse
+    return mirrored
+  }
   const head = advanceVideoEditClipSource(clip, clip.duration, rate)
   const next = { ...clip, ...head, ...(reverse ? { reverse: true } : {}) }
   if (!reverse) delete next.reverse

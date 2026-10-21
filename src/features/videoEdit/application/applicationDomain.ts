@@ -64,8 +64,8 @@ import { placeVideoEditCreativeResultFromCapability } from './videoEditResultCap
 import { recoverVideoEditPlacement } from './videoEditPlacementRecovery'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { handleVideoEditInPlaceCapability } from './videoEditInPlaceCapability'
-import { rippleVideoEditClipSpeedCapability } from '@/core/application-control/domains/videoEdit/videoEditSpeedCapability'
-import { rippleVideoEditClipSpeed } from './videoEditSpeedCapability'
+import { rampVideoEditClipSpeedCapability, rippleVideoEditClipSpeedCapability } from '@/core/application-control/domains/videoEdit/videoEditSpeedCapability'
+import { rampVideoEditClipSpeed, rippleVideoEditClipSpeed } from './videoEditSpeedCapability'
 import { nestVideoEditClipsCapability } from '@/core/application-control/domains/videoEdit/videoEditNestCapability'
 import { nestVideoEditClipsFromCapability } from './videoEditNestCapability'
 import { measureVideoEditLoudnessCapability, normalizeVideoEditLoudnessCapability } from '@/core/application-control/domains/videoEdit/videoEditLoudnessCapabilities'
@@ -197,6 +197,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (subtitles) return subtitles
       // 原地生成（4.12）：与时间线右键同一个服务
       if (definition.id === rippleVideoEditClipSpeedCapability.id) return rippleVideoEditClipSpeed(raw, context)
+      if (definition.id === rampVideoEditClipSpeedCapability.id) return rampVideoEditClipSpeed(raw, context)
       if (definition.id === nestVideoEditClipsCapability.id) return nestVideoEditClipsFromCapability(raw, context)
       const inPlace = await handleVideoEditInPlaceCapability(definition.id, raw, context)
       if (inPlace) return inPlace

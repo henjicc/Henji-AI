@@ -63,7 +63,7 @@ function builtinGraphic(template: TitleTemplate, p: TitleTemplateParameters, wid
   return videoEditGraphicSchema.parse({ width, height, objects })
 }
 export function captureTitleTemplate(name: string, sequence: VideoEditSequence, clips: readonly VideoEditClip[]): TitleTemplate {
-  if (!clips.length || clips.some(clip => !['text', 'graphic'].includes(clip.kind) || clip.speed || clip.reverse || clip.effects?.length || clip.follow)) throw new Error('请选择原速文字或图形片段；含效果或跟随时请先移除这些绑定。')
+  if (!clips.length || clips.some(clip => !['text', 'graphic'].includes(clip.kind) || clip.speed || clip.timeRemap || clip.reverse || clip.effects?.length || clip.follow)) throw new Error('请选择原速文字或图形片段；含效果或跟随时请先移除这些绑定。')
   const start = Math.min(...clips.map(clip => clip.start)); const track = Math.min(...clips.map(clip => clip.track)); const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
   const durationSeconds = (Math.max(...clips.map(clip => clip.start + clip.duration)) - start) / fps
   const style = clips.find(clip => clip.kind === 'text')?.textStyle ?? clips.flatMap(clip => clip.graphic?.objects ?? []).find(object => object.kind === 'text')?.textStyle

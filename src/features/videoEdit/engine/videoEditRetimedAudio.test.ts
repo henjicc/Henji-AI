@@ -7,7 +7,11 @@ import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './vide
 import { videoEditResampleAt, videoEditResampleKernel } from './videoEditRetimedAudio'
 
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
-beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {} })
+beforeAll(() => {
+  (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {}
+  // 拉伸器的 Emscripten 模块看到 WorkerGlobalScope 后按工作线程读 self.location。
+  ;(globalThis as { self?: unknown }).self ??= { location: { href: 'file:///' } }
+})
 
 const RATE = 48000
 /** 源：左声道 220 Hz 正弦、右声道伪随机噪声（任何一个样本错位都会改变结果）。 */

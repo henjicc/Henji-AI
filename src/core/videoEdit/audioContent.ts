@@ -2,6 +2,7 @@ import { audibleVideoEditClips, videoEditClipMedia, videoEditDuration, videoEdit
 import { activeVideoEditAudioEffects } from './compositing'
 import type { VideoEditKeyframe } from './keyframes'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from './sequenceGraph'
+import { VIDEO_EDIT_AUDIO_STRETCH_ENGINE } from './clipSpeed'
 import { videoEditTransitionMedium, videoEditTransitionWindow, type VideoEditTransitionWindow } from './transitions'
 
 function points(values: readonly VideoEditKeyframe[] | undefined): unknown[] {
@@ -34,6 +35,7 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
         return {
           start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder,
           speed: clip.speed ?? { numerator: 1, denominator: 1 }, reverse: clip.reverse ?? false, preservePitch: clip.preservePitch ?? false,
+          timeRemap: clip.timeRemap ?? null, pitchSemitones: clip.pitchSemitones ?? 0,
           volume: clip.disabledIntrinsicSections?.includes('audio') ? 1 : clip.volume, volumeCurve: points(clip.disabledIntrinsicSections?.includes('audio') ? undefined : clip.curves?.volume), fadeInFrames: clip.fadeInFrames ?? 0, fadeOutFrames: clip.fadeOutFrames ?? 0,
           audioMapping: clip.audioMapping,
           effects: activeVideoEditAudioEffects(clip).map(effect => ({ id: effect.builtin.id, amount: effect.amount, params: effect.builtin.params,
@@ -50,5 +52,6 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
     return index
   }
   content(snapshot, [])
-  return JSON.stringify(canonical(sequences))
+  // 拉伸引擎换版本时，保持音调与变调的声音随之改变。
+  return JSON.stringify(canonical([VIDEO_EDIT_AUDIO_STRETCH_ENGINE, sequences]))
 }

@@ -4,7 +4,7 @@ import { splitSubtitleText, wrapSubtitleText, ensureSubtitleDuration, type AutoS
 import { resolveSubtitleStyle, subtitleFrameBoundary } from './subtitleStyleProfiles'
 import { segmentTimedSubtitles, subtitleTokensFromCharacters, type SubtitlePause } from './subtitleSegmentation'
 import { joinAudioEditText } from '../audioEdit/captions'
-import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange, videoEditClipSpeedValue, type VideoEditClipTiming } from './clipSpeed'
+import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange, videoEditClipAverageSpeed, type VideoEditClipTiming } from './clipSpeed'
 import { videoEditFps, type VideoEditRatio } from './time'
 import type { VideoEditCaption } from './timedContent'
 import { bindVideoEditCaptionSpeech, type VideoEditCaptionSpeechWord } from './captionSpeech'
@@ -42,7 +42,7 @@ export async function buildSpeechSubtitles(original: string, timings: SpeechTimi
       token.endMs = Math.min(range.to * 1000, Math.max(token.endMs, item.endMs))
     }
     // Profile limits describe playback time, while aligner and energy clocks describe source time.
-    const speed = videoEditClipSpeedValue(clip)
+    const speed = videoEditClipAverageSpeed(clip, fps)
     const sourceOptions = { ...options, minDurationSeconds: settings.minDurationSeconds * speed, maxDurationSeconds: settings.maxDurationSeconds * speed,
       maxReadingSpeed: settings.maxReadingSpeed / speed, joinGapMs: settings.joinGapMs * speed,
       ...(settings.pauseSeconds === undefined ? {} : { pauseSeconds: settings.pauseSeconds * speed }) }

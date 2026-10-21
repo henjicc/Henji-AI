@@ -10,8 +10,8 @@ import type { VideoEditAudioChunk, VideoEditClipAudio } from './videoEditFrameSo
  *   预览与导出走同一个混音函数，所以结果相同。
  * - 加速时截止频率按每个输出样本走过的源样本数降低（抗混叠）；核宽度上限 32 个源样本（400% 以上只部分抗混叠，
  *   听感上那时已是快进音）。速度 100% 且位置落在整数样本上时结果就是原样本。
- * - “保持音调”不在这里：重采样后的声音音调随速度升降，由混音在效果链最前面加一级音调补偿
- *   （`VideoEditAudioEffectChain` 的 smbPitchShift 相位声码器，比例 1/速度，固定延迟，与 4.7c 同一套连续性与预读规则）。
+ * - 这是不保持音调（磁带式）的路径：音调随速度升降。保持音调与变调由拉伸器直接按源时间做时间拉伸
+ *   （`videoEditTimeStretch.ts`，Signalsmith Stretch），不再先重采样再补偿音调。
  */
 const KERNEL_ZEROS = 8
 const MAX_HALF_WIDTH = 32
@@ -41,12 +41,12 @@ export function videoEditResampleAt(plane: Float32Array, index: number, fraction
 }
 
 /** `start` 是缓冲第 0 个样本的绝对源样本号（源时间 × 采样率）。 */
-interface SourceBuffer { start: number; rate: number; planes: Float32Array[] }
+export interface VideoEditSourceBuffer { start: number; rate: number; planes: Float32Array[] }
 /**
  * 把 [from, to) 秒的源声音读成连续缓冲（已按声道映射混到输出声道）。缓冲以第一块的时间戳为原点；后续块按各自时间戳落位，
  * 块之间的空隙为静音。读取器的块落在同一采样网格上，所以缓冲原点不同的两次读取对同一源时刻给出同一样本。
  */
-async function readSourceBuffer(audio: VideoEditClipAudio, from: number, to: number, rate: number, outputs: number, gains?: number[][]): Promise<SourceBuffer | undefined> {
+export async function readVideoEditSourceBuffer(audio: VideoEditClipAudio, from: number, to: number, rate: number, outputs: number, gains?: number[][]): Promise<VideoEditSourceBuffer | undefined> {
   const blocks: Array<{ timestamp: number; sampleRate: number; planes: Float32Array[] }> = []
   for await (const chunk of audio.chunks(Math.max(0, from), to, rate)) {
     try { blocks.push({ timestamp: chunk.timestamp, sampleRate: chunk.sampleRate, planes: mapped(chunk, outputs, gains ?? videoEditDefaultAudioGains(chunk.numberOfChannels, outputs)) }) }
@@ -115,10 +115,12 @@ export async function mixVideoEditRetimedSound(request: VideoEditRetimedSoundReq
   for (const read of request.reads) {
     // 读取范围两端各留插值核的余量（按最低 8 kHz 源采样率估算，宁多勿少）。
     const margin = (MAX_HALF_WIDTH + 4) / 8000 + speed / rate
-    const buffer = await readSourceBuffer(read.audio, Math.min(...edges) - margin, Math.max(...edges) + margin, rate, request.channels, read.gains)
+    const buffer = await readVideoEditSourceBuffer(read.audio, Math.min(...edges) - margin, Math.max(...edges) + margin, rate, request.channels, read.gains)
     if (!buffer) continue
-    const { cutoff, halfWidth } = videoEditResampleKernel(speed * buffer.rate / rate)
+    // 抗混叠截止按局部速度：常数速度整段一样，速度曲线每 64 个样本按实际走过的源样本数更新一次。
+    let { cutoff, halfWidth } = videoEditResampleKernel(speed * buffer.rate / rate)
     for (let sample = first; sample < end; sample++) {
+      if (clip.timeRemap && (sample - first) % 64 === 0) ({ cutoff, halfWidth } = videoEditResampleKernel(Math.abs(sourceAt(sample + 64) - sourceAt(sample)) / 64 * buffer.rate))
       const position = sourceAt(sample) * buffer.rate
       const whole = Math.floor(position); const fraction = position - whole
       const gain = request.gainAt(sample)

@@ -1,4 +1,5 @@
 import { activeVideoEditEffects } from './compositing'
+import { VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE } from './timeRemap'
 import { videoEditTransitionClipIds } from './transitions'
 import { videoEditDuration, type VideoEditClip, type VideoEditComposition, type VideoEditSequence } from './document'
 
@@ -35,7 +36,7 @@ function hash(text: string): string {
 
 /** 声音相关字段不影响画面，修改音量不让预览文件失效。 */
 function pictureClip(clip: VideoEditClip): unknown {
-  const { volume: _volume, audioMapping: _mapping, preservePitch: _pitch, ...rest } = clip
+  const { volume: _volume, audioMapping: _mapping, preservePitch: _pitch, pitchSemitones: _semitones, ...rest } = clip
   return rest
 }
 
@@ -98,7 +99,8 @@ export function videoEditRenderWindows(document: VideoEditComposition, dependenc
   const visual = document.clips.filter(clip => clip.kind !== 'audio')
   const longest = Math.max(0, ...(document.transitions ?? []).map(transition => transition.durationFrames))
   const { clips: _clips, transitions: _transitions, captions: _captions, annotations: _annotations, markers: _markers, name: _name, media: _media, items: _items, sequences: _sequences, codeMaterials: _codeMaterials, revision: _revision, ...settings } = document
-  const base = JSON.stringify([VIDEO_EDIT_RENDER_CACHE_VERSION, settings, dependencies.fontRevision, dependencies.analysis])
+  // 速度曲线与补帧方式随片段进入窗口指纹；补帧实现换版本（如光流接入）时旧窗口失效。
+  const base = JSON.stringify([VIDEO_EDIT_RENDER_CACHE_VERSION, VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE, settings, dependencies.fontRevision, dependencies.analysis])
   const windows: VideoEditRenderWindow[] = []
   for (let index = 0; index * size < duration; index++) {
     const startFrame = index * size, endFrame = Math.min(duration, startFrame + size)

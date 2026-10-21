@@ -66,6 +66,25 @@ fn workingColor(c: vec4f) -> vec4f {
 }
 `
 
+/**
+ * 帧混合（时间重映射补帧 blend）：同一素材相邻两帧逐平面线性混合。YUV 与 RGB 之间是线性变换，按平面混合与先转 RGB
+ * 再混合结果相同，所以紧凑 4:2:0 帧的 Y、UV 平面与完整 RGBA 帧都用同一个着色器，输出格式与输入相同。
+ */
+export const VIDEO_EDIT_FRAME_BLEND_SHADER = `
+struct Vertex { @builtin(position) position: vec4f }
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
+ let uv = array<vec2f, 3>(vec2f(0,0), vec2f(0,2), vec2f(2,0))[i];
+ return Vertex(vec4f(uv.x * 2 - 1, 1 - uv.y * 2, 0, 1));
+}
+@group(0) @binding(0) var a: texture_2d<f32>;
+@group(0) @binding(1) var b: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> weight: vec4f;
+@fragment fn fs(v: Vertex) -> @location(0) vec4f {
+ let point = vec2u(v.position.xy);
+ return mix(textureLoad(a, point, 0), textureLoad(b, point, 0), weight.x);
+}
+`
+
 /** Snapshot copies of a decoder frame into owned memory; `rgba` writes either `rgba8unorm` or `rgba16float`. */
 export const VIDEO_EDIT_COPY_SHADER = VIDEO_EDIT_MEDIA_TRANSFER + `
 
