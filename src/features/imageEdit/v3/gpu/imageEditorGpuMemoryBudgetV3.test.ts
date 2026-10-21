@@ -10,6 +10,7 @@ import {
 } from '@/core/imageEdit/v3'
 import type { ImageEditJsonObjectV3 } from '@/core/imageEdit/v3'
 import { createDefaultVgpuGlowOperationParams } from '@/core/imageEdit/vgpuGlowParams'
+import { COLOR_GRADE_TABLE_ROWS, COLOR_GRADE_TABLE_WIDTH } from '@/core/imaging/adjustments/unifiedGrade'
 import { estimateImageEditorGpuGraphResidentBytesV3 } from './imageEditorGpuMemoryBudgetV3'
 import { compileImageEditorGpuRasterSceneV3 } from './imageEditorGpuRasterSceneCompilerV3'
 import { resolveImageEditorGpuEffectViewportV3 } from './imageEditorGpuEffectViewportV3'
@@ -81,12 +82,14 @@ it('共享调整的边界与 ping-pong target 进入预算；中性不保留额�
   const estimate = (): number => { const compiled = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: source, byteLength: 3200000, mediaType: 'image/png' }]); if (!compiled.supported) throw new Error(compiled.reason); return estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [1000, 800]) }
   const neutral = estimate()
   const layer = document.layers[1]; if (layer.type !== 'adjustment') throw new Error('缺少调整')
+  // Any non-neutral grade uploads one parameter/curve table (float RGBA).
+  const table = COLOR_GRADE_TABLE_WIDTH * COLOR_GRADE_TABLE_ROWS * 16
   // A single pointwise stage writes straight to the output: only the three boundary targets.
   layer.params = { exposure: 1 }
-  expect(estimate() - neutral).toBe(3 * 1000 * 800 * 16)
+  expect(estimate() - neutral).toBe(3 * 1000 * 800 * 16 + table)
   // Several stages still ping-pong through two full-size scratch targets.
   layer.params = { exposure: 1, vignette_amount: -30 }
-  expect(estimate() - neutral).toBe(5 * 1000 * 800 * 16)
+  expect(estimate() - neutral).toBe(5 * 1000 * 800 * 16 + table)
 })
 
 it.each(['stable', 'export'] as const)('%s：8K 强高斯的真实局部纹理/halo/mip 预算低于256MiB，不预留整幅纹理', quality => {

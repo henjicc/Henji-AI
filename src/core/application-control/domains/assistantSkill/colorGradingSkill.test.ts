@@ -22,7 +22,7 @@ describe('调色技能只引用真实契约', () => {
     expect(mentioned.filter(name => !name.endsWith('_') && !keys.has(name) && !/^(before_grade|after_grade|hue_offset)/.test(name) && !name.endsWith('_percent'))).toEqual([])
   })
   it('风格词典与代码数据一致，每个配方在剪辑与图片参数校验中都合法', () => {
-    const recipes = [...styles.matchAll(/```json\n(.+)\n```/g)].map(match => JSON.parse(match[1]) as { id: string; params: Record<string, number> })
+    const recipes = [...styles.matchAll(/```json\r?\n(.+?)\r?\n```/g)].map(match => JSON.parse(match[1]) as { id: string; params: Record<string, number> })
     expect(recipes).toEqual(COLOR_GRADE_STYLES.map(style => ({ id: style.id, params: style.params })))
     for (const style of COLOR_GRADE_STYLES) {
       expect(() => normalizeVideoEditBuiltinParams('color_grade', style.params), style.id).not.toThrow()
