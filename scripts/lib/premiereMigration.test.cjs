@@ -147,3 +147,10 @@ test('extractor follows UUID references and ignores nested view-state ObjectID c
   const code = `import sys, gzip, struct, base64, xml.etree.ElementTree as E\nsys.path.insert(0, 'scripts/lib')\nfrom premiereMigrationExtract import ProjectGraph\nx=b'''<PremiereData><View ObjectID="view"><Nested ObjectID="1"/></View><Sequence ObjectUID="main"><Name>Same</Name><TrackGroups><TrackGroup><Second ObjectRef="1"/></TrackGroup></TrackGroups></Sequence><Sequence ObjectUID="backup"><Name>Same</Name></Sequence><VideoTrackGroup ObjectID="1"><TrackGroup><Tracks/><FrameRate>4233600000</FrameRate></TrackGroup><FrameRect>0,0,3840,2160</FrameRect></VideoTrackGroup></PremiereData>'''\ng=ProjectGraph(gzip.compress(x))\nresult=g.extract('main')\nassert len(result['sequences']) == 1\nassert result['sequences'][0]['frameRect'] == '0,0,3840,2160'\ndef string(s):\n b=s.encode('utf-8'); chunk=struct.pack('<I',len(b))+b+b'\\0'; return chunk+b'\\0'*((-len(chunk))%4)\nblock=E.fromstring('<Block><FormattedTextData/></Block>')\ng.ids['caption']=block\nitem=E.fromstring('<CaptionDataClipTrackItem ObjectID="caption-item"><BlockVector><BlockVectorItem ObjectRef="caption"/></BlockVector></CaptionDataClipTrackItem>')\ntext='字幕 text'\nblock[0].text=base64.b64encode(string(text)+string('HarmonyOS Sans')).decode()\nassert g.caption(item)==text\nblock[0].text=base64.b64encode(string(text)+string('另一句')).decode()\ntry:\n g.caption(item)\n raise AssertionError('Ambiguous caption must fail')\nexcept ValueError:\n pass\n`
   execFileSync(python, ['-B', '-c', code], { windowsHide: true })
 })
+
+test('cover art in an audio file stays audio media', () => {
+  const result = build([seq('main', [track([clip('music', 0, 5)])])], undefined,
+    new Map([[file, { streams: [{ codec_type: 'video', codec_name: 'mjpeg', width: 360, height: 360, avg_frame_rate: '0/0', r_frame_rate: '90000/1', disposition: { attached_pic: 1 } }, { codec_type: 'audio' }], format: { duration: '30' } }]]))
+  const media = result.document.media[0]
+  assert.equal(media.kind, 'audio'); assert.equal(media.width, 0); assert.equal(media.frameRate, undefined); assert.equal(media.hasAudio, true)
+})

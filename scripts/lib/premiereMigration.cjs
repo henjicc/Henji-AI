@@ -83,7 +83,8 @@ function buildPremiereMigration(graph, probes, options) {
     if (!probe) throw new Error(`Missing media probe: ${raw.path}`)
     let item = itemByPath.get(raw.path)
     if (!item) {
-      const video = probe.streams.find(stream => stream.codec_type === 'video')
+      // Cover art in an audio file is an attached picture, not a picture track (same rule as the app's native probe).
+      const video = probe.streams.find(stream => stream.codec_type === 'video' && stream.disposition?.attached_pic !== 1)
       const hasAudio = probe.streams.some(stream => stream.codec_type === 'audio')
       const still = raw.streams.VideoStream?.IsStill === 'true'
       const kind = video ? still ? 'image' : 'video' : 'audio'
