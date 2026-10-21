@@ -26,6 +26,8 @@ export interface DocumentKindDescriptor<TContent = unknown> {
   readonly storage: DocumentStorageMode
   /** 当前内容版本（外壳里的 kindVersion）。 */
   readonly version: number
+  /** 本程序写出的内容需要的最低内容版本（外壳里的 kindMinReaderVersion）；只新增可选字段时保持不变。省略即等于 version。 */
+  readonly minReaderVersion?: number
   /** 内存形态（位置都是绝对路径）的内容 schema。 */
   readonly contentSchema: z.ZodType<TContent>
   /** Key N owns N → N+1; a missing step explicitly rejects old content. */

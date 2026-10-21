@@ -30,6 +30,7 @@ function validateReleasedCompatibility(formats, baseline, released, samples) {
     const versions = Object.keys(promise.versions).map(Number)
     if (current.version < Math.max(...versions)) errors.push(`禁止回退已发布版本：${id}`)
     if (promise.versions[current.version] && current.fingerprint !== promise.versions[current.version]) errors.push(`禁止改写已发布版本指纹：${id}/v${current.version}`)
+    if (promise.readers?.[current.version] !== undefined && (current.minReaderVersion ?? current.version) !== promise.readers[current.version]) errors.push(`禁止改写已发布版本的最低可读版本：${id}/v${current.version}`)
     const actual = samples(id)
     for (const [file, digest] of Object.entries(promise.samples)) if (actual[file] !== digest) errors.push(`已发布黄金样本被修改或删除：${id}/${file}`)
   }
@@ -46,7 +47,7 @@ function validateReleaseHistory(previous, next) {
     if (!current) { errors.push(`受保护发布格式不可删除：${id}`); continue }
     if (!retainsRequirements(old.requiredFixtures, current.requiredFixtures ?? [])) errors.push(`受保护样本类型不可删除：${id}`)
     if (current.supportedFrom > old.supportedFrom) errors.push(`受保护支持下限不可提高：${id}`)
-    for (const section of ['versions', 'samples']) for (const [key, value] of Object.entries(old[section])) {
+    for (const section of ['versions', 'samples', 'readers']) for (const [key, value] of Object.entries(old[section] ?? {})) {
       if (current[section]?.[key] !== value) errors.push(`受保护发布快照不可改写：${id}/${section}/${key}`)
     }
   }
@@ -64,7 +65,8 @@ function createReleaseSnapshot(formats, baseline, previous, samples) {
     const old = previous.formats[format.id]
     next.formats[format.id] = { supportedFrom: old?.supportedFrom ?? baseline.formats[format.id].supportedFrom ?? 1,
       requiredFixtures: structuredClone(requirements(format)),
-      versions: { ...old?.versions, [format.version]: format.fingerprint }, samples: { ...old?.samples, ...samples(format.id) } }
+      versions: { ...old?.versions, [format.version]: format.fingerprint }, readers: { ...old?.readers, [format.version]: format.minReaderVersion ?? format.version },
+      samples: { ...old?.samples, ...samples(format.id) } }
   }
   return next
 }

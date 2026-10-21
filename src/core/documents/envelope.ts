@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
+import { persistenceForwardFields, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
+import { restoreForwardFields } from '../persistence/forwardCompat'
 
 /*
  * 文档文件外壳（实施方案 2.4）：剪辑、画布、口播、镜头参考各是一个 JSON 文件，外壳统一，
@@ -20,8 +21,12 @@ const isoTimestampSchema = z.iso.datetime({ offset: true })
 export interface DocumentEnvelope {
   format: typeof DOCUMENT_FORMAT
   envelopeVersion: number
+  /** 能读懂这个外壳的最低外壳版本。 */
+  minReaderVersion: number
   kind: string
   kindVersion: number
+  /** 能读懂 content 的最低内容版本；只新增可选字段时与旧版本相同。 */
+  kindMinReaderVersion: number
   id: string
   name: string
   createdAt: string
@@ -35,8 +40,10 @@ export interface DocumentEnvelope {
 export const documentEnvelopeSchema = z.object({
   format: z.literal(DOCUMENT_FORMAT),
   envelopeVersion: z.literal(DOCUMENT_ENVELOPE_VERSION),
+  minReaderVersion: z.number().int().positive().max(DOCUMENT_ENVELOPE_VERSION).optional(),
   kind: z.string().min(1).max(64),
   kindVersion: z.number().int().positive(),
+  kindMinReaderVersion: z.number().int().positive().optional(),
   id: documentIdSchema,
   name: z.string().min(1).max(255),
   createdAt: isoTimestampSchema,
@@ -58,10 +65,37 @@ export function documentEnvelopeVersion(raw: unknown): number {
   return raw && typeof raw === 'object' && 'envelopeVersion' in raw && typeof raw.envelopeVersion === 'number' ? raw.envelopeVersion : 0
 }
 
+/** 外壳自身的最低可读版本；缺省视为文件自身版本（不能被更旧的程序读取）。 */
+export function documentEnvelopeMinReaderVersion(raw: unknown): number | undefined {
+  return raw && typeof raw === 'object' && 'minReaderVersion' in raw && typeof raw.minReaderVersion === 'number' ? raw.minReaderVersion : undefined
+}
+
+/** 更新版本写出、本程序仍可读的外壳：保存时带回原版本戳与本程序不认识的外壳字段。 */
+const envelopeForward = new WeakMap<DocumentEnvelope, { envelopeVersion: number; minReaderVersion: number; fields: ReturnType<typeof persistenceForwardFields> }>()
+
 export function upgradeDocumentEnvelope(raw: unknown, backupPath?: string): DocumentEnvelope {
-  const input = raw && typeof raw === 'object' && !Array.isArray(raw) && !('envelopeVersion' in raw) ? { ...raw, envelopeVersion: 1 } : raw
-  const { draft, ...rest } = upgradePersistenceContent(documentEnvelopeContract, input, documentEnvelopeVersion(raw), backupPath) as z.infer<typeof documentEnvelopeSchema>
-  return { ...rest, ...(draft === true ? { draft: true as const } : {}) }
+  const version = documentEnvelopeVersion(raw)
+  const minReaderVersion = documentEnvelopeMinReaderVersion(raw)
+  const forward = version > DOCUMENT_ENVELOPE_VERSION
+  // 前向读取按本程序的外壳 schema 校验：版本字段换成当前值，原版本戳另行保存。
+  const input = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? { ...raw, ...(!('envelopeVersion' in raw) || forward ? { envelopeVersion: DOCUMENT_ENVELOPE_VERSION } : {}), ...(forward ? { minReaderVersion: DOCUMENT_ENVELOPE_VERSION } : {}) }
+    : raw
+  const parsed = upgradePersistenceContent(documentEnvelopeContract, input, version, backupPath, minReaderVersion) as z.infer<typeof documentEnvelopeSchema>
+  const { draft, minReaderVersion: _ignored, kindMinReaderVersion, ...rest } = parsed
+  const envelope: DocumentEnvelope = { ...rest, envelopeVersion: DOCUMENT_ENVELOPE_VERSION, minReaderVersion: DOCUMENT_ENVELOPE_VERSION,
+    kindMinReaderVersion: kindMinReaderVersion ?? rest.kindVersion, ...(draft === true ? { draft: true as const } : {}) }
+  if (forward) envelopeForward.set(envelope, { envelopeVersion: version, minReaderVersion: minReaderVersion!, fields: persistenceForwardFields(parsed) })
+  return envelope
+}
+
+/** 写回同一文件时调用：把源文件的前向外壳版本戳与未知字段带到新外壳；非前向文件原样返回。 */
+export function carryDocumentEnvelopeForward(source: DocumentEnvelope, next: DocumentEnvelope): DocumentEnvelope {
+  const forward = envelopeForward.get(source)
+  if (!forward) return next
+  const carried = { ...restoreForwardFields(next, forward.fields), envelopeVersion: forward.envelopeVersion, minReaderVersion: forward.minReaderVersion }
+  envelopeForward.set(carried, forward)
+  return carried
 }
 
 export class DocumentFormatError extends Error {
@@ -77,12 +111,14 @@ export function parseDocumentEnvelope(raw: unknown): DocumentEnvelope {
   if (!result.success) {
     throw new DocumentFormatError(`不是有效的痕迹AI文档：${result.error.issues[0]?.message ?? '格式错误'}`, { cause: result.error })
   }
-  const { draft, ...rest } = result.data
-  return buildDocumentEnvelope({ ...rest, draft: draft === true })
+  const { draft, minReaderVersion: _minReaderVersion, kindMinReaderVersion, ...rest } = result.data
+  return buildDocumentEnvelope({ ...rest, kindMinReaderVersion: kindMinReaderVersion ?? rest.kindVersion, draft: draft === true })
 }
 
-export interface DocumentEnvelopeFields extends Omit<DocumentEnvelope, 'format' | 'envelopeVersion' | 'draft'> {
+export interface DocumentEnvelopeFields extends Omit<DocumentEnvelope, 'format' | 'envelopeVersion' | 'minReaderVersion' | 'kindMinReaderVersion' | 'draft'> {
   draft: boolean
+  /** 省略时等于 kindVersion：本文件不能被更旧的内容版本读取。 */
+  kindMinReaderVersion?: number
 }
 
 /** 按固定字段顺序组装外壳，草稿标记只在为真时写出。 */
@@ -90,8 +126,10 @@ export function buildDocumentEnvelope(fields: DocumentEnvelopeFields): DocumentE
   return {
     format: DOCUMENT_FORMAT,
     envelopeVersion: DOCUMENT_ENVELOPE_VERSION,
+    minReaderVersion: DOCUMENT_ENVELOPE_VERSION,
     kind: fields.kind,
     kindVersion: fields.kindVersion,
+    kindMinReaderVersion: fields.kindMinReaderVersion ?? fields.kindVersion,
     id: fields.id,
     name: fields.name,
     createdAt: fields.createdAt,

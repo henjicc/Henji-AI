@@ -6,6 +6,7 @@ import {
   MAX_DOCUMENT_FILE_BYTES,
   parseDocumentRawText,
   documentEnvelopeContract,
+  documentEnvelopeMinReaderVersion,
   documentEnvelopeVersion,
   upgradeDocumentEnvelope,
   toTimestamp,
@@ -112,12 +113,14 @@ export async function loadDocumentFile(
   const originalText = await fsp.readFile(filePath, 'utf8')
   const raw = parseDocumentRawText(originalText)
   const fromEnvelopeVersion = documentEnvelopeVersion(raw)
+  const envelopeMinReader = documentEnvelopeMinReaderVersion(raw)
   const upgradingEnvelope = fromEnvelopeVersion < documentEnvelopeContract.version
   const logger = createMainLogger('main.documents')
   let envelopeBackup: string | undefined
   let envelope: DocumentEnvelope
   try {
-    envelopeBackup = await backupBeforePersistenceUpgrade(filePath, documentEnvelopeContract, fromEnvelopeVersion, originalText)
+    assertPersistenceVersion(documentEnvelopeContract, fromEnvelopeVersion, envelopeMinReader)
+    envelopeBackup = upgradingEnvelope ? await backupBeforePersistenceUpgrade(filePath, documentEnvelopeContract, fromEnvelopeVersion, originalText) : undefined
     if (upgradingEnvelope) logger.info('开始升级文档外壳', { event: 'documents.envelope.upgrade.start', context: { fromVersion: fromEnvelopeVersion, toVersion: documentEnvelopeContract.version, backupPath: envelopeBackup } })
     envelope = upgradeDocumentEnvelope(raw, envelopeBackup)
     if (upgradingEnvelope) logger.info('文档外壳升级完成，等待首次保存', { event: 'documents.envelope.upgrade.completed', context: { fromVersion: fromEnvelopeVersion, toVersion: documentEnvelopeContract.version, backupPath: envelopeBackup } })
@@ -128,8 +131,8 @@ export async function loadDocumentFile(
   if (envelope.kind !== kind.id) throw new DocumentFormatError('文档类型与扩展名不一致。')
   const contract = documentPersistenceContract(kind)
   try {
-    assertPersistenceVersion(contract, envelope.kindVersion)
-    const backupPath = await backupBeforePersistenceUpgrade(filePath, contract, envelope.kindVersion, originalText) ?? envelopeBackup
+    assertPersistenceVersion(contract, envelope.kindVersion, envelope.kindMinReaderVersion)
+    const backupPath = (envelope.kindVersion < contract.version ? await backupBeforePersistenceUpgrade(filePath, contract, envelope.kindVersion, originalText) : undefined) ?? envelopeBackup
     return { kind, path: filePath, stat, header: headerFromEnvelope(envelope), envelope, packageSummary: null, backupPath }
   } catch (error) {
     createMainLogger('main.documents').warn('文档格式读取失败', { event: 'documents.load.failed', context: { format: contract.id, fromVersion: envelope.kindVersion, toVersion: kind.version }, error })
@@ -138,7 +141,7 @@ export async function loadDocumentFile(
 }
 
 export function documentPersistenceContract(kind: DocumentKindDescriptor): PersistenceContract {
-  return { id: `document.${kind.id}`, name: kind.untitledNames.zh.replace('未命名', ''), version: kind.version, schema: kind.contentSchema, migrations: kind.migrations }
+  return { id: `document.${kind.id}`, name: kind.untitledNames.zh.replace('未命名', ''), version: kind.version, minReaderVersion: kind.minReaderVersion, schema: kind.contentSchema, migrations: kind.migrations }
 }
 
 function headerFromEnvelope(envelope: DocumentEnvelope): DocumentFileHeader {
@@ -189,7 +192,7 @@ export function decodeDocumentContent(
   const logger = createMainLogger('main.documents')
   if (migrating) logger.info('开始升级文档内容', { event: 'documents.upgrade.start', context: { format: file.kind.id, fromVersion: file.envelope.kindVersion, toVersion: file.kind.version, backupPath: file.backupPath } })
   try {
-    const upgraded = upgradePersistenceContent(documentPersistenceContract(file.kind), content, file.envelope.kindVersion, file.backupPath)
+    const upgraded = upgradePersistenceContent(documentPersistenceContract(file.kind), content, file.envelope.kindVersion, file.backupPath, file.envelope.kindMinReaderVersion)
     if (migrating) logger.info('文档内容升级完成，等待首次保存', { event: 'documents.upgrade.completed', context: { format: file.kind.id, fromVersion: file.envelope.kindVersion, toVersion: file.kind.version, backupPath: file.backupPath } })
     return { content: upgraded, report: file.kind.dependencyContent
       ? codec.decodeContent(file.kind.dependencyContent(upgraded)).report

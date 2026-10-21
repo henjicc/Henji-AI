@@ -16,7 +16,7 @@ export const PACKAGE_VERSION = 1
 const folder = z.string().min(1).max(120).refine(value => isSafeRelativeSegment('win32', value) && value !== INTERNAL_FOLDER_NAME, '包里的文件夹名无效。')
 const relative = z.string().min(1).max(4096).refine(value => value.split('/').every(segment => isSafeRelativeSegment('win32', segment)), '包里的位置无效。')
 export const packageManifestSchema = z.object({
-  format: z.literal(PACKAGE_FORMAT), version: z.literal(PACKAGE_VERSION), type: z.enum(['document', 'project']),
+  format: z.literal(PACKAGE_FORMAT), version: z.literal(PACKAGE_VERSION), minReaderVersion: z.number().int().positive().optional(), type: z.enum(['document', 'project']),
   name: z.string().min(1).max(200), exportedAt: z.string().max(64),
   folders: z.object({ generated: folder, materials: folder }).strict(),
   document: z.object({ id: documentIdSchema, path: relative }).strict().optional(),

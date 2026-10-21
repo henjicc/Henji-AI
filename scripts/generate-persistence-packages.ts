@@ -155,11 +155,12 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
       }
     }
     // The motion fixture owns additional semantic evidence; newer minimal JSON samples must not erase it from the archive.
-    const motion = parseDocumentText(fs.readFileSync(fixture('document.video_edit', 'v2.json'), 'utf8'))
+    const motion = parseDocumentText(fs.readFileSync(path.join(root, 'tests/fixtures/video-edit-motion/golden-motion.json'), 'utf8'))
     const head = creativeIntentsSchema.parse((motion.content as { creativeIntents: unknown }).creativeIntents)
-    const samplePage = creativeIntentPageSchema.parse(read('creative-intent-page'))
+    const motionPage = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/video-edit-motion/golden-motion-page.json'), 'utf8')) as unknown
+    const samplePage = creativeIntentPageSchema.parse(motionPage)
     if (samplePage.kind !== 'samples') throw new Error('黄金运动页必须包含原始采样')
-    const recordedCandidate = read('creative-intent-candidate') as { identity: { requestKey: string } }
+    const recordedCandidate = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/video-edit-motion/golden-motion-candidate.json'), 'utf8')) as { identity: { requestKey: string } }
     const request = JSON.parse(recordedCandidate.identity.requestKey) as { mappings: [string, OptimizeMotionInput['mappings'][string]][] }
     const candidate = { version: MOTION_CANDIDATE_VERSION, ...optimizeMotionDraft({
       draft: head.drafts[0], samples: samplePage.entries, mappings: Object.fromEntries(request.mappings),
@@ -167,7 +168,7 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     for (const resource of head.resources) {
       const file = path.join(project.path, '素材', `${resource.resourceId}.json`)
       await fsp.mkdir(path.dirname(file), { recursive: true })
-      const bytes = Buffer.from(JSON.stringify(resource.kind === 'page' ? read('creative-intent-page') : candidate))
+      const bytes = Buffer.from(JSON.stringify(resource.kind === 'page' ? motionPage : candidate))
       await fsp.writeFile(file, bytes)
       resource.bytes = bytes.byteLength
       resource.digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
@@ -182,7 +183,7 @@ export async function generatePersistencePackages(root = process.cwd(), only?: '
     const content = await rehomeVideoMotionResources(golden, motion.id, current.meta.id, project.path)
     await service.saveDocument({ target: { id: current.meta.id }, expectedRevision: current.meta.revision, content })
     const exported = await service.exportProjectPackage({ projectId: project.id })
-    await fsp.copyFile(exported.path, projectTarget ?? fixture('project-package', `v${PACKAGE_VERSION}-video-v${VIDEO_EDIT_CONTENT_VERSION}.henjipack`), fs.constants.COPYFILE_EXCL)
+    await fsp.copyFile(exported.path, projectTarget ?? fixture('project-package', `v${PACKAGE_VERSION}.henjipack`), fs.constants.COPYFILE_EXCL)
   } finally { await env.cleanup() }
 }
 

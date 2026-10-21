@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { PERSISTENCE_FORMATS } from './formats'
 import baseline from './schemaBaseline.json'
-import { PersistenceError, migratePersistenceContent, upgradePersistenceContent } from './migrations'
+import { PersistenceError, upgradePersistenceContent } from './migrations'
 import { persistenceSchemaStructure } from './fingerprint'
 import { parseDocumentEnvelope, parseDocumentText } from '../documents/envelope'
 import { videoEditDocumentSchema } from '../videoEdit/document'
@@ -20,7 +20,6 @@ import { llmStoredConfigSchema } from './llmSchemas'
 import { mcpConnectionStorageSchema } from './mcpConnectionSchema'
 import { persistedCanvasNodeDataSchema, persistedStageSettingsSchema } from './businessSchemas'
 import { createDefaultLlmConfig } from '../llm/defaults'
-import type { VideoEditDocumentContent } from '../documents/kinds/videoEdit'
 
 describe('持久格式逐版本链', () => {
   const schema = z.object({ label: z.string(), count: z.number() }).strict()
@@ -59,7 +58,7 @@ describe('持久格式逐版本链', () => {
     expect(readLocalPersistenceJson(raw, 'library', contract, storage)).toEqual([1]); expect(values.size).toBe(2)
     const blocked = { ...storage, getItem: () => null, setItem: () => { throw new Error('quota') } }
     step.mockClear(); expect(() => readLocalPersistenceJson(raw, 'library', contract, blocked)).toThrow('quota'); expect(step).not.toHaveBeenCalled()
-    expect(() => parseVersionedPersistenceJson([1], contract)).toThrow('旧版本格式')
+    expect(() => parseVersionedPersistenceJson([1], contract)).toThrow('早于当前版本可读取的最低版本')
   })
   it('SQLite设置值先备份原行，迁移失败保留原件与备份键', async () => {
     const raw = '{"version":1,"content":[1]}'
@@ -123,44 +122,6 @@ describe('Schema结构指纹', () => {
 })
 
 describe('所有登记格式的黄金样本', () => {
-  it.each([
-    ['document.video_edit', 9, 10],
-    ['document.screen_recording', 11, 12],
-    ['code-asset', 1, 2],
-    ['title-templates', 3, 4],
-    ['video-preset-package', 2, 3],
-    ['subtitle-manifest', 5, 6],
-  ] as const)('%s 历史参数拓宽步骤保留旧样本；不等于恢复开发期已放弃的读取支持', (id, from, to) => {
-    const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
-    expect(format.version).toBeGreaterThanOrEqual(to)
-    const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${from}.json`, 'utf8')) as unknown
-    const before = structuredClone(raw)
-    const content = id.startsWith('document.') ? parseDocumentEnvelope(raw).content
-      : id === 'title-templates' ? (raw as { content: unknown }).content : raw
-    const expected = ['code-asset', 'video-preset-package', 'subtitle-manifest'].includes(id)
-      ? { ...(content as object), version: to } : content
-    expect(migratePersistenceContent({ ...format, version: to }, content, from)).toEqual(expected)
-    if (format.version === to) expect(upgradePersistenceContent(format, content, from)).toEqual(format.schema.parse(expected))
-    else expect(() => upgradePersistenceContent(format, content, from)).toThrowError(expect.objectContaining({ code: 'unsupported-version', fromVersion: to, toVersion: to + 1 }))
-    expect(raw).toEqual(before)
-  })
-  it('剪辑历史 v2–v7 至 v10 的纯迁移保留原稿，但不能越过字幕词源的开发期断点', () => {
-    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
-    expect(baseline.formats['document.video_edit'].supportedFrom).toBe(format.version)
-    for (const version of [2, 3, 4, 5, 6, 7]) {
-      const raw = parseDocumentEnvelope(JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.video_edit/v${version}.json`, 'utf8')))
-      const before = structuredClone(raw.content) as VideoEditDocumentContent
-      const upgraded = migratePersistenceContent({ ...format, version: 10 }, raw.content, version) as VideoEditDocumentContent
-      expect(() => upgradePersistenceContent(format, raw.content, version)).toThrowError(expect.objectContaining({ code: 'unsupported-version', fromVersion: 10, toVersion: 11 }))
-      expect(raw.content).toEqual(before)
-      expect(upgraded.creativeIntents).toEqual(before.creativeIntents)
-      expect(upgraded.codeMaterials).toEqual(before.codeMaterials)
-      expect(upgraded.sequences[0].clips).toEqual(before.sequences[0].clips)
-      expect(upgraded.sequences[0].captions).toEqual(before.sequences[0].captions)
-      if (version < 4) expect(upgraded.sequences[0]).toMatchObject({ captionTrackEnabled: true, captionTrackLocked: false })
-      if (version === 2) expect(upgraded.exportHistory?.[0]).toMatchObject({ presetName: '已完成导出', rangeSource: 'content' })
-    }
-  })
   for (const format of PERSISTENCE_FORMATS) {
     const directory = path.resolve('tests/fixtures/persistence', format.id)
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {
@@ -185,7 +146,7 @@ describe('所有登记格式的黄金样本', () => {
           expect(() => upgradePersistenceContent(format, raw, version)).toThrowError(expect.objectContaining({
             code: 'unsupported-version', formatId: format.id,
           }))
-          expect(() => upgradePersistenceContent(format, raw, version)).toThrow('旧版本格式')
+          expect(() => upgradePersistenceContent(format, raw, version)).toThrow('早于当前版本可读取的最低版本')
         })
         continue
       }
@@ -238,11 +199,15 @@ describe('所有登记格式的黄金样本', () => {
       })
     }
   }
-  it('只豁免已明确登记的接入前历史版本；当前版本样本始终存在', () => {
+  it('兼容起点之后不再有开发期豁免；每种格式从支持下限到当前版本都有样本', () => {
+    expect(baseline.releasedCompatibility).toBe(true)
+    expect(baseline.devBreaks).toEqual([])
     for (const format of PERSISTENCE_FORMATS) {
-      expect(fs.existsSync(path.resolve('tests/fixtures/persistence', format.id, `v${format.version}.json`))).toBe(true)
-      const floor = baseline.formats[format.id as keyof typeof baseline.formats]?.supportedFrom ?? 1
-      if (floor > 1) expect(baseline.devBreaks.some(item => item.format === format.id && item.reason.length > 0)).toBe(true)
+      const entry = baseline.formats[format.id as keyof typeof baseline.formats]
+      expect(entry.minReaderVersion).toBe(format.minReaderVersion ?? format.version)
+      for (let version = entry.supportedFrom; version <= format.version; version++) {
+        expect(fs.existsSync(path.resolve('tests/fixtures/persistence', format.id, `v${version}.json`))).toBe(true)
+      }
     }
     expect(PersistenceError.prototype).toBeInstanceOf(Error)
   })

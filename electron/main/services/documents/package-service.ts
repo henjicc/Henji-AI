@@ -7,7 +7,8 @@ import { pipeline } from 'node:stream/promises'
 import type { z } from 'zod'
 import { PACKAGE_FORMAT, PACKAGE_VERSION, packageManifestSchema } from '../../../../src/core/persistence/storedSchemas'
 
-import { buildDocumentEnvelope, serializeDocumentEnvelope, type DocumentEnvelope } from '../../../../src/core/documents/envelope'
+import { buildDocumentEnvelope, carryDocumentEnvelopeForward, serializeDocumentEnvelope, type DocumentEnvelope } from '../../../../src/core/documents/envelope'
+import { restoreForwardFields } from '../../../../src/core/persistence/forwardCompat'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { entryNameKey, keepBothEntryName, sameEntryName } from '../../../../src/core/documents/naming'
 import { buildProjectManifest, INTERNAL_FOLDER_NAME, PROJECT_FOLDER_NAMES, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
@@ -32,7 +33,7 @@ import type { DocumentIndexScanner } from './index-scanner'
 import { codeGroupDestinations, sameFileContent, rewriteContentPaths } from './media-transfer'
 import { readEntryNameKeys } from './name-check'
 import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
-import { upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
+import { persistenceForwardFields, upgradePersistenceContent } from '../../../../src/core/persistence/migrations'
 import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
 import { rehomeVideoMotionResources } from './video-motion-resources'
 import type { PackageAdapterRegistry } from './package-adapters'
@@ -137,6 +138,7 @@ export class DocumentPackageService {
       const manifest: PackageManifest = {
         format: PACKAGE_FORMAT,
         version: PACKAGE_VERSION,
+        minReaderVersion: PACKAGE_VERSION,
         type: 'document',
         name: path.basename(file.path, file.kind.extension),
         exportedAt: this.workspace.now().toISOString(),
@@ -192,6 +194,7 @@ export class DocumentPackageService {
       const manifest: PackageManifest = {
         format: PACKAGE_FORMAT,
         version: PACKAGE_VERSION,
+        minReaderVersion: PACKAGE_VERSION,
         type: 'project',
         name: path.basename(container.root),
         exportedAt: this.workspace.now().toISOString(),
@@ -281,12 +284,16 @@ export class DocumentPackageService {
       }
       mapping.set(key, path.join(container.root, ...relative.split('/')))
     }
-    const content = rewriteContentPaths(decoded.content, mapping, style)
-    const encoded = createLocationCodec(this.workspace.locationContext(container)).encodeContent(content)
     const envelope = file.envelope as DocumentEnvelope
-    const bytes = Buffer.from(serializeDocumentEnvelope(buildDocumentEnvelope({
+    // 更新版本写出、本程序可读的文档：导出保留原版本戳与本程序不认识的字段。
+    const forward = envelope.kindVersion > file.kind.version
+    const rewritten = rewriteContentPaths(decoded.content, mapping, style)
+    const content = forward ? restoreForwardFields(rewritten, persistenceForwardFields(decoded.content)) : rewritten
+    const encoded = createLocationCodec(this.workspace.locationContext(container)).encodeContent(content)
+    const bytes = Buffer.from(serializeDocumentEnvelope(carryDocumentEnvelopeForward(envelope, buildDocumentEnvelope({
       kind: envelope.kind,
-      kindVersion: file.kind.version,
+      kindVersion: forward ? envelope.kindVersion : file.kind.version,
+      kindMinReaderVersion: forward ? envelope.kindMinReaderVersion : file.kind.minReaderVersion ?? file.kind.version,
       id: envelope.id,
       name: envelope.name,
       createdAt: envelope.createdAt,
@@ -294,7 +301,7 @@ export class DocumentPackageService {
       revision: envelope.revision,
       draft: envelope.draft === true,
       content: encoded.content,
-    })), 'utf8')
+    }))), 'utf8')
     return { bytes, entries, missingPaths }
   }
 
@@ -450,7 +457,7 @@ export class DocumentPackageService {
           const linked = idMap.size ? remapDocumentLinks(file.envelope.content, idMap) : file.envelope.content
           const content = nextId && file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(linked, file.header.id, nextId, staging) : linked
           if (!nextId && content === file.envelope.content) continue
-          const envelope = buildDocumentEnvelope({ ...file.envelope, draft: file.envelope.draft === true, id: nextId ?? file.envelope.id, content })
+          const envelope = carryDocumentEnvelopeForward(file.envelope, buildDocumentEnvelope({ ...file.envelope, draft: file.envelope.draft === true, id: nextId ?? file.envelope.id, content }))
           await writeBufferAtomically(filePath, Buffer.from(serializeDocumentEnvelope(envelope), 'utf8'))
         } else if (nextId) {
           const adapter = this.options.adapters.get(file.kind.id)
@@ -517,8 +524,9 @@ export class DocumentPackageService {
         }
         const contract = { id: 'project-package', name: '项目和文档包', version: PACKAGE_VERSION, schema: packageManifestSchema, migrations: formatMigrations('project-package') }
         const version = raw && typeof raw === 'object' && 'version' in raw ? Number(raw.version) : 0
-        const backupPath = await backupBeforePersistenceUpgrade(source, contract, version)
-        const upgraded = upgradePersistenceContent(contract, raw, version, backupPath)
+        const minReaderVersion = raw && typeof raw === 'object' && 'minReaderVersion' in raw && typeof raw.minReaderVersion === 'number' ? raw.minReaderVersion : undefined
+        const backupPath = version < contract.version ? await backupBeforePersistenceUpgrade(source, contract, version) : undefined
+        const upgraded = upgradePersistenceContent(contract, raw, version, backupPath, minReaderVersion)
         const parsed = packageManifestSchema.safeParse(upgraded)
         if (!parsed.success) throw new DocumentFormatError(`包说明无效：${parsed.error.issues[0]?.message ?? '格式错误'}`)
         return parsed.data

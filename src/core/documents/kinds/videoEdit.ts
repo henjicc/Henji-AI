@@ -116,55 +116,11 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: VIDEO_EDIT_CONTENT_VERSION,
   contentSchema: videoEditContentSchema,
-  // 2 → 3（t187）：字幕新增可选 sourceText，原样保留；导出归档新增必填 presetName / rangeSource。
-  // 旧归档没有记下预设名与区间来源，按升级前的展示补齐，不改动其他内容。
-  migrations: {
-    2: migrateVideoEditContentV2,
-    3: migrateVideoEditContentV3,
-    // 4 → 5：新增可选录制光标引用和效果，已有内容不需要补值。
-    4: content => content,
-    // 5 → 6：新增可选 screen_attention 关键帧归属，已有关键帧语义不变。
-    5: content => content,
-    // 6 → 7：内置效果新增可选缩放区间 regions（自动缩放）与录屏画框效果，已有效果不需要补值。
-    6: content => content,
-    // 7 → 8 → 9（t97）：风格改为说明书，旧风格快照与绑定丢弃。
-    7: dropVideoEditStyleKits,
-    8: dropVideoEditStyleKits,
-    // 9 → 10（t102）：代码素材新增音频参数与视频/下方画面引用，旧内容原样保留。
-    9: content => content,
-  },
+  // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
+  migrations: {},
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,
   isEmptyContent: isEmptyVideoEditContent,
   summarize: summarizeVideoEdit,
 }
 
-function migrateVideoEditContentV2(content: unknown): unknown {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
-  const record = content as Record<string, unknown>
-  if (!Array.isArray(record.exportHistory)) return content
-  return { ...record, exportHistory: record.exportHistory.map(entry => entry && typeof entry === 'object' && !Array.isArray(entry)
-    ? { presetName: '已完成导出', rangeSource: 'content', ...(entry as Record<string, unknown>) }
-    : entry) }
-}
-
-/** 3 → 4：字幕原先始终输出且可编辑；显式保留这两个默认行为。 */
-function migrateVideoEditContentV3(content: unknown): unknown {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
-  const record = content as Record<string, unknown>
-  if (!Array.isArray(record.sequences)) return content
-  return { ...record, sequences: record.sequences.map(sequence => sequence && typeof sequence === 'object' && !Array.isArray(sequence)
-    ? { ...(sequence as Record<string, unknown>), captionTrackEnabled: true, captionTrackLocked: false }
-    : sequence) }
-}
-
-/**
- * 7 → 8 → 9（t97）：风格从参数包改为给 AI 的说明书，旧风格快照不再适用，按开发期约定直接丢弃：
- * 删除工程风格快照与序列/片段上的风格绑定，其他内容原样保留。
- */
-export function dropVideoEditStyleKits(content: unknown): unknown {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return content
-  const { styleKits: _styleKits, ...record } = content as Record<string, unknown>
-  const unbind = (value: unknown): unknown => { if (!value || typeof value !== 'object' || Array.isArray(value)) return value; const { styleKitId: _id, ...rest } = value as Record<string, unknown>; return rest }
-  return Array.isArray(record.sequences) ? { ...record, sequences: record.sequences.map(sequence => { const unbound = unbind(sequence) as Record<string, unknown>; return Array.isArray(unbound?.clips) ? { ...unbound, clips: unbound.clips.map(unbind) } : unbound }) } : record
-}

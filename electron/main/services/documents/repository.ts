@@ -1,8 +1,11 @@
 import fsp from 'node:fs/promises'
+import { persistenceForwardFields } from '../../../../src/core/persistence/migrations'
+import { restoreForwardFields } from '../../../../src/core/persistence/forwardCompat'
 import path from 'node:path'
 
 import {
   buildDocumentEnvelope,
+  carryDocumentEnvelopeForward,
   DocumentFormatError,
   serializeDocumentEnvelope,
   type DocumentEnvelope,
@@ -222,7 +225,7 @@ export class DocumentRepository {
       if (request.id !== undefined && this.workspace.catalog.getDocument(request.id)) throw new DocumentLocationError('已有同一 ID 的文档。')
       const id = request.id ?? this.workspace.randomId()
       const written = await this.writeNewDocumentFile(folder, kind, (name) => buildDocumentEnvelope({
-        kind: kind.id, kindVersion: kind.version, id, name, createdAt: now, updatedAt: now, revision: 0, draft, content: encoded.content,
+        kind: kind.id, kindVersion: kind.version, kindMinReaderVersion: kind.minReaderVersion ?? kind.version, id, name, createdAt: now, updatedAt: now, revision: 0, draft, content: encoded.content,
       }), userName === null ? { mode: 'untitled', base: kind.untitledNames[container.locale] } : { mode: 'exact', name: userName })
       const file = await describeWrittenDocument(kind, written.path, written.envelope)
       this.workspace.catalog.upsertDocument(indexedFromFile(file, container, kind.summarize(content)))
@@ -252,9 +255,10 @@ export class DocumentRepository {
         }
         const content = this.validateContent(file.kind, request.content)
         const container = await this.workspace.containerForPath(file.path)
-        const encoded = this.encode(file.kind, container, content)
+        const stamped = this.stamped(file, () => decodeDocumentContent(file, container, this.workspace).content, content)
+        const encoded = this.encode(file.kind, container, stamped.content)
         const name = documentNameOf(file.kind, file.path)
-        const unchanged = file.envelope.kindVersion === file.kind.version
+        const unchanged = file.envelope.kindVersion === stamped.kindVersion
           && file.envelope.name === name
           && JSON.stringify(encoded.content) === JSON.stringify(file.envelope.content)
         if (unchanged) {
@@ -263,7 +267,8 @@ export class DocumentRepository {
         }
         const envelope = this.withHeader(file.envelope, {
           name,
-          kindVersion: file.kind.version,
+          kindVersion: stamped.kindVersion,
+          kindMinReaderVersion: stamped.kindMinReaderVersion,
           updatedAt: this.workspace.now().toISOString(),
           revision: file.header.revision + 1,
           content: encoded.content,
@@ -412,10 +417,11 @@ export class DocumentRepository {
       missingPaths = transfer.missingPaths
       const relocated = rewriteContentPaths(decoded.content, transfer.mapping, this.workspace.style)
       const content = this.validateContent(file.kind, file.kind.id === 'video_edit' ? await rehomeVideoMotionResources(relocated, file.header.id, id, destination.root) : relocated)
-      const encoded = this.encode(file.kind, destination, content)
+      const stamped = this.stamped(file, () => decoded.content, content)
+      const encoded = this.encode(file.kind, destination, stamped.content)
       const now = this.workspace.now().toISOString()
       const written = await this.writeNewDocumentFile(folder, file.kind, (fileName) => this.withHeader(original, {
-        id, name: fileName, draft: false, createdAt: now, updatedAt: now, revision: 0, kindVersion: file.kind.version, content: encoded.content,
+        id, name: fileName, draft: false, createdAt: now, updatedAt: now, revision: 0, kindVersion: stamped.kindVersion, kindMinReaderVersion: stamped.kindMinReaderVersion, content: encoded.content,
       }), naming)
       adopted = await describeWrittenDocument(file.kind, written.path, written.envelope)
     } else {
@@ -497,10 +503,12 @@ export class DocumentRepository {
       })
       if (!collected.mapping.size && !documents.links.size) return { meta: metaFromFile(file, container), copiedFiles: 0, copiedDocuments: 0, missingPaths: collected.missingPaths }
       const content = this.validateContent(file.kind, rewriteDocumentLinks(rewriteContentPaths(decoded.content, collected.mapping, this.workspace.style), documents.links))
-      const encoded = this.encode(file.kind, container, content)
+      const stamped = this.stamped(file, () => decoded.content, content)
+      const encoded = this.encode(file.kind, container, stamped.content)
       const envelope = this.withHeader(file.envelope, {
         name: documentNameOf(file.kind, file.path),
-        kindVersion: file.kind.version,
+        kindVersion: stamped.kindVersion,
+        kindMinReaderVersion: stamped.kindMinReaderVersion,
         updatedAt: this.workspace.now().toISOString(),
         revision: file.header.revision + 1,
         content: encoded.content,
@@ -726,10 +734,21 @@ export class DocumentRepository {
     return Buffer.from(serializeDocumentEnvelope(envelope), 'utf8')
   }
 
-  private withHeader(envelope: DocumentEnvelope, patch: Partial<Omit<DocumentEnvelope, 'format' | 'draft'>> & { draft?: boolean }): DocumentEnvelope {
-    return buildDocumentEnvelope({
+  /**
+   * 内容写回本文件或其副本时的版本戳：更新版本写出、本程序可读的文件保留原版本戳，
+   * 并带回本程序不认识的字段；其余写本程序的版本与最低可读版本。
+   */
+  private stamped(file: LoadedDocumentFile, decodedOnDisk: () => unknown, content: unknown): { content: unknown; kindVersion: number; kindMinReaderVersion: number } {
+    const envelope = file.envelope
+    if (!envelope || envelope.kindVersion <= file.kind.version) return { content, kindVersion: file.kind.version, kindMinReaderVersion: file.kind.minReaderVersion ?? file.kind.version }
+    return { content: restoreForwardFields(content, persistenceForwardFields(decodedOnDisk())), kindVersion: envelope.kindVersion, kindMinReaderVersion: envelope.kindMinReaderVersion }
+  }
+
+  private withHeader(envelope: DocumentEnvelope, patch: Partial<Omit<DocumentEnvelope, 'format' | 'draft' | 'envelopeVersion' | 'minReaderVersion'>> & { draft?: boolean }): DocumentEnvelope {
+    return carryDocumentEnvelopeForward(envelope, buildDocumentEnvelope({
       kind: patch.kind ?? envelope.kind,
       kindVersion: patch.kindVersion ?? envelope.kindVersion,
+      kindMinReaderVersion: patch.kindMinReaderVersion ?? envelope.kindMinReaderVersion,
       id: patch.id ?? envelope.id,
       name: patch.name ?? envelope.name,
       createdAt: patch.createdAt ?? envelope.createdAt,
@@ -737,7 +756,7 @@ export class DocumentRepository {
       revision: patch.revision ?? envelope.revision,
       draft: patch.draft ?? envelope.draft === true,
       content: patch.content === undefined ? envelope.content : patch.content,
-    })
+    }))
   }
 
   private async pickTarget(folder: string, extension: string, naming: NamingMode): Promise<{ name: string; path: string }> {
@@ -929,11 +948,12 @@ export class DocumentRepository {
         copiedFiles = transfer.copied
         missingPaths = transfer.missingPaths
       }
-      const encoded = this.encode(file.kind, destination, content)
+      const stamped = this.stamped(file, () => decoded.content, content)
+      const encoded = this.encode(file.kind, destination, stamped.content)
       const updatedAt = this.workspace.now().toISOString()
       const revision = rewritten ? file.header.revision + 1 : file.header.revision
       const written = await this.writeNewDocumentFile(folder, file.kind, (name) => this.withHeader(original, {
-        name, draft: options.draft, updatedAt, revision, kindVersion: file.kind.version, content: encoded.content,
+        name, draft: options.draft, updatedAt, revision, kindVersion: stamped.kindVersion, kindMinReaderVersion: stamped.kindMinReaderVersion, content: encoded.content,
       }), options.naming)
       await this.removeOriginal(file.path, written.path)
       moved = await describeWrittenDocument(file.kind, written.path, written.envelope)

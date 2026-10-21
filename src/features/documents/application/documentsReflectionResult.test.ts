@@ -68,7 +68,7 @@ beforeEach(() => {
 afterEach(() => { holder.fake = null })
 
 it.each([
-  ['PersistenceError', '这份剪辑是旧版本格式，当前开发版不再支持打开；原文件未被修改。'],
+  ['PersistenceError', '这份剪辑的格式早于当前版本可读取的最低版本，无法打开；原文件未被修改。'],
   ['DocumentFormatError', '这份文档已损坏，无法解析文件内容。'],
   ['DocumentNotFoundError', '找不到这份文档文件。'],
 ])('open_document 加载前的 %s 拒绝通过正式统一通道返回零执行和可行动提示', async (name, message) => {

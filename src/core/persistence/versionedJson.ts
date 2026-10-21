@@ -1,8 +1,11 @@
 import type { z } from 'zod'
 import { formatMigrations } from './formatMigrations'
-import { assertPersistenceVersion, PersistenceError, upgradePersistenceContent, type PersistenceContract } from './migrations'
+import { assertPersistenceVersion, PersistenceError, persistenceForwardFields, persistenceMinReaderVersion, upgradePersistenceContent, type PersistenceContract } from './migrations'
+import { restoreForwardFields, type ForwardField } from './forwardCompat'
 
-export interface VersionedPersistenceJson { version: number; content: unknown }
+export interface VersionedPersistenceJson { version: number; minReaderVersion?: number; content: unknown }
+/** 每个本机库只有一份当前内容：记住最近一次前向读取，保存时带回未知字段与原版本戳。 */
+const forwardReads = new Map<string, { version: number; minReaderVersion: number; fields: readonly ForwardField[] }>()
 export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: string; version: number }>> = {
   'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 3 },
   'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 6 },
@@ -20,11 +23,18 @@ export function localLibraryContract(key: string, schema: z.ZodType): Persistenc
 export function parseVersionedPersistenceJson(raw: unknown, contract: PersistenceContract, backupPath?: string): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !('version' in raw)) throw new PersistenceError('unsupported-version', contract.id, contract.name, 0, contract.version)
   const value = raw as Partial<VersionedPersistenceJson>
-  if (typeof value.version !== 'number' || Object.keys(value).some(key => key !== 'version' && key !== 'content')) throw new PersistenceError('invalid-content', contract.id, contract.name, 0, contract.version, ['version'])
-  return upgradePersistenceContent(contract, value.content, value.version, backupPath)
+  if (typeof value.version !== 'number' || Object.keys(value).some(key => key !== 'version' && key !== 'minReaderVersion' && key !== 'content')
+    || value.minReaderVersion !== undefined && typeof value.minReaderVersion !== 'number') throw new PersistenceError('invalid-content', contract.id, contract.name, 0, contract.version, ['version'])
+  const upgraded = upgradePersistenceContent(contract, value.content, value.version, backupPath, value.minReaderVersion)
+  if (value.version > contract.version) forwardReads.set(contract.id, { version: value.version, minReaderVersion: value.minReaderVersion!, fields: persistenceForwardFields(upgraded) })
+  else forwardReads.delete(contract.id)
+  return upgraded
 }
 export function serializeVersionedPersistenceJson(contract: PersistenceContract, content: unknown): string {
-  return JSON.stringify({ version: contract.version, content: contract.schema.parse(content) })
+  const parsed = contract.schema.parse(content)
+  const forward = forwardReads.get(contract.id)
+  if (forward) return JSON.stringify({ version: forward.version, minReaderVersion: forward.minReaderVersion, content: restoreForwardFields(parsed, forward.fields) })
+  return JSON.stringify({ version: contract.version, minReaderVersion: persistenceMinReaderVersion(contract), content: parsed })
 }
 
 /** Async key/value stores (SQLite settings): publish the original row before the first step. */
@@ -64,7 +74,8 @@ export function readLocalPersistenceJson(text: string, key: string, contract: Pe
       index++
     }
   }
-  if (contentField === 'state' && raw && typeof raw === 'object' && 'state' in raw) raw = { version, content: raw.state }
-  if (contentField === 'self') return upgradePersistenceContent(contract, raw, version, backup)
+  const minReaderVersion = raw && typeof raw === 'object' && 'minReaderVersion' in raw && typeof raw.minReaderVersion === 'number' ? raw.minReaderVersion : undefined
+  if (contentField === 'state' && raw && typeof raw === 'object' && 'state' in raw) raw = { version, ...(minReaderVersion === undefined ? {} : { minReaderVersion }), content: raw.state }
+  if (contentField === 'self') return upgradePersistenceContent(contract, raw, version, backup, minReaderVersion)
   return parseVersionedPersistenceJson(raw, contract, backup)
 }

@@ -27,10 +27,31 @@ test('开发期显式登记破坏，必须有理由且不能豁免当前版本�
 })
 test('发布开关拒绝dev-break；接入前豁免可保留，未来版本仍须迁移', () => {
   const state = baseline(); state.releasedCompatibility = true
-  assert.throws(() => updateBaseline([format], state, { devBreak: 'test', reason: 'no' }, () => [1]), /正式发布后禁止/)
+  assert.throws(() => updateBaseline([format], state, { devBreak: 'test', reason: 'no' }, () => [1]), /已正式启用向后兼容/)
   const adopted = { ...state, formats: { test: { version: 2, fingerprint: 'old', supportedFrom: 2 } }, devBreaks: [{ format: 'test', version: 2, reason: '接入前版本', waivedFixtureVersions: [1] }] }
   assert.deepEqual(validateCompatibility([{ ...format, version: 2 }], adopted, () => [2]), [])
   assert.throws(() => updateBaseline([{ ...format, version: 3 }], adopted, {}, () => [2, 3]), /v2 → v3/)
+})
+test('最低可读版本：同版本不得改变，升版本可提高不可降低', () => {
+  const state = baseline(); state.formats.test.minReaderVersion = 1
+  assert.match(validateCompatibility([{ ...format, version: 1, minReaderVersion: 2 }], state, () => [1]).join(''), /最低可读版本与基线不一致/)
+  const optional = { ...format, version: 2, fingerprint: 'new', minReaderVersion: 1, migrations: { 1: () => ({}) } }
+  assert.equal(updateBaseline([optional], state, {}, () => [1, 2]).formats.test.minReaderVersion, 1)
+  const raised = updateBaseline([{ ...optional, minReaderVersion: 2 }], state, {}, () => [1, 2])
+  assert.equal(raised.formats.test.minReaderVersion, 2)
+  assert.match(validateCompatibility([{ ...optional, version: 3, minReaderVersion: 1 }], raised, () => [1, 2, 3]).join(''), /不能降低/)
+})
+test('兼容起点一次性登记：当前版本为支持下限，清空开发期豁免，之后拒绝 dev-break', () => {
+  const dev = { ...baseline(), devBreaks: [{ format: 'test', version: 1, reason: '开发期' }] }
+  const current = { ...format, version: 2, fingerprint: 'new', migrations: {} }
+  assert.throws(() => updateBaseline([current], dev, { compatibilityStart: true }, () => [2]), /非空 --reason/)
+  const start = updateBaseline([current], dev, { compatibilityStart: true, reason: '正式启用' }, () => [2])
+  assert.deepEqual(start.formats.test, { version: 2, fingerprint: 'new', supportedFrom: 2, minReaderVersion: 2 })
+  assert.equal(start.releasedCompatibility, true); assert.deepEqual(start.devBreaks, [])
+  assert.deepEqual(validateCompatibility([current], start, () => [2]), [])
+  assert.throws(() => updateBaseline([current], start, { compatibilityStart: true, reason: '再来' }, () => [2]), /只能在首次/)
+  assert.throws(() => updateBaseline([current], start, { devBreak: 'test', reason: 'x' }, () => [2]), /已正式启用向后兼容/)
+  assert.throws(() => updateBaseline([current], start, { waiveBefore: true }, () => [2]), /已正式启用向后兼容/)
 })
 test('格式移除与版本回退不能静默改写基线', () => {
   assert.match(validateCompatibility([], baseline(), () => []).join(''), /登记被删除/)
@@ -45,7 +66,7 @@ test('多个格式一起变化须分别登记；开发期删除已知格式也�
   assert.equal(updated.devBreaks.length, 2)
   const retired = updateBaseline([], baseline(), { devBreak: 'test', reason: '删除未发布的开发功能' }, () => [])
   assert.deepEqual(retired.formats, {}); assert.equal(retired.devBreaks[0].retired, true)
-  assert.throws(() => updateBaseline([], { ...baseline(), releasedCompatibility: true }, { devBreak: 'test', reason: '删除' }, () => []), /正式发布后禁止/)
+  assert.throws(() => updateBaseline([], { ...baseline(), releasedCompatibility: true }, { devBreak: 'test', reason: '删除' }, () => []), /已正式启用向后兼容/)
 })
 
 test('发布快照阻止开关回退、支持下限抬高、新豁免、格式删除、版本指纹及样本改写', () => {

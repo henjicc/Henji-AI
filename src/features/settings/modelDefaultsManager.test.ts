@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { ModelDefinition } from '@/core/types'
-import modelsV1 from '../../../tests/fixtures/persistence/model-defaults/v1.json'
+import modelsV2 from '../../../tests/fixtures/persistence/model-defaults/v2.json'
 
 import {
   MODEL_DEFAULTS_STORAGE_KEY,
@@ -54,19 +54,18 @@ function catalog(models: ModelDefinition[]): ModelDefaultsCatalog {
 }
 
 describe('ModelDefaultsManager', () => {
-  it('v1 黄金样本加载后保留原件，用户修改能保存为 v2 并再次加载', () => {
+  it('当前版本黄金样本原样加载，用户修改保存为当前版本并可再次加载', () => {
     const storage = new MemoryStorage()
-    const text = JSON.stringify(modelsV1)
+    const text = JSON.stringify(modelsV2)
     storage.setItem(MODEL_DEFAULTS_STORAGE_KEY, text)
     const models = catalog([model('kie-image', 'selected-image', 'kie', 'image')])
     const manager = new ModelDefaultsManager(storage, models)
-    expect(manager.getSnapshot()).toEqual({ ...modelsV1, version: 2, models: { ...modelsV1.models, transcription: '' } })
+    expect(manager.getSnapshot()).toEqual(modelsV2)
     expect(storage.getItem(MODEL_DEFAULTS_STORAGE_KEY)).toBe(text)
-    expect(storage.getItem(`${MODEL_DEFAULTS_STORAGE_KEY}:backup:v1`)).toBe(text)
     manager.setDefaultModel('image', 'selected-image')
     expect(JSON.parse(storage.getItem(MODEL_DEFAULTS_STORAGE_KEY)!)).toEqual(manager.getSnapshot())
+    expect(manager.getSnapshot()).toMatchObject({ version: 2, models: { image: 'selected-image' } })
     expect(new ModelDefaultsManager(storage, models).getSnapshot()).toEqual(manager.getSnapshot())
-    expect(storage.getItem(`${MODEL_DEFAULTS_STORAGE_KEY}:backup:v1`)).toBe(text)
   })
   it('首次创建独立默认项时迁移旧引导里的供应商', () => {
     const storage = new MemoryStorage()

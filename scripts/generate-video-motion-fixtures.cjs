@@ -18,14 +18,14 @@ if (process.argv.includes('--package')) {
     const input = await openZip(filename); let entries = []
     try { for await (const entry of iterateEntries(input)) if (!entry.fileName.endsWith('/')) entries.push({ name: entry.fileName, bytes: await readEntryBytes(input, entry, entry.fileName) }) } finally { input.close() }
     entries = entries.filter(entry => !['content/素材/golden-motion-page.json', 'content/素材/golden-motion-candidate.json'].includes(entry.name))
-    const envelope = JSON.parse(fs.readFileSync(path.join(root, 'document.video_edit/v2.json'), 'utf8'))
+    const envelope = JSON.parse(fs.readFileSync(path.join(root, '../video-edit-motion/golden-motion.json'), 'utf8'))
     const video = entries.find(entry => entry.name.endsWith('.henji-video'))
     const previous = JSON.parse(video.bytes.toString('utf8'))
     // Preserve package-relative code locations and the package document identity.
     envelope.content.codeMaterials = previous.content.codeMaterials; envelope.id = previous.id
     const oldId = envelope.content.creativeIntents.drafts[0].ownerRef.id
-    for (const [id, name] of [['creative-intent-page', 'golden-motion-page.json'], ['creative-intent-candidate', 'golden-motion-candidate.json']]) {
-      const value = JSON.parse(fs.readFileSync(path.join(root, id, 'v1.json'), 'utf8'))
+    for (const name of ['golden-motion-page.json', 'golden-motion-candidate.json']) {
+      const value = JSON.parse(fs.readFileSync(path.join(root, '../video-edit-motion', name), 'utf8'))
       entries.push({ name: `content/素材/${name}`, bytes: encoded(value) })
     }
     // Keep the original document ID; rewriting refs would also require re-signing every immutable page.
@@ -55,7 +55,7 @@ if (process.argv.includes('--baseline')) {
 const fixture = createMotionFixture('S15')
 process.stdout.write(`${JSON.stringify(scoreMotionFixture(fixture, optimizeMotionDraft(fixture.input).candidates[0]))}\n`)
 // Enrich the current golden document so newer fields (such as beat settings) survive.
-const envelope = JSON.parse(fs.readFileSync(path.join(root, 'document.video_edit/v2.json'), 'utf8'))
+const envelope = JSON.parse(fs.readFileSync(path.join(root, '../video-edit-motion/golden-motion.json'), 'utf8'))
 envelope.kindVersion = 2
 const sequence = envelope.content.sequences[0]; const clip = sequence.clips[0]; clip.duration = 420
 const oldId = fixture.input.draft.ownerRef.id
@@ -77,7 +77,7 @@ const candidate = { version: 1, ...optimizeMotionDraft({ draft, samples, mapping
 const resource = { resourceId: 'golden-motion-candidate', digest: hash(encoded(candidate)), bytes: encoded(candidate).length, path: 'henji:/素材/golden-motion-candidate.json', kind: 'candidate' }
 draft.candidateRefs = [{ resourceId: resource.resourceId, digest: resource.digest, bytes: resource.bytes }]; draft.selectedCandidateRef = resource.resourceId
 envelope.content.creativeIntents = { drafts: [draft], sessions: [], resources: [pageResource, resource] }
-for (const [id, version, value] of [['document.video_edit', 2, envelope], ['creative-intent-page', 1, page], ['creative-intent-candidate', 1, candidate]]) {
-  const directory = path.join(root, id); fs.mkdirSync(directory, { recursive: true })
-  fs.writeFileSync(path.join(directory, `v${version}.json`), JSON.stringify(value, null, 2) + '\n', { flag: process.argv.includes('--refresh') ? 'w' : 'wx' })
+for (const [id, version, value] of [['video-edit-motion', 'golden-motion', envelope], ['video-edit-motion', 'golden-motion-page', page], ['video-edit-motion', 'golden-motion-candidate', candidate]]) {
+  const directory = path.join(root, '..', id); fs.mkdirSync(directory, { recursive: true })
+  fs.writeFileSync(path.join(directory, `${version}.json`), JSON.stringify(value, null, 2) + '\n', { flag: process.argv.includes('--refresh') ? 'w' : 'wx' })
 }

@@ -33,7 +33,7 @@ function exportTheme(): void {
 const GeneralTab: React.FC = () => {
   const importThemePayload = useSettingsStore((state) => state.importThemePayload)
 
-  /** 导入 v1/v2 主题文件：统一经 parseThemePayload（v1 自动迁移）。 */
+  /** 导入主题文件：统一经 parseThemePayload，只接受当前 v2。 */
   const handleImportTheme = async (file: File, mode: ThemeImportMode): Promise<boolean> => {
     try {
       const raw = await file.text()

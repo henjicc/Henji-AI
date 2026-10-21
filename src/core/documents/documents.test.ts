@@ -75,7 +75,7 @@ describe('文档外壳', () => {
 
   it('固定字段顺序，草稿标记只在为真时写出，往返一致', () => {
     const draft = buildDocumentEnvelope({ ...base, draft: true })
-    expect(Object.keys(draft)).toEqual(['format', 'envelopeVersion', 'kind', 'kindVersion', 'id', 'name', 'createdAt', 'updatedAt', 'revision', 'draft', 'content'])
+    expect(Object.keys(draft)).toEqual(['format', 'envelopeVersion', 'minReaderVersion', 'kind', 'kindVersion', 'kindMinReaderVersion', 'id', 'name', 'createdAt', 'updatedAt', 'revision', 'draft', 'content'])
     expect(parseDocumentText(serializeDocumentEnvelope(draft))).toEqual(draft)
     const saved = buildDocumentEnvelope({ ...base, draft: false })
     expect('draft' in saved).toBe(false)

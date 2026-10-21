@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { documentIdSchema } from './envelope'
 import type { FolderLocale } from './types'
 import { formatMigrations } from '../persistence/formatMigrations'
-import { migratePersistenceContent, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
+import { migratePersistenceContent, persistenceForwardFields, upgradePersistenceContent, type PersistenceContract } from '../persistence/migrations'
+import { restoreForwardFields } from '../persistence/forwardCompat'
 
 /*
  * 项目说明 `<项目>/.henji/project.json`（实施方案 2.3）。
@@ -31,6 +32,8 @@ export const UNTITLED_PROJECT_NAMES: Readonly<Record<FolderLocale, string>> = {
 export interface ProjectManifest {
   format: typeof PROJECT_MANIFEST_FORMAT
   version: typeof PROJECT_MANIFEST_VERSION
+  /** 能读懂这份说明的最低程序版本；只新增可选字段时不变。 */
+  minReaderVersion: number
   id: string
   createdAt: string
   locale: FolderLocale
@@ -47,6 +50,7 @@ const folderNameSchema = z.string().min(1).max(120).refine(
 export const projectManifestSchema = z.object({
   format: z.literal(PROJECT_MANIFEST_FORMAT),
   version: z.literal(PROJECT_MANIFEST_VERSION),
+  minReaderVersion: z.number().int().positive().optional(),
   id: documentIdSchema,
   createdAt: z.iso.datetime({ offset: true }),
   locale: z.enum(['zh', 'en']),
@@ -76,6 +80,7 @@ export function buildProjectManifest(fields: ProjectManifestFields): ProjectMani
   return {
     format: PROJECT_MANIFEST_FORMAT,
     version: PROJECT_MANIFEST_VERSION,
+    minReaderVersion: PROJECT_MANIFEST_VERSION,
     id: fields.id,
     createdAt: fields.createdAt,
     locale: fields.locale,
@@ -92,13 +97,33 @@ export function projectManifestContract(): PersistenceContract {
 export function parseProjectManifest(raw: unknown, backupPath?: string): ProjectManifest {
   const version = raw && typeof raw === 'object' && 'version' in raw ? Number(raw.version) : PROJECT_MANIFEST_VERSION
   const contract = projectManifestContract()
-  const upgraded = version < contract.version ? upgradePersistenceContent(contract, raw, version, backupPath) : migratePersistenceContent(contract, raw, version, backupPath)
+  const upgraded = version !== contract.version ? upgradePersistenceContent(contract, raw, version, backupPath, projectManifestMinReader(raw)) : migratePersistenceContent(contract, raw, version, backupPath)
   const result = projectManifestSchema.safeParse(upgraded)
   if (!result.success) {
     throw new ProjectManifestError(`项目说明无效：${result.error.issues[0]?.message ?? '格式错误'}`, { cause: result.error })
   }
   const { draft, mainVideoEditId, ...rest } = result.data
   return buildProjectManifest({ ...rest, draft: draft === true, mainVideoEditId })
+}
+
+function projectManifestMinReader(raw: unknown): number | undefined {
+  return raw && typeof raw === 'object' && 'minReaderVersion' in raw && typeof raw.minReaderVersion === 'number' ? raw.minReaderVersion : undefined
+}
+
+/**
+ * 写回项目说明前对照磁盘上的现有说明：更新版本写出、本程序可读的说明保留原版本戳与本程序不认识的字段。
+ * 现有说明缺失、无法解析或不是更新版本时，原样返回本次说明。
+ */
+export function carryProjectManifestForward(existingText: string | null, next: ProjectManifest): unknown {
+  if (!existingText) return next
+  let raw: unknown
+  try { raw = JSON.parse(existingText.charCodeAt(0) === 0xfeff ? existingText.slice(1) : existingText) as unknown } catch { return next }
+  const version = raw && typeof raw === 'object' && 'version' in raw ? Number(raw.version) : 0
+  if (!(version > PROJECT_MANIFEST_VERSION)) return next
+  try {
+    const fields = persistenceForwardFields(upgradePersistenceContent(projectManifestContract(), raw, version, undefined, projectManifestMinReader(raw)))
+    return { ...restoreForwardFields(next, fields), version, minReaderVersion: projectManifestMinReader(raw) }
+  } catch { return next }
 }
 
 export function parseProjectManifestText(text: string, backupPath?: string): ProjectManifest {
@@ -111,7 +136,7 @@ export function parseProjectManifestText(text: string, backupPath?: string): Pro
   return parseProjectManifest(raw, backupPath)
 }
 
-export function serializeProjectManifest(manifest: ProjectManifest): string {
+export function serializeProjectManifest(manifest: unknown): string {
   return `${JSON.stringify(manifest, null, 2)}\n`
 }
 

@@ -11,6 +11,7 @@ import {
   projectManifestContract,
   PROJECT_MANIFEST_FILE_NAME,
   serializeProjectManifest,
+  carryProjectManifestForward,
   type ProjectManifest,
 } from '../../../../src/core/documents/projectManifest'
 import type { DocumentContainerRef, FolderLocale } from '../../../../src/core/documents/types'
@@ -172,13 +173,14 @@ export class DocumentWorkspace {
     let raw: unknown
     try { raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown }
     catch { return parseProjectManifestText(text) }
-    const backupPath = raw && typeof raw === 'object' && 'version' in raw ? await backupBeforePersistenceUpgrade(this.manifestPath(projectRoot), projectManifestContract(), typeof raw.version === 'number' ? raw.version : 0, text) : undefined
+    const backupPath = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' && raw.version < projectManifestContract().version ? await backupBeforePersistenceUpgrade(this.manifestPath(projectRoot), projectManifestContract(), typeof raw.version === 'number' ? raw.version : 0, text) : undefined
     return parseProjectManifestText(text, backupPath)
   }
 
   async writeManifest(projectRoot: string, manifest: ProjectManifest): Promise<void> {
     await this.ensureInternalFolder(projectRoot)
-    await writeBufferAtomically(this.manifestPath(projectRoot), Buffer.from(serializeProjectManifest(manifest), 'utf8'))
+    const existing = await fsp.readFile(this.manifestPath(projectRoot), 'utf8').catch(() => null)
+    await writeBufferAtomically(this.manifestPath(projectRoot), Buffer.from(serializeProjectManifest(carryProjectManifestForward(existing, manifest)), 'utf8'))
   }
 
   /**

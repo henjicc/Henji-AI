@@ -1,8 +1,10 @@
 {
   "format": "henji-document",
   "envelopeVersion": 1,
+  "minReaderVersion": 1,
   "kind": "image_document",
   "kindVersion": 1,
+  "kindMinReaderVersion": 1,
   "id": "golden-image_document",
   "name": "图片",
   "createdAt": "2026-10-09T00:00:00.000Z",
@@ -13,6 +15,6 @@
     "emptyUntilRevision": 0,
     "width": 32,
     "height": 40,
-    "layers": 4
+    "layers": 5
   }
 }

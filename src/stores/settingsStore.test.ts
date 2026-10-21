@@ -2,26 +2,23 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useSettingsStore } from './settingsStore'
 import { SETTINGS_STORAGE_VERSION } from '@/core/persistence/settingsSchema'
-import settingsV13 from '../../tests/fixtures/persistence/settings/v13.json'
-import { DEFAULT_RECORDING_SHORTCUTS } from '@/core/screenRecording/contracts'
+import settingsV14 from '../../tests/fixtures/persistence/settings/v14.json'
 
 describe('设置格式保护', () => {
   beforeEach(() => {
     localStorage.clear()
     useSettingsStore.setState({ assetEdgeTriggerEnabled: false, assetTriggerEdge: 'right', assetEdgeDelayMs: 650 })
   })
-  it('v13 黄金样本 hydration 保留旧设置并补快捷键，随后修改可保存为 v14', async () => {
-    const text = JSON.stringify(settingsV13)
+  it('当前版本黄金样本 hydration 原样保留设置，随后修改按当前版本保存', async () => {
+    const text = JSON.stringify(settingsV14)
     localStorage.setItem('settings-storage', text)
     await useSettingsStore.persist.rehydrate()
-    expect(useSettingsStore.getState()).toMatchObject({ ...settingsV13.state, recordingShortcuts: DEFAULT_RECORDING_SHORTCUTS })
+    expect(useSettingsStore.getState()).toMatchObject(settingsV14.state)
     expect(localStorage.getItem('settings-storage')).toBe(text)
-    expect(localStorage.getItem('settings-storage:backup:v13')).toBe(text)
     useSettingsStore.getState().setAssetEdgeTriggerEnabled(true)
-    expect(JSON.parse(localStorage.getItem('settings-storage')!)).toMatchObject({ version: 14, state: { ...settingsV13.state, assetEdgeTriggerEnabled: true, recordingShortcuts: DEFAULT_RECORDING_SHORTCUTS } })
+    expect(JSON.parse(localStorage.getItem('settings-storage')!)).toMatchObject({ version: SETTINGS_STORAGE_VERSION, state: { ...settingsV14.state, assetEdgeTriggerEnabled: true } })
     await useSettingsStore.persist.rehydrate()
     expect(useSettingsStore.getState().assetEdgeTriggerEnabled).toBe(true)
-    expect(localStorage.getItem('settings-storage:backup:v13')).toBe(text)
   })
   it('已明确放弃的旧设置不自动迁移、不覆盖原件，后续写入也明确失败', async () => {
     const text = JSON.stringify({ version: 10, state: { assetEdgeTriggerEnabled: true, assetTriggerEdge: 'left', assetEdgeDelayMs: 900 } })
@@ -29,7 +26,7 @@ describe('设置格式保护', () => {
     await useSettingsStore.persist.rehydrate()
     expect(useSettingsStore.getState().assetEdgeTriggerEnabled).toBe(false)
     expect(localStorage.getItem('settings-storage')).toBe(text)
-    expect(() => useSettingsStore.getState().setAssetEdgeTriggerEnabled(true)).toThrow('旧版本格式')
+    expect(() => useSettingsStore.getState().setAssetEdgeTriggerEnabled(true)).toThrow('早于当前版本可读取的最低版本')
     expect(localStorage.getItem('settings-storage')).toBe(text)
   })
   it('当前版本保留用户设置，hydration不触发改写', async () => {

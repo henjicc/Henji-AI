@@ -22,6 +22,7 @@ import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSche
 import { makeVideoEditItemClip } from '../src/core/videoEdit/projectItems'
 import { bindVideoEditCaptionSpeech } from '../src/core/videoEdit/captionSpeech'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../src/core/videoEdit/codeAsset'
+import { CODE_AUTHOR_API_VERSION } from '../src/core/videoEdit/codeMaterialPersistence'
 import { BUILTIN_STYLE_KITS } from '../src/core/videoEdit/styleKitPresets'
 import { BUILTIN_TITLE_TEMPLATES } from '../src/core/videoEdit/titleTemplates'
 import { VIDEO_EDIT_PRESET_PACKAGE_VERSION } from '../src/core/videoEdit/presetPackage'
@@ -33,7 +34,7 @@ import { embedImageEditRasterV3 } from '../src/core/imageEdit/v3/smartContent/co
 import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
 import { createThemePayloadV2 } from '../src/core/theme/themeMigration'
 import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
-import { BLACK_HEX, DEFAULT_THEME_COLOR_SCHEME_HEX, RECORDING_FRAME_SOLID_DEFAULT_HEX, SETTINGS_ACCENT_HEX } from '../src/core/theme/colorTokens'
+import { BLACK_HEX, RECORDING_FRAME_SOLID_DEFAULT_HEX } from '../src/core/theme/colorTokens'
 
 const timestamp = '2026-10-09T00:00:00.000Z'
 const parameters = {
@@ -47,13 +48,13 @@ const source = `export default {
   motionBlur: { shutter: 180, maxSamples: 16 },
   params: ${JSON.stringify(Object.entries(parameters).map(([key, value]) => ({ key, ...value })))},
   layers() {
-    return [{ id: "golden-motion", bounds: [0, 0, 100, 100], blurShape: "lens", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = "#000000"; ctx.fillRect(0, 0, 100, 100) } }]
+    return [{ id: "golden-motion", bounds: [0, 0, 100, 100], blurShape: "lens", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = "${BLACK_HEX}"; ctx.fillRect(0, 0, 100, 100) } }]
   }
 }
 `
 const program = testCodeMetadata({ name: '黄金代码', width: 1920, height: 1080, durationSeconds: 4, parameters })
 const hash = createHash('sha256').update(source).digest('hex')
-const sourceVersion = { apiVersion: 4 as const, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: '/persistence-project/代码/标题/v1/main.ts', hash }], imports: [] }
+const sourceVersion = { apiVersion: CODE_AUTHOR_API_VERSION, languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location: '/persistence-project/代码/标题/v1/main.ts', hash }], imports: [] }
 const document = createVideoEditDocument('持久格式黄金样本')
 document.id = 'golden-video'
 document.codeMaterials = [{ id: 'code-definition', name: '代码标题', defaultVersionId: 'code-version', versions: [{ id: 'code-version', ...sourceVersion }] }]
@@ -88,8 +89,12 @@ cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true
   { id: 'golden-frame', name: '录屏画框', enabled: true, amount: 1, builtin: { id: 'recording_frame', params: { background: 'solid', color: RECORDING_FRAME_SOLID_DEFAULT_HEX, padding: 6, radius: 2.5, shadow: 50 } } }]
 cursorClip.curves = { scale: [{ time: 0, value: 1, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 0, value: 1, interpolation: 'linear' } }, { time: 45, value: 1.8, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 45, value: 1.8, interpolation: 'linear' } }] }
 sequence.clips.push(cursorClip)
+const holdClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 180, duration: 30 })
+holdClip.id = 'golden-frame-hold'
+holdClip.frameHold = true
+sequence.clips.push(holdClip)
 // v8：工程风格快照带理念、结构化规则、节奏与扩展动效；序列绑定它。
-const goldenKit = { ...BUILTIN_STYLE_KITS[0], id: 'golden-kit', name: '黄金风格', examples: BUILTIN_STYLE_KITS[0].examples.slice(0, 1) }
+const goldenKit = { ...BUILTIN_STYLE_KITS[0], id: 'golden-kit', name: '黄金风格', examples: [{ id: 'opener', title: '开场标题', note: '演示说明书里的错峰入场与字体层级。', source }] }
 document.styleKits = [goldenKit]
 sequence.styleKitId = goldenKit.id
 videoEditDocumentSchema.parse(document)
@@ -188,6 +193,7 @@ const values: Record<string, unknown> = {
   project: buildProjectManifest({ id: 'golden-project', createdAt: timestamp, locale: 'zh', draft: false, mainVideoEditId: document.id }),
   'project-package': { format: 'henji-package', version: 1, type: 'project', name: '黄金项目', exportedAt: timestamp, folders: { generated: '生成结果', materials: '素材' }, documents: [{ id: document.id, path: '黄金剪辑.henji-video' }] },
   'code-version': { id: 'code-version', ...sourceVersion },
+  'code-author-api': { apiVersion: CODE_AUTHOR_API_VERSION },
   'code-component': { schemaVersion: 1, name: '组件', version: 1, description: '黄金组件', exports: ['value'], imports: [] },
   'code-asset': codeAssetSchema.parse({ format: 'henji-code-asset', version: CODE_ASSET_VERSION, name: '代码标题', sourceVersion, codeSources: [{ hash, source }], parameters: { label: '黄金样本' }, curves: {}, images: [] }),
   'image-header': { format: 'henji-image-document', version: 1, id: image.id, revision: 0, kindVersion: 1, createdAt: timestamp, updatedAt: timestamp, contentRevision: 0, emptyUntilRevision: 0, summary: { width: 32, height: 40, layers: image.layers.length } },
@@ -239,7 +245,6 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
     const directory = path.join(root, 'tests/fixtures/persistence', format.id)
     fs.mkdirSync(directory, { recursive: true })
     fs.writeFileSync(path.join(directory, `v${format.version}.json`), `${JSON.stringify(raw, null, 2)}\n`, { flag: 'wx' })
-    if (format.id === 'theme-payload') fs.writeFileSync(path.join(directory, 'v1.json'), `${JSON.stringify({ version: 1, themeTonePreset: 'neutral', uiRadiusPreset: 'default', accentColor: SETTINGS_ACCENT_HEX, colors: DEFAULT_THEME_COLOR_SCHEME_HEX }, null, 2)}\n`, { flag: 'wx' })
   }
   return PERSISTENCE_FORMATS.length
 }

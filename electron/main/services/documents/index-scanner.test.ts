@@ -10,14 +10,14 @@ it('不可读的版本、外壳、项目说明和图片包只计 invalid，正�
   try {
     const good = await env.services.service.createDocument({ kind: 'canvas', name: '正常', container: { kind: 'user' } })
     const raw = JSON.parse(await fsp.readFile(good.meta.path, 'utf8')) as Record<string, unknown>
-    for (const [name, content] of Object.entries({ kind: { ...raw, kindVersion: 999 }, envelope: { ...raw, envelopeVersion: 999 }, missing: {} })) {
+    for (const [name, content] of Object.entries({ kind: { ...raw, kindVersion: 999, kindMinReaderVersion: 999 }, envelope: { ...raw, envelopeVersion: 999, minReaderVersion: 999 }, missing: {} })) {
       await fsp.writeFile(path.join(path.dirname(good.meta.path), `${name}.henji-canvas`), JSON.stringify(content))
     }
     for (const version of [999, 'future']) {
       const project = await env.services.service.createProject({ name: `坏项目-${version}` })
       const file = path.join(project.path, '.henji', 'project.json')
       const manifest = JSON.parse(await fsp.readFile(file, 'utf8')) as Record<string, unknown>
-      await fsp.writeFile(file, JSON.stringify({ ...manifest, version }))
+      await fsp.writeFile(file, JSON.stringify({ ...manifest, version, minReaderVersion: version }))
     }
     await fsp.writeFile(path.join(path.dirname(good.meta.path), 'empty.henjiimg'), '')
     await expect(env.services.scanner.rebuild()).resolves.toMatchObject({ invalid: 6, documents: 1 })

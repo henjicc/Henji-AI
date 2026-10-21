@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import { PERSISTENCE_FORMATS } from './formats'
+import { z } from 'zod'
 import { guardedPlainStorage, guardedStateStorage } from './stateStorage'
-import { migrateModelDefaultsV1 } from './preferenceSchemas'
-import { migrateSettingsV13 } from './settingsSchema'
-import { DEFAULT_RECORDING_SHORTCUTS } from '../screenRecording/contracts'
-import settingsV13 from '../../../tests/fixtures/persistence/settings/v13.json'
-import modelsV1 from '../../../tests/fixtures/persistence/model-defaults/v1.json'
+import type { PersistenceContract } from './migrations'
+
+// 兼容起点之后的第一次升版本形态：v1 → v2 只补新字段默认值，保留用户值与未知字段。
+const settingsV1 = { version: 1, state: { theme: 'dark', extension: { keep: true } } }
+const settingsContract: PersistenceContract = { id: 'settings', name: '界面设置', version: 2, schema: z.object({ theme: z.string(), shortcut: z.string() }).passthrough(),
+  migrations: { 1: content => ({ ...(content as object), shortcut: 'Alt+F1' }) } }
+const modelsV1 = { version: 1, providerId: 'fal', models: { image: 'my-image' } }
+const modelsContract: PersistenceContract = { id: 'model-defaults', name: '默认生成与转写模型', version: 2, schema: z.object({ version: z.literal(2), providerId: z.string(), models: z.object({ image: z.string(), transcription: z.string() }) }),
+  migrations: { 1: content => { const value = content as typeof modelsV1; return { ...value, version: 2, models: { ...value.models, transcription: '' } } } } }
 
 function memoryStorage(key: string, text: string) {
   const values = new Map([[key, text]])
@@ -18,11 +22,10 @@ function memoryStorage(key: string, text: string) {
 
 describe('旧设置恢复读写与原件保护', () => {
   const cases = [
-    { id: 'settings', key: 'settings-storage', fixture: settingsV13, expected: { version: 14, state: { ...settingsV13.state, recordingShortcuts: DEFAULT_RECORDING_SHORTCUTS } } },
-    { id: 'model-defaults', key: 'henji-model-defaults', fixture: modelsV1, expected: { ...modelsV1, version: 2, models: { ...modelsV1.models, transcription: '' } } },
+    { id: 'settings', key: 'settings-storage', contract: settingsContract, fixture: settingsV1 as Record<string, unknown> & { version: number }, expected: { version: 2, state: { ...settingsV1.state, shortcut: 'Alt+F1' } } },
+    { id: 'model-defaults', key: 'henji-model-defaults', contract: modelsContract, fixture: modelsV1 as Record<string, unknown> & { version: number }, expected: { ...modelsV1, version: 2, models: { ...modelsV1.models, transcription: '' } } },
   ]
-  for (const { id, key, fixture, expected } of cases) {
-    const contract = PERSISTENCE_FORMATS.find(format => format.id === id)!
+  for (const { id, key, contract, fixture, expected } of cases) {
     const wrap = (storage: ReturnType<typeof memoryStorage>, onFailure = vi.fn()) => id === 'settings'
       ? guardedStateStorage(key, contract, storage)
       : guardedPlainStorage(key, contract, storage, onFailure)
@@ -59,7 +62,7 @@ describe('旧设置恢复读写与原件保护', () => {
     })
 
     it(`${id} 损坏、新版与非法字段继续保护原件，修复后重新读取能解除失败状态`, () => {
-      const invalid = id === 'settings' ? { ...fixture, state: { recordingShortcuts: null } } : { ...fixture, models: null }
+      const invalid = id === 'settings' ? { ...fixture, state: { theme: null } } : { ...fixture, models: null }
       for (const text of ['{broken', JSON.stringify({ ...fixture, version: contract.version + 1 }), JSON.stringify(invalid)]) {
         const storage = memoryStorage(key, text)
         const onFailure = vi.fn()
@@ -75,16 +78,4 @@ describe('旧设置恢复读写与原件保护', () => {
     })
   }
 
-  it('只补缺失默认值，保留用户选项和未知字段，纯迁移不修改输入', () => {
-    const models = { ...modelsV1, providerId: 'fal', models: { image: 'my-image', video: 'my-video', audio: 'my-audio' }, extension: { keep: true } }
-    const before = structuredClone(models)
-    expect(migrateModelDefaultsV1(models)).toEqual({ ...models, version: 2, models: { ...models.models, transcription: '' } })
-    expect(models).toEqual(before)
-    expect(migrateModelDefaultsV1({ ...models, models: { ...models.models, transcription: 'chosen' } })).toMatchObject({ models: { transcription: 'chosen' } })
-    const settings = { ...settingsV13.state, extension: { keep: true }, recordingShortcuts: { toggle: null, mark: 'Alt+F1', stop: 'Alt+F2' } }
-    expect(migrateSettingsV13(settings)).toEqual(settings)
-    const migrated = migrateSettingsV13({ extension: { keep: true } }) as { recordingShortcuts: typeof DEFAULT_RECORDING_SHORTCUTS }
-    expect(migrated).toEqual({ extension: { keep: true }, recordingShortcuts: DEFAULT_RECORDING_SHORTCUTS })
-    expect(migrated.recordingShortcuts).not.toBe(DEFAULT_RECORDING_SHORTCUTS)
-  })
 })

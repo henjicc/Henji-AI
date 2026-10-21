@@ -32,7 +32,7 @@ describe('不可变资源统一解码', () => {
     vi.stubGlobal('crypto', webcrypto)
     expect(await readMotionResource(resource)).toEqual(upgraded)
     expect(fs.readFileSync(file)).toEqual(bytes)
-    const oldFile = 'tests/fixtures/persistence/creative-intent-candidate/v1.json'
+    const oldFile = 'tests/fixtures/video-edit-motion/golden-motion-candidate.json'
     const oldBytes = fs.readFileSync(oldFile)
     expect(() => decodePersistenceResource('creative-intent-candidate', JSON.parse(oldBytes.toString('utf8')))).toThrowError(expect.objectContaining({ code: 'unsupported-version' }))
     expect(fs.readFileSync(oldFile)).toEqual(oldBytes)

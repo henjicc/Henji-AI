@@ -8,14 +8,13 @@ import { creativeIntentsSchema, MOTION_CANDIDATE_VERSION } from '../../../../src
 import { creativeIntentPageSchema } from '../../../../src/core/creativeIntent/pages'
 import { assertCandidateCurrent, motionCandidateIdentity, optimizeMotionDraft } from '../../../../src/core/creativeIntent/candidates'
 import { createTestEnvironment, silentLogger } from './documents.test-support'
-import { VIDEO_EDIT_CONTENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { PACKAGE_VERSION } from '../../../../src/core/persistence/storedSchemas'
 it('复制或项目包重配身份时，页和候选完整改绑；源文件和资源身份保持不变', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-motion-'))
   try {
-    const envelope = JSON.parse(await fs.readFile('tests/fixtures/persistence/document.video_edit/v2.json', 'utf8'))
-    const pages = JSON.parse(await fs.readFile('tests/fixtures/persistence/creative-intent-page/v1.json', 'utf8'))
-    const recordedCandidate = JSON.parse(await fs.readFile('tests/fixtures/persistence/creative-intent-candidate/v1.json', 'utf8'))
+    const envelope = JSON.parse(await fs.readFile('tests/fixtures/video-edit-motion/golden-motion.json', 'utf8'))
+    const pages = JSON.parse(await fs.readFile('tests/fixtures/video-edit-motion/golden-motion-page.json', 'utf8'))
+    const recordedCandidate = JSON.parse(await fs.readFile('tests/fixtures/video-edit-motion/golden-motion-candidate.json', 'utf8'))
     // 保留黄金录制的原始采样和映射，用正式算法生成当前候选，不依赖旧候选格式迁移。
     const candidate = { version: MOTION_CANDIDATE_VERSION, ...optimizeMotionDraft({
       draft: creativeIntentsSchema.parse(envelope.content.creativeIntents).drafts[0],
@@ -66,7 +65,7 @@ it('正式项目包导入、剪辑移动、再次导出重开保留全部原稿�
     const { service } = env.services
     // 黄金包含固定 id-0001；先占用它，使测试 ID 生成器走真实冲突重配，避免与后建项目碰撞。
     await service.createProject({ name: '原稿身份冲突' })
-    const imported = await service.importPackage({ source: path.resolve('tests/fixtures/persistence/project-package', `v${PACKAGE_VERSION}-video-v${VIDEO_EDIT_CONTENT_VERSION}.henjipack`) })
+    const imported = await service.importPackage({ source: path.resolve('tests/fixtures/persistence/project-package', `v${PACKAGE_VERSION}.henjipack`) })
     if (imported.type !== 'project') throw new Error('应为剪辑项目包')
     const document = env.catalog.listDocuments({ projectId: imported.project.id, kind: 'video_edit' })[0]
     const snapshot = async (id: string) => {

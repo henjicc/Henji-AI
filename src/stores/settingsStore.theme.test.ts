@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { ACCENT_PRESET_HEX, SETTINGS_ACCENT_HEX, THEME_PALETTE_PRESET_HEX, THEME_SEED_ACCENT_HEX } from '@/core/theme/colorTokens'
-import { normalizeHex } from '@/core/theme/themeColor'
+import { SETTINGS_ACCENT_HEX, THEME_PALETTE_PRESET_HEX, THEME_SEED_ACCENT_HEX } from '@/core/theme/colorTokens'
 import { DEFAULT_THEME_SEED, THEME_ACCENT_CHOICES, THEME_CONTRAST_LEVELS, THEME_PRESETS } from '@/core/theme/themeEngine'
 import { createThemePayloadV2, parseThemePayload } from '@/core/theme/themeMigration'
 import { DEFAULT_THEME_SELECTION } from '@/core/theme/themeSelection'
@@ -80,19 +79,12 @@ describe('settingsStore 外观选择（v14）', () => {
     expect(state.themeSelection.preset).toBe('custom')
     expect(state.uiRadiusPreset).toBe('large')
   })
-
-  it('导入 v1 主题文件：内置方案 → 石墨并保留改过的强调色', () => {
-    const v1 = { version: 1, themeTonePreset: 'warm', uiRadiusPreset: 'default', accentColor: ACCENT_PRESET_HEX[7], colors: THEME_PALETTE_PRESET_HEX[1].colors }
-    useSettingsStore.getState().importThemePayload(parseThemePayload(v1)!, 'all')
-    expect(useSettingsStore.getState().themeSelection).toMatchObject({ preset: 'graphite', accent: normalizeHex(ACCENT_PRESET_HEX[7]) })
-  })
 })
 
 describe('settingsStore 外观持久化边界', () => {
-  it('开发期v11/v12设置迁移已显式放弃，保留可分享主题的既有迁移', () => {
+  it('设置不走 zustand 迁移；兼容起点之前的 v1 主题文件不再转换', () => {
     expect(useSettingsStore.persist.getOptions().migrate).toBeUndefined()
-    const imported = parseThemePayload({ version: 1, themeTonePreset: 'warm', uiRadiusPreset: 'default', accentColor: SETTINGS_ACCENT_HEX, colors: THEME_PALETTE_PRESET_HEX[2].colors })
-    expect(imported?.version).toBe(2)
-    expect(imported?.seed).toEqual(DEFAULT_THEME_SEED)
+    expect(parseThemePayload({ version: 1, themeTonePreset: 'warm', uiRadiusPreset: 'default', accentColor: SETTINGS_ACCENT_HEX, colors: THEME_PALETTE_PRESET_HEX[2].colors })).toBeNull()
+    expect(parseThemePayload(createThemePayloadV2({ seed: DEFAULT_THEME_SEED }))?.seed).toEqual(DEFAULT_THEME_SEED)
   })
 })

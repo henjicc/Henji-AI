@@ -152,7 +152,7 @@ describe('通用单文件包（4.1）', () => {
     const container = { kind: 'project' as const, projectId: project.id }
     const internal = write(path.join(project.path, '导出', '内置成片.mp4'), 'internal-output')
     const external = write(path.join(env.outside, '外部成片.mp4'), 'external-output')
-    const golden = await readJson('tests/fixtures/persistence/document.video_edit/v4.json')
+    const golden = await readJson('tests/fixtures/persistence/document.video_edit/v17.json')
     const history = videoEditExportHistorySchema.parse((golden.content as Record<string, unknown>).exportHistory)
     const outputPaths = ['/persistence-project/导出/黄金.mp4', 'Z:\\缺失\\成片.mp4', path.join(project.path, '导出', '已删除.mp4'), internal, external]
     const exportHistory = outputPaths.map((output, index) => ({ ...history[0], id: `output-${index}`, path: output }))
@@ -183,7 +183,7 @@ describe('通用单文件包（4.1）', () => {
   it('成片重新作为源素材使用时仍是依赖，Windows 与 POSIX 缺失源素材均如实报告', async () => {
     const { service } = env.services
     const project = await service.createProject({ name: '成片复用' })
-    const golden = await readJson('tests/fixtures/persistence/document.video_edit/v4.json')
+    const golden = await readJson('tests/fixtures/persistence/document.video_edit/v17.json')
     const history = videoEditExportHistorySchema.parse((golden.content as Record<string, unknown>).exportHistory)
     const missing = ['/persistence-project/导出/黄金.mp4', 'Z:\\缺失\\成片.mp4']
     const source = write(path.join(env.outside, '复用成片.mp4'), 'source-output')

@@ -14,18 +14,12 @@ function content() {
 }
 
 describe('剪辑类型登记', () => {
-  it.each([4, 5, 6, 10])('v%s 开发期旧内容明确拒绝，不伪造字幕词源且不改原输入', (version) => {
+  it.each([4, 10, videoEditDocumentKind.version - 1])('兼容起点之前的 v%s 内容明确拒绝为早于最低可读版本，不改原输入', (version) => {
     const before = { ...content(), sequences: [{ ...createVideoEditSequence(), captions: [{ id: 'caption', start: 0, duration: 30, text: '保留字幕' }], futureField: { keep: true } }] }
     const snapshot = structuredClone(before)
-    expect(() => upgradePersistenceContent({ id: 'document.video_edit', name: '剪辑', version: videoEditDocumentKind.version, schema: videoEditDocumentKind.contentSchema, migrations: videoEditDocumentKind.migrations }, before, version)).toThrowError(expect.objectContaining({ code: 'unsupported-version', fromVersion: 10, toVersion: 11 }))
+    expect(() => upgradePersistenceContent({ id: 'document.video_edit', name: '剪辑', version: videoEditDocumentKind.version, schema: videoEditDocumentKind.contentSchema, migrations: videoEditDocumentKind.migrations }, before, version))
+      .toThrowError(expect.objectContaining({ code: 'unsupported-version', fromVersion: version }))
     expect(before).toEqual(snapshot)
-  })
-  it('3 → 4 迁移保留字幕与其他内容并初始化可见、未锁定，不改原输入', () => {
-    const before = { ...content(), sequences: [{ ...createVideoEditSequence(), captions: [{ id: 'caption', start: 0, duration: 30, text: '保留字幕' }] }] }
-    const migrated = videoEditDocumentKind.migrations![3](before)
-    expect(migrated).toEqual({ ...before, sequences: [{ ...before.sequences[0], captionTrackEnabled: true, captionTrackLocked: false }] })
-    expect(before.sequences[0]).not.toHaveProperty('captionTrackLocked')
-    expect(videoEditDocumentKind.contentSchema.parse(migrated).sequences[0].captions).toEqual(before.sequences[0].captions)
   })
   it('新建内容没有序列，算空；显式建立空序列仍算空', () => {
     const empty = content()

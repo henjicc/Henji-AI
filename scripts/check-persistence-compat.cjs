@@ -27,7 +27,9 @@ function snapshot(root = ROOT) {
     if (ids.has(format.id)) throw new Error(`持久格式重复登记：${format.id}`)
     ids.add(format.id)
     if (!Number.isSafeInteger(format.version) || format.version < 1) throw new Error(`格式版本无效：${format.id}`)
-    return { ...format, fingerprint: crypto.createHash('sha256').update(persistenceSchemaStructure(format.schemas)).digest('hex') }
+    const minReaderVersion = format.minReaderVersion ?? format.version
+    if (!Number.isSafeInteger(minReaderVersion) || minReaderVersion < 1 || minReaderVersion > format.version) throw new Error(`最低可读版本无效：${format.id}`)
+    return { ...format, minReaderVersion, fingerprint: crypto.createHash('sha256').update(persistenceSchemaStructure(format.schemas)).digest('hex') }
   })
 }
 function fixtureVersions(root, id, extension) {
@@ -45,9 +47,12 @@ function validateCompatibility(formats, baseline, fixtures) {
     const previous = baseline.formats[format.id]
     if (!previous) { errors.push(`未登记基线：${format.id}；运行 npm run persistence:baseline。`); continue }
     if (format.version < previous.version) errors.push(`持久格式版本不能回退：${format.id}`)
+    const previousMinReader = previous.minReaderVersion ?? previous.version, minReader = format.minReaderVersion ?? format.version
+    if (format.version === previous.version && minReader !== previousMinReader) errors.push(`最低可读版本与基线不一致：${format.id}；只新增可选字段时保持不变，改变已有含义时提高，然后运行 npm run persistence:baseline。`)
+    if (minReader < previousMinReader) errors.push(`最低可读版本不能降低：${format.id}`)
     if (format.fingerprint !== previous.fingerprint || format.version !== previous.version) {
       errors.push(format.version === previous.version
-        ? `改了持久格式 ${format.id}：请升版本并写迁移；开发期可运行 npm run persistence:baseline -- --dev-break ${format.id} --reason "…" 显式登记放弃兼容。`
+        ? `改了持久格式 ${format.id}：请升版本并写迁移与黄金样本。`
         : `持久格式 ${format.id} 已升版本，请补迁移和样本后运行 npm run persistence:baseline。`)
     }
     // Grandfathered dev breaks reject historical versions even after release; new ones are forbidden.
@@ -66,7 +71,7 @@ function validateCompatibility(formats, baseline, fixtures) {
     ].sort((a, b) => a.at.localeCompare(b.at))
     if (supportHistory.length && (previous.supportedFrom ?? 1) !== supportHistory.at(-1).floor) errors.push(`支持下限与审计不一致：${format.id}；请通过 --restore-support 补迁移恢复支持。`)
     const waived = new Set(breaks.flatMap(item => item.waivedFixtureVersions ?? []))
-    for (let version = 1; version <= format.version; version++) {
+    for (let version = Math.max(1, previous.supportedFrom ?? 1); version <= format.version; version++) {
       if (!fixtures(format.id).includes(version) && !(version < format.version && waived.has(version))) errors.push(`缺少黄金样本：${format.id}/v${version}.*`)
     }
     for (const requirement of format.requiredFixtures ?? [{ extension: 'json' }]) {
@@ -86,6 +91,14 @@ function validateCompatibility(formats, baseline, fixtures) {
   return errors
 }
 function updateBaseline(formats, baseline, options, fixtures) {
+  if (options.compatibilityStart) {
+    if (baseline.releasedCompatibility || options.devBreak || options.restoreSupport || !options.reason?.trim()) throw new Error('兼容起点只能在首次正式启用前登记一次，须提供非空 --reason，且不能混用其他登记命令。')
+    const start = { releasedCompatibility: true, compatibilityStart: { at: new Date().toISOString(), reason: options.reason.trim() }, formats: {}, devBreaks: [] }
+    for (const format of formats) start.formats[format.id] = { version: format.version, fingerprint: format.fingerprint, supportedFrom: format.version, minReaderVersion: format.minReaderVersion ?? format.version }
+    const errors = validateCompatibility(formats, start, fixtures)
+    if (errors.length) throw new Error(errors.join('\n'))
+    return start
+  }
   const next = structuredClone(baseline)
   const adoption = options.frameworkAdoption === true
   const restorations = options.restoreSupport ?? []
@@ -109,7 +122,7 @@ function updateBaseline(formats, baseline, options, fixtures) {
   }
   if (adoption && (baseline.releasedCompatibility || baseline.frameworkAdoption || !options.reason?.trim() || options.devBreak)) throw new Error('框架一次性登记仅允许首次发布前执行一次，须提供非空理由且不能混用 dev-break')
   const breaks = options.devBreak ? (Array.isArray(options.devBreak) ? options.devBreak : [options.devBreak]) : []
-  if (breaks.length && baseline.releasedCompatibility) throw new Error('正式发布后禁止 --dev-break；请升版本并写迁移和黄金样本。')
+  if ((breaks.length || options.waiveBefore) && baseline.releasedCompatibility) throw new Error('已正式启用向后兼容，禁止 --dev-break 与 --waive-before；请升版本并写迁移和黄金样本。')
   if (breaks.length && (!options.reason?.trim() || breaks.some(id => !formats.some(format => format.id === id) && !baseline.formats[id]))) throw new Error('--dev-break 必须指定已登记格式与非空 --reason。')
   for (const format of formats) {
     const broken = breaks.includes(format.id)
@@ -119,7 +132,8 @@ function updateBaseline(formats, baseline, options, fixtures) {
     if (previous && format.version === previous.version && previous.fingerprint !== format.fingerprint && !broken && !options.frameworkAdoption) throw new Error(`改了持久格式 ${format.id}，请升版本并写迁移；开发期须显式 --dev-break。`)
     const adoption = options.init && format.version > 1
     const supportedFrom = restoredFloors.get(format.id) ?? (broken || adoption ? format.version : previous?.supportedFrom ?? 1)
-    next.formats[format.id] = { version: format.version, fingerprint: format.fingerprint, supportedFrom }
+    if (previous?.minReaderVersion !== undefined && (format.minReaderVersion ?? format.version) < previous.minReaderVersion) throw new Error(`最低可读版本不能降低：${format.id}`)
+    next.formats[format.id] = { version: format.version, fingerprint: format.fingerprint, supportedFrom, minReaderVersion: format.minReaderVersion ?? format.version }
     if (restoredFloors.has(format.id)) {
       next.compatibilityRestorations ??= []
       next.compatibilityRestorations.push({ at: new Date().toISOString(), format: format.id, version: format.version,
@@ -141,7 +155,7 @@ function updateBaseline(formats, baseline, options, fixtures) {
   return next
 }
 function main(argv = process.argv.slice(2)) {
-  const flags = new Set(['--write', '--init', '--dev-break', '--restore-support', '--reason', '--waive-before', '--release-snapshot', '--framework-adoption'])
+  const flags = new Set(['--write', '--init', '--dev-break', '--restore-support', '--reason', '--waive-before', '--release-snapshot', '--framework-adoption', '--compatibility-start'])
   const options = {}
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]
@@ -157,7 +171,8 @@ function main(argv = process.argv.slice(2)) {
   }
   options.frameworkAdoption = options['framework-adoption']
   options.waiveBefore = options['waive-before']
-  if ((options.devBreak || options.restoreSupport || options.reason || options.waiveBefore || options.init || options.frameworkAdoption) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
+  options.compatibilityStart = options['compatibility-start']
+  if ((options.devBreak || options.restoreSupport || options.reason || options.waiveBefore || options.init || options.frameworkAdoption || options.compatibilityStart) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
   if (options.waiveBefore && !options.devBreak) throw new Error('--waive-before 只允许和 --dev-break、--reason 一起使用。')
   const formats = snapshot()
   let baseline
@@ -166,6 +181,7 @@ function main(argv = process.argv.slice(2)) {
     if (!options.reason?.trim()) throw new Error('初始化基线须用 --reason 显式登记接入前历史样本豁免。')
     baseline = { releasedCompatibility: false, formats: {}, devBreaks: [] }
   } else baseline = JSON.parse(fs.readFileSync(BASELINE, 'utf8'))
+  if (baseline.releasedCompatibility && (options.devBreak || options.waiveBefore)) throw new Error('已正式启用向后兼容，禁止 --dev-break 与 --waive-before；请升版本并写迁移和黄金样本。')
   const fixtures = (id, extension) => fixtureVersions(ROOT, id, extension)
   const releasedPath = path.join(ROOT, RELEASED_PATH)
   const released = JSON.parse(fs.readFileSync(releasedPath, 'utf8'))

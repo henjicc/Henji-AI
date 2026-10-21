@@ -25,7 +25,7 @@ export const FILE_PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   file('canvas-layer-package', '画布内嵌图层包', CANVAS_LAYER_PACKAGE_VERSION, 'henji-document.json.version', 'electron/main/services/image-editor-v3/canvas-layers/canvas-layer-packages.ts', canvasLayerHeaderSchema, { package: imagePackageManifestSchema }),
   file('keystore', '供应商凭据文件', KEYSTORE_VERSION, 'KeystoreFile.version', 'electron/main/services/keystore.ts::readKeystoreFile', encryptedKeystoreSchema),
   file('media-grants', '媒体目录授权', MEDIA_GRANTS_VERSION, 'PersistedGrantsFile.version', 'electron/main/services/media/rootGrants.ts::restorePersistedMediaRoots', mediaGrantsSchema),
-  file('llm-config', '助手模型配置', LLM_CONFIG_VERSION, 'llm-config.json.version（内容仍为公共SDK DTO）', 'electron/main/services/llm/provider-settings-storage.ts::readConfig', llmStoredConfigSchema, { container: z.object({ version: z.literal(LLM_CONFIG_VERSION), content: llmStoredConfigSchema }).strict() }),
+  file('llm-config', '助手模型配置', LLM_CONFIG_VERSION, 'llm-config.json.version（内容仍为公共SDK DTO）', 'electron/main/services/llm/provider-settings-storage.ts::readConfig', llmStoredConfigSchema, { container: z.object({ version: z.literal(LLM_CONFIG_VERSION), minReaderVersion: z.number().int().positive().max(LLM_CONFIG_VERSION).optional(), content: llmStoredConfigSchema }).strict() }),
   file('storyboard-metadata', '分镜图片描述', STORYBOARD_METADATA_VERSION, 'StoryboardCopilotMetadata.version（PNG iTXt）', 'electron/main/services/image/png-metadata.ts::readStoryboardMetadataFromPng', storyboardMetadataSchema),
   file('llm-config-journal', '助手配置事务恢复记录', LLM_JOURNAL_VERSION, 'ProviderSettingsJournal.version', 'electron/main/services/llm/provider-settings-storage.ts::readJournal', providerSettingsJournalSchema),
 ]

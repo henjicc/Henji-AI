@@ -16,7 +16,7 @@ const image = z.object({
   kind: z.enum(['image', 'video', 'audio']), content: codeAssetContentSchema, assetId: z.string().min(1).max(100).optional(),
 }).strict()
 export const codeAssetSchema = z.object({
-  format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), name: z.string().trim().min(1).max(200),
+  format: z.literal('henji-code-asset'), version: z.literal(CODE_ASSET_VERSION), minReaderVersion: z.number().int().positive().optional(), name: z.string().trim().min(1).max(200),
   sourceVersion: z.object({ apiVersion: codeMaterialVersionSchema.shape.apiVersion, languageVersion: codeMaterialVersionSchema.shape.languageVersion, entry: codeMaterialVersionSchema.shape.entry, files: codeMaterialVersionSchema.shape.files, imports: codeMaterialVersionSchema.shape.imports }).strict(),
   codeSources: codeSourcesSchema,
   parameters: codeMaterialInstanceSchema.shape.parameters,
@@ -55,10 +55,14 @@ export function decodeCodeAsset(bytes: Uint8Array, backupPath?: string): CodeAss
   if (!bytes.byteLength || bytes.byteLength > CODE_ASSET_LIMITS.bytes) throw new Error('代码素材清单不能为空且最多512KiB。')
   const raw = parseCodeAssetBytes(bytes, backupPath)
   const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
-  return codeAssetSchema.parse(upgradePersistenceContent(codeAssetContract(), raw, version, backupPath))
+  const minReaderVersion = raw && typeof raw === 'object' && 'minReaderVersion' in raw && typeof raw.minReaderVersion === 'number' ? raw.minReaderVersion : undefined
+  // 最低可读版本只是文件版本戳，不进入内存值；写出时总按本程序版本重新盖戳。
+  const { minReaderVersion: _stamp, ...asset } = codeAssetSchema.parse(upgradePersistenceContent(codeAssetContract(), raw, version, backupPath, minReaderVersion))
+  return asset
 }
 export function encodeCodeAsset(input: CodeAsset): Uint8Array {
-  const bytes = new TextEncoder().encode(JSON.stringify(codeAssetSchema.parse(input)))
+  const { format, version, minReaderVersion: _minReaderVersion, ...rest } = codeAssetSchema.parse(input)
+  const bytes = new TextEncoder().encode(JSON.stringify({ format, version, minReaderVersion: CODE_ASSET_VERSION, ...rest }))
   if (bytes.byteLength > CODE_ASSET_LIMITS.bytes) throw new Error('代码素材清单最多512KiB。')
   return bytes
 }

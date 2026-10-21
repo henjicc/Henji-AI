@@ -42,7 +42,7 @@ describe('文档升级的真实文件边界', () => {
     expect(await fsp.readFile(filePath, 'utf8')).toBe(text)
     await env.cleanup(); environment = undefined
     const missing = await setup(false, true)
-    await expect(missing.env.services.service.readDocument({ id: 'upgrade', path: missing.filePath })).rejects.toThrow('旧版本格式')
+    await expect(missing.env.services.service.readDocument({ id: 'upgrade', path: missing.filePath })).rejects.toThrow('早于当前版本可读取的最低版本')
     expect(missing.step).not.toHaveBeenCalled()
   })
   it('备份无法写入时不调用迁移，也不改变原文件', async () => {
@@ -90,7 +90,7 @@ describe('文档升级的真实文件边界', () => {
       const files = await fsp.readdir(directory)
       expect(await realRead(path.join(directory, files[0]), 'utf8')).toBe(original)
       envelopeStep.mockClear()
-      await fsp.writeFile(filePath, JSON.stringify({ ...raw, envelopeVersion: 3 }))
+      await fsp.writeFile(filePath, JSON.stringify({ ...raw, envelopeVersion: 3, minReaderVersion: 3 }))
       await expect(env.services.service.readDocument({ id: 'upgrade', path: filePath })).rejects.toMatchObject({ code: 'newer-version', formatId: 'document-envelope' })
       expect(envelopeStep).not.toHaveBeenCalled()
       await fsp.writeFile(filePath, original)
@@ -98,5 +98,36 @@ describe('文档升级的真实文件边界', () => {
       await expect(env.services.service.readDocument({ id: 'upgrade', path: filePath })).rejects.toMatchObject({ code: 'backup-failed' })
       expect(envelopeStep).not.toHaveBeenCalled()
     } finally { Object.assign(documentEnvelopeContract, originalContract) }
+  })
+})
+
+describe('更新版本写出的文档被本版本读取', () => {
+  async function setup(kindMinReaderVersion: number) {
+    const skeleton = defineSkeletonDocumentKind({ id: 'canvas', extension: '.henji-test', standaloneFolderNames: { zh: '画布', en: 'Canvas' }, untitledNames: { zh: '未命名画布', en: 'Untitled' }, storage: 'json' })
+    const kind = { ...skeleton, version: 2, contentSchema: z.object({ title: z.string() }), migrations: { 1: (content: unknown) => content } }
+    environment = createTestEnvironment({ kinds: createDocumentKindRegistry([kind]) })
+    const filePath = path.join(environment.workRoot, '画布', '新版本.henji-test')
+    await fsp.mkdir(path.dirname(filePath), { recursive: true })
+    // 模拟更新的程序：外壳 v2（最低可读 v1）多了一个外壳字段，内容 v3 多了一个可选字段。
+    const envelope = { ...buildDocumentEnvelope({ kind: 'canvas', kindVersion: 3, kindMinReaderVersion, id: 'newer', name: '新版本', createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:00:00.000Z', revision: 0, draft: false, content: { title: '原标题', futureNote: { keep: true } } }), envelopeVersion: 2, minReaderVersion: 1, futureEnvelope: 'kept' }
+    const text = JSON.stringify(envelope, null, 2)
+    await fsp.writeFile(filePath, text)
+    return { env: environment, filePath, text }
+  }
+  it('最低可读版本不高于本程序：正常打开，保存后保留原版本戳与本程序不认识的字段', async () => {
+    const { env, filePath } = await setup(2)
+    const target = { id: 'newer', path: filePath }
+    const read = await env.services.service.readDocument(target)
+    expect(read.content).toEqual({ title: '原标题' })
+    expect(fs.existsSync(path.join(path.dirname(filePath), '.henji/backups'))).toBe(false)
+    await env.services.service.saveDocument({ target, expectedRevision: 0, content: { title: '旧版本改的标题' } })
+    expect(JSON.parse(await fsp.readFile(filePath, 'utf8'))).toMatchObject({ envelopeVersion: 2, minReaderVersion: 1, futureEnvelope: 'kept', kindVersion: 3, kindMinReaderVersion: 2, revision: 1,
+      content: { title: '旧版本改的标题', futureNote: { keep: true } } })
+  })
+  it('最低可读版本高于本程序：提示由更新版本创建，不打开也不改写原文件', async () => {
+    const { env, filePath, text } = await setup(3)
+    await expect(env.services.service.readDocument({ id: 'newer', path: filePath })).rejects.toMatchObject({ code: 'newer-version', formatId: 'document.canvas' })
+    await expect(env.services.service.readDocument({ id: 'newer', path: filePath })).rejects.toThrow('更新版本')
+    expect(await fsp.readFile(filePath, 'utf8')).toBe(text)
   })
 })

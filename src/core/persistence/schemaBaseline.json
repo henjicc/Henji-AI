@@ -1,2170 +1,322 @@
 {
-  "releasedCompatibility": false,
-  "compatibilityRestorations": [
-    {
-      "at": "2026-10-14T08:05:00.000Z",
-      "format": "document.video_edit",
-      "version": 6,
-      "previousSupportedFrom": 6,
-      "supportedFrom": 2,
-      "reason": "修复CI契约漂移：v2→v3→v4→v5→v6已有完整迁移，录制光标与注意力只增加可选字段；恢复与真实项目包v1导入一致的支持下限，保留历史dev-break审计和黄金样本。"
-    },
-    {
-      "at": "2026-10-14T08:05:00.000Z",
-      "format": "creative-intent-candidate",
-      "version": 2,
-      "previousSupportedFrom": 2,
-      "supportedFrom": 1,
-      "reason": "补齐v1→v2迁移：共享曲线只新增可选screen_attention来源，旧曲线和候选身份语义不变；真实工程的原稿候选须可读回、复制和导入，原始资源不改写。"
-    },
-    {
-      "at": "2026-10-15T11:11:20.741Z",
-      "format": "settings",
-      "version": 14,
-      "previousSupportedFrom": 14,
-      "supportedFrom": 13,
-      "reason": "补齐 settings 13→14 的默认录制快捷键与 model-defaults 1→2 的空转写选择，黄金样本及正式设置入口读后保存验证通过；保留其他用户设置与原件备份。",
-      "previousFingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
-      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
-      "migrationVersions": [
-        13
-      ]
-    },
-    {
-      "at": "2026-10-15T11:11:20.744Z",
-      "format": "model-defaults",
-      "version": 2,
-      "previousSupportedFrom": 2,
-      "supportedFrom": 1,
-      "reason": "补齐 settings 13→14 的默认录制快捷键与 model-defaults 1→2 的空转写选择，黄金样本及正式设置入口读后保存验证通过；保留其他用户设置与原件备份。",
-      "previousFingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
-      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
-      "migrationVersions": [
-        1
-      ]
-    },
-    {
-      "at": "2026-10-15T11:11:31.766Z",
-      "format": "capture-log-page",
-      "version": 2,
-      "previousSupportedFrom": 2,
-      "supportedFrom": 1,
-      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
-      "previousFingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
-      "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
-      "migrationVersions": [
-        1
-      ]
-    },
-    {
-      "at": "2026-10-15T11:11:31.769Z",
-      "format": "document.screen_recording",
-      "version": 12,
-      "previousSupportedFrom": 5,
-      "supportedFrom": 2,
-      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
-      "previousFingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
-      "fingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
-      "migrationVersions": [
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11
-      ]
-    },
-    {
-      "at": "2026-10-15T11:11:31.769Z",
-      "format": "title-templates",
-      "version": 4,
-      "previousSupportedFrom": 3,
-      "supportedFrom": 1,
-      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
-      "previousFingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
-      "fingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
-      "migrationVersions": [
-        1,
-        2,
-        3
-      ]
-    },
-    {
-      "at": "2026-10-15T11:11:31.769Z",
-      "format": "subtitle-manifest",
-      "version": 6,
-      "previousSupportedFrom": 3,
-      "supportedFrom": 1,
-      "reason": "恢复可无损迁移的本机标题、字幕回填、录制事件与会话：仅补新增空集合或提升版本标记，既有字段和身份保持；黄金样本读回与再次序列化验证通过。录制 v1 缺少带时标文字稿语义，暂不恢复。",
-      "previousFingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
-      "fingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
-      "migrationVersions": [
-        1,
-        2,
-        3,
-        4,
-        5
-      ]
-    }
-  ],
+  "releasedCompatibility": true,
+  "compatibilityStart": {
+    "at": "2026-10-21T05:24:16.987Z",
+    "reason": "2026-10-21 用户决定正式启用向后兼容：当前全部格式版本作为兼容起点，开发期版本、迁移与样本清除"
+  },
   "formats": {
-    "document.video_edit": {
-      "version": 17,
-      "fingerprint": "c95b9eaa921a612cf0d21b15181a58c69b65111a0671fbb4eee0845204ebba64",
-      "supportedFrom": 17
-    },
-    "document.canvas": {
-      "version": 1,
-      "fingerprint": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
-      "supportedFrom": 1
-    },
-    "document.audio_edit": {
-      "version": 1,
-      "fingerprint": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c",
-      "supportedFrom": 1
-    },
-    "document.camera_stage": {
-      "version": 1,
-      "fingerprint": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813",
-      "supportedFrom": 1
-    },
-    "document.image_document": {
-      "version": 1,
-      "fingerprint": "ea316f50b5e177668955a297adb75dbec64515d44f1b10abafa838e958acc8d4",
-      "supportedFrom": 1
-    },
-    "project": {
-      "version": 1,
-      "fingerprint": "288dda146a1cca701efd239342419faa11b259691731471cb6353b99a77627c1",
-      "supportedFrom": 1
-    },
-    "project-package": {
-      "version": 1,
-      "fingerprint": "cb286a2c85a32ac0cb9233cd2aa1504a2a22c5f1e33e19928f87534c47b0dfb5",
-      "supportedFrom": 1
-    },
-    "code-version": {
-      "version": 3,
-      "fingerprint": "fc77fd5053c7b8a9219e471de1f2ce9691d7294a454d699ff7a675e2ac5907cb",
-      "supportedFrom": 3
-    },
-    "code-component": {
-      "version": 1,
-      "fingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b",
-      "supportedFrom": 1
-    },
-    "code-asset": {
-      "version": 6,
-      "fingerprint": "f028595eaf46840c713458b7cac2b7bbaa2cd95eac4104bfbcd2e13f05feadb6",
-      "supportedFrom": 6
-    },
-    "image-header": {
-      "version": 1,
-      "fingerprint": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5",
-      "supportedFrom": 1
-    },
-    "image-package": {
-      "version": 12,
-      "fingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
-      "supportedFrom": 12
-    },
-    "image-working-copy": {
-      "version": 14,
-      "fingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
-      "supportedFrom": 14
-    },
-    "settings": {
-      "version": 14,
-      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
-      "supportedFrom": 13
-    },
-    "theme": {
-      "version": 1,
-      "fingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417",
-      "supportedFrom": 1
-    },
-    "style-kits": {
-      "version": 3,
-      "fingerprint": "81ce726cdb6722b1b501552f9a58ce949c3eb4dfd2efe32155bfff4ada636420",
-      "supportedFrom": 1
-    },
-    "title-templates": {
-      "version": 6,
-      "fingerprint": "b1459696a7ffd3889bbd90bfd40655b894ba4ed5933396eb5b049f61d4398381",
-      "supportedFrom": 6
-    },
-    "text-presets": {
-      "version": 1,
-      "fingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84",
-      "supportedFrom": 1
-    },
-    "export-presets": {
-      "version": 1,
-      "fingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920",
-      "supportedFrom": 1
-    },
-    "voice-library": {
-      "version": 1,
-      "fingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5",
-      "supportedFrom": 1
-    },
-    "setting-records": {
-      "version": 21,
-      "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
-      "supportedFrom": 19
-    },
-    "asset-records": {
-      "version": 21,
-      "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
-      "supportedFrom": 19
-    },
-    "generation-presets": {
-      "version": 21,
-      "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
-      "supportedFrom": 19
-    },
-    "sqlite": {
-      "version": 21,
-      "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
-      "supportedFrom": 19
-    },
-    "preset-export": {
-      "version": 1,
-      "fingerprint": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839",
-      "supportedFrom": 1
-    },
-    "theme-payload": {
-      "version": 2,
-      "fingerprint": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b",
-      "supportedFrom": 1
-    },
-    "canvas-layer-package": {
-      "version": 12,
-      "fingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
-      "supportedFrom": 12
-    },
-    "keystore": {
-      "version": 1,
-      "fingerprint": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed",
-      "supportedFrom": 1
-    },
-    "media-grants": {
-      "version": 1,
-      "fingerprint": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d",
-      "supportedFrom": 1
-    },
-    "llm-config": {
-      "version": 1,
-      "fingerprint": "4f93184b865bb50b6255440e15608089e410f3ce5da7c2394b9dfcb0d0f318e4",
-      "supportedFrom": 1
-    },
-    "llm-config-journal": {
-      "version": 1,
-      "fingerprint": "1291e2000348078e6c5b3a0ed666bdf781eaaacf27ca555132db19eb47ecbde9",
-      "supportedFrom": 1
-    },
-    "node-defaults": {
-      "version": 1,
-      "fingerprint": "9c3e3c10f0ea4887a7cb0bf3ee987eefff77e886fd03be5e8fd3dc92f5a311f8",
-      "supportedFrom": 1
-    },
-    "model-defaults": {
-      "version": 2,
-      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
-      "supportedFrom": 1
-    },
-    "onboarding": {
-      "version": 2,
-      "fingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50",
-      "supportedFrom": 2
-    },
-    "subtitle-manifest": {
-      "version": 11,
-      "fingerprint": "5c5cbc7875326b7c3edd63615d7db5e1ca11667ad8abd4d5168e8bd919d779ce",
-      "supportedFrom": 11
-    },
-    "storyboard-metadata": {
-      "version": 1,
-      "fingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe",
-      "supportedFrom": 1
-    },
-    "image-history-checkpoint": {
-      "version": 2,
-      "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
-      "supportedFrom": 2
-    },
-    "creative-intent-page": {
-      "version": 1,
-      "fingerprint": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64",
-      "supportedFrom": 1
-    },
-    "creative-intent-candidate": {
-      "version": 4,
-      "fingerprint": "44b96df9f304200d0ba33fbeef6e1c34b868796850ba857490292a09346f3078",
-      "supportedFrom": 4
-    },
-    "image-layout-page": {
-      "version": 1,
-      "fingerprint": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d",
-      "supportedFrom": 1
-    },
-    "image-layout-candidate": {
-      "version": 1,
-      "fingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee",
-      "supportedFrom": 1
-    },
     "generation-output-timings": {
       "version": 1,
       "fingerprint": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32",
-      "supportedFrom": 1
-    },
-    "document-envelope": {
-      "version": 1,
-      "fingerprint": "51ed115082057c70f3a45c0e39c2e59fd5287e0079f57fb91528fcf33e2fa577",
-      "supportedFrom": 1
-    },
-    "mcp-connections": {
-      "version": 2,
-      "fingerprint": "f6e809a60ecfcb39ddd70f0d4f3d6529f7d0834ba79bc5c24e6f8fb2b79bc9ee",
-      "supportedFrom": 1
-    },
-    "capture-log-page": {
-      "version": 2,
-      "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
-      "supportedFrom": 1
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     },
     "screen-recording-tracks": {
       "version": 1,
       "fingerprint": "7c0538485a22c4b46d5b972c36473428b3f7d4160ba7b9f920887a784df86456",
-      "supportedFrom": 1
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "capture-log-page": {
+      "version": 2,
+      "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
+      "supportedFrom": 2,
+      "minReaderVersion": 2
+    },
+    "creative-intent-page": {
+      "version": 1,
+      "fingerprint": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "creative-intent-candidate": {
+      "version": 4,
+      "fingerprint": "44b96df9f304200d0ba33fbeef6e1c34b868796850ba857490292a09346f3078",
+      "supportedFrom": 4,
+      "minReaderVersion": 4
+    },
+    "image-layout-page": {
+      "version": 1,
+      "fingerprint": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "image-layout-candidate": {
+      "version": 1,
+      "fingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "document-envelope": {
+      "version": 1,
+      "fingerprint": "be84bf7409e7cc10c107d7267942d9296dc8312a0e89cc0cbd2aaf10622b959f",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     },
     "screen-capture": {
       "version": 1,
       "fingerprint": "4e9e82dfecd4a349f4b2409ab6351352e72cf633f109280a060fdafac86ee8b2",
-      "supportedFrom": 1
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "mcp-connections": {
+      "version": 2,
+      "fingerprint": "f6e809a60ecfcb39ddd70f0d4f3d6529f7d0834ba79bc5c24e6f8fb2b79bc9ee",
+      "supportedFrom": 2,
+      "minReaderVersion": 2
+    },
+    "image-history-checkpoint": {
+      "version": 2,
+      "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
+      "supportedFrom": 2,
+      "minReaderVersion": 2
+    },
+    "image-header": {
+      "version": 1,
+      "fingerprint": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "image-package": {
+      "version": 12,
+      "fingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
+      "supportedFrom": 12,
+      "minReaderVersion": 12
+    },
+    "image-working-copy": {
+      "version": 14,
+      "fingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
+      "supportedFrom": 14,
+      "minReaderVersion": 14
+    },
+    "canvas-layer-package": {
+      "version": 12,
+      "fingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
+      "supportedFrom": 12,
+      "minReaderVersion": 12
+    },
+    "keystore": {
+      "version": 1,
+      "fingerprint": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "media-grants": {
+      "version": 1,
+      "fingerprint": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "llm-config": {
+      "version": 1,
+      "fingerprint": "76559e91a6e3061e1968022aa4170007a1418ced0fa1f0541ca06dea7c902d82",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "storyboard-metadata": {
+      "version": 1,
+      "fingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "llm-config-journal": {
+      "version": 1,
+      "fingerprint": "1291e2000348078e6c5b3a0ed666bdf781eaaacf27ca555132db19eb47ecbde9",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "document.video_edit": {
+      "version": 17,
+      "fingerprint": "1a3b440bf2f0262356c1ef9ac4df2ed3e4a520f7060989c13f06bc43bfef24a5",
+      "supportedFrom": 17,
+      "minReaderVersion": 17
+    },
+    "document.canvas": {
+      "version": 1,
+      "fingerprint": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "document.audio_edit": {
+      "version": 1,
+      "fingerprint": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "document.camera_stage": {
+      "version": 1,
+      "fingerprint": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "document.image_document": {
+      "version": 1,
+      "fingerprint": "ea316f50b5e177668955a297adb75dbec64515d44f1b10abafa838e958acc8d4",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     },
     "document.screen_recording": {
       "version": 19,
-      "fingerprint": "b3593db6c06ce464ae1846376d63532da298efbef4a4c87b23c7570f5afda475",
-      "supportedFrom": 19
+      "fingerprint": "0468424dda4c26161516d6de930dc0f8a6e7f2575f1453caa977cb0a61dc6d27",
+      "supportedFrom": 19,
+      "minReaderVersion": 19
+    },
+    "project": {
+      "version": 1,
+      "fingerprint": "c459d0703056998eea21df42fc3f768601d14a9423076cb1c24837e8a72db9d1",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "project-package": {
+      "version": 1,
+      "fingerprint": "0e74080fe193641790a35a451f2a682dce056dda70ed32ac128c0f6757d3ccd2",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "code-version": {
+      "version": 1,
+      "fingerprint": "5b108486ce03383d00a870085c4360caf71afb7fdc8f1e909b23382f4311ab46",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "code-author-api": {
+      "version": 4,
+      "fingerprint": "6b845fd7a6c363f49c4e6ebf0b9e0152bdb60fbde1cc3f679418bde722a7fd81",
+      "supportedFrom": 4,
+      "minReaderVersion": 4
+    },
+    "code-component": {
+      "version": 1,
+      "fingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "code-asset": {
+      "version": 6,
+      "fingerprint": "fb41ed5836b9b0be5a7d2576e30c9532777ca82feae7dbdd34ed35b1d4b951e2",
+      "supportedFrom": 6,
+      "minReaderVersion": 6
+    },
+    "settings": {
+      "version": 14,
+      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
+      "supportedFrom": 14,
+      "minReaderVersion": 14
+    },
+    "theme": {
+      "version": 1,
+      "fingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "style-kits": {
+      "version": 3,
+      "fingerprint": "5910753ae4946e4405e184bc1383e3a803459d4a80d622fbb718085c5bcd310d",
+      "supportedFrom": 3,
+      "minReaderVersion": 3
+    },
+    "title-templates": {
+      "version": 6,
+      "fingerprint": "999d8388d561d64838134f6d237388b0f4b51f19bcd842bae50787b8b489e5fd",
+      "supportedFrom": 6,
+      "minReaderVersion": 6
+    },
+    "text-presets": {
+      "version": 1,
+      "fingerprint": "65ad792088daa0ae4ab26d1868aca1317b15ca02af37273c406c40f6645dcb8f",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "export-presets": {
+      "version": 1,
+      "fingerprint": "998ad75a95858f7fdcd0e5e079741e41e2db9d2ad7ac5a64bdb872ee7d648ca9",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "preset-preferences": {
+      "version": 1,
+      "fingerprint": "933bc37259cb561d07af13809073ea5988ef0f18f9ffa1e3dea6277ad698ca4a",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "video-preset-package": {
+      "version": 5,
+      "fingerprint": "a330c429373c3c5a97d70b5057a6f111c68ed44fdcc6502de46d69c6fc6646fa",
+      "supportedFrom": 5,
+      "minReaderVersion": 5
+    },
+    "voice-library": {
+      "version": 1,
+      "fingerprint": "4202ee44cb1ed0e207e26b4985768afa908e5771a0cc3f52360291d1801b40b6",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "preset-export": {
+      "version": 1,
+      "fingerprint": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "theme-payload": {
+      "version": 2,
+      "fingerprint": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b",
+      "supportedFrom": 2,
+      "minReaderVersion": 2
+    },
+    "node-defaults": {
+      "version": 1,
+      "fingerprint": "630788b4d12050de7be1f939de936d1de27a7af3b3952315c51b00a10f0130bd",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     },
     "recording-setup": {
       "version": 1,
       "fingerprint": "7510476937e9eebed84177d8a0b0622e67023fbb988ff929ba79792d22d9caf4",
-      "supportedFrom": 1
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     },
-    "preset-preferences": {
-      "version": 1,
-      "fingerprint": "3e78afe1f04eba116961a3db156039baff5c140c420cf26ffeab194816e47a83",
-      "supportedFrom": 1
+    "model-defaults": {
+      "version": 2,
+      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
+      "supportedFrom": 2,
+      "minReaderVersion": 2
     },
-    "video-preset-package": {
-      "version": 5,
-      "fingerprint": "d6662b432c4f16e12d5bd87438850a8ed9c9f0c945a458e468e201546ac3ae75",
-      "supportedFrom": 5
+    "onboarding": {
+      "version": 2,
+      "fingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50",
+      "supportedFrom": 2,
+      "minReaderVersion": 2
+    },
+    "subtitle-manifest": {
+      "version": 11,
+      "fingerprint": "5c5cbc7875326b7c3edd63615d7db5e1ca11667ad8abd4d5168e8bd919d779ce",
+      "supportedFrom": 11,
+      "minReaderVersion": 11
+    },
+    "setting-records": {
+      "version": 21,
+      "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
+      "supportedFrom": 21,
+      "minReaderVersion": 21
+    },
+    "asset-records": {
+      "version": 21,
+      "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
+      "supportedFrom": 21,
+      "minReaderVersion": 21
+    },
+    "generation-presets": {
+      "version": 21,
+      "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
+      "supportedFrom": 21,
+      "minReaderVersion": 21
+    },
+    "sqlite": {
+      "version": 21,
+      "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
+      "supportedFrom": 21,
+      "minReaderVersion": 21
     }
   },
-  "devBreaks": [
-    {
-      "at": "2026-10-08T16:48:25.821Z",
-      "format": "image-working-copy",
-      "version": 3,
-      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
-      "previousFingerprint": null,
-      "fingerprint": "50f8cb7dc55e2dc892f47b1c7d78a52bb8e00b3e6e3785c32386702069f8d9f9",
-      "waivedFixtureVersions": [
-        1,
-        2
-      ]
-    },
-    {
-      "at": "2026-10-08T16:48:25.823Z",
-      "format": "settings",
-      "version": 13,
-      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
-      "previousFingerprint": null,
-      "fingerprint": "b5d8a71c6e31101abdca3796e953da1ebc1eccb3e6259888db2bb4621f793399",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12
-      ]
-    },
-    {
-      "at": "2026-10-08T16:48:25.823Z",
-      "format": "setting-records",
-      "version": 18,
-      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
-      "previousFingerprint": null,
-      "fingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17
-      ]
-    },
-    {
-      "at": "2026-10-08T16:48:25.823Z",
-      "format": "asset-records",
-      "version": 18,
-      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
-      "previousFingerprint": null,
-      "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17
-      ]
-    },
-    {
-      "at": "2026-10-08T16:48:25.823Z",
-      "format": "generation-presets",
-      "version": 18,
-      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
-      "previousFingerprint": null,
-      "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17
-      ]
-    },
-    {
-      "at": "2026-10-08T16:48:25.823Z",
-      "format": "sqlite",
-      "version": 18,
-      "reason": "t94接入时只接纳当前格式；开发期不补历史迁移，设置v1至v12、图片副本v1至v2、SQLite账本v1至v17的样本明确豁免。",
-      "previousFingerprint": null,
-      "fingerprint": "18c5e5c3db7a828ad00b815dd386c5ba711ebd91b86bf439b3a5124c0e2e7f56",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17
-      ]
-    },
-    {
-      "at": "2026-10-08T17:21:15.547Z",
-      "format": "code-component",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "c8f7d0d3cbf4995fd5b144318a72e9d7e6ef85135acd11d1884b3fdb8833cc48",
-      "fingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "settings",
-      "version": 13,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "b5d8a71c6e31101abdca3796e953da1ebc1eccb3e6259888db2bb4621f793399",
-      "fingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12
-      ]
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "theme",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "991bd148ed34a0a33b178c6aa51e9a1863563e150bcf9a94d4f633066f8706f0",
-      "fingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "style-kits",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "21a26d9fcdc4c888beed5f3575e4ad6fe46a90dffa3d4428c710287f8e59b424",
-      "fingerprint": "b04966f580225450c23b9c4217a614b36e96d2853671f51e0ecf202a1884e0c1",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "title-templates",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "f2b40808d08552d041a61c676097a5cef0d542f9ff1c82e18630f4a658cc9029",
-      "fingerprint": "5dea6fd60f3d3114e279cdae07035b371f22075ddf7979cad9d48a6f9352d7ae",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "text-presets",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "5791a793ef7a4962d2d24fb29ec6150a5e52defedb3917f6379f602800fb2333",
-      "fingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "export-presets",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "e0ebc035f84f60217c694c1da35bda727098ddf8b327257eff1e91a46e43e3b8",
-      "fingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "voice-library",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "7cd7d6d87c89d393c31f898359d6f9075151e0722e532b64149f09783060bb36",
-      "fingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "llm-config",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "aa6de2feedf98d644539d28ecdc006b54e5592e8d97c34da31f42498b6dd6659",
-      "fingerprint": "d395dfe2639d1590fd6ad95db21477a2c21698cea7f5c2d8851a8ef753ef6bc5",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "llm-config-journal",
-      "version": 1,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": "295b8e0e7dd35488cb1c600c00719a0f687e5e8b16d6a7167275cb0ac0704884",
-      "fingerprint": "dad22cbafc862e1a35f5d7452313319e28c9f608197a35a1f8d8dacae699f870",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:21:15.549Z",
-      "format": "onboarding",
-      "version": 2,
-      "reason": "t94建立基线：登记原有存储外壳与组件格式版本，校正事务密文快照结构；引导只接纳现有v2，不补开发期历史迁移及样本。",
-      "previousFingerprint": null,
-      "fingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50",
-      "waivedFixtureVersions": [
-        1
-      ]
-    },
-    {
-      "at": "2026-10-08T17:36:59.585Z",
-      "format": "document.video_edit",
-      "version": 1,
-      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
-      "previousFingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
-      "fingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:36:59.587Z",
-      "format": "image-package",
-      "version": 1,
-      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
-      "previousFingerprint": "207a4955960f4e364eaab3365d92a0e1162eca663e2ab83f58e95fe3ca24f1b9",
-      "fingerprint": "036f72942ce47677a70237652eeebd6b24059838b46c8b27544aa4484f189b49",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:36:59.587Z",
-      "format": "image-working-copy",
-      "version": 3,
-      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
-      "previousFingerprint": "50f8cb7dc55e2dc892f47b1c7d78a52bb8e00b3e6e3785c32386702069f8d9f9",
-      "fingerprint": "5fac545be10637768f090c84338b401d98179901bb17112bf03f5ed357cf1a03",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T17:36:59.587Z",
-      "format": "canvas-layer-package",
-      "version": 1,
-      "reason": "t94补全图片HDR嵌套结构指纹并接入正式校验；剪辑基线明确放弃t88/t89之前同为开发v1的内联源码格式，不写旧开发数据迁移。",
-      "previousFingerprint": "1bb5c90527c793d956a8f0480374ae9aaf1758261f4de8dfbb80a1cbc93a5418",
-      "fingerprint": "c57638581962d64a0dfcdf03b7bc6d066d1bd07c5e0f0fba62145c56ada1b998",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T20:36:58.465Z",
-      "format": "image-package",
-      "version": 1,
-      "reason": "开发期图片 v3 新增共享全能调整层：结构化曲线、闭合参数及内容寻址 LUT；两宿主同源渲染，不为旧开发数据保留迁移分支",
-      "previousFingerprint": "036f72942ce47677a70237652eeebd6b24059838b46c8b27544aa4484f189b49",
-      "fingerprint": "ab6cef02eb017a28af210e1f40b7bb9938df7a186eef3fd066fc2d655aaa0226",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T20:36:58.467Z",
-      "format": "image-working-copy",
-      "version": 3,
-      "reason": "开发期图片 v3 新增共享全能调整层：结构化曲线、闭合参数及内容寻址 LUT；两宿主同源渲染，不为旧开发数据保留迁移分支",
-      "previousFingerprint": "5fac545be10637768f090c84338b401d98179901bb17112bf03f5ed357cf1a03",
-      "fingerprint": "aff7204ad4b2e8e1afa8cb736f42492665191a779e65879b960b2725f5fe1982",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T20:36:58.467Z",
-      "format": "canvas-layer-package",
-      "version": 1,
-      "reason": "开发期图片 v3 新增共享全能调整层：结构化曲线、闭合参数及内容寻址 LUT；两宿主同源渲染，不为旧开发数据保留迁移分支",
-      "previousFingerprint": "c57638581962d64a0dfcdf03b7bc6d066d1bd07c5e0f0fba62145c56ada1b998",
-      "fingerprint": "b44ec5fdff7f7339ae3e56e3449c7441a77ff13befe04a49d2508c88f8d9483a",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T21:05:37.974Z",
-      "format": "document.video_edit",
-      "version": 1,
-      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
-      "previousFingerprint": "8f493a8e4c87b9910dd01becf8f06ba39a33e3bd42aa1863401709fd61825d30",
-      "fingerprint": "8845257f4d5248314ff9d8b9ef554c2e0ee7197d0bd463be9ccb5577c8899c99",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T21:05:37.975Z",
-      "format": "code-asset",
-      "version": 1,
-      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
-      "previousFingerprint": "7cabf54e0ae4239f418fc12bf1482bd365fbe37bd4841e306c57f5250d280d7c",
-      "fingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T21:05:37.975Z",
-      "format": "title-templates",
-      "version": 1,
-      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
-      "previousFingerprint": "5dea6fd60f3d3114e279cdae07035b371f22075ddf7979cad9d48a6f9352d7ae",
-      "fingerprint": "334b11b6b893d4ba85c4525a9bdeef88beff272a54a71c835e17f24f98ef20cb",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T21:05:37.975Z",
-      "format": "subtitle-manifest",
-      "version": 1,
-      "reason": "t99 开发期转场参数帧曲线与全局贝塞尔关键帧契约，显式放弃旧开发数据兼容，不新增迁移分支",
-      "previousFingerprint": "e76b099b96dec71929f7f7446a0ff2e637861ed1657f1360a1c2ab77222b5be7",
-      "fingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-08T22:25:58.343Z",
-      "format": "document.video_edit",
-      "version": 1,
-      "reason": "t100 修复创作落位身份被文档保存 schema 剥离，开发期直接登记 creativePlacements，无旧格式迁移",
-      "previousFingerprint": "8845257f4d5248314ff9d8b9ef554c2e0ee7197d0bd463be9ccb5577c8899c99",
-      "fingerprint": "054a07b7f2e30897b8a36e4de10a51fd5ea4c22614477c847b921b6cdc55748b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T03:44:24.775Z",
-      "format": "image-package",
-      "version": 1,
-      "reason": "t114 图片高斯采用共享 canonical 参数 schema 与登记派生，删除旧字段契约",
-      "previousFingerprint": "ab6cef02eb017a28af210e1f40b7bb9938df7a186eef3fd066fc2d655aaa0226",
-      "fingerprint": "79afffa04c4a2aef827dc09c019cf9e0143946a9908f4fd9eb304ca3810de41e",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T03:44:24.777Z",
-      "format": "image-working-copy",
-      "version": 3,
-      "reason": "t114 图片高斯采用共享 canonical 参数 schema 与登记派生，删除旧字段契约",
-      "previousFingerprint": "aff7204ad4b2e8e1afa8cb736f42492665191a779e65879b960b2725f5fe1982",
-      "fingerprint": "8dab341e2a184551b0147478f6717bd49c6e9a0bb23ad5678d854ad905960e09",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T03:44:24.777Z",
-      "format": "canvas-layer-package",
-      "version": 1,
-      "reason": "t114 图片高斯采用共享 canonical 参数 schema 与登记派生，删除旧字段契约",
-      "previousFingerprint": "b44ec5fdff7f7339ae3e56e3449c7441a77ff13befe04a49d2508c88f8d9483a",
-      "fingerprint": "85c005712fb98917a93e1dd8b49ab7b310fc4e11152c9257a199ec86739441fd",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T04:39:48.401Z",
-      "format": "image-package",
-      "version": 1,
-      "reason": "R05 开发期删除 V2 文档迁移、legacyOperation 与旧模糊载荷，仅接受 V3 文档与正式效果参数",
-      "previousFingerprint": "79afffa04c4a2aef827dc09c019cf9e0143946a9908f4fd9eb304ca3810de41e",
-      "fingerprint": "117c73e5de586a69a576da5f6a8e323440e4a4fdf082a5b32562eac47ab00e5a",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T04:39:48.403Z",
-      "format": "image-working-copy",
-      "version": 3,
-      "reason": "R05 开发期删除 V2 文档迁移、legacyOperation 与旧模糊载荷，仅接受 V3 文档与正式效果参数",
-      "previousFingerprint": "8dab341e2a184551b0147478f6717bd49c6e9a0bb23ad5678d854ad905960e09",
-      "fingerprint": "edaa40c8dbce98c58c94598f8c420d8571fad5403d759c34fbd04130b2610533",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T04:39:48.403Z",
-      "format": "canvas-layer-package",
-      "version": 1,
-      "reason": "R05 开发期删除 V2 文档迁移、legacyOperation 与旧模糊载荷，仅接受 V3 文档与正式效果参数",
-      "previousFingerprint": "85c005712fb98917a93e1dd8b49ab7b310fc4e11152c9257a199ec86739441fd",
-      "fingerprint": "8db9cd793f201ddd7d82e6e79607e50ea45a985b0d3fad4d6969a07b042df78b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T13:54:12.887Z",
-      "format": "image-package",
-      "version": 2,
-      "reason": "t119-04+06：图层填充、剪贴、蒙版附件和局部滤镜统一格式；开发期不兼容旧作品",
-      "previousFingerprint": "117c73e5de586a69a576da5f6a8e323440e4a4fdf082a5b32562eac47ab00e5a",
-      "fingerprint": "8521e2424783a56129d5bb7903b9d2450184debc2d02c79cea4a687279aae46f",
-      "waivedFixtureVersions": [
-        1
-      ]
-    },
-    {
-      "at": "2026-10-09T13:54:12.889Z",
-      "format": "image-working-copy",
-      "version": 4,
-      "reason": "t119-04+06：图层填充、剪贴、蒙版附件和局部滤镜统一格式；开发期不兼容旧作品",
-      "previousFingerprint": "edaa40c8dbce98c58c94598f8c420d8571fad5403d759c34fbd04130b2610533",
-      "fingerprint": "88cc3f96532a2c0cc9a8a52d0531b8b562b72da1ffc1f9ad29bac225f4b136cf",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3
-      ]
-    },
-    {
-      "at": "2026-10-09T13:54:12.889Z",
-      "format": "canvas-layer-package",
-      "version": 2,
-      "reason": "t119-04+06：图层填充、剪贴、蒙版附件和局部滤镜统一格式；开发期不兼容旧作品",
-      "previousFingerprint": "8db9cd793f201ddd7d82e6e79607e50ea45a985b0d3fad4d6969a07b042df78b",
-      "fingerprint": "caa906d2fd945abe742bce9da6e0c90b108e08adb1e0083bad565ca1d5af6a80",
-      "waivedFixtureVersions": [
-        1
-      ]
-    },
-    {
-      "at": "2026-10-09T14:57:41.470Z",
-      "format": "image-package",
-      "version": 2,
-      "reason": "t120-B1b 删除旧资源蒙版，统一稀疏蒙版及共同字段，开发期断代不迁移",
-      "previousFingerprint": "8521e2424783a56129d5bb7903b9d2450184debc2d02c79cea4a687279aae46f",
-      "fingerprint": "28429b97bac340b10cf5ef9a110d71ccbf0de6796c943f99036281b429d507fc",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T14:57:41.471Z",
-      "format": "image-working-copy",
-      "version": 4,
-      "reason": "t120-B1b 删除旧资源蒙版，统一稀疏蒙版及共同字段，开发期断代不迁移",
-      "previousFingerprint": "88cc3f96532a2c0cc9a8a52d0531b8b562b72da1ffc1f9ad29bac225f4b136cf",
-      "fingerprint": "3d03750107b8e785fcd3b1e5587bb576055c84498fbb2f80665efe62b3f3db52",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T14:57:41.471Z",
-      "format": "canvas-layer-package",
-      "version": 2,
-      "reason": "t120-B1b 删除旧资源蒙版，统一稀疏蒙版及共同字段，开发期断代不迁移",
-      "previousFingerprint": "caa906d2fd945abe742bce9da6e0c90b108e08adb1e0083bad565ca1d5af6a80",
-      "fingerprint": "e8e19f3a9b9b626e2a58c87ac03ab8cbd5c5166c5e4fe917143310c810aedb86",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T17:54:46.253Z",
-      "format": "image-package",
-      "version": 3,
-      "reason": "开发期图片历史改为检查点与不可变资源页，删除 inline 历史落盘，不保留旧版本读取分支",
-      "previousFingerprint": "28429b97bac340b10cf5ef9a110d71ccbf0de6796c943f99036281b429d507fc",
-      "fingerprint": "9b2b3146bef5fd5cb80548146be0ade17f0864dfaedda5e4096e949a6460ce54",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T17:54:46.254Z",
-      "format": "image-working-copy",
-      "version": 5,
-      "reason": "开发期图片历史改为检查点与不可变资源页，删除 inline 历史落盘，不保留旧版本读取分支",
-      "previousFingerprint": "3d03750107b8e785fcd3b1e5587bb576055c84498fbb2f80665efe62b3f3db52",
-      "fingerprint": "a10d70f9b8fb530dd3ac00ffa380254d896ea551d934c76b30979a999fd5973d",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T17:54:46.254Z",
-      "format": "canvas-layer-package",
-      "version": 3,
-      "reason": "开发期图片历史改为检查点与不可变资源页，删除 inline 历史落盘，不保留旧版本读取分支",
-      "previousFingerprint": "e8e19f3a9b9b626e2a58c87ac03ab8cbd5c5166c5e4fe917143310c810aedb86",
-      "fingerprint": "62f9870511b37abff697f8574509f0d21230eedd1f0fe7e88a59722d6b3738aa",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T17:59:11.660Z",
-      "format": "image-package",
-      "version": 3,
-      "reason": "历史页只改变工作副本外壳；图片内容版本独立保持 4，黄金样本按正式构造器重新生成",
-      "previousFingerprint": "9b2b3146bef5fd5cb80548146be0ade17f0864dfaedda5e4096e949a6460ce54",
-      "fingerprint": "690b33f50c44a712a549debbc0dca607bb3b66ecc2cef1b44f739b68b700c390",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T17:59:11.662Z",
-      "format": "image-working-copy",
-      "version": 5,
-      "reason": "历史页只改变工作副本外壳；图片内容版本独立保持 4，黄金样本按正式构造器重新生成",
-      "previousFingerprint": "a10d70f9b8fb530dd3ac00ffa380254d896ea551d934c76b30979a999fd5973d",
-      "fingerprint": "7e63868b5b6f0470b240042ac46f99fd62179dc7173c3ae92fba9430e7a1eac3",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T17:59:11.662Z",
-      "format": "canvas-layer-package",
-      "version": 3,
-      "reason": "历史页只改变工作副本外壳；图片内容版本独立保持 4，黄金样本按正式构造器重新生成",
-      "previousFingerprint": "62f9870511b37abff697f8574509f0d21230eedd1f0fe7e88a59722d6b3738aa",
-      "fingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T18:46:14.937Z",
-      "format": "image-package",
-      "version": 4,
-      "reason": "开发期命名选区通道进入作品与命令历史，内容版本改为5，不保留旧格式读取",
-      "previousFingerprint": "690b33f50c44a712a549debbc0dca607bb3b66ecc2cef1b44f739b68b700c390",
-      "fingerprint": "7c15812b5523c892c7b5fcd980e4b2ebc45a458b7cfc0587337d3cb8dd4568af",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T18:46:14.938Z",
-      "format": "image-working-copy",
-      "version": 6,
-      "reason": "开发期命名选区通道进入作品与命令历史，内容版本改为5，不保留旧格式读取",
-      "previousFingerprint": "7e63868b5b6f0470b240042ac46f99fd62179dc7173c3ae92fba9430e7a1eac3",
-      "fingerprint": "b80d30100e5cec7e49dfdc9049248c5e8c6e808b7b10bcbcb26b9880ae16bab7",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T18:46:14.938Z",
-      "format": "canvas-layer-package",
-      "version": 4,
-      "reason": "开发期命名选区通道进入作品与命令历史，内容版本改为5，不保留旧格式读取",
-      "previousFingerprint": "2b1bcbd2c4943fe56a6d83cfe059719f5c3d036fac57ef846aaed4ecc46efb67",
-      "fingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T20:50:46.153Z",
-      "format": "image-history-checkpoint",
-      "version": 2,
-      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
-      "previousFingerprint": "d0b02a406edba526dc32f55cc50f835ecca398cea803f8a58b51db85b2be7ba9",
-      "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T20:50:46.154Z",
-      "format": "image-package",
-      "version": 5,
-      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
-      "previousFingerprint": "7c15812b5523c892c7b5fcd980e4b2ebc45a458b7cfc0587337d3cb8dd4568af",
-      "fingerprint": "405628a35c95525a6a8851e5bdf3d74d7d244949dc4c47f46969649d5b7c1548",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T20:50:46.154Z",
-      "format": "image-working-copy",
-      "version": 7,
-      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
-      "previousFingerprint": "b80d30100e5cec7e49dfdc9049248c5e8c6e808b7b10bcbcb26b9880ae16bab7",
-      "fingerprint": "e5d3c5cf8c28e8ae87c4b31532088d8a29e9a92af21145c0a90bbe0bef2d25a6",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T20:50:46.154Z",
-      "format": "canvas-layer-package",
-      "version": 5,
-      "reason": "t128：选区 RLE 无损 float32 覆盖率与滤镜原子历史，开发期拒绝旧字节覆盖率格式",
-      "previousFingerprint": "cc27c0aa6e8fd94b7fcfec18ee6403e4d5841d48d8f0ee28506cac37d237b011",
-      "fingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T23:36:46.762Z",
-      "format": "image-package",
-      "version": 6,
-      "reason": "新增非破坏透视与网格变形，开发期统一新格式",
-      "previousFingerprint": "405628a35c95525a6a8851e5bdf3d74d7d244949dc4c47f46969649d5b7c1548",
-      "fingerprint": "fd0c153b617255668cc5e10b988208fbd5d0b1cb511f8f53fd1e39869ca2b168",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T23:36:46.763Z",
-      "format": "image-working-copy",
-      "version": 8,
-      "reason": "新增非破坏透视与网格变形，开发期统一新格式",
-      "previousFingerprint": "e5d3c5cf8c28e8ae87c4b31532088d8a29e9a92af21145c0a90bbe0bef2d25a6",
-      "fingerprint": "cd946612a4108f69343edb5f63e38ec54948405e2f7a87f94759631b9777491b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-09T23:36:46.763Z",
-      "format": "canvas-layer-package",
-      "version": 6,
-      "reason": "新增非破坏透视与网格变形，开发期统一新格式",
-      "previousFingerprint": "4c8e704ca8325baa78f56bd791c61e36bb55f946fa452f3d439811e7aeaa4f1b",
-      "fingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T03:49:53.724Z",
-      "format": "image-package",
-      "version": 7,
-      "reason": "t119-13：智能对象保留可编辑内容、来源与原生缓存网格，统一新格式并拒绝旧工作副本和包",
-      "previousFingerprint": "fd0c153b617255668cc5e10b988208fbd5d0b1cb511f8f53fd1e39869ca2b168",
-      "fingerprint": "8a086adf32b6176a068ff66c7403c1495ae3b850313c6a49b0897de8af876ed0",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T03:49:53.726Z",
-      "format": "image-working-copy",
-      "version": 9,
-      "reason": "t119-13：智能对象保留可编辑内容、来源与原生缓存网格，统一新格式并拒绝旧工作副本和包",
-      "previousFingerprint": "cd946612a4108f69343edb5f63e38ec54948405e2f7a87f94759631b9777491b",
-      "fingerprint": "c135bb85272a4c3a6715780dec78c400c150c0d5023029589b40395db7f6a411",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T03:49:53.726Z",
-      "format": "canvas-layer-package",
-      "version": 7,
-      "reason": "t119-13：智能对象保留可编辑内容、来源与原生缓存网格，统一新格式并拒绝旧工作副本和包",
-      "previousFingerprint": "577471eb47527ea2c72d1258173b0d0a253ef32dd198a6a45d01e6fd8e249af6",
-      "fingerprint": "d0cd170e9f45638bfe45884578d852031c5c5f26d3c28b6e8667fe24112ac9e8",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T05:59:28.709Z",
-      "format": "image-package",
-      "version": 8,
-      "reason": "t119-14 开发期正式文字/形状/路径与可编辑矢量蒙版替换旧标注，不保留旧格式",
-      "previousFingerprint": "8a086adf32b6176a068ff66c7403c1495ae3b850313c6a49b0897de8af876ed0",
-      "fingerprint": "602aedb49e623262db4367cbca4e776b371103bccbfa58266bcfeb2bb230ccf2",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7
-      ]
-    },
-    {
-      "at": "2026-10-10T05:59:28.711Z",
-      "format": "image-working-copy",
-      "version": 10,
-      "reason": "t119-14 开发期正式文字/形状/路径与可编辑矢量蒙版替换旧标注，不保留旧格式",
-      "previousFingerprint": "c135bb85272a4c3a6715780dec78c400c150c0d5023029589b40395db7f6a411",
-      "fingerprint": "c54c26256a99cedabb82f13389c786a0d61502fd811b2aaf326032ab32a51eb9",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9
-      ]
-    },
-    {
-      "at": "2026-10-10T05:59:28.711Z",
-      "format": "canvas-layer-package",
-      "version": 8,
-      "reason": "t119-14 开发期正式文字/形状/路径与可编辑矢量蒙版替换旧标注，不保留旧格式",
-      "previousFingerprint": "d0cd170e9f45638bfe45884578d852031c5c5f26d3c28b6e8667fe24112ac9e8",
-      "fingerprint": "b1cd66edbe4444ab0809b02a27b9ca5fb458857d629690566c80619f7874b917",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7
-      ]
-    },
-    {
-      "at": "2026-10-10T06:52:30.036Z",
-      "format": "image-package",
-      "version": 8,
-      "reason": "t119-14 正式文字与矢量内容统一，修正共享行距的作品空间说明；开发期不兼容旧标注格式",
-      "previousFingerprint": "602aedb49e623262db4367cbca4e776b371103bccbfa58266bcfeb2bb230ccf2",
-      "fingerprint": "3db5294b62f36390c396f74c9a7c1cf92b6f92541c8f355c0c0bfec28e9892dc",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7
-      ]
-    },
-    {
-      "at": "2026-10-10T06:52:30.038Z",
-      "format": "image-working-copy",
-      "version": 10,
-      "reason": "t119-14 正式文字与矢量内容统一，修正共享行距的作品空间说明；开发期不兼容旧标注格式",
-      "previousFingerprint": "c54c26256a99cedabb82f13389c786a0d61502fd811b2aaf326032ab32a51eb9",
-      "fingerprint": "1781d68487bae400aab9f93a017886aa17b2d5c6ee6fa849d447b22b471016ab",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9
-      ]
-    },
-    {
-      "at": "2026-10-10T06:52:30.038Z",
-      "format": "canvas-layer-package",
-      "version": 8,
-      "reason": "t119-14 正式文字与矢量内容统一，修正共享行距的作品空间说明；开发期不兼容旧标注格式",
-      "previousFingerprint": "b1cd66edbe4444ab0809b02a27b9ca5fb458857d629690566c80619f7874b917",
-      "fingerprint": "429c33aceb80fad97a1733b7a09ec0aca10d6e9fcc2f29955dd5a7bf94d0bbed",
-      "waivedFixtureVersions": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7
-      ]
-    },
-    {
-      "at": "2026-10-10T08:00:33.121Z",
-      "format": "image-package",
-      "version": 9,
-      "reason": "画布图层包共用扩图工作副本与历史命令",
-      "previousFingerprint": "3db5294b62f36390c396f74c9a7c1cf92b6f92541c8f355c0c0bfec28e9892dc",
-      "fingerprint": "e1d87c416ce062091021cf7696e3c117e1194444eef280e495583e67b784af44",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T08:00:33.122Z",
-      "format": "image-working-copy",
-      "version": 11,
-      "reason": "画布图层包共用扩图工作副本与历史命令",
-      "previousFingerprint": "1781d68487bae400aab9f93a017886aa17b2d5c6ee6fa849d447b22b471016ab",
-      "fingerprint": "865d031879f266e2362f67249044c92a0d61216c1823c8685c9a26346da1fbd3",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T08:00:33.122Z",
-      "format": "canvas-layer-package",
-      "version": 9,
-      "reason": "画布图层包共用扩图工作副本与历史命令",
-      "previousFingerprint": "429c33aceb80fad97a1733b7a09ec0aca10d6e9fcc2f29955dd5a7bf94d0bbed",
-      "fingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T10:07:15.432Z",
-      "format": "image-package",
-      "version": 10,
-      "reason": "t119-16：选区保留画布外有限坐标，尺寸锚点与缩放共用当前格式；开发期不兼容旧数据",
-      "previousFingerprint": "e1d87c416ce062091021cf7696e3c117e1194444eef280e495583e67b784af44",
-      "fingerprint": "da28536f4cf24a7d8eb812c2153fd97393f47c1a9279dafb400e5f490cbfcf8e",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T10:07:15.433Z",
-      "format": "image-working-copy",
-      "version": 12,
-      "reason": "t119-16：选区保留画布外有限坐标，尺寸锚点与缩放共用当前格式；开发期不兼容旧数据",
-      "previousFingerprint": "865d031879f266e2362f67249044c92a0d61216c1823c8685c9a26346da1fbd3",
-      "fingerprint": "08f4eec83d4a5f71f977ccea05c8e39abeabfba257c46cfb964f94cf49f9b11b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T10:07:15.433Z",
-      "format": "canvas-layer-package",
-      "version": 10,
-      "reason": "t119-16：选区保留画布外有限坐标，尺寸锚点与缩放共用当前格式；开发期不兼容旧数据",
-      "previousFingerprint": "df88d10bb072db6bc8e6e6b2468341ca552e36ccfe18b7ae6a96327d00242afa",
-      "fingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T12:01:50.945Z",
-      "format": "image-package",
-      "version": 11,
-      "reason": "t119-17 新增可撤销颜色契约命令；指定和转换 profile 的原稿及历史按新开发格式保存，不兼容旧工作副本",
-      "previousFingerprint": "da28536f4cf24a7d8eb812c2153fd97393f47c1a9279dafb400e5f490cbfcf8e",
-      "fingerprint": "c504b6aec73e949eaa1ea515cfc90ce3d2d6df6a6964adc431a62c0104156c8a",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T12:01:50.946Z",
-      "format": "image-working-copy",
-      "version": 13,
-      "reason": "t119-17 新增可撤销颜色契约命令；指定和转换 profile 的原稿及历史按新开发格式保存，不兼容旧工作副本",
-      "previousFingerprint": "08f4eec83d4a5f71f977ccea05c8e39abeabfba257c46cfb964f94cf49f9b11b",
-      "fingerprint": "fe3aef47f834dbdedbf1553259a9bc02bf789da0bf4fd2bf2b846b64df381ae4",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T12:01:50.946Z",
-      "format": "canvas-layer-package",
-      "version": 11,
-      "reason": "t119-17 新增可撤销颜色契约命令；指定和转换 profile 的原稿及历史按新开发格式保存，不兼容旧工作副本",
-      "previousFingerprint": "e01ba9890c025cc251223b7df8e9121be5902e36d0f1d2267351111c0131006d",
-      "fingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T18:22:54.826Z",
-      "format": "document.video_edit",
-      "version": 2,
-      "reason": "t144 剪辑超级关键帧草稿与不可变页接线，开发期采用新格式",
-      "previousFingerprint": "054a07b7f2e30897b8a36e4de10a51fd5ea4c22614477c847b921b6cdc55748b",
-      "fingerprint": "fa15389dd5ecaecd141ec3d75cb0898024e16082588085bfe58d0e157de74349",
-      "waivedFixtureVersions": [
-        1
-      ]
-    },
-    {
-      "at": "2026-10-10T20:17:35.364Z",
-      "format": "image-package",
-      "version": 11,
-      "reason": "t142 马赛克滤镜进入共享效果内核，图片渲染节点 schema 扩展，开发期采用新格式",
-      "previousFingerprint": "c504b6aec73e949eaa1ea515cfc90ce3d2d6df6a6964adc431a62c0104156c8a",
-      "fingerprint": "5fa776635a671cda19e6458e8fc2f0f4f3ee5f9fcb3cf1322c22cd8535d808d2",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T20:17:35.366Z",
-      "format": "image-working-copy",
-      "version": 13,
-      "reason": "t142 马赛克滤镜进入共享效果内核，图片渲染节点 schema 扩展，开发期采用新格式",
-      "previousFingerprint": "fe3aef47f834dbdedbf1553259a9bc02bf789da0bf4fd2bf2b846b64df381ae4",
-      "fingerprint": "c154dc100c4474fa3b69aae88faedbee71a57f0946c490e75ba6df4c7069bfde",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T20:17:35.366Z",
-      "format": "canvas-layer-package",
-      "version": 11,
-      "reason": "t142 马赛克滤镜进入共享效果内核，图片渲染节点 schema 扩展，开发期采用新格式",
-      "previousFingerprint": "d00b9fc24b881a55d70f545f25cf0e8450094cc4b61b87a16b32b78e35b1369a",
-      "fingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T22:12:05.737Z",
-      "format": "image-package",
-      "version": 12,
-      "reason": "t147 图片布局草稿头、不可变几何页与候选接入正式存储，开发期升版不迁移旧数据",
-      "previousFingerprint": "5fa776635a671cda19e6458e8fc2f0f4f3ee5f9fcb3cf1322c22cd8535d808d2",
-      "fingerprint": "d24265348b8ddb698917da8773afa0814a46e2de0ce468bac138ad15036347bf",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T22:12:05.739Z",
-      "format": "image-working-copy",
-      "version": 14,
-      "reason": "t147 图片布局草稿头、不可变几何页与候选接入正式存储，开发期升版不迁移旧数据",
-      "previousFingerprint": "c154dc100c4474fa3b69aae88faedbee71a57f0946c490e75ba6df4c7069bfde",
-      "fingerprint": "edccddcd3e5923baaff55ec1f673bad096525be666f7d6900380d2a1cfb28301",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-10T22:12:05.739Z",
-      "format": "canvas-layer-package",
-      "version": 12,
-      "reason": "t147 图片布局草稿头、不可变几何页与候选接入正式存储，开发期升版不迁移旧数据",
-      "previousFingerprint": "b593bfcca4f7a1049defc3b7906cdc5136d6ccf236ec62129cc345652b82d793",
-      "fingerprint": "cc0b5d94094b475c989d8c74348b37b06cae0c7765eb93b3cec06f272dc600d8",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T00:03:30.989Z",
-      "format": "model-defaults",
-      "version": 2,
-      "reason": "t149 将默认转写模型归入权威设置格式，开发期升版并停止读取无转写字段的旧格式",
-      "previousFingerprint": "d3201320105f4ef9d3e376238c9accf8847d4a660ae51d003acaf8ed961acd32",
-      "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T04:38:14.951Z",
-      "format": "image-package",
-      "version": 12,
-      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
-      "previousFingerprint": "d24265348b8ddb698917da8773afa0814a46e2de0ce468bac138ad15036347bf",
-      "fingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T04:38:14.953Z",
-      "format": "image-working-copy",
-      "version": 14,
-      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
-      "previousFingerprint": "edccddcd3e5923baaff55ec1f673bad096525be666f7d6900380d2a1cfb28301",
-      "fingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T04:38:14.953Z",
-      "format": "canvas-layer-package",
-      "version": 12,
-      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
-      "previousFingerprint": "cc0b5d94094b475c989d8c74348b37b06cae0c7765eb93b3cec06f272dc600d8",
-      "fingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T04:38:14.953Z",
-      "format": "document.video_edit",
-      "version": 2,
-      "reason": "t151 动作原语与循环配方进入超级关键帧草稿和候选 schema，开发期采用新格式",
-      "previousFingerprint": "fa15389dd5ecaecd141ec3d75cb0898024e16082588085bfe58d0e157de74349",
-      "fingerprint": "c55ceea7fa1c3ac86c20c429671c56716773fbda2ea3fa3ccbd8e36444f4993b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T06:28:05.023Z",
-      "format": "document.video_edit",
-      "version": 2,
-      "reason": "t161：手绘蒙版新增源时间路径动画与显式点对应，开发期按新契约读取，不兼容旧格式。",
-      "previousFingerprint": "c55ceea7fa1c3ac86c20c429671c56716773fbda2ea3fa3ccbd8e36444f4993b",
-      "fingerprint": "50ae23c66ccf409cfc4811dd6676b0a6ce4cf71fbfad1279cd11c52e44efae65",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T06:28:05.025Z",
-      "format": "subtitle-manifest",
-      "version": 1,
-      "reason": "t161：手绘蒙版新增源时间路径动画与显式点对应，开发期按新契约读取，不兼容旧格式。",
-      "previousFingerprint": "87e316a9e804baa7d525567cfa78022f51a31d6ed58a0130d3d1de438da69249",
-      "fingerprint": "de2e33717d95785ac025ea50ce654e98678e3d3da8dc5921c54178ed7aae52ee",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T09:50:13.658Z",
-      "format": "document.video_edit",
-      "version": 2,
-      "reason": "t164 最小节拍标记类型与重音强度、片段节拍吸附开关；开发阶段直接采用新字段，当前黄金样本已由正式构造器更新。",
-      "previousFingerprint": "50ae23c66ccf409cfc4811dd6676b0a6ce4cf71fbfad1279cd11c52e44efae65",
-      "fingerprint": "01d4d62289e24849e04171e730fc2a54cd01233777e3b47727d51092a3d74cbe",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T09:50:13.661Z",
-      "format": "subtitle-manifest",
-      "version": 1,
-      "reason": "t164 最小节拍标记类型与重音强度、片段节拍吸附开关；开发阶段直接采用新字段，当前黄金样本已由正式构造器更新。",
-      "previousFingerprint": "de2e33717d95785ac025ea50ce654e98678e3d3da8dc5921c54178ed7aae52ee",
-      "fingerprint": "9ad2c8922d20b178dcb14f4ec7485631ad108d32507d20f0312805120b75febf",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-11T09:55:54.891Z",
-      "format": "document.video_edit",
-      "version": 2,
-      "reason": "t164 标记类型区分普通 marker 与节拍 beat；补齐通用实体未设置时的合法默认读值。",
-      "previousFingerprint": "01d4d62289e24849e04171e730fc2a54cd01233777e3b47727d51092a3d74cbe",
-      "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T04:30:22.553Z",
-      "format": "document.video_edit",
-      "version": 2,
-      "reason": "t177 原文字幕保留首尾空白和换行，移除 caption.text 的隐式 trim，仍拒绝纯空白；开发期语义变更，不迁移旧字幕。",
-      "previousFingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
-      "fingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T05:34:11.228Z",
-      "format": "setting-records",
-      "version": 19,
-      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
-      "previousFingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
-      "fingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T05:34:11.230Z",
-      "format": "asset-records",
-      "version": 19,
-      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
-      "previousFingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
-      "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T05:34:11.230Z",
-      "format": "generation-presets",
-      "version": 19,
-      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
-      "previousFingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
-      "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T05:34:11.230Z",
-      "format": "sqlite",
-      "version": 19,
-      "reason": "t178：既有SQLite账本第19项登记等待用户确认状态及确认元数据；其余三种记录随共享SQLite版本递增，内容结构不变。开发期不引入旧确认格式迁移。",
-      "previousFingerprint": "18c5e5c3db7a828ad00b815dd386c5ba711ebd91b86bf439b3a5124c0e2e7f56",
-      "fingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T07:07:19.472Z",
-      "format": "setting-records",
-      "version": 19,
-      "reason": "t180 统一 AI 付费授权设置、项目授权及操作账本费用预留；开发期不兼容旧自动额度与确认格式",
-      "previousFingerprint": "dcea1c8e941b32dfe6f9430f8e1160fb08eb2080d39d9f53026dffd42de9ddb7",
-      "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T07:07:19.473Z",
-      "format": "sqlite",
-      "version": 19,
-      "reason": "t180 统一 AI 付费授权设置、项目授权及操作账本费用预留；开发期不兼容旧自动额度与确认格式",
-      "previousFingerprint": "3badf4e1c3c9e514075b446ac33ff9f8d5f7e9a05e4082581030160efe1ac772",
-      "fingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T08:13:44.264Z",
-      "format": "document.video_edit",
-      "version": 2,
-      "reason": "t182：剪辑文档保存已完成导出回执；既有操作账本记录生成上限估值性质，开发期不兼容旧格式",
-      "previousFingerprint": "512be4d2c019c033b4818d4b0feea25b81cbfaeb5d0cc2dbdf660240eececd55",
-      "fingerprint": "de24e35a2a880bea9ab037ce98c70a77f464122c7b65b657ccfcd3a9280588ea",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T08:13:44.265Z",
-      "format": "sqlite",
-      "version": 19,
-      "reason": "t182：剪辑文档保存已完成导出回执；既有操作账本记录生成上限估值性质，开发期不兼容旧格式",
-      "previousFingerprint": "7bfa7fa30e6e20cd8d2e0b96acbb55bd11b0ab8c0b1880894f5f889d814e148d",
-      "fingerprint": "38953dfbc151d55fa5d4d752a73ccecde97948879a488ebd2048c8418084389d",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T17:23:49.089Z",
-      "format": "llm-config",
-      "version": 1,
-      "reason": "f4 真实默认配置复核：纳入结构化输出与思考兼容性字段；供应商记录仍允许由宿主补齐可选元数据，保留SDK扩展内容。",
-      "previousFingerprint": "6d1e482c29cd83832a588ddf3d533c2066855bfa7dbd722ed7dab99231771ed9",
-      "fingerprint": "b957a4290f9c47abe9b7d660364a108e52bb72dc9c630bf77688be26433ff61b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T17:23:49.091Z",
-      "format": "llm-config-journal",
-      "version": 1,
-      "reason": "f4 真实默认配置复核：纳入结构化输出与思考兼容性字段；供应商记录仍允许由宿主补齐可选元数据，保留SDK扩展内容。",
-      "previousFingerprint": "863c9203e0a8435f02a2c0204404f4db099b6a3b49624e948d1398799daea9aa",
-      "fingerprint": "6d54d6bc678ecd77eb33497d592f7b088243b5fff4b5d0c8f3498440bb3407de",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T17:26:19.432Z",
-      "format": "llm-config",
-      "version": 1,
-      "reason": "f4 稳定字段覆盖补全：提示词文档、媒体绑定、素材组与图片文档引用纳入指纹；保留开放扩展字段。",
-      "previousFingerprint": "b957a4290f9c47abe9b7d660364a108e52bb72dc9c630bf77688be26433ff61b",
-      "fingerprint": "4f93184b865bb50b6255440e15608089e410f3ce5da7c2394b9dfcb0d0f318e4",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T17:26:19.435Z",
-      "format": "llm-config-journal",
-      "version": 1,
-      "reason": "f4 稳定字段覆盖补全：提示词文档、媒体绑定、素材组与图片文档引用纳入指纹；保留开放扩展字段。",
-      "previousFingerprint": "6d54d6bc678ecd77eb33497d592f7b088243b5fff4b5d0c8f3498440bb3407de",
-      "fingerprint": "1291e2000348078e6c5b3a0ed666bdf781eaaacf27ca555132db19eb47ecbde9",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-12T17:26:19.435Z",
-      "format": "document.canvas",
-      "version": 1,
-      "reason": "f4 稳定字段覆盖补全：提示词文档、媒体绑定、素材组与图片文档引用纳入指纹；保留开放扩展字段。",
-      "previousFingerprint": "39801f4a26e4516fb26dba9d624b8123e4b8d3d7253c877a761444b6d07619f1",
-      "fingerprint": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-13T21:45:22.432Z",
-      "format": "settings",
-      "version": 14,
-      "reason": "屏幕录制1.1新增全局录制快捷键，开发期只读取新版设置，不保留旧开发设置迁移",
-      "previousFingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
-      "fingerprint": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T02:02:38.663Z",
-      "format": "document.video_edit",
-      "version": 5,
-      "reason": "开发期剪辑内容升级至v5，新增录制光标事件日志引用与内置效果，旧格式不迁移",
-      "previousFingerprint": "1556823f2557f135a0bf7a1794b3eb2ec48248a914afd7a28e3fa96d84c656e0",
-      "fingerprint": "b032a41c978bedf1a500f833d621e4b94d2449ab9271316f86dae2dc6363973b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T02:54:04.922Z",
-      "format": "creative-intent-candidate",
-      "version": 2,
-      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
-      "previousFingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152",
-      "fingerprint": "a902a12e001aaff8d583069fa423c75ab121f299338822d787f0632962600f87",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T02:54:04.923Z",
-      "format": "document.video_edit",
-      "version": 6,
-      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
-      "previousFingerprint": "b032a41c978bedf1a500f833d621e4b94d2449ab9271316f86dae2dc6363973b",
-      "fingerprint": "5677bf7aab1004cc5a4517c0e4d6e42499c795896090980146780728b02ef781",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T02:54:04.923Z",
-      "format": "title-templates",
-      "version": 3,
-      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
-      "previousFingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9",
-      "fingerprint": "8939641fa6dde690d899eba43966872d4fbef9d8cc2ff7c912fcb71b5a320700",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T02:54:04.923Z",
-      "format": "subtitle-manifest",
-      "version": 3,
-      "reason": "共享关键帧契约新增 screen_attention 来源及手改归属校验，所有嵌套消费格式同步升版，开发期不保留兼容",
-      "previousFingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
-      "fingerprint": "01bcce87c26ef3685d037398498a56905885505cd9a8cfe4c2c393491cd24673",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T03:47:40.910Z",
-      "format": "document.screen_recording",
-      "version": 2,
-      "reason": "录制理解升级为带时间戳的文字稿步骤章节与可审阅候选，开发期不保留旧占位格式",
-      "previousFingerprint": "37c71a0834aaa96c072a4bbff152ccd26ff6e297aa258f4f221a2a15e5547244",
-      "fingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T04:48:45.394Z",
-      "format": "capture-log-page",
-      "version": 2,
-      "reason": "录制隐私候选与密码框几何升级开发期会话和共享事件页，不保留旧开发格式",
-      "previousFingerprint": "9c5b96598110855efe69b671a8694915b603b7e6cab524ac63152d5a0d91aa37",
-      "fingerprint": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T04:48:45.396Z",
-      "format": "document.screen_recording",
-      "version": 3,
-      "reason": "录制隐私候选与密码框几何升级开发期会话和共享事件页，不保留旧开发格式",
-      "previousFingerprint": "bb39bf802e22aebb4e867d29d3c07c28c555b50f5e913e8ed9642eeb151fa0d8",
-      "fingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T09:43:48.937Z",
-      "format": "document.screen_recording",
-      "version": 4,
-      "reason": "录制脚本新增受限输入快照与可编辑步骤，开发期不兼容旧会话",
-      "previousFingerprint": "3e59aa3dc5b8b1bf4231ff608e9c4d03ffdff73cd153712bf7892b42716b4e00",
-      "fingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-14T11:36:04.032Z",
-      "format": "document.screen_recording",
-      "version": 5,
-      "reason": "4.23 导演脚本、配音回执与可选真实 ASR 文档引用，开发期升至 v5",
-      "previousFingerprint": "56e85fcd10408908ef4707113188b05bf84a97950363721846c67f468f52da05",
-      "fingerprint": "88543a4f90b66eff15998d917e5fc115fb532a6e29e9a0b8c1cc04960957b9be",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-18T21:57:58.219Z",
-      "format": "document.video_edit",
-      "version": 11,
-      "reason": "自动字幕新增来源词关联与剪辑后复核语义，开发期直接采用新格式；同步内嵌剪辑快照和字幕回填记录，不伪造旧字幕词源。",
-      "previousFingerprint": "84d241187a265089913f87233afa5532184f3259eee49823f471058f84949a9a",
-      "fingerprint": "935f7a1492b7d5597bb23d9f9fbba96ef6c4d88d5ad202d9abd4d7ce137e0d0e",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-18T21:57:58.221Z",
-      "format": "document.screen_recording",
-      "version": 13,
-      "reason": "自动字幕新增来源词关联与剪辑后复核语义，开发期直接采用新格式；同步内嵌剪辑快照和字幕回填记录，不伪造旧字幕词源。",
-      "previousFingerprint": "84f21191a767791e4a93cec97046c86ffe7f682cdd820c6aa437b6295748a319",
-      "fingerprint": "394d6c3b5a670beb03ee5a07d71bd75fde9ef6863ae4a1d859de985e9e02b3b2",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-18T21:57:58.221Z",
-      "format": "subtitle-manifest",
-      "version": 7,
-      "reason": "自动字幕新增来源词关联与剪辑后复核语义，开发期直接采用新格式；同步内嵌剪辑快照和字幕回填记录，不伪造旧字幕词源。",
-      "previousFingerprint": "326ce30fe77cd7cb82bc93b595c493090ccb0c965a57806cb203846c2c600eb1",
-      "fingerprint": "4fcdfc8d74520ad802adc5ff527b95a3fb0cda7fe95d0485668e8c2faf8497b3",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-18T22:36:17.495Z",
-      "format": "document.video_edit",
-      "version": 12,
-      "reason": "新增画面与内容来源区间关联，开发期统一采用正式来源引用及偏移语义，不保留旧开发数据兼容。",
-      "previousFingerprint": "935f7a1492b7d5597bb23d9f9fbba96ef6c4d88d5ad202d9abd4d7ce137e0d0e",
-      "fingerprint": "8290ab9630276ec74b471a29b3d25a266d4aed11690048b0068e1fb32fcf1099",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-18T22:36:17.497Z",
-      "format": "document.screen_recording",
-      "version": 14,
-      "reason": "新增画面与内容来源区间关联，开发期统一采用正式来源引用及偏移语义，不保留旧开发数据兼容。",
-      "previousFingerprint": "394d6c3b5a670beb03ee5a07d71bd75fde9ef6863ae4a1d859de985e9e02b3b2",
-      "fingerprint": "c44f68bed9c98989c6aecee3dea66b4d931c126178c57016683fc8b2ea83bb50",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-18T22:36:17.497Z",
-      "format": "subtitle-manifest",
-      "version": 8,
-      "reason": "新增画面与内容来源区间关联，开发期统一采用正式来源引用及偏移语义，不保留旧开发数据兼容。",
-      "previousFingerprint": "4fcdfc8d74520ad802adc5ff527b95a3fb0cda7fe95d0485668e8c2faf8497b3",
-      "fingerprint": "940e7d9b37100162c653a45dcaea5e66bc91e9900fb304d50a84604452ad478d",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T14:20:32.167Z",
-      "format": "document.video_edit",
-      "version": 13,
-      "reason": "API2新增分组快门曝光语义及代码版本声明，开发期按新契约保存，录制内嵌剪辑同步升级；不新增旧数据迁移分支。",
-      "previousFingerprint": "8290ab9630276ec74b471a29b3d25a266d4aed11690048b0068e1fb32fcf1099",
-      "fingerprint": "950e1857acdd30f50324f32352c1870c0b884723dd18d8de3ab528bf6aac3992",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T14:20:32.169Z",
-      "format": "document.screen_recording",
-      "version": 15,
-      "reason": "API2新增分组快门曝光语义及代码版本声明，开发期按新契约保存，录制内嵌剪辑同步升级；不新增旧数据迁移分支。",
-      "previousFingerprint": "c44f68bed9c98989c6aecee3dea66b4d931c126178c57016683fc8b2ea83bb50",
-      "fingerprint": "abbf3aae002d8414d1d4f879f44e3113fc5838f41b41914961909f02a51a21a6",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T14:20:32.169Z",
-      "format": "code-version",
-      "version": 2,
-      "reason": "API2新增分组快门曝光语义及代码版本声明，开发期按新契约保存，录制内嵌剪辑同步升级；不新增旧数据迁移分支。",
-      "previousFingerprint": "2d0b7ae8ace0207261df34baedec228c5e6e15f0b0853b6158968664827bdd71",
-      "fingerprint": "8de25d276d2edb19b513d14a7113dad5a9e38abc27b9bd7d24737350590e8328",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T14:20:32.169Z",
-      "format": "code-asset",
-      "version": 3,
-      "reason": "API2新增分组快门曝光语义及代码版本声明，开发期按新契约保存，录制内嵌剪辑同步升级；不新增旧数据迁移分支。",
-      "previousFingerprint": "c527337e08f3102019f3dd9763c4c5e8d0147e439599d1f78ec73e65593e9d0e",
-      "fingerprint": "819597f36bca79a55930143929097650c817d5524afebd886a2d6e191e216ff8",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T15:13:47.023Z",
-      "format": "document.video_edit",
-      "version": 14,
-      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
-      "previousFingerprint": "950e1857acdd30f50324f32352c1870c0b884723dd18d8de3ab528bf6aac3992",
-      "fingerprint": "57f457b7a93d9e300e07127d4b5fdbdba0b2768e2793fc11a53bba984b1b8fbe",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T15:13:47.025Z",
-      "format": "document.screen_recording",
-      "version": 16,
-      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
-      "previousFingerprint": "abbf3aae002d8414d1d4f879f44e3113fc5838f41b41914961909f02a51a21a6",
-      "fingerprint": "59286126b2663d2a88c685d80b5c7ef03b2582279f1a056ff8fefd552ae1e73d",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T15:13:47.025Z",
-      "format": "code-version",
-      "version": 3,
-      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
-      "previousFingerprint": "8de25d276d2edb19b513d14a7113dad5a9e38abc27b9bd7d24737350590e8328",
-      "fingerprint": "fc77fd5053c7b8a9219e471de1f2ce9691d7294a454d699ff7a675e2ac5907cb",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T15:13:47.025Z",
-      "format": "code-asset",
-      "version": 4,
-      "reason": "API3在现有作者语言3中增加分组圆盘散焦与焦点曲线语义，开发期容器直接采用新契约",
-      "previousFingerprint": "819597f36bca79a55930143929097650c817d5524afebd886a2d6e191e216ff8",
-      "fingerprint": "735e47745cb17cf78ef96948332566cc6e56fa7cd3bec87536c65130cec16e29",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:06:13.663Z",
-      "format": "creative-intent-candidate",
-      "version": 3,
-      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
-      "previousFingerprint": "a902a12e001aaff8d583069fa423c75ab121f299338822d787f0632962600f87",
-      "fingerprint": "9bcd34b1fb0cdd4fa7121bef291dd547ad50fa1c3f015c524c23e88683a0ea96",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:06:13.665Z",
-      "format": "document.video_edit",
-      "version": 15,
-      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
-      "previousFingerprint": "57f457b7a93d9e300e07127d4b5fdbdba0b2768e2793fc11a53bba984b1b8fbe",
-      "fingerprint": "80b8f26996bebec3da9b726e716873363cfb0d64388aefc24695d099af333dae",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:06:13.665Z",
-      "format": "document.screen_recording",
-      "version": 17,
-      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
-      "previousFingerprint": "59286126b2663d2a88c685d80b5c7ef03b2582279f1a056ff8fefd552ae1e73d",
-      "fingerprint": "feef38c65530bb0ba66ca37553fd40ed9007f55f43b75337b24403c8618a51f9",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:06:13.665Z",
-      "format": "code-asset",
-      "version": 5,
-      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
-      "previousFingerprint": "735e47745cb17cf78ef96948332566cc6e56fa7cd3bec87536c65130cec16e29",
-      "fingerprint": "4dcc4b1e095e1e24661b102132f1c6c7c7a421826f4fc95665aed379d577f02b",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:06:13.665Z",
-      "format": "title-templates",
-      "version": 5,
-      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
-      "previousFingerprint": "4ec30d2f4da7ca680a3e1905d64f17c06acec340d2fb78b5a014978bb4db0cf7",
-      "fingerprint": "c265bc4b68a8d27ae147af11bdb91673efcf10267b8eb65d76a538ba337c3bb7",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:06:13.665Z",
-      "format": "video-preset-package",
-      "version": 4,
-      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
-      "previousFingerprint": "98e1d776ad0d10523958e78a6f3446e91178567b6b269863547239dbf6eeca04",
-      "fingerprint": "5f20068998e2e3261e8142370fff6f81e9be816ad6cfe7b634edeb794d6f0b04",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:06:13.665Z",
-      "format": "subtitle-manifest",
-      "version": 9,
-      "reason": "作者 JS 声明文字样式复合参数，统一参数值及嵌套关键帧保存完整文字样式；开发期只保留新格式",
-      "previousFingerprint": "940e7d9b37100162c653a45dcaea5e66bc91e9900fb304d50a84604452ad478d",
-      "fingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:16:33.046Z",
-      "format": "creative-intent-candidate",
-      "version": 4,
-      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
-      "previousFingerprint": "9bcd34b1fb0cdd4fa7121bef291dd547ad50fa1c3f015c524c23e88683a0ea96",
-      "fingerprint": "44b96df9f304200d0ba33fbeef6e1c34b868796850ba857490292a09346f3078",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:16:33.047Z",
-      "format": "document.video_edit",
-      "version": 16,
-      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
-      "previousFingerprint": "80b8f26996bebec3da9b726e716873363cfb0d64388aefc24695d099af333dae",
-      "fingerprint": "1bf2fc86252df5cce90d13cab295bfd3f0e4ee7f5a4c164b43d33240534084d5",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:16:33.047Z",
-      "format": "document.screen_recording",
-      "version": 18,
-      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
-      "previousFingerprint": "feef38c65530bb0ba66ca37553fd40ed9007f55f43b75337b24403c8618a51f9",
-      "fingerprint": "c5ff45f44a8256ad6c3f8c0e4e721c6d061101ea1c9b2843115b8efaca5185d5",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:16:33.047Z",
-      "format": "code-asset",
-      "version": 6,
-      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
-      "previousFingerprint": "4dcc4b1e095e1e24661b102132f1c6c7c7a421826f4fc95665aed379d577f02b",
-      "fingerprint": "f028595eaf46840c713458b7cac2b7bbaa2cd95eac4104bfbcd2e13f05feadb6",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:16:33.047Z",
-      "format": "title-templates",
-      "version": 6,
-      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
-      "previousFingerprint": "c265bc4b68a8d27ae147af11bdb91673efcf10267b8eb65d76a538ba337c3bb7",
-      "fingerprint": "b1459696a7ffd3889bbd90bfd40655b894ba4ed5933396eb5b049f61d4398381",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:16:33.047Z",
-      "format": "video-preset-package",
-      "version": 5,
-      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
-      "previousFingerprint": "5f20068998e2e3261e8142370fff6f81e9be816ad6cfe7b634edeb794d6f0b04",
-      "fingerprint": "d6662b432c4f16e12d5bd87438850a8ed9c9f0c945a458e468e201546ac3ae75",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-19T22:16:33.047Z",
-      "format": "subtitle-manifest",
-      "version": 10,
-      "reason": "作者动态图层用结构化数据表参数保存驱动数组与逐项文字样式，覆盖关联按数据键或索引定位；开发期直接使用新格式",
-      "previousFingerprint": "27454a32fa9250cdce6efb0ef0c9ad39cb093e5fc02024d5decf958f34e00a38",
-      "fingerprint": "985ff24614e0f773527e99bd32e768409e87a7fb832c83e0452af05baa17fce9",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-20T13:39:14.386Z",
-      "format": "document.video_edit",
-      "version": 17,
-      "reason": "开发期新增引用原视频的帧定格及镜头版本状态；剪辑及嵌入快照同步登记，不增加旧格式迁移。",
-      "previousFingerprint": "1bf2fc86252df5cce90d13cab295bfd3f0e4ee7f5a4c164b43d33240534084d5",
-      "fingerprint": "c95b9eaa921a612cf0d21b15181a58c69b65111a0671fbb4eee0845204ebba64",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-20T13:39:14.387Z",
-      "format": "document.screen_recording",
-      "version": 19,
-      "reason": "开发期新增引用原视频的帧定格及镜头版本状态；剪辑及嵌入快照同步登记，不增加旧格式迁移。",
-      "previousFingerprint": "c5ff45f44a8256ad6c3f8c0e4e721c6d061101ea1c9b2843115b8efaca5185d5",
-      "fingerprint": "b3593db6c06ce464ae1846376d63532da298efbef4a4c87b23c7570f5afda475",
-      "waivedFixtureVersions": []
-    },
-    {
-      "at": "2026-10-20T13:39:14.387Z",
-      "format": "subtitle-manifest",
-      "version": 11,
-      "reason": "开发期新增引用原视频的帧定格及镜头版本状态；剪辑及嵌入快照同步登记，不增加旧格式迁移。",
-      "previousFingerprint": "985ff24614e0f773527e99bd32e768409e87a7fb832c83e0452af05baa17fce9",
-      "fingerprint": "5c5cbc7875326b7c3edd63615d7db5e1ca11667ad8abd4d5168e8bd919d779ce",
-      "waivedFixtureVersions": []
-    }
-  ],
-  "frameworkAdoption": {
-    "at": "2026-10-12T17:19:19.572Z",
-    "reason": "f4 首发前框架登记：文档外壳独立，稳定业务字段纳入指纹，SQLite 记录版本冻结21并移除无内容变化的JSON空迁移；保留所有原 supportedFrom 与SQL账本，记录内容未变。",
-    "formats": [
-      {
-        "format": "generation-output-timings",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32",
-        "fingerprint": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32"
-      },
-      {
-        "format": "creative-intent-page",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64",
-        "fingerprint": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64"
-      },
-      {
-        "format": "creative-intent-candidate",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152",
-        "fingerprint": "e85ed109ad976b678ef9b2389b7caeed647719b27cd01b2a9288feedc6f40152"
-      },
-      {
-        "format": "image-layout-page",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d",
-        "fingerprint": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d"
-      },
-      {
-        "format": "image-layout-candidate",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee",
-        "fingerprint": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee"
-      },
-      {
-        "format": "image-history-checkpoint",
-        "version": 2,
-        "supportedFrom": 2,
-        "previousFingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46",
-        "fingerprint": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46"
-      },
-      {
-        "format": "image-header",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5",
-        "fingerprint": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5"
-      },
-      {
-        "format": "image-package",
-        "version": 12,
-        "supportedFrom": 12,
-        "previousFingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
-        "fingerprint": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36"
-      },
-      {
-        "format": "image-working-copy",
-        "version": 14,
-        "supportedFrom": 14,
-        "previousFingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
-        "fingerprint": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327"
-      },
-      {
-        "format": "canvas-layer-package",
-        "version": 12,
-        "supportedFrom": 12,
-        "previousFingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
-        "fingerprint": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58"
-      },
-      {
-        "format": "keystore",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed",
-        "fingerprint": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed"
-      },
-      {
-        "format": "media-grants",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d",
-        "fingerprint": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d"
-      },
-      {
-        "format": "llm-config",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "d395dfe2639d1590fd6ad95db21477a2c21698cea7f5c2d8851a8ef753ef6bc5",
-        "fingerprint": "6d1e482c29cd83832a588ddf3d533c2066855bfa7dbd722ed7dab99231771ed9"
-      },
-      {
-        "format": "storyboard-metadata",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe",
-        "fingerprint": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe"
-      },
-      {
-        "format": "llm-config-journal",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "dad22cbafc862e1a35f5d7452313319e28c9f608197a35a1f8d8dacae699f870",
-        "fingerprint": "863c9203e0a8435f02a2c0204404f4db099b6a3b49624e948d1398799daea9aa"
-      },
-      {
-        "format": "document.video_edit",
-        "version": 4,
-        "supportedFrom": 2,
-        "previousFingerprint": "46c8998b3296f9b34c37d025ed34b635200cd6db0f0d0ae4d350fb58568ce291",
-        "fingerprint": "1556823f2557f135a0bf7a1794b3eb2ec48248a914afd7a28e3fa96d84c656e0"
-      },
-      {
-        "format": "document.canvas",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "50289812848e2c636aae1e4e1f8d7380fc3dcdd6671a28b750300030d266c48c",
-        "fingerprint": "39801f4a26e4516fb26dba9d624b8123e4b8d3d7253c877a761444b6d07619f1"
-      },
-      {
-        "format": "document.audio_edit",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "ae0acd09a6924f24a63fcdb4d5fad108010689e117896d0db59071fb417eb9ac",
-        "fingerprint": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c"
-      },
-      {
-        "format": "document.camera_stage",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "19ccbfc9c4521941d9257a97c21ef56dadebb8ff1e22681336d9db7b57d1a131",
-        "fingerprint": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813"
-      },
-      {
-        "format": "document.image_document",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "5b117d2946d9506f95acb3d22d90f0cf7cb44b5d09bf4c8042774341405fe19b",
-        "fingerprint": "ea316f50b5e177668955a297adb75dbec64515d44f1b10abafa838e958acc8d4"
-      },
-      {
-        "format": "project",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "288dda146a1cca701efd239342419faa11b259691731471cb6353b99a77627c1",
-        "fingerprint": "288dda146a1cca701efd239342419faa11b259691731471cb6353b99a77627c1"
-      },
-      {
-        "format": "project-package",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "cb286a2c85a32ac0cb9233cd2aa1504a2a22c5f1e33e19928f87534c47b0dfb5",
-        "fingerprint": "cb286a2c85a32ac0cb9233cd2aa1504a2a22c5f1e33e19928f87534c47b0dfb5"
-      },
-      {
-        "format": "code-version",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "2d0b7ae8ace0207261df34baedec228c5e6e15f0b0853b6158968664827bdd71",
-        "fingerprint": "2d0b7ae8ace0207261df34baedec228c5e6e15f0b0853b6158968664827bdd71"
-      },
-      {
-        "format": "code-component",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b",
-        "fingerprint": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b"
-      },
-      {
-        "format": "code-asset",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2",
-        "fingerprint": "0a8152ece2a27ff18d9d92abb4032a26ad256ff0e528c04d1bab14061f2db4b2"
-      },
-      {
-        "format": "settings",
-        "version": 13,
-        "supportedFrom": 13,
-        "previousFingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014",
-        "fingerprint": "00b6a5471108cf3a775e2607a5dbc121fc81178cc89744f26d16175dddbc3014"
-      },
-      {
-        "format": "theme",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417",
-        "fingerprint": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417"
-      },
-      {
-        "format": "style-kits",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "b04966f580225450c23b9c4217a614b36e96d2853671f51e0ecf202a1884e0c1",
-        "fingerprint": "b04966f580225450c23b9c4217a614b36e96d2853671f51e0ecf202a1884e0c1"
-      },
-      {
-        "format": "title-templates",
-        "version": 2,
-        "supportedFrom": 1,
-        "previousFingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9",
-        "fingerprint": "cdd7711c4b51c782d4360f2c60dded44b8872bd95dc2f2548cdeac45efa11fb9"
-      },
-      {
-        "format": "text-presets",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84",
-        "fingerprint": "b3cd97574335bfc7b82eb6498705ca5edcba06b374da18e39694bb4079c52e84"
-      },
-      {
-        "format": "export-presets",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920",
-        "fingerprint": "a88eeccd2e6ce741d26ff1ecab677caede63c28a08dc5e9df3ced4b8c2106920"
-      },
-      {
-        "format": "voice-library",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5",
-        "fingerprint": "8d24016258fa4cb86621a06c702003232dcb9335ed8b092af5c7fe85a71461b5"
-      },
-      {
-        "format": "preset-export",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839",
-        "fingerprint": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839"
-      },
-      {
-        "format": "theme-payload",
-        "version": 2,
-        "supportedFrom": 1,
-        "previousFingerprint": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b",
-        "fingerprint": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b"
-      },
-      {
-        "format": "node-defaults",
-        "version": 1,
-        "supportedFrom": 1,
-        "previousFingerprint": "9c3e3c10f0ea4887a7cb0bf3ee987eefff77e886fd03be5e8fd3dc92f5a311f8",
-        "fingerprint": "9c3e3c10f0ea4887a7cb0bf3ee987eefff77e886fd03be5e8fd3dc92f5a311f8"
-      },
-      {
-        "format": "model-defaults",
-        "version": 2,
-        "supportedFrom": 2,
-        "previousFingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f",
-        "fingerprint": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f"
-      },
-      {
-        "format": "onboarding",
-        "version": 2,
-        "supportedFrom": 2,
-        "previousFingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50",
-        "fingerprint": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50"
-      },
-      {
-        "format": "subtitle-manifest",
-        "version": 2,
-        "supportedFrom": 1,
-        "previousFingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005",
-        "fingerprint": "667b693575ef564ce770e5583efb420445c57a044d7099795e1a6002c3e93005"
-      },
-      {
-        "format": "setting-records",
-        "version": 21,
-        "supportedFrom": 19,
-        "previousFingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785",
-        "fingerprint": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785"
-      },
-      {
-        "format": "asset-records",
-        "version": 21,
-        "supportedFrom": 19,
-        "previousFingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad",
-        "fingerprint": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad"
-      },
-      {
-        "format": "generation-presets",
-        "version": 21,
-        "supportedFrom": 19,
-        "previousFingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353",
-        "fingerprint": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353"
-      },
-      {
-        "format": "sqlite",
-        "version": 21,
-        "supportedFrom": 19,
-        "previousFingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
-        "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8"
-      }
-    ]
-  }
+  "devBreaks": []
 }

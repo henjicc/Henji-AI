@@ -1,5 +1,915 @@
 {
-  "releasedCompatibility": false,
-  "formats": {},
+  "releasedCompatibility": true,
+  "formats": {
+    "generation-output-timings": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "c8e61932dc8a35824e0b6dd05286d224ff3f026fed3a3711d47f1c900e98dd1c"
+      }
+    },
+    "screen-recording-tracks": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "7c0538485a22c4b46d5b972c36473428b3f7d4160ba7b9f920887a784df86456"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "adc46620b24bce0a4bb23b6e245a459da126e15abcc068751b5ab39b9e0fb34c"
+      }
+    },
+    "capture-log-page": {
+      "supportedFrom": 2,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "2": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60"
+      },
+      "readers": {
+        "2": 2
+      },
+      "samples": {
+        "v2.json": "15f9fbddb1cab34d2ce113d0bf106488fb19826152577e8eaaa4f9c263aa145f"
+      }
+    },
+    "creative-intent-page": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "2d3526e420b92ff3f5ae31ac2076b008c12bb56cee7347a4f71d27a852bf06c3"
+      }
+    },
+    "creative-intent-candidate": {
+      "supportedFrom": 4,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "4": "44b96df9f304200d0ba33fbeef6e1c34b868796850ba857490292a09346f3078"
+      },
+      "readers": {
+        "4": 4
+      },
+      "samples": {
+        "v4.json": "acf7d625c1eb5f766add7335cb7d38b7b0fe11c319ab71ee570ce139fa713316"
+      }
+    },
+    "image-layout-page": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "cee402a2fcb6bec29c2d7cb6ab4933ac0c8b8e2b2e5eed071648e3306fbd006a"
+      }
+    },
+    "image-layout-candidate": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "ad758cb7eb69bcd1a4bc6ca4d1bbc2bcd52fc8fd39bc993f9296d629ef6b591e"
+      }
+    },
+    "document-envelope": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "be84bf7409e7cc10c107d7267942d9296dc8312a0e89cc0cbd2aaf10622b959f"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "203f0a04860135516b207fdba328be01a451e5bc244d5430b72a1e5774c864fb"
+      }
+    },
+    "screen-capture": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "4e9e82dfecd4a349f4b2409ab6351352e72cf633f109280a060fdafac86ee8b2"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "f00320edae2671c7c09af08b47126bb2ce70e702da0a7922988a9750c57222aa"
+      }
+    },
+    "mcp-connections": {
+      "supportedFrom": 2,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "2": "f6e809a60ecfcb39ddd70f0d4f3d6529f7d0834ba79bc5c24e6f8fb2b79bc9ee"
+      },
+      "readers": {
+        "2": 2
+      },
+      "samples": {
+        "v2.json": "2d834efab42910d2eca282d67e9c3ac9cb60ddca76efaca588ceaa78dd3df5bc"
+      }
+    },
+    "image-history-checkpoint": {
+      "supportedFrom": 2,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "2": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46"
+      },
+      "readers": {
+        "2": 2
+      },
+      "samples": {
+        "v2.json": "4097394c116bc3c3c5e62a7c78c45b2bea54b2d8334528615c47d8a9b15e60b8"
+      }
+    },
+    "image-header": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        },
+        {
+          "extension": "henjiimg",
+          "versionFormat": "image-package"
+        }
+      ],
+      "versions": {
+        "1": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "c08a504d69b6de348ac666cd1eea1b80ad5084e00a4abff3c9ce075f7b2a5c5e",
+        "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458"
+      }
+    },
+    "image-package": {
+      "supportedFrom": 12,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        },
+        {
+          "extension": "henjiimg"
+        }
+      ],
+      "versions": {
+        "12": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36"
+      },
+      "readers": {
+        "12": 12
+      },
+      "samples": {
+        "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458",
+        "v12.json": "e021560e94de3551e311976211fad24a6587fa14be57784dfa50014a68d9a87e"
+      }
+    },
+    "image-working-copy": {
+      "supportedFrom": 14,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "14": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327"
+      },
+      "readers": {
+        "14": 14
+      },
+      "samples": {
+        "v14.json": "6a33ab70b4b88d55a35806d06f2a54cee62c8c025f924c00d4dad775d3706652"
+      }
+    },
+    "canvas-layer-package": {
+      "supportedFrom": 12,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        },
+        {
+          "extension": "henjilayer"
+        }
+      ],
+      "versions": {
+        "12": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58"
+      },
+      "readers": {
+        "12": 12
+      },
+      "samples": {
+        "v12.henjilayer": "163f530ee8758c95ff0ef6bcc03d77dc52d9ef10d5f74c11ebd3778ab48580ea",
+        "v12.json": "053f60257e389cb251659f0ed6f51d0f198eea61c28f77d4bfdfda275b924ab9"
+      }
+    },
+    "keystore": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "a3598ec22103cf22c9fe92000a142620c8e880e19e335f3257e50be7b0811b86"
+      }
+    },
+    "media-grants": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "f42c80b2aa89f2406b738dc253ca32ce549623dffaaa905b3142397a668c1df1"
+      }
+    },
+    "llm-config": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "76559e91a6e3061e1968022aa4170007a1418ced0fa1f0541ca06dea7c902d82"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "36387c9579609bcfe3bb761546879640c5bec4e13f6ff278e845c6fded183e81"
+      }
+    },
+    "storyboard-metadata": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "de93fb5b02824c08297bceb5f42048d642ac2ba8b2e41735c497903d65e0464c",
+        "v1.png": "40eefeda4a5f4b8031e3c42cc0fa923c5880ff3387b3385b43502d6608fa26c6"
+      }
+    },
+    "llm-config-journal": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "1291e2000348078e6c5b3a0ed666bdf781eaaacf27ca555132db19eb47ecbde9"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "fdf251f4ac01cbc6587fc9c0c9dd50a0e0cc97d1aa0077954d9d123709a16aca"
+      }
+    },
+    "document.video_edit": {
+      "supportedFrom": 17,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "17": "1a3b440bf2f0262356c1ef9ac4df2ed3e4a520f7060989c13f06bc43bfef24a5"
+      },
+      "readers": {
+        "17": 17
+      },
+      "samples": {
+        "v17.json": "04f30f2c819759b07c9ca5415541f277636eddce7dd1ee5808abd2e7ee34e414"
+      }
+    },
+    "document.canvas": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "ead30f4c29504b7d70f8f2bb5808ab20878baee0af1575a15f380af0d91f7b71"
+      }
+    },
+    "document.audio_edit": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "291d35efce75f1e1a662168ac2db602a34341bff7c76b691680204b01542dc01"
+      }
+    },
+    "document.camera_stage": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "298232d1a5eea1e06384b567156ebf9597bb3df3bec704fc1812b6e49f26e813"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "d2e82b88d6f5f0994ad30150db1ab1714f2a6965f524519fa9ceda368484153b"
+      }
+    },
+    "document.image_document": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        },
+        {
+          "extension": "henjiimg",
+          "versionFormat": "image-package"
+        }
+      ],
+      "versions": {
+        "1": "ea316f50b5e177668955a297adb75dbec64515d44f1b10abafa838e958acc8d4"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "7f5ffe1c148181b45986ede0965a8c395dda6421d1c82ad0dc94f1f87e044472",
+        "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458"
+      }
+    },
+    "document.screen_recording": {
+      "supportedFrom": 19,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "19": "0468424dda4c26161516d6de930dc0f8a6e7f2575f1453caa977cb0a61dc6d27"
+      },
+      "readers": {
+        "19": 19
+      },
+      "samples": {
+        "v19.json": "bed3ba5d2510d2fcb6c72a8f0608f39ff45af13e01ff2db2963e4008afd6a5b8"
+      }
+    },
+    "project": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "c459d0703056998eea21df42fc3f768601d14a9423076cb1c24837e8a72db9d1"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "7c22df2d3933c5ece9eca7b87818c54f30a66694b0f17133f9655b1f88b53002"
+      }
+    },
+    "project-package": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        },
+        {
+          "extension": "henjipack"
+        }
+      ],
+      "versions": {
+        "1": "0e74080fe193641790a35a451f2a682dce056dda70ed32ac128c0f6757d3ccd2"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.henjipack": "61e1302e79ff9fa669adcfda1b0ae713bc34ec3d0e4ec7d29937b2da3cb2dc7b",
+        "v1.json": "dc5f5a27a1e70ce717e0e9ec40a43890bed7ac22cd4e70862f4ff7c72d6f8fef"
+      }
+    },
+    "code-version": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "5b108486ce03383d00a870085c4360caf71afb7fdc8f1e909b23382f4311ab46"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "e88825a54b171ab584213931a7a0bb916d89616c256fc69787be101bbdb614f0",
+        "v1.ts": "f6f1e9f0ce00e2b293418731dbdcef684c806130256799e4aef48484d0f8f08a"
+      }
+    },
+    "code-author-api": {
+      "supportedFrom": 4,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "4": "6b845fd7a6c363f49c4e6ebf0b9e0152bdb60fbde1cc3f679418bde722a7fd81"
+      },
+      "readers": {
+        "4": 4
+      },
+      "samples": {
+        "v4.json": "49447d107bf18934b940ab8f5ef8e03f50b1dcf1215da347a4599f3f7ca4b18b"
+      }
+    },
+    "code-component": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "4c030c139abaae92a074ce6960f7b93c7962612523cbb6333dbf2095ecaff9ee",
+        "v1.ts": "967272e539c44bd28ea487abf1641c92ab5b5e63ca5e4fc22bf47c45b5c8ded8"
+      }
+    },
+    "code-asset": {
+      "supportedFrom": 6,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "6": "fb41ed5836b9b0be5a7d2576e30c9532777ca82feae7dbdd34ed35b1d4b951e2"
+      },
+      "readers": {
+        "6": 6
+      },
+      "samples": {
+        "v6.json": "650a8d401aecd5675dee8067e8b83275c10413049e324a2faf58c061d4ea1b16"
+      }
+    },
+    "settings": {
+      "supportedFrom": 14,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "14": "7b798aac72c96287eff885080b1f55a1e2ec783061ee35512b696c0234b5cd9a"
+      },
+      "readers": {
+        "14": 14
+      },
+      "samples": {
+        "v14.json": "b2c3a2708c447039f8f11bd8387991dba48216af6d9b6f89897dab47433c1049"
+      }
+    },
+    "theme": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "28db681fc96b9ef5e1d9da06d705f6f2ba475e0a0028124baf16f013ac7065a9"
+      }
+    },
+    "style-kits": {
+      "supportedFrom": 3,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "3": "5910753ae4946e4405e184bc1383e3a803459d4a80d622fbb718085c5bcd310d"
+      },
+      "readers": {
+        "3": 3
+      },
+      "samples": {
+        "v3.json": "0873f67425a608820961c8e6409c0254ab6a08e06f6fab84f3cce22cc33d3989"
+      }
+    },
+    "title-templates": {
+      "supportedFrom": 6,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "6": "999d8388d561d64838134f6d237388b0f4b51f19bcd842bae50787b8b489e5fd"
+      },
+      "readers": {
+        "6": 6
+      },
+      "samples": {
+        "v6.json": "bb8db03186048891f984f653e5aef9a2288d94ae61ca648bedba7530aa4ef5ed"
+      }
+    },
+    "text-presets": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "65ad792088daa0ae4ab26d1868aca1317b15ca02af37273c406c40f6645dcb8f"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "1d683816921eb10ac942a1294ad371742838da2c85ad167b3dd4e74ce9db1d20"
+      }
+    },
+    "export-presets": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "998ad75a95858f7fdcd0e5e079741e41e2db9d2ad7ac5a64bdb872ee7d648ca9"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "7e7c6b8ed2013eec729a73e45a596f60af3ba9953ed689d01bd328725b966e5b"
+      }
+    },
+    "preset-preferences": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "933bc37259cb561d07af13809073ea5988ef0f18f9ffa1e3dea6277ad698ca4a"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "f34d5c7d220711ff80722bdc7dd2a3ccf072cb04a03c00020e11b8df39d537a3"
+      }
+    },
+    "video-preset-package": {
+      "supportedFrom": 5,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "5": "a330c429373c3c5a97d70b5057a6f111c68ed44fdcc6502de46d69c6fc6646fa"
+      },
+      "readers": {
+        "5": 5
+      },
+      "samples": {
+        "v5.json": "696b65700dd08633b347e3b529b06a381dc237ecdb7741f2937e950dec56da1e"
+      }
+    },
+    "voice-library": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "4202ee44cb1ed0e207e26b4985768afa908e5771a0cc3f52360291d1801b40b6"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "f24824f3bad85c9d73ca2cd6fc96fb3a2130314315bb054708ba275777aa86f7"
+      }
+    },
+    "preset-export": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "e0422fd231726d626027d348c216d82230af4eb4caeefc36df1199cfc5cdffe3"
+      }
+    },
+    "theme-payload": {
+      "supportedFrom": 2,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "2": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b"
+      },
+      "readers": {
+        "2": 2
+      },
+      "samples": {
+        "v2.json": "2d39d2bc026ba005060269e90730bc720cf57ca0520660f78d887066fd95e115"
+      }
+    },
+    "node-defaults": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "630788b4d12050de7be1f939de936d1de27a7af3b3952315c51b00a10f0130bd"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "dae74d3fd2649f0e8fb0d578d7cbbdf4c5b7ff8cad5bed03fdd3b3780712c49b"
+      }
+    },
+    "recording-setup": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "7510476937e9eebed84177d8a0b0622e67023fbb988ff929ba79792d22d9caf4"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "b330a7f4a400676060f9ae83df635edf4282bbfcdaa7e6e47af024655eaf3ea3"
+      }
+    },
+    "model-defaults": {
+      "supportedFrom": 2,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "2": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f"
+      },
+      "readers": {
+        "2": 2
+      },
+      "samples": {
+        "v2.json": "5e27e8a8e93c42d50e075e2df263e050c58ce546082af4f3d20542c3783aa12b"
+      }
+    },
+    "onboarding": {
+      "supportedFrom": 2,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "2": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50"
+      },
+      "readers": {
+        "2": 2
+      },
+      "samples": {
+        "v2.json": "0b8494e89610f0c0e71bd3abbb39534d85665c2fdebb0e05f451795e4c53f857"
+      }
+    },
+    "subtitle-manifest": {
+      "supportedFrom": 11,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "11": "5c5cbc7875326b7c3edd63615d7db5e1ca11667ad8abd4d5168e8bd919d779ce"
+      },
+      "readers": {
+        "11": 11
+      },
+      "samples": {
+        "v11.json": "2b377205e3a00c198f44abc443b58c33b2e41901690effa050187b2d79b1c1cf"
+      }
+    },
+    "setting-records": {
+      "supportedFrom": 21,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "21": "b39613f1df0b90dad1bc50c9589fa5232084b5cdeeaf58e97228768b2f9bf785"
+      },
+      "readers": {
+        "21": 21
+      },
+      "samples": {
+        "v21.json": "f446842e085aeb6c5eb2295e31257ea09f3ac20e7157c15361ad9484dab280bb"
+      }
+    },
+    "asset-records": {
+      "supportedFrom": 21,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "21": "1067abc3b185267866f69255e9e538170219dd08f5e4cf8aa81d232d894b35ad"
+      },
+      "readers": {
+        "21": 21
+      },
+      "samples": {
+        "v21.json": "775d13973ce0e8dd5b29930a83a233fd9d6720d0215112d0e2250143c0b6394e"
+      }
+    },
+    "generation-presets": {
+      "supportedFrom": 21,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "21": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353"
+      },
+      "readers": {
+        "21": 21
+      },
+      "samples": {
+        "v21.json": "41dc05fa39c8641a5c363d79dfc28a64ce4bf107d3b41ea4b234a5c373bd7438"
+      }
+    },
+    "sqlite": {
+      "supportedFrom": 21,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "21": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8"
+      },
+      "readers": {
+        "21": 21
+      },
+      "samples": {
+        "v21.json": "dcd25a35c0a5afe35e705a3b186a5fa2a5d7f1a6202ba5a456eb528ed6c72991"
+      }
+    }
+  },
   "devBreaks": []
 }

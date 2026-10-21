@@ -2,7 +2,7 @@ import type { Dirent, Stats } from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
-import { buildDocumentEnvelope, serializeDocumentEnvelope } from '../../../../src/core/documents/envelope'
+import { buildDocumentEnvelope, carryDocumentEnvelopeForward, serializeDocumentEnvelope } from '../../../../src/core/documents/envelope'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { sameEntryName } from '../../../../src/core/documents/naming'
 import { INTERNAL_FOLDER_NAME, ProjectManifestError, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
@@ -381,7 +381,7 @@ export class DocumentIndexScanner {
     const previousId = file.header.id
     const id = this.workspace.randomId()
     if (file.envelope) {
-      const envelope = buildDocumentEnvelope({ ...file.envelope, id, draft: file.envelope.draft === true })
+      const envelope = carryDocumentEnvelopeForward(file.envelope, buildDocumentEnvelope({ ...file.envelope, id, draft: file.envelope.draft === true }))
       await writeBufferAtomically(file.path, Buffer.from(serializeDocumentEnvelope(envelope), 'utf8'))
     } else {
       const adapter = this.options.adapters.get(file.kind.id)

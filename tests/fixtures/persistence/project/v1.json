@@ -1,6 +1,7 @@
 {
   "format": "henji-project",
   "version": 1,
+  "minReaderVersion": 1,
   "id": "golden-project",
   "createdAt": "2026-10-09T00:00:00.000Z",
   "locale": "zh",

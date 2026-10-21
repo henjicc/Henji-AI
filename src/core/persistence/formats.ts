@@ -8,7 +8,7 @@ import { documentEnvelopeSchema, documentEnvelopeContract } from '../documents/e
 import { PROJECT_MANIFEST_VERSION, projectManifestSchema } from '../documents/projectManifest'
 import { videoEditDocumentSchema } from '../videoEdit/document'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../videoEdit/codeAsset'
-import { CODE_MATERIAL_API_VERSION, codeMaterialVersionSchema } from '../videoEdit/codeMaterialPersistence'
+import { CODE_AUTHOR_API_VERSION, CODE_MATERIAL_VERSION_RECORD, codeAuthorApiSchema, codeMaterialVersionSchema } from '../videoEdit/codeMaterialPersistence'
 import { codeComponentMetadataSchema } from '../videoEdit/codeMaterial/components'
 import { codeMaterialFilesSchema } from '../videoEdit/codeMaterial/sources'
 import { styleKitSchema } from '../videoEdit/styleKit'
@@ -39,7 +39,7 @@ export interface PersistenceFormat extends PersistenceContract {
 
 function format(id: string, name: string, version: number, versionSource: string, readEntry: string, schema: z.ZodType, storage: PersistenceFormat['storage'] = 'file', schemas: Readonly<Record<string, z.ZodType>> = {}): PersistenceFormat {
   const container = ['settings', 'theme'].includes(id) ? z.object({ version: z.literal(version), state: schema })
-    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config'].includes(id) ? z.object({ version: z.literal(version), content: schema }).strict() : undefined
+    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
   return { id, name, version, versionSource, readEntry, schema, schemas: { content: schema, ...(container ? { container } : {}), ...schemas }, migrations: formatMigrations(id), storage, migrationEntry: storage === 'sqlite-ledger' ? 'electron/main/services/db-migrations.ts::SCHEMA_MIGRATIONS / runSchemaMigrations' : 'src/core/persistence/formatMigrations.ts / migrations.ts::upgradePersistenceContent' }
 }
 
@@ -51,10 +51,12 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   ...FILE_PERSISTENCE_FORMATS,
   ...DOCUMENT_KINDS.map(kind => ({ ...format(`document.${kind.id}`, kind.untitledNames.zh.replace('未命名', ''), kind.version, 'DocumentEnvelope.kindVersion',
     kind.storage === 'package' ? 'electron/main/services/image-editor-v3/image-document/image-document-service.ts' : 'electron/main/services/documents/document-file.ts::decodeDocumentContent',
-    kind.contentSchema, 'file', { ...(kind.id === 'video_edit' ? { domain: videoEditDocumentSchema } : {}), ...(kind.id === 'audio_edit' ? { domain: audioEditProjectSchema } : {}) }), migrations: kind.migrations, ...(kind.id === 'image_document' ? { requiredFixtures: [{ extension: 'json' }, { extension: 'henjiimg', versionFormat: 'image-package' }] } : {}), migrationEntry: 'src/core/documents/kinds/对应类型.ts::migrations / src/core/persistence/migrations.ts::upgradePersistenceContent' })),
+    kind.contentSchema, 'file', { ...(kind.id === 'video_edit' ? { domain: videoEditDocumentSchema } : {}), ...(kind.id === 'audio_edit' ? { domain: audioEditProjectSchema } : {}) }), minReaderVersion: kind.minReaderVersion, migrations: kind.migrations, ...(kind.id === 'image_document' ? { requiredFixtures: [{ extension: 'json' }, { extension: 'henjiimg', versionFormat: 'image-package' }] } : {}), migrationEntry: 'src/core/documents/kinds/对应类型.ts::migrations / src/core/persistence/migrations.ts::upgradePersistenceContent' })),
   format('project', '项目说明', PROJECT_MANIFEST_VERSION, 'ProjectManifest.version', 'electron/main/services/documents/workspace.ts::readManifest', projectManifestSchema),
   { ...format('project-package', '项目和文档包', PACKAGE_VERSION, 'henji-package.json.version', 'electron/main/services/documents/package-service.ts::readManifest', packageManifestSchema), requiredFixtures: [{ extension: 'json' }, { extension: 'henjipack' }] },
-  format('code-version', '代码源码版本', CODE_MATERIAL_API_VERSION, 'CodeMaterialVersion.apiVersion（源码由父版本引用携带版本）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }),
+  format('code-version', '代码源码版本', CODE_MATERIAL_VERSION_RECORD, '所在剪辑内容版本（记录随剪辑文档的 kindVersion 读写）', 'electron/main/services/documents/code-files.ts::read', codeMaterialVersionSchema, 'file', { source: codeMaterialFilesSchema }),
+  // 作者宿主接口：每个代码版本记录 apiVersion；宿主接口变化时升版本并按 apiVersion 保持旧代码的原行为，不迁移源码。
+  format('code-author-api', '代码作者宿主接口', CODE_AUTHOR_API_VERSION, 'CodeMaterialVersion.apiVersion / CodeAsset.sourceVersion.apiVersion', 'src/features/videoEdit/engine/videoEditAuthorRuntime.ts', codeAuthorApiSchema),
   format('code-component', '项目组件说明', CODE_COMPONENT_SCHEMA_VERSION, '组件首行.schemaVersion（作品版本 version 与格式版本不同）', 'src/core/videoEdit/codeMaterial/components.ts::componentSourceMetadata', codeComponentMetadataSchema),
   format('code-asset', '可编辑代码资产', CODE_ASSET_VERSION, 'CodeAsset.version', 'src/core/videoEdit/codeAsset.ts::decodeCodeAsset', codeAssetSchema),
   format('settings', '界面设置', SETTINGS_STORAGE_VERSION, 'settings-storage.version', 'src/stores/settingsStore.ts::persist', rendererSettingsSchema, 'local-storage'),

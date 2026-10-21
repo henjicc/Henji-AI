@@ -1,12 +1,14 @@
 {
   "format": "henji-document",
   "envelopeVersion": 1,
+  "minReaderVersion": 1,
   "kind": "screen_recording",
   "kindVersion": 19,
+  "kindMinReaderVersion": 19,
   "id": "golden-screen_recording",
   "name": "录制",
   "createdAt": "2026-10-09T00:00:00.000Z",
-  "updatedAt": "2026-10-20T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
   "revision": 0,
   "content": {
     "directorRun": {
@@ -243,7 +245,7 @@
                 "channels": 2,
                 "tracks": [
                   {
-                    "id": "87dab35c-580b-4c06-9364-527e9ccfa771",
+                    "id": "7e775414-c3f3-4b8b-a7ef-a2d3aa2813bc",
                     "name": "音频 1",
                     "index": 0,
                     "kind": "audio",
@@ -253,7 +255,7 @@
                     "solo": false
                   },
                   {
-                    "id": "f00be84b-94a5-4700-94b2-e6dc2022a82c",
+                    "id": "899ca3cc-5835-43fa-a6a9-4629a87708ef",
                     "name": "视频 1",
                     "index": 1,
                     "kind": "video",

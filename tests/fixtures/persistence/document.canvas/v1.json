@@ -1,8 +1,10 @@
 {
   "format": "henji-document",
   "envelopeVersion": 1,
+  "minReaderVersion": 1,
   "kind": "canvas",
   "kindVersion": 1,
+  "kindMinReaderVersion": 1,
   "id": "golden-canvas",
   "name": "画布",
   "createdAt": "2026-10-09T00:00:00.000Z",

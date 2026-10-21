@@ -1,7 +1,7 @@
 {
   "persistence": {
     "newer-version": "这份{{format}}由更新版本的痕迹AI创建，请升级后再打开。",
-    "unsupported-version": "这份{{format}}是旧版本格式，当前开发版不再支持打开；原文件未被修改。",
+    "unsupported-version": "这份{{format}}的格式早于当前版本可读取的最低版本，无法打开；原文件未被修改。",
     "migration-failed": "{{format}}升级失败（第 {{from}} → {{to}} 步）；原文件未修改。备份位置：{{backup}}",
     "invalid-content": "这份{{format}}的内容格式不受当前版本支持；原文件未被修改。",
     "corrupt": "这份{{format}}已损坏，无法解析文件内容；原文件未被修改。",

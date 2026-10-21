@@ -13,7 +13,7 @@ import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSc
 import { readStoryboardMetadataFromPng } from '../image/png-metadata'
 import ts from 'typescript'
 import { videoEditDocumentSchema } from '../../../../src/core/videoEdit/document'
-import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, VIDEO_EDIT_DOCUMENT_VERSION, VIDEO_EDIT_CONTENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
+import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, VIDEO_EDIT_DOCUMENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
 import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
 
@@ -76,20 +76,10 @@ describe('正式读入口打开黄金归档与源码', () => {
   it.each(supported('image-package'))('图片头 v%s 走真实归档入口', async version => {
     expect((await readImageDocumentPackageHeader(fixture('image-header', `v${version}.henjiimg`))).header).toMatchObject({ id: 'golden-image', kindVersion: 1, summary: { width: 32, height: 40, layers: 5 } })
   })
-  it('开发期放弃的旧图片与画布图层 ZIP 明确拒绝为旧版本，不改写原件', async () => {
-    environment = createTestEnvironment()
-    const codec = new HenjiImagePackageCodec(new ContentAddressedResourceStore(path.join(environment.outside, 'resources')))
-    for (const [id, file] of [['document.image_document', 'v1.henjiimg'], ['image-package', 'v1.henjiimg'], ['canvas-layer-package', 'v1.henjilayer']]) {
-      const source = fixture(id, file)
-      const original = await fsp.readFile(source)
-      await expect(codec.import(source)).rejects.toMatchObject({ code: 'unsupported-version', formatId: 'image-package', fromVersion: 1 })
-      expect(await fsp.readFile(source)).toEqual(original)
-    }
-  })
   it.each(supported('project-package'))('真实项目包 v%s 导入后剪辑内容和代码文件可读，保留效果、字幕与调色', async version => {
     environment = createTestEnvironment()
     // The archive envelope and its editable documents have independent format versions.
-    const source = fixture('project-package', `v${version}-video-v${VIDEO_EDIT_CONTENT_VERSION}.henjipack`)
+    const source = fixture('project-package', `v${version}.henjipack`)
     const original = await fsp.readFile(source)
     const imported = await environment.services.service.importPackage({ source })
     if (imported.type !== 'project') throw new Error('应为项目包')

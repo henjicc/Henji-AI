@@ -230,7 +230,7 @@ it('t88之前同版本内联源码明确提示旧开发格式，打开失败不�
   replaceSavedVideoEdit(id, { media: [], bins: [], items: [], sequences, codeMaterials: [{ id: 'old-code', name: '旧代码', defaultVersionId: 'old-version', versions: [{ id: 'old-version', apiVersion: 1, languageVersion: 3, source: 'export default {}' }] }] })
   const original = structuredClone(harnessDocumentStore().stored(id))
   const failure = reopenVideoEdit(id)
-  await expect(failure).rejects.toThrow('这份剪辑是旧版本格式，当前开发版不再支持打开')
+  await expect(failure).rejects.toThrow('这份剪辑的格式早于当前版本可读取的最低版本')
   await expect(failure).rejects.not.toThrow('损坏')
   expect(harnessDocumentStore().stored(id)).toEqual(original)
 })
