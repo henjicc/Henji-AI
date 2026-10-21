@@ -282,7 +282,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const selected = isSelected(entry); const kind = kindOf(entry)
     return <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="w-full min-w-0 flex-col items-stretch gap-1.5 " data-entry-kind={kind} {...entryHandlers(entry, selected)}>
       <span className="block h-16 w-full shrink-0 overflow-hidden rounded-md bg-raised"><VideoEditProjectThumbnail media={entry.kind === 'item' ? media.get(entry.value.mediaId ?? '') : undefined} kind={kind} active={visible} /></span>
-      <span className="flex w-full min-w-0 items-center gap-1.5"><LabelSwatch label={videoEditProjectColumns(instance.document, entry, fallbackFps).label} /><span className="block min-w-0 flex-1 truncate text-xs font-medium" data-observation-sensitive>{entry.value.name}</span></span>
+      <span className="flex w-full min-w-0 items-center gap-1.5"><LabelSwatch label={videoEditProjectColumns(instance.document, entry, fallbackFps).label} /><span className="block min-w-0 flex-1 truncate text-xs font-medium">{entry.value.name}</span></span>
       <span className="block truncate text-2xs text-text3">{detailOf(entry)}</span>
     </UiOptionButton>
   }
@@ -296,7 +296,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="min-h-7 min-w-0 flex-1 gap-2 " data-entry-kind={kind} {...entryHandlers(entry, selected)}>
         <LabelSwatch label={columns.label} />
         <Icon size={UI_ICON_SIZE.xs} className="shrink-0 text-text2" aria-hidden="true" />
-        <span className="min-w-0 shrink-0 truncate text-left text-xs" style={{ width: Math.max(40, columnWidths.name - Math.min(row.depth, 8) * INDENT_PX - 44) }} data-observation-sensitive title={entry.kind === 'item' && entry.value.tags?.length ? `${entry.value.name}（${entry.value.tags.join(' · ')}）` : `${entry.value.name} · ${detailOf(entry)}`}>{entry.value.name}</span>
+        <span className="min-w-0 shrink-0 truncate text-left text-xs" style={{ width: Math.max(40, columnWidths.name - Math.min(row.depth, 8) * INDENT_PX - 44) }} title={entry.kind === 'item' && entry.value.tags?.length ? `${entry.value.name}（${entry.value.tags.join(' · ')}）` : `${entry.value.name} · ${detailOf(entry)}`}>{entry.value.name}</span>
         {LIST_COLUMNS.map(column => <span key={column.key} className="shrink-0 truncate pl-2 text-left font-mono text-2xs tabular-nums text-text3" style={{ width: columnWidths[column.key] }} data-video-edit-project-column={column.key}>{cells[column.key]}</span>)}
       </UiOptionButton>
     </div>

@@ -22,7 +22,7 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
       <p className="text-xs text-text2">{t(quick ? 'recording.modeHint_quick' : 'recording.modeHint_full')}</p>
       {quick && <UiFormRow label={t('recording.saveTo')} density="compact">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-xs text-text2" data-observation-sensitive>{value.saveDirectory || t('recording.saveToDefault')}</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-text2">{value.saveDirectory || t('recording.saveToDefault')}</span>
           <UiButton size="sm" onClick={() => { void chooseFolder() }}><FolderOpen />{t('recording.chooseFolder')}</UiButton>
         </div>
       </UiFormRow>}

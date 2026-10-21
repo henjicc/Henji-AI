@@ -144,9 +144,8 @@ describe('AgentSkillsSection', () => {
 
     await screen.findByText('解析失败')
     expect(screen.getByText('第 3 行：frontmatter 缺少 name')).toBeTruthy()
-    // 失败条目会带出本地绝对路径，必须标记为观察敏感区域。
-    const pathNode = screen.getByText('D:/data/assistant/skills/broken')
-    expect(pathNode.closest('[data-observation-sensitive]')).not.toBeNull()
+    // 失败条目带出本地绝对路径，助手观察画面时可直接看到。
+    expect(screen.getByText('D:/data/assistant/skills/broken')).toBeTruthy()
   })
 
   it('安装结果里的被跳过文件会展示出来', async () => {

@@ -40,7 +40,7 @@ function DocumentRow({ document, meta, onOpen }: { document: DocumentSummary; me
   const Icon = presentation.icon
   return <UiOptionButton variant="menu" size="sm" className="w-full min-w-0 gap-2" disabled={document.missing} onClick={onOpen} data-video-edit-project-document={document.id}>
     <Icon size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" aria-hidden="true" />
-    <span className="min-w-0 flex-1 truncate text-left" data-observation-sensitive>{document.name}</span>
+    <span className="min-w-0 flex-1 truncate text-left">{document.name}</span>
     <span className="shrink-0 text-2xs text-text3">{meta}</span>
   </UiOptionButton>
 }
@@ -82,7 +82,7 @@ function ProjectDocumentsPanel({ instance, onError, onOpenElsewhere, onImport }:
       {data.elsewhere.map(entry => entry.document
         ? <DocumentRow key={entry.docRef.docId} document={entry.document} meta={t('videoEditProject.documents.fromElsewhere')} onOpen={() => open(entry.document!)} />
         : <p key={entry.docRef.docId} className="flex min-w-0 items-center gap-2 px-2 py-1.5 text-xs text-text2">
-          <span className="min-w-0 flex-1 truncate" data-observation-sensitive>{entry.docRef.path.slice(Math.max(entry.docRef.path.lastIndexOf('/'), entry.docRef.path.lastIndexOf('\\')) + 1)}</span>
+          <span className="min-w-0 flex-1 truncate">{entry.docRef.path.slice(Math.max(entry.docRef.path.lastIndexOf('/'), entry.docRef.path.lastIndexOf('\\')) + 1)}</span>
           <span className="shrink-0 text-2xs text-text3">{t('videoEditProject.otherDocumentsMissing')}</span>
         </p>)}
     </> : null}
@@ -150,8 +150,8 @@ function OtherLocationDocumentsDialog({ instance, onClose, onError, onNotice }: 
             const Icon = documentKindPresentation(document.kind).icon
             return <UiOptionButton key={document.id} role="option" variant="menu" aria-selected={selected === document.id} active={selected === document.id} disabled={working} className="w-full min-w-0 gap-2" onClick={() => setSelected(document.id)} onDoubleClick={() => { setSelected(document.id); void act('open') }}>
               <Icon size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-left" data-observation-sensitive>{document.name}</span>
-              <span className="shrink-0 text-2xs text-text3" data-observation-sensitive>{t(documentKindPresentation(document.kind).nameKey)} · {location(document)}</span>
+              <span className="min-w-0 flex-1 truncate text-left">{document.name}</span>
+              <span className="shrink-0 text-2xs text-text3">{t(documentKindPresentation(document.kind).nameKey)} · {location(document)}</span>
             </UiOptionButton>
           })}
         </div>}

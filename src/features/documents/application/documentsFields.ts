@@ -7,7 +7,7 @@ import { DOCUMENT_KIND_IDS, type DocumentSummary, type ProjectSummary } from '@/
 /*
  * 通用文档与项目实体的字段（存储底座 2.5）：一条声明派生属性描述、读取映射与写入表。
  * 只有名称可写（改名走通用实体属性）；位置、草稿等由正式能力维护，只读理由里点名该用的能力。
- * 不暴露文件路径（助手用项目 ID 表达位置）。
+ * 同时给出文件 / 文件夹的本机绝对路径，外部助手可直接按路径读写。
  */
 
 export const DOCUMENTS_ENTITY_TYPES = { document: DOCUMENT_ENTITY_TYPE, project: DOCUMENT_PROJECT_ENTITY_TYPE } as const
@@ -27,6 +27,7 @@ const NAME = { kind: 'string', minLength: 1, maxLength: 200 } as const
 const TEXT = { kind: 'string', maxLength: 2000 } as const
 const BOOL = { kind: 'boolean' } as const
 const TIME = { kind: 'integer', hardRange: { min: 0 } } as const
+const PATH = { kind: 'string', maxLength: 4096 } as const
 
 function field<TSource>(
   entityType: DocumentsEntityType,
@@ -66,6 +67,7 @@ const MOVE_REASON = '所在项目由 move_document 改变（会复制原项目�
 
 export const DOCUMENT_FIELDS: ApplicationFieldDefinition<DocumentFieldSource, DocumentsFieldDraft>[] = [
   field<DocumentFieldSource>(D, 'name', '文档名称（即文件名；同一文件夹里同类型不能重名）', NAME, (s) => s.document.name, { writable: true }),
+  field<DocumentFieldSource>(D, 'path', '文档文件的本机绝对路径', PATH, (s) => s.document.path, { readOnlyReason: '改名用 name，换项目用 move_document。' }),
   field<DocumentFieldSource>(D, 'kind', '文档类型', { kind: 'enum', values: DOCUMENT_KIND_IDS.map((value) => ({ value, label: value })) }, (s) => s.document.kind, { readOnlyReason: '文档类型在新建时确定。' }),
   field<DocumentFieldSource>(D, 'project_id', '所在项目 ID（不在任何项目里时为空字符串）', TEXT, (s) => (s.document.container.kind === 'project' ? s.document.container.projectId : ''), { readOnlyReason: MOVE_REASON }),
   field<DocumentFieldSource>(D, 'project_name', '所在项目名称（不在任何项目里时为空字符串）', TEXT, (s) => s.document.projectName ?? '', { readOnlyReason: MOVE_REASON }),
@@ -78,6 +80,7 @@ export const DOCUMENT_FIELDS: ApplicationFieldDefinition<DocumentFieldSource, Do
 
 export const PROJECT_FIELDS: ApplicationFieldDefinition<ProjectFieldSource, DocumentsFieldDraft>[] = [
   field<ProjectFieldSource>(P, 'name', '项目名称（即文件夹名；同一位置不能重名）', NAME, (s) => s.project.name, { writable: true }),
+  field<ProjectFieldSource>(P, 'path', '项目文件夹的本机绝对路径', PATH, (s) => s.project.path, { readOnlyReason: '改名用 name。' }),
   field<ProjectFieldSource>(P, 'draft', '是否草稿项目（尚未保存起名）', BOOL, (s) => s.project.draft, { readOnlyReason: '草稿项目由用户在离开时保存或丢弃。' }),
   field<ProjectFieldSource>(P, 'external', '是否位于作品目录之外', BOOL, (s) => s.project.external, { readOnlyReason: '由保存位置决定。' }),
   field<ProjectFieldSource>(P, 'missing', '文件夹是否找不到', BOOL, (s) => s.project.missing, { readOnlyReason: '由作品索引扫描判断。' }),

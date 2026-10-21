@@ -40,7 +40,7 @@ const SoundFolderRow: React.FC<{ folder: SoundLibraryFolderInfo; view: SoundLibr
     <div className="flex items-center gap-3">
       <div className="min-w-0 flex-1">
         <div className="truncate text-13 text-text1">{folder.name}</div>
-        <div className="truncate text-xs text-text3" data-observation-sensitive>{folder.path}</div>
+        <div className="truncate text-xs text-text3">{folder.path}</div>
         <div className={UI_TEXT_META_CLASS}>{folder.status === 'indexing' && folder.progress ? t('sections.soundLibrary.indexing', folder.progress) : meta}</div>
         {folder.status === 'indexing' && folder.progress?.total ? <ProgressBar appearance="hairline" progress={progress} className="mt-1.5" /> : null}
         {folder.lastError ? <UiInlineStatus className="mt-0.5">{folder.lastError}</UiInlineStatus> : null}

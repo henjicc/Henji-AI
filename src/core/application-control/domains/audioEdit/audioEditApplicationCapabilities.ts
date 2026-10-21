@@ -29,7 +29,7 @@ export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['transcribe_audio_edit', '转写口播素材', '通过已配置语音模型识别原素材，可能计费；参考稿仅辅助内容对齐。', 'R2'],
   ['process_audio_edit_sound', '准备口播声音处理', '依照口播配方处理全长音轨，试听与可选 XML 声音交付共用处理结果。', 'R1'],
   ['export_audio_edit', '导出口播剪辑', '导出 FCP7 XML 或 WAV 到已配置下载目录，可附带 SRT；返回实际交付时长。', 'R2'],
-  ['query_audio_edit_tasks', '查询口播处理任务', '读取该口播的分析、转写、处理和导出状态；不返回素材路径。', 'R0'],
+  ['query_audio_edit_tasks', '查询口播处理任务', '读取该口播的分析、转写、处理和导出状态。', 'R0'],
   ['cancel_audio_edit_task', '取消口播处理任务', '取消明确口播下正在进行的指定任务。', 'R1'],
   ['retry_audio_edit_save', '重试保存口播', '只重新确认已修改口播的保存，不重放剪辑或付费任务。', 'R1'],
 ].map(([id, title, description, risk]) => defineApplicationCapability({

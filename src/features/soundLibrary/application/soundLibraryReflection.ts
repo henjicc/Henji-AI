@@ -17,7 +17,7 @@ import type { SoundLibraryFolderInfo, SoundLibrarySoundSummary, SoundLibraryStat
 
 /*
  * 音效库的助手覆盖：音效库（单例）→ 登记的文件夹 → 整理出的音效，三级只读实体；
- * 文件夹可按通用集合删除（只取消登记，不删文件）。登记新文件夹要用户在系统选择框里选，走 add_sound_library_folder；
+ * 文件夹可按通用集合删除（只取消登记，不删文件）。登记新文件夹走 add_sound_library_folder（可直接给路径，省略时弹选择框）；
  * 检索与卡点是算法操作，走 search_sound_effects 与 place_video_edit_sound_effects。
  * 真相源是主进程 SoundLibraryService，经 `src/commands/soundLibrary.ts` 访问；设置页与助手共用。
  */
@@ -57,6 +57,7 @@ const libraryFields = [
 
 const folderFields = [
   field<SoundLibraryFolderInfo>(SOUND_LIBRARY_FOLDER_ENTITY, 'name', '文件夹名', '登记文件夹的名字（不含上级路径）。', { kind: 'string', maxLength: 260 }, folder => folder.name, FOLDER_READ_ONLY),
+  field<SoundLibraryFolderInfo>(SOUND_LIBRARY_FOLDER_ENTITY, 'path', '路径', '登记文件夹的本机绝对路径。', { kind: 'string', maxLength: 4096 }, folder => folder.path, FOLDER_READ_ONLY),
   field<SoundLibraryFolderInfo>(SOUND_LIBRARY_FOLDER_ENTITY, 'status', '整理状态', '尚未整理 / 正在整理 / 已整理 / 整理失败（原因见 last_error）。检索会自动整理，不必提前等待。', { kind: 'enum', values: STATUS_VALUES }, folder => folder.status, FOLDER_READ_ONLY, { verificationStrategy: 'execution' }),
   field<SoundLibraryFolderInfo>(SOUND_LIBRARY_FOLDER_ENTITY, 'sound_count', '音效数', '可检索的音效数量。', { kind: 'integer', hardRange: { min: 0 } }, folder => folder.soundCount, FOLDER_READ_ONLY, { verificationStrategy: 'execution' }),
   field<SoundLibraryFolderInfo>(SOUND_LIBRARY_FOLDER_ENTITY, 'listening_count', '已听音数', '已算出听音向量的音效数量；听音模型下载后下一次检索自动补齐。', { kind: 'integer', hardRange: { min: 0 } }, folder => folder.listeningCount, FOLDER_READ_ONLY, { verificationStrategy: 'execution' }),
@@ -69,6 +70,7 @@ const soundFields = [
   field<SoundLibrarySoundSummary>(SOUND_LIBRARY_SOUND_ENTITY, 'english_name', '英文名', '文件名里的英文部分（通常比机翻中文可靠）；没有为空字符串。', { kind: 'string', maxLength: 260 }, sound => sound.english ?? '', SOUND_READ_ONLY),
   field<SoundLibrarySoundSummary>(SOUND_LIBRARY_SOUND_ENTITY, 'chinese_name', '中文名', '文件名里的中文部分（常是机翻，可能不准）；没有为空字符串。', { kind: 'string', maxLength: 260 }, sound => sound.chinese ?? '', SOUND_READ_ONLY),
   field<SoundLibrarySoundSummary>(SOUND_LIBRARY_SOUND_ENTITY, 'relative_path', '位置', '在登记文件夹里的相对位置。', { kind: 'string', maxLength: 1000 }, sound => sound.relativePath, SOUND_READ_ONLY),
+  field<SoundLibrarySoundSummary & { path?: string }>(SOUND_LIBRARY_SOUND_ENTITY, 'path', '文件路径', '音效文件的本机绝对路径。', { kind: 'string', maxLength: 4096 }, sound => sound.path ?? '', SOUND_READ_ONLY),
   field<SoundLibrarySoundSummary>(SOUND_LIBRARY_SOUND_ENTITY, 'folder', '所属文件夹', '所在的登记文件夹。', { kind: 'ref', refKinds: [SOUND_LIBRARY_FOLDER_ENTITY] }, sound => ({ kind: SOUND_LIBRARY_FOLDER_ENTITY, id: sound.folderId }), SOUND_READ_ONLY),
   field<SoundLibrarySoundSummary>(SOUND_LIBRARY_SOUND_ENTITY, 'duration_seconds', '时长', '声音总时长。', { kind: 'number', hardRange: { min: 0 } }, sound => sound.features.durationSeconds, SOUND_READ_ONLY, { unit: '秒' }),
   field<SoundLibrarySoundSummary>(SOUND_LIBRARY_SOUND_ENTITY, 'attack_seconds', '起音点', '声音第一次进入峰值 -20 dB 以内的时刻（从文件开头算）。', { kind: 'number', hardRange: { min: 0 } }, sound => sound.features.attackSeconds, SOUND_READ_ONLY, { unit: '秒' }),
@@ -102,7 +104,7 @@ export function createSoundLibraryRegistrations(): ApplicationEntityRegistration
   })
   return [
     {
-      entity: descriptor(SOUND_LIBRARY_ENTITY, '音效库', '用户登记的音效文件夹汇总（单例 singleton）。登记文件夹用 add_sound_library_folder（会弹出选择框由用户选）；按意图找音效用 search_sound_effects；卡点放进剪辑用 place_video_edit_sound_effects。', [], { writeExclusion: { reason: LIBRARY_READ_ONLY } }),
+      entity: descriptor(SOUND_LIBRARY_ENTITY, '音效库', '用户登记的音效文件夹汇总（单例 singleton）。登记文件夹用 add_sound_library_folder（用户给了路径就传 path，否则弹出选择框）；按意图找音效用 search_sound_effects；卡点放进剪辑用 place_video_edit_sound_effects。', [], { writeExclusion: { reason: LIBRARY_READ_ONLY } }),
       properties: fieldDescriptors(libraryFields),
       provider: {
         entityType: SOUND_LIBRARY_ENTITY,
@@ -117,7 +119,7 @@ export function createSoundLibraryRegistrations(): ApplicationEntityRegistration
       },
     },
     {
-      entity: descriptor(SOUND_LIBRARY_FOLDER_ENTITY, '音效文件夹', '一个登记的音效文件夹及其整理状态。删除只取消登记，不删除任何文件；新登记必须用 add_sound_library_folder 由用户选择。', [SOUND_LIBRARY_ENTITY], { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 8 } }),
+      entity: descriptor(SOUND_LIBRARY_FOLDER_ENTITY, '音效文件夹', '一个登记的音效文件夹及其整理状态。删除只取消登记，不删除任何文件；新登记用 add_sound_library_folder。', [SOUND_LIBRARY_ENTITY], { collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [], maxItemsPerChange: 8 } }),
       properties: fieldDescriptors(folderFields),
       provider: {
         entityType: SOUND_LIBRARY_FOLDER_ENTITY,
@@ -135,7 +137,7 @@ export function createSoundLibraryRegistrations(): ApplicationEntityRegistration
         async getPropertyAvailability(ref, propertyIds) { const state = await getSoundLibraryState(); findFolder(state, ref); return readOnly(folderFields as never, propertyIds, state.revision, FOLDER_READ_ONLY) },
         async getCollectionAvailability(request) {
           const available = unrestrictedCollectionAvailability(SOUND_LIBRARY_FOLDER_ENTITY, request, revisions((await getSoundLibraryState()).revision), FOLDER_PERMISSIONS.write)
-          available.create = { ...available.create, available: false, reasons: ['登记新文件夹需要用户在系统选择框里选择，请用 add_sound_library_folder。'] }
+          available.create = { ...available.create, available: false, reasons: ['登记新文件夹请用 add_sound_library_folder（可直接给路径）。'] }
           if (request.kind !== SOUND_LIBRARY_ENTITY) available.remove = { ...available.remove, available: false, reasons: ['音效文件夹挂在音效库 sound_library.library/singleton 下。'] }
           return available
         },
@@ -153,7 +155,7 @@ export function createSoundLibraryRegistrations(): ApplicationEntityRegistration
         },
         async readEntity(ref, request) {
           if (ref.kind !== SOUND_LIBRARY_SOUND_ENTITY) throw new Error('NOT_FOUND:请使用 search_sound_effects 或列表返回的音效引用')
-          const { path: _path, ...sound } = await locateSoundLibrarySound(ref.id).catch(() => { throw new Error('NOT_FOUND:这个音效已不在登记的文件夹里，请重新检索') })
+          const sound = await locateSoundLibrarySound(ref.id).catch(() => { throw new Error('NOT_FOUND:这个音效已不在登记的文件夹里，请重新检索') })
           const state = await getSoundLibraryState()
           return { ref: soundRef(sound), entityType: SOUND_LIBRARY_SOUND_ENTITY, revisions: revisions(state.revision), properties: filter(fieldReadValues(soundFields, sound), request.propertyIds), capturedAt: new Date().toISOString() }
         },
@@ -171,7 +173,7 @@ export function createSoundLibraryRegistrations(): ApplicationEntityRegistration
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 
-/** 取消登记文件夹：只改登记表，不删除文件；要重新登记必须由用户在选择框里再选一次，所以不提供撤销。 */
+/** 取消登记文件夹：只改登记表，不删除文件；重新登记用 add_sound_library_folder，所以不提供撤销。 */
 export class SoundLibraryFolderCollectionExecutor implements ApplicationCollectionExecutor {
   readonly entityType = SOUND_LIBRARY_FOLDER_ENTITY
   readonly effectContract = { direct: [], cascades: [] }

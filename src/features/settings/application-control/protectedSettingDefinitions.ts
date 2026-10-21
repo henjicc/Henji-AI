@@ -2,8 +2,8 @@
  * 只读理由必须是技术事实，不是含糊的「安全」表态（4.4 决策，见重要记录.md 记录 003）。
  *
  * 密钥两项确实是安全边界：明文密钥一旦进入模型上下文就有泄露风险，理由保留「安全」表述。
- * 路径三项不是「顾虑」，是渲染进程技术上做不到——OS 文件对话框由主进程/系统弹出，渲染层
- * 拿不到用户在对话框里的选择结果之外的任何东西，助手没有办法代替用户点。
+ * 下载目录与快速下载目录（2026-10-21 起）是普通可读写设置，助手直接按路径读写；作品目录可读路径，
+ * 但更换要整体搬迁并重启，仍由用户在设置里完成。
  *
  * 每条理由都补一句 open_application_surface 的替代路径：助手做不到的事，至少能把用户
  * 带到对应设置分区，由用户自己完成。
@@ -29,27 +29,13 @@ export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<st
       + '由用户自己在密钥输入框里操作。',
     aliases: ['API Key', '密钥', '供应商密钥'], target: { tab: 'providers', sectionId: 'providers' }, sensitive: true, writable: false,
   },
-  'storage.download_paths': {
-    id: 'storage.download_paths', title: '下载目录',
-    description: 'OS 文件选择器由系统弹出，不在渲染进程里，助手没有办法代替用户点选目录，'
-      + '只能查询已配置几条；配置或删除下载预设路径请用 open_application_surface 把用户带到 '
-      + 'files-download 分区的「常用保存位置」，由用户自己选择目录。',
-    aliases: ['下载路径', '保存目录', '本地路径', '下载预设路径'], target: { tab: 'files', sectionId: 'files-download' }, sensitive: true, writable: false,
-  },
   'storage.data_path': {
     id: 'storage.data_path', title: '作品目录',
     description: '作品目录（默认“文档/痕迹AI”）存放项目、各类文档、生成结果、上传素材、导出与助手技能。'
-      + '助手只能查询是否使用默认位置，不返回本地路径；更换位置要整体移动全部作品、先保存并关闭所有打开的内容，'
-      + '完成后重新启动应用，新位置也必须由用户在系统选择器里选定，因此只能由用户在设置里操作。'
+      + '可读取当前路径（path）；更换位置要整体移动全部作品、先保存并关闭所有打开的内容，'
+      + '完成后重新启动应用，因此只能由用户在设置里操作。'
       + '需要时用 open_application_surface 把用户带到 files-storage 分区。',
     aliases: ['作品目录', '数据目录', '保存位置', '存储位置', 'works folder'], target: { tab: 'files', sectionId: 'files-storage' }, sensitive: true, writable: false,
-  },
-  'downloads.quick_path': {
-    id: 'downloads.quick_path', title: '快速下载目录',
-    description: 'OS 文件选择器由系统弹出，不在渲染进程里，助手没有办法代替用户点选目录，'
-      + '具体路径只能通过系统选择器确认；用 open_application_surface 把用户带到 files-download '
-      + '分区定位到这一项。',
-    aliases: ['快速下载路径', '下载文件夹'], target: { tab: 'files', sectionId: 'files-download' }, sensitive: true, writable: false,
   },
   'llm.configuration': {
     id: 'llm.configuration', title: '助手模型配置',

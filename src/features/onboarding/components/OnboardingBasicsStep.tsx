@@ -27,7 +27,6 @@ export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult
             <p className={`leading-5 ${UI_TEXT_META_CLASS}`}>{t('basics.dataDescription')}</p>
             <div className="mt-3 flex items-stretch gap-2">
               <UiInput
-                data-observation-sensitive
                 value={dataPath.currentPath || dataPath.defaultPath}
                 readOnly
                 aria-label={t('basics.currentPath')}
@@ -42,7 +41,7 @@ export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult
                 {t('actions.chooseDirectory')}
               </UiButton>
             </div>
-            <p data-observation-sensitive className={`mt-2 break-all leading-5 ${UI_TEXT_META_CLASS}`}>
+            <p className={`mt-2 break-all leading-5 ${UI_TEXT_META_CLASS}`}>
               {t('basics.defaultPath', { path: dataPath.defaultPath })}
             </p>
           </div>

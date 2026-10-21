@@ -97,6 +97,7 @@ const properties: Record<GenerationEntityType, ApplicationPropertyDescriptor[]> 
     property(GENERATION_ENTITY_TYPES.result, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }),
     property(GENERATION_ENTITY_TYPES.result, 'media_ref', '稳定媒体引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.result] }),
     property(GENERATION_ENTITY_TYPES.result, 'output_timings', '各输出的语音时间戳（毫秒）', { kind: 'json', schemaRef: schemaRef('property', 'generation.result.output_timings.value') }),
+    property(GENERATION_ENTITY_TYPES.result, 'file_paths', '结果文件的本机绝对路径（按输出顺序；只有远程地址时为空）', { kind: 'json', schemaRef: schemaRef('property', 'generation.result.file_paths.value') }),
   ],
   [GENERATION_ENTITY_TYPES.record]: [
     property(GENERATION_ENTITY_TYPES.record, 'model_ref', '模型引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.model] }),
@@ -213,6 +214,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
         'generation.result.media_type': record.type,
         'generation.result.media_ref': { kind: GENERATION_ENTITY_TYPES.result, id: record.id },
         'generation.result.output_timings': record.type === 'audio' ? await readGenerationResultTimings(record.id) : [],
+        'generation.result.file_paths': record.resultPaths,
       }, revision: historyRevision(record) }
     }
     if (!task || (this.entityType === GENERATION_ENTITY_TYPES.result && !task.resultAvailable)) throw new Error('NOT_FOUND')
@@ -223,6 +225,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
       'generation.result.media_type': task.mediaType,
       'generation.result.media_ref': { kind: GENERATION_ENTITY_TYPES.result, id: task.taskId },
       'generation.result.output_timings': task.mediaType === 'audio' ? await readGenerationResultTimings(task.taskId) : [],
+      'generation.result.file_paths': (record ?? await databaseService.getHistoryById(task.taskId).catch(() => null))?.resultPaths ?? [],
     }, revision: taskRevision(task) }
   }
 }
@@ -352,7 +355,10 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       { ref: schemaRef('property', 'generation.model.tags.value'), value: { type: 'array', items: { type: 'string' } } as JsonValue },
       { ref: schemaRef('property', 'generation.model.parameter_schema_ref.value'), value: { type: 'object', description: 'ApplicationSchemaRef' } as JsonValue },
       ...modelSchemaDocuments(),
-    ] : entityType === GENERATION_ENTITY_TYPES.result ? [{ ref: schemaRef('property', 'generation.result.output_timings.value'), value: z.toJSONSchema(generationOutputTimingsSchema) as JsonValue }] : [],
+    ] : entityType === GENERATION_ENTITY_TYPES.result ? [
+      { ref: schemaRef('property', 'generation.result.output_timings.value'), value: z.toJSONSchema(generationOutputTimingsSchema) as JsonValue },
+      { ref: schemaRef('property', 'generation.result.file_paths.value'), value: { type: 'array', items: { type: 'string' } } as JsonValue },
+    ] : [],
   }))
   const historyRegistration: ApplicationEntityRegistration = {
     entity: {
@@ -360,7 +366,7 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       domain: 'generation',
       version: 1,
       title: '生成历史记录',
-      description: 'SQLite 中持久保存的生成历史摘要，不暴露本地路径与原始请求参数。',
+      description: 'SQLite 中持久保存的生成历史摘要；结果文件路径见 generation.result.file_paths。',
       refKind: GENERATION_ENTITY_TYPES.record,
       dataClass: 'C1',
       exposures: ['ui', 'assistant', 'local_adapter'],

@@ -21,7 +21,7 @@ function create(model: { ready: boolean }) {
   const analyzed: string[][] = []
   const folders: SoundLibraryFolderRecord[] = [{ id: '00000000-0000-4000-8000-000000000001', path: root, addedAt: '2026-10-21T00:00:00.000Z' }]
   const service = new SoundLibraryService({
-    readFolders: async () => folders, writeFolders: async next => { folders.splice(0, folders.length, ...next) }, chooseFolder: async () => null,
+    readFolders: async () => folders, writeFolders: async next => { folders.splice(0, folders.length, ...next) }, chooseFolder: async () => null, allowFolder: folder => folder,
     analyze: async (files, models) => { analyzed.push(files.map(file => path.basename(file))); return { decodeMs: 1, inferenceMs: 1, provider: models ? 'cpu' : null, files: files.map(file => file.includes('Umbrella') ? { path: file, ok: false as const, reason: '文件已损坏或不是有效的音频' } : { path: file, ok: true as const, features, ...(models ? { embedding: Array.from({ length: 512 }, (_, i) => (file.includes('Whoosh') ? i === 0 : i === 1) ? 1 : 0) } : {}) }) } },
     embedText: async () => [Array.from({ length: 512 }, (_, i) => i === 0 ? 1 : 0)],
     clapModels: async () => model.ready ? clap : null,
@@ -53,4 +53,15 @@ it('模型未下载时只按名字并说明；下载后只补算缺向量的音�
   expect(located.path).toBe(path.join(root, '转场', '嗖02-短   Whoosh 2 - Short.wav'))
   await expect(service.search({ keywords: ['applause'], limit: 3 })).resolves.toMatchObject({ noGoodMatch: true })
   await expect(service.search({ keywords: ['x'], folderIds: ['missing'], limit: 3 })).rejects.toThrow('已登记的有')
+})
+
+it('直接给路径登记文件夹，不弹选择框；同一路径重复登记沿用原文件夹；不是文件夹时说明路径', async () => {
+  const { service } = create({ ready: false })
+  const other = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-sfx-path-'))
+  try {
+    const added = await service.addFolder(other)
+    expect(added).toMatchObject({ path: path.resolve(other) })
+    expect((await service.addFolder(other))?.id).toBe(added?.id)
+    await expect(service.addFolder(path.join(other, '不存在'))).rejects.toThrow('不是文件夹或不存在')
+  } finally { await fs.rm(other, { recursive: true, force: true }) }
 })

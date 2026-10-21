@@ -35,7 +35,7 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
     >
       <div className={UI_TEXT_TITLE_CLASS}>{title}</div>
       <div className="mt-4">
-        <div data-observation-sensitive className="mb-2 truncate text-text2">{progress.file}</div>
+        <div className="mb-2 truncate text-text2">{progress.file}</div>
         {/* 第一份文件复制完之前总数还不知道：不显示“0 / 0”（5.8 补截发现） */}
         {progress.total > 0 ? <div className={`mb-2 ${UI_TEXT_META_CLASS}`}>{progress.current} / {progress.total}</div> : null}
         <ProgressBar progress={ratio} showPercentage={false} duration={300} />

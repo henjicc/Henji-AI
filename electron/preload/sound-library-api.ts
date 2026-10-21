@@ -8,7 +8,7 @@ export function createSoundLibraryApi(invoke: NativeInvoke, subscribe: Subscribe
   const c = SOUND_LIBRARY_IPC_CHANNELS
   return {
     getState: () => invoke(c.getState),
-    addFolder: () => invoke(c.addFolder),
+    addFolder: (folderPath?: string) => invoke(c.addFolder, folderPath === undefined ? undefined : { path: folderPath }),
     removeFolder: (id) => invoke(c.removeFolder, { id }),
     refresh: (folderIds) => invoke(c.refresh, folderIds ? { folderIds } : {}),
     search: (request) => invoke(c.search, request),

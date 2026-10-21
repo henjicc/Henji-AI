@@ -49,7 +49,7 @@ function DisplayMap({ screens, sourceId, label, onSelect }: { screens: CaptureSo
         return <div key={source.id} className="absolute p-1" style={{ left: `${(rect.x - left) / width * 100}%`, top: `${(rect.y - top) / height * 100}%`, width: `${rect.width / width * 100}%`, height: `${rect.height / height * 100}%` }}>
           <UiOptionButton variant="cover" active={source.id === sourceId} aria-label={source.name} className="h-full w-full" onClick={() => onSelect(source.id)}>
           <div className={`${UI_COVER_FRAME_CLASS} relative h-full w-full overflow-hidden bg-media`}>
-            {source.thumbnailUrl && <img src={source.thumbnailUrl} alt="" className="h-full w-full object-cover" data-observation-sensitive />}
+            {source.thumbnailUrl && <img src={source.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
             <span className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-media-scrim px-2 py-1 text-xs text-on-media">
               <Monitor className={UI_ICON_SIZE_CLASS.sm} aria-hidden />{label(source)}{rect.primary ? ` · ${t('recording.primaryScreen')}` : ''}
               <span className={`${UI_TEXT_TIMECODE_CLASS} opacity-80`}>{Math.round(rect.width * rect.scaleFactor)}×{Math.round(rect.height * rect.scaleFactor)}</span>
@@ -72,10 +72,10 @@ function WindowGrid({ windows, sourceId, onSelect }: { windows: CaptureSource[];
     <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
       {visible.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
         {visible.map(source => <UiOptionButton key={source.id} variant="cover" active={source.id === sourceId} aria-label={source.name} className="min-w-0" onClick={() => onSelect(source.id)}>
-          <div className={`${UI_COVER_FRAME_CLASS} aspect-video w-full overflow-hidden bg-media`}>{source.thumbnailUrl && <img src={source.thumbnailUrl} alt="" className="h-full w-full object-contain" data-recording-source-thumbnail data-observation-sensitive />}</div>
+          <div className={`${UI_COVER_FRAME_CLASS} aspect-video w-full overflow-hidden bg-media`}>{source.thumbnailUrl && <img src={source.thumbnailUrl} alt="" className="h-full w-full object-contain" data-recording-source-thumbnail />}</div>
           <span className="flex w-full min-w-0 items-center gap-2 pt-2 text-13" data-recording-source-caption>
             {source.iconUrl ? <img src={source.iconUrl} alt="" className="h-4 w-4 shrink-0" /> : <AppWindow className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text3`} aria-hidden />}
-            <span className="truncate" data-recording-source-title data-observation-sensitive>{source.name}</span>
+            <span className="truncate" data-recording-source-title>{source.name}</span>
           </span>
         </UiOptionButton>)}
       </div> : <UiEmpty title={query ? t('recording.noWindowMatch') : t('recording.noWindows')} />}
@@ -136,7 +136,7 @@ function RegionStage({ screens, sourceId, region, label, onSelect, onRegionChang
     <div className="flex min-h-0 flex-1 items-center justify-center bg-gap p-6" style={{ containerType: 'size' }}>
       <div ref={stage} className="relative touch-none select-none overflow-hidden bg-media" style={{ width: `min(100cqw, 100cqh * ${display.width / display.height})`, aspectRatio: `${display.width} / ${display.height}` }}
         onPointerDown={down('draw')} onPointerMove={move} onPointerUp={up} onPointerCancel={up} data-recording-region-stage>
-        {current.thumbnailUrl && <img src={current.thumbnailUrl} alt="" draggable={false} className="pointer-events-none h-full w-full object-cover" data-observation-sensitive />}
+        {current.thumbnailUrl && <img src={current.thumbnailUrl} alt="" draggable={false} className="pointer-events-none h-full w-full object-cover" />}
         <div className="pointer-events-none absolute inset-0 bg-media-scrim" style={{ clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 ${region.y * 100}%, ${region.x * 100}% ${region.y * 100}%, ${region.x * 100}% ${(region.y + region.height) * 100}%, ${(region.x + region.width) * 100}% ${(region.y + region.height) * 100}%, ${(region.x + region.width) * 100}% ${region.y * 100}%, 0 ${region.y * 100}%)` }} />
         <div role="group" aria-label={t('recording.regionArea')} className="absolute cursor-move border-2 border-accent"
           style={{ left: `${region.x * 100}%`, top: `${region.y * 100}%`, width: `${region.width * 100}%`, height: `${region.height * 100}%` }} onPointerDown={down('move')}>

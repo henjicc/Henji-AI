@@ -293,7 +293,7 @@ export default function AgentSkillsSection(): JSX.Element {
         <UiGroup title={t('agentSkills.invalidGroup')} divided>
           {manifest.invalid.map((entry) => (
             /* 失败条目会带出技能文件夹的本地绝对路径，必须声明为观察敏感区域。 */
-            <div key={entry.path} data-observation-sensitive className="py-1">
+            <div key={entry.path} className="py-1">
               <p className={`break-all ${UI_TEXT_BODY_CLASS}`}>{entry.path}</p>
               <p className={`mt-0.5 leading-5 ${UI_TEXT_META_CLASS}`}>{entry.reason}</p>
             </div>

@@ -158,7 +158,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
         <div className="w-80 shrink-0 overflow-y-auto border-r border-line">
           <UiGroup labelWidth={72} gap="row" className="px-3 py-3">
             <VideoEditExportField label="文件名"><UiInput size="sm" className="w-full" aria-label="导出文件名" value={fileName} disabled={busy} onChange={event => setFileName(event.target.value)} /></VideoEditExportField>
-            <VideoEditExportField label="位置"><UiButton variant="link" disabled={busy} aria-label="选择导出目录" className="max-w-full" onClick={() => void chooseDirectory()}><span className="truncate" data-observation-sensitive={directory ? 'true' : undefined} title={directory}>{directory || '选择目录…'}</span></UiButton></VideoEditExportField>
+            <VideoEditExportField label="位置"><UiButton variant="link" disabled={busy} aria-label="选择导出目录" className="max-w-full" onClick={() => void chooseDirectory()}><span className="truncate" title={directory}>{directory || '选择目录…'}</span></UiButton></VideoEditExportField>
             <VideoEditExportField label="预设" lock={<PanelTrigger size="sm" panelWidth="content" closeOnPanelClick panelPadding="menu" renderPanel={() => <>
               <UiOptionButton variant="menu" disabled={busy} onClick={() => { setPresetName(''); setPresetAction('save') }}>保存当前设置为预设</UiOptionButton>
               <UiOptionButton variant="menu" disabledReason={!customPreset ? '请先选择自定义预设' : undefined} disabled={busy || !customPreset} onClick={() => { setPresetName(presets.find(value => value.id === presetId)!.name); setPresetAction('rename') }}>重命名</UiOptionButton>

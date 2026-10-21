@@ -45,6 +45,8 @@ export interface SoundLibraryServiceDeps {
   readFolders(): Promise<SoundLibraryFolderRecord[]>
   writeFolders(folders: SoundLibraryFolderRecord[]): Promise<void>
   chooseFolder(): Promise<string | null>
+  /** 直接给出的文件夹：登记前加入媒体授权目录，返回规范化后的路径。 */
+  allowFolder(folderPath: string): string
   analyze(files: string[], clap: SoundClapModels | null, progress: (done: number, total: number) => void): Promise<SoundAnalysisResult>
   embedText(clap: SoundClapModels, texts: string[]): Promise<number[][]>
   /** 听音模型已下载时返回文件位置；未下载返回 null（不自动下载）。 */
@@ -119,13 +121,14 @@ export class SoundLibraryService {
     return this.snapshot()
   }
 
-  async addFolder(): Promise<SoundLibraryFolderInfo | null> {
+  /** 给了路径直接登记；没给时弹出系统选择框，用户取消返回 null。 */
+  async addFolder(folderPath?: string): Promise<SoundLibraryFolderInfo | null> {
     await this.load()
-    const chosen = await this.deps.chooseFolder()
+    const chosen = folderPath ? this.deps.allowFolder(path.resolve(folderPath)) : await this.deps.chooseFolder()
     if (!chosen) return null
     const existing = [...this.folders.values()].find(state => samePath(state.record.path, chosen))
     if (existing) return this.info(existing)
-    if (!(await fs.stat(chosen).catch(() => null))?.isDirectory()) throw new SoundLibraryError('选择的位置不是文件夹。')
+    if (!(await fs.stat(chosen).catch(() => null))?.isDirectory()) throw new SoundLibraryError(`不是文件夹或不存在：${chosen}`)
     const record: SoundLibraryFolderRecord = { id: randomUUID(), path: path.resolve(chosen), addedAt: new Date().toISOString() }
     await this.deps.writeFolders([...[...this.folders.values()].map(state => state.record), record])
     const state: FolderState = { record, files: new Map(), status: 'not_indexed', progress: null, indexedAt: null, lastError: null }

@@ -6,7 +6,7 @@ import type { SoundLibraryFolderInfo, SoundLibrarySearchRequest, SoundLibrarySea
  */
 
 export function getSoundLibraryState(): Promise<SoundLibraryState> { return getPlatform().soundLibrary.getState() }
-export function addSoundLibraryFolder(): Promise<SoundLibraryFolderInfo | null> { return getPlatform().soundLibrary.addFolder() }
+export function addSoundLibraryFolder(folderPath?: string): Promise<SoundLibraryFolderInfo | null> { return getPlatform().soundLibrary.addFolder(folderPath) }
 export function removeSoundLibraryFolder(id: string): Promise<boolean> { return getPlatform().soundLibrary.removeFolder(id) }
 export function refreshSoundLibrary(folderIds?: string[]): Promise<SoundLibraryState> { return getPlatform().soundLibrary.refresh(folderIds) }
 export function searchSoundLibrary(request: SoundLibrarySearchRequest): Promise<SoundLibrarySearchResponse> { return getPlatform().soundLibrary.search(request) }

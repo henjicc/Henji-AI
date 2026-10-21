@@ -36,7 +36,7 @@ const downloadCanvasMedia = defineApplicationCapability({
   requiredScopes: ['canvas'],
   acceptsRefs: ['canvas.document', 'canvas.node'],
   producesRefs: ['canvas.node'],
-  successEvidence: ['返回实际保存成功与失败的节点 ID；目标目录只从用户已配置项解析，不向模型暴露本地路径。'],
+  successEvidence: ['返回实际保存成功与失败的节点 ID 以及保存到的目录；目标目录从用户已配置项解析。'],
   failureRecovery: ['未配置目标目录时提示用户先配置；部分文件失败时返回失败节点，不猜测或改写其它目录。'],
   inputSchema: z.object({
     documentId: canvasDocumentIdSchema,
@@ -49,6 +49,7 @@ const downloadCanvasMedia = defineApplicationCapability({
     savedNodeIds: z.array(z.string()),
     failedNodeIds: z.array(z.string()),
     destinationMode: z.enum(['quick', 'preset']),
+    directory: z.string(),
   }),
   concurrencyKey: 'canvas_export',
   resolveConcurrencyKey: (input) => `canvas_export:${input.documentId}`,

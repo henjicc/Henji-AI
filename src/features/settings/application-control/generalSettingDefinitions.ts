@@ -171,6 +171,17 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
   }, QUICK_DOWNLOAD_SETTING_SPECS.enableQuickDownload.key,
   QUICK_DOWNLOAD_SETTING_SPECS.enableQuickDownload.parse),
   storageSetting({
+    id: 'downloads.quick_path', title: '快速下载目录', description: '快速下载保存到的文件夹（本机绝对路径）；空字符串表示未设置。',
+    aliases: ['快速下载路径', '下载文件夹'], schema: z.string().max(4096), defaultValue: '',
+    target: { tab: 'files', sectionId: 'files-download' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, QUICK_DOWNLOAD_SETTING_SPECS.quickDownloadPath.key,
+  QUICK_DOWNLOAD_SETTING_SPECS.quickDownloadPath.parse),
+  storeSetting({
+    id: 'storage.download_paths', title: '常用保存位置', description: '下载与导出时可选的常用文件夹（本机绝对路径列表，按顺序对应 presetIndex，重复项自动去掉）。',
+    aliases: ['下载目录', '保存目录', '下载预设路径', '本地路径'], schema: z.array(z.string().min(1).max(4096)).max(32), defaultValue: [],
+    target: { tab: 'files', sectionId: 'files-download' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => [...useSettingsStore.getState().downloadPresetPaths], paths => useSettingsStore.getState().setDownloadPresetPaths(paths)),
+  storageSetting({
     id: 'downloads.button_only', title: '仅显示快速下载按钮', description: '启用快速下载后只显示直接下载动作。',
     aliases: ['下载按钮', '快速下载'], schema: z.boolean(), defaultValue: true,
     target: { tab: 'files', sectionId: 'files-download' }, requiresReload: false, requiresRestart: false, sensitive: false,

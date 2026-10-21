@@ -47,17 +47,15 @@ export async function downloadCanvasMedia(input: {
   const targets = resolveNodeDownloadTargets(nodes.filter((node) => requestedIds.has(node.id)))
   if (targets.length === 0) throw new Error('NO_DOWNLOADABLE_CANVAS_MEDIA')
 
-  const summary = await downloadCanvasMediaTargetsToDirectory(
-    targets,
-    resolveConfiguredDestination(input.destination),
-    input.destination.mode
-  )
+  const directory = resolveConfiguredDestination(input.destination)
+  const summary = await downloadCanvasMediaTargetsToDirectory(targets, directory, input.destination.mode)
   if (summary.savedNodeIds.length === 0) throw new Error('CANVAS_MEDIA_DOWNLOAD_FAILED')
 
   return {
     projectId: input.projectId,
     ...summary,
     destinationMode: input.destination.mode,
+    directory,
     verification: { verified: summary.failedNodeIds.length === 0 && summary.savedNodeIds.length > 0, condition: '正式文件保存服务已逐项确认写入；失败项保留在 failedNodeIds。' },
   }
 }

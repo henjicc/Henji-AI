@@ -396,7 +396,7 @@ export function DocumentLibraryPage({
         banner={(
           <>
             {actionError ? <UiInlineStatus role="alert" className="mb-4">{actionError}</UiInlineStatus> : null}
-            {packageStatus && !actionError ? <p role="status" className={`mb-4 ${UI_TEXT_META_CLASS}`} data-observation-sensitive>{packageStatus}</p> : null}
+            {packageStatus && !actionError ? <p role="status" className={`mb-4 ${UI_TEXT_META_CLASS}`}>{packageStatus}</p> : null}
             {banner}
           </>
         )}

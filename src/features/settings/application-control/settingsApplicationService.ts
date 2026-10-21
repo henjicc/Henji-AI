@@ -133,19 +133,13 @@ export function getApplicationSettings(ids: string[]): {
         configured: { ...useSettingsStore.getState().providerKeyStatus },
       }
     }
-    if (id === 'storage.download_paths') {
-      return {
-        ...PROTECTED_APPLICATION_SETTING_DEFINITIONS[id],
-        configured: useSettingsStore.getState().downloadPresetPaths.length > 0,
-        configuredCount: useSettingsStore.getState().downloadPresetPaths.length,
-      }
-    }
     if (id === 'storage.data_path') {
-      // 只给“是否默认位置”，不返回本地路径；尚未读取过作品目录时为 null。
+      // 尚未读取过作品目录时为 null。
       const directories = peekAppDirectories()
       return {
         ...PROTECTED_APPLICATION_SETTING_DEFINITIONS[id],
         usesDefaultLocation: directories ? !directories.isCustomUserRoot : null,
+        path: directories?.userRoot ?? null,
       }
     }
     const protectedDefinition = PROTECTED_APPLICATION_SETTING_DEFINITIONS[id]

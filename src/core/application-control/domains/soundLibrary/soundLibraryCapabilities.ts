@@ -9,17 +9,17 @@ const folderStatus = z.enum(['not_indexed', 'indexing', 'ready', 'failed'])
 
 export const addSoundLibraryFolderCapability = defineApplicationCapability({
   id: 'add_sound_library_folder', version: 1, domain: 'sound_library', title: '登记音效文件夹',
-  description: '打开系统文件夹选择框，由用户选择自己收集的音效文件夹并登记；不接受路径参数，用户取消则不登记。登记后在后台递归整理（时长、起音点、击中点、响度、明暗；听音模型已下载时一并听音），只有第一次慢，之后按文件大小与修改时间增量更新。同一文件夹重复登记返回原文件夹。坏文件跳过，原因沿 sound_library.folder.skipped_files 读取。移除登记用 change_application_entities 删除 sound_library.folder（不删除任何文件）。',
+  description: '登记用户收集的音效文件夹：用户给了路径（如 E:/素材/音效）就传 path 直接登记；没给路径时省略 path，会弹出系统文件夹选择框由用户选，用户取消则不登记。登记后在后台递归整理（时长、起音点、击中点、响度、明暗；听音模型已下载时一并听音），只有第一次慢，之后按文件大小与修改时间增量更新。同一文件夹重复登记返回原文件夹。坏文件跳过，原因沿 sound_library.folder.skipped_files 读取。移除登记用 change_application_entities 删除 sound_library.folder（不删除任何文件）。',
   aliases: ['添加音效文件夹', '音效库', '我的音效', 'sound effects folder'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'settings:write', idempotent: false, destructive: false,
   timeoutMs: 600000, supportsPreview: false, supportsUndo: false, requiredScopes: ['sound_library'], acceptsRefs: [], producesRefs: ['sound_library.folder'],
-  prerequisites: ['需要用户在弹出的文件夹选择框里选择；无人值守时会一直等待到超时。'],
-  inputSchema: z.object({}).strict(),
-  outputSchema: z.object({ status: z.enum(['added', 'already_registered', 'cancelled']), resultRef: soundLibraryFolderRef.optional(), folderStatus: folderStatus.optional(), message: z.string(),
+  prerequisites: ['省略 path 时需要用户在弹出的选择框里选择；无人值守时请传 path。'],
+  inputSchema: z.object({ path: z.string().trim().min(1).max(4096).optional().describe('音效文件夹的本机绝对路径；省略时弹出选择框。') }).strict(),
+  outputSchema: z.object({ status: z.enum(['added', 'already_registered', 'cancelled']), resultRef: soundLibraryFolderRef.optional(), path: z.string().optional(), folderStatus: folderStatus.optional(), message: z.string(),
     verification: z.object({ verified: z.boolean(), condition: z.string() }).strict() }).strict(),
   concurrencyKey: 'sound_library', resolveOperationTargets: () => [], resolveOperationWriteTargets: () => [{ kind: 'sound_library.library', id: 'singleton' }],
-  control: capabilityControl('execute', ['sound_library.folder'], { revisionScopes: ['sound_library'] }), summarize: result => result.message,
+  control: capabilityControl('create', ['sound_library.folder'], { revisionScopes: ['sound_library'] }), summarize: result => result.message,
   verificationContract: { kind: 'effect_receipt', requireEffects: false, requireVerifiedEffects: false },
-  resolveObservedEffects: (_input, result) => result.resultRef && result.status === 'added' ? [{ effect: 'execute', entityTypes: ['sound_library.folder'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }] : [],
+  resolveObservedEffects: (_input, result) => result.resultRef && result.status === 'added' ? [{ effect: 'create', entityTypes: ['sound_library.folder'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }] : [],
 })
 
 const match = z.object({

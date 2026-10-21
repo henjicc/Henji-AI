@@ -71,6 +71,7 @@ export function getSoundLibraryService(): SoundLibraryService {
       if (chosen) allowMediaRoot(chosen)
       return chosen
     },
+    allowFolder: folderPath => { allowMediaRoot(folderPath); return folderPath },
     analyze: async (files, clap, progress) => inference.analyzeSounds({ id: randomUUID(), ffmpegPath: await loadFfmpegPath(), files: files.map(path => ({ path })), ...(clap ? { clap } : {}), providers }, progress),
     embedText: async (clap, texts) => (await inference.embedSoundText({ id: randomUUID(), clap, texts, providers })).embeddings,
     clapModels,

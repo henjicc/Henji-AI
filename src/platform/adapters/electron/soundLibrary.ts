@@ -14,7 +14,7 @@ function getNativeSoundLibrary(): SoundLibraryPlatform {
 export function createElectronSoundLibrary(): SoundLibraryPlatform {
   return {
     getState: () => getNativeSoundLibrary().getState(),
-    addFolder: () => getNativeSoundLibrary().addFolder(),
+    addFolder: folderPath => getNativeSoundLibrary().addFolder(folderPath),
     removeFolder: (id) => getNativeSoundLibrary().removeFolder(id),
     refresh: (folderIds) => getNativeSoundLibrary().refresh(folderIds),
     search: (request) => getNativeSoundLibrary().search(request),

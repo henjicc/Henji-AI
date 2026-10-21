@@ -75,7 +75,6 @@ function isImageEditorEvent(event: MainLogEvent): boolean {
 }
 
 function sanitizeDiagnosticString(value: string): string {
-  if (/^[a-z]:[\\/]/i.test(value) || value.startsWith('/')) return '[redacted-path]'
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return '[redacted-url]'
   return value.slice(0, 512)
 }

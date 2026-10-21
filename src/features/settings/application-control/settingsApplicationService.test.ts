@@ -73,15 +73,17 @@ describe('assistant settings registry', () => {
     expect(useSettingsStore.getState().uiBlurEnabled).toBe(true)
   })
 
-  it('密钥和路径只返回状态', () => {
+  it('密钥只返回状态；下载目录按路径直接读写', () => {
     const result = getApplicationSettings([
       'security.provider_keys',
       'storage.download_paths',
     ])
     expect(result.settings[0]).not.toHaveProperty('value')
     expect(result.settings[0]).toHaveProperty('configured')
-    expect(result.settings[1]).not.toHaveProperty('value')
-    expect(result.settings[1]).not.toHaveProperty('path')
+    expect(result.settings[1]).toHaveProperty('value', [])
+    const plan = planApplicationSettingsChange([{ id: 'storage.download_paths', value: ['E:/导出/成片', 'E:/导出/成片', 'D:/素材'] }])
+    applyApplicationSettingsChange(plan.planRef)
+    expect(getApplicationSettings(['storage.download_paths']).settings[0]).toHaveProperty('value', ['E:/导出/成片', 'D:/素材'])
   })
 
   it('默认供应商通过通用设置能力读写默认项真相源', () => {

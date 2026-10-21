@@ -49,7 +49,7 @@ export function useSoundLibrary(): SoundLibraryView {
 
   return {
     state, loadFailed, actionFailed, reload,
-    add: () => run('sound_library.ui_add.failed', addSoundLibraryFolder),
+    add: () => run('sound_library.ui_add.failed', () => addSoundLibraryFolder()),
     remove: (id) => run('sound_library.ui_remove.failed', () => removeSoundLibraryFolder(id)),
     refresh: (id) => run('sound_library.ui_refresh.failed', () => refreshSoundLibrary([id])),
   }

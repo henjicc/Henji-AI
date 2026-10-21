@@ -60,7 +60,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
   >
     <div className={UI_TEXT_TITLE_CLASS}>{title}</div>
     {description ? <div className={`mt-2 ${UI_TEXT_BODY_CLASS}`}>{description}</div> : null}
-    {detailPath ? <div data-observation-sensitive className={`mt-2 break-all font-mono ${UI_TEXT_META_CLASS}`}>{detailPath}</div> : null}
+    {detailPath ? <div className={`mt-2 break-all font-mono ${UI_TEXT_META_CLASS}`}>{detailPath}</div> : null}
   </UiModal>
   )
 }

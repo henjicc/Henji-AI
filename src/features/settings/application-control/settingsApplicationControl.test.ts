@@ -91,16 +91,15 @@ describe('settings application control adapter', () => {
     const ids = Object.keys(PROTECTED_APPLICATION_SETTING_DEFINITIONS)
     expect(ids).toEqual([
       'security.paid_approval',
-      'security.provider_keys', 'storage.download_paths', 'storage.data_path',
-      'downloads.quick_path', 'llm.configuration',
+      'security.provider_keys', 'storage.data_path', 'llm.configuration',
     ])
     for (const id of ids) {
       const definition = PROTECTED_APPLICATION_SETTING_DEFINITIONS[id]
       expect(definition.writable).toBe(false)
       const description = String(definition.description)
       expect(description).toContain('open_application_surface')
-      // 理由要落到技术事实（明文密钥 / OS 对话框不在渲染进程），不是含糊的"安全"表态。
-      expect(/明文|密钥|OS 文件|系统弹出|系统确认|系统选择器|自行提升权限/.test(description)).toBe(true)
+      // 理由要落到技术事实（明文密钥 / 整体搬迁并重启 / 自行提权），不是含糊的"安全"表态。
+      expect(/明文|密钥|整体移动|自行提升权限/.test(description)).toBe(true)
     }
   })
 })

@@ -3,7 +3,7 @@ import type { SoundFeatures } from '../../core/soundLibrary/soundFeatures'
 /*
  * 音效库：用户登记自己的音效文件夹，主进程递归扫描并在后台进程里测量每个音效（时长、起音点、击中点、
  * 响度、明暗；听音模型就绪时再算 CLAP 向量），按“路径 + 大小 + 修改时间”增量缓存。
- * 文件夹只能经主进程的系统文件夹选择框登记，渲染层只按文件夹 ID 引用，不传路径。
+ * 文件夹可直接按路径登记，不给路径时经主进程的系统文件夹选择框登记；之后按文件夹 ID 引用。
  * 主进程实现在 `electron/main/services/sound-library/`，渲染层经 `src/commands/soundLibrary.ts` 调用。
  */
 
@@ -20,7 +20,7 @@ export interface SoundLibraryFolderInfo {
   id: string
   /** 文件夹名（不含上级路径）。 */
   name: string
-  /** 本机绝对路径：只供设置页显示与宿主内部使用，不交给助手。 */
+  /** 本机绝对路径。 */
   path: string
   status: SoundLibraryIndexStatus
   soundCount: number
@@ -117,7 +117,8 @@ export const SOUND_LIBRARY_IPC_CHANNELS = {
 export interface SoundLibraryPlatform {
   getState(): Promise<SoundLibraryState>
   /** 打开系统文件夹选择框登记一个音效文件夹并开始整理；用户取消返回 null，已登记的返回原文件夹。 */
-  addFolder(): Promise<SoundLibraryFolderInfo | null>
+  /** 给了路径直接登记；不给时弹出系统选择框。 */
+  addFolder(folderPath?: string): Promise<SoundLibraryFolderInfo | null>
   removeFolder(id: string): Promise<boolean>
   /** 增量整理指定文件夹（省略则全部），只分析新增或改动的文件；返回整理后的状态。 */
   refresh(folderIds?: string[]): Promise<SoundLibraryState>

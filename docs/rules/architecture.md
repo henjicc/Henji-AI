@@ -84,7 +84,7 @@ packages/ai-sdk/       # 可独立发布的模型 SDK：catalog、provider、协
 - `src/core/application-control/` 是调用方中立的反射、观察和事务契约；禁止导入组件、Store、助手适配器或 Electron 实现。
 - 正式领域服务是持久业务逻辑唯一入口；UI、Pi 和 MCP 适配器只能委托同一服务，不得各自维护第二份 schema、校验、状态机或写入逻辑。
 - `ApplicationCapabilityDefinition` 是应用语义能力元数据唯一来源；禁止手写第二份 Agent 工具描述、旧 `HostCommand`/`HostQuery` 执行表或跨阶段兼容执行入口。
-- AI 输入必须是封闭 schema，禁止任意 Store Patch、任意 JavaScript/TypeScript 执行和原始路径参数。多项实体修改使用现有通用事务，算法操作使用正式领域能力，不再引入脚本执行链。
+- AI 输入必须是封闭 schema，禁止任意 Store Patch、任意 JavaScript/TypeScript 执行；文件或文件夹路径可以作为声明好的参数（如登记音效文件夹）。多项实体修改使用现有通用事务，算法操作使用正式领域能力，不再引入脚本执行链。
 - 公开实体、属性、语义操作、Surface、模型/媒体模态或长任务发生变化时，必须更新真实注册源并通过 `npm run check:assistant-capabilities`，不得只修改助手提示词。
 
 - 跨进程领域声明放在 `core/application-control/domains/`，只依赖纯契约；反射与执行器归各领域，渲染层装配只做组合和依赖注入。

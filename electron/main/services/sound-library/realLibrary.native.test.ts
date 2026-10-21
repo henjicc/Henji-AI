@@ -26,7 +26,7 @@ describe.skipIf(!root || !ffmpeg)('真实音效库', () => {
   const service = async (cacheDir: string, withModel: boolean) => {
     const folders: SoundLibraryFolderRecord[] = [{ id: '00000000-0000-4000-8000-000000000001', path: root!, addedAt: new Date().toISOString() }]
     return new SoundLibraryService({
-      readFolders: async () => folders, writeFolders: async () => undefined, chooseFolder: async () => null,
+      readFolders: async () => folders, writeFolders: async () => undefined, chooseFolder: async () => null, allowFolder: folder => folder,
       analyze: (files, models, progress) => runSoundAnalysis({ id: 'a', ffmpegPath: ffmpeg!, files: files.map(file => ({ path: file })), ...(models ? { clap: models } : {}), providers: executionProviderOrder(process.platform) }, { openModel, signal: new AbortController().signal, progress, log: () => undefined }),
       embedText: async (models, texts) => (await runSoundTextEmbedding({ id: 't', clap: models, texts, providers: executionProviderOrder(process.platform) }, { openModel, signal: new AbortController().signal, log: () => undefined })).embeddings,
       clapModels: async () => withModel ? clap : null,

@@ -99,7 +99,7 @@ export function ExplanationReview({ entry, onRead, onBind, onError, onPick, onRe
     const at = text.indexOf(mention.text, offset), before = text.slice(offset, at); offset = at + mention.text.length
     return <span key={mention.id}>{before}<UiTextToken aria-label={`查看「${mention.text}」的指向`} aria-expanded={activeId === mention.id} onClick={() => inspect(mention)}><span className={`underline decoration-2 underline-offset-[3px] ${needsConfirmation(mention) ? 'decoration-warning-text' : 'decoration-accent-text'}`}>{mention.text}</span>{needsConfirmation(mention) && <span aria-label="待确认" className="ml-0.5 inline-block h-1 w-1 rounded-full bg-warning-solid align-middle" />}</UiTextToken>{mention.negated && mention.selected && <LockKeyhole aria-label="保护" size={UI_ICON_SIZE.xs} className="inline text-text2" />}</span>
   })
-  return <div className="space-y-3" data-observation-sensitive data-explanation-paragraph={entry.utteranceId}>
+  return <div className="space-y-3" data-explanation-paragraph={entry.utteranceId}>
     {!open ? showTrigger && <UiTextToken aria-label={`查看「${entry.text}」的指向`} aria-expanded={false} onClick={() => setOpen(true)}>{entry.text}</UiTextToken> : <>
       <p className={`whitespace-pre-wrap break-words leading-7 ${UI_TEXT_BODY_CLASS}`}>{parts}{text.slice(offset)}</p>
       {failed && <UiError size="xs" align="start" title="讲解读取失败" message="" retryLabel="重试" onRetry={() => setRetry(value => value + 1)} />}

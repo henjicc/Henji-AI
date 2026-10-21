@@ -59,7 +59,7 @@ class RecordingProvider implements ApplicationEntityProvider {
       const active = snapshot?.sessionId === content.sessionId ? snapshot : null
       revision = meta.revision
       values = { name: meta.name, phase: active?.phase ?? content.status, elapsed_ms: active?.elapsedMs ?? Math.max(0, ...content.media.map(media => media.monoUs + media.durationUs)), details: {
-        source: content.source?.name ?? '', cursorEmbedded: content.source?.cursorEmbedded ?? false, media: content.media.map(({ path: _path, ...media }) => media), markers: content.markers.length,
+        source: content.source?.name ?? '', cursorEmbedded: content.source?.cursorEmbedded ?? false, media: content.media, markers: content.markers.length,
         events: content.eventPages.reduce((sum, page) => sum + page.lastSequence - page.firstSequence + 1, 0),
         devices: content.devices,
       } }

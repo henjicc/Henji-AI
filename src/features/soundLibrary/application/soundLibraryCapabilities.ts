@@ -5,18 +5,18 @@ import { addSoundLibraryFolder, getSoundLibraryState, searchSoundLibrary } from 
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import type { SoundLibrarySearchResponse } from '@/platform/contracts/soundLibrary'
 
-/** 登记与设置页“添加文件夹”同一入口：主进程弹出选择框，渲染层不经手路径。 */
+/** 登记与设置页“添加文件夹”同一入口：给了路径直接登记，否则主进程弹出选择框。 */
 export async function addSoundLibraryFolderFromCapability(raw: unknown, context: CapabilityExecutionContext): Promise<z.infer<typeof addSoundLibraryFolderCapability.outputSchema>> {
-  addSoundLibraryFolderCapability.inputSchema.parse(raw)
+  const input = addSoundLibraryFolderCapability.inputSchema.parse(raw)
   const before = await getSoundLibraryState()
   context.signal?.throwIfAborted()
-  const folder = await addSoundLibraryFolder()
+  const folder = await addSoundLibraryFolder(input.path)
   if (!folder) return { status: 'cancelled', message: '用户取消了选择，没有登记文件夹。', verification: { verified: true, condition: '选择框已取消，登记表未改变。' } }
   const after = await getSoundLibraryState()
   const added = !before.folders.some(value => value.id === folder.id)
   const verified = after.folders.some(value => value.id === folder.id)
   return {
-    status: added ? 'added' : 'already_registered', resultRef: { kind: 'sound_library.folder', id: folder.id }, folderStatus: folder.status,
+    status: added ? 'added' : 'already_registered', resultRef: { kind: 'sound_library.folder', id: folder.id }, path: folder.path, folderStatus: folder.status,
     message: added ? `已登记音效文件夹“${folder.name}”，正在后台整理；检索时会自动等待整理完成。` : `“${folder.name}”已经登记过，沿用原文件夹。`,
     verification: { verified, condition: verified ? '已从音效库服务回读，文件夹在登记表里。' : '回读登记表没有这个文件夹。' },
   }

@@ -5,8 +5,8 @@ import { parseVoid, registerIpcHandler } from './registry'
 
 /*
  * 音效库 IPC：渲染层经 preload `henjiNative.soundLibrary` → PAL `SoundLibraryPlatform`
- * → `src/commands/soundLibrary.ts` 调用。渲染层只按文件夹 / 音效 ID 引用，不传路径；
- * 登记文件夹只经主进程的系统选择框。状态变化经 `soundLibrary:changed` 推给所有窗口。
+ * → `src/commands/soundLibrary.ts` 调用。登记文件夹可直接给路径，不给时由主进程弹出系统选择框；
+ * 之后按文件夹 / 音效 ID 引用。状态变化经 `soundLibrary:changed` 推给所有窗口。
  */
 
 const id = z.string().min(1).max(200)
@@ -24,7 +24,7 @@ const searchSchema = z.object({
 export function registerSoundLibraryIpc(): void {
   const c = SOUND_LIBRARY_IPC_CHANNELS
   registerIpcHandler(c.getState, parseVoid, () => getSoundLibraryService().getState())
-  registerIpcHandler(c.addFolder, parseVoid, () => getSoundLibraryService().addFolder())
+  registerIpcHandler(c.addFolder, value => value === undefined ? undefined : z.object({ path: z.string().min(1).max(4096).optional() }).strict().parse(value).path, folderPath => getSoundLibraryService().addFolder(folderPath))
   registerIpcHandler(c.removeFolder, value => z.object({ id }).strict().parse(value).id, folderId => getSoundLibraryService().removeFolder(folderId))
   registerIpcHandler(c.refresh, value => z.object({ folderIds: z.array(id).max(64).optional() }).strict().parse(value).folderIds, folderIds => getSoundLibraryService().refresh(folderIds))
   registerIpcHandler(c.search, value => searchSchema.parse(value), request => getSoundLibraryService().search(request))

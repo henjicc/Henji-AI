@@ -106,7 +106,7 @@ export function ExplanationPanel({ entries, stage, elapsedUs, busy, loading, has
       setSendRequest(undefined); await onGenerate(paragraphs)
     })().catch(review.onError).finally(() => { generatingRef.current = false; setGenerating(false) })
   }
-  return <section ref={section} style={{ maxHeight: availableHeight }} className="flex max-h-[80vh] min-h-0 min-w-0 flex-col gap-4 overflow-hidden" aria-label="讲解词稿审阅" data-observation-sensitive>
+  return <section ref={section} style={{ maxHeight: availableHeight }} className="flex max-h-[80vh] min-h-0 min-w-0 flex-col gap-4 overflow-hidden" aria-label="讲解词稿审阅">
     <div className="flex shrink-0 items-center justify-between gap-2">
       <span className={UI_TEXT_BODY_CLASS}>讲解 · {explanationDuration(elapsedUs)}</span>
       {onDelete && <UiIconButton size="xs" tone="danger" aria-label="删除讲解" disabled={busy} onClick={onDelete}><Trash2  /></UiIconButton>}

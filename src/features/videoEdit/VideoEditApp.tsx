@@ -103,10 +103,10 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
       })}><FolderInput size={UI_ICON_SIZE.sm} />{t('videoEditProject.collect')}</UiOptionButton>
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(() => getDocumentOperations().revealDocument(instance.session.target))}><FolderOpen size={UI_ICON_SIZE.sm} />{t('videoEditProject.revealProject')}</UiOptionButton>
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={UI_ICON_SIZE.sm} />{t('videoEditProject.shortcuts')}</UiOptionButton>
-      {others.map(item => <UiOptionButton key={item.document.id} variant="menu" size="sm" className="min-w-0" onClick={() => focusVideoEdit(item.document.id)}><span className="truncate" data-observation-sensitive>{t('videoEditProject.switchTo', { name: item.document.name })}</span></UiOptionButton>)}
+      {others.map(item => <UiOptionButton key={item.document.id} variant="menu" size="sm" className="min-w-0" onClick={() => focusVideoEdit(item.document.id)}><span className="truncate">{t('videoEditProject.switchTo', { name: item.document.name })}</span></UiOptionButton>)}
     </div>}>
       {({ open, togglePanel }) => <UiButton size="sm" className="min-w-0 max-w-56" aria-label={t('videoEditProject.menu', { name: instance.document.name })} aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
-        <span className="truncate" data-observation-sensitive>{instance.document.name}</span><ChevronDown  className="shrink-0 text-text3" />
+        <span className="truncate">{instance.document.name}</span><ChevronDown  className="shrink-0 text-text3" />
       </UiButton>}
     </PanelTrigger>
     {sequence && <span className="shrink-0 truncate text-xs tabular-nums text-text3">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))} fps</span>}

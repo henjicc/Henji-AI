@@ -74,7 +74,6 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
           <div className="flex items-center gap-2">
             {/* 明文本地路径，观察截图时需要遮罩；密钥类输入自带 password 掩码，无需标注。 */}
             <UiInput
-              data-observation-sensitive
               value={quickDownloadPath}
               onChange={(e) => onChangePath(e.target.value)}
               placeholder={t('sections.download.pathPlaceholder')}
@@ -103,7 +102,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             <div key={path} className="flex items-center gap-2 border-b border-line/60 py-3 first:pt-0 last:border-b-0 last:pb-0">
               <FolderOpen className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text2`} />
               {/* 明文本地路径，观察截图时需要遮罩 */}
-              <span data-observation-sensitive className="min-w-0 flex-1 truncate text-sm" title={path}>
+              <span className="min-w-0 flex-1 truncate text-sm" title={path}>
                 {path}
               </span>
               <UiIconButton

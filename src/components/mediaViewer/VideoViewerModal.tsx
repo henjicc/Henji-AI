@@ -430,7 +430,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             data-viewer-time={timeline ? displayedTime : undefined}
             data-viewer-duration={timeline?.duration}
             data-viewer-gap={timelinePlayer.gap || undefined}
-            data-observation-sensitive
             preload="auto"
             playsInline
             className={`w-full h-full object-contain ${timeline && timelinePlayer.gap ? "invisible" : ""}`}

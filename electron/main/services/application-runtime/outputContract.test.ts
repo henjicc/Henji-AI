@@ -113,7 +113,7 @@ const successData: Record<string, Record<string, unknown>> = {
   apply_canvas_image_capability: { documentId: 'canvas', kind: 'canvas-node', capabilityId: 'image.relight', sourceNodeId: 'node', nodeId: 'new', edgeId: 'edge', undoRef: 'undo', ...revisions },
   add_asset_to_canvas: { documentId: 'canvas', assetId: 'asset', mediaType: 'image', nodeId: 'node', nodeType: 'image', nodeRef, undoRef: 'undo', verification: { verified: true, condition: message }, ...revisions },
   add_generation_result_to_canvas: { documentId: 'canvas', resultRef: ref('generation.result', 'task'), mediaType: 'image', nodeId: 'node', nodeType: 'image', nodeRef, undoRef: 'undo', verification: { verified: true, condition: message }, ...revisions },
-  download_canvas_media: { documentId: 'canvas', savedNodeIds: ['node'], failedNodeIds: [], requestedCount: 1, destinationMode: 'quick', ...revisions },
+  download_canvas_media: { documentId: 'canvas', savedNodeIds: ['node'], failedNodeIds: [], requestedCount: 1, destinationMode: 'quick', directory: 'E:/下载', ...revisions },
   submit_canvas_node_generation: { taskId: 'task', status: 'submitted', ...revisions },
   resume_canvas_generation_task: { taskId: 'task', status: 'success', task: { status: 'success' }, ...revisions },
   retry_layer_stack_result: { nodeRef: ref('canvas.node', 'canvas:layers'), status: 'retrieving', resultRefs: [nodeRef], ...revisions },

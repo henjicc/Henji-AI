@@ -22,7 +22,6 @@ const DataPathSection: React.FC = () => {
           {/* 这里是明文本地绝对路径（不像密钥框那样自带掩码），
               助手观察截图时必须遮住，否则路径会原样进模型。 */}
           <UiInput
-            data-observation-sensitive
             value={currentPath}
             title={currentPath}
             readOnly

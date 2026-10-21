@@ -291,7 +291,7 @@ export const listGenerationHistoryCapability = defineCapability({
   prerequisites: ['生成历史数据库已就绪。'],
   acceptsRefs: [],
   producesRefs: ['generation.record', 'generation.result'],
-  successEvidence: ['返回按时间倒序排列的记录及稳定引用，不暴露本地路径。'],
+  successEvidence: ['返回按时间倒序排列的记录及稳定引用；结果文件路径可读 generation.result.file_paths。'],
   failureRecovery: ['没有成功结果时明确返回空列表，不创建画布或其他文档。'],
   /*
    * 筛选维度与生成页的筛选栏一一对应。此前只有 mediaType / status / limit，
