@@ -22,6 +22,7 @@ import {
 } from './builtinApplicationCapabilities'
 import { SETTINGS_APPLICATION_CAPABILITIES } from './domains/settings/settingsApplicationCapabilities'
 import { cancelLocalModelDownloadCapability } from './domains/localModels/localModelCapabilities'
+import { SOUND_LIBRARY_APPLICATION_CAPABILITIES } from './domains/soundLibrary/soundLibraryCapabilities'
 import { ASSET_APPLICATION_CAPABILITIES } from './domains/asset/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from './domains/cameraStage/cameraStageApplicationCapabilities'
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from './domains/shared/applicationReflectionApplicationCapabilities'
@@ -52,6 +53,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   focusApplicationEntityCapability,
   ...SETTINGS_APPLICATION_CAPABILITIES,
   cancelLocalModelDownloadCapability,
+  ...SOUND_LIBRARY_APPLICATION_CAPABILITIES,
   listGenerationHistoryCapability,
   openImageEditorWithSourceCapability,
   ...GENERATION_APPLICATION_CAPABILITIES,

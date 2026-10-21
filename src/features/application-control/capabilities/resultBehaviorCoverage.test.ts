@@ -60,6 +60,10 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/localModels/application/localModelsReflection.test.ts', title: '通过通用 change 下载并删除本地模型，下载服务状态随之变化' },
     { file: 'src/features/localModels/application/localModelsReflection.test.ts', title: '通过通用 change 把下载源改为国内，读回一致' },
   ],
+  sound_library: [
+    { file: 'src/features/soundLibrary/application/soundLibraryReflection.test.ts', title: '通过通用 change 取消登记音效文件夹，音效库登记表随之变化且不删文件' },
+    { file: 'src/features/soundLibrary/application/soundLibraryReflection.test.ts', title: '通过通用读取文件夹与音效：跳过的坏文件、击中点可读回，音效只读并指明改道' },
+  ],
   audio_edit: [
     { file: 'src/features/audioEdit/application/audioEditReflectionResult.test.ts', title: '通用属性静音与界面设置保存可回读，静音不缩短成片且可以撤销' },
     { file: 'src/features/audioEdit/application/audioEditReflectionResult.test.ts', title: '通过通用 change 删除词块并让成片映射同步缩短' },
@@ -79,6 +83,7 @@ const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = 
   audio_edit: 2,
   documents: 3,
   local_models: 2,
+  sound_library: 2,
 }
 
 function writableDomains(): string[] {

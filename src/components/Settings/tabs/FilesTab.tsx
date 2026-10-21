@@ -8,6 +8,7 @@ import LargeUploadSection from '../sections/LargeUploadSection'
 import UploadSection from '../sections/UploadSection'
 import DownloadSection from '../sections/DownloadSection'
 import LocalModelsSection from '../sections/LocalModelsSection'
+import SoundLibrarySection from '../sections/SoundLibrarySection'
 
 /**
  * 文件与下载：文件存在哪、怎么传给模型、怎么下载回来，以及在本机运行的小模型。
@@ -36,6 +37,10 @@ const FilesTab: React.FC = () => {
           onToggleButtonOnly={(value) => updateSetting('quickDownloadButtonOnly', value)}
           onChangePath={(value) => updateSetting('quickDownloadPath', value)}
         />
+      </SettingsSection>
+
+      <SettingsSection id="files-sounds">
+        <SoundLibrarySection />
       </SettingsSection>
 
       <SettingsSection id="files-models">

@@ -1,3 +1,5 @@
+2026-10-21：新增音效库领域 sound_library（音效库单例 / 登记文件夹 / 音效三个只读实体，文件夹可按通用集合取消登记）与三个算法能力：add_sound_library_folder（系统选择框由用户选择，不接受路径）、search_sound_effects（名字匹配 + 时长/击中点/明暗过滤，听音模型 audio_understanding_clap 已下载时融合英文描述的听音分，结果不足返回 noGoodMatch）、place_video_edit_sound_effects（击中点或起音点按微秒对齐到帧、标记或切点，一步撤销并保存回读）。设置“文件与下载 › 音效库”与助手同源；外部 MCP 自动投影，外部契约 2.44.0。精确结果测试与真实音效库（669 个文件）主进程服务实测通过；真实 Pi/MCP 模型任务与 Electron 后台推理进程链路未验收。
+
 2026-10-21：剪辑新增 render_video_edit_preview（对标 PR 渲染入点到出点），后台按 30 秒分段预渲染吃力段落；状态由 video_edit.document.render_cache 读取，自动预渲染偏好走 video_edit.document.render_preference 通用属性；UI 渲染条、Pi、MCP 同源，外部契约 2.43.0。打开项目内素材的剪辑时改为按当前位置重读文件身份并重新绑定转录来源，修复重开后字幕生成、按文字剪辑与转录检索全部报“尚未绑定原文件身份”；真实 Electron 外部 MCP 局部检索删重说场景通过。
 
 2026-10-21：旧作者语言整体退役：AST 编译器、求值器、V3 GPU 栅格/矢量/滤镜路径及其测试与夹具删除，代码素材只走标准 ES 模块。运行时技能 video-edit-code-creation 的作者接口、文字动效、GPU/滤镜、音频与画面输入、参数类型、示例与全部配方改写为作者 JS（Canvas2D 图层、pose、createWebGPU/createWebGL），删除旧表达式参考；技能测试改为加载每个源码围栏并解析参数。Reality 验收场景的旧源码夹具统一改为作者模块（未逐场景重跑真实 Electron）。助手按新文档创作的端到端质量尚未重新验证。

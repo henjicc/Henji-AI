@@ -34,7 +34,7 @@ export const applicationDomainCoverageSchema = z.object({
   querySource: z.string().min(1).max(500),
   observationSource: z.string().min(1).max(500),
   verificationSource: z.string().min(1).max(500),
-  surfaceIds: z.array(applicationSurfaceIdSchema).max(32),
+  surfaceIds: z.array(applicationSurfaceIdSchema).max(64),
 }).strict()
 export type ApplicationDomainCoverage = z.infer<typeof applicationDomainCoverageSchema>
 

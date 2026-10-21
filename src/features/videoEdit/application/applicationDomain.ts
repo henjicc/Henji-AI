@@ -1,4 +1,6 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
+import { placeVideoEditSoundEffectsCapability } from '@/core/application-control/domains/videoEdit/videoEditSoundEffectCapability'
+import { placeVideoEditSoundEffects } from './videoEditSoundEffects'
 import { executeVideoEditPrivacy } from './videoEditPrivacyCapability'
 import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
 import { videoEditStaggerCapability } from '@/core/application-control/domains/videoEdit/videoEditStaggerCapability'
@@ -145,6 +147,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         return { resultRefs: changed.map(clipId => ({ kind: 'video_edit.clip', id: `${id}:${clipId}` })), message: '已错峰复制动作。', verification: { verified: true, condition: '所有目标曲线通过范围校验并在同一次文档编辑中提交。' } }
       }
       if (definition.id === analyzeVideoEditBeatsCapability.id) return executeVideoEditBeatCapability(analyzeVideoEditBeatsCapability.inputSchema.parse(raw), context.signal)
+      if (definition.id === placeVideoEditSoundEffectsCapability.id) return placeVideoEditSoundEffects(placeVideoEditSoundEffectsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
       const title = await handleTitleTemplateCapability(definition.id, raw, context.signal)
       if (title !== undefined) return title

@@ -24,6 +24,7 @@
     "files-storage": "作品目录",
     "files-upload": "上传",
     "files-download": "下载",
+    "files-sounds": "音效库",
     "files-models": "本地模型",
     "assistant-models": "助手模型",
     "assistant-preferences": "用户指令",
@@ -379,6 +380,21 @@
       "presetPathsAdd": "添加目录",
       "presetPathsCount": "已添加 {{count}} / {{limit}}",
       "presetPathsRemove": "移除预设路径 {{path}}"
+    },
+    "soundLibrary": {
+      "listLabel": "音效文件夹",
+      "listHint": "登记自己收集的音效文件夹后，智能助手可以按“短促的嗖”“清脆的叮”这类意图挑音效，并把击中点卡到切点或节拍上。只读取文件，不移动或修改它们；下载下方的听音模型后还能按声音本身检索。",
+      "add": "添加文件夹",
+      "empty": "还没有登记音效文件夹",
+      "loadFailed": "读取音效库失败",
+      "refresh": "重新整理 {{name}}",
+      "remove": "取消登记 {{name}}",
+      "count": "{{count}} 个音效",
+      "listening": "已听音 {{count}} 个",
+      "indexing": "正在整理 {{done}} / {{total}}",
+      "notIndexed": "尚未整理",
+      "skipped": "跳过 {{count}} 个无法读取的文件：{{files}}",
+      "actionFailed": "操作未完成，请重试"
     },
     "localModels": {
       "sourceLabel": "下载源",
