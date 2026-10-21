@@ -52,6 +52,9 @@ export default defineConfig({
       },
     },
     plugins: [react()],
+    // 渲染层根目录是仓库根：并行任务的 worktree、原生构建产物与临时目录不属于渲染层源码，监听它们只会被
+    // 编译中被锁住的文件（EBUSY）弄崩 dev server，也白白耗费文件句柄。
+    server: { watch: { ignored: ['**/.claude/**', '**/native/**/target/**', '**/.tmp/**', '**/release/**', '**/.reality/**', '**/.ui-tour/**'] } },
     // 所有 Worker 都以 { type: 'module' } 创建；ES 格式才允许 Worker 内按需 import（着色器组件逐个懒加载）。
     worker: { format: 'es' },
     optimizeDeps: {
