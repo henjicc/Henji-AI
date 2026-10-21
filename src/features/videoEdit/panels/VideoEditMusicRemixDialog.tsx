@@ -52,7 +52,7 @@ export function VideoEditMusicRemixDialog({ request, onClose }: { request: Video
       <UiButton loading={busy} variant="primary" disabled={busy} onClick={() => void run(false)}>{phase === 'model' ? '正在准备节拍模型' : '重构'}</UiButton>
     </>}>
     <UiGroup labelWidth={96}>
-      <UiFormRow label="目标时长" density="compact" trailing={null}>
+      <UiFormRow label="目标时长（秒）" density="compact" trailing={null}>
         <NumberInput ariaLabel="目标时长（秒）" value={alignToEnd && initial.sequenceEndSeconds !== null ? Math.round(initial.sequenceEndSeconds * 10) / 10 : seconds} min={1} max={3600} step={0.1} precision={1} disabled={busy || alignToEnd} onChange={setSeconds} />
       </UiFormRow>
       {initial.sequenceEndSeconds !== null && <UiFormRow label="对齐" density="compact">
