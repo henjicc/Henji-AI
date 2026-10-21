@@ -144,6 +144,7 @@
     "ffmpeg-ffprobe-static": "6.1.2-rc.1",
     "fit-curve": "0.2.0",
     "fontkit": "2.0.4",
+    "highs": "1.15.3",
     "i18next": "^23.7.0",
     "i18next-browser-languagedetector": "^7.2.0",
     "koffi": "3.3.2",

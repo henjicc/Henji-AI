@@ -90,6 +90,13 @@ cursorClip.effects = [{ id: 'golden-cursor', name: '录制光标', enabled: true
   ] } },
   { id: 'golden-frame', name: '录屏画框', enabled: true, amount: 1, builtin: { id: 'recording_frame', params: { background: 'solid', color: RECORDING_FRAME_SOLID_DEFAULT_HEX, padding: 6, radius: 2.5, shadow: 50 } } }]
 cursorClip.curves = { scale: [{ time: 0, value: 1, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 0, value: 1, interpolation: 'linear' } }, { time: 45, value: 1.8, interpolation: 'linear', source: 'screen_attention', reframeOrigin: { time: 45, value: 1.8, interpolation: 'linear' } }] }
+// 剪辑内容 v20：两点跟踪的变换跟随（旋转、缩放）、录屏光标事件跟踪、防抖参数。
+cursorClip.trackers = [
+  { id: 'golden-two-point', name: '两点', method: 'point', prompts: [{ timeUs: 0, points: [[0.3, 0.4, 1], [0.6, 0.5, 1]] }] },
+  { id: 'golden-cursor-track', name: '光标', method: 'point', prompts: [{ timeUs: 0, points: [[0.5, 0.5, 1]], window: { feature: 0.06, search: 0.2 } }], recording: { kind: 'cursor' } },
+]
+cursorClip.stabilization = { smoothness: 'natural', maxCrop: 0.1, rotation: true, scale: false }
+clip.follow = { clipId: cursorClip.id, trackerId: 'golden-two-point', offsetX: 0.05, offsetY: -0.02, motion: { rotation: 12.5, size: 0.3 } }
 sequence.clips.push(cursorClip)
 const holdClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 180, duration: 30 })
 holdClip.id = 'golden-frame-hold'

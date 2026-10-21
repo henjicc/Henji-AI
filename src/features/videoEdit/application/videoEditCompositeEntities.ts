@@ -96,7 +96,7 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
 export function updateVideoEditCompositeEntity(document: VideoEditDocument, type: VideoEditCompositeEntityType, childId: string, data: Data): VideoEditDocument {
   const owner = videoEditCompositeOwner(document, type, childId)
   if (owner.kind === 'tracker') {
-    putVideoEditTracker(document, owner.clip, { id: owner.tracker.id, name: data.name, method: data.method, prompts: data.prompts })
+    putVideoEditTracker(document, owner.clip, { id: owner.tracker.id, name: data.name, method: data.method, prompts: data.prompts, ...(owner.tracker.recording ? { recording: owner.tracker.recording } : {}) })
   } else if (owner.kind === 'graphic') {
     Object.assign(owner.object, { name: data.name, parameters: data.parameters, curves: data.curves, textStyle: data.textStyle ?? undefined, visible: data.visible })
   } else if (owner.kind === 'effect') {

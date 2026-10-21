@@ -1,4 +1,4 @@
-import type { VideoEditTrackMethod, VideoEditTrackPrompt } from '../../core/videoEdit/tracking'
+import type { VideoEditAnalysisMethod, VideoEditTrackPrompt, VideoEditTrackRecording } from '../../core/videoEdit/tracking'
 
 /*
  * 跟踪器（任务 4.10）：主进程实现在 `electron/main/services/tracking/`，渲染层经 `getPlatform().tracking` 调用；
@@ -9,9 +9,12 @@ import type { VideoEditTrackMethod, VideoEditTrackPrompt } from '../../core/vide
 export interface TrackingDefinition {
   /** 已授权素材路径，或渲染器提供的嵌套合成内容身份。 */
   source: TrackingSource
-  method: VideoEditTrackMethod
-  /** 按时间排序的提示（坐标是片段画面的归一化坐标，时间是素材绝对时钟的微秒）。 */
+  /** camera 是防抖的相机运动分析：没有提示，结果从片段用到的范围起点往两边累计。 */
+  method: VideoEditAnalysisMethod
+  /** 按时间排序的提示（坐标是片段画面的归一化坐标，时间是素材绝对时钟的微秒）；camera 为空。 */
   prompts: VideoEditTrackPrompt[]
+  /** 录屏事件跟踪：结果由录制事件直接换算，只在渲染层使用，不提交后台任务。 */
+  recording?: VideoEditTrackRecording
 }
 
 /** 要跟踪到的素材时间范围（片段用到的范围，微秒，结束不含）。 */

@@ -116,7 +116,7 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   storage: 'json',
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: VIDEO_EDIT_CONTENT_VERSION,
-  // 第 19 版只新增可选字段（速度曲线、补帧、变调）：第 18 版程序仍能正确打开并原样保留它们。
+  // 第 19、20 版只新增可选字段（速度曲线、补帧、变调；跟随 motion、跟踪器 recording、防抖）：第 18 版程序仍能正确打开并原样保留它们。
   minReaderVersion: 18,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
@@ -125,6 +125,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     17: content => migrateEmbeddedVideoColorGradesV1(content),
     // 18 → 19：片段新增可选的速度曲线 timeRemap、补帧 frameInterpolation 与变调 pitchSemitones；旧内容原样有效。
     18: content => content,
+    // 19 → 20：只新增可选字段（跟随 motion 变换跟随、跟踪器 recording 录屏事件来源、片段 stabilization 防抖），原内容不变。
+    19: content => content,
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

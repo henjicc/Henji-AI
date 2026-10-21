@@ -36,7 +36,7 @@ import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditAudioTransitionClipGain, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
-import { applyVideoEditClipFollow } from './videoEditTrackResults'
+import { applyVideoEditClipFollow, applyVideoEditStabilization } from './videoEditTrackResults'
 import { activeVideoEditAudioEffects, activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
@@ -752,10 +752,11 @@ export class VideoEditRenderer {
     }
     const transitionIds = new Set(rawTransitions.flatMap(window => [window.left.id, window.right.id]))
     for (const window of rawTransitions) for (const clip of [window.left, window.right]) candidates.set(clip.id, clip)
-    const active = (await applyVideoEditClipFollow(sourceDocument, [...candidates.values()], frame)).map(clip => {
+    // 防抖修正在关键帧与跟随之后合成进位置、缩放、旋转（预览与导出同一份）。
+    const active = (await applyVideoEditStabilization(sourceDocument, (await applyVideoEditClipFollow(sourceDocument, [...candidates.values()], frame)).map(clip => {
       const evaluated = evaluateVideoEditClip(clip, frame)
       return videoEditClipFades(clip) ? { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(clip, frame) } : evaluated
-    }).filter(clip => !['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length || transitionIds.has(clip.id))
+    }), frame)).filter(clip => !['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length || transitionIds.has(clip.id))
     const byId = new Map(active.map(clip => [clip.id, clip]))
     const transitions = rawTransitions.map(window => ({ ...window, left: byId.get(window.left.id)!, right: byId.get(window.right.id)! }))
     if (!cachedWindow) active.push(...videoEditCaptionClips(document, frame))

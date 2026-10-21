@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { videoEditClipPixelScale, videoEditClipToFrame, type VideoEditClipPlacement, type VideoEditSize } from './clipGeometry'
+import { type VideoEditClipPlacement, type VideoEditSize } from './clipGeometry'
 import { processSmartRegionMatte, rasterizeSmartRegionBoxes, smartRegionMaskSize, SMART_REGION_FORMAT_VERSION, type SmartRegionBox, type SmartRegionMaskParams } from './smartRegions'
 import { rasterizeVideoEditMaskShapes } from './effectMasks'
+import { videoEditAngleDelta, videoEditBoxPose, videoEditTrackPoseOnFrame, type VideoEditTrackPose } from './trackTransform'
 
 /*
  * 跟踪器（任务 4.10，实施方案第七节：跟踪 = 区域 + 方式 + 结果 + 绑定）。
@@ -15,6 +16,8 @@ import { rasterizeVideoEditMaskShapes } from './effectMasks'
 /** shape/box 用本地模型；point/planar 用后台 OpenCV 金字塔 LK 与 RANSAC，无需下载模型。 */
 export const VIDEO_EDIT_TRACK_METHODS = ['shape', 'box', 'point', 'planar'] as const
 export type VideoEditTrackMethod = (typeof VIDEO_EDIT_TRACK_METHODS)[number]
+/** 后台分析方式：跟踪器的方式加上防抖用的相机运动（camera，不出现在片段的跟踪器里，没有提示）。 */
+export type VideoEditAnalysisMethod = VideoEditTrackMethod | 'camera'
 export const VIDEO_EDIT_TRACK_METHOD_LABELS: Readonly<Record<VideoEditTrackMethod, string>> = { shape: '形状跟踪', box: '物体框跟踪', point: '点跟踪', planar: '平面跟踪' }
 /** Per-clip live matte/geometry analysis budget, shared with rendering and background model preparation. */
 export const VIDEO_EDIT_MAX_TRACKERS = 8
@@ -55,12 +58,27 @@ export const videoEditTrackPromptSchema = z.object({
 })
 export type VideoEditTrackPrompt = z.infer<typeof videoEditTrackPromptSchema>
 
+/**
+ * 录屏事件跟踪：结果直接由录制时的光标与前台窗口事件换算（精确、零计算），不做视觉跟踪。
+ * cursor 是一点跟踪（提示点为光标所在处，提示的 window.feature 是光标周围区域的大小）；
+ * window 是物体框跟踪（提示框为窗口里的区域，随窗口移动与缩放；windowId 为提示时刻的前台窗口）。
+ * 方式与提示仍是普通点 / 物体框跟踪，旧版本程序忽略这个字段时按视觉跟踪同一个点或框。
+ */
+export const videoEditTrackRecordingSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('cursor') }).strict(),
+  z.object({ kind: z.literal('window'), windowId: z.string().min(1).max(200).nullable() }).strict(),
+])
+export type VideoEditTrackRecording = z.infer<typeof videoEditTrackRecordingSchema>
+
 export const videoEditTrackerSchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().trim().min(1).max(60),
   method: z.enum(VIDEO_EDIT_TRACK_METHODS),
   prompts: z.array(videoEditTrackPromptSchema).min(1).max(VIDEO_EDIT_MAX_TRACK_PROMPTS),
+  recording: videoEditTrackRecordingSchema.optional(),
 }).strict().superRefine((tracker, ctx) => {
+  if (tracker.recording?.kind === 'cursor' && (tracker.method !== 'point' || tracker.prompts.length !== 1 || tracker.prompts[0].points?.length !== 1)) ctx.addIssue({ code: 'custom', message: '光标跟踪是一点跟踪：method 为 point，只有一个提示、一个点。' })
+  if (tracker.recording?.kind === 'window' && (tracker.method !== 'box' || tracker.prompts.length !== 1)) ctx.addIssue({ code: 'custom', message: '窗口跟踪是物体框跟踪：method 为 box，只有一个提示框。' })
   if (tracker.method === 'box' && tracker.prompts.some(prompt => !prompt.box)) ctx.addIssue({ code: 'custom', message: '物体框跟踪的每个提示都要有 box（框住要跟踪的物体）。' })
   if ((tracker.method === 'box' || tracker.method === 'shape') && tracker.prompts.some(p=>p.quad || p.window)) ctx.addIssue({code:'custom',message:'quad 用于平面跟踪，window 用于点跟踪；形状与物体框提示不使用这两个字段。'})
   if (tracker.method === 'point' && tracker.prompts.some(p => !p.points || p.points.length > 4 || p.points.some(point => point[2] !== 1) || p.box || p.quad || p.candidate)) ctx.addIssue({ code: 'custom', message: '点跟踪每帧提示需要 1–4 个正向 points，不使用 box、quad 或 candidate。' })
@@ -84,9 +102,9 @@ export function videoEditTrackFps(mediaFps: number | undefined): number {
 export function videoEditTrackFrame(timeUs: number, fps: number): number { return Math.round(timeUs * fps / 1e6) }
 export function videoEditTrackFrameTime(frame: number, fps: number): number { return Math.round(frame * 1e6 / fps) }
 
-/** 渲染层与 Worker 用来对上结果的键：同一素材、同一方式、同样的提示 = 同一份结果。 */
-export function videoEditTrackerKey(mediaId: string, tracker: Pick<VideoEditTracker, 'method' | 'prompts'>): string {
-  return JSON.stringify([mediaId, tracker.method, [...tracker.prompts].sort((a, b) => a.timeUs - b.timeUs)])
+/** 渲染层与 Worker 用来对上结果的键：同一素材、同一方式、同样的提示 = 同一份结果（录屏事件跟踪另带来源）。 */
+export function videoEditTrackerKey(mediaId: string, tracker: Pick<VideoEditTracker, 'method' | 'prompts'> & { recording?: VideoEditTrackRecording }): string {
+  return JSON.stringify([mediaId, tracker.method, [...tracker.prompts].sort((a, b) => a.timeUs - b.timeUs), ...(tracker.recording ? [tracker.recording] : [])])
 }
 
 // ==================== 结果文件（与 4.7d 智能区域同一种容器：JSON 头 + 帧索引 + 每帧 deflate 数据） ====================
@@ -102,7 +120,7 @@ const RECORD_HEADER_BYTES = 4 + VIDEO_EDIT_TRACK_POINTER_SIZE * 4
 export interface VideoEditTrackHeader {
   version: number
   kind: 'track'
-  method: VideoEditTrackMethod
+  method: VideoEditAnalysisMethod
   /** 实际使用的模型（efficienttam / vittrack），只用于日志。 */
   model: string
   fps: number
@@ -118,6 +136,11 @@ export interface VideoEditTrackHeader {
   boxes: Array<VideoEditTrackBox | null>
   /** 形状跟踪：每帧记录的 logit 尺寸。 */
   logits?: { width: number; height: number; scale: number }
+  /**
+   * 相机运动（防抖分析）：每帧到锚定帧的累计相似变换 [a, b, tx, ty, 内点比例]，坐标以画面中心为原点、画面高度为单位。
+   * 整条路径放在文件头里，平滑求解一次读完，不逐帧取记录。
+   */
+  camera?: Array<[number, number, number, number, number]>
   summary: { tracked: number; lost: number }
 }
 
@@ -289,8 +312,9 @@ export function videoEditTrackShapeMask(logits: Int8Array, header: Pick<VideoEdi
 // ==================== 片段跟随 ====================
 
 /**
- * 片段跟随（元素跟随）：文字、图片、片段的位置跟着另一个片段上的跟踪框走（可选同时跟随缩放）。
+ * 片段跟随（元素跟随）：文字、图片、片段的位置跟着另一个片段上的跟踪走（可选同时跟随缩放、旋转）。
  * 位置 = 跟踪框中心（换算到序列画面）+ 偏移；缩放 = 片段自己的缩放 × 当前框大小 / 建立跟随时的框大小。
+ * 变换跟随（motion）按跟踪的相似变换：偏移随跟踪转动、缩放，旋转 = 片段自己的旋转 + 跟踪角度变化。
  * 跟踪结果驱动，不写成逐帧数值：跟踪重算或纠错后跟随自动更新（与 4.14 关键帧的衔接见任务文件）。
  */
 export const videoEditClipFollowSchema = z.object({
@@ -303,30 +327,67 @@ export const videoEditClipFollowSchema = z.object({
   offsetY: z.number().finite().min(-2).max(2),
   /** 跟随缩放时，建立跟随那一帧跟踪框的大小（序列画面里 √(宽 × 高) 占序列高度的比例）；不写只跟随位置。 */
   scaleReference: z.number().finite().positive().max(10).optional(),
+  /**
+   * 变换跟随（两点及以上的点跟踪、平面跟踪、物体框）：建立跟随那一帧的跟踪角度（度，序列画面）与大小（占序列高度的比例）。
+   * 有它时按跟踪的相似变换走：位置取跟踪锚点，偏移随跟踪一起转动、缩放；写了 rotation 跟随旋转、写了 size 跟随缩放，
+   * 此时不用 scaleReference。旧版本程序忽略它，只跟随位置。
+   */
+  motion: z.object({ rotation: z.number().finite().min(-360).max(360).optional(), size: z.number().finite().positive().max(10).optional() }).strict().refine(value => value.rotation !== undefined || value.size !== undefined, 'motion 至少跟随旋转或缩放之一。').optional(),
 }).strict()
 export type VideoEditClipFollow = z.infer<typeof videoEditClipFollowSchema>
 
 /** 跟踪框中心换算到序列画面（归一化）与框大小（序列画面里 √(宽 × 高) 占序列高度的比例）。 */
 export function videoEditTrackBoxOnFrame(target: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize, box: VideoEditTrackBox): { x: number; y: number; size: number } {
-  const center = videoEditClipToFrame(target, picture, frame, box[0] + box[2] / 2, box[1] + box[3] / 2)
-  const scale = videoEditClipPixelScale(target, picture, frame)
-  return { x: center.x, y: center.y, size: Math.sqrt(box[2] * picture.width * scale * box[3] * picture.height * scale) / frame.height }
+  const on = videoEditTrackPoseOnFrame(target, picture, frame, videoEditBoxPose(box, picture.width / Math.max(1, picture.height)))
+  return { x: on.x, y: on.y, size: on.size! }
 }
 
-/** 跟随片段在这一帧的位置与缩放。 */
-export function videoEditFollowPlacement(follow: VideoEditClipFollow, scale: number, target: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize, box: VideoEditTrackBox): { x: number; y: number; scale: number } {
-  const on = videoEditTrackBoxOnFrame(target, picture, frame, box)
+/** 一帧的跟踪：框（位置跟随与旧的缩放跟随）与能求出的姿态（变换跟随）。 */
+export interface VideoEditFollowTrack { box: VideoEditTrackBox; pose?: VideoEditTrackPose }
+/** 跟随片段这一帧的位置、缩放与旋转；trackingRotation 是跟随带来的旋转增量（旋转关键帧在它之上叠加）。 */
+export interface VideoEditFollowResult { x: number; y: number; scale: number; rotation: number; trackingRotation?: number }
+
+/** 跟随片段在这一帧的位置、缩放与旋转。 */
+export function videoEditFollowPlacement(follow: VideoEditClipFollow, clip: Pick<VideoEditClipPlacement, 'scale' | 'rotation'>, target: VideoEditClipPlacement, picture: VideoEditSize, frame: VideoEditSize, track: VideoEditFollowTrack): VideoEditFollowResult {
+  const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value))
+  if (!follow.motion) {
+    const on = videoEditTrackBoxOnFrame(target, picture, frame, track.box)
+    return { x: clamp(on.x - 0.5 + follow.offsetX, 2), y: clamp(on.y - 0.5 + follow.offsetY, 2), rotation: clip.rotation, scale: follow.scaleReference ? Math.max(0.01, Math.min(4, clip.scale * on.size / follow.scaleReference)) : clip.scale }
+  }
+  const on = videoEditTrackPoseOnFrame(target, picture, frame, track.pose ?? videoEditBoxPose(track.box, picture.width / Math.max(1, picture.height)))
+  const ratio = follow.motion.size !== undefined && on.size !== undefined ? on.size / follow.motion.size : 1
+  const delta = follow.motion.rotation !== undefined && on.angle !== undefined ? videoEditAngleDelta(on.angle - follow.motion.rotation) : 0
+  // 偏移在序列像素里随跟踪一起转动、缩放（AE：附加点绕跟踪点转）。
+  const cos = Math.cos(delta * Math.PI / 180) * ratio; const sin = Math.sin(delta * Math.PI / 180) * ratio
+  const ox = follow.offsetX * frame.width; const oy = follow.offsetY * frame.height
   return {
-    x: Math.max(-2, Math.min(2, on.x - 0.5 + follow.offsetX)), y: Math.max(-2, Math.min(2, on.y - 0.5 + follow.offsetY)),
-    scale: follow.scaleReference ? Math.max(0.01, Math.min(4, scale * on.size / follow.scaleReference)) : scale,
+    x: clamp(on.x - 0.5 + (ox * cos - oy * sin) / frame.width, 2), y: clamp(on.y - 0.5 + (ox * sin + oy * cos) / frame.height, 2),
+    scale: Math.max(0.01, Math.min(4, clip.scale * ratio)), rotation: clamp(clip.rotation + delta, 360), ...(delta ? { trackingRotation: delta } : {}),
   }
 }
 
-/** 建立跟随：让片段停在现在的位置（这一帧的跟踪框中心 + 偏移 = 片段现在的中心），跟随缩放时记下这一帧的框大小。 */
-export function videoEditFollowBinding(clip: Pick<VideoEditClipPlacement, 'x' | 'y'>, target: { clipId: string; trackerId: string; placement: VideoEditClipPlacement; picture: VideoEditSize }, frame: VideoEditSize, box: VideoEditTrackBox, followScale: boolean): VideoEditClipFollow {
-  const on = videoEditTrackBoxOnFrame(target.placement, target.picture, frame, box)
+/** 跟踪能跟随哪些分量：一点只有位置；两点及以上的点、平面有旋转与缩放；物体框与形状只有缩放；四点与平面可角点贴合。 */
+export function videoEditTrackerFollowAbilities(tracker: Pick<VideoEditTracker, 'method' | 'prompts'>): { rotation: boolean; scale: boolean; cornerPin: boolean } {
+  const points = tracker.method === 'point' ? tracker.prompts[0]?.points?.length ?? 0 : 0
+  return { rotation: tracker.method === 'planar' || points >= 2, scale: tracker.method !== 'point' || points >= 2, cornerPin: tracker.method === 'planar' || points === 4 }
+}
+
+/**
+ * 建立跟随：让片段停在现在的位置（这一帧的跟踪锚点 + 偏移 = 片段现在的中心）。
+ * 跟随旋转、或有角度的跟踪跟随缩放时记下这一帧的跟踪角度与大小（变换跟随）；物体框只跟随缩放沿用 scaleReference。
+ */
+export function videoEditFollowBinding(clip: Pick<VideoEditClipPlacement, 'x' | 'y'>, target: { clipId: string; trackerId: string; placement: VideoEditClipPlacement; picture: VideoEditSize }, frame: VideoEditSize, track: VideoEditFollowTrack, follow: { scale?: boolean; rotation?: boolean }): VideoEditClipFollow {
   const round = (value: number): number => Math.round(value * 1e5) / 1e5
-  return { clipId: target.clipId, trackerId: target.trackerId, offsetX: round(Math.max(-2, Math.min(2, clip.x - (on.x - 0.5)))), offsetY: round(Math.max(-2, Math.min(2, clip.y - (on.y - 0.5)))), ...(followScale ? { scaleReference: round(Math.max(1e-4, on.size)) } : {}) }
+  const offset = (on: { x: number; y: number }): { offsetX: number; offsetY: number } => ({ offsetX: round(Math.max(-2, Math.min(2, clip.x - (on.x - 0.5)))), offsetY: round(Math.max(-2, Math.min(2, clip.y - (on.y - 0.5)))) })
+  const binding = { clipId: target.clipId, trackerId: target.trackerId }
+  if (follow.rotation || (follow.scale && track.pose?.angle !== undefined)) {
+    const on = videoEditTrackPoseOnFrame(target.placement, target.picture, frame, track.pose ?? videoEditBoxPose(track.box, target.picture.width / Math.max(1, target.picture.height)))
+    if (follow.rotation && on.angle === undefined) throw new Error('这个跟踪只能跟随位置或缩放：跟随旋转需要两点及以上的点跟踪或平面跟踪。')
+    if (follow.scale && on.size === undefined) throw new Error('一点跟踪只能跟随位置：跟随缩放需要两点及以上的点跟踪、平面或物体框跟踪。')
+    return { ...binding, ...offset(on), motion: { ...(follow.rotation ? { rotation: round(on.angle!) } : {}), ...(follow.scale ? { size: round(Math.max(1e-4, on.size!)) } : {}) } }
+  }
+  const on = videoEditTrackBoxOnFrame(target.placement, target.picture, frame, track.box)
+  return { ...binding, ...offset(on), ...(follow.scale ? { scaleReference: round(Math.max(1e-4, on.size)) } : {}) }
 }
 
 /** 手绘遮罩跟随：按跟踪框相对参考框的平移与缩放（以框中心为基准）。 */

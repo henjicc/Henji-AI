@@ -20,6 +20,7 @@ import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditCodeImageGenerationSchema } from './codeImageGeneration'
 import { videoEditLabelSchema } from './labels'
 import { videoEditTrackerSchema, videoEditClipFollowSchema, VIDEO_EDIT_MAX_TRACKERS } from './tracking'
+import { videoEditClipStabilizationSchema } from './stabilization'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
 import { videoEditInPlaceRecordsSchema } from './inPlacePersistence'
 import { videoEditClipCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS, videoEditClipAnimatedValueSchemas, videoEditKeyframeValues } from './keyframes'
@@ -69,6 +70,8 @@ const videoEditClipStateSchema = z.object({
   multicamCameraId: identifier.optional(),
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
   follow: videoEditClipFollowSchema.optional(),
+  /** 防抖参数（平滑程度、最大裁切、是否校正旋转与缩放）；相机运动分析按素材内容缓存，渲染时实时修正。 */
+  stabilization: videoEditClipStabilizationSchema.optional(),
   contentAnchor: videoEditContentAnchorSchema.optional(),
   snapToBeat: z.boolean().optional().describe('超级关键帧整理时吸附到序列节拍标记，钉点优先。'),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),

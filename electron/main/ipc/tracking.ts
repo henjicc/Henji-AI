@@ -42,6 +42,11 @@ export function parseTrackingFrameReply(input: unknown): TrackingFrameReply {
 function parseDefinition(value: unknown): TrackingDefinition {
   const record = parseRecord(value)
   if (Object.keys(record).some(key => !['source', 'method', 'prompts'].includes(key))) throw new Error('跟踪请求含未知字段。')
+  // camera：防抖的相机运动分析，没有提示。
+  if (record.method === 'camera') {
+    if (!Array.isArray(record.prompts) || record.prompts.length) throw new Error('相机运动分析不带提示。')
+    return { source: parseSource(record.source), method: 'camera', prompts: [] }
+  }
   if (typeof record.method !== 'string' || !(VIDEO_EDIT_TRACK_METHODS as readonly string[]).includes(record.method)) throw new Error('无效的跟踪方式。')
   if (!Array.isArray(record.prompts) || !record.prompts.length || record.prompts.length > VIDEO_EDIT_MAX_TRACK_PROMPTS) throw new Error('跟踪提示数量无效。')
   return { source: parseSource(record.source), method: record.method as TrackingDefinition['method'], prompts: record.prompts.map(prompt => videoEditTrackPromptSchema.parse(prompt)) }
