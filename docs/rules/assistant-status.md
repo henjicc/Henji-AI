@@ -1,3 +1,4 @@
+2026-10-22：剪辑风格与模板换成 Frameflow 的风格预设与模板机制（用户确认照搬）：**推翻 t97 第三阶段、t68 与 4.30 的风格/标题模板口径**（见第五节）。新通用实体 video_edit.style（风格库，内置六套只读）、video_edit.template（库模板）、video_edit.project_style（工程副本，只读，writeExclusion）、video_edit.project_template（工程模板，可改名称/说明/所属风格、取消登记），序列绑定改为 video_edit.sequence.style_id，片段新增只读 template_id；读改增删与成员关系都走通用动词。新增 9 个算法能力：render_video_edit_style、import/export_video_edit_style_package、bind_video_edit_style、apply/create/promote/update_video_edit_template、detach_video_edit_template_instance。删除 video_edit.style_kit / style_preset / title_template 实体与 apply_video_edit_title_template、generate_video_edit_title_from_description；video_edit.preset 不再列风格与标题。宿主上下文 currentStyleKit 改为 currentStyle（带版本与库更新提示）。精确测试、能力门禁、双 tsc 与真实 Electron 隔离场景 video-edit-styles 见提交记录；真实 Pi/MCP 按风格创作的语义质量未验，未付费。
 2026-10-22：剪辑新增 remix_video_edit_music（对标 PR“重新混合”）：音频片段按目标秒数/帧数、序列结尾或某片段出点自动重新拼接，加长缩短都精确到帧；节拍与小节来自本地模型 music_beats_beat_this（Beat This!，首次自动下载，失败回退谱通量），分析按文件内容缓存在主进程。结果为同轨子片段 + 2 帧恒定功率接缝过渡，一步撤销；子片段只读属性 video_edit.clip.remix 记录参数、原始源范围与接缝把握，再次调用任一子片段即按新参数重算整组；video_edit.media.music_structure 读回 BPM、拍号与段落。自由节奏明确拒绝并给原因，目标过短给出可行下限。UI 右键“重构到时长…”、Pi、MCP 同源，外部契约 2.49.0。精确结果测试与真实歌曲离线实测通过；真实 Electron 窗口与 Pi/MCP 模型任务未验收。
 2026-10-22：剪辑跟踪补全、防抖与录屏事件跟踪接通（分支 claude/track-stabilize-b67f16）。新增三个算法能力：follow_video_edit_tracker（片段跟随跟踪器，两点及以上的点跟踪、平面跟踪可同时跟随旋转与缩放，四点/平面可角点贴合；apply=keyframes 把每帧位置、缩放、旋转写成关键帧并去掉绑定，对标 AE“应用”）、stabilize_video_edit_clip（后台相机运动分析 + L1 最优路径，平滑程度 subtle/natural/locked、最大裁切、是否校正旋转/缩放，返回实际裁切）、track_video_edit_recording（录屏片段按录制事件建立光标或窗口跟踪器，零计算）。参数修改走通用属性 video_edit.clip.stabilization、video_edit.clip.follow（新增 motion），跟踪器新增只读 recording。剪辑内容格式 19→20（只增可选字段，最低可读 18），外部契约 2.48.0。公共入口结果测试与隔离资料目录真实 Electron 场景（外部 MCP 调用：两点旋转跟随误差 0.5°、防抖帧差 135→1.4、光标跟随横移误差 0.0002）通过；真实 Pi 模型任务未验收。
 
@@ -713,6 +714,10 @@ L-B 已经没有独立 npm 脚本，harness 文件也从 `assistantHarness.*` �
 - **删除数据分级（C0–C3）、暴露面、五档风险等级** —— 对单机应用偏重，但在跑且没添麻烦，拆除风险大于收益。
 
 ## 五、推翻记录
+
+### 2026-10-22：风格说明书与标题模板换成风格预设与模板
+
+推翻 t97 第三阶段（说明书固定九章 + 0–6 段参考示例、style_kit/style_preset 两个实体）、t68 风格包与 4.30 动态图形标题模板（六种程序化标题、描述生成付费能力）。用户在 Frameflow 的真实片子里打磨出的机制更完整：说明书十四栏写引导不写参数表，样片按标准分镜演示并渲染出预览与锚点帧（版本只在渲染时随内容变化加 1）；模板是换内容就能复用的元素，默认联动、改前先说影响、单独改一处先分离，工程模板与全局模板分开，库里更新只提示、同意才升级。旧做法不能留：两套风格与模板会让助手和用户各用一套。旧数据按持久格式迁移保留（剪辑内容 20、录制会话 21、旧本机库与预设文件导入时转换），六种程序化标题图形只留作录屏成片步骤标题与旧条目转换。
 
 2026-10-19：只绑定文档实例与修订号不能证明观察内容未变：后台续跟会更新跟踪结果文件而不编辑作品。documentVersion现同时绑定已有跟踪结果身份，查询分页与观察交付前复核；进度通知不使版本失效。拒绝过期来源发生在发布资产之前，跨工作区测试不再期待过期取帧产生新资产。
 

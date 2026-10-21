@@ -4,7 +4,7 @@ import { migrateEmbeddedVideoColorGradesV1 } from '../../videoEdit/colorGradeMig
 import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
 import { colorLutAssetSchema } from '../../videoEdit/colorLutAsset'
-import { styleKitSchema } from '../../videoEdit/styleKit'
+import { migrateVideoEditStyles } from '../../videoEdit/styles/legacyStyles'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
 import { VIDEO_EDIT_CONTENT_VERSION } from '../../persistence/schemaVersions'
@@ -42,7 +42,8 @@ const sequenceSchema = z.looseObject({
 export const videoEditContentSchema = z.object({
   exportHistory: videoEditDocumentSchema.shape.exportHistory,
   creativeIntents: creativeIntentsSchema.optional(),
-  styleKits: z.array(styleKitSchema).optional(),
+  styles: videoEditDocumentSchema.shape.styles,
+  templates: videoEditDocumentSchema.shape.templates,
   colorLuts: z.array(colorLutAssetSchema).optional(),
   media: z.array(z.looseObject({ id: z.string().min(1), path: z.string().min(1) })),
   bins: z.array(identified),
@@ -116,8 +117,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   storage: 'json',
   // 版本 1 = 旧剪辑文件第 2 版的持久字段（去掉 format / version / id / name / revision，由外壳表达）。
   version: VIDEO_EDIT_CONTENT_VERSION,
-  // 第 19、20、21 版只新增可选字段（速度曲线、补帧、变调；跟随 motion、跟踪器 recording、防抖；音频重构 remix）：第 18 版程序仍能正确打开并原样保留它们。
-  minReaderVersion: 18,
+  // 第 22 版删除了旧程序依赖的 styleKits 与序列 styleKitId：更早的程序不能正确理解，最低可读版本提高到 22。
+  minReaderVersion: 22,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -129,6 +130,9 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     19: content => content,
     // 20 → 21：片段新增可选的音频重构记录 remix，旧内容原样保留。
     20: content => content,
+    // 21 → 22：风格说明书换成 Frameflow 的风格包机制。工程风格包转成风格副本（旧栏目并入新栏目、参考示例记进“样片与代码”），
+    // 序列绑定 styleKitId 改名 styleId；新增工程模板 templates 与原生模板实例标记 clip.templateId。
+    21: content => migrateVideoEditStyles(content),
   },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,

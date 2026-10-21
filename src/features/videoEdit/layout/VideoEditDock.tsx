@@ -1,6 +1,6 @@
 import { focusVideoEditPanelElement } from './videoEditPanelFocus'
 import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
-import { VideoEditStyleKitsPanel } from '../panels/VideoEditStyleKitsPanel'
+import { VideoEditStylesPanel } from '../panels/VideoEditStylesPanel'
 import { VideoEditPresetsPanel } from '../panels/VideoEditPresetsPanel'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
@@ -20,7 +20,7 @@ import { VideoEditEffectsPanel } from '../panels/VideoEditEffectsPanel'
 import { VideoEditSourcePanel } from '../panels/VideoEditSourcePanel'
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
 import { VideoEditEffectsLibraryPanel } from '../panels/VideoEditEffectsLibraryPanel'
-import { VideoEditTitleTemplatesPanel } from '../panels/VideoEditTitleTemplatesPanel'
+import { VideoEditTemplatesPanel } from '../panels/VideoEditTemplatesPanel'
 import { readVideoEditSource, subscribeVideoEditSource } from '../application/videoEditSource'
 import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
@@ -55,9 +55,9 @@ function SourceBody({ visible }: { visible: boolean }): React.ReactElement { ret
 const VIDEO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock', 4)
 function TrackingBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="tracking"><VideoEditTrackingPanel {...useDock(visible)} visible={visible} /></div> }
 function ColorGradeBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="color_grade"><VideoEditColorGradePanel {...useDock(visible)} visible={visible} /></div> }
-function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="title_templates"><VideoEditTitleTemplatesPanel {...useDock(visible)} visible={visible} /></div> }
+function TitleTemplatesBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="title_templates"><VideoEditTemplatesPanel {...useDock(visible)} visible={visible} /></div> }
 function AnnotationsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="annotations"><VideoEditAnnotationsPanel {...useDock(visible)} visible={visible} /></div> }
-function StyleKitsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="style_kits"><VideoEditStyleKitsPanel {...useDock(visible)} visible={visible} /></div> }
+function StyleKitsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="style_kits"><VideoEditStylesPanel {...useDock(visible)} visible={visible} /></div> }
 function PresetsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="presets"><VideoEditPresetsPanel {...useDock(visible)} visible={visible} /></div> }
 const BODIES: Record<VideoEditPanelId, PanelBody> = { presets: PresetsBody, style_kits: StyleKitsBody, annotations: AnnotationsBody, title_templates: TitleTemplatesBody, color_grade: ColorGradeBody, tracking: TrackingBody, project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {

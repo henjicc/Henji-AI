@@ -358,7 +358,7 @@ export function focusVideoEdit(id: string): void { requireVideoEditInstance(id);
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
 /** Metadata-only heads preserve the acknowledged render snapshot; they must not reset playback/GPU pixels. */
 function inheritVideoEditCompositions(previous: VideoEditDocument, next: VideoEditDocument): void {
-  if (previous.revision !== next.revision || previous.sequences !== next.sequences || previous.media !== next.media || previous.items !== next.items || previous.styleKits !== next.styleKits || previous.colorLuts !== next.colorLuts || previous.codeMaterials !== next.codeMaterials) return
+  if (previous.revision !== next.revision || previous.sequences !== next.sequences || previous.media !== next.media || previous.items !== next.items || previous.styles !== next.styles || previous.templates !== next.templates || previous.colorLuts !== next.colorLuts || previous.codeMaterials !== next.codeMaterials) return
   const cache = compositions.get(previous); if (cache) compositions.set(next, cache)
   const origin = undoneFrom.get(previous); if (origin) undoneFrom.set(next, origin)
 }

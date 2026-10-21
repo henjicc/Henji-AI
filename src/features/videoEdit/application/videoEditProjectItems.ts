@@ -7,7 +7,7 @@ import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { videoEditAudioMappingSchema, videoEditAudioLayoutSchema, type VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
-import { withDefaultVideoEditStyle } from './videoEditDefaultStyle'
+import { withDefaultVideoEditStyle } from './videoEditStyles'
 
 export { videoEditItemUsage }
 export type { VideoEditSequenceSettings }

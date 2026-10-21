@@ -327,9 +327,9 @@
     },
     {
       "from": "src/features/application-control/hostContext/hostContext.ts",
-      "to": "src/features/videoEdit/application/videoEditStyleKits.ts",
+      "to": "src/features/videoEdit/application/videoEditStyles.ts",
       "kind": "static",
-      "specifier": "@/features/videoEdit/application/videoEditStyleKits",
+      "specifier": "@/features/videoEdit/application/videoEditStyles",
       "line": 6,
       "cell": "application-control → videoEdit"
     },

@@ -1,6 +1,6 @@
 ---
 name: video-edit-code-creation
-description: 在剪辑里设计、编写或修改代码素材：动态图形、标题、花字、粒子、着色器、滤镜与转场，含风格说明书与取帧审查。普通剪辑、媒体生成和进度查询不触发。
+description: 在剪辑里设计、编写或修改代码素材：动态图形、标题、花字、粒子、着色器、滤镜与转场，含风格预设、模板与取帧审查。普通剪辑、媒体生成和进度查询不触发。
 ---
 
 # 剪辑代码创作：先导演，再写代码
@@ -9,7 +9,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 
 ## 审美听谁的
 
-1. 序列绑定的风格说明书与本次需求。
+1. 本次需求、品牌规范与序列绑定的风格预设（说明书）。
 2. 用户的长期偏好（共享记忆）。
 3. 你自己的判断。
 
@@ -30,12 +30,12 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 - 先说“用什么画面讲哪一句”。装饰可以多，但要有主次：观众每一刻都知道看哪里。
 - 动作解释看哪里、阅读顺序与交接；快慢、动静、大小的对比由风格决定。注意力事件少而准、各有理由，静止也可以是对的。
 - AI 作者主动把用户大概率想调的文案、时长/延迟/节奏、颜色、位置、大小和强度声明成参数；数量克制，按元素分组，不把所有数值都开放。画面从参数推导，改动优先改参数。
-- 新作者 JS 默认给每段可见文字声明 `text` 内容与 `textStyle` 文字样式参数，两者用 `layer` 绑定同一图层；字体、字号、字重、字距、行距、填充和描边的默认值跟随风格包。未声明的文字才改源码。
+- 新作者 JS 默认给每段可见文字声明 `text` 内容与 `textStyle` 文字样式参数，两者用 `layer` 绑定同一图层；字体、字号、字重、字距、行距、填充和描边的默认值跟随风格预设。未声明的文字才改源码。
 - 动态生成图层用数据键或索引组成稳定 id（如 `node-3`）；驱动数组用 `table` 参数声明 `fields` 与 `default`，建议用 `rowKey` 指定稳定键。图层用 `data:{parameter,keyField,key}`（或 `data:{parameter,index}`）绑定对应项，`factory:{file,name}` 指向工厂函数；选中后改内容直接改数据，改外观改工厂。
 - 拖动、缩放和旋转的覆盖立即生效并长期保存，不等源码写回。已声明参数无需写回；只有用户需要整理源码时才后台或批量创建新版本、验证后合并覆盖，写回前后都进同一撤销栈。
 - 同类元素的规则由说明书定；局部变化要有语义。
 - 大作品（多镜头或 15 秒以上）先做主停留帧，取帧读图给用户确认方向；短小内容直接做完。用户说过“不用停”“直接做完”就自主选定并说明。改字、换色不重做提案。
-- 绑定了说明书：开工前读，做完逐条对照“必须”自查。自己选的风格不算用户口味。
+- 绑定了风格：开工前读说明书、看锚点帧，做完逐条对照不变量与硬约束自查。自己选的风格不算用户口味。做标题、人名条这类反复出现的元素先查模板。
 - 改已有作品：先用 `read_application_entity` 读素材、参数、曲线、覆盖与位置，并看原画面。保留满意的内容；源码改动新增版本再重绑；核对共享实例和邻接缝。
 - 每组修改后用 `observe_video_edit_frame` 取受影响画面，用 `read_application_media` 真读图。交付分清：读回了什么、看过哪些帧、哪些未验证。导出和收录听用户安排，不自动增加付费或权限。
 
@@ -46,14 +46,14 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 任务 | 参考 |
 | --- | --- |
 | 简报、概念、拆参考 | [简报与概念](references/brief-concept.md) |
-| 风格说明书、风格／构图／字体／颜色 | [风格说明书](references/style-kit.md)、[风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
+| 风格预设（读、选、建、改、分享）、风格／构图／字体／颜色 | [风格预设](references/style-kit.md)、[风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
 | 质感选型、实现边界、试一帧 | [定做法](references/approach.md) |
 | 时长曲线、错峰、因果、转场 | [运动](references/motion.md) |
 | 动多少、何时静止、太忙或僵住、删减与密度 | [注意力与克制](references/attention.md) |
 | 镜头感、分层视差、换场不空、像 PPT | [镜头感](references/camera.md) |
 | 全片节奏、讲解、声画 | [结构](references/structure.md) |
 | 取帧、批注、A/B、评分、交付 | [审查](references/review.md)、[常见症状](references/review-ai.md) |
-| 换字自适应、量字、压力测试 | [模板](references/templates.md) |
+| 模板（登记、复用、联动、全局）、换字自适应、压力测试 | [模板](references/templates.md) |
 | 开工读口味、明确评价后保存 | [偏好](references/preferences.md) |
 | 逐字／逐词、遮罩、排版 | [文字配方](references/recipes-text.md)、[逐词分拍](references/recipes-text-words.md) |
 | 打字机、光标、数字滚动 | [终端与数字](references/recipes-text-data.md) |

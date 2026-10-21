@@ -40,7 +40,7 @@ import { prepareVideoEditCaption } from './videoEditCaptionCreation'
 import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
 import { resolveVideoEditContentAnchor, verifyVideoEditContentAnchorSources } from './videoEditContentAnchors'
 import { retimeVideoEditContentClips } from '@/core/videoEdit/contentAnchors'
-import { defaultVideoEditStyleBinding } from './videoEditDefaultStyle'
+import { withDefaultVideoEditStyle } from './videoEditStyles'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting; proxyPreference: VideoEditProxyPreference; renderPreference: VideoEditRenderPreference }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
@@ -243,7 +243,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
             if (!sequence.multicam || value.cameras.length !== sequence.multicam.cameras.length || value.cameras.some((camera, index) => camera.id !== sequence.multicam!.cameras[index].id || camera.clipId !== sequence.multicam!.cameras[index].clipId)) throw new Error('只能修改现有机位名称、说话人和主音频，请保留机位引用和顺序。')
           }
           const next = changeVideoEditSequenceSettings(sequence, { width: Number(data.width), height: Number(data.height), frameRate: data.frameRate as typeof sequence.frameRate, pixelAspectRatio: data.pixelAspectRatio as typeof sequence.pixelAspectRatio, sampleRate: data.sampleRate as typeof sequence.sampleRate, channels: data.channels as typeof sequence.channels })
-          return { ...next, ...(keys.includes('video_edit.sequence.caption_track_enabled') ? { captionTrackEnabled: videoEditSequenceSchema.shape.captionTrackEnabled.unwrap().parse(data.captionTrackEnabled) } : {}), ...(keys.includes('video_edit.sequence.caption_track_locked') ? { captionTrackLocked: videoEditSequenceSchema.shape.captionTrackLocked.unwrap().parse(data.captionTrackLocked) } : {}), ...(keys.includes('video_edit.sequence.multicam') ? { multicam: videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam) } : {}), ...(keys.includes('video_edit.sequence.style_kit_id') ? { styleKitId: data.styleKitId ? String(data.styleKitId) : undefined } : {}), name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
+          return { ...next, ...(keys.includes('video_edit.sequence.caption_track_enabled') ? { captionTrackEnabled: videoEditSequenceSchema.shape.captionTrackEnabled.unwrap().parse(data.captionTrackEnabled) } : {}), ...(keys.includes('video_edit.sequence.caption_track_locked') ? { captionTrackLocked: videoEditSequenceSchema.shape.captionTrackLocked.unwrap().parse(data.captionTrackLocked) } : {}), ...(keys.includes('video_edit.sequence.multicam') ? { multicam: videoEditSequenceSchema.shape.multicam.unwrap().parse(data.multicam) } : {}), ...(keys.includes('video_edit.sequence.style_id') ? { styleId: data.styleId ? String(data.styleId) : undefined } : {}), name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
         }
         // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
         if (this.entityType === 'video_edit.clip' && sequence.clips.some(clip => clip.id === childId)) {
@@ -384,7 +384,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             refs.push({ kind: this.entityType, id: `${before.id}:${created}` }); continue
           }
           switch (this.entityType) {
-            case 'video_edit.sequence': { const binding = defaultVideoEditStyleBinding(document, values as { styleKitId?: string }); if (binding) document.styleKits = binding.styleKits; document.sequences.push({ ...createVideoEditSequence(), ...useSettingsStore.getState().videoEditSequenceDefaults, ...(binding ? { styleKitId: binding.styleKitId } : {}), ...values, id } as ReturnType<typeof createVideoEditSequence>); break }
+            case 'video_edit.sequence': { const styled = withDefaultVideoEditStyle(document, { ...createVideoEditSequence(), ...useSettingsStore.getState().videoEditSequenceDefaults, ...values, id } as ReturnType<typeof createVideoEditSequence>); document.styles = styled.document.styles; document.sequences.push(styled.sequence); break }
             case 'video_edit.bin': document.bins.push(videoEditBinSchema.parse({ id, ...values })); break
             case 'video_edit.item': {
               if (values.kind === 'graphic') {

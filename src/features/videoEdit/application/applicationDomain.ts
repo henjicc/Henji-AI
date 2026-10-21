@@ -9,11 +9,10 @@ import { videoEditStaggerCapability } from '@/core/application-control/domains/v
 import { staggerVideoMotion } from './videoEditMotionDraft'
 export { videoCreativeIntentProvider } from './videoEditCreativeIntentReflection'
 import { VideoEditTextPresetExecutor, VideoEditTextPresetMutationExecutor } from './videoEditTextPresetReflection'
-import { VideoEditStyleKitCollectionExecutor, VideoEditStyleKitMutationExecutor, STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY } from './videoEditStyleKitReflection'
+import { VideoEditProjectTemplateCollectionExecutor, VideoEditProjectTemplateMutationExecutor, VideoEditStyleCollectionExecutor, VideoEditStyleMutationExecutor, STYLE_ENTITY, TEMPLATE_ENTITY } from './videoEditStyleReflection'
 import { VideoEditPresetMutationExecutor } from './videoEditPresetReflection'
 import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability'
-import { handleTitleTemplateCapability } from './videoEditTitleTemplateCapability'
-import { TitleTemplateCollectionExecutor, TitleTemplateMutationExecutor } from './videoEditTitleTemplateReflection'
+import { handleVideoEditStyleCapability } from './videoEditStyleCapability'
 import { handleVideoEditProxyCapability } from './videoEditProxyCapability'
 import { handleVideoEditRenderCacheCapability } from './videoEditRenderCacheCapability'
 import { screenAttentionVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditScreenAttentionCapability'
@@ -109,12 +108,12 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
     engine.registerCollectionExecutor(new CodeComponentCollectionExecutor())
-    for (const type of [STYLE_KIT_ENTITY, STYLE_PRESET_ENTITY] as const) { engine.registerCollectionExecutor(new VideoEditStyleKitCollectionExecutor(type)); engine.registerMutationExecutor(new VideoEditStyleKitMutationExecutor(type)) }
+    for (const type of [STYLE_ENTITY, TEMPLATE_ENTITY] as const) { engine.registerCollectionExecutor(new VideoEditStyleCollectionExecutor(type)); engine.registerMutationExecutor(new VideoEditStyleMutationExecutor(type)) }
+    engine.registerCollectionExecutor(new VideoEditProjectTemplateCollectionExecutor())
+    engine.registerMutationExecutor(new VideoEditProjectTemplateMutationExecutor())
     engine.registerCollectionExecutor(new VideoEditTextPresetExecutor())
     engine.registerMutationExecutor(new VideoEditPresetMutationExecutor())
     engine.registerMutationExecutor(new VideoEditTextPresetMutationExecutor())
-    engine.registerCollectionExecutor(new TitleTemplateCollectionExecutor())
-    engine.registerMutationExecutor(new TitleTemplateMutationExecutor())
     engine.registerCollectionExecutor(new VideoEditExportPresetExecutor())
     engine.registerMutationExecutor(new VideoEditExportPresetMutationExecutor())
     for (const entityType of ['video_edit.document', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
@@ -154,8 +153,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (definition.id === placeVideoEditSoundEffectsCapability.id) return placeVideoEditSoundEffects(placeVideoEditSoundEffectsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === remixVideoEditMusicCapability.id) return executeVideoEditMusicRemixCapability(remixVideoEditMusicCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
-      const title = await handleTitleTemplateCapability(definition.id, raw, context.signal)
-      if (title !== undefined) return title
+      const styles = await handleVideoEditStyleCapability(definition.id, raw, context.signal)
+      if (styles !== undefined) return styles
       const multicam = await handleVideoEditMulticamCapability(definition.id, raw, context.signal)
       if (multicam !== undefined) return multicam
       const textEdit = await handleVideoEditTextCapability(definition.id, raw, context.signal)
@@ -329,7 +328,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     }))
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.title_template', 'video_edit.style_preset', 'video_edit.preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.title_template', 'video_edit.text_preset', 'video_edit.style_preset'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && !['video_edit.source', 'video_edit.export_preset', 'video_edit.text_preset', 'video_edit.template', 'video_edit.style', 'video_edit.preset'].includes(step.target.kind) ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && !['video_edit.export_preset', 'video_edit.template', 'video_edit.text_preset', 'video_edit.style'].includes(step.entityType) && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)

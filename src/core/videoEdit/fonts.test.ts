@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip } from './document'
-import { BUILTIN_TITLE_TEMPLATES, instantiateTitleTemplate, titleTemplateOverridesSchema } from './titleTemplates'
+import { titleGraphic } from './titleGraphics'
 import { defaultVideoEditTextStyle, layoutVideoEditText } from './text'
 import { videoEditSubtitleStyleSchema } from './subtitleStyle'
 import { collectVideoEditFonts, missingVideoEditFonts } from './fonts'
@@ -10,7 +10,8 @@ import { textStyleSchema } from '../imaging/vectorContent/text'
 
 it('任意字体名贯通文字、图形标题、字幕和嵌套序列；缺字体说明引用片段和回退', () => {
   const document = createVideoEditDocument('字体工程'); const sequence = createVideoEditSequence()
-  const title = instantiateTitleTemplate(BUILTIN_TITLE_TEMPLATES[0], { textStyle: { ...defaultVideoEditTextStyle(1080), fontFamily: '思源黑体 Bold' } }, sequence)[0]
+  const graphic = titleGraphic('lower_third', { textStyle: { ...defaultVideoEditTextStyle(1080), fontFamily: '思源黑体 Bold' } }, sequence.width, sequence.height, 4)
+  const title = { kind: 'graphic', graphic, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
   sequence.clips = [{ ...title, id: 'title', itemId: 'title-item', start: 0, track: 1, name: '开场标题' } as VideoEditClip,
     { ...title, graphic: undefined, id: 'text', itemId: 'text-item', kind: 'text', start: 0, track: 1, name: '正文', text: '字体', textStyle: { ...defaultVideoEditTextStyle(1080), fontFamily: '微软雅黑' } } as VideoEditClip]
   sequence.captions = [{ id: 'cue', text: '字幕示例', start: 0, duration: 30, style: videoEditSubtitleStyleSchema.parse({ fontFamily: 'Imported Serif' }) }]
@@ -21,7 +22,6 @@ it('任意字体名贯通文字、图形标题、字幕和嵌套序列；缺字�
   const missing = missingVideoEditFonts(uses, [{ ...GENERIC_FONT_FACES[0], id: 'yahei', family: 'Microsoft YaHei', localizedFamily: '微软雅黑', aliases: [] }])
   expect(missing.map(value => value.font)).toEqual(['思源黑体 Bold', 'Imported Serif'])
   expect(missing[0]).toMatchObject({ fallback: '系统无衬线字体', uses: expect.arrayContaining([expect.objectContaining({ label: expect.stringContaining('开场标题') })]) })
-  expect(titleTemplateOverridesSchema.parse({ textStyle: { ...defaultVideoEditTextStyle(1080), fontFamily: 'Imported Serif' } }).textStyle?.fontFamily).toBe('Imported Serif')
 })
 it('文字布局生成的 Canvas font 不允许字体名注入额外族', () => {
   const measure = vi.fn((_text: string, _font: string) => 20)

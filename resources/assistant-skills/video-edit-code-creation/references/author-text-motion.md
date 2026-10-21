@@ -4,7 +4,7 @@
 
 ## 文字参数与样式
 
-每段可见文字声明两项参数并用 `layer` 绑定到同一图层 id：`text` 存内容，`textStyle` 存样式。用户点选图层即可改字、改样式；默认值跟随风格包。
+每段可见文字声明两项参数并用 `layer` 绑定到同一图层 id：`text` 存内容，`textStyle` 存样式。用户点选图层即可改字、改样式；默认值跟随风格预设。
 
 `textStyle` 的值是对象（未填字段由你兜底）：`fontFamily`、`fontWeight`、`fontStyle`、`fontSize`（作品像素）、`tracking`（千分之一 em）、`leading`（行距像素，0 为自动 1.25 倍）、`align`、`fill:{enabled,color}`、`strokes:[{enabled,color,width,position}]`、`shadows:[{enabled,color,opacity,angle,distance,blur}]`、`allCaps` 等。颜色为六位十六进制。
 

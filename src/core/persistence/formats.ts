@@ -11,8 +11,9 @@ import { CODE_ASSET_VERSION, codeAssetSchema } from '../videoEdit/codeAsset'
 import { CODE_AUTHOR_API_VERSION, CODE_MATERIAL_VERSION_RECORD, codeAuthorApiSchema, codeMaterialVersionSchema } from '../videoEdit/codeMaterialPersistence'
 import { codeComponentMetadataSchema } from '../videoEdit/codeMaterial/components'
 import { codeMaterialFilesSchema } from '../videoEdit/codeMaterial/sources'
-import { styleKitSchema } from '../videoEdit/styleKit'
-import { titleTemplateSchema } from '../videoEdit/titleTemplates'
+import { legacyStyleKitSchema, legacyTitleTemplateSchema } from '../videoEdit/styles/legacyStyles'
+import { videoEditStyleSchema } from '../videoEdit/styles/styleSchemas'
+import { VIDEO_EDIT_STYLE_LIBRARY_VERSION, VIDEO_EDIT_STYLE_PACKAGE_VERSION, VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, videoEditStylePackageSchema, videoEditTemplateSchema } from '../videoEdit/styles/templateSchemas'
 import { VIDEO_EDIT_PRESET_PACKAGE_VERSION, videoEditPresetPackageSchema, videoEditPresetPreferencesSchema } from '../videoEdit/presetPackage'
 import { videoEditExportPresetSchema } from '../videoEdit/exportPresets'
 import { audioEditProjectSchema } from '../audioEdit/schema'
@@ -40,7 +41,7 @@ export interface PersistenceFormat extends PersistenceContract {
 
 function format(id: string, name: string, version: number, versionSource: string, readEntry: string, schema: z.ZodType, storage: PersistenceFormat['storage'] = 'file', schemas: Readonly<Record<string, z.ZodType>> = {}): PersistenceFormat {
   const container = ['settings', 'theme'].includes(id) ? z.object({ version: z.literal(version), state: schema })
-    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config', 'sound-library-folders'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
+    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
   return { id, name, version, versionSource, readEntry, schema, schemas: { content: schema, ...(container ? { container } : {}), ...schemas }, migrations: formatMigrations(id), storage, migrationEntry: storage === 'sqlite-ledger' ? 'electron/main/services/db-migrations.ts::SCHEMA_MIGRATIONS / runSchemaMigrations' : 'src/core/persistence/formatMigrations.ts / migrations.ts::upgradePersistenceContent' }
 }
 
@@ -62,8 +63,12 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('code-asset', '可编辑代码资产', CODE_ASSET_VERSION, 'CodeAsset.version', 'src/core/videoEdit/codeAsset.ts::decodeCodeAsset', codeAssetSchema),
   format('settings', '界面设置', SETTINGS_STORAGE_VERSION, 'settings-storage.version', 'src/stores/settingsStore.ts::persist', rendererSettingsSchema, 'local-storage'),
   format('theme', '主题选择', THEME_STORAGE_VERSION, 'theme-storage.version', 'src/stores/themeStore.ts::persist', z.object({ theme: z.enum(['dark', 'light']) }), 'local-storage'),
-  format('style-kits', '本机风格包', LOCAL_LIBRARY_FORMATS['video-edit-style-kits'].version, 'video-edit-style-kits.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(styleKitSchema), 'local-storage'),
-  format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(titleTemplateSchema), 'local-storage'),
+  // 2026-10-22 起停用：只读，风格库首次加载时把其中的个人风格与标题模板转存进新的风格库目录，原键不改写。
+  format('style-kits', '本机风格包', LOCAL_LIBRARY_FORMATS['video-edit-style-kits'].version, 'video-edit-style-kits.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readLegacyLibrary', z.array(legacyStyleKitSchema), 'local-storage'),
+  format('title-templates', '本机标题模板', LOCAL_LIBRARY_FORMATS['video-edit-title-templates'].version, 'video-edit-title-templates.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readLegacyLibrary', z.array(legacyTitleTemplateSchema), 'local-storage'),
+  format('video-style-library', '风格库中的风格', VIDEO_EDIT_STYLE_LIBRARY_VERSION, '风格库/styles/<id>/style.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readStyleFile', videoEditStyleSchema),
+  format('video-template-library', '风格库中的模板', VIDEO_EDIT_TEMPLATE_LIBRARY_VERSION, '风格库/templates/<id>.json.version', 'src/features/videoEdit/application/videoEditStyleLibrary.ts::readTemplateFile', videoEditTemplateSchema),
+  format('video-style-package', '可分享风格包', VIDEO_EDIT_STYLE_PACKAGE_VERSION, '.henjistyle.version', 'src/features/videoEdit/application/videoEditStylePackages.ts::importVideoEditStylePackage', videoEditStylePackageSchema),
   format('text-presets', '本机文字和字幕预设', LOCAL_LIBRARY_FORMATS['video-edit-text-presets'].version, 'video-edit-text-presets.version', 'src/features/videoEdit/application/videoEditLocalLibrary.ts', z.array(videoEditTextPresetSchema), 'local-storage'),
   format('export-presets', '本机导出预设', LOCAL_LIBRARY_FORMATS['video-edit-export-presets'].version, 'video-edit-export-presets.version', 'src/features/videoEdit/application/videoEditExportPresets.ts', z.array(videoEditExportPresetSchema), 'local-storage'),
   format('preset-preferences', '预设评分与默认', LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].version, 'video-edit-preset-preferences.version', 'src/features/videoEdit/application/videoEditPresetPreferences.ts', videoEditPresetPreferencesSchema, 'local-storage'),

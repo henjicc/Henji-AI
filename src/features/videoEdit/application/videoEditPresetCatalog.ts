@@ -1,26 +1,24 @@
 import { createLogger } from '@/core/logging'
 import { PERSISTENCE_FORMATS } from '@/core/persistence/formats'
 import { upgradePersistenceContent } from '@/core/persistence/migrations'
-import { styleKitSchema, styleKitSummary, type StyleKit } from '@/core/videoEdit/styleKit'
-import { titleTemplateSchema, type TitleTemplate } from '@/core/videoEdit/titleTemplates'
+import type { VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
+import type { VideoEditTemplateBody } from '@/core/videoEdit/styles/templateSchemas'
+import { convertLegacyStyleKit, convertLegacyTitleTemplate } from '@/core/videoEdit/styles/legacyStyles'
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import type { VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
-import { VIDEO_EDIT_PRESET_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_PACKAGE_VERSION, videoEditPresetPackageSchema, type VideoEditPresetCategory, type VideoEditPresetPackageItem } from '@/core/videoEdit/presetPackage'
-import { videoEditStyleKitLibrary } from './videoEditStyleKitLibrary'
-import { listTitleTemplates, useTitleTemplateLibrary } from './videoEditTitleTemplateLibrary'
+import { VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_PACKAGE_VERSION, VIDEO_EDIT_PRESET_PANEL_CATEGORIES, videoEditPresetPackageSchema, type VideoEditPresetCategory, type VideoEditPresetPackageItem } from '@/core/videoEdit/presetPackage'
+import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import { listVideoEditSubtitlePresets, type VideoEditSubtitlePreset } from './videoEditSubtitlePresetList'
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
 import { useVideoEditEffectLibraryStore } from './videoEditEffectPresets'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
-// Defaults are applied where sequences are created; loading the catalog installs that hook.
-import './videoEditDefaultStyle'
 
 const logger = createLogger('features.videoEdit.presetCatalog')
 const PRESET_PACKAGE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-preset-package')!
-/** What a preset previews and applies with; one resolver for the panel, the assistant entity and export. */
+/** What a preview renders: a style sample, a template, or a panel preset (one resolver for the panel, the assistant entity and export). */
 export type VideoEditPresetSource =
-  | { category: 'style'; kit: StyleKit }
-  | { category: 'title'; template: TitleTemplate }
+  | { category: 'style'; sample: VideoEditStyleSample }
+  | { category: 'template'; body: VideoEditTemplateBody }
   | { category: 'text'; preset: VideoEditSubtitlePreset }
   | { category: 'effect'; preset: VideoEditEffectPreset }
   | { category: 'transition'; kind: VideoEditTransitionKind }
@@ -33,8 +31,8 @@ export interface VideoEditPresetEntry {
 interface Raw { id: string; name: string; meta: string; builtin: boolean }
 function raw(category: VideoEditPresetCategory): Raw[] {
   switch (category) {
-    case 'style': return videoEditStyleKitLibrary.list().map(kit => ({ id: kit.id, name: kit.name, meta: styleKitSummary(kit), builtin: kit.id.startsWith('builtin:') }))
-    case 'title': return listTitleTemplates().map(template => ({ id: template.id, name: template.name, meta: template.content ? '自建组合' : '内置', builtin: template.id.startsWith('title:') }))
+    // 风格与模板由风格库面板管理。
+    case 'style': case 'title': return []
     case 'text': return listVideoEditSubtitlePresets().map(preset => ({ id: preset.id, name: preset.name, meta: preset.id.startsWith('builtin:') ? '字幕' : '个人文字样式', builtin: preset.id.startsWith('builtin:') }))
     case 'effect': return useVideoEditEffectLibraryStore.getState().presets.map(preset => ({ id: preset.id, name: preset.name, meta: `${preset.media === 'video' ? '画面' : '声音'} · ${preset.effects.length} 个效果`, builtin: false }))
     case 'transition': return VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === 'video').map(preset => ({ id: preset.kind, name: preset.name, meta: preset.tooltip, builtin: true }))
@@ -49,7 +47,7 @@ export function listVideoEditPresets(category: VideoEditPresetCategory): VideoEd
   if (best) best.recommended = true
   return entries.map(({ order: _order, ...entry }) => entry)
 }
-export function listAllVideoEditPresets(): VideoEditPresetEntry[] { return VIDEO_EDIT_PRESET_CATEGORIES.flatMap(listVideoEditPresets) }
+export function listAllVideoEditPresets(): VideoEditPresetEntry[] { return VIDEO_EDIT_PRESET_PANEL_CATEGORIES.flatMap(listVideoEditPresets) }
 /** The preset new work should start from: the default, otherwise the best-liked one; undefined when nothing is set or rated. */
 export function preferredVideoEditPreset(category: VideoEditPresetCategory): VideoEditPresetEntry | undefined {
   const entries = listVideoEditPresets(category)
@@ -60,11 +58,10 @@ export function requireVideoEditPreset(category: VideoEditPresetCategory, id: st
   if (!entry) throw new Error(`NOT_FOUND：这个${VIDEO_EDIT_PRESET_CATEGORY_LABELS[category]}预设已删除，请重新选择。`)
   return entry
 }
-export function videoEditPresetSource(category: VideoEditPresetCategory, id: string): VideoEditPresetSource {
+export function videoEditPresetSource(category: VideoEditPresetCategory, id: string): Exclude<VideoEditPresetSource, { category: 'style' | 'template' }> {
   requireVideoEditPreset(category, id)
   switch (category) {
-    case 'style': { const kit = videoEditStyleKitLibrary.list().find(value => value.id === id)!; return { category, kit } }
-    case 'title': return { category, template: listTitleTemplates().find(value => value.id === id)! }
+    case 'style': case 'title': throw new Error('风格与模板在风格库里查看。')
     case 'text': return { category, preset: listVideoEditSubtitlePresets().find(value => value.id === id)! }
     case 'effect': return { category, preset: useVideoEditEffectLibraryStore.getState().presets.find(value => value.id === id)! }
     case 'transition': return { category, kind: id as VideoEditTransitionKind }
@@ -77,9 +74,7 @@ export function deleteVideoEditPreset(category: VideoEditPresetCategory, id: str
   const entry = requireVideoEditPreset(category, id)
   if (entry.builtin) throw new Error('内置预设不能删除。')
   logger.info('preset.delete.start', '删除个人预设', { context: { category } })
-  if (category === 'style') videoEditStyleKitLibrary.remove(id)
-  else if (category === 'title') useTitleTemplateLibrary.getState().replace(useTitleTemplateLibrary.getState().templates.filter(template => template.id !== id))
-  else if (category === 'text') videoEditTextPresetLibrary.remove(id)
+  if (category === 'text') videoEditTextPresetLibrary.remove(id)
   else if (category === 'effect') useVideoEditEffectLibraryStore.getState().deletePreset(id)
   videoEditPresetPreferences.forget(category, id)
   logger.info('preset.delete.completed', '个人预设已删除', { context: { category } })
@@ -87,22 +82,23 @@ export function deleteVideoEditPreset(category: VideoEditPresetCategory, id: str
 function packageItem(category: VideoEditPresetCategory, id: string): VideoEditPresetPackageItem {
   const source = videoEditPresetSource(category, id)
   switch (source.category) {
-    case 'style': return { category: 'style', preset: source.kit }
-    case 'title': return { category: 'title', preset: source.template }
     case 'text': { const { bottomMargin: _margin, ...style } = source.preset.style; return { category: 'text', preset: { id: source.preset.id, name: source.preset.name, style } } }
     case 'effect': return { category: 'effect', preset: source.preset }
     case 'transition': throw new Error('内置转场不需要导出。')
   }
 }
-export function videoEditPresetExportable(category: VideoEditPresetCategory, _id: string): boolean { return category !== 'transition' }
+export function videoEditPresetExportable(category: VideoEditPresetCategory, _id: string): boolean { return category === 'text' || category === 'effect' }
 /** Serialized exchange file (pretty JSON) for one or more presets. */
 export function exportVideoEditPresetPackage(refs: ReadonlyArray<{ category: VideoEditPresetCategory; id: string }>): string {
   const value = videoEditPresetPackageSchema.parse({ format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: refs.map(ref => packageItem(ref.category, ref.id)) })
   return `${JSON.stringify(value, null, 2)}\n`
 }
 const unique = (name: string, taken: readonly string[]): string => { if (!taken.includes(name)) return name; let index = 2; while (taken.includes(`${name} ${index}`)) index++; return `${name} ${index}` }
-/** Adds every item as a new personal preset (fresh ids, “名称 2” on a clash); ratings and defaults are not carried over. */
-export function importVideoEditPresetPackage(text: string): Array<{ category: VideoEditPresetCategory; id: string; name: string }> {
+/**
+ * Adds every item as a new personal preset (fresh ids, “名称 2” on a clash); ratings and defaults are not carried over.
+ * 旧文件里的风格与标题条目转成风格库里的个人风格与原生模板。
+ */
+export async function importVideoEditPresetPackage(text: string): Promise<Array<{ category: VideoEditPresetCategory; id: string; name: string }>> {
   let parsed: unknown
   try { parsed = JSON.parse(text) } catch { throw new Error('这个文件不是可读取的预设文件。') }
   // Older packages go through the registered migrations first (v1 drops the old parameter-style items).
@@ -114,8 +110,17 @@ export function importVideoEditPresetPackage(text: string): Array<{ category: Vi
   const added: Array<{ category: VideoEditPresetCategory; id: string; name: string }> = []
   for (const item of result.data.items) {
     const taken = raw(item.category).map(value => value.name)
-    if (item.category === 'style') { const kit = videoEditStyleKitLibrary.save(styleKitSchema.parse({ ...item.preset, name: unique(item.preset.name, taken) })); added.push({ category: 'style', id: kit.id, name: kit.name }) }
-    else if (item.category === 'title') { const template = titleTemplateSchema.parse({ ...item.preset, id: crypto.randomUUID(), name: unique(item.preset.name, taken) }); useTitleTemplateLibrary.getState().replace([...useTitleTemplateLibrary.getState().templates, template]); added.push({ category: 'title', id: template.id, name: template.name }) }
+    if (item.category === 'style') {
+      await videoEditStyleLibrary.ready()
+      const converted = convertLegacyStyleKit(item.preset, new Date().toISOString())
+      const style = (await videoEditStyleLibrary.saveStyle({ ...converted, id: crypto.randomUUID(), name: unique(converted.name, videoEditStyleLibrary.listStyles().map(entry => entry.style.name)).slice(0, 80) })).style
+      added.push({ category: 'style', id: style.id, name: style.name })
+    } else if (item.category === 'title') {
+      await videoEditStyleLibrary.ready()
+      const converted = convertLegacyTitleTemplate(item.preset, new Date().toISOString())
+      const template = (await videoEditStyleLibrary.saveTemplate({ ...converted, id: crypto.randomUUID(), name: unique(converted.name, videoEditStyleLibrary.listTemplates().map(entry => entry.template.name)).slice(0, 80) })).template
+      added.push({ category: 'title', id: template.id, name: template.name })
+    }
     else if (item.category === 'text') { const preset = videoEditTextPresetLibrary.save(unique(item.preset.name, taken), item.preset.style); added.push({ category: 'text', id: preset.id, name: preset.name }) }
     else { const [preset] = useVideoEditEffectLibraryStore.getState().importPresets([{ ...item.preset, name: unique(item.preset.name, taken) }]); added.push({ category: 'effect', id: preset.id, name: preset.name }) }
   }
@@ -124,7 +129,7 @@ export function importVideoEditPresetPackage(text: string): Array<{ category: Vi
 }
 /** Bounded assistant hint: per category the default and the best-liked preset, so “加个标题” uses what the user likes. */
 export function videoEditPresetHostSummary(): string {
-  const parts = VIDEO_EDIT_PRESET_CATEGORIES.flatMap(category => {
+  const parts = VIDEO_EDIT_PRESET_PANEL_CATEGORIES.flatMap(category => {
     const entries = listVideoEditPresets(category); const preferred = entries.find(entry => entry.isDefault); const liked = entries.find(entry => entry.recommended)
     if (!preferred && !liked) return []
     return [`${VIDEO_EDIT_PRESET_CATEGORY_LABELS[category]}：${[preferred && `默认“${preferred.name}”`, liked && `最喜欢“${liked.name}”（${liked.rating} 星）`].filter(Boolean).join('，')}`]

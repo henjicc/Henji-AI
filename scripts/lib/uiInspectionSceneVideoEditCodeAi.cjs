@@ -317,25 +317,18 @@ function createVideoEditCodeAiScene() {
           item.undone = await waitRead(textRef, property, value => JSON.stringify(value) === JSON.stringify(item.before), '一步撤销未恢复选择字体之前的文字样式')
           item.undoPresentation = await fresh(beforeUndo, 150)
         })
-        await step('07-style-kit', '为序列绑定内置风格说明书', async item => {
+        await step('07-style', '从风格面板把内置风格绑定到序列', async item => {
           await seek(25); await focus(ref('video_edit.clip', codeClip.id))
-          const panel = page.locator('[data-video-edit-style-kits]')
-          // 聚焦片段会异步把效果控件推到前台；切到风格后确认风格面板真的可见再操作。
-          for (let attempt = 0; attempt < 3 && !(await panel.isVisible()); attempt++) { await dock('风格'); await panel.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {}) }
-          item.dockState = await page.evaluate(() => ({
-            tabs: [...document.querySelectorAll('.dv-tab')].map(tab => ({ text: tab.textContent?.trim(), active: tab.classList.contains('dv-active-tab') })),
-            panels: [...document.querySelectorAll('[data-video-edit-panel]')].map(el => ({ id: el.getAttribute('data-video-edit-panel'), visible: !!(el.offsetWidth || el.offsetHeight), w: el.offsetWidth, h: el.offsetHeight })),
-            styleKits: [...document.querySelectorAll('[data-video-edit-style-kits]')].map(el => ({ w: el.offsetWidth, h: el.offsetHeight, text: el.textContent?.slice(0, 120) })),
-          }))
-          await panel.waitFor({ state: 'visible' })
-          await panel.getByRole('button', { name: '选择风格', exact: true }).click()
-          await page.getByRole('option', { name: '科技信息', exact: true }).click()
-          await panel.getByRole('button', { name: '绑定到序列', exact: true }).click()
-          const project = await saved(page, file, value => value.styleKits?.some(kit => kit.name === '科技信息') && value.sequences[0].styleKitId)
-          const applied = project.styleKits.find(kit => kit.id === project.sequences[0].styleKitId)
-          assert.equal(applied?.name, '科技信息', '科技信息预设没有绑定当前序列')
-          item.applied = { id: applied.id, name: applied.name, sections: (applied.guide.match(/^## /gm) ?? []).length, examples: applied.examples.length }
-          assert.ok(item.applied.sections >= 9 && item.applied.examples > 0, '绑定的风格不是完整说明书')
+          const card = page.locator('[data-video-edit-style="tech-info"]')
+          // 聚焦片段会异步把效果控件推到前台；切到风格后确认风格卡片真的可见再操作。
+          for (let attempt = 0; attempt < 3 && !(await card.isVisible()); attempt++) { await dock('风格'); await card.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {}) }
+          await card.click()
+          await page.getByRole('button', { name: '绑定到当前序列', exact: true }).click()
+          const project = await saved(page, file, value => value.styles?.some(style => style.id === 'tech-info') && value.sequences[0].styleId === 'tech-info')
+          const applied = project.styles.find(style => style.id === project.sequences[0].styleId)
+          assert.equal(applied?.name, '科技信息', '科技信息风格没有绑定当前序列')
+          item.applied = { id: applied.id, name: applied.name, version: applied.version, sections: (applied.guide.match(/^## /gm) ?? []).length, sample: Object.keys(applied.sample.code.files) }
+          assert.ok(item.applied.sections >= 14 && item.applied.sample.length > 0, '绑定的风格不是完整说明书与样片')
         })
         await step('08-shader-effect', '效果库添加镜头色差并重渲染', async item => {
           await seek(130); await focus(ref('video_edit.clip', 'base')); await dock('效果')

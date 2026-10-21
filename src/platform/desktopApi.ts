@@ -61,6 +61,11 @@ export async function getBundledResourceUrl(relativePath: string): Promise<strin
   return absolutePath ? media.toDisplaySrc(absolutePath) : null
 }
 
+/** 随安装包分发的只读资源（resources/ 下）的本机路径；不在桌面环境或文件不存在时为 null。 */
+export async function getBundledResourcePath(relativePath: string): Promise<string | null> {
+  return isDesktopRuntime() ? await getPlatform().media.getBundledResourcePath(relativePath) : null
+}
+
 export async function readFile(path: string): Promise<Uint8Array<ArrayBuffer>> {
   const bytes = await getPlatform().system.fs.readFile(path)
   const normalized = new Uint8Array(bytes.byteLength)

@@ -1,7 +1,7 @@
 import { UiSegmented } from '@/components/ui'
 import { useEffect, useMemo, useState } from 'react'
 import { UiButton, UiCheckbox, UiError, UiFieldLayoutContext, UiFieldTrigger, UiFormRow, UiGroup, UiInput, UiLoading, UiModal, UiSwitch } from '@/components/ui'
-import { resolveVideoEditStyleKit, styleKitGenerationPrompt } from '@/core/videoEdit/styleKit'
+import { videoEditStyleGenerationPrompt } from '../application/videoEditStylePrompt'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -107,8 +107,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
   const text = toPromptPlainText(prompt).trim()
   // Picture generation adds the style's “画面生成提示” when it has one; the switch turns it off for this request.
   const styleDocument = requireVideoEditInstance(projectId).document; const styleSequence = styleDocument.sequences.find(value => value.id === sequenceId)
-  const styleKit = plan && plan.mediaType !== 'audio' && styleSequence ? resolveVideoEditStyleKit(styleDocument, styleSequence) : undefined
-  const styleHint = styleKit ? styleKitGenerationPrompt(styleKit) : ''
+  const styleHint = plan && plan.mediaType !== 'audio' ? videoEditStyleGenerationPrompt(styleDocument, styleSequence) : undefined
   const model = modelId ? getModelInfo(modelId) ?? undefined : undefined
   const providerId = modelId ? registry.getModel(modelId)?.meta.provider ?? '' : ''
   const provider = getAvailableProviders().find(value => value.id === providerId)
@@ -167,7 +166,7 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
             {selected.error && <UiError message={selected.error} />}
           </div>
         </UiFormRow>}
-        {styleHint && <UiFormRow label={`套用风格：${styleKit!.name}`} info={styleHint} inline><UiSwitch aria-label="套用风格" checked={applyStyle} onCheckedChange={setApplyStyle} /></UiFormRow>}
+        {styleHint && <UiFormRow label={`套用风格：${styleHint.name}`} info={styleHint.prompt} inline><UiSwitch aria-label="套用风格" checked={applyStyle} onCheckedChange={setApplyStyle} /></UiFormRow>}
         <UiFieldLayoutContext.Provider value="toolbar">
           {modelId ? <ParameterPanel currentModel={model} selectedModel={modelId} uploadedImages={usedImages} uploadedVideos={[]} values={params as DynamicValueMap}
             onChange={(id, value) => setParams(current => ({ ...current, [id]: value }))} onChanges={changes => setParams(current => ({ ...current, ...changes }))} toolbarLeading={modelTrigger} />
