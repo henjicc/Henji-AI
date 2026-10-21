@@ -81,7 +81,11 @@ it('共享调整的边界与 ping-pong target 进入预算；中性不保留额�
   const estimate = (): number => { const compiled = compileImageEditorGpuRasterSceneV3(document, [{ resourceRef: source, byteLength: 3200000, mediaType: 'image/png' }]); if (!compiled.supported) throw new Error(compiled.reason); return estimateImageEditorGpuGraphResidentBytesV3(compiled.scene, [1000, 800]) }
   const neutral = estimate()
   const layer = document.layers[1]; if (layer.type !== 'adjustment') throw new Error('缺少调整')
+  // A single pointwise stage writes straight to the output: only the three boundary targets.
   layer.params = { exposure: 1 }
+  expect(estimate() - neutral).toBe(3 * 1000 * 800 * 16)
+  // Several stages still ping-pong through two full-size scratch targets.
+  layer.params = { exposure: 1, vignette_amount: -30 }
   expect(estimate() - neutral).toBe(5 * 1000 * 800 * 16)
 })
 
