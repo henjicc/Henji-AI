@@ -29,6 +29,16 @@ function huggingFaceUrl(repo: string, file: string): string {
   return `https://huggingface.co/${repo}/resolve/main/${file}`
 }
 
+/** Xenova/larger_clap_general 固定版本（2024-10-08），各文件哈希与我们的 ModelScope 仓库一致。 */
+const CLAP_XENOVA_REVISION = 'd78c3994912c441f0151a5cc44d86f6b7bf4c861'
+/** 听音模型 CLAP 的一个文件：国内为我们的 ModelScope 仓库，国外为 Xenova 的 Hugging Face 导出。 */
+function clapFile(name: string, role: LocalModelFileSpec['role'], sizeBytes: number, sha256: string, upstream: string): LocalModelFileSpec {
+  return { name, role, sizeBytes, sha256, sources: [
+    { region: 'domestic', label: 'own-modelscope', url: ownUrl(`audio_understanding_clap/${name}`) },
+    { region: 'global', label: 'huggingface-xenova', url: `https://huggingface.co/Xenova/larger_clap_general/resolve/${CLAP_XENOVA_REVISION}/${upstream}` },
+  ] }
+}
+
 export interface LocalModelSource {
   region: DownloadRegion
   /** 日志里区分来源用（不展示给用户）。 */
@@ -39,7 +49,7 @@ export interface LocalModelSource {
 export interface LocalModelFileSpec {
   /** 存到本地的文件名。 */
   name: string
-  role: 'model' | 'dict'
+  role: 'model' | 'dict' | 'config'
   sizeBytes: number
   sha256: string
   sources: readonly LocalModelSource[]
@@ -240,6 +250,25 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
         // 我们从官方权重导出（官方没有 ONNX），只放在自有仓库；国外用户同样从 ModelScope 下载
         sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('object_segmentation_efficienttam/efficienttam_ti_512_mask_downsample.onnx') }],
       },
+    ],
+  },
+  {
+    id: 'audio_understanding_clap',
+    title: { zh: '听音模型 CLAP', en: 'Audio Understanding (CLAP)' },
+    purpose: { zh: '听懂音效的声音特点，让音效库能按“短促的嗖”“清脆的叮”之类的描述找音效', en: 'Understands how sound effects sound so the sound library can be searched by description' },
+    folderName: { zh: '听音模型 CLAP', en: 'Audio Understanding CLAP' },
+    homepage: 'https://huggingface.co/laion/larger_clap_general',
+    license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/laion/larger_clap_general' },
+    availability: 'available',
+    // Xenova 的 fp16 ONNX 导出（输入输出仍为 float32）；与 fp32 检索前 10 重合 96%，int8 只有 86%。
+    // 我们的 ModelScope 仓库与 Hugging Face 同名文件逐字节一致（2026-10-21 核对 SHA-256）。
+    files: [
+      clapFile('larger_clap_general_audio_fp16.onnx', 'model', 143_432_227, '7331cfbef5e9b7eec56e489c93737556f5e22c8abf8978280f0ad38c4b2b1ed1', 'onnx/audio_model_fp16.onnx'),
+      clapFile('larger_clap_general_text_fp16.onnx', 'model', 251_029_088, '9c06f2aa8b7da59c3a781c682cbca510206d198e2d0c9ebadb78927e38df7f94', 'onnx/text_model_fp16.onnx'),
+      clapFile('tokenizer.json', 'config', 2_108_774, 'dc239041d98de27ffc3975473a1a23e3db4c937b23c138c38bbc66588bd247e5', 'tokenizer.json'),
+      clapFile('tokenizer_config.json', 'config', 1_392, '2c964a338683aec3695ea37687271e75b40905233f5d2a5bbb9be8cb40c4d0a0', 'tokenizer_config.json'),
+      clapFile('preprocessor_config.json', 'config', 541, '9739f58296aa6f9ac18008fd0150fb2649bc554985fbde86d0a4041c882ac753', 'preprocessor_config.json'),
+      clapFile('config.json', 'config', 587, 'b8c3a259af1c9eee98570630d81881974a368364886678d9c6b04c6d15874837', 'config.json'),
     ],
   },
 ]

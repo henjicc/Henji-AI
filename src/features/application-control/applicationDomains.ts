@@ -13,6 +13,7 @@ import { videoEditApplicationDomain, videoCreativeIntentProvider } from '@/featu
 import { registerCreativeIntentHost } from './creativeIntentHost'
 import { documentsApplicationDomain } from '@/features/documents/application/applicationDomain'
 import { localModelsApplicationDomain } from '@/features/localModels/application/applicationDomain'
+import { soundLibraryApplicationDomain } from '@/features/soundLibrary'
 import { creativeIntentApplicationDomain } from './creativeIntentDomain'
 import type { ApplicationDomainModule } from './domainModule'
 import { configureImageEditDocumentProjectionResolverV3 } from '@/features/imageEdit/v3/application/imageEditDocumentBindings'
@@ -38,6 +39,7 @@ export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
   videoEditApplicationDomain,
   documentsApplicationDomain,
   localModelsApplicationDomain,
+  soundLibraryApplicationDomain,
   creativeIntentApplicationDomain,
   memoryApplicationDomain,
   navigationApplicationDomain,

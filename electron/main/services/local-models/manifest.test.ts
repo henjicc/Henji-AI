@@ -46,3 +46,15 @@ it('OCR只有内置tiny；公共下载目录不存在OCR，资源逐字节符合
   expect(actual).toEqual(expected)
   expect(fs.readFileSync('electron-builder.yml', 'utf8')).toMatch(/extraResources:\s+- from: resources\/local-models\s+to: resources\/local-models/)
 })
+
+it('听音模型 CLAP：六个文件各有大小与完整哈希，国内为自有 ModelScope 仓库，国外为 Xenova 导出', () => {
+  const model = LOCAL_MODEL_MANIFEST.find(model => model.id === 'audio_understanding_clap')!
+  expect(model.license.spdx).toBe('Apache-2.0'); expect(model.availability).toBe('available')
+  expect(model.files.map(file => file.name)).toEqual(['larger_clap_general_audio_fp16.onnx', 'larger_clap_general_text_fp16.onnx', 'tokenizer.json', 'tokenizer_config.json', 'preprocessor_config.json', 'config.json'])
+  expect(model.files.reduce((sum, file) => sum + file.sizeBytes, 0)).toBe(396_572_609)
+  for (const file of model.files) {
+    expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
+    expect(file.sources.find(source => source.region === 'domestic')?.url).toBe(`https://www.modelscope.cn/models/henjicc/henji-ai-local-models/resolve/master/audio_understanding_clap/${file.name}`)
+    expect(file.sources.find(source => source.region === 'global')?.url).toMatch(/^https:\/\/huggingface\.co\/Xenova\/larger_clap_general\/resolve\/d78c3994912c441f0151a5cc44d86f6b7bf4c861\//)
+  }
+})

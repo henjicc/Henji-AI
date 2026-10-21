@@ -47,6 +47,7 @@ import { createDocumentsApi } from './documents-api'
 import { createCanvasTestFixturesApi } from './canvas-test-fixtures'
 import { createWorkRootApi } from './work-root-api'
 import { createLocalModelsApi } from './local-models-api'
+import { createSoundLibraryApi } from './sound-library-api'
 import { createFontsApi } from './fonts-api'
 import { createSmartRegionsApi } from './smart-regions-api'
 import { createTrackingApi } from './tracking-api'
@@ -504,6 +505,7 @@ const api: HenjiNativeApi = {
   documents: createDocumentsApi(nativeInvoke),
   workRoot: createWorkRootApi(nativeInvoke, subscribeChannel),
   localModels: createLocalModelsApi(nativeInvoke, subscribeChannel),
+  soundLibrary: createSoundLibraryApi(nativeInvoke, subscribeChannel),
   fonts: createFontsApi(nativeInvoke, subscribeChannel),
   smartRegions: createSmartRegionsApi(nativeInvoke, subscribeChannel),
   tracking: createTrackingApi(nativeInvoke, subscribeChannel),

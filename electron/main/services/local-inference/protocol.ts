@@ -6,6 +6,7 @@ import type { OnnxExtraOutput } from './tracking/onnxGraphOutputs'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 import type { TrackingFrameReply, TrackingFrameRequest } from '../../../../src/platform/contracts/tracking'
 import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
+import type { SoundAnalysisJob, SoundAnalysisResult, SoundTextEmbeddingJob, SoundTextEmbeddingResult } from './sound/protocol'
 
 /*
  * 主进程 ↔ 本地推理后台进程（utility process）的消息。主进程负责解析素材、准备模型与缓存位置，
@@ -14,7 +15,7 @@ import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
 
 export type LocalInferenceModelName = 'yunet' | 'rvm' | 'selfie' | 'ppocr' | 'ppocr_rec'
   | 'etam_image_encoder' | 'etam_mask_decoder' | 'etam_memory_encoder' | 'etam_memory_attention' | 'etam_mask_downsample' | 'vittrack'
-  | 'migan' | 'lama'
+  | 'migan' | 'lama' | 'clap_audio' | 'clap_text'
 
 export interface LocalInferenceModelFile {
   name: LocalInferenceModelName
@@ -54,6 +55,8 @@ export type LocalInferenceRequest =
   | { type: 'inpaint'; job: ImageInpaintJob }
   | { type: 'track'; job: TrackingJob }
   | { type: 'candidates'; job: TrackingCandidatesJob }
+  | { type: 'sound-analyze'; job: SoundAnalysisJob }
+  | { type: 'sound-text'; job: SoundTextEmbeddingJob }
   | { type: 'cancel'; id: string }
   | { type: 'frames'; id: string; reply: TrackingFrameReply }
 
@@ -71,6 +74,6 @@ export interface SmartRegionAnalysisResult {
 export type LocalInferenceEvent =
   | { type: 'frames'; id: string; requestId: string; request: TrackingFrameRequest }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult | OcrPrivacyResult }
+  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult | OcrPrivacyResult | SoundAnalysisResult | SoundTextEmbeddingResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }
   | { type: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }

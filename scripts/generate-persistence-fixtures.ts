@@ -209,6 +209,7 @@ const values: Record<string, unknown> = {
   'preset-preferences': [{ category: 'style', id: 'golden-kit', rating: 5, isDefault: true }, { category: 'transition', id: 'cross_dissolve', rating: 3, isDefault: false }],
   'video-preset-package': { format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: [{ category: 'style', preset: goldenKit }, { category: 'title', preset: { ...BUILTIN_TITLE_TEMPLATES[0], id: 'golden-template', name: '黄金标题' } }, { category: 'text', preset: { id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) } }] },
   'voice-library': [{ voiceId: 'golden-voice', voiceName: '黄金音色', providerId: 'kie', createdAt: timestamp, updatedAt: timestamp, status: 'ready', activated: true }],
+  'sound-library-folders': [{ id: '00000000-0000-4000-8000-000000000001', path: '/persistence-project/音效', addedAt: timestamp }],
   'preset-export': { version: '1.0', name: '黄金生成预设', description: null, modelId: null, params: { prompt: '黄金样本' } },
   'theme-payload': createThemePayloadV2({ seed: DEFAULT_THEME_SEED }),
   'canvas-layer-package': { format: 'henji-canvas-layer', version: CANVAS_LAYER_PACKAGE_VERSION, documentId: image.id, contentRevision: 0 },
@@ -242,7 +243,7 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
     const content = format.schema.parse(values[format.id])
     const raw = format.id.startsWith('document.') ? buildDocumentEnvelope({ kind: format.id.slice('document.'.length), kindVersion: format.version, id: `golden-${format.id.split('.')[1]}`, name: format.name, createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content })
       : format.id === 'settings' || format.id === 'theme' ? { version: format.version, state: content }
-      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || format.id === 'voice-library' || format.id === 'llm-config' ? { version: format.version, content } : content
+      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, content } : content
     const directory = path.join(root, 'tests/fixtures/persistence', format.id)
     fs.mkdirSync(directory, { recursive: true })
     fs.writeFileSync(path.join(directory, `v${format.version}.json`), `${JSON.stringify(raw, null, 2)}\n`, { flag: 'wx' })

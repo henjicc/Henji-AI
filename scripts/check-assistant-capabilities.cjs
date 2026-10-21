@@ -212,6 +212,9 @@ const ASSISTANT_BLIND_FEATURES = {
     + '不承载用户数据、不出现在正式界面，助手无需观察或操作。',
   localModels: '本地模型状态由主进程 LocalModelService 持有，没有 Zustand store；localModelsReflection 的 '
     + 'local_model.item 与 local_model.settings 两个实体及其执行器覆盖状态读取、下载、删除与下载源设置。',
+  soundLibrary: '音效库状态由主进程 SoundLibraryService 持有，没有 Zustand store；soundLibraryReflection 的 '
+    + 'sound_library.library/folder/sound 三个实体与文件夹集合执行器覆盖读取与取消登记，登记、检索与卡点分别是 '
+    + 'add_sound_library_folder、search_sound_effects、place_video_edit_sound_effects 正式能力。',
   maskEditor: '蒙版编辑器只管理本次面板内的位图绘制与未确认草稿，没有独立持久化实体或 zustand store；'
     + '确认后的蒙版引用和编辑文档由画布节点与派生媒体服务持有，入口由画布专用编辑器会话统一编排。'
     + '助手可读写最终画布节点，但不伪造逐像素鼠标绘制能力。',

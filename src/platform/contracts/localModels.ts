@@ -1,5 +1,6 @@
 /*
- * 可下载本地模型：抠像、检测、跟踪模型第一次用到时下载；内置OCR不属于此公开目录。
+ * 可下载本地模型：抠像、检测、跟踪模型第一次用到时下载；听音模型（音效库按声音检索）只在用户或助手明确下载后启用；
+ * 内置OCR不属于此公开目录。
  *
  * 文件放在作品目录的“模型/<模型名>/”下，均按清单的 SHA-256 校验；下载源在国内
  * （ModelScope）与国外（Hugging Face / GitHub）之间自动选择，失败自动换源。
@@ -15,6 +16,7 @@ export const LOCAL_MODEL_IDS = [
   'object_tracking_efficienttam',
   'image_inpainting_migan',
   'image_inpainting_lama',
+  'audio_understanding_clap',
 ] as const
 
 export type LocalModelId = (typeof LOCAL_MODEL_IDS)[number]

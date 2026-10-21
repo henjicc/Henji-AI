@@ -25,6 +25,7 @@
     "files-cache": "Cache",
     "files-upload": "Uploads",
     "files-download": "Downloads",
+    "files-sounds": "Sound library",
     "files-models": "Local models",
     "assistant-models": "Assistant Models",
     "assistant-preferences": "User Instructions",
@@ -429,6 +430,21 @@
       "presetPathsAdd": "Add folder",
       "presetPathsCount": "{{count}} / {{limit}} added",
       "presetPathsRemove": "Remove preset folder {{path}}"
+    },
+    "soundLibrary": {
+      "listLabel": "Sound effect folders",
+      "listHint": "Register folders of sound effects you collected. The assistant can then pick sounds by intent (\"a short whoosh\", \"a bright ding\") and line their hit points up with cuts or beats. Files are only read, never moved or changed; download the listening model below to also search by how sounds sound.",
+      "add": "Add folder",
+      "empty": "No sound effect folders yet",
+      "loadFailed": "Could not read the sound library",
+      "refresh": "Rescan {{name}}",
+      "remove": "Unregister {{name}}",
+      "count": "{{count}} sounds",
+      "listening": "{{count}} listened",
+      "indexing": "Scanning {{done}} / {{total}}",
+      "notIndexed": "Not scanned yet",
+      "skipped": "Skipped {{count}} unreadable files: {{files}}",
+      "actionFailed": "Could not finish, please try again"
     },
     "localModels": {
       "sourceLabel": "Download source",

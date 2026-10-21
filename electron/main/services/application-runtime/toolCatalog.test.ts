@@ -92,6 +92,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.44.0'] = '81912b3cdcf8ab78dcb6a13cd789b6a843bf40a5dcc8ab5cae3a3503937ac13b'
     // Works-folder cache settings, proxy preset auto, render/proxy descriptions for full-quality pause.
     fingerprints['2.45.0'] = '8db0b496e74490d0b8b610ded4cad2e6f49686106dcb4676c6558bf0a85f45c1'
+    // Sound library: add_sound_library_folder, search_sound_effects, place_video_edit_sound_effects.
+    fingerprints['2.46.0'] = 'b5ea98ee62b0f550aae1be39032de31f65264e302201e3aa8e111cffa9183456'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

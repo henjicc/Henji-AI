@@ -155,7 +155,7 @@ describe('所有登记格式的黄金样本', () => {
         let content = raw
         if (format.id.startsWith('document.')) content = parseDocumentEnvelope(raw).content
         else if (format.id === 'settings' || format.id === 'theme') content = (raw as { state: unknown }).state
-        else if ((format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config'].includes(format.id)) content = (raw as { content: unknown }).content
+        else if ((format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id)) content = (raw as { content: unknown }).content
         const upgraded = upgradePersistenceContent(format, content, version)
         expect(format.schema.safeParse(upgraded).success).toBe(true)
         if (format.id === 'document.video_edit') {

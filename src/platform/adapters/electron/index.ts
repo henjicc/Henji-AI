@@ -25,6 +25,7 @@ import { createElectronVideoDecoder } from './videoDecoder'
 import { createElectronDocuments } from './documents'
 import { createElectronWorkRoot } from './workRoot'
 import { createElectronLocalModels } from './localModels'
+import { createElectronSoundLibrary } from './soundLibrary'
 import { createElectronFonts } from './fonts'
 import { createElectronSmartRegions } from './smartRegions'
 import { createElectronTracking } from './tracking'
@@ -64,6 +65,7 @@ export function createElectronPlatform(): PlatformRuntime {
     documents: createElectronDocuments(),
     workRoot: createElectronWorkRoot(),
     localModels: createElectronLocalModels(),
+    soundLibrary: createElectronSoundLibrary(),
     fonts: createElectronFonts(),
     smartRegions: createElectronSmartRegions(),
     tracking: createElectronTracking(),

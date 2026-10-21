@@ -22,6 +22,7 @@ import { rendererSettingsSchema, SETTINGS_STORAGE_VERSION } from './settingsSche
 import { formatMigrations } from './formatMigrations'
 import { LOCAL_LIBRARY_FORMATS } from './versionedJson'
 import { presetExportSchema, themePayloadSchema } from './auxiliarySchemas'
+import { SOUND_LIBRARY_FOLDERS_VERSION, soundLibraryFoldersSchema } from '../soundLibrary/soundLibraryFolders'
 import { THEME_STORAGE_VERSION, CODE_COMPONENT_SCHEMA_VERSION, SQLITE_SCHEMA_VERSION, SETTING_RECORD_VERSION, ASSET_RECORD_VERSION, GENERATION_PRESET_VERSION } from './schemaVersions'
 import { MODEL_DEFAULTS_VERSION, modelDefaultsSchema, NODE_DEFAULTS_VERSION, nodeDefaultsSchema, RECORDING_SETUP_VERSION, recordingSetupSchema, ONBOARDING_VERSION, onboardingSchema, SUBTITLE_MANIFEST_VERSION } from './preferenceSchemas'
 import { applicationOperationStateSchema, applicationUserConfirmationSchema } from '../application-control/userConfirmation'
@@ -39,7 +40,7 @@ export interface PersistenceFormat extends PersistenceContract {
 
 function format(id: string, name: string, version: number, versionSource: string, readEntry: string, schema: z.ZodType, storage: PersistenceFormat['storage'] = 'file', schemas: Readonly<Record<string, z.ZodType>> = {}): PersistenceFormat {
   const container = ['settings', 'theme'].includes(id) ? z.object({ version: z.literal(version), state: schema })
-    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
+    : ['style-kits', 'title-templates', 'text-presets', 'export-presets', 'preset-preferences', 'voice-library', 'node-defaults', 'llm-config', 'sound-library-folders'].includes(id) ? z.object({ version: z.literal(version), minReaderVersion: z.number().int().positive().max(version).optional(), content: schema }).strict() : undefined
   return { id, name, version, versionSource, readEntry, schema, schemas: { content: schema, ...(container ? { container } : {}), ...schemas }, migrations: formatMigrations(id), storage, migrationEntry: storage === 'sqlite-ledger' ? 'electron/main/services/db-migrations.ts::SCHEMA_MIGRATIONS / runSchemaMigrations' : 'src/core/persistence/formatMigrations.ts / migrations.ts::upgradePersistenceContent' }
 }
 
@@ -68,6 +69,7 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('preset-preferences', '预设评分与默认', LOCAL_LIBRARY_FORMATS['video-edit-preset-preferences'].version, 'video-edit-preset-preferences.version', 'src/features/videoEdit/application/videoEditPresetPreferences.ts', videoEditPresetPreferencesSchema, 'local-storage'),
   format('video-preset-package', '可分享剪辑预设', VIDEO_EDIT_PRESET_PACKAGE_VERSION, 'henji-video-presets.version', 'src/features/videoEdit/application/videoEditPresetCatalog.ts::importVideoEditPresetPackage', videoEditPresetPackageSchema),
   format('voice-library', '克隆音色库', LOCAL_LIBRARY_FORMATS['voice_library_records'].version, 'settings.voice_library_records.version', 'src/services/voiceLibrary/VoiceLibraryService.ts::parseVoiceRecords', z.array(voiceLibraryRecordSchema)),
+  format('sound-library-folders', '音效文件夹', SOUND_LIBRARY_FOLDERS_VERSION, 'settings.sound_library.folders.version', 'electron/main/services/sound-library/runtime.ts::readFolders', soundLibraryFoldersSchema),
   format('preset-export', '可分享生成预设', 1, 'PresetService export.version（1.0 → 1）', 'src/services/presets/PresetService.ts::importPreset', presetExportSchema),
   format('theme-payload', '可分享主题', 2, 'ThemePayloadV2.version', 'src/core/theme/themeMigration.ts::parseThemePayload', themePayloadSchema),
   format('node-defaults', '画布默认参数', NODE_DEFAULTS_VERSION, 'henji-canvas-node-parameter-defaults-v1.version', 'src/features/canvas/application/nodeParameterDefaults.ts::load', nodeDefaultsSchema, 'local-storage'),
