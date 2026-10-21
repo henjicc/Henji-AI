@@ -2,6 +2,7 @@ import { audibleVideoEditClips, videoEditClipMedia, videoEditDuration, videoEdit
 import { activeVideoEditAudioEffects } from './compositing'
 import type { VideoEditKeyframe } from './keyframes'
 import { VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from './sequenceGraph'
+import { VIDEO_EDIT_AUDIO_STRETCH_ENGINE } from './clipSpeed'
 import { videoEditTransitionMedium, videoEditTransitionWindow, type VideoEditTransitionWindow } from './transitions'
 
 function points(values: readonly VideoEditKeyframe[] | undefined): unknown[] {
@@ -50,5 +51,6 @@ export function videoEditAudioContent(snapshot: VideoEditComposition): string {
     return index
   }
   content(snapshot, [])
-  return JSON.stringify(canonical(sequences))
+  // 拉伸引擎换版本时，保持音调与变调的声音随之改变。
+  return JSON.stringify(canonical([VIDEO_EDIT_AUDIO_STRETCH_ENGINE, sequences]))
 }

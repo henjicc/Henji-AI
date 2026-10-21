@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
 import { UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInput, UiModal } from '@/components/ui'
-import { changeVideoEditClipSpeed, stretchVideoEditClip, videoEditClipSpeedPercent, videoEditSpeedRatio, VIDEO_EDIT_SPEED_MAX, VIDEO_EDIT_SPEED_MIN } from '@/core/videoEdit/clipSpeed'
+import { changeVideoEditClipSpeed, stretchVideoEditClip, videoEditClipRetimed, videoEditClipSpeedPercent, videoEditSpeedRatio, VIDEO_EDIT_SPEED_MAX, VIDEO_EDIT_SPEED_MIN } from '@/core/videoEdit/clipSpeed'
 import type { VideoEditSpeedChange } from '@/core/videoEdit/clipSpeedEdits'
 import { parseVideoEditTimecodeInput, videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -19,7 +19,7 @@ export function VideoEditSpeedDialog({ request, onClose }: { request: VideoEditS
     const sequence = owner.document.sequences.find(value => value.id === request.sequenceId)
     const clips = sequence?.clips.filter(clip => request.clipIds.includes(clip.id)) ?? []
     const first = clips[0]
-    return { fps: sequence ? videoEditFps(sequence.frameRate) : 30, percent: first ? videoEditClipSpeedPercent(first) : 100, clip: first ?? { start: 0, duration: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }, duration: first?.duration ?? 1, reverse: clips.length > 0 && clips.every(clip => clip.reverse), preservePitch: clips.length > 0 && clips.every(clip => clip.preservePitch), count: clips.length }
+    return { fps: sequence ? videoEditFps(sequence.frameRate) : 30, percent: first ? videoEditClipSpeedPercent(first) : 100, clip: first ?? { start: 0, duration: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }, duration: first?.duration ?? 1, reverse: clips.length > 0 && clips.every(clip => clip.reverse), preservePitch: clips.length > 0 && clips.every(clip => clip.preservePitch || !videoEditClipRetimed(clip)), count: clips.length }
   }, [request])
   const [percent, setPercent] = useState(initial.percent)
   const [duration, setDuration] = useState(initial.duration)

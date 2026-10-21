@@ -6,7 +6,7 @@ import type { VideoEditRatio } from './time'
 import { retimeVideoEditContent } from './timedContent'
 import { rescaleVideoEditClipKeyframes } from './keyframes'
 import { assertNoTrackOverlap, retimeVideoEditAnnotations } from './timelineTrims'
-import { changeVideoEditClipSpeed, setVideoEditClipReverse, stretchVideoEditClip, videoEditClipSpeedSupported, videoEditStretchDurationLimits } from './clipSpeed'
+import { changeVideoEditClipSpeed, setVideoEditClipReverse, stretchVideoEditClip, videoEditClipRetimed, videoEditClipSpeedSupported, videoEditStretchDurationLimits } from './clipSpeed'
 
 /**
  * 片段速度的编辑（4.13）：“速度/持续时间”对话框（Ctrl+R）、比率拉伸工具（R）与助手的速度属性都走这里，
@@ -41,6 +41,11 @@ function nextStart(sequence: VideoEditSequence, clip: VideoEditClip, limit: numb
 function previousEnd(sequence: VideoEditSequence, clip: VideoEditClip): number {
   return Math.max(0, ...sequence.clips.filter(other => other.track === clip.track && other.id !== clip.id && end(other) <= clip.start).map(end))
 }
+/** 保持音调默认开启（PR 同样默认勾选）：原速片段第一次变速且没有明确设置时打开。 */
+function defaultPreservePitch(before: VideoEditClip, after: VideoEditClip, explicit: boolean | undefined): VideoEditClip {
+  if (explicit !== undefined || before.preservePitch || videoEditClipRetimed(before) || after.frameHold || !videoEditClipRetimed(after)) return after
+  return { ...after, preservePitch: true }
+}
 function finish(sequence: VideoEditSequence, clips: VideoEditClip[], fps: number): VideoEditSequence {
   return retimeVideoEditContent(sequence, { ...sequence, clips, annotations: retimeVideoEditAnnotations(sequence, clips, fps) })
 }
@@ -65,7 +70,7 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
     if (change.duration !== undefined) next = stretchVideoEditClip(next, Math.min(change.duration, room))
     else if (change.speed) next = changeVideoEditClipSpeed(next, change.speed, fps, { sourceDurationSeconds: sourceDuration(document, sequence, clip, metadata), maxDuration: room })
     next = rescaleVideoEditClipKeyframes(next, time => Math.round(time * next.duration / clip.duration), next.duration)
-    changed.set(clip.id, next)
+    changed.set(clip.id, defaultPreservePitch(clip, next, change.preservePitch))
   }
   let clips = sequence.clips.map(clip => changed.get(clip.id) ?? clip)
   if (change.ripple) {
@@ -105,7 +110,7 @@ export function applyVideoEditRateStretch(document: VideoEditDocument, sequenceI
   const clips = sequence.clips.map(clip => {
     if (!ids.has(clip.id)) return clip
     const raw = stretchVideoEditClip(clip, edge === 'out' ? clip.duration + delta : clip.duration - delta)
-    const stretched = rescaleVideoEditClipKeyframes(raw, time => Math.round(time * raw.duration / clip.duration), raw.duration)
+    const stretched = defaultPreservePitch(clip, rescaleVideoEditClipKeyframes(raw, time => Math.round(time * raw.duration / clip.duration), raw.duration), undefined)
     return edge === 'in' ? { ...stretched, start: end(clip) - stretched.duration } : stretched
   })
   assertNoTrackOverlap(clips, '比率拉伸会让同轨片段重叠，请调整范围。')

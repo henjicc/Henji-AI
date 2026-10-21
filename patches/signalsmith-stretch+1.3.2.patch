@@ -1,0 +1,17 @@
+diff --git a/node_modules/signalsmith-stretch/SignalsmithStretch.mjs b/node_modules/signalsmith-stretch/SignalsmithStretch.mjs
+--- a/node_modules/signalsmith-stretch/SignalsmithStretch.mjs
++++ b/node_modules/signalsmith-stretch/SignalsmithStretch.mjs
+@@ -363,6 +363,8 @@ function registerWorkletProcessor(Module, audioNodeKey) {
+ 	@param {Object} options - channel configuration (as per [options]{@link https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode/AudioWorkletNode#options})
+ 	@returns {Promise<StretchNode>}
+ */
++// Henji-AI: expose the raw Emscripten factory so a Worker can drive the C API without an AudioWorklet.
++const SignalsmithStretchWasm = SignalsmithStretch;
+ SignalsmithStretch = ((Module, audioNodeKey) => {
+ 	if (typeof AudioWorkletProcessor === "function" && typeof registerProcessor === "function") {
+ 		// AudioWorklet side
+@@ -455,3 +457,4 @@ if (typeof exports === 'object' && typeof module === 'object') {
+ 	define([], () => SignalsmithStretch);
+ }
+ let _export=SignalsmithStretch;export default _export;
++export { SignalsmithStretchWasm };

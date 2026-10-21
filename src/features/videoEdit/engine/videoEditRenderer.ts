@@ -20,8 +20,9 @@ import { assertVideoEditSequenceGraph, VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from '@/c
 import { VideoEditCodePicture } from './videoEditCodePicture'
 import { videoEditNestedAudio } from './videoEditNestedAudio'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
-import { videoEditClipHeadRoomSeconds, videoEditClipRetimed, videoEditClipSourceSecondsAtTime, videoEditClipSpeedValue } from '@/core/videoEdit/clipSpeed'
-import { mixVideoEditRetimedSound } from './videoEditRetimedAudio'
+import { videoEditClipAudioMode, videoEditClipHeadRoomSeconds, videoEditClipSourceSecondsAtTime } from '@/core/videoEdit/clipSpeed'
+import { mixVideoEditRetimedSound, type VideoEditRetimedSoundRequest } from './videoEditRetimedAudio'
+import { mixVideoEditStretchedSound, VideoEditTimeStretcher } from './videoEditTimeStretch'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
@@ -335,7 +336,7 @@ export class VideoEditRenderer {
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     this.sources.clear(); this.frameCache.clear(); this.contentAudio.clear()
     for (const chain of this.audioChains.values()) chain.dispose()
-    this.audioChains.clear()
+    this.audioChains.clear(); this.stretchers.clear()
     await this.codeSources?.replaceContent(document)
     await this.updateDocument(document)
   }
@@ -348,7 +349,7 @@ export class VideoEditRenderer {
       await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
       this.sources.clear()
       for (const chain of this.audioChains.values()) chain.dispose()
-      this.audioChains.clear()
+      this.audioChains.clear(); this.stretchers.clear()
       this.sequencePath = [document.id]
     }
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
@@ -990,6 +991,21 @@ export class VideoEditRenderer {
   }
   /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
   private readonly audioChains = new Map<string, VideoEditAudioEffectChain>()
+  /** 保持音调与变调的拉伸器（Signalsmith Stretch），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
+  private readonly stretchers = new Map<string, Promise<VideoEditTimeStretcher>>()
+  /** 变速、倒放、变调片段的声音：保持音调或变调时经拉伸器，否则按位置重采样（磁带式）。 */
+  private async mixRetimedSound(clip: VideoEditClip, request: VideoEditRetimedSoundRequest, mode: 'resample' | 'stretch', activeStretchers: Set<string>): Promise<void> {
+    if (mode === 'resample') return mixVideoEditRetimedSound(request)
+    activeStretchers.add(clip.id)
+    let pending = this.stretchers.get(clip.id)
+    const existing = pending && await pending.catch(() => undefined)
+    if (!existing || existing.channels !== request.channels || existing.rate !== request.rate) {
+      pending = VideoEditTimeStretcher.create(request.channels, request.rate)
+      pending.catch(() => this.stretchers.delete(clip.id))
+      this.stretchers.set(clip.id, pending)
+    }
+    await mixVideoEditStretchedSound({ ...request, stretcher: await pending!, semitones: 0, preservePitch: Boolean(clip.preservePitch) })
+  }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
   async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {
     const rate = this.document.sampleRate
@@ -1000,6 +1016,7 @@ export class VideoEditRenderer {
     const finish = startSeconds + durationSeconds
     const activeAudio = new Set<string>()
     const activeChains = new Set<string>()
+    const activeStretchers = new Set<string>()
     const fps = this.document.fps
     // 音频过渡（PR 恒定功率／恒定增益）：左片段越过出点、右片段提前入点，在窗口里按曲线交叉淡化。
     const audioWindows = (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
@@ -1018,7 +1035,7 @@ export class VideoEditRenderer {
       const headRoom = clipStart - videoEditClipHeadRoomSeconds(clip, sourceDuration)
       from = Math.max(from, headRoom)
       if (from >= to) continue
-      const retimed = videoEditClipRetimed(clip)
+      const audioMode = videoEditClipAudioMode(clip)
       // 淡化手柄与音频过渡的增益包络（按输出采样）；没有时整段就是片段音量。
       const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0 || Boolean(clip.curves?.volume?.length)
       const envelope = enveloped ? Float32Array.from({ length }, (_, sample) => {
@@ -1039,11 +1056,11 @@ export class VideoEditRenderer {
         let renderer = this.nestedSounds.get(clip.id)
         if (!renderer) { renderer = new VideoEditRenderer(nested, this.previewWidth, undefined, 1, this.frames, undefined, [...this.sequencePath, nested.id]); this.nestedSounds.set(clip.id, renderer) }
         const audio = videoEditNestedAudio(nested.sampleRate, sourceDuration, (start, duration) => renderer!.mixAudio(start, duration))
-        await mixVideoEditRetimedSound({ clip, fps, rate, channels: this.document.channels, from, to, base, targets, gainAt, reads: [{ audio }] })
+        await this.mixRetimedSound(clip, { clip, fps, rate, channels: this.document.channels, from, to, base, targets, gainAt, reads: [{ audio }] }, audioMode === 'stretch' ? 'stretch' : 'resample', activeStretchers)
         return
       }
-      if (retimed) {
-        // 变速／倒放（4.13）：按位置重采样，见 videoEditRetimedAudio.ts。
+      if (audioMode !== 'direct') {
+        // 变速／倒放／变调（4.13）：保持音调或变调时经拉伸器（videoEditTimeStretch.ts），否则按位置重采样（videoEditRetimedAudio.ts）。
         const reads = []
         for (const read of clip.audioMapping ? videoEditAudioMixReads(clip.audioMapping, this.document.channels) : [undefined]) {
           const key = read ? `audio:${clip.id}${AUDIO_STREAM_KEY}${read.stream}` : `audio:${clip.id}`
@@ -1051,7 +1068,7 @@ export class VideoEditRenderer {
           const source = await this.source(key, media!, read?.stream)
           if (source.audio) reads.push({ audio: source.audio, ...(read ? { gains: read.gains } : {}) })
         }
-        await mixVideoEditRetimedSound({ clip, fps, rate, channels: this.document.channels, from, to, base, targets, gainAt, reads })
+        await this.mixRetimedSound(clip, { clip, fps, rate, channels: this.document.channels, from, to, base, targets, gainAt, reads }, audioMode, activeStretchers)
         return
       }
       const sampleStartSeconds = base / rate
@@ -1107,17 +1124,15 @@ export class VideoEditRenderer {
       }
       }
       const effects = activeVideoEditAudioEffects(clip)
-      // 变速保持音调（4.13）：重采样让音调随速度升降，效果链最前面按 1/速度 补偿回来。
-      const pitchCompensation = retimed && clip.preservePitch ? 1 / videoEditClipSpeedValue(clip) : 1
-      if (!effects.length && pitchCompensation === 1) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : videoEditClipValue(clip, 'volume', from * fps)); continue }
+      if (!effects.length) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : videoEditClipValue(clip, 'volume', from * fps)); continue }
       // 音频效果（4.7c）：片段音量在效果之前（限幅器的上限不被音量推高），淡化与过渡在效果之后；效果链有延迟时多读后面的素材抵消，
       // 块不连续时从前面预读一段让状态稳定。预览与导出都走这里，连续播放时与分块方式无关、逐样本一致。
       let chain = this.audioChains.get(clip.id)
       if (!chain || chain.rate !== rate || chain.channels !== this.document.channels) { chain?.dispose(); chain = new VideoEditAudioEffectChain(rate, this.document.channels); this.audioChains.set(clip.id, chain) }
       activeChains.add(clip.id)
-      const rebuilt = await chain.sync(effects, pitchCompensation)
+      const rebuilt = await chain.sync(effects)
       const plan = planVideoEditAudioEffectBlock(chain, firstSample, length)
-      if (!plan.contiguous && !rebuilt) await chain.reset(effects, pitchCompensation)
+      if (!plan.contiguous && !rebuilt) await chain.reset(effects)
       const input = Array.from({ length: this.document.channels }, () => new Float32Array(plan.inputLength))
       const readFrom = Math.max(plan.inputStart / rate, playStart, headRoom); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)
       if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, sample => videoEditClipValue(clip, 'volume', (plan.inputStart + sample) / rate * fps))
@@ -1147,6 +1162,7 @@ export class VideoEditRenderer {
       this.sources.delete(key); this.release(await pending)
     }
     for (const [id, chain] of this.audioChains) if (!activeChains.has(id)) { chain.dispose(); this.audioChains.delete(id) }
+    for (const id of this.stretchers.keys()) if (!activeStretchers.has(id)) this.stretchers.delete(id)
     for (const [id, renderer] of this.nestedSounds) if (!activeAudio.has(id)) { this.nestedSounds.delete(id); await renderer.dispose() }
     return result
   }
@@ -1164,6 +1180,6 @@ export class VideoEditRenderer {
     for (const key of this.images.keys()) this.releaseImage(key)
     this.contentAudio.clear(); this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
     for (const chain of this.audioChains.values()) chain.dispose()
-    this.audioChains.clear()
+    this.audioChains.clear(); this.stretchers.clear()
   }
 }

@@ -12,7 +12,7 @@ import { offsetVideoEditSource, offsetVideoEditSourceFraction, sampleVideoEditSo
  * - 画面按“帧采样”取（PR 默认）：时间线第 k 帧显示这一帧所覆盖源区间的起点处的画面——正放是
  *   `sourceIn + k·speed/fps`，倒放是 `sourceIn - (k+1)·speed/fps`（倒放一帧覆盖的区间的较早一端），
  *   高倍速时跳过中间的源画面，不做帧混合。
- * - 声音按连续时间换算（`videoEditClipSourceSecondsAtTime`），变速由混音按位置重采样。
+ * - 声音按连续时间换算（`videoEditClipSourceSecondsAtTime`），变速由混音按位置重采样或经拉伸器保持音调。
  */
 export const VIDEO_EDIT_SPEED_MIN = 0.01
 export const VIDEO_EDIT_SPEED_MAX = 100
@@ -40,6 +40,33 @@ export function videoEditClipSpeedPercent(clip: Pick<VideoEditClipTiming, 'speed
 /** 片段是否改过速度或倒放（时间线上的速度标记、渲染换算路径据此区分）。 */
 export function videoEditClipRetimed(clip: Pick<VideoEditClipTiming, 'speed' | 'reverse' | 'frameHold'>): boolean {
   return Boolean(clip.frameHold || clip.reverse) || (clip.speed !== undefined && clip.speed.numerator !== clip.speed.denominator)
+}
+/** 保持音调与变调的时间拉伸器（混音与声音内容指纹共用；换引擎或预设时修改）。 */
+export const VIDEO_EDIT_AUDIO_STRETCH_ENGINE = 'signalsmith-stretch@1.3.2/preset-default'
+/** 保持音调的速度范围（时间拉伸器）：超出时声音降级为磁带式重采样，音调随速度变化。 */
+export const VIDEO_EDIT_PITCH_STRETCH_MIN = 0.25
+export const VIDEO_EDIT_PITCH_STRETCH_MAX = 4
+export type VideoEditClipAudioMode = 'direct' | 'resample' | 'stretch'
+/** 片段用到的速度范围（常数速度时两端相同；定格为 0）。 */
+export function videoEditClipSpeedRange(clip: Pick<VideoEditClipTiming, 'speed' | 'frameHold'>): { min: number; max: number } {
+  if (clip.frameHold) return { min: 0, max: 0 }
+  const value = videoEditClipSpeedValue(clip)
+  return { min: value, max: value }
+}
+/** 变速保持音调或变调时速度是否超出拉伸范围（界面提示与混音降级同一判断）。 */
+export function videoEditClipPitchStretchOutOfRange(clip: Pick<VideoEditClipTiming, 'speed' | 'frameHold'>): boolean {
+  const range = videoEditClipSpeedRange(clip)
+  return range.min < VIDEO_EDIT_PITCH_STRETCH_MIN - 1e-9 || range.max > VIDEO_EDIT_PITCH_STRETCH_MAX + 1e-9
+}
+/**
+ * 声音怎么跟随速度：`direct` 原速直读；`resample` 按位置重采样（磁带式，音调随速度变化）；`stretch` 时间拉伸器
+ * （保持音调或变调）。保持音调在速度超出 25%–400% 时降级为重采样。
+ */
+export function videoEditClipAudioMode(clip: Pick<VideoEditClipTiming, 'speed' | 'reverse' | 'frameHold'> & { preservePitch?: boolean; pitchSemitones?: number }): VideoEditClipAudioMode {
+  const retimed = videoEditClipRetimed(clip)
+  const wantsStretch = Boolean(clip.pitchSemitones) || retimed && Boolean(clip.preservePitch)
+  if (wantsStretch && !clip.frameHold && !videoEditClipPitchStretchOutOfRange(clip)) return 'stretch'
+  return retimed ? 'resample' : 'direct'
 }
 /** 速度为 1 时去掉字段（旧文件与未变速片段保持原样）。 */
 function speedFields(speed: VideoEditRatio): { speed?: VideoEditRatio } { return speed.numerator === speed.denominator ? {} : { speed } }
