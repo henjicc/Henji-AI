@@ -12,9 +12,14 @@ use vst3_host::{
 
 const PROTOCOL_VERSION: u32 = 1;
 
+mod dsp;
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command {
+    Spectrogram(dsp::SpectrogramRequest),
+    SpectralHeal(dsp::HealRequest),
+    Declick(dsp::DeclickRequest),
     Ping,
     Scan { roots: Vec<PathBuf> },
     Inspect { plugin_path: PathBuf, sample_rate: u32 },
@@ -161,6 +166,9 @@ fn process(
 
 fn execute(command: Command) -> Result<Value, Box<dyn Error>> {
     match command {
+        Command::Spectrogram(request) => dsp::spectrogram(request),
+        Command::SpectralHeal(request) => dsp::spectral_heal(request),
+        Command::Declick(request) => dsp::declick(request),
         Command::Ping => Ok(json!({ "worker": "henji-audio-worker", "protocolVersion": PROTOCOL_VERSION })),
         Command::Scan { roots } => {
             let mut plugins = Vec::new();
