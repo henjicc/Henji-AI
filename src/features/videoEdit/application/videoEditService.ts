@@ -13,6 +13,8 @@ import { recordVideoEditMaskUpdate } from './videoEditMaskEditing'
 import { reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
+import { rebindVideoEditProjectTextIdentities } from '@/core/videoEdit/textTranscript'
+import { inspectVideoEditMediaContent } from '../videoEditMediaContent'
 import { createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDuration, videoEditDocumentSchema, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
@@ -784,20 +786,24 @@ export function videoEditDocumentFromContent(content: unknown, meta: { id: strin
 /**
  * 项目文件夹里的素材只按位置引用（重要记录 006）：素材库的内容快照含原位置，项目被拷走、收集素材或移动后
  * 位置变了就永远对不上，会被误判为“源文件已改变”。所以落在剪辑所在项目文件夹里的素材去掉素材库关联，
- * 外部素材照旧按素材库快照核对。返回去掉后的剪辑；没有可去掉的返回 null。
+ * 并在打开时按当前位置重新读取文件身份：字幕、按文字剪辑等来源核对仍有身份可比，项目搬家也不误报。
+ * 文件已不在时去掉旧身份，由使用方提示重新定位。外部素材照旧按素材库快照核对。没有变化返回 null。
  */
-function detachProjectMediaAssets(document: VideoEditDocument, projectRoot: string): VideoEditDocument | null {
+async function relocateProjectMedia(document: VideoEditDocument, projectRoot: string): Promise<VideoEditDocument | null> {
   const normalize = (value: string): string => value.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase()
   const root = `${normalize(projectRoot)}/`
   let changed = false
-  const media = document.media.map(item => {
-    if (!item.assetId && !item.assetContent) return item
+  const media = await Promise.all(document.media.map(async item => {
     if (!normalize(item.path).startsWith(root)) return item
+    const { assetId: _assetId, assetContent: previous, ...rest } = item
+    const content = await inspectVideoEditMediaContent(item).catch(() => null)
+    if (!item.assetId && JSON.stringify(previous ?? null) === JSON.stringify(content)) return item
     changed = true
-    const { assetId: _assetId, assetContent: _assetContent, ...rest } = item
-    return rest
-  })
-  return changed ? { ...document, media } : null
+    return content ? { ...rest, assetContent: content } : rest
+  }))
+  const located = changed ? { ...document, media } : document
+  // Recognised words are bound to the media identity, which includes the refreshed file identity.
+  return rebindVideoEditProjectTextIdentities(located, projectRoot) ?? (changed ? located : null)
 }
 function projectRootOf(session: DocumentSession): string | null {
   return session.documentMeta.container.kind === 'project' ? parentFolderOf(session.documentMeta.path) : null
@@ -814,7 +820,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   if (existing && existing.session === session && !session.isEnded) { if (focus) focusVideoEdit(session.id); return existing }
   const loaded = videoEditDocumentFromContent(session.getContent(), session.documentMeta)
   const root = projectRootOf(session)
-  const detached = root ? detachProjectMediaAssets(loaded, root) : null
+  const detached = root ? await relocateProjectMedia(loaded, root) : null
   const document = detached ?? loaded
   const codeMetadata = await prepareVideoEditCodeMetadata(document)
   if (session.isEnded) throw new Error('剪辑在打开期间已关闭。')
@@ -843,9 +849,12 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
       const before = instance.document
       const received = videoEditDocumentFromContent(content, { id: before.id, name: session.documentMeta.name }, before.revision + 1)
       const receivedRoot = projectRootOf(session)
-      const receivedDetached = receivedRoot ? detachProjectMediaAssets(received, receivedRoot) : null
-      instance.document = receivedDetached ?? received
-      if (receivedDetached) queueMicrotask(() => notifyVideoEditContent(instance))
+      instance.document = received
+      if (receivedRoot) void relocateProjectMedia(received, receivedRoot).then(next => {
+        if (!next || session.isEnded || instance.document !== received) return
+        instance.document = next; instance.version++; instance.contentVersion++
+        notifyVideoEditContent(instance); publishVideoEdit(true)
+      }).catch(error => logger.warn('重新载入后项目素材身份未刷新', { event: 'video_edit.document.media_relocate_failed', error }))
       instance.past = []; instance.future = []; instance.playing = false; instance.version++; instance.contentVersion++
       reconcileSequenceView(instance)
       void ensureVideoEditCodeDocumentMetadata(instance, instance.document).catch(error => logger.warn('重新载入后代码素材检查未完成', { event: 'video_edit.document.code_metadata_failed', error }))

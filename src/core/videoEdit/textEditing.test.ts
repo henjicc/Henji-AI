@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema, type VideoEditClip } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { addLegacyVideoEditTracks } from './testFixtures'
-import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, mapVideoEditTextRange, resolveVideoEditTextRanges, videoEditTranscriptWords } from './textTranscript'
+import { buildVideoEditTextTranscription, mergeVideoEditTextTranscription, mapVideoEditTextRange, rebindVideoEditProjectTextIdentities, resolveVideoEditTextRanges, videoEditTranscriptWords } from './textTranscript'
 import { deleteVideoEditTextRanges, extractVideoEditTextRanges, insertVideoEditTextRanges } from './textEdits'
 import type { AudioEditProjectDocument } from '../audioEdit/types'
 import { videoEditAnnotationSchema } from './annotations'
@@ -176,4 +176,24 @@ it('silence requires audio evidence, respects locked speech and retains the voic
   audio.transcript.push({ id: 'locked', text: '保护', startFrame: 2500, endFrame: 3000, included: true, locked: true, granularity: 'word' })
   sequence.textTranscription = buildVideoEditTextTranscription(videoEditComposition(document, sequence.id), sound, audio, 0)
   expect(resolveVideoEditTextRanges(videoEditComposition(document, sequence.id), { kind: 'silence' })).toEqual([])
+})
+
+describe('project-local media identity', () => {
+  const words = (document: ReturnType<typeof fixture>['document']) => videoEditTranscriptWords(videoEditComposition(document, document.sequences[0].id)).map(word => word.text)
+  it('打开时去掉项目内素材的素材库快照或移动项目后，词源仍按同一位置绑定；换成别的文件不绑定', () => {
+    const { document } = fixture()
+    document.media[0] = { ...document.media[0], path: 'D:/作品/项目A/素材/voice.mp4', assetContent: { sizeBytes: 10, fileModifiedAt: 1.5, contentIdentity: 'a'.repeat(64) } }
+    document.sequences[0].textTranscription = buildVideoEditTextTranscription(videoEditComposition(document, document.sequences[0].id), [document.sequences[0].clips[1]], fixture().audio, 0)
+    expect(words(document)).toEqual(['嗯，', '价格', '九元。', '那个'])
+    // Reopened: the asset snapshot is dropped. Moved: the project root changes too.
+    const { assetContent: _content, ...located } = document.media[0]
+    const moved = { ...document, media: [{ ...located, path: 'E:/备份/项目A/素材/voice.mp4' }] }
+    expect(words(moved)).toEqual([])
+    expect(rebindVideoEditProjectTextIdentities(moved, 'D:/作品')).toBeNull()
+    const rebound = rebindVideoEditProjectTextIdentities(moved, 'E:\\备份\\项目A')!
+    expect(words(rebound)).toEqual(['嗯，', '价格', '九元。', '那个'])
+    expect(rebindVideoEditProjectTextIdentities(rebound, 'E:/备份/项目A')).toBeNull()
+    expect(rebindVideoEditProjectTextIdentities({ ...moved, media: [{ ...moved.media[0], path: 'E:/备份/项目A/素材/other.mp4' }] }, 'E:/备份/项目A')).toBeNull()
+    expect(rebindVideoEditProjectTextIdentities({ ...moved, media: [{ ...moved.media[0], sourceRevision: 'relinked' }] }, 'E:/备份/项目A')).toBeNull()
+  })
 })
