@@ -141,3 +141,14 @@ describe('video render cache store', () => {
     expect(await render.list('p')).toEqual([])
   })
 })
+
+describe('media cache shutdown', () => {
+  it('does no maintenance or settings writes after stop (the database closes on quit)', async () => {
+    const owner = host(await temporary())
+    const manager = new MediaCacheManager(owner)
+    manager.stop()
+    await manager.startupMaintenance()
+    await manager.enforce()
+    expect(owner.values.size).toBe(0)
+  })
+})

@@ -37,5 +37,5 @@ export function registerMediaCacheIpc(): void {
   registerIpcHandler(MEDIA_CACHE_CHANNELS.detectHardware, value => z.object({ encode: z.array(hardwareEncodeResultSchema).max(8) }).strict().parse(value), ({ encode }) => getHardwareCapabilitiesService().detect(encode), assertTrustedApplicationSender)
   // 启动维护放到界面起来之后，不与首屏争磁盘。
   const timer = setTimeout(() => { void manager.startupMaintenance().catch(error => logger.warn('缓存启动维护失败', { event: 'media_cache.startup.failed', error })) }, 15_000)
-  app.once('before-quit', () => clearTimeout(timer))
+  app.once('before-quit', () => { clearTimeout(timer); manager.stop() })
 }

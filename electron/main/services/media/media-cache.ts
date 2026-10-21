@@ -58,6 +58,8 @@ export class MediaCacheManager {
   private readonly protectors = new Set<ProtectFile>()
   private readonly orphanCollectors = new Set<OrphanCollector>()
   private readonly listeners = new Set<() => void>()
+  /** 应用退出后不再开始任何维护或设置读写（主进程退出流程会关闭数据库）。 */
+  private stopped = false
 
   constructor(private readonly host: MediaCacheHost) {}
 
@@ -83,6 +85,8 @@ export class MediaCacheManager {
     const after = <T>(value: T): T => { this.scheduleEnforce(); return value }
     return { ...cache, write: async (key, bytes) => after(await cache.write(key, bytes)), adopt: async (key, temporary) => after(await cache.adopt(key, temporary)) }
   }
+
+  stop(): void { this.stopped = true }
 
   protect(callback: ProtectFile): () => void { this.protectors.add(callback); return () => { this.protectors.delete(callback) } }
   registerOrphanCollector(callback: OrphanCollector): void { this.orphanCollectors.add(callback) }
@@ -196,6 +200,7 @@ export class MediaCacheManager {
 
   /** 跨类执行保留天数与总容量上限；写入后节流调用，设置变化时立即调用。 */
   scheduleEnforce(immediate = false): void {
+    if (this.stopped) return
     if (!immediate && Date.now() - this.lastEnforce < ENFORCE_INTERVAL_MS) return
     void this.enforce().catch(error => this.host.logger.warn('缓存容量检查失败', { event: 'media_cache.enforce.failed', error }))
   }
@@ -203,6 +208,7 @@ export class MediaCacheManager {
   enforce(): Promise<void> {
     this.enforcing ??= (async () => {
       this.lastEnforce = Date.now()
+      if (this.stopped) return
       const settings = this.readSettings()
       const files = await this.listFiles()
       const { budgetBytes } = await this.budgetBytes(files.reduce((sum, file) => sum + file.size, 0))
@@ -227,11 +233,12 @@ export class MediaCacheManager {
    */
   async startupMaintenance(): Promise<void> {
     const root = this.cacheRoot()
-    if (!root) return
+    if (!root || this.stopped) return
     const settings = this.host.settings
     if (settings.get(MEDIA_CACHE_SETTING_KEYS.legacyCleaned) !== '1') {
       let removed = 0
       for (const directory of this.host.legacyDirectories()) {
+        if (this.stopped) return
         try { await fs.access(directory) } catch { continue }
         try { await removeUnmanagedCachePath(directory, { recursive: true, force: true }); removed++ }
         catch (error) { this.host.logger.warn('旧版缓存目录未能删除', { event: 'media_cache.legacy.failed', error, context: { directory } }) }
@@ -246,9 +253,11 @@ export class MediaCacheManager {
         this.host.logger.info('作品目录已更换，旧位置的缓存已删除', { event: 'media_cache.previous_root.removed', context: { previous: last } })
       } catch (error) { this.host.logger.warn('旧位置的缓存未能删除', { event: 'media_cache.previous_root.failed', error, context: { previous: last } }) }
     }
+    if (this.stopped) return
     settings.set(MEDIA_CACHE_SETTING_KEYS.lastRoot, root, 'string')
     await fs.mkdir(root, { recursive: true })
     if (process.platform === 'win32') await new Promise<void>(resolve => { execFile('attrib', ['+h', root], { windowsHide: true }, () => resolve()) })
+    if (this.stopped) return
     if (this.host.liveDocumentIds && this.orphanCollectors.size) {
       const live = { video_edit: await this.host.liveDocumentIds('video_edit'), audio_edit: await this.host.liveDocumentIds('audio_edit') }
       let removed = 0
