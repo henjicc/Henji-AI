@@ -22,6 +22,7 @@
     "workspace-video-edit": "Edit",
     "workspace-assets": "Assets",
     "files-storage": "Works Folder",
+    "files-cache": "Cache",
     "files-upload": "Uploads",
     "files-download": "Downloads",
     "files-models": "Local models",
@@ -292,6 +293,55 @@
     }
   },
   "sections": {
+    "hardware": {
+      "title": "Hardware Capabilities",
+      "gpus": "Graphics",
+      "decodingGpu": "{{name}} (used for decoding)",
+      "noGpu": "No usable graphics card found",
+      "detecting": "Detecting…",
+      "decodeLabel": "{{codec}} Decoding",
+      "variant": "{{depth}}-bit {{chroma}}",
+      "decodeGpu": "GPU: {{list}}",
+      "decodeCpu": "CPU (slower): {{list}}",
+      "unsupported": "Not supported",
+      "encodeLabel": "GPU Encoding",
+      "encodeInfo": "Formats that render previews and exports can encode on the graphics card, which is much faster than the CPU.",
+      "noHardwareEncode": "Not available; the CPU is used"
+    },
+    "mediaCache": {
+      "usageLabel": "Current Usage",
+      "usageInfo": "Render previews, proxies, analysis and other caches live in the hidden \".Henji AI Cache\" folder inside your works folder, on the same disk as your projects. Anything deleted is rebuilt automatically when needed; your work is not affected.",
+      "usageValue": "{{used}} of {{budget}}",
+      "clearAll": "Clear All",
+      "clear": "Clear",
+      "clearAllTitle": "Clear all caches?",
+      "clearAllMessage": "Render previews, proxies and analysis results will be deleted; your work is not affected. They are rebuilt when needed, and playback may stutter until then.",
+      "budgetLabel": "Size Limit",
+      "budgetInfo": "When caches exceed the limit, the least recently used are deleted first. Automatic uses 10% of the free space on the cache disk, between 10 GB and 50 GB.",
+      "budgetAuto": "Automatic",
+      "budgetAutoWithSize": "Automatic (about {{size}})",
+      "retentionLabel": "Auto Cleanup",
+      "retentionInfo": "Caches not used for this long are deleted automatically.",
+      "retentionDays": "{{count}} days",
+      "retentionNever": "Never",
+      "loadFailed": "Could not read cache usage.",
+      "clearFailed": "Some caches could not be cleared because they are in use. Try again later.",
+      "saveFailed": "Cache settings were not saved. Please try again.",
+      "category": {
+        "render": "Render Previews",
+        "proxy": "Proxies",
+        "analysis": "Smart Analysis",
+        "preview": "Thumbnails & Waveforms",
+        "audio_edit": "Voiceover Processing"
+      },
+      "categoryInfo": {
+        "render": "Rendered preview files for demanding parts of an edit, for smoother playback.",
+        "proxy": "Low-resolution stand-ins for high-resolution footage, for smooth previews.",
+        "analysis": "Results of person matting, tracking, shot detection and audio analysis.",
+        "preview": "Timeline thumbnail strips and audio waveforms.",
+        "audio_edit": "Decoded audio and processing results for voiceovers."
+      }
+    },
     "language": {
       "title": "Language",
       "label": "Interface Language",
@@ -499,7 +549,14 @@
       "duplicateSkip": "Skip",
       "duplicateImport": "Import another copy",
       "selectionFollowsPlayheadLabel": "Selection follows playhead",
-      "selectionFollowsPlayheadInfo": "Same as Premiere Pro's Selection Follows Playhead: while playing or moving the playhead, the topmost visible clip at the current frame is selected and Effect Controls shows it."
+      "selectionFollowsPlayheadInfo": "Same as Premiere Pro's Selection Follows Playhead: while playing or moving the playhead, the topmost visible clip at the current frame is selected and Effect Controls shows it.",
+      "renderFormatLabel": "Render Format",
+      "renderFormatInfo": "Automatic uses HEVC when this computer can encode and decode it in hardware (files about a third smaller at the same quality), otherwise H.264. Resolution always follows the sequence.",
+      "renderFormatAuto": "Automatic",
+      "renderQualityLabel": "Render Quality",
+      "renderQualityInfo": "High quality uses 1.5× the bitrate of Standard, with larger files. After a change, rendered parts are re-rendered with the new setting when idle.",
+      "renderQualityStandard": "Standard",
+      "renderQualityHigh": "High"
     },
     "assetLibrary": {
       "title": "Asset Library",

@@ -2,6 +2,8 @@ import { GenerationLifecycleProvider } from '@/features/generation/application/G
 import { RecordingDirectorCursor } from '@/features/screenRecording/RecordingDirectorCursor'
 import { createLogger } from '@/core/logging'
 import React, { Suspense, lazy, useState, useEffect } from 'react'
+import { initializeMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
+import { initializeHardwareCapabilities } from '@/services/mediaCache/hardwareCapabilities'
 import { SettingsModalPlaceholder } from '@/components/Settings/SettingsModalFrame'
 import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
@@ -120,6 +122,8 @@ const App: React.FC = () => {
     void import('@/features/screenRecording/tracks/tourFixture').then(module => module.installRecordingTracksTourFixture())
     void import('@/features/screenRecording/application/directorTourFixture').then(module => module.installDirectorTourFixture())
   }, [])
+  // 缓存设置的同步投影与本机硬件能力检测（后台进行，不阻塞界面）。
+  useEffect(() => { initializeMediaCacheSettings(); initializeHardwareCapabilities() }, [])
   useApplyUiScale()
   useDevToolsShortcut()
   useLogWindowShortcut()

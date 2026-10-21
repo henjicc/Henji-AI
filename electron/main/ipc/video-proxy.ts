@@ -8,16 +8,16 @@ import { registerIpcHandler } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
 import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
-import { createContentDiskCache } from '../services/media/content-disk-cache'
-import { getProgramDataDir } from '../services/appPaths'
+import { getMediaCacheManager } from '../services/media/media-cache-runtime'
 import { createMainLogger } from '../services/logging'
 import { VideoProxyService } from '../services/video/proxy'
 
 const logger = createMainLogger('main.video.proxy')
 const tasks = new Map<number, Map<string, AbortController>>()
 const watched = new WeakSet<WebContents>()
-const cacheOptions = { directory: () => path.join(getProgramDataDir(), 'cache', 'video-proxies'), onError: (event: string, error: unknown) => logger.warn('代理缓存失败', { event: `video.proxy.cache.${event}`, error }) }
-const service = new VideoProxyService(createContentDiskCache({ ...cacheOptions, extension: '.mp4', budgetBytes: 20 * 1024 ** 3 }), createContentDiskCache({ ...cacheOptions, extension: '.json', budgetBytes: 16 * 1024 ** 2 }))
+const cacheOptions = { onError: (event: string, error: unknown) => logger.warn('代理缓存失败', { event: `video.proxy.cache.${event}`, error }) }
+const service = new VideoProxyService(getMediaCacheManager().createCache('proxy', undefined, { ...cacheOptions, extension: '.mp4', budgetBytes: Number.POSITIVE_INFINITY }), getMediaCacheManager().createCache('proxy', undefined, { ...cacheOptions, extension: '.json', budgetBytes: 16 * 1024 ** 2 }))
+// 代理文件只受缓存管理的总上限与保留天数约束（不另设单类上限）。
 function release(senderId: number): void { for (const controller of tasks.get(senderId)?.values() ?? []) controller.abort(new Error('代理创建已取消。')); tasks.delete(senderId) }
 async function authorizedSource(source: string): Promise<string> {
   const local = normalizeLocalSource(source)

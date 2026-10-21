@@ -22,6 +22,7 @@
     "workspace-video-edit": "剪辑",
     "workspace-assets": "资产",
     "files-storage": "作品目录",
+    "files-cache": "缓存管理",
     "files-upload": "上传",
     "files-download": "下载",
     "files-models": "本地模型",
@@ -292,6 +293,55 @@
     }
   },
   "sections": {
+    "hardware": {
+      "title": "本机硬件能力",
+      "gpus": "显卡",
+      "decodingGpu": "{{name}}（用于解码）",
+      "noGpu": "未找到可用的显卡",
+      "detecting": "正在检测…",
+      "decodeLabel": "{{codec}} 解码",
+      "variant": "{{depth}} 位 {{chroma}}",
+      "decodeGpu": "显卡解码：{{list}}",
+      "decodeCpu": "处理器解码（较慢）：{{list}}",
+      "unsupported": "不支持",
+      "encodeLabel": "显卡编码",
+      "encodeInfo": "预渲染与导出可以用显卡编码的格式；显卡编码比处理器快得多。",
+      "noHardwareEncode": "不支持，使用处理器编码"
+    },
+    "mediaCache": {
+      "usageLabel": "当前占用",
+      "usageInfo": "预渲染、代理、智能分析等缓存放在作品目录下的隐藏文件夹“.痕迹AI缓存”里，随作品所在磁盘。删除后需要时会自动重新生成，不影响作品本身。",
+      "usageValue": "{{used}}，上限 {{budget}}",
+      "clearAll": "全部清除",
+      "clear": "清除",
+      "clearAllTitle": "清除全部缓存？",
+      "clearAllMessage": "预渲染、代理和分析结果都会删除，作品不受影响。之后用到时会重新生成，期间播放可能不够流畅。",
+      "budgetLabel": "容量上限",
+      "budgetInfo": "缓存总量超过上限时，先删除最久没用过的。自动上限取缓存所在磁盘可用空间的 10%，最多 50 GB，最少 10 GB。",
+      "budgetAuto": "自动",
+      "budgetAutoWithSize": "自动（约 {{size}}）",
+      "retentionLabel": "自动清理",
+      "retentionInfo": "超过这段时间没有用到的缓存会自动删除。",
+      "retentionDays": "{{count}} 天",
+      "retentionNever": "从不",
+      "loadFailed": "读取缓存占用失败。",
+      "clearFailed": "有缓存未能清除，可能正在使用，稍后再试。",
+      "saveFailed": "缓存设置未保存，请重试。",
+      "category": {
+        "render": "预渲染",
+        "proxy": "代理",
+        "analysis": "智能分析",
+        "preview": "缩略图与波形",
+        "audio_edit": "口播处理"
+      },
+      "categoryInfo": {
+        "render": "剪辑里吃力段落渲染好的预览文件，让播放更流畅。",
+        "proxy": "高分辨率素材的低分辨率替身，用于流畅预览。",
+        "analysis": "人物抠像、跟踪、镜头检测与声音分析的结果。",
+        "preview": "时间线上的缩略图条与音频波形。",
+        "audio_edit": "口播的解码音频与处理结果。"
+      }
+    },
     "language": {
       "title": "语言",
       "label": "界面语言",
@@ -499,7 +549,14 @@
       "duplicateSkip": "跳过",
       "duplicateImport": "仍导入一份",
       "selectionFollowsPlayheadLabel": "播放头自动选中片段",
-      "selectionFollowsPlayheadInfo": "对应 PR 的“选择跟随播放指示器”：播放或拖动播放头时，自动选中当前帧最上面的可见片段，效果控件随之显示它的参数。"
+      "selectionFollowsPlayheadInfo": "对应 PR 的“选择跟随播放指示器”：播放或拖动播放头时，自动选中当前帧最上面的可见片段，效果控件随之显示它的参数。",
+      "renderFormatLabel": "预渲染格式",
+      "renderFormatInfo": "自动：本机显卡能编码并解码 HEVC 时用 HEVC（同画质文件约小三分之一），否则用 H.264。分辨率始终跟随序列。",
+      "renderFormatAuto": "自动",
+      "renderQualityLabel": "预渲染画质",
+      "renderQualityInfo": "高画质的码率是标准的 1.5 倍，文件也相应变大。改动后已渲染的段落会在空闲时按新设置重新渲染。",
+      "renderQualityStandard": "标准",
+      "renderQualityHigh": "高"
     },
     "assetLibrary": {
       "title": "资产库行为",

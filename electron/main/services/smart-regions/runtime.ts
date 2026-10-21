@@ -1,9 +1,8 @@
 import path from 'node:path'
 import { BrowserWindow, utilityProcess } from 'electron'
 import { SMART_REGIONS_IPC_CHANNELS, type SmartRegionProgressEvent } from '../../../../src/platform/contracts/smartRegions'
-import { getProgramStoreDir } from '../appPaths'
 import { createMainLogger } from '../logging'
-import { createContentDiskCache } from '../media/content-disk-cache'
+import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { identifyMediaContent } from '../media/content-identity'
 import { ensureBundledOcrModel, ensureLocalModel } from '../local-models/runtime'
 import { isBundledOcrModel } from '../local-models/bundledOcr'
@@ -59,7 +58,6 @@ export function getLocalInferenceHost(): LocalInferenceHost {
 
 export function getSmartRegionService(): SmartRegionService {
   if (service) return service
-  const cacheDirectory = (): string => getProgramStoreDir('smartRegions')
   const onError = (event: string, error: unknown): void => logger.warn('智能区域缓存操作失败', { event: `smart_regions.cache.${event}`, error })
   const inference = getLocalInferenceHost()
   const created = new SmartRegionService({
@@ -74,8 +72,8 @@ export function getSmartRegionService(): SmartRegionService {
     },
     ffmpegPath: loadFfmpegPath,
     // 人物抠像 1 分钟 30 帧约 10–20MB；超过 4GB 时按最久未用清理。
-    segments: createContentDiskCache({ directory: cacheDirectory, extension: '.hsrg', budgetBytes: 4 * 1024 ** 3, pruneIntervalMs: 60_000, onError }),
-    indexes: createContentDiskCache({ directory: cacheDirectory, extension: '.json', budgetBytes: 64 * 1024 ** 2, pruneIntervalMs: 60_000, onError }),
+    segments: getMediaCacheManager().createCache('analysis', 'smart-regions', { extension: '.hsrg', budgetBytes: 4 * 1024 ** 3, pruneIntervalMs: 60_000, onError }),
+    indexes: getMediaCacheManager().createCache('analysis', 'smart-regions', { extension: '.json', budgetBytes: 64 * 1024 ** 2, pruneIntervalMs: 60_000, onError }),
     analyze: (job, progress) => inference.analyze(job, progress),
     cancelAnalysis: id => inference.cancel(id),
     providers: executionProviderOrder(process.platform),

@@ -48,6 +48,8 @@ export interface MoveWorkRootInput {
   forceCopy?: boolean
   /** 测试注入：替换复制 / 改名以模拟失败。 */
   fileOps?: Partial<MoveWorkRootFileOps>
+  /** 跨磁盘复制时不复制的顶层文件夹（可重建的缓存）；它们随旧目录一起删除。 */
+  skipTopLevel?: readonly string[]
   /** 测试注入：可用空间（字节）；不传时读取磁盘。 */
   availableBytes?: (directory: string) => Promise<number | null>
 }
@@ -164,10 +166,11 @@ async function readAvailableBytes(directory: string): Promise<number | null> {
 }
 
 /** 列出整棵目录树（文件夹在其内容之前）；读不全就失败，避免漏拷后删除旧目录丢文件。 */
-async function listTree(root: string): Promise<TreeEntry[]> {
+async function listTree(root: string, skipTopLevel: readonly string[] = []): Promise<TreeEntry[]> {
   const entries: TreeEntry[] = []
   const walk = async (directory: string, relativeDir: string): Promise<void> => {
     for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      if (!relativeDir && skipTopLevel.includes(entry.name)) continue
       const relative = relativeDir ? path.join(relativeDir, entry.name) : entry.name
       const full = path.join(directory, entry.name)
       if (entry.isSymbolicLink()) {
@@ -235,7 +238,7 @@ async function moveByCopy(input: MoveWorkRootInput, ops: MoveWorkRootFileOps): P
   const report = input.onProgress
 
   report?.({ phase: 'preparing', current: 0, total: 0, item: '' })
-  const plan = await listTree(oldRoot)
+  const plan = await listTree(oldRoot, input.skipTopLevel)
   const totalBytes = plan.reduce((sum, entry) => sum + entry.size, 0)
   const available = await (input.availableBytes ?? readAvailableBytes)(newRoot)
   if (available !== null && available < totalBytes) {
@@ -287,7 +290,7 @@ async function moveByCopy(input: MoveWorkRootInput, ops: MoveWorkRootFileOps): P
     }
     // 补拷：复制期间可能又有文件写进旧位置（写入已冻结，正常不会发生）。
     const seen = new Set(plan.map((entry) => entry.relative))
-    for (const entry of await listTree(oldRoot)) {
+    for (const entry of await listTree(oldRoot, input.skipTopLevel)) {
       if (seen.has(entry.relative)) continue
       assertNotAborted(input.signal)
       await copyEntry(entry)

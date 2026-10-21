@@ -51,6 +51,7 @@ import { createFontsApi } from './fonts-api'
 import { createSmartRegionsApi } from './smart-regions-api'
 import { createTrackingApi } from './tracking-api'
 import { createVideoProxyApi } from './video-proxy-api'
+import { createMediaCacheApi } from './media-cache-api'
 import { createSceneDetectionApi } from './scene-detection-api'
 import { createGenerationHistoryApi, createPresetsApi, createSettingsApi } from './local-records-api'
 
@@ -507,6 +508,7 @@ const api: HenjiNativeApi = {
   smartRegions: createSmartRegionsApi(nativeInvoke, subscribeChannel),
   tracking: createTrackingApi(nativeInvoke, subscribeChannel),
   videoProxy: createVideoProxyApi(nativeInvoke, subscribeChannel),
+  mediaCache: createMediaCacheApi(nativeInvoke, subscribeChannel),
   sceneDetection: createSceneDetectionApi(nativeInvoke, subscribeChannel),
   screenRecording: createScreenRecordingApi(nativeInvoke, subscribeChannel),
 }

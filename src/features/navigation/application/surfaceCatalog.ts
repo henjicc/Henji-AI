@@ -102,6 +102,7 @@ const surfaceDefinitions = [
   { id: 'settings.workspace.assets', kind: 'settings', settingsTarget: { tab: 'workspace', sectionId: 'workspace-assets' }, ...immediate },
   { id: 'settings.files', kind: 'settings', settingsTarget: { tab: 'files' }, ...immediate },
   { id: 'settings.storage', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-storage' }, ...immediate },
+  { id: 'settings.files.cache', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-cache' }, ...immediate },
   { id: 'settings.upload', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-upload' }, ...immediate },
   { id: 'settings.files.download', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-download' }, ...immediate },
   { id: 'settings.files.models', kind: 'settings', settingsTarget: { tab: 'files', sectionId: 'files-models' }, ...immediate },

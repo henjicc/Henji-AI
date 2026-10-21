@@ -4,6 +4,7 @@ import SettingsSection from '../components/SettingsSection'
 import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
 import { useSettings } from '../hooks/useSettings'
 import DataPathSection from '../sections/DataPathSection'
+import MediaCacheSection from '../sections/MediaCacheSection'
 import LargeUploadSection from '../sections/LargeUploadSection'
 import UploadSection from '../sections/UploadSection'
 import DownloadSection from '../sections/DownloadSection'
@@ -20,6 +21,10 @@ const FilesTab: React.FC = () => {
     <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
       <SettingsSection id="files-storage">
         <DataPathSection />
+      </SettingsSection>
+
+      <SettingsSection id="files-cache">
+        <MediaCacheSection />
       </SettingsSection>
 
       <SettingsSection id="files-upload">

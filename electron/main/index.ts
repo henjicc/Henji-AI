@@ -22,6 +22,7 @@ import { registerWorkRootIpc } from './ipc/work-root'
 import { registerLocalModelsIpc } from './ipc/local-models'
 import { registerSmartRegionsIpc } from './ipc/smart-regions'
 import { registerVideoProxyHandlers } from './ipc/video-proxy'
+import { registerMediaCacheIpc } from './ipc/media-cache'
 import { registerSceneDetectionHandlers } from './ipc/scene-detection'
 import { registerTrackingIpc } from './ipc/tracking'
 import { disposeLocalModels } from './services/local-models/runtime'
@@ -139,6 +140,7 @@ app.whenReady().then(async () => {
   registerLocalModelsIpc()
   registerSmartRegionsIpc()
   registerVideoProxyHandlers()
+  registerMediaCacheIpc()
   registerScreenRecordingIpc()
   registerSceneDetectionHandlers()
   registerTrackingIpc()
