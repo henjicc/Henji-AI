@@ -30,8 +30,9 @@ function sessionOptions(provider: LocalExecutionProvider): InferenceSession.Sess
 
 /** 模型来源：普通模型按路径载入；要补图输出的（EfficientTAM 解码器候选）读进内存改好后从缓冲区载入。 */
 type SessionFactory = (provider: LocalExecutionProvider) => Promise<InferenceSession>
+// 原生绑定只要出现 intraOpNumThreads 键就要求是数字，未指定时不能写成 undefined。
 function sessionFactory(runtime: OnnxRuntime, model: LocalInferenceModelFile, shape: string, options: LocalSessionOptions): SessionFactory {
-  const config = (provider: LocalExecutionProvider): InferenceSession.SessionOptions => ({ ...sessionOptions(provider), intraOpNumThreads: options.intraOpNumThreads, ...(options.allowSpinning === undefined ? {} : { extra: { session: { intra_op: { allow_spinning: options.allowSpinning ? '1' : '0' } } } }), ...(shape === 'dynamic' ? { enableMemPattern: false } : {}) })
+  const config = (provider: LocalExecutionProvider): InferenceSession.SessionOptions => ({ ...sessionOptions(provider), ...(options.intraOpNumThreads === undefined ? {} : { intraOpNumThreads: options.intraOpNumThreads }), ...(options.allowSpinning === undefined ? {} : { extra: { session: { intra_op: { allow_spinning: options.allowSpinning ? '1' : '0' } } } }), ...(shape === 'dynamic' ? { enableMemPattern: false } : {}) })
   if (!model.extraOutputs?.length) return provider => runtime.InferenceSession.create(model.path, config(provider))
   let bytes: Promise<Uint8Array> | undefined
   return async provider => {
