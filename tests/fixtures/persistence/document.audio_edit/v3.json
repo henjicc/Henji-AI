@@ -1,0 +1,82 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "minReaderVersion": 1,
+  "kind": "audio_edit",
+  "kindVersion": 3,
+  "kindMinReaderVersion": 3,
+  "id": "golden-audio_edit",
+  "name": "口播",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "source": {
+      "mediaType": "audio",
+      "sourcePath": "/persistence-project/素材/voice.wav",
+      "audioPath": "/persistence-project/素材/voice.wav",
+      "durationFrames": 48000,
+      "sampleRate": 48000,
+      "channels": 1
+    },
+    "referenceScript": "参考稿",
+    "transcript": [
+      {
+        "id": "word",
+        "text": "你好",
+        "startFrame": 0,
+        "endFrame": 24000,
+        "included": true,
+        "locked": false,
+        "granularity": "word"
+      }
+    ],
+    "suggestions": [],
+    "vstEnabled": false,
+    "cuts": [
+      {
+        "id": "cut",
+        "startFrame": 24000,
+        "endFrame": 48000,
+        "reason": "manual",
+        "enabled": true
+      }
+    ],
+    "gainRegions": [
+      {
+        "id": "gain",
+        "startFrame": 0,
+        "endFrame": 24000,
+        "enabled": true,
+        "gainDb": -6,
+        "fadeInFrames": 100,
+        "fadeOutFrames": 100
+      }
+    ],
+    "repairs": [
+      {
+        "id": "repair",
+        "startFrame": 1000,
+        "endFrame": 2000,
+        "enabled": true,
+        "kind": "spectral_heal",
+        "lowHz": 100,
+        "highHz": 1000,
+        "strength": 0.5,
+        "strokes": [
+          {
+            "radius": 0.1,
+            "radiusY": 0.2,
+            "points": [
+              {
+                "x": 0.5,
+                "y": 0.5
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "processorChain": []
+  }
+}

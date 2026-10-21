@@ -7,7 +7,7 @@ import { runSpectrogram } from './dsp-adapter'
 import { runAudioEditTask } from './task-store'
 import { prepareAudioEditRenderSource } from './render'
 
-/** Returns at most 8 MiB / 10 seconds. Continue from endFrame for a long requested interval. */
+/** Returns at most 8 MiB of columns. Continue from endFrame for a long requested interval; a larger hop covers more time per chunk. */
 export async function getAudioEditSpectrogram(raw: AudioEditSpectrogramRequest): Promise<AudioEditSpectrogramChunk> {
   const request = audioEditSpectrogramRequestSchema.parse(raw)
   const project = await requireAudioEditProject(request.projectId)
@@ -16,7 +16,7 @@ export async function getAudioEditSpectrogram(raw: AudioEditSpectrogramRequest):
   if (request.startFrame >= project.source.durationFrames) throw new Error('频谱开始位置超出音频')
   const hop = request.hop ?? request.fftSize / 4
   const maxFrames = Math.floor(8 * 1024 * 1024 / channels / (request.fftSize / 2 + 1)) * hop
-  const endFrame = Math.min(request.endFrame, project.source.durationFrames, request.startFrame + project.source.sampleRate * 10, request.startFrame + maxFrames)
+  const endFrame = Math.min(request.endFrame, project.source.durationFrames, request.startFrame + maxFrames)
   const file = await runAudioEditTask(project.id, 'spectrogram', async signal => {
     await verifyAudioEditSource(project, false, signal)
     const identity = project.source.identity ?? await identifyAudioEditSource(project.source.sourcePath, signal)

@@ -59,13 +59,26 @@ impl Transform {
 /// Periodic Hann, coherent-gain-corrected ONE-SIDED amplitude, dBFS:
 /// round(clamp((20*log10(amplitude)+120)/120,0,1)*255).
 /// DC/Nyquist are not doubled. No per-file normalization or dithering.
+/// Largest column spacing: one hour at 48 kHz still fits a few thousand columns.
+pub const MAX_HOP: usize = 1 << 24;
+
+fn quantize_row(buffer: &[Complex32], n: usize, gain: f32, row: &mut [u8]) {
+    for (k, value) in row.iter_mut().enumerate() {
+        let factor = if k == 0 || k == n / 2 { 1.0 } else { 2.0 };
+        let amplitude = buffer[k].norm() * factor / gain;
+        let db = 20.0 * amplitude.max(1e-6).log10();
+        *value = ((db + 120.0) * (255.0 / 120.0)).clamp(0.0, 255.0).round() as u8;
+    }
+}
+
 pub fn spectrogram(req: SpectrogramRequest) -> Result<Value> {
     let began = Instant::now();
     validate_fft(req.fft_size)?;
     let n = req.fft_size;
     let hop = req.hop.unwrap_or(n / 4);
-    if hop == 0 || hop > n {
-        return Err("hop must be in 1..=fft_size".into());
+    // hop > fft_size samples one window per column (overview of long audio at screen resolution).
+    if hop == 0 || hop > MAX_HOP {
+        return Err(format!("hop must be in 1..={MAX_HOP}").into());
     }
     let mut input = Audio::open(&req.input_path)?;
     let start = req.start_frame.unwrap_or(0);
@@ -109,8 +122,36 @@ pub fn spectrogram(req: SpectrogramRequest) -> Result<Value> {
     // Channel-major passes trade sequential reads for bounded memory O(N),
     // independent of file duration and the number of spectrogram columns.
     for &channel in &channels {
-        input.seek(start.saturating_sub((n / 2) as u64))?;
         let total = input.frames as i64;
+        if hop > n {
+            for t in 0..frames {
+                let begin = start as i64 + t as i64 * hop as i64 - (n / 2) as i64;
+                ring.fill(0.0);
+                let first = begin.max(0);
+                if first < total {
+                    input.seek(first as u64)?;
+                    let mut samples = input.samples();
+                    let mut frame = first;
+                    while frame < begin + n as i64 && frame < total {
+                        for c in 0..source_channels {
+                            let x = samples.next().ok_or("unexpected end of WAV")??;
+                            if c == channel {
+                                ring[(frame - begin) as usize] = x;
+                            }
+                        }
+                        frame += 1;
+                    }
+                }
+                for j in 0..n {
+                    buffer[j] = Complex32::new(ring[j] * fft.window[j], 0.0);
+                }
+                fft.forward(&mut buffer);
+                quantize_row(&buffer, n, gain, &mut row);
+                writer.write_all(&row)?;
+            }
+            continue;
+        }
+        input.seek(start.saturating_sub((n / 2) as u64))?;
         let mut samples = input.samples();
         let mut next_frame = start as i64 - (n / 2) as i64;
         let mut head = 0;
@@ -137,12 +178,7 @@ pub fn spectrogram(req: SpectrogramRequest) -> Result<Value> {
                 buffer[j] = Complex32::new(ring[(head + j) % n] * fft.window[j], 0.0);
             }
             fft.forward(&mut buffer);
-            for k in 0..bins {
-                let factor = if k == 0 || k == n / 2 { 1.0 } else { 2.0 };
-                let amplitude = buffer[k].norm() * factor / gain;
-                let db = 20.0 * amplitude.max(1e-6).log10();
-                row[k] = ((db + 120.0) * (255.0 / 120.0)).clamp(0.0, 255.0).round() as u8;
-            }
+            quantize_row(&buffer, n, gain, &mut row);
             writer.write_all(&row)?;
         }
     }

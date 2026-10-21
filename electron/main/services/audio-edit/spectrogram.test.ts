@@ -22,7 +22,8 @@ afterEach(async () => { await fs.rm(state.directory, { recursive: true, force: t
 it('bounds long requests, reuses source/parameter cache, and returns typed samples with continuation', async () => {
   const request = { projectId: 'p', startFrame: 0, endFrame: 4800000 }
   const first = await getAudioEditSpectrogram(request)
-  expect(first.endFrame).toBe(480000); expect(first.values).toEqual(new Uint8Array([0, 127, 255]))
+  // 每段按数据量封顶：8 MiB ÷（2 声道 × 1025 频点）= 4092 列 × 默认间隔 512。
+  expect(first.endFrame).toBe(4092 * 512); expect(first.values).toEqual(new Uint8Array([0, 127, 255]))
   await getAudioEditSpectrogram(request); expect(state.calls).toBe(1)
   await getAudioEditSpectrogram({ ...request, startFrame: first.endFrame }); expect(state.calls).toBe(2)
   await getAudioEditSpectrogram({ ...request, channel: 0 }); expect(state.calls).toBe(3)

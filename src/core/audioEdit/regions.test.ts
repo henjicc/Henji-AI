@@ -32,3 +32,9 @@ it('brush strokes rasterize connected lines in low-frequency-first row order and
   expect(bytes[30 * 100 + 40]).toBe(255); expect(bytes[70 * 100 + 40]).toBe(0)
   expect(() => rasterAudioRepairMask(repair.strokes, 100000, 100000)).toThrow('过大')
 })
+it('elliptical brush uses its own vertical radius', () => {
+  const bytes = rasterAudioRepairMask([{ radius: .05, radiusY: .3, points: [{ x: .5, y: .5 }] }], 100, 100)
+  expect(bytes[75 * 100 + 50]).toBe(255) // 0.25 above center: inside radiusY
+  expect(bytes[50 * 100 + 60]).toBe(0) // 0.1 right of center: outside radius
+  expect(bytes[50 * 100 + 53]).toBe(255)
+})

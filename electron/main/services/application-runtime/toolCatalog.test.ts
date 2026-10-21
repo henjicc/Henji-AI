@@ -103,6 +103,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     // Style presets and templates (Frameflow mechanism): render/import/export/bind style, apply/create/promote/update/detach template; title template tools removed.
     fingerprints['2.50.0'] = 'ac839b4f9cb9be7ed5e6ccc4e8fc777ede1527174987649714ba3ad5959ace45'
     fingerprints['2.51.0'] = '944ba245b4340c7ecf0d2aa1b7b1cd4f132586683a449a2f9078447d96f94111'
+    // Spectrogram columns may be spaced wider than the FFT window (overview at screen resolution); brush strokes gain an optional vertical radius.
+    fingerprints['2.52.0'] = '54c1286e84d7bdfa2158630b5d3df8ec7ef48806a589f99e1609a249fe8b556f'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

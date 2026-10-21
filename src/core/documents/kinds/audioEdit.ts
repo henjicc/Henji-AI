@@ -64,10 +64,11 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   untitledNames: { zh: '未命名口播', en: 'Untitled Voiceover' },
   storage: 'json',
   // 版本 1 = 旧口播工程（audio_edit_projects.document_json）去掉 id / name / createdAt / updatedAt / revision。
-  version: 2,
+  // 版本 2 = 新增可选的音量区域与修复记录；版本 3 = 修复画笔笔画新增可选的纵向半径 radiusY。都只加可选字段，旧文件原样可读。
+  version: 3,
   minReaderVersion: 1,
   contentSchema: audioEditContentSchema,
-  migrations: { 1: (content) => structuredClone(content) },
+  migrations: { 1: (content) => structuredClone(content), 2: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [], vstEnabled: false }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

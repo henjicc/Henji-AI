@@ -211,6 +211,41 @@ fn spectrogram_header_peak_channel_range_and_quantization() {
     }
 }
 
+#[test]
+fn spectrogram_stride_columns_match_dense_columns() {
+    // hop > fft_size samples one window per column; each column equals the dense column at the same center.
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("input.wav");
+    let samples: Vec<_> = (0..65536)
+        .map(|i| 0.5 * (TAU * (32.0 + i as f32 / 4096.0) * i as f32 / 2048.0).sin())
+        .collect();
+    write_wav(&input, &samples, 1);
+    let run = |hop: usize, name: &str| {
+        let output = dir.path().join(name);
+        spectrogram(SpectrogramRequest {
+            input_path: input.clone(),
+            output_path: output.clone(),
+            fft_size: 1024,
+            hop: Some(hop),
+            channel: None,
+            start_frame: Some(4096),
+            end_frame: Some(61440),
+        })
+        .unwrap();
+        fs::read(output).unwrap()
+    };
+    let dense = run(256, "dense.bin");
+    let stride = run(4096, "stride.bin");
+    let bins = 513;
+    let columns = u64::from_le_bytes(stride[24..32].try_into().unwrap()) as usize;
+    assert_eq!(columns, 14);
+    for t in 0..columns {
+        let a = &stride[64 + t * bins..64 + (t + 1) * bins];
+        let b = &dense[64 + t * 16 * bins..64 + (t * 16 + 1) * bins];
+        assert_eq!(a, b, "column {t}");
+    }
+}
+
 fn write_mask(path: &Path, width: u32, height: u32, value: impl Fn(usize, usize) -> u8) {
     let mut bytes = b"HJMK\x01\x00\x10\x00".to_vec();
     bytes.extend(width.to_le_bytes());
@@ -411,7 +446,7 @@ fn dc_nyquist_silence_short_files_and_invalid_requests() {
         for (fft_size, hop, channel, start, end) in [
             (100, Some(25), None, None, None),
             (256, Some(0), None, None, None),
-            (256, Some(257), None, None, None),
+            (256, Some((1 << 24) + 1), None, None, None),
             (256, None, Some(1), None, None),
             (256, None, None, Some(2), Some(2)),
             (256, None, None, None, Some(1025)),

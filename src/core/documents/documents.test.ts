@@ -114,7 +114,7 @@ describe('文档类型登记', () => {
     expect(rows).toEqual([
       ['video_edit', '.henji-video', null, 'json', VIDEO_EDIT_CONTENT_VERSION],
       ['canvas', '.henji-canvas', { zh: '画布', en: 'Canvases' }, 'json', 1],
-      ['audio_edit', '.henji-audio', { zh: '口播', en: 'Voiceovers' }, 'json', 1],
+      ['audio_edit', '.henji-audio', { zh: '口播', en: 'Voiceovers' }, 'json', 3],
       ['camera_stage', '.henji-stage', { zh: '镜头参考', en: 'Camera Stages' }, 'json', 1],
       ['image_document', '.henjiimg', { zh: '图片文档', en: 'Image Documents' }, 'package', 1],
       ['screen_recording', '.henji-recording', { zh: '录制会话', en: 'Recordings' }, 'json', 23],

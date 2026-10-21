@@ -125,6 +125,7 @@ const successData: Record<string, Record<string, unknown>> = {
   resume_canvas_generation_task: { taskId: 'task', status: 'success', task: { status: 'success' }, ...revisions },
   retry_layer_stack_result: { nodeRef: ref('canvas.node', 'canvas:layers'), status: 'retrieving', resultRefs: [nodeRef], ...revisions },
   retry_audio_edit_save: { resultRef: audioDocumentRef, ...verified },
+  send_video_edit_clip_to_audio_edit: { resultRef: documentRef, audioDocumentRef, clipRef, created: true, message, verified: true },
   create_image_edit_preview: { previewRef: 'preview', sourceRef: assetRef, resultRefs: [ref('image_edit.preview', 'preview')], operationCount: 1, hasEffect: true, width: 1280, height: 720, ...revisions },
   commit_image_edit: { previewRef: 'preview', assetId: 'asset', status: 'committed', resultRefs: [assetRef], verification: verification(assetRef), ...revisions },
   open_image_editor_with_source: { sourceRef: assetRef, resultRefs: [ref('application.surface', 'tool.image_edit')], surfaceId: 'tool.image_edit', ...revisions },
@@ -246,7 +247,7 @@ for (const name of ['create_document', 'open_document', 'move_document', 'duplic
 for (const name of ['ripple_delete_video_edit_text', 'extract_video_edit_text', 'insert_video_edit_text', 'detect_video_edit_text_silence']) {
   successData[name] = { documentRef, resultRef: sequenceRef, ranges: [{ from: 0, to: 60 }], changed: true, ...verified }
 }
-for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'transcribe_audio_edit', 'process_audio_edit_sound', 'export_audio_edit', 'query_audio_edit_tasks', 'cancel_audio_edit_task']) {
+for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'transcribe_audio_edit', 'process_audio_edit_sound', 'export_audio_edit', 'query_audio_edit_tasks', 'cancel_audio_edit_task', 'repair_audio_edit_region']) {
   successData[name] = { resultRef: audioDocumentRef, ...verified, count: 1, shortenedMs: 100, durationFrames: 2400, tasks: [{ requestId: 'task', documentId: 'audio', kind: 'processing', state: 'completed', progress: 100 }] }
 }
 
