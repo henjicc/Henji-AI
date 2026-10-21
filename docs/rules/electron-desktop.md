@@ -35,6 +35,8 @@ Electron 自动化脚本通过 CDP/Playwright 启动构建产物。需要临时�
 
 原生模块重建：`npm run electron:rebuild`。
 
+`release/` 只保留最新一次的打包产物（安装包、`latest.yml`、`win-unpacked/` 与当前版本的 `source/`）。生成新产物后直接删除所有旧产物，包括旧版本目录、本地测试包和旧的解包目录，不做任何备份。
+
 ## Electron 版本升级
 
 安全公告本身不触发升级。满足下面任一条才升级大版本：
