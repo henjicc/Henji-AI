@@ -212,7 +212,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     : props.spectrogramStatus === 'loading' && !props.spectrogram ? <UiLoading message="正在生成频谱图…" />
       : <SpectrogramView data={props.spectrogram} lanes={lanes} startFrame={view.start} endFrame={view.end} minHz={frequency.minHz} maxHz={frequency.maxHz} scale={frequency.scale} label="频谱图" />
 
-  return <div className="grid h-full min-h-0 select-none grid-cols-[minmax(0,1fr)_auto] grid-rows-[24px_minmax(0,1fr)] bg-gap" data-audio-spectral-editor data-tool={tool} data-display={display}>
+  return <div className="grid h-full min-h-0 select-none grid-cols-[minmax(0,1fr)_auto] grid-rows-[24px_minmax(0,1fr)] bg-gap" data-audio-spectral-editor data-tool={tool} data-display={display} data-spectrogram-status={props.spectrogramStatus}>
     {/* 时间刻度 */}
     <div className="relative overflow-hidden border-b border-line" aria-hidden>
       {ticks.map(frame => <div key={frame} className="absolute inset-y-0 flex items-end" style={{ left: percentX(frame) }}>
@@ -259,7 +259,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
     {/* 右侧刻度：dB 在波形旁、Hz 在频谱旁；在刻度上滚轮做纵向缩放 */}
     <div className={`${RULER_WIDTH} flex min-h-0 flex-col border-l border-line`}>
       {showWave && <div ref={waveRuler} className="relative min-h-0 cursor-ns-resize" style={{ height: showSpectrum ? `${split * 100}%` : '100%' }} aria-label="振幅刻度，滚动缩放波形高度" data-ruler="amplitude">
-        {lanes.map(lane => waveTicks.flatMap(tick => (tick.db === 0 || tick.amplitude < 0.999 ? [1, -1] : [1]).map(sign => {
+        {lanes.map(lane => waveTicks.flatMap(tick => [1, -1].map(sign => {
           const mid = (lane + 0.5) * laneFraction
           const top = mid - sign * tick.amplitude * laneFraction / 2
           return <span key={`${lane}:${tick.db}:${sign}`} className={`${UI_TEXT_TIMECODE_CLASS} absolute left-1 -translate-y-1/2 text-2xs text-text3`} style={{ top: `${top}%` }}>{tick.db === 0 ? '0' : tick.db}</span>
@@ -267,7 +267,7 @@ export function AudioSpectralEditor(props: AudioSpectralEditorProps) {
       </div>}
       {showWave && showSpectrum && <div className="h-1.5 shrink-0" />}
       {showSpectrum && <div ref={spectrumRuler} className="relative min-h-0 flex-1 cursor-ns-resize" aria-label="频率刻度，滚动缩放频率范围" data-ruler="frequency">
-        {lanes.map(lane => hzTicks.map(hz => <span key={`${lane}:${hz}`} className={`${UI_TEXT_TIMECODE_CLASS} absolute left-1 -translate-y-1/2 text-2xs text-text3`}
+        {lanes.map(lane => hzTicks.filter(hz => { const at = yAtHz(hz, 100, frequency); return at > 6 && at < 94 }).map(hz => <span key={`${lane}:${hz}`} className={`${UI_TEXT_TIMECODE_CLASS} absolute left-1 -translate-y-1/2 text-2xs text-text3`}
           style={{ top: `${lane * laneFraction + yAtHz(hz, laneFraction, frequency)}%` }}>{formatSpectrogramHz(hz)}</span>))}
       </div>}
     </div>

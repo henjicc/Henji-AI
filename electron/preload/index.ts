@@ -423,6 +423,7 @@ const audioApi: HenjiAudioApi = {
   listEditProcessors: () => nativeInvoke('audioEdit:processors:list'),
   editSpectrogram: payload => nativeInvoke('audioEdit:spectrogram', payload),
   renderEditAudio: payload => nativeInvoke('audioEdit:render', payload),
+  editedSourceAudio: payload => nativeInvoke('audioEdit:editedSource', payload),
   prepareEditPreviewChunk: (payload) => nativeInvoke('audioEdit:preview:chunk', payload),
 }
 

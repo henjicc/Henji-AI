@@ -76,6 +76,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
     listProcessors: () => api().listEditProcessors(),
     spectrogram: request => api().editSpectrogram(request),
     render: request => api().renderEditAudio(request),
+    editedSource: request => api().editedSourceAudio(request),
     preparePreviewChunk: (request) => api().prepareEditPreviewChunk(request),
     extractWaveform: (source, bucketCount) => api().extractSamples({ source, bucketCount }),
     extractWaveformRange: (request, signal) => cancellable((payload) => api().extractRangeSamples(payload), request, signal),

@@ -31,6 +31,8 @@ export interface AudioEditAsrModel {
 export interface AudioEditPlatform {
   spectrogram(request: AudioEditSpectrogramRequest): Promise<AudioEditSpectrogramChunk>
   render(request: { projectId: string; requestId?: string; includeProcessing?: boolean }): Promise<AudioEditRenderedAudio>
+  /** 修复与区间音量已生效、删除与静音未套用的音频（时间轴同原素材），供波形显示编辑后的样子。 */
+  editedSource(request: { projectId: string; requestId?: string }): Promise<{ audioPath: string }>
   recording: import('@/core/audioEdit/recordingAudio').RecordingAudioPlatform
   loudness: AudioLoudnessPlatform
   /** 导入音频或视频：探测素材并计算内容指纹（不建文档）。 */

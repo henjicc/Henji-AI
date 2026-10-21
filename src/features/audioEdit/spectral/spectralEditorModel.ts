@@ -104,10 +104,10 @@ export function strokeBounds(stroke: AudioBrushStroke, duration: number, nyquist
 /** dB 刻度：给定振幅缩放，取能放下的整齐刻度（0、-3、-6、-12……），返回 dB 与对应的 0..1 振幅。 */
 export function amplitudeTicks(zoom: number): Array<{ db: number; amplitude: number }> {
   const candidates = [0, -6, -12, -18, -24, -30, -36, -42, -48, -54, -60]
-  const visible = candidates.map(db => ({ db, amplitude: 10 ** (db / 20) * zoom })).filter(tick => tick.amplitude <= 1.0001 && tick.amplitude >= 0.08)
+  const visible = candidates.map(db => ({ db, amplitude: 10 ** (db / 20) * zoom })).filter(tick => tick.amplitude <= 0.92 && tick.amplitude >= 0.2)
   // 太靠近中线的刻度挤在一起，留下彼此间隔足够的那些。
   const kept: Array<{ db: number; amplitude: number }> = []
-  for (const tick of visible) if (!kept.length || kept[kept.length - 1].amplitude - tick.amplitude >= 0.12) kept.push(tick)
+  for (const tick of visible) if (!kept.length || kept[kept.length - 1].amplitude - tick.amplitude >= 0.18) kept.push(tick)
   return kept
 }
 

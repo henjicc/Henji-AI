@@ -33,6 +33,12 @@ export function registerAudioIpc(): void {
     const project = await requireAudioEditProject(request.projectId)
     return runAudioEditTask(project.id, 'render', signal => renderAudioEditProject(project, request.includeProcessing ?? project.vstEnabled, signal), request.requestId, JSON.stringify([project, request.includeProcessing]), true)
   })
+  // 修复与区间音量已生效、删除/静音尚未套用的音频：时间轴与原素材一致，波形视图据此显示编辑后的样子。
+  registerIpcHandler('audioEdit:editedSource', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional() }).strict().parse(input), async request => {
+    const project = await requireAudioEditProject(request.projectId)
+    const audioPath = await runAudioEditTask(project.id, 'render', signal => prepareAudioEditRenderSource(project, false, signal), request.requestId, JSON.stringify(['edited-source', project.repairs, project.gainRegions, project.source]), true)
+    return { audioPath }
+  })
   registerAudioSampleHandlers()
   registerExplanationAudioHandlers()
   registerAudioLoudnessHandlers()

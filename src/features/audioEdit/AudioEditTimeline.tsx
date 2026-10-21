@@ -62,7 +62,7 @@ const LEGEND: Array<[string, string]> = [
   ['bg-text3/30', '已静音'],
 ]
 
-export const AudioEditTimeline = memo(function AudioEditTimeline({ project, delivery, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings, selectedBlockIds, onSelectBlock, onEditBlock, onDeleteBlock, navigationTarget, textSearch }: {
+export const AudioEditTimeline = memo(function AudioEditTimeline({ project, delivery, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings, selectedBlockIds, onSelectBlock, onEditBlock, onDeleteBlock, navigationTarget, textSearch, transportOnly = false }: {
   project: AudioEditProjectDocument
   delivery: AudioEditDelivery
   onSeek: (frame: number) => void
@@ -81,6 +81,8 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
   onDeleteBlock: (id: string) => void
   navigationTarget: { frame: number } | null
   textSearch: AudioEditTextSearch
+  /** 波形视图里编辑区自带波形、缩放与选区，这里只留播放条。 */
+  transportOnly?: boolean
 }) {
   const { durationFrames: duration, sampleRate: rate } = project.source
   const sourceFrame = useAudioEditPlaybackStore((state) => state.sourceFrame)
@@ -189,7 +191,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
   const transportItems: UiOverflowRowItem[] = [
     ...(readouts.length ? [{ id: 'readouts', priority: 10, node: <span className="max-w-56 truncate whitespace-nowrap text-xs text-text3" aria-live="polite" title={readouts.join(' · ')}>{readouts.join(' · ')}</span> }] : []),
     ...(error ? [{ id: 'error', priority: 100, pinned: true, node: <UiInlineStatus role="alert" className="min-w-0 truncate" tooltip={error}>{error}</UiInlineStatus> }] : []),
-    ...(selection ? [{ id: 'selection', priority: 90, node: <div className="flex items-center gap-1" aria-label="波形选区操作">
+    ...(selection && !transportOnly ? [{ id: 'selection', priority: 90, node: <div className="flex items-center gap-1" aria-label="波形选区操作">
       <span className="mr-1 whitespace-nowrap font-mono text-xs tabular-nums text-text2">选区 {time(selection.startFrame, rate)} – {time(selection.endFrame, rate)}</span>
       <UiButton size="sm" variant="danger" disabled={disabled} tooltip="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2  className="mr-1" />删除</UiButton>
       <UiButton size="sm" disabled={disabled} tooltip="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX  className="mr-1" />静音</UiButton>
@@ -203,12 +205,12 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
       <Volume2 size={UI_ICON_SIZE.sm} aria-hidden="true" className="text-text3" />
       <UiRangeInput className="!w-20 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
     </label> },
-    { id: 'zoom', priority: 60, node: <div className="flex items-center gap-1.5" role="group" aria-label="波形缩放控制">
+    ...(transportOnly ? [] : [{ id: 'zoom', priority: 60, node: <div className="flex items-center gap-1.5" role="group" aria-label="波形缩放控制">
       <UiIconButton aria-label="显示全部" tooltip="显示全部" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}><Expand  /></UiIconButton>
       <UiIconButton aria-label="缩小波形" tooltip="缩小波形" disabledReason="已缩小到全部内容" disabled={zoomLevel <= 0} onClick={() => zoomTo(zoomLevel - 10)}><Minus  /></UiIconButton>
       <UiRangeInput className="!w-24 shrink-0" aria-label="波形缩放" min={0} max={ZOOM_STEPS} step={1} value={Math.max(0, Math.min(ZOOM_STEPS, zoomLevel))} onChange={(event) => zoomTo(Number(event.target.value))} />
       <UiIconButton aria-label="放大波形" tooltip="放大波形" disabledReason="已达到最大缩放" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus  /></UiIconButton>
-    </div> },
+    </div> }]),
     { id: 'help', priority: 30, node: <PanelTrigger
       panelSize="menu"
       panelPadding="content"
@@ -254,7 +256,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
           )}
         />
       </div>
-      <div className="flex flex-col gap-1.5 px-3 pb-3">
+      {!transportOnly && <div className="flex flex-col gap-1.5 px-3 pb-3">
         <div ref={container} role="slider" tabIndex={0} aria-label="口播波形定位" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={sourceFrame} aria-valuetext={time(sourceFrame, rate)}
           data-view-start={view.start} data-view-end={view.end}
           className="relative h-[clamp(8rem,18vh,14rem)] touch-none select-none overflow-hidden rounded-md bg-gap outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
@@ -331,7 +333,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
             <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-accent-ring" style={{ left: `${Math.max(0, Math.min(100, (sourceFrame / rate - detailStart) / Math.max(1e-6, detailEnd - detailStart) * 100))}%` }} />
           </div>
         </div>}
-      </div>
+      </div>}
       <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />
     </section>
   )

@@ -45,10 +45,10 @@ describe('音频编辑区交互模型', () => {
   })
 
   it('dB 刻度随振幅放大出现更安静的刻度，且彼此不挤', () => {
-    expect(amplitudeTicks(1).map(tick => tick.db)).toEqual([0, -6, -12, -18])
+    expect(amplitudeTicks(1).map(tick => tick.db)).toEqual([-6, -12])
     const zoomed = amplitudeTicks(8)
-    expect(zoomed[0].db).toBeLessThanOrEqual(-18)
-    for (let index = 1; index < zoomed.length; index++) expect(zoomed[index - 1].amplitude - zoomed[index].amplitude).toBeGreaterThanOrEqual(0.12)
+    expect(zoomed[0].db).toBeLessThanOrEqual(-24)
+    for (let index = 1; index < zoomed.length; index++) expect(zoomed[index - 1].amplitude - zoomed[index].amplitude).toBeGreaterThanOrEqual(0.18)
   })
 
   it('时间刻度步长与时间码', () => {

@@ -1,5 +1,5 @@
 import { UiInlineStatus } from '@/components/ui'
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE_CLASS, UI_INLINE_GAP_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationMessage } from '@/i18n/notifications'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
@@ -35,6 +35,7 @@ import {
   UiTextToken,
   UiToolbar,
   UiRangeInput,
+  UiSegmented,
 } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
@@ -64,6 +65,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { UI_SCALE_MODES } from '@/core/theme/uiScale'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { useAudioEditStore } from './store/audioEditStore'
+import { AudioWaveToolbar, AudioWaveWorkspace } from './spectral/AudioWaveWorkspace'
+import { audioWaveActions, useAudioWaveEditor } from './spectral/audioWaveEditorState'
 
 import { applyAudioEditSuggestion, audioEditSuggestionStates, dismissAudioEditSuggestion, DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject } from './application/audioEditProjectInstances'
@@ -276,6 +279,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const [withSrt, setWithSrt] = useState(false)
   const [withRx, setWithRx] = useState(false)
   const [waveSelection, setWaveSelection] = useState<AudioEditRange | null>(null)
+  // 文字视图（按转写稿编辑）与波形视图（波形 + 频谱精修）是同一份作品的两种编辑方式，共用选区、撤销与播放。
+  const [workspaceView, setWorkspaceView] = useState<'text' | 'wave'>('text')
+  const waveEditor = useAudioWaveEditor(project ?? undefined)
   const [viewSettingsOpen, setViewSettingsOpen] = useState(false)
   const editorRoot = useRef<HTMLDivElement>(null)
   const [selectionOnly, setSelectionOnly] = useState(false)
@@ -300,6 +306,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const projectId = project?.id
   const setSelectedBlockIds = state.setSelectedBlockIds
   useEffect(() => { setWaveSelection(null); setSelectionOnly(false); setEditingBlockId(null); setNavigationTarget(null) }, [projectId])
+  // 没有转写稿时文字视图是空的，直接进波形视图。
+  const hasTranscript = Boolean(project?.transcript.length)
+  useEffect(() => { setWorkspaceView(hasTranscript ? 'text' : 'wave') }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps -- only on opening another document
   useEffect(() => {
     const match = textSearch.currentMatch
     if (!match) return
@@ -412,6 +421,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     if (!waveSelection || disabled) return
     try { editAudioEditProject(project.id, (current) => editAudioEditRange(current, waveSelection, mode)) } catch (error) { notifyError(error) }
   }
+  const waveActions = audioWaveActions(project, (action) => void run(action))
   const relinkSource = () => run(async () => {
     const path = await pickAudioEditMedia('原始素材')
     if (path) { await relinkAudioEdit(project.id, path); setSourceError(''); showNotification(notificationMessage('audioRelinked')) }
@@ -429,9 +439,14 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     <ApplicationOperationReviewBanner documentId={project.id} domain="audio_edit" label="口播" />
     <UiToolbar
       variant="command"
-      center={<AudioEditPlaybackModeSwitch delivery={delivery} />}
+      center={<div className={`flex items-center ${UI_INLINE_GAP_CLASS.group}`}>
+        <UiSegmented ariaLabel="编辑方式" size="sm" value={workspaceView} onChange={setWorkspaceView} options={[{ value: 'text', label: '文字' }, { value: 'wave', label: '波形' }]} />
+        <AudioEditPlaybackModeSwitch delivery={delivery} />
+      </div>}
       centerLayout="fit"
-      subordinate={textSearch.isOpen ? <AudioEditFindReplace search={textSearch} disabled={disabled} /> : undefined}
+      subordinate={workspaceView === 'wave'
+        ? <AudioWaveToolbar editor={waveEditor} selection={waveSelection} disabled={disabled} actions={waveActions} onEditSelection={editSelection} />
+        : textSearch.isOpen ? <AudioEditFindReplace search={textSearch} disabled={disabled} /> : undefined}
       trailing={<>
         {runningTasks.map((task) => <span key={task.requestId} role="status" className="flex items-center gap-1">
           <span className="text-xs tabular-nums text-text2">正在处理{task.progress === undefined ? '…' : ` ${Math.round(task.progress * 100)}%`}</span>
@@ -460,7 +475,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">
-      <main className="min-h-0 min-w-0 flex-1"><Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} search={textSearch} /></main>
+      <main className="min-h-0 min-w-0 flex-1">{workspaceView === 'wave'
+        ? <AudioWaveWorkspace project={project} editor={waveEditor} selection={waveSelection} onSelection={setWaveSelection} onSeek={seekSourceFrame} onEditSelection={editSelection} actions={waveActions} disabled={disabled} />
+        : <Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} search={textSearch} />}</main>
       <aside aria-label="处理" className="w-64 shrink-0 overflow-y-auto border-l border-gap bg-panel p-4 xl:w-72">
         <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-5">
           {!project.transcript.length && <section className="flex flex-col gap-3">
@@ -529,7 +546,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         </fieldset>
       </aside>
     </div>
-    <AudioEditTimeline project={project} delivery={delivery} onSeek={seekSourceFrame} onToggle={togglePlayback} selection={waveSelection} onSelection={setWaveSelection} onEditSelection={editSelection} previewRanges={silencePreview.ranges} previewPending={silencePreview.pending} previewError={silencePreview.error} disabled={disabled} onSettings={() => setViewSettingsOpen(true)} selectedBlockIds={selectedBlockIds} onSelectBlock={(id) => { state.setSelectedBlockIds([id]); const block = project.transcript.find((item) => item.id === id); if (block) navigateToFrame(block.startFrame) }} onEditBlock={setEditingBlockId} onDeleteBlock={deleteBlock} navigationTarget={navigationTarget} textSearch={textSearch} />
+    <AudioEditTimeline project={project} delivery={delivery} onSeek={seekSourceFrame} onToggle={togglePlayback} selection={waveSelection} onSelection={setWaveSelection} onEditSelection={editSelection} previewRanges={silencePreview.ranges} previewPending={silencePreview.pending} previewError={silencePreview.error} disabled={disabled} onSettings={() => setViewSettingsOpen(true)} selectedBlockIds={selectedBlockIds} onSelectBlock={(id) => { state.setSelectedBlockIds([id]); const block = project.transcript.find((item) => item.id === id); if (block) navigateToFrame(block.startFrame) }} onEditBlock={setEditingBlockId} onDeleteBlock={deleteBlock} navigationTarget={navigationTarget} textSearch={textSearch} transportOnly={workspaceView === 'wave'} />
     <AudioEditViewSettings open={viewSettingsOpen} onClose={() => setViewSettingsOpen(false)} value={project.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS} onChange={(viewSettings) => update({ viewSettings })} />
     {editingBlock && <AudioEditTextEditor key={editingBlock.id} block={editingBlock} disabled={disabled} onClose={() => setEditingBlockId(null)} onSave={(text) => {
       try { editAudioEditProject(project.id, (current) => ({ ...current, transcript: current.transcript.map((block) => block.id === editingBlock.id ? { ...block, text } : block) })); setEditingBlockId(null) } catch (error) { notifyError(error) }

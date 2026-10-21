@@ -361,6 +361,7 @@ export interface HenjiAudioApi {
   listEditProcessors(): Promise<AudioEditProcessorDescriptor[]>
   editSpectrogram(request: AudioEditSpectrogramRequest): Promise<AudioEditSpectrogramChunk>
   renderEditAudio(request: { projectId: string; requestId?: string; includeProcessing?: boolean }): Promise<AudioEditRenderedAudio>
+  editedSourceAudio(request: { projectId: string; requestId?: string }): Promise<{ audioPath: string }>
   prepareEditPreviewChunk(payload: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
 }
 import type {

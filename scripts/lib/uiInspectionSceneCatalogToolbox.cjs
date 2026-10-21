@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- 正式 Electron 巡检启动器使用 CommonJS 场景工厂。 */
 const { createAudioEditScene } = require('./uiInspectionSceneAudioEdit.cjs')
+const { createAudioEditSpectralScene } = require('./uiInspectionSceneAudioEditSpectral.cjs')
 const { createAudioEditHomeScene } = require('./uiInspectionSceneAudioEditHome.cjs')
 const { createAudioEditInteractionScene } = require('./uiInspectionSceneAudioEditInteraction.cjs')
 const {
@@ -36,6 +37,7 @@ function createToolboxScenes(context) {
     createAudioEditInteractionScene(context),
     createAudioEditHomeScene(context),
     createAudioEditScene(context),
+    createAudioEditSpectralScene(context),
     { id: 'toolbox-home', surface: '工具箱', name: '工具箱-首页', setup: setupToolbox },
     {
       id: 'toolbox-hover',
