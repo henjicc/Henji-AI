@@ -419,7 +419,11 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   }
   const editSelection = (mode: 'delete' | 'mute' | 'restore') => {
     if (!waveSelection || disabled) return
-    try { editAudioEditProject(project.id, (current) => editAudioEditRange(current, waveSelection, mode)) } catch (error) { notifyError(error) }
+    try {
+      editAudioEditProject(project.id, (current) => editAudioEditRange(current, waveSelection, mode))
+      // 删除、静音后清掉选区，标记直接露出来；恢复保留选区方便继续操作。
+      if (mode !== 'restore') setWaveSelection(null)
+    } catch (error) { notifyError(error) }
   }
   const waveActions = audioWaveActions(project, (action) => void run(action))
   const relinkSource = () => run(async () => {

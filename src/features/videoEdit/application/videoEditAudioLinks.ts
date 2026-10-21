@@ -53,12 +53,18 @@ export async function sendVideoEditClipToAudioEdit(projectId: string, clipId: st
     ] }))
     await flushAudioEditProject(audio.document.id)
     // Promote the linked document out of the disposable draft lifecycle.
+    // 作品以片段名命名（“旁白”而不是“未命名音频 1”）；同名时依次加序号。
     await audio.session.withTransfer(async () => {
-      const result = await finalizeDocument({ target: audio.session.target, name: audio.session.documentMeta.name })
+      const base = (clip.name || media.name).trim().slice(0, 120) || audio.session.documentMeta.name
+      let result: Awaited<ReturnType<typeof finalizeDocument>> | undefined
+      for (let attempt = 1; !result; attempt++) {
+        try { result = await finalizeDocument({ target: audio.session.target, name: attempt === 1 ? base : `${base} ${attempt}` }) }
+        catch (error) { if (attempt >= 20 || !String(error instanceof Error ? error.message : error).includes('同名')) throw error }
+      }
       await audio.session.applyTransfer(result)
     })
     const rendered = await renderAudioEdit(audio.document.id)
-    const output = await durableAudio(projectId, rendered, `${media.name} · 音频编辑`)
+    const output = await durableAudio(projectId, rendered, `${(clip.name || media.name).trim()} · 音频编辑`)
     if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('准备期间剪辑已改变，请重新选择片段')
     const itemId = crypto.randomUUID()
     let targetId = clipId

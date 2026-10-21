@@ -64,6 +64,7 @@ const { createVideoFramesScene } = require('./uiInspectionSceneVideoFrames.cjs')
 const { createVideoEditMediaProbeScene } = require('./uiInspectionSceneVideoEditMediaProbe.cjs')
 const { createVideoEditNativeAudioScene } = require('./uiInspectionSceneVideoEditNativeAudio.cjs')
 const { createVideoEditMusicRemixScene } = require('./uiInspectionSceneVideoEditMusicRemix.cjs')
+const { createVideoEditAudioLinkScene } = require('./uiInspectionSceneVideoEditAudioLink.cjs')
 const { createVideoEditHighPrecisionScene } = require('./uiInspectionSceneVideoEditHighPrecision.cjs')
 const { createVideoDecodeScene } = require('./uiInspectionSceneVideoDecode.cjs')
 const { createVideoEditLinksScene } = require('./uiInspectionSceneVideoEditLinks.cjs')
@@ -203,6 +204,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditMediaProbeScene(),
     createVideoEditNativeAudioScene(),
     createVideoEditMusicRemixScene(),
+    createVideoEditAudioLinkScene(),
     createVideoEditHighPrecisionScene(),
     createVideoDecodeScene(),
     createVideoEditLinksScene(),

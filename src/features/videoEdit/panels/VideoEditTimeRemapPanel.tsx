@@ -62,9 +62,10 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
         <Dropdown ariaLabel="速度曲线预设" value="" display="选择预设" options={VIDEO_EDIT_TIME_REMAP_PRESET_IDS.map(id => ({ value: id, label: VIDEO_EDIT_TIME_REMAP_PRESETS[id].label }))} onSelect={(id: string) => { if (id) apply({ timeRemap: videoEditTimeRemapPreset(id as VideoEditTimeRemapPreset, span) }) }} />
       </UiFormRow>
     </>}
-    <UiFormRow label="补帧" density="compact" info="慢放时相邻两帧怎样过渡：帧采样取最近的一帧；帧混合把相邻两帧按位置混合，慢放更顺但有重影。">
-      <UiSegmented<VideoEditFrameInterpolation> ariaLabel="补帧方式" size="sm" value={clip.frameInterpolation === 'optical_flow' ? 'optical_flow' : clip.frameInterpolation ?? 'nearest'} onChange={value => apply({ frameInterpolation: value })}
-        options={[{ value: 'nearest', label: '帧采样' }, { value: 'blend', label: '帧混合' }, { value: 'optical_flow', label: '光流', disabled: true, title: '光流补帧即将支持；已设置时按帧混合显示' }]} />
+    <UiFormRow label="补帧" density="compact" info="慢放时相邻两帧怎样过渡：采样取最近的一帧；混合把相邻两帧按位置混合，慢放更顺但有重影。">
+      {/* 光流补帧尚未实现，不出现在界面上；旧数据里的 optical_flow 按帧混合渲染，这里也显示为“混合”。 */}
+      <UiSegmented<VideoEditFrameInterpolation> ariaLabel="补帧方式" size="sm" value={clip.frameInterpolation === 'nearest' || !clip.frameInterpolation ? 'nearest' : 'blend'} onChange={value => apply({ frameInterpolation: value })}
+        options={[{ value: 'nearest', label: '采样' }, { value: 'blend', label: '混合' }]} />
     </UiFormRow>
     <UiFormRow label="变调" density="compact" info="升降音调，不改变速度与时长；+12 高一个八度。">
       <NumberInput ariaLabel="变调半音" value={clip.pitchSemitones ?? 0} min={-24} max={24} step={1} precision={0} onChange={value => apply({ pitchSemitones: value })} />
