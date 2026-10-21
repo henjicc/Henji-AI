@@ -123,6 +123,7 @@ soundDocument.media.push({ id: 'golden-sound', name: '鼓点', path: '/persisten
 soundDocument.items.push({ id: 'golden-sound-item', name: '鼓点', kind: 'audio', mediaId: 'golden-sound' })
 const soundClip = makeVideoEditItemClip(soundDocument, 'golden-sound-item', soundSequence.id, { frame: 0, duration: 90 })
 soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true; soundClip.pitchSemitones = -3
+soundClip.remix = { id: 'golden-remix', segment: 0, targetFrames: 90, repetition: 0.5, granularity: 'bar', seed: 0, analysisIdentity: `music-v1:${'b'.repeat(64)}`, sourceInUs: 0, sourceOutUs: 3000000 }
 document.media.push(...soundDocument.media)
 document.items.push(...soundDocument.items)
 clip.contentAnchor = { ranges: [{ clipId: soundClip.id, itemId: soundClip.itemId, fromUs: 0, toUs: 3000000 }], startOffsetSeconds: 0, endOffsetSeconds: 0 }

@@ -19,6 +19,7 @@ import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons'
 import { VideoEditCanvasSendDialog, type VideoEditCanvasSendRequest } from '../panels/VideoEditCanvasSendDialog'
 import type { VideoEditNestTarget } from '../application/videoEditNesting'
 import { analyzeVideoEditBeats } from '../application/videoEditBeatAnalysis'
+import { VideoEditMusicRemixDialog, type VideoEditMusicRemixRequest } from '../panels/VideoEditMusicRemixDialog'
 import { cancelVideoEditRenderCache, clearVideoEditRenderCache, getVideoEditRenderPreference, readVideoEditRenderCache, renderVideoEditRenderCache, setVideoEditRenderPreference } from '../application/videoEditRenderCache'
 
 const actionIcons = { audio_gain: AudioLines, clip_speed: Gauge, copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, frame_hold: Pause, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
@@ -29,6 +30,7 @@ export interface TimelineInPlaceMenu { items(target: VideoEditInPlaceMenuTarget)
 export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void, inPlace?: TimelineInPlaceMenu, onScenes?: (target: VideoEditSceneTarget) => void, onReframe?: (target: VideoEditSceneTarget) => void, onNest?: (target: VideoEditNestTarget) => void) {
   const menu = useContextMenu()
   const [canvasSend, setCanvasSend] = useState<VideoEditCanvasSendRequest | null>(null)
+  const [remix, setRemix] = useState<VideoEditMusicRemixRequest | null>(null)
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const show = (event: React.MouseEvent): void => {
     // 浮窗中的目标属于子窗口 realm，不能用 instanceof Element 判定。
@@ -62,6 +64,8 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       }
       const media = clip && videoEditClipMedia(instance.document, clip)
       if (clip?.kind === 'audio' && media) items.push({ id: 'analyze_beats', label: '分析节拍', icon: <AudioLines size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => { void analyzeVideoEditBeats({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }).catch(error => { if (!(error instanceof DOMException && error.name === 'AbortError')) onError(error) }) } })
+      // PR“重新混合”：把音乐自动拼接到目标时长（已重构的子片段再次打开即改参数重算整组）。
+      if (clip?.kind === 'audio' && media) items.push({ id: 'music_remix', label: '重构到时长…', icon: <TimerReset size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => setRemix({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
       if (clip && clip.kind !== 'adjustment' && clip.kind !== 'sequence') items.push({ id: 'send_canvas', label: '发送片段到画布…', icon: <ICON_WORKSPACE_CANVAS size={UI_ICON_SIZE.md} />, onClick: () => setCanvasSend({ projectId: instance.document.id, sequenceId: sequence.id, source: { kind: 'clip', clipId: clip.id } }) })
       if (clip?.kind === 'video' && clip.sourceComponent !== 'audio' && media?.kind === 'video' && onReframe) items.push({ id: 'auto_reframe', label: '自动重构…', icon: <Crop size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onReframe({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
       if (clip?.kind === 'video' && media?.kind === 'video' && onScenes) items.push({ id: 'scene_detection', label: '场景编辑检测…', icon: <Scissors size={UI_ICON_SIZE.md} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onScenes({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
@@ -86,5 +90,5 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       menu.showMenu(event, items)
     } catch (error) { onError(error) }
   }
-  return { ...menu, show, canvasDialog: canvasSend ? <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} /> : null }
+  return { ...menu, show, canvasDialog: canvasSend ? <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} /> : null, remixDialog: remix ? <VideoEditMusicRemixDialog request={remix} onClose={() => setRemix(null)} /> : null }
 }

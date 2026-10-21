@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { SOUND_ANALYSIS_SAMPLE_RATE } from '../../../../../src/core/soundLibrary/soundFeatures'
 
 /*
- * 音效解码：随包 FFmpeg 在后台进程里把任意常见格式解成 48 kHz 双声道 32 位浮点 PCM。
+ * 音效与音乐解码：随包 FFmpeg 在后台进程里把任意常见格式解成双声道 32 位浮点 PCM（音效 48 kHz，节拍分析 22050 Hz）。
  * 单声道源被 FFmpeg 复制成两个相同声道，这里认出来后还原为单声道（响度按 BS.1770 单声道计）。
  * 最多读前 MAX_SECONDS 秒；更长的文件时长取容器报告的总时长。
  */
@@ -30,10 +30,20 @@ function failureReason(stderr: string): string {
   return '无法解码这个文件'
 }
 
-export function decodeSound(ffmpegPath: string, file: string, signal: AbortSignal): Promise<DecodedSound> {
+export interface DecodedPcm {
+  /** 两个声道（单声道源由 FFmpeg 复制成相同的两路）。 */
+  channels: [Float32Array, Float32Array]
+  /** 实际解码的秒数。 */
+  decodedSeconds: number
+  /** 容器报告的总时长；读不到为 null。 */
+  reportedSeconds: number | null
+}
+
+/** 随包 FFmpeg 把第一条音频流解成指定采样率的双声道 32 位浮点 PCM，最多 maxSeconds 秒。 */
+export function decodePcm(ffmpegPath: string, file: string, options: { sampleRate: number; maxSeconds: number }, signal: AbortSignal): Promise<DecodedPcm> {
   signal.throwIfAborted()
   return new Promise((resolve, reject) => {
-    const child = spawn(ffmpegPath, ['-hide_banner', '-nostdin', '-nostats', '-i', file, '-map', '0:a:0', '-vn', '-sn', '-dn', '-t', String(SOUND_DECODE_MAX_SECONDS), '-ac', '2', '-ar', String(SOUND_ANALYSIS_SAMPLE_RATE), '-f', 'f32le', 'pipe:1'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(ffmpegPath, ['-hide_banner', '-nostdin', '-nostats', '-i', file, '-map', '0:a:0', '-vn', '-sn', '-dn', '-t', String(options.maxSeconds), '-ac', '2', '-ar', String(options.sampleRate), '-f', 'f32le', 'pipe:1'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     const chunks: Buffer[] = []; let bytes = 0; let stderr = ''
     const abort = (): void => { child.kill() }
     signal.addEventListener('abort', abort, { once: true })
@@ -50,14 +60,17 @@ export function decodeSound(ffmpegPath: string, file: string, signal: AbortSigna
       for (const chunk of chunks) { const take = Math.min(chunk.byteLength, aligned.length - offset); aligned.set(chunk.subarray(0, take), offset); offset += take }
       const interleaved = new Float32Array(aligned.buffer)
       const left = new Float32Array(frames), right = new Float32Array(frames)
-      let identical = true
-      for (let index = 0; index < frames; index++) {
-        left[index] = interleaved[index * 2]; right[index] = interleaved[index * 2 + 1]
-        if (identical && left[index] !== right[index]) identical = false
-      }
-      const decoded = frames / SOUND_ANALYSIS_SAMPLE_RATE
-      const reported = containerDuration(stderr)
-      resolve({ channels: identical ? [left] : [left, right], durationSeconds: decoded >= SOUND_DECODE_MAX_SECONDS - 0.01 && reported ? Math.max(decoded, reported) : decoded })
+      for (let index = 0; index < frames; index++) { left[index] = interleaved[index * 2]; right[index] = interleaved[index * 2 + 1] }
+      resolve({ channels: [left, right], decodedSeconds: frames / options.sampleRate, reportedSeconds: containerDuration(stderr) })
     })
   })
+}
+
+export async function decodeSound(ffmpegPath: string, file: string, signal: AbortSignal): Promise<DecodedSound> {
+  const pcm = await decodePcm(ffmpegPath, file, { sampleRate: SOUND_ANALYSIS_SAMPLE_RATE, maxSeconds: SOUND_DECODE_MAX_SECONDS }, signal)
+  const [left, right] = pcm.channels
+  let identical = true
+  for (let index = 0; identical && index < left.length; index++) if (left[index] !== right[index]) identical = false
+  const decoded = pcm.decodedSeconds
+  return { channels: identical ? [left] : [left, right], durationSeconds: decoded >= SOUND_DECODE_MAX_SECONDS - 0.01 && pcm.reportedSeconds ? Math.max(decoded, pcm.reportedSeconds) : decoded }
 }

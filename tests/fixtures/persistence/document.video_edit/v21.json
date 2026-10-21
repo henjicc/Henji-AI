@@ -1,0 +1,775 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "minReaderVersion": 1,
+  "kind": "video_edit",
+  "kindVersion": 21,
+  "kindMinReaderVersion": 21,
+  "id": "golden-video_edit",
+  "name": "剪辑",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "exportHistory": [
+      {
+        "id": "golden-export",
+        "taskId": "golden-render",
+        "sequenceId": "golden-sequence",
+        "name": "黄金导出",
+        "presetName": "自定义导出",
+        "path": "/persistence-project/导出/黄金.mp4",
+        "completedAt": 1791504000000,
+        "rangeSource": "explicit",
+        "settings": {
+          "format": "mp4",
+          "width": 1920,
+          "height": 1080,
+          "fps": null,
+          "videoBitrateMbps": 12,
+          "audioBitrateKbps": 192,
+          "fit": "fit",
+          "loudness": {
+            "targetLufs": -14,
+            "truePeakDbtp": -1
+          },
+          "codec": "avc",
+          "bitrateMode": "vbr",
+          "keyframeInterval": "auto",
+          "encoderPreference": "hardware",
+          "videoEnabled": true,
+          "audioEnabled": true,
+          "audioCodec": "aac",
+          "sampleRate": 48000,
+          "channels": 2,
+          "captionMode": "none",
+          "followSequence": {
+            "resolution": true,
+            "fps": true,
+            "sampleRate": true,
+            "channels": true
+          },
+          "importToProject": false,
+          "addToLibrary": true,
+          "useProxies": false
+        },
+        "range": {
+          "startFrame": 0,
+          "endFrame": 30
+        },
+        "assetRef": {
+          "kind": "asset",
+          "id": "golden-export-asset"
+        }
+      }
+    ],
+    "styleKits": [
+      {
+        "guide": "## 定位\n请按当前作品填写。\n\n## 核心理念\n请按当前作品填写。\n\n## 视觉语言\n请按当前作品填写。\n\n## 动效语言\n请按当前作品填写。\n\n## 节奏与剪辑\n请按当前作品填写。\n\n## 文字与字幕\n请按当前作品填写。\n\n## 必须\n请按当前作品填写。\n\n## 避免\n请按当前作品填写。\n\n## 可以自由发挥\n请按当前作品填写。",
+        "examples": [
+          {
+            "id": "opener",
+            "title": "开场标题",
+            "note": "演示说明书里的错峰入场与字体层级。",
+            "source": "export default {\n  name: \"黄金代码\", kind: \"generator\", mode: \"dynamic\", width: 1920, height: 1080, durationSeconds: 4,\n  motionBlur: { shutter: 180, maxSamples: 16 },\n  params: [{\"key\":\"nodes\",\"type\":\"table\",\"title\":\"节点数据\",\"rowKey\":\"id\",\"fields\":{\"id\":{\"type\":\"text\",\"title\":\"键\",\"default\":\"\",\"maxLength\":64},\"label\":{\"type\":\"text\",\"title\":\"文案\",\"default\":\"\",\"maxLength\":200}},\"default\":[{\"id\":\"node-0\",\"label\":\"首项\"}]},{\"key\":\"titleStyle\",\"type\":\"textStyle\",\"title\":\"文字样式\",\"layer\":\"golden-motion\",\"default\":{\"fontFamily\":\"sans-serif\",\"fontSize\":64}},{\"key\":\"label\",\"type\":\"text\",\"title\":\"标题\",\"default\":\"黄金样本\",\"maxLength\":200},{\"key\":\"size\",\"type\":\"number\",\"title\":\"字号\",\"default\":24,\"min\":1,\"max\":72,\"step\":1,\"unit\":\"px\"}],\n  layers() {\n    return [{ id: \"golden-motion\", bounds: [0, 0, 100, 100], blurShape: \"lens\", pose: t => ({ x: t * 10, blur: 8 }), draw(ctx) { ctx.fillStyle = \"#000000\"; ctx.fillRect(0, 0, 100, 100) } }]\n  }\n}\n"
+          }
+        ],
+        "id": "golden-kit",
+        "name": "黄金风格",
+        "revision": 0
+      }
+    ],
+    "media": [
+      {
+        "id": "golden-screen",
+        "path": "/persistence-project/素材/screen.mp4",
+        "name": "屏幕原片",
+        "kind": "video",
+        "width": 1920,
+        "height": 1080,
+        "durationSeconds": 3,
+        "recordingCursor": {
+          "ownerRef": {
+            "kind": "recording_session",
+            "id": "golden-recording"
+          },
+          "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "cursorBakedIn": false,
+          "recordingStartUs": 0,
+          "width": 1920,
+          "height": 1080,
+          "pages": [
+            {
+              "path": "/persistence-project/素材/events.capture.json",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "recordingSpanUs": [
+                0,
+                3000000
+              ],
+              "seqSpan": [
+                0,
+                255
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "golden-sound",
+        "path": "/persistence-project/素材/鼓点.wav",
+        "name": "鼓点",
+        "kind": "audio",
+        "durationSeconds": 3,
+        "width": 0,
+        "height": 0,
+        "hasAudio": true
+      }
+    ],
+    "bins": [],
+    "items": [
+      {
+        "id": "code-item",
+        "name": "代码标题",
+        "kind": "code",
+        "code": {
+          "definitionId": "code-definition",
+          "versionId": "code-version",
+          "parameters": {
+            "label": "黄金样本",
+            "size": 24,
+            "titleStyle": {
+              "fontFamily": "sans-serif",
+              "fontWeight": 400,
+              "fontStyle": "normal",
+              "fontSize": 64,
+              "fauxBold": false,
+              "fauxItalic": false,
+              "allCaps": false,
+              "smallCaps": false,
+              "superscript": false,
+              "subscript": false,
+              "underline": false,
+              "align": "center",
+              "verticalAlign": "middle",
+              "tracking": 0,
+              "kerning": "auto",
+              "leading": 0,
+              "baselineShift": 0,
+              "tsume": 0,
+              "fill": {
+                "enabled": true,
+                "color": "#ffffff"
+              },
+              "strokes": [],
+              "background": {
+                "enabled": false,
+                "color": "#000000",
+                "opacity": 0.7,
+                "padding": 12,
+                "radius": 0
+              },
+              "shadows": [],
+              "boxWidth": 0,
+              "boxHeight": 0
+            },
+            "nodes": [
+              {
+                "id": "node-0",
+                "label": "首项"
+              }
+            ]
+          },
+          "curves": {
+            "size": [
+              {
+                "id": "source-key",
+                "sourceInUs": 0,
+                "sourceRemainder": {
+                  "numerator": 0,
+                  "denominator": 1
+                },
+                "value": 24,
+                "interpolation": "linear"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "golden-screen-item",
+        "name": "屏幕原片",
+        "kind": "video",
+        "mediaId": "golden-screen"
+      },
+      {
+        "id": "golden-sound-item",
+        "name": "鼓点",
+        "kind": "audio",
+        "mediaId": "golden-sound"
+      }
+    ],
+    "sequences": [
+      {
+        "id": "golden-sequence",
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "tracks": [
+          {
+            "id": "4df7d6ff-a0b7-4e08-ab8a-175f5010b2ef",
+            "name": "音频 1",
+            "index": 0,
+            "kind": "audio",
+            "locked": false,
+            "enabled": true,
+            "muted": false,
+            "solo": false
+          },
+          {
+            "id": "3976726a-1941-4607-a869-369d1d576b36",
+            "name": "视频 1",
+            "index": 1,
+            "kind": "video",
+            "locked": false,
+            "enabled": true,
+            "muted": false,
+            "solo": false
+          }
+        ],
+        "clips": [
+          {
+            "id": "golden-clip",
+            "start": 0,
+            "duration": 90,
+            "itemId": "code-item",
+            "name": "代码标题",
+            "kind": "code",
+            "code": {
+              "definitionId": "code-definition",
+              "versionId": "code-version",
+              "parameters": {
+                "label": "黄金样本",
+                "size": 24,
+                "titleStyle": {
+                  "fontFamily": "sans-serif",
+                  "fontWeight": 400,
+                  "fontStyle": "normal",
+                  "fontSize": 64,
+                  "fauxBold": false,
+                  "fauxItalic": false,
+                  "allCaps": false,
+                  "smallCaps": false,
+                  "superscript": false,
+                  "subscript": false,
+                  "underline": false,
+                  "align": "center",
+                  "verticalAlign": "middle",
+                  "tracking": 0,
+                  "kerning": "auto",
+                  "leading": 0,
+                  "baselineShift": 0,
+                  "tsume": 0,
+                  "fill": {
+                    "enabled": true,
+                    "color": "#ffffff"
+                  },
+                  "strokes": [],
+                  "background": {
+                    "enabled": false,
+                    "color": "#000000",
+                    "opacity": 0.7,
+                    "padding": 12,
+                    "radius": 0
+                  },
+                  "shadows": [],
+                  "boxWidth": 0,
+                  "boxHeight": 0
+                },
+                "nodes": [
+                  {
+                    "id": "node-0",
+                    "label": "首项"
+                  }
+                ]
+              },
+              "curves": {
+                "size": [
+                  {
+                    "id": "source-key",
+                    "sourceInUs": 0,
+                    "sourceRemainder": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 24,
+                    "interpolation": "linear"
+                  }
+                ]
+              }
+            },
+            "track": 1,
+            "sourceInUs": 0,
+            "sourceRemainder": {
+              "numerator": 0,
+              "denominator": 1
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "snapToBeat": true,
+            "curves": {
+              "opacity": [
+                {
+                  "time": 0,
+                  "value": 0,
+                  "interpolation": "linear"
+                },
+                {
+                  "time": 20,
+                  "value": 1,
+                  "interpolation": "ease"
+                }
+              ]
+            },
+            "effects": [
+              {
+                "id": "golden-grade",
+                "name": "全能调色",
+                "enabled": true,
+                "amount": 1,
+                "builtin": {
+                  "id": "color_grade",
+                  "params": {
+                    "exposure": 0.25,
+                    "temperature_kelvin": 5600,
+                    "tint": 4,
+                    "tone_lights": 12,
+                    "mixer_orange_saturation": -10,
+                    "wheel_mode": "primary",
+                    "global_hue": 200,
+                    "global_strength": 6
+                  },
+                  "curves": {
+                    "temperature_kelvin": [
+                      {
+                        "time": 0,
+                        "value": 5600,
+                        "interpolation": "linear"
+                      },
+                      {
+                        "time": 30,
+                        "value": 6200,
+                        "interpolation": "linear"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "id": "golden-blur",
+                "name": "高斯模糊",
+                "enabled": true,
+                "amount": 0.5,
+                "builtin": {
+                  "id": "gaussian_blur",
+                  "params": {
+                    "sigma_fraction_height": 0.003,
+                    "axis": "both",
+                    "edge_mode": "clamp"
+                  }
+                }
+              }
+            ],
+            "follow": {
+              "clipId": "golden-cursor-clip",
+              "trackerId": "golden-two-point",
+              "offsetX": 0.05,
+              "offsetY": -0.02,
+              "motion": {
+                "rotation": 12.5,
+                "size": 0.3
+              }
+            },
+            "contentAnchor": {
+              "ranges": [
+                {
+                  "clipId": "golden-sound-clip",
+                  "itemId": "golden-sound-item",
+                  "fromUs": 0,
+                  "toUs": 3000000
+                }
+              ],
+              "startOffsetSeconds": 0,
+              "endOffsetSeconds": 0
+            }
+          },
+          {
+            "id": "golden-cursor-clip",
+            "start": 90,
+            "duration": 90,
+            "itemId": "golden-screen-item",
+            "name": "屏幕原片",
+            "kind": "video",
+            "track": 1,
+            "sourceInUs": 0,
+            "sourceRemainder": {
+              "numerator": 0,
+              "denominator": 1
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "effects": [
+              {
+                "id": "golden-cursor",
+                "name": "录制光标",
+                "enabled": true,
+                "amount": 1,
+                "builtin": {
+                  "id": "recording_cursor",
+                  "params": {
+                    "size": 3,
+                    "smoothing": 40,
+                    "click_style": "ripple"
+                  }
+                }
+              },
+              {
+                "id": "golden-zoom",
+                "name": "自动缩放",
+                "enabled": true,
+                "amount": 1,
+                "builtin": {
+                  "id": "recording_zoom",
+                  "params": {
+                    "connect": true,
+                    "transition": "smooth"
+                  },
+                  "regions": [
+                    {
+                      "id": "golden-zoom-follow",
+                      "startUs": 500000,
+                      "endUs": 1500000,
+                      "depth": 3,
+                      "focus": "cursor",
+                      "origin": "auto"
+                    },
+                    {
+                      "id": "golden-zoom-fixed",
+                      "startUs": 2000000,
+                      "endUs": 2800000,
+                      "depth": 5,
+                      "focus": {
+                        "x": 0.8,
+                        "y": 0.2
+                      },
+                      "origin": "manual"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "golden-frame",
+                "name": "录屏画框",
+                "enabled": true,
+                "amount": 1,
+                "builtin": {
+                  "id": "recording_frame",
+                  "params": {
+                    "background": "solid",
+                    "color": "#1b1d22",
+                    "padding": 6,
+                    "radius": 2.5,
+                    "shadow": 50
+                  }
+                }
+              }
+            ],
+            "curves": {
+              "scale": [
+                {
+                  "time": 0,
+                  "value": 1,
+                  "interpolation": "linear",
+                  "source": "screen_attention",
+                  "reframeOrigin": {
+                    "time": 0,
+                    "value": 1,
+                    "interpolation": "linear"
+                  }
+                },
+                {
+                  "time": 45,
+                  "value": 1.8,
+                  "interpolation": "linear",
+                  "source": "screen_attention",
+                  "reframeOrigin": {
+                    "time": 45,
+                    "value": 1.8,
+                    "interpolation": "linear"
+                  }
+                }
+              ]
+            },
+            "trackers": [
+              {
+                "id": "golden-two-point",
+                "name": "两点",
+                "method": "point",
+                "prompts": [
+                  {
+                    "timeUs": 0,
+                    "points": [
+                      [
+                        0.3,
+                        0.4,
+                        1
+                      ],
+                      [
+                        0.6,
+                        0.5,
+                        1
+                      ]
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "golden-cursor-track",
+                "name": "光标",
+                "method": "point",
+                "prompts": [
+                  {
+                    "timeUs": 0,
+                    "points": [
+                      [
+                        0.5,
+                        0.5,
+                        1
+                      ]
+                    ],
+                    "window": {
+                      "feature": 0.06,
+                      "search": 0.2
+                    }
+                  }
+                ],
+                "recording": {
+                  "kind": "cursor"
+                }
+              }
+            ],
+            "stabilization": {
+              "smoothness": "natural",
+              "maxCrop": 0.1,
+              "rotation": true,
+              "scale": false
+            }
+          },
+          {
+            "id": "golden-frame-hold",
+            "start": 180,
+            "duration": 30,
+            "itemId": "golden-screen-item",
+            "name": "屏幕原片",
+            "kind": "video",
+            "track": 1,
+            "sourceInUs": 0,
+            "sourceRemainder": {
+              "numerator": 0,
+              "denominator": 1
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "frameHold": true
+          },
+          {
+            "id": "golden-time-remap",
+            "start": 210,
+            "duration": 100,
+            "itemId": "golden-screen-item",
+            "name": "屏幕原片",
+            "kind": "video",
+            "track": 1,
+            "sourceInUs": 0,
+            "sourceRemainder": {
+              "numerator": 0,
+              "denominator": 1
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "timeRemap": {
+              "points": [
+                {
+                  "offsetUs": 0,
+                  "speed": 1,
+                  "interpolation": "ease"
+                },
+                {
+                  "offsetUs": 600000,
+                  "speed": 0.25,
+                  "interpolation": "hold"
+                },
+                {
+                  "offsetUs": 900000,
+                  "speed": 0.25,
+                  "interpolation": "linear"
+                },
+                {
+                  "offsetUs": 1500000,
+                  "speed": 2,
+                  "interpolation": "linear"
+                }
+              ]
+            },
+            "frameInterpolation": "blend",
+            "preservePitch": true,
+            "pitchSemitones": 2
+          },
+          {
+            "id": "golden-sound-clip",
+            "start": 0,
+            "duration": 90,
+            "itemId": "golden-sound-item",
+            "name": "鼓点",
+            "kind": "audio",
+            "track": 0,
+            "sourceInUs": 0,
+            "sourceRemainder": {
+              "numerator": 0,
+              "denominator": 1
+            },
+            "x": 0,
+            "y": 0,
+            "scale": 1,
+            "rotation": 0,
+            "opacity": 1,
+            "volume": 1,
+            "text": "",
+            "snapToBeat": true,
+            "pitchSemitones": -3,
+            "remix": {
+              "id": "golden-remix",
+              "segment": 0,
+              "targetFrames": 90,
+              "repetition": 0.5,
+              "granularity": "bar",
+              "seed": 0,
+              "analysisIdentity": "music-v1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "sourceInUs": 0,
+              "sourceOutUs": 3000000
+            }
+          }
+        ],
+        "annotations": [],
+        "name": "序列 1",
+        "width": 1920,
+        "height": 1080,
+        "pixelAspectRatio": {
+          "numerator": 1,
+          "denominator": 1
+        },
+        "sampleRate": 48000,
+        "channels": 2,
+        "captions": [
+          {
+            "id": "golden-caption",
+            "start": 5,
+            "duration": 40,
+            "text": "字幕原文",
+            "sourceText": "字幕原文、",
+            "translation": "Golden caption",
+            "speech": {
+              "text": "字幕原文",
+              "aligned": true,
+              "words": [
+                {
+                  "clipId": "golden-sound-clip",
+                  "text": "字幕",
+                  "startUs": 166667,
+                  "endUs": 700000,
+                  "precision": "word"
+                },
+                {
+                  "clipId": "golden-sound-clip",
+                  "text": "原文",
+                  "startUs": 700000,
+                  "endUs": 1500000,
+                  "precision": "word"
+                }
+              ]
+            },
+            "reviewReasons": [
+              "translation"
+            ]
+          }
+        ],
+        "transitions": [
+          {
+            "id": "golden-transition",
+            "kind": "cross_dissolve",
+            "rightClipId": "golden-clip",
+            "durationFrames": 10
+          }
+        ],
+        "markers": [
+          {
+            "id": "golden-marker",
+            "frame": 20,
+            "name": "审查点"
+          },
+          {
+            "id": "golden-beat",
+            "frame": 30,
+            "name": "重音",
+            "type": "beat",
+            "strength": 0.9
+          }
+        ],
+        "styleKitId": "golden-kit"
+      }
+    ],
+    "codeMaterials": [
+      {
+        "id": "code-definition",
+        "name": "代码标题",
+        "defaultVersionId": "code-version",
+        "versions": [
+          {
+            "id": "code-version",
+            "apiVersion": 4,
+            "languageVersion": 4,
+            "entry": "main.ts",
+            "files": [
+              {
+                "path": "main.ts",
+                "location": "/persistence-project/代码/标题/v1/main.ts",
+                "hash": "f6f1e9f0ce00e2b293418731dbdcef684c806130256799e4aef48484d0f8f08a"
+              }
+            ],
+            "imports": []
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -36,6 +36,7 @@ import type { TrackingPlatform } from '../../src/platform/contracts/tracking'
 import type { VideoProxyPlatform } from '../../src/platform/contracts/videoProxy'
 import type { MediaCachePlatform } from '../../src/platform/contracts/mediaCache'
 import type { SceneDetectionPlatform } from '../../src/platform/contracts/sceneDetection'
+import type { MusicAnalysisPlatform } from '../../src/platform/contracts/musicAnalysis'
 import type { ScreenRecordingPlatform } from '../../src/platform/contracts/screenRecording'
 import type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
@@ -105,6 +106,7 @@ export interface HenjiNativeApi {
   videoProxy: VideoProxyPlatform
   mediaCache: MediaCachePlatform
   sceneDetection: SceneDetectionPlatform
+  musicAnalysis: MusicAnalysisPlatform
 }
 
 declare global {

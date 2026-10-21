@@ -35,6 +35,7 @@ import { creativeIntentsSchema } from '../creativeIntent/persistence'
 import { recordingCursorSourceSchema, RECORDING_CURSOR_EFFECT } from './recordingCursor'
 import { RECORDING_ZOOM_EFFECT } from './recordingZoom'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '../persistence/schemaVersions'
+import { videoEditClipRemixSchema } from './musicRemix'
 
 const frame = z.number().int().min(0).max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
 const identifier = z.string().min(1).max(100)
@@ -96,6 +97,8 @@ const videoEditClipStateSchema = z.object({
   frameHold: z.literal(true).optional(),
   /** 时间重映射（速度曲线，见 timeRemap.ts），与 `speed`、`frameHold` 互斥；`frameInterpolation` 补帧方式；`pitchSemitones` 变调（半音）。 */
   ...videoEditClipTimingExtensionFields(),
+  /** 音频重构（PR“重新混合”）生成的子片段：记录同一次重构的参数与原始源范围，改参数时据此重算。 */
+  remix: videoEditClipRemixSchema.optional(),
 }).strict()
 export const videoEditClipTakeSchema = z.object({
   frameHold: z.literal(true).optional(),

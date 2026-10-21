@@ -126,8 +126,8 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 20,
-      "fingerprint": "22a0dcc3db957d6cbdfa16b0b433fff4dc411f17309c1971bd2ef72d4ca43aaa",
+      "version": 21,
+      "fingerprint": "e7f39259db0486506239e01da307f170a4ad31c5f35d467701d777abec45e01b",
       "supportedFrom": 17,
       "minReaderVersion": 18
     },
@@ -156,8 +156,8 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 21,
-      "fingerprint": "dca159941ead85b655fea1701595ed8d07d6a653d0f075464a7cbb5a53b1b0e8",
+      "version": 22,
+      "fingerprint": "d7ef16c010b1ff7b900e6be8b0f69200f1d97d62bc19ec65f34660f9f0d72b3c",
       "supportedFrom": 19,
       "minReaderVersion": 19
     },
@@ -288,10 +288,10 @@
       "minReaderVersion": 2
     },
     "subtitle-manifest": {
-      "version": 13,
-      "fingerprint": "9b1b9a36efe9d4f9fd49193c212dec1e0981d8139286a560a9f6b7c6cf15f688",
+      "version": 14,
+      "fingerprint": "57ac41a405fd3c021580cc2e07f25e115642dfb48a4bb25ad0c3bb95a168058d",
       "supportedFrom": 11,
-      "minReaderVersion": 13
+      "minReaderVersion": 14
     },
     "setting-records": {
       "version": 21,
