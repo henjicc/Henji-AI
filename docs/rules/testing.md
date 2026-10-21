@@ -175,6 +175,7 @@ npx vitest run
 - 默认 `--profile temporary`，使用隔离临时 userData，退出后回收；适合创建、删除和任意 fixture。
 - `--profile real` / `--real-data` 才复用用户正在使用的工程、设置与系统密钥链。它不是把密钥复制到临时目录，而是让测试进程使用正式 Electron 资料目录，避免 safeStorage 与配置漂移。
 - real 模式默认跳过声明了 `writesUserData` 的 UI 场景；只有用户明确授权后才传 `--allow-writes`。
+- 多个会话或 worktree 并行时，同一时间只允许一个进程使用真实资料目录。真实资料目录指 `--profile real`、`assistant:cli` 与 `electron:dev`；其余验收一律走隔离资料目录。用完后正常退出，不强制结束进程。2026-10-21 多个 worktree 交替用真实资料目录运行后，henji.db 主文件与 WAL 不同步，整库损坏。
 - 同一入口可以重复传 `--suite`，但任一层失败立即停止；不得用后续更多通过项稀释前面的失败。
 
 ```bash

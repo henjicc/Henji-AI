@@ -3,10 +3,19 @@ import fs from 'node:fs'
 import Database from 'better-sqlite3'
 import { getProgramDataDir } from './appBasePaths'
 import { assertDatabaseVersionSupported, runSchemaMigrations, type SchemaMigrationOptions } from './db-migrations'
+import { isDatabaseCorruption, restoreDatabaseFromSnapshot, snapshotDatabase, verifyDatabase, type DatabaseRestoreResult } from './db-recovery'
+import { createMainLogger, type MainLogger } from './logging/main-logger'
 
 const DB_FILE_NAME = 'henji.db'
 
 let db: Database.Database | null = null
+let recovery: DatabaseRestoreResult | null = null
+let logger: MainLogger | null = null
+function getLogger(): MainLogger {
+  // 延迟创建：logging 的写入链路在模块初始化阶段不可用。
+  logger ??= createMainLogger('main.db')
+  return logger
+}
 
 /**
  * 正式运行环境的迁移参数（位置换算上下文、备份目录）由主进程入口在启动时登记（db-locations.ts 提供），
@@ -36,17 +45,17 @@ export function initializeSchema(conn: Database.Database, options: SchemaMigrati
   runSchemaMigrations(conn, undefined, options)
 }
 
-export function getDb(): Database.Database {
-  if (db) {
-    return db
-  }
+function getBackupDir(): string {
+  return path.join(getHenjiDataDir(), 'backups')
+}
 
-  fs.mkdirSync(getHenjiDataDir(), { recursive: true })
+function openDatabase(): Database.Database {
   const connection = new Database(getHenjiDbPath())
   try {
     assertDatabaseVersionSupported(connection)
     connection.pragma('journal_mode = WAL')
     connection.pragma('foreign_keys = ON')
+    verifyDatabase(connection)
     // 版本预检通过后才允许迁移参数经 settings 读回本连接。
     db = connection
     initializeSchema(connection, migrationOptionsProvider(connection))
@@ -56,4 +65,48 @@ export function getDb(): Database.Database {
     throw error
   }
   return connection
+}
+
+export function getDb(): Database.Database {
+  if (db) {
+    return db
+  }
+
+  fs.mkdirSync(getHenjiDataDir(), { recursive: true })
+  let connection: Database.Database
+  try {
+    connection = openDatabase()
+  } catch (error) {
+    if (!isDatabaseCorruption(error)) throw error
+    const restored = restoreDatabaseFromSnapshot(getHenjiDbPath(), path.join(getBackupDir(), 'snapshots'), getBackupDir())
+    if (!restored) {
+      getLogger().error('数据库已损坏且没有可用快照', { event: 'db.corrupt.unrecoverable', error })
+      throw error
+    }
+    getLogger().error('数据库已损坏，已换上最近的快照', { event: 'db.corrupt.restored', error, context: { ...restored } })
+    recovery = restored
+    connection = openDatabase()
+  }
+  try {
+    const snapshot = snapshotDatabase(connection, path.join(getBackupDir(), 'snapshots'))
+    if (snapshot) getLogger().info('数据库快照已写入', { event: 'db.snapshot.completed', context: { snapshot } })
+  } catch (error) {
+    getLogger().warn('数据库快照未能写入', { event: 'db.snapshot.failed', error })
+  }
+  return connection
+}
+
+/** 本次启动是否从快照恢复过（只取一次，用于告知用户）。 */
+export function takeDatabaseRecovery(): DatabaseRestoreResult | null {
+  const result = recovery
+  recovery = null
+  return result
+}
+
+/** 退出时合并 WAL 并关闭，下次启动不必从日志恢复。 */
+export function closeDb(): void {
+  if (!db) return
+  const connection = db
+  db = null
+  try { connection.pragma('wal_checkpoint(TRUNCATE)') } finally { connection.close() }
 }

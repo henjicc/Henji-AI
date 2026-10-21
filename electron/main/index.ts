@@ -14,7 +14,7 @@ import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerLocalRecordsIpc } from './ipc/local-records'
 import { registerFontsIpc } from './ipc/fonts'
 import { registerTestFixturesIpc } from './ipc/test-fixtures'
-import { configureDatabaseMigrations, getDb } from './services/db'
+import { closeDb, configureDatabaseMigrations, getDb, takeDatabaseRecovery } from './services/db'
 import { PersistenceError } from '../../src/core/persistence/migrations'
 import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
@@ -119,6 +119,13 @@ app.whenReady().then(async () => {
     else dialog.showErrorBox('Henji AI', error.message)
     app.exit(1)
     return
+  }
+  const recovered = takeDatabaseRecovery()
+  if (recovered) {
+    const message = `应用数据库文件损坏，已自动恢复到 ${path.basename(recovered.snapshot)} 这份备份。备份之后的生成记录、素材库整理可能需要重新确认；损坏的文件保存在 ${recovered.quarantine}。`
+    if (isAssistantCliMode()) process.stderr.write(`${message}
+`)
+    else void dialog.showMessageBox({ type: 'warning', title: 'Henji AI', message })
   }
   configureMacDockIcon()
   registerMediaProtocolHandler()
@@ -238,7 +245,11 @@ app.on('window-all-closed', () => {
 bindApplicationShutdown(app, [closeRecordingControl, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
-  if (isAssistantCliMode() || process.argv.includes('--verify-model')) return
-  const outcome = await mediaRecycleLifecycle.exit(runMediaRecycle)
-  createMainLogger('main.media_recycle').info('退出媒体回收结束', { event: 'media_recycle.exit.completed', context: { outcome } })
+  try {
+    if (isAssistantCliMode() || process.argv.includes('--verify-model')) return
+    const outcome = await mediaRecycleLifecycle.exit(runMediaRecycle)
+    createMainLogger('main.media_recycle').info('退出媒体回收结束', { event: 'media_recycle.exit.completed', context: { outcome } })
+  } finally {
+    closeDb()
+  }
 })
