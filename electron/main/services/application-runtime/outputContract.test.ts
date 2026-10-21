@@ -147,6 +147,7 @@ const successData: Record<string, Record<string, unknown>> = {
   open_video_edit_clip_source: { resultRef: clipRef, documentRef, status: 'opened', sourceType: 'document', message, verification: verification(clipRef) },
   nest_video_edit_clips: { resultRef: documentRef, sequenceRef, parentSequenceRef: sequenceRef, itemRef: ref('video_edit.item'), clipRef, movedClipRefs: [clipRef], message, verification: verification() },
   ripple_video_edit_clip_speed: { resultRef: documentRef, changedClipRefs: [clipRef], message, verification: verification() },
+  ramp_video_edit_clip_speed: { resultRef: documentRef, changedClipRefs: [clipRef], durationFrames: 120, curve: [{ sourceSeconds: 0, speedPercent: 100 }, { sourceSeconds: 2, speedPercent: 30 }], snappedSeconds: [3], message, verification: verification() },
   get_video_edit_in_place_generation: { documentRef, taskRef: ref('generation.task', 'task'), status: 'placed', progress: 100, clipRef, takeIndex: 0, message },
   discard_video_edit_in_place_generation: { documentRef, taskRef: ref('generation.task', 'task'), status: 'removed', ...verified },
   recover_video_edit_in_place_generation: { documentRef, taskRef: ref('generation.task', 'task'), status: 'placed', ...verified },

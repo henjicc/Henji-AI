@@ -58,10 +58,12 @@ it('Ctrl+R 打开速度对话框：50% 与时长互算，倒放／保持音调�
   const speed = dialog.getByLabelText('速度百分比') as HTMLInputElement
   const duration = dialog.getByLabelText('持续时间') as HTMLInputElement
   expect(speed.value).toBe('100'); expect(duration.value).toBe('00:00:01:00')
-  for (const name of ['倒放速度', '保持音频音调', '波纹编辑，移动尾部剪辑']) expect(dialog.getByRole('checkbox', { name }).getAttribute('aria-checked')).toBe('false')
+  for (const name of ['倒放速度', '波纹编辑，移动尾部剪辑']) expect(dialog.getByRole('checkbox', { name }).getAttribute('aria-checked')).toBe('false')
+  // 原速片段默认保持音调：变速后不变调。
+  expect(dialog.getByRole('checkbox', { name: '保持音频音调' }).getAttribute('aria-checked')).toBe('true')
   fireEvent.change(speed, { target: { value: '50' } }); fireEvent.blur(speed)
   expect(duration.value).toBe('00:00:02:00')
-  for (const name of ['倒放速度', '保持音频音调', '波纹编辑，移动尾部剪辑']) fireEvent.click(dialog.getByRole('checkbox', { name }))
+  for (const name of ['倒放速度', '波纹编辑，移动尾部剪辑']) fireEvent.click(dialog.getByRole('checkbox', { name }))
   expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
   fireEvent.click(dialog.getByRole('button', { name: '确定' }))
   expect(current().clips[0]).toMatchObject({ duration: 60, reverse: true, preservePitch: true })
