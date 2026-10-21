@@ -14,8 +14,9 @@ import type { EffectQuality, EffectSize } from '@/core/imaging/effects/descripto
 export type VideoEditLutLoader = (asset: ColorLutAsset) => Promise<CubeLut>
 const loadLut: VideoEditLutLoader = fetchVideoEditColorLut
 interface UploadQueue { writeTexture(destination: unknown, data: ArrayBufferView, layout: unknown, size: unknown): void }
+const halfScratch = new Float32Array(1); const halfBits = new Uint32Array(halfScratch.buffer)
 function half(value: number): number {
-  const bits = new Uint32Array(new Float32Array([value]).buffer)[0]; const sign = (bits >>> 16) & 0x8000; const exponent = ((bits >>> 23) & 255) - 127 + 15; const mantissa = bits & 0x7fffff
+  halfScratch[0] = value; const bits = halfBits[0]; const sign = (bits >>> 16) & 0x8000; const exponent = ((bits >>> 23) & 255) - 127 + 15; const mantissa = bits & 0x7fffff
   if (exponent <= 0) return exponent < -10 ? sign : sign | ((mantissa | 0x800000) >>> (14 - exponent))
   return sign | (exponent << 10) | (mantissa >>> 13)
 }
@@ -121,12 +122,16 @@ export class VideoEditBuiltinEffectsGpu {
       if (!lookup) { lookups.push(undefined); continue }
       const asset = lookup.kind === 'cube' ? luts.find(asset => asset.id === lookup.ref) : undefined
       if (lookup.kind === 'cube' && !asset) throw new Error('项目中找不到此 LUT，请重新导入或移除引用。')
-      const key = lookup.kind === 'curve' ? `curve:${Array.from(lookup.data).join(',')}` : `cube:${asset!.path}:${asset!.contentIdentity}`
+      const key = lookup.kind === 'table' ? `table:${lookup.key}` : `cube:${asset!.path}:${asset!.contentIdentity}`
       let resource = this.lookups.get(key)
       if (!resource) {
-        if (lookup.kind === 'curve') {
-          const rgba = new Float32Array(lookup.data.length * 4); lookup.data.forEach((value, i) => rgba.set([value, value, value, 1], i * 4))
-          resource = { texture: this.upload(rgba, lookup.data.length), used: true }
+        if (lookup.kind === 'table') {
+          // Parameter tables change on every drag frame: rewrite an idle table texture of the same size instead of allocating.
+          const idle = [...this.lookups].find(([key, value]) => key.startsWith('table:') && !value.used && !value.cube)
+          if (idle) {
+            this.lookups.delete(idle[0]); resource = idle[1]
+            ;(this.device.queue as typeof this.device.queue & UploadQueue).writeTexture({ texture: resource.texture }, Uint16Array.from(lookup.data, half), { bytesPerRow: lookup.width * 8, rowsPerImage: lookup.height }, [lookup.width, lookup.height, 1])
+          } else resource = { texture: this.upload(lookup.data, lookup.width), used: true }
         } else {
           const cube = await this.lutLoader(asset!)
           if (this.disposed) throw new Error('原调色渲染已关闭。')

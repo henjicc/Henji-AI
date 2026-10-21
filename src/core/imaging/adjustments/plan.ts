@@ -1,9 +1,11 @@
-import { COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HSL_CORRECTION_KEYS, COLOR_GRADE_HUE_CURVES, COLOR_GRADE_WHEEL_REGIONS, colorGradeWhiteBalance } from './colorGrade'
-import { colorGradeCurveLut, colorGradeCurvePoints, parseColorGradeCurve } from './curves'
+import { COLOR_GRADE_HSL_CORRECTION_KEYS, colorGradeWhiteBalance } from './colorGrade'
+import { buildColorGradeTable } from './unifiedGrade'
 import { MAX_GAUSSIAN_DIRECT_SIGMA as MAX_DIRECT_SIGMA, MAX_GAUSSIAN_LEVELS as MAX_LEVELS, planGaussian } from './gaussianPlan'
-export type AdjustmentPassEntry = 'copy' | 'blur' | 'unsharp' | 'color_grade_basic' | 'color_grade_creative' | 'color_grade_curve' | 'color_grade_hue_curve' | 'color_grade_wheel' | 'color_grade_vignette' | 'color_grade_lut' | 'color_grade_hsl_key' | 'color_grade_hsl_correct' | 'color_grade_linear' | 'color_grade_hsl_sharpen'
+export type AdjustmentPassEntry = 'copy' | 'blur' | 'unsharp' | 'color_grade_unified' | 'color_grade_vignette' | 'color_grade_lut' | 'color_grade_hsl_key' | 'color_grade_hsl_correct' | 'color_grade_linear' | 'color_grade_hsl_sharpen'
 export type AdjustmentTexture = 'input' | 'output' | number
-export interface AdjustmentPass { entry: AdjustmentPassEntry; source: AdjustmentTexture; target: AdjustmentTexture; original?: AdjustmentTexture; mask?: AdjustmentTexture; uniforms: Float32Array; lookup?: { kind: 'curve'; data: Float32Array } | { kind: 'cube'; ref: string } }
+export interface AdjustmentPass { entry: AdjustmentPassEntry; source: AdjustmentTexture; target: AdjustmentTexture; original?: AdjustmentTexture; mask?: AdjustmentTexture; uniforms: Float32Array; lookup?: AdjustmentLookup }
+/** `table`: RGBA32F rows bound as `original` (unified grade parameters and curves); `cube`: imported LUT reference. */
+export type AdjustmentLookup = { kind: 'table'; data: Float32Array; width: number; height: number; key: string } | { kind: 'cube'; ref: string }
 export interface AdjustmentPlan { width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: AdjustmentPass[] }
 type Vec4 = readonly [number, number, number, number]
 const ZERO: Vec4 = [0, 0, 0, 0]
@@ -46,12 +48,15 @@ const plan = new Planner(width, height)
       const n = (key: string): number => number(params, key)
       const stages: Array<{ entry: AdjustmentPassEntry; a: Vec4; b?: Vec4; c?: Vec4; lookup?: AdjustmentPass['lookup'] }> = []
       if (params.input_lut && n('input_lut_strength')) stages.push({ entry: 'color_grade_lut', a: [n('input_lut_strength') / 100, 0, 0, 0], lookup: { kind: 'cube', ref: params.input_lut as string } })
-      if (['temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'saturation', 'vibrance'].some(key => n(key) !== 0)) {
-        const gain = 2 ** n('exposure'); const wb = colorGradeWhiteBalance(n('temperature'), n('tint')); const contrast = n('contrast') / 100
-        stages.push({ entry: 'color_grade_basic', a: [wb[0] * gain, wb[1] * gain, wb[2] * gain, contrast >= 0 ? 1 + contrast * 2 : 1 + contrast], b: [n('highlights') / 100, n('shadows') / 100, n('whites') / 100, n('blacks') / 100], c: [n('saturation') / 100, n('vibrance') / 100, 0, 0] })
-      }
-      if (params.look_lut && n('look_lut_strength')) stages.push({ entry: 'color_grade_lut', a: [n('look_lut_strength') / 100, 0, 0, 0], lookup: { kind: 'cube', ref: params.look_lut as string } })
-      if (n('faded_film') || n('creative_shadow_strength') || n('creative_highlight_strength')) stages.push({ entry: 'color_grade_creative', a: [n('faded_film') / 100, n('creative_shadow_hue'), n('creative_shadow_strength') / 100, n('creative_highlight_hue')], b: [n('creative_highlight_strength') / 100, 0, 0, 0] })
+      // Every pointwise operation runs in the unified pass; a Look LUT splits it into scene (A) and display (B) halves.
+      const table = buildColorGradeTable(params)
+      const lookup: AdjustmentPass['lookup'] = { kind: 'table', data: table.data, width: table.width, height: table.height, key: table.key }
+      const look = Boolean(params.look_lut && n('look_lut_strength'))
+      if (look) {
+        if (table.stageA) stages.push({ entry: 'color_grade_unified', a: [1, 0, 0, 0], lookup })
+        stages.push({ entry: 'color_grade_lut', a: [n('look_lut_strength') / 100, 0, 0, 0], lookup: { kind: 'cube', ref: params.look_lut as string } })
+        if (table.stageB) stages.push({ entry: 'color_grade_unified', a: [2, 0, 0, 0], lookup })
+      } else if (table.stageA || table.stageB) stages.push({ entry: 'color_grade_unified', a: [(table.stageA ? 1 : 0) + (table.stageB ? 2 : 0), 0, 0, 0], lookup })
       // Two full-resolution ping-pong surfaces regardless of the number of color sections.
       let current: AdjustmentTexture = 'input'; const ping = plan.alloc(); const pong = plan.alloc()
       const target = (): number => current === ping ? pong : ping
@@ -62,15 +67,6 @@ const plan = new Planner(width, height)
         plan.gaussian(current, blurred, sigma, sigma, true)
         const next = target(); plan.pass('unsharp', blurred, next, [n('sharpen') / 100 * 3, 0, 0, 0], ZERO, current); current = next
       }
-      COLOR_GRADE_CURVE_CHANNELS.forEach((channel, index) => {
-        const points = colorGradeCurvePoints(params, channel)
-        if (points.some(point => point.y !== point.x)) draw({ entry: 'color_grade_curve', a: ZERO, b: [0, index, 0, 0], lookup: { kind: 'curve', data: colorGradeCurveLut(points) } })
-      })
-      COLOR_GRADE_HUE_CURVES.forEach((channel, index) => {
-        const points = parseColorGradeCurve(params[`curve_${channel}_points`])
-        if (points.some(point => point.y !== 50)) draw({ entry: 'color_grade_hue_curve', a: [index, 0, 0, 0], lookup: { kind: 'curve', data: colorGradeCurveLut(points) } })
-      })
-      COLOR_GRADE_WHEEL_REGIONS.forEach((region, index) => { if (n(`${region}_strength`) || n(`${region}_luminance`)) draw({ entry: 'color_grade_wheel', a: [n(`${region}_hue`), n(`${region}_strength`) / 100, n(`${region}_luminance`) / 100, index] }) })
       const showMask = params.hsl_show_mask === true
       if (showMask || COLOR_GRADE_HSL_CORRECTION_KEYS.some(key => n(key) !== 0)) {
         let mask = plan.alloc()

@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, RotateCcw, WandSparkles, Upload } from 'luci
 import { Dropdown, UiButton, UiEmpty, UiGroup, UiIconButton, UiLoading } from '@/components/ui'
 
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
-import { COLOR_GRADE_BASIC_PARAMS, COLOR_GRADE_CREATIVE_PARAMS, COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HSL_PARAMS, COLOR_GRADE_HUE_CURVES, COLOR_GRADE_HUE_CURVE_NAMES, COLOR_GRADE_LUT_PARAMS, COLOR_GRADE_POINT_PARAMS, COLOR_GRADE_VIGNETTE_PARAMS, COLOR_GRADE_WHEEL_PARAMS, COLOR_GRADE_WHEEL_REGIONS, VIDEO_EDIT_COLOR_GRADE } from '@/core/videoEdit/colorGrade'
+import { COLOR_GRADE_BASIC_PARAMS, COLOR_GRADE_CREATIVE_PARAMS, COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HSL_PARAMS, COLOR_GRADE_HUE_CURVES, COLOR_GRADE_HUE_CURVE_NAMES, COLOR_GRADE_LUT_PARAMS, COLOR_GRADE_MIXER_PARAMS, COLOR_GRADE_POINT_PARAMS, COLOR_GRADE_TONE_PARAMS, COLOR_GRADE_VIGNETTE_PARAMS, COLOR_GRADE_WHEEL_PARAMS, COLOR_GRADE_WHEEL_REGIONS, VIDEO_EDIT_COLOR_GRADE } from '@/core/videoEdit/colorGrade'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { getActiveVideoEditSequence, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
@@ -57,6 +57,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
   const [channel, setChannel] = useState('master')
+  const [mixer, setMixer] = useState('saturation')
   return <UiGroup labelWidth={96} className="flex flex-col" gap="row">
     <div className="flex flex-wrap items-center justify-end gap-1">
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} tooltip="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles  />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
@@ -68,12 +69,18 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     <Section title="基本校正">{lutControl('input')}<VideoEditBuiltinParamRows params={COLOR_GRADE_LUT_PARAMS.filter(param => param.key === 'input_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={COLOR_GRADE_BASIC_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
     <Section title="创意">{lutControl('look')}<VideoEditBuiltinParamRows params={COLOR_GRADE_LUT_PARAMS.filter(param => param.key === 'look_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={COLOR_GRADE_CREATIVE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
     <Section title="曲线">
+      <VideoEditBuiltinParamRows params={COLOR_GRADE_TONE_PARAMS} values={values} gesture={gesture} animation={animation} />
       <UiFormRow label={t('surfaceGrammar.curveChannel')} density="compact" labelColumn="panel"><UiSegmented ariaLabel="曲线通道" size="sm" fullWidth value={channel} onChange={setChannel} options={COLOR_GRADE_CURVE_CHANNELS.map((value, i) => ({ value, label: ['RGB 主', '红', '绿', '蓝'][i] }))} /></UiFormRow>
       <VideoEditBuiltinParamRows params={COLOR_GRADE_POINT_PARAMS.filter(param => param.key === `curve_${channel}_points`)} values={values} gesture={gesture} animation={animation} />
       <UiFormRow label={t('surfaceGrammar.curveType')} density="compact" labelColumn="panel"><Dropdown ariaLabel="色相饱和度曲线类型" size="sm" value={hueCurve} onSelect={setHueCurve} options={COLOR_GRADE_HUE_CURVES.map((value, i) => ({ value, label: COLOR_GRADE_HUE_CURVE_NAMES[i] }))} /></UiFormRow>
       <VideoEditBuiltinParamRows params={COLOR_GRADE_POINT_PARAMS.filter(param => param.key === `curve_${hueCurve}_points`)} values={values} gesture={gesture} animation={animation} />
     </Section>
+    <Section title="混色器">
+      <UiFormRow label="调整" density="compact" labelColumn="panel"><UiSegmented ariaLabel="混色器通道" size="sm" fullWidth value={mixer} onChange={setMixer} options={[{ value: 'hue', label: '色相' }, { value: 'saturation', label: '饱和度' }, { value: 'luminance', label: '明亮度' }]} /></UiFormRow>
+      <VideoEditBuiltinParamRows params={COLOR_GRADE_MIXER_PARAMS.filter(param => param.key.endsWith(`_${mixer}`))} values={values} gesture={gesture} animation={animation} />
+    </Section>
     <Section title="色轮">
+      <VideoEditBuiltinParamRows params={COLOR_GRADE_WHEEL_PARAMS.filter(param => param.key === 'wheel_mode' || param.key.startsWith('grade_'))} values={values} gesture={gesture} animation={animation} />
       <div className="flex flex-wrap gap-2">{COLOR_GRADE_WHEEL_REGIONS.map(region => <div key={region} className="min-w-0 basis-40 flex-1"><VideoEditBuiltinParamRows params={COLOR_GRADE_WHEEL_PARAMS.filter(param => param.key.startsWith(`${region}_`))} values={values} gesture={gesture} animation={animation} /></div>)}</div>
     </Section>
     <Section title="HSL 辅助"><VideoEditBuiltinParamRows params={COLOR_GRADE_HSL_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>

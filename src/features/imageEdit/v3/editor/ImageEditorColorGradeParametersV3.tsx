@@ -9,9 +9,9 @@ import type { ImageEditAdjustmentLayerV3, ImageEditJsonObjectV3 } from '@/core/i
 import { importImageEditorColorLutV3 } from '@/commands/imageEditorV3'
 import type { ImageEditorV3Controller } from './types'
 
-const GROUPS = ['基本校正', '创意', '曲线', 'LUT', '色轮', 'HSL 辅助', '晕影'] as const
+const GROUPS = ['基本校正', '创意', '曲线', 'LUT', '色轮', 'HSL 辅助', '晕影', '混色器'] as const
 const fields = builtinParameterFields(COLOR_GRADE_PARAMETERS.filter(param => param.key !== 'hsl_show_mask')).map(field => ({ ...field, animatable: false, control: field.type === 'number' ? 'slider' as const : 'control' in field ? field.control : undefined,
-  group: field.key.startsWith('curve_') ? GROUPS[2] : field.type === 'lut' || field.key.includes('_lut_strength') ? GROUPS[3] : field.key.startsWith('hsl_') ? GROUPS[5] : field.key.startsWith('vignette_') ? GROUPS[6] : /^(shadow|midtone|highlight)_/.test(field.key) ? GROUPS[4] : /^(creative_|faded_|sharpen)/.test(field.key) ? GROUPS[1] : GROUPS[0],
+  group: field.key.startsWith('curve_') || field.key.startsWith('tone_') ? GROUPS[2] : field.key.startsWith('mixer_') ? GROUPS[7] : field.type === 'lut' || field.key.includes('_lut_strength') ? GROUPS[3] : field.key.startsWith('hsl_') ? GROUPS[5] : field.key.startsWith('vignette_') ? GROUPS[6] : /^(shadow|midtone|highlight|global)_|^wheel_mode$|^grade_/.test(field.key) ? GROUPS[4] : /^(faded_|sharpen)/.test(field.key) ? GROUPS[1] : GROUPS[0],
 })) as ParamFieldSpec[]
 
 /** Image adapter owns layer transactions and resource choice; controls own neither workspace nor history. */
@@ -59,7 +59,7 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
     finally { if (live.current && currentPreviewId.current === previewId) setImporting(false) }
   }
   const values = Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, { ...draft,
-    ...Object.fromEntries(['shadow', 'midtone', 'highlight', 'hsl_grade'].flatMap(region => [`${region}_hue`, `${region}_strength`, `${region}_luminance`].map(key => [key, draft[key] ?? 0]))),
+    ...Object.fromEntries(['shadow', 'midtone', 'highlight', 'global', 'hsl_grade'].flatMap(region => [`${region}_hue`, `${region}_strength`, `${region}_luminance`].map(key => [key, draft[key] ?? 0]))),
   })]))
   return <UiGroup gap="stack" titleTone="compact">
     {error && <UiError message={error} size="xs" align="start" />}

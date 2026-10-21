@@ -32,7 +32,7 @@ test('Lumetri basic correction uses the existing color grader and preserves sour
     new Map([[file, { streams: [{ codec_type: 'video', width: 3840, height: 2160, avg_frame_rate: '60/1' }], format: { duration: '30' } }]]))
   const grade = result.document.sequences[0].clips[0].effects[0]
   assert.equal(grade.builtin.id, 'color_grade')
-  assert.deepEqual(grade.builtin.params, { temperature: 0, tint: 0, exposure: .7999998927116394, contrast: -19, highlights: 0, shadows: 0, whites: 0, blacks: -3, saturation: 10 })
+  assert.deepEqual(grade.builtin.params, { temperature_kelvin: 6500, tint: 0, exposure: .7999998927116394, contrast: -19, highlights: 0, shadows: 0, whites: 0, blacks: -3, saturation: 10 })
   assert.ok(!result.evidence.limitations.some(item => item.text.includes('待适配画面效果')))
 })
 

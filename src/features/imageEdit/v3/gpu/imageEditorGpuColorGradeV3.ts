@@ -2,7 +2,7 @@ import { COMPOSITING_WGSL } from '@/core/imaging/compositing/wgsl'
 import { imageEditOperationParametersV3 } from '@/core/imageEdit/v3/renderContracts/operationParameters'
 import { draw, effect, target, type Draw, type Effect, type Gpu, type Target, type Texture } from 'vgpu'
 import { adjustmentPassesWgsl } from '@/core/imaging/effects/wgsl/adjustmentPasses'
-import { planColorGrade, isNeutralAdjustmentPlan, type AdjustmentTexture } from '@/core/imaging/adjustments/plan'
+import { planColorGrade, isNeutralAdjustmentPlan, type AdjustmentLookup, type AdjustmentTexture } from '@/core/imaging/adjustments/plan'
 import { imageColorGradeRuntimeParams } from '@/core/imaging/adjustments/schema'
 import { linearWorkingSpaceMatrixV3 } from '@/core/imageEdit/v3/execution/tileColor'
 import { assertImageColorGradeLutDomain } from '@/core/imageEdit/v3/effects/colorGrade'
@@ -75,14 +75,12 @@ export class ImageEditorGpuColorGradeV3 {
       let lookup: Texture | undefined
       const settings: Record<string, unknown> = { colorLut: this.fallbackLut, source: texture(pass.source), u: pass.uniforms, original: texture(pass.original ?? 'input'), gradeMask: texture(pass.mask ?? 'input') }
       if (pass.lookup) {
-        const lookupKey = pass.lookup.kind === 'curve' ? `curve:${Array.from(pass.lookup.data).join(',')}` : pass.lookup.ref
+        const lookupKey = lookupId(pass.lookup)
         lookup = this.lookups.get(lookupKey)
-        if (pass.lookup.kind === 'curve') {
+        if (pass.lookup.kind === 'table') {
           if (!lookup) {
-            const rgba = new Float32Array(pass.lookup.data.length * 4)
-            pass.lookup.data.forEach((x, j) => rgba.set([x, x, x, 1], j * 4))
-            lookup = this.gpu.device.createTexture({ size: [pass.lookup.data.length, 1], format: 'rgba32float', usage: ['copy_dst', 'texture_binding'] })
-            this.gpu.gpu.queue.writeTexture({ texture: lookup.gpu }, rgba, { bytesPerRow: pass.lookup.data.length * 16 }, { width: pass.lookup.data.length, height: 1 })
+            lookup = this.gpu.device.createTexture({ size: [pass.lookup.width, pass.lookup.height], format: 'rgba32float', usage: ['copy_dst', 'texture_binding'] })
+            this.gpu.gpu.queue.writeTexture({ texture: lookup.gpu }, pass.lookup.data, { bytesPerRow: pass.lookup.width * 16 }, { width: pass.lookup.width, height: pass.lookup.height })
           }
           settings.original = lookup
         } else {
@@ -112,10 +110,11 @@ export class ImageEditorGpuColorGradeV3 {
       params: { options: [adjustment.opacity, blendIndex(adjustment.blendMode), 0, 0], maskOptions: [adjustment.mask ? 1 : 0, adjustment.mask?.defaultValue ?? 1, adjustment.mask?.inverted ? 1 : 0, Number(adjustment.parameters.maskDensity ?? 1)] } })
     this.passes.push({ draw: this.mix, target: output })
     for (const pass of this.passes) if (!this.compiled.has(pass.draw)) { await pass.draw.compile(pass.target); this.compiled.add(pass.draw); this.onCompiled() }
-    const active = new Set(plan.passes.flatMap(pass => !pass.lookup ? [] : [pass.lookup.kind === 'curve' ? `curve:${Array.from(pass.lookup.data).join(',')}` : pass.lookup.ref]))
+    const active = new Set(plan.passes.flatMap(pass => pass.lookup ? [lookupId(pass.lookup)] : []))
     for (const [key, resource] of this.lookups) if (!active.has(key)) { resource.destroy(); this.lookups.delete(key) }
   }
   encode(frame: ReturnType<typeof import('vgpu').frame>): void { for (const pass of this.passes) frame.pass(pass.target, pass.draw) }
   dispose(): void { this.fallbackLut.destroy(); this.scratch.forEach(value => value.color.destroy()); this.buffers.forEach(value => value.destroy()); this.lookups.forEach(value => value.destroy()); this.lookups.clear(); this.draws.clear() }
 }
 function blendIndex(mode: string): number { return mode === 'multiply' ? 1 : mode === 'screen' ? 2 : mode === 'overlay' ? 3 : mode === 'soft-light' ? 4 : 0 }
+function lookupId(lookup: AdjustmentLookup): string { return lookup.kind === 'table' ? `table:${lookup.key}` : lookup.ref }

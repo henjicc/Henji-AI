@@ -12,7 +12,7 @@
 
 `analyze_video_edit_color` 给 documentRef、sequenceRef、clipRef；sampleCount=1–9，不指定 frame 时均匀采样（5帧为工具起点），指定 frame 只采该整数序列帧。
 
-- 自动校色：将返回 temperature/tint/exposure/contrast 绝对建议合并已读参数，经通用属性写入；不是“在当前值再加一次”。纯色或极暗分析失败可选其他代表帧或手调。
+- 自动校色：将返回 temperature_kelvin/tint/exposure/contrast 绝对建议合并已读参数，经通用属性写入；不是“在当前值再加一次”。纯色或极暗分析失败可选其他代表帧或手调。
 - 参考匹配：referenceClipRef 给同序列已调好参考，matchMethod=moments/histogram。返回完整中性参数和RGB曲线，用 parameters 整体替换，并在同一事务清除相应 frame_curves（全部换时写{}），防止旧Look或动画重复作用；此替换会移除旧风格，先确认它符合任务范围。
 - 统计不识别艺术意图：对白肤色、混合光源、夕阳不可只按均值判断。写入后观察代表帧与镜头交接，再按素材调整。
 

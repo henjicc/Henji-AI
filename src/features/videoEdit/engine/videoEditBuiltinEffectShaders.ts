@@ -12,7 +12,7 @@ import { RECORDING_ZOOM_WGSL } from './videoEditRecordingZoomShader'
 import { ADJUSTMENT_PASSES_WGSL } from '@/core/imaging/effects/wgsl/adjustmentPasses'
 import { GLOW_PRO_ENTRIES, GLOW_PRO_WGSL } from './glowPro'
 import { GAUSSIAN_WGSL } from '@/core/imaging/effects/wgsl/gaussian'
-const LEGACY_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_basic', 'color_grade_creative', 'color_grade_curve', 'color_grade_wheel', 'color_grade_vignette', 'color_grade_hue_curve', 'color_grade_lut'] as const
+const LEGACY_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'color_grade_unified', 'color_grade_vignette', 'color_grade_lut'] as const
 export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = [...LEGACY_EFFECT_ENTRIES, 'recording_cursor', 'recording_click', 'recording_zoom', 'recording_frame_content', 'recording_frame_compose', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample', 'color_grade_hsl_key', 'color_grade_hsl_correct', 'color_grade_linear', 'color_grade_hsl_sharpen', ...GLOW_PRO_ENTRIES] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 

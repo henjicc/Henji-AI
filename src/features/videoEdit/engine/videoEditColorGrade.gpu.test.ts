@@ -2,6 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { init, type Gpu } from 'vgpu/node'
 import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { colorGradeLinear, colorGradeSrgb, colorGradeWhiteBalance } from '@/core/videoEdit/colorGrade'
+import { applyMat3, whiteBalanceMatrix } from '@/core/imaging/adjustments/colorScience'
+import { buildColorGradeTable, gradeStageA, gradeStageB } from '@/core/imaging/adjustments/unifiedGrade'
+import { colorGradeDefaults } from '@/core/imaging/adjustments/schema'
 import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import { readVideoEditPreciseRow, videoEditGradientLevels, videoEditHalfToFloat } from './videoEditGpuShaders'
 
@@ -50,15 +53,30 @@ describe('ColorGrade 正式 GPU 像素', () => {
     near(await run({ exposure: 1 }, [.2, .2, .2, .5]), [colorGradeSrgb(colorGradeLinear(.4) * 2) * .5, colorGradeSrgb(colorGradeLinear(.4) * 2) * .5, colorGradeSrgb(colorGradeLinear(.4) * 2) * .5, .5])
   })
   it('曝光/白平衡按线性增益；曲线固定点与通道独立；红色中间调轮保持亮度', async () => {
-    const gains = colorGradeWhiteBalance(30, -20)
-    near(await run({ temperature: 30, tint: -20 }, [.4, .4, .4, 1]), [...gains.map(g => colorGradeSrgb(colorGradeLinear(.4) * g)), 1])
+    const wb = applyMat3(whiteBalanceMatrix(4200, -20), [colorGradeLinear(.4), colorGradeLinear(.4), colorGradeLinear(.4)])
+    near(await run({ temperature_kelvin: 4200, tint: -20 }, [.4, .4, .4, 1]), [...wb.map(colorGradeSrgb), 1])
     near(await run({ curve_master_2: 75 }, [.5, .5, .5, 1]), [.75, .75, .75, 1])
     near(await run({ curve_red_2: 75 }, [.5, .5, .5, 1]), [.75, .5, .5, 1])
     near(await run({ midtone_hue: 0, midtone_strength: 40 }, [.5, .5, .5, 1]), [.5 + .7874 * .1, .5 - .2126 * .1, .5 - .2126 * .1, 1])
     near(await run({ shadow_luminance: 40 }, [0, 0, 0, 1]), [.1, .1, .1, 1])
   })
+  it('统一调色 WGSL 与 CPU 真值逐像素一致（含 Look LUT 拆分前后两半之外的全部逐像素段）', async () => {
+    const params = { ...colorGradeDefaults(), temperature_kelvin: 5200, tint: 12, exposure: .3, contrast: 35, highlights: -25, shadows: 20, whites: 10, blacks: -8, tone_lights: 15, tone_shadows: -10, saturation: 15, vibrance: 25, faded_film: 12,
+      mixer_orange_saturation: -30, mixer_blue_hue: 40, mixer_green_luminance: 30, curve_master_points: encodeColorGradeCurve([{ x: 0, y: 0 }, { x: 40, y: 50 }, { x: 100, y: 100 }]), curve_hue_sat_points: encodeColorGradeCurve([{ x: 0, y: 50 }, { x: 33, y: 80 }, { x: 100, y: 50 }]),
+      shadow_hue: 220, shadow_strength: 20, highlight_hue: 40, highlight_strength: 15, global_luminance: 5, grade_balance: 20, grade_blending: 70 }
+    const pixels = Array.from({ length: 64 }, (_, i) => [((i * 37) % 64) / 63, ((i * 11) % 64) / 63, ((i * 23) % 64) / 63, 1]).flat()
+    const table = buildColorGradeTable(params).data
+    const got = await run(params as VideoEditBuiltinParams, pixels)
+    for (let i = 0; i < 64; i++) {
+      const input = pixels.slice(i * 4, i * 4 + 3).map(x => videoEditHalfToFloat(half(x))) as [number, number, number]
+      gradeStageB(gradeStageA(input, table), table).forEach((x, c) => expect(Math.abs(got[i * 4 + c] - x), `${i}:${c}`).toBeLessThan(6e-3))
+    }
+    const primary = { ...colorGradeDefaults(), wheel_mode: 'primary', shadow_luminance: 20, midtone_hue: 30, midtone_strength: 20, highlight_luminance: -10, global_hue: 200, global_strength: 10 }
+    const primaryTable = buildColorGradeTable(primary).data; const primaryGot = await run(primary as VideoEditBuiltinParams, pixels)
+    for (let i = 0; i < 64; i++) gradeStageB(pixels.slice(i * 4, i * 4 + 3).map(x => videoEditHalfToFloat(half(x))) as [number, number, number], primaryTable).forEach((x, c) => expect(Math.abs(primaryGot[i * 4 + c] - x)).toBeLessThan(6e-3))
+  })
   it('各分区的 WGSL 编译与组合执行，锐化/创意/曲线/三色轮/晕影保留透明度', async () => {
-    const result = await run({ exposure: .2, contrast: 20, highlights: -20, shadows: 20, whites: 10, blacks: -10, saturation: 20, vibrance: 10, faded_film: 10, sharpen: 20, creative_shadow_hue: 240, creative_shadow_strength: 20, creative_highlight_hue: 60, creative_highlight_strength: 10, curve_green_1: 30, shadow_hue: 240, shadow_strength: 20, midtone_luminance: 10, highlight_hue: 60, highlight_strength: 10, vignette_amount: -20, vignette_roundness: 100 }, [.3, .3, .3, 1])
+    const result = await run({ exposure: .2, contrast: 20, highlights: -20, shadows: 20, whites: 10, blacks: -10, saturation: 20, vibrance: 10, faded_film: 10, sharpen: 20, tone_lights: 20, mixer_red_saturation: 30, global_hue: 60, global_strength: 10, curve_green_1: 30, shadow_hue: 240, shadow_strength: 20, midtone_luminance: 10, highlight_hue: 60, highlight_strength: 10, vignette_amount: -20, vignette_roundness: 100 }, [.3, .3, .3, 1])
     expect(result.every(Number.isFinite)).toBe(true); expect(result.filter((_, i) => i % 4 === 3).every(x => x === 1)).toBe(true)
   })
 })
@@ -121,11 +139,12 @@ it('自由样条曲线LUT匹配求值，1024梯度保持高精度', async () => 
   result.forEach((value, i) => { if (i % 4 !== 3) expect(value).toBeCloseTo(evaluate(videoEditHalfToFloat(half(pixels[i])) * 100) / 100, 2) })
   expect(new Set(result.filter((_, i) => i % 4 === 0)).size).toBeGreaterThan(900)
 })
-it('色相三曲线已知像素及红色周期接缝；灰色不被染色', async () => {
+it('色相三曲线按感知色相/亮度/彩度修改，与 CPU 真值一致；灰色不被染色', async () => {
   const constant = (y: number): string => encodeColorGradeCurve([{ x: 0, y }, { x: 100, y }])
-  near(await run({ curve_hue_sat_points: constant(0) }, [1, 0, 0, 1]), [.5, .5, .5, 1])
-  near(await run({ curve_hue_hue_points: constant(50 + 100 / 6) }, [1, 0, 0, 1]), [1, 1, 0, 1])
-  near(await run({ curve_hue_luma_points: constant(75) }, [.5, 0, 0, 1]), [1, 0, 0, 1])
+  const cpu = (params: VideoEditBuiltinParams, rgb: [number, number, number]): number[] => { const table = buildColorGradeTable({ ...colorGradeDefaults(), ...params }).data; return [...gradeStageB(rgb, table), 1] }
+  const desaturated = await run({ curve_hue_sat_points: constant(0) }, [1, 0, 0, 1])
+  expect(desaturated[0]).toBeCloseTo(desaturated[1], 2); expect(desaturated[1]).toBeCloseTo(desaturated[2], 2)
+  for (const [params, rgb] of [[{ curve_hue_hue_points: constant(50 + 100 / 6) }, [1, 0, 0]], [{ curve_hue_luma_points: constant(75) }, [.5, 0, 0]], [{ curve_sat_sat_points: constant(30) }, [.2, .6, .3]]] as Array<[VideoEditBuiltinParams, [number, number, number]]>) near(await run(params, [...rgb, 1]), cpu(params, rgb))
   near(await run({ curve_hue_hue_points: constant(100), curve_hue_luma_points: constant(75) }, [.4, .4, .4, 1]), [.4, .4, .4, 1])
 })
 it('1D/3D LUT恒等、反相、域归一化、强度与透明度；65³纹理', async () => {

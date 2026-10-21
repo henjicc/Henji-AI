@@ -7,7 +7,7 @@ import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/co
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
-import { planColorGrade } from '@/core/imaging/adjustments/plan'
+import { planColorGrade, type AdjustmentLookup } from '@/core/imaging/adjustments/plan'
 import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
 import { planGlowPro } from './glowPro'
 import type { VideoEditShaderClock } from '@/core/videoEdit/shaderGraph/effects'
@@ -23,7 +23,7 @@ export type VideoEditBuiltinTexture = 'input' | 'second' | 'output' | number
 export interface VideoEditBuiltinPass {
   /** HSL 选区蒙版；仅局部锐化同时需要原画面、线性模糊画面和蒙版。 */
   mask?: VideoEditBuiltinTexture
-  lookup?: { kind: 'curve'; data: Float32Array } | { kind: 'cube'; ref: string }
+  lookup?: AdjustmentLookup
   entry: VideoEditBuiltinEffectEntry
   source: VideoEditBuiltinTexture
   /** 第二个输入（`original` 绑定）；没有时绑定效果的原始输入。 */

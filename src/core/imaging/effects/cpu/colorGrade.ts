@@ -1,6 +1,7 @@
 import type { CubeLut } from '../../lut/cube'
 import { colorGradeLinear, colorGradeSrgb } from '../../adjustments/colorGrade'
 import { planColorGrade, type AdjustmentPass, type AdjustmentPlan } from '../../adjustments/plan'
+import { gradeStageA, gradeStageB } from '../../adjustments/unifiedGrade'
 
 type Rgb = [number, number, number]
 export interface AdjustmentCoordinates { origin: readonly [number, number]; size: readonly [number, number] }
@@ -27,7 +28,6 @@ function hueRange(x: number, lo: number, hi: number, feather: number): number {
   const h = fract(x - lo + 1); const span = fract(hi - lo + 1)
   return h <= span ? 1 : feather <= 0 ? 0 : 1 - smooth(0, feather, Math.min(h - span, 1 - h))
 }
-function curve(data: Float32Array, x: number): number { const at = clamp(x) * (data.length - 1); const left = Math.floor(at); return mix(data[left], data[Math.min(left + 1, data.length - 1)], fract(at)) }
 /** Adobe .cube: red changes fastest; 1D linear / 3D trilinear sampling matches WGSL. */
 export function sampleCubeLut(cube: CubeLut, rgb: Rgb): Rgb {
   const at = map(rgb, (x, c) => clamp((x - cube.domainMin[c]) / (cube.domainMax[c] - cube.domainMin[c])) * (cube.size - 1))
@@ -62,24 +62,12 @@ function evaluate(pass: AdjustmentPass, source: AdjustmentPixels, original: Adju
     }
     case 'unsharp': { const base = sample(original, u, v); return [0, 1, 2].map(i => base[i] + (base[i] - c[i]) * a[0]).concat(base[3]) }
     case 'color_grade_linear': rgb = map(rgb, linear); break
-    case 'color_grade_basic': {
-      rgb = map(rgb, (x, i) => encoded(linear(x) * a[i])); const y = clamp(luma(rgb)); const w = weights(rgb)
-      const offset = b[0] * w[2] * .25 + b[1] * w[0] * .25 + b[2] * y ** 4 * .25 + b[3] * (1 - y) ** 4 * .25
-      rgb = map(rgb, x => (x - .5) * a[3] + .5 + offset); const saturation = Math.max(...rgb) - Math.min(...rgb); const y2 = luma(rgb)
-      rgb = map(rgb, x => mix(y2, x, Math.max(0, 1 + d[0] + d[1] * (1 - clamp(saturation))))); break
+    case 'color_grade_unified': {
+      if (pass.lookup?.kind !== 'table') throw new Error('调色参数表缺失')
+      if (a[0] === 1 || a[0] === 3) rgb = gradeStageA(rgb, pass.lookup.data)
+      if (a[0] === 2 || a[0] === 3) rgb = gradeStageB(rgb, pass.lookup.data)
+      break
     }
-    case 'color_grade_creative': { const w = weights(rgb); const shadow = tint(a[1]); const high = tint(a[3]); rgb = map(rgb, (x, i) => mix(x, x * .75 + .125, a[0]) + shadow[i] * a[2] * w[0] * .25 + high[i] * b[0] * w[2] * .25); break }
-    case 'color_grade_curve': if (pass.lookup?.kind === 'curve') rgb = map(rgb, (x, i) => b[1] === 0 || i === b[1] - 1 ? curve(pass.lookup!.kind === 'curve' ? pass.lookup!.data : new Float32Array(), x) : x); break
-    case 'color_grade_hue_curve': {
-      if (pass.lookup?.kind !== 'curve') throw new Error('曲线数据缺失')
-      const chroma = Math.max(...rgb) - Math.min(...rgb); let light = (Math.max(...rgb) + Math.min(...rgb)) * .5; let sat = chroma / Math.max(1e-6, 1 - Math.abs(2 * light - 1)); let h = hue(rgb)
-      const amount = (curve(pass.lookup.data, a[0] === 3 ? clamp(light) : a[0] === 4 ? clamp(sat) : h) - .5) * 2
-      if (a[0] === 1) h = fract(h + amount * .5 + 1)
-      else if (a[0] === 2) light = clamp(light + amount * .5 * Math.min(1, chroma * 100))
-      else sat = clamp(sat * Math.max(0, 1 + amount))
-      rgb = map(hueBase(h), x => (x - .5) * (1 - Math.abs(2 * light - 1)) * sat + light); break
-    }
-    case 'color_grade_wheel': { const w = weights(rgb)[a[3]]; const t = tint(a[0]); rgb = map(rgb, (x, i) => x + (t[i] * a[1] + a[2]) * .25 * w); break }
     case 'color_grade_lut': if (!lut) throw new Error('颜色查找表资源缺失'); else { const mapped = sampleCubeLut(lut, rgb); rgb = map(rgb, (x, i) => mix(x, mapped[i], a[0])); break }
     case 'color_grade_hsl_key': {
       rgb = map(rgb, x => clamp(x)); const chroma = Math.max(...rgb) - Math.min(...rgb); const light = (Math.max(...rgb) + Math.min(...rgb)) * .5; const sat = clamp(chroma / Math.max(1e-6, 1 - Math.abs(2 * light - 1)))

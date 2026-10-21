@@ -2,7 +2,7 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { VideoEditColorGradePanel } from '../panels/VideoEditColorGradePanel'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
@@ -56,7 +56,7 @@ it('首次拖动创建效果：连续预览不增历史，松手一步；Esc 连
   finishVideoEditGesture(gesture, true); expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(target.projectId); expect(clip().effects?.length ?? 0).toBe(0)
   const cancelled = beginVideoEditGesture(target.projectId)
-  editVideoEditColorGrade(target, { params: { temperature: 25 } }, cancelled)
+  editVideoEditColorGrade(target, { params: { temperature_kelvin: 7500 } }, cancelled)
   finishVideoEditGesture(cancelled, false); expect(clip().effects?.length ?? 0).toBe(0)
   editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: true })) })) }))
   expect(() => editVideoEditColorGrade(target, { params: { exposure: 1 } })).toThrow('锁定')
@@ -109,6 +109,8 @@ it('独立面板曲线：首次拖动创建、重渲染不断开手势，松手�
   const plot = view.getByLabelText('RGB 主控制点'); const point = view.getByRole('slider', { name: 'RGB 主控制点点3' })
   vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
   fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 25 })
+  // Gesture writes coalesce per display frame.
+  await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_points).toContain('75')
   view.rerender(<VideoEditColorGradePanel instance={owner} onError={onError} />)
   expect(owner.past).toHaveLength(history)
@@ -162,6 +164,7 @@ it('三色轮及 HSL 区间消费专业原件，键盘一步提交，切换折�
   vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 360, 100))
   const before = owner.document
   fireEvent.pointerDown(start, { button: 0, clientX: 340, clientY: 50 }); fireEvent.pointerMove(track, { clientX: 350, clientY: 50 })
+  await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.hsl_hue_start).toBe(350)
   fireEvent.click(view.getByRole('button', { name: 'HSL 辅助' }))
   expect(owner.document).toEqual({ ...before, revision: owner.document.revision }); expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()

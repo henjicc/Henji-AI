@@ -163,6 +163,10 @@ describe('所有登记格式的黄金样本', () => {
           const clip = document.sequences[0].clips[0]
           expect(document.codeMaterials?.[0].versions[0].files[0].hash).toHaveLength(64)
           expect(clip.effects?.map(effect => effect.builtin?.id)).toEqual(['color_grade', 'gaussian_blur'])
+          // v18：全能调色参数格式 v2；旧样本经迁移保留曝光，不再出现旧色温键。
+          expect(clip.effects?.[0].builtin?.params.exposure).toBe(.25)
+          expect(clip.effects?.[0].builtin?.params).not.toHaveProperty('temperature')
+          if (version >= 18) expect(clip.effects?.[0].builtin?.curves?.temperature_kelvin?.map(point => point.value)).toEqual([5600, 6200])
           expect(clip.curves?.opacity?.[1].value).toBe(1)
           expect(document.sequences[0].captions?.[0].translation).toBe('Golden caption')
           if (version >= 11) {
@@ -195,6 +199,10 @@ describe('所有登记格式的黄金样本', () => {
           const image = parseImageEditDocumentV3((working as { document: unknown }).document)
           expect(image.version).toBe(IMAGE_EDIT_DOCUMENT_VERSION_V3)
           expect(image.layers[0]).toMatchObject({ type: 'smart', fillOpacity: .7, maskAttachment: { linked: false, density: .6 }, filters: [{ effectId: 'exposure', params: { stops: .4 } }] })
+          // 全能调色 v2：旧样本的色轮与曲线原样保留，旧色温/创意分离色调键经迁移消失。
+          const grade = image.layers.find(layer => layer.id === 'golden-shared-grade') as { params: Record<string, unknown> }
+          expect(grade.params).toMatchObject({ exposure: .25, shadow_hue: 230, shadow_strength: 12 })
+          expect(Object.keys(grade.params).filter(key => key === 'temperature' || key.startsWith('creative_'))).toEqual([])
         }
       })
     }

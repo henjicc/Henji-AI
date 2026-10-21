@@ -8,6 +8,7 @@ import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPres
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry, type VideoEditEffectsRegistryEntry } from '@/core/videoEdit/effectsRegistry'
 
+import { migrateEmbeddedVideoColorGradesV1 } from '@/core/videoEdit/colorGradeMigration'
 import { videoEditEffectPresetNameSchema as nameSchema, videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 const logger = createLogger('features.videoEdit.presets')
 export { videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
@@ -23,6 +24,7 @@ interface LibraryState extends LibraryData {
   toggleFavorite(id: string): void
 }
 export const VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY = 'video-edit-effects-library'
+const VIDEO_EDIT_EFFECT_LIBRARY_VERSION = 2
 const dataSchema = z.object({ favorites: z.array(z.string().max(150)), presets: z.array(videoEditEffectPresetSchema) }).strict()
 interface SyncSettingsStorage { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
 
@@ -35,8 +37,9 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage)
   try {
     const saved = json?.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
     if (saved && !('then' in saved)) {
-      if (saved.version !== 1) throw new Error('效果库格式无法读取。')
-      initial = dataSchema.parse(saved.state)
+      if (saved.version !== 1 && saved.version !== VIDEO_EDIT_EFFECT_LIBRARY_VERSION) throw new Error('效果库格式无法读取。')
+      // v1 → v2：全能调色参数格式 v2（与剪辑文档 17 → 18 同一迁移）；首次保存时写入 v2。
+      initial = dataSchema.parse(saved.version === 1 ? migrateEmbeddedVideoColorGradesV1(saved.state) : saved.state)
       if (new Set(initial.presets.map(preset => preset.id)).size !== initial.presets.length) throw new Error('预设标识重复。')
       initial.favorites = [...new Set(initial.favorites)]
     }
@@ -47,7 +50,7 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage)
       try {
         if (!json) throw new Error('本机预设存储不可用。')
         if (loadError) throw new Error(loadError)
-        const result = json.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, { state: dataSchema.parse(next), version: 1 })
+        const result = json.setItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY, { state: dataSchema.parse(next), version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION })
         if (result && typeof result === 'object' && 'then' in result) throw new Error('效果库需要同步的本机设置存储。')
         set({ ...next, revision: get().revision + 1 })
         logger.info(`effect_library.${operation}.completed`, '本机效果库已保存')

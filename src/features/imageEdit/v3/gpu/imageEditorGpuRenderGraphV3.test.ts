@@ -120,7 +120,7 @@ describe('GPU RenderGraph 完整图层语义（真实 WebGPU）', () => {
   it('共享调整 basic/curves/wheels/HSL 与 CPU 真值逐像素一致，透明与蒙版不漂移', async () => {
     const cube = ref(98)
     lutFixtures.set(cube, 'LUT_1D_SIZE 2\n0 0 0\n1 .8 .6')
-    for (const params of [{}, { exposure: .4, temperature: 20, tint: -10, saturation: 15 }, { curve_red_points: [{ x: 0, y: 0 }, { x: 45, y: 60 }, { x: 100, y: 100 }] }, { shadow_hue: 240, shadow_strength: 15, midtone_luminance: 8 }, { hsl_hue_start: 340, hsl_hue_end: 30, hsl_hue_feather: 15, hsl_saturation: -50 }, { input_lut: cube, input_lut_strength: 50 }, { vignette_amount: -40 }, { sharpen: 30 }, { hsl_saturation: -30, hsl_blur: 3, hsl_sharpen: 10 }] as ImageEditJsonObjectV3[]) {
+    for (const params of [{}, { exposure: .4, temperature_kelvin: 5400, tint: -10, saturation: 15, contrast: 30, tone_darks: 15, mixer_blue_saturation: -40 }, { curve_red_points: [{ x: 0, y: 0 }, { x: 45, y: 60 }, { x: 100, y: 100 }] }, { shadow_hue: 240, shadow_strength: 15, midtone_luminance: 8 }, { hsl_hue_start: 340, hsl_hue_end: 30, hsl_hue_feather: 15, hsl_saturation: -50 }, { input_lut: cube, input_lut_strength: 50 }, { vignette_amount: -40 }, { sharpen: 30 }, { hsl_saturation: -30, hsl_blur: 3, hsl_sharpen: 10 }] as ImageEditJsonObjectV3[]) {
       const document = baseDocument('shared-grade')
       const adjustment = createImageEditAdjustmentLayerV3('grade', '全能调整', 'color_grade', params)
       adjustment.opacity = .82

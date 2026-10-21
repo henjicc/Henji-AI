@@ -39,7 +39,7 @@
 | 字段 | 意义与可突破的起点 |
 | --- | --- |
 | params.exposure | 线性曝光档，+1 亮度翻倍；轻微提亮可从 +0.3 起，按高光细节改 |
-| params.temperature / params.tint | 正色温偏暖、负偏冷；正色调偏洋红、负偏绿；先围绕中性处微调 |
+| params.temperature_kelvin / params.tint | 色温写画面光源的开尔文值让白色还原，6500 不变，低于 6500 变冷、高于变暖；色调正值偏洋红、负值偏绿 |
 | params.saturation / params.vibrance | 饱和度 0 中性、-100 黑白、+100 翻倍；自然饱和度优先影响低饱和色 |
 | params.shadow_hue / params.shadow_strength | 色相角配合强度，强度为0不染色；色轮只转色相不会自动生效 |
 | params.curve_master_points | 图片用结构化 {x,y} 数组，x/y 为0–100百分比、x严格递增；空数组中性，非空至少两点 |
