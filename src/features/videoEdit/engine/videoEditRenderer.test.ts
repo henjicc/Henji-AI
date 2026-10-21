@@ -481,6 +481,20 @@ it('正向播放时钟落后时在同一计划内跳帧追上，不重新定位�
     expect(boundary.scheduled).toHaveLength(2)
   } finally { await renderer.dispose() }
 })
+it('重新起播时再次请求刚显示过的帧，沿用原排程，不在起播处重新定位', async () => {
+  boundary.scheduled = []
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 10 }))
+  document.clips = [{ ...document.clips[0], duration: 600 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    for (const frame of [100, 101, 102, 101, 103, 104]) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us(result.sourceTimestamps)).toEqual(us([frame / 60]))
+    }
+    expect(boundary.scheduled).toHaveLength(1)
+  } finally { await renderer.dispose() }
+})
 it('嵌套画面作为普通一层参与父效果与运动/不透明度关键帧', async () => {
   const document = nestedFixture()
   document.clips[0].effects = [{ id: 'nested-blur', name: '模糊', enabled: true, amount: .5, builtin: { id: 'gaussian_blur', params: {} } }]

@@ -86,6 +86,8 @@ const AUDIO_STREAM_KEY = '\u0000'
 // stream opens its decoder half a second before its first frame and releases it after its last.
 const PLAYBACK_SCHEDULE_SECONDS = 1800
 const PLAYBACK_ARM_IDLE_MS = 2500
+/** Frames a forward request may step back (pictures still in flight or just shown) without rebuilding the schedule. */
+const PLAYBACK_REPEAT_FRAMES = 3
 /** A playback clock that fell behind skips ahead this far at most inside one schedule; the skipped pictures are released unused. */
 const PLAYBACK_MAX_SKIP_SECONDS = 1
 interface VideoSource {
@@ -484,7 +486,9 @@ export class VideoEditRenderer {
   /** Whether a sequential frame continues the current schedule: the next frame, a repeat, or a skip ahead within it. */
   private continuesPlayback(frame: number, planKey?: string): boolean {
     const last = this.lastForwardFrame, playback = this.playback
-    if (last === undefined || !playback || frame < last || frame >= playback.endFrame || playback.plan?.key !== planKey || playback.cacheRevision !== this.renderCacheRevision) return false
+    // A frame just before the last one is a repeated request of a picture already shown (a restarted play command
+    // presents its current frame again): it keeps the schedule and reads the played picture back from the frame cache.
+    if (last === undefined || !playback || frame < last - PLAYBACK_REPEAT_FRAMES || frame >= playback.endFrame || playback.plan?.key !== planKey || playback.cacheRevision !== this.renderCacheRevision) return false
     return frame - last <= 1 || !!playback.plan || frame - last <= Math.ceil(this.document.fps * PLAYBACK_MAX_SKIP_SECONDS)
   }
   /** Briefly position the active decoder ahead of play, including the handoff after the scrub cache.
@@ -712,13 +716,15 @@ export class VideoEditRenderer {
       const forward = this.continuesPlayback(frame, nestedRender?.playbackPlan?.key)
       // Resolution changes and cache pressure can remove a prefix after arming. Rebuild the
       // same playback plan at this frame instead of opening a second reader for the missing prefix.
-      const missingPrefix = this.playback && document.clips.some(clip => {
+      // Pre-rendered windows are scheduled clips too: a missing prefix picture of one rebuilds the plan as well.
+      const missingPrefix = this.playback && [...document.clips, ...this.renderCache.map(window => window.clip)].some(clip => {
         const stream = this.playback?.byClip.get(clip.id)
         if (!stream || frame >= stream.cachedUntilFrame || frame < clip.start || frame >= clip.start + clip.duration) return false
         const media = this.clipMedia(document, clip)
         return !media || !(this.frameCache.get(media.path, videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps))) instanceof VideoEditGpuFrame)
       })
-      if (this.playback && (this.playback.document !== document || !forward || missingPrefix)) await this.disposePlayback()
+      if (this.playback && (this.playback.document !== document || !forward || missingPrefix)) { recordVideoEditPreparation(missingPrefix ? 'playbackDropPrefix' : !forward ? 'playbackDropJump' : 'playbackDropDocument', 0); await this.disposePlayback() }
+      if (!this.playback) recordVideoEditPreparation('playbackBuild', 0)
       // A sequential preview render is always forward playback (reverse play, single steps and scrubbing render
       // non-sequentially), so its first frame already builds the schedules and takes its picture from them. Waiting for
       // a second consecutive frame made the first one open a sequential reader that decoded the GOP up to the start,
@@ -726,7 +732,7 @@ export class VideoEditRenderer {
       // of long-GOP 4K material). A sequential frame before the previous one is not playback: it keeps the seek path
       // and its frame cache.
       if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, visible, nestedRender?.playbackPlan)
-      this.lastForwardFrame = frame; this.armedFrame = undefined
+      this.lastForwardFrame = forward ? Math.max(frame, this.lastForwardFrame!) : frame; this.armedFrame = undefined
       this.primeUpcomingStreams(frame)
     } else if (this.armedFrame !== frame || this.playback?.document !== document) { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
     const cachedWindow = sequential && !nestedRender ? this.cachedWindow(frame) : undefined
@@ -878,6 +884,8 @@ export class VideoEditRenderer {
       // A backwards source clock must use the shared GOP cache even when the
       // caller requests continuous playback; a forward iterator would re-decode
       // the whole GOP for every preceding picture.
+      // Which reader served a playback picture: the schedule, or a fallback that decodes on its own (diagnostics).
+      if (scheduledStream) recordVideoEditPreparation(scheduled ? 'pictureScheduled' : 'pictureUnscheduled', 0)
       if (scheduled) {
         await source.iterator?.return(); source.iterator = undefined
         source.current?.close(); source.current = scheduled

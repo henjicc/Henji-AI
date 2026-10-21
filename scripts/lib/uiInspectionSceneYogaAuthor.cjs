@@ -251,7 +251,14 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
           window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]'))
         })
         const started = performance.now()
-        await playback(range.from, true)
+        // range.click: start as a user does, with the program monitor's play button (one play command), instead of MCP.
+        let clicked = false
+        if (range.click) clicked = await page.evaluate(() => {
+          const canvas = document.querySelector('canvas[aria-label="剪辑画面"]')
+          const button = [...document.querySelectorAll('button')].find(value => /播放/.test(value.getAttribute('aria-label') ?? value.title ?? '') && canvas && value.closest('section,[data-panel],[role="region"]')?.contains(canvas))
+          button?.click(); return !!button
+        })
+        if (!clicked) await playback(range.from, true)
         const captures = new Set(range.captureAt ?? [])
         while (performance.now() - started < (range.to - range.from) / 60 * 1000 * 4 + 20000) {
           await page.waitForTimeout(100)
@@ -260,6 +267,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
           if (frame >= range.to - 1) break
         }
         const elapsedMs = performance.now() - started
+        if (range.click) range.clicked = clicked
         await playback(Math.min(range.to - 1, await presentedFrame()), false)
         const trace = await workerSnapshot(page)
         const droppedFrames = Number(await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-dropped-frames'))

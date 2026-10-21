@@ -295,7 +295,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     if (this.media.kind !== 'video') return undefined
     return {
       frames: start => this.frames(start),
-      frameAt: seconds => this.lane.run(async () => (await this.seek()).frameAt(seconds)),
+      frameAt: seconds => this.lane.run(async () => { recordVideoEditPreparation('nativeFrameAt', 0); return (await this.seek()).frameAt(seconds) }),
     }
   }
 
