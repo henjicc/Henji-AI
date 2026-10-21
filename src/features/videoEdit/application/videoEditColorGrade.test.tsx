@@ -2,16 +2,18 @@ import { createVideoEditTestProject as createVideoEditProject } from './videoEdi
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { VideoEditColorGradePanel } from '../panels/VideoEditColorGradePanel'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
-import { analyzeVideoEditColorGrade, editVideoEditColorGrade } from './videoEditColorGrade'
+import { analyzeVideoEditColorGrade, editVideoEditColorGrade, observeVideoEditColor } from './videoEditColorGrade'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { makeVideoEditBuiltinEffect } from './videoEditCompositing'
 import { evaluateVideoEditBuiltinParameters } from '@/core/videoEdit/keyframes'
 import { videoEditObservationVersion } from './videoEditObservationVersion'
+import type { z } from 'zod'
+import type { observeVideoEditColorCapability } from '@/core/application-control/domains/videoEdit/videoEditColorGradeCapability'
 
 vi.mock('./videoEditCodeTrial', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditCodeTrial')>(), trialVideoEditCodeFrames: vi.fn(), trialVideoEditCodeDocument: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('./videoEditColorLutClient', async () => {
@@ -56,7 +58,7 @@ it('首次拖动创建效果：连续预览不增历史，松手一步；Esc 连
   finishVideoEditGesture(gesture, true); expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(target.projectId); expect(clip().effects?.length ?? 0).toBe(0)
   const cancelled = beginVideoEditGesture(target.projectId)
-  editVideoEditColorGrade(target, { params: { temperature: 25 } }, cancelled)
+  editVideoEditColorGrade(target, { params: { temperature_kelvin: 7500 } }, cancelled)
   finishVideoEditGesture(cancelled, false); expect(clip().effects?.length ?? 0).toBe(0)
   editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: true })) })) }))
   expect(() => editVideoEditColorGrade(target, { params: { exposure: 1 } })).toThrow('锁定')
@@ -109,6 +111,8 @@ it('独立面板曲线：首次拖动创建、重渲染不断开手势，松手�
   const plot = view.getByLabelText('RGB 主控制点'); const point = view.getByRole('slider', { name: 'RGB 主控制点点3' })
   vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
   fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 25 })
+  // Gesture writes coalesce per display frame.
+  await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_points).toContain('75')
   view.rerender(<VideoEditColorGradePanel instance={owner} onError={onError} />)
   expect(owner.past).toHaveLength(history)
@@ -150,7 +154,7 @@ it('三色轮及 HSL 区间消费专业原件，键盘一步提交，切换折�
   vi.stubGlobal('PointerEvent', MouseEvent)
   Element.prototype.setPointerCapture = vi.fn(); Element.prototype.releasePointerCapture = vi.fn(); Element.prototype.hasPointerCapture = () => true
   const view = render(<VideoEditColorGradePanel instance={owner} onError={onError} />)
-  fireEvent.click(view.getByRole('button', { name: '色轮' }))
+  fireEvent.click(view.getByRole('button', { name: '色彩分级' }))
   expect(view.getByRole('slider', { name: '阴影色轮亮度' })).toBeTruthy()
   expect(view.getByRole('slider', { name: '中间调色轮亮度' })).toBeTruthy()
   expect(view.getByRole('slider', { name: '高光色轮亮度' })).toBeTruthy()
@@ -162,6 +166,7 @@ it('三色轮及 HSL 区间消费专业原件，键盘一步提交，切换折�
   vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 360, 100))
   const before = owner.document
   fireEvent.pointerDown(start, { button: 0, clientX: 340, clientY: 50 }); fireEvent.pointerMove(track, { clientX: 350, clientY: 50 })
+  await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.hsl_hue_start).toBe(350)
   fireEvent.click(view.getByRole('button', { name: 'HSL 辅助' }))
   expect(owner.document).toEqual({ ...before, revision: owner.document.revision }); expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
@@ -190,4 +195,36 @@ it('公共参考匹配多帧保留参考调色，隔离淡化/不透明度动画
     expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.curves?.faded_film).toBeUndefined()
     undoVideoEdit(target.projectId); expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.faded_film).toBe(40)
   } finally { app.dispose() }
+})
+it('颜色读数经公共能力返回：调色前/后隔离同一片段，节目读整幅合成；只读不改文档', async () => {
+  const { owner, target } = await setup(); const app = createApplicationHarness()
+  vi.mocked(trialVideoEditCodeFrames).mockResolvedValue({ width: 256, height: 1, close: closeBitmap } as unknown as ImageBitmap)
+  editVideoEditColorGrade(target, { params: { exposure: .5 } })
+  const blur = makeVideoEditBuiltinEffect('invert')
+  editVideoProject(target.projectId, document => ({ ...document, sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, effects: [...clip.effects ?? [], blur] })) })) }))
+  const snapshot = owner.document; const history = owner.past.length
+  const documentRef = { kind: 'video_edit.document', id: target.projectId }; const sequenceRef = { kind: 'video_edit.sequence', id: `${target.projectId}:${target.sequenceId}` }; const clipRef = { kind: 'video_edit.clip', id: `${target.projectId}:${target.clipId}` }
+  try {
+    const after = await app.requireResult('observe_video_edit_color', { documentRef, sequenceRef, clipRef, includeScopes: true }) as z.infer<typeof observeVideoEditColorCapability.outputSchema>
+    expect(after.stage).toBe('after_grade'); expect(after.readout.color.chromaMedian).toBeLessThan(.01); expect(Math.abs(after.readout.whiteBalance.kelvin - 6500)).toBeLessThan(100)
+    expect(after.scopes?.histogram.luma).toHaveLength(64)
+    expect(vi.mocked(trialVideoEditCodeFrames).mock.calls.at(-1)![0][0].document.clips[0].effects!.map(effect => effect.builtin?.id)).toEqual(['color_grade'])
+    await app.requireResult('observe_video_edit_color', { documentRef, sequenceRef, clipRef, stage: 'before_grade' })
+    expect(vi.mocked(trialVideoEditCodeFrames).mock.calls.at(-1)![0][0].document.clips[0].effects).toEqual([])
+    const program = await app.requireResult('observe_video_edit_color', { documentRef, sequenceRef })
+    expect(program.stage).toBe('program'); expect(program.scopes).toBeUndefined()
+    expect(owner.document).toBe(snapshot); expect(owner.past).toHaveLength(history)
+    expect((await app.call('observe_video_edit_color', { documentRef, sequenceRef, stage: 'before_grade' })).ok).toBe(false)
+  } finally { app.dispose() }
+})
+it('片段不铺满画面时，调色前后读数只统计片段内容，不把四周空黑算成死黑', async () => {
+  const { target } = await setup()
+  const framed = Uint8ClampedArray.from(Array.from({ length: 16 * 16 }, (_, i) => { const x = i % 16; const y = Math.floor(i / 16); const inside = x >= 4 && x < 12 && y >= 4 && y < 12; return inside ? [118, 118, 118, 255] : [0, 0, 0, 255] }).flat())
+  vi.mocked(trialVideoEditCodeFrames).mockResolvedValue({ width: 16, height: 16, close: closeBitmap } as unknown as ImageBitmap)
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { drawImage() {}, getImageData: () => ({ data: framed }) } } })
+  const isolated = await observeVideoEditColor(target, { stage: 'after_grade' })
+  expect(isolated.statistics.readout.clipping.shadowsPercent).toBe(0)
+  expect(isolated.statistics.readout.exposure.middleGrayOffsetEv).toBeCloseTo(0, 0)
+  const program = await observeVideoEditColor(target, { stage: 'program' })
+  expect(program.statistics.readout.clipping.shadowsPercent).toBeGreaterThan(70)
 })

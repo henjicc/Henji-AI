@@ -148,7 +148,8 @@ function buildPremiereMigration(graph, probes, options) {
           if (parameter?.Keyframes) mark(sequence, raw, `Lumetri ${parameter.Name} 动画尚待还原。`, clip)
         }
         const identity = raw.sourceEffects?.includes(effect) ? `${effect.id}:${clip.id}` : effect.id
-        ;(clip.effects ??= []).push({ id: stable('effect', identity), name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params } })
+        // Lumetri temperature/tint are relative ±100 like color grade v1; v2 names the light in kelvin.
+        ;(clip.effects ??= []).push({ id: stable('effect', identity), name: '全能调色', enabled: true, amount: 1, builtin: { id: 'color_grade', params: api().migrateColorGradeParamsV1(params) } })
       } else if (effect.matchName === 'Internal Volume Stereo') {
         const level = effect.parameters.find(param => param.Name === '级别')
         volume *= audioGain(level)

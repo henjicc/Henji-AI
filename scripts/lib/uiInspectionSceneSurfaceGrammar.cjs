@@ -134,11 +134,16 @@ function createSurfaceGrammarScenes(context) {
           await context.settlePage(page, 300); await assertFormColumns(page.getByLabel('批注面板', { exact: true })); await capture('annotation-rows')
           await page.getByRole('button', { name: '面板', exact: true }).click()
           await page.getByRole('button', { name: '全能调色', exact: true }).click()
-          await page.getByRole('button', { name: '基本校正', exact: true }).click()
-          await page.getByRole('button', { name: '曲线', exact: true }).click()
-          await page.getByRole('radiogroup', { name: '曲线通道', exact: true }).scrollIntoViewIfNeeded()
+          const grade = page.locator('div[aria-label="全能调色"]').last()
+          await grade.getByRole('button', { name: '基本', exact: true }).click()
+          await grade.getByRole('button', { name: '曲线', exact: true }).click()
+          await grade.getByRole('radiogroup', { name: '曲线通道', exact: true }).scrollIntoViewIfNeeded()
           await context.settlePage(page, 500)
-          await assertFormColumns(page.locator('div[aria-label="全能调色"]').last())
+          await assertFormColumns(grade)
+          // Scopes read the production frame after the grade; the canvas only appears once statistics arrived.
+          await grade.getByRole('button', { name: '示波器', exact: true }).click()
+          await grade.locator('canvas[aria-label="直方图"]').waitFor({ timeout: 15000 })
+          await context.settlePage(page, 300); await capture('color-scopes')
         } finally { await restore() }
       } },
   ]

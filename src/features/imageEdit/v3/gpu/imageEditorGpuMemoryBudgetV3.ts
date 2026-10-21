@@ -47,7 +47,8 @@ export function estimateImageEditorGpuGraphResidentBytesV3(
             + plan.scratch.reduce((sum, surface) => sum + surface.width * surface.height * 16, 0)
           // Cube parsing is bounded by the shared 65³ lattice; reserve decoded lookup bytes, not a layer count.
           adjustmentScratchBytes += [value.input_lut, value.look_lut].filter(ref => !!ref).length * 65 ** 3 * 16
-          adjustmentScratchBytes += plan.passes.filter(pass => pass.lookup?.kind === 'curve').reduce((sum, pass) => sum + (pass.lookup?.kind === 'curve' ? pass.lookup.data.byteLength * 4 : 0), 0)
+          // One parameter/curve table per plan, shared by the scene and display halves.
+          adjustmentScratchBytes += plan.passes.find(pass => pass.lookup?.kind === 'table')?.lookup?.kind === 'table' ? (plan.passes.find(pass => pass.lookup?.kind === 'table')!.lookup as { data: Float32Array }).data.byteLength : 0
         }
       }
     }

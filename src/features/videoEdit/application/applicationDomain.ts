@@ -24,8 +24,8 @@ import { queryVideoEditReview } from './videoEditReview'
 import { readVideoEditContentIndex } from './videoEditContentIndex'
 import { executeVideoEditReframeCapability } from './videoEditReframeCapability'
 import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
-import { analyzeVideoEditColorGradeCapability } from '@/core/application-control/domains/videoEdit/videoEditColorGradeCapability'
-import { analyzeVideoEditColorGrade } from './videoEditColorGrade'
+import { analyzeVideoEditColorGradeCapability, observeVideoEditColorCapability } from '@/core/application-control/domains/videoEdit/videoEditColorGradeCapability'
+import { analyzeVideoEditColorGrade, observeVideoEditColor } from './videoEditColorGrade'
 import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability'
 import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
 import { createVideoEditRegistrations } from './videoEditReflection'
@@ -174,6 +174,16 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         if (reference && (reference.projectId !== input.documentRef.id || !reference.childId)) throw new Error('参考片段必须属于目标剪辑。')
         const result = await analyzeVideoEditColorGrade({ projectId: input.documentRef.id, sequenceId: sequence.childId, clipId: clip.childId }, input.frame, context.signal, undefined, { sampleCount: input.sampleCount, referenceClipId: reference?.childId, matchMethod: input.matchMethod })
         return { ...result, resultRef: input.clipRef, message: '已分析自动校色建议，可写入全能调色参数后观察并微调。' }
+      }
+      if (definition.id === observeVideoEditColorCapability.id) {
+        const input = observeVideoEditColorCapability.inputSchema.parse(raw)
+        const sequence = splitVideoEditRef(input.sequenceRef); const clip = input.clipRef ? splitVideoEditRef(input.clipRef) : undefined
+        const sequenceId = sequence.childId
+        if (sequence.projectId !== input.documentRef.id || !sequenceId || clip && (clip.projectId !== input.documentRef.id || !clip.childId)) throw new Error('序列和片段必须属于目标剪辑。')
+        const result = await observeVideoEditColor({ projectId: input.documentRef.id, sequenceId, clipId: clip?.childId }, { frame: input.frame, stage: input.stage, sampleCount: input.sampleCount, scopes: input.includeScopes }, context.signal)
+        const { readout, scopes } = result.statistics
+        return { resultRef: input.sequenceRef, stage: result.stage, frame: result.frame, frames: result.frames, readout, ...(scopes ? { scopes } : {}), documentRevision: result.documentRevision, documentVersion: result.documentVersion,
+          message: `中灰偏差 ${readout.exposure.middleGrayOffsetEv} EV，高光溢出 ${readout.clipping.highlightsPercent}%，估计光源 ${readout.whiteBalance.kelvin} K（可信度 ${readout.whiteBalance.confidence}）。` }
       }
       if (definition.id === measureVideoEditLoudnessCapability.id) return executeVideoEditLoudnessCapability(measureVideoEditLoudnessCapability.inputSchema.parse(raw), false, context.signal)
       if (definition.id === 'detect_video_edit_sensitive_text') return executeVideoEditPrivacy(raw, context)

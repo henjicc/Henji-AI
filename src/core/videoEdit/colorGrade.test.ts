@@ -1,7 +1,8 @@
 import { encodeColorGradeCurve, parseColorGradeCurve, colorGradeCurveLut } from './colorGradeCurves'
 import { describe, expect, it } from 'vitest'
 import { normalizeVideoEditBuiltinParams, videoEditBuiltinEffect, videoEditBuiltinDefaults } from './builtinEffects'
-import { VIDEO_EDIT_COLOR_GRADE, colorGradeLinear, colorGradeSrgb, colorGradeWhiteBalance, suggestColorGradeAutoColor } from './colorGrade'
+import { VIDEO_EDIT_COLOR_GRADE, colorGradeLinear, colorGradeSrgb, suggestColorGradeAutoColor } from './colorGrade'
+import { applyMat3, whiteBalanceMatrix } from '../imaging/adjustments/colorScience'
 import { planVideoEditBuiltinEffect } from '../../features/videoEdit/engine/videoEditBuiltinEffectPasses'
 
 describe('ColorGrade 参数与自动校色', () => {
@@ -9,7 +10,7 @@ describe('ColorGrade 参数与自动校色', () => {
     const plan = planVideoEditBuiltinEffect({ id: 'color_grade', params: { exposure: .8, contrast: -19, blacks: -3 } }, { width: 3840, height: 2160, frame: 0 })
     expect(plan.scratch).toEqual([])
     expect(plan.passes).toHaveLength(1)
-    expect(plan.passes[0]).toMatchObject({ entry: 'color_grade_basic', source: 'input', target: 'output' })
+    expect(plan.passes[0]).toMatchObject({ entry: 'color_grade_unified', source: 'input', target: 'output' })
   })
   it('中性只复制，不分配临时纹理；每项都有界面与助手语义，通用参数拒绝未知及越界值', () => {
     expect(videoEditBuiltinEffect('color_grade')).toBe(VIDEO_EDIT_COLOR_GRADE)
@@ -19,30 +20,30 @@ describe('ColorGrade 参数与自动校色', () => {
     expect(() => normalizeVideoEditBuiltinParams('color_grade', { exposure: 5 })).toThrow('exposure')
     expect(() => normalizeVideoEditBuiltinParams('color_grade', { unknown: 1 })).toThrow('unknown')
   })
-  it('分区工序顺序固定，共用两张交替纹理；回放分辨率不改变非空间参数', () => {
+  it('逐像素调色合并为一道统一工序，共用两张交替纹理；回放分辨率不改变非空间参数', () => {
     const params = { exposure: 1, faded_film: 20, curve_master_2: 60, shadow_strength: 20, midtone_strength: 20, highlight_strength: 20, vignette_amount: -30 }
     const make = (height: number) => planVideoEditBuiltinEffect({ id: 'color_grade', params }, { width: height * 16 / 9, height, frame: 0 })
     const full = make(1080); const reduced = make(270)
-    expect(full.passes.map(pass => pass.entry)).toEqual(['color_grade_basic', 'color_grade_creative', 'color_grade_curve', 'color_grade_wheel', 'color_grade_wheel', 'color_grade_wheel', 'color_grade_vignette', 'copy'])
+    expect(full.passes.map(pass => pass.entry)).toEqual(['color_grade_unified', 'color_grade_vignette', 'copy'])
     expect(full.scratch).toHaveLength(2)
     full.passes.forEach((pass, i) => expect([...pass.uniforms.slice(4)]).toEqual([...reduced.passes[i].uniforms.slice(4)]))
   })
   it('灰世界建议逆转已知线性偏色，校色后 RGB 收敛到相同值', () => {
     const pixels = Float32Array.from(Array.from({ length: 256 }, (_, i) => { const gray = .03 + i / 255 * .4; return [colorGradeSrgb(gray * 1.2), colorGradeSrgb(gray * .85), colorGradeSrgb(gray * .8), 1] }).flat())
-    const params = suggestColorGradeAutoColor(pixels, 1); const gains = colorGradeWhiteBalance(params.temperature as number, params.tint as number)
-    const corrected = [1.2, .85, .8].map((x, i) => x * gains[i])
-    expect(Math.max(...corrected) - Math.min(...corrected)).toBeLessThan(1e-6)
+    const params = suggestColorGradeAutoColor(pixels, 1)
+    const corrected = applyMat3(whiteBalanceMatrix(params.temperature_kelvin as number, params.tint as number), [1.2, .85, .8])
+    expect((Math.max(...corrected) - Math.min(...corrected)) / corrected[1]).toBeLessThan(2e-3)
     expect(params.exposure).toBeGreaterThanOrEqual(-2); expect(params.exposure).toBeLessThanOrEqual(2)
     const rgb = [.4, .4, .4].map(x => colorGradeSrgb(colorGradeLinear(x)))
     expect(rgb[0]).toBeCloseTo(.4)
   })
-  it('分位数增强低反差画面，透明/饱和像素不污染白平衡；空白画面可恢复失败', () => {
+  it('中性画面不改白平衡、不建议对比度，透明像素不污染统计；空白画面可恢复失败', () => {
     const base = Array.from({ length: 1024 }, (_, i) => { const x = .35 + i / 1023 * .3; return [x, x, x, 1] }).flat()
     const params = suggestColorGradeAutoColor(base, 1)
-    expect(params.temperature).toBeCloseTo(0); expect(params.tint).toBeCloseTo(0); expect(params.contrast).toBeGreaterThan(20)
+    expect(params.temperature_kelvin).toBeCloseTo(6500, 0); expect(params.tint).toBeCloseTo(0, 1); expect(params).not.toHaveProperty('contrast')
     const mixed = [...base, ...Array.from({ length: 1024 }, () => [1, 0, 0, 0]).flat()]
     expect(suggestColorGradeAutoColor(mixed, 1)).toEqual(params)
-    expect(() => suggestColorGradeAutoColor(new Float32Array(100), 1)).toThrow('缺少')
+    expect(() => suggestColorGradeAutoColor(new Float32Array(100), 1)).toThrow('透明')
     expect(() => suggestColorGradeAutoColor([1, 2], 1)).toThrow('RGBA')
   })
 })

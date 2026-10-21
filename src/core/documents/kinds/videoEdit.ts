@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { migrateEmbeddedVideoColorGradesV1 } from '../../videoEdit/colorGradeMigration'
 
 import type { DocumentKindDescriptor } from './registry'
 import { videoEditInPlaceRecordsSchema } from '../../videoEdit/inPlacePersistence'
@@ -117,7 +118,10 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   version: VIDEO_EDIT_CONTENT_VERSION,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
-  migrations: {},
+  migrations: {
+    // 17 → 18：全能调色参数格式 v2（开尔文白平衡、创意分离色调并入色轮），含关键帧。
+    17: content => migrateEmbeddedVideoColorGradesV1(content),
+  },
   dependencyContent: ({ exportHistory: _exportHistory, ...dependencies }) => dependencies,
   createEmptyContent: createEmptyVideoEditContent,
   isEmptyContent: isEmptyVideoEditContent,

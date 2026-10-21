@@ -66,8 +66,8 @@ try {
   const lut = parseCubeLut('LUT_3D_SIZE 2\n0 0 0\n.8 .1 0\n.1 .9 0\n.9 1 0\n0 0 1\n.8 .1 1\n.1 .9 1\n.9 1 1')
   const assets = [{ id: 'ie1-lut', name: 'fixture', path: 'C:/fixture.cube', contentIdentity: 'a'.repeat(64) }]
   const samples = [
-    {}, { exposure: .8, temperature: 15, tint: -8, contrast: 12, highlights: -11, shadows: 22, whites: 6, blacks: -5, saturation: -20, vibrance: 10 },
-    { faded_film: 17, sharpen: 30, creative_shadow_hue: 220, creative_shadow_strength: 12 },
+    {}, { exposure: .8, temperature_kelvin: 7000, tint: -8, contrast: 12, highlights: -11, shadows: 22, whites: 6, blacks: -5, saturation: -20, vibrance: 10 },
+    { faded_film: 17, sharpen: 30, shadow_hue: 220, shadow_strength: 12 },
     { curve_master_points: '[{"x":0,"y":0},{"x":35,"y":44},{"x":100,"y":100}]', curve_red_2: 63 },
     { curve_hue_sat_points: '[{"x":0,"y":50},{"x":35,"y":70},{"x":100,"y":50}]' },
     { shadow_hue: 30, shadow_strength: 25, midtone_luminance: 12, highlight_hue: 240, highlight_strength: 15 },
@@ -95,7 +95,7 @@ try {
   const video: Record<string, number> = {}
   for (const [label, Renderer] of [['before', HistoricalRenderer], ['after', VideoEditBuiltinEffectsGpu]] as const) {
     const renderer = new Renderer(device as unknown as GpuDevice, device.createSampler({ minFilter: 'linear', magFilter: 'linear' }), { allocate: (w, h) => allocate(w, h) as unknown as GpuTexture, release: texture => texture.destroy() })
-    const timings = await time(async exposure => { await renderer.render({ id: 'color_grade', params: { exposure, temperature: 10 } }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba16float' }, output as unknown as GpuTexture, 0); await device.queue.onSubmittedWorkDone() })
+    const timings = await time(async exposure => { await renderer.render({ id: 'color_grade', params: { exposure, temperature_kelvin: 6800 } }, { texture: source as unknown as GpuTexture, width, height, format: 'rgba16float' }, output as unknown as GpuTexture, 0); await device.queue.onSubmittedWorkDone() })
     video[label] = median(timings); renderer.dispose()
   }
   source.destroy(); output.destroy()

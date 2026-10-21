@@ -1,15 +1,17 @@
 import type { ImagingParams } from '../parameterDefinition'
 import { z } from 'zod'
-import { COLOR_GRADE_BASIC_PARAMS, COLOR_GRADE_CREATIVE_PARAMS, COLOR_GRADE_POINT_PARAMS, COLOR_GRADE_CURVE_PARAMS, COLOR_GRADE_LUT_PARAMS, COLOR_GRADE_WHEEL_PARAMS, COLOR_GRADE_HSL_PARAMS, COLOR_GRADE_VIGNETTE_PARAMS } from './colorGrade'
+import { COLOR_GRADE_PARAMS, COLOR_GRADE_POINT_PARAMS, COLOR_GRADE_CURVE_PARAMS } from './colorGrade'
 import { parseColorGradeCurve } from './curves'
 
-export const COLOR_GRADE_PARAMETERS = [...COLOR_GRADE_BASIC_PARAMS, ...COLOR_GRADE_CREATIVE_PARAMS, ...COLOR_GRADE_POINT_PARAMS, ...COLOR_GRADE_LUT_PARAMS, ...COLOR_GRADE_WHEEL_PARAMS, ...COLOR_GRADE_HSL_PARAMS, ...COLOR_GRADE_VIGNETTE_PARAMS]
+/** Static image layers persist structured curves only; the legacy five-anchor keys stay runtime defaults. */
+export const COLOR_GRADE_PARAMETERS = COLOR_GRADE_PARAMS.filter(parameter => !COLOR_GRADE_CURVE_PARAMS.includes(parameter))
 const point = z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).strict()
 const shape: Record<string, z.ZodType> = {}
 for (const parameter of COLOR_GRADE_PARAMETERS) {
   if (parameter.key === 'hsl_show_mask') continue // Observation belongs to the image edit session.
   const schema: z.ZodType = parameter.type === 'number' ? z.number().min(parameter.min).max(parameter.max)
     : parameter.type === 'boolean' ? z.boolean()
+      : parameter.type === 'enum' ? z.enum(parameter.options.map(option => option.value) as [string, ...string[]])
       : parameter.type === 'curve' ? z.array(point)
         : z.string().regex(/^(?:sha256:[a-f0-9]{64})?$/, '需要已导入的颜色查找表资源引用')
   const fallback = parameter.type === 'curve' ? [] : parameter.default

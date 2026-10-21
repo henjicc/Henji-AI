@@ -311,7 +311,7 @@ it('新角度和点位在实例/关键帧共用控件，自定义字体悬停回
   expect(owner.past).toHaveLength(fontHistory); expect(onError).not.toHaveBeenCalled()
 })
 
-it('内置位置双分量拖动一步撤销，Esc 和隐藏恢复两个参数', () => {
+it('内置位置双分量拖动一步撤销，Esc 和隐藏恢复两个参数', async () => {
   const definition = SHADER_GRAPH_EFFECT_DEFINITIONS.find(definition => builtinParameterFields(definition.params).some(field => field.type === 'point'))!
   const field = builtinParameterFields(definition.params).find(field => field.type === 'point')!
   const id = owner.document.id
@@ -323,6 +323,8 @@ it('内置位置双分量拖动一步撤销，Esc 和隐藏恢复两个参数', 
   const original = { ...effect().builtin.params }
   let control = view.getByRole('slider', { name: field.title })
   fireEvent.pointerDown(control, { pointerId: 81, button: 0, clientX: .2, clientY: .3 }); fireEvent.pointerMove(control, { pointerId: 81, clientX: .8, clientY: .9 })
+  // Gesture writes coalesce per display frame.
+  await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
   expect(effect().builtin.params).toMatchObject({ [field.bindingKeys[0]]: 80, [field.bindingKeys[1]]: 90 }); expect(owner.past).toHaveLength(before)
   fireEvent.pointerUp(control, { pointerId: 81 }); expect(owner.past).toHaveLength(before + 1)
   act(() => undoVideoEdit(id)); expect(effect().builtin.params).toEqual(original)

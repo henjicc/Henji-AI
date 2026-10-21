@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createImageEditAdjustmentLayerV3 } from '@/core/imageEdit/v3/documentFactory'
+import { createImageEditAdjustmentLayerV3, createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import { ImageEditorColorGradeParametersV3 } from './ImageEditorColorGradeParametersV3'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -13,7 +13,7 @@ function setup() {
   vi.stubGlobal('requestAnimationFrame', requestFrame)
   vi.stubGlobal('cancelAnimationFrame', cancelFrame)
   const layer = createImageEditAdjustmentLayerV3('grade', '调整', 'color_grade', {})
-  const controller = { sessionId: 'grade-test', setParameterPreview: vi.fn(), clearParameterPreview: vi.fn(), commitLayerParamsPreview: vi.fn() }
+  const controller = { sessionId: 'grade-test', setParameterPreview: vi.fn(), clearParameterPreview: vi.fn(), commitLayerParamsPreview: vi.fn(), document: createImageEditDocumentV3({ width: 8, height: 8, documentId: 'grade-test' }) }
   const view = render(<ImageEditorColorGradeParametersV3 controller={controller} layer={layer} disabled={false} />)
   const flush = (): void => { const scheduled = [...frames.values()]; frames.clear(); act(() => scheduled.forEach(callback => callback())) }
   return { view, layer, controller, frames, flush, requestFrame, cancelFrame }
@@ -21,7 +21,7 @@ function setup() {
 describe('图片调整复用中立参数事务', () => {
   it('仅基本组展开，连续拖动一帧发布最新值、松手一笔提交', () => {
     const { view, controller, frames, flush, requestFrame } = setup()
-    expect(view.getByRole('button', { name: '展开曲线' }).getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByRole('button', { name: '曲线' }).getAttribute('aria-expanded')).toBe('false')
     const input = view.getByRole('slider', { name: '曝光滑杆' })
     fireEvent.pointerDown(input, { pointerId: 1 })
     for (let i = 1; i <= 10; i++) fireEvent.change(input, { target: { value: i / 10 } })
@@ -38,7 +38,7 @@ describe('图片调整复用中立参数事务', () => {
   it('HSL 观察不进权威 params；取消和禁用清除排队帧', () => {
     const { view, controller, layer, frames, flush, requestFrame, cancelFrame } = setup()
     expect(view.queryByRole('checkbox', { name: '查看 HSL 选区' })).toBeNull()
-    fireEvent.click(view.getByRole('button', { name: '展开HSL 辅助' }))
+    fireEvent.click(view.getByRole('button', { name: 'HSL 辅助' }))
     fireEvent.click(view.getByRole('checkbox', { name: '查看 HSL 选区' }))
     flush()
     expect(controller.setParameterPreview.mock.calls[0][2]).toHaveProperty('hsl_show_mask', true)

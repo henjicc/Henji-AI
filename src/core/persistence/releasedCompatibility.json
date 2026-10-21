@@ -207,7 +207,8 @@
       },
       "samples": {
         "v1.json": "c08a504d69b6de348ac666cd1eea1b80ad5084e00a4abff3c9ce075f7b2a5c5e",
-        "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458"
+        "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458",
+        "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd"
       }
     },
     "image-package": {
@@ -221,14 +222,18 @@
         }
       ],
       "versions": {
-        "12": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36"
+        "12": "e58e912caac59034a13ede21458200d2a943cea4f9c0a59facaf0810a4f02d36",
+        "13": "2e4b45ea9a641983e4196b3ba58f7e56c80b7a00bb93078b110af42902d3d1d8"
       },
       "readers": {
-        "12": 12
+        "12": 12,
+        "13": 13
       },
       "samples": {
         "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458",
-        "v12.json": "e021560e94de3551e311976211fad24a6587fa14be57784dfa50014a68d9a87e"
+        "v12.json": "e021560e94de3551e311976211fad24a6587fa14be57784dfa50014a68d9a87e",
+        "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd",
+        "v13.json": "2fc27bfb9a3b619f6bb1c1fa1be8091cbed863e425d15a0ef6123962f62efbe8"
       }
     },
     "image-working-copy": {
@@ -239,13 +244,16 @@
         }
       ],
       "versions": {
-        "14": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327"
+        "14": "c0cc7528488bb89732f72b60bbb3cc1a3efd95efe8003b43946d85227de97327",
+        "15": "e23c2500dc1930f2071b863205832a8e3a83c8c290a7e05735b7674dea0c1a01"
       },
       "readers": {
-        "14": 14
+        "14": 14,
+        "15": 15
       },
       "samples": {
-        "v14.json": "6a33ab70b4b88d55a35806d06f2a54cee62c8c025f924c00d4dad775d3706652"
+        "v14.json": "6a33ab70b4b88d55a35806d06f2a54cee62c8c025f924c00d4dad775d3706652",
+        "v15.json": "b8c38c751155c1d48c0fa5a2ff705bcf2c39b63fded0fb1bebd94abe5d62e8d2"
       }
     },
     "canvas-layer-package": {
@@ -259,14 +267,18 @@
         }
       ],
       "versions": {
-        "12": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58"
+        "12": "c83c51b4173c957d12d9304a8f73c352c2f1a4c6f2afab8872f9e6062d22dc58",
+        "13": "5becf6c4e5f268553322f8ded17b13813c1afa1fd878d914b8c953fe782b7046"
       },
       "readers": {
-        "12": 12
+        "12": 12,
+        "13": 13
       },
       "samples": {
         "v12.henjilayer": "163f530ee8758c95ff0ef6bcc03d77dc52d9ef10d5f74c11ebd3778ab48580ea",
-        "v12.json": "053f60257e389cb251659f0ed6f51d0f198eea61c28f77d4bfdfda275b924ab9"
+        "v12.json": "053f60257e389cb251659f0ed6f51d0f198eea61c28f77d4bfdfda275b924ab9",
+        "v13.henjilayer": "d0aacb61e633da9e6aade40f12d01f16c298d15f63c84b054d798c97e02b78b0",
+        "v13.json": "55d90a53a2c67614b841dfb018255047a0569e20bfb5f20a2b0495e32cdab622"
       }
     },
     "keystore": {
@@ -363,13 +375,16 @@
         }
       ],
       "versions": {
-        "17": "1a3b440bf2f0262356c1ef9ac4df2ed3e4a520f7060989c13f06bc43bfef24a5"
+        "17": "1a3b440bf2f0262356c1ef9ac4df2ed3e4a520f7060989c13f06bc43bfef24a5",
+        "18": "1a3b440bf2f0262356c1ef9ac4df2ed3e4a520f7060989c13f06bc43bfef24a5"
       },
       "readers": {
-        "17": 17
+        "17": 17,
+        "18": 18
       },
       "samples": {
-        "v17.json": "04f30f2c819759b07c9ca5415541f277636eddce7dd1ee5808abd2e7ee34e414"
+        "v17.json": "04f30f2c819759b07c9ca5415541f277636eddce7dd1ee5808abd2e7ee34e414",
+        "v18.json": "35ade49f78b4345a8b9e41c5c407799c827cab7f3cfd084cdacd40171d3a41ed"
       }
     },
     "document.canvas": {
@@ -442,7 +457,8 @@
       },
       "samples": {
         "v1.json": "7f5ffe1c148181b45986ede0965a8c395dda6421d1c82ad0dc94f1f87e044472",
-        "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458"
+        "v12.henjiimg": "acfa8903b25427f1c24d5171036df3eb73fa06e81abda3770fa33ab1b6861458",
+        "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd"
       }
     },
     "document.screen_recording": {
@@ -697,13 +713,16 @@
         }
       ],
       "versions": {
-        "5": "a330c429373c3c5a97d70b5057a6f111c68ed44fdcc6502de46d69c6fc6646fa"
+        "5": "a330c429373c3c5a97d70b5057a6f111c68ed44fdcc6502de46d69c6fc6646fa",
+        "6": "f2620715c48791875c4a7a9ae999e3af7444060bd51ee576165ce5c25ddafc59"
       },
       "readers": {
-        "5": 5
+        "5": 5,
+        "6": 6
       },
       "samples": {
-        "v5.json": "696b65700dd08633b347e3b529b06a381dc237ecdb7741f2937e950dec56da1e"
+        "v5.json": "696b65700dd08633b347e3b529b06a381dc237ecdb7741f2937e950dec56da1e",
+        "v6.json": "4a10bb46cb5e048c5721c79f792896b3e22640a4e9d730e19a2f7adb08093f4d"
       }
     },
     "voice-library": {

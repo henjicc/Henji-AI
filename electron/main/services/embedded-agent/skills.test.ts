@@ -47,7 +47,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     }
   })
   it('关闭设置后清单消失，旧工具调用也不能读取；恢复立即可用', async () => {
-    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench']
+    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench', 'color-grading']
     expect(await embeddedSkillCatalog()).toEqual({ tools: [], instructions: '' })
     await expect(callEmbeddedSkill({ name: 'prompt-optimization', reason: '旧调用' }, signal)).rejects.toThrow('停用')
     state.disabled = []

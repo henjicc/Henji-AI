@@ -1,6 +1,8 @@
 import type { CubeLut } from '@/core/videoEdit/cubeLut'
 import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
-export type ColorGradeWorkerRequest = { kind: 'lut'; bytes: Uint8Array } | { kind: 'analyze'; pixels: Uint8ClampedArray; reference?: Uint8ClampedArray; method?: 'moments' | 'histogram' }
+export type ColorGradeWorkerRequest = { kind: 'lut'; bytes: Uint8Array } | { kind: 'analyze'; pixels: Uint8ClampedArray; width?: number; reference?: Uint8ClampedArray; method?: ColorGradeMatchMethod }
+/** `mkl`: OkLab Monge–Kantorovich match fitted back to sliders (default); `moments` / `histogram`: per-channel RGB curves. */
+export type ColorGradeMatchMethod = 'mkl' | 'moments' | 'histogram'
 export type ColorGradeWorkerResult = { lut: CubeLut; contentIdentity: string } | { parameters: VideoEditBuiltinParams }
 /** One import/verification owns one worker; large 65³ tables never parse on the UI thread. */
 function request(request: ColorGradeWorkerRequest, transfer: Transferable[], signal?: AbortSignal): Promise<ColorGradeWorkerResult> {
@@ -22,8 +24,8 @@ export async function decodeVideoEditLutOffThread(bytes: Uint8Array, signal?: Ab
   if (!('lut' in result)) throw new Error('LUT 解析返回异常。')
   return result
 }
-export async function analyzeVideoEditColorGradeOffThread(pixels: Uint8ClampedArray, reference?: Uint8ClampedArray, method?: 'moments' | 'histogram', signal?: AbortSignal): Promise<VideoEditBuiltinParams> {
-  const result = await request({ kind: 'analyze', pixels, reference, method }, [pixels.buffer, ...(reference ? [reference.buffer] : [])], signal)
+export async function analyzeVideoEditColorGradeOffThread(pixels: Uint8ClampedArray, reference?: Uint8ClampedArray, method?: ColorGradeMatchMethod, signal?: AbortSignal, width?: number): Promise<VideoEditBuiltinParams> {
+  const result = await request({ kind: 'analyze', pixels, width, reference, method }, [pixels.buffer, ...(reference ? [reference.buffer] : [])], signal)
   if (!('parameters' in result)) throw new Error('颜色分析返回异常。')
   return result.parameters
 }

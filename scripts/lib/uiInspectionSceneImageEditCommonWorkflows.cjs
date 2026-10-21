@@ -154,6 +154,15 @@ function createImageEditCommonWorkflowsScene(context, canvas = false, large = fa
               await page.mouse.up(); await context.settlePage(page, 300)
               await shot(label === '对比度滑杆' ? 'contrast-adjusted' : 'saturation-adjusted')
             }
+            await host.getByRole('button', { name: '示波器', exact: true }).click()
+            await host.locator('canvas[aria-label="直方图"]').waitFor({ timeout: 15000 })
+            await context.settlePage(page, 300); await shot('color-scopes')
+            const beforeAuto = await rev()
+            await host.getByRole('button', { name: '自动', exact: true }).click()
+            const autoDeadline = Date.now() + 15000
+            while (await rev() === beforeAuto && Date.now() < autoDeadline) await page.waitForTimeout(200)
+            assert.ok(await rev() > beforeAuto, '自动校色应写入一步可撤销的参数')
+            await context.settlePage(page, 500); await shot('color-auto')
           }
           await tab('layers'); await host.locator('[data-layer-select]').first().click(); await tab('adjustments')
         }

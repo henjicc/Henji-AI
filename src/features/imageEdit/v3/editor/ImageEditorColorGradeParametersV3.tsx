@@ -1,21 +1,29 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Upload } from 'lucide-react'
-import { ParamField, ParamList, UiButton, UiGroup, UiError, UiCheckbox, type ParamFieldSpec, type ParamGesture } from '@/components/ui'
+import { SquareSplitHorizontal, Upload, Wand } from 'lucide-react'
+import { ParamField, ParamList, UiButton, UiGroup, UiError, UiCheckbox, UiIconButton, type ParamFieldSpec, type ParamGesture } from '@/components/ui'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField } from '@/components/ui/params/fieldSpec'
+import { ColorGradeSections } from '@/components/colorGrade/ColorGradeSections'
+import { ColorGradeScopes } from '@/components/colorGrade/ColorGradeScopes'
 import type { CodeParameterValue, CodePoint } from '@/core/imaging/parameterTypes'
+import type { ImagingParam } from '@/core/imaging/parameterDefinition'
 import { COLOR_GRADE_PARAMETERS, parseImageColorGradeParams } from '@/core/imaging/adjustments/schema'
+import { computeColorStatistics, type ColorStatistics } from '@/core/imaging/adjustments/colorStatistics'
 import { LatestAdjustmentPreview } from '@/core/imaging/adjustments/latestPreview'
 import type { ImageEditAdjustmentLayerV3, ImageEditJsonObjectV3 } from '@/core/imageEdit/v3/layerTypes'
+import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
+import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import { importImageEditorColorLutV3 } from '@/commands/imageEditorV3'
+import { readImageEditColorPixelsV3, suggestImageEditColorV3 } from '../application/imageEditColorObservationV3'
 import type { ImageEditorV3Controller } from './types'
 
-const GROUPS = ['基本校正', '创意', '曲线', 'LUT', '色轮', 'HSL 辅助', '晕影'] as const
-const fields = builtinParameterFields(COLOR_GRADE_PARAMETERS.filter(param => param.key !== 'hsl_show_mask')).map(field => ({ ...field, animatable: false, control: field.type === 'number' ? 'slider' as const : 'control' in field ? field.control : undefined,
-  group: field.key.startsWith('curve_') ? GROUPS[2] : field.type === 'lut' || field.key.includes('_lut_strength') ? GROUPS[3] : field.key.startsWith('hsl_') ? GROUPS[5] : field.key.startsWith('vignette_') ? GROUPS[6] : /^(shadow|midtone|highlight)_/.test(field.key) ? GROUPS[4] : /^(creative_|faded_|sharpen)/.test(field.key) ? GROUPS[1] : GROUPS[0],
-})) as ParamFieldSpec[]
+const IMAGE_KEYS = new Set(COLOR_GRADE_PARAMETERS.map(param => param.key))
+/** Image layers have no keyframes: numeric controls are sliders; section structure is shared with the video panel. */
+function imageFields(params: readonly ImagingParam[]): ParamFieldSpec[] {
+  return builtinParameterFields(params.filter(param => param.key !== 'hsl_show_mask' && IMAGE_KEYS.has(param.key))).map(field => ({ ...field, animatable: false, control: field.type === 'number' ? 'slider' as const : 'control' in field ? field.control : undefined })) as ParamFieldSpec[]
+}
 
 /** Image adapter owns layer transactions and resource choice; controls own neither workspace nor history. */
-export function ImageEditorColorGradeParametersV3({ controller, layer, disabled }: { controller: Pick<ImageEditorV3Controller, 'sessionId' | 'setParameterPreview' | 'clearParameterPreview' | 'commitLayerParamsPreview'>; layer: ImageEditAdjustmentLayerV3; disabled: boolean }): JSX.Element {
+export function ImageEditorColorGradeParametersV3({ controller, layer, disabled }: { controller: Pick<ImageEditorV3Controller, 'sessionId' | 'setParameterPreview' | 'clearParameterPreview' | 'commitLayerParamsPreview' | 'document' | 'historyResourceDescriptors'>; layer: ImageEditAdjustmentLayerV3; disabled: boolean }): JSX.Element {
   const id = useId()
   const previewId = `${controller.sessionId}:${layer.id}:color-grade:${id}`
   const currentPreviewId = useRef(previewId); currentPreviewId.current = previewId
@@ -58,12 +66,12 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
     catch (reason) { if (live.current && currentPreviewId.current === previewId) setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { if (live.current && currentPreviewId.current === previewId) setImporting(false) }
   }
-  const values = Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, { ...draft,
-    ...Object.fromEntries(['shadow', 'midtone', 'highlight', 'hsl_grade'].flatMap(region => [`${region}_hue`, `${region}_strength`, `${region}_luminance`].map(key => [key, draft[key] ?? 0]))),
-  })]))
-  return <UiGroup gap="stack" titleTone="compact">
-    {error && <UiError message={error} size="xs" align="start" />}
-    <ParamList fields={fields} values={values} contextKey={previewId} initiallyOpenGroups={['基本校正']}
+  const rowValues = { ...draft, ...Object.fromEntries(['shadow', 'midtone', 'highlight', 'global', 'hsl_grade'].flatMap(region => [`${region}_hue`, `${region}_strength`, `${region}_luminance`].map(key => [key, draft[key] ?? 0]))) }
+  const renderRows = (params: readonly ImagingParam[]): JSX.Element | null => {
+    const fields = imageFields(params)
+    if (!fields.length) return null
+    const values = Object.fromEntries(fields.map(field => [field.key, readBuiltinField(field, rowValues)]))
+    return <ParamList fields={fields} values={values} contextKey={previewId}
       extras={Object.fromEntries(fields.map(field => [field.key, [disabled, field.key === 'hsl_invert' ? showMask : null, field.type === 'lut' ? [importing, names] : null]]))}
       resetDisabled={() => disabled} onReset={field => gesture(field).atomic(field.default)}
       renderControl={(field, value) => <UiGroup gap="row"><ParamField field={field} value={value} gesture={gesture(field)} disabled={disabled} resource={field.type === 'lut' ? <div className="flex flex-wrap items-center gap-1">
@@ -75,5 +83,65 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
       else { coalescer.cancel(); controllerRef.current.clearParameterPreview(previewId) }
     }}>查看 HSL 选区</UiCheckbox>}</UiGroup>}
     />
+  }
+  const resetParams = (params: readonly ImagingParam[]): void => {
+    if (disabled) return
+    const patch = Object.fromEntries(params.filter(param => IMAGE_KEYS.has(param.key) && param.key !== 'hsl_show_mask').map(param => [param.key, param.type === 'curve' ? [] : param.default]))
+    latest.current = { ...latest.current, ...patch } as ImageEditJsonObjectV3; setDraft(latest.current)
+    controllerRef.current.commitLayerParamsPreview(previewId, layer.id, latest.current)
+  }
+  const compare = (on: boolean): void => {
+    if (disabled || active.current) return
+    if (on) controllerRef.current.setParameterPreview(previewId, layer.id, parseImageColorGradeParams({}))
+    else controllerRef.current.clearParameterPreview(previewId)
+  }
+  const [analyzing, setAnalyzing] = useState(false)
+  const automatic = async (): Promise<void> => {
+    if (disabled || analyzing || active.current) return
+    const startParams = paramsRef.current
+    setAnalyzing(true); setError('')
+    try {
+      const suggestion = await suggestImageEditColorV3(controllerRef.current.document, layer.id, controllerRef.current.historyResourceDescriptors ?? [], new AbortController().signal)
+      if (!live.current || paramsRef.current !== startParams || disabledRef.current) return
+      latest.current = { ...latest.current, ...suggestion }; setDraft(latest.current)
+      controllerRef.current.commitLayerParamsPreview(previewId, layer.id, latest.current)
+    } catch (reason) { if (live.current) setError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { if (live.current) setAnalyzing(false) }
+  }
+  return <UiGroup gap="stack" titleTone="compact">
+    {error && <UiError message={error} size="xs" align="start" />}
+    <div className="flex flex-wrap items-center justify-end gap-1">
+      <UiButton size="sm" loading={analyzing} disabled={disabled} disabledReason="当前图层不可编辑" tooltip="分析调整层下方的画面，自动校正白平衡与曝光" onClick={() => { void automatic() }}><Wand />自动</UiButton>
+      <UiIconButton size="xs" tooltip="按住查看调色前" aria-label="按住查看调色前" disabled={disabled} disabledReason="当前图层不可编辑"
+        onPointerDown={() => compare(true)} onPointerUp={() => compare(false)} onPointerLeave={() => compare(false)} onPointerCancel={() => compare(false)}
+        onKeyDown={event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); compare(true) } }} onKeyUp={() => compare(false)} onBlur={() => compare(false)}><SquareSplitHorizontal /></UiIconButton>
+    </div>
+    <ColorGradeSections host={{
+      values: draft, disabled, renderRows, resetParams,
+      previewParams: values => { if (disabled || active.current) return; if (values) controllerRef.current.setParameterPreview(previewId, layer.id, { ...latest.current, ...values }); else controllerRef.current.clearParameterPreview(previewId) },
+      applyParams: values => { if (disabled) return; latest.current = { ...latest.current, ...values }; setDraft(latest.current); controllerRef.current.commitLayerParamsPreview(previewId, layer.id, latest.current) },
+      renderLut: stage => renderRows(COLOR_GRADE_PARAMETERS.filter(param => param.key === `${stage}_lut`)),
+      scopes: <ImageEditorColorScopesV3 document={controller.document} resources={controller.historyResourceDescriptors ?? []} />,
+    }} />
   </UiGroup>
+}
+
+/** Same pixel reader and statistics as observe_image_edit_color, against the committed document. */
+function ImageEditorColorScopesV3({ document, resources }: { document: ImageEditDocumentV3; resources: readonly ImageEditorV3ResourceDescriptor[] }): JSX.Element {
+  const [statistics, setStatistics] = useState<ColorStatistics | null>(null)
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('')
+  const [manual, setManual] = useState(0)
+  const latest = useRef({ document, resources }); latest.current = { document, resources }
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setBusy(true); setError('')
+      readImageEditColorPixelsV3(latest.current.document, latest.current.resources, controller.signal)
+        .then(sampled => { if (!controller.signal.aborted) setStatistics(computeColorStatistics(sampled.pixels, sampled.width, sampled.height, { scopes: true })) })
+        .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)) })
+        .finally(() => { if (!controller.signal.aborted) setBusy(false) })
+    }, 350)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [document.revision, manual])
+  return <ColorGradeScopes statistics={statistics} busy={busy} error={error} onRefresh={() => setManual(value => value + 1)} />
 }
