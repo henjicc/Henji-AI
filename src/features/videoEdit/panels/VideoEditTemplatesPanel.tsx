@@ -27,7 +27,7 @@ function TemplatePicture({ body, playing, label }: { body: VideoEditTemplateBody
 }
 
 /**
- * 模板面板（Frameflow“预设 → 模板”）：本工程模板在前，风格库模板在后；单击加到播放头、拖到时间线指定位置，
+ * 模板面板（Frameflow“预设 → 模板”）：本工程模板在前，全局模板在后；单击加到播放头、拖到时间线指定位置，
  * 右键设为全局、升级、重命名、删除。底部把时间线上所选片段固化成模板，或把所选实例分离。
  */
 function Panel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
@@ -53,13 +53,13 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   const items = (entry: Entry): MenuItem[] => [
     { id: 'apply', label: '加到播放头', icon: <Play />, disabled: !sequence, onClick: () => { void apply(entry) } },
     ...(entry.project ? [
-      { id: 'promote', label: entry.project.origin ? '更新到风格库' : '设为全局模板', icon: <Globe />, onClick: () => { void run(async () => { const result = await promoteVideoEditTemplate(projectId, entry.id); showNotification(`“${result.library.name}”已存进风格库（v${result.library.version}）。`) }) } },
+      { id: 'promote', label: entry.project.origin ? '更新全局模板' : '设为全局模板', icon: <Globe />, onClick: () => { void run(async () => { const result = await promoteVideoEditTemplate(projectId, entry.id); showNotification(`“${result.library.name}”已存为全局模板（v${result.library.version}）。`) }) } },
       ...(entry.newer ? [{ id: 'upgrade', label: `升级到 v${entry.newer}（影响 ${videoEditTemplateInstances(instance.document, entry.project).length} 处）`, icon: <ArrowUpCircle />, onClick: () => { void run(async () => { const result = await updateVideoEditTemplate(projectId, entry.id, { kind: 'library' }); showNotification(`已升级“${result.template.name}”，${result.instances} 处实例一起更新。`) }) } }] : []),
       { id: 'rename', label: '重命名…', icon: <Pencil />, onClick: () => setNaming({ mode: 'rename', key: `project:${entry.id}`, name: entry.name, description: entry.description }) },
       { id: 'unregister', label: '取消登记（保留片段）', icon: <Trash2 />, divider: true, onClick: () => { void run(() => { editVideoProject(projectId, document => unregisterVideoEditTemplates(document, [entry.id])) }) } },
     ] : [
       { id: 'rename', label: '重命名…', icon: <Pencil />, onClick: () => setNaming({ mode: 'rename', key: `library:${entry.id}`, name: entry.name, description: entry.description }) },
-      { id: 'delete', label: '从风格库删除', icon: <Trash2 />, divider: true, onClick: () => { void run(() => videoEditStyleLibrary.removeTemplate(entry.id)) } },
+      { id: 'delete', label: '删除全局模板', icon: <Trash2 />, divider: true, onClick: () => { void run(() => videoEditStyleLibrary.removeTemplate(entry.id)) } },
     ]),
   ]
   const tile = (entry: Entry): React.ReactElement => <div role="listitem" key={`${entry.scope}:${entry.id}`} className="min-w-0">
@@ -89,7 +89,7 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-3" aria-label="模板" data-video-edit-templates>
     <UiSearchInput size="sm" aria-label="搜索模板" placeholder="搜索模板" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除搜索" />
     <div className="min-h-0 flex-1 overflow-y-auto">
-      {project.length || library.length ? <>{grid('本工程', project)}{grid('风格库', library)}</> : <UiEmpty size="sm" title={query ? '没有匹配的模板' : '还没有模板'} description={query ? undefined : '在时间线上选中做好的文字、图形或代码片段，点“保存所选为模板”。'} />}
+      {project.length || library.length ? <>{grid('本工程', project)}{grid('全局模板', library)}</> : <UiEmpty size="sm" title={query ? '没有匹配的模板' : '还没有模板'} description={query ? undefined : '在时间线上选中做好的文字、图形或代码片段，点“保存所选为模板”。'} />}
     </div>
     <UiActionGroup tier="secondary" size="sm">
       <UiButton disabled={busy || !selectedClips.length || !sequence} disabledReason="先在时间线上选中做好的片段" onClick={() => setNaming({ mode: 'create', name: selectedClips[0]?.name.slice(0, 80) ?? '模板', description: '' })}>保存所选为模板</UiButton>
