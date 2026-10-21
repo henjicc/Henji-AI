@@ -260,6 +260,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
           effectWarnings = new Set(result.effectErrors)
           await result.completion
           traceVideoEditFrame('compositor.complete', request.frame, start)
+          recordVideoEditPreparation('presentComplete', performance.now() - start)
           const transferStarted = performance.now()
           const pixels = snapshot ? await snapshot : undefined
           if (pixels) owned.add(pixels)

@@ -306,7 +306,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         await page.waitForTimeout(1000)
         const frame = await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-presented-frame')
         evidence.playbackProgress = { frame: Number(frame), elapsedMs: performance.now() - started }; save()
-        if (performance.now() - started >= nextCapture) {
+        if (spec.playbackCaptures !== false && performance.now() - started >= nextCapture) {
           await capture(`yoga-playing-${Math.round(nextCapture / 1000)}`)
           nextCapture += 30000
         }

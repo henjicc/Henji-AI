@@ -54,6 +54,8 @@ async function observeWorkers(page, traceFrames = false) {
     window.__videoLayoutEvidence = evidence
     window.__videoLayoutNativeWorker = NativeWorker
     window.__videoLayoutObservers = []
+    // Main-thread long tasks delay frame requests and the Worker's refresh callbacks: recorded next to the frames.
+    try { new PerformanceObserver(list => { for (const entry of list.getEntries()) evidence.events.push({ kind: 'longtask', at: entry.startTime, elapsedMs: entry.duration }) }).observe({ type: 'longtask' }) } catch { /* not supported */ }
     window.__videoLayoutWatchCanvas = canvas => {
       const canvasId = window.__videoLayoutObservers.length + 1
       const recordFrame = initial => {

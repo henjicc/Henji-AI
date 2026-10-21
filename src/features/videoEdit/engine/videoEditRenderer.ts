@@ -969,9 +969,12 @@ export class VideoEditRenderer {
     }
     const activeImages = new Set(canPresent() ? [...imageIds, ...this.warmImages] : this.images.keys())
     for (const key of this.images.keys()) if (!activeImages.has(key)) this.releaseImage(key)
+    // A pre-rendered frame keeps the live decoders and nested sequences of the paused picture until playback leaves the
+    // cache: closing a native seek decoder held the GPU for about 100ms, a dropped frame at every start of playback.
+    const keepLive = !!cachedWindow
     const activePaths = new Set(canPresent() ? active.map(clip => this.clipMedia(document, clip)?.path) : this.seekers.keys())
-    for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
-    if (!nestedRender) for (const [id, entry] of this.nestedPictures) {
+    if (!keepLive) for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
+    if (!nestedRender && !keepLive) for (const [id, entry] of this.nestedPictures) {
       if (!nestedContext.keys.has(id)) { this.nestedPictures.delete(id); await entry.renderer.dispose() }
       else (await entry.renderer.compositor?.code())?.releaseNestedFrames(nestedContext.keys.get(id)!)
     }

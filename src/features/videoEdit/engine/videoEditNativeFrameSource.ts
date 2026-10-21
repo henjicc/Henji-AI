@@ -7,6 +7,7 @@ import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFr
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
+import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 import { VideoEditNativeFailure, videoEditNativeClosed, videoEditNativeFailureKind, videoEditNativeFailureKindOf, videoEditNativeFailureMessage, videoEditNativeOpenFailure, videoEditNativeReadFailure } from './videoEditNativeFailure'
 
 /**
@@ -228,7 +229,9 @@ export class VideoEditNativeDecoderSession {
       for (const consumer of this.consumers.values()) { consumer.done ??= { reason: 'cancelled', at: performance.now() - LOST_FRAME_GRACE_MS }; consumer.wake?.() }
       for (const ticket of this.tickets.values()) ticket.fail(videoEditNativeClosed(reason))
       this.tickets.clear()
+      const started = performance.now()
       await this.channel.call('closeStream', { streamId: this.info.streamId }).catch(() => undefined)
+      recordVideoEditPreparation('nativeClose', performance.now() - started)
       this.onClosed()
     })()
     return this.closing
@@ -358,8 +361,10 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
       // Pre-rendered preview files (8-bit H.264, NV12 slots) keep a deeper decoded queue: opening the next file's decoder
       // briefly stalls decoding, and 16 ready pictures (267ms at 60fps) cover it without a dropped frame.
       const deep = purpose === 'playback' && media.id.startsWith('render-cache:')
+      const started = performance.now()
       const info = await this.options.channel.call('openDecoder', { path, purpose, ...(deep ? { poolSize: 16 } : {}) })
-      return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions-- })
+      recordVideoEditPreparation(purpose === 'playback' ? 'nativeOpenPlayback' : 'nativeOpenSeek', performance.now() - started)
+      return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions--; recordVideoEditPreparation(purpose === 'playback' ? 'nativeClosedPlayback' : 'nativeClosedSeek', 0) })
     } catch (error) { this.sessions--; throw videoEditNativeOpenFailure(media.name, error) }
   }
 

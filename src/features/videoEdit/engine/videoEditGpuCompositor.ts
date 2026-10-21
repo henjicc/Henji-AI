@@ -425,11 +425,13 @@ export class VideoEditGpuCompositor {
       this.waits.add(finish); request = self.requestAnimationFrame(tick)
     })
     traceVideoEditFrame('compositor.deadline', -1, deadlineStarted)
+    if (deadline !== undefined) recordVideoEditPreparation('presentDeadline', performance.now() - deadlineStarted)
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     this.assertDevice()
     const inflightStarted = performance.now()
     while (this.uploads.size >= 2) await Promise.race(this.uploads)
     traceVideoEditFrame('compositor.inflight', -1, inflightStarted)
+    recordVideoEditPreparation('presentInflight', performance.now() - inflightStarted)
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (target) {
       if (target.width !== document.width || target.height !== document.height) throw new Error('离屏合成需要序列全尺寸目标。')
