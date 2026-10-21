@@ -12,7 +12,7 @@ const input = z.object({
 const output = z.object({ documentRef, pendingWindows: z.number().int(), readyFrames: z.number().int(), requestedFrames: z.number().int(), verified: z.boolean(), message: z.string() }).strict()
 export const renderVideoEditPreviewCapability = defineApplicationCapability({
   id: 'render_video_edit_preview', title: '预渲染剪辑预览',
-  description: '免费本地后台把当前序列吃力的段落（代码效果、嵌套序列、转场或多层画面）按导出画质渲染成预览文件，让节目监视器在完整分辨率下流畅播放，相当于 Premiere 的“渲染入点到出点”。启动后在后台进行并立即返回，进度与完成情况从 video_edit.document.render_cache 读取（rendering 为进行中，全部段落为 ready 即完成）。以三十秒为一段，已渲染且内容未改的段落跳过；修改片段、效果参数、代码源码或素材后只有受影响的段落需要重新渲染。只写程序缓存，不改剪辑内容；暂停画面、选帧和导出仍实时合成。节目播放时自动暂停渲染，可取消。渲染状态从 video_edit.document.render_cache 读取。',
+  description: '免费本地后台把当前序列吃力的段落（代码效果、嵌套序列、转场或多层画面）渲染成预览文件（编码与画质按设置 video_edit.render_format / video_edit.render_quality，码率随序列分辨率与帧率），让节目监视器在完整分辨率下流畅播放，相当于 Premiere 的“渲染入点到出点”。启动后在后台进行并立即返回，进度与完成情况从 video_edit.document.render_cache 读取（rendering 为进行中，全部段落为 ready 即完成）。以三十秒为一段，已渲染且内容未改的段落跳过；修改片段、效果参数、代码源码或素材后只有受影响的段落需要重新渲染。只写作品目录下的缓存（受缓存容量上限与自动清理约束），不改剪辑内容；暂停画面、选帧和导出仍实时合成。节目播放时自动暂停渲染，可取消。渲染状态从 video_edit.document.render_cache 读取。',
   version: 1, domain: 'video_edit', aliases: ['渲染预览', '渲染入点到出点', '预渲染', '渲染条', 'render preview', 'render in to out'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write',
   destructive: false, supportsPreview: false, supportsUndo: false, idempotent: true, timeoutMs: 600000, requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document'], producesRefs: ['video_edit.document'],
   inputSchema: input, outputSchema: output,

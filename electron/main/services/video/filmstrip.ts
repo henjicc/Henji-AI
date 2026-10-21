@@ -2,10 +2,10 @@ import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
-import path from 'node:path'
 import { app } from 'electron'
 import { createMainLogger } from '../logging'
-import { createContentDiskCache, type ContentDiskCache } from '../media/content-disk-cache'
+import type { ContentDiskCache } from '../media/content-disk-cache'
+import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { identifyMediaContent, type MediaContentIdentity } from '../media/content-identity'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
 import { FILMSTRIP_FORMAT_VERSION, type FilmstripHeight } from '../../../../src/core/media/filmstripFrames'
@@ -118,9 +118,8 @@ function defaultSpawn(binary: string, args: string[]): ChildLike {
 }
 
 function defaultCache(): ContentDiskCache {
-  return createContentDiskCache({
+  return getMediaCacheManager().createCache('preview', 'filmstrip', {
     extension: '.webp',
-    directory: () => app?.getPath ? filmstripCacheDirectory(app.getPath('userData')) : undefined,
     budgetBytes: 256 * 1024 * 1024,
     pruneIntervalMs: 60_000,
     onError: (event, error) => logger.warn('缩略帧磁盘缓存失败', { event: `video.filmstrip.cache.${event}_failed`, error }),
@@ -146,10 +145,6 @@ const PROCESS_INPUT_PIXELS = 18_000_000
 export function filmstripInputsPerProcess(width: number, height: number, batchSize: number): number {
   const pixels = width * height
   return pixels > 0 ? Math.max(1, Math.min(batchSize, Math.floor(PROCESS_INPUT_PIXELS / pixels))) : batchSize
-}
-
-export function filmstripCacheDirectory(userData: string): string {
-  return path.join(userData, 'HenjiCache', 'Filmstrip')
 }
 
 export function createFilmstripService(dependencies: FilmstripServiceDependencies = {}): {

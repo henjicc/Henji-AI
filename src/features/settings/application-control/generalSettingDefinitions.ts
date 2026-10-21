@@ -18,9 +18,16 @@ import { GENERATION_MODEL_DESCRIPTIONS } from '@/core/modelCatalog/generationMod
 import { API_KEY_PROVIDER_IDS } from '@/core/config/providers'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import { ASR_CATALOG, isTimestampedLocalAsr } from '@/core/audioEdit/asrCatalog'
+import { DEFAULT_MEDIA_CACHE_SETTINGS, mediaCacheBudgetGbSchema, mediaCacheRetentionDaysSchema, VIDEO_RENDER_CACHE_FORMATS, VIDEO_RENDER_CACHE_QUALITIES, type MediaCacheSettings } from '@/core/media/mediaCache'
+import { getMediaCacheSettings, updateMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
 
 import { storageSetting, storeSetting } from './definitionFactories'
 import type { ApplicationSettingDefinition } from './types'
+
+/** 缓存设置的权威值在主进程；这里读同步投影，写入先更新投影再异步保存（失败时投影回滚并记日志）。 */
+function writeMediaCacheSetting(patch: Partial<MediaCacheSettings>): void {
+  void updateMediaCacheSettings(patch).catch(() => undefined)
+}
 
 const DEFAULT_MODEL_ID_SCHEMA = z.enum([
   'auto',
@@ -169,4 +176,24 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
     target: { tab: 'files', sectionId: 'files-download' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, QUICK_DOWNLOAD_SETTING_SPECS.quickDownloadButtonOnly.key,
   QUICK_DOWNLOAD_SETTING_SPECS.quickDownloadButtonOnly.parse),
+  storeSetting({
+    id: 'storage.cache_budget_gb', title: '缓存容量上限', description: '作品目录下可重建缓存（预渲染、代理、智能分析、缩略图与波形、口播处理）的总容量上限，单位 GB，10–4096；null 表示自动（所在盘可用空间的 10%，10–50GB）。超过上限时先删最久未用的。',
+    aliases: ['缓存上限', '缓存大小', '缓存容量', 'cache size', 'cache limit'], schema: mediaCacheBudgetGbSchema.nullable(), defaultValue: DEFAULT_MEDIA_CACHE_SETTINGS.budgetGb,
+    target: { tab: 'files', sectionId: 'files-cache' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => getMediaCacheSettings().budgetGb, budgetGb => writeMediaCacheSetting({ budgetGb })),
+  storeSetting({
+    id: 'storage.cache_retention_days', title: '缓存自动清理', description: '超过这么多天没有用到的缓存自动删除：7、30（默认）、90，0 表示从不按时间清理（仍受容量上限约束）。',
+    aliases: ['缓存清理', '自动清理缓存', '缓存保留', 'cache retention'], schema: mediaCacheRetentionDaysSchema, defaultValue: DEFAULT_MEDIA_CACHE_SETTINGS.retentionDays,
+    target: { tab: 'files', sectionId: 'files-cache' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => getMediaCacheSettings().retentionDays, retentionDays => writeMediaCacheSetting({ retentionDays })),
+  storeSetting({
+    id: 'video_edit.render_format', title: '预渲染格式', description: '剪辑预渲染文件的编码：auto（默认）在本机硬件能编码并解码 HEVC 时用 HEVC，否则 H.264；avc 固定 H.264；hevc 固定 HEVC。分辨率始终跟随序列；改动后旧格式的段落在空闲时按新格式重新渲染。',
+    aliases: ['预渲染格式', '渲染格式', '预览文件格式', 'render format', 'HEVC', 'H.264'], schema: z.enum(VIDEO_RENDER_CACHE_FORMATS), defaultValue: DEFAULT_MEDIA_CACHE_SETTINGS.renderFormat,
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => getMediaCacheSettings().renderFormat, renderFormat => writeMediaCacheSetting({ renderFormat })),
+  storeSetting({
+    id: 'video_edit.render_quality', title: '预渲染画质', description: '剪辑预渲染的画质：standard（默认）按序列分辨率与帧率查码率表（H.264 4K60 50Mbps、4K30 40、1440p60 30、1080p 20，HEVC ×0.7，最低 20Mbps），high 为其 1.3 倍；改动后旧段落在空闲时重新渲染。',
+    aliases: ['预渲染画质', '渲染画质', 'render quality'], schema: z.enum(VIDEO_RENDER_CACHE_QUALITIES), defaultValue: DEFAULT_MEDIA_CACHE_SETTINGS.renderQuality,
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => getMediaCacheSettings().renderQuality, renderQuality => writeMediaCacheSetting({ renderQuality })),
 ]

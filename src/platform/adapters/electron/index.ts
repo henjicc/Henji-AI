@@ -29,6 +29,7 @@ import { createElectronFonts } from './fonts'
 import { createElectronSmartRegions } from './smartRegions'
 import { createElectronTracking } from './tracking'
 import { createElectronVideoProxy } from './videoProxy'
+import { createElectronMediaCache } from './mediaCache'
 import { createElectronSceneDetection } from './sceneDetection'
 import { createElectronScreenRecording } from './screenRecording'
 
@@ -67,6 +68,7 @@ export function createElectronPlatform(): PlatformRuntime {
     smartRegions: createElectronSmartRegions(),
     tracking: createElectronTracking(),
     videoProxy: createElectronVideoProxy(),
+    mediaCache: createElectronMediaCache(),
     sceneDetection: createElectronSceneDetection(),
   }
 }

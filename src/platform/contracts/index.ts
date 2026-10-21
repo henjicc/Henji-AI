@@ -27,6 +27,7 @@ import type { FontsPlatform } from './fonts'
 import type { SmartRegionsPlatform } from './smartRegions'
 import type { TrackingPlatform } from './tracking'
 import type { VideoProxyPlatform } from './videoProxy'
+import type { MediaCachePlatform } from './mediaCache'
 import type { SceneDetectionPlatform } from './sceneDetection'
 import type { ScreenRecordingPlatform } from './screenRecording'
 
@@ -64,6 +65,7 @@ export interface PlatformRuntime {
   smartRegions: SmartRegionsPlatform
   tracking: TrackingPlatform
   videoProxy: VideoProxyPlatform
+  mediaCache: MediaCachePlatform
   sceneDetection: SceneDetectionPlatform
 }
 

@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { app } from 'electron'
 import { normalizeLocalSource } from '../image/source'
 import { resolveLocalMediaPath } from '../media/shared'
 import { withMediaHeavyTask } from '../media-import/concurrency'
@@ -10,7 +9,8 @@ import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { AudioWaveformQueue } from './queue'
 import { AudioWaveformWorker } from './worker-client'
-import { createContentDiskCache, type ContentDiskCache } from '../media/content-disk-cache'
+import type { ContentDiskCache } from '../media/content-disk-cache'
+import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { identifyMediaContent, type MediaContentIdentity } from '../media/content-identity'
 import {
   WAVEFORM_DETAIL_MAX_FRAMES, WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET, WAVEFORM_PYRAMID_FORMAT_VERSION, WAVEFORM_PYRAMID_LEVEL_FACTOR, WAVEFORM_PYRAMID_TOP_BUCKETS,
@@ -218,7 +218,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
   const identity = dependencies.identity ?? identifyMediaContent
   const createWorker = dependencies.createWorker ?? (() => new AudioWaveformWorker())
   const disk = dependencies.diskCache === undefined
-    ? createContentDiskCache({ extension: '.hwpk', directory: () => app?.getPath ? path.join(app.getPath('userData'), 'HenjiCache', 'Waveforms') : undefined, onError: (event, error) => logger.error('波形磁盘缓存失败', { event: `audio.waveform.cache.${event}_failed`, error }) })
+    ? getMediaCacheManager().createCache('preview', 'waveforms', { extension: '.hwpk', onError: (event, error) => logger.error('波形磁盘缓存失败', { event: `audio.waveform.cache.${event}_failed`, error }) })
     : dependencies.diskCache
   const memoryBudget = dependencies.pyramidMemoryBytes ?? 128 * 1024 * 1024
   const memory = new Map<string, { data: WaveformPyramidData; bytes: number }>()

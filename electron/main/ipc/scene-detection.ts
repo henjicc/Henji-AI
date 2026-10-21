@@ -8,8 +8,7 @@ import { registerIpcHandler } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
 import { isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
-import { createContentDiskCache } from '../services/media/content-disk-cache'
-import { getProgramDataDir } from '../services/appPaths'
+import { getMediaCacheManager } from '../services/media/media-cache-runtime'
 import { createMainLogger } from '../services/logging'
 import { SceneDetectionService } from '../services/video/scene-detection'
 import { identifyMediaContent } from '../services/media/content-identity'
@@ -17,7 +16,7 @@ import { identifyMediaContent } from '../services/media/content-identity'
 const logger = createMainLogger('main.video.scene_detection')
 const tasks = new Map<number, Map<string, AbortController>>()
 const watched = new WeakSet<WebContents>()
-const service = new SceneDetectionService(createContentDiskCache({ directory: () => path.join(getProgramDataDir(), 'scene-detection'), extension: '.json', budgetBytes: 16 * 1024 * 1024, onError: (event, error) => logger.warn('场景检测缓存失败', { event: `video.scene_detection.cache.${event}`, error }) }))
+const service = new SceneDetectionService(getMediaCacheManager().createCache('analysis', 'scenes', { extension: '.json', budgetBytes: 16 * 1024 * 1024, onError: (event, error) => logger.warn('场景检测缓存失败', { event: `video.scene_detection.cache.${event}`, error }) }))
 function release(senderId: number): void { for (const controller of tasks.get(senderId)?.values() ?? []) controller.abort(new Error('场景检测已取消。')); tasks.delete(senderId) }
 async function authorizedSource(source: string): Promise<string> {
   const local = normalizeLocalSource(source)

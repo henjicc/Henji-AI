@@ -33,7 +33,7 @@ export interface WorkRootServiceDeps {
   logger: MainLogger
   style?: 'win32' | 'posix'
   /** 测试注入，透传给 moveWorkRoot。 */
-  moveOptions?: Pick<MoveWorkRootInput, 'forceCopy' | 'fileOps' | 'availableBytes'>
+  moveOptions?: Pick<MoveWorkRootInput, 'forceCopy' | 'fileOps' | 'availableBytes' | 'skipTopLevel'>
 }
 
 export interface WorkRootService {

@@ -6,6 +6,7 @@ import path from 'node:path'
 import type { AudioEditProjectDocument, AudioEditSourceIdentity, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
 import { resolveLocalMediaPath } from '../media/shared'
 import { getProgramStoreDir } from '../appPaths'
+import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { requireAudioEditProject } from './project-store'
@@ -31,7 +32,9 @@ function streamDuration(stream: ProbeStream, fallback: number): number {
 }
 export function audioEditCacheDirectory(projectId: string): string {
   if (!/^[\w-]+$/.test(projectId)) throw new Error('口播引用无效')
-  return path.join(getProgramStoreDir('audioEdit'), projectId, 'cache')
+  const directory = getMediaCacheManager().categoryDirectory('audio_edit', projectId)
+  if (!directory) throw new Error('作品目录不可用，暂时无法处理口播。')
+  return directory
 }
 // 口播文档离开作品（回收站、删除空草稿、从列表移除）时清掉程序目录 AudioEdit/<文档 ID>（解码缓存、处理结果）
 // 与任务回执，都可重建；还有任务在跑时不动（下次离开或手动清理时再说）。别的类型的文档 ID 在这里没有数据，不受影响。
@@ -39,6 +42,8 @@ registerDocumentProgramStateCleaner('audio_edit', async (docId) => {
   if (!/^[\w-]+$/.test(docId) || hasActiveAudioEditTask(docId)) return
   const removedTasks = deleteAudioEditTasks(docId)
   await removeUnmanagedCachePath(path.join(getProgramStoreDir('audioEdit'), docId), { recursive: true, force: true })
+  const cache = getMediaCacheManager().categoryDirectory('audio_edit', docId)
+  if (cache) await removeUnmanagedCachePath(cache, { recursive: true, force: true })
   if (removedTasks) logger.info('口播内部缓存已清理', { event: 'audio_edit.program_state.cleaned', context: { docId, removedTasks } })
 })
 

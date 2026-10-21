@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-export const videoProxyPresetSchema = z.enum(['720p', '540p'])
+/** auto：源的一半（短边最高 1080），按代理自身分辨率帧率计算码率；720p/540p 只为读取旧代理与旧调用保留。 */
+export const videoProxyPresetSchema = z.enum(['auto', '720p', '540p'])
 export type VideoProxyPreset = z.infer<typeof videoProxyPresetSchema>
 export const videoProxyRequestSchema = z.object({ requestId: z.string().min(1).max(100), source: z.string().min(1).max(32768), preset: videoProxyPresetSchema }).strict()
 export type VideoProxyRequest = z.infer<typeof videoProxyRequestSchema>

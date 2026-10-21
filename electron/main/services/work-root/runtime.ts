@@ -5,6 +5,7 @@ import { getUserDataLayout, USER_ROOT_FOLDER_NAMES } from '../appPaths'
 import { writeCustomDataRoot } from '../dataRoot'
 import { getDocumentService } from '../documents/runtime'
 import { createMainLogger } from '../logging/main-logger'
+import { MEDIA_CACHE_FOLDER_NAMES } from '../media/media-cache'
 import { findWorkRootBusyReason, registerWorkRootBusyProbe } from './busy-probes'
 import { createWorkRootService, type WorkRootService } from './service'
 
@@ -34,6 +35,8 @@ export function getWorkRootService(): WorkRootService {
     ensureFolders: () => { getUserDataLayout() },
     refreshIndex: () => getDocumentService().refreshIndex(),
     busyReason: findWorkRootBusyReason,
+    // 可重建的缓存不跨盘复制，随旧目录删除，新位置重新生成。
+    moveOptions: { skipTopLevel: Object.values(MEDIA_CACHE_FOLDER_NAMES) },
     logger,
   })
   return service

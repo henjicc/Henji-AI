@@ -44,6 +44,9 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'sections.about.authorLabel',
     'sections.about.homepageLabel',
     ['sections.about.licenseLabel', ['许可', 'license']],
+    ['sections.hardware.gpus', ['显卡', '硬件', 'GPU', 'hardware']],
+    ['sections.hardware.decodeLabel', ['硬件解码', 'H.264', 'HEVC', 'AV1', 'VP9', '4:2:2', 'decode']],
+    ['sections.hardware.encodeLabel', ['硬件编码', 'NVENC', 'encode']],
     ['sections.about.componentsLabel', ['开源', '第三方', 'open source']],
     'sections.about.allComponentsLabel',
   ]),
@@ -82,6 +85,8 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     ['sections.videoEdit.binsFirstLabel', ['素材箱', 'bin']],
     ['sections.videoEdit.folderBinsLabel', ['素材箱', 'folder bin']],
     ['sections.videoEdit.duplicatePolicyLabel', ['重复文件', 'duplicate']],
+    ['sections.videoEdit.renderFormatLabel', ['预渲染', 'HEVC', 'H.264', '编码', 'render format']],
+    ['sections.videoEdit.renderQualityLabel', ['预渲染画质', 'render quality']],
   ]),
   ...rows('workspace-assets', [
     ['sections.assetLibrary.tabAction', ['资产', '素材', 'asset']],
@@ -92,6 +97,16 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   ]),
   ...rows('files-storage', [
     ['sections.dataPath.pathLabel', ['作品目录', '数据目录', '保存位置', '更换位置', '存储', 'works folder', 'storage', 'folder']],
+  ]),
+  ...rows('files-cache', [
+    ['sections.mediaCache.usageLabel', ['缓存', '占用', '清理', '磁盘空间', 'cache', 'disk space']],
+    ['sections.mediaCache.category.render', ['预渲染', '渲染文件', 'render']],
+    ['sections.mediaCache.category.proxy', ['代理', 'proxy']],
+    'sections.mediaCache.category.analysis',
+    'sections.mediaCache.category.preview',
+    'sections.mediaCache.category.audio_edit',
+    ['sections.mediaCache.budgetLabel', ['容量上限', '缓存大小', 'cache size', 'limit']],
+    ['sections.mediaCache.retentionLabel', ['自动清理', '保留', 'retention']],
   ]),
   ...rows('files-upload', [
     ['sections.largeUpload.strategyLabel', ['大文件', '复制', '引用', 'upload']],

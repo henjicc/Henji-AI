@@ -411,6 +411,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (captureHistory !== historyEnabled) { historyEnabled = captureHistory; if (historyEnabled) lastRequested = -1; else retainExplanationPixels(surface, -1) }
         if (appliedFonts !== renderer.fontPresentationRevision) { appliedFonts = renderer.fontPresentationRevision; lastRequested = -1 }
         requestCommand = command; requestDocument = document
+        // 代理只在播放与拖动播放头时使用；停下（暂停、拖动松手）后节目换回原片实时合成的完整画质，
+        // 取帧观察与导出始终用原片。没有可用代理时不切换，避免每次起停都重建解码会话。
+        const availableProxies = videoEditProxySignature(instance.document.id)
+        const useOriginal = captureFull > 0 || !(current.playing || current.scrubbing) || availableProxies === '[]'
         if (failedDocument) {
           if (failedDocument === document && failedFrame === current.frame && Date.now() < failedRetryAt) { timer = setTimeout(() => { void loop() }, 250); return }
           failedDocument = undefined
@@ -430,13 +434,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
-          await renderer.updateDocument(document, captureFull > 0); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; lastRequested = -1
+          await renderer.updateDocument(document, useOriginal); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; appliedProxy = useOriginal ? 'original' : availableProxies; lastRequested = -1
           if (!parameterUpdate && !liveProjection) lastFrame = -1
           if (stopped) return
         }
-        const proxySignature = captureFull > 0 ? 'original' : videoEditProxySignature(instance.document.id)
+        const proxySignature = useOriginal ? 'original' : availableProxies
         if (appliedProxy !== proxySignature) {
-          stopAudio(); wasPlaying = false; await renderer.updateDocument(document, captureFull > 0); appliedProxy = proxySignature; lastFrame = -1; lastRequested = -1
+          stopAudio(); wasPlaying = false; await renderer.updateDocument(document, useOriginal); appliedProxy = proxySignature; lastFrame = -1; lastRequested = -1
           if (stopped) return
         }
         if (performance.now() - renderCacheCheckedAt > 250) {

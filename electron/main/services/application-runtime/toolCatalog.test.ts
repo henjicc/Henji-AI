@@ -90,6 +90,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.43.0'] = '3b9842320c147772f238f5bc68cef197f83cef64bba54354860c7491a9b73cf0'
     // Color grade v2: new parameters in analyze_video_edit_color (mkl match); new observe_video_edit_color, observe_image_edit_color, analyze_image_edit_color.
     fingerprints['2.44.0'] = '81912b3cdcf8ab78dcb6a13cd789b6a843bf40a5dcc8ab5cae3a3503937ac13b'
+    // Works-folder cache settings, proxy preset auto, render/proxy descriptions for full-quality pause.
+    fingerprints['2.45.0'] = '8db0b496e74490d0b8b610ded4cad2e6f49686106dcb4676c6558bf0a85f45c1'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

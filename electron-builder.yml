@@ -13,6 +13,9 @@ extraResources:
     to: resources/progress-seeds.json
   - from: resources/camera-stage
     to: resources/camera-stage
+  # 硬件解码能力检测用的极小测试视频（scripts/generate-hardware-probe-clips.cjs 生成）。
+  - from: resources/hardware-probe
+    to: resources/hardware-probe
   - from: resources/assistant-skills
     to: resources/assistant-skills
   - from: native/audio-worker/target/release/henji-audio-worker.exe

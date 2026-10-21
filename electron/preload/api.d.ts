@@ -33,6 +33,7 @@ import type { FontsPlatform } from '../../src/platform/contracts/fonts'
 import type { SmartRegionsPlatform } from '../../src/platform/contracts/smartRegions'
 import type { TrackingPlatform } from '../../src/platform/contracts/tracking'
 import type { VideoProxyPlatform } from '../../src/platform/contracts/videoProxy'
+import type { MediaCachePlatform } from '../../src/platform/contracts/mediaCache'
 import type { SceneDetectionPlatform } from '../../src/platform/contracts/sceneDetection'
 import type { ScreenRecordingPlatform } from '../../src/platform/contracts/screenRecording'
 import type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
@@ -99,6 +100,7 @@ export interface HenjiNativeApi {
   smartRegions: SmartRegionsPlatform
   tracking: TrackingPlatform
   videoProxy: VideoProxyPlatform
+  mediaCache: MediaCachePlatform
   sceneDetection: SceneDetectionPlatform
 }
 

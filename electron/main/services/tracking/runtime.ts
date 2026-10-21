@@ -1,9 +1,8 @@
 import fs from 'node:fs/promises'
 import { BrowserWindow } from 'electron'
 import { TRACKING_IPC_CHANNELS, type TrackingProgressEvent } from '../../../../src/platform/contracts/tracking'
-import { getProgramStoreDir } from '../appPaths'
 import { createMainLogger } from '../logging'
-import { createContentDiskCache } from '../media/content-disk-cache'
+import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { identifyMediaContent } from '../media/content-identity'
 import { ensureLocalModel } from '../local-models/runtime'
 import { executionProviderOrder } from '../local-inference/providers'
@@ -45,7 +44,7 @@ export function getTrackingService(): TrackingService {
     ensureModel: async id => (await ensureLocalModel(id)).files.filter(file => file.role === 'model').map(file => ({ name: file.name, path: file.path })),
     ffmpegPath: loadFfmpegPath,
     // 形状跟踪每帧约 5–15KB（压缩后），10 分钟约 100MB；超过 2GB 按最久未用清理。
-    results: createContentDiskCache({ directory: () => getProgramStoreDir('smartRegions'), extension: '.htrk', budgetBytes: 2 * 1024 ** 3, pruneIntervalMs: 60_000, onError: (event, error) => logger.warn('跟踪结果缓存操作失败', { event: `tracking.cache.${event}`, error }) }),
+    results: getMediaCacheManager().createCache('analysis', 'tracking', { extension: '.htrk', budgetBytes: 2 * 1024 ** 3, pruneIntervalMs: 60_000, onError: (event, error) => logger.warn('跟踪结果缓存操作失败', { event: `tracking.cache.${event}`, error }) }),
     track: (job, progress, frames) => inference.track(job, progress, frames),
     candidates: (job, frames) => inference.candidates(job, frames),
     cancel: id => inference.cancel(id),

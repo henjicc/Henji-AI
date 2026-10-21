@@ -205,7 +205,14 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.render_preference': spec.renderPreference } }] }))
     }
     // Idle automatic pre-rendering: from opening the project until the render bar has nothing left to render.
+    if (spec.mediaCacheSettings) await page.evaluate(value => window.henjiNative.mediaCache.setSettings(value), spec.mediaCacheSettings)
     if (spec.waitAutoRender) {
+      // Format "auto" follows the hardware detection: wait for it so every window is rendered with the final profile.
+      for (const deadline = performance.now() + 120_000; performance.now() < deadline;) {
+        const state = await page.evaluate(() => window.henjiNative.mediaCache.hardwareCapabilities())
+        if (!state.stale) { evidence.hardware = state.report; break }
+        await page.waitForTimeout(2000)
+      }
       const started = performance.now()
       evidence.autoRender = { samples: [] }
       for (;;) {
@@ -218,6 +225,16 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         assert.ok(performance.now() - started < 60 * 60 * 1000, '自动预渲染超过一小时仍未完成')
       }
       await capture('yoga-auto-rendered')
+      evidence.mediaCache = { usage: await page.evaluate(() => window.henjiNative.mediaCache.usage()), settings: await page.evaluate(() => window.henjiNative.mediaCache.getSettings()) }
+      // Keep the produced pre-render files for ffprobe (GOP, colour tags) and colour comparison against paused real-time frames.
+      if (spec.copyRenderFiles) {
+        const entries = await page.evaluate(id => window.henjiNative.mediaCache.renderList(id), created.documentId)
+        const folder = path.join(root, 'render-files'); fs.mkdirSync(folder, { recursive: true })
+        evidence.renderFiles = entries.sort((a, b) => a.startFrame - b.startFrame).slice(0, spec.copyRenderFiles).map(entry => {
+          const target = path.join(folder, `${entry.startFrame}-${entry.endFrame}.mp4`); fs.copyFileSync(entry.path, target)
+          return { startFrame: entry.startFrame, endFrame: entry.endFrame, profile: entry.profile, bytes: entry.bytes, file: target }
+        })
+      }
       save()
     }
     // Pre-render through the formal assistant capability, then wait until the render bar reports every requested window ready.
