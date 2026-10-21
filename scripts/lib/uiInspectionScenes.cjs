@@ -56,6 +56,7 @@ const { createVideoEditDockGesturesScene, createVideoEditPopoutScene } = require
 const { createVideoEditAgentLoopScene } = require('./uiInspectionSceneVideoEditAgentLoop.cjs')
 const { createVideoEditObservationScene } = require('./uiInspectionSceneVideoEditObservation.cjs')
 const { createVideoEditPerformanceScene } = require('./uiInspectionSceneVideoEditPerformance.cjs')
+const { createVideoEditTimeRemapScene } = require('./uiInspectionSceneVideoEditTimeRemap.cjs')
 const { createVideoEditCodeProjectScene } = require('./uiInspectionSceneVideoEditCodeProject.cjs')
 const { createVideoFramesScene } = require('./uiInspectionSceneVideoFrames.cjs')
 const { createVideoEditMediaProbeScene } = require('./uiInspectionSceneVideoEditMediaProbe.cjs')
@@ -190,6 +191,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditAgentLoopScene(),
     createVideoEditObservationScene(),
     createVideoEditPerformanceScene(),
+    createVideoEditTimeRemapScene(),
     createVideoEditCodeProjectScene(),
     createVideoEditCodeProjectScene({ controls: true }),
     createVideoFramesScene(),
