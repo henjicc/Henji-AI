@@ -186,6 +186,7 @@
     "effectUnavailable": "This effect cannot be added to the selected clips. Check clip types and track locks.",
     "canvasSaved": "Canvas saved. Check the existing nodes. You can undo in the canvas.",
     "sentToCanvas": "Sent to canvas. You can undo in the canvas.",
+    "musicRemixed": "Music remixed into {{segments}} segments ({{seams}} seams). Undo restores the original.",
     "sentToEdit": "Added to editing and saved. You can undo in the editing workspace.",
     "sendToEditFailed": "Could not add to editing: {{reason}}",
     "autoApprovedEstimate": "Executed under your automatic approval rule. Estimated cost: ¥{{amount}}",

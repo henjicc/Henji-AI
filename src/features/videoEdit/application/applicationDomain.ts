@@ -1,6 +1,8 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { placeVideoEditSoundEffectsCapability } from '@/core/application-control/domains/videoEdit/videoEditSoundEffectCapability'
 import { placeVideoEditSoundEffects } from './videoEditSoundEffects'
+import { remixVideoEditMusicCapability } from '@/core/application-control/domains/videoEdit/videoEditMusicRemixCapability'
+import { executeVideoEditMusicRemixCapability } from './videoEditMusicRemixCapability'
 import { executeVideoEditPrivacy } from './videoEditPrivacyCapability'
 import { CodeComponentCollectionExecutor } from './videoEditCodeComponentReflection'
 import { videoEditStaggerCapability } from '@/core/application-control/domains/videoEdit/videoEditStaggerCapability'
@@ -150,6 +152,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       }
       if (definition.id === analyzeVideoEditBeatsCapability.id) return executeVideoEditBeatCapability(analyzeVideoEditBeatsCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === placeVideoEditSoundEffectsCapability.id) return placeVideoEditSoundEffects(placeVideoEditSoundEffectsCapability.inputSchema.parse(raw), context.signal)
+      if (definition.id === remixVideoEditMusicCapability.id) return executeVideoEditMusicRemixCapability(remixVideoEditMusicCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === retryVideoEditSmartRegionCapability.id) return retryVideoEditSmartRegionFromCapability(raw, context.signal)
       const title = await handleTitleTemplateCapability(definition.id, raw, context.signal)
       if (title !== undefined) return title

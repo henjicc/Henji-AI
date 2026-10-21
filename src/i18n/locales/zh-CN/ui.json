@@ -186,6 +186,7 @@
     "effectUnavailable": "所选片段无法添加此效果，请检查片段类型和轨道锁定。",
     "canvasSaved": "画布已保存，请检查已有节点；可在画布中撤销。",
     "sentToCanvas": "已发送到画布，可在画布中撤销。",
+    "musicRemixed": "音乐已重构为 {{segments}} 段（{{seams}} 个接缝），可一步撤销。",
     "sentToEdit": "已加入剪辑并保存，可在剪辑中撤销。",
     "sendToEditFailed": "未能加入剪辑：{{reason}}",
     "autoApprovedEstimate": "已按自动同意规则执行，预计 ¥{{amount}}",

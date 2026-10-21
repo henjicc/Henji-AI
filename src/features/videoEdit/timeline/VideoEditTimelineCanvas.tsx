@@ -563,6 +563,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       onZoom={(frame, factor) => videoEditTimelineViewport(projectId, sequence.id)?.zoomAt(frame, factor)} />
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
     {menu.canvasDialog}
+    {menu.remixDialog}
     {trackMenu.elements}
     {clipSource.dialog}
     {inPlace.dialog}

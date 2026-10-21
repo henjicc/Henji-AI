@@ -1,6 +1,8 @@
 import { getVideoEditRenderPreference, readVideoEditRenderCache } from './videoEditRenderCache'
 import { videoEditCaptionClipIds } from '@/core/videoEdit/captionSpeech'
 import { readVideoEditMediaAudio, videoEditContentAudioProgress } from './videoEditContentAudio'
+import { readVideoEditMusicStructure } from './videoEditMusicRemix'
+import type { JsonValue } from '@/core/application-control/identifiers'
 import { createCodeComponentRegistration } from './videoEditCodeComponentReflection'
 import { createVideoEditExplanationRegistration } from './videoEditExplanationReflection'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
@@ -95,6 +97,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     const audio = readVideoEditMediaAudio(projectId, childId)
     data.audioAnalysis = audio ? { bpm: audio.bpm, beats: [...audio.beats], onsets: [...audio.onsets], beatsPerBar: audio.beatsPerBar, barOrigin: audio.barOrigin } : null
     data.proxyState = { ...readVideoEditProxyState(projectId, childId) }
+    data.musicStructure = JSON.parse(JSON.stringify(readVideoEditMusicStructure(projectId, childId) ?? null)) as JsonValue
     const source = instance.document.media.find(media => media.id === childId)?.recordingCursor
     data.recordingCursorMode = source ? source.cursorBakedIn ? 'clicks' : 'redraw' : 'unavailable'
     delete data.recordingCursor
