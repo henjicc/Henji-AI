@@ -14,7 +14,7 @@ it('动态识别会话跨批宽复用，线程配置参与键；固定形状与�
   expect(await pool.open(model, ['cpu'], 'dynamic', { intraOpNumThreads: 2 })).not.toBe(a)
   expect(await pool.open(model, ['cpu'], '128x48')).not.toBe(a)
   // 未指定线程数时不带这个键（原生绑定拒绝 undefined），跟踪、修补、音效分析都走这条。
-  expect(Object.keys(create.mock.lastCall![1] as object)).not.toContain('intraOpNumThreads')
+  expect(Object.keys((create.mock.lastCall as unknown as [string, object])[1])).not.toContain('intraOpNumThreads')
   expect(await pool.open(model, ['cpu'], 'dynamic', { intraOpNumThreads: 4, allowSpinning: false })).not.toBe(a)
   expect(create).toHaveBeenLastCalledWith('rec.onnx', expect.objectContaining({ extra: { session: { intra_op: { allow_spinning: '0' } } } }))
   await pool.dispose(); expect(release).toHaveBeenCalledTimes(4)
