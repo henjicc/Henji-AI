@@ -18,7 +18,7 @@ import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 
 const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0 }))
-const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
+const boundary = vi.hoisted(() => ({ pendingSchedule: undefined as Promise<void> | undefined, scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, failOffscreenClip: undefined as string | undefined, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[], warmed: [] as string[], protectedInstances: [] as string[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -76,7 +76,7 @@ vi.mock('./videoEditGpuCompositor', async () => {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
   }
-  async code() { return { inspectAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle), retainAuthorInstances: async () => undefined, observeAuthor: () => [], authorGenerator: async (_key: string, _instance: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) },
+  async code() { return { inspectAuthor: async (bundle: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorBundle) => testAuthorProgram(bundle), retainAuthorInstances: async () => undefined, observeAuthor: () => [], authorGenerator: async (_key: string, _instance: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) }, warmAuthor: async (key: string) => { boundary.warmed.push(key) }, protectAuthorInstances: (keys: ReadonlySet<string>) => { boundary.protectedInstances = [...keys] },
     target: async (_key: string, width: number, height: number) => target(width, height), releaseNestedFrames: vi.fn(),
     builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
@@ -102,7 +102,7 @@ beforeEach(() => {
   boundary.pendingSchedule = undefined; boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.failOffscreenClip = undefined; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
-  boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []
+  boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []; boundary.warmed = []; boundary.protectedInstances = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
 })
@@ -651,6 +651,23 @@ it('可见原视频和代码画面走同一合成，静态变换修改复用纹�
     await renderer.render(70); expect(boundary.released.at(-1)).toEqual([])
   } finally { await renderer.dispose() }
   expect(boundary.compilerDisposed).toBe(1)
+})
+it('播放头前方的代码片段提前编译并画一帧不显示的预热画面，实例保留到进入片段，不打断当前帧', async () => {
+  const document = mixedFixture(); document.clips[1] = { ...document.clips[1], start: 90, duration: 60 }
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    await (await renderer.render(0, true)).completion
+    expect(boundary.compilerCalls).toBe(0)
+    expect(renderer.upcomingCodeStart(0, 60, new Set())).toBeUndefined()
+    const upcoming = renderer.upcomingCodeStart(40, 60, new Set())!
+    expect(upcoming.frame).toBe(90)
+    expect(renderer.upcomingCodeStart(40, 60, new Set([upcoming.key]))).toBeUndefined()
+    expect(await renderer.warmAhead(upcoming.frame, new AbortController().signal)).toEqual(['code-clip'])
+    expect(boundary.compilerCalls).toBe(1); expect(boundary.warmed).toEqual(['code-clip']); expect(boundary.protectedInstances).toEqual(['code-clip'])
+    // Entering the clip reuses the compiled program: no second compilation on the boundary frame.
+    await (await renderer.render(90, true)).completion
+    expect(boundary.compilerCalls).toBe(1); expect(boundary.generatorCalls).toBe(1)
+  } finally { await renderer.dispose() }
 })
 it('完全透明的代码片段不激活源码，隐藏后释放目标且恢复复用已检查program', async () => {
   const document = mixedFixture(); document.clips[1].opacity = 0

@@ -546,7 +546,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (pipelined) { playbackInFlight++; unsubmitted++; queuedFrame = Math.max(queuedFrame, target) }
           let submitted = false
           const presentation = renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
-            if (pipelined) { submitted = true; unsubmitted--; submittedFrame = Math.max(submittedFrame, target); if (playbackInFlight >= 3 || unsubmitted >= 1) return }
+            if (pipelined) { submitted = true; unsubmitted--; submittedFrame = Math.max(submittedFrame, target); if (playbackInFlight >= 3 || unsubmitted >= 2) return }
             if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
           } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing).finally(() => { if (pipelined) { playbackInFlight--; if (!submitted) unsubmitted-- } })
           // Three frames in flight: while this one waits for its refresh in the Worker, the next one is already queued

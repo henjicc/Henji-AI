@@ -209,8 +209,8 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
       [right.id, boundary.picture('right-raw', [0, 0, 1, 1])], [caption.id, boundary.picture('caption-raw', [0, .1, 0, .2])]])
     const result = await renderVideoEditCompositeScene(document, nodes, pictures, new Map(), boundary.compositor, 60, () => true)
     await result.completion
-    expect(boundary.mixes).toHaveLength(1); expect(boundary.mixes[0].amount).toBe(.5)
-    expectPixel(boundary.mixes[0].output, [.25, 0, .125, .375]); expectPixel(boundary.canvas(), [.2, .2, .1, 1])
+    expect(boundary.mixes).toHaveLength(1); expect(boundary.mixes[0].amount).toBe(.4)
+    expectPixel(boundary.mixes[0].output, [.3, 0, .1, .4]); expectPixel(boundary.canvas(), [.24, .196, .08, 1])
     expect(boundary.draws.filter(value => value.target).map(value => value.clips)).toEqual([[left], [right]])
     expect(boundary.draws.at(-1)!.clips.map(value => value.id)).toEqual(['lower', 'left', 'caption'])
     expect(boundary.draws.at(-1)!.inputKeys).toEqual(['lower-raw', 'composite:transition:dissolve', 'caption-raw'])
@@ -227,7 +227,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     expect(boundary.filters[0]).toMatchObject({ info: rightEffect.info, parameters: { gain: .75 } })
     expect(boundary.filters[0].info.clip.time).toBe(-1 / 60)
     expect(boundary.filters[0].info.time).toBeCloseTo(1 - 1 / 60, 12)
-    expectPixel(boundary.mixes[0].output, [.75, 0, .125, .875]); expectPixel(boundary.canvas(), [.75, 0, .125, 1])
+    expectPixel(boundary.mixes[0].output, [.8, 0, .1, .9]); expectPixel(boundary.canvas(), [.8, 0, .1, 1])
     expect(reserved.size).toBe(5); expect(boundary.commits()).toBe(1)
   })
   it('取消发生在离屏/filter之后时拒绝最终canvas提交，初始取消不分配任何目标', async () => {
@@ -267,6 +267,6 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     const pictures = new Map([[left.id, boundary.picture('ten-bit', [1, 0, 0, 1], 3840, 2160, 'rgba16float')], [right.id, boundary.picture('eight-bit', [0, 0, 1, 1])]])
     await (await renderVideoEditCompositeScene(document, nodes, pictures, new Map(), boundary.compositor, 60, () => true)).completion
     expect(boundary.formats.get('composite:clip:left:0')).toBe('rgba16float'); expect(boundary.formats.get('composite:clip:right:0')).toBe('rgba8unorm')
-    expectPixel(boundary.canvas(), [.5, 0, .5, 1])
+    expectPixel(boundary.canvas(), [.6, 0, .4, 1])
   })
 })

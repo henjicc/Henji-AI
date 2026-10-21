@@ -7,7 +7,7 @@ import { getPlatform } from '@/platform/runtime'
 import { fontLibrarySnapshot } from '@/platform/fonts'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
-import { getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
+import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
 import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTracking'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
 
@@ -19,13 +19,69 @@ import { videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './video
 const logger = createLogger('features.videoEdit.renderCache')
 /** 预览文件码率：4K60 H.264 下肉眼看不出与实时合成的差别，又不至于占满磁盘（30 秒约 300MB）。 */
 const RENDER_CACHE_BITRATE_MBPS = 80
+/** 自动预渲染：编辑停下这么久、且没有播放、拖动或导出时才开始。 */
+const AUTO_RENDER_IDLE_MS = 3000
+const AUTO_RENDER_RETRY_MS = 30_000
+
+export interface VideoEditRenderPreference { autoRender: boolean }
+const preferenceSchema = z.object({ autoRender: z.boolean() }).strict()
+const preferences = new Map<string, VideoEditRenderPreference>()
+/** 预渲染偏好，本机按剪辑记住；默认自动渲染。 */
+export function getVideoEditRenderPreference(projectId: string): VideoEditRenderPreference {
+  let value = preferences.get(projectId)
+  if (!value) {
+    try { value = preferenceSchema.parse(JSON.parse(localStorage.getItem(`videoEdit.renderPreference.${projectId}`) ?? 'null')) } catch { value = { autoRender: true } }
+    preferences.set(projectId, value)
+  }
+  return { ...value }
+}
+export function setVideoEditRenderPreference(projectId: string, next: VideoEditRenderPreference): void {
+  requireVideoEditInstance(projectId)
+  const value = preferenceSchema.parse(next)
+  preferences.set(projectId, value)
+  try { localStorage.setItem(`videoEdit.renderPreference.${projectId}`, JSON.stringify(value)) } catch (error) { logger.warn('预渲染偏好未保存', { event: 'video_edit.render_cache.preference_failed', error }) }
+  if (!value.autoRender) for (const instance of listVideoEditInstances()) if (instance.document.id === projectId) autoState.get(instance)?.controller?.abort(new DOMException('已关闭自动预渲染。', 'AbortError'))
+  publishVideoEdit()
+}
 
 const entrySchema = z.object({ key: z.string(), sequenceId: z.string(), file: z.string(), startFrame: z.number().int(), endFrame: z.number().int(), width: z.number().int(), height: z.number().int(), fps: z.number(), bytes: z.number() }).strict()
 const indexSchema = z.object({ version: z.literal(VIDEO_EDIT_RENDER_CACHE_VERSION), entries: z.array(entrySchema) }).strict()
 type Entry = z.infer<typeof entrySchema>
 interface ProjectCache { directory: string; entries: Map<string, Entry & { path: string }> }
 const caches = new Map<string, Promise<ProjectCache>>()
-interface Job { sequenceId: string; controller: AbortController; total: number; done: number; current?: string }
+interface Job { sequenceId: string; controller: AbortController; total: number; done: number; current?: string; auto: boolean }
+/** Per open project: the content an automatic render belongs to and when it last changed. */
+const autoState = new WeakMap<VideoEditInstance, { content: string; changedAt: number; controller?: AbortController }>()
+let autoTimer: ReturnType<typeof setInterval> | undefined
+/** Starts watching open projects for idle time (once, when a program monitor first reads its cache). */
+function ensureAutoRender(): void {
+  if (autoTimer) return
+  autoTimer = setInterval(() => {
+    const now = performance.now()
+    for (const instance of listVideoEditInstances()) {
+      const projectId = instance.document.id
+      const content = `${instance.activeSequenceId}\u0000${instance.document.revision}`
+      let state = autoState.get(instance)
+      if (!state) { state = { content, changedAt: now }; autoState.set(instance, state) }
+      // An edit makes windows rendered from the old content useless: stop the automatic job and wait for quiet again.
+      if (state.content !== content) { state.content = content; state.changedAt = now; state.controller?.abort(new DOMException('剪辑内容已改变。', 'AbortError')) }
+      if (!getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || jobs.get(instance) || !instance.activeSequenceId) continue
+      if (instance.playing || instance.scrubbing || instance.busy || now - state.changedAt < AUTO_RENDER_IDLE_MS) continue
+      let view: VideoEditRenderCacheView
+      try { view = readVideoEditRenderCache(projectId) } catch { continue }
+      if (!view.needsRenderFrames) continue
+      const controller = new AbortController(); state.controller = controller
+      void renderVideoEditRenderCache(projectId, { scope: 'needed', aroundFrame: instance.frame, auto: true }, controller.signal)
+        .catch(error => {
+          if (controller.signal.aborted) return
+          // A failing render (missing media, device lost) waits half a minute instead of retrying every tick.
+          state!.changedAt = performance.now() + AUTO_RENDER_RETRY_MS - AUTO_RENDER_IDLE_MS
+          logger.warn('自动预渲染未完成，稍后重试', { event: 'video_edit.render_cache.auto_failed', error, context: { projectId } })
+        })
+    }
+    if (!listVideoEditInstances().length) { clearInterval(autoTimer); autoTimer = undefined }
+  }, 1000)
+}
 const jobs = new WeakMap<VideoEditInstance, Job>()
 
 export type VideoEditRenderWindowState = 'ready' | 'rendering' | 'needs_render' | 'realtime'
@@ -81,6 +137,7 @@ const loaded = new Map<string, ProjectCache>()
 /** 已加载的项目缓存（同步读取用）；节目监视器打开时触发加载，完成后通知界面。 */
 function loadedCache(projectId: string, load = false): ProjectCache | undefined {
   const cache = loaded.get(projectId)
+  if (load) ensureAutoRender()
   if (!cache && load) void cacheOf(projectId).then(value => { if (!loaded.has(projectId)) { loaded.set(projectId, value); publishVideoEdit() } }, error => logger.warn('预渲染缓存读取失败', { event: 'video_edit.render_cache.load_failed', error, context: { projectId } }))
   return cache
 }
@@ -98,7 +155,9 @@ export function readyVideoEditRenderWindows(projectId: string, composition: Vide
 /** 渲染条的状态：已渲染、正在渲染、需要渲染（吃力且未渲染）、实时。 */
 export function readVideoEditRenderCache(projectId: string, sequenceId?: string): VideoEditRenderCacheView {
   const instance = requireVideoEditInstance(projectId)
-  const composition = getActiveVideoEditSequence(instance)
+  // An empty project has nothing to render.
+  const composition = findActiveVideoEditSequence(instance)
+  if (!composition) return { windows: [], readyFrames: 0, needsRenderFrames: 0, totalFrames: 0, rendering: null }
   if (sequenceId && sequenceId !== composition.id) throw new Error('只能读取当前序列的渲染状态，请先切换到该序列。')
   const cache = loadedCache(projectId)
   const job = jobs.get(instance)
@@ -110,7 +169,13 @@ export function readVideoEditRenderCache(projectId: string, sequenceId?: string)
 
 export function cancelVideoEditRenderCache(projectId: string): void { jobs.get(requireVideoEditInstance(projectId))?.controller.abort(new DOMException('预渲染已取消。', 'AbortError')) }
 
-export interface VideoEditRenderCacheRequest { range?: { startFrame: number; endFrame: number }; scope: 'needed' | 'all' }
+export interface VideoEditRenderCacheRequest {
+  range?: { startFrame: number; endFrame: number }; scope: 'needed' | 'all'
+  /** Render the window under this frame first, then the following ones, then the earlier ones. */
+  aroundFrame?: number
+  /** Started by the idle scheduler rather than the user or the assistant. */
+  auto?: boolean
+}
 export interface VideoEditRenderCacheResult { renderedWindows: number; readyFrames: number; requestedFrames: number; cancelled: boolean }
 
 /**
@@ -119,13 +184,18 @@ export interface VideoEditRenderCacheResult { renderedWindows: number; readyFram
  */
 export async function renderVideoEditRenderCache(projectId: string, request: VideoEditRenderCacheRequest, signal?: AbortSignal, onStarted?: (plan: { pendingWindows: number; requestedFrames: number; readyFrames: number }) => void): Promise<VideoEditRenderCacheResult> {
   const instance = requireVideoEditInstance(projectId)
-  if (jobs.get(instance)) throw new Error('该剪辑正在预渲染，请等待完成或先取消。')
+  const running = jobs.get(instance)
+  if (running && !running.auto) throw new Error('该剪辑正在预渲染，请等待完成或先取消。')
+  // A user or assistant request replaces the idle job (its finished windows stay ready).
+  if (running) { running.controller.abort(new DOMException('改为按请求预渲染。', 'AbortError')); while (jobs.get(instance)) await new Promise(resolve => setTimeout(resolve, 20)) }
   const composition = getActiveVideoEditSequence(instance)
   const cache = await cacheOf(projectId); loaded.set(projectId, cache)
   const range = request.range ?? { startFrame: 0, endFrame: Number.MAX_SAFE_INTEGER }
   const windows = videoEditRenderCacheWindows(composition).filter(window => window.endFrame > range.startFrame && window.startFrame < range.endFrame && (request.scope === 'all' || window.heavy))
+  const around = request.aroundFrame
   const pending = windows.filter(window => !cache.entries.has(window.key))
-  const job: Job = { sequenceId: composition.id, controller: new AbortController(), total: pending.length, done: 0 }
+    .sort((a, b) => around === undefined ? a.startFrame - b.startFrame : (a.endFrame <= around ? 1 : 0) - (b.endFrame <= around ? 1 : 0) || (a.endFrame <= around ? b.startFrame - a.startFrame : a.startFrame - b.startFrame))
+  const job: Job = { sequenceId: composition.id, controller: new AbortController(), total: pending.length, done: 0, auto: request.auto === true }
   const abort = (): void => job.controller.abort(signal?.reason)
   signal?.addEventListener('abort', abort, { once: true })
   if (signal?.aborted) abort()
@@ -134,7 +204,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   const platform = getPlatform()
   let session: VideoEditRenderSession | undefined
   const started = performance.now()
-  logger.info('开始预渲染', { event: 'video_edit.render_cache.start', context: { projectId, sequenceId: composition.id, windows: pending.length } })
+  logger.info('开始预渲染', { event: 'video_edit.render_cache.start', context: { projectId, sequenceId: composition.id, windows: pending.length, auto: job.auto } })
   try {
     // Windows of this sequence that no longer match its content are never played again.
     const current = new Set(videoEditRenderCacheWindows(composition).map(window => window.key))
@@ -161,8 +231,8 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
         output.addVideoTrack(video, { frameRate: composition.fps })
         await output.start()
         for (let frame = window.startFrame; frame < window.endFrame; frame++) {
-          // Playing the program takes the GPU: wait instead of competing with it.
-          while (instance.playing && !job.controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 100))
+          // Playing, scrubbing and exporting take the GPU: wait instead of competing with them.
+          while ((instance.playing || instance.scrubbing || instance.busy) && !job.controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 100))
           job.controller.signal.throwIfAborted()
           await session!.render(frame, true)
           await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps)

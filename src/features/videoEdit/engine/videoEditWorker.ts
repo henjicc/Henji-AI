@@ -102,6 +102,25 @@ function preopenMedia(request: Extract<RenderRequest, { kind: 'preopen' }>): voi
   preopenTimer = setTimeout(releasePreopened, 2000)
 }
 let effectWarnings = new Set<string>()
+/** Code clips the program playback reaches within this many seconds are prepared ahead, outside the render queue. */
+const WARM_AHEAD_SECONDS = 3
+let warmingAhead: AbortController | undefined
+const warmedAhead = new Set<string>()
+function warmUpcomingCode(frame: number): void {
+  if (!renderer || warmingAhead || !direct) return
+  // Speculative: a failure here never fails the frame that triggered it.
+  let upcoming: ReturnType<VideoEditRenderer['upcomingCodeStart']>
+  try { upcoming = renderer.upcomingCodeStart(frame, Math.ceil(renderer.document.fps * WARM_AHEAD_SECONDS), warmedAhead) } catch { return }
+  if (!upcoming) return
+  warmedAhead.add(upcoming.key)
+  const controller = new AbortController(); warmingAhead = controller
+  const started = performance.now()
+  const target = upcoming
+  void Promise.resolve().then(() => renderer!.warmAhead(target.frame, controller.signal))
+    .then(keys => { if (keys.length) log('debug', '代码片段已提前准备', 'video_edit.code.warm_ahead.completed', { frame: target.frame, instances: keys.length, durationMs: Math.round(performance.now() - started) }) },
+      error => log('debug', '代码片段提前准备未完成', 'video_edit.code.warm_ahead.failed', { frame: target.frame, reason: String(error) }))
+    .finally(() => { if (warmingAhead === controller) warmingAhead = undefined })
+}
 const proxies = new Map<string, VideoProxyResult>()
 function setProxies(values: Record<string, VideoProxyResult> | undefined): void { proxies.clear(); for (const [id, result] of Object.entries(values ?? {})) proxies.set(id, result) }
 const localPaths = new Map<string, string>()
@@ -154,7 +173,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
   const request = event.data
   const receivedAt = performance.now()
   if (request.kind === 'init') enableVideoEditFrameTrace(request.traceFrames === true)
-  if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'fonts'].includes(request.kind)) contentWarmup.cancel()
+  if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'fonts'].includes(request.kind)) { contentWarmup.cancel(); warmingAhead?.abort(); warmingAhead = undefined; if (request.kind !== 'parameters') warmedAhead.clear() }
   if (request.kind === 'render') contentWarmup.defer()
   if (request.kind === 'preopen') { preopenMedia(request); return }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
@@ -232,6 +251,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         const readCodePerformance = renderer.captureCodePerformance()
         const authorElements = request.observeElements && result.presented ? renderer.observeAuthorElements(request.frame) : undefined
         traceVideoEditFrame('worker.render', request.frame, renderStarted)
+        if (request.sequential) warmUpcomingCode(request.frame)
         const finish = async (): Promise<void> => {
           const owned = new Set<ImageBitmap>()
           try {
@@ -273,7 +293,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         await renderer.prepareGpu(); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'arm') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
-        await renderer.armPlayback(request.frame); self.postMessage({ id: request.id } satisfies RenderResponse)
+        await renderer.armPlayback(request.frame); warmUpcomingCode(request.frame); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'scale') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         renderer.setRenderDivisor(request.divisor); self.postMessage({ id: request.id } satisfies RenderResponse)

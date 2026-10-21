@@ -9,6 +9,8 @@ import { authorEffectMetadata } from './videoEditAuthorParameters'
 export class VideoEditAuthorPrograms {
   private readonly modules = new Map<CodeAuthorBundle, { url: string; module: Promise<AuthorModule> }>()
   private readonly instances = new Map<string, { program: CodeAuthorProgram; runtime: VideoEditAuthorRuntime }>()
+  /** Instances warmed ahead of the playhead: kept until their clip is drawn, even while no current frame uses them. */
+  private protectedKeys: ReadonlySet<string> = new Set()
   private closed = false
   private lifecycle: Promise<unknown> = Promise.resolve()
   private closing?: Promise<void>
@@ -67,8 +69,10 @@ export class VideoEditAuthorPrograms {
 
   observe(key: string): ReturnType<VideoEditAuthorRuntime['observeElements']> { return this.instances.get(key)?.runtime.observeElements() ?? [] }
 
+  protect(keys: ReadonlySet<string>): void { this.protectedKeys = new Set(keys) }
+
   retain(keys: ReadonlySet<string>): Promise<void> {
-    const retained = new Set(keys)
+    const retained = new Set([...keys, ...this.protectedKeys])
     return this.enqueue(() => this.releaseInstances(retained))
   }
 

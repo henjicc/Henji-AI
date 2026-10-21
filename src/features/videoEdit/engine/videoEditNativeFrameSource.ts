@@ -355,7 +355,10 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     if (this.sessions >= limit) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
     this.sessions++
     try {
-      const info = await this.options.channel.call('openDecoder', { path, purpose })
+      // Pre-rendered preview files (8-bit H.264, NV12 slots) keep a deeper decoded queue: opening the next file's decoder
+      // briefly stalls decoding, and 16 ready pictures (267ms at 60fps) cover it without a dropped frame.
+      const deep = purpose === 'playback' && media.id.startsWith('render-cache:')
+      const info = await this.options.channel.call('openDecoder', { path, purpose, ...(deep ? { poolSize: 16 } : {}) })
       return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions-- })
     } catch (error) { this.sessions--; throw videoEditNativeOpenFailure(media.name, error) }
   }

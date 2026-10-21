@@ -162,6 +162,48 @@ export class VideoEditRenderer {
     if (!this.compositor) { this.compositor = this.nestedOwner?.compositor?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs)); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
     return this.compositor!
   }
+  /** Image media decoded ahead for code clips about to start; kept until those clips draw them (or the warm-up expires). */
+  private readonly warmImages = new Set<string>()
+  private warmImagesTimer?: ReturnType<typeof setTimeout>
+  /**
+   * The first frame of a top-level code clip or code effect starting in (frame, frame + within], not in `skip`.
+   * Program playback warms it ahead (`warmAhead`) so entering the clip does not stall.
+   */
+  upcomingCodeStart(frame: number, within: number, skip: ReadonlySet<string>): { frame: number; key: string } | undefined {
+    if (!this.previewWidth || this.nestedOwner) return undefined
+    const visible = videoEditVisibleTracks(this.document)
+    let best: { frame: number; key: string } | undefined
+    for (const clip of this.document.clips) {
+      if (clip.start <= frame || clip.start > frame + within || !visible.has(clip.track) || !(clip.kind === 'code' || activeVideoEditEffects(clip).some(effect => effect.code))) continue
+      // Prerendered: playback draws the cache file there, the clip itself never runs.
+      if (this.cachedWindow(clip.start)) continue
+      const key = `${this.document.revision}:${clip.id}`
+      if (!skip.has(key) && (!best || clip.start < best.frame)) best = { frame: clip.start, key }
+    }
+    return best
+  }
+  /** Compiles and draws one discarded frame of the code clips starting at `frame`, concurrently with playback. */
+  async warmAhead(frame: number, signal: AbortSignal): Promise<string[]> {
+    if (this.disposed || !this.previewWidth || this.nestedOwner) return []
+    const document = this.document
+    const clips = activeVideoEditClips(document, frame).filter(clip => clip.kind === 'code' || activeVideoEditEffects(clip).some(effect => effect.code))
+    if (!clips.length) return []
+    const compositor = this.ensureCompositor()
+    const { VideoEditCodeSources } = await import('./videoEditCodeSources')
+    if (this.disposed || this.document !== document || signal.aborted) return []
+    this.codeSources ??= new VideoEditCodeSources(document, () => compositor.code())
+    const images = new Map<string, ImageBitmap>()
+    for (const id of new Set(clips.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)])]))) {
+      const media = document.media.find(value => value.id === id && value.kind === 'image')
+      if (!media) continue
+      this.warmImages.add(id)
+      images.set(id, await this.image(media))
+    }
+    clearTimeout(this.warmImagesTimer)
+    this.warmImagesTimer = setTimeout(() => this.warmImages.clear(), 10_000)
+    if (this.disposed || this.document !== document || signal.aborted) return []
+    return this.codeSources.warmAhead(document, clips, frame, videoEditRenderSize(document.width, document.height, this.renderDivisor), images, signal)
+  }
   /** Only devices/pipelines: no project media, render targets or sound are opened during workspace warmup. */
   async prepareGpu(): Promise<void> { await this.ensureCompositor().prepare() }
   async renderAuthorFrame(...args: Parameters<VideoEditGpuCompositor['renderAuthorFrame']>): ReturnType<VideoEditGpuCompositor['renderAuthorFrame']> {
@@ -729,7 +771,8 @@ export class VideoEditRenderer {
       return media
     }).filter(media => media.kind === 'image')
     if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > 256 * 1024 ** 2) throw new Error('可见图片超过32份或256MiB预算，请减少同时显示的图片。')
-    for (const id of this.images.keys()) if (!imageIds.has(id)) this.releaseImage(id)
+    for (const id of imageIds) this.warmImages.delete(id)
+    for (const id of this.images.keys()) if (!imageIds.has(id) && !this.warmImages.has(id)) this.releaseImage(id)
     const imagesReady = (async () => {
       const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)))
       for (const [key, picture] of await this.prepareCodeInputs(sourceDocument, active, frame, sequential, quality, canPresent, nestedContext, path)) inputs.set(key, picture)
@@ -924,7 +967,7 @@ export class VideoEditRenderer {
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {
       this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source)
     }
-    const activeImages = new Set(canPresent() ? imageIds : this.images.keys())
+    const activeImages = new Set(canPresent() ? [...imageIds, ...this.warmImages] : this.images.keys())
     for (const key of this.images.keys()) if (!activeImages.has(key)) this.releaseImage(key)
     const activePaths = new Set(canPresent() ? active.map(clip => this.clipMedia(document, clip)?.path) : this.seekers.keys())
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }

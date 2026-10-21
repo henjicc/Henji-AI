@@ -52,6 +52,8 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       return { projectId: project.id, documentId: id, file: result.meta.path, projectPath: project.path }
     }, { model, emptyContent, packages: prepared.packages })
     evidence.project = created; save()
+    // The idle scheduler may start as soon as the program opens: apply the preference before opening the project.
+    if (spec.renderPreference) await page.evaluate(({ id, value }) => localStorage.setItem(`videoEdit.renderPreference.${id}`, JSON.stringify(value)), { id: created.documentId, value: spec.renderPreference })
     if (spec.playFullTimeline || spec.playbackRanges) await observeWorkers(page)
     try { await openVideoEditProjectCard(page, created.projectId) } catch (error) {
       await capture('yoga-open-failed')
@@ -197,6 +199,27 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       }] }))
     }
     const presentedFrame = async () => Number(await page.locator('canvas[aria-label="剪辑画面"]').getAttribute('data-presented-frame'))
+    if (spec.renderPreference) {
+      const baseline = await callTool(client, 'read_application_entity', { ref: documentRef })
+      await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '设置自动预渲染', changes: [{
+        kind: 'set_properties', entityType: documentRef.kind, target: documentRef, properties: { 'video_edit.document.render_preference': spec.renderPreference } }] }))
+    }
+    // Idle automatic pre-rendering: from opening the project until the render bar has nothing left to render.
+    if (spec.waitAutoRender) {
+      const started = performance.now()
+      evidence.autoRender = { samples: [] }
+      for (;;) {
+        await page.waitForTimeout(5000)
+        const read = await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['video_edit.document.render_cache'] })
+        const cache = read.data.properties['video_edit.document.render_cache']
+        const sample = { elapsedMs: Math.round(performance.now() - started), rendering: cache.rendering, readyFrames: cache.readyFrames, needsRenderFrames: cache.needsRenderFrames, totalFrames: cache.totalFrames }
+        evidence.autoRender.samples.push(sample); save()
+        if (!cache.rendering && cache.needsRenderFrames === 0) { evidence.autoRender.final = { ...sample, windows: cache.windows }; break }
+        assert.ok(performance.now() - started < 60 * 60 * 1000, '自动预渲染超过一小时仍未完成')
+      }
+      await capture('yoga-auto-rendered')
+      save()
+    }
     // Pre-render through the formal assistant capability, then wait until the render bar reports every requested window ready.
     if (spec.prerender) {
       const started = performance.now()
@@ -266,8 +289,11 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
           properties: { 'video_edit.document.playback_resolution': { resolution: spec.playbackResolution, fullWhenPaused: true } },
         }] }))
       }
+      evidence.fullPlaybackRuns = []
+      for (let run = 0; run < (spec.fullPlaybackRuns ?? 1); run++) {
       await playback(0)
       await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0')
+      await page.waitForTimeout(spec.playbackSettleMs ?? 0)
       await page.evaluate(() => {
         window.__videoLayoutEvidence.frames.length = 0
         window.__videoLayoutEvidence.events.length = 0
@@ -288,7 +314,7 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
       }
       const elapsedMs = performance.now() - started
       const trace = await workerSnapshot(page)
-      fs.writeFileSync(path.join(root, 'playback-trace.json'), JSON.stringify(trace))
+      fs.writeFileSync(path.join(root, run ? `playback-trace-${run}.json` : 'playback-trace.json'), JSON.stringify(trace))
       const frames = trace.frames.filter((value, index, all) => !value.initial && Number.isFinite(value.frame) && value.frame !== all[index - 1]?.frame)
       let skippedFrames = 0
       for (let i = 1; i < frames.length; i++) skippedFrames += Math.max(0, frames[i].frame - frames[i - 1].frame - 1)
@@ -298,8 +324,10 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
         lastPresentedFrame: frames.at(-1)?.frame, renderErrors: trace.events.filter(value => value.error),
         noSkippedFrames: skippedFrames === 0 && frames.length >= endFrame - 1,
         completedPlayback, realTimePass: completedPlayback && elapsedMs <= endFrame / 60 * 1000 + 1000 }
+      evidence.fullPlaybackRuns.push({ ...evidence.fullPlayback.stats, droppedFrames: evidence.fullPlayback.droppedFrames, renderErrors: evidence.fullPlayback.renderErrors.length })
       save()
       await playback(Math.min(endFrame - 1, frames.at(-1)?.frame ?? 0), false)
+      }
       if (!spec.collectDifferences) assert.ok(evidence.fullPlayback.noSkippedFrames && evidence.fullPlayback.realTimePass
         && evidence.fullPlayback.renderErrors.length === 0, '完整播放未通过实时无跳帧验收')
     }

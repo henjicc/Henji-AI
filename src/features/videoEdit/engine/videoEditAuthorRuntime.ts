@@ -64,7 +64,14 @@ export class VideoEditAuthorRuntime {
       return [{ ...observeAuthorElement(this.effect, sourceSpan ? { ...layer, sourceSpan } : layer, index, bounds, override ? authorOverrideMatrix(matrix, bounds, override) : matrix, frame.parameters), baseMatrix: matrix, baseOpacity: pose.opacity ?? 1, opacity: (pose.opacity ?? 1) * (override?.opacity ?? 1) }]
     })
   }
-  async render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
+  private renders: Promise<unknown> = Promise.resolve()
+  /** One frame at a time per instance: a warm-up ahead of the playhead and a visible frame never share surfaces. */
+  render(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
+    const result = this.renders.then(() => this.renderFrame(target, width, height, params, assets, info, overrides, inputs))
+    this.renders = result.catch(() => undefined)
+    return result
+  }
+  private async renderFrame(target: GpuTexture, width: number, height: number, params: AuthorParameters, assets: AuthorAssets, info: AuthorFrameInfo, overrides?: AuthorElementOverrides, inputs?: AuthorGpuInputs): Promise<void> {
     if (this.closed) throw new Error('代码效果会话已关闭。')
     const frameImages: ImageBitmap[] = []
     try {
@@ -78,7 +85,7 @@ export class VideoEditAuthorRuntime {
           this.textures.add(texture); this.nativeOverrideTarget = { texture, width, height }
         }
         const picture = this.nativeOverrideTarget.texture
-        await this.render(picture, width, height, params, assets, info, undefined, inputs)
+        await this.renderFrame(picture, width, height, params, assets, info, undefined, inputs)
         await this.layers.begin(target)
         const samples = authorLayerSamples(whole, this.effect, info, { x: 0, y: 0, width, height }, overrides[AUTHOR_WHOLE_EFFECT_ID])
         this.layers.draw(target, width, height, { texture: picture, x: 0, y: 0, width, height }, samples)
