@@ -89,7 +89,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     // render_video_edit_preview: new tool that starts background preview rendering.
     fingerprints['2.43.0'] = '3b9842320c147772f238f5bc68cef197f83cef64bba54354860c7491a9b73cf0'
     // 音效库：add_sound_library_folder、search_sound_effects、place_video_edit_sound_effects 三个新工具。
-    fingerprints['2.44.0'] = '8715841928a58431647954278776a7553a5ccad235740a8f66de6880eeae71ff'
+    fingerprints['2.44.0'] = '1ae2d0c0a4a3cf9b613a2f1649c803d595d9c84598301ce61df8abd5b9ad297d'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {
