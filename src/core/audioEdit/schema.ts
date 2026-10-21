@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { audioEditGainRegionsSchema, audioEditRepairsSchema } from './regions'
 
 const frame = z.number().int().nonnegative()
 export const audioEditFrameRateSchema = z.object({ numerator: z.number().int().positive(), denominator: z.number().int().positive() }).strict()
@@ -20,13 +21,18 @@ export const audioEditProjectSchema = z.object({
   suggestions: suggestionsSchema,
   editBaseline: z.object({ kind: z.enum(['original', 'legacy']), transcript: transcriptSchema, suggestions: suggestionsSchema }).strict().optional(),
   cuts: audioEditCutsSchema.optional(),
+  gainRegions: audioEditGainRegionsSchema.optional(), repairs: audioEditRepairsSchema.optional(),
   viewSettings: audioEditViewSettingsSchema.optional(),
   batchSettings: audioEditSettingsSchema.optional(), processorChain: audioEditProcessorChainSchema.optional(), xmlFrameRate: audioEditFrameRateSchema.optional(),
   vstEnabled: z.boolean(), selectedAsrModelId: z.string().optional(), createdAt: frame, updatedAt: frame, revision: frame,
 }).strict().superRefine((project, context) => {
-  for (const range of [...project.transcript, ...(project.editBaseline?.transcript ?? []), ...(project.cuts ?? [])]) {
+  for (const range of [...project.transcript, ...(project.editBaseline?.transcript ?? []), ...(project.cuts ?? []), ...(project.gainRegions ?? []), ...(project.repairs ?? [])]) {
     if (range.endFrame <= range.startFrame || range.endFrame > project.source.durationFrames) context.addIssue({ code: 'custom', message: '剪辑范围超出音频或时长为零' })
   }
+  for (const regions of [project.gainRegions ?? [], project.repairs ?? []]) {
+    if (new Set(regions.map(r => r.id)).size !== regions.length) context.addIssue({ code: 'custom', message: '区域引用重复' })
+  }
+  for (const repair of project.repairs ?? []) if (repair.highHz > project.source.sampleRate / 2) context.addIssue({ code: 'custom', message: '修复频率不能高于采样率的一半' })
   if (new Set((project.cuts ?? []).map((cut) => cut.id)).size !== (project.cuts ?? []).length) context.addIssue({ code: 'custom', message: '裁切引用重复' })
   if (new Set(project.transcript.map((block) => block.id)).size !== project.transcript.length) context.addIssue({ code: 'custom', message: '词块引用重复' })
 })

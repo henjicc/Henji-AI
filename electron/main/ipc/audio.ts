@@ -1,3 +1,7 @@
+import { z } from 'zod'
+import { audioEditSpectrogramRequestSchema } from '../../../src/core/audioEdit/regions'
+import { getAudioEditSpectrogram } from '../services/audio-edit/spectrogram'
+import { renderAudioEditProject, prepareAudioEditRenderSource } from '../services/audio-edit/render'
 import { registerAudioSampleHandlers } from './audio-samples'
 import { registerExplanationAudioHandlers } from './explanation-audio'
 import { registerAudioLoudnessHandlers } from './audio-loudness'
@@ -11,7 +15,7 @@ import { requireAudioEditProject } from '../services/audio-edit/project-store'
 import { listAudioEditAsrModels, transcribeAudioEditProject, preflightAudioEditTranscription } from '../services/audio-edit/asr'
 import { transcriptionPreflightSchema } from '../../../src/core/audioEdit/transcriptionFailure'
 import { exportAudioEditProject } from '../services/audio-edit/export'
-import { listAudioEditProcessors, prepareAudioEditProcessedAudio } from '../services/audio-edit/processors'
+import { listAudioEditProcessors } from '../services/audio-edit/processors'
 import { prepareAudioEditPreviewChunk } from '../services/audio-edit/preview'
 import type {
   AudioEditExportRequest,
@@ -24,6 +28,11 @@ import type {
  * 这里只剩导入时探测素材，以及按文档 ID（参数名沿用 projectId）执行的转写、分析、处理、试听与导出。
  */
 export function registerAudioIpc(): void {
+  registerIpcHandler('audioEdit:spectrogram', input => audioEditSpectrogramRequestSchema.parse(input), getAudioEditSpectrogram)
+  registerIpcHandler('audioEdit:render', input => z.object({ projectId: z.string().min(1), requestId: z.string().optional(), includeProcessing: z.boolean().optional() }).strict().parse(input), async request => {
+    const project = await requireAudioEditProject(request.projectId)
+    return runAudioEditTask(project.id, 'render', signal => renderAudioEditProject(project, request.includeProcessing ?? project.vstEnabled, signal), request.requestId, JSON.stringify([project, request.includeProcessing]), true)
+  })
   registerAudioSampleHandlers()
   registerExplanationAudioHandlers()
   registerAudioLoudnessHandlers()
@@ -54,7 +63,8 @@ export function registerAudioIpc(): void {
     const project = await requireAudioEditProject(projectId)
     return runAudioEditTask(projectId, 'processing', async (signal, progress) => {
       await verifyAudioEditSource(project)
-      await prepareAudioEditProcessedAudio(project, signal, progress)
+      await prepareAudioEditRenderSource(project, true, signal)
+      progress(1)
     }, requestId, JSON.stringify([project.source.identity, project.processorChain]))
   })
   registerIpcHandler('audioEdit:asr:transcribe', parseTranscription, transcribeAudioEditProject)
@@ -69,6 +79,7 @@ function parsePreviewChunk(input: unknown): AudioEditPreviewChunkRequest {
   const record = parseRecord(input)
   return {
     projectId: readString(record, 'projectId'),
+    mode: record.mode === 'source' ? 'source' : 'edited',
     sourceStartFrame: readNumber(record, 'sourceStartFrame'),
     frameCount: readNumber(record, 'frameCount'),
     processing: record.processing === undefined ? undefined : readBoolean(record, 'processing'),

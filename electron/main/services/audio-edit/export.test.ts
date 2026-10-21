@@ -7,7 +7,7 @@ import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/ty
 const state = vi.hoisted(() => ({ project: undefined as AudioEditProjectDocument | undefined, processed: '' }))
 vi.mock('./project-store', () => ({ requireAudioEditProject: () => structuredClone(state.project) }))
 vi.mock('./media', () => ({ verifyAudioEditSource: vi.fn(), validateAudioEditAudio: vi.fn() }))
-vi.mock('./processors', () => ({ prepareAudioEditProcessedAudio: async () => state.processed }))
+vi.mock('./render', () => ({ prepareAudioEditRenderSource: async () => state.processed, renderAudioEditProject: async () => ({ audioPath: state.processed }) }))
 vi.mock('./process', () => ({ runAudioEditProcess: vi.fn(async () => { throw new Error('XML must not encode') }) }))
 vi.mock('./task-store', () => ({ runAudioEditTask: async (_id: string, _kind: string, operation: (signal: AbortSignal, progress: (n: number) => void) => Promise<unknown>) => operation(new AbortController().signal, () => undefined) }))
 import { exportAudioEditProject } from './export'

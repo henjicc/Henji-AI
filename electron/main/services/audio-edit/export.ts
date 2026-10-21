@@ -7,12 +7,9 @@ import { buildProjectAudioEditTimeline, editedDurationFrames } from '../../../..
 import { buildAudioEditSrt } from '../../../../src/core/audioEdit/subtitles'
 import { buildAudioEditXml, compileAudioEditXmlTimeline } from '../../../../src/core/audioEdit/xml'
 import type { AudioEditExportRequest, AudioEditExportResult } from '../../../../src/core/audioEdit/types'
-import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { requireAudioEditProject } from './project-store'
-import { prepareAudioEditProcessedAudio } from './processors'
-import { verifyAudioEditSource, validateAudioEditAudio } from './media'
-import { runAudioEditProcess } from './process'
-import { buildAudioEditConcatFilter, buildAudioEditRenderArgs } from './export-render'
+import { prepareAudioEditRenderSource, renderAudioEditProject } from './render'
+import { verifyAudioEditSource } from './media'
 import { runAudioEditTask } from './task-store'
 
 interface StagedOutput { temporary: string; target: string; backup?: string; published?: boolean }
@@ -67,7 +64,7 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
     try {
       const processing = request.includeProcessing ?? (format === 'wav' && project.vstEnabled)
       let processedPath: string | undefined
-      if (processing) processedPath = await prepareAudioEditProcessedAudio(project, signal, (value) => progress(value * 0.8))
+      if (format === 'xml' && (processing || project.gainRegions?.some(r => r.enabled) || project.repairs?.some(r => r.enabled))) processedPath = await prepareAudioEditRenderSource(project, processing, signal)
       let exportedAudioPath = ''
       if (format === 'xml' && processedPath) {
         exportedAudioPath = path.join(path.dirname(target), `${path.basename(target, path.extname(target))}-RX-${randomUUID().slice(0, 8)}.wav`)
@@ -79,13 +76,8 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
       if (format === 'xml' && timeline) {
         await fs.writeFile(temporary, buildAudioEditXml(project, timeline, pathToFileURL(project.source.sourcePath).href, exportedAudioPath ? pathToFileURL(exportedAudioPath).href : undefined), 'utf8')
       } else {
-        const filter = `${temporary}.filter`
-        temporaryPaths.push(filter)
-        const inputStream = processedPath || project.source.ownership !== 'external' ? '0:a:0' : `0:${project.source.audioStreamIndex ?? 0}`
-        await fs.writeFile(filter, buildAudioEditConcatFilter(spans, inputStream), 'utf8')
-        const ffmpeg = await loadFfmpegPath()
-        await runAudioEditProcess(ffmpeg, await buildAudioEditRenderArgs(ffmpeg, processedPath ?? project.source.audioPath, filter, temporary), signal)
-        await validateAudioEditAudio(temporary, project.source.sampleRate, project.source.channels, editedDurationFrames(spans), signal)
+        const rendered = await renderAudioEditProject(project, processing, signal)
+        await fs.copyFile(rendered.audioPath, temporary)
         exportedAudioPath = target
       }
       signal.throwIfAborted()

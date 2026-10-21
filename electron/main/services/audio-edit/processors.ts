@@ -1,10 +1,10 @@
+import { getRegisteredAudioEditProcessor, registeredAudioEditProcessors } from './processor-registry'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { AudioEditProcessorDescriptor, AudioEditProcessorSetting, AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
+import type { AudioEditProcessorDescriptor, AudioEditProcessorSetting } from '../../../../src/core/audioEdit/types'
 import { invokeAudioWorker } from './audio-worker-client'
-import { audioEditCacheDirectory, prepareAudioEditAudio, verifyAudioEditSource, validateAudioEditAudio } from './media'
 
 const KNOWN_RX_PROCESSORS = [
   { match: /mouth[ -]?de-?click/i, role: 'mouth_declick' as const },
@@ -27,10 +27,10 @@ async function walkVst3(root: string): Promise<string[]> {
 
 /** Lightweight discovery remains useful before the isolated Rust probe is available. */
 export async function listAudioEditProcessors(): Promise<AudioEditProcessorDescriptor[]> {
-  if (processorCache && processorCache.expiresAt > Date.now()) return processorCache.value
+  if (processorCache && processorCache.expiresAt > Date.now()) return [...await processorCache.value, ...registeredAudioEditProcessors()]
   const value = discoverAudioEditProcessors()
   processorCache = { expiresAt: Date.now() + 60_000, value }
-  return value
+  return [...await value, ...registeredAudioEditProcessors()]
 }
 
 async function discoverAudioEditProcessors(): Promise<AudioEditProcessorDescriptor[]> {
@@ -95,18 +95,13 @@ export async function processAudioEditVstChain(inputPath: string, workingDirecto
   const seen = new Set<string>()
   const available = await listAudioEditProcessors()
   if (recipe?.some((setting) => setting.enabled && !available.some((processor) => processor.id === setting.id && processor.available))) throw new Error('口播使用的声音插件不可用，请重新选择或关闭声音处理。')
-  const processors = available
-    .filter((processor): processor is AudioEditProcessorDescriptor & { semanticRole: NonNullable<AudioEditProcessorDescriptor['semanticRole']> } => Boolean(processor.available && processor.semanticRole))
-    .filter((processor) => {
-      if (recipe) {
-        if (!recipe.some((setting) => setting.id === processor.id && setting.enabled)) return false
-        if (seen.has(processor.semanticRole)) throw new Error('同类处理器只能启用一个版本。')
-      }
-      if (seen.has(processor.semanticRole)) return false
-      seen.add(processor.semanticRole)
-      return true
-    })
-    .sort((left, right) => PROCESSOR_ORDER.indexOf(left.semanticRole) - PROCESSOR_ORDER.indexOf(right.semanticRole))
+  const enabledRecipe = recipe?.filter(setting => setting.enabled)
+  const processors = enabledRecipe
+    ? enabledRecipe.map(setting => available.find(processor => processor.id === setting.id && processor.available)!)
+    : available.filter(processor => {
+      if (!processor.available || !processor.semanticRole || seen.has(processor.semanticRole)) return false
+      seen.add(processor.semanticRole); return true
+    }).sort((a, b) => PROCESSOR_ORDER.indexOf(a.semanticRole!) - PROCESSOR_ORDER.indexOf(b.semanticRole!))
   if (processors.length === 0) throw new Error('VST3_UNAVAILABLE：没有找到可用的 RX 口播处理器，请关闭 VST3 后导出。')
   const temporaryPaths: string[] = []
   const runId = crypto.randomUUID()
@@ -115,14 +110,10 @@ export async function processAudioEditVstChain(inputPath: string, workingDirecto
     signal?.throwIfAborted()
     const outputPath = path.join(workingDirectory, `vst-${runId}-${index}.wav`)
     temporaryPaths.push(outputPath)
-    await invokeAudioWorker({
-      type: 'process',
-      plugin_path: pluginPaths.get(processor.id)!,
-      input_path: currentPath,
-      output_path: outputPath,
-      parameters: recipe?.find((setting) => setting.id === processor.id)?.parameters ?? {},
-      bypass: false,
-    }, 30 * 60_000, signal)
+    const custom = getRegisteredAudioEditProcessor(processor.id)
+    const parameters = enabledRecipe?.[index].parameters ?? {}
+    if (custom) await custom.process({ inputPath: currentPath, outputPath, parameters: custom.parameters.parse(parameters), signal })
+    else await invokeAudioWorker({ type: 'process', plugin_path: pluginPaths.get(processor.id)!, input_path: currentPath, output_path: outputPath, parameters, bypass: false }, 30 * 60_000, signal)
     currentPath = outputPath
     onProgress?.((index + 1) / processors.length)
   }
@@ -133,22 +124,10 @@ export async function processAudioEditVstChain(inputPath: string, workingDirecto
   }
 }
 
-const preparing = new Map<string, Promise<string>>()
-export async function prepareAudioEditProcessedAudio(project: AudioEditProjectDocument, signal?: AbortSignal, progress?: (value: number) => void): Promise<string> {
-  await verifyAudioEditSource(project, false)
-  const key = crypto.createHash('sha256').update(JSON.stringify([project.source.identity ?? project.source, project.processorChain ?? []])).digest('hex')
-  const directory = audioEditCacheDirectory(project.id)
-  const output = path.join(directory, `rx-${key}.wav`)
-  if (await fs.stat(output).then(() => true, () => false)) return output
-  const existing = preparing.get(output)
-  if (existing) return existing
-  const operation = (async () => {
-    const source = await prepareAudioEditAudio(project, signal)
-    await fs.mkdir(directory, { recursive: true })
-    const processed = await processAudioEditVstChain(source, directory, project.processorChain, signal, progress)
-    try { await validateAudioEditAudio(processed.outputPath, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal); signal?.throwIfAborted(); await fs.rename(processed.outputPath, output); return output }
-    finally { await Promise.all(processed.temporaryPaths.map((file) => removeUnmanagedCachePath(file, { force: true }))) }
-  })()
-  preparing.set(output, operation)
-  try { return await operation } finally { preparing.delete(output) }
+export async function audioEditProcessorCacheIdentity(recipe?: AudioEditProcessorSetting[]): Promise<unknown> {
+  const descriptors = await listAudioEditProcessors()
+  return Promise.all(descriptors.filter(d => d.available && (recipe ? recipe.some(s => s.enabled && s.id === d.id) : d.semanticRole)).map(async d => {
+    const file = pluginPaths.get(d.id), stat = file ? await fs.stat(file) : undefined
+    return [d.id, d.version, stat?.mtimeMs, stat?.size]
+  }))
 }

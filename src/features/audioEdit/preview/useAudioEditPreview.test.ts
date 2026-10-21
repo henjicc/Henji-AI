@@ -8,6 +8,7 @@ import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 const { prepare } = vi.hoisted(() => ({ prepare: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ audioEdit: { preparePreviewChunk: prepare } }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn() }) }))
+vi.mock('../application/audioEditProjectInstances', () => ({ flushAudioEditProject: vi.fn(async () => undefined) }))
 let node: FakeNode
 function captureNode(value: FakeNode) { node = value }
 class FakeContext {
@@ -118,5 +119,19 @@ it('keeps audio on save-only revisions and jumps to the next retained range afte
   await waitFor(() => expect(useAudioEditPlaybackStore.getState().sourceFrame).toBe(96000))
   act(() => hook.result.current.seekSourceFrame(24000))
   expect(useAudioEditPlaybackStore.getState().sourceFrame).toBe(96000)
+  hook.unmount()
+})
+
+it('invalidates buffered edited audio after gain or repair changes', async () => {
+  const fixture = project()
+  const hook = renderHook(({ value }) => useAudioEditPreview(value), { initialProps: { value: fixture } })
+  await waitFor(() => expect(useAudioEditPlaybackStore.getState().preparing).toBe(false))
+  const initial = generation()
+  hook.rerender({ value: { ...fixture, gainRegions: [{ id: 'gain', startFrame: 0, endFrame: 48000, gainDb: -6, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }] } })
+  await waitFor(() => expect(generation()).toBeGreaterThan(initial))
+  const gainGeneration = generation()
+  hook.rerender({ value: { ...fixture, repairs: [{ id: 'repair', kind: 'declick', startFrame: 100, endFrame: 200, lowHz: 0, highHz: 24000, strength: 1, enabled: true }] } })
+  await waitFor(() => expect(generation()).toBeGreaterThan(gainGeneration))
+  expect(prepare.mock.calls.at(-1)?.[0].mode).toBe('edited')
   hook.unmount()
 })
