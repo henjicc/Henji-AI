@@ -464,6 +464,8 @@ export const UI_PARAMETER_TRACK_BACKGROUND = {
 export const UI_GRADE_WHEEL_BACKGROUND = 'radial-gradient(circle, rgb(var(--on-media-rgb)), transparent), conic-gradient(from 90deg, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))'
 export const UI_GRADE_LUMINANCE_BACKGROUND = `linear-gradient(0deg, ${BLACK_HEX}, ${WHITE_HEX})`
 export const UI_CURVE_CHANNEL_COLOR = { master: 'var(--text1)', red: SOCKET_TYPE_COLOR_HEX.VIDEO, green: SOCKET_TYPE_COLOR_HEX.STRING, blue: SOCKET_TYPE_COLOR_HEX.NUMBER } as const
+/** Color scopes draw on a canvas: channel colors reuse the curve channels; neutral/grid name theme variables resolved at draw time. */
+export const UI_SCOPE_COLORS = { red: UI_CURVE_CHANNEL_COLOR.red, green: UI_CURVE_CHANNEL_COLOR.green, blue: UI_CURVE_CHANNEL_COLOR.blue, neutralVariable: '--on-media', gridVariable: '--media-line' } as const
 /** User RGBA is content, not UI chrome; all color formatting stays at the token boundary. */
 export function uiParameterRgba(color: readonly number[]): string {
   return `rgb(${color.slice(0, 3).map(channel => Math.round(Math.max(0, Math.min(1, channel)) * 255)).join(' ')} / ${Math.max(0, Math.min(1, color[3] ?? 1))})`

@@ -1,28 +1,24 @@
-import { UiFormRow, UiSegmented } from '@/components/ui'
+import { UiFormRow } from '@/components/ui'
+import { ColorGradeSections } from '@/components/colorGrade/ColorGradeSections'
+import { ColorGradeScopes } from '@/components/colorGrade/ColorGradeScopes'
+import type { ColorStatistics } from '@/core/imaging/adjustments/colorStatistics'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, RotateCcw, WandSparkles, Upload } from 'lucide-react'
+import { RotateCcw, SquareSplitHorizontal, WandSparkles, Upload } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiGroup, UiIconButton, UiLoading } from '@/components/ui'
 
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
-import { COLOR_GRADE_BASIC_PARAMS, COLOR_GRADE_CREATIVE_PARAMS, COLOR_GRADE_CURVE_CHANNELS, COLOR_GRADE_HSL_PARAMS, COLOR_GRADE_HUE_CURVES, COLOR_GRADE_HUE_CURVE_NAMES, COLOR_GRADE_LUT_PARAMS, COLOR_GRADE_MIXER_PARAMS, COLOR_GRADE_POINT_PARAMS, COLOR_GRADE_TONE_PARAMS, COLOR_GRADE_VIGNETTE_PARAMS, COLOR_GRADE_WHEEL_PARAMS, COLOR_GRADE_WHEEL_REGIONS, VIDEO_EDIT_COLOR_GRADE } from '@/core/videoEdit/colorGrade'
+import { VIDEO_EDIT_COLOR_GRADE } from '@/core/videoEdit/colorGrade'
 import type { VideoEditClip } from '@/core/videoEdit/document'
-import { getActiveVideoEditSequence, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
-import { analyzeVideoEditColorGrade, editVideoEditColorGrade } from '../application/videoEditColorGrade'
-import type { VideoEditCompositeTarget } from '../application/videoEditCompositing'
+import { analyzeVideoEditColorGrade, editVideoEditColorGrade, observeVideoEditColor } from '../application/videoEditColorGrade'
+import { updateVideoEditBuiltinEffect, type VideoEditCompositeTarget } from '../application/videoEditCompositing'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
 
 import { importVideoEditColorLut } from '../application/videoEditColorLuts'
-
-function Section({ title, children }: { title: string; children: ReactNode }): React.ReactElement {
-  const [open, setOpen] = useState(title === '基本校正')
-  return <UiGroup titleTone="compact" gap="none" title={<UiButton size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <ChevronDown  /> : <ChevronRight  />}{title}</UiButton>}>
-    {open && children}
-  </UiGroup>
-}
 
 function ColorGradeEditor({ target, clip, selectedId, onError }: { target: VideoEditCompositeTarget; clip: VideoEditClip; selectedId: string; onError: (reason: unknown) => void }): React.ReactElement {
   const { t } = useTranslation('ui')
@@ -35,8 +31,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
   const request = useRef<AbortController>(); const [busy, setBusy] = useState(false)
   useEffect(() => () => { request.current?.abort() }, [])
   const [reference, setReference] = useState('')
-  const [matchMethod, setMatchMethod] = useState<'moments' | 'histogram'>('moments')
-  const [hueCurve, setHueCurve] = useState('hue_sat')
+  const [matchMethod, setMatchMethod] = useState<'mkl' | 'moments' | 'histogram'>('mkl')
   const luts = requireVideoEditInstance(target.projectId).document.colorLuts ?? []
   const upload = async (stage: string): Promise<void> => {
     if (busy || gesture.active()) return
@@ -45,7 +40,7 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     catch (error) { if (!controller.signal.aborted) onError(error) }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
-  const lutControl = (stage: string): ReactNode => <UiFormRow label={t(stage === 'input' ? 'surfaceGrammar.inputLut' : 'surfaceGrammar.creativeLook')} density="compact"><div className="flex items-center gap-1"><div className="min-w-0 flex-1"><Dropdown size="sm" ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="xs" aria-label="导入 LUT" tooltip="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload  /></UiIconButton></div></UiFormRow>
+  const lutControl = (stage: 'input' | 'look'): ReactNode => <UiFormRow label={t(stage === 'input' ? 'surfaceGrammar.inputLut' : 'surfaceGrammar.creativeLook')} density="compact"><div className="flex items-center gap-1"><div className="min-w-0 flex-1"><Dropdown size="sm" ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="xs" aria-label="导入 LUT" tooltip="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload  /></UiIconButton></div></UiFormRow>
   const automatic = async (): Promise<void> => {
     if (busy || gesture.active()) return
     const controller = new AbortController(); request.current = controller; setBusy(true)
@@ -56,36 +51,63 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     } catch (error) { if (!controller.signal.aborted) onError(error) }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
-  const [channel, setChannel] = useState('master')
-  const [mixer, setMixer] = useState('saturation')
   return <UiGroup labelWidth={96} className="flex flex-col" gap="row">
     <div className="flex flex-wrap items-center justify-end gap-1">
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} tooltip="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles  />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
+      <VideoEditGradeCompare target={target} effectId={effect?.id} disabled={busy || !effect?.enabled} />
       <UiIconButton size="xs" tooltip="重置全能调色" aria-label="重置全能调色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE) })}><RotateCcw  /></UiIconButton>
     </div>
     <UiFormRow label="校色参考片段" density="compact"><Dropdown ariaLabel="校色参考片段" value={reference} options={[{ value: '', label: '自动校色' }, ...getActiveVideoEditSequence(requireVideoEditInstance(target.projectId)).clips.filter(value => value.id !== clip.id && value.kind !== 'audio' && value.kind !== 'adjustment').map(value => ({ value: value.id, label: value.name }))]} onSelect={setReference} /></UiFormRow>
-    {reference && <UiFormRow label="颜色匹配方式" density="compact"><Dropdown ariaLabel="颜色匹配方式" value={matchMethod} options={[{ value: 'moments', label: '均值与反差' }, { value: 'histogram', label: '颜色分布' }]} onSelect={value => setMatchMethod(value as 'moments' | 'histogram')} /></UiFormRow>}
+    {reference && <UiFormRow label="颜色匹配方式" density="compact"><Dropdown ariaLabel="颜色匹配方式" value={matchMethod} options={[{ value: 'mkl', label: '整体颜色（推荐）' }, { value: 'moments', label: '均值与反差曲线' }, { value: 'histogram', label: '颜色分布曲线' }]} onSelect={value => setMatchMethod(value as 'mkl' | 'moments' | 'histogram')} /></UiFormRow>}
     {busy && <UiLoading size="xs" message="正在处理颜色…" />}
-    <Section title="基本校正">{lutControl('input')}<VideoEditBuiltinParamRows params={COLOR_GRADE_LUT_PARAMS.filter(param => param.key === 'input_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={COLOR_GRADE_BASIC_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
-    <Section title="创意">{lutControl('look')}<VideoEditBuiltinParamRows params={COLOR_GRADE_LUT_PARAMS.filter(param => param.key === 'look_lut_strength')} values={values} gesture={gesture} animation={animation} /><VideoEditBuiltinParamRows params={COLOR_GRADE_CREATIVE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
-    <Section title="曲线">
-      <VideoEditBuiltinParamRows params={COLOR_GRADE_TONE_PARAMS} values={values} gesture={gesture} animation={animation} />
-      <UiFormRow label={t('surfaceGrammar.curveChannel')} density="compact" labelColumn="panel"><UiSegmented ariaLabel="曲线通道" size="sm" fullWidth value={channel} onChange={setChannel} options={COLOR_GRADE_CURVE_CHANNELS.map((value, i) => ({ value, label: ['RGB 主', '红', '绿', '蓝'][i] }))} /></UiFormRow>
-      <VideoEditBuiltinParamRows params={COLOR_GRADE_POINT_PARAMS.filter(param => param.key === `curve_${channel}_points`)} values={values} gesture={gesture} animation={animation} />
-      <UiFormRow label={t('surfaceGrammar.curveType')} density="compact" labelColumn="panel"><Dropdown ariaLabel="色相饱和度曲线类型" size="sm" value={hueCurve} onSelect={setHueCurve} options={COLOR_GRADE_HUE_CURVES.map((value, i) => ({ value, label: COLOR_GRADE_HUE_CURVE_NAMES[i] }))} /></UiFormRow>
-      <VideoEditBuiltinParamRows params={COLOR_GRADE_POINT_PARAMS.filter(param => param.key === `curve_${hueCurve}_points`)} values={values} gesture={gesture} animation={animation} />
-    </Section>
-    <Section title="混色器">
-      <UiFormRow label="调整" density="compact" labelColumn="panel"><UiSegmented ariaLabel="混色器通道" size="sm" fullWidth value={mixer} onChange={setMixer} options={[{ value: 'hue', label: '色相' }, { value: 'saturation', label: '饱和度' }, { value: 'luminance', label: '明亮度' }]} /></UiFormRow>
-      <VideoEditBuiltinParamRows params={COLOR_GRADE_MIXER_PARAMS.filter(param => param.key.endsWith(`_${mixer}`))} values={values} gesture={gesture} animation={animation} />
-    </Section>
-    <Section title="色轮">
-      <VideoEditBuiltinParamRows params={COLOR_GRADE_WHEEL_PARAMS.filter(param => param.key === 'wheel_mode' || param.key.startsWith('grade_'))} values={values} gesture={gesture} animation={animation} />
-      <div className="flex flex-wrap gap-2">{COLOR_GRADE_WHEEL_REGIONS.map(region => <div key={region} className="min-w-0 basis-40 flex-1"><VideoEditBuiltinParamRows params={COLOR_GRADE_WHEEL_PARAMS.filter(param => param.key.startsWith(`${region}_`))} values={values} gesture={gesture} animation={animation} /></div>)}</div>
-    </Section>
-    <Section title="HSL 辅助"><VideoEditBuiltinParamRows params={COLOR_GRADE_HSL_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
-    <Section title="晕影"><VideoEditBuiltinParamRows params={COLOR_GRADE_VIGNETTE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
+    <ColorGradeSections host={{
+      values, disabled: busy, renderLut: lutControl,
+      renderRows: params => <VideoEditBuiltinParamRows params={params} values={values} gesture={gesture} animation={animation} />,
+      resetParams: params => {
+        const curves = { ...effect?.builtin?.curves }; for (const param of params) delete curves[param.key]
+        gesture.commit({ params: Object.fromEntries(params.map(param => [param.key, param.default])), curves })
+      },
+      applyParams: values => gesture.commit({ params: values }),
+      // Hovering a style previews it inside a gesture; leaving cancels it, so nothing enters the undo history.
+      previewParams: values => { if (values) { gesture.begin(); gesture.commit({ params: values }) } else if (gesture.active()) gesture.cancel() },
+      scopes: <VideoEditColorScopes target={target} effectId={selectedId || undefined} refreshKey={JSON.stringify([values, effect?.enabled])} />,
+    }} />
   </UiGroup>
+}
+
+/** Press and hold to see the clip without this grade; release restores it without an undo step. */
+function VideoEditGradeCompare({ target, effectId, disabled }: { target: VideoEditCompositeTarget; effectId?: string; disabled: boolean }): React.ReactElement {
+  const handle = useRef<VideoEditGesture>()
+  const release = (): void => { const previous = handle.current; handle.current = undefined; if (previous) finishVideoEditGesture(previous, false) }
+  useEffect(() => release, [])
+  const press = (): void => {
+    if (handle.current || !effectId) return
+    handle.current = beginVideoEditGesture(target.projectId)
+    updateVideoEditBuiltinEffect(target, effectId, { enabled: false }, handle.current)
+  }
+  return <UiIconButton size="xs" tooltip="按住查看调色前" aria-label="按住查看调色前" disabled={disabled} disabledReason="调色效果已关闭或正在处理"
+    onPointerDown={press} onPointerUp={release} onPointerLeave={release} onPointerCancel={release}
+    onKeyDown={event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); press() } }} onKeyUp={release} onBlur={release}><SquareSplitHorizontal /></UiIconButton>
+}
+
+/** Scopes read the same statistics as observe_video_edit_color, refreshed shortly after an edit settles. */
+function VideoEditColorScopes({ target, effectId, refreshKey }: { target: VideoEditCompositeTarget; effectId?: string; refreshKey: string }): React.ReactElement {
+  const [statistics, setStatistics] = useState<ColorStatistics | null>(null)
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('')
+  const [manual, setManual] = useState(0)
+  const { projectId, sequenceId, clipId } = target
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setBusy(true); setError('')
+      observeVideoEditColor({ projectId, sequenceId, clipId }, { stage: 'after_grade', scopes: true, effectId }, controller.signal)
+        .then(result => { if (!controller.signal.aborted) setStatistics(result.statistics) })
+        .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)) })
+        .finally(() => { if (!controller.signal.aborted) setBusy(false) })
+    }, 350)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [projectId, sequenceId, clipId, effectId, refreshKey, manual])
+  return <ColorGradeScopes statistics={statistics} busy={busy} error={error} onRefresh={() => setManual(value => value + 1)} />
 }
 
 /** Dock and native popout use this same body. Selection follows the existing primary selected clip. */

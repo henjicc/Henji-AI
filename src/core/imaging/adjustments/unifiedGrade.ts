@@ -39,7 +39,7 @@ function fnv(data: Float32Array): string {
 }
 
 /** Packs one ColorGrade parameter set; returns stage flags so planners skip neutral work entirely. */
-export function buildColorGradeTable(params: Params): ColorGradeTable {
+export function buildColorGradeTable(params: Params, options: { key?: boolean } = {}): ColorGradeTable {
   const width = COLOR_GRADE_TABLE_WIDTH; const height = COLOR_GRADE_TABLE_ROWS
   const data = new Float32Array(width * height * 4)
   const slot = (index: number, values: readonly number[]): void => { data.set(values, index * 4) }
@@ -94,7 +94,7 @@ export function buildColorGradeTable(params: Params): ColorGradeTable {
   const stageB = num(params, 'faded_film') !== 0 || mixerActive || wheelsActive || curveFlags.some(Boolean)
   slot(SLOT.flags, [matrixActive ? 1 : 0, toneActive ? 1 : 0, colorActive ? 1 : 0, mixerActive ? 1 : 0])
   data[SLOT.wheel * 4 + 3] = wheelsActive ? 1 : 0
-  return { data, width, height, stageA, stageB, key: fnv(data) }
+  return { data, width, height, stageA, stageB, key: options.key === false ? '' : fnv(data) }
 }
 
 // ---------- CPU reference (mirrors WGSL line for line) ----------

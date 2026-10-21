@@ -24,7 +24,11 @@ export function legacyWhiteBalanceGains(temperature: number, tint: number): Vec3
  */
 export function legacyWhiteBalanceToKelvin(temperature: number, tint: number): { temperature_kelvin: number; tint: number } {
   if (temperature === 0 && tint === 0) return { temperature_kelvin: 6500, tint: 0 }
-  const white = CAT16_SRGB([1, 1, 1]); const target = CAT16_SRGB(legacyWhiteBalanceGains(temperature, tint))
+  return whiteBalanceFromGains(legacyWhiteBalanceGains(temperature, tint))
+}
+/** The kelvin/tint correction that maps neutral grey onto the given linear RGB gains (direction only; luminance is preserved). */
+export function whiteBalanceFromGains(gains: Vec3): { temperature_kelvin: number; tint: number } {
+  const white = CAT16_SRGB([1, 1, 1]); const target = CAT16_SRGB(gains)
   const destination = applyMat3(CAT16, xyToXyz(...D65_XY))
   const sourceLms = white.map((w, i) => destination[i] * w / target[i])
   const xyz = applyMat3(CAT16_INVERSE, sourceLms)

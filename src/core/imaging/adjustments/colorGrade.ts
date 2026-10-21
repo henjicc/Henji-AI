@@ -1,5 +1,4 @@
-import type { ImagingParam, ImagingParams } from '../parameterDefinition'
-import { applyMat3, linearSrgbToXyz, TINT_DUV_PER_UNIT, whiteBalanceMatrix, xyToKelvinDuv, xyzToXy } from './colorScience'
+import type { ImagingParam } from '../parameterDefinition'
 
 const signed = (key: string, name: string, description: string): ImagingParam => ({ key, name, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: 0, tooltip: description, description })
 const positive = (key: string, name: string, description: string, fallback = 0): ImagingParam => ({ key, name, type: 'number', unit: 'strength', min: 0, max: 100, step: 1, default: fallback, tooltip: description, description })
@@ -76,37 +75,3 @@ export function colorGradeWhiteBalance(temperature: number, tint: number): [numb
 }
 export const colorGradeLinear = (x: number): number => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4
 export const colorGradeSrgb = (x: number): number => x <= .0031308 ? x * 12.92 : 1.055 * Math.max(0, x) ** (1 / 2.4) - .055
-const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x))
-/** Bounded (256²) histogram statistics: OpenCV GrayworldWB saturation rejection + robust percentile stretch.
- * Pixels are straight, encoded RGB(A), scale=255 for ImageData, scale=1 for float fixtures. */
-export function suggestColorGradeAutoColor(pixels: ArrayLike<number>, scale = 255): ImagingParams {
-  if (pixels.length % 4 || !pixels.length || !(scale > 0)) throw new Error('自动校色需要有效的 RGBA 画面。')
-  const means = [0, 0, 0]; let count = 0
-  for (let i = 0; i < pixels.length; i += 4) {
-    const rgb = [pixels[i], pixels[i + 1], pixels[i + 2]].map(x => clamp(x / scale, 0, 1))
-    const max = Math.max(...rgb); const min = Math.min(...rgb)
-    if (pixels[i + 3] / scale < .5 || max < .02 || max > .98 || (max - min) / max > .85) continue
-    rgb.forEach((x, c) => { means[c] += colorGradeLinear(x) }); count++
-  }
-  if (count < 8 || means.some(x => x <= 1e-8)) throw new Error('画面缺少可分析的中性明暗区域，请换一帧或手动校色。')
-  // Gray world: the mean of neutral candidates is the illuminant color; its chromaticity names the light directly.
-  const light = xyToKelvinDuv(...xyzToXy(linearSrgbToXyz(means)))
-  const temperature_kelvin = Math.round(clamp(light.kelvin, 2000, 20000) * 10) / 10
-  const tint = Math.round(clamp(light.duv / TINT_DUV_PER_UNIT, -100, 100) * 100) / 100
-  const matrix = whiteBalanceMatrix(temperature_kelvin, tint); const histogram = new Uint32Array(1024); let samples = 0
-  for (let i = 0; i < pixels.length; i += 4) {
-    if (pixels[i + 3] / scale < .5) continue
-    const rgb = applyMat3(matrix, [0, 1, 2].map(c => colorGradeLinear(clamp(pixels[i + c] / scale, 0, 1)))).map(colorGradeSrgb)
-    const y = rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722
-    histogram[Math.round(clamp(y, 0, 1) * 1023)]++; samples++
-  }
-  const quantile = (q: number): number => { let n = 0; for (let i = 0; i < histogram.length; i++) { n += histogram[i]; if (n >= Math.max(1, samples * q)) return i / 1023 } return 1 }
-  const low = quantile(.02); const high = quantile(.98)
-  if (high - low < .04) return { temperature_kelvin, tint, exposure: 0, contrast: 0 }
-  const mid = (high + low) / 2
-  const exposure = clamp(Math.log2(colorGradeLinear(.5) / Math.max(1e-6, colorGradeLinear(mid))), -2, 2)
-  const gain = 2 ** exposure
-  const a = colorGradeSrgb(colorGradeLinear(low) * gain); const b = colorGradeSrgb(colorGradeLinear(high) * gain)
-  const slope = clamp(.9 / Math.max(.04, b - a), .5, 2)
-  return { temperature_kelvin, tint, exposure, contrast: slope >= 1 ? (slope - 1) * 50 : (slope - 1) * 100 }
-}

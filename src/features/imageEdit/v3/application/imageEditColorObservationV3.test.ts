@@ -4,7 +4,7 @@ import { createImageEditAdjustmentLayerV3, createImageEditDocumentV3, createImag
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { registerPersistedImageEditTestSession } from '@/tests/imageEditPersistenceTestSession'
 import { ImageEditCommandBusV3 } from './imageEditCommandBus'
-import { observeImageEditColorV3, projectImageEditColorObservationDocumentV3 } from './imageEditColorObservationV3'
+import { observeImageEditColorV3, projectImageEditColorObservationDocumentV3, suggestImageEditColorV3 } from './imageEditColorObservationV3'
 
 const disposers: Array<() => void> = []
 beforeEach(installHarnessNativeStorage)
@@ -44,4 +44,26 @@ it('读数来自正式像素读取并按当前修订号返回；读取中图片�
   expect(rendered.layers[1].type === 'group' && rendered.layers[1].children[0].visible).toBe(false)
   const changing = vi.fn(async () => { bus.dispatch({ type: 'layer.update-common', commandId: 'rename', expectedRevision: bus.getSnapshot().document.revision, layerId: 'content', patch: { opacity: .5 } }); return { pixels: grey, width: 8, height: 8 } })
   await expect(observeImageEditColorV3(document.id, { reader: changing })).rejects.toThrow('已变化')
+})
+
+it('自动校色只分析隐藏该调整层后的画面，返回白平衡与曝光的绝对建议', async () => {
+  const { document } = setup()
+  // A warm, dark grey card: the suggestion must cool it down (kelvin below 6500) and brighten it.
+  const warm = Uint8ClampedArray.from(Array.from({ length: 256 }, (_, i) => { const v = 40 + (i % 16) * 3; return [Math.min(255, v * 1.25), v, Math.round(v * .7), 255] }).flat())
+  const reader = vi.fn(async () => ({ pixels: warm, width: 16, height: 16 }))
+  const suggestion = await suggestImageEditColorV3(document, 'grade', [], new AbortController().signal, reader)
+  expect(Object.keys(suggestion).sort()).toEqual(['exposure', 'temperature_kelvin', 'tint'])
+  expect(suggestion.temperature_kelvin).toBeLessThan(5000); expect(suggestion.exposure).toBeGreaterThan(0)
+  const rendered = (reader.mock.calls[0] as unknown[])[0] as typeof document
+  expect(rendered.layers[1].type === 'group' && rendered.layers[1].children[0].visible).toBe(false)
+})
+
+it('图层上的全能调色滤镜按滤镜标识关闭，图层本身仍可见', () => {
+  const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: 'filter-grade' })
+  const content = createImageEditRasterLayerV3('content', '内容')
+  content.filters = [{ id: 'grade-filter', operationType: 'adjustment', effectId: 'color_grade', params: { exposure: 1 }, enabled: true, opacity: 1, blendMode: 'normal', mask: null }]
+  document.layers = [content]
+  const before = projectImageEditColorObservationDocumentV3(document, 'grade-filter', 'before_grade')
+  expect(before.layers[0].visible).toBe(true); expect(before.layers[0].filters[0].enabled).toBe(false)
+  expect(document.layers[0].filters[0].enabled).toBe(true)
 })

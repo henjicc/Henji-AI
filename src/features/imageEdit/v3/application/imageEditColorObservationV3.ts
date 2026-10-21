@@ -1,5 +1,6 @@
 import { imageEditOutputSizeV3, createImageEditIdV3, type ImageEditDocumentV3, type ImageEditLayerV3 } from '@/core/imageEdit/v3'
 import { computeColorStatistics, type ColorStatistics } from '@/core/imaging/adjustments/colorStatistics'
+import { suggestColorGradeAutoColor } from '@/core/imaging/adjustments/autoGrade'
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import { ImageEditorViewportCompositeClientV3 } from '../execution/viewportCompositeClientV3'
@@ -16,8 +17,16 @@ export function projectImageEditColorObservationDocumentV3(document: ImageEditDo
   if (stage === 'document') return document
   if (!layerId) throw new Error('调色前读数需要指定一个全能调色调整层')
   const location = findImageEditV3LiveLayer(document, layerId)
-  if (!location || location.layer.type !== 'adjustment' || location.layer.adjustmentId !== 'color_grade') throw new Error('请指定一个全能调色调整层')
-  const hide = (layers: readonly ImageEditLayerV3[]): ImageEditLayerV3[] => layers.map(layer => layer.id === layerId ? { ...layer, visible: false } : layer.type === 'group' ? { ...layer, children: hide(layer.children) } : layer)
+  // A color grade is either its own adjustment layer or an adjustment filter on a layer (filter id); both switch off the same way.
+  const isFilter = (layer: ImageEditLayerV3): boolean => layer.filters.some(filter => filter.id === layerId && filter.operationType === 'adjustment' && filter.effectId === 'color_grade')
+  const contains = (layers: readonly ImageEditLayerV3[]): boolean => layers.some(layer => isFilter(layer) || layer.type === 'group' && contains(layer.children))
+  const isLayer = location?.layer.type === 'adjustment' && location.layer.adjustmentId === 'color_grade'
+  if (!isLayer && !contains(document.layers)) throw new Error('请指定一个全能调色调整层')
+  const hide = (layers: readonly ImageEditLayerV3[]): ImageEditLayerV3[] => layers.map(layer => {
+    if (isLayer && layer.id === layerId) return { ...layer, visible: false }
+    const next = isFilter(layer) ? { ...layer, filters: layer.filters.map(filter => filter.id === layerId ? { ...filter, enabled: false } : filter) } : layer
+    return next.type === 'group' ? { ...next, children: hide(next.children) } : next
+  })
   return { ...document, layers: hide(document.layers) }
 }
 
@@ -62,4 +71,19 @@ export async function observeImageEditColorV3(documentId: string, options: { lay
     logger.info('图片颜色读数完成', { event: 'image_edit.color.observe.completed', context: { documentId, stage } })
     return { statistics, stage, revision: start.revision }
   } catch (error) { logger.warn('图片颜色读数失败', { event: 'image_edit.color.observe.failed', error, context: { documentId } }); throw error }
+}
+
+/**
+ * Automatic correction for one color grade layer: analyzes the picture beneath that layer (the layer hidden) and returns
+ * absolute slider values for white balance and exposure. The caller merges them into the layer's params in one write.
+ */
+export async function suggestImageEditColorV3(document: ImageEditDocumentV3, layerId: string, resources: readonly ImageEditorV3ResourceDescriptor[], signal: AbortSignal, reader: ImageEditColorPixelReader = readImageEditColorPixelsV3): Promise<Record<string, number>> {
+  const projected = projectImageEditColorObservationDocumentV3(document, layerId, 'before_grade')
+  logger.info('图片自动校色开始', { event: 'image_edit.color.auto.start', context: { documentId: document.id, layerId } })
+  try {
+    const sampled = await reader(projected, resources, signal)
+    const parameters = suggestColorGradeAutoColor(sampled.pixels, 255, sampled.width)
+    logger.info('图片自动校色完成', { event: 'image_edit.color.auto.completed', context: { documentId: document.id, layerId } })
+    return parameters
+  } catch (error) { logger.warn('图片自动校色失败', { event: 'image_edit.color.auto.failed', error, context: { documentId: document.id } }); throw error }
 }

@@ -49,6 +49,7 @@ const successData: Record<string, Record<string, unknown>> = {
   observe_video_edit_color: { resultRef: sequenceRef, stage: 'after_grade', frame: 60, frames: [60], documentRevision: 29, documentVersion: 'host:document:29', message,
     readout: { exposure: { middleGrayOffsetEv: -.4, key: 'normal' }, clipping: { highlightsPercent: .2, shadowsPercent: 0 }, tone: { p2: 4, p50: 41, p98: 93 }, whiteBalance: { kelvin: 5400, tint: 2, confidence: .7, neutralPercent: 35 },
       color: { chromaMedian: .05, chromaP95: .14, oversaturatedPercent: 0, palette: [{ hex: BLACK_HEX, percent: 30 }] }, skin: { candidatePercent: 12, hueOffsetDegrees: 3 } } },
+  analyze_image_edit_color: { resultRef: { kind: 'image_edit.layer', id: 'v3:doc:grade' }, parameters: { temperature_kelvin: 5200, tint: 3, exposure: .4 }, revision: 4, message },
   observe_image_edit_color: { resultRef: { kind: 'image_edit.document', id: 'v3:doc' }, stage: 'document', revision: 4, message,
     readout: { exposure: { middleGrayOffsetEv: -.4, key: 'normal' }, clipping: { highlightsPercent: .2, shadowsPercent: 0 }, tone: { p2: 4, p50: 41, p98: 93 }, whiteBalance: { kelvin: 5400, tint: 2, confidence: .7, neutralPercent: 35 },
       color: { chromaMedian: .05, chromaP95: .14, oversaturatedPercent: 0, palette: [{ hex: BLACK_HEX, percent: 30 }] }, skin: { candidatePercent: 12, hueOffsetDegrees: 3 } } },

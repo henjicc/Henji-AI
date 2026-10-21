@@ -88,8 +88,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.42.0'] = '67834fb9a8b01b9d92d00399e67adc023e41bc0c87d8f981f48988574ef188c4'
     // render_video_edit_preview: new tool that starts background preview rendering.
     fingerprints['2.43.0'] = '3b9842320c147772f238f5bc68cef197f83cef64bba54354860c7491a9b73cf0'
-    // Color grade v2: analyze_video_edit_color outputs the new parameters; new read-only observe_video_edit_color / observe_image_edit_color.
-    fingerprints['2.44.0'] = 'c4fb5076e2e01d832f65527ee1e742a44dac32d4b3e72b9b1bcd736610fc5262'
+    // Color grade v2: new parameters in analyze_video_edit_color (mkl match); new observe_video_edit_color, observe_image_edit_color, analyze_image_edit_color.
+    fingerprints['2.44.0'] = '81912b3cdcf8ab78dcb6a13cd789b6a843bf40a5dcc8ab5cae3a3503937ac13b'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

@@ -18,3 +18,18 @@ export const observeImageEditColorCapability = defineApplicationCapability({
   concurrencyKey: 'image_edit_color_observe', resolveConcurrencyKey: input => `image_edit_color_observe:${input.documentRef.id}`,
   summarize: output => output.message,
 })
+
+export const analyzeImageEditColorCapability = defineApplicationCapability({
+  id: 'analyze_image_edit_color', version: 1, domain: 'image_edit', side: 'frontend', title: '分析图片自动校色建议',
+  aliases: ['自动校色', '自动白平衡', '自动曝光', 'auto color', 'auto white balance'],
+  description: '分析全能调色调整层之下的画面，返回白平衡（temperature_kelvin、tint）与曝光（exposure）的绝对建议值：四种光源估计投票，分歧大时只做部分校正以保留有意偏色；曝光识别低调/高调画面并保护高光。合并已读的 image_edit.layer.params 后经通用属性写入（同一次写入即一步撤销），写入后可用 observe_image_edit_color 核对。只读，不修改图片。',
+  readOnly: true, control: capabilityControl('observe', ['image_edit.layer'], { revisionScopes: ['image_edit'], cancelable: true }),
+  risk: 'R0', dataClasses: ['C1'], permission: 'image_edit:read', idempotent: true, destructive: false, timeoutMs: 120_000,
+  supportsPreview: false, supportsUndo: false, requiredScopes: ['image_edit'], acceptsRefs: ['image_edit.layer'], producesRefs: ['image_edit.layer'],
+  inputSchema: z.object({ layerRef }).strict(),
+  outputSchema: z.object({ resultRef: layerRef, parameters: z.object({ temperature_kelvin: z.number(), tint: z.number(), exposure: z.number() }).strict(), revision: z.number().int().nonnegative(), message: z.string() }).strict(),
+  successEvidence: ['返回由正式合成内核读取画面得到的建议值；写入后需观察并微调。'], failureRecovery: ['图片在分析中被修改时重新分析；纯透明画面无法分析。'],
+  resolveOperationTargets: input => [input.layerRef], resolveOperationWriteTargets: () => [],
+  concurrencyKey: 'image_edit_color_observe', resolveConcurrencyKey: input => `image_edit_color_observe:${input.layerRef.id}`,
+  summarize: output => output.message,
+})

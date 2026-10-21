@@ -34,13 +34,14 @@
 
 ## 与剪辑一致的参数意义
 
-按 describe 的参数 schema 取真实字段、范围、默认和单位。基本校正、创意、RGB/色相曲线、三段色轮、HSL 二级、晕影、输入与 Look LUT 共用剪辑调色数学，但图片是静态参数，不写视频关键帧。
+按 describe 的参数 schema 取真实字段、范围、默认和单位。基本校正、参数曲线、混色器、RGB/色相曲线、四个色轮（分级或一级）、HSL 二级、晕影、输入与 Look LUT 共用剪辑调色数学，但图片是静态参数，不写视频关键帧。
 
 | 字段 | 意义与可突破的起点 |
 | --- | --- |
 | params.exposure | 线性曝光档，+1 亮度翻倍；轻微提亮可从 +0.3 起，按高光细节改 |
 | params.temperature_kelvin / params.tint | 色温写画面光源的开尔文值让白色还原，6500 不变，低于 6500 变冷、高于变暖；色调正值偏洋红、负值偏绿 |
-| params.saturation / params.vibrance | 饱和度 0 中性、-100 黑白、+100 翻倍；自然饱和度优先影响低饱和色 |
+| params.saturation / params.vibrance | OkLCh 彩度：饱和度 0 中性、-100 黑白、+100 翻倍；自然饱和度优先影响低饱和色并保护肤色 |
+| params.tone_lights / params.mixer_orange_saturation 等 | 参数曲线四段（tone_highlights/lights/darks/shadows）与 8 色混色器，±100，详见 color-grading 技能 |
 | params.shadow_hue / params.shadow_strength | 色相角配合强度，强度为0不染色；色轮只转色相不会自动生效 |
 | params.curve_master_points | 图片用结构化 {x,y} 数组，x/y 为0–100百分比、x严格递增；空数组中性，非空至少两点 |
 | params.hsl_hue_start / params.hsl_hue_end | 顺时针色相范围，可跨0°；肤色15–50°仅作观察起点，按真实肤色突破 |
@@ -48,7 +49,7 @@
 
 周期色相曲线两端 y 相等；HSL 饱和度/亮度范围起点不大于终点。图片 HSL 灰度观察属于会话预览，不写 params.hsl_show_mask，不进入保存/导出。查 params schema 而非复制视频 JSON 字符串曲线或动画字段。
 
-LUT 由现有图片编辑器文件导入入口提供，助手不能捏造资源标识；只接受明确的 sRGB 工作空间/sRGB 传递函数。P3/PQ/HLG LUT 拒绝，不把普通 .cube 当 HDR/Log 转换。曝光等有宽色域/HDR支持，不代表全部高级校正与专业 HDR/Log 软件等价。图片自动校色/参考匹配入口尚未交付；助手可读图提出并写入参数，不冒用视频分析工具。
+LUT 由现有图片编辑器文件导入入口提供，助手不能捏造资源标识；只接受明确的 sRGB 工作空间/sRGB 传递函数。P3/PQ/HLG LUT 拒绝，不把普通 .cube 当 HDR/Log 转换。曝光等有宽色域/HDR支持，不代表全部高级校正与专业 HDR/Log 软件等价。自动白平衡与曝光用 `analyze_image_edit_color`（传调整层引用，返回建议后合并写入 params），调色前后读数用 `observe_image_edit_color`；完整调色流程、验收数值与风格词典读 color-grading 技能。图片参考匹配尚未提供，不冒用视频分析工具。
 
 ## 用选区控制调整范围
 

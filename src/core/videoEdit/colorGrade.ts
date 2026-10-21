@@ -1,4 +1,5 @@
 export * from '../imaging/adjustments/colorGrade'
+export { suggestColorGradeAutoColor } from '../imaging/adjustments/autoGrade'
 import { COLOR_GRADE_PARAMS } from '../imaging/adjustments/colorGrade'
 import type { VideoEditBuiltinEffectDefinition } from './builtinEffects'
 

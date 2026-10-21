@@ -7,7 +7,7 @@ import { VideoEditColorGradePanel } from '../panels/VideoEditColorGradePanel'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit } from './videoEditService'
-import { analyzeVideoEditColorGrade, editVideoEditColorGrade } from './videoEditColorGrade'
+import { analyzeVideoEditColorGrade, editVideoEditColorGrade, observeVideoEditColor } from './videoEditColorGrade'
 import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 import { makeVideoEditBuiltinEffect } from './videoEditCompositing'
 import { evaluateVideoEditBuiltinParameters } from '@/core/videoEdit/keyframes'
@@ -154,7 +154,7 @@ it('三色轮及 HSL 区间消费专业原件，键盘一步提交，切换折�
   vi.stubGlobal('PointerEvent', MouseEvent)
   Element.prototype.setPointerCapture = vi.fn(); Element.prototype.releasePointerCapture = vi.fn(); Element.prototype.hasPointerCapture = () => true
   const view = render(<VideoEditColorGradePanel instance={owner} onError={onError} />)
-  fireEvent.click(view.getByRole('button', { name: '色轮' }))
+  fireEvent.click(view.getByRole('button', { name: '色彩分级' }))
   expect(view.getByRole('slider', { name: '阴影色轮亮度' })).toBeTruthy()
   expect(view.getByRole('slider', { name: '中间调色轮亮度' })).toBeTruthy()
   expect(view.getByRole('slider', { name: '高光色轮亮度' })).toBeTruthy()
@@ -216,4 +216,15 @@ it('颜色读数经公共能力返回：调色前/后隔离同一片段，节目
     expect(owner.document).toBe(snapshot); expect(owner.past).toHaveLength(history)
     expect((await app.call('observe_video_edit_color', { documentRef, sequenceRef, stage: 'before_grade' })).ok).toBe(false)
   } finally { app.dispose() }
+})
+it('片段不铺满画面时，调色前后读数只统计片段内容，不把四周空黑算成死黑', async () => {
+  const { target } = await setup()
+  const framed = Uint8ClampedArray.from(Array.from({ length: 16 * 16 }, (_, i) => { const x = i % 16; const y = Math.floor(i / 16); const inside = x >= 4 && x < 12 && y >= 4 && y < 12; return inside ? [118, 118, 118, 255] : [0, 0, 0, 255] }).flat())
+  vi.mocked(trialVideoEditCodeFrames).mockResolvedValue({ width: 16, height: 16, close: closeBitmap } as unknown as ImageBitmap)
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { drawImage() {}, getImageData: () => ({ data: framed }) } } })
+  const isolated = await observeVideoEditColor(target, { stage: 'after_grade' })
+  expect(isolated.statistics.readout.clipping.shadowsPercent).toBe(0)
+  expect(isolated.statistics.readout.exposure.middleGrayOffsetEv).toBeCloseTo(0, 0)
+  const program = await observeVideoEditColor(target, { stage: 'program' })
+  expect(program.statistics.readout.clipping.shadowsPercent).toBeGreaterThan(70)
 })

@@ -37,13 +37,13 @@ describe('ColorGrade 参数与自动校色', () => {
     const rgb = [.4, .4, .4].map(x => colorGradeSrgb(colorGradeLinear(x)))
     expect(rgb[0]).toBeCloseTo(.4)
   })
-  it('分位数增强低反差画面，透明/饱和像素不污染白平衡；空白画面可恢复失败', () => {
+  it('中性画面不改白平衡、不建议对比度，透明像素不污染统计；空白画面可恢复失败', () => {
     const base = Array.from({ length: 1024 }, (_, i) => { const x = .35 + i / 1023 * .3; return [x, x, x, 1] }).flat()
     const params = suggestColorGradeAutoColor(base, 1)
-    expect(params.temperature_kelvin).toBeCloseTo(6500, 0); expect(params.tint).toBeCloseTo(0, 1); expect(params.contrast).toBeGreaterThan(20)
+    expect(params.temperature_kelvin).toBeCloseTo(6500, 0); expect(params.tint).toBeCloseTo(0, 1); expect(params).not.toHaveProperty('contrast')
     const mixed = [...base, ...Array.from({ length: 1024 }, () => [1, 0, 0, 0]).flat()]
     expect(suggestColorGradeAutoColor(mixed, 1)).toEqual(params)
-    expect(() => suggestColorGradeAutoColor(new Float32Array(100), 1)).toThrow('缺少')
+    expect(() => suggestColorGradeAutoColor(new Float32Array(100), 1)).toThrow('透明')
     expect(() => suggestColorGradeAutoColor([1, 2], 1)).toThrow('RGBA')
   })
 })
