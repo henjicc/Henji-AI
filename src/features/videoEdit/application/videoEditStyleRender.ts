@@ -8,7 +8,7 @@ import { videoEditStyleLibrary, type VideoEditLibraryStyle, type VideoEditStyleM
 const logger = createLogger('features.videoEdit.styleRender')
 const PREVIEW_LONG_EDGE = 1280
 const THUMBNAIL_WIDTH = 320
-const PREVIEW_BITRATE = 1_200_000
+const PREVIEW_BITRATE = 450_000
 
 function fit(width: number, height: number, longEdge: number): { width: number; height: number } {
   const scale = Math.min(1, longEdge / Math.max(width, height)); const even = (value: number): number => Math.max(2, Math.round(value * scale / 2) * 2)
@@ -36,7 +36,7 @@ export async function renderVideoEditStyle(styleId: string, signal: AbortSignal,
     const thumbnailSize = { width: THUMBNAIL_WIDTH, height: Math.max(2, Math.round(THUMBNAIL_WIDTH * style.sample.height / style.sample.width / 2) * 2) }
     const canvas = new OffscreenCanvas(size.width, size.height); const context = canvas.getContext('2d')!
     const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() })
-    const video = new CanvasSource(canvas, { codec: 'avc', bitrate: PREVIEW_BITRATE, keyFrameInterval: 2 })
+    const video = new CanvasSource(canvas, { codec: 'avc', bitrate: PREVIEW_BITRATE, bitrateMode: 'constant', keyFrameInterval: 2 })
     output.addVideoTrack(video, { frameRate: timeline.fps })
     const media: VideoEditStyleMediaBytes = { anchors: [] }
     const anchorFrames = style.sample.anchors.map(seconds => Math.min(timeline.frames - 1, Math.round(seconds * timeline.fps)))

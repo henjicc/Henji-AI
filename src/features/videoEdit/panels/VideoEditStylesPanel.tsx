@@ -65,7 +65,7 @@ function StyleDetail({ entry, instance, onClose, onError }: { entry: VideoEditLi
       <div className="flex min-w-0 flex-col gap-4">
         {entry.style.description && <p className="text-13 leading-6 text-text1">{entry.style.description}</p>}
         {sections.map((section, index) => <UiGroup key={`${section.title}-${index}`} title={section.title || undefined} titleTone="compact">
-          <p className="whitespace-pre-wrap text-13 leading-6 text-text1">{section.body.replace(/<!--[\s\S]*?-->/g, '').replace(/^#\s+.*\n?/, '').trim()}</p>
+          <p className="whitespace-pre-wrap text-13 leading-6 text-text1">{section.body.replace(/<!--[\s\S]*?-->/g, '').replace(/^#\s+.*\n?/, '').replace(/^>\s?/gm, '').trim()}</p>
         </UiGroup>)}
       </div>
     </div>
