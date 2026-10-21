@@ -168,9 +168,9 @@ describe('所有登记格式的黄金样本', () => {
           expect(clip.effects?.[0].builtin?.params).not.toHaveProperty('temperature')
           if (version >= 18) expect(clip.effects?.[0].builtin?.curves?.temperature_kelvin?.map(point => point.value)).toEqual([5600, 6200])
           expect(clip.curves?.opacity?.[1].value).toBe(1)
-          // v19：音频重构子片段的参数与原始源范围随片段保存；旧样本没有该字段。
+          // v21：音频重构子片段的参数与原始源范围随片段保存；旧样本没有该字段。
           const sound = document.sequences[0].clips.find(value => value.id === 'golden-sound-clip')
-          if (version >= 19) expect(sound?.remix).toMatchObject({ id: 'golden-remix', granularity: 'bar', sourceOutUs: 3000000 })
+          if (version >= 21) expect(sound?.remix).toMatchObject({ id: 'golden-remix', granularity: 'bar', sourceOutUs: 3000000 })
           else expect(sound?.remix).toBeUndefined()
           expect(document.sequences[0].captions?.[0].translation).toBe('Golden caption')
           if (version >= 11) {
