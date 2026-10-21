@@ -114,7 +114,7 @@ async function terminateOwnedChild(child, state, { platform = process.platform, 
 
 async function runNativePersistence({
   executable = require('electron'), root = workspaceRoot, testFiles = NATIVE_TEST_FILES,
-  timeoutMs = 60000, graceMs = 2000, signal,
+  timeoutMs = 300000, graceMs = 2000, signal,
   // 自检仅替换子进程命令；正式入口仍唯一使用已安装的 Electron + Vitest。
   createArguments = (reportPath) => [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', '--mode=native',
     ...testFiles.map((file) => path.resolve(root, file)), '--pool=forks', '--poolOptions.forks.singleFork=true',

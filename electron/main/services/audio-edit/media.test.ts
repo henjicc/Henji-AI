@@ -7,6 +7,7 @@ vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: 
 vi.mock('../db', () => ({ getDb: vi.fn() }))
 vi.mock('../appPaths', () => ({ getProgramStoreDir: () => `${os.tmpdir()}/AudioEdit` }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (value: string) => value }))
+vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ categoryDirectory: (_category: string, id: string) => path.join(os.tmpdir(), '.痕迹AI缓存', 'audio-edit', id) }) }))
 vi.mock('./project-store', () => ({ requireAudioEditProject: vi.fn() }))
 import { identifyAudioEditSource, verifyAudioEditSource, audioEditCacheDirectory, probeAudioEditImport } from './media'
 import { cancelAudioEditTask, hasActiveAudioEditTask } from './task-store'
@@ -33,7 +34,8 @@ it('detects same-name, same-size, restored-time replacement without altering the
 it('rejects cache traversal before filesystem deletion is possible', () => {
   expect(() => audioEditCacheDirectory('../original')).toThrow('无效')
   expect(() => audioEditCacheDirectory('C:\\original')).toThrow('无效')
-  expect(audioEditCacheDirectory('safe-project')).toBe(path.join(os.tmpdir(), 'AudioEdit', 'safe-project', 'cache'))
+  // 口播缓存随作品目录下的统一缓存根（缓存与代理改造），不再放程序目录。
+  expect(audioEditCacheDirectory('safe-project')).toBe(path.join(os.tmpdir(), '.痕迹AI缓存', 'audio-edit', 'safe-project'))
 })
 
 it('探测前已登记取消，音频帧/视频包扫描与流式哈希都接收取消信号', async () => {
