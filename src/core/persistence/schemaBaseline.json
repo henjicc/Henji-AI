@@ -126,10 +126,10 @@
       "minReaderVersion": 1
     },
     "document.video_edit": {
-      "version": 21,
-      "fingerprint": "e7f39259db0486506239e01da307f170a4ad31c5f35d467701d777abec45e01b",
+      "version": 22,
+      "fingerprint": "16fc589254d73fc921fe39c6450f2557112b00c9e3e871bc2096490116aebbae",
       "supportedFrom": 17,
-      "minReaderVersion": 18
+      "minReaderVersion": 22
     },
     "document.canvas": {
       "version": 1,
@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 22,
-      "fingerprint": "d7ef16c010b1ff7b900e6be8b0f69200f1d97d62bc19ec65f34660f9f0d72b3c",
+      "version": 23,
+      "fingerprint": "531f214ae7de6df15d07c2590f6b6db15a6dfce9c2b6a6c757fda682781c851b",
       "supportedFrom": 19,
-      "minReaderVersion": 19
+      "minReaderVersion": 23
     },
     "project": {
       "version": 1,
@@ -288,10 +288,10 @@
       "minReaderVersion": 2
     },
     "subtitle-manifest": {
-      "version": 14,
-      "fingerprint": "57ac41a405fd3c021580cc2e07f25e115642dfb48a4bb25ad0c3bb95a168058d",
+      "version": 15,
+      "fingerprint": "c422d4f915fcb6a1623645148e1050ff1ef5a3de6f5081e46693fec044c45d4e",
       "supportedFrom": 11,
-      "minReaderVersion": 14
+      "minReaderVersion": 15
     },
     "setting-records": {
       "version": 21,
@@ -320,6 +320,24 @@
     "sound-library-folders": {
       "version": 1,
       "fingerprint": "222d49b6818fec35de9a499015a8e03e74e17a1c27d9ac9c6c811056d878da33",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "video-style-library": {
+      "version": 1,
+      "fingerprint": "fc7b19ee664a2fae3ed3afaf188f27b3177399c0203327b48065562c02d72705",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "video-template-library": {
+      "version": 1,
+      "fingerprint": "49ccebbecb6505d1bac6e0090e7ceb26f8b6758ce539ca8afdfd29eeb502b13b",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
+    },
+    "video-style-package": {
+      "version": 1,
+      "fingerprint": "f64ff3c850f12db57ae02ab1364b93700c992e57791ab2259f14273c1dc411c4",
       "supportedFrom": 1,
       "minReaderVersion": 1
     }
