@@ -141,7 +141,7 @@ function createVideoEditMonitorScene() {
         assert.equal(pressureVideo.width, 3840); assert.equal(pressureVideo.height, 2160); assert.equal(pressureVideo.avg_frame_rate, '60/1')
         evidence.originalVideoProbe = pressureProbe
         const factoryFile = path.join(root, 'fixture-factory.cjs')
-        buildSync({ entryPoints: [path.join(__dirname, 'uiInspectionVideoEditMonitorFixtures.ts')], bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: factoryFile })
+        buildSync({ entryPoints: [path.join(__dirname, 'uiInspectionVideoEditMonitorFixtures.ts')], bundle: true, platform: 'node', format: 'cjs', packages: 'external', alias: { '@': path.resolve('src') }, outfile: factoryFile })
         delete require.cache[factoryFile]
         const { dynamicSource, staticSource } = require('./uiInspectionVideoEditCodeControls.cjs')
         const { project, pressure } = require(factoryFile).createMonitorFixtures(root, previousMedia, original, [dynamicSource, staticSource])

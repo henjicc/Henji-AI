@@ -1,15 +1,15 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { CodeMaterialError } from './codeMaterial/contract'
-import type { CodeMaterialContext, CodeMaterialProgram } from './codeMaterial/contract'
+import type { CodeMaterialContext } from './codeMaterial/contract'
+import type { CodeMaterialMetadata } from './codeMaterialDocument'
 import { videoEditFps, videoEditSourceSeconds } from './time'
 import type { VideoEditFrameOffset, VideoEditRatio, VideoEditSourceTime } from './time'
 import { videoEditFrameFraction } from './time'
 import { videoEditClipSourceTimeAt, videoEditClipMotionSourceTimeAt } from './clipSpeed'
-import type { CodeMotionClock } from './codeMaterial/motionSampling'
 
 /** 片段速度与倒放（4.13）按 clipSpeed.ts 换算源时间。 */
 export type CodeMaterialTimedClip = VideoEditSourceTime & { start: number; duration: number; speed?: VideoEditRatio; reverse?: boolean }
-type TimingProgram = Pick<CodeMaterialProgram, 'mode'> & Partial<Pick<CodeMaterialProgram, 'width' | 'height' | 'durationSeconds'>>
+type TimingProgram = Pick<CodeMaterialMetadata, 'mode' | 'width' | 'height' | 'durationSeconds'>
 export interface CodeMaterialHostSize { width: number; height: number }
 /** Placement hints are optional. The host supplies the actual canvas; source
  * declarations never acquire invented dimensions or a finite source duration. */
@@ -61,20 +61,6 @@ function contextForSubframe(clip: CodeMaterialTimedClip, timelineFrame: number, 
   if (program.mode === 'dynamic' && program.durationSeconds !== undefined && time - program.durationSeconds > tolerance) { if (transparent) return null; throw new CodeMaterialError('CONTEXT', '快门源时刻超出动态代码素材声明时长。') }
   const delta = offset.numerator / offset.denominator
   return { sourceTime, context: { ...center, time, localTime: (timelineFrame - clip.start + delta) / center.fps, sequenceTime: (timelineFrame + delta) / center.fps, frame: timelineFrame + delta } }
-}
-/** Each frame owns this transient clock. Clip trims truncate and normalize the
- * shutter; missing source exposure stays transparent instead of inventing data.
- * Audio/media content remains prepared once; audioTime follows local playback. */
-export function codeMaterialMotionClock(clip: CodeMaterialTimedClip, timelineFrame: number, rate: VideoEditRatio, program: TimingProgram, parametersAt: (time: VideoEditSourceTime) => Readonly<Record<string, unknown>>, center: CodeMaterialContext, window?: { start: number; end: number }): CodeMotionClock {
-  const extent = window ?? { start: clip.start, end: clip.start + clip.duration }
-  const cache = new Map<string, ReturnType<CodeMotionClock['at']>>()
-  return { available: { start: { numerator: extent.start - timelineFrame, denominator: 1 }, end: { numerator: extent.end - timelineFrame, denominator: 1 } }, at(offset) {
-    const key = `${offset.numerator}/${offset.denominator}`
-    if (cache.has(key)) return cache.get(key)!
-    const sampled = contextForSubframe(clip, timelineFrame, offset, rate, program, window, true, center)
-    const result = sampled ? { sourceTime: sampled.sourceTime, context: { ...center, ...sampled.context, ...(center.audio ? { audioTime: (center.audioTime ?? center.localTime) + offset.numerator / offset.denominator / center.fps } : {}) }, parameters: parametersAt(sampled.sourceTime) } : null
-    cache.set(key, result); return result
-  } }
 }
 function contextForFrame(clip: CodeMaterialTimedClip, timelineFrame: number, rate: VideoEditRatio, program: TimingProgram, transitionHandles = false, host?: CodeMaterialHostSize): CodeMaterialContext {
   integer(clip.start, '片段起点'); integer(clip.duration, '片段时长', 1)

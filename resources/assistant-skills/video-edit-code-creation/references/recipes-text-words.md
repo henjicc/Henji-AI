@@ -2,45 +2,43 @@
 
 配方只示范写法与常见做法，不是推荐风格；配色、时长、幅度按风格说明书或需求改。
 
-words(text)按空白分词；中文写成“看见 关系 理解 变化”才有四个词，不是自动中文语义分词。原文不能因分词而改变，普通句子优先recipes-text的整句perChar；明确关键词／英文词组才用此配方。
+关键词用 table 参数逐行声明，比把一句话按空格拆开更可靠：中文不会自动分词，每行一个词，用户可直接增删改行，选中卡片即改对应行。原文不能因分词而改变；普通句子优先 recipes-text 的整句逐字揭示。
 
-完整样例一拍四张关键词卡、阅读顺序错峰，后续词按拍继续显示。四张是构图选择，不是产品数量限制；输入更多就继续分拍，扩参数容量时同时按实际词数延长源时长与片段，不能把未展示内容截掉。最慢展示每拍6秒，当前80字符声明在空白拆词最坏约40词、10拍以内，60秒源时长能容纳；实际成片按ceil(词数/4)×每拍秒数裁出，并核对源时间。
-
-卡片用measureText量完整词、不量当前显字；空词组整组隐藏。词越长卡片越高，若超过安全高度则改版式／字号，不横向压扁或让maxLines偷偷缩小。这里是词卡揭示，不是连续句子的自动紧密排版。
+样例一拍四张卡片、阅读顺序错峰，后续词按拍继续显示。四张是构图选择，不是数量限制；词更多就继续分拍，并按 ceil(词数/4)×每拍秒数延长片段，不能截掉未展示内容。卡片宽度按完整词量字；词越长卡片越高，超过安全高度时改版式／字号，不横向压扁。
 
 ```ts
+const clamp01 = v => Math.min(1, Math.max(0, v))
+const quartOut = t => 1 - (1 - t) ** 4
 export default {
-  apiVersion: 1, languageVersion: 3, name: "关键词分拍揭示",
-  kind: "generator", mode: "dynamic", width: 1920, height: 1080,
-  durationSeconds: 60, seed: 3,
-  parameters: {
-    value: {type: "text", title: "关键词（空格分隔）", default: "看见 关系 理解 变化", maxLength: 80},
-    accent: {type: "color", title: "卡片颜色", default: [.12,.32,.4,1]},
-    seconds: {type: "number", title: "每拍秒数", default: 3, min: 2, max: 6, step: .1},
-    each: {type: "number", title: "词间隔秒", default: .1, min: 0, max: .2, step: .01}
-  },
-  render(ctx) {
-    const tokens = words(ctx.params.value);
-    const n = tokens.length;
-    const page = min(floor(ctx.time / ctx.params.seconds), max(0, ceil(n / 4) - 1));
-    const local = ctx.time - page * ctx.params.seconds;
-    const width = ctx.width * .2;
-    const tile = (i) => {
-      const index = min(page * 4 + i, max(0, n - 1));
-      const word = n > 0 ? tokens[index] : "";
-      const box = measureText({text: word, fontSize: 54, maxWidth: width - 48, wrap: true});
-      return group({id: "wordCard", x: ctx.width * .07 + i * ctx.width * .22,
-        y: ctx.height * .45 + tween(local, .15 + stagger(i, ctx.params.each), .5, 32, 0, "quartOut"),
-        opacity: page * 4 + i < n ? progress(local, .15 + stagger(i, ctx.params.each), .25) : 0}, [
-        rect({id: "plate", x: 0, y: 0, width: width, height: box.height + 48,
-          radius: 24, fill: ctx.params.accent}),
-        text({id: "word", x: 24, y: 24, text: word, fontSize: 54,
-          baseline: "top", maxWidth: width - 48, wrap: true, color: [0.95, 0.96, 0.97, 1]})
-      ]);
-    };
-    return repeat(4, i => tile(i));
+  name: "关键词分拍揭示", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 60,
+  params: [
+    { key: "words", type: "table", title: "关键词", rowKey: "id",
+      fields: { id: { type: "text", title: "标识", default: "w", maxLength: 16 }, word: { type: "text", title: "词", default: "关键词", maxLength: 24 } },
+      default: [{ id: "w1", word: "看见" }, { id: "w2", word: "关系" }, { id: "w3", word: "理解" }, { id: "w4", word: "变化" }] },
+    { key: "accent", type: "color", title: "卡片颜色", default: "#1f5266" },
+    { key: "seconds", type: "number", title: "每拍秒数", default: 3, min: 2, max: 6, step: .1 },
+    { key: "each", type: "number", title: "词间隔秒", default: .1, min: 0, max: .2, step: .01 }
+  ],
+  layers(params, width, height) {
+    const rows = params.words, cardWidth = width * .2
+    return rows.map((row, index) => {
+      const page = Math.floor(index / 4), slot = index % 4
+      const x = width * .07 + slot * width * .22, y = height * .45
+      const start = t => t - page * params.seconds - .15 - slot * params.each
+      return { id: `word-${row.id}`, bounds: [x, y, x + cardWidth, y + 140], data: { parameter: "words", keyField: "id", key: row.id },
+        pose: t => {
+          const local = start(t)
+          if (local < 0 || t >= (page + 1) * params.seconds && page < Math.ceil(rows.length / 4) - 1) return null
+          return { y: (1 - quartOut(clamp01(local / .5))) * 32, opacity: clamp01(local / .25) }
+        },
+        draw(ctx) {
+          ctx.fillStyle = params.accent; ctx.beginPath(); ctx.roundRect(x, y, cardWidth, 140, 24); ctx.fill()
+          ctx.fillStyle = "#f2f5f7"; ctx.font = "54px sans-serif"; ctx.textBaseline = "middle"
+          ctx.fillText(row.word, x + 24, y + 70, cardWidth - 48)
+        } }
+    })
   }
 }
 ```
 
-word卡只负责图形，真实词级配音时刻须另外读到并驱动时间；固定每拍时长不等于对齐语音。检查每拍第一个、中间错峰、最后必要词落定和切拍两侧；大标题与字幕区域仍保持一个焦点。
+卡片只负责图形，真实词级配音时刻须另外读到并驱动时间；固定每拍时长不等于对齐语音。检查每拍第一个、中间错峰、最后必要词落定和切拍两侧；大标题与字幕区域仍保持一个焦点。

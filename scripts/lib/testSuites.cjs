@@ -13,8 +13,6 @@ const GPU_TEST_FILES = [
   'src/features/imageEdit/v3/gpu/imageEditorGpuSparseAnnotationV3.test.ts',
   'src/core/imageEdit/testing/vgpuImpulseProbe.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditGpuPrecision.gpu.test.ts',
-  'src/features/videoEdit/engine/videoEditCodeGpuV3.gpu.test.ts',
-  'src/features/videoEdit/engine/videoEditCodeVector.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditCornerPin.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts',
   'src/features/videoEdit/engine/gaussianHosts.gpu.test.ts',
@@ -22,7 +20,6 @@ const GPU_TEST_FILES = [
   'src/features/videoEdit/engine/videoEditColorGrade.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditBuiltinTransitions.gpu.test.ts',
   'src/features/videoEdit/engine/videoEditPlaybackResolution.gpu.test.ts',
-  'src/features/videoEdit/engine/videoEditPressureBenchmark.test.ts',
   'src/features/videoEdit/engine/videoEditSmartRegionMask.gpu.test.ts',
 ]
 const IMAGE_EXPORT_TEST_FILES = [

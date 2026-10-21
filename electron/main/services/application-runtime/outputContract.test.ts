@@ -202,7 +202,7 @@ for (const domain of ['image_edit', 'video_edit']) {
   for (const action of ['organize', 'interpret']) successData[`${action}_${domain}_intent`] = { resultRef: ref(`${domain}.intent_draft`), candidateRefs: [ref(`${domain}.intent_candidate`)], status: 'candidate', questions: [], ...revisions }
   successData[`read_${domain}_intent_recording`] = { resultRef: domain === 'video_edit' ? documentRef : imageDocumentRef, lines: ['{"text":"请缩短片头"}'], nextOffset: null, nextImageOffset: null, semanticImages: [], inputReceipt: 'receipt', ...revisions }
 }
-for (const name of ['import_video_edit_asset', 'import_video_edit_folder', 'save_video_edit', 'split_video_edit', 'trim_video_edit_clip', 'undo_video_edit', 'redo_video_edit']) {
+for (const name of ['import_video_edit_asset', 'import_video_edit_folder', 'save_video_edit', 'split_video_edit', 'add_video_edit_frame_hold', 'trim_video_edit_clip', 'undo_video_edit', 'redo_video_edit']) {
   successData[name] = { resultRef: documentRef, message, verification: verification() }
 }
 for (const name of ['collect_video_edit_code_asset', 'collect_video_edit_output']) {

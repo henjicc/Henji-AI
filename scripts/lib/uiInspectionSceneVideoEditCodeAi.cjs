@@ -3,23 +3,30 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 
-// 契约来源：author-api.md、author-text-motion.md、author-shaders.md、examples.md。
+// 作者原代码（标准 ES 模块，Canvas2D 图层）；图层 id 决定点选与源码定位。
 // 使用默认风格字体和比例；参数 size 可在外部 Agent 的批注处理事务内修改。
 const CODE_AI_SOURCE = `export default {
-  apiVersion:1, languageVersion:3, name:"Reality 极光标题", kind:"generator", mode:"dynamic",
-  width:1920, height:1080, durationSeconds:4, seed:42,
-  parameters:{size:{type:"number",title:"标题字号",default:96,min:48,max:160,step:1}},
-  render(ctx){
-    const enter=expoOut(progress(ctx.time,0,.6));
+  name: "Reality 极光标题", kind: "generator", mode: "dynamic",
+  width: 1920, height: 1080, durationSeconds: 4,
+  params: [{ key: "size", type: "number", title: "标题字号", default: 96, min: 48, max: 160, step: 1 }],
+  layers(params, width, height) {
+    const enter = time => 1 - Math.pow(2, -10 * Math.min(1, Math.max(0, time / .6)))
     return [
-      shader({id:"sky",x:0,y:0,width:ctx.width,height:ctx.height,layers:[{type:"SolidColor",props:{color:[.02,.03,.06,1]}},{type:"Aurora",props:{speed:2}}]}),
-      group({id:"heading",x:960,y:540+(1-enter)*80,opacity:enter},[
-        rect({id:"plate",x:-600,y:-100,width:1200,height:200,radius:20,fill:[0.33,0.82,0.88,1]}),
-        text({id:"title",x:0,y:0,text:"title",fontFamily:"sans-serif",
-          fontSize:ctx.params.size,fontWeight:600,align:"center",baseline:"middle",maxWidth:1100,maxLines:1,wrap:false,
-          color:[0.95,0.96,0.97,1],perChar:(i,n)=>({y:tween(ctx.time,stagger(i,.045),.6,48,0,"expoOut"),opacity:progress(ctx.time,stagger(i,.045),.28)})})
-      ])
-    ];
+      { id: "sky", bounds: [0, 0, width, height], draw(ctx, time) {
+        const glow = ctx.createLinearGradient(0, 0, width, height)
+        glow.addColorStop(0, "#05080f"); glow.addColorStop(.5 + .2 * Math.sin(time * 2), "#1b6f63"); glow.addColorStop(1, "#05080f")
+        ctx.fillStyle = glow; ctx.fillRect(0, 0, width, height)
+      } },
+      { id: "plate", bounds: [360, 440, 1560, 640], draw(ctx, time) {
+        const amount = enter(time); ctx.globalAlpha = amount; ctx.fillStyle = "#54d1e0"
+        ctx.beginPath(); ctx.roundRect(360, 440 + (1 - amount) * 80, 1200, 200, 20); ctx.fill()
+      } },
+      { id: "title", bounds: [410, 480, 1510, 600], draw(ctx, time) {
+        const amount = enter(time); ctx.globalAlpha = amount; ctx.fillStyle = "#f2f5f7"
+        ctx.font = \`600 \${params.size}px sans-serif\`; ctx.textAlign = "center"; ctx.textBaseline = "middle"
+        ctx.fillText("title", 960, 540 + (1 - amount) * 80, 1100)
+      } }
+    ]
   }
 }`
 
@@ -174,7 +181,7 @@ function createVideoEditCodeAiScene() {
           codeClip = inserted.sequences[0].clips.find(clip => clip.kind === 'code')
           // 最后一个字入场结束 .18+.6=.78；第 25 帧 (.833s) 是全部入场后的一帧。
           await seek(25)
-          item.clipRef = ref('video_edit.clip', codeClip.id); item.requestedFrame = 25; item.languageVersion = 3
+          item.clipRef = ref('video_edit.clip', codeClip.id); item.requestedFrame = 25; item.languageVersion = 4
           assert.equal((await snapshot()).presentedFrame, 25, '节目画面未呈现请求的入场后帧')
         })
         await step('03-pick-element', '点选标题并定位源码高亮', async item => {

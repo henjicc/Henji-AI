@@ -7,10 +7,11 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks, quantile } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { adoptNewVideoEditProject, closeVideoEditDockPanel, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 // 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
 const readFile = readVideoEditFile
-const filterSource = 'export default {apiVersion:1,name:"原创红色处理",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:21,parameters:{gain:{type:"number",title:"红色增益",default:.8,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
+const filterSource = authorSources.redGainFilter('原创红色处理', .8, true)
 
 /** Uses the formal Electron host, actual UI actions, and the same public Modern MCP registry. */
 function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {

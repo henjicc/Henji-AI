@@ -80,7 +80,7 @@ npm run test:reality -- --suite integration
 
 ## 全局架构边界
 
-**代码效果作者路线（2026-10-20 用户确认，正在实施）**：标准 ES 模块 JS 在现有剪辑渲染 Worker 直接执行，共用合成 GPUDevice；作者接口对齐 Frameflow 的 Canvas2D、layers、WebGL，并支持原生 WebGPU 与多 pass WGSL。效果、效率与 AI 创作成本优先，不以 AST 白名单或封闭 DSL 限制作者表达；不为每个效果另开隔离线程或逐帧搬运像素。确定性通过作者约定及正确失效的帧缓存实现。旧语言在三个原效果可行性验证通过后整体退役，当前不能把路线确认当作迁移验收通过。
+**代码效果作者路线（2026-10-20 用户确认）**：标准 ES 模块 JS 在现有剪辑渲染 Worker 直接执行，共用合成 GPUDevice；作者接口对齐 Frameflow 的 Canvas2D、layers、WebGL，并支持原生 WebGPU 与多 pass WGSL。效果、效率与 AI 创作成本优先，不以 AST 白名单或封闭 DSL 限制作者表达；不为每个效果另开隔离线程或逐帧搬运像素。确定性通过作者约定及正确失效的帧缓存实现。旧作者语言（AST 编译器、求值器与 V3 GPU 路径）已于 2026-10-21 整体退役，作者代码只走标准 ES 模块。
 
 这些对绝大多数任务都成立，细则见 [architecture.md](docs/rules/architecture.md)：
 

@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { compileCodeMaterial } from './codeMaterial/compiler'
+import { testCodeMetadata } from './codeMaterial/sourceTestFixtures'
 import { codeMaterialCurvesSchema, evaluateCodeMaterialParameters, prepareCodeMaterialParameters, proposeCodeMaterialMigration } from './codeMaterialAnimation'
 import type { CodeMaterialCurves, CodeMaterialKeyframe } from './codeMaterialAnimation'
 import type { CodeMaterialInstance } from './codeMaterialPersistence'
 import { offsetVideoEditSource } from './time'
 
-const source = `export default {apiVersion:1,name:"动画",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1,animatable:true},ink:{type:"color",title:"颜色",default:[0,0,0,0],animatable:true},flag:{type:"boolean",title:"开关",default:false,animatable:true},label:{type:"text",title:"文字",default:"旧",maxLength:20,animatable:true},choice:{type:"choice",title:"选项",default:"a",options:["a","b"],animatable:true}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:100,height:100,fill:ctx.params.ink})];}}`
-const program = compileCodeMaterial(source)
+const program = testCodeMetadata({ name: '动画', width: 3840, height: 2160, durationSeconds: 10, parameters: { amount: { type: 'number', title: '强度', default: 5, min: 0, max: 10, step: 1, animatable: true }, ink: { type: 'color', title: '颜色', default: [0, 0, 0, 0], animatable: true }, flag: { type: 'boolean', title: '开关', default: false, animatable: true }, label: { type: 'text', title: '文字', default: '旧', maxLength: 20, animatable: true }, choice: { type: 'choice', title: '选项', default: 'a', options: ['a', 'b'], animatable: true } } })
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
 const point = (id: string, sourceInUs: number, value: CodeMaterialKeyframe['value'], interpolation: CodeMaterialKeyframe['interpolation'] = 'linear'): CodeMaterialKeyframe => ({ id, ...time(sourceInUs), value, interpolation })
 const instance = (curves: CodeMaterialCurves, parameters: CodeMaterialInstance['parameters'] = {}): CodeMaterialInstance => ({ definitionId: 'd', versionId: 'v', parameters, curves })

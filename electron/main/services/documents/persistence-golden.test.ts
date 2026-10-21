@@ -11,7 +11,7 @@ import { ContentAddressedResourceStore } from '../image-editor-v3/resource-store
 import { readImageDocumentPackageHeader } from '../image-editor-v3/image-document/package-file'
 import { imageWorkingCopySchema } from '../../../../src/core/persistence/imageSchemas'
 import { readStoryboardMetadataFromPng } from '../image/png-metadata'
-import { compileCodeMaterial } from '../../../../src/core/videoEdit/codeMaterial/compiler'
+import ts from 'typescript'
 import { videoEditDocumentSchema } from '../../../../src/core/videoEdit/document'
 import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, VIDEO_EDIT_DOCUMENT_VERSION, VIDEO_EDIT_CONTENT_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { ImageEditCommandHistoryV3 } from '../../../../src/core/imageEdit/v3/commandHistory'
@@ -112,7 +112,9 @@ describe('正式读入口打开黄金归档与源码', () => {
     expect(component.metadata).toMatchObject({ schemaVersion: 1, name: '组件', exports: ['value'] })
     const version = JSON.parse(await fsp.readFile(fixture('code-version', 'v1.json'), 'utf8')) as { files: { hash: string }[] }
     expect(codeSourceHash(await fsp.readFile(fixture('code-version', 'v1.ts'), 'utf8'))).toBe(version.files[0].hash)
-    expect(compileCodeMaterial(await fsp.readFile(fixture('code-version', 'v1.ts'), 'utf8'))).toMatchObject({ mode: 'dynamic', width: 1920, height: 1080 })
+    const exports: { default?: Record<string, unknown> } = {}
+    new Function('exports', ts.transpileModule(await fsp.readFile(fixture('code-version', 'v1.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(exports)
+    expect(exports.default).toMatchObject({ mode: 'dynamic', width: 1920, height: 1080 })
   })
   it('正式PNG元数据编码器生成版本化描述，原公开DTO不暴露内部版本', async () => {
     expect(readStoryboardMetadataFromPng(await fsp.readFile(fixture('storyboard-metadata', 'v1.png')))).toEqual({ gridRows: 2, gridCols: 2, frameNotes: ['远景', '特写'] })

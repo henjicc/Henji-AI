@@ -3,7 +3,7 @@ import ts from 'typescript'
 import { migratePersistenceContent, PersistenceError } from '../../persistence/migrations'
 import { formatMigrations } from '../../persistence/formatMigrations'
 import { z } from 'zod'
-import { CodeMaterialError, CODE_V3_LIMITS } from './contract'
+import { CodeMaterialError, CODE_MATERIAL_LIMITS } from './contract'
 import { type CodeComponentPin, type CodeMaterialFiles, type CodeSourceResolver, codeSourceHashSchema } from './sources'
 
 export const codeComponentNameSchema = z.string().trim().min(1).max(200).refine(name => [...name].every(character => character.charCodeAt(0) >= 32) && !/[\\/:*?"<>|@]/.test(name) && !/[. ]$/.test(name) && name !== '.' && name !== '..' && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name), '组件名不能含路径、@ 或非法文件名字符。')
@@ -75,7 +75,7 @@ export function pinCodeComponentImports(files: CodeMaterialFiles, library: reado
     const checked = new Set<string>()
     const visit = (pin: CodeComponentPin, chain: string[]): void => {
       if (chain.includes(pin.name) || publishingName === pin.name) throw new CodeMaterialError('COMPATIBILITY', `组件循环依赖：${[...(publishingName ? [publishingName] : []), ...chain, pin.name].join(' → ')}。`)
-      if (chain.length >= CODE_V3_LIMITS.depth) throw new CodeMaterialError('BUDGET', '组件依赖深度超出编译预算。')
+      if (chain.length >= CODE_MATERIAL_LIMITS.depth) throw new CodeMaterialError('BUDGET', '组件依赖深度超出编译预算。')
       const key = `${pin.location}:${pin.hash}`; if (checked.has(key)) return; checked.add(key)
       pin.imports.forEach(child => visit(child, [...chain, pin.name]))
     }
@@ -94,7 +94,7 @@ export function expandPinnedCodeComponents(contents: CodeMaterialFiles, imports:
       if (!pin) throw new CodeMaterialError('COMPATIBILITY', `${path} 的 ${request.specifier} 未钉住版本，请重新保存素材。`)
       const key = `${pin.name}@${pin.version}:${pin.hash}`
       if (chain.includes(key)) throw new CodeMaterialError('COMPATIBILITY', `组件循环依赖：${[...chain, key].join(' → ')}`)
-      if (chain.length >= CODE_V3_LIMITS.depth) throw new CodeMaterialError('BUDGET', '组件依赖深度超出编译预算。')
+      if (chain.length >= CODE_MATERIAL_LIMITS.depth) throw new CodeMaterialError('BUDGET', '组件依赖深度超出编译预算。')
       let target = paths.get(key)
       if (!target) {
         const stem = pin.name.replace(/[^a-zA-Z0-9_\-.\u3400-\u9fff]/g, '_')

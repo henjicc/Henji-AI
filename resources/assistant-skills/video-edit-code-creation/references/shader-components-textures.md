@@ -1,6 +1,6 @@
 # 着色器组件：纹理与背景
 
-由脚本从 shaders 4.0.2 生成。代码里写英文组件名；中文名是效果面板名。角色：生成=自己画；滤镜=处理之前画好的图层；转场=剪辑过渡或 layers 里的揭示。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect（effect:shaders.组件名 / transition:shaders.组件名）。
+由脚本从 shaders 4.0.2 生成。作为剪辑内置效果与转场使用（片段效果 effect:shaders.组件名，转场 transition:shaders.组件名），作者代码不直接调用；中文名是效果面板名。角色：生成=画出整幅内容；滤镜=处理片段画面；转场=剪辑过渡。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect。
 
 - **Aurora** 极光｜生成｜Mesmerizing aurora borealis with layered curtains, vertical rays, and …｜colorA colorB colorC colorSpace balance intensity curtainCount speed⏱ waviness rayDensity height center seed
 - **Beam** 光束｜生成｜A beam of light from one point to another.｜startPosition endPosition startThickness endThickness startSoftness endSoftness insideColor outsideColor colorSpace

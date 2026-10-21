@@ -1,6 +1,6 @@
 # 着色器组件：图形与材质
 
-由脚本从 shaders 4.0.2 生成。代码里写英文组件名；中文名是效果面板名。角色：生成=自己画；滤镜=处理之前画好的图层；转场=剪辑过渡或 layers 里的揭示。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect（effect:shaders.组件名 / transition:shaders.组件名）。
+由脚本从 shaders 4.0.2 生成。作为剪辑内置效果与转场使用（片段效果 effect:shaders.组件名，转场 transition:shaders.组件名），作者代码不直接调用；中文名是效果面板名。角色：生成=画出整幅内容；滤镜=处理片段画面；转场=剪辑过渡。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect。
 
 - **Arc** 扇形｜生成｜Pie sector (arc wedge) with adjustable radius and aperture angle｜origin color center radius aperture rotation softness strokeThickness strokeColor strokePosition colorSpace
 - **BrushedMetal** 拉丝金属｜生成｜Photorealistic brushed metal — a satin anodised surface combed with fi…｜origin center scale rotation lightColor darkColor brushAngle anisotropy grain grainScale roughness environment envRotation lightAngle speed⏱ bevelWidth bevelShape edgeSoftness shape
@@ -30,4 +30,3 @@
 - **Plastic** 塑料｜生成｜Glossy molded plastic with photorealistic studio reflections, driven i…｜origin center scale rotation colorA colorB stops gradientAngle colorSpace thickness roughness reflectivity crumple crumpleScale crumpleCoverage seed edgeSoftness lightAngle speed⏱ shading rim rimColor shape
 - **Polygon** 正多边形｜生成｜Regular polygon with adjustable sides and corner rounding｜origin color center radius sides rounding rotation softness strokeThickness strokeColor strokePosition colorSpace
 - **Ring** 圆环｜生成｜Annular ring (donut) with adjustable radius and band thickness｜origin color center radius thickness softness strokeThickness strokeColor strokePosition colorSpace
-- **RoundedRect** 圆角矩形｜生成｜Rounded rectangle with adjustable width, height, and corner rounding｜origin color center width height rounding rotation softness strokeThickness strokeColor strokePosition colorSpace

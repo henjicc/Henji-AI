@@ -9,6 +9,7 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
+const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
@@ -53,16 +54,8 @@ async function comparePng(actual, expected) {
   }
   return { equal: a.equals(b), actualHash: createHash('sha256').update(a).digest('hex'), expectedHash: createHash('sha256').update(b).digest('hex'), differentChannels: different, channels, maximumDelta: max, rms: Math.sqrt(square / a.length) }
 }
-const baseDynamicSource = `export default {
-  apiVersion:1,name:"原创轨道标题",kind:"generator",mode:"dynamic",
-  width:3840,height:2160,durationSeconds:10,seed:91,
-  parameters:{speed:{type:"number",title:"移动速度",default:80,min:0,max:400,step:1},ink:{type:"color",title:"标题颜色",default:[0.2,1,1,0.8]}},
-  render(ctx){const x=250+ctx.time*ctx.params.speed;
-    return [ellipse({x:x,y:1100,width:260,height:260,fill:ctx.params.ink}),
-      line({x1:x,y1:1420,x2:x+1800,y2:1420,width:14,color:ctx.params.ink}),
-      text({x:x+150,y:1600,text:"原创代码 · 混合剪辑",fontSize:130,color:[1,1,1,1]})];}
-}`
-const baseStaticSource = `export default {apiVersion:1,name:"透明静态卡片",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:3,seed:12,parameters:{ink:{type:"color",title:"底色",default:[0.1,0.25,1,0.5]}},render(ctx){return [rect({x:130,y:130,width:980,height:600,radius:48,fill:ctx.params.ink}),text({x:210,y:420,text:"静态画面复用",fontSize:115,color:[1,1,1,1]})];}}`
+const baseDynamicSource = authorSources.trackTitleSource({ withControls: false })
+const baseStaticSource = authorSources.staticCardSource({ withLogo: false })
 
 function createVideoEditCodeProjectScene({ controls = false } = {}) {
   const control = controls ? require('./uiInspectionVideoEditCodeControls.cjs') : undefined

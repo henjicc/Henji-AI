@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityRegistration, type ApplicationFieldDefinition, type ApplicationCollectionExecutor, type ApplicationPlannedStep, type ApplicationExecutionContext, type ApplicationCompletedStepResult, type ApplicationEvidence, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import type { CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { codeComponentNameSchema, componentSourceMetadata } from '@/core/videoEdit/codeMaterial/components'
-import { codeSourceTextSchema, componentFileReferences } from '@/core/videoEdit/codeMaterial/sources'
+import { CODE_AUTHOR_SOURCE_MAX_BYTES, codeSourceTextSchema, componentFileReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditSchemaRef } from './videoEditFields'
 import { listVideoEditInstances, openVideoEditDocument, videoEditDomainRevision } from './videoEditService'
 import { projectCodeComponents, publishProjectCodeComponent, refuseCodeComponentRemoval, discardProjectCodeComponents, withdrawProjectCodeComponents, codeComponentReferences, type CodeComponentReference } from './videoEditCodeStorage'
@@ -15,12 +15,12 @@ const creation = { name: codeComponentNameSchema, source: codeSourceTextSchema, 
 interface ComponentReadData extends CodeComponent { references: CodeComponentReference[] }
 const field = (key: string, title: string, value: ApplicationFieldDefinition<ComponentReadData, ComponentReadData>['descriptor']['value'], read: (component: ComponentReadData) => JsonValue): ApplicationFieldDefinition<ComponentReadData, ComponentReadData> => ({
   propertyId: `${type}.${key}`, storeActions: [], read,
-  descriptor: { id: `${type}.${key}`, entityType: type, version: 1, title, description: key === 'source' ? '最新版本模块源码，仅允许 const、export const、纯箭头函数和静态声明；不允许 export default。使用 import { 名称 } from "@组件/组件名"，或 "@组件/组件名@2" 固定版本。发布时钉住依赖并拒绝循环。' : reason, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['video_edit'], readOnlyReason: reason, schemaRef: videoEditSchemaRef('property', `${type}.${key}`) },
+  descriptor: { id: `${type}.${key}`, entityType: type, version: 1, title, description: key === 'source' ? '最新版本组件源码：标准 ES 模块，用具名导出提供函数、图层工厂或常量；不写 export default。使用 import { 名称 } from "@组件/组件名"，或 "@组件/组件名@2" 固定版本。发布时钉住依赖并拒绝循环。' : reason, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['video_edit'], readOnlyReason: reason, schemaRef: videoEditSchemaRef('property', `${type}.${key}`) },
 })
 const latest = (component: CodeComponent) => component.versions.find(version => version.version === component.latestVersion)!
 const fields = [
   field('name', '组件名称', { kind: 'string', maxLength: 200 }, component => component.name),
-  field('source', '源码', { kind: 'string', maxLength: 65536 }, component => componentSourceMetadata(latest(component).source).source),
+  field('source', '源码', { kind: 'string', maxLength: CODE_AUTHOR_SOURCE_MAX_BYTES }, component => componentSourceMetadata(latest(component).source).source),
   field('description', '说明', { kind: 'string' }, component => latest(component).description),
   field('latest_version', '最新版本', { kind: 'number', hardRange: { min: 1, step: 1 } }, component => component.latestVersion),
   field('exports', '导出名称', { kind: 'json', schemaRef: videoEditSchemaRef('property', `${type}.exports.value`) }, component => latest(component).exports),

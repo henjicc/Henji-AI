@@ -7,6 +7,7 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { openVideoEditFile, readVideoEditFile, videoEditDockTab } = require('./uiInspectionVideoEditDocuments.cjs')
+const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: page.locator(`[data-dock-tab-title="${title}"]`) })
 const ORIGINAL = process.env.HENJI_PERF_SOURCE || 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -33,8 +34,8 @@ const TILES = LAYOUT.tiles; const TILE = LAYOUT.tile; const TOTAL = 3780
 // Fixed before measuring (5.1): a regression must fail, not be re-tuned.
 // memoryGrowth applies to private bytes and allocator totals (record 017); working sets are recorded only.
 const TOLERANCE = { updatesPerSecond: 59.0, missingRatio: 0.01, maxGapMs: 100, clockDeviation: 0.01, memoryGrowth: 0.15 }
-const GENERATOR = 'export default {apiVersion:1,name:"持续动态标题条",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:63,seed:5,parameters:{amount:{type:"number",title:"强度",default:.6,min:0,max:1,step:.01,animatable:true}},render(ctx){return [rect({x:200+ctx.time*40,y:1700,width:1200,height:180,fill:[1,.85,.2,ctx.params.amount]}),ellipse({x:3200,y:300+ctx.time*20,width:320,height:320,fill:[.2,.6,1,.7]})];}}'
-const FILTER = 'export default {apiVersion:1,name:"受控暖色",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:63,seed:9,parameters:{warm:{type:"number",title:"暖色",default:.9,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r,c.g*ctx.params.warm,c.b*ctx.params.warm,c.a);}}'
+const GENERATOR = authorSources.PERFORMANCE_GENERATOR
+const FILTER = authorSources.PERFORMANCE_FILTER
 
 function fixture(audioPath) {
   const track = (index, kind, name) => ({ id: `${kind[0]}${index}`, name, index, kind, locked: false, enabled: true, muted: false, solo: false })

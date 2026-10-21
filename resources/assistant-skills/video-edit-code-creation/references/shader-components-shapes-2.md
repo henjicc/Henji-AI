@@ -1,7 +1,8 @@
 # 着色器组件：图形与材质（续）
 
-由脚本从 shaders 4.0.2 生成。代码里写英文组件名；中文名是效果面板名。角色：生成=自己画；滤镜=处理之前画好的图层；转场=剪辑过渡或 layers 里的揭示。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect（effect:shaders.组件名 / transition:shaders.组件名）。
+由脚本从 shaders 4.0.2 生成。作为剪辑内置效果与转场使用（片段效果 effect:shaders.组件名，转场 transition:shaders.组件名），作者代码不直接调用；中文名是效果面板名。角色：生成=画出整幅内容；滤镜=处理片段画面；转场=剪辑过渡。⏱ 为速度属性。属性含义与范围读实体 video_edit.builtin_effect。
 
+- **RoundedRect** 圆角矩形｜生成｜Rounded rectangle with adjustable width, height, and corner rounding｜origin color center width height rounding rotation softness strokeThickness strokeColor strokePosition colorSpace
 - **Star** 星形｜生成｜Classic star polygon with straight sides and sharp pointed tips｜origin color center radius sides innerRatio rotation softness strokeThickness strokeColor strokePosition colorSpace
 - **Teardrop** 水滴｜生成｜Teardrop — a rounded bulb tapering to a sharp point｜origin color center radius height rotation softness strokeThickness strokeColor strokePosition colorSpace
 - **ThinFilm** 薄膜虹彩｜生成｜Iridescent thin-film edge｜origin center scale rotation intensity rimWidth edgeSoftness thickness dispersion saturation hueShift lightAngle mode colorA colorB colorC colorSpace speed⏱ shape

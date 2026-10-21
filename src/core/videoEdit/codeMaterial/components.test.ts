@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { compileCodeMaterial } from './compiler'
 import { expandPinnedCodeComponents, portableCodeComponentFiles, pinCodeComponentImports, packageComponentSource, rewriteCodeComponentImports, componentSourceMetadata, type CodeComponent } from './components'
 import { addressCodeMaterialFiles, codeComponentPinsSchema, componentFileReferences, codeVersionContentKey, documentCodeSourceResolver, installCodeSourceReader, loadCodeSourceReferences, type CodeComponentPin } from './sources'
 import { renameCodeMaterialFile } from './fileEdits'
@@ -42,8 +41,9 @@ describe('位置解析与固定组件依赖', () => {
     expect(pins.map(pin => pin.version)).toEqual([1, 2])
     const compilation = expandPinnedCodeComponents(files, pins, documentCodeSourceResolver())
     expect(compilation.resolvedImports!['main.ts']['@组件/人名条']).toBe('项目组件/人名条/v2.ts')
-    expect(compileCodeMaterial(compilation).name).toBe('组件')
-    expect(compileCodeMaterial(portableCodeComponentFiles(compilation)).name).toBe('组件')
+    expect(compilation.resolvedImports!['main.ts']['@组件/人名条@1']).toBe('项目组件/人名条/v1.ts')
+    const portable = portableCodeComponentFiles(compilation)
+    expect(Object.values(portable.files).filter(text => text.includes('width:1,') || text.includes('width:2,'))).toHaveLength(2)
     const replacements: CodeComponentPin[] = pins.map(pin => ({ ...pin, name: '导入的人名条' }))
     expect(rewriteCodeComponentImports(source, pins, replacements)).toContain('@组件/导入的人名条@2')
     expect(renameCodeMaterialFile(files, 'main.ts', 'nested/main.ts').files['nested/main.ts']).toBe(source)

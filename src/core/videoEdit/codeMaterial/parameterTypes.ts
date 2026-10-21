@@ -1,5 +1,5 @@
 import { CODE_PARAMETER_TYPES, CodeMaterialError, assertCodeMaterialKey, codeColor, finiteCodeNumber } from './contract'
-import type { CodeBasicParameterDeclaration, CodeBasicParameterValue, CodeParameterDeclaration, CodeParameterObject, CodeParameterTypeDefinition, CodeParameterValue, CodeParameterVisibility, CodePoint, CodeValueType } from './contract'
+import type { CodeBasicParameterDeclaration, CodeBasicParameterValue, CodeParameterDeclaration, CodeParameterObject, CodeParameterTypeDefinition, CodeParameterValue, CodeParameterVisibility, CodePoint } from './contract'
 import { CODE_EASE_NAMES } from './motion'
 import { textStyleSchema } from '../../imaging/vectorContent/text'
 
@@ -190,25 +190,6 @@ export function validateCodeMaterialV3ParameterValue(declaration: CodeParameterD
     }
     case 'audio': case 'image': if (value === null) return null; fail(key, 'null；图片引用请走既有图片参数校验')
   }
-}
-export function codeParameterValueType(parameter: CodeParameterDeclaration): CodeValueType {
-  if (['number', 'angle', 'seed'].includes(parameter.type)) return 'number'
-  if (['choice', 'text', 'font'].includes(parameter.type)) return 'string'
-  if (['point', 'grade', 'custom', 'textStyle'].includes(parameter.type)) return 'object'
-  if (['range', 'gradient', 'curve', 'table'].includes(parameter.type)) return 'array'
-  if (parameter.type === 'easing') return typeof parameter.default === 'string' ? 'string' : 'array'
-  return parameter.type as 'boolean' | 'color' | 'image' | 'audio'
-}
-export interface CodeParameterShape { type: CodeValueType; fields?: Record<string, CodeParameterShape>; element?: CodeParameterShape }
-export function codeParameterShape(parameter: CodeParameterDeclaration): CodeParameterShape {
-  const type = codeParameterValueType(parameter); const numeric: CodeParameterShape = { type: 'number' }
-  if (parameter.type === 'point') return { type, fields: { x: numeric, y: numeric } }
-  if (parameter.type === 'grade') return { type, fields: { hue: numeric, strength: numeric, luminance: numeric } }
-  if (parameter.type === 'custom') return { type, fields: Object.fromEntries(Object.entries(parameter.fields).map(([key, field]) => [key, codeParameterShape(field)])) }
-  if (parameter.type === 'gradient') return { type, element: { type: 'object', fields: { at: numeric, color: { type: 'color' } } } }
-  if (parameter.type === 'curve') return { type, element: { type: 'object', fields: { x: numeric, y: numeric } } }
-  if (type === 'array') return { type, element: numeric }
-  return { type }
 }
 /** Metadata preserves the source spelling while the executable IR uses a closed custom tag. */
 export function codeParameterMetadata(parameter: CodeParameterDeclaration): Record<string, unknown> {

@@ -1,4 +1,4 @@
-import { testCodeManifest } from './codeMaterial/sourceTestFixtures'
+import { testCodeManifest, testCodeMetadata } from './codeMaterial/sourceTestFixtures'
 import { createVideoEditTestDocument as createVideoEditDocument } from './testFixtures'
 import { describe, expect, it } from 'vitest'
 import { changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
@@ -9,7 +9,6 @@ import { WHITE_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_BUILTIN_TRANSITION_KINDS, VIDEO_EDIT_TRANSITION_PARAMS, validateVideoEditTransitionParams } from './transitionParams'
 import { reconcileVideoEditTimedContent } from './timedContent'
 import { assertVideoEditLockedTracks } from './lockedTracks'
-import { compileCodeMaterial } from './codeMaterial/compiler'
 import { validateCodeMaterialDocument, videoEditCodeReferences } from './codeMaterialDocument'
 import { codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import { prepareCodeMaterialParameters, evaluateCodeMaterialParameters } from './codeMaterialAnimation'
@@ -78,9 +77,10 @@ it.each(['caption', 'transition'] as const)('降帧率导致 %s 过短时给出�
   expect(document).toEqual(before)
   expect(() => videoEditDocumentSchema.parse(document)).not.toThrow()
 })
-const source = (kind: 'generator' | 'filter', mode = 'dynamic', duration = 10): string => `export default {apiVersion:1,name:"时间验证",kind:"${kind}",mode:"${mode}",width:3840,height:2160,durationSeconds:${duration},seed:0,parameters:{amount:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return ${kind === 'generator' ? '[rect({x:0,y:0,width:100,height:100,fill:[1,0,0,ctx.params.amount]})]' : 'sample(ctx.u,ctx.v)'};}}`
-function addEffect(document: VideoEditDocument, mode = 'static', duration = 10) {
-  const text = source('filter', mode, duration); const program = compileCodeMaterial(text)
+const source = (kind: 'generator' | 'filter', mode = 'dynamic', duration = 10): string => `export default { name: '时间验证', kind: '${kind}', mode: '${mode}', width: 3840, height: 2160, durationSeconds: ${duration}, params: [{ key: 'amount', type: 'number', title: '强度', default: .5, min: 0, max: 1, step: .01, animatable: true }], draw() {} }`
+const metadata = (kind: 'generator' | 'filter', mode: 'static' | 'dynamic' = 'dynamic', duration = 10) => testCodeMetadata({ name: '时间验证', kind, mode, width: 3840, height: 2160, durationSeconds: duration, parameters: { amount: { type: 'number', title: '强度', default: .5, min: 0, max: 1, step: .01, animatable: true } } })
+function addEffect(document: VideoEditDocument, mode: 'static' | 'dynamic' = 'static', duration = 10) {
+  const text = source('filter', mode, duration); const program = metadata('filter', mode, duration)
   document.codeMaterials = [{ id: 'filter', name: '滤镜', defaultVersionId: 'filter-version', versions: [{ id: 'filter-version', ...testCodeManifest(text, document), apiVersion: 4, languageVersion: 4 }] }]
   document.sequences[0].clips[0].effects = [{ id: 'effect', name: '效果', enabled: true, amount: .5, code: { definitionId: 'filter', versionId: 'filter-version', parameters: { amount: .4 } } }]
   return program
@@ -190,12 +190,12 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
   it('动态生成器及附加滤镜都检查真实余量，静态负源曲线保持首点而不改原局部时钟', () => {
     const { document, sequence } = fixture(); const program = addEffect(document, 'dynamic', 2.24)
     expect(() => validateCodeMaterialDocument(document, () => program)).toThrow('余量不足')
-    const text = source('generator', 'dynamic', 2.24); const generator = compileCodeMaterial(text)
+    const text = source('generator', 'dynamic', 2.24); const generator = metadata('generator', 'dynamic', 2.24)
     document.codeMaterials = [{ id: 'generator', name: '生成器', defaultVersionId: 'generator-version', versions: [{ id: 'generator-version', ...testCodeManifest(text, document), apiVersion: 4, languageVersion: 4 }] }]
     document.items = [{ id: 'item', name: '代码', kind: 'code', code: { definitionId: 'generator', versionId: 'generator-version', parameters: {} } }]
     sequence.clips.forEach(clip => { clip.kind = 'code'; clip.code = structuredClone(document.items[0].code); delete clip.effects })
     expect(() => validateCodeMaterialDocument(document, () => generator)).toThrow('余量不足')
-    const staticProgram = compileCodeMaterial(source('generator', 'static'))
+    const staticProgram = metadata('generator', 'static')
     const right = { ...sequence.clips[1], sourceInUs: 0 }
     const window = videoEditTransitionWindow(sequence, sequence.transitions![0])
     const instance = { parameters: {}, curves: { amount: [{ id: 'first', sourceInUs: 500000, sourceRemainder: { numerator: 0, denominator: 1 }, value: .2, interpolation: 'linear' as const }, { id: 'last', sourceInUs: 1_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: .8, interpolation: 'linear' as const }] } }

@@ -3,7 +3,8 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
-import { CODE_BUILTINS, CODE_CONTEXT_KEYS } from '@/core/videoEdit/codeMaterial/contract'
+import { authorEffectMetadata } from '@/features/videoEdit/engine/videoEditAuthorParameters'
+import { testAuthorModule } from '@/features/videoEdit/engine/videoEditAuthorTestFixtures'
 import { createVideoEditRegistrations } from '@/features/videoEdit/application/videoEditReflection'
 import { PROTOCOL_TOOL_SPECS } from '../../../../../electron/main/services/application-runtime/toolCatalog'
 
@@ -42,15 +43,23 @@ describe('剪辑代码素材技能只引用真实契约', () => {
     expect(ids.filter(id => properties.has(id)).length).toBeGreaterThan(20)
   })
 
-  it('作者接口包含基础 ctx 与内置函数，v3 扩展按职责分流', () => {
+  it('作者接口按标准 ES 模块描述，并按绘制、文字与 GPU 职责分流', () => {
     const api = text(path.join(SKILL_DIR, 'references/author-api.md'))
     const motion = text(path.join(SKILL_DIR, 'references/author-text-motion.md'))
     const shaders = text(path.join(SKILL_DIR, 'references/author-shaders.md'))
-    for (const key of CODE_CONTEXT_KEYS) expect(api).toContain(key)
-    for (const name of CODE_BUILTINS) expect([api, motion, shaders].join('\n')).toContain(name)
-    expect(api).toContain('languageVersion: 3')
-    expect(motion).toContain('perChar')
-    expect(shaders).toContain('shaderFilter')
+    for (const entry of ['draw(ctx, time, params, width, height, assets, info)', 'layers(params, width, height, assets, info)', 'pose(t)', 'bounds']) expect(api).toContain(entry)
+    expect(motion).toContain('textStyle')
+    for (const entry of ['createWebGPU', 'inputs.current', 'inputs.frames', 'createWebGL']) expect(shaders).toContain(entry)
+    expect(all).not.toMatch(/render\(ctx\)|languageVersion|ctx\.params|perChar|shaderFilter/)
+  })
+
+  it('每个完整源码围栏都能作为作者模块加载并解析参数', () => {
+    const sources = files.flatMap(file => [...text(file).matchAll(/```ts\n([\s\S]*?)```/g)].map(match => ({ file: path.basename(file), source: match[1] })))
+    expect(sources.length).toBeGreaterThanOrEqual(12)
+    for (const { file, source } of sources) {
+      const metadata = authorEffectMetadata(testAuthorModule(source))
+      expect(metadata.name, file).toBeTruthy()
+    }
   })
 
   it('全部样例调用满足正式事务 schema、可写属性与集合必填契约', () => {

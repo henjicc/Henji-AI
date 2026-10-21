@@ -27,7 +27,7 @@
 
 - 布局用参数和量字结果算出来：文字变长，底板跟着变宽；字号变了，行距和边距按比例变。不要写死只适配默认文字的坐标。
 - 同一个量只写一处：颜色、时长、间距算成 const 再复用，不要同一个数字散落多处。
-- 时间轴从节奏参数推导：`const enter = progress(ctx.time, 0, ctx.params.enterSeconds)`。
+- 时间轴从节奏参数推导：`const enter = Math.min(1, Math.max(0, time / params.enterSeconds))`。
 
 ## 组件化
 

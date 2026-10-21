@@ -7,13 +7,14 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
 const { presented, png, pixelDifference, mediaProbe } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { observeWorkers, workerSnapshot } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const authorSources = require('./uiInspectionAuthorSources.cjs')
 
-const SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"单帧观察验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"背景",x:0,y:0,width:640,height:360,fill:ctx.time>=.5&&ctx.time<.51?[1,0,0,1]:[0,0,1,1]})];}}'
-const SOUND_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"声音驱动验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{},render(ctx){return [rect({id:"声音标记",x:ctx.audio.level()*500,y:80,width:60,height:40,fill:[0,1,0,1]})];}}'
-const INPUT_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"画面输入验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{picture:{type:"image",title:"画面",default:null}},render(ctx){return [image({id:"输入",source:ctx.params.picture,x:0,y:0,width:640,height:360})];}}'
-const SHARED_INPUT_SOURCE = 'export default {apiVersion:1,languageVersion:3,name:"四路输入",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{a:{type:"image",title:"原片",default:null},b:{type:"image",title:"重复原片",default:null},c:{type:"image",title:"下层",default:null},d:{type:"image",title:"重复下层",default:null}},render(ctx){return [image({source:ctx.params.a,x:0,y:0,width:160,height:360}),image({source:ctx.params.b,x:160,y:0,width:160,height:360}),image({source:ctx.params.c,x:320,y:0,width:160,height:360}),image({source:ctx.params.d,x:480,y:0,width:160,height:360})];}}'
-const MOTION_SOURCE = 'export default {apiVersion:2,languageVersion:3,name:"快门曝光验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{blurEnabled:{type:"boolean",title:"运动曝光",default:true}},render(ctx){return [rect({x:0,y:0,width:640,height:360,fill:[0,0,0,1]}),group({id:"运动层",x:160+(ctx.time-1)*1920,y:160,motionBlur:{enabled:ctx.params.blurEnabled,shutter:180,maxSamples:64}},[rect({x:0,y:0,width:8,height:40,fill:[1,0,0,128/255]})])];}}'
-const LENS_SOURCE = 'export default {apiVersion:3,languageVersion:3,name:"层级焦点验收",kind:"generator",mode:"dynamic",width:640,height:360,durationSeconds:2,seed:1,parameters:{focus:{type:"number",title:"焦点",default:0,min:0,max:1,step:.01,animatable:true}},render(ctx){return [rect({x:0,y:0,width:640,height:360,fill:[0,0,0,1]}),group({x:160,y:160,blurShape:"lens",blur:ctx.params.focus*24},[rect({x:0,y:0,width:16,height:40,fill:[1,0,0,1]})]),group({x:400,y:160,blurShape:"lens",blur:(1-ctx.params.focus)*24},[rect({x:0,y:0,width:16,height:40,fill:[0,0,1,1]})])];}}'
+const SOURCE = authorSources.OBSERVATION_SOURCES.flash
+const SOUND_SOURCE = authorSources.OBSERVATION_SOURCES.sound
+const INPUT_SOURCE = authorSources.OBSERVATION_SOURCES.input
+const SHARED_INPUT_SOURCE = authorSources.OBSERVATION_SOURCES.shared
+const MOTION_SOURCE = authorSources.OBSERVATION_SOURCES.motion
+const LENS_SOURCE = authorSources.OBSERVATION_SOURCES.lens
 async function pixel(bytes, x, y) {
   return [...await sharp(bytes).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer()]
 }

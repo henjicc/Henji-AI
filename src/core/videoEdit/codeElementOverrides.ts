@@ -1,6 +1,5 @@
 import { z } from 'zod'
-import { CODE_V3_LIMITS, CodeMaterialError, type CodeDrawCommand, type CodeMatrix, type CodeTextMeasurer } from './codeMaterial/contract'
-import { codeLocalBounds, codeMultiply, codeTransform } from './codeMaterial/geometry'
+import type { CodeMatrix } from './codeMaterial/contract'
 import { codeMaterialKeyframeSchema, compareCodeMaterialTime, type CodeMaterialKeyframe } from './codeMaterialAnimation'
 import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe } from './keyframeInterpolation'
 import type { VideoEditSourceTime } from './time'
@@ -60,63 +59,13 @@ export function evaluateCodeElementOverride(value: CodeElementOverride, time: Vi
   return codeElementOverrideValuesSchema.parse(result)
 }
 
-/** Alias IDs must be identical for paint, selection, annotations and persistence. */
-export function identifyCodeElements(commands: readonly CodeDrawCommand[], owned = false): CodeDrawCommand[] {
-  const counts = new Map<string, number>()
-  const count = (commands: readonly CodeDrawCommand[]): void => { commands.forEach((command, i) => { const id = command.elementId ?? `draw:${i}`; counts.set(id, (counts.get(id) ?? 0) + 1); if (command.kind === 'group') count(command.children) }) }
-  count(commands)
-  const visit = (commands: readonly CodeDrawCommand[]): CodeDrawCommand[] => commands.map((command, i) => {
-    const id = command.elementId ?? `draw:${i}`
-    // The frame evaluator can transfer fresh, de-aliased commands. Other callers
-    // retain the original non-mutating contract.
-    const next = owned ? command : { ...command }
-    next.authorElementId = id; next.elementId = counts.get(id)! > 1 ? `${id}@${JSON.stringify(command.elementPath ?? [])}` : id
-    if (next.kind === 'group') next.children = visit(next.children)
-    return next
-  })
-  return visit(commands)
-}
 export function codeInverseMatrix(m: CodeMatrix): CodeMatrix {
   const d = m[0] * m[3] - m[1] * m[2]
   if (Math.abs(d) < 1e-12) throw new Error('元素当前不可变换，请选择可见且有尺寸的元素。')
   return [m[3] / d, -m[1] / d, -m[2] / d, m[0] / d, (m[2] * m[5] - m[3] * m[4]) / d, (m[1] * m[4] - m[0] * m[5]) / d]
 }
 
-/** Append a parent-space correction after the author's transform, before paint. No second scene graph. */
-export function applyCodeElementOverrides(commands: readonly CodeDrawCommand[], overrides: CodeElementOverrides, time: VideoEditSourceTime, measureText: CodeTextMeasurer): CodeDrawCommand[] {
-  const visit = (command: CodeDrawCommand): CodeDrawCommand => {
-    const next: CodeDrawCommand = command.kind === 'group' ? { ...command, children: command.children.map(visit) } : { ...command }
-    const raw = readCodeElementOverride(overrides, command.elementId ?? ''); if (!raw) return next
-    const value = evaluateCodeElementOverride(raw, time)
-    if (value.hidden) next.opacity = 0
-    else if (value.opacity !== undefined) next.opacity = value.opacity
-    if (next.kind === 'text') {
-      next.layout = measureText({ text: next.text, fontFamily: next.fontFamily, fontWeight: next.fontWeight ?? 400, fontStyle: next.fontStyle ?? 'normal', fontSize: next.fontSize, letterSpacing: next.letterSpacing ?? 0, lineHeight: next.lineHeight ?? 1.2, maxWidth: next.maxWidth ?? 0, wrap: next.wrap ?? false, maxLines: next.maxLines ?? 0 })
-    }
-    next.elementTransform = codeElementCorrection(next, value)
-    return next
-  }
-  const result = commands.map(visit)
-  let characters = 0
-  const count = (commands: readonly CodeDrawCommand[]): void => { for (const command of commands) { if (command.kind === 'text') characters += command.text.length; if (command.kind === 'group') count(command.children) } }
-  count(result)
-  if (characters > CODE_V3_LIMITS.textCharacters) throw new CodeMaterialError('BUDGET', '本帧覆盖后文字超出文字绘制预算。')
-  return result
-}
-export function codeElementCorrection(command: CodeDrawCommand, value: CodeElementOverrideValues, authorMatrix?: CodeMatrix): CodeMatrix {
-  const next = { ...command, elementTransform: undefined }; const local = codeLocalBounds(next); const base = authorMatrix ?? codeTransform(next)
-  const center = next.authorAnchor ? [(next.anchorX ?? 0) + (next.kind !== 'group' && 'x' in next ? next.x : 0), (next.anchorY ?? 0) + (next.kind !== 'group' && 'y' in next ? next.y : 0)] : [local.x + local.width / 2, local.y + local.height / 2]
-  const angle = (value.rotation ?? 0) * Math.PI / 180; const c = Math.cos(angle); const s = Math.sin(angle)
-  const sx = (value.scale ?? 1) * (value.scaleX ?? 1); const sy = (value.scale ?? 1) * (value.scaleY ?? 1)
-  const relative: CodeMatrix = [c * sx, s * sx, -s * sy, c * sy, center[0] - c * sx * center[0] + s * sy * center[1], center[1] - s * sx * center[0] - c * sy * center[1]]
-  // Scaling follows the element's own axes, including an author's existing rotation;
-  // parent-axis nonuniform scaling would shear its oriented selection rectangle.
-  if (Math.abs(base[0] * base[3] - base[1] * base[2]) < 1e-12) return [1, 0, 0, 1, value.dx ?? 0, value.dy ?? 0]
-  return codeMultiply([1, 0, 0, 1, value.dx ?? 0, value.dy ?? 0], codeMultiply(base, codeMultiply(relative, codeInverseMatrix(base))))
-}
-
 /** Missing is derived from source identity, never persisted into an override or inferred from one hidden frame. */
 export function codeElementOverrideStatus(overrides: CodeElementOverrides, sourceIds: ReadonlySet<string>): Array<{ elementId: string; missing: boolean }> {
   return Object.keys(overrides).map(elementId => ({ elementId, missing: !sourceIds.has(elementId) }))
 }
-export function codeElementParentMatrix(element: { command: CodeDrawCommand; matrix: CodeMatrix }): CodeMatrix { return codeMultiply(element.matrix, codeInverseMatrix(codeTransform(element.command))) }

@@ -34,7 +34,7 @@ describe('可编辑代码资产文件契约', () => {
   })
   it('按UTF-8源字节、整体文件、声明及曲线预算拒绝越界', () => {
     const input = fixture()
-    expect(() => encodeCodeAsset({ ...input, ...testCodeAssetSource('汉'.repeat(30_000)) })).toThrow()
+    expect(() => encodeCodeAsset({ ...input, ...testCodeAssetSource('汉'.repeat(200_000)) })).toThrow('512KiB')
     expect(() => decodeCodeAsset(new Uint8Array(CODE_ASSET_LIMITS.bytes + 1))).toThrow()
     const parameters = { ...input.parameters, ...Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`p${index}`, index])) }
     expect(decodeCodeAsset(encodeCodeAsset({ ...input, parameters })).parameters).toEqual(parameters)

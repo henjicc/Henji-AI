@@ -4,7 +4,6 @@ import { codeCubicBezier, codeEase } from './motion'
 import { validateCodeMaterialV3ParameterValue } from './parameterTypes'
 
 const base = { key: '采样参数', title: '采样参数', description: '', animatable: false }
-export const CODE_PARAMETER_FUNCTION_COSTS: Readonly<Record<string, number>> = { sampleGradient: 32 * 20, sampleCurve: 64 * 8, ease: 128 }
 /** Linear RGBA interpolation; at ties the last stop wins, so hard transitions stay deterministic. */
 export function sampleCodeGradient(value: unknown, input: number): CodeColor {
   const stops = validateCodeMaterialV3ParameterValue({ ...base, type: 'gradient', maxStops: 32, default: [] }, value) as CodeGradientStop[]

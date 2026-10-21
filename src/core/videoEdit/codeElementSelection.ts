@@ -8,8 +8,7 @@ export function prepareAuthorElementIndex(observations: readonly AuthorElementOb
   const bounds = observations.map((author): CodeElementBounds => {
     const x = Math.min(...author.corners.map(point => point[0])), y = Math.min(...author.corners.map(point => point[1]))
     const width = Math.max(...author.corners.map(point => point[0])) - x, height = Math.max(...author.corners.map(point => point[1])) - y
-    return { elementId: author.id, elementPath: [author.id], sourceSpan: author.sourceSpan, x, y, width, height, matrix: author.matrix, opacity: author.opacity ?? 1, author,
-      command: { kind: 'rect', x, y, width, height, fill: [0, 0, 0, 0], radius: 0 } }
+    return { elementId: author.id, elementPath: [author.id], sourceSpan: author.sourceSpan, x, y, width, height, matrix: author.matrix, opacity: author.opacity ?? 1, author }
   })
   return { bounds, byId: new Map(bounds.map(bound => [bound.elementId, bound])), ancestors: new Map(), parameters: new Map(observations.map(author => [author.id, author.parameterKeys])) }
 }

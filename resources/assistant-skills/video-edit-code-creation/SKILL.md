@@ -5,7 +5,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 
 # 剪辑代码创作：先导演，再写代码
 
-用作者语言（受限 TS）和正式工具描述画面。编译成功不等于画面验收。
+用标准 ES 模块（Canvas2D 图层、WebGPU、WebGL）和正式工具描述画面。源码加载成功不等于画面验收。
 
 ## 审美听谁的
 
@@ -15,14 +15,14 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 
 本技能里的数值、档位、配方和症状表都只是前两项缺席时的起点和诊断工具，可以整套推翻；与说明书或需求冲突时照说明书和需求做，不必解释。没有说明书时，你自己定一个有想法的方向直接做，交付时说清选了什么、为什么。
 
-不可越过的只有这些：同一帧结果确定、预算与语法契约、真实素材与原文不伪造不删减、关键信息读得清读得完、闪烁安全、付费与权限边界。其余都是创作空间：极简或满屏、静止或一直在动、统一或每次不同、霓虹、粒子、回弹、对称，都可以，只要服务这部作品。
+不可越过的只有这些：同一帧结果确定、作者模块契约、真实素材与原文不伪造不删减、关键信息读得清读得完、闪烁安全、付费与权限边界。其余都是创作空间：极简或满屏、静止或一直在动、统一或每次不同、霓虹、粒子、回弹、对称，都可以，只要服务这部作品。
 
 ## 能用的手段
 
-- 代码图形与文字：形状、路径、渐变、阴影辉光模糊、逐字逐词动效、遮罩揭示、数字滚动。
-- 粒子与场：`repeat`＋`random`＋`noise` 按时间直接求值，可寻帧（见 recipes-particles）。
-- 着色器：160 多个框架组件可叠成图层树；库里没有的效果直接写 WGSL，用作图层、滤镜或转场。
-- 空间：多层视差和投影倍率做伪3D；自写 WGSL 可做光线步进或 SDF 体积。
+- 代码图形与文字：Canvas2D 形状、路径、渐变、阴影辉光模糊、逐字逐词动效、遮罩揭示、数字滚动；需要点选和运动模糊的元素写成图层。
+- 粒子与场：种子哈希＋时间函数直接求位置，可寻帧（见 recipes-particles）；大规模用 WebGPU。
+- GPU：`createWebGPU` 与合成共用设备，可写多遍 WGSL、读下方画面与相邻帧做滤镜；160 多个 shaders 组件作为内置效果与转场使用。
+- 空间：多层图层视差和投影倍率做伪3D；WebGPU 可做光线步进、SDF 或真实网格。
 - 素材与效果：就地生成图片或视频落到当前位置，调色、内置效果、转场与代码素材叠用。
 
 ## 做法
@@ -59,12 +59,12 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 玻璃、图标、线条、圆角卡片 | [玻璃与线条](references/recipes-glass-lines.md) |
 | 粒子、光尘、爆散、星轨 | [粒子与场](references/recipes-particles.md) |
 | 三维镜头参考、代码视差 | [空间配方](references/recipes-3d.md) |
-| 语法、图形、预算 | [作者接口](references/author-api.md)、[数学与字符串](references/author-api-expressions.md) |
+| 模块契约、绘制、图层 | [作者接口](references/author-api.md) |
 | 预览卡顿、成本反馈 | [性能](references/performance.md) |
 | 音乐响度节拍、视频画面输入 | [音频与画面输入](references/author-api-media.md) |
-| text、measureText、perChar、缓动 | [文字动效接口](references/author-text-motion.md) |
-| 框架组件、图层树、自写 WGSL | [着色器接口](references/author-shaders.md) |
-| 查真实组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
+| 文字参数与样式、量字、逐字、缓动 | [文字动效接口](references/author-text-motion.md) |
+| WebGPU、WebGL、滤镜、相邻帧 | [GPU 接口](references/author-shaders.md) |
+| 查内置 shaders 组件名称与角色 | [纹理](references/shader-components-textures.md)／[续](references/shader-components-textures-2.md)、[图形材质](references/shader-components-shapes.md)／[续](references/shader-components-shapes-2.md)、[模糊扭曲调色](references/shader-components-filters.md)、[风格化转场](references/shader-components-stylize.md) |
 | 用户标注发现、定位、回复 | [标注协议](references/annotations.md) |
 | 参数化、拆文件、项目组件库 | [参数化](references/parametric.md)、[多文件组件](references/multifile-components.md) |
 | 参数类型、分组、条件、自定义类型 | [参数类型](references/parameter-types.md) |

@@ -10,14 +10,14 @@ import { subscribeVideoEditView, videoEditViewRevision, subscribeVideoEditDomain
 import { useVideoEditTypographyGesture } from './useVideoEditTypographyGesture'
 
 function CodeElementProperties({ target, onError }: { target: VideoEditCodeElementTarget; onError: (error: unknown) => void }): React.ReactElement {
-  const current = readVideoEditCodeElementEdit(target); const command = current.element!.command
+  const current = readVideoEditCodeElementEdit(target)
   const identity = `${JSON.stringify(target)}:${JSON.stringify(current.time)}`
   const gesture = useVideoEditTypographyGesture(target.projectId, identity, onError)
   const write = (patch: CodeElementOverrideValues): void => { try { updateVideoEditCodeElement(target, patch, { gesture: gesture.handle.current, time: current.time }) } catch (error) { gesture.end(false); onError(error) } }
   const run = (operation: () => void): void => { try { gesture.end(true); operation() } catch (error) { onError(error) } }
   const fields: Array<[CodeElementOverrideKey, string, number, number]> = [['dx', '水平位移', -32768, 32768], ['dy', '垂直位移', -32768, 32768], ['scale', '整体比例', .001, 1024], ['scaleX', '水平比例', .001, 1024], ['scaleY', '垂直比例', .001, 1024], ['rotation', '旋转', -32768, 32768], ['opacity', '不透明度', 0, 1]]
   return <div className="flex flex-col gap-3">
-    {fields.map(([key, label, min, max]) => <UiFormRow key={key} label={label} density="compact"><NumberInput size="sm" ariaLabel={`元素${label}`} value={Number(current.values[key] ?? (key === 'dx' || key === 'dy' || key === 'rotation' ? 0 : key === 'opacity' ? command.opacity ?? 1 : 1))} min={min} max={max} step={key.startsWith('scale') || key === 'opacity' ? .01 : 1} precision={2} widthClassName="w-20" onScrubStart={gesture.begin} onScrubEnd={cancelled => gesture.end(!cancelled)} onChange={value => write({ [key]: value })} /><UiIconButton size="xs" on={Boolean(current.override.curves?.[key])} aria-label={`元素${label}关键帧`} tooltip={`启用或关闭${label}关键帧`} onClick={() => run(() => toggleVideoEditCodeElementKeyframe(target, key))}><Diamond /></UiIconButton></UiFormRow>)}
+    {fields.map(([key, label, min, max]) => <UiFormRow key={key} label={label} density="compact"><NumberInput size="sm" ariaLabel={`元素${label}`} value={Number(current.values[key] ?? (key === 'dx' || key === 'dy' || key === 'rotation' ? 0 : 1))} min={min} max={max} step={key.startsWith('scale') || key === 'opacity' ? .01 : 1} precision={2} widthClassName="w-20" onScrubStart={gesture.begin} onScrubEnd={cancelled => gesture.end(!cancelled)} onChange={value => write({ [key]: value })} /><UiIconButton size="xs" on={Boolean(current.override.curves?.[key])} aria-label={`元素${label}关键帧`} tooltip={`启用或关闭${label}关键帧`} onClick={() => run(() => toggleVideoEditCodeElementKeyframe(target, key))}><Diamond /></UiIconButton></UiFormRow>)}
     <UiFormRow label="显示" density="compact"><UiSwitch aria-label="显示元素" checked={!current.values.hidden} onCheckedChange={visible => write({ hidden: !visible })} /></UiFormRow>
   </div>
 }

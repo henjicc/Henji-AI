@@ -2,9 +2,10 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const sharp = require('sharp')
+const authorSources = require('./uiInspectionAuthorSources.cjs')
 
-const dynamicSource = `export default {apiVersion:1,name:"原创轨道标题",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:91,parameters:{speed:{type:"number",title:"移动速度",default:80,min:0,max:400,step:1,animatable:true},ink:{type:"color",title:"标题颜色",default:[0.2,1,1,0.8],animatable:true},enabled:{type:"boolean",title:"显示图形",default:true},shape:{type:"choice",title:"图形样式",default:"圆",options:["圆","方"]},label:{type:"text",title:"标题文字",default:"原创代码 · 混合剪辑",maxLength:128}},render(ctx){const x=250+ctx.time*ctx.params.speed;return [rect({x:x,y:1100,width:260,height:260,radius:ctx.params.shape==="圆"?130:0,fill:ctx.params.enabled?ctx.params.ink:[0,0,0,0]}),line({x1:x,y1:1420,x2:x+1800,y2:1420,width:14,color:ctx.params.ink}),text({x:x+150,y:1600,text:ctx.params.label,fontSize:130,color:[1,1,1,1]})];}}`
-const staticSource = `export default {apiVersion:1,name:"透明静态卡片",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:3,seed:12,parameters:{ink:{type:"color",title:"底色",default:[0.1,0.25,1,0.5]},logo:{type:"image",title:"透明徽标",default:null,animatable:false}},render(ctx){return [rect({x:130,y:130,width:980,height:600,radius:48,fill:ctx.params.ink}),text({x:210,y:420,text:"静态画面复用",fontSize:115,color:[1,1,1,1]}),image({source:ctx.params.logo,x:1200,y:240,width:1000,height:700})];}}`
+const dynamicSource = authorSources.trackTitleSource()
+const staticSource = authorSources.staticCardSource()
 async function makePicture(root) {
   const file = path.join(root, 'transparent-4k.png')
   if (!fs.existsSync(file)) await sharp({ create: { width: 3840, height: 2160, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 128 / 255 } } }).png().toFile(file)

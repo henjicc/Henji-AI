@@ -2,7 +2,7 @@ import { expandPinnedCodeComponents } from './codeMaterial/components'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, type CodeMaterialFiles } from './codeMaterial/sources'
 import type { VideoEditDocument } from './document'
 import type { CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPersistence'
-import type { CodeMaterialProgram } from './codeMaterial/contract'
+import type { CodeParameterDeclaration, CodeParameterTypeDefinition } from './codeMaterial/contract'
 import { CodeMaterialError } from './codeMaterial/contract'
 import { prepareCodeMaterialParameters } from './codeMaterialAnimation'
 import { isCodeImageReference, isCodeAudioReference } from './codeMaterial/contract'
@@ -10,7 +10,12 @@ import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } fr
 import { validateVideoEditTransitions, videoEditTransitionWindow } from './transitions'
 import { videoEditEffectCodes } from './compositing'
 
-export type CodeMaterialMetadata = Pick<CodeMaterialProgram, 'name' | 'kind' | 'mode' | 'seed' | 'parameters' | 'types'> & Partial<Pick<CodeMaterialProgram, 'width' | 'height' | 'durationSeconds'>>
+/** Control metadata normalized from an author module; drawing code is never part of it. */
+export interface CodeMaterialMetadata {
+  name: string; kind: 'generator' | 'filter'; mode: 'static' | 'dynamic'; seed: number
+  parameters: CodeParameterDeclaration[]; types?: Record<string, CodeParameterTypeDefinition>
+  width?: number; height?: number; durationSeconds?: number
+}
 export type CodeMaterialMetadataReader = (instance: CodeMaterialInstance) => CodeMaterialMetadata
 export function videoEditCodeReferences(document: VideoEditDocument): CodeMaterialInstance[] {
   return [

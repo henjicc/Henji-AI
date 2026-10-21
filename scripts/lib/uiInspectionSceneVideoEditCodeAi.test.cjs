@@ -19,30 +19,25 @@ test('性能摘要保留每步和热帧实测，缺失数据明确为 null 而�
   assert.equal(performanceSummary([], [], []).maxRenderMs, null)
 })
 
-test('v3 夹具经正式编译器编译与求值，入场后标题中心实际命中 title', async () => {
-  // esbuild 内存打包正式 TS 纯逻辑；不启动 Vite 服务、GPU 或 Electron，不执行作者源码。
+test('作者原代码夹具声明可点选图层，标题图层覆盖画面中心并定位到自身源码', async () => {
+  // esbuild 内存打包正式 TS 纯逻辑；不启动 Vite 服务、GPU 或 Electron。
   const Module = require('node:module')
   const bundle = await require('esbuild').build({ stdin: { contents: `
-    export { compileCodeMaterial } from './src/core/videoEdit/codeMaterial/compiler';
-    export { evaluateCodeMaterial, hitTestCodeMaterial } from './src/core/videoEdit/codeMaterial/evaluate';
-    export { layoutCodeText } from './src/core/videoEdit/codeMaterial/textLayout';`, resolveDir: process.cwd(), loader: 'ts' },
+    export { testAuthorModule } from './src/features/videoEdit/engine/videoEditAuthorTestFixtures';
+    export { authorSourceLocations } from './src/features/videoEdit/engine/videoEditAuthorBundle';`, resolveDir: process.cwd(), loader: 'ts' },
     bundle: true, write: false, format: 'cjs', platform: 'node', packages: 'external', alias: { '@': path.resolve('src') }, logLevel: 'silent' })
   const loaded = new Module(path.join(__dirname, 'codeAiProbe.cjs'))
   loaded.filename = path.join(__dirname, 'codeAiProbe.cjs')
   loaded.paths = Module._nodeModulePaths(__dirname)
   loaded._compile(bundle.outputFiles[0].text, loaded.filename)
-  const { compileCodeMaterial, evaluateCodeMaterial, hitTestCodeMaterial, layoutCodeText } = loaded.exports
-    const program = compileCodeMaterial(CODE_AI_SOURCE)
-    assert.equal(program.languageVersion, 3)
-    const context = { time: 25 / 30, localTime: 25 / 30, sequenceTime: 25 / 30, width: 1920, height: 1080, frame: 25, fps: 30 }
-    const options = { measureText: request => layoutCodeText(request, (text, font) => Array.from(text).length * .6 * Number(font.match(/([\d.]+)px/)[1])) }
-    const commands = evaluateCodeMaterial(program, context, {}, options)
-    assert.equal(commands[0].kind, 'shader'); assert.equal(commands[0].elementId, 'sky')
-    assert.equal(commands[1].kind, 'group')
-    assert.deepEqual(commands[1].children.map(child => child.elementId), ['plate', 'title'])
-    const hit = hitTestCodeMaterial(program, context, {}, { x: 960, y: 540 }, options)
-    assert.equal(hit?.elementId, 'title', '入场后的点击坐标必须命中标题，不能落到底板或背景')
-    assert.match(CODE_AI_SOURCE.slice(hit.sourceSpan.start, hit.sourceSpan.end), /id:"title"/)
+  const { testAuthorModule, authorSourceLocations } = loaded.exports
+  const effect = testAuthorModule(CODE_AI_SOURCE)
+  const layers = effect.layers({ size: 96 }, 1920, 1080, {}, {})
+  assert.deepEqual(layers.map(layer => layer.id), ['sky', 'plate', 'title'])
+  const title = layers.at(-1)
+  assert.ok(title.bounds[0] <= 960 && title.bounds[2] >= 960 && title.bounds[1] <= 540 && title.bounds[3] >= 540, '标题图层必须覆盖画面中心的点击位置')
+  const span = authorSourceLocations({ entry: 'main.ts', files: { 'main.ts': CODE_AI_SOURCE } }).layers.title
+  assert.match(CODE_AI_SOURCE.slice(span.start, span.end), /id: "title"/)
 })
 
 test('Reality 场景登记唯一 id 且声明会写隔离资料', () => {

@@ -7,11 +7,12 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectTo
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
+const authorSources = require('./uiInspectionAuthorSources.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
 const FIXTURE_ID = 'video-edit-agent-loop'
 // Original source written for this acceptance: not a template parameter change.
-const SOURCE = 'export default {apiVersion:1,name:"智能体原创色块",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:5,seed:3,parameters:{red:{type:"number",title:"红色",default:.2,min:0,max:1,step:.01,animatable:true}},render(ctx){return [rect({x:960,y:540,width:1920,height:1080,fill:[ctx.params.red,.3,.8,1]})];}}'
+const SOURCE = authorSources.AGENT_COLOR_SOURCE
 
 function fixture() {
   const track = (index, kind, name) => ({ id: `${kind[0]}${index}`, name, index, kind, locked: false, enabled: true, muted: false, solo: false })

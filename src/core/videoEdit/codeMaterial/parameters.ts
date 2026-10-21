@@ -1,7 +1,7 @@
-import { CODE_MATERIAL_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, codeAudioReference, finiteCodeNumber } from './contract'
-import type { CodeMaterialProgram, CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './contract'
-import { parseCodeMaterialV3Parameters, validateCodeMaterialV3ParameterValue } from './parameterTypes'
-import type { CodeParameterTypeDefinition } from './contract'
+import { CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, codeAudioReference, finiteCodeNumber } from './contract'
+import type { CodeMaterialMetadata } from '../codeMaterialDocument'
+import type { CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './contract'
+import { validateCodeMaterialV3ParameterValue } from './parameterTypes'
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new CodeMaterialError('PARAMETERS', `${label}必须是静态对象。`)
@@ -10,46 +10,6 @@ function object(value: unknown, label: string): Record<string, unknown> {
 function text(value: unknown, label: string, max: number, allowEmpty = false): string {
   if (typeof value !== 'string' || value.length > max || (!allowEmpty && !value.length)) throw new CodeMaterialError('PARAMETERS', `${label}必须是长度不超过 ${max} 的文本。`)
   return value
-}
-/** The only parameter declarations are extracted from the checked source object. */
-export function parseCodeMaterialParameters(value: unknown, languageVersion = 1, types: Record<string, CodeParameterTypeDefinition> = {}): CodeParameterDeclaration[] {
-  if (languageVersion === 3) return parseCodeMaterialV3Parameters(value, types)
-  const entries = Object.entries(object(value, 'parameters'))
-  if (entries.length > CODE_MATERIAL_LIMITS.parameters) throw new CodeMaterialError('BUDGET', '参数最多 32 项。')
-  return entries.map(([key, raw]): CodeParameterDeclaration => {
-    assertCodeMaterialKey(key)
-    const item = object(raw, key)
-    const animatable = item.animatable ?? false
-    if (typeof animatable !== 'boolean') throw new CodeMaterialError('PARAMETERS', `${key}.animatable 必须是布尔值。`)
-    const base = { key, title: text(item.title, `${key}.title`, 80), description: text(item.description ?? '', `${key}.description`, 1000, true), animatable }
-    const extra = item.type === 'number' ? ['min', 'max', 'step', 'unit'] : item.type === 'choice' ? ['options'] : item.type === 'text' ? ['maxLength'] : []
-    for (const name of Object.keys(item)) if (!['type', 'title', 'description', 'animatable', 'default', ...extra].includes(name)) throw new CodeMaterialError('PARAMETERS', `未知参数字段：${key}.${name}`)
-    if (item.type === 'number') {
-      const min = finiteCodeNumber(item.min, `${key}.min`); const max = finiteCodeNumber(item.max, `${key}.max`); const step = finiteCodeNumber(item.step, `${key}.step`)
-      if (min > max || step <= 0 || Math.max(Math.abs(min), Math.abs(max), step) > 1e9) throw new CodeMaterialError('PARAMETERS', `${key} 的数值范围或步长无效。`)
-      const declaration: CodeParameterDeclaration = { ...base, type: 'number', min, max, step, unit: text(item.unit ?? '', `${key}.unit`, 32, true), default: finiteCodeNumber(item.default, `${key}.default`) }
-      validateCodeMaterialParameterValue(declaration, declaration.default); return declaration
-    }
-    if (item.type === 'color') return { ...base, type: 'color', default: codeColor(item.default, `${key}.default`) }
-    if (item.type === 'boolean' && typeof item.default === 'boolean') return { ...base, type: 'boolean', default: item.default }
-    if (item.type === 'choice') {
-      if (!Array.isArray(item.options) || !item.options.length || item.options.length > 32) throw new CodeMaterialError('PARAMETERS', `${key}.options 必须有 1 到 32 项。`)
-      const options = item.options.map(value => text(value, `${key}.options`, 128))
-      if (new Set(options).size !== options.length) throw new CodeMaterialError('PARAMETERS', `${key}.options 有重复项。`)
-      const declaration: CodeParameterDeclaration = { ...base, type: 'choice', options, default: text(item.default, `${key}.default`, 128) }
-      validateCodeMaterialParameterValue(declaration, declaration.default); return declaration
-    }
-    if (item.type === 'text') {
-      const maxLength = finiteCodeNumber(item.maxLength, `${key}.maxLength`)
-      if (!Number.isInteger(maxLength) || maxLength < 1 || maxLength > CODE_MATERIAL_LIMITS.stringLength) throw new CodeMaterialError('PARAMETERS', `${key}.maxLength 超出范围。`)
-      return { ...base, type: 'text', maxLength, default: text(item.default, `${key}.default`, maxLength, true) }
-    }
-    if (item.type === 'image') {
-      if (item.default !== null || animatable) throw new CodeMaterialError('PARAMETERS', `${key} 的图片默认值必须为 null，且不可动画。`)
-      return { ...base, type: 'image', default: null, animatable: false }
-    }
-    throw new CodeMaterialError('PARAMETERS', `${key} 的参数类型或默认值无效。`)
-  })
 }
 export function validateCodeMaterialParameterValue(declaration: CodeParameterDeclaration, value: unknown): CodeParameterValue {
   const { key } = declaration
@@ -62,7 +22,7 @@ export function validateCodeMaterialParameterValue(declaration: CodeParameterDec
   if (declaration.type === 'image') return value === null ? null : codeImageReference(value, key)
   return validateCodeMaterialV3ParameterValue(declaration, value)
 }
-export function validateCodeMaterialParameters(program: Pick<CodeMaterialProgram, 'parameters'>, values: Readonly<Record<string, unknown>> = {}): CodeParameterValues {
+export function validateCodeMaterialParameters(program: Pick<CodeMaterialMetadata, 'parameters'>, values: Readonly<Record<string, unknown>> = {}): CodeParameterValues {
   object(values, '参数实例')
   const declared = new Set(program.parameters.map(parameter => parameter.key))
   for (const key of Object.keys(values)) { assertCodeMaterialKey(key); if (!declared.has(key)) throw new CodeMaterialError('PARAMETERS', `实例包含未声明参数：${key}`) }

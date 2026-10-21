@@ -13,7 +13,7 @@ test('监视器重建当前代码文件引用，保留音画压力样本且不�
     const output = path.join(root, 'factory.cjs')
     buildSync({ entryPoints: [path.join(__dirname, 'uiInspectionVideoEditMonitorFixtures.ts')], bundle: true, platform: 'node', format: 'cjs',
       // The isolated factory resolves runtime dependencies from this repository.
-      nodePaths: [path.resolve('node_modules')], outfile: output })
+      nodePaths: [path.resolve('node_modules')], alias: { '@': path.resolve('src') }, outfile: output })
     const media = [
       { id: 'video', name: 'video.mp4', path: path.join(root, 'video.mp4'), kind: 'video', durationSeconds: 3, width: 3840, height: 2160, hasAudio: false },
       { id: 'image', name: 'image.png', path: path.join(root, 'image.png'), kind: 'image', durationSeconds: 0, width: 3840, height: 2160 },

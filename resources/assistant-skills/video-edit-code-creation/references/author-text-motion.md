@@ -1,98 +1,90 @@
-# 作者语言 v3：文字与动效
+# 文字与动效
 
-基础语法、图形树与预算见 author-api；字体先查 font 实体（type.md）。量字与画面使用相同文本、字体、排版字段。
+文字和动效直接用 Canvas2D 与普通 JS 写。宿主只提供参数值与时间；量字、换行、逐字动画、缓动都在你的代码里完成。
 
-## 分组运动曝光（API2/3）
+## 文字参数与样式
 
-`group` 可给 `motionBlur:{enabled:true,shutter:180,phase:-90,maxSamples:64}`。省略整个字段保持普通合成；`enabled:false` 或 `shutter:0` 关闭。快门角度 0–720 度，默认相位为负半快门，曝光范围须在中心前后两帧内；角度按微度精度处理。
+每段可见文字声明两项参数并用 `layer` 绑定到同一图层 id：`text` 存内容，`textStyle` 存样式。用户点选图层即可改字、改样式；默认值跟随风格包。
 
-宿主只在子时刻重算组的 x/y、旋转、缩放、倾斜、锚点和透明度，内容、视频输入、着色器及空间模糊保持帧中心结果；组内再有运动组时先完成内组曝光，再作为外组内容，属于分层合成。源时钟、参数曲线和元素覆盖随变速/倒放换算，声音按局部播放时钟取样。位姿求值中的 ctx.frame 可以为小数，需要整帧随机索引时显式 floor。
-
-片段边界截断曝光后归一，超出真实源或动态声明时长的样本透明；关闭不会补出不存在的源帧。单层 1–64 样本，按路径自适应，整帧共用位姿及像素采样预算，超额明确拒绝。观察和元素编辑仍使用帧中心结构；最终拖影要取成片画面检查。
-
-## 分层镜头散焦（API3）
-
-`group({blurShape:"lens",blur:12},children)`：blur 为作者画幅内的弥散圆半径，0–256，0保持清晰；默认或 `blurShape:"gaussian"` 保留原有柔化。圆盘散焦区别于普通雾化，适合焦外光斑。对一组的文字、图片、视频及嵌套内容整体处理，之后应用蒙版/裁剪和运动曝光，半径冻结在帧中心。
-
-焦点转移复用普通参数与曲线，例如给前/后景分别设 `blur:abs(ctx.params.focus-0)*24` 和 `blur:abs(ctx.params.focus-1)*24`，focus 从0到1。这是分层二维近似，不推断视频内部深度或物体遮挡；需要真实三维景深时使用三维画面来源。
-
-透明色按预乘RGBA卷积，保留透明边缘；图形有可扩散留边，明确 clip 仍裁掉范围外的散焦。大半径按采样间距连续降采样，纹理复用现有分组缓存，尺寸变化释放旧存储；整帧采样与常驻资源都有预算，超额会明确拒绝。散焦不自动增加亮度；完成后取清晰/焦外及焦点交换帧检查实际像素。
-
-## text 与 measureText
-
-text({...}) 必须有 x/y/text/fontSize；纯色用 color，渐变用 fill；stroke/strokeWidth 支持渐变描边。公共变换、阴影、辉光、模糊见 author-api。
-
-| 字段 | 默认与语义 |
-| --- | --- |
-| fontFamily | sans-serif；允许查到的家族/精确样式名 |
-| fontWeight / fontStyle | 400 / normal；字重 1–1000；normal/italic/oblique |
-| align | left；left/center/right 决定 x 对齐哪一边 |
-| baseline | middle；top/middle/bottom/alphabetic 决定 y 基线 |
-| letterSpacing | 0 像素，可负；不能导致排版宽度为负 |
-| lineHeight | 1.2，字号倍数，范围 0.1–10 |
-| maxWidth | 0 不限；非零约束排版宽度，最多 8192 |
-| wrap | 省略且 maxWidth 非零时 true，否则 false |
-| maxLines | 0 不限；1–4096 整数；超限缩字号，最低 1px |
-
-中文逐字断行，英文优先整词，长词可拆字，行尾空白移除。不要横向压扁；先换行、减密度或延长阅读。maxLines 缩字可能损害小屏可读性，须取帧检查。
-
-```text
-measureText({text,fontFamily,fontWeight,fontStyle,fontSize,
-  letterSpacing,lineHeight,maxWidth,wrap,maxLines})
-// 作者可读 width、height、lines
-```
-
-默认值与 text 一致，量字和绘制共用布局。底板宽度用量字加左右留白；宿主负责真实字体度量，作者不能提供 Canvas、DOM 或测量器。缺字体回退并报告；回退量字不等于目标字体量字。
-
-## 逐字错峰
-
-perChar: (i,n) => ({x,y,opacity,scale,rotation,skewX,fill,blur,glow})：i 为零基字符索引，n 为数量；前五字段默认 0/0/1/1/0，skewX 默认 0 度。fill 接受颜色或三种渐变；blur 为 0–256；glow 为 {radius,intensity,color}，范围同图形。省略 fill/blur/glow 时继承 text 设置；每项可依赖 i/n 和帧上下文。例如 `perChar:(i,n)=>({fill:rgba(i/n,0,1,1),blur:i,skewX:15,glow:{radius:4,intensity:1,color:[1,1,1,1]}})`。scale ≥0，opacity 0–1，rotation 为度。仍是封闭纯表达式，不赋值或访问宿主。按 Unicode 码点拆分，复杂连字不保证逐字 shaping，要看实际帧。
+`textStyle` 的值是对象（未填字段由你兜底）：`fontFamily`、`fontWeight`、`fontStyle`、`fontSize`（作品像素）、`tracking`（千分之一 em）、`leading`（行距像素，0 为自动 1.25 倍）、`align`、`fill:{enabled,color}`、`strokes:[{enabled,color,width,position}]`、`shadows:[{enabled,color,opacity,angle,distance,blur}]`、`allCaps` 等。颜色为六位十六进制。
 
 ```ts
+function applyStyle(ctx, style) {
+  const size = style.fontSize ?? 72
+  ctx.font = `${style.fontStyle ?? "normal"} ${style.fontWeight ?? 400} ${size}px ${style.fontFamily ?? "sans-serif"}`
+  ctx.letterSpacing = `${(style.tracking ?? 0) / 1000 * size}px`
+  ctx.textBaseline = "alphabetic"
+  return { size, lineHeight: style.leading || size * 1.25 }
+}
+function drawStyledText(ctx, text, x, y, style) {
+  const { lineHeight } = applyStyle(ctx, style)
+  const lines = String(style.allCaps ? text.toUpperCase() : text).split("\n")
+  ctx.textAlign = style.align === "left" || style.align === "right" ? style.align : "center"
+  lines.forEach((line, i) => {
+    const at = y + i * lineHeight
+    for (const stroke of style.strokes ?? []) if (stroke.enabled !== false && stroke.width > 0) {
+      ctx.lineJoin = "round"; ctx.lineWidth = stroke.width * 2; ctx.strokeStyle = stroke.color; ctx.strokeText(line, x, at)
+    }
+    if (style.fill?.enabled !== false) { ctx.fillStyle = style.fill?.color ?? "#ffffff"; ctx.fillText(line, x, at) }
+  })
+}
 export default {
-  apiVersion: 1, languageVersion: 3, name: "逐字排版验证",
-  kind: "generator", mode: "dynamic", width: 1920, height: 1080,
-  durationSeconds: 4, seed: 42, parameters: {},
-  render(ctx) {
-    const title = "让信息有呼吸";
-    const box = measureText({text: title, fontSize: 96, fontWeight: 600});
-    return [text({id: "title", x: (ctx.width - box.width) / 2, y: 540,
-      text: title, fontSize: 96, fontWeight: 600, baseline: "middle",
-      color: [.92, .95, .96, 1],
-      perChar: (i, n) => ({
-        y: tween(ctx.time, stagger(i, .045), .55, 36, 0, "expoOut"),
-        opacity: progress(ctx.time, stagger(i, .045), .3),
-        scale: 1, rotation: 0
-      })})];
+  name: "样式标题", kind: "generator", mode: "static", width: 1920, height: 1080,
+  params: [
+    { key: "title", type: "text", title: "标题", default: "痕迹AI", maxLength: 80, multiline: true, layer: "title" },
+    { key: "titleStyle", type: "textStyle", title: "标题样式", layer: "title", default: { fontSize: 120, fontWeight: 700 } }
+  ],
+  layers(params, width, height) {
+    return [{ id: "title", bounds: [160, 380, width - 160, 700], draw(ctx) { drawStyledText(ctx, params.title, width / 2, 560, params.titleStyle) } }]
   }
 }
 ```
 
-逐字按 maxLength/可证明上界预算，不只按默认字数；给合理文本容量，长内容分段，不为省预算截断原文。chars(text) 返回 Unicode 码点数组，words(text) 按空白拆词，不是中文分词。
+## 量字、换行与自适应
 
-## 动效函数
+- `ctx.measureText(text)` 返回宽度与 `actualBoundingBoxAscent/Descent`；先设好 `ctx.font` 和 `letterSpacing` 再量。
+- 自动换行自己写：中文逐字累加、英文按词累加，超过 `maxWidth` 折行。标题过长时按 `maxWidth / 实测宽度` 等比缩小字号，保证读得完。
+- 字体在 Worker 中加载；缺字体会回退并提示，交付前用取帧确认实际字形。
 
-| 签名 | 语义 |
-| --- | --- |
-| progress(t,start,duration) | 夹到 0–1；duration >0 |
-| tween(t,start,duration,from,to,ease) | 数字/RGBA 插值，ease 为缓动名 |
-| stagger(i,each) | i×each，通常作开始时间 |
-| keyframes(t,[[time,value,ease],...]) | 数字关键帧；时间严格递增，左行 ease 管下一段，默认 linear |
-| mix(a,b,t) | 数字/RGBA 插值，允许过冲；最终颜色显式 clamp |
-| cubicBezier(x1,y1,x2,y2,t) | 固定步数反解，x 控制点在 0–1 |
-| noise(x,y?,z?) | seed 驱动的 0–1 value noise，省略坐标为 0 |
-| random(index) | seed 与无符号 32 位整数索引决定，随机寻帧可重复 |
+## 逐字与逐词动画
 
-缓动既能直接调用 expoOut(t)，也能给 tween/keyframes 名称：linear；sine/quad/cubic/quart/quint/expo/circ 各有 In、Out、InOut；另有 backOut/elasticOut/bounceOut。例如 sineInOut、quadOut。直接 backOut(t,overshoot?) 默认 1.70158，GPU 要求 overshoot 0–10。
+用 `Array.from(text)`（正确处理中文与表情）拆字，按索引错峰：
 
-进场之后留阅读停留，退场在片段结束前完成；核对 source_in_us、变速和接缝。函数 keyframes 是源码表达式，实例 code_curves 是可编辑参数轨道，不是同一存储。static 不读时间，但宿主可以把曲线求值结果作为参数传入。
+```ts
+const clamp01 = v => Math.min(1, Math.max(0, v))
+const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
+export default {
+  name: "逐字入场", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
+  params: [
+    { key: "text", type: "text", title: "文字", default: "逐字入场", maxLength: 60, layer: "text" },
+    { key: "style", type: "textStyle", title: "样式", layer: "text", default: { fontSize: 110, fontWeight: 700 } }
+  ],
+  layers(params, width, height) {
+    return [{ id: "text", bounds: [100, 420, width - 100, 660], draw(ctx, time) {
+      const style = params.style, size = style.fontSize ?? 110
+      ctx.font = `${style.fontWeight ?? 700} ${size}px ${style.fontFamily ?? "sans-serif"}`
+      ctx.fillStyle = style.fill?.color ?? "#ffffff"; ctx.textBaseline = "middle"
+      const chars = Array.from(params.text), widths = chars.map(c => ctx.measureText(c).width)
+      let x = (width - widths.reduce((a, b) => a + b, 0)) / 2
+      chars.forEach((c, i) => {
+        const p = expoOut(clamp01((time - i * .045) / .6))
+        ctx.globalAlpha = p; ctx.fillText(c, x, 540 + (1 - p) * 48); x += widths[i]
+      })
+      ctx.globalAlpha = 1
+    } }]
+  }
+}
+```
 
-滤镜 tween 接受过冲缓动，输出通道在片元末端夹取；帧级 keyframes 同样由 CPU 求值，逐像素 keyframes 仍要求无过冲缓动。逐像素计算保留有限范围证明。CPU 双精度与 GPU f32 语义一致，不承诺逐位相同。
+## 缓动、弹簧与随机
 
-## 数学、数字与色彩
+- 缓动是普通函数：`cubicOut = t => 1 - (1 - t) ** 3`、`backOut`、`elasticOut` 等按需要自己写；easing 参数值为名称或 `[x1,y1,x2,y2]`，用贝塞尔反解求值。
+- 时间映射先夹到 0–1：`clamp01((time - start) / duration)`；超出区间保持端值，避免过冲闪烁。
+- 随机必须可重现：用种子哈希而不是 `Math.random()`。
 
-数学：sin/cos/abs/floor/ceil/round、min(a,b)/max(a,b)、clamp(x,min,max)、smoothstep(edge0,edge1,x)，以及 sqrt/pow/atan2 等完整数学函数、PI/TAU/E 与 `**`（见 author-api-expressions）。smoothstep 边界递增，clamp 支持数字/RGBA。字符串可用 `+` 拼接、模板插值、formatNumber/formatTime；没有 toFixed/toLocaleString 等方法。数字滚动可直接 `formatNumber(round(v), {thousands: true}) + "%"`；需要每位单独滚动时再用 chars("0123456789")、位权表和 repeat 绘制各位字形（见 examples）。
+```text
+const hash = (i, seed = 0) => { let h = Math.imul(i ^ seed, 0x9e3779b1); h ^= h >>> 15; h = Math.imul(h, 0x85ebca77); h ^= h >>> 13; return (h >>> 0) / 4294967296 }
+```
 
-rgba(r,g,b,a) 构造四通道；luma(color) 为 Rec.709 亮度；contrast(color,amount) 以 0.5 为中心调 RGB；saturate(color,amount) 按亮度调饱和度，后二者夹到 0–1。hsv(h,s,v,a?)/hsl(h,s,l,a?)：h 为周数，s/v/l 在 0–1，alpha 默认 1；toHsv/toHsl 返回 [h,s,v或l,a]，转换结果不能直接当 RGB 绘制。
-
-主色、描边、辉光分别负责可读、分离、质感，不能靠全部提亮解决层级。完成后 observe_video_edit_frame + read_application_media(mode="image") 看真实像素；编译/求值测试证明契约，不能证明字体形状、辉光观感或运动品味。
+- 运动模糊：需要曝光拖影的元素写成带 `pose` 的图层；整体快门、相位与采样上限写在模块 `motionBlur`。关闭某层写 `motionBlur: false`。
+- 景深：pose 返回 `blur`（像素）并设 `blurShape: "lens"` 得到镜头散焦；默认 `gaussian`。

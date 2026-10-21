@@ -14,42 +14,35 @@
 
 ## 代码伪3D配方
 
-背景、主体、前景分组，前景移动快、远景慢。轻推进可以只让三层用不同scale与x/y幅度；需要近大远小，用投影倍率f/(f+z−cameraTravel)算位置和尺寸，所有层同一时刻直接求值。分母必须始终为正且远离0，限定运镜范围或裁掉穿越镜头的层，不能靠无限放大表现穿越。
+背景、主体、前景分成图层，前景移动快、远景慢。轻推进可以只让三层 pose 用不同 scale 与 x/y 幅度；需要近大远小，用投影倍率f/(f+z−cameraTravel)算位置和尺寸，所有层同一时刻直接求值。分母必须始终为正且远离0，限定运镜范围或裁掉穿越镜头的层，不能靠无限放大表现穿越。
 
-代码group只有平面rotation与scaleX/Y，没有rotateX/Y、z、相机或深度排序；按返回顺序由远到近画。侧转可平面缩窄＋补侧面多边形作为示意，但不能声称正确透视／体积折射。需要真正的三维体积、透视和光照时，在着色器图层里自写 WGSL（光线步进、SDF），见 author-shaders。需要动态遮挡换序时用合法时间条件明确组织，不读取上一帧。
+图层 pose 只有平面 rotation 与 scaleX/Y；layers 按返回顺序由远到近合成。Canvas2D 可用 `setTransform` 画斜切示意侧转，但不能声称正确透视／体积折射。需要真正的三维体积、透视和光照时用 createWebGPU（光线步进、SDF 或真实网格），见 author-shaders。需要动态遮挡换序时按当前时间排序返回的图层数组，不读取上一帧。
 
 完整样例：三层卡片按固定纵深由远到近绘制，统一前推产生不同位移和尺度。运镜距离、秒数、标题、颜色可改；技术约束来自投影分母，非产品数量上限。它是伪3D平面卡片，不含厚度、真实光照或相机景深。
 
 ```ts
+const sineInOut = t => -(Math.cos(Math.PI * t) - 1) / 2
+const clamp01 = v => Math.min(1, Math.max(0, v))
 export default {
-  apiVersion: 1, languageVersion: 3, name: "三层视差推进",
-  kind: "generator", mode: "dynamic", width: 1920, height: 1080,
-  durationSeconds: 6, seed: 10,
-  parameters: {
-    title: {type: "text", title: "卡片文字", default: "近与远", maxLength: 32},
-    accent: {type: "color", title: "卡片颜色", default: [.14,.4,.46,1]},
-    travel: {type: "number", title: "推进距离", default: 180, min: 0, max: 300, step: 10,
-      description: "伪3D投影距离；最大300，确保最近层分母至少350，不穿过镜头"},
-    seconds: {type: "number", title: "推进秒数", default: 4, min: 2, max: 5, step: .1}
-  },
-  render(ctx) {
-    const z = [500, 0, -250];
-    const xs = [-620, 0, 560];
-    const ys = [-180, 0, 160];
-    const advance = ctx.params.travel * sineInOut(progress(ctx.time, .2, ctx.params.seconds));
-    return [
-      rect({id: "background", x: 0, y: 0, width: ctx.width, height: ctx.height,
-        fill: [0.06, 0.07, 0.09, 1]}),
-      repeat(3, i => group({id: "depthCard",
-        x: ctx.width / 2 + xs[i] * 900 / (900 + z[i] - advance),
-        y: ctx.height / 2 + ys[i] * 900 / (900 + z[i] - advance),
-        scale: 900 / (900 + z[i] - advance), anchorX: 200, anchorY: 100}, [
-        rect({id: "plate", x: 0, y: 0, width: 400, height: 200, radius: 24,
-          fill: ctx.params.accent, stroke: [0.62, 0.66, 0.71, 1], strokeWidth: 2}),
-        text({id: "title", x: 200, y: 100, text: ctx.params.title, fontSize: 48,
-          align: "center", color: [0.95, 0.96, 0.97, 1]})
-      ]))
-    ];
+  name: "三层视差推进", kind: "generator", mode: "dynamic", width: 1920, height: 1080, durationSeconds: 6,
+  params: [
+    { key: "title", type: "text", title: "卡片文字", default: "近与远", maxLength: 32 },
+    { key: "accent", type: "color", title: "卡片颜色", default: "#24666e" },
+    { key: "travel", type: "number", title: "推进距离", default: 180, min: 0, max: 300, step: 10, description: "伪3D投影距离；最大300，确保最近层分母至少350，不穿过镜头" },
+    { key: "seconds", type: "number", title: "推进秒数", default: 4, min: 2, max: 5, step: .1 }
+  ],
+  layers(params, width, height) {
+    const z = [500, 0, -250], xs = [-620, 0, 560], ys = [-180, 0, 160]
+    const advance = t => params.travel * sineInOut(clamp01((t - .2) / params.seconds))
+    const cards = [0, 1, 2].map(i => ({ id: `depth-card-${i}`, bounds: [width / 2 - 200, height / 2 - 100, width / 2 + 200, height / 2 + 100],
+      pose: t => { const k = 900 / (900 + z[i] - advance(t)); return { x: width / 2 * (1 - k) + xs[i] * k, y: height / 2 * (1 - k) + ys[i] * k, scale: k } },
+      draw(ctx) {
+        ctx.fillStyle = params.accent; ctx.strokeStyle = "#9ea8b5"; ctx.lineWidth = 2
+        ctx.beginPath(); ctx.roundRect(width / 2 - 200, height / 2 - 100, 400, 200, 24); ctx.fill(); ctx.stroke()
+        ctx.fillStyle = "#f2f5f7"; ctx.font = "48px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
+        ctx.fillText(params.title, width / 2, height / 2)
+      } }))
+    return [{ id: "background", draw(ctx) { ctx.fillStyle = "#0f1217"; ctx.fillRect(0, 0, width, height) } }, ...cards]
   }
 }
 ```

@@ -12,7 +12,7 @@
   - 常用 `video_edit.clip.start`（序列帧，默认取上下文的 `frame`）、`video_edit.clip.track`（轨道号）、`video_edit.clip.duration`（帧，动态素材不能超过声明时长）；
   - 可同时写 `video_edit.clip.code_parameters`、`video_edit.clip.code_curves`。
 - 轨道号可以从同轨已有片段的 `video_edit.clip.track` 读到；不要假设新序列有几条轨道：先用 `list_application_entities` 读该序列的 `video_edit.track`（kind、index），缺轨道时在序列下 `create_items` 新建。锁定的轨道会拒绝修改，换轨道或请用户解锁。
-- 滤镜：提交后只得到 `video_edit.code_material`。在目标片段下 `create_items`，entityType `video_edit.effect`，属性 `video_edit.effect.definition_id`（素材引用 id 冒号后的部分），可加 `video_edit.effect.name`、`video_edit.effect.parameters`。不设片段效果数量上限，按实际 GPU 资源保护执行；代码滤镜不能加到音频片段。单份源码 8 道 shaderFilter 工序预算不是片段效果数量限制。
+- 滤镜：提交后只得到 `video_edit.code_material`。在目标片段下 `create_items`，entityType `video_edit.effect`，属性 `video_edit.effect.definition_id`（素材引用 id 冒号后的部分），可加 `video_edit.effect.name`、`video_edit.effect.parameters`。不设片段效果数量上限，按实际 GPU 资源保护执行；代码滤镜不能加到音频片段。代码滤镜内部的遍数由作者决定，不是片段效果数量限制。
 - 片段画面位置：`video_edit.clip.x`、`video_edit.clip.y` 为归一化坐标，另有 `video_edit.clip.scale`、`video_edit.clip.rotation`、`video_edit.clip.opacity`。先读现值再改。
 
 ## 批量修改
@@ -34,7 +34,7 @@
 
 它按当前剪辑版本离屏渲染，不改用户的播放头、选区和画面。返回的 `resultRef` 交给 `read_application_media(mode="image")` 查看图像，读到像素后再评价。动画至少看开始、关键帧附近和结束三处；只看一帧不能证明动画正确。
 
-处理批注读 annotations；修改源码使用 languageVersion:3 并新增固定版本，参数仍属于片段实例。不要用旧元素位置/旧版本帧评价新作品，也不要把编译成功当作像素验收。
+处理批注读 annotations；修改源码新增固定版本，参数仍属于片段实例。不要用旧元素位置/旧版本帧评价新作品，也不要把编译成功当作像素验收。
 
 ## 撤销与保存
 

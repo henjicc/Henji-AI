@@ -141,8 +141,8 @@ describe('剪辑内置效果（真实设备）', () => {
         if (warm) expect(count).toEqual(warm)
         else warm = count
       }
-      // Gaussian's three linear targets and ColorGrade's two ping-pong textures, shared across all instances.
-      expect(scratchAllocations).toBe(5)
+      // Gaussian's three linear targets, shared across all instances; a single-stage grade writes straight to its output.
+      expect(scratchAllocations).toBe(3)
       expect(pixel(await read(current), W / 2, H / 2)[3]).toBe(255)
     } finally { local.dispose(); source.destroy(); first.destroy(); second.destroy() }
   }, 60_000)

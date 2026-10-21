@@ -62,7 +62,7 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
         if (instance.snapping && !event.altKey) {
           const targets = { x: [.05, .5, .95], y: [.05, .5, .95] }
           for (const entry of videoEditCodeElementFrames(instance).values()) for (const element of entry.index.bounds) {
-            if (element.elementId === current.target.elementId && entry.clip.id === current.target.clipId || element.opacity < .01 || element.command.kind === 'group') continue
+            if (element.elementId === current.target.elementId && entry.clip.id === current.target.clipId || element.opacity < .01) continue
             const polygon = codeElementOrientedPolygon(element, entry.clip, entry.picture, sequence)
             targets.x.push(Math.min(...polygon.map(point => point.x)), Math.max(...polygon.map(point => point.x)))
             targets.y.push(Math.min(...polygon.map(point => point.y)), Math.max(...polygon.map(point => point.y)))

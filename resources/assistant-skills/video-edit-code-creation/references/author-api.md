@@ -1,104 +1,115 @@
-# 作者语言 v3：核心与图形
+# 作者接口：模块、绘制与图层
 
-声明素材契约 `apiVersion: 3` 与作者语言 `languageVersion: 3`；API2支持运动曝光，API3增加分层镜头散焦，省略语言版本不会启用 v3。文字与动效读 author-text-motion，着色器与滤镜读 author-shaders，参数实例读 parameters-curves。
+代码素材是标准 ES 模块，在剪辑渲染 Worker 里直接执行，和合成共用同一个 GPU 设备。写普通 JS/TS：`let`、循环、类、闭包、`Math`、数组方法、相对导入都可以用；宿主不解析也不限制你的绘制代码。文字与动效见 author-text-motion，WebGPU/WebGL 与滤镜见 author-shaders，参数类型见 parameter-types。
 
 ## 完整最小源码
 
-ts 围栏须为完整作者源码，测试直接编译；调用片段用 text，工具输入用 json。
+ts 围栏须为完整作者源码，测试会直接加载；调用片段用 text，工具输入用 json。
 
 ```ts
 export default {
-  apiVersion: 3, languageVersion: 3,
   name: "图形核心", kind: "generator", mode: "dynamic",
-  width: 1920, height: 1080, durationSeconds: 5, seed: 42,
-  parameters: {},
-  render(ctx) {
-    const p = smoothstep(0, 1, clamp(ctx.time, 0, 1));
-    return [group({id: "card", x: 120 + p * 80, y: 120, opacity: p, motionBlur: {shutter: 180}}, [
-      rect({id: "plate", x: 0, y: 0, width: 680, height: 180,
-        radius: 16, fill: [0.13, 0.15, 0.19, 1]}),
-      line({id: "rule", x1: 32, y1: 144, x2: 648, y2: 144,
-        width: 2, color: [.45, .7, .65, 1], trimEnd: p})
-    ])];
+  width: 1920, height: 1080, durationSeconds: 5,
+  params: [
+    { key: "accent", type: "color", title: "强调色", default: "#73b3a6" },
+    { key: "enter", type: "number", title: "入场时长", min: .1, max: 3, step: .05, default: 1 }
+  ],
+  draw(ctx, time, params, width, height) {
+    const p = Math.min(1, Math.max(0, time / params.enter))
+    const eased = 1 - (1 - p) ** 3
+    ctx.globalAlpha = eased
+    ctx.fillStyle = "#21262f"
+    ctx.beginPath(); ctx.roundRect(120 + eased * 80, 120, 680, 180, 16); ctx.fill()
+    ctx.strokeStyle = params.accent; ctx.lineWidth = 2
+    ctx.beginPath(); ctx.moveTo(152 + eased * 80, 264); ctx.lineTo(152 + eased * 80 + 616 * eased, 264); ctx.stroke()
   }
 }
 ```
 
-name 为 1–160 个 UTF-16 单元；kind 为 generator/filter；可选 shaders 定义自己写的 WGSL 着色器（见 author-shaders）；mode 为 static/dynamic。width/height 为 1–8192 整数像素，durationSeconds 为 0.000001–86400 秒（24 小时源时钟技术范围），seed 为无符号 32 位整数。parameters 必填，可为空。static 禁止读 time/localTime/sequenceTime/frame/fps；静态 shader 必须显式给固定 time。滤镜按输入画面处理，作者尺寸不是重采样指令。
+## 模块契约
 
-## 受限语法与 render
+`export default` 一个对象：
 
-允许 export 前顶层 const、render 内 const、纯箭头辅助函数；块体只允许 const 与最后一个 return。辅助函数编译时展开，不运行任意 JS。函数参数不能带 TS 类型、默认值、解构或剩余参数。对象字段必须显式写 `x: x`，不支持简写、展开或方法。
-
-允许字面量、数组、静态字段对象，`+ - * / %`、比较、同类型标量 `=== !==`、`&& || !`、同类型两支的三元表达式（“不画”的一支写 `group({}, [])`，不写 `[]`）；`ctx.params` 不能赋给别名。可读数组下标、允许的对象字段、颜色 `.r/.g/.b/.a`；CPU 生成器支持经过检查的动态索引，滤镜索引须静态确定。不支持 if/for/while、let/var、赋值、递归、class/new、默认导入或动态 import（具名相对导入与 @组件 导入见 [多文件与项目组件库](multifile-components.md)）、任意方法及浏览器/Node/网络/文件访问。
-
-ctx：time 源秒、localTime 片段内秒、sequenceTime 序列秒、frame、fps、width/height；参数为 `ctx.params.key`。u/v 仅滤镜可用，表示当前输入归一化像素坐标。关键帧按 time，不把三种时间混用；frame 由宿主提供，不假定总等于源秒乘帧率。
-
-API2 的组可写 `motionBlur:{shutter:180}`；内容只画一次，位姿在快门内求值。开关、相位、边界与嵌套语义见 [文字与动效](author-text-motion.md)。
-
-
-生成器 return 图形数组或 repeat 结果，嵌套数组展开。`repeat(count, i => expression)` 从零计数，可返回图形/数组/值；count 是非负整数常量或有非负 min、整数 max 的 number 参数，运行值也必须为整数。时间/随机数不能决定展开上界。辅助函数展开最多 16 层，repeat 嵌套最多 4 层。
-
-## 图形与公共字段
-
-坐标为作者画布像素，组内为局部坐标，按输出顺序从底到顶绘制。
-
-| 调用 | 几何与专属字段 |
+| 字段 | 说明 |
 | --- | --- |
-| rect({...}) | x/y/width/height；fill；radius 或 radii（1–4 项，CSS 顺序） |
-| ellipse({...}) | x/y/width/height 为外接矩形；fill |
-| line({...}) | x1/y1/x2/y2；width、color；stroke/strokeWidth、lineCap/lineJoin、dash、trimStart/trimEnd |
-| path({...}) | d 或 points 二选一；closed、fill；描边与 trim 同 line |
-| group({...},children) | x/y 默认 0；children 数组/repeat；clip 为局部矩形 {x,y,width,height}；mask:{shape,mode?,invert?} |
-| image({...}) | source 为 image 参数；x/y/width/height；空参数不画 |
-| text({...}) | x/y/text/fontSize；排版见 author-text-motion |
-| shader({...}) | name+params 或 layers 图层树，time/x/y/width/height；见 author-shaders |
+| `name` | 必填，素材名 |
+| `kind` | `generator`（默认，自己画内容）或 `filter`（处理下方画面，只能用 createWebGPU，见 author-shaders） |
+| `mode` | `dynamic`（默认）或 `static`（同一参数下每帧画面相同，宿主可复用） |
+| `width` / `height` / `durationSeconds` | 可选的放置提示；实际画布尺寸与时间由宿主给出，不要假定等于提示值 |
+| `params` / `types` | 参数声明数组与自定义组件类型，见 parameter-types |
+| `frames` | 滤镜需要的相邻帧偏移（宿主帧单位，非零、不重复），见 author-shaders |
+| `motionBlur` | `{ shutter?, phase?, maxSamples? }`，layers 的运动曝光默认值 |
+| 绘制入口 | `draw`、`layers`、`createWebGL`、`createWebGPU` 至少一个；`layers` 不能与 GPU 入口同时声明 |
+| `dispose` | 可选；实例释放时调用 |
 
-公共字段：静态字符串 id；opacity 0–1；rotation 为度；scale 或 scaleX/scaleY（后者优先）；anchorX/anchorY 为局部像素锚点，默认 0。scale 可负以镜像；perChar.scale 必须非负。skewX/skewY 为度，默认 0，范围 −89.9–89.9；矩阵依次缩放、倾斜、旋转，再按锚点与位置平移。blend 为 normal/multiply/screen/overlay/add/lighten/darken/difference/exclusion/soft-light/hard-light/color-dodge/color-burn/hue/saturation/color/luminosity。
-
-除 shader 自身外，可用 shadow:{x,y,blur,color}、glow:{radius,intensity,color}、blur。阴影偏移 ±1024，模糊/辉光半径 0–256，辉光强度 0–16。组 opacity 在整组完成后应用一次；mask 在组效果后、clip 前应用；clip 在局部图层完成效果后裁切，再做组变换。shader 可放组内接受组效果。
-
-rect/ellipse/path/text 的 fill/stroke 接受 RGBA 或渐变，strokeWidth 控制描边。lineCap 为 butt/round/square，lineJoin 为 miter/round/bevel；dash 至多 32 项非负长度，非空时不能全零。line/path 的 trimStart/trimEnd 为 0–1，end 不小于 start，沿长度裁描边，不改变填充。SVG d 支持完整路径语法（含相对命令、H V S T A，见 author-api-expressions）；points 为 [[x,y],...]，closed 控制闭合。
+绘制入口签名：
 
 ```text
-linearGradient({x1,y1,x2,y2,stops:[[0,rgbaValue],[1,rgbaValue]]})
-radialGradient({cx,cy,r,stops:[[0,rgbaValue],[1,rgbaValue]]})
-conicGradient({cx,cy,angle:0,stops:[[0,rgbaValue],[1,rgbaValue]]})
+draw(ctx, time, params, width, height, assets, info)
+layers(params, width, height, assets, info) => Layer[]
 ```
 
-渐变坐标为图形/组局部画布坐标；stops 为 2–32 项静态数组，位置 0–1、非递减。线性两端不能重合，径向半径 >0。颜色用 [r,g,b,a] 或 rgba，各通道 0–1；过冲后用 clamp 收口。
+- `ctx` 是 `OffscreenCanvasRenderingContext2D`，画布即输出尺寸，左上角为原点。
+- `time` 是素材源时间（秒，随片段裁剪、变速、倒放连续），关键帧与动画都按它写。
+- `params` 为当前帧参数值（已应用关键帧曲线），见 parameter-types 的取值表。
+- `assets` 为 image 参数的画面（`CanvasImageSource`），按参数键取，如 `assets.logo`；未绑定时没有该键。
+- `info`：`time`、`frameDuration`（一帧秒数）、`clip.time` / `clip.duration`（片段内时间与片段时长）、可选 `audio` / `audioTime`（见 author-api-media）。
 
-`conicGradient` 的 angle 默认 0 度，零度从中心向右，顺时针增加，绕中心一圈覆盖 stops 的 0–1。
+## 图层：layers
 
-`group({mask:{shape,mode:"alpha",invert:false}}, children)`：shape 是一个图形调用，支持 rect/ellipse/line/path/text/image/shader，也可嵌套 group；使用组内局部坐标和同一帧上下文。mode 为 alpha（默认）或 luma，后者为预乘 RGB 的 `.2126*r + .7152*g + .0722*b`。invert 默认 false，true 时覆盖率为 `1-coverage`，包括图形之外的区域。空图片产生零覆盖；反转后全覆盖。矩形 clip 独立保留。
+需要点选、拖动或单独运动模糊的元素写成图层。`layers()` 每帧返回数组，按顺序从底到顶合成：
 
-```text
-group({mask:{shape:ellipse({x:ctx.time*20,y:0,width:200,height:200,fill:[1,1,1,1]}),mode:"alpha"}}, [rect({x:0,y:0,width:400,height:200,fill:[1,0,0,1]})])
-rect({x:0,y:0,width:100,height:100,skewX:15,skewY:5,blend:"difference",fill:[.8,.2,.3,1]})
-```
-
-## 元素定位
-
-每个图形可给稳定静态id；省略按源码偏移生成，repeat加索引。输出带elementId、elementPath与sourceSpan：start/end为零基UTF-16偏移、左闭右开；行列一基。实例可沿video_edit.clip.element_overrides修位置／文字等，先读并保留其他覆盖；文字参数优先改参数。结构改动仍新增版本并重绑。
-
-源码重排改变自动 id/偏移，先核对标注对应的固定 version，不用旧 sourceSpan 切新源码。命中按当前帧变换、裁切和可见性，包围盒是画布 AABB；文字用正式宿主量字。通过标注 target 或选中元素上下文取得定位，见 annotations。
-
-## 技术预算与错误
-
-| 单份源码/单帧技术保护 | 数值 |
+| 字段 | 说明 |
 | --- | --- |
-| 源码 UTF-8 / AST / 深度 | 64 KiB / 16384 / 64 |
-| 绘制单元（逐字按字形）/ CPU 加权工作 | 4096 / 1000000 |
-| 参数 / 单字符串 / 每帧文字 | languageVersion 3 不限个数（v1/v2 为 32）/ 4096 / 8192 UTF-16 |
-| 滤镜采样 / 标量工作 | 64 / 4096 |
-| 单路径展平点 / 渐变 stops | 4096 / 2–32 |
-| shader 图层 / shaderFilter 工序 | 32 / 8 |
-| 字号 / 字形纹理 / GPU 驻留 | 1–1024px / 宽≤8192且≤四百万像素 / 256 MiB |
+| `id` | 稳定字符串，用于点选、元素覆盖、标注定位；动态图层用数据键组成，如 `node-3` |
+| `name` | 可选显示名 |
+| `bounds` | `[x0, y0, x1, y1]` 内容范围（画布像素）；带 `pose` 的图层必填，也用于选框 |
+| `clip` | 可选裁切矩形 `[x0, y0, x1, y1]` |
+| `draw(ctx, t)` | 绘制本图层；坐标仍是画布像素 |
+| `pose(t)` | 可选；返回 `{x, y, rotation, scale, scaleX, scaleY, opacity, blur}` 或 `null`（本时刻不显示）。变换作用在画布坐标上：先绕画布原点缩放、旋转（弧度），再平移 x/y；绕自身中心缩放时把 `中心 × (1 − scale)` 加进 x/y。有 pose 的图层只画一次内容，位姿在快门内按 `pose(t)` 采样 |
+| `motionBlur` | 有 pose 时默认开启运动模糊，`false` 关闭 |
+| `blurShape` | `gaussian`（默认）或 `lens`（镜头散焦），配合 pose 的 `blur` |
+| `data` | `{ parameter, index }` 或 `{ parameter, keyField, key }`，把图层绑定到 table 参数的一行 |
+| `factory` | `{ file, name }`，指向生成这类图层的工厂函数，选中后可跳转 |
 
-repeat、辅助函数、路径、字符动画按展开上界计费。代码目标驻留数量按 256 MiB 纹理预算和分辨率计算，预留一半给图层与效果；超过驻留容量时按最近使用顺序回读位图并淘汰纹理，同帧合成保留结果，后续按需重建，没有固定 16 个目标限制。以上是单帧保护，不限制工程素材/片段/序列数量，不承诺所有设备 60fps。
+相邻、没有 pose 的图层会合并到同一张画布上绘制，保留 Canvas 的混合关系；有 pose 的图层各自栅格化后按位姿合成。
 
-渲染时先检查组透明度、裁切与恒空蒙版；能证明不可见的子树不展开，其省下的 CPU 求值不计费。静态编译检查、数值确定性和可见部分预算保持不变，表达式缓存仍按原有逻辑工作量计费。命中测试及元素覆盖使用完整树定位，存在元素覆盖时保守求值后再做绘制剔除，避免原本透明或画外元素无法移回。绘制命令完全相同才复用整帧纹理；静态组复用图层，任意微小变化、字体变化与可变媒体输入都会阻止相应复用，不要为提高命中率删掉作品需要的动画。
+```ts
+export default {
+  name: "分层标题", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
+  params: [
+    { key: "title", type: "text", title: "标题", default: "痕迹AI", maxLength: 40, layer: "title" },
+    { key: "titleStyle", type: "textStyle", title: "标题样式", layer: "title", default: { fontSize: 120, fontWeight: 700 } }
+  ],
+  layers(params, width, height) {
+    const enter = t => 1 - Math.pow(2, -10 * Math.min(1, Math.max(0, t / .6)))
+    return [
+      { id: "plate", bounds: [360, 440, 1560, 640], pose: t => ({ y: (1 - enter(t)) * 80, opacity: enter(t) }),
+        draw(ctx) { ctx.fillStyle = "#1d2a33"; ctx.beginPath(); ctx.roundRect(360, 440, 1200, 200, 20); ctx.fill() } },
+      { id: "title", bounds: [410, 470, 1510, 610], pose: t => ({ y: (1 - enter(t - .1)) * 60, opacity: enter(t - .1) }),
+        draw(ctx) {
+          const style = params.titleStyle
+          ctx.font = `${style.fontWeight ?? 700} ${style.fontSize ?? 120}px ${style.fontFamily ?? "sans-serif"}`
+          ctx.fillStyle = style.fill?.color ?? "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"
+          ctx.fillText(params.title, width / 2, 540, 1100)
+        } }
+    ]
+  }
+}
+```
 
-试渲染和取帧结果的 performance / evidence 会返回 CPU 求值、GPU 准备到队列完成的墙钟耗时、前五项结构的源码行列和成本占比，以及剔除与复用次数；预算内也返回，超预算不拒绝有效画面。结构计时包含子结构，可能重叠；占比按各类已测结构总和归一化，不能把结构时间相加当成整帧耗时，也不能当成硬件 GPU timestamp。先依据反馈优化最贵结构，再核对实际画面。
+## 确定性与性能
 
-错误：SOURCE_LIMIT 源码超限；SYNTAX 禁止语法/结构；TYPE 字段/类型/索引；BUDGET 展开/资源；PARAMETERS 声明/实例/颜色/着色器参数；NON_FINITE 非有限数值/GPU 安全证明；CONTEXT 时间/尺寸/量字/GPU；COMPATIBILITY 不可变版本契约。可归属错误带 sourceSpan，按位置修正后提交新操作，不原样重试。缺字体报告 MISSING_FONT 并回退 sans-serif；回退能画不等于品牌字体已验收。
+- 同一参数、同一 `time` 必须得到同一画面：随机用自己写的种子哈希（见 author-text-motion），不用 `Math.random()`、`Date.now()` 或跨帧累积状态。宿主按帧缓存并可能乱序取帧，跨帧状态会在拖动、导出时出错。
+- 不访问网络、文件或 DOM；外部图片走 image 参数。
+- 宿主不设语言预算或绘制数量上限。试渲染与取帧会返回 `performance`：`cpuMs`、`gpuMs`（提交到队列完成的墙钟）、`budgetMs`（`1000/fps`）。超出预算不拒绝画面，按反馈优化最贵的部分：缓存不随时间变化的路径和渐变、减少逐帧 `getImageData`、把逐像素工作移到 createWebGPU。
+
+## 多文件与元素
+
+- 入口默认 `main.ts`，可用相对导入拆文件，或 `@组件/名称` 导入项目组件，见 multifile-components。
+- 图层 id 是元素身份：拖动、缩放、旋转写入 `video_edit.clip.element_overrides`，按 id 保存；改名或删除图层会让旧覆盖失效。改字、改色优先改参数。
+- 源码结构变化新增版本再重绑，不要改写已被片段引用的版本。
+
+## 错误
+
+源码在后台 Worker 打包并加载；语法错误、导入缺失、入口缺失或 `draw` 抛错时，操作返回错误与源码位置（文件、行列），按位置修正后提交新操作，不原样重试。缺字体会提示并回退；回退能画不等于品牌字体已验收。

@@ -136,7 +136,8 @@ it('真实转场窗口准备两端原视频余量，不改片段时钟，禁用�
         { ids: [base.id], timestamps: [undefined], offscreen: false },
       ])
     }
-    expect(boundary.mixes).toEqual([0, 5 / 9, 1]); expect(boundary.compilerCalls).toBe(0)
+    // 半开窗口按真实时长插值（690216d9a）：最后一帧仍差一帧的混合量
+    expect(boundary.mixes).toEqual([0, 5 / 10, 9 / 10]); expect(boundary.compilerCalls).toBe(0)
     boundary.draws = []; await renderer.render(65)
     expect(boundary.draws.map(draw => ({ ...draw, timestamps: us(draw.timestamps) }))).toEqual([{ ids: ['right'], timestamps: us([1 + 5 / 60]), offscreen: false }])
     const decodes = boundary.snapshotCalls.length
@@ -160,7 +161,7 @@ it('媒体不足时转场重复首尾帧（PR），黑场过渡把纯色交给�
     const after = await renderer.render(122); await after.completion
     // 左片段越过源结尾停在最后一帧
     expect(us(after.sourceTimestamps)).toEqual(expect.arrayContaining(us([119 / 60, 2 / 60])))
-    expect(boundary.mixes).toEqual([[3 / 9, 0, 0, 0, 1], [7 / 9, 0, 0, 0, 1]])
+    expect(boundary.mixes).toEqual([[3 / 10, 0, 0, 0, 1], [7 / 10, 0, 0, 0, 1]])
   } finally { await renderer.dispose() }
 })
 it('淡化手柄：画面按帧乘不透明度，声音按恒定功率包络混音（4.3）', async () => {
@@ -196,9 +197,9 @@ it('单侧过渡：画面从黑场淡入、淡出到透明，声音在片段一�
   document.transitions = [{ id: 'head', kind: 'dip_to_black', rightClipId: 'clip', durationFrames: 10 }, { id: 'tail', kind: 'cross_dissolve', leftClipId: 'clip', durationFrames: 10 }]
   const renderer = new VideoEditRenderer(document)
   try {
-    // 入点：同一片段两次传入，借纯色混合的后半段（0.5 → 1）；出点借前半段（0 → 0.5），透明为全零预乘色
-    await renderer.render(33); expect(boundary.mixes).toEqual([[.5 + 3 / 18, 0, 0, 0, 1]])
-    await renderer.render(89); expect(boundary.mixes).toEqual([[.5 + 3 / 18, 0, 0, 0, 1], [.5, 0, 0, 0, 0]])
+    // 入点：同一片段两次传入，借纯色混合的后半段（0.5 → 1）；出点借前半段（0 → 接近 0.5，出窗口才到 0.5），透明为全零预乘色
+    await renderer.render(33); expect(boundary.mixes).toEqual([[.5 + 3 / 20, 0, 0, 0, 1]])
+    await renderer.render(89); expect(boundary.mixes).toEqual([[.5 + 3 / 20, 0, 0, 0, 1], [9 / 20, 0, 0, 0, 0]])
   } finally { await renderer.dispose() }
   const sound = fixture()
   sound.media = sound.media.map(media => ({ ...media, durationSeconds: 4, hasAudio: true }))

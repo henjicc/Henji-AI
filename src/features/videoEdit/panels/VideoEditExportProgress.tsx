@@ -46,8 +46,8 @@ function ExportProgress({ job, onClose }: { job: ReturnType<typeof videoEditExpo
       </div>
       <p role="status" className="text-13 tabular-nums text-text2">已用 {duration(elapsed)}{active ? remaining === undefined ? ' · 正在估算剩余时间' : ` · 预计剩余 ${duration(remaining)}` : ''}</p>
       {active && progress === 1 && !cancelling && <p className="text-13 text-text2">画面处理完成，正在保存成片…</p>}
-      <p className="break-all text-12 text-text2">保存位置：{job.path || '正在准备输出文件'}</p>
-      {active && <p className="text-12 text-text2">{confirmCancel ? '确认取消？未完成的文件不会作为成片保存。' : '导出期间请保持软件开启。完成或取消后可继续编辑。'}</p>}
+      <p className="break-all text-xs text-text2">保存位置：{job.path || '正在准备输出文件'}</p>
+      {active && <p className="text-xs text-text2">{confirmCancel ? '确认取消？未完成的文件不会作为成片保存。' : '导出期间请保持软件开启。完成或取消后可继续编辑。'}</p>}
       {job.error && <UiError align="start" message={job.error} />}
     </div>
   </UiModal>

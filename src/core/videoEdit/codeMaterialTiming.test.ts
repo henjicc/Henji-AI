@@ -1,13 +1,11 @@
-import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
 import { describe, expect, it } from 'vitest'
-import { compileCodeMaterial } from './codeMaterial/compiler'
+import { testCodeMetadata } from './codeMaterial/sourceTestFixtures'
 import { CodeMaterialError } from './codeMaterial/contract'
-import { evaluateCodeMaterial } from './codeMaterial/evaluate'
 import { codeMaterialContextForFrame, codeMaterialContextForSubframe, codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import type { CodeMaterialTimedClip } from './codeMaterialTiming'
 import { offsetVideoEditSource } from './time'
 
-const program = compileCodeMaterial('export default {apiVersion:1,name:"源时钟图形",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:90,seed:42,parameters:{},render(ctx){return [rect({x:ctx.time*20,y:100,width:200,height:80,fill:[.2,.5,1,.6]})];}}')
+const program = testCodeMetadata({ name: '源时钟图形', width: 3840, height: 2160, durationSeconds: 90 })
 const base: CodeMaterialTimedClip = { start: 11, duration: 2000, sourceInUs: 1234567, sourceRemainder: { numerator: 1, denominator: 3 } }
 const rates = [{ numerator: 30000, denominator: 1001 }, { numerator: 60000, denominator: 1001 }]
 
@@ -59,8 +57,6 @@ describe('快门位姿子时钟', () => {
       const moved = codeMaterialContextForSubframe({ ...timed, start: 160 }, 175, { numerator: 1, denominator: 4 }, rate, program)
       expect(moved.sourceTime).toEqual(sample(1).sourceTime)
       expect(moved.context.localTime).toBe(next.localTime)
-      // Fractional contexts never enter the ordinary full-picture evaluator.
-      expect(() => evaluateCodeMaterial(program, next)).toThrow()
     }
   })
   it('只允许显式片段或转场窗口，结束半开；动态源时长和负源仍受保护', () => {
@@ -82,19 +78,16 @@ describe('快门位姿子时钟', () => {
 })
 
 describe('真实转场余量保持原片段时钟', () => {
-  it('右侧提前采样保留负局部时间，普通求值仍拒绝片段外帧及未授权负时间', () => {
+  it('右侧提前采样保留负局部时间，普通时钟仍拒绝片段外帧', () => {
     const right = { start: 60, duration: 60, sourceInUs: 1_000_000, sourceRemainder: { numerator: 0, denominator: 1 } }
     const rate = { numerator: 60, denominator: 1 }; const window = { start: 45, end: 75 }
-    const moving = compileCodeMaterial('export default {apiVersion:1,name:"原局部时钟",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:0,parameters:{},render(ctx){return [rect({x:ctx.localTime*100,y:0,width:100,height:100,fill:[1,0,0,1]})];}}')
+    const moving = testCodeMetadata({ name: '原局部时钟', width: 3840, height: 2160, durationSeconds: 10 })
     const before = codeMaterialContextForTransitionFrame(right, 45, rate, moving, window)
     expect(before).toMatchObject({ time: .75, localTime: -.25, sequenceTime: .75, frame: 45 })
     expect(() => codeMaterialContextForFrame(right, 45, rate, moving)).toThrow('片段内部')
-    expect(() => evaluateCodeMaterial(moving, before)).toThrow('时间')
-    expect(evaluateCodeMaterial(moving, before, {}, { transitionHandles: true })[0]).toMatchObject({ x: -25 })
     for (const frame of [60, 74]) expect(codeMaterialContextForTransitionFrame(right, frame, rate, moving, window)).toEqual(codeMaterialContextForFrame(right, frame, rate, moving))
     for (const frame of [44, 75]) expect(() => codeMaterialContextForTransitionFrame(right, frame, rate, moving, window)).toThrow('转场')
     expect(() => codeMaterialContextForTransitionFrame({ ...right, sourceInUs: 0 }, 45, rate, moving, window)).toThrow('源入点')
-    expect(() => evaluateCodeMaterial(moving, { ...before, localTime: -VIDEO_EDIT_MAX_SEQUENCE_SECONDS - 1 }, {}, { transitionHandles: true })).toThrow('时间')
   })
   it('静态源零之前保持源首点，NTSC余量和真实时长仍精确验证', () => {
     const clip = { start: 60, duration: 60, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
@@ -112,7 +105,7 @@ describe('真实转场余量保持原片段时钟', () => {
 })
 
 describe('连续源时间的统一映射', () => {
-  it('NTSC多次裁剪与拆分后，同一序列帧的源时间和图形完全一致', () => {
+  it('NTSC多次裁剪与拆分后，同一序列帧的源时间完全一致', () => {
     for (const rate of rates) {
       const frame = 1500
       const expected = codeMaterialContextForFrame(base, frame, rate, program)
@@ -122,12 +115,10 @@ describe('连续源时间的统一映射', () => {
       expect(afterTrim.time).toBe(expected.time)
       expect(afterTrim.frame).toBe(frame)
       expect(afterTrim.sequenceTime).toBe(expected.sequenceTime)
-      expect(evaluateCodeMaterial(program, afterTrim)).toEqual(evaluateCodeMaterial(program, expected))
       let tail = structuredClone(base)
       for (const splitFrame of [250, 610, 900, 1200]) tail = { ...tail, ...offsetVideoEditSource(tail, splitFrame - tail.start, rate), duration: tail.start + tail.duration - splitFrame, start: splitFrame }
       const afterSplits = codeMaterialContextForFrame(tail, frame, rate, program)
       expect(afterSplits.time).toBe(expected.time)
-      expect(evaluateCodeMaterial(program, afterSplits)).toEqual(evaluateCodeMaterial(program, expected))
       expect(afterSplits.localTime).toBe((frame - tail.start) / afterSplits.fps)
     }
   })
@@ -142,7 +133,6 @@ describe('连续源时间的统一映射', () => {
     expect(moved.localTime).toBe(original.localTime)
     expect(moved.frame).toBe(700)
     expect(moved.sequenceTime).toBe(700 / moved.fps)
-    expect(evaluateCodeMaterial(program, moved)).toEqual(evaluateCodeMaterial(program, original))
     expect(moved).toMatchObject({ width: 3840, height: 2160 })
     expect('seed' in moved).toBe(false)
   })

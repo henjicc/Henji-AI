@@ -1,4 +1,4 @@
-# 四个可编译的 v3 创作样例
+# 四个可加载的作者代码样例
 
 用于理解接口与设计关系，不原样套用到用户作品，也不代表推荐风格；每个作品按自己的简报重新定方向。色彩是作者画面数据；按品牌重设。先查序列规格和轨道，以下插入按 30fps、start=120、track=2 演示，实际必须换算。所有占位引用换为上下文/工具返回的真实值，外部 MCP 写入另带正式 operationId 信封。
 
@@ -19,29 +19,28 @@
 
 <!-- skill-example: lower-third -->
 ```ts
+const css = c => `rgba(${c[0] * 255}, ${c[1] * 255}, ${c[2] * 255}, ${c[3]})`
+const clamp01 = v => Math.min(1, Math.max(0, v))
+const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 export default {
-  apiVersion: 1, languageVersion: 3, name: "克制标题条",
-  kind: "generator", mode: "dynamic", width: 1920, height: 1080,
-  durationSeconds: 4, seed: 42,
-  parameters: {
-    title: {type: "text", title: "标题", default: "第一章 出发", maxLength: 80},
-    accent: {type: "color", title: "强调色", default: [.43,.7,.63,1], animatable: true},
-    font: {type: "text", title: "字体家族", default: "sans-serif", maxLength: 200}
-  },
-  render(ctx) {
-    const box = measureText({text: ctx.params.title, fontFamily: ctx.params.font,
-      fontSize: 64, fontWeight: 600, maxWidth: 920, maxLines: 1, wrap: false});
-    const enter = expoOut(progress(ctx.time, 0, .6));
-    const leave = progress(ctx.time, 3.6, .4);
-    return [group({id: "title-bar", x: mix(-1080, 120, enter), y: 830,
-      opacity: enter * (1 - leave)}, [
-      rect({id: "plate", x: 0, y: 0, width: box.width + 88, height: 132,
-        radius: 12, fill: [.035,.045,.055,.94]}),
-      rect({id: "accent", x: 0, y: 24, width: 4, height: 84, fill: ctx.params.accent}),
-      text({id: "title", x: 44, y: 66, text: ctx.params.title,
-        fontFamily: ctx.params.font, fontSize: 64, fontWeight: 600,
-        maxWidth: 920, maxLines: 1, wrap: false, color: [.94,.96,.95,1]})
-    ])];
+  name: "克制标题条", kind: "generator", mode: "dynamic",
+  width: 1920, height: 1080, durationSeconds: 4,
+  params: [
+    { key: "title", type: "text", title: "标题", default: "第一章 出发", maxLength: 80, layer: "title-bar" },
+    { key: "accent", type: "color", title: "强调色", default: [.43, .7, .63, 1], animatable: true },
+    { key: "font", type: "text", title: "字体家族", default: "sans-serif", maxLength: 200 }
+  ],
+  layers(params) {
+    const enter = t => expoOut(clamp01(t / .6)), leave = t => clamp01((t - 3.6) / .4)
+    return [{ id: "title-bar", bounds: [0, 0, 1040, 132],
+      pose: t => ({ x: -1080 + 1200 * enter(t), y: 830, opacity: enter(t) * (1 - leave(t)) }),
+      draw(ctx) {
+        ctx.font = `600 64px ${params.font}`
+        const width = Math.min(920, ctx.measureText(params.title).width)
+        ctx.fillStyle = "rgba(9, 11, 14, .94)"; ctx.beginPath(); ctx.roundRect(0, 0, width + 88, 132, 12); ctx.fill()
+        ctx.fillStyle = css(params.accent); ctx.fillRect(0, 24, 4, 84)
+        ctx.fillStyle = "#f0f5f2"; ctx.textBaseline = "middle"; ctx.fillText(params.title, 44, 66, 920)
+      } }]
   }
 }
 ```
@@ -122,32 +121,37 @@ export default {
 
 <!-- skill-example: stagger-title -->
 ```ts
+const clamp01 = v => Math.min(1, Math.max(0, v))
+const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 export default {
-  apiVersion: 1, languageVersion: 3, name: "错峰花字",
-  kind: "generator", mode: "dynamic", width: 1920, height: 1080,
-  durationSeconds: 4, seed: 42,
-  parameters: {
-    title: {type: "text", title: "强调短语", default: "灵感正在发生", maxLength: 32},
-    glowPower: {type: "number", title: "辉光强度", default: .65, min: 0, max: 2, step: .05}
-  },
-  render(ctx) {
-    const ink = linearGradient({x1: 0, y1: 0, x2: 1100, y2: 0,
-      stops: [[0,[.52,.86,.92,1]],[1,[.74,.64,.93,1]]]});
-    const edge = linearGradient({x1: 0, y1: 0, x2: 1100, y2: 0,
-      stops: [[0,[.88,.97,1,1]],[1,[.63,.69,.9,1]]]});
+  name: "错峰花字", kind: "generator", mode: "dynamic",
+  width: 1920, height: 1080, durationSeconds: 4,
+  params: [
+    { key: "title", type: "text", title: "强调短语", default: "灵感正在发生", maxLength: 32, layer: "headline" },
+    { key: "glowPower", type: "number", title: "辉光强度", default: .65, min: 0, max: 2, step: .05 }
+  ],
+  layers(params, width, height) {
     return [
-      rect({id: "background", x: 0, y: 0, width: ctx.width, height: ctx.height,
-        fill: [.025,.03,.055,1]}),
-      text({id: "headline", x: 960, y: 540, text: ctx.params.title,
-        fontSize: 112, fontWeight: 800, align: "center", maxWidth: 1600,
-        maxLines: 1, wrap: false, fill: ink, stroke: edge, strokeWidth: 2,
-        glow: {radius: 16, intensity: ctx.params.glowPower, color: [.35,.65,.9,1]},
-        perChar: (i,n) => ({
-          y: tween(ctx.time, stagger(i,.045), .55, 48, 0, "expoOut"),
-          opacity: progress(ctx.time, stagger(i,.045), .28) * (1-progress(ctx.time,3.6,.4)),
-          scale: 1, rotation: 0
-        })})
-    ];
+      { id: "background", draw(ctx) { ctx.fillStyle = "#06080e"; ctx.fillRect(0, 0, width, height) } },
+      { id: "headline", bounds: [160, 440, 1760, 640], draw(ctx, time) {
+        ctx.font = "800 112px sans-serif"; ctx.textBaseline = "middle"
+        const chars = Array.from(params.title), widths = chars.map(c => ctx.measureText(c).width)
+        const total = widths.reduce((a, b) => a + b, 0)
+        const ink = ctx.createLinearGradient(960 - total / 2, 0, 960 + total / 2, 0)
+        ink.addColorStop(0, "#85dbeb"); ink.addColorStop(1, "#bda3ed")
+        const out = 1 - clamp01((time - 3.6) / .4)
+        let x = 960 - total / 2
+        chars.forEach((c, i) => {
+          const start = i * .045, p = expoOut(clamp01((time - start) / .55))
+          ctx.globalAlpha = clamp01((time - start) / .28) * out
+          ctx.shadowColor = "rgba(89, 166, 230, .9)"; ctx.shadowBlur = 16 * params.glowPower
+          ctx.lineWidth = 2; ctx.strokeStyle = "#e0f7ff"; ctx.fillStyle = ink
+          const y = 540 + (1 - p) * 48
+          ctx.fillText(c, x, y); ctx.strokeText(c, x, y); x += widths[i]
+        })
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0
+      } }
+    ]
   }
 }
 ```
@@ -212,45 +216,49 @@ export default {
 
 ## 三：极光上的章节卡
 
-背景缓慢流动，前景保持稳定阅读。深色底、极光、胶片颗粒三层着色器图层与细边卡片分层，以章节号、小标签和一句大标题建立信息顺序；卡片整体淡入，不让装饰抢戏。
+背景缓慢流动，前景保持稳定阅读。深色底、极光波带、颗粒与细边卡片分层，以章节号、小标签和一句大标题建立信息顺序；卡片整体淡入，不让装饰抢戏。
 
 <!-- skill-example: aurora-chapter -->
 ```ts
+const clamp01 = v => Math.min(1, Math.max(0, v))
+const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
+const hash = i => { let h = Math.imul(i, 0x9e3779b1); h ^= h >>> 15; h = Math.imul(h, 0x85ebca77); h ^= h >>> 13; return (h >>> 0) / 4294967296 }
 export default {
-  apiVersion: 1, languageVersion: 3, name: "极光章节卡",
-  kind: "generator", mode: "dynamic", width: 1920, height: 1080,
-  durationSeconds: 5, seed: 42,
-  parameters: {
-    chapter: {type: "text", title: "章节编号", default: "03", maxLength: 8},
-    title: {type: "text", title: "章节标题", default: "把想法变成画面", maxLength: 80},
-    speed: {type: "number", title: "背景流速", default: 1.5, min: 0, max: 6, step: .1}
-  },
-  render(ctx) {
-    const p = expoOut(progress(ctx.time, .15, .7));
+  name: "极光章节卡", kind: "generator", mode: "dynamic",
+  width: 1920, height: 1080, durationSeconds: 5,
+  params: [
+    { key: "chapter", type: "text", title: "章节编号", default: "03", maxLength: 8, layer: "chapter-card" },
+    { key: "title", type: "text", title: "章节标题", default: "把想法变成画面", maxLength: 80, layer: "chapter-card" },
+    { key: "speed", type: "number", title: "背景流速", default: 1.5, min: 0, max: 6, step: .1 }
+  ],
+  layers(params, width, height) {
+    const p = t => expoOut(clamp01((t - .15) / .7))
     return [
-      shader({id: "aurora", time: ctx.time, x: 0, y: 0, width: ctx.width, height: ctx.height,
-        layers: [
-          {type: "SolidColor", props: {color: [.02,.035,.06,1]}},
-          {type: "Aurora", props: {speed: ctx.params.speed, intensity: 70, height: 90,
-            colorA: [.05,.18,.2,1], colorB: [.12,.45,.4,1], colorC: [.2,.24,.5,1]}},
-          {type: "FilmGrain", props: {strength: .12}}
-        ]}),
-      group({id: "chapter-card", x: 300, y: mix(360,320,p),
-        opacity: p * (1-progress(ctx.time,4.5,.5))}, [
-        rect({id: "plate", x: 0, y: 0, width: 1320, height: 440,
-          radius: 20, fill: [.025,.045,.06,.88],
-          stroke: [.47,.64,.63,.32], strokeWidth: 1}),
-        text({id: "label", x: 72, y: 82, text: "CHAPTER",
-          fontSize: 30, letterSpacing: 3, color: [.55,.75,.72,1]}),
-        text({id: "chapter-number", x: 288, y: 82, text: ctx.params.chapter,
-          fontSize: 30, color: [.55,.75,.72,1]}),
-        text({id: "chapter-title", x: 72, y: 226, text: ctx.params.title,
-          fontSize: 88, fontWeight: 600, maxWidth: 1176, maxLines: 2,
-          lineHeight: 1.15, color: [.94,.96,.94,1]}),
-        line({id: "rule", x1: 72, y1: 360, x2: 1248, y2: 360,
-          width: 1, color: [.55,.75,.72,.35], trimEnd: p})
-      ])
-    ];
+      { id: "aurora", draw(ctx, time) {
+        ctx.fillStyle = "#050910"; ctx.fillRect(0, 0, width, height)
+        ctx.globalCompositeOperation = "lighter"
+        for (let band = 0; band < 3; band++) {
+          ctx.beginPath(); ctx.moveTo(0, height)
+          for (let x = 0; x <= width; x += 32) ctx.lineTo(x, height * (.35 + .08 * band) + Math.sin(x * .004 + time * params.speed * .4 + band * 2) * 90)
+          ctx.lineTo(width, height); ctx.closePath()
+          ctx.fillStyle = ["rgba(13, 46, 51, .55)", "rgba(31, 115, 102, .45)", "rgba(51, 61, 128, .4)"][band]; ctx.fill()
+        }
+        ctx.globalCompositeOperation = "source-over"
+        const frame = Math.floor(time * 24)
+        ctx.fillStyle = "rgba(255, 255, 255, .05)"
+        for (let i = 0; i < 1500; i++) ctx.fillRect(hash(i * 2 + frame * 7919) * width, hash(i * 2 + 1 + frame * 7919) * height, 2, 2)
+      } },
+      { id: "chapter-card", bounds: [300, 320, 1620, 760],
+        pose: t => ({ y: (1 - p(t)) * 40, opacity: p(t) * (1 - clamp01((t - 4.5) / .5)) }),
+        draw(ctx, time) {
+          ctx.fillStyle = "rgba(6, 11, 15, .88)"; ctx.strokeStyle = "rgba(120, 163, 161, .32)"; ctx.lineWidth = 1
+          ctx.beginPath(); ctx.roundRect(300, 320, 1320, 440, 20); ctx.fill(); ctx.stroke()
+          ctx.fillStyle = "#8cbfb8"; ctx.font = "30px sans-serif"; ctx.textBaseline = "middle"
+          ctx.letterSpacing = "3px"; ctx.fillText("CHAPTER", 372, 402); ctx.letterSpacing = "0px"; ctx.fillText(params.chapter, 588, 402)
+          ctx.fillStyle = "#f0f5f0"; ctx.font = "600 88px sans-serif"; ctx.fillText(params.title, 372, 546, 1176)
+          ctx.strokeStyle = "rgba(140, 191, 184, .35)"; ctx.beginPath(); ctx.moveTo(372, 680); ctx.lineTo(372 + 1176 * p(time), 680); ctx.stroke()
+        } }
+    ]
   }
 }
 ```
@@ -321,35 +329,27 @@ export default {
 
 <!-- skill-example: rolling-data -->
 ```ts
+const clamp01 = v => Math.min(1, Math.max(0, v))
+const expoOut = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 export default {
-  apiVersion: 1, languageVersion: 3, name: "数字数据卡",
-  kind: "generator", mode: "dynamic", width: 1920, height: 1080,
-  durationSeconds: 4, seed: 42,
-  parameters: {
-    value: {type: "number", title: "展示数值", default: 1280, min: 0, max: 1000000, step: 1},
-    label: {type: "text", title: "数据说明", default: "完成作品", maxLength: 60},
-    unit: {type: "text", title: "单位", default: "件", maxLength: 12}
-  },
-  render(ctx) {
-    const p = expoOut(progress(ctx.time, .2, 1.3));
-    const number = round(ctx.params.value * p);
-    const digits = chars("0123456789");
-    const places = [1000000,100000,10000,1000,100,10,1];
-    return [group({id: "data-card", x: 540, y: 280}, [
-      rect({id: "plate", x: 0, y: 0, width: 840, height: 520, radius: 20,
-        fill: [.045,.055,.065,1], stroke: [.65,.7,.7,.18], strokeWidth: 1}),
-      text({id: "label", x: 64, y: 90, text: ctx.params.label,
-        fontSize: 40, maxWidth: 712, maxLines: 1, color: [.62,.69,.7,1]}),
-      repeat(7, i => text({id: "digit", x: 64 + i * 92, y: 256,
-        text: digits[floor(number / places[i]) % 10],
-        opacity: number >= places[i] || i === 6 ? 1 : 0,
-        fontFamily: "monospace", fontSize: 132, fontWeight: 600,
-        color: [.94,.96,.95,1]})),
-      text({id: "unit", x: 64, y: 370, text: ctx.params.unit,
-        fontSize: 32, color: [.54,.76,.69,1]}),
-      line({id: "progress", x1: 64, y1: 446, x2: 776, y2: 446,
-        width: 3, color: [.54,.76,.69,1], trimEnd: p})
-    ])];
+  name: "数字数据卡", kind: "generator", mode: "dynamic",
+  width: 1920, height: 1080, durationSeconds: 4,
+  params: [
+    { key: "value", type: "number", title: "展示数值", default: 1280, min: 0, max: 1000000, step: 1 },
+    { key: "label", type: "text", title: "数据说明", default: "完成作品", maxLength: 60, layer: "data-card" },
+    { key: "unit", type: "text", title: "单位", default: "件", maxLength: 12, layer: "data-card" }
+  ],
+  layers(params) {
+    return [{ id: "data-card", bounds: [540, 280, 1380, 800], draw(ctx, time) {
+      const p = expoOut(clamp01((time - .2) / 1.3))
+      ctx.fillStyle = "#0b0e11"; ctx.strokeStyle = "rgba(166, 179, 179, .18)"; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.roundRect(540, 280, 840, 520, 20); ctx.fill(); ctx.stroke()
+      ctx.textBaseline = "middle"
+      ctx.fillStyle = "#9eb0b3"; ctx.font = "40px sans-serif"; ctx.fillText(params.label, 604, 370, 712)
+      ctx.fillStyle = "#f0f5f2"; ctx.font = "600 132px monospace"; ctx.fillText(String(Math.round(params.value * p)), 604, 536, 712)
+      ctx.fillStyle = "#8ac2b0"; ctx.font = "32px sans-serif"; ctx.fillText(params.unit, 604, 650)
+      ctx.strokeStyle = "#8ac2b0"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(604, 726); ctx.lineTo(604 + 712 * p, 726); ctx.stroke()
+    } }]
   }
 }
 ```
@@ -414,4 +414,4 @@ export default {
 }
 ```
 
-检查每例进场、停留、退出及片段接缝；极光另外看两处时间的流动，数字卡确认终值与用户原数据一致。用 observe_video_edit_frame 的 program 目标，再 read_application_media(mode="image") 读取像素。样例自动测试编译及多个时间点求值，不替代真实画面审查。
+检查每例进场、停留、退出及片段接缝；极光另外看两处时间的流动，数字卡确认终值与用户原数据一致。用 observe_video_edit_frame 的 program 目标，再 read_application_media(mode="image") 读取像素。样例自动测试只验证模块可加载、参数可解析，不替代真实画面审查。

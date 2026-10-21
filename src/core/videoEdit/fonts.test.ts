@@ -5,7 +5,7 @@ import { defaultVideoEditTextStyle, layoutVideoEditText } from './text'
 import { videoEditSubtitleStyleSchema } from './subtitleStyle'
 import { collectVideoEditFonts, missingVideoEditFonts } from './fonts'
 import { GENERIC_FONT_FACES } from '../fonts/catalog'
-import { compileCodeMaterial } from './codeMaterial/compiler'
+import { testCodeMetadata } from './codeMaterial/sourceTestFixtures'
 import { textStyleSchema } from '../imaging/vectorContent/text'
 
 it('任意字体名贯通文字、图形标题、字幕和嵌套序列；缺字体说明引用片段和回退', () => {
@@ -33,7 +33,7 @@ it('内置风格只是推荐字体并自动回退，不算缺字体；用户自�
   expect(missingVideoEditFonts(uses, []).flatMap(item => item.uses.map(use => use.ownerId))).toEqual(['style:mine:display'])
 })
 it('v3字体参数及自定义组件字体字段的默认、实例和关键帧进入同一缺失检测', () => {
-  const program = compileCodeMaterial('export default {apiVersion:1,languageVersion:3,name:"字体组件",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,types:{label:{title:"标签",layout:"row",fields:{face:{type:"font",title:"字体",default:"Missing Default"},power:{type:"number",title:"强度",min:0,max:1,step:.1,default:1}}}},parameters:{face:{type:"font",title:"字体",default:"Missing Font"},label:{type:"label",title:"标签",default:{},animatable:true}},render(ctx){return [];}}')
+  const program = testCodeMetadata({ name: '字体组件', types: { label: { title: '标签', layout: 'row', fields: { face: { type: 'font', title: '字体', default: 'Missing Default' }, power: { type: 'number', title: '强度', min: 0, max: 1, step: .1, default: 1 } } } }, parameters: { face: { type: 'font', title: '字体', default: 'Missing Font' }, label: { type: 'label', title: '标签', default: {}, animatable: true } } })
   const document = createVideoEditDocument('代码字体')
   document.items.push({ id: 'item', kind: 'code', name: '代码字体', code: { definitionId: 'd', versionId: 'v', parameters: {}, curves: { label: [{ id: 'key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: { face: 'Missing Keyframe', power: .5 }, interpolation: 'hold' }] } } })
   const uses = collectVideoEditFonts(document, () => program)
@@ -42,7 +42,7 @@ it('v3字体参数及自定义组件字体字段的默认、实例和关键帧�
 })
 
 it('文字样式参数的默认值、实例及关键帧字体进入共享缺失检测', () => {
-  const program = compileCodeMaterial('export default {apiVersion:1,languageVersion:3,name:"文字",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:10,seed:1,parameters:{style:{type:"textStyle",title:"样式",default:{fontFamily:"Style Default"},animatable:true}},render(ctx){return [];}}')
+  const program = testCodeMetadata({ name: '文字', parameters: { style: { type: 'textStyle', title: '样式', default: { fontFamily: 'Style Default' }, animatable: true } } })
   const document = createVideoEditDocument('样式字体')
   document.items.push({ id: 'item', kind: 'code', name: '文字', code: { definitionId: 'd', versionId: 'v', parameters: {}, curves: { style: [{ id: 'key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: textStyleSchema.parse({ fontFamily: 'Style Keyframe' }), interpolation: 'hold' }] } } })
   expect(collectVideoEditFonts(document, () => program).map(use => use.font)).toEqual(['Style Default', 'Style Keyframe'])

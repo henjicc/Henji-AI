@@ -3,7 +3,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema, type VideoEditMedia } from '../../src/core/videoEdit/document'
 import { makeVideoEditItemClip } from '../../src/core/videoEdit/projectItems'
-import { compileCodeMaterial } from '../../src/core/videoEdit/codeMaterial/compiler'
+import { testAuthorModule } from '../../src/features/videoEdit/engine/videoEditAuthorTestFixtures'
+import { authorEffectMetadata } from '../../src/features/videoEdit/engine/videoEditAuthorParameters'
 
 /** Rebuild the monitor inputs with the same constructors used by persistence golden fixtures. */
 export function createMonitorFixtures(root: string, media: VideoEditMedia[], original: VideoEditMedia, sources: string[]) {
@@ -25,7 +26,7 @@ export function createMonitorFixtures(root: string, media: VideoEditMedia[], ori
     sequence.clips.push(clip)
   }
   project.codeMaterials = sources.map((source, index) => {
-    const program = compileCodeMaterial(source)
+    const program = { ...authorEffectMetadata(testAuthorModule(source)), seed: 0 }
     const id = `monitor-code-${index}`; const versionId = `${id}-version`
     const folder = path.join(root, 'code-fixture', id, versionId)
     mkdirSync(folder, { recursive: true })
@@ -34,8 +35,8 @@ export function createMonitorFixtures(root: string, media: VideoEditMedia[], ori
     const item = { id: `${id}-item`, name: program.name, kind: 'code' as const, code }
     project.items.push(item)
     sequence.clips.push(makeVideoEditItemClip(project, item.id, sequence.id, { frame: 0, duration: 180, track: 5 - index }, () => program))
-    return { id, name: program.name, defaultVersionId: versionId, versions: [{ id: versionId, apiVersion: 1 as const,
-      languageVersion: program.languageVersion, entry: 'main.ts', files: [{ path: 'main.ts', location, hash: createHash('sha256').update(source).digest('hex') }] }] }
+    return { id, name: program.name, defaultVersionId: versionId, versions: [{ id: versionId, apiVersion: 4 as const,
+      languageVersion: 4 as const, entry: 'main.ts', files: [{ path: 'main.ts', location, hash: createHash('sha256').update(source).digest('hex') }] }] }
   })
   const pressure = createVideoEditDocument('监视器32轨500片段原素材4K60')
   pressure.id = 'monitor-pressure'; pressure.media = [structuredClone(original)]

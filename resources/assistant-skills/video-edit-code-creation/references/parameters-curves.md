@@ -1,8 +1,8 @@
-# v3 参数实例与关键帧
+# 参数实例与关键帧
 
 ## 在源码里声明参数
 
-v3 参数声明的全部类型、通用字段（group/advanced/visibleWhen/tooltip）、取用函数和自定义组件类型见 [参数类型与自定义组件类型](parameter-types.md)。开放哪些参数见 [参数化与组件化](parametric.md)。非法键、未知字段或类型会拒绝整次写入，不静默丢弃。
+参数声明的全部类型、通用字段（group/advanced/visibleWhen/tooltip）、取用函数和自定义组件类型见 [参数类型与自定义组件类型](parameter-types.md)。开放哪些参数见 [参数化与组件化](parametric.md)。非法键、未知字段或类型会拒绝整次写入，不静默丢弃。
 
 ## 图片参数就地生成
 

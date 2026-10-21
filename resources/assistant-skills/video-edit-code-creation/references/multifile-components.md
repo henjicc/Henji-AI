@@ -10,14 +10,14 @@
 
 ```json
 {
-  "main.ts": "import { card } from './parts/card'\nimport { palette } from './palette'\nexport default { ...入口声明..., render(ctx) { return [card(ctx, palette.accent)] } }",
-  "parts/card.ts": "export const card = (ctx, accent) => rect({x: 0, y: 0, width: ctx.width * .3, height: 120, fill: accent})",
-  "palette.ts": "export const palette = { accent: [.9,.4,.2,1] }"
+  "main.ts": "import { card } from './parts/card'\nimport { palette } from './palette'\nexport default { ...入口声明..., layers(params, width, height) { return [card(width, palette.accent)] } }",
+  "parts/card.ts": "export const card = (width, accent) => ({ id: 'card', bounds: [0, 0, width * .3, 120], draw(ctx) { ctx.fillStyle = accent; ctx.fillRect(0, 0, width * .3, 120) } })",
+  "palette.ts": "export const palette = { accent: '#e66633' }"
 }
 ```
 
 - 路径用 `/` 分隔的相对路径，扩展名 .ts，不能越出根目录。
-- 只有入口文件写 `export default`；其他文件是模块，只能有 `const`、`export const`、纯箭头函数和静态声明，不能有副作用。
+- 只有入口文件写 `export default`；其他文件是普通 ES 模块，用具名导出。模块顶层不要依赖时间或累积状态，保证同一帧结果确定。
 - 导入写在文件顶部：`import { a, b as c } from "./相对路径"`，只支持具名导入，不写扩展名。缺失文件、缺失导出和循环导入会被拒绝，报错里带文件名和行号。
 - 入口的 parameters、types、shaders 可以直接引用模块导出的静态对象，方便把一大段声明或 WGSL 字符串单独放一个文件。
 
