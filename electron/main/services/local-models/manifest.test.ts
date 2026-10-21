@@ -58,3 +58,15 @@ it('听音模型 CLAP：六个文件各有大小与完整哈希，国内为自�
     expect(file.sources.find(source => source.region === 'global')?.url).toMatch(/^https:\/\/huggingface\.co\/Xenova\/larger_clap_general\/resolve\/d78c3994912c441f0151a5cc44d86f6b7bf4c861\//)
   }
 })
+
+it('节拍模型 Beat This!：三个文件各有大小与完整哈希，国内为自有 ModelScope 仓库，国外固定 musetric 导出版本，MIT', () => {
+  const model = LOCAL_MODEL_MANIFEST.find(model => model.id === 'music_beats_beat_this')!
+  expect(model.license.spdx).toBe('MIT'); expect(model.availability).toBe('available')
+  expect(model.files.map(file => file.name)).toEqual(['beat_this.onnx', 'mel-filterbank.bin', 'config.json'])
+  expect(model.files.reduce((sum, file) => sum + file.sizeBytes, 0)).toBe(190_912_694)
+  for (const file of model.files) {
+    expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
+    expect(file.sources.find(source => source.region === 'domestic')?.url).toBe(`https://www.modelscope.cn/models/henjicc/henji-ai-local-models/resolve/master/music_beats_beat_this/${file.name}`)
+    expect(file.sources.find(source => source.region === 'global')?.url).toBe(`https://huggingface.co/musetric/beat-this-onnx/resolve/25308706dda545c0d5950065bb0604ad71bcf1f5/${file.name}`)
+  }
+})

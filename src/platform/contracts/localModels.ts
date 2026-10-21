@@ -17,6 +17,7 @@ export const LOCAL_MODEL_IDS = [
   'image_inpainting_migan',
   'image_inpainting_lama',
   'audio_understanding_clap',
+  'music_beats_beat_this',
 ] as const
 
 export type LocalModelId = (typeof LOCAL_MODEL_IDS)[number]

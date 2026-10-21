@@ -39,6 +39,16 @@ function clapFile(name: string, role: LocalModelFileSpec['role'], sizeBytes: num
   ] }
 }
 
+/** musetric/beat-this-onnx 固定版本（2026-10-08，1500 帧静态图，与官方 PyTorch 参考逐拍一致）。 */
+const BEAT_THIS_REVISION = '25308706dda545c0d5950065bb0604ad71bcf1f5'
+/** 节拍模型 Beat This! 的一个文件：国内为我们的 ModelScope 仓库，国外为 musetric 的 Hugging Face 导出。 */
+function beatThisFile(name: string, role: LocalModelFileSpec['role'], sizeBytes: number, sha256: string): LocalModelFileSpec {
+  return { name, role, sizeBytes, sha256, sources: [
+    { region: 'domestic', label: 'own-modelscope', url: ownUrl(`music_beats_beat_this/${name}`) },
+    { region: 'global', label: 'huggingface-musetric', url: `https://huggingface.co/musetric/beat-this-onnx/resolve/${BEAT_THIS_REVISION}/${name}` },
+  ] }
+}
+
 export interface LocalModelSource {
   region: DownloadRegion
   /** 日志里区分来源用（不展示给用户）。 */
@@ -269,6 +279,22 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
       clapFile('tokenizer_config.json', 'config', 1_392, '2c964a338683aec3695ea37687271e75b40905233f5d2a5bbb9be8cb40c4d0a0', 'tokenizer_config.json'),
       clapFile('preprocessor_config.json', 'config', 541, '9739f58296aa6f9ac18008fd0150fb2649bc554985fbde86d0a4041c882ac753', 'preprocessor_config.json'),
       clapFile('config.json', 'config', 587, 'b8c3a259af1c9eee98570630d81881974a368364886678d9c6b04c6d15874837', 'config.json'),
+    ],
+  },
+  {
+    id: 'music_beats_beat_this',
+    title: { zh: '节拍模型 Beat This!', en: 'Beat Tracking (Beat This!)' },
+    purpose: { zh: '准确找出音乐的拍子与小节，用于音频重构（把音乐自动拼接到指定时长）', en: 'Finds beats and bars in music for remixing a track to a target duration' },
+    folderName: { zh: '节拍模型 Beat This', en: 'Beat Tracking Beat This' },
+    homepage: 'https://github.com/CPJKU/beat_this',
+    // 代码与权重均为 MIT（CPJKU 仓库 LICENSE 与 README “License” 一节；ONNX 导出仓库沿用 MIT）。
+    license: { spdx: 'MIT', url: 'https://github.com/CPJKU/beat_this/blob/main/LICENSE' },
+    availability: 'available',
+    // 官方 final0 检查点（sha256 8c328b45…）的 fp32 ONNX；梅尔滤波器组是 torchaudio MelScale.fb 原样导出。
+    files: [
+      beatThisFile('beat_this.onnx', 'model', 190_649_026, '1337dc6c21257ed6b803418efc320df42b5d8eb296ef16648ef60457cd4b9e55'),
+      beatThisFile('mel-filterbank.bin', 'config', 262_656, '1ee975d96f44ccf2c3bfe37825c1c1f0b089f5703c7a12a84b1f0a3bce004533'),
+      beatThisFile('config.json', 'config', 1_012, '966f271e9a44c8f1b9e438622b34165ecdf6df9adedc8a9c0a6f7fd9d3458cc2'),
     ],
   },
 ]
