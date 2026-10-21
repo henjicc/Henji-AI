@@ -34,11 +34,12 @@ it('代表性调用序列与 tools/list 的字符预算可重复测量', async (
   const contractInput = { domains, skills, access, catalog, port: 43821, requestedDomains: [] }
   const contractBefore = { ok: true, data: buildApplicationContract({ ...contractInput, detail: 'full' }) }
   const contractAfter = { ok: true, data: buildApplicationContract(contractInput) }
-  expect(JSON.stringify(contractAfter).length).toBeLessThan(4000)
+  // 2026-10-21 调色技能与音效库领域加入后约 4.2k；仍是一屏以内的契约摘要。
+  expect(JSON.stringify(contractAfter).length).toBeLessThan(4500)
   for (const kind of ['external', 'embedded'] as const) for (const grants of [access, { allowWrites: false, allowDestructive: false, allowPaid: false }]) {
-    expect(JSON.stringify({ ok: true, data: buildApplicationContract({ ...contractInput, callerKind: kind, access: grants }) }).length).toBeLessThan(4000)
+    expect(JSON.stringify({ ok: true, data: buildApplicationContract({ ...contractInput, callerKind: kind, access: grants }) }).length).toBeLessThan(4500)
   }
-  expect(skills).toHaveLength(6)
+  expect(skills).toHaveLength(7)
 
   const scopeRevisions = Object.fromEntries(domains.map((domain, index) => [domain.id, index]))
   const revisionEnvelope = { revision: 12, scopeRevisions }
