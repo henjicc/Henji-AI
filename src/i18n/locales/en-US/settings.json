@@ -551,7 +551,7 @@
       "selectionFollowsPlayheadLabel": "Selection follows playhead",
       "selectionFollowsPlayheadInfo": "Same as Premiere Pro's Selection Follows Playhead: while playing or moving the playhead, the topmost visible clip at the current frame is selected and Effect Controls shows it.",
       "renderFormatLabel": "Render Format",
-      "renderFormatInfo": "Automatic uses HEVC when this computer can encode and decode it in hardware (files about 30% smaller at the same quality), otherwise H.264. Resolution always follows the sequence.",
+      "renderFormatInfo": "Automatic uses H.264 for the smoothest playback. HEVC files are about 30% smaller at the same quality; choose it manually to save space. Resolution always follows the sequence.",
       "renderFormatAuto": "Automatic",
       "renderQualityLabel": "Render Quality",
       "renderQualityInfo": "High quality uses 1.3× the bitrate of Standard, with larger files. After a change, rendered parts are re-rendered with the new setting when idle.",

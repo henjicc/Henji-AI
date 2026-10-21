@@ -551,7 +551,7 @@
       "selectionFollowsPlayheadLabel": "播放头自动选中片段",
       "selectionFollowsPlayheadInfo": "对应 PR 的“选择跟随播放指示器”：播放或拖动播放头时，自动选中当前帧最上面的可见片段，效果控件随之显示它的参数。",
       "renderFormatLabel": "预渲染格式",
-      "renderFormatInfo": "自动：本机显卡能编码并解码 HEVC 时用 HEVC（同画质文件约小 30%），否则用 H.264。分辨率始终跟随序列。",
+      "renderFormatInfo": "自动：使用 H.264，播放最流畅。HEVC 同画质文件约小 30%，需要省空间时可手动选择。分辨率始终跟随序列。",
       "renderFormatAuto": "自动",
       "renderQualityLabel": "预渲染画质",
       "renderQualityInfo": "高画质的码率是标准的 1.3 倍，文件也相应变大。改动后已渲染的段落会在空闲时按新设置重新渲染。",

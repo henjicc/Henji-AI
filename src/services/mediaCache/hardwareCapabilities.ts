@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import type { VideoRenderCacheFormat } from '@/core/media/mediaCache'
-import { hardwareDecodes, hardwareEncodes, type HardwareCapabilitiesReport, type HardwareEncodeCodec, type HardwareEncodeResult } from '@/core/media/hardwareCapabilities'
+import { type HardwareCapabilitiesReport, type HardwareEncodeCodec, type HardwareEncodeResult } from '@/core/media/hardwareCapabilities'
 import { getPlatform } from '@/platform/runtime'
 
 /**
@@ -16,10 +16,12 @@ export function getHardwareCapabilities(): HardwareCapabilitiesReport | null { r
 export function subscribeHardwareCapabilities(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 function publish(next: HardwareCapabilitiesReport | null): void { report = next; for (const listener of listeners) listener() }
 
-/** 预渲染实际使用的编码：自动时在本机硬件能编码并解码 HEVC 时用 HEVC，否则 H.264。 */
+/**
+ * 预渲染实际使用的编码：自动一律用 H.264。YOGA 4K60 整片实测 H.264 跳帧 0.028%，HEVC 为 0.044%–0.064%，
+ * 播放余量更重要；想省空间的用户可以手动选 HEVC（2026-10-21 用户确认）。
+ */
 export function resolveRenderCacheCodec(format: VideoRenderCacheFormat): 'avc' | 'hevc' {
-  if (format !== 'auto') return format
-  return hardwareEncodes(report, 'hevc') && hardwareDecodes(report, 'hevc') ? 'hevc' : 'avc'
+  return format === 'auto' ? 'avc' : format
 }
 
 /**
