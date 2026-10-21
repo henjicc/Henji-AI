@@ -157,8 +157,7 @@ it('素材右键创建代理进入后台，列表显示进度与已有，保留�
   expect(column().textContent).toBe('无')
   const before = instance.document; const history = instance.past.length
   fireEvent.contextMenu(view.getByRole('button', { name: 'A原视频' }))
-  fireEvent.click(await view.findByText('创建代理…'))
-  fireEvent.click(await view.findByRole('button', { name: '创建' }))
+  fireEvent.click(await view.findByText('为选中素材生成代理'))
   await waitFor(() => expect(column().textContent).toBe('生成中 0%'))
   const request = vi.mocked(getPlatform().videoProxy.create).mock.calls[0][0]
   act(() => progress.mock.calls[0][0]({ requestId: request.requestId, progress: .5 }))
@@ -166,6 +165,6 @@ it('素材右键创建代理进入后台，列表显示进度与已有，保留�
   await act(async () => finish(result))
   await waitFor(() => expect(column().textContent).toBe('已有'))
   expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history)
-  expect(request).toMatchObject({ source: 'D:/sourceA.mp4', preset: '720p' })
+  expect(request).toMatchObject({ source: 'D:/sourceA.mp4', preset: 'auto' })
   expect(onError).not.toHaveBeenCalled()
 })

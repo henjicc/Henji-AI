@@ -108,15 +108,17 @@ it('独立面板曲线：首次拖动创建、重渲染不断开手势，松手�
   Element.prototype.setPointerCapture = vi.fn(); Element.prototype.releasePointerCapture = vi.fn(); Element.prototype.hasPointerCapture = () => true
   const view = render(<VideoEditColorGradePanel instance={owner} onError={onError} />)
   fireEvent.click(view.getByRole('button', { name: '曲线' }))
-  const plot = view.getByLabelText('RGB 主控制点'); const point = view.getByRole('slider', { name: 'RGB 主控制点点3' })
+  // An untouched curve has only its two endpoints; clicking the graph adds a point on the curve.
+  const plot = view.getByLabelText('RGB 主控制点'); expect(view.getAllByRole('slider', { name: /^RGB 主控制点点/ })).toHaveLength(2)
   vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100))
-  fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 25 })
+  fireEvent.pointerDown(plot, { button: 0, clientX: 50, clientY: 50 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 25 })
   // Gesture writes coalesce per display frame.
   await act(() => new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }))
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_points).toContain('75')
   view.rerender(<VideoEditColorGradePanel instance={owner} onError={onError} />)
   expect(owner.past).toHaveLength(history)
   fireEvent.pointerUp(plot); expect(owner.past).toHaveLength(history + 1)
+  const point = view.getByRole('slider', { name: 'RGB 主控制点点2' })
   fireEvent.pointerDown(point, { button: 0 }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 10 }); fireEvent.keyDown(point, { key: 'Escape' }); fireEvent.pointerMove(plot, { clientX: 50, clientY: 5 })
   expect(getActiveVideoEditSequence(owner).clips[0].effects![0].builtin!.params.curve_master_points).toContain('75')
   expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()

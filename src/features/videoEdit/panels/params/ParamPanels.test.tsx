@@ -132,7 +132,7 @@ it('ColorGrade 直接调用方保留数值写入和样条曲线控件/百分比�
   fireEvent.focus(exposure); fireEvent.change(exposure, { target: { value: '1' } }); fireEvent.blur(exposure)
   expect(commit).toHaveBeenLastCalledWith({ params: { exposure: 1 } })
   const field = builtinParameterFields(params)[1]
-  expect(readBuiltinField(field, values)).toEqual([{ x: 0, y: 0 }, { x: .25, y: .25 }, { x: .5, y: .5 }, { x: .75, y: .75 }, { x: 1, y: 1 }])
+  expect(readBuiltinField(field, values)).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }])
   expect(writeBuiltinField(field, [{ x: 0, y: 0 }, { x: 1, y: .8 }])).toEqual({ curve_master_points: JSON.stringify([{ x: 0, y: 0 }, { x: 100, y: 80 }]) })
   expect(view.container.querySelector('[data-param-control="curve"]')).toBeTruthy()
 })
