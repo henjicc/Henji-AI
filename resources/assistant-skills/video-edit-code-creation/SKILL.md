@@ -28,7 +28,7 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 ## 做法
 
 - 先说“用什么画面讲哪一句”。装饰可以多，但要有主次：观众每一刻都知道看哪里。
-- 动作解释看哪里、阅读顺序与交接；快慢、动静、大小的对比由风格决定。
+- 动作解释看哪里、阅读顺序与交接；快慢、动静、大小的对比由风格决定。注意力事件少而准、各有理由，静止也可以是对的。
 - AI 作者主动把用户大概率想调的文案、时长/延迟/节奏、颜色、位置、大小和强度声明成参数；数量克制，按元素分组，不把所有数值都开放。画面从参数推导，改动优先改参数。
 - 新作者 JS 默认给每段可见文字声明 `text` 内容与 `textStyle` 文字样式参数，两者用 `layer` 绑定同一图层；字体、字号、字重、字距、行距、填充和描边的默认值跟随风格包。未声明的文字才改源码。
 - 动态生成图层用数据键或索引组成稳定 id（如 `node-3`）；驱动数组用 `table` 参数声明 `fields` 与 `default`，建议用 `rowKey` 指定稳定键。图层用 `data:{parameter,keyField,key}`（或 `data:{parameter,index}`）绑定对应项，`factory:{file,name}` 指向工厂函数；选中后改内容直接改数据，改外观改工厂。
@@ -49,6 +49,8 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 风格说明书、风格／构图／字体／颜色 | [风格说明书](references/style-kit.md)、[风格](references/styles.md)、[版式](references/layout.md)、[文字](references/type.md)、[色彩质感](references/color-texture.md) |
 | 质感选型、实现边界、试一帧 | [定做法](references/approach.md) |
 | 时长曲线、错峰、因果、转场 | [运动](references/motion.md) |
+| 动多少、何时静止、太忙或僵住、删减与密度 | [注意力与克制](references/attention.md) |
+| 镜头感、分层视差、换场不空、像 PPT | [镜头感](references/camera.md) |
 | 全片节奏、讲解、声画 | [结构](references/structure.md) |
 | 取帧、批注、A/B、评分、交付 | [审查](references/review.md)、[常见症状](references/review-ai.md) |
 | 换字自适应、量字、压力测试 | [模板](references/templates.md) |
@@ -83,8 +85,8 @@ description: 在剪辑里设计、编写或修改代码素材：动态图形、�
 | 定做法 | 选实现、查组件与效果、试一帧 | approach、author-shaders、recipes-3d |
 | 定样子 | 主停留帧与版式、字体、配色 | layout、type、color-texture、author-api |
 | 搭骨架 | 能量与节拍表，粗排完整时间线 | structure、timeline-check |
-| 动起来 | 因果主次、曲线错峰、文字与质感 | motion、parameters-curves、recipes-* |
-| 看片改 | 看片、A/B、可执行批注、局部返修 | review、review-ai、annotations |
+| 动起来 | 因果主次、曲线错峰、事件预算、文字与质感 | motion、attention、camera、parameters-curves、recipes-* |
+| 看片改 | 看片、删减轮、A/B、可执行批注、局部返修 | review、review-ai、attention、annotations |
 | 交付沉淀 | 回读自检、可编辑模板、明确的长期口味 | review、templates、multifile-components、preferences |
 
 ## 执行边界
