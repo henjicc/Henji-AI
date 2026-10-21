@@ -18,6 +18,11 @@ it('旧五点及其数值关键帧自动迁移；新控制点优先，hold动画
   const lut = colorGradeCurveLut(points); expect(lut[0]).toBeCloseTo(.1); expect(lut[1023]).toBeCloseTo(.9)
   expect(() => assertVideoEditBuiltinCurves({ id: 'color_grade', curves: { curve_master_points: [{ time: 0, value: encodeColorGradeCurve(points), interpolation: 'linear' }] } })).toThrow('hold')
 })
+it('未调整的曲线只有首尾两点，与旧五点直线等效', () => {
+  const points = colorGradeCurvePoints({}, 'red')
+  expect(points).toEqual([{ x: 0, y: 0 }, { x: 100, y: 100 }])
+  expect(colorGradeSpline(points)(37)).toBeCloseTo(37, 8)
+})
 it('通用参数严格校验控制点和色相首尾连续', () => {
   for (const raw of ['[]', '[{"x":1,"y":1},{"x":1,"y":20}]', '[{"x":0,"y":-1},{"x":100,"y":100}]', 'null']) expect(() => parseColorGradeCurve(raw)).toThrow()
   expect(() => normalizeVideoEditBuiltinParams('color_grade', { curve_hue_sat_points: '[{"x":0,"y":20},{"x":100,"y":80}]' })).toThrow('连续')

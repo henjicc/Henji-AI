@@ -34,7 +34,10 @@ export function colorGradeSpline(points: readonly ColorGradeCurvePoint[]): (x: n
 }
 export function colorGradeCurvePoints(params: Readonly<Record<string, unknown>>, channel: string): ColorGradeCurvePoint[] {
   const points = parseColorGradeCurve(params[`curve_${channel}_points`] ?? '')
-  return points.length ? points : Array.from({ length: 5 }, (_, i) => ({ x: i * 25, y: Number(params[`curve_${channel}_${i}`] ?? i * 25) }))
+  if (points.length) return points
+  const legacy = Array.from({ length: 5 }, (_, i) => ({ x: i * 25, y: Number(params[`curve_${channel}_${i}`] ?? i * 25) }))
+  // An untouched curve is just its two endpoints, as in PS/PR; legacy five-anchor values only show when they bend it.
+  return legacy.every(point => point.y === point.x) ? [{ x: 0, y: 0 }, { x: 100, y: 100 }] : legacy
 }
 export function colorGradeCurveLut(points: readonly ColorGradeCurvePoint[], size = 1024): Float32Array {
   const evaluate = colorGradeSpline(points)
