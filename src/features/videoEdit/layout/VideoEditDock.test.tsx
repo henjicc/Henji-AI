@@ -38,9 +38,9 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
   } }
 })
 vi.mock('../panels/VideoEditProjectPanel', () => ({ VideoEditProjectPanel: ({ instance }: { instance: VideoEditInstance }) => { projectRenders(); return <div>素材面板 {instance.document.name}</div> } }))
-vi.mock('../panels/VideoEditStyleKitsPanel', () => ({ VideoEditStyleKitsPanel: () => <div>风格面板</div> }))
+vi.mock('../panels/VideoEditStylesPanel', () => ({ VideoEditStylesPanel: () => <div>风格面板</div> }))
 vi.mock('../panels/VideoEditAnnotationsPanel', () => ({ VideoEditAnnotationsPanel: () => <div>批注面板</div> }))
-vi.mock('../panels/VideoEditTitleTemplatesPanel', () => ({ VideoEditTitleTemplatesPanel: () => <div>基本图形面板</div> }))
+vi.mock('../panels/VideoEditTemplatesPanel', () => ({ VideoEditTemplatesPanel: () => <div>模板面板</div> }))
 vi.mock('../panels/VideoEditTimedContentPanel', () => ({ VideoEditTimedContentPanel: () => <div>字幕与标记面板</div> }))
 vi.mock('../panels/VideoEditEffectsPanel', async () => {
   const { useState } = await import('react')

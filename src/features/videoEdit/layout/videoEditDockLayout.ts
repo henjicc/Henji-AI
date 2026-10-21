@@ -17,7 +17,7 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'color_grade', title: '全能调色' },
   // PR“效果”面板：视频／音频过渡与效果的预设库，拖到时间线编辑点或片段上（4.3）。
   { id: 'effects_library', title: '效果' },
-  { id: 'title_templates', title: '基本图形' },
+  { id: 'title_templates', title: '模板' },
   // 预设：风格、标题、文字、效果、转场预设的动态预览与管理（评分、默认、导入导出）。
   { id: 'presets', title: '预设' },
 ] as const

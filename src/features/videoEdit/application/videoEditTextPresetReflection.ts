@@ -8,7 +8,7 @@ import { requireVideoEditInstance, videoEditDomainRevision } from './videoEditSe
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
 
 const type = 'video_edit.text_preset'
-const reason = '本机共享文字样式预设。通过通用集合创建/删除，属性 name 重命名、style 修改。读取 style 写入 clip.text_style、graphic_object.text_style、title_template.definition.parameters.textStyle 或 caption.style（字幕保留 bottomMargin）；应用进入目标剪辑撤销栈。'
+const reason = '本机共享文字样式预设。通过通用集合创建/删除，属性 name 重命名、style 修改。读取 style 写入 clip.text_style、graphic_object.text_style、原生模板实例的文字片段或 caption.style（字幕保留 bottomMargin）；应用进入目标剪辑撤销栈。'
 const field = (key: 'name' | 'style', title: string, description: string, value: ApplicationFieldDefinition<VideoEditTextPreset, VideoEditTextPreset>['descriptor']['value']): ApplicationFieldDefinition<VideoEditTextPreset, VideoEditTextPreset> => ({
   propertyId: `${type}.${key}`, storeActions: [], read: preset => preset[key] as JsonValue,
   writer: { write: (draft, mutation) => { if (key === 'name') draft.name = videoEditTextPresetSchema.shape.name.parse(mutation.value); else draft.style = videoEditTextStyleSchema.parse(mutation.value) } },

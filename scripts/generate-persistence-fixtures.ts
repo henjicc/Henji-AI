@@ -25,8 +25,9 @@ import { videoEditFps } from '../src/core/videoEdit/time'
 import { bindVideoEditCaptionSpeech } from '../src/core/videoEdit/captionSpeech'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../src/core/videoEdit/codeAsset'
 import { CODE_AUTHOR_API_VERSION } from '../src/core/videoEdit/codeMaterialPersistence'
-import { BUILTIN_STYLE_KITS } from '../src/core/videoEdit/styleKitPresets'
-import { BUILTIN_TITLE_TEMPLATES } from '../src/core/videoEdit/titleTemplates'
+import { titleGraphic } from '../src/core/videoEdit/titleGraphics'
+import { BLANK_STYLE_SAMPLE_SOURCE } from '../src/core/videoEdit/styles/blankSample'
+import { styleGuideTemplate } from '../src/core/videoEdit/styles/styleGuide'
 import { VIDEO_EDIT_PRESET_PACKAGE_VERSION } from '../src/core/videoEdit/presetPackage'
 import { VIDEO_EDIT_EXPORT_PRESETS } from '../src/core/videoEdit/exportPresets'
 import { videoEditTextStyleSchema } from '../src/core/videoEdit/text'
@@ -111,10 +112,25 @@ remapClip.frameInterpolation = 'blend'
 remapClip.preservePitch = true
 remapClip.pitchSemitones = 2
 sequence.clips.push(remapClip)
-// v8：工程风格快照带理念、结构化规则、节奏与扩展动效；序列绑定它。
-const goldenKit = { ...BUILTIN_STYLE_KITS[0], id: 'golden-kit', name: '黄金风格', examples: [{ id: 'opener', title: '开场标题', note: '演示说明书里的错峰入场与字体层级。', source }] }
-document.styleKits = [goldenKit]
-sequence.styleKitId = goldenKit.id
+// v20：工程风格副本（说明书 + 样片代码）绑定序列；代码模板联动代码定义，原生模板联动带 templateId 的图形片段。
+const goldenStyle = { id: 'golden-style', name: '黄金风格', description: '用于持久格式样本的风格。', version: 2, contentHash: 'a'.repeat(64), updatedAt: timestamp, guide: styleGuideTemplate('黄金风格', '冷静的科技讲解'), sample: { code: { entry: 'index.js', files: { 'index.js': BLANK_STYLE_SAMPLE_SOURCE } }, width: 1280, height: 720, durationSeconds: 8, fps: 24, thumbnail: 1.2, anchors: [1.2, 3.2, 5.2, 6.4, 7.8] } }
+document.styles = [goldenStyle]
+sequence.styleId = goldenStyle.id
+const nativeGraphic = titleGraphic('lower_third', { text: '姓名', subtitle: '职务' }, 1920, 1080, 119 / 30)
+const nativeClipContent = { name: '人名条', kind: 'graphic' as const, graphic: nativeGraphic, track: 0, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }
+document.templates = [
+  { id: 'golden-code-template', name: '代码标题模板', description: '换文字就能复用的标题。', version: 1, contentHash: 'b'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, origin: { id: 'golden-library-template', version: 3 }, body: { kind: 'code', definitionId: 'code-definition' } },
+  { id: 'golden-native-template', name: '人名条', description: '人物首次出场时介绍姓名。', version: 2, contentHash: 'c'.repeat(64), updatedAt: timestamp, style: null, origin: null, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } },
+]
+document.items.push({ id: 'golden-native-item', name: '人名条', kind: 'graphic', graphic: nativeGraphic })
+const nativeClip = makeVideoEditItemClip(document, 'golden-native-item', sequence.id, { frame: 300, duration: 120 })
+nativeClip.id = 'golden-native-instance'; nativeClip.templateId = 'golden-native-template'; nativeClip.graphic = nativeGraphic
+sequence.clips.push(nativeClip)
+// 2026-10-22 之前的说明书风格与标题模板只出现在旧格式样本里，读取原样本作为这些冻结格式的当前内容。
+const legacyFixture = (id: string, version: number): unknown => (JSON.parse(fs.readFileSync(path.join('tests/fixtures/persistence', id, `v${version}.json`), 'utf8')) as { content: unknown }).content
+const legacyKits = legacyFixture('style-kits', 3) as unknown[]
+const legacyTitles = legacyFixture('title-templates', 6) as unknown[]
+const legacyPresetItems = (JSON.parse(fs.readFileSync('tests/fixtures/persistence/video-preset-package/v6.json', 'utf8')) as { items: unknown[] }).items
 videoEditDocumentSchema.parse(document)
 const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...videoContent } = document
 const soundDocument = createVideoEditDocument('节拍声音样本'), soundSequence = createVideoEditSequence()
@@ -221,12 +237,15 @@ const values: Record<string, unknown> = {
   'image-working-copy': working,
   settings: { providerKeyStatus: { kie: false }, uploadProvider: 'kie', uploadFallbackEnabled: false, canvasLodLevel: 'balanced', videoEditBinsFirst: true },
   theme: { theme: 'dark' },
-  'style-kits': [goldenKit],
-  'title-templates': [{ ...BUILTIN_TITLE_TEMPLATES[0], id: 'golden-template', name: '黄金标题' }],
+  'style-kits': legacyKits,
+  'title-templates': legacyTitles,
+  'video-style-library': goldenStyle,
+  'video-template-library': { id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'code', code: { entry: 'main.ts', files: { 'main.ts': source } }, durationSeconds: 4 } },
+  'video-style-package': { format: 'henji-video-style', style: { ...goldenStyle, imported: true }, templates: [{ id: 'golden-library-template', name: '黄金模板', description: '代码标题模板。', version: 3, contentHash: 'd'.repeat(64), updatedAt: timestamp, style: { id: goldenStyle.id, version: 2 }, body: { kind: 'native', content: { width: 1920, height: 1080, fps: 30, clips: [nativeClipContent] } } }], media: { thumbnail: '/9j/4AAQ', anchors: ['/9j/4AAQ'] } },
   'text-presets': [{ id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) }],
   'export-presets': [{ ...VIDEO_EDIT_EXPORT_PRESETS[0], id: 'golden-export', name: '黄金导出' }],
   'preset-preferences': [{ category: 'style', id: 'golden-kit', rating: 5, isDefault: true }, { category: 'transition', id: 'cross_dissolve', rating: 3, isDefault: false }],
-  'video-preset-package': { format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: [{ category: 'style', preset: goldenKit }, { category: 'title', preset: { ...BUILTIN_TITLE_TEMPLATES[0], id: 'golden-template', name: '黄金标题' } }, { category: 'text', preset: { id: 'golden-text', name: '黄金字型', style: videoEditTextStyleSchema.parse({}) } }] },
+  'video-preset-package': { format: 'henji-video-presets', version: VIDEO_EDIT_PRESET_PACKAGE_VERSION, items: legacyPresetItems },
   'voice-library': [{ voiceId: 'golden-voice', voiceName: '黄金音色', providerId: 'kie', createdAt: timestamp, updatedAt: timestamp, status: 'ready', activated: true }],
   'sound-library-folders': [{ id: '00000000-0000-4000-8000-000000000001', path: '/persistence-project/音效', addedAt: timestamp }],
   'preset-export': { version: '1.0', name: '黄金生成预设', description: null, modelId: null, params: { prompt: '黄金样本' } },
@@ -262,7 +281,7 @@ export function generatePersistenceFixtures(root = process.cwd(), only?: string)
     const content = format.schema.parse(values[format.id])
     const raw = format.id.startsWith('document.') ? buildDocumentEnvelope({ kind: format.id.slice('document.'.length), kindVersion: format.version, id: `golden-${format.id.split('.')[1]}`, name: format.name, createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content })
       : format.id === 'settings' || format.id === 'theme' ? { version: format.version, state: content }
-      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, content } : content
+      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, content } : ['video-style-library', 'video-template-library', 'video-style-package'].includes(format.id) ? { version: format.version, minReaderVersion: format.version, content } : content
     const directory = path.join(root, 'tests/fixtures/persistence', format.id)
     fs.mkdirSync(directory, { recursive: true })
     fs.writeFileSync(path.join(directory, `v${format.version}.json`), `${JSON.stringify(raw, null, 2)}\n`, { flag: 'wx' })

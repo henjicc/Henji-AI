@@ -1,7 +1,7 @@
 import { createVideoEditSequence, videoEditDuration, type VideoEditDocument, type VideoEditSequence, type VideoEditClip } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditSpeedRatio } from '@/core/videoEdit/clipSpeed'
-import { BUILTIN_TITLE_TEMPLATES, instantiateTitleTemplate } from '@/core/videoEdit/titleTemplates'
+import { titleGraphic } from '@/core/videoEdit/titleGraphics'
 import { createVideoEditMaskShape, type VideoEditEffectMask } from '@/core/videoEdit/effectMasks'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import type { RecordingDocument } from '@/core/screenRecording/document'
@@ -108,8 +108,8 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
       if (!mapped) continue
       const start = frame(mapped.outputStartUs), duration = Math.min(3 * fps, frame(mapped.outputEndUs) - start)
       if (duration < fps / 2) continue
-      const snapshot = instantiateTitleTemplate(BUILTIN_TITLE_TEMPLATES[0], { text: step.title, subtitle: '', entrance: 'fade', durationSeconds: duration / fps }, sequence)[0]
-      const clip = shapeClip(document, sequence, step.title, snapshot.graphic!, start, duration, 5)
+      const graphic = titleGraphic('lower_third', { text: step.title, subtitle: '', entrance: 'fade', durationSeconds: duration / fps }, sequence.width, sequence.height, (duration - 1) / fps)
+      const clip = shapeClip(document, sequence, step.title, graphic, start, duration, 5)
       clip.y = -.64; sequence.clips.push(clip)
     }
     for (const chapter of understanding.chapters) {

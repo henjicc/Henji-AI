@@ -121,7 +121,7 @@ describe('Pi official SDK engine', () => {
       expect(first).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'analyze_video_edit_color']))
       if (allowWrites) expect(first).toEqual(expect.arrayContaining(['change_application_entities', ...videoEditCreativeTools()]))
       else expect(first).not.toContain('generate_video_edit_in_place')
-      expect(first).not.toContain('apply_video_edit_title_template')
+      expect(first).not.toContain('apply_video_edit_template')
       disclosure.prepareContext('{"surface":{"id":"workspace.canvas"}}')
       disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}')
       expect(active).toEqual(first)

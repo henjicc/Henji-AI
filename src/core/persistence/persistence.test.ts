@@ -155,7 +155,7 @@ describe('所有登记格式的黄金样本', () => {
         let content = raw
         if (format.id.startsWith('document.')) content = parseDocumentEnvelope(raw).content
         else if (format.id === 'settings' || format.id === 'theme') content = (raw as { state: unknown }).state
-        else if ((format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id)) content = (raw as { content: unknown }).content
+        else if ((format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders', 'video-style-library', 'video-template-library', 'video-style-package'].includes(format.id)) content = (raw as { content: unknown }).content
         const upgraded = upgradePersistenceContent(format, content, version)
         expect(format.schema.safeParse(upgraded).success).toBe(true)
         if (format.id === 'document.video_edit') {
@@ -193,12 +193,18 @@ describe('所有登记格式的黄金样本', () => {
             expect(effects[2].builtin?.params).toMatchObject({ background: 'solid', padding: 6 })
           }
           // v9：风格是说明书加参考示例，原样读回且序列仍绑定它；更早的参数式风格快照与绑定被丢弃。
-          if (version >= 9) {
-            const kit = document.styleKits?.[0]
-            expect(document.sequences[0].styleKitId).toBe('golden-kit')
-            expect(kit?.guide).toContain('## 必须'); expect(kit?.examples).toHaveLength(1)
+          // v22：说明书风格换成风格副本——旧栏目并入新栏目、参考示例成为样片并记进“样片与代码”，序列绑定改名 styleId。
+          if (version >= 22) {
+            expect(document.styles?.[0]).toMatchObject({ id: 'golden-style', version: 2 }); expect(document.sequences[0].styleId).toBe('golden-style')
+            expect(document.templates?.map(template => [template.id, template.body.kind, template.origin?.version ?? null])).toEqual([['golden-code-template', 'code', 3], ['golden-native-template', 'native', null]])
+            expect(document.sequences[0].clips.find(value => value.id === 'golden-native-instance')?.templateId).toBe('golden-native-template')
+          } else if (version >= 9) {
+            const style = document.styles?.[0]
+            expect(document.sequences[0].styleId).toBe('golden-kit'); expect(style?.name).toBe('黄金风格')
+            expect(style?.guide).toContain('硬约束（原“必须”）'); expect(style?.guide).toContain('### 开场标题')
+            expect(style?.sample.code.files[style.sample.code.entry]).toContain('黄金代码'); expect(document.templates).toBeUndefined()
           } else {
-            expect(document.styleKits).toBeUndefined(); expect(document.sequences.every(sequence => sequence.styleKitId === undefined)).toBe(true)
+            expect(document.styles).toBeUndefined(); expect(document.sequences.every(sequence => sequence.styleId === undefined)).toBe(true)
           }
         }
         // style-kits v1/v2：参数式风格不再适用，升级后清空。

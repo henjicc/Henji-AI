@@ -1,14 +1,12 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import { FolderInput, FolderOutput, Star } from 'lucide-react'
-import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiModal, UiOptionButton, UiRecordItem, UiRecordList, UiSearchInput, UiSegmented, UiSwitch } from '@/components/ui'
+import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiModal, UiOptionButton, UiSearchInput, UiSegmented, UiSwitch } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openDialog, readTextFile, saveDialog, writeTextFile } from '@/platform/desktopApi'
-import { parseStyleGuide } from '@/core/videoEdit/styleKit'
-import { VIDEO_EDIT_PRESET_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, VIDEO_EDIT_PRESET_PACKAGE_EXTENSION, type VideoEditPresetCategory } from '@/core/videoEdit/presetPackage'
+import { VIDEO_EDIT_PRESET_PANEL_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, VIDEO_EDIT_PRESET_PACKAGE_EXTENSION, type VideoEditPresetCategory } from '@/core/videoEdit/presetPackage'
 import { deleteVideoEditPreset, exportVideoEditPresetPackage, importVideoEditPresetPackage, listVideoEditPresets, setVideoEditPresetDefault, setVideoEditPresetRating, videoEditPresetExportable, videoEditPresetSource, type VideoEditPresetEntry } from '../application/videoEditPresetCatalog'
 import { applyVideoEditPreset } from '../application/videoEditPresetApply'
 import { getActiveVideoEditSequence, subscribeVideoEditDomain, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
-import { writeTitleTemplateDrag } from '../application/videoEditTitleTemplates'
 import { startVideoEditEffectDrag } from './videoEditEffectDrag'
 import { startVideoEditTransitionDrag } from './videoEditTransitionDrag'
 import { VideoEditPresetPlayer } from './VideoEditPresetPlayer'
@@ -25,26 +23,8 @@ function status(entry: VideoEditPresetEntry): string[] {
 function PresetPicture({ entry, size, playing, label }: { entry: VideoEditPresetEntry; size: typeof TILE_SIZE; playing: boolean; label: string }): React.ReactElement {
   const source = useMemo(() => videoEditPresetSource(entry.category, entry.id), [entry.category, entry.id])
   if (source.category === 'effect' && source.preset.media === 'audio') return <span className="flex h-full w-full items-center justify-center text-xs text-text3">声音效果</span>
-  if (source.category === 'style' && !source.kit.examples.length) return <span className="flex h-full w-full items-center justify-center px-2 text-center text-xs text-text3">没有参考示例</span>
   return <VideoEditPresetPlayer source={source} size={size} playing={playing} label={label} />
 }
-/** A style is a guide for the AI: show it section by section, exactly as the assistant reads it. */
-function StyleGuide({ entry }: { entry: VideoEditPresetEntry }): React.ReactElement | null {
-  const source = videoEditPresetSource(entry.category, entry.id)
-  if (source.category !== 'style') return null
-  return <>{parseStyleGuide(source.kit.guide).filter(section => section.body).map((section, index) => <UiGroup key={`${section.title}-${index}`} title={section.title || undefined} titleTone="compact">
-    <p className="whitespace-pre-wrap text-13 leading-6 text-text1">{section.body}</p>
-  </UiGroup>)}</>
-}
-/** The reference examples the reel plays, with what each one demonstrates. */
-function StyleExamples({ entry }: { entry: VideoEditPresetEntry }): React.ReactElement | null {
-  const source = videoEditPresetSource(entry.category, entry.id)
-  if (source.category !== 'style' || !source.kit.examples.length) return null
-  return <UiGroup title="参考示例（样片按顺序播放，只示意手法）" titleTone="compact">
-    <UiRecordList>{source.kit.examples.map((example, index) => <UiRecordItem key={example.id} index={index} density="compact" title={example.title}>{example.note && <p className={UI_TEXT_META_CLASS}>{example.note}</p>}</UiRecordItem>)}</UiRecordList>
-  </UiGroup>
-}
-
 function PresetDetail({ entry, instance, onClose, onError }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; onClose: () => void; onError: (reason: unknown) => void }): React.ReactElement {
   const { showNotification } = useNotification()
   const [busy, setBusy] = useState(false)
@@ -62,7 +42,6 @@ function PresetDetail({ entry, instance, onClose, onError }: { entry: VideoEditP
     <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]" data-video-edit-preset-detail={entry.category}>
       <div className="flex min-w-0 flex-col gap-4">
         <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}><PresetPicture entry={entry} size={DETAIL_SIZE} playing label={`${entry.name}动态预览`} /></span>
-        <StyleExamples entry={entry} />
       </div>
       <div className="flex min-w-0 flex-col gap-4">
         <UiGroup labelWidth={96}>
@@ -73,14 +52,12 @@ function PresetDetail({ entry, instance, onClose, onError }: { entry: VideoEditP
           </UiFormRow>
           {VIDEO_EDIT_PRESET_DEFAULTABLE.includes(entry.category) && <UiFormRow label="设为默认" density="compact" info={DEFAULT_HINT[entry.category]}><UiSwitch aria-label="设为默认" checked={entry.isDefault} disabled={busy || entry.category === 'transition' && entry.isDefault} onCheckedChange={value => { void run(() => setVideoEditPresetDefault(entry.category, value ? entry.id : null)) }} /></UiFormRow>}
         </UiGroup>
-        {entry.category === 'style' ? <StyleGuide entry={entry} /> : entry.meta && <p className={UI_TEXT_META_CLASS}>{entry.meta}</p>}
+        {entry.meta && <p className={UI_TEXT_META_CLASS}>{entry.meta}</p>}
       </div>
     </div>
   </UiModal>
 }
 const DEFAULT_HINT: Partial<Record<VideoEditPresetCategory, string>> = {
-  style: '新建序列自动绑定这个风格，助手在序列里按它创作。',
-  title: '没有指定模板时（包括让助手加标题）使用它。',
   text: '新字幕没有可参照的样式时使用它。',
   transition: '快捷键添加的默认视频转场；同一时间只有一个。',
 }
@@ -88,12 +65,11 @@ const DEFAULT_HINT: Partial<Record<VideoEditPresetCategory, string>> = {
 function PresetTile({ entry, instance, onOpen, onApply }: { entry: VideoEditPresetEntry; instance: VideoEditInstance; onOpen: () => void; onApply: () => void }): React.ReactElement {
   const [hovered, setHovered] = useState(false)
   const drag = (event: React.DragEvent): void => {
-    if (entry.category === 'title') writeTitleTemplateDrag(event.dataTransfer, entry.id)
-    else if (entry.category === 'effect') startVideoEditEffectDrag(event.dataTransfer, instance.document.id, `preset:${entry.id}`)
+    if (entry.category === 'effect') startVideoEditEffectDrag(event.dataTransfer, instance.document.id, `preset:${entry.id}`)
     else if (entry.category === 'transition') startVideoEditTransitionDrag(event.dataTransfer, instance.document.id, entry.id as VideoEditTransitionKind)
     else event.preventDefault()
   }
-  const draggable = entry.category === 'title' || entry.category === 'effect' || entry.category === 'transition'
+  const draggable = entry.category === 'effect' || entry.category === 'transition'
   return <UiOptionButton variant="cover" className="w-full min-w-0" data-video-edit-preset={`${entry.category}:${entry.id}`} draggable={draggable} onDragStart={drag}
     onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} onClick={onOpen} onDoubleClick={onApply} aria-label={`${entry.name}，${[...status(entry), '单击查看，双击应用'].join('，')}`}>
     <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}><PresetPicture entry={entry} size={TILE_SIZE} playing={hovered} label={`${entry.name}预览`} /></span>
@@ -108,7 +84,7 @@ function PresetTile({ entry, instance, onOpen, onApply }: { entry: VideoEditPres
 function Content({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
   const { showNotification } = useNotification()
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
-  const [category, setCategory] = useState<VideoEditPresetCategory>('style')
+  const [category, setCategory] = useState<VideoEditPresetCategory>('text')
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const sequence = instance.activeSequenceId ? getActiveVideoEditSequence(instance) : undefined
@@ -120,7 +96,7 @@ function Content({ instance, onError, visible = true }: { instance: VideoEditIns
     try {
       const selected = await openDialog({ multiple: true, filters: FILTERS }); const paths = selected === null ? [] : Array.isArray(selected) ? selected : [selected]
       let count = 0
-      for (const path of paths) count += importVideoEditPresetPackage(await readTextFile(path)).length
+      for (const path of paths) count += (await importVideoEditPresetPackage(await readTextFile(path))).length
       if (count) showNotification(`已导入 ${count} 个预设。`)
     } catch (reason) { onError(reason) }
   }
@@ -131,7 +107,7 @@ function Content({ instance, onError, visible = true }: { instance: VideoEditIns
     } catch (reason) { onError(reason) }
   }
   return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-3" aria-label="预设" data-video-edit-presets>
-    <UiSegmented ariaLabel="预设类别" size="sm" fullWidth value={category} onChange={value => { setCategory(value); setOpen(null) }} options={VIDEO_EDIT_PRESET_CATEGORIES.map(value => ({ value, label: VIDEO_EDIT_PRESET_CATEGORY_LABELS[value] }))} />
+    <UiSegmented ariaLabel="预设类别" size="sm" fullWidth value={category} onChange={value => { setCategory(value); setOpen(null) }} options={VIDEO_EDIT_PRESET_PANEL_CATEGORIES.map(value => ({ value, label: VIDEO_EDIT_PRESET_CATEGORY_LABELS[value] }))} />
     <div className="flex items-center gap-1">
       <UiSearchInput size="sm" className="min-w-0 flex-1" aria-label="搜索预设" placeholder="搜索预设" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除搜索" />
       <UiIconButton size="sm" label="导入预设" onClick={() => { void importFiles() }}><FolderInput /></UiIconButton>

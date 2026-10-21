@@ -3,7 +3,7 @@ import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
 import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementSummary'
-import { styleKitHostSummary, videoEditPresetHostSummary } from '@/features/videoEdit/application/videoEditStyleKits'
+import { videoEditPresetHostSummary, videoEditStyleHostSummary } from '@/features/videoEdit/application/videoEditStyles'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
   HOST_ANNOTATION_PREVIEW_CHARACTERS,
@@ -335,7 +335,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       selectedClipRefs: videoEdit.selectedClipIds.slice(0, 48).map(id => `video_edit.clip:${videoEdit.document.id}:${id}`),
       selectedCodeElement: videoEditSelectedCodeElementContext(videoEdit),
       elementOverrides: videoEditCodeElementHostSummary(videoEdit.document.id),
-      currentStyleKit: styleKitHostSummary(videoEdit.document.id, videoEdit.activeSequenceId),
+      currentStyle: videoEditStyleHostSummary(videoEdit.document.id, videoEdit.activeSequenceId),
       presetPreferences: videoEditPresetHostSummary(),
       targetTrackRefs: videoEdit.targetTrackIds.slice(0, 32).map(id => `video_edit.track:${videoEdit.document.id}:${id}`),
     } } : {}),

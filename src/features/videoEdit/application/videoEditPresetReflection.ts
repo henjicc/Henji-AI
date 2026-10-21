@@ -2,21 +2,21 @@ import { fieldDescriptors, fieldReadValues, fieldWriterTable, unrestrictedCollec
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditTransitionKind } from '@/core/videoEdit/transitions'
-import { VIDEO_EDIT_PRESET_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, type VideoEditPresetCategory, type VideoEditPresetPreference } from '@/core/videoEdit/presetPackage'
+import { VIDEO_EDIT_PRESET_PANEL_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, type VideoEditPresetCategory, type VideoEditPresetPreference } from '@/core/videoEdit/presetPackage'
 import { videoEditSchemaRef } from './videoEditFields'
 import { videoEditDomainRevision } from './videoEditService'
 import { listAllVideoEditPresets, requireVideoEditPreset, setVideoEditPresetDefault, setVideoEditPresetRating, type VideoEditPresetEntry } from './videoEditPresetCatalog'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
 
 export const PRESET_ENTITY = 'video_edit.preset'
-const SOURCE_ENTITY: Partial<Record<VideoEditPresetCategory, string>> = { style: 'video_edit.style_preset', title: 'video_edit.title_template', text: 'video_edit.subtitle_preset', effect: 'video_edit.effect_preset' }
-const description = '剪辑预设面板里的全部预设（风格、标题、文字、效果、转场）及用户偏好。rating 为喜爱程度 0–5（0 未评分），is_default 为该类默认（效果没有默认）：风格默认会自动套到新建序列，文字默认用于新字幕，标题默认用于未指定模板的标题，转场默认即默认过渡。用户没有指定时优先用默认，没有默认就推荐 recommended（评分最高）。内容本身经 source_ref 指向的原实体读写或删除。'
+const SOURCE_ENTITY: Partial<Record<VideoEditPresetCategory, string>> = { text: 'video_edit.subtitle_preset', effect: 'video_edit.effect_preset' }
+const description = '剪辑预设面板里的预设（文字、效果、转场）及用户偏好。rating 为喜爱程度 0–5（0 未评分），is_default 为该类默认（效果没有默认）：文字默认用于新字幕，转场默认即默认过渡。用户没有指定时优先用默认，没有默认就推荐 recommended（评分最高）。内容本身经 source_ref 指向的原实体读写或删除。风格与模板在 video_edit.style / video_edit.template。'
 type Entry = VideoEditPresetEntry
 interface Draft { entry: Entry; rating: number; isDefault: boolean }
 function key(category: VideoEditPresetCategory, id: string): string { return `${category}:${id}` }
 function parse(ref: ApplicationRef): { category: VideoEditPresetCategory; id: string } {
   const colon = ref.id.indexOf(':'); const category = ref.id.slice(0, colon) as VideoEditPresetCategory
-  if (ref.kind !== PRESET_ENTITY || colon < 0 || !VIDEO_EDIT_PRESET_CATEGORIES.includes(category)) throw new Error(`NOT_FOUND：预设引用应为“类别:标识”，类别为 ${VIDEO_EDIT_PRESET_CATEGORIES.join('、')}；请重新列出 ${PRESET_ENTITY}。`)
+  if (ref.kind !== PRESET_ENTITY || colon < 0 || !(VIDEO_EDIT_PRESET_PANEL_CATEGORIES as readonly string[]).includes(category)) throw new Error(`NOT_FOUND：预设引用应为“类别:标识”，类别为 ${VIDEO_EDIT_PRESET_PANEL_CATEGORIES.join('、')}（风格与模板见 video_edit.style、video_edit.template）；请重新列出 ${PRESET_ENTITY}。`)
   return { category, id: ref.id.slice(colon + 1) }
 }
 const readOnly = (name: string, title: string, value: ApplicationFieldDefinition<Draft, Draft>['descriptor']['value'], read: (draft: Draft) => JsonValue): ApplicationFieldDefinition<Draft, Draft> => ({
@@ -25,7 +25,7 @@ const readOnly = (name: string, title: string, value: ApplicationFieldDefinition
 })
 const fields: ApplicationFieldDefinition<Draft, Draft>[] = [
   readOnly('name', '预设名称', { kind: 'string', maxLength: 200 }, draft => draft.entry.name),
-  readOnly('category', '预设类别', { kind: 'enum', values: VIDEO_EDIT_PRESET_CATEGORIES.map(value => ({ value, label: VIDEO_EDIT_PRESET_CATEGORY_LABELS[value] })) }, draft => draft.entry.category),
+  readOnly('category', '预设类别', { kind: 'enum', values: VIDEO_EDIT_PRESET_PANEL_CATEGORIES.map(value => ({ value, label: VIDEO_EDIT_PRESET_CATEGORY_LABELS[value] })) }, draft => draft.entry.category),
   readOnly('summary', '适用说明', { kind: 'string', maxLength: 2000 }, draft => draft.entry.meta),
   readOnly('builtin', '内置预设', { kind: 'boolean' }, draft => draft.entry.builtin),
   readOnly('recommended', '推荐（未设为默认中评分最高）', { kind: 'boolean' }, draft => draft.entry.recommended),

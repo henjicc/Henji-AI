@@ -28,9 +28,9 @@ import { videoEditTextStyleSchema } from './text'
 import { colorLutAssetSchema } from './colorLutAsset'
 import { videoEditAudioRoleSchema } from './audioDucking'
 import { assertVideoEditSequenceGraph } from './sequenceGraph'
-import { videoEditTextTranscriptionSchema } from './textTranscript'
+import { videoEditTextTranscriptionSchema } from './textTranscriptionSchema'
 import { videoEditMulticamSchema } from './multicamSchema'
-import { styleKitSchema } from './styleKit'
+import { videoEditStyleSchema, videoEditStyleIdSchema, videoEditTemplateMetaShape, videoEditTemplateOriginSchema } from './styles/styleSchemas'
 import { creativeIntentsSchema } from '../creativeIntent/persistence'
 import { recordingCursorSourceSchema, RECORDING_CURSOR_EFFECT } from './recordingCursor'
 import { RECORDING_ZOOM_EFFECT } from './recordingZoom'
@@ -75,6 +75,8 @@ const videoEditClipStateSchema = z.object({
   stabilization: videoEditClipStabilizationSchema.optional(),
   contentAnchor: videoEditContentAnchorSchema.optional(),
   snapToBeat: z.boolean().optional().describe('超级关键帧整理时吸附到序列节拍标记，钉点优先。'),
+  /** 原生模板实例：同一模板的文字图形片段联动；分离后去掉。代码模板靠代码定义联动，不写这一项。 */
+  templateId: identifier.optional(),
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
   elementOverrides: codeElementOverridesSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),
@@ -112,8 +114,24 @@ export const videoEditClipTakeSchema = z.object({
 export const videoEditClipSchema = videoEditClipStateSchema.extend({
   takes: z.array(videoEditClipTakeSchema).optional(),
 })
+/** 原生模板的内容：自成一体的文字与图形片段快照（start/track 相对组合起点），不带媒体、代码、跟踪或效果。 */
+export const videoEditNativeTemplateClipSchema = videoEditClipSchema.pick({ name: true, kind: true, track: true, start: true, duration: true, sourceInUs: true, sourceRemainder: true, x: true, y: true, scale: true, rotation: true, anchorX: true, anchorY: true, opacity: true, volume: true, text: true, textStyle: true, graphic: true, curves: true }).strip().superRefine((clip, ctx) => {
+  if (clip.kind !== 'graphic' && clip.kind !== 'text' || clip.kind === 'graphic' && !clip.graphic) ctx.addIssue({ code: 'custom', message: '原生模板只接受文字或图形片段。' })
+})
+export const videoEditNativeTemplateContentSchema = z.object({ width: z.number().int().min(16).max(8192), height: z.number().int().min(16).max(8192), fps: z.number().finite().positive().max(120), clips: z.array(videoEditNativeTemplateClipSchema).min(1) }).strict()
+export const videoEditNativeTemplateBodySchema = z.object({ kind: z.literal('native'), content: videoEditNativeTemplateContentSchema }).strict()
+/** 工程模板：代码模板的源码就是工程里那份代码定义（不另存一份），origin 记录复制自哪个库模板及其版本。 */
+export const videoEditProjectTemplateSchema = z.object({
+  ...videoEditTemplateMetaShape,
+  origin: videoEditTemplateOriginSchema.nullable(),
+  body: z.discriminatedUnion('kind', [z.object({ kind: z.literal('code'), definitionId: identifier }).strict(), videoEditNativeTemplateBodySchema]),
+}).strict()
+export type VideoEditProjectTemplate = z.infer<typeof videoEditProjectTemplateSchema>
+export type VideoEditNativeTemplateContent = z.infer<typeof videoEditNativeTemplateContentSchema>
+export type VideoEditNativeTemplateClip = z.infer<typeof videoEditNativeTemplateClipSchema>
 export const videoEditSequenceSchema = z.object({
-  styleKitId: identifier.optional(),
+  /** 序列按哪份工程风格副本创作（`styles` 中的 id）；绑定不改时间线上的任何东西。 */
+  styleId: videoEditStyleIdSchema.optional(),
   multicam: videoEditMulticamSchema.optional(),
   textTranscription: videoEditTextTranscriptionSchema.optional(),
   id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), ...videoEditSequenceSizeFields,
@@ -136,7 +154,10 @@ export type VideoEditExportHistoryEntry = z.infer<typeof videoEditExportHistoryS
 export const videoEditDocumentSchema = z.object({
   exportHistory: videoEditExportHistorySchema.optional(),
   creativeIntents: creativeIntentsSchema.optional(),
-  styleKits: z.array(styleKitSchema).optional(),
+  /** 工程风格副本：绑定时从风格库复制，与库里同一 id；库里有更新版本时只提示，用户同意后才升级。 */
+  styles: z.array(videoEditStyleSchema).optional(),
+  /** 工程模板（剪辑内容第 22 版）：代码模板联动同一代码定义的全部片段，原生模板联动 templateId 相同的文字图形片段。 */
+  templates: z.array(videoEditProjectTemplateSchema).optional(),
   colorLuts: z.array(colorLutAssetSchema).optional(),
   format: z.literal('henji-video-project'), version: z.literal(VIDEO_EDIT_DOCUMENT_VERSION), id: identifier, name, revision: z.number().int().nonnegative(),
   media: z.array(videoEditMediaSchema), bins: z.array(videoEditBinSchema), items: z.array(videoEditItemSchema), sequences: z.array(videoEditSequenceSchema),
@@ -155,13 +176,17 @@ export const videoEditDocumentSchema = z.object({
   const itemsById = new Map(document.items.map(value => [value.id, value]))
   const sequencesById = new Map(document.sequences.map(value => [value.id, value]))
   const definitionsById = new Map(document.codeMaterials?.map(value => [value.id, value]))
-  const styleIds = new Set(document.styleKits?.map(value => value.id))
-  if (styleIds.size !== (document.styleKits?.length ?? 0)) issue('工程风格包标识不能重复。')
-  for (const sequence of document.sequences) if (sequence.styleKitId && !styleIds.has(sequence.styleKitId)) issue('序列的风格引用不存在。')
+  const styleIds = new Set(document.styles?.map(value => value.id))
+  if (styleIds.size !== (document.styles?.length ?? 0)) issue('工程风格副本标识不能重复。')
+  for (const sequence of document.sequences) if (sequence.styleId && !styleIds.has(sequence.styleId)) issue('序列的风格引用不存在。')
+  const nativeTemplates = new Set(document.templates?.filter(template => template.body.kind === 'native').map(template => template.id))
+  for (const template of document.templates ?? []) if (template.body.kind === 'code' && !definitionsById.has(template.body.definitionId)) issue(`模板“${template.name}”的代码定义不存在。`)
+  if (new Set(document.templates?.map(template => template.body.kind === 'code' ? template.body.definitionId : template.id)).size !== (document.templates?.length ?? 0)) issue('一份代码定义只能登记为一个模板。')
+  for (const sequence of document.sequences) for (const clip of sequence.clips) if (clip.templateId && !nativeTemplates.has(clip.templateId)) issue('片段引用的原生模板不存在。')
   const lutsById = new Set(document.colorLuts?.map(value => value.id))
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')
   const ids = new Set<string>()
-  for (const item of [...(document.styleKits ?? []), ...(document.colorLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
+  for (const item of [...(document.styles ?? []), ...(document.templates ?? []), ...(document.colorLuts ?? []), ...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
     if (ids.has(item.id)) issue('剪辑包含重复标识。')
     ids.add(item.id)
   }
@@ -293,7 +318,7 @@ export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
 export type VideoEditItem = z.infer<typeof videoEditItemSchema>
 export type VideoEditBin = z.infer<typeof videoEditBinSchema>
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
-export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'colorLuts' | 'styleKits'> & { fps: number; sequences?: VideoEditSequence[] }
+export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision' | 'codeMaterials' | 'colorLuts' | 'styles'> & { fps: number; sequences?: VideoEditSequence[] }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {
   return { id: crypto.randomUUID(), name, width: 1920, height: 1080, frameRate: { numerator: 30, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
     // 新序列与 PR 一样只有一条视频轨（V1）和一条音频轨（A1）；需要更多轨道时拖到轨道外或用轨道头菜单添加。
@@ -307,8 +332,8 @@ export function videoEditComposition(document: VideoEditDocument, sequenceId: st
   if (!sequence) throw new Error('目标序列不存在。')
   return composeVideoEditSequence(document, sequence)
 }
-function composeVideoEditSequence(document: Pick<VideoEditComposition, 'media' | 'items' | 'sequences' | 'styleKits' | 'colorLuts' | 'codeMaterials' | 'revision'>, sequence: VideoEditSequence): VideoEditComposition {
-  return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styleKits ? { styleKits: document.styleKits } : {}), ...(document.colorLuts ? { colorLuts: document.colorLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
+function composeVideoEditSequence(document: Pick<VideoEditComposition, 'media' | 'items' | 'sequences' | 'styles' | 'colorLuts' | 'codeMaterials' | 'revision'>, sequence: VideoEditSequence): VideoEditComposition {
+  return { ...sequence, width: Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator), media: document.media, items: document.items, sequences: document.sequences, ...(document.styles ? { styles: document.styles } : {}), ...(document.colorLuts ? { colorLuts: document.colorLuts } : {}), ...(document.codeMaterials ? { codeMaterials: document.codeMaterials } : {}), revision: document.revision, fps: videoEditFps(sequence.frameRate) }
 }
 export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' | 'items'>, clip: VideoEditClip): VideoEditMedia | undefined {
   const item = document.items.find(item => item.id === clip.itemId)

@@ -4,7 +4,7 @@ import { deduplicateHostContexts, prepareHostContext } from './hostContext'
 import { budgetContext } from './contextBudget'
 
 type Message = AgentSession['messages'][number]
-const raw = (frame: number, summary = '风格原文'.repeat(1500)) => JSON.stringify({ capturedAt: `time-${frame}`, surface: { id: 'workspace.video_edit' }, videoEdit: { frame, currentStyleKit: { summary } } })
+const raw = (frame: number, summary = '风格原文'.repeat(1500)) => JSON.stringify({ capturedAt: `time-${frame}`, surface: { id: 'workspace.video_edit' }, videoEdit: { frame, currentStyle: { summary } } })
 function message(value: NonNullable<ReturnType<typeof prepareHostContext>>): Extract<Message, { role: 'custom' }> {
   return { role: 'custom', customType: 'henji-context', ...value, display: false, timestamp: 0 }
 }

@@ -3,8 +3,8 @@ import { VIDEO_EDIT_AUTHOR_CONTENT_COLORS } from '@/core/theme/colorTokens'
 import { addressCodeMaterialFiles, normalizeCodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { createVideoEditSequence, videoEditComposition, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { instantiateTitleTemplate } from '@/core/videoEdit/titleTemplates'
-import type { StyleKit } from '@/core/videoEdit/styleKit'
+import { instantiateNativeTemplate } from '@/core/videoEdit/styles/nativeTemplates'
+import type { VideoEditStyleSample } from '@/core/videoEdit/styles/styleSchemas'
 import type { CodeParameterValues } from '@/core/videoEdit/codeMaterial/contract'
 import { videoEditOffscreenPool } from '../engine/videoEditOffscreenPool'
 import { compileVideoEditCode } from './videoEditCodeState'
@@ -45,8 +45,8 @@ interface Builder { document: VideoEditDocument; sequence: VideoEditSequence }
 const PREVIEW_DOCUMENT_ID = 'preset-preview'
 const PREVIEW_SEQUENCE_ID = 'preset-preview-sequence'
 let previewRevision = 0
-function start(size: { width: number; height: number }): Builder {
-  const sequence: VideoEditSequence = { ...createVideoEditSequence('预设预览'), id: PREVIEW_SEQUENCE_ID, ...size }
+function start(size: { width: number; height: number }, fps = PRESET_PREVIEW_FPS): Builder {
+  const sequence: VideoEditSequence = { ...createVideoEditSequence('预设预览'), id: PREVIEW_SEQUENCE_ID, ...size, frameRate: { numerator: fps, denominator: 1 } }
   for (const index of [2, 3, 4, 5]) sequence.tracks.push({ id: `preview-track-${index}`, name: `视频 ${index}`, index, kind: 'video', locked: false, enabled: true, muted: false, solo: false })
   const document: VideoEditDocument = { format: 'henji-video-project', version: VIDEO_EDIT_DOCUMENT_VERSION, id: PREVIEW_DOCUMENT_ID, name: '预设预览', revision: ++previewRevision, media: [], bins: [], items: [], sequences: [sequence], codeMaterials: [] }
   return { document, sequence }
@@ -61,35 +61,29 @@ async function codeClip(builder: Builder, source: Parameters<typeof normalizeCod
   const declared = Object.fromEntries(Object.entries(parameters).filter(([key]) => program.parameters.some(value => value.key === key)))
   builder.document.items.push({ id: itemId, name: '预设样片', kind: 'code', code: { definitionId, versionId, parameters: declared } })
   // Never ask for more frames than the component has after its source-in point.
-  const available = program.durationSeconds === undefined ? Infinity : Math.floor((program.durationSeconds - (placement.sourceInSeconds ?? 0)) * PRESET_PREVIEW_FPS)
-  const duration = Math.max(1, Math.min(Math.round(placement.seconds * PRESET_PREVIEW_FPS), available))
+  const fps = builder.sequence.frameRate.numerator / builder.sequence.frameRate.denominator
+  const available = program.durationSeconds === undefined ? Infinity : Math.floor((program.durationSeconds - (placement.sourceInSeconds ?? 0)) * fps)
+  const duration = Math.max(1, Math.min(Math.round(placement.seconds * fps), available))
   // Source ranges are for media items; a generator clip just starts later in its own clock (transition handles).
   const clip = makeVideoEditItemClip(builder.document, itemId, builder.sequence.id, { frame: placement.frame, track: placement.track, duration }, () => program)
   if (placement.sourceInSeconds) clip.sourceInUs = Math.round(placement.sourceInSeconds * 1e6)
   builder.sequence.clips.push(clip); return clip.id
 }
-const EXAMPLE_SECONDS = 3
-/**
- * A style has no look of its own to render — it is a guide for the AI. What can be shown are its reference
- * examples, played back to back over the shared footage, each for at most three seconds.
- */
-async function exampleReel(kit: StyleKit, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
-  const builder = start(size); const f = PRESET_PREVIEW_FPS; let frame = 0
-  const slots: Array<{ example: StyleKit['examples'][number]; frame: number; seconds: number }> = []
-  for (const example of kit.examples) { slots.push({ example, frame, seconds: EXAMPLE_SECONDS }); frame += EXAMPLE_SECONDS * f }
-  const total = Math.max(frame / f, 2)
-  await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: total }, signal)
-  // Examples that time their own exit read a hold parameter; others simply end with their slot.
-  for (const slot of slots) await codeClip(builder, slot.example.source, { hold: Math.max(.3, slot.seconds - .6) }, { frame: slot.frame, track: 2, seconds: slot.seconds }, signal)
+/** 风格样片：只放样片代码本身（它自己画满不透明的底），按样片的帧率与时长。 */
+async function styleSample(sample: VideoEditStyleSample, size: { width: number; height: number }, signal: AbortSignal, fps = PRESET_PREVIEW_FPS): Promise<Builder> {
+  const builder = start(size, fps)
+  // A sample may declare a shorter durationSeconds hint; the style's own sample setting is authoritative.
+  await codeClip(builder, sample.code, {}, { frame: 0, track: 1, seconds: sample.durationSeconds }, signal)
   return builder
 }
 async function build(source: VideoEditPresetSource, size: { width: number; height: number }, signal: AbortSignal): Promise<Builder> {
   switch (source.category) {
-    case 'style': return exampleReel(source.kit, size, signal)
-    case 'title': {
+    case 'style': return styleSample(source.sample, size, signal)
+    case 'template': {
       const builder = start(size)
-      await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: 8 }, signal)
-      for (const snapshot of instantiateTitleTemplate(source.template, {}, builder.sequence)) {
+      await codeClip(builder, BACKDROP, {}, { frame: 0, track: 1, seconds: 4 }, signal)
+      if (source.body.kind === 'code') { await codeClip(builder, source.body.code, {}, { frame: 0, track: 2, seconds: source.body.durationSeconds ?? 4 }, signal); return builder }
+      for (const snapshot of instantiateNativeTemplate(source.body.content, builder.sequence)) {
         const itemId = crypto.randomUUID(); const track = 2 + snapshot.track
         builder.document.items.push({ id: itemId, name: snapshot.name, kind: snapshot.kind, ...(snapshot.graphic ? { graphic: structuredClone(snapshot.graphic) } : {}) })
         builder.sequence.clips.push({ ...makeVideoEditItemClip(builder.document, itemId, builder.sequence.id, { frame: snapshot.start, track, duration: snapshot.duration }), ...snapshot, id: crypto.randomUUID(), itemId, track })
@@ -123,8 +117,8 @@ export interface PresetPreviewTimeline { composition: VideoEditComposition; fram
 function posterFrame(source: VideoEditPresetSource, frames: number): number {
   const at = (seconds: number): number => Math.min(frames - 1, Math.round(seconds * PRESET_PREVIEW_FPS))
   switch (source.category) {
-    case 'style': return at(1.8)
-    case 'title': return at(Math.min(2, source.template.parameters.durationSeconds / 2))
+    case 'style': return at(source.sample.thumbnail)
+    case 'template': return at(1.2)
     // Just before the midpoint: a dip to black, white or a flash still shows both shots.
     case 'transition': return at(1.65)
     default: return at(1)
@@ -133,8 +127,7 @@ function posterFrame(source: VideoEditPresetSource, frames: number): number {
 const timelines = new Map<string, Promise<PresetPreviewTimeline>>()
 /** Built once per preset content and size; compiling the components is the only step that is not real time. */
 export function presetPreviewTimeline(source: VideoEditPresetSource, size: { width: number; height: number }): Promise<PresetPreviewTimeline> {
-  // A style rebuilds only when its examples change, not while its guide text is being edited.
-  const key = JSON.stringify([source.category === 'style' ? { category: 'style', examples: source.kit.examples } : source, size])
+  const key = JSON.stringify([source, size])
   let value = timelines.get(key)
   if (!value) {
     value = build(source, size, new AbortController().signal).then(builder => {
@@ -182,4 +175,10 @@ class PresetRenderer {
 }
 
 const renderer = new PresetRenderer()
+/** 渲染风格样片用：按样片自己的帧率逐帧取画面（预览视频、缩略图与锚点帧）。 */
+export async function styleSampleTimeline(sample: VideoEditStyleSample, signal: AbortSignal): Promise<PresetPreviewTimeline & { fps: number }> {
+  const builder = await styleSample(sample, { width: sample.width, height: sample.height }, signal, sample.fps)
+  const frames = Math.max(1, ...builder.sequence.clips.map(clip => clip.start + clip.duration))
+  return { composition: videoEditComposition(builder.document, builder.sequence.id), frames, poster: Math.min(frames - 1, Math.round(sample.thumbnail * sample.fps)), fps: sample.fps }
+}
 export function renderPresetPreviewFrame(composition: VideoEditComposition, frame: number, signal: AbortSignal): Promise<ImageBitmap | null> { return renderer.frame(composition, frame, signal) }

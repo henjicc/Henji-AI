@@ -10,8 +10,8 @@ export function hostContextIdentity(value: unknown): string {
 }
 
 function compactStableText(value: unknown, previous: unknown, path = ''): unknown {
-  if (typeof value === 'string' && (value.length >= 1000 || value.length > 0 && /(?:currentStyleKit|styleKit)\.summary$/.test(path)) && value === previous) {
-    return /(?:currentStyleKit|styleKit)\.summary$/.test(path) ? '风格说明书与前文相同（未改动）' : '此段内容与前文相同（未改动）'
+  if (typeof value === 'string' && (value.length >= 1000 || value.length > 0 && /currentStyle\.summary$/.test(path)) && value === previous) {
+    return /currentStyle\.summary$/.test(path) ? '风格说明书与前文相同（未改动）' : '此段内容与前文相同（未改动）'
   }
   if (Array.isArray(value)) return value.map((item, index) => compactStableText(item, Array.isArray(previous) ? previous[index] : undefined, `${path}.${index}`))
   if (!value || typeof value !== 'object') return value

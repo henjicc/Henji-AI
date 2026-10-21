@@ -5,7 +5,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createVideoEditTestProject, closeAllVideoEdits } from './videoEditDocumentTestKit'
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
-import { applyTitleTemplate } from './videoEditTitleTemplates'
+import { addTestTitleTemplate } from './videoEditStyleTestKit'
 import { videoEditGraphicObjectId } from './videoEditCompositeEntities'
 import { undoVideoEdit } from './videoEditService'
 beforeEach(() => { installHarnessNativeStorage(); videoEditTextPresetLibrary.replace([]) })
@@ -19,7 +19,7 @@ it('助手通用实体创建/读回/改名/改样式/删除预设，应用图形
     expect((await app.read(ref, ['video_edit.text_preset.name', 'video_edit.text_preset.style'])).properties).toMatchObject({ 'video_edit.text_preset.name': '电影', 'video_edit.text_preset.style': style })
     const renamed = await app.change(ref, { 'video_edit.text_preset.name': '片头', 'video_edit.text_preset.style': { ...style, allCaps: true } }); expect(renamed.ok, JSON.stringify(renamed)).toBe(true)
     expect(videoEditTextPresetLibrary.list()[0]).toMatchObject({ name: '片头', style: { allCaps: true } })
-    const [clipId] = applyTitleTemplate(parent.id, owner.activeSequenceId, 'title:chapter')
+    const clipId = await addTestTitleTemplate(parent.id, owner.activeSequenceId)
     const object = owner.document.sequences[0].clips.find(clip => clip.id === clipId)!.graphic!.objects.find(value => value.kind === 'text')!
     const target = { kind: 'video_edit.graphic_object', id: `${parent.id}:${videoEditGraphicObjectId(clipId, object.id)}` }
     const previous = structuredClone(object.textStyle); const history = owner.past.length

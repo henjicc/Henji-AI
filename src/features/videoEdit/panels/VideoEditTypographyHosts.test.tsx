@@ -5,16 +5,15 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditTestProject, closeAllVideoEdits } from '../application/videoEditDocumentTestKit'
 import { addVideoEditProgramText } from '../application/videoEditProgramText'
-import { applyTitleTemplate } from '../application/videoEditTitleTemplates'
+import { addTestTitleTemplate } from '../application/videoEditStyleTestKit'
 import { createVideoEditCaption } from '../application/videoEditTimedContent'
 import { getActiveVideoEditSequence, setVideoEditTimelineView, undoVideoEdit } from '../application/videoEditService'
 import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
 import { VideoEditGraphicPanel } from './VideoEditGraphicPanel'
-import { VideoEditTitleTemplatesPanel } from './VideoEditTitleTemplatesPanel'
 import { VideoEditSubtitleActions } from './VideoEditSubtitleActions'
 beforeEach(() => { installHarnessNativeStorage(); vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([]); vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ font: '', measureText: (text: string) => ({ width: text.length * 20 }) } as unknown as CanvasRenderingContext2D) })
 afterEach(async () => { cleanup(); await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
-it.each(['text', 'graphic', 'title', 'subtitle'] as const)('四宿主 %s 同一外观写入/撤销，图形复用对象列表及关键帧行', async host => {
+it.each(['text', 'graphic', 'subtitle'] as const)('三宿主 %s 同一外观写入/撤销，图形复用对象列表及关键帧行', async host => {
   const owner = await createVideoEditTestProject(); const projectId = owner.document.id; const sequenceId = owner.activeSequenceId; const error = vi.fn()
   let element: React.ReactElement; let read: () => boolean | undefined
   if (host === 'text') {
@@ -26,8 +25,8 @@ it.each(['text', 'graphic', 'title', 'subtitle'] as const)('四宿主 %s 同一�
     element = <VideoEditSubtitleActions instance={owner} sequence={getActiveVideoEditSequence(owner)} selectedCaptionId={id} onError={error} />
     read = () => { const style = getActiveVideoEditSequence(owner).captions?.find(value => value.id === id)?.style; return style ? style.allCaps : undefined }
   } else {
-    const [id] = applyTitleTemplate(projectId, sequenceId, 'title:lower_third'); setVideoEditTimelineView(projectId, { selectedClipIds: [id] }, id)
-    element = host === 'graphic' ? <VideoEditGraphicPanel projectId={projectId} sequenceId={sequenceId} clipId={id} onError={error} /> : <VideoEditTitleTemplatesPanel instance={owner} onError={error} />
+    const id = await addTestTitleTemplate(projectId, sequenceId); setVideoEditTimelineView(projectId, { selectedClipIds: [id] }, id)
+    element = <VideoEditGraphicPanel projectId={projectId} sequenceId={sequenceId} clipId={id} onError={error} />
     read = () => getActiveVideoEditSequence(owner).clips.find(value => value.id === id)?.graphic?.objects.filter(value => value.kind === 'text').at(-1)?.textStyle?.allCaps
   }
   const history = owner.past.length; const view = render(element)

@@ -57,7 +57,7 @@ export function nestVideoEditClips(document: VideoEditDocument, sequenceId: stri
     return [...selectedSpeech(caption), ...otherSpeech(caption).map(cue => ({ ...cue, id: crypto.randomUUID() }))]
   })
   const trackIds = new Map(parent.tracks.map(track => [track.id, crypto.randomUUID()]))
-  const child: VideoEditSequence = { ...createVideoEditSequence(name), ...(parent.styleKitId ? { styleKitId: parent.styleKitId } : {}), width: parent.width, height: parent.height, frameRate: parent.frameRate, pixelAspectRatio: parent.pixelAspectRatio, sampleRate: parent.sampleRate, channels: parent.channels,
+  const child: VideoEditSequence = { ...createVideoEditSequence(name), ...(parent.styleId ? { styleId: parent.styleId } : {}), width: parent.width, height: parent.height, frameRate: parent.frameRate, pixelAspectRatio: parent.pixelAspectRatio, sampleRate: parent.sampleRate, channels: parent.channels,
     ...(parent.captionTrackEnabled !== undefined ? { captionTrackEnabled: parent.captionTrackEnabled } : {}),
     // Recognition is in source microseconds, so moving clips changes neither its identity nor timestamps.
     ...(parent.textTranscription ? { textTranscription: { ...parent.textTranscription, sources: parent.textTranscription.sources.filter(source => selected.some(clip => clip.itemId === source.itemId)) } } : {}),

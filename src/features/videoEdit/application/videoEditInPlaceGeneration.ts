@@ -19,7 +19,7 @@ import { prepareVideoEditCreativeResult } from './videoEditCreativeSources'
 import { placeVideoEditFileInProject } from './videoEditResultTarget'
 import { importVideoEditSources } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, saveVideoEdit, subscribeVideoEdit, updateVideoEditInPlaceMetadata } from './videoEditService'
-import { resolveVideoEditStyleKit, styleKitGenerationPrompt } from '@/core/videoEdit/styleKit'
+import { videoEditStyleGenerationPrompt } from './videoEditStylePrompt'
 
 /*
  * 原地生成（4.12）的执行：规划 → 放占位 → 取参考帧 → 走正式生成链路提交 → 等待 → 结果复制进项目并收录 → 一步编辑落进时间线。
@@ -277,8 +277,7 @@ export function selectedVideoEditInPlaceReferences(plan: VideoEditInPlacePlan, r
 export function videoEditInPlaceStylePrompt(request: Pick<VideoEditInPlaceRequest, 'projectId' | 'sequenceId' | 'applyStyle'>, mediaType: VideoEditInPlacePreparation['mediaType']): string {
   if (mediaType === 'audio' || request.applyStyle === false) return ''
   const document = requireVideoEditInstance(request.projectId).document; const sequence = document.sequences.find(value => value.id === request.sequenceId)
-  const kit = sequence ? resolveVideoEditStyleKit(document, sequence) : undefined
-  return kit ? styleKitGenerationPrompt(kit) : ''
+  return videoEditStyleGenerationPrompt(document, sequence)?.prompt ?? ''
 }
 function styledPrompt(prompt: string, style: string): string { return style ? `${prompt}\n\n画面风格：${style}` : prompt }
 /** 提交前的完整检查（不取帧、不付费）：落点、模型、参数、参考帧数量与预估费用。界面、助手与提交共用。 */

@@ -11,6 +11,8 @@ import { videoEditContentSchema } from '@/core/documents/kinds/videoEdit'
 import { createVideoEditTestProject, closeAllVideoEdits, failVideoEditSaves, savedVideoEdit, reopenVideoEdit } from '@/features/videoEdit/application/videoEditDocumentTestKit'
 import { attachLocalApplicationHost } from './localApplicationHost'
 import { getPlatform } from '@/platform/runtime'
+import { titleGraphic } from '@/core/videoEdit/titleGraphics'
+import { editVideoProject } from '@/features/videoEdit/application/videoEditService'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 
 // 只替换持久账本、IPC/媒体解码边界；公共 dispatcher、宿主、能力、文档 schema 与验证走正式实现。
@@ -87,8 +89,12 @@ it('t95 D1/D3：公共标题回执进入 verified 终态；无原视频拒绝不
     expect(smartDenied).toMatchObject({ ok: false, executionState: 'not_executed', verificationState: 'verified' })
     expect(host.store.unresolved()).toEqual([])
     const titleId = crypto.randomUUID()
-    const title = await host.call('apply_video_edit_title_template', { operationId: titleId, documentRef, sequenceRef, frame: 12, templateRef: { kind: 'video_edit.title_template', id: 'title:chapter' }, parameters: { text: '第二章' } })
-    expect(title).toMatchObject({ ok: true, executionState: 'completed', verificationState: 'verified', result: { data: { verified: true, verification: { verified: true } } } })
+    const sequence = owner.document.sequences[0]
+    const graphic = titleGraphic('chapter', { text: '第一章' }, sequence.width, sequence.height, 119 / 30)
+    editVideoProject(owner.document.id, document => ({ ...document, templates: [{ id: 'chapter-template', name: '章节标题', description: '', version: 1, contentHash: '', updatedAt: new Date(0).toISOString(), style: null, origin: null, body: { kind: 'native', content: { width: sequence.width, height: sequence.height, fps: 30, clips: [{ name: '章节标题', kind: 'graphic', graphic, track: 0, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, text: '' }] } } }] }))
+    const title = await host.call('apply_video_edit_template', { operationId: titleId, documentRef, sequenceRef, frame: 12, templateRef: { kind: 'video_edit.project_template', id: `${owner.document.id}:chapter-template` }, texts: ['第二章'] })
+    expect(title, JSON.stringify(title)).toMatchObject({ ok: true, executionState: 'completed', verificationState: 'verified', result: { data: { verification: { verified: true } } } })
+    expect(JSON.stringify(savedVideoEdit(owner).sequences[0].clips[0].graphic)).toContain('第二章')
     expect(savedVideoEdit(owner).sequences[0].clips).toHaveLength(1)
     expect(host.store.unresolved()).toEqual([])
   } finally { host.dispose() }

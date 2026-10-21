@@ -30,6 +30,8 @@ export const VIDEO_EDIT_AUTHOR_CONTENT_COLORS = {
   probeRectangle: 'rgba(255,0,0,.5)',
   probeEllipse: 'rgba(0,255,0,.75)',
 } as const;
+/** 新建风格自带样片的画面配色（作者代码里的内容色，不随界面主题变化）。 */
+export const STYLE_SAMPLE_COLORS = { bg: '#F4F2EE', text: '#16181D', muted: '#6B6F78', accent: '#2F5BFF', line: '#D9D6CF' } as const;
 export const TEXT_LIGHT_HEX = '#E5E5E5';
 
 export const CANVAS_BG_HEX = '#0A0A0A';

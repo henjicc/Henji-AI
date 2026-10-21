@@ -1,6 +1,5 @@
 import { z } from 'zod'
-import { styleKitSchema } from './styleKit'
-import { titleTemplateSchema } from './titleTemplates'
+import { legacyStyleKitSchema, legacyTitleTemplateSchema } from './styles/legacyStyles'
 import { videoEditEffectPresetSchema } from './effectPresets'
 import { videoEditTextPresetSchema } from '../persistence/storedSchemas'
 
@@ -8,6 +7,12 @@ import { videoEditTextPresetSchema } from '../persistence/storedSchemas'
 export const VIDEO_EDIT_PRESET_CATEGORIES = ['style', 'title', 'text', 'effect', 'transition'] as const
 export type VideoEditPresetCategory = typeof VIDEO_EDIT_PRESET_CATEGORIES[number]
 export const VIDEO_EDIT_PRESET_CATEGORY_LABELS: Record<VideoEditPresetCategory, string> = { style: '风格', title: '标题', text: '文字', effect: '效果', transition: '转场' }
+/**
+ * 预设面板管理的类别。风格与标题（style/title）2026-10-22 起由风格库与模板接管：类别值仍留在偏好与旧预设文件里
+ * （风格默认值继续存在偏好的 style 类别下），面板与 video_edit.preset 不再列出。
+ */
+export const VIDEO_EDIT_PRESET_PANEL_CATEGORIES = ['text', 'effect', 'transition'] as const satisfies readonly VideoEditPresetCategory[]
+export type VideoEditPresetPanelCategory = typeof VIDEO_EDIT_PRESET_PANEL_CATEGORIES[number]
 /** Categories whose default changes what new work starts from (effects have no single default). */
 export const VIDEO_EDIT_PRESET_DEFAULTABLE: readonly VideoEditPresetCategory[] = ['style', 'title', 'text', 'transition']
 export const VIDEO_EDIT_PRESET_MAX_RATING = 5
@@ -28,8 +33,9 @@ export const videoEditPresetPreferencesSchema = z.array(videoEditPresetPreferenc
 /** One exchange file may carry presets of several kinds; ids are replaced on import. */
 export const VIDEO_EDIT_PRESET_PACKAGE_VERSION = 6
 export const videoEditPresetPackageItemSchema = z.discriminatedUnion('category', [
-  z.object({ category: z.literal('style'), preset: styleKitSchema }).strict(),
-  z.object({ category: z.literal('title'), preset: titleTemplateSchema }).strict(),
+  // 风格与标题条目只出现在 2026-10-22 之前导出的文件里，导入时转成新的风格与原生模板；新导出不再写这两类。
+  z.object({ category: z.literal('style'), preset: legacyStyleKitSchema }).strict(),
+  z.object({ category: z.literal('title'), preset: legacyTitleTemplateSchema }).strict(),
   z.object({ category: z.literal('text'), preset: videoEditTextPresetSchema }).strict(),
   z.object({ category: z.literal('effect'), preset: videoEditEffectPresetSchema }).strict(),
 ])
