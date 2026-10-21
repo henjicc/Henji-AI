@@ -37,7 +37,7 @@ export const videoEditTimeRemapSchema = z.object({
 export type VideoEditTimeRemapPoint = z.infer<typeof videoEditTimeRemapPointSchema>
 export type VideoEditTimeRemap = z.infer<typeof videoEditTimeRemapSchema>
 
-/** 补帧方式：nearest 帧采样（PR 默认），blend 相邻两帧按位置混合；optical_flow 预留（尚未实现时按 blend 渲染）。 */
+/** 补帧方式：nearest 帧采样（PR 默认），blend 慢于原速处相邻两帧按位置混合；optical_flow 预留（尚未实现时按 blend 渲染）。 */
 export const VIDEO_EDIT_FRAME_INTERPOLATIONS = ['nearest', 'blend', 'optical_flow'] as const
 export const videoEditFrameInterpolationSchema = z.enum(VIDEO_EDIT_FRAME_INTERPOLATIONS)
 export type VideoEditFrameInterpolation = z.infer<typeof videoEditFrameInterpolationSchema>

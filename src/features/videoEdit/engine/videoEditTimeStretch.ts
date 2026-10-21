@@ -1,4 +1,4 @@
-import type { SignalsmithStretchModule } from 'signalsmith-stretch'
+import { SignalsmithStretchWasm, type SignalsmithStretchModule } from 'signalsmith-stretch'
 import { readVideoEditSourceBuffer, type VideoEditRetimedSoundRequest, type VideoEditSourceBuffer } from './videoEditRetimedAudio'
 import { VIDEO_EDIT_PITCH_STRETCH_MAX, videoEditClipSourceSecondsAtTime } from '@/core/videoEdit/clipSpeed'
 
@@ -18,12 +18,6 @@ import { VIDEO_EDIT_PITCH_STRETCH_MAX, videoEditClipSourceSecondsAtTime } from '
 export const VIDEO_EDIT_STRETCH_BLOCK = 512
 const TONALITY_LIMIT_HZ = 8000
 
-let factory: Promise<(options?: Record<string, unknown>) => Promise<SignalsmithStretchModule>> | undefined
-/** 只在用到拉伸时加载（约 110 KB 的 WASM，内嵌在模块里）；失败后下次重试。 */
-function loadFactory(): Promise<(options?: Record<string, unknown>) => Promise<SignalsmithStretchModule>> {
-  factory ??= import('signalsmith-stretch').then(module => module.SignalsmithStretchWasm).catch(error => { factory = undefined; throw error })
-  return factory
-}
 
 /** 序列样本 → 输入坐标（方向 × 源样本号，可带小数）。 */
 export type VideoEditStretchInputAt = (sequenceSample: number) => number
@@ -53,7 +47,8 @@ export class VideoEditTimeStretcher {
     this.carry = Array.from({ length: channels }, () => new Float32Array(VIDEO_EDIT_STRETCH_BLOCK))
   }
   static async create(channels: number, rate: number): Promise<VideoEditTimeStretcher> {
-    return new VideoEditTimeStretcher(await (await loadFactory())(), channels, rate)
+    // 静态导入：WASM 内嵌在模块里（约 110 KB）；渲染 Worker 里的动态导入会让 Vite 生产构建重复产出同名分块。
+    return new VideoEditTimeStretcher(await SignalsmithStretchWasm(), channels, rate)
   }
   /** 用给定模块实例（测试替身可记录每次送入的样本数）。 */
   static fromModule(module: SignalsmithStretchModule, channels: number, rate: number): VideoEditTimeStretcher { return new VideoEditTimeStretcher(module, channels, rate) }

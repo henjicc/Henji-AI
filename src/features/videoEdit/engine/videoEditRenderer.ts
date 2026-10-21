@@ -941,7 +941,9 @@ export class VideoEditRenderer {
       }
       timestamps.push(source.current.timestamp)
       // 帧混合（时间重映射补帧）：源位置落在两幅源画面之间时，按位置把下一幅混合进来。
-      if (clip.frameInterpolation && videoEditRenderedFrameInterpolation(clip.frameInterpolation) === 'blend' && !clip.frameHold) {
+      // 只在慢于原速处混合：原速或加速时两幅源画面的间隔不超过一帧，混合只增加解码量（如 59.94 素材放在 60 序列）。
+      const slowed = () => Math.abs(clipSourceSeconds(clip, frame + 1, document.fps) - clipSourceSeconds(clip, frame, document.fps)) * document.fps < .995
+      if (clip.frameInterpolation && videoEditRenderedFrameInterpolation(clip.frameInterpolation) === 'blend' && !clip.frameHold && slowed()) {
         const current = source.current
         const weight = (originalTime - current.timestamp) / current.duration
         const partnerTime = videoEditPictureSeconds(current.timestamp + current.duration)
