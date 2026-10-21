@@ -1,3 +1,4 @@
+import { sendVideoEditClipToAudioEdit } from '../application/videoEditAudioLinks'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { videoEditMulticamSource } from '@/core/videoEdit/multicam'
 import { switchVideoEditMulticam, autoSwitchVideoEditMulticam } from '../application/videoEditMulticam'
@@ -86,6 +87,7 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
         items.push({ id: 'render_preview_auto', label: auto ? '关闭空闲时自动渲染' : '开启空闲时自动渲染', icon: <TimerReset size={UI_ICON_SIZE.md} />, onClick: () => { try { setVideoEditRenderPreference(projectId, { autoRender: !auto }) } catch (error) { onError(error) } } })
         items.push({ id: 'render_preview_clear', label: '删除渲染文件', icon: <Trash2 size={UI_ICON_SIZE.md} />, disabled: cache.readyFrames === 0 && !cache.rendering, onClick: () => { void clearVideoEditRenderCache(projectId).catch(onError) } })
       }
+      if (clip && (clip.kind === 'audio' || clip.kind === 'video')) items.unshift({ id: 'edit_audio', label: '在音频编辑中编辑', icon: <AudioLines size={UI_ICON_SIZE.md} />, onClick: () => { void sendVideoEditClipToAudioEdit(instance.document.id, clip.id).catch(onError) } })
       if (clip?.creativeSource && onOpenSource) items.unshift({ id: 'open_source', label: '回到来源继续编辑', icon: <Undo2 size={UI_ICON_SIZE.md} />, divider: true, onClick: () => onOpenSource(clip.id) })
       menu.showMenu(event, items)
     } catch (error) { onError(error) }

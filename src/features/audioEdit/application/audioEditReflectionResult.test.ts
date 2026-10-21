@@ -139,3 +139,41 @@ it('助手修改与手工历史共存，撤销助手操作不会抹去之前的�
     await flushAudioEditProject('audio-result')
   } finally { app.dispose() }
 })
+
+
+it('区域音量与修复通过公共事务写入、回读、持久化并一次撤销', async () => {
+  const app = createApplicationHarness()
+  const ref = { kind: 'audio_edit.document', id: 'audio-result' }
+  const gain = { id: 'gain', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 100, fadeOutFrames: 100, enabled: true }
+  const repair = { id: 'repair', kind: 'spectral_heal', startFrame: 5000, endFrame: 6000, lowHz: 100, highHz: 4000, strength: .5, enabled: true }
+  try {
+    expect((await app.change(ref, { 'audio_edit.document.gain_regions': [gain], 'audio_edit.document.repairs': [repair] })).ok).toBe(true)
+    expect((await app.read(ref, ['audio_edit.document.gain_regions', 'audio_edit.document.repairs'])).properties).toMatchObject({ 'audio_edit.document.gain_regions': [gain], 'audio_edit.document.repairs': [repair] })
+    expect(harnessDocumentStore().stored(ref.id)?.content).toMatchObject({ gainRegions: [gain], repairs: [repair] })
+    undoAudioEditProject(ref.id)
+    await flushAudioEditProject(ref.id)
+    expect((await loadAudioEditProject(ref.id)).document.gainRegions ?? []).toEqual([])
+    expect((await loadAudioEditProject(ref.id)).document.repairs ?? []).toEqual([])
+    expect((await app.change(ref, { 'audio_edit.document.repairs': [{ ...repair, highHz: 50000 }] })).ok).toBe(false)
+    expect((await loadAudioEditProject(ref.id)).document.repairs ?? []).toEqual([])
+  } finally { app.dispose() }
+})
+
+
+it('区域修复公共能力渲染实际保存版本并回读，同一历史可撤销；失败保留可恢复记录', async () => {
+  const app = createApplicationHarness(), ref = { kind: 'audio_edit.document', id: 'audio-result' }
+  const repair = { id: 'algorithm', kind: 'spectral_heal', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, strength: 1, enabled: true }
+  const render = vi.spyOn(getPlatform().audioEdit, 'render').mockImplementation(async ({ projectId }) => {
+    expect(harnessDocumentStore().stored(projectId)?.content).toMatchObject({ repairs: [repair] })
+    return { audioPath: 'result.wav', durationFrames: 96000, sampleRate: 48000, channels: 1, revision: harnessDocumentStore().stored(projectId)!.meta.revision }
+  })
+  try {
+    expect(await app.call('repair_audio_edit_region', { documentRef: ref, repair })).toMatchObject({ ok: true, data: { verified: true, durationFrames: 96000 } })
+    expect(render).toHaveBeenCalledOnce()
+    undoAudioEditProject(ref.id); await flushAudioEditProject(ref.id)
+    expect((await loadAudioEditProject(ref.id)).document.repairs ?? []).toEqual([])
+    render.mockRejectedValueOnce(new Error('Worker unavailable'))
+    expect(await app.call('repair_audio_edit_region', { documentRef: ref, repair: { ...repair, id: 'failed' } })).toMatchObject({ ok: false })
+    expect((await loadAudioEditProject(ref.id)).document.repairs?.[0].id).toBe('failed')
+  } finally { render.mockRestore(); app.dispose() }
+})

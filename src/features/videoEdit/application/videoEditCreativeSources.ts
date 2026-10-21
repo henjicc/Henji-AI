@@ -1,3 +1,6 @@
+import { renderAudioEdit } from '@/features/audioEdit'
+import { buildAudioEditSrt } from '@/core/audioEdit/subtitles'
+import { buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import { createLogger } from '@/core/logging'
 import { videoEditCreativeSourceRequestSchema, type VideoEditCreativeSource, type VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
 import type { DocumentMeta } from '@/core/documents/types'
@@ -7,7 +10,6 @@ import { getGraphNodeMediaOutputs } from '@/features/canvas/application/graphOut
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import { addMediaReferenceToLibrary, resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
-import { exportAudioEdit } from '@/features/audioEdit/application/audioEditApplicationService'
 import { flushAudioEditProject, getAudioEditProjectInstance, loadAudioEditProject } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { loadImageEditorV3Document, createImageEditorV3RequestId } from '@/commands/imageEditorV3'
 import { materializeImageEditorV3StandaloneRaster } from '@/commands/imageEditorV3Export'
@@ -62,7 +64,6 @@ export class VideoEditSourceMissingError extends Error {
 }
 
 const logger = createLogger('features.videoEdit.creativeSources')
-const SUBTITLE_BYTES = 2 * 1024 * 1024
 
 function assertCurrent(options: VideoEditCreativeSourceOptions): void {
   options.signal?.throwIfAborted()
@@ -168,59 +169,25 @@ async function imageSource(meta: DocumentMeta, revision: number | undefined, opt
   }
 }
 
-/** 给剪后声音挑一个不重名的位置：先用指定文件夹（项目“生成结果”），没有时请用户选。 */
-async function audioTarget(name: string, options: VideoEditCreativeSourceOptions): Promise<string> {
-  const platform = getPlatform()
-  const stem = `${name.replace(/\.[^.]+$/, '')}-剪辑`
-  const folder = options.outputFolder ? await guarded(options, options.outputFolder) : null
-  if (folder) {
-    for (let index = 1; index <= 999; index += 1) {
-      const candidate = await platform.system.paths.join(folder, `${stem}${index === 1 ? '' : ` (${index})`}.wav`)
-      const subtitle = candidate.replace(/\.wav$/i, '.srt')
-      if (!await platform.system.fs.exists(candidate) && !await platform.system.fs.exists(subtitle)) return candidate
-    }
-    throw new Error('项目“生成结果”里同名文件过多，请先整理后重试。')
-  }
-  const path = await guarded(options, () => platform.system.dialog.save({ defaultPath: `${stem}.wav`, filters: [{ name: 'WAV 与 SRT', extensions: ['wav'] }] }))
-  if (!path) throw new DOMException('已取消口播结果导出。', 'AbortError')
-  if (!/\.wav$/i.test(path)) throw new Error('请使用新的 .wav 文件名保存剪后声音。')
-  for (const file of [path, path.replace(/\.wav$/i, '.srt')]) if (await guarded(options, () => platform.system.fs.exists(file))) throw new Error('请选择新的 WAV 和 SRT 文件名，避免覆盖已有交付。')
-  return path
-}
-
+/** 按保存版本生成声音与字幕，放入剪辑不要求用户导出。 */
 async function audioSource(meta: DocumentMeta, includeProcessing: boolean | undefined, options: VideoEditCreativeSourceOptions): Promise<PublishedSource> {
   const projectId = meta.id
   const owner = await guarded(options, () => loadAudioEditProject(projectId, meta.path))
   await guarded(options, () => flushAudioEditProject(projectId))
   const baseline = owner.document; const version = owner.version
   const assertSource = (): void => { if (getAudioEditProjectInstance(projectId) !== owner || owner.document !== baseline || owner.version !== version) conflict() }
-  const platform = getPlatform()
-  const target = localPath(await audioTarget(baseline.name, options))
-  const subtitleTarget = target.replace(/\.wav$/i, '.srt')
-  assertSource()
   const requestId = crypto.randomUUID()
-  const cancel = (): void => { void platform.audioEdit.cancelTask(requestId).catch(error => logger.warn('口播结果取消未确认', { event: 'video_edit.creative_source.audio.cancel_failed', error, requestId })) }
+  const cancel = (): void => { void getPlatform().audioEdit.cancelTask(requestId).catch(error => logger.warn('取消音频渲染失败', { event: 'video_edit.audio_link.cancel.failed', error })) }
   options.signal?.addEventListener('abort', cancel, { once: true })
-  let result: Awaited<ReturnType<typeof exportAudioEdit>>
-  try {
-    result = await guarded(options, () => exportAudioEdit({ projectId, targetPath: target, format: 'wav', subtitleTargetPath: subtitleTarget, requestId, ...(includeProcessing !== undefined ? { includeProcessing } : {}) }))
-  } finally { options.signal?.removeEventListener('abort', cancel) }
+  let result: Awaited<ReturnType<typeof renderAudioEdit>>
+  try { result = await guarded(options, () => renderAudioEdit(projectId, requestId, includeProcessing)) }
+  finally { options.signal?.removeEventListener('abort', cancel) }
   assertSource()
-  if (!sameVideoEditMediaPath(result.audioPath, target) || !result.subtitlePath || !sameVideoEditMediaPath(result.subtitlePath, subtitleTarget) || !Number.isSafeInteger(result.durationFrames) || result.durationFrames < 1) throw new Error('口播服务没有返回完整 WAV 与 SRT 交付，请检查原输出。')
-  const readCaptions = async (): Promise<string> => {
-    const bytes = await platform.system.fs.readFile(subtitleTarget, { maxBytes: SUBTITLE_BYTES })
-    if (bytes.byteLength > SUBTITLE_BYTES) throw new Error('口播字幕超过 2MiB，请裁短后重新导出。')
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  }
-  const captions = await guarded(options, readCaptions)
-  return { path: target, mediaType: 'audio', name: `${baseline.name} · 剪后声音`, librarySource: 'imported', origin: documentOrigin(meta, { revision: baseline.revision }),
-    // 没转写过的口播导出的 SRT 是空的：不带字幕，只放声音
-    ...(captions.trim() ? { captions } : {}),
-    async recheck() { assertSource(); if (await readCaptions() !== captions) conflict(); assertSource() },
-  }
+  const captions = buildAudioEditSrt(baseline.transcript, buildProjectAudioEditTimeline(baseline), baseline.source.sampleRate)
+  return { path: result.audioPath, mediaType: 'audio', name: `${baseline.name} · 剪后声音`, librarySource: 'imported', origin: documentOrigin(meta, { revision: result.revision }),
+    ...(captions.trim() ? { captions } : {}), recheck: async () => { assertSource() } }
 }
 
-/** 按跨文档引用找到来源文档（先位置后 ID）；找不到时报 VideoEditSourceMissingError。 */
 export async function resolveVideoEditSourceDocument(docRef: { docId: string; path: string }): Promise<DocumentMeta> {
   const resolved = await getDocumentOperations().resolveDocumentLink(docRef)
   if (resolved.status !== 'found') throw new VideoEditSourceMissingError()
