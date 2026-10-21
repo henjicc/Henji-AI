@@ -1,7 +1,7 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { videoEditMulticamSource } from '@/core/videoEdit/multicam'
 import { switchVideoEditMulticam, autoSwitchVideoEditMulticam } from '../application/videoEditMulticam'
-import { Crop, Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2, Gauge, Pause } from 'lucide-react'
+import { Crop, Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2, Gauge, Pause, Clapperboard, CircleStop } from 'lucide-react'
 import { expandVideoEditSelection, videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -19,6 +19,7 @@ import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons'
 import { VideoEditCanvasSendDialog, type VideoEditCanvasSendRequest } from '../panels/VideoEditCanvasSendDialog'
 import type { VideoEditNestTarget } from '../application/videoEditNesting'
 import { analyzeVideoEditBeats } from '../application/videoEditBeatAnalysis'
+import { cancelVideoEditRenderCache, clearVideoEditRenderCache, getVideoEditRenderPreference, readVideoEditRenderCache, renderVideoEditRenderCache, setVideoEditRenderPreference } from '../application/videoEditRenderCache'
 
 const actionIcons = { audio_gain: AudioLines, clip_speed: Gauge, copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, frame_hold: Pause, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
@@ -70,6 +71,17 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       }
       // 回到来源继续编辑（4.1）：片段记着来源时打开来源文档并定位，或打开生成记录
       if (inPlace) items.unshift(...inPlace.items({ ...(clipId ? { clipId } : {}), ...(trackId ? { trackId } : {}), frame: inPlace.frameAt(event.clientX) }))
+      if (!clipId) {
+        // 渲染预览（PR“渲染入点到出点”）：有入出点时只渲染这段，否则整条序列；只渲染渲染条上标黄的段落。
+        const projectId = instance.document.id
+        const cache = readVideoEditRenderCache(projectId)
+        const range = instance.inFrame !== null || instance.outFrame !== null ? { startFrame: instance.inFrame ?? 0, endFrame: instance.outFrame ?? Math.max(1, cache.totalFrames) } : undefined
+        if (cache.rendering) items.push({ id: 'render_preview_cancel', label: `取消渲染预览（${cache.rendering.done}/${cache.rendering.total}）`, icon: <CircleStop size={UI_ICON_SIZE.md} />, divider: true, onClick: () => cancelVideoEditRenderCache(projectId) })
+        else items.push({ id: 'render_preview', label: range ? '渲染入点到出点' : '渲染预览', icon: <Clapperboard size={UI_ICON_SIZE.md} />, divider: true, disabled: cache.needsRenderFrames === 0, onClick: () => { void renderVideoEditRenderCache(projectId, { ...(range ? { range } : {}), scope: 'needed' }).catch(onError) } })
+        const auto = getVideoEditRenderPreference(projectId).autoRender
+        items.push({ id: 'render_preview_auto', label: auto ? '关闭空闲时自动渲染' : '开启空闲时自动渲染', icon: <Clapperboard size={UI_ICON_SIZE.md} />, onClick: () => { try { setVideoEditRenderPreference(projectId, { autoRender: !auto }) } catch (error) { onError(error) } } })
+        items.push({ id: 'render_preview_clear', label: '删除渲染文件', icon: <Trash2 size={UI_ICON_SIZE.md} />, disabled: cache.readyFrames === 0 && !cache.rendering, onClick: () => { void clearVideoEditRenderCache(projectId).catch(onError) } })
+      }
       if (clip?.creativeSource && onOpenSource) items.unshift({ id: 'open_source', label: '回到来源继续编辑', icon: <Undo2 size={UI_ICON_SIZE.md} />, divider: true, onClick: () => onOpenSource(clip.id) })
       menu.showMenu(event, items)
     } catch (error) { onError(error) }

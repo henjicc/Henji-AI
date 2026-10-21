@@ -129,6 +129,23 @@ export class VideoEditCodeGpu {
     this.pending = this.device.queue.onSubmittedWorkDone().then(completed); this.counts.filterFrames++
     return target.picture
   }
+  /**
+   * Speculative first frame of an instance the playhead is about to reach: loads its module and builds its GPU
+   * resources and author state off the playback path. The picture is never shown; the instance stays protected
+   * from release until `protectAuthorInstances` drops it.
+   */
+  async warmAuthor(instanceKey: string, program: CodeAuthorProgram, size: { width: number; height: number }, parameters: Readonly<Record<string, unknown>>, assets: AuthorAssets, info: AuthorFrameInfo, filter?: boolean): Promise<void> {
+    return this.trackAuthor(async () => {
+      await this.ready; this.assertLive()
+      const runtime = await this.authors().instance(instanceKey, program); this.assertLive()
+      const target = this.surface(`warm:${instanceKey}`, size.width, size.height)
+      const input = filter ? this.surface(`warm:input:${instanceKey}`, size.width, size.height) : undefined
+      // The picture is discarded: free it at once (destroy waits for the submitted work) instead of holding a full frame per warmed instance.
+      try { await runtime.render(target.picture.texture, size.width, size.height, parameters, assets, info, undefined, input ? { current: input.picture.texture, frames: [] } : undefined) }
+      finally { this.releaseSurface(`warm:${instanceKey}`); if (input) this.releaseSurface(`warm:input:${instanceKey}`) }
+    })
+  }
+  protectAuthorInstances(keys: ReadonlySet<string>): void { this.authorPrograms?.protect(keys) }
   observeAuthor(instanceKey: string): ReturnType<VideoEditAuthorPrograms['observe']> { return this.authorPrograms?.observe(instanceKey) ?? [] }
   async retainAuthorInstances(keys: ReadonlySet<string>): Promise<void> { await this.authorPrograms?.retain(keys) }
   private readonly performanceFrames = new Map<string, CodeFramePerformance>()

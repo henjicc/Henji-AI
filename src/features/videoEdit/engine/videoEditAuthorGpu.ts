@@ -64,6 +64,8 @@ export class VideoEditAuthorGpu {
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: view(target), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }] })
     pass.end()
   }
+  /** Drops a frame whose author code must run again before anything was submitted. */
+  abandon(): void { this.encoder = undefined }
   finish(): void {
     if (!this.encoder) return
     this.device.queue.submit([this.encoder.finish()])

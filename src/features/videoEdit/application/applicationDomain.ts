@@ -11,6 +11,7 @@ import { handleVideoEditMulticamCapability } from './videoEditMulticamCapability
 import { handleTitleTemplateCapability } from './videoEditTitleTemplateCapability'
 import { TitleTemplateCollectionExecutor, TitleTemplateMutationExecutor } from './videoEditTitleTemplateReflection'
 import { handleVideoEditProxyCapability } from './videoEditProxyCapability'
+import { handleVideoEditRenderCacheCapability } from './videoEditRenderCacheCapability'
 import { screenAttentionVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditScreenAttentionCapability'
 import { executeVideoEditScreenAttentionCapability } from './videoEditScreenAttentionCapability'
 import { reframeVideoEditCapability } from '@/core/application-control/domains/videoEdit/videoEditReframeCapability'
@@ -158,6 +159,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (transfer) return transfer
       const proxy = await handleVideoEditProxyCapability(definition.id, raw, context)
       if (proxy) return proxy
+      const preview = await handleVideoEditRenderCacheCapability(definition.id, raw, context)
+      if (preview) return preview
       const scenes = await handleVideoEditSceneCapability(definition.id, raw, context)
       if (scenes) return scenes
       if (definition.id === screenAttentionVideoEditCapability.id) return executeVideoEditScreenAttentionCapability(screenAttentionVideoEditCapability.inputSchema.parse(raw), context.signal)

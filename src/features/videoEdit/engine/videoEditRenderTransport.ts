@@ -209,7 +209,7 @@ export class VideoEditRenderTransport {
   }
   private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
     if (this.disposed) return Promise.reject(this.failure ?? new Error('剪辑渲染已关闭。'))
-    if (this.pending.size >= 3) return Promise.reject(new Error('剪辑渲染请求过多。'))
+    if (this.pending.size >= 4) return Promise.reject(new Error('剪辑渲染请求过多。'))
     const id = ++this.nextId
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.fail(new Error('剪辑渲染超过时限，已停止当前画面任务。请检查代码效果后重新加载预览；已保存的作品不受影响。')), this.requestTimeoutMs)
@@ -265,6 +265,11 @@ export class VideoEditRenderTransport {
   async armPlayback(frame: number): Promise<void> { await this.ready; await this.request({ kind: 'arm', frame }) }
   /** 智能区域（4.7d）：已分析好的段落交给 Worker，下一次渲染即使用。 */
   setSmartRegions(regions: VideoEditSmartRegionSegments): void { if (!this.disposed) this.worker.postMessage({ kind: 'regions', regions, id: 0 } satisfies RenderRequest) }
+  /** Ready pre-rendered windows of the current sequence (program playback only); local files map to worker URLs here. */
+  setRenderCache(windows: ReadonlyArray<Omit<import('./videoEditRenderer').VideoEditRenderCacheWindow, 'url'> & { path: string }>): void {
+    if (this.disposed) return
+    this.worker.postMessage({ kind: 'renderCache', id: 0, windows: windows.map(({ path, ...window }) => ({ ...window, url: toFetchableMediaUrl(path) })), localPaths: Object.fromEntries(windows.map(window => [toFetchableMediaUrl(window.path), window.path])) } satisfies RenderRequest)
+  }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {

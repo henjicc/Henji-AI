@@ -7,7 +7,7 @@
 1. 读 `video_edit.document` 和目标 `video_edit.sequence`，分页查子实体；序列规格优先取交付简报，再参考主素材。有理帧率 `video_edit.sequence.frame_rate` 的 numerator/denominator 不要四舍五入成整数帧率。
 2. 序列用通用 `create_items` 在文档下创建，`video_edit.sequence.name` 必填；不要依赖未指定的初始规格。轨道在序列下创建，`video_edit.track.kind` 必填；片段的 `video_edit.clip.track` 写实际 `video_edit.track.index`，不是 V1/A1 显示编号。轨道 kind/index 只读，改名走 `video_edit.track.name`。
 3. 命名可用“粗剪_访谈”“成片_竖版”“开场_走进工厂”；保留用户既有体系。素材箱 `video_edit.bin.name` / `video_edit.bin.parent_id`、项目项 `video_edit.item.name` / `video_edit.item.bin_id` 可通用修改。不为数量、目录层数设产品上限；列表分页，创建按发现的每次事务容量分批。
-4. 常用组织起点是主画面、补充画面、图文、对白、音效、音乐分轨；纪录现场声可混合呈现，一镜到底也可只用必要轨道。分轨是为了独立编辑，不规定固定轨数或禁止某种混音。
+4. 常用组织起点是主画面、补充画面、图文、对白、音效、音乐分轨；纪录现场声可混合呈现，一镜到底也可只用必要轨道。分轨是为了独立编辑，不规定固定轨数。
 
 ## 时间与关联
 
@@ -42,4 +42,4 @@
 
 定向看片沿 `observe_video_edit_frame`：target.kind="frames" 给1–12个 frames，去重排序；near_cut 给 cutFrame（切入后第一帧）、before/after（各0–5，默认各2），连续取帧并限制在序列首尾。临时放大直接给 cropRegion={x,y,width,height}（归一化且完整在画面内），支持源帧、合成帧和联系表，无需创建标注；与 cropAnnotationId 二选一。reference={itemRef,offsetUs?} 取同一剪辑内的参考图片/视频与成片并排，左成片右参考；视频参考时间为成片秒数加微秒偏移，图片始终取0，检查返回 comparison.referenceTimesUs。联系表与比较只叠 cropRegion，不叠标注或元素高亮。先检查 contactSheet.frames 和 documentVersion，再读取资产图片；观察期间编辑、关闭或参考文件变化会拒绝旧结果，不移动播放头或改作品。均匀联系表不能证明不存在闪帧，切点优先连续看。
 
-回读所属序列、位置、时长、源范围、轨道与关联；涉及时间变化同时查字幕、标记和相邻片段。同目的修改进一组事务，跨返回引用分步骤。回滚前确认最近一步就是本次修改，避免撤销用户后来做的事；保存失败用 `save_video_edit` 只重试保存，不重放剪辑。
+回读所属序列、位置、时长、源范围、轨道与关联；涉及时间变化同时查字幕、标记和相邻片段。同目的修改进一组事务，跨返回引用分步骤。回滚前确认最近一步就是本次修改；保存失败用 `save_video_edit` 只重试保存，不重放剪辑。

@@ -48,7 +48,7 @@ import { videoEditTextResolution } from './videoEditTextSurface'
 const logger = createLogger('features.videoEdit.codeSources')
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
@@ -132,6 +132,43 @@ export class VideoEditCodeSources {
   /** The caller has established that immutable code versions and media did not change. */
   updateParameters(document: VideoEditComposition): void { this.cancel(); this.document = document }
   cancel(): void { this.epoch++; this.controller?.abort(); this.controller = undefined }
+  private warmTimer?: ReturnType<typeof setTimeout>
+  /**
+   * Prepares code clips and code effects the playhead reaches at `frame`, concurrently with playback: compiles their
+   * source, creates their author instances and draws one discarded frame, so the first visible frame does not pay
+   * for compilation, module loading, GPU pipelines or lazy author setup. Clips reading audio, video inputs or
+   * neighbour frames are compiled only. Never cancels or changes the current frame's preparation.
+   */
+  async warmAhead(document: VideoEditComposition, clips: readonly VideoEditClip[], frame: number, size: { width: number; height: number }, images: ReadonlyMap<string, ImageBitmap>, signal: AbortSignal): Promise<string[]> {
+    const runtime = this.runtime ??= await this.acquireRuntime()
+    const warmed: string[] = []
+    const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
+    const draw = async (clip: VideoEditClip, instance: CodeMaterialInstance, key: string, filter: boolean): Promise<void> => {
+      const program = await this.program(identity(instance.definitionId, instance.versionId), codeMaterialSource(document, instance), signal, pinned)
+      if (signal.aborted || this.disposed || program.kind !== (filter ? 'filter' : 'generator') || program.frames.length || codeMaterialUsesAudio(program) || !runtime.warmAuthor) return
+      const parameters = codeMediaFrameParameters(clip, evaluateCodeMaterialParameters(prepareCodeMaterialParameters(program, instance), videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, false)))
+      const assets: Record<string, CanvasImageSource> = {}
+      for (const [name, value] of Object.entries(parameters)) if (isCodeImageReference(value)) {
+        const image = images.get(value.mediaId)
+        if (!image) return
+        assets[name] = image
+      }
+      const context = codeMaterialContextForFrame(clip, frame, document.frameRate, program, document)
+      const target = filter ? size : { width: context.width, height: context.height }
+      await runtime.warmAuthor(key, program, target, parameters, assets, { time: context.time, frameDuration: 1 / document.fps, clip: { time: context.localTime, duration: clip.duration / document.fps } }, filter)
+      warmed.push(key)
+    }
+    for (const clip of clips) {
+      for (const effect of activeVideoEditEffects(clip)) if (effect.code) await draw(clip, effect.code, `${clip.id}:${effect.id}`, true).catch(error => logger.debug('代码效果预热未完成', { event: 'video_edit.code.warm_ahead.failed', error, context: { clipId: clip.id } }))
+      if (clip.kind === 'code' && clip.code) await draw(clip, clip.code, clip.id, false).catch(error => logger.debug('代码片段预热未完成', { event: 'video_edit.code.warm_ahead.failed', error, context: { clipId: clip.id } }))
+      if (signal.aborted) break
+    }
+    // Keep the warmed instances until their clips are drawn; a stale warm-up expires on its own.
+    runtime.protectAuthorInstances?.(new Set(warmed))
+    clearTimeout(this.warmTimer)
+    this.warmTimer = setTimeout(() => this.runtime?.protectAuthorInstances?.(new Set()), 10_000)
+    return warmed
+  }
   private async program(key: string, version: CodeMaterialVersion, signal: AbortSignal, pinned: ReadonlySet<string>): Promise<CodeMaterialProgram> {
     signal.throwIfAborted()
     const cached = this.programs.get(key)

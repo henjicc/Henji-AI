@@ -35,6 +35,38 @@ export function alignVideoEditClockToDisplay(target: number, vsync: number, peri
   return target + (((period / 2 - phase) % period) + period) % period
 }
 
+/**
+ * 正向播放下一张要画的帧：通常是紧接上一张提交的帧；画面跟不上时钟时直接跳到下一张还来得及按时呈现的帧（丢帧），
+ * 不让时钟被渲染拖慢、画面与声音越拉越远。`due` 是此刻按时钟应当在屏上的帧。
+ */
+export function videoEditPlaybackTarget(next: number, due: number, start: number, duration: number): number {
+  // Due exactly now: present it a moment late rather than dropping it. A whole frame behind: skip to the next one that can still be on time.
+  return Math.max(start, Math.min(duration - 1, due > next ? due + 1 : next))
+}
+
+/** 声音输出时间戳（AudioContext.getOutputTimestamp）的两个时基。 */
+export interface VideoEditAudioStamp { contextTime?: number; performanceTime?: number }
+
+/**
+ * 声音为主时钟：按扬声器实际输出的时间戳，换算出起点帧在 performance.now() 时基下“被听到”的时刻（含输出延迟）。
+ * `clockStart` 是起点帧声音在 AudioContext 时基下的排程时刻。声音尚未开始输出时返回 undefined。
+ */
+export function videoEditAudioClockOrigin(stamp: VideoEditAudioStamp, clockStart: number, now: number): number | undefined {
+  if (!(stamp.contextTime! > 0) || !(stamp.performanceTime! > 0)) return undefined
+  const heard = stamp.contextTime! + (now - stamp.performanceTime!) / 1000
+  return now - (heard - clockStart) * 1000
+}
+
+/**
+ * 画面时钟跟随声音：`origin` 是平滑后的声音起点。偏差不到一个刷新周期时不动——每帧的呈现时刻保持在两次刷新正中间，
+ * 时间戳抖动与两套时钟的缓慢频差都不让画面忽早忽晚；超过一个周期（起播时的输出延迟、长时间漂移、设备切换）才整体对齐，
+ * 并重新落到两次刷新正中间（`vsync` 为任一次刷新时刻）。
+ */
+export function followVideoEditAudioClock(current: number, origin: number, period: number, vsync?: number): number {
+  if (Math.abs(origin - current) <= period) return current
+  return vsync === undefined ? origin : alignVideoEditClockToDisplay(origin, vsync, period)
+}
+
 /** 示范中按现有播放时钟重画已到时刻，不把最新姿态排到下一张未来帧之后。 */
 export function videoEditLiveFrame(start: number, elapsedMs: number, fps: number, rate: number, direction: 1 | -1, duration: number): number {
   const steps = Math.floor(Math.max(0, elapsedMs) * fps * rate / 1000)

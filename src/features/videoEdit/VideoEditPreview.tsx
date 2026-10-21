@@ -31,7 +31,7 @@ import { subscribeVideoEditTracking, videoEditTrackResults } from './application
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { VIDEO_EDIT_AUDIO_BLOCK_SECONDS, VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
-import { alignVideoEditClockToDisplay, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditLiveFrame } from './engine/videoEditDisplayClock'
+import { alignVideoEditClockToDisplay, followVideoEditAudioClock, measureVideoEditDisplayPeriod, nextVideoEditDisplayFrame, videoEditAudioClockOrigin, videoEditLiveFrame, videoEditPlaybackTarget } from './engine/videoEditDisplayClock'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
 import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
@@ -61,6 +61,7 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_PLAYBACK_RESOLUTIONS, VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS, videoEditPreviewDivisor, type VideoEditPlaybackResolution, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
+import { readyVideoEditRenderWindows } from './application/videoEditRenderCache'
 
 const logger = createLogger('features.videoEdit.preview')
 /** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 回放分辨率 ~56 + 更多 28 + 间距 */
@@ -274,8 +275,19 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     /** 已提交给 GPU、结果还没回来的正向播放帧（两帧流水，见下方 present）。 */
     let submittedFrame = -1
     let playbackInFlight = 0
+    /** Forward frames already queued in the Worker but not yet submitted (one is prepared while the previous waits for its refresh). */
+    let unsubmitted = 0
+    let queuedFrame = -1
+    /** 本次播放因跟不上时钟而跳过的帧数（播放验收读取）。 */
+    let droppedFrames = 0
+    /** 已交给渲染器的预渲染窗口（按内容指纹）；节目播放时整帧取自预览文件。 */
+    let appliedRenderCache = ''
+    let renderCacheCheckedAt = -Infinity
     // 起播预热时提前混好的第一块声音：起播时钟不必再留 100ms 等混音。
     let displayPeriod: number | undefined
+    /** A refresh timestamp of this play run and the smoothed audio-clock origin the picture follows. */
+    let displayVsync: number | undefined
+    let audioOrigin: number | undefined
     let lastParameterUpdate = -Infinity
     let historyEnabled = false
     let displayMeasuredAt = -Infinity
@@ -427,6 +439,12 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           stopAudio(); wasPlaying = false; await renderer.updateDocument(document, captureFull > 0); appliedProxy = proxySignature; lastFrame = -1; lastRequested = -1
           if (stopped) return
         }
+        if (performance.now() - renderCacheCheckedAt > 250) {
+          renderCacheCheckedAt = performance.now()
+          const ready = readyVideoEditRenderWindows(instance.document.id, document)
+          const signature = ready.map(window => window.key).join(',')
+          if (signature !== appliedRenderCache) { appliedRenderCache = signature; renderer.setRenderCache(ready) }
+        }
         const divisor = captureFull > 0 ? 1 : videoEditPreviewDivisor(getVideoEditPlaybackResolution(instance.document.id), current.playing)
         if (divisor !== appliedDivisor) {
           await renderer.setRenderDivisor(divisor)
@@ -456,7 +474,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           if (initialResult.presented === false) { lastFrame = -1; lastRequested = -1; wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           if (initialResult.presented !== true) recordPresentation(initialFrame, initialResult, requestedAt, false, document)
           const phaseFirst = performance.now()
-          lastFrame = initialFrame; lastScrubbing = false; submittedFrame = -1
+          lastFrame = initialFrame; lastScrubbing = false; submittedFrame = -1; queuedFrame = -1
           lastRequested = initialFrame; activeCommand = command
           if (audioReady) {
             await audioReady
@@ -470,6 +488,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           const lead = premixed ? PLAY_PREMIXED_LEAD_SECONDS : 0.1
           // 起点放在两次刷新正中间，避免每帧呈现时刻贴着刷新边界来回跳（见 videoEditDisplayClock）。
           const vsync = displayPeriod ? await nextVideoEditDisplayFrame() : undefined
+          displayVsync = vsync; audioOrigin = undefined
           if (stopped) return
           const clockNow = performance.now(); const audioNow = audio?.currentTime ?? 0
           const clockAt = vsync !== undefined && displayPeriod ? alignVideoEditClockToDisplay(clockNow + lead * 1000, vsync, displayPeriod) : clockNow + lead * 1000
@@ -481,10 +500,20 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           logger.info('节目起播准备完成', { event: 'video_edit.program.play_start', context: { projectId: instance.document.id, sequenceId: document.id, frame: initialFrame, ...phases } })
           surface.dataset.playClockStartAt = String(clockPerformanceStart)
           surface.dataset.playStartFrame = String(startFrame)
+          droppedFrames = 0; surface.dataset.droppedFrames = '0'
         }
         if (!current.playing && wasPlaying) stopAudio()
         wasPlaying = current.playing
         if (current.playing) {
+          // 声音为主时钟：正常速度正放有声音时，画面按扬声器实际输出的时刻呈现，长时间播放不因两套时钟的频差漂移。
+          if (direction === 1 && (current.playbackRate ?? 1) === 1 && audio && meter && typeof audio.getOutputTimestamp === 'function' && audibleVideoEditClips(document).length) {
+            const origin = videoEditAudioClockOrigin(audio.getOutputTimestamp(), clockStart, performance.now())
+            if (origin !== undefined) {
+              // A slow average of the output timestamps: their jitter must not move individual frames.
+              audioOrigin = audioOrigin === undefined ? origin : audioOrigin + (origin - audioOrigin) * 0.02
+              clockPerformanceStart = followVideoEditAudioClock(clockPerformanceStart, audioOrigin, displayPeriod ?? 1000 / document.fps, displayVsync)
+            }
+          }
           const timelineTime = startFrame / document.fps + direction * (current.playbackRate ?? 1) * (performance.now() - clockPerformanceStart) / 1000
           if (direction === 1 ? timelineTime >= videoEditDuration(document) / document.fps && lastFrame >= videoEditDuration(document) - 1 : timelineTime <= 0 && lastFrame <= 0) { setVideoEditView(instance.document.id, { playing: false }, true); stopAudio() }
           if (direction === 1 && (current.playbackRate ?? 1) === 1 && audio && meter && audibleVideoEditClips(document).length) {
@@ -501,7 +530,10 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         }
         const playing = current.playing
         const liveRecording = playing && videoMotionState(current)?.status === 'recording'
-        const target = liveRecording ? videoEditLiveFrame(startFrame, performance.now() - clockPerformanceStart, document.fps, current.playbackRate ?? 1, direction, videoEditDuration(document)) : playing ? direction === 1 ? Math.max(startFrame, Math.min(videoEditDuration(document) - 1, Math.max(lastFrame, submittedFrame) + 1)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
+        const due = playing ? videoEditLiveFrame(startFrame, performance.now() - clockPerformanceStart, document.fps, current.playbackRate ?? 1, direction, videoEditDuration(document)) : current.frame
+        const next = Math.max(lastFrame, submittedFrame, queuedFrame) + 1
+        const target = liveRecording ? due : playing ? direction === 1 ? videoEditPlaybackTarget(next, due, startFrame, videoEditDuration(document)) : Math.min(startFrame, Math.max(0, lastFrame - 1)) : current.frame
+        if (playing && direction === 1 && !liveRecording && target > Math.max(next, startFrame) && target !== lastRequested) { droppedFrames += target - Math.max(next, startFrame); surface.dataset.droppedFrames = String(droppedFrames) }
         if (target !== lastRequested || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
           const scrubbing = !!current.scrubbing
           const requestedAt = performance.now()
@@ -511,12 +543,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 否则每帧都赶不上下一次刷新，画面成对出现（一帧晚、下一帧紧跟着补上，前一帧根本没显示）。
           // A history bitmap must finish before another draw can overwrite its surface.
           const pipelined = playing && direction === 1 && !liveRecording && !historyEnabled
-          if (pipelined) playbackInFlight++
-          const result = await renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
-            if (pipelined) { submittedFrame = target; if (playbackInFlight >= 2) return }
+          if (pipelined) { playbackInFlight++; unsubmitted++; queuedFrame = Math.max(queuedFrame, target) }
+          let submitted = false
+          const presentation = renderer.present(target, pipelined, scrubbing, deadline, scrubbing || pipelined ? () => {
+            if (pipelined) { submitted = true; unsubmitted--; submittedFrame = Math.max(submittedFrame, target); if (playbackInFlight >= 3 || unsubmitted >= 2) return }
             if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
-          } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing).finally(() => { if (pipelined) playbackInFlight-- })
+          } : undefined, undefined, 'interactive', historyEnabled, !playing && !scrubbing).finally(() => { if (pipelined) { playbackInFlight--; if (!submitted) unsubmitted-- } })
+          // Three frames in flight: while this one waits for its refresh in the Worker, the next one is already queued
+          // behind it, so main-thread work (timeline updates, meters) cannot delay its preparation.
+          if (pipelined && unsubmitted < 2 && playbackInFlight < 3 && !stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
+          const result = await presentation
           if (submittedFrame === target) submittedFrame = -1
+          if (queuedFrame === target && unsubmitted === 0) queuedFrame = -1
           {
             // A completed seek is useful while the pointer keeps moving. Only a different
             // document/lifetime invalidates it; the next iteration reads the latest target.
