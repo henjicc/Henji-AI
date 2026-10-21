@@ -18,6 +18,8 @@ import { OcrRecognitionPool } from './services/local-inference/ocr/recognitionPo
 import { screenOcrFrames } from './services/local-inference/ocr/screenFrames'
 import { withOcrImageBudget } from './services/local-inference/ocr/frameOcr'
 import type { PrivacyBox } from '../../src/core/screenRecording/privacy'
+import { runSoundAnalysis, runSoundTextEmbedding } from './services/local-inference/sound/analyze'
+import type { SoundAnalysisJob, SoundTextEmbeddingJob } from './services/local-inference/sound/protocol'
 
 /*
  * 本地推理后台进程（重要记录 003、任务 4.7d）：onnxruntime-node 原生推理与取帧都在这里，主进程只协调。
@@ -31,7 +33,7 @@ const log = (level: 'info' | 'warn', message: string, event: string, context: Re
 const renderedFrames = new RenderedTrackingFrames((id, requestId, request) => post({ type: 'frames', id, requestId, request }))
 
 let sessions: Promise<LocalModelSessions> | undefined
-type QueuedJob = { type: 'ocr-privacy'; job: OcrPrivacyJob } | { type: 'select-image-region'; job: ImageSubjectSelectionJob } | { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob }
+type QueuedJob = { type: 'ocr-privacy'; job: OcrPrivacyJob } | { type: 'select-image-region'; job: ImageSubjectSelectionJob } | { type: 'analyze'; job: SmartRegionAnalysisJob } | { type: 'track'; job: TrackingJob } | { type: 'candidates'; job: TrackingCandidatesJob } | { type: 'inpaint'; job: ImageInpaintJob } | { type: 'sound-analyze'; job: SoundAnalysisJob } | { type: 'sound-text'; job: SoundTextEmbeddingJob }
 const queue: QueuedJob[] = []
 const controllers = new Map<string, AbortController>()
 let running = false
@@ -140,6 +142,28 @@ async function run(job: SmartRegionAnalysisJob): Promise<void> {
   } finally { controllers.delete(job.id) }
 }
 
+async function runSound(entry: Extract<QueuedJob, { type: 'sound-analyze' | 'sound-text' }>): Promise<void> {
+  const controller = new AbortController(); controllers.set(entry.job.id, controller)
+  let lastProgress = 0
+  try {
+    // 只做 DSP 测量（听音模型未下载）时不载入推理运行时。
+    const openModel = async (model: Parameters<LocalModelSessions['open']>[0], providers: Parameters<LocalModelSessions['open']>[1], shape: string) => {
+      sessions ??= loadOnnxRuntime().then(runtime => new LocalModelSessions(runtime, log))
+      return (await sessions).open(model, providers, shape)
+    }
+    const result = entry.type === 'sound-text'
+      ? await runSoundTextEmbedding(entry.job, { openModel, signal: controller.signal, log })
+      : await runSoundAnalysis(entry.job, { openModel, signal: controller.signal, log, progress: (done, total) => {
+        const now = Date.now()
+        if (done < total && now - lastProgress < 200) return
+        lastProgress = now; post({ type: 'progress', id: entry.job.id, done, total })
+      } })
+    post({ type: 'done', id: entry.job.id, result })
+  } catch (error) {
+    post({ type: 'failed', id: entry.job.id, code: controller.signal.aborted ? 'cancelled' : 'inference', message: error instanceof Error ? error.message.slice(0, 500) : '音效分析失败。' })
+  } finally { controllers.delete(entry.job.id) }
+}
+
 async function drain(): Promise<void> {
   if (running) return
   running = true
@@ -149,6 +173,7 @@ async function drain(): Promise<void> {
       else if (entry.type === 'ocr-privacy') await runPrivacy(entry.job)
       else if (entry.type === 'select-image-region') await runSelectImageRegion(entry.job)
       else if (entry.type === 'inpaint') await runInpaint(entry.job)
+      else if (entry.type === 'sound-analyze' || entry.type === 'sound-text') await runSound(entry)
       else await runTrack(entry)
     }
   } finally { running = false }
@@ -157,7 +182,7 @@ async function drain(): Promise<void> {
 port.on('message', (event) => {
   const request = event.data as LocalInferenceRequest
   if (request.type === 'frames') { renderedFrames.reply(request.id, request.reply); return }
-  if (request.type === 'ocr-privacy' || request.type === 'select-image-region' || request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint') { queue.push(request); void drain() }
+  if (request.type === 'ocr-privacy' || request.type === 'select-image-region' || request.type === 'analyze' || request.type === 'track' || request.type === 'candidates' || request.type === 'inpaint' || request.type === 'sound-analyze' || request.type === 'sound-text') { queue.push(request); void drain() }
   else if (request.type === 'cancel') {
     const index = queue.findIndex(entry => entry.job.id === request.id)
     if (index >= 0) { const [entry] = queue.splice(index, 1); post({ type: 'failed', id: entry.job.id, code: 'cancelled', message: '分析已取消。' }) }

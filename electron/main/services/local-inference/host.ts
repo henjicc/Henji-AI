@@ -4,6 +4,7 @@ import type { LocalInferenceEvent, LocalInferenceFailureCode, LocalInferenceRequ
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 import { assertTrackingFrames, type TrackingFrameProvider } from '../../../../src/platform/contracts/tracking'
 import type { ImageInpaintJob, ImageInpaintResult } from './inpainting/protocol'
+import type { SoundAnalysisJob, SoundAnalysisResult, SoundTextEmbeddingJob, SoundTextEmbeddingResult } from './sound/protocol'
 
 /*
  * 主进程侧的本地推理宿主：按需启动后台进程（utility process），派发分析、转发进度与日志、取消；
@@ -107,6 +108,15 @@ export class LocalInferenceHost {
 
   candidates(job: TrackingCandidatesJob, frames?: TrackingFrameProvider): Promise<TrackingCandidatesResult> {
     return this.send<TrackingCandidatesResult>({ type: 'candidates', job }, job.id, () => undefined, frames)
+  }
+
+  /** 音效库：解码与测量一批音效（听音模型就绪时一并算向量），与其他分析同一个队列。 */
+  analyzeSounds(job: SoundAnalysisJob, progress: (done: number, total: number) => void = () => undefined): Promise<SoundAnalysisResult> {
+    return this.send<SoundAnalysisResult>({ type: 'sound-analyze', job }, job.id, progress)
+  }
+
+  embedSoundText(job: SoundTextEmbeddingJob): Promise<SoundTextEmbeddingResult> {
+    return this.send<SoundTextEmbeddingResult>({ type: 'sound-text', job }, job.id, () => undefined)
   }
 
   private send<T>(request: LocalInferenceRequest, id: string, progress: (done: number, total: number) => void, frames?: TrackingFrameProvider): Promise<T> {
