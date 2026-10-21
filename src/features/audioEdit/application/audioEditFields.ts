@@ -1,3 +1,4 @@
+import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '@/core/audioEdit/regions'
 import { z } from 'zod'
 import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, type JsonValue, fieldWriterTable } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
@@ -40,6 +41,8 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'reference_script', '参考逐字稿', TEXT, (s) => s.document.referenceScript, (s, v) => { s.document.referenceScript = string(v) }, ['setReferenceScript']),
     field(E.project, 'batch_settings', '批量剪辑设置', objectValue('audio_edit.batch_settings'), (s) => json(s.document.batchSettings ?? {}), (s, v) => { s.document.batchSettings = audioEditSettingsSchema.parse(v) }),
     field(E.project, 'cuts', '声音编辑区间（mode 为 delete 删除或 mute 静音，省略时删除）', objectValue('audio_edit.cuts'), (s) => json(s.document.cuts ?? []), (s, v) => { s.document.cuts = audioEditCutsSchema.parse(v) }),
+    field(E.project, 'gain_regions', '音量区域（采样帧、分贝与淡入淡出采样帧）', objectValue('audio_edit.gain_regions'), s => json(s.document.gainRegions ?? []), (s, v) => { s.document.gainRegions = audioEditGainRegionsSchema.parse(v) }),
+    field(E.project, 'repairs', '声音修复区域（源采样帧、Hz、强度、启用与归一化画笔）', objectValue('audio_edit.repairs'), s => json(s.document.repairs ?? []), (s, v) => { s.document.repairs = audioEditRepairsSchema.parse(v) }),
     field(E.project, 'view_settings', '文字大小、左右留白与时间轴字幕', objectValue('audio_edit.view_settings'), (s) => json(s.document.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS), (s, v) => { s.document.viewSettings = audioEditViewSettingsSchema.parse(v) }),
     field(E.project, 'xml_frame_rate', '音频 XML 帧率', objectValue('audio_edit.frame_rate'), (s) => json(s.document.xmlFrameRate ?? { numerator: 25, denominator: 1 }), (s, v) => { s.document.xmlFrameRate = audioEditFrameRateSchema.parse(v) }),
     field(E.project, 'selected_asr_model_id', '语音识别模型', TEXT, (s) => s.document.selectedAsrModelId ?? ''),
@@ -87,6 +90,8 @@ export function audioEditWriterTable(entityType: AudioEditEntityType) { return f
 const audioEditValueSchemas: Record<string, z.ZodType> = {
   'audio_edit.batch_settings': audioEditSettingsSchema,
   'audio_edit.cuts': audioEditCutsSchema,
+  'audio_edit.gain_regions': audioEditGainRegionsSchema,
+  'audio_edit.repairs': audioEditRepairsSchema,
   'audio_edit.view_settings': audioEditViewSettingsSchema,
   'audio_edit.frame_rate': audioEditFrameRateSchema,
   'audio_edit.recipe': audioEditProcessorChainSchema,

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import type { AudioEditPreviewChunk, AudioEditPreviewChunkRequest } from '../../../../src/core/audioEdit/types'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { requireAudioEditProject } from './project-store'
-import { prepareAudioEditProcessedAudio } from './processors'
+import { prepareAudioEditRenderSource } from './render'
 import { prepareAudioEditAudio } from './media'
 
 export async function prepareAudioEditPreviewChunk(request: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk> {
@@ -10,7 +10,7 @@ export async function prepareAudioEditPreviewChunk(request: AudioEditPreviewChun
   const sourceStartFrame = Math.max(0, Math.min(project.source.durationFrames, Math.round(request.sourceStartFrame)))
   const frameCount = Math.min(Math.max(1, Math.round(request.frameCount)), project.source.sampleRate * 4, project.source.durationFrames - sourceStartFrame)
   if (frameCount <= 0) return { sourceStartFrame, sourceEndFrame: sourceStartFrame, sampleRate: project.source.sampleRate, channels: project.source.channels, pcm: new ArrayBuffer(0) }
-  const source = (request.processing ?? project.vstEnabled) ? await prepareAudioEditProcessedAudio(project) : await prepareAudioEditAudio(project)
+  const source = request.mode === 'source' ? await prepareAudioEditAudio(project) : await prepareAudioEditRenderSource(project, request.processing ?? project.vstEnabled)
   const binary = await loadFfmpegPath()
   const pcm = await new Promise<Buffer>((resolve, reject) => {
     execFile(binary, ['-v', 'error', '-ss', (sourceStartFrame / project.source.sampleRate).toFixed(9), '-i', source, '-t', (frameCount / project.source.sampleRate).toFixed(9),

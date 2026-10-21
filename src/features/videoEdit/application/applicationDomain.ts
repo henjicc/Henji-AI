@@ -1,3 +1,5 @@
+import { startVideoEditAudioDocumentLinks, sendVideoEditClipToAudioEdit } from './videoEditAudioLinks'
+import { sendVideoEditAudioCapability } from '@/core/application-control/domains/videoEdit/videoEditAudioLinkCapability'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { placeVideoEditSoundEffectsCapability } from '@/core/application-control/domains/videoEdit/videoEditSoundEffectCapability'
 import { placeVideoEditSoundEffects } from './videoEditSoundEffects'
@@ -83,6 +85,7 @@ import { analyzeVideoEditBeatsCapability } from '@/core/application-control/doma
 import { executeVideoEditBeatCapability } from './videoEditBeatCapability'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
+let stopAudioDocumentLinks: (() => void) | null = null
 let stopImageDocumentLinks: (() => void) | null = null
 let stopTracking: (() => void) | null = null
 let stopSmartRegions: (() => void) | null = null
@@ -135,6 +138,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 通用“收集素材到项目”（4.4）：导出进行中或参数调整未完成时不允许整份改写
     registerDocumentBusyCheck('video_edit', videoEditBusyReason)
     // 图片文档放进剪辑保持链接（4.1）：图片文档写回后，打开着的剪辑里链接它的片段自动重新渲染
+    stopAudioDocumentLinks ??= startVideoEditAudioDocumentLinks()
     stopImageDocumentLinks ??= startVideoEditImageDocumentLinks()
     // 智能区域（4.7d）：打开着的剪辑里挂了作用区域的效果，后台自动开始分析（不依赖页面是否打开）
     stopSmartRegions ??= startVideoEditSmartRegions()
@@ -142,6 +146,13 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
     getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, guardVideoEditDocumentAlgorithm(definition.id, async (raw, context) => {
+      if (definition.id === sendVideoEditAudioCapability.id) {
+        const input = sendVideoEditAudioCapability.inputSchema.parse(raw)
+        const target = splitVideoEditRef(input.clipRef)
+        if (target.projectId !== input.documentRef.id || !target.childId) throw new Error('片段必须属于目标剪辑')
+        const result = await sendVideoEditClipToAudioEdit(input.documentRef.id, target.childId, false)
+        return { resultRef: input.documentRef, created: result.created, audioDocumentRef: { kind: 'audio_edit.document', id: result.documentId }, clipRef: { kind: 'video_edit.clip', id: `${input.documentRef.id}:${result.clipId}` }, verified: await verifyVideoEditSaved(input.documentRef.id), message: '已建立音频编辑链接，保存声音后自动更新，可在剪辑中一步撤销链接。' }
+      }
       if (definition.id === videoEditStaggerCapability.id) {
         context.signal.throwIfAborted()
         const input = videoEditStaggerCapability.inputSchema.parse(raw), id = input.documentRef.id

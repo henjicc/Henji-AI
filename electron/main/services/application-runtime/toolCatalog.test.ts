@@ -102,6 +102,7 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.49.0'] = '1161579fdd7999995d56058f93844af7fecab29e5605b0e27e052bd2874673fd'
     // Style presets and templates (Frameflow mechanism): render/import/export/bind style, apply/create/promote/update/detach template; title template tools removed.
     fingerprints['2.50.0'] = 'ac839b4f9cb9be7ed5e6ccc4e8fc777ede1527174987649714ba3ad5959ace45'
+    fingerprints['2.51.0'] = '944ba245b4340c7ecf0d2aa1b7b1cd4f132586683a449a2f9078447d96f94111'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

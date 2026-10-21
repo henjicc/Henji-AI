@@ -11,6 +11,7 @@ import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { requireAudioEditProject } from './project-store'
 import { runAudioEditProcess } from './process'
+import { cachedAudioFile } from './render-cache'
 import { assertAudioEditProjectIdle, deleteAudioEditTasks, hasActiveAudioEditTask, registerAudioEditTaskController } from './task-store'
 import { registerDocumentProgramStateCleaner } from '../documents/program-state-cleaners'
 
@@ -156,16 +157,11 @@ export async function prepareAudioEditAudio(project: AudioEditProjectDocument, s
   await verifyAudioEditSource(project, false, signal)
   if (project.source.ownership !== 'external') return project.source.audioPath
   const directory = audioEditCacheDirectory(project.id)
-  await fs.mkdir(directory, { recursive: true })
-  const output = path.join(directory, `audio-${project.source.identity?.digest ?? 'source'}.wav`)
-  if (await fs.stat(output).then(() => true, () => false)) return output
-  const temporary = path.join(directory, `${crypto.randomUUID()}.wav`)
-  try {
-    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', project.source.sourcePath, '-map', `0:${project.source.audioStreamIndex ?? 0}`, '-vn', '-c:a', 'pcm_s16le', '-ar', String(project.source.sampleRate), '-ac', String(project.source.channels), temporary], signal)
-    signal?.throwIfAborted()
-    await fs.rename(temporary, output)
-    return output
-  } finally { await removeUnmanagedCachePath(temporary, { force: true }) }
+  const digest = project.source.identity?.digest ?? (await identifyAudioEditSource(project.source.sourcePath, signal)).digest
+  return cachedAudioFile(directory, `audio-f32-${digest}-${project.source.audioStreamIndex ?? 0}-${project.source.sampleRate}-${project.source.channels}`, 'wav', async temporary => {
+    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', project.source.sourcePath, '-map', `0:${project.source.audioStreamIndex ?? 0}`, '-vn', '-c:a', 'pcm_f32le', '-ar', String(project.source.sampleRate), '-ac', String(project.source.channels), temporary], signal)
+    await validateAudioEditAudio(temporary, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
+  }, signal)
 }
 
 /**

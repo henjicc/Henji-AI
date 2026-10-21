@@ -421,6 +421,8 @@ const audioApi: HenjiAudioApi = {
   transcribeEditProject: (payload) => ipcRenderer.invoke('audioEdit:asr:transcribe', payload),
   exportEditProject: (payload) => nativeInvoke('audioEdit:export', payload),
   listEditProcessors: () => nativeInvoke('audioEdit:processors:list'),
+  editSpectrogram: payload => nativeInvoke('audioEdit:spectrogram', payload),
+  renderEditAudio: payload => nativeInvoke('audioEdit:render', payload),
   prepareEditPreviewChunk: (payload) => nativeInvoke('audioEdit:preview:chunk', payload),
 }
 

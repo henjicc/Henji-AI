@@ -23,7 +23,7 @@ vi.mock('@/commands/imageEditorV3', async importOriginal => ({ ...await importOr
 vi.mock('@/commands/imageEditorV3Export', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), materializeImageEditorV3StandaloneRaster: producers.materialize }))
 vi.mock('@/features/imageMark/standalone/imageMarkV3RasterExportSpec', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), createImageMarkV3RasterExportSpec: producers.spec }))
 vi.mock('@/features/imageEdit/v3/export', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), prepareImageEditorV3ExportRender: vi.fn(), renderImageEditorV3ExportTilesWithGpu: producers.render }))
-vi.mock('@/features/audioEdit/application/audioEditApplicationService', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), exportAudioEdit: producers.exportAudio }))
+vi.mock('@/features/audioEdit/application/audioEditRegions', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), renderAudioEdit: producers.exportAudio }))
 vi.mock('@/features/audioEdit/application/audioEditProjectInstances', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), loadAudioEditProject: producers.loadAudio, flushAudioEditProject: producers.flushAudio, getAudioEditProjectInstance: producers.audioInstance }))
 vi.mock('@/features/assets/services/assetCollectionService', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), addMediaReferenceToLibrary: producers.addAsset, resolveLocalAssetPath: (value: string) => value }))
 vi.mock('@/features/assets/application/assetApplicationService', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), assetApplicationService: { inspect: producers.inspect } }))
@@ -120,40 +120,23 @@ it('图片编辑固定版本独立渲染；未被资产引用的渲染失败时�
   expect(producers.materialize).not.toHaveBeenCalled()
 })
 
-it('口播导出新 WAV/SRT 并读取剪后字幕；取消转发到原任务，选择已有文件拒绝', async () => {
-  const owner = { document: { name: '口播.wav', revision: 3, source: { identity: 'voice', sampleRate: 48000 }, vstEnabled: false }, version: 2 }
+it('音频作品按保存版本渲染并携带字幕，不要求手动导出；取消仍传递给原任务', async () => {
+  const owner = { document: { name: '口播', revision: 3, source: { sampleRate: 48000, durationFrames: 144000 }, transcript: [{ id: 'w', text: '剪后字幕', startFrame: 24000, endFrame: 48000, included: true, locked: false, granularity: 'word' }], cuts: [], vstEnabled: false }, version: 2 }
   producers.loadAudio.mockResolvedValue(owner); producers.audioInstance.mockReturnValue(owner); producers.flushAudio.mockResolvedValue(undefined)
-  const platform = getPlatform()
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/voice/cut.wav')
-  vi.spyOn(platform.system.fs, 'exists').mockResolvedValue(false)
-  vi.spyOn(platform.system.fs, 'readFile').mockResolvedValue(new TextEncoder().encode('1\n00:00:00,500 --> 00:00:01,000\n剪后字幕\n'))
+  const platform = getPlatform(), save = vi.spyOn(platform.system.dialog, 'save')
   const cancel = vi.spyOn(platform.audioEdit, 'cancelTask').mockResolvedValue(undefined)
-  producers.exportAudio.mockImplementation(async (input: { targetPath: string; subtitleTargetPath: string }) => ({ audioPath: input.targetPath, subtitlePath: input.subtitleTargetPath, durationFrames: 144000 }))
+  const output = path.resolve(path.sep, 'managed', 'voice.wav')
+  producers.exportAudio.mockResolvedValue({ audioPath: output, durationFrames: 144000, sampleRate: 48000, channels: 1, revision: 3 })
   const voice: VideoEditCreativeSourceRequest = { type: 'document', docRef: ref('voice') }
   const result = await prepareVideoEditCreativeResult(voice, options())
-  expect(result).toMatchObject({ asset: { filePath: 'D:/voice/cut.wav', mediaType: 'audio' }, origin: { type: 'document', docRef: ref('voice'), revision: 3 } })
-  expect(producers.loadAudio).toHaveBeenCalledWith('voice', 'D:/作品/voice')
-  expect(result.captions).toContain('剪后字幕')
-  expect(producers.exportAudio).toHaveBeenCalledWith(expect.objectContaining({ format: 'wav', targetPath: 'D:/voice/cut.wav', subtitleTargetPath: 'D:/voice/cut.srt' }))
+  expect(result).toMatchObject({ asset: { filePath: output, mediaType: 'audio' }, origin: { type: 'document', revision: 3 } })
+  expect(result.captions).toContain('剪后字幕'); expect(save).not.toHaveBeenCalled()
   const controller = new AbortController()
-  producers.exportAudio.mockImplementationOnce(() => new Promise((_, reject) => { controller.signal.addEventListener('abort', () => reject(new DOMException('取消', 'AbortError'))) ; queueMicrotask(() => controller.abort()) }))
+  producers.exportAudio.mockImplementationOnce(() => new Promise((_, reject) => { controller.signal.addEventListener('abort', () => reject(new DOMException('取消', 'AbortError'))); queueMicrotask(() => controller.abort()) }))
   await expect(prepareVideoEditCreativeResult(voice, options(vi.fn(), controller.signal))).rejects.toThrow()
   expect(cancel).toHaveBeenCalledTimes(1)
-  vi.mocked(platform.system.fs.exists).mockResolvedValue(true); producers.exportAudio.mockClear()
-  await expect(prepareVideoEditCreativeResult(voice, options())).rejects.toThrow('新的 WAV')
-  vi.mocked(platform.system.dialog.save).mockResolvedValue(null)
-  await expect(prepareVideoEditCreativeResult(voice, options())).rejects.toThrow('已取消')
-  expect(producers.exportAudio).not.toHaveBeenCalled()
-  // 放进剪辑时直接写进项目“生成结果”，重名顺延，不弹保存对话框
-  vi.mocked(platform.system.dialog.save).mockClear()
-  vi.spyOn(platform.system.paths, 'join').mockImplementation(async (...parts: string[]) => parts.join('/'))
-  vi.mocked(platform.system.fs.exists).mockImplementation(async (file: string) => file.endsWith('口播-剪辑.wav'))
-  const placed = await prepareVideoEditCreativeResult(voice, { ...options(), outputFolder: async () => 'D:/项目/生成结果' })
-  expect(placed.asset.filePath).toBe('D:/项目/生成结果/口播-剪辑 (2).wav')
-  expect(platform.system.dialog.save).not.toHaveBeenCalled()
-  // 没转写过的口播导出的 SRT 为空：只放声音，不带字幕（否则字幕导入报“没有可导入的字幕”）
-  vi.mocked(platform.system.fs.readFile).mockResolvedValue(new TextEncoder().encode(''))
-  expect((await prepareVideoEditCreativeResult(voice, { ...options(), outputFolder: async () => 'D:/项目/生成结果' })).captions).toBeUndefined()
+  owner.document.transcript = []
+  expect((await prepareVideoEditCreativeResult(voice, options())).captions).toBeUndefined()
 })
 
 it('目标失效时不再收录资产：原结果保留在生产方', async () => {

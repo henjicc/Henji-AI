@@ -16,7 +16,7 @@ export function restoreAudioEditBaseline(project: AudioEditProjectDocument): Aud
     ...project, editBaseline: baseline,
     transcript: baseline.transcript.map((block) => ({ ...block })),
     suggestions: baseline.suggestions.map((item) => ({ ...item, blockIds: [...item.blockIds] })),
-    cuts: [], batchSettings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, fillers: [...DEFAULT_AUDIO_EDIT_SETTINGS.fillers] },
+    cuts: [], gainRegions: [], repairs: [], batchSettings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, fillers: [...DEFAULT_AUDIO_EDIT_SETTINGS.fillers] },
     vstEnabled: false, processorChain: [],
   }
 }
@@ -24,6 +24,7 @@ export function restoreAudioEditBaseline(project: AudioEditProjectDocument): Aud
 /** IPC/schema normalization may reorder object keys; that is not an edit. */
 export function audioEditContentKey(value: AudioEditProjectDocument): string {
   return JSON.stringify({
+    gainRegions: value.gainRegions ?? [], repairs: value.repairs ?? [],
     transcript: value.transcript, suggestions: value.suggestions, cuts: value.cuts ?? [],
     batchSettings: value.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS,
     vstEnabled: value.vstEnabled, processorChain: value.processorChain ?? [],

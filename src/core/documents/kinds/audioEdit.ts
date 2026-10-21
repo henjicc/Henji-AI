@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { audioEditGainRegionsSchema, audioEditRepairsSchema } from '../../audioEdit/regions'
 
 import type { DocumentKindDescriptor } from './registry'
 
@@ -37,6 +38,7 @@ export const audioEditContentSchema = z.looseObject({
   suggestions: z.array(itemSchema),
   vstEnabled: z.boolean(),
   cuts: z.array(itemSchema).optional(),
+  gainRegions: audioEditGainRegionsSchema.optional(), repairs: audioEditRepairsSchema.optional(),
   processorChain: z.array(itemSchema).optional(),
 })
 
@@ -50,6 +52,7 @@ function isEmptyAudioEditContent(content: AudioEditDocumentContent): boolean {
   if (!content.source) return true
   return content.transcript.length === 0
     && !(content.cuts?.length)
+    && !(content.gainRegions?.length) && !(content.repairs?.length)
     && content.referenceScript.trim().length === 0
     && !(content.processorChain?.length)
 }
@@ -61,9 +64,10 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   untitledNames: { zh: '未命名口播', en: 'Untitled Voiceover' },
   storage: 'json',
   // 版本 1 = 旧口播工程（audio_edit_projects.document_json）去掉 id / name / createdAt / updatedAt / revision。
-  version: 1,
+  version: 2,
+  minReaderVersion: 1,
   contentSchema: audioEditContentSchema,
-  migrations: {},
+  migrations: { 1: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [], vstEnabled: false }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

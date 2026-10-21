@@ -94,6 +94,8 @@ export interface AudioEditProjectDocument {
   createdAt: number
   updatedAt: number
   revision: number
+  gainRegions?: import('./regions').AudioEditGainRegion[]
+  repairs?: import('./regions').AudioEditRepair[]
   cuts?: AudioEditCut[]
   batchSettings?: AudioEditBatchSettings
   processorChain?: AudioEditProcessorSetting[]
@@ -151,6 +153,7 @@ export interface AudioEditProcessorDescriptor {
 }
 
 export interface AudioEditPreviewChunkRequest {
+  mode?: 'source' | 'edited'
   projectId: string
   sourceStartFrame: number
   frameCount: number

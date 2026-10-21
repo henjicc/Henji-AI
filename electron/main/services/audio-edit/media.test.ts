@@ -7,16 +7,30 @@ vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: 
 vi.mock('../db', () => ({ getDb: vi.fn() }))
 vi.mock('../appPaths', () => ({ getProgramStoreDir: () => `${os.tmpdir()}/AudioEdit` }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (value: string) => value }))
-vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ categoryDirectory: (_category: string, id: string) => path.join(os.tmpdir(), '.痕迹AI缓存', 'audio-edit', id) }) }))
+vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ categoryDirectory: (_category: string, id: string) => path.join(directory ?? os.tmpdir(), '.痕迹AI缓存', 'audio-edit', id) }) }))
 vi.mock('./project-store', () => ({ requireAudioEditProject: vi.fn() }))
-import { identifyAudioEditSource, verifyAudioEditSource, audioEditCacheDirectory, probeAudioEditImport } from './media'
+import { identifyAudioEditSource, verifyAudioEditSource, audioEditCacheDirectory, probeAudioEditImport, prepareAudioEditAudio } from './media'
 import { cancelAudioEditTask, hasActiveAudioEditTask } from './task-store'
 import { runAudioEditProcess } from './process'
-vi.mock('../video/ffmpeg-loader', () => ({ loadFfprobePath: async () => 'ffprobe' }))
+vi.mock('../video/ffmpeg-loader', () => ({ loadFfprobePath: async () => 'ffprobe', loadFfmpegPath: async () => 'ffmpeg' }))
 vi.mock('./process', () => ({ runAudioEditProcess: vi.fn() }))
 
 let directory: string | undefined
 afterEach(async () => { if (directory) await fs.rm(directory, { recursive: true, force: true }); directory = undefined })
+it('concurrent source consumers share one validated float decode', async () => {
+  directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-source-decode-'))
+  const file = path.join(directory, 'source.wav'); await fs.writeFile(file, 'source')
+  const project = { id: 'decode', source: { ownership: 'external', sourcePath: file, audioPath: file, sampleRate: 48000, channels: 2, durationFrames: 48000 } } as AudioEditProjectDocument
+  let decodes = 0
+  vi.mocked(runAudioEditProcess).mockImplementation(async (binary, args) => {
+    if (binary === 'ffprobe') return JSON.stringify({ streams: [{ sample_rate: '48000', channels: 2, duration: '1' }] })
+    decodes++; expect(args).toContain('pcm_f32le'); await fs.writeFile(args.at(-1)!, 'float PCM'); return ''
+  })
+  const [first, second] = await Promise.all([prepareAudioEditAudio(project), prepareAudioEditAudio(project)])
+  expect(first).toBe(second); expect(decodes).toBe(1)
+  expect(await prepareAudioEditAudio(project)).toBe(first); expect(decodes).toBe(1)
+  vi.mocked(runAudioEditProcess).mockReset()
+})
 it('detects same-name, same-size, restored-time replacement without altering the source', async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-source-test-'))
   const file = path.join(directory, '中文 & # 原素材.wav')

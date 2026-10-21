@@ -424,13 +424,16 @@
         }
       ],
       "versions": {
-        "1": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c"
+        "1": "0d1f5d0fa22752a2e6c5ab6dd2d85b6b9a3f3bd9c47404fdb8f970a0bd55681c",
+        "2": "1cf1f0c8562dca7e4c0854d783840b2c8cc310e9d77c49e5503d0677fd400af7"
       },
       "readers": {
-        "1": 1
+        "1": 1,
+        "2": 1
       },
       "samples": {
-        "v1.json": "291d35efce75f1e1a662168ac2db602a34341bff7c76b691680204b01542dc01"
+        "v1.json": "291d35efce75f1e1a662168ac2db602a34341bff7c76b691680204b01542dc01",
+        "v2.json": "7114c9d93f17b7e5036fcf6b526d673edd49105351e24bf9665e2d661db24717"
       }
     },
     "document.camera_stage": {

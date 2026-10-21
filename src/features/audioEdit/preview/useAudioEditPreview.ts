@@ -7,6 +7,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { createPreviewOutput } from './previewGain'
+import { flushAudioEditProject } from '../application/audioEditProjectInstances'
 
 const CHUNK_SECONDS = 1
 const BUFFER_SECONDS = 3
@@ -68,6 +69,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     const generation = generationRef.current
     const filling = (async () => {
       try {
+        if (mode !== 'source') await flushAudioEditProject(project.id)
         while (queuedFramesRef.current < project.source.sampleRate * BUFFER_SECONDS && generation === generationRef.current) {
           const cursor = nextSourceFrameRef.current
           const span = spansRef.current.find((candidate) => cursor >= candidate.sourceStartFrame && cursor < candidate.sourceEndFrame)
@@ -84,7 +86,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
           const startFrame = Math.max(cursor, span.sourceStartFrame)
           const frameCount = Math.min(project.source.sampleRate * CHUNK_SECONDS, span.sourceEndFrame - startFrame)
           const silenceFrames = span.muted ? frameCount : startFrame < 0 ? Math.min(frameCount, -startFrame) : startFrame >= project.source.durationFrames ? frameCount : 0
-          const chunk = silenceFrames ? { sourceStartFrame: startFrame, sourceEndFrame: startFrame + silenceFrames, channels: project.source.channels, pcm: new Float32Array(silenceFrames * project.source.channels).buffer } : await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount: Math.min(frameCount, project.source.durationFrames - startFrame), processing: mode === 'edited' && project.vstEnabled })
+          const chunk = silenceFrames ? { sourceStartFrame: startFrame, sourceEndFrame: startFrame + silenceFrames, channels: project.source.channels, pcm: new Float32Array(silenceFrames * project.source.channels).buffer } : await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount: Math.min(frameCount, project.source.durationFrames - startFrame), mode: mode === 'source' ? 'source' : 'edited', processing: mode === 'edited' && project.vstEnabled })
           if (generation !== generationRef.current) break
           const decodedFrames = chunk.sourceEndFrame - chunk.sourceStartFrame
           if (decodedFrames <= 0) throw new Error('此位置无法读取音频，请重新定位后重试')
@@ -192,7 +194,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     }
   }, [channelCount, projectId, sampleRate])
 
-  const planKey = JSON.stringify([projectId, mode, project?.vstEnabled, project?.processorChain, activeSpans])
+  const planKey = JSON.stringify([projectId, mode, project?.vstEnabled, project?.processorChain, mode !== 'source' ? project?.gainRegions : undefined, mode !== 'source' ? project?.repairs : undefined, activeSpans])
   useEffect(() => {
     if (!nodeRef.current) return
     resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)

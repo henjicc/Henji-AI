@@ -1,3 +1,4 @@
+import { repairAudioEditRegion } from './audioEditRegions'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { preflightAudioEditTranscription } from './audioEditApplicationService'
@@ -64,6 +65,11 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     try {
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.document', id }, message: '' }
       switch (definition.id) {
+        case 'repair_audio_edit_region': {
+          if (!input.repair) throw new Error('请提供 repair 修复范围')
+          const rendered = await repairAudioEditRegion(id, input.repair, requestId)
+          result.durationFrames = rendered.durationFrames; result.message = '修复已渲染并保存，可在音频编辑中撤销。'; break
+        }
         case 'reset_audio_edit': await undoAllAudioEditChanges(id); result.message = instance.document.editBaseline?.kind === 'original' ? '已恢复初始剪辑与识别原文，可撤销本次恢复。' : '已恢复全部声音、分段和处理设置。旧口播没有保存最初识别原文，保留已有文字，可撤销本次恢复。'; break
         case 'format_audio_edit_subtitles': result.count = await formatProjectAudioEditCaptions(id); result.message = `已整理 ${result.count} 段字幕，文字区、波形区与 SRT 共用分段。`; break
         case 'quick_process_audio_edit': Object.assign(result, await quickProcessAudioEdit(id, input.range, requestId)); result.message = `已压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。`; break
