@@ -5,7 +5,7 @@ import { videoEditClipPictureSize } from './clipGeometry'
 import { sliceVideoEditCurves, videoEditClipValue, writeVideoEditClipKeyframes, type VideoEditKeyframe } from './keyframes'
 
 export function motionClipBase(clip: VideoEditClip): unknown {
-  return { id: clip.id, itemId: clip.itemId, kind: clip.kind, start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder, speed: clip.speed, x: clip.x, y: clip.y, rotation: clip.rotation, scale: clip.scale, anchorX: clip.anchorX, anchorY: clip.anchorY, curves: clip.curves, follow: clip.follow, disabledIntrinsicSections: clip.disabledIntrinsicSections }
+  return { id: clip.id, itemId: clip.itemId, kind: clip.kind, start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder, speed: clip.speed, timeRemap: clip.timeRemap, x: clip.x, y: clip.y, rotation: clip.rotation, scale: clip.scale, anchorX: clip.anchorX, anchorY: clip.anchorY, curves: clip.curves, follow: clip.follow, disabledIntrinsicSections: clip.disabledIntrinsicSections }
 }
 /** Include resolved source dimensions: fitting and ghost geometry must share the same picture. */
 export function motionClipGeometry(composition: Pick<VideoEditComposition, 'width' | 'height' | 'pixelAspectRatio' | 'frameRate' | 'items' | 'media' | 'sequences'>, clip: VideoEditClip): unknown {

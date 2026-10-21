@@ -1,14 +1,14 @@
 import { videoEditClipMedia, type VideoEditDocument, type VideoEditClip, type VideoEditSequence } from './document'
-import { videoEditClipSourceRange, videoEditClipSpeedValue } from './clipSpeed'
-import { videoEditFps, videoEditSourceSeconds } from './time'
+import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceRange } from './clipSpeed'
+import { videoEditFps } from './time'
 import { applyVideoEditTimelineEdit } from './timelineEdits'
 import { sceneApplyOptionsSchema, sceneCutsSchema, type SceneApplyOptions } from './sceneDetection'
 
 /** Source clock to the first timeline sample on the other side of a cut. Reverse samples the earlier edge. */
 export function videoEditSceneCutFrames(clip: VideoEditClip, sequence: VideoEditSequence, cuts: number[]): number[] {
   sceneCutsSchema.parse(cuts)
-  const fps = videoEditFps(sequence.frameRate); const step = videoEditClipSpeedValue(clip) / fps; const head = videoEditSourceSeconds(clip)
-  return [...new Set(cuts.map(time => clip.start + (clip.reverse ? Math.floor((head - time) / step + 1e-6) : Math.ceil((time - head) / step - 1e-6))))].filter(frame => frame > clip.start && frame < clip.start + clip.duration).sort((a, b) => a - b)
+  const fps = videoEditFps(sequence.frameRate)
+  return [...new Set(cuts.map(time => { const offset = videoEditClipFrameBoundaryAtSource(clip, time, fps) - clip.start; return clip.start + (clip.reverse ? Math.floor(offset + 1e-6) : Math.ceil(offset - 1e-6)) }))].filter(frame => frame > clip.start && frame < clip.start + clip.duration).sort((a, b) => a - b)
 }
 export interface SceneEditResult { document: VideoEditDocument; cutFrames: number[]; clipIds: string[]; markerIds: string[]; itemIds: string[] }
 export function applyVideoEditSceneCuts(document: VideoEditDocument, sequenceId: string, clipId: string, cuts: number[], options: SceneApplyOptions): SceneEditResult {

@@ -6,7 +6,8 @@ import type { VideoEditRatio } from './time'
 import { retimeVideoEditContent } from './timedContent'
 import { rescaleVideoEditClipKeyframes } from './keyframes'
 import { assertNoTrackOverlap, retimeVideoEditAnnotations } from './timelineTrims'
-import { changeVideoEditClipSpeed, setVideoEditClipReverse, stretchVideoEditClip, videoEditClipRetimed, videoEditClipSpeedSupported, videoEditStretchDurationLimits } from './clipSpeed'
+import { changeVideoEditClipSpeed, setVideoEditClipReverse, setVideoEditClipTimeRemap, stretchVideoEditClip, videoEditClipFrameBoundaryAtSource, videoEditClipRetimed, videoEditClipSourceSecondsAt, videoEditClipSpeedSupported, videoEditStretchDurationLimits } from './clipSpeed'
+import type { VideoEditFrameInterpolation, VideoEditTimeRemap } from './timeRemap'
 
 /**
  * 片段速度的编辑（4.13）：“速度/持续时间”对话框（Ctrl+R）、比率拉伸工具（R）与助手的速度属性都走这里，
@@ -19,6 +20,12 @@ export interface VideoEditSpeedChange {
   duration?: number
   reverse?: boolean
   preservePitch?: boolean
+  /** 速度曲线（时间重映射）；null 移除并回到原速。与 `speed`、`duration` 互斥，时长随曲线变化。 */
+  timeRemap?: VideoEditTimeRemap | null
+  /** 补帧方式（nearest 为默认帧采样）。 */
+  frameInterpolation?: VideoEditFrameInterpolation
+  /** 变调（半音，0 不变）。 */
+  pitchSemitones?: number
   /** 波纹编辑：同一轨道上后面的片段跟着前移／后移；关闭时变长只能用到后面片段之前的空白（PR）。 */
   ripple?: boolean
 }
@@ -59,6 +66,8 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
   if (!edited.length || edited.length !== ids.size) throw new Error('请先选择要改速度的片段。')
   if (change.speed && change.duration !== undefined) throw new Error('速度与持续时间只能改其中一个。')
   if (change.duration !== undefined && (!Number.isSafeInteger(change.duration) || change.duration < 1)) throw new Error('持续时间至少为 1 帧。')
+  if (change.timeRemap !== undefined && (change.speed || change.duration !== undefined)) throw new Error('速度曲线与常数速度、持续时间只能改其中一个：曲线决定时长。')
+  if (change.pitchSemitones !== undefined && !(Number.isFinite(change.pitchSemitones) && Math.abs(change.pitchSemitones) <= 24)) throw new Error('变调须在 -24 到 24 个半音之间。')
   assertVideoEditClipsEditable(sequence, [...ids]); assertVideoEditSpeedClips(edited)
   const { fps } = composition; const limit = sequenceLimit(fps)
   const changed = new Map<string, VideoEditClip>()
@@ -69,7 +78,13 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
     const room = change.ripple ? limit - clip.start : nextStart(sequence, clip, limit) - clip.start
     if (change.duration !== undefined) next = stretchVideoEditClip(next, Math.min(change.duration, room))
     else if (change.speed) next = changeVideoEditClipSpeed(next, change.speed, fps, { sourceDurationSeconds: sourceDuration(document, sequence, clip, metadata), maxDuration: room })
-    next = rescaleVideoEditClipKeyframes(next, time => Math.round(time * next.duration / clip.duration), next.duration)
+    else if (change.timeRemap !== undefined) next = setVideoEditClipTimeRemap(next, change.timeRemap, fps, room)
+    if (change.frameInterpolation !== undefined) { next = { ...next }; if (change.frameInterpolation === 'nearest') delete next.frameInterpolation; else next.frameInterpolation = change.frameInterpolation }
+    if (change.pitchSemitones !== undefined) { next = { ...next }; if (change.pitchSemitones) next.pitchSemitones = change.pitchSemitones; else delete next.pitchSemitones }
+    // 曲线变化时片段内关键帧跟着内容走（同一源时刻落在新时间线位置）；常数速度按比例缩放。
+    const followsContent = (clip.timeRemap || next.timeRemap) && Boolean(clip.reverse) === Boolean(next.reverse)
+    const remapped = next
+    next = rescaleVideoEditClipKeyframes(next, followsContent ? time => Math.round(videoEditClipFrameBoundaryAtSource(remapped, videoEditClipSourceSecondsAt(clip, clip.start + time, fps), fps)) - remapped.start : time => Math.round(time * next.duration / clip.duration), next.duration)
     changed.set(clip.id, defaultPreservePitch(clip, next, change.preservePitch))
   }
   let clips = sequence.clips.map(clip => changed.get(clip.id) ?? clip)

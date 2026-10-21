@@ -832,7 +832,7 @@ export class VideoEditRenderer {
           const playing = sequential && !clip.reverse
           // The parent's upcoming frames mapped through this clip's speed: the child schedules exactly the pictures it will show.
           const playbackPlan = playing && this.previewWidth ? {
-            key: JSON.stringify([nestedRender?.playbackPlan?.key, clip.id, clip.start, clip.duration, clip.sourceInUs, clip.sourceRemainder, clip.speed]),
+            key: JSON.stringify([nestedRender?.playbackPlan?.key, clip.id, clip.start, clip.duration, clip.sourceInUs, clip.sourceRemainder, clip.speed, clip.timeRemap, clip.frameInterpolation]),
             frames: (): number[] => {
               const frames: number[] = []
               for (const at of this.upcomingFrames(frame, clip.start + clip.duration)) {
@@ -1004,7 +1004,7 @@ export class VideoEditRenderer {
       pending.catch(() => this.stretchers.delete(clip.id))
       this.stretchers.set(clip.id, pending)
     }
-    await mixVideoEditStretchedSound({ ...request, stretcher: await pending!, semitones: 0, preservePitch: Boolean(clip.preservePitch) })
+    await mixVideoEditStretchedSound({ ...request, stretcher: await pending!, semitones: clip.pitchSemitones ?? 0, preservePitch: Boolean(clip.preservePitch) })
   }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
   async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {

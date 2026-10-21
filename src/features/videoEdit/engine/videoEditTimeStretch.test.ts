@@ -70,3 +70,41 @@ describe('Signalsmith Stretch 实际引擎', () => {
     expect(20 * Math.log10(Math.sqrt(power / (to - from)) / (.5 / Math.SQRT2))).toBeCloseTo(0, 0)
   })
 })
+
+describe('速度曲线的声音跟随（混音入口）', () => {
+  it('60 秒素材走 0.5×–2× 往复的速度曲线：每个音包落在曲线换算的位置，累计漂移小于 1 个音频块', async () => {
+    const { mixVideoEditStretchedSound } = await import('./videoEditTimeStretch')
+    const { setVideoEditClipTimeRemap, videoEditClipFrameBoundaryAtSource } = await import('@/core/videoEdit/clipSpeed')
+    const FPS = 30; const SECONDS = 60
+    const source = new Float32Array(RATE * SECONDS)
+    const bursts = Array.from({ length: 29 }, (_, index) => 1 + index * 2)
+    for (const t of bursts) for (let i = 0; i < 480; i++) source[t * RATE + i] = Math.sin(2 * Math.PI * 1000 * i / RATE) * Math.sin(Math.PI * i / 480)
+    const audio = { async *chunks(start: number, end: number) {
+      for (let first = Math.max(0, Math.floor(start * RATE / 4800) * 4800); first < Math.min(source.length, end * RATE + 1); first += 4800) {
+        const count = Math.min(4800, source.length - first)
+        yield { timestamp: first / RATE, duration: count / RATE, sampleRate: RATE, numberOfFrames: count, numberOfChannels: 1, copyTo: (target: Float32Array) => target.set(source.subarray(first, first + count)), close() {} }
+      }
+    } } as unknown as import('./videoEditFrameSource').VideoEditClipAudio
+    const points = Array.from({ length: 7 }, (_, index) => ({ offsetUs: index * 10_000_000, speed: index % 2 ? 2 : .5, interpolation: index % 3 === 2 ? 'ease' as const : 'linear' as const }))
+    const clip = setVideoEditClipTimeRemap({ start: 30, duration: SECONDS * FPS, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }, { points }, FPS)
+    const total = Math.round((clip.start + clip.duration) / FPS * RATE); const out = new Float32Array(total)
+    const stretcher = await VideoEditTimeStretcher.create(1, RATE)
+    // 导出式的按帧分块（1/30 秒），正好不与 512 样本网格对齐。
+    for (let first = 0; first < total; first += RATE / FPS) {
+      const length = Math.min(RATE / FPS, total - first); const targets = [new Float32Array(length)]
+      await mixVideoEditStretchedSound({ clip, fps: FPS, rate: RATE, channels: 1, from: first / RATE, to: (first + length) / RATE, base: first, targets, gainAt: () => 1, reads: [{ audio }], stretcher, semitones: 0, preservePitch: true })
+      out.set(targets[0], first)
+    }
+    let worst = 0
+    for (const t of bursts) {
+      // 音包中心（源 t + 5 ms）在时间线上的位置。
+      const expected = videoEditClipFrameBoundaryAtSource(clip, t + .005, FPS) / FPS * RATE
+      if (expected > total - 4000) continue
+      let best = 0; let at = 0
+      for (let i = Math.round(expected - 3000); i < expected + 3000; i++) { let energy = 0; for (let j = -96; j < 96; j++) energy += (out[i + j] ?? 0) ** 2; if (energy > best) { best = energy; at = i } }
+      worst = Math.max(worst, Math.abs(at - expected))
+    }
+    if (process.env.HENJI_TEST_DIAGNOSTICS === '1') process.stdout.write(JSON.stringify({ worstBurstOffsetSamples: worst, clipSeconds: clip.duration / FPS }) + '\n')
+    expect(worst).toBeLessThan(VIDEO_EDIT_STRETCH_BLOCK)
+  }, 60_000)
+})

@@ -7,6 +7,7 @@ import { isVideoEditSequenceSize, videoEditSequenceSizeFields } from './sequence
 import { rescaleVideoEditFrame, videoEditFps, videoEditRatioSchema, VIDEO_EDIT_FRAME_RATES } from './time'
 import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipHeadRoom, videoEditClipSourceSecondsAt, videoEditClipSpeedSchema, videoEditClipSpeedSupported, videoEditClipSpeedValue, videoEditClipTailRoom, videoEditClipWithinSource } from './clipSpeed'
 import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './codeMaterialPersistence'
+import { videoEditFrameInterpolationSchema, videoEditTimeRemapSchema } from './timeRemap'
 import { codeElementOverridesSchema } from './codeElementOverrides'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
@@ -60,6 +61,10 @@ export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './c
  * 被替换下来的镜头版本（4.12 原地生成的“替换镜头”，PR 的替换素材）：片段换成新画面后仍记着原来用的素材与入点，
  * 可以随时切回。只记引用，不校验素材项是否还在（素材从项目移除后切回时如实拒绝），不参与渲染。
  */
+/** 速度曲线、补帧与变调（剪辑内容第 19 版新增的可选字段），片段与镜头版本共用。 */
+function videoEditClipTimingExtensionFields() {
+  return { timeRemap: videoEditTimeRemapSchema.optional(), frameInterpolation: videoEditFrameInterpolationSchema.optional(), pitchSemitones: z.number().finite().min(-24).max(24).optional() }
+}
 const videoEditClipStateSchema = z.object({
   multicamCameraId: identifier.optional(),
   trackers: z.array(videoEditTrackerSchema).max(VIDEO_EDIT_MAX_TRACKERS).optional(),
@@ -86,12 +91,15 @@ const videoEditClipStateSchema = z.object({
    */
   speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
   frameHold: z.literal(true).optional(),
+  /** 时间重映射（速度曲线，见 timeRemap.ts），与 `speed`、`frameHold` 互斥；`frameInterpolation` 补帧方式；`pitchSemitones` 变调（半音）。 */
+  ...videoEditClipTimingExtensionFields(),
 }).strict()
 export const videoEditClipTakeSchema = z.object({
   frameHold: z.literal(true).optional(),
   itemId: identifier, name, kind: z.enum(['video', 'audio', 'image']), duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
   speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
+  ...videoEditClipTimingExtensionFields(),
   /** 与镜头一起替换的声音，保留源范围、声道与效果；offset 相对镜头起点，可随移动切回。 */
   linkedAudio: z.array(z.object({ clip: videoEditClipStateSchema, offset: z.number().int() }).strict()).optional(),
 }).strict()
@@ -240,8 +248,9 @@ export const videoEditDocumentSchema = z.object({
       for (const code of videoEditEffectCodes(clip.effects)) if (!definitionsById.get(code.definitionId)?.versions.some(version => version.id === code.versionId)) issue('附加效果的固定源码版本不存在。')
       if (!track || track.kind !== (clip.kind === 'audio' ? 'audio' : 'video')) issue(`片段 ${clip.name} 的轨道类型不匹配。`)
       if (clip.start + clip.duration > Math.floor(fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)) issue('序列最长为 24 小时。')
-      if ((clip.speed || clip.reverse || clip.preservePitch) && !videoEditClipSpeedSupported(clip.kind)) issue(`片段 ${clip.name} 不能改速度或倒放。`)
-      if (clip.frameHold && (clip.kind !== 'video' && clip.kind !== 'sequence' || clip.sourceComponent === 'audio' || clip.speed || clip.reverse || clip.preservePitch)) issue('定格必须引用视频或序列画面，且不能同时变速、倒放或保持音调。')
+      if ((clip.speed || clip.reverse || clip.preservePitch || clip.timeRemap || clip.pitchSemitones || clip.frameInterpolation) && !videoEditClipSpeedSupported(clip.kind)) issue(`片段 ${clip.name} 不能改速度、倒放或变调。`)
+      if (clip.frameHold && (clip.kind !== 'video' && clip.kind !== 'sequence' || clip.sourceComponent === 'audio' || clip.speed || clip.reverse || clip.preservePitch || clip.timeRemap)) issue('定格必须引用视频或序列画面，且不能同时变速、倒放、保持音调或使用速度曲线。')
+      if (clip.timeRemap && clip.speed) issue(`片段 ${clip.name} 的速度曲线与常数速度不能同时存在。`)
       if (media && media.kind !== 'image' && !videoEditClipWithinSource(clip, fps, media.durationSeconds, Math.max(1, videoEditClipSpeedValue(clip)) / fps)) issue(`片段 ${clip.name} 超出源素材范围。`)
     }
     for (const annotation of sequence.annotations) {
@@ -307,7 +316,7 @@ export function videoEditNestedComposition(document: VideoEditComposition, clip:
   if (!sequence) throw new Error('嵌套序列已移除或未包含在渲染快照中。')
   const composition = composeVideoEditSequence(document, sequence)
   if (clip.start !== undefined && clip.duration !== undefined && clip.sourceInUs !== undefined) {
-    const timing = { start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder ?? { numerator: 0, denominator: 1 }, speed: clip.speed, reverse: clip.reverse, frameHold: clip.frameHold }
+    const timing = { start: clip.start, duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: clip.sourceRemainder ?? { numerator: 0, denominator: 1 }, speed: clip.speed, reverse: clip.reverse, frameHold: clip.frameHold, timeRemap: clip.timeRemap }
     composition.captions = projectVideoEditNestedCaptions(sequence, timing, document.fps)
     composition.clips = projectVideoEditNestedContentClips(sequence, timing, document.fps)
   }

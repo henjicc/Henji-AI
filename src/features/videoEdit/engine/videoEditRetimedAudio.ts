@@ -117,8 +117,10 @@ export async function mixVideoEditRetimedSound(request: VideoEditRetimedSoundReq
     const margin = (MAX_HALF_WIDTH + 4) / 8000 + speed / rate
     const buffer = await readVideoEditSourceBuffer(read.audio, Math.min(...edges) - margin, Math.max(...edges) + margin, rate, request.channels, read.gains)
     if (!buffer) continue
-    const { cutoff, halfWidth } = videoEditResampleKernel(speed * buffer.rate / rate)
+    // 抗混叠截止按局部速度：常数速度整段一样，速度曲线每 64 个样本按实际走过的源样本数更新一次。
+    let { cutoff, halfWidth } = videoEditResampleKernel(speed * buffer.rate / rate)
     for (let sample = first; sample < end; sample++) {
+      if (clip.timeRemap && (sample - first) % 64 === 0) ({ cutoff, halfWidth } = videoEditResampleKernel(Math.abs(sourceAt(sample + 64) - sourceAt(sample)) / 64 * buffer.rate))
       const position = sourceAt(sample) * buffer.rate
       const whole = Math.floor(position); const fraction = position - whole
       const gain = request.gainAt(sample)

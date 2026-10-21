@@ -20,6 +20,8 @@ import { buildDocumentEnvelope } from '../src/core/documents/envelope'
 import { buildProjectManifest } from '../src/core/documents/projectManifest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema } from '../src/core/videoEdit/document'
 import { makeVideoEditItemClip } from '../src/core/videoEdit/projectItems'
+import { setVideoEditClipTimeRemap } from '../src/core/videoEdit/clipSpeed'
+import { videoEditFps } from '../src/core/videoEdit/time'
 import { bindVideoEditCaptionSpeech } from '../src/core/videoEdit/captionSpeech'
 import { CODE_ASSET_VERSION, codeAssetSchema } from '../src/core/videoEdit/codeAsset'
 import { CODE_AUTHOR_API_VERSION } from '../src/core/videoEdit/codeMaterialPersistence'
@@ -93,6 +95,15 @@ const holdClip = makeVideoEditItemClip(document, 'golden-screen-item', sequence.
 holdClip.id = 'golden-frame-hold'
 holdClip.frameHold = true
 sequence.clips.push(holdClip)
+// 剪辑内容 v19：速度曲线（缓入慢放再加速）、帧混合与变调。
+const remapClip = setVideoEditClipTimeRemap(makeVideoEditItemClip(document, 'golden-screen-item', sequence.id, { frame: 210, duration: 60 }), { points: [
+  { offsetUs: 0, speed: 1, interpolation: 'ease' }, { offsetUs: 600000, speed: 0.25, interpolation: 'hold' }, { offsetUs: 900000, speed: 0.25, interpolation: 'linear' }, { offsetUs: 1500000, speed: 2, interpolation: 'linear' },
+] }, videoEditFps(sequence.frameRate))
+remapClip.id = 'golden-time-remap'
+remapClip.frameInterpolation = 'blend'
+remapClip.preservePitch = true
+remapClip.pitchSemitones = 2
+sequence.clips.push(remapClip)
 // v8：工程风格快照带理念、结构化规则、节奏与扩展动效；序列绑定它。
 const goldenKit = { ...BUILTIN_STYLE_KITS[0], id: 'golden-kit', name: '黄金风格', examples: [{ id: 'opener', title: '开场标题', note: '演示说明书里的错峰入场与字体层级。', source }] }
 document.styleKits = [goldenKit]
@@ -104,7 +115,7 @@ soundSequence.id = 'golden-sound-sequence'; soundDocument.sequences.push(soundSe
 soundDocument.media.push({ id: 'golden-sound', name: '鼓点', path: '/persistence-project/素材/鼓点.wav', kind: 'audio', durationSeconds: 3, width: 0, height: 0, hasAudio: true })
 soundDocument.items.push({ id: 'golden-sound-item', name: '鼓点', kind: 'audio', mediaId: 'golden-sound' })
 const soundClip = makeVideoEditItemClip(soundDocument, 'golden-sound-item', soundSequence.id, { frame: 0, duration: 90 })
-soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true
+soundClip.id = 'golden-sound-clip'; soundClip.snapToBeat = true; soundClip.pitchSemitones = -3
 document.media.push(...soundDocument.media)
 document.items.push(...soundDocument.items)
 clip.contentAnchor = { ranges: [{ clipId: soundClip.id, itemId: soundClip.itemId, fromUs: 0, toUs: 3000000 }], startOffsetSeconds: 0, endOffsetSeconds: 0 }

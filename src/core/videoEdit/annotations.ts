@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { VIDEO_EDIT_MAX_SEQUENCE_FRAMES } from './time'
-import { videoEditSourceSeconds } from './time'
-import { videoEditClipSourceMidSecondsAt, videoEditClipSpeedSupported, videoEditClipSpeedValue } from './clipSpeed'
+import { videoEditClipFrameBoundaryAtSource, videoEditClipSourceMidSecondsAt, videoEditClipSpeedSupported } from './clipSpeed'
 import type { VideoEditClip } from './document'
 
 const identifier = z.string().min(1).max(100)
@@ -71,8 +70,8 @@ export function retimeVideoEditAnnotation(mark: VideoEditAnnotation, before: Vid
   const convert = (frame: number): number => {
     if (!videoEditClipSpeedSupported(before.kind)) return frame + after.start - before.start
     const source = videoEditClipSourceMidSecondsAt(before, frame, fps)
-    const offset = (source - videoEditSourceSeconds(after)) / (videoEditClipSpeedValue(after) / fps) * (after.reverse ? -1 : 1) - 0.5
-    return after.start + Math.round(offset)
+    // 源时刻在新片段里的连续位置（速度、方向与速度曲线都在 clipSpeed.ts 换算），取所在帧。
+    return Math.round(videoEditClipFrameBoundaryAtSource(after, source, fps) - 0.5)
   }
   const mapped = mapVideoEditAnnotationTime(mark, convert)
   if ((mapped.endFrame ?? mapped.frame) < after.start || mapped.frame >= after.start + after.duration) return undefined

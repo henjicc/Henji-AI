@@ -136,7 +136,7 @@ export function retimeVideoEditContentClips(before: VideoEditSequence, after: Vi
         const previous = old.get(origins.get(clip.id)?.originalId ?? clip.id)
         const manuallyAdjusted = previous && JSON.stringify(previous.contentAnchor) === JSON.stringify(anchor)
           && (previous.start !== clip.start || previous.duration !== clip.duration)
-          && anchor.ranges.every(value => { const a = old.get(value.clipId); const b = current.get(value.clipId); return a && b && a.start === b.start && a.duration === b.duration && a.sourceInUs === b.sourceInUs && JSON.stringify(a.speed) === JSON.stringify(b.speed) && a.reverse === b.reverse })
+          && anchor.ranges.every(value => { const a = old.get(value.clipId); const b = current.get(value.clipId); return a && b && a.start === b.start && a.duration === b.duration && a.sourceInUs === b.sourceInUs && JSON.stringify(a.speed) === JSON.stringify(b.speed) && JSON.stringify(a.timeRemap) === JSON.stringify(b.timeRemap) && a.reverse === b.reverse })
         result = groups.flatMap((group, index) => {
           const from = Math.min(...group.map(value => value.from)); const to = Math.max(...group.map(value => value.to))
           const startOffsetSeconds = manuallyAdjusted ? (clip.start - from) / fps : anchor.startOffsetSeconds

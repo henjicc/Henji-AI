@@ -160,7 +160,7 @@ function holdFrame(sequence: VideoEditSequence, ids: string[], frame: number): V
       }
       if (clip.id !== middle.id) return clip
       const held: VideoEditClip = { ...clip, ...source, frameHold: true }
-      delete held.speed; delete held.reverse; delete held.preservePitch
+      delete held.speed; delete held.reverse; delete held.preservePitch; delete held.timeRemap; delete held.frameInterpolation; delete held.pitchSemitones
       delete held.linkId; delete held.groupId
       return held
     }) }
