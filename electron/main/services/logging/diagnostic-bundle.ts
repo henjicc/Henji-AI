@@ -1,5 +1,5 @@
 import { ZipArchive } from 'archiver'
-import { app, dialog } from 'electron'
+import { app } from 'electron'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
@@ -13,6 +13,7 @@ import type {
 import { createMainLogger } from './main-logger'
 import { queryLogEvents } from './query'
 import type { MainLogEvent } from './types'
+import { showSaveDialog } from '../dialogs'
 
 const logger = createMainLogger('main.logging.diagnostic_bundle')
 const MAX_DIAGNOSTIC_EVENTS = 500
@@ -178,7 +179,7 @@ async function writeZip(targetPath: string, payload: unknown): Promise<void> {
 export async function exportImageEditorDiagnosticBundle(
   request: ImageEditorDiagnosticBundleRequest,
 ): Promise<ImageEditorDiagnosticBundleResult> {
-  const result = await dialog.showSaveDialog({
+  const result = await showSaveDialog(null, {
     defaultPath: `Henji-AI-图片编辑诊断-${new Date().toISOString().slice(0, 10)}.zip`,
     filters: [{ name: 'ZIP', extensions: ['zip'] }],
   })

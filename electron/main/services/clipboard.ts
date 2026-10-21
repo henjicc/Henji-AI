@@ -1,6 +1,7 @@
-import { clipboard, nativeImage } from 'electron'
+import { clipboard, ClipboardItem, nativeImage } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { resolveSourceBytes } from './image/source'
 import { loadSharp } from './image/sharp-loader'
 import { createMainLogger } from './logging/main-logger'
@@ -54,50 +55,19 @@ function uniquePaths(paths: string[]): string[] {
   })
 }
 
-function parseNullSeparated(value: string): string[] {
-  return value
-    .split('\0')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-}
-
-function readWindowsClipboardFilePaths(): string[] {
-  const unicode = clipboard.readBuffer('FileNameW')
-  if (unicode.length > 0) {
-    return parseNullSeparated(unicode.toString('utf16le').replace(/\0+$/g, ''))
-  }
-
-  const ansi = clipboard.readBuffer('FileName')
-  if (ansi.length > 0) {
-    return parseNullSeparated(ansi.toString('utf8').replace(/\0+$/g, ''))
-  }
-
-  return []
-}
-
-function readMacClipboardFilePaths(): string[] {
-  const text = clipboard.read('NSFilenamesPboardType')
-  if (!text) return []
-
-  const quoted = Array.from(text.matchAll(/"([^"]+)"/g), (match) => match[1])
-  if (quoted.length > 0) return quoted
-
-  return text
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter((item) => item.startsWith('/'))
-}
-
-function readClipboardFilePaths(): string[] {
-  const paths = process.platform === 'darwin'
-    ? readMacClipboardFilePaths()
-    : readWindowsClipboardFilePaths()
+/** Electron 44 起剪贴板为异步 W3C 接口：文件列表统一读 text/uri-list（Windows CF_HDROP、macOS 文件引用都映射到它）。 */
+async function readClipboardFilePaths(): Promise<string[]> {
+  const item = (await clipboard.read()).find(entry => [...entry.types].includes('text/uri-list'))
+  if (!item) return []
+  const list = await (await item.getType('text/uri-list')).text()
+  const paths = list.split(/\r?\n/).map(line => line.trim()).filter(line => line.startsWith('file:'))
+    .flatMap(uri => { try { return [fileURLToPath(uri)] } catch { return [] } })
   return uniquePaths(paths.filter((filePath) => path.isAbsolute(filePath)))
 }
 
 export async function readClipboardFiles(): Promise<ClipboardFileEntryDto[]> {
   const entries: ClipboardFileEntryDto[] = []
-  const filePaths = readClipboardFilePaths()
+  const filePaths = await readClipboardFilePaths()
   for (const filePath of filePaths) {
     try {
       const stat = await fs.stat(filePath)
@@ -114,45 +84,49 @@ export async function readClipboardFiles(): Promise<ClipboardFileEntryDto[]> {
   return entries
 }
 
-export function readClipboardText(): string {
+export function readClipboardText(): Promise<string> {
   return clipboard.readText()
 }
 
 /**
  * 主动从剪贴板取一张图片。
  *
- * 两种来源都要覆盖：截图之类的原始位图走 `readImage()`，从资源管理器复制的图片文件
+ * 两种来源都要覆盖：截图之类的原始位图读 image/png，从资源管理器复制的图片文件
  * 走已有的文件列表读取。判断顺序放在这里而不是各调用方，避免每个界面各写一遍。
  * 剪贴板里没有图片时返回 null，由调用方决定怎么提示。
  */
-async function readNativeClipboardImage(expectWrittenImage = false): Promise<ReturnType<typeof clipboard.readImage>> {
-  let image = clipboard.readImage()
-  // Windows 暂时无法打开剪贴板时，readImage 和 availableFormats 都可能为空。
-  // 格式枚举不能作为是否重读的门槛；始终短暂让出主线程后有界重读。
+async function readClipboardPng(): Promise<Buffer | null> {
+  const item = (await clipboard.read()).find(entry => [...entry.types].includes('image/png'))
+  return item ? Buffer.from(await (await item.getType('image/png')).arrayBuffer()) : null
+}
+
+async function readNativeClipboardImage(expectWrittenImage = false): Promise<Buffer | null> {
+  let image = await readClipboardPng()
+  // Windows 暂时无法打开剪贴板时读取可能为空；短暂让出主线程后有界重读。
   const startedAt = performance.now()
   let deferredReads = 0
-  while (image.isEmpty() && performance.now() - startedAt < 250) {
+  while (!image?.length && performance.now() - startedAt < 250) {
     await new Promise<void>(resolve => setTimeout(resolve, 16))
-    image = clipboard.readImage()
+    image = await readClipboardPng()
     deferredReads++
   }
   if (deferredReads) logger.info('剪贴板图片延后读回', {
-    event: 'clipboard.image_read.deferred', context: { expectWrittenImage, deferredReads, durationMs: Math.round(performance.now() - startedAt), found: !image.isEmpty() },
+    event: 'clipboard.image_read.deferred', context: { expectWrittenImage, deferredReads, durationMs: Math.round(performance.now() - startedAt), found: Boolean(image?.length) },
   })
-  return image
+  return image?.length ? image : null
 }
 
 export async function readClipboardImage(): Promise<ClipboardImageDto | null> {
   const image = await readNativeClipboardImage()
-  if (!image.isEmpty()) {
+  if (image) {
     return {
-      dataUrl: image.toDataURL(),
+      dataUrl: `data:image/png;base64,${image.toString('base64')}`,
       name: `clipboard-${Date.now()}.png`,
       origin: 'bitmap',
     }
   }
 
-  const filePaths = readClipboardFilePaths()
+  const filePaths = await readClipboardFilePaths()
   for (const filePath of filePaths) {
     const mimeType = inferMimeFromPath(filePath)
     if (!mimeType.startsWith('image/')) continue
@@ -177,7 +151,7 @@ export async function writeImageFromPath(filePath: string): Promise<void> {
   await writeClipboardImage(() => fs.readFile(filePath), 'path')
 }
 
-export function writeClipboardText(text: string): void { clipboard.writeText(text) }
+export function writeClipboardText(text: string): Promise<void> { return clipboard.writeText(text) }
 
 export async function writeImageFromSource(source: string): Promise<void> {
   await writeClipboardImage(async () => (await resolveSourceBytes(source)).bytes, 'source')
@@ -208,9 +182,9 @@ async function writeClipboardImage(readBytes: () => Promise<Buffer>, inputKind: 
     logger.info('图片已解码，开始写入系统剪贴板', {
       event: 'clipboard.image_write.decoded', context: { ...context, rssBytes: process.memoryUsage().rss },
     })
-    clipboard.writeImage(image)
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([pngBytes], { type: 'image/png' }) })])
     stage = 'confirm'
-    if ((await readNativeClipboardImage(true)).isEmpty()) throw new Error('系统暂时无法读回复制的图片，请重试')
+    if (!(await readNativeClipboardImage(true))) throw new Error('系统暂时无法读回复制的图片，请重试')
     logger.info('图片复制完成', {
       event: 'clipboard.image_write.completed', context: { ...context, durationMs: Math.round(performance.now() - startedAt) },
     })

@@ -21,8 +21,8 @@ function createClipboardImageScene(context) {
         await page.evaluate(async ({ source, method }) => {
           await window.henjiNative.clipboard[method](source)
         }, { source, method })
-        const result = await app.evaluate(({ clipboard }) => {
-          const image = clipboard.readImage()
+        // Electron 44 起剪贴板为异步接口：读 image/png 再解码。
+        const result = await app.evaluate(async ({ clipboard, nativeImage }) => { const item = (await clipboard.read()).find(entry => [...entry.types].includes('image/png')); const image = item ? nativeImage.createFromBuffer(Buffer.from(await (await item.getType('image/png')).arrayBuffer())) : nativeImage.createEmpty()
           return { empty: image.isEmpty(), size: image.getSize() }
         })
         assert.equal(result.empty, false)
@@ -48,7 +48,7 @@ function createClipboardImageScene(context) {
       console.log('[clipboard-image] canvas copy button start')
       await page.getByRole('button', { name: /^(复制|Copy)$/i }).click()
       await page.getByRole('button', { name: /复制成功|已复制|Copied|Copy successful/i }).waitFor({ timeout: 10000 })
-      const copiedSize = await app.evaluate(({ clipboard }) => clipboard.readImage().getSize())
+      const copiedSize = await app.evaluate(async ({ clipboard, nativeImage }) => { const item = (await clipboard.read()).find(entry => [...entry.types].includes('image/png')); const image = item ? nativeImage.createFromBuffer(Buffer.from(await (await item.getType('image/png')).arrayBuffer())) : nativeImage.createEmpty(); return image.getSize() })
       assert.deepEqual(copiedSize, { width: metadata.width, height: metadata.height })
       console.log('[clipboard-image] canvas copy button completed', JSON.stringify(copiedSize))
     },

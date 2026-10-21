@@ -183,7 +183,7 @@ function createImageEditCommonFeaturesScene(context, canvas = false) {
           await press('v'); await press('Control+c')
           await context.settlePage(page, 500)
           await host.getByRole('button', { name: '取消', exact: true }).waitFor({ state: 'hidden', timeout: 60000 })
-          const clipboardState = await app.evaluate(({ clipboard }) => { const image = clipboard.readImage(); return { empty: image.isEmpty(), size: image.getSize(), formats: clipboard.availableFormats() } })
+          const clipboardState = await app.evaluate(async ({ clipboard, nativeImage }) => { const item = (await clipboard.read()).find(entry => [...entry.types].includes('image/png')); const image = item ? nativeImage.createFromBuffer(Buffer.from(await (await item.getType('image/png')).arrayBuffer())) : nativeImage.createEmpty(); return { empty: image.isEmpty(), size: image.getSize(), formats: (await clipboard.read()).flatMap(entry => [...entry.types]) } })
           await fs.writeFile(path.resolve(`.reality/t142-copy-${canvas ? 'canvas' : 'toolbox'}.json`), JSON.stringify(clipboardState, null, 2))
           assert.equal(await host.locator('[data-image-edit-clipboard-error]').count(), 0, `复制不得出现用户可见失败：${await host.locator('[data-image-edit-clipboard-error]').allTextContents()}`)
           assert.equal(clipboardState.empty, false, '必须从真实系统剪贴板读回图片')

@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const mocks = vi.hoisted(() => ({
-  writeImage: vi.fn(), readImage: vi.fn(), availableFormats: vi.fn(), readBuffer: vi.fn(), read: vi.fn(), createFromBuffer: vi.fn(), readFile: vi.fn(), resolveSourceBytes: vi.fn(),
+  write: vi.fn(), read: vi.fn(), createFromBuffer: vi.fn(), readFile: vi.fn(), resolveSourceBytes: vi.fn(),
   info: vi.fn(), error: vi.fn(), warn: vi.fn(), stat: vi.fn(), boundedRead: vi.fn(),
 }))
-vi.mock('electron', () => ({ clipboard: { writeImage: mocks.writeImage, readImage: mocks.readImage, availableFormats: mocks.availableFormats, readBuffer: mocks.readBuffer, read: mocks.read }, nativeImage: { createFromBuffer: mocks.createFromBuffer } }))
+vi.mock('electron', () => ({
+  clipboard: { write: mocks.write, read: mocks.read },
+  ClipboardItem: class { constructor(readonly data: Record<string, Blob>) {} },
+  nativeImage: { createFromBuffer: mocks.createFromBuffer },
+}))
 vi.mock('node:fs/promises', () => ({ default: { readFile: mocks.readFile, stat: mocks.stat } }))
 vi.mock('./system', () => ({ readFileBytes: mocks.boundedRead }))
 vi.mock('./image/source', () => ({ resolveSourceBytes: mocks.resolveSourceBytes }))
@@ -14,36 +19,40 @@ vi.mock('./logging/main-logger', () => ({ createMainLogger: () => mocks }))
 import { readClipboardFiles, readClipboardImage, writeImageFromPath, writeImageFromSource } from './clipboard'
 import { loadSharp } from './image/sharp-loader'
 
+/** Electron 44 的异步剪贴板项：types 与 getType。 */
+function item(data: Record<string, string | Buffer>) {
+  return { types: Object.keys(data), getType: async (type: string) => new Blob([data[type]]) }
+}
+const png = (bytes = 'image') => [item({ 'image/png': Buffer.from(bytes) })]
+const nothing = () => [] as ReturnType<typeof item>[]
+
 function setFilePaths(paths: string[]): void {
-  mocks.readBuffer.mockImplementation(format => format === 'FileNameW' ? Buffer.from(`${paths.join('\0')}\0`, 'utf16le') : Buffer.alloc(0))
-  mocks.read.mockReturnValue(paths.map(file => `"${file}"`).join('\n'))
+  mocks.read.mockResolvedValue([item({ 'text/uri-list': paths.map(file => pathToFileURL(file).href).join('\r\n') })])
 }
 
 describe('共享图片剪贴板写入', () => {
-  beforeEach(() => { vi.resetAllMocks(); mocks.availableFormats.mockReturnValue([]); mocks.readBuffer.mockReturnValue(Buffer.alloc(0)); mocks.readImage.mockReturnValue({ isEmpty: () => false }) })
+  beforeEach(() => { vi.resetAllMocks(); mocks.read.mockResolvedValue(png()) })
 
   it('已经公布图片格式而首次位图暂不可读时，异步重读原生图片', async () => {
-    mocks.availableFormats.mockReturnValue(['image/png'])
-    mocks.readImage.mockReturnValueOnce({ isEmpty: () => true }).mockReturnValue({ isEmpty: () => false, toDataURL: () => 'data:image/png;base64,image' })
-    expect(await readClipboardImage()).toMatchObject({ dataUrl: 'data:image/png;base64,image', origin: 'bitmap' })
-    expect(mocks.readImage).toHaveBeenCalledTimes(2)
+    mocks.read.mockResolvedValueOnce(nothing()).mockResolvedValue(png())
+    expect(await readClipboardImage()).toMatchObject({ dataUrl: `data:image/png;base64,${Buffer.from('image').toString('base64')}`, origin: 'bitmap' })
+    expect(mocks.read).toHaveBeenCalledTimes(2)
     expect(mocks.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'clipboard.image_read.deferred', context: expect.objectContaining({ found: true }) }))
   })
 
   it('格式枚举暂时为空也重读原生位图，不把锁争用当成没有图片', async () => {
-    mocks.readImage.mockReturnValueOnce({ isEmpty: () => true }).mockReturnValue({ isEmpty: () => false, toDataURL: () => 'data:image/png;base64,image' })
+    mocks.read.mockResolvedValueOnce([item({ 'text/plain': 'x' })]).mockResolvedValue(png())
     expect(await readClipboardImage()).toMatchObject({ origin: 'bitmap' })
-    expect(mocks.readImage).toHaveBeenCalledTimes(2)
+    expect(mocks.read).toHaveBeenCalledTimes(2)
   })
 
   it('没有图片格式且始终为空时有界结束，空剪贴板仍返回 null', async () => {
-    mocks.readImage.mockReturnValue({ isEmpty: () => true })
+    mocks.read.mockResolvedValue(nothing())
     expect(await readClipboardImage()).toBeNull()
-    expect(mocks.readImage.mock.calls.length).toBeGreaterThan(1)
+    expect(mocks.read.mock.calls.length).toBeGreaterThan(1)
   })
 
   it('文件图片回退先筛选类型，视频不读取，只读第一张有界图片', async () => {
-    mocks.readImage.mockReturnValue({ isEmpty: () => true })
     const imagePath = path.resolve('image.png')
     setFilePaths([path.resolve('huge.mp4'), imagePath, path.resolve('second.jpg')])
     mocks.stat.mockResolvedValue({ isFile: () => true, size: 3 })
@@ -55,7 +64,6 @@ describe('共享图片剪贴板写入', () => {
   })
 
   it('超大图片不读；文件列表返回路径，读取失败记录警告', async () => {
-    mocks.readImage.mockReturnValue({ isEmpty: () => true })
     setFilePaths([path.resolve('huge.png')])
     mocks.stat.mockResolvedValue({ isFile: () => true, size: 100 * 1024 * 1024 })
     expect(await readClipboardImage()).toBeNull()
@@ -79,8 +87,7 @@ describe('共享图片剪贴板写入', () => {
   })
 
   it('公布的图片始终不可读时有界结束，保留实际失败事实', async () => {
-    mocks.availableFormats.mockReturnValue(['image/png'])
-    mocks.readImage.mockReturnValue({ isEmpty: () => true })
+    mocks.read.mockResolvedValue([item({ 'image/png': Buffer.alloc(0) })])
     expect(await readClipboardImage()).toBeNull()
     expect(mocks.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'clipboard.image_read.deferred', context: expect.objectContaining({ found: false }) }))
   })
@@ -95,8 +102,9 @@ describe('共享图片剪贴板写入', () => {
     await (kind === 'path' ? writeImageFromPath('/image.png') : writeImageFromSource('data:image/png;base64,test'))
     const png = mocks.createFromBuffer.mock.calls[0][0] as Buffer
     expect(await sharp(png).raw().toBuffer()).toEqual(await sharp(input).raw().toBuffer())
-    expect(mocks.writeImage).toHaveBeenCalledTimes(1)
-    expect(mocks.writeImage).toHaveBeenCalledWith(image)
+    expect(mocks.write).toHaveBeenCalledTimes(1)
+    const written = (mocks.write.mock.calls[0][0] as Array<{ data: Record<string, Blob> }>)[0].data['image/png']
+    expect(Buffer.from(await written.arrayBuffer()).equals(png)).toBe(true)
     expect(mocks.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'clipboard.image_write.completed' }))
   })
 
@@ -104,7 +112,7 @@ describe('共享图片剪贴板写入', () => {
     const error = new Error('read failed')
     mocks.readFile.mockRejectedValue(error)
     await expect(writeImageFromPath('/missing.png')).rejects.toBe(error)
-    expect(mocks.writeImage).not.toHaveBeenCalled()
+    expect(mocks.write).not.toHaveBeenCalled()
     expect(mocks.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ error, context: expect.objectContaining({ stage: 'read' }) }))
   })
 
@@ -113,7 +121,7 @@ describe('共享图片剪贴板写入', () => {
     mocks.resolveSourceBytes.mockResolvedValue({ bytes: await sharp({ create: { width: 1, height: 1, channels: 3, background: 'white' } }).png().toBuffer() })
     mocks.createFromBuffer.mockReturnValue({ isEmpty: () => false, getSize: () => ({ width: 1, height: 1 }) })
     const error = new Error('write failed')
-    mocks.writeImage.mockImplementation(() => { throw error })
+    mocks.write.mockRejectedValue(error)
     await expect(writeImageFromSource('/image.png')).rejects.toBe(error)
     expect(mocks.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ error, context: expect.objectContaining({ stage: 'write' }) }))
     expect(mocks.info).not.toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'clipboard.image_write.completed' }))
@@ -123,7 +131,7 @@ describe('共享图片剪贴板写入', () => {
     const sharp = await loadSharp()
     mocks.resolveSourceBytes.mockResolvedValue({ bytes: await sharp({ create: { width: 1, height: 1, channels: 3, background: 'white' } }).png().toBuffer() })
     mocks.createFromBuffer.mockReturnValue({ isEmpty: () => false, getSize: () => ({ width: 1, height: 1 }) })
-    mocks.readImage.mockReturnValue({ isEmpty: () => true })
+    mocks.read.mockResolvedValue(nothing())
     await expect(writeImageFromSource('/image.png')).rejects.toThrow('无法读回')
     expect(mocks.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ context: expect.objectContaining({ stage: 'confirm' }) }))
     expect(mocks.info).not.toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'clipboard.image_write.completed' }))

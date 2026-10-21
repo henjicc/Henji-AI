@@ -3,7 +3,7 @@ import path from 'node:path'
 import { validateImageColorLut } from '../services/image-editor-v3/color-lut-validation'
 import { CUBE_LUT_MAX_BYTES } from '../../../src/core/imaging/lut/cube'
 import type { ContentAddressedResourceStore } from '../services/image-editor-v3/resource-store'
-import { BrowserWindow, dialog, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import type {
   ImageEditorV3ManagedSource,
   ImageEditorV3SourceMetadata,
@@ -34,6 +34,7 @@ import {
 } from './image-editor-v3-request-admission'
 import { registerIpcHandler } from './registry'
 import { registerImageEditorV3TileStreamIpc } from './image-editor-v3-tile-stream'
+import { showOpenDialog } from '../services/dialogs'
 
 const logger = createMainLogger('main.image_editor_v3.source_ipc')
 
@@ -157,7 +158,7 @@ export function registerImageEditorV3SourceIpc(dependencies: ImageEditorV3Source
   })
   registerIpcHandler('imageEditorV3:lut:import', parseImageEditorV3BasePayload, (payload, event) => (
     runRequest('lut.import', payload.requestId, event.sender.id, async (signal) => {
-      const selection = await dialog.showOpenDialog(ownerFor(event), { properties: ['openFile'], filters: [{ name: '颜色查找表', extensions: ['cube'] }] })
+      const selection = await showOpenDialog(ownerFor(event), { properties: ['openFile'], filters: [{ name: '颜色查找表', extensions: ['cube'] }] })
       if (selection.canceled || !selection.filePaths[0]) return { status: 'cancelled' as const }
       signal.throwIfAborted()
       const file = await fs.open(selection.filePaths[0], 'r')
@@ -175,7 +176,7 @@ export function registerImageEditorV3SourceIpc(dependencies: ImageEditorV3Source
   ), guard)
   registerIpcHandler('imageEditorV3:source:import', parseImageEditorV3BasePayload, (payload, event) => (
     runRequest('source.import', payload.requestId, event.sender.id, async (signal) => {
-      const selection = await dialog.showOpenDialog(ownerFor(event), {
+      const selection = await showOpenDialog(ownerFor(event), {
         properties: ['openFile'], filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
       })
       if (selection.canceled || !selection.filePaths[0]) {

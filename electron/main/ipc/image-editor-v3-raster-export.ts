@@ -1,7 +1,7 @@
 import path from 'node:path'
 import fsp from 'node:fs/promises'
 
-import { BrowserWindow, dialog, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 
 import { sanitizeFileStem } from '../services/image/path-utils'
 import { createMainLogger } from '../services/logging'
@@ -17,6 +17,7 @@ import {
   parseImageEditorV3WriteRasterExportTilePayload,
 } from './image-editor-v3-export-payloads'
 import { registerIpcHandler, type IpcSenderGuard } from './registry'
+import { showSaveDialog } from '../services/dialogs'
 
 const logger = createMainLogger('main.image_editor_v3.raster_export_ipc')
 
@@ -145,7 +146,7 @@ export function registerImageEditorV3RasterExportIpc(
         let targetPath: string
         for (;;) {
           signal.throwIfAborted()
-          const selection = await dialog.showSaveDialog(owner, dialogOptions)
+          const selection = await showSaveDialog(owner, dialogOptions)
           if (selection.canceled || !selection.filePath) {
             logger.info('用户取消栅格图片导出', {
               event: 'image_editor_v3.raster_export.dialog_cancelled',

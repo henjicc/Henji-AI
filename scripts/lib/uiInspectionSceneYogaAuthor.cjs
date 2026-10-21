@@ -28,7 +28,8 @@ async function runYogaAuthorTimeline(page, app, { capture, root, spec }) {
   assert.ok(await app.evaluate(() => Boolean(process.env.HENJI_ISOLATED_APP_DATA)), '先在隔离资料目录验收完整工程')
   const prepared = JSON.parse(fs.readFileSync(spec.yogaTimeline, 'utf8'))
   assert.equal(crypto.createHash('sha256').update(fs.readFileSync(prepared.source.path)).digest('hex'), prepared.source.sha256, 'PR 原工程已变化')
-  const model = prepared.document
+  // 预转换的时间线可能早于当前内置效果格式；按正式逐版本迁移补齐（如全能调色 v1→v2）。
+  const model = loadTypeScript('src/core/videoEdit/colorGradeMigration.ts').migrateEmbeddedVideoColorGradesV1(prepared.document)
   const { createVideoEditDocument } = loadTypeScript('scripts/lib/premiereMigrationModel.ts')
   const empty = createVideoEditDocument(model.name)
   const { format: _f, version: _v, id: _id, revision: _r, name: _n, ...emptyContent } = empty

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { BrowserWindow, dialog } from 'electron'
+import { BrowserWindow } from 'electron'
 import { formatMigrations } from '../../../../src/core/persistence/formatMigrations'
 import { readStoredPersistenceJson, serializeVersionedPersistenceJson } from '../../../../src/core/persistence/versionedJson'
 import type { PersistenceContract } from '../../../../src/core/persistence/migrations'
@@ -16,6 +16,7 @@ import { getSettingsStore } from '../settings/store'
 import { getLocalInferenceHost } from '../smart-regions/runtime'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { SoundLibraryService } from './service'
+import { showOpenDialog } from '../dialogs'
 
 /*
  * 音效库的进程内单例：设置表（登记的文件夹）、系统文件夹选择框、本地推理后台进程、听音模型与窗口广播。
@@ -66,7 +67,7 @@ export function getSoundLibraryService(): SoundLibraryService {
     chooseFolder: async () => {
       const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
       const options = { title: '选择音效文件夹', properties: ['openDirectory' as const] }
-      const selection = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+      const selection = await showOpenDialog(window, options)
       const chosen = selection.canceled ? null : selection.filePaths[0] ?? null
       if (chosen) allowMediaRoot(chosen)
       return chosen

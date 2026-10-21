@@ -1,4 +1,4 @@
-import { app, dialog, shell } from 'electron'
+import { app, shell } from 'electron'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -6,6 +6,7 @@ import { writeBufferAtomically } from './fs/atomic-file'
 import { getAppBaseDir } from './appBasePaths'
 import { enqueueMediaCandidates, isManagedMediaPath, overlapsManagedMediaRoot, registerOwnedMedia } from './media-recycle/queue'
 import { removeUnmanagedCachePath } from './media-recycle/cache-deletion'
+import { showOpenDialog as showSystemOpenDialog, showSaveDialog as showSystemSaveDialog } from './dialogs'
 
 export interface FsDirEntryDto {
   name: string
@@ -158,7 +159,7 @@ export async function removePath(targetPath: string, recursive = false): Promise
 }
 
 export async function showSaveDialog(options?: DialogSaveOptionsDto): Promise<string | null> {
-  const result = await dialog.showSaveDialog({
+  const result = await showSystemSaveDialog(null, {
     defaultPath: options?.defaultPath,
     filters: options?.filters,
   })
@@ -172,7 +173,7 @@ export async function showOpenDialog(options?: DialogOpenOptionsDto): Promise<st
     properties.push('multiSelections')
   }
 
-  const result = await dialog.showOpenDialog({
+  const result = await showSystemOpenDialog(null, {
     defaultPath: options?.defaultPath,
     filters: options?.filters,
     properties,

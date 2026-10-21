@@ -175,7 +175,7 @@
   },
   "devDependencies": {
     "@dagrejs/graphlib": "4.0.5",
-    "@electron/rebuild": "^4.0.4",
+    "@electron/rebuild": "^4.2.1",
     "@testing-library/react": "^16.3.2",
     "@types/archiver": "^8.0.0",
     "@types/better-sqlite3": "^7.6.13",
@@ -189,7 +189,7 @@
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.0.3",
     "autoprefixer": "^10.4.16",
-    "electron": "^42.5.0",
+    "electron": "^44.9.3",
     "electron-builder": "^26.15.3",
     "electron-vite": "^3.1.0",
     "eslint": "^8.45.0",
