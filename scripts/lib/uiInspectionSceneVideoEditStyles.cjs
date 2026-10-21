@@ -41,17 +41,24 @@ function createVideoEditStylesScene() {
       const read = (ref, propertyIds) => callTool(client, 'read_application_entity', { ref, ...(propertyIds ? { propertyIds } : {}) })
       const dock = async title => {
         const tab = page.locator('.dv-tab').filter({ has: page.getByText(title, { exact: true }) }).first()
-        if (await tab.isVisible()) await tab.click(); else { await button(page, '面板').click(); await button(page, title).click() }
+        if (await tab.isVisible()) return tab.click()
+        // 标签放不下时收进组标题右侧的下拉。
+        const overflow = page.locator('.dv-tabs-overflow-dropdown-default, .dv-tabs-overflow-dropdown-root').first()
+        if (await overflow.isVisible().catch(() => false)) { await overflow.click(); const item = page.locator('.dv-tabs-overflow-container .dv-tab').filter({ hasText: title }).first(); if (await item.isVisible().catch(() => false)) return item.click() }
+        await button(page, '面板').click(); await button(page, title).click()
       }
       const savedProject = async matches => { for (let i = 0; i < 300; i++) { const value = readVideoEditFile(file); if (matches(value)) return value; await page.waitForTimeout(100) } return assert.fail(`剪辑没有保存成期望状态：${JSON.stringify(readVideoEditFile(file).templates ?? null)}`) }
       try {
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+        // 默认布局：风格与模板面板在右侧标签组里（溢出时从组下拉切换），不受上一轮巡检留下的布局影响。
+        await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '风格与模板', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji styles Reality')
 
         // 1. 风格面板：六张内置卡片都显示渲染好的缩略图。
         await dock('风格')
         const cards = page.locator('[data-video-edit-style]')
+        await page.locator('[data-video-edit-styles]').waitFor({ state: 'visible', timeout: 15000 }).catch(() => {})
         await page.waitForFunction(count => document.querySelectorAll('[data-video-edit-style] img').length >= count && [...document.querySelectorAll('[data-video-edit-style] img')].every(img => img.complete && img.naturalWidth > 0), BUILTIN.length, { timeout: 30000 })
         evidence.steps.grid = { ids: await cards.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-video-edit-style'))) }
         assert.deepEqual(evidence.steps.grid.ids, BUILTIN, '内置风格卡片不全或顺序不对')
@@ -60,7 +67,7 @@ function createVideoEditStylesScene() {
         await page.locator('[data-video-edit-style="variety"]').click()
         const detail = page.locator('[data-video-edit-style-detail="variety"]'); await detail.waitFor({ state: 'visible' })
         await page.waitForFunction(() => { const video = document.querySelector('[data-video-edit-style-detail] video'); return video && video.readyState >= 2 && video.currentTime > 0.3 }, null, { timeout: 30000 })
-        evidence.steps.detail = { anchors: await detail.locator('[aria-label^="锚点帧"]').count(), sections: await detail.getByText('不变量与自由度', { exact: true }).count(), capture: await capture('styles-02-detail') }
+        evidence.steps.detail = { anchors: await detail.getByRole('button', { name: /^锚点帧 \d/ }).count(), sections: await detail.getByText('不变量与自由度', { exact: true }).count(), capture: await capture('styles-02-detail') }
         assert.equal(evidence.steps.detail.anchors, 5)
         await page.keyboard.press('Escape'); await detail.waitFor({ state: 'hidden' })
 
@@ -139,6 +146,22 @@ function createVideoEditStylesScene() {
         const baseline = await read(nameRef, ['video_edit.clip.code_parameters'])
         await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '改名字', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: nameRef, properties: { 'video_edit.clip.code_parameters': { ...baseline.data.properties['video_edit.clip.code_parameters'], name: '王二', role: '摄影指导', label: 'DIRECTOR OF PHOTOGRAPHY' } } }] }))
         await seek(nameClip.start + 46); evidence.steps.parameters = { capture: await capture('styles-09-name-bar-edited') }
+        // 模板压力文案：最短、最长（预期上限 1.5 倍）、中英混排带数字与下伸字母、空字符串（整组隐藏）。
+        const paramClip = project.sequences[0].clips.find(clip => clip.code.definitionId === project.templates[0].body.definitionId)
+        const paramRef = { kind: 'video_edit.clip', id: `${PROJECT_ID}:${paramClip.id}` }
+        evidence.steps.pressure = {}
+        for (const [label, name, value] of [['short', '林', '8'], ['long', '欧阳林一一二三四五六七八九十甲乙丙丁戊己庚辛', '1234567.89K'], ['mixed', 'Lin Yi 林一 gyp 2026', '96 GB'], ['empty', '', '']]) {
+          for (const [ref, params] of [[nameRef, { name }], [paramRef, { value }]]) {
+            const before = await read(ref, ['video_edit.clip.code_parameters'])
+            await callTool(client, 'change_application_entities', operationEnvelope([before], { summary: `压力文案 ${label}`, changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: ref, properties: { 'video_edit.clip.code_parameters': { ...before.data.properties['video_edit.clip.code_parameters'], ...params } } }] }))
+          }
+          await seek(nameClip.start + 47); evidence.steps.pressure[`${label}-name`] = await capture(`styles-10-pressure-${label}-name`)
+          await seek(60); evidence.steps.pressure[`${label}-param`] = await capture(`styles-10-pressure-${label}-param`)
+        }
+        for (const [ref, params] of [[nameRef, { name: '王二' }], [paramRef, { value: '2.5K' }]]) {
+          const restore = await read(ref, ['video_edit.clip.code_parameters'])
+          await callTool(client, 'change_application_entities', operationEnvelope([restore], { summary: '恢复文案', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: ref, properties: { 'video_edit.clip.code_parameters': { ...restore.data.properties['video_edit.clip.code_parameters'], ...params } } }] }))
+        }
         const detached = await tool('detach_video_edit_template_instance', { documentRef, sequenceRef, clipRefs: [nameRef] })
         assert.equal(detached.verificationState, 'verified', JSON.stringify(detached))
         project = await savedProject(value => value.sequences[0].clips.find(clip => clip.id === nameClip.id)?.code.definitionId !== nameClip.code.definitionId)
