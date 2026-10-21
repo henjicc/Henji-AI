@@ -7,7 +7,7 @@ import { VideoSample } from 'mediabunny'
 import { rasterizeVideoEditText, videoEditTextResolution, type VideoEditTextRaster } from './videoEditTextSurface'
 import { defaultVideoEditTextStyle, scaleVideoEditTextStyle } from '@/core/videoEdit/text'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
-import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
+import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_FRAME_BLEND_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
 import type { VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
@@ -143,6 +143,8 @@ export class VideoEditGpuCompositor {
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private blankTexture?: GpuTexture
+  /** 帧混合管线，按输出平面格式；首次使用时编译。 */
+  private readonly blendPipelines = new Map<string, Promise<GpuRenderPipeline>>()
   constructor(readonly canvas: OffscreenCanvas, private readonly shared?: VideoEditGpuCompositor, private readonly capturePresentation?: () => VideoEditPresentationCapture | undefined, readyTiming?: (durationMs: number, stage?: string) => void) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
@@ -329,6 +331,48 @@ export class VideoEditGpuCompositor {
     if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
     this.blankTexture ??= this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x04 })
     return new VideoEditGpuFrame({ timestamp, duration, displayWidth: Math.max(1, width), displayHeight: Math.max(1, height), rotation: 0, flip: false }, this.blankTexture, undefined, 4, () => {})
+  }
+  /**
+   * 帧混合（时间重映射补帧）：`a`、`b` 是同一素材相邻两帧，返回 a·(1−weight) + b·weight 的新帧（同尺寸、同格式，
+   * 紧凑帧逐平面混合）。两帧结构不同（例如回放分辨率刚切换）时返回 undefined，由调用方退回帧采样。
+   */
+  async blend(a: VideoEditGpuFrame, b: VideoEditGpuFrame, weight: number): Promise<VideoEditGpuFrame | undefined> {
+    await this.ready
+    this.assertDevice()
+    if (this.disposed) throw new Error('剪辑预览已关闭。')
+    type Shape = { width: number; height: number; format: string }
+    const shape = (texture: GpuTexture | undefined): Shape | undefined => texture as unknown as Shape | undefined
+    const planes = [[shape(a.texture), shape(b.texture)], [shape(a.chroma), shape(b.chroma)]] as const
+    if (planes.some(([left, right]) => Boolean(left) !== Boolean(right) || left && right && (left.width !== right.width || left.height !== right.height || left.format !== right.format))) return undefined
+    const pipeline = (format: string): Promise<GpuRenderPipeline> => {
+      let pending = this.blendPipelines.get(format)
+      if (!pending) {
+        const module = this.device.createShaderModule({ code: VIDEO_EDIT_FRAME_BLEND_SHADER })
+        const descriptor = { layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } }
+        pending = Promise.resolve(this.device.createRenderPipelineAsync?.(descriptor) ?? this.device.createRenderPipeline(descriptor))
+        this.blendPipelines.set(format, pending)
+      }
+      return pending
+    }
+    const luma = planes[0][0]!; const chroma = planes[1][0]
+    const texture = this.device.createTexture({ size: [luma.width, luma.height], format: luma.format, usage: 0x04 | 0x10 })
+    const chromaTexture = chroma ? this.device.createTexture({ size: [chroma.width, chroma.height], format: chroma.format, usage: 0x04 | 0x10 }) : undefined
+    try {
+      const uniform = this.device.createBuffer({ size: 16, usage: 0x08 | 0x40 })
+      this.device.queue.writeBuffer(uniform, 0, new Float32Array([Math.max(0, Math.min(1, weight)), 0, 0, 0]))
+      const encoder = this.device.createCommandEncoder()
+      const jobs: Array<readonly [GpuTexture, GpuTexture, GpuTexture, string]> = [[texture, a.texture, b.texture, luma.format], ...(chromaTexture && chroma ? [[chromaTexture, a.chroma!, b.chroma!, chroma.format] as const] : [])]
+      for (const [target, left, right, format] of jobs) {
+        const program = await pipeline(format)
+        const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
+        pass.setPipeline(program)
+        pass.setBindGroup(0, this.device.createBindGroup({ layout: program.getBindGroupLayout(0), entries: [{ binding: 0, resource: left.createView() }, { binding: 1, resource: right.createView() }, { binding: 2, resource: { buffer: uniform } }] }))
+        pass.draw(3); pass.end()
+      }
+      this.device.queue.submit([encoder.finish()])
+      void this.device.queue.onSubmittedWorkDone().then(() => uniform.destroy(), () => uniform.destroy())
+      return new VideoEditGpuFrame(a, texture, chromaTexture, a.allocationSize(), undefined, undefined, a.highPrecision)
+    } catch (error) { texture.destroy(); chromaTexture?.destroy(); throw error }
   }
   async code(): Promise<VideoEditCodeGpu> {
     await this.ready
