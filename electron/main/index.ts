@@ -20,6 +20,7 @@ import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
 import { registerWorkRootIpc } from './ipc/work-root'
 import { registerLocalModelsIpc } from './ipc/local-models'
+import { registerSoundLibraryIpc } from './ipc/sound-library'
 import { registerSmartRegionsIpc } from './ipc/smart-regions'
 import { registerVideoProxyHandlers } from './ipc/video-proxy'
 import { registerSceneDetectionHandlers } from './ipc/scene-detection'
@@ -137,6 +138,7 @@ app.whenReady().then(async () => {
   registerDocumentsIpc()
   registerWorkRootIpc()
   registerLocalModelsIpc()
+  registerSoundLibraryIpc()
   registerSmartRegionsIpc()
   registerVideoProxyHandlers()
   registerScreenRecordingIpc()

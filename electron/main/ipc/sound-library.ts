@@ -1,0 +1,33 @@
+import { z } from 'zod'
+import { SOUND_LIBRARY_IPC_CHANNELS } from '../../../src/platform/contracts/soundLibrary'
+import { getSoundLibraryService } from '../services/sound-library/runtime'
+import { parseVoid, registerIpcHandler } from './registry'
+
+/*
+ * 音效库 IPC：渲染层经 preload `henjiNative.soundLibrary` → PAL `SoundLibraryPlatform`
+ * → `src/commands/soundLibrary.ts` 调用。渲染层只按文件夹 / 音效 ID 引用，不传路径；
+ * 登记文件夹只经主进程的系统选择框。状态变化经 `soundLibrary:changed` 推给所有窗口。
+ */
+
+const id = z.string().min(1).max(200)
+const searchSchema = z.object({
+  keywords: z.array(z.string().min(1).max(80)).max(16),
+  description: z.string().min(1).max(300).optional(),
+  folderIds: z.array(id).max(64).optional(),
+  minDurationSeconds: z.number().nonnegative().max(3600).optional(),
+  maxDurationSeconds: z.number().positive().max(3600).optional(),
+  maxHitSeconds: z.number().nonnegative().max(3600).optional(),
+  brightness: z.enum(['dark', 'neutral', 'bright']).optional(),
+  limit: z.number().int().min(1).max(100),
+}).strict()
+
+export function registerSoundLibraryIpc(): void {
+  const c = SOUND_LIBRARY_IPC_CHANNELS
+  registerIpcHandler(c.getState, parseVoid, () => getSoundLibraryService().getState())
+  registerIpcHandler(c.addFolder, parseVoid, () => getSoundLibraryService().addFolder())
+  registerIpcHandler(c.removeFolder, value => z.object({ id }).strict().parse(value).id, folderId => getSoundLibraryService().removeFolder(folderId))
+  registerIpcHandler(c.refresh, value => z.object({ folderIds: z.array(id).max(64).optional() }).strict().parse(value).folderIds, folderIds => getSoundLibraryService().refresh(folderIds))
+  registerIpcHandler(c.search, value => searchSchema.parse(value), request => getSoundLibraryService().search(request))
+  registerIpcHandler(c.listSounds, value => z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(200) }).strict().parse(value), ({ offset, limit }) => getSoundLibraryService().listSounds(offset, limit))
+  registerIpcHandler(c.locate, value => z.object({ id }).strict().parse(value).id, soundId => getSoundLibraryService().locate(soundId))
+}

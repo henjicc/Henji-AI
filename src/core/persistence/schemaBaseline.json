@@ -316,6 +316,12 @@
       "fingerprint": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
       "supportedFrom": 21,
       "minReaderVersion": 21
+    },
+    "sound-library-folders": {
+      "version": 1,
+      "fingerprint": "222d49b6818fec35de9a499015a8e03e74e17a1c27d9ac9c6c811056d878da33",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     }
   },
   "devBreaks": []
