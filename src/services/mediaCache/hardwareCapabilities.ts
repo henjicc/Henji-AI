@@ -22,6 +22,19 @@ export function resolveRenderCacheCodec(format: VideoRenderCacheFormat): 'avc' |
   return hardwareEncodes(report, 'hevc') && hardwareDecodes(report, 'hevc') ? 'hevc' : 'avc'
 }
 
+/**
+ * 导出选择硬件加速却不被支持时，按本机检测结果说明原因；没有检测结果或检测认为支持时返回 null（交给通用说明）。
+ */
+export function hardwareEncodeLimitation(codec: 'avc' | 'hevc', width: number, height: number): string | null {
+  const name = codec === 'avc' ? 'H.264' : 'HEVC'
+  const result = report?.encode.find(item => item.codec === (codec === 'avc' ? 'h264' : 'hevc'))
+  if (!result) return null
+  if (!result.hardware) return `本机显卡不支持 ${name} 硬件编码，请改用软件编码${codec === 'hevc' ? '或 H.264' : ''}。`
+  const limit = result.maxHardwareSize
+  if (limit && width * height > limit.width * limit.height) return `本机显卡的 ${name} 硬件编码最高约 ${limit.width} × ${limit.height}，请降低分辨率或改用软件编码。`
+  return null
+}
+
 const CODEC_STRINGS: Record<HardwareEncodeCodec, { large: string; small: string }> = {
   h264: { large: 'avc1.640034', small: 'avc1.640028' },
   hevc: { large: 'hvc1.1.6.L156.B0', small: 'hvc1.1.6.L123.B0' },

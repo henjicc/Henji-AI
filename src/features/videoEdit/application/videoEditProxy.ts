@@ -82,7 +82,7 @@ export async function refreshVideoEditProxies(projectId: string, signal?: AbortS
     signal?.throwIfAborted()
     if (entry(projectId, media.id)?.controller) continue
     let result: VideoProxyResult | null = null
-    for (const preset of ['720p', '540p'] as const) { result = await getPlatform().videoProxy.lookup({ source: media.path, preset }); if (result) break }
+    for (const preset of ['auto', '720p', '540p'] as const) { result = await getPlatform().videoProxy.lookup({ source: media.path, preset }); if (result) break }
     signal?.throwIfAborted()
     if (!listVideoEditInstances().includes(owner)) return
     const current = owner.document.media.find(value => value.id === media.id)
@@ -97,7 +97,7 @@ export async function ensureVideoEditProxyState(projectId: string, mediaId: stri
   const owner = requireVideoEditInstance(projectId); const media = owner.document.media.find(value => value.id === mediaId)
   if (!media || media.kind !== 'video') return
   let result: VideoProxyResult | null = null
-  for (const preset of ['720p', '540p'] as const) { result = await getPlatform().videoProxy.lookup({ source: media.path, preset }); if (result) break }
+  for (const preset of ['auto', '720p', '540p'] as const) { result = await getPlatform().videoProxy.lookup({ source: media.path, preset }); if (result) break }
   const current = owner.document.media.find(value => value.id === mediaId)
   if (!listVideoEditInstances().includes(owner) || current?.path !== media.path || current.sourceRevision !== media.sourceRevision || entry(projectId, mediaId)) return
   let values = entries.get(owner); if (!values) { values = new Map(); entries.set(owner, values) }
@@ -135,6 +135,17 @@ export async function createVideoEditProxy(projectId: string, mediaId: string, p
     throw error
   } finally { current.controller = undefined; tasks.delete(task); unsubscribe(); signal?.removeEventListener('abort', abort); controller.signal.removeEventListener('abort', cancel); publishVideoEdit() }
 }
+/** “为选中素材生成代理”：逐个后台生成（避免多段同时转码争抢编码器）；失败留在各素材的代理状态里，最后抛出第一个错误。 */
+export async function createVideoEditProxies(projectId: string, mediaIds: readonly string[]): Promise<void> {
+  let first: unknown
+  for (const mediaId of new Set(mediaIds)) {
+    try { await createVideoEditProxy(projectId, mediaId, 'auto') } catch (error) {
+      if (error instanceof Error && /已取消|已关闭/.test(error.message)) return
+      first ??= error
+    }
+  }
+  if (first) throw first
+}
 export function cancelVideoEditProxy(projectId: string, mediaId: string): void { entry(projectId, mediaId)?.controller?.abort(new Error('代理创建已取消。')) }
 /** Import is already committed; proxy failures are visible state, never roll back imported originals. Serial queue avoids CPU oversubscription. */
 export async function autoCreateVideoEditProxies(projectId: string, mediaIds: readonly string[]): Promise<void> {
@@ -144,6 +155,6 @@ export async function autoCreateVideoEditProxies(projectId: string, mediaIds: re
     if (!listVideoEditInstances().includes(owner)) return
     const media = owner.document.media.find(value => value.id === mediaId)
     if (!media || media.kind !== 'video' || media.height <= 1080 && media.width <= 1920) continue
-    try { await createVideoEditProxy(projectId, mediaId, '720p') } catch (error) { if (error instanceof Error && /已取消|已关闭/.test(error.message)) return /* Other errors remain visible in the common proxy state. */ }
+    try { await createVideoEditProxy(projectId, mediaId, 'auto') } catch (error) { if (error instanceof Error && /已取消|已关闭/.test(error.message)) return /* Other errors remain visible in the common proxy state. */ }
   }
 }

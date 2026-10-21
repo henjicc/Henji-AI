@@ -1,7 +1,6 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VideoEditMulticamDialog } from './VideoEditMulticamDialog'
-import { cancelVideoEditProxy, getVideoEditProxyPreference, readVideoEditProxyState, refreshVideoEditProxies, setVideoEditProxyPreference } from '../application/videoEditProxy'
-import { VideoEditProxyDialog } from './VideoEditProxyDialog'
+import { cancelVideoEditProxy, createVideoEditProxies, getVideoEditProxyPreference, readVideoEditProxyState, refreshVideoEditProxies, setVideoEditProxyPreference } from '../application/videoEditProxy'
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } from 'react-virtuoso'
@@ -114,7 +113,6 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const projectId = instance.document.id
   const [multicamItemIds, setMulticamItemIds] = useState<string[] | null>(null)
   const proxyError = useRef(onError); proxyError.current = onError
-  const [proxyMediaIds, setProxyMediaIds] = useState<string[] | null>(null)
   useEffect(() => {
     const controller = new AbortController()
     void refreshVideoEditProxies(projectId, controller.signal).catch(error => { if (!controller.signal.aborted) proxyError.current(error) })
@@ -208,7 +206,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const audioTarget: VideoEditAudioChannelsTarget | undefined = sounding.length === items.length && sounding[0] && (items.length === 1 || sounding.every(value => value!.audioStreams && JSON.stringify(value!.audioStreams) === JSON.stringify(sounding[0]!.audioStreams))) ? { kind: 'items', itemIds: items.map(value => value.id), mediaId: sounding[0].id, ...(items[0].audioChannels ? { layout: items[0].audioChannels } : {}) } : undefined
     return [
       { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={UI_ICON_SIZE.md} />, disabled: items.length < 2 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
-      { id: 'create_proxy', label: '创建代理…', icon: <ProxyIcon size={UI_ICON_SIZE.md} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
+      { id: 'create_proxy', label: '为选中素材生成代理', icon: <ProxyIcon size={UI_ICON_SIZE.md} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => { void createVideoEditProxies(projectId, proxyIds).catch(onError) } },
       { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={UI_ICON_SIZE.md} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
       { id: 'preview', label: '打开源素材', icon: <Play size={UI_ICON_SIZE.md} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
       { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, disabled: !activeSequence, icon: <Plus size={UI_ICON_SIZE.md} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
@@ -403,7 +401,6 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         <UiButton size="sm" onClick={() => run(() => setVideoEditLabels(projectId, labelPicker.targets, null))}>按类型默认</UiButton>
       </div>} />}
     {multicamItemIds && <VideoEditMulticamDialog projectId={projectId} sequenceId={instance.activeSequenceId} itemIds={multicamItemIds} onClose={() => setMulticamItemIds(null)} />}
-    {proxyMediaIds && <VideoEditProxyDialog projectId={projectId} mediaIds={proxyMediaIds} onClose={() => setProxyMediaIds(null)} onError={onError} />}
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {creatingCode && <VideoEditCodeCreateDialog projectId={projectId} binId={binId || undefined} onClose={() => setCreatingCode(false)} onCreated={ids => setVideoEditProjectView(projectId, { selectedItemIds: ids })} />}
     {edit && <VideoEditProjectEditDialog value={edit} bins={instance.document.bins} onClose={() => setEdit(null)} onSubmit={values => {

@@ -88,6 +88,8 @@ describe('对外工具目录的投影与授权过滤', () => {
     fingerprints['2.42.0'] = '67834fb9a8b01b9d92d00399e67adc023e41bc0c87d8f981f48988574ef188c4'
     // render_video_edit_preview: new tool that starts background preview rendering.
     fingerprints['2.43.0'] = '3b9842320c147772f238f5bc68cef197f83cef64bba54354860c7491a9b73cf0'
+    // Cache settings page surface, proxy preset auto, render/proxy descriptions for works-folder caches and full-quality pause.
+    fingerprints['2.44.0'] = 'a13575e1f5c24d1a5a161f274b5b12c11844f7677fd17e96545b890bd33b4d93'
     expect(fingerprints[EXTERNAL_CONTRACT_VERSION], '工具参数/说明/输出变化时须升级 EXTERNAL_CONTRACT_VERSION，再登记该版本指纹').toBe(fingerprint)
   })
   it('媒体 mode 的枚举与说明经过目录授权投影仍完整保留', () => {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { hardwareEncodeLimitation } from '@/services/mediaCache/hardwareCapabilities'
 import { MoreHorizontal } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiGroup, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton, UiRangeInput } from '@/components/ui'
 import { videoEditComposition, videoEditDuration } from '@/core/videoEdit/document'
@@ -164,7 +165,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
               <UiOptionButton variant="menu" disabledReason={!customPreset ? '请先选择自定义预设' : undefined} disabled={busy || !customPreset} onClick={() => { try { videoEditExportPresetLibrary.remove(presetId); setPresetId('custom'); setError('') } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>删除自定义预设</UiOptionButton>
             </>}>{controls => <UiIconButton size="xs" aria-label="管理导出预设" disabled={busy} onClick={controls.togglePanel}><MoreHorizontal  /></UiIconButton>}</PanelTrigger>}><Dropdown size="sm" className="w-full" ariaLabel="导出预设" value={presetId} minWidthStrategy="none" disabled={busy} options={[...presets.map(value => ({ value: value.id, label: value.name })), { value: 'custom', label: '自定义', disabled: true }]} onSelect={selectPreset} /></VideoEditExportField>
             <VideoEditExportField label="格式"><Dropdown size="sm" className="w-full" ariaLabel="导出格式" value={settings.videoEnabled ? settings.codec : settings.format} minWidthStrategy="none" disabled={busy} options={[
-              ...(['avc', 'hevc'] as const).map(codec => ({ value: codec, label: codec === 'avc' ? 'MP4 · H.264' : 'MP4 · HEVC (H.265)', disabled: probing || !codecChoice(codec), tooltip: !codecChoice(codec) ? codec === 'avc' ? '当前规格不支持 H.264；8K 请尝试 HEVC，或降低规格。' : '当前规格不支持 HEVC；请降低规格。' : !support(codec, settings.encoderPreference, settings.bitrateMode) ? '选择后使用本机可用的性能与码率模式，请检查编码分区。' : undefined })),
+              ...(['avc', 'hevc'] as const).map(codec => ({ value: codec, label: codec === 'avc' ? 'MP4 · H.264' : 'MP4 · HEVC (H.265)', disabled: probing || !codecChoice(codec), tooltip: !codecChoice(codec) ? codec === 'avc' ? '当前规格不支持 H.264；8K 请尝试 HEVC，或降低规格。' : hardwareEncodeLimitation('hevc', settings.width, settings.height) ?? '当前规格不支持 HEVC；请降低规格。' : !support(codec, settings.encoderPreference, settings.bitrateMode) ? '选择后使用本机可用的性能与码率模式，请检查编码分区。' : undefined })),
               { value: 'aac', label: '音频 · AAC' }, { value: 'wav', label: '音频 · WAV' },
             ]} onSelect={value => value === 'avc' || value === 'hevc' ? patch({ format: 'mp4', ...codecChoice(value) }) : patch({ format: value as 'aac' | 'wav' })} /></VideoEditExportField>
           </UiGroup>

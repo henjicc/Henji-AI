@@ -10,14 +10,22 @@ import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
 import { getMediaCacheManager } from '../services/media/media-cache-runtime'
 import { createMainLogger } from '../services/logging'
-import { VideoProxyService } from '../services/video/proxy'
+import { transcodeVideoProxy, VideoProxyService } from '../services/video/proxy'
+import { getPreferredEncoder, invalidateEncoderCache } from '../services/video/hwaccel'
 
 const logger = createMainLogger('main.video.proxy')
 const tasks = new Map<number, Map<string, AbortController>>()
 const watched = new WeakSet<WebContents>()
 const cacheOptions = { onError: (event: string, error: unknown) => logger.warn('代理缓存失败', { event: `video.proxy.cache.${event}`, error }) }
-const service = new VideoProxyService(getMediaCacheManager().createCache('proxy', undefined, { ...cacheOptions, extension: '.mp4', budgetBytes: Number.POSITIVE_INFINITY }), getMediaCacheManager().createCache('proxy', undefined, { ...cacheOptions, extension: '.json', budgetBytes: 16 * 1024 ** 2 }))
-// 代理文件只受缓存管理的总上限与保留天数约束（不另设单类上限）。
+// 代理文件只受缓存管理的总上限与保留天数约束（不另设单类上限）；编码器按 FFmpeg 硬件编码探测结果。
+const service = new VideoProxyService(getMediaCacheManager().createCache('proxy', undefined, { ...cacheOptions, extension: '.mp4', budgetBytes: Number.POSITIVE_INFINITY }), getMediaCacheManager().createCache('proxy', undefined, { ...cacheOptions, extension: '.json', budgetBytes: 16 * 1024 ** 2 }), async (request, output, signal, progress) => {
+  const encoder = (await getPreferredEncoder()).id
+  logger.info('代理编码方式', { event: 'video.proxy.encoder', requestId: request.requestId, context: { encoder } })
+  return transcodeVideoProxy(request, output, signal, progress, undefined, { encoder, onFallback: error => {
+    logger.warn('显卡转码代理失败，改用处理器', { event: 'video.proxy.hardware_fallback', requestId: request.requestId, error, context: { encoder } })
+    void invalidateEncoderCache().catch(() => undefined)
+  } })
+})
 function release(senderId: number): void { for (const controller of tasks.get(senderId)?.values() ?? []) controller.abort(new Error('代理创建已取消。')); tasks.delete(senderId) }
 async function authorizedSource(source: string): Promise<string> {
   const local = normalizeLocalSource(source)
