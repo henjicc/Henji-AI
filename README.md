@@ -148,6 +148,18 @@ docs/rules/          架构、界面、测试等项目规则
 - [日志调试中心使用手册](docs/日志调试中心使用手册.md)（开发与测试模式）
 - [验证与测试规则](docs/rules/testing.md)
 
+## 用到的开源项目
+
+痕迹AI 建立在许多优秀的开源项目之上，主要包括：
+
+- **桌面与界面**：[Electron](https://www.electronjs.org/)、[React](https://react.dev/)、[Vite](https://vitejs.dev/) / [electron-vite](https://electron-vite.org/)、[Tailwind CSS](https://tailwindcss.com/)、[Lucide](https://lucide.dev/)、[React Flow](https://reactflow.dev/)、[Dockview](https://dockview.dev/)、[Tiptap](https://tiptap.dev/)
+- **图形与 3D**：[Three.js](https://threejs.org/) / [React Three Fiber](https://r3f.docs.pmnd.rs/)、[Konva](https://konvajs.org/)、[VGPU](https://vgpu.sh/)、[OpenCV.js](https://opencv.org/)
+- **音视频**：[FFmpeg](https://ffmpeg.org/)、[Mediabunny](https://mediabunny.dev/)、[RNNoise](https://github.com/xiph/rnnoise)
+- **本地模型与数据**：[ONNX Runtime](https://onnxruntime.ai/)、[SQLite](https://sqlite.org/) / [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)、[sharp](https://sharp.pixelplumbing.com/)
+- **智能助手**：[Pi](https://github.com/earendil-works/pi)、[Model Context Protocol](https://modelcontextprotocol.io/)
+
+完整依赖及其许可证见应用内「设置 → 关于」。
+
 ## 许可证
 
 本项目采用 [Apache License 2.0](LICENSE)。第三方资源与依赖遵循各自的许可证。
