@@ -1,3 +1,4 @@
+import { ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -27,7 +28,7 @@ vi.mock('../engine/videoEditCodeCompiler', async () => {
 beforeEach(() => { installHarnessNativeStorage(); checks.hold = false; checks.disposed = 0 })
 afterEach(async () => { for (const request of checks.pending) request.resolve(); await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
-it.each(['close', 'failed-open', 'create'] as const)('后台打开正在编译时%s不释放共享编译器', async action => {
+it.each(['close', 'failed-open', 'create'] as const)('打开不读取源码，按需读取期间%s不释放共享编译器', async action => {
   const a = await createVideoEditTestProject()
   const document = structuredClone(a.document); document.id = 'background-code'; document.name = '后台代码'
   const source = "export default {name:\"代码\",kind:\"generator\",mode:\"dynamic\",width:1920,height:1080,durationSeconds:2,params:[],draw(){}}"
@@ -37,7 +38,9 @@ it.each(['close', 'failed-open', 'create'] as const)('后台打开正在编译�
   if (action !== 'close') await closeVideoEditProject(a.document.id)
   checks.disposed = 0
   checks.hold = true
-  const opening = openVideoEditDocument({ id }, { focus: false }).then(value => ({ value }), error => ({ error }))
+  const opened = await openVideoEditDocument({ id }, { focus: false })
+  expect(checks.pending.size).toBe(0)
+  const preparing = ensureVideoEditCodeParameterMetadata(opened, opened.document, 'definition', 'version')
   await vi.waitFor(() => expect(checks.pending.size).toBe(1))
   if (action === 'close') await closeVideoEditProject(a.document.id)
   else if (action === 'failed-open') {
@@ -50,9 +53,8 @@ it.each(['close', 'failed-open', 'create'] as const)('后台打开正在编译�
     await closeVideoEditProject(created.document.id)
   }
   for (const request of checks.pending) request.resolve()
-  const result = await opening
-  if ('error' in result) throw result.error
-  expect(result).toHaveProperty('value.document.id', id)
+  await preparing
+  expect(opened.document.id).toBe(id)
   await closeVideoEditProject(id)
   expect(checks.disposed).toBe(1)
 })

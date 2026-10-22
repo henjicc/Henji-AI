@@ -9,6 +9,8 @@ export { warmVideoEditNativeDecoder } from './videoEditRenderTransport'
 export class VideoEditRenderSession extends VideoEditRenderTransport {
   constructor(...args: ConstructorParameters<typeof VideoEditRenderTransport> extends [unknown, ...infer Rest] ? Rest : never) {
     initializeVideoEditCodeSourceRuntime()
-    super({ fonts: prepareVideoEditFonts, proxies: verifiedVideoEditProxySources, maskUpdateTime: videoEditMaskUpdateTime }, ...args)
+    super({ fonts: prepareVideoEditFonts, proxies: verifiedVideoEditProxySources, maskUpdateTime: videoEditMaskUpdateTime, readCodeMetadata: readCodeMetadataCache, writeCodeMetadata: writeCodeMetadataCache, loadCodeModules: prepareVideoEditNativeModules }, ...args)
   }
 }
+import { readCodeMetadataCache, writeCodeMetadataCache } from '../application/videoEditCodeMetadataCache'
+import { prepareVideoEditNativeModules } from '../application/videoEditNativeModules'

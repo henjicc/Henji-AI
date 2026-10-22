@@ -1,3 +1,5 @@
+import { changedCodeMaterialVersions } from '@/core/videoEdit/codeMaterialDocument'
+import { ensureVideoEditChangedCodeMetadata } from './videoEditCodeState'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
@@ -138,13 +140,15 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       assertVideoEditClipsEditable(videoEditComposition(baseline, sequence.id), [clip.id])
       const effect = { id: crypto.randomUUID(), name: filter.definition.name, enabled: true, amount: 1, code: filter.filter! }
       clip.effects = [...(clip.effects ?? []), effect]
-      validateCodeMaterialDocument(candidateDocument, readVideoEditCodeMetadata(owner, candidateDocument))
+      await ensureVideoEditChangedCodeMetadata(owner, baseline, candidateDocument, controller.signal)
+      validateCodeMaterialDocument(candidateDocument, readVideoEditCodeMetadata(owner, candidateDocument), changedCodeMaterialVersions(baseline, candidateDocument))
       filterTrial = videoEditCodeValidationFrames(candidateDocument, [{ ...target, effectIds: [effect.id] }], { sequenceId: sequence.id, frame: Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)) })
     }
     if (publication?.afterImport) candidateDocument = videoEditDocumentSchema.parse(publication.afterImport(candidateDocument, items.map(item => item.id)))
     if (afterCreate) candidateDocument = videoEditDocumentSchema.parse(afterCreate(candidateDocument, items.map(item => item.id)))
     const read = readVideoEditCodeMetadata(owner, candidateDocument)
-    validateCodeMaterialDocument(candidateDocument, read)
+    await ensureVideoEditChangedCodeMetadata(owner, baseline, candidateDocument, controller.signal)
+    validateCodeMaterialDocument(candidateDocument, read, changedCodeMaterialVersions(baseline, candidateDocument))
     const placements = publication || afterCreate ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
     const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication), owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId))
     await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal, false, undefined, measurements)
@@ -219,6 +223,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       trials.push(candidate({ ...result.definition, defaultVersionId: result.versionId }, result.program, {}))
     }
     const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: [...definitions.values()] })
+    await ensureVideoEditChangedCodeMetadata(owner, baseline, document, controller.signal)
     const read = readVideoEditCodeMetadata(owner, document)
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.

@@ -1,6 +1,6 @@
 import { codeElementOverrideStatus } from '@/core/videoEdit/codeElementOverrides'
 import { codeElementLabel } from '@/core/videoEdit/codeElementSelection'
-import { readVideoEditCodeProgram } from './videoEditCodeState'
+import { peekVideoEditCodeProgram } from './videoEditCodeState'
 import { videoEditCodeElementFrames } from './videoEditCodeElements'
 import { requireVideoEditInstance } from './videoEditService'
 
@@ -9,11 +9,11 @@ export function videoEditCodeElementOverrideSummary(projectId: string, sequenceI
   if (!clip?.code) return []
   const overrides = clip.elementOverrides ?? {}
   if (!Object.keys(overrides).length) return []
-  const program = readVideoEditCodeProgram(owner, owner.document, clip.code)
+  const program = peekVideoEditCodeProgram(owner, clip.code.versionId)
   const index = videoEditCodeElementFrames(owner, sequenceId, Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame))).get(clip.id)?.index
   // A hidden or data-generated layer cannot be declared deleted from one frame.
-  const ids = new Set([...Object.keys(program.bundle.locations.layers), ...Object.keys(overrides)]); for (const id of index?.byId.keys() ?? []) ids.add(id)
-  return codeElementOverrideStatus(overrides, ids).map(value => ({ ...value, label: index?.byId.has(value.elementId) ? codeElementLabel(index.byId.get(value.elementId)!) : value.missing ? '元素已不存在' : '元素当前未显示', visible: Boolean(index?.byId.has(value.elementId)), fields: Object.keys(overrides[value.elementId]) }))
+  const ids = new Set([...Object.keys(program?.bundle.locations.layers ?? {}), ...Object.keys(overrides)]); for (const id of index?.byId.keys() ?? []) ids.add(id)
+  return codeElementOverrideStatus(overrides, ids).map(value => ({ ...value, label: index?.byId.has(value.elementId) ? codeElementLabel(index.byId.get(value.elementId)!) : !program ? '正在读取元素…' : value.missing ? '元素已不存在' : '元素当前未显示', visible: Boolean(index?.byId.has(value.elementId)), fields: Object.keys(overrides[value.elementId]) }))
 }
 export function videoEditCodeElementHostSummary(projectId: string) {
   const owner = requireVideoEditInstance(projectId)

@@ -3,7 +3,7 @@ import { videoEditExportHistorySchema, type VideoEditExportHistoryEntry } from '
 import { persistenceMessage } from '@/core/persistence/messages'
 import { VIDEO_EDIT_DOCUMENT_VERSION } from '@/core/persistence/schemaVersions'
 import { creativeIntentsSchema, creativeIntentLiveResources, type CreativeIntents } from '@/core/creativeIntent/persistence'
-import { pruneCodeSources, assertCodeSourcesUnchanged } from '@/core/videoEdit/codeMaterial/sources'
+import { pruneCodeSources, assertCodeSourcesUnchanged, withActualCodeSourceHashes, invalidateCodeSourceReads } from '@/core/videoEdit/codeMaterial/sources'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { copyVideoEditSequence } from '@/core/videoEdit/sequenceCopy'
 import { createLogger } from '@/core/logging'
@@ -20,7 +20,7 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, VIDEO_EDIT_TIMELINE_TOOLS, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
-import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
+import { validateCodeMaterialDocument, changedCodeMaterialVersions } from '@/core/videoEdit/codeMaterialDocument'
 import type { DocumentTarget, ProjectSummary } from '@/core/documents/types'
 import type { VideoEditDocumentContent } from '@/core/documents/kinds/videoEdit'
 import { isDocumentServiceError, toError } from '@/features/documents/documentErrors'
@@ -28,7 +28,7 @@ import type { DocumentSession } from '@/features/documents/documentSession'
 import { getDocumentSessionRegistry, parentFolderOf, type DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import type { DocumentContentAdapter, DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
-import { ensureVideoEditCodeDocumentMetadata, installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
+import { installVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler, releaseVideoEditCodeMetadata } from './videoEditCodeState'
 import { validateVideoEditFontChanges } from './videoEditFonts'
 import { videoEditClipUnderPlayhead } from './videoEditPlayheadSelection'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -314,7 +314,7 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
     try {
       videoEditDocumentSchema.parse(owner.document)
       assertVideoEditLockedTracks(state.before, owner.document)
-      validateCodeMaterialDocument(owner.document, readVideoEditCodeMetadata(owner, owner.document))
+      validateCodeMaterialDocument(owner.document, readVideoEditCodeMetadata(owner, owner.document), changedCodeMaterialVersions(state.before, owner.document))
     } catch (error) { finishVideoEditGesture(handle, false); throw error }
   }
   if (commit && state.validateFonts) {
@@ -573,7 +573,7 @@ function applyVideoEditDocument(instance: VideoEditInstance, update: (document: 
   assertCodeSourcesUnchanged(instance.document, requested)
   const next = normalizeVideoEditCaptionSources(videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors)))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
-  validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
+  validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next), changedCodeMaterialVersions(instance.document, next))
   if (!restoring && !gestures.has(instance)) validateVideoEditFontChanges(instance.document, next, readVideoEditCodeMetadata(instance, instance.document), readVideoEditCodeMetadata(instance, next))
   if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
   return publishVideoEditDocument(instance, next, recordHistory)
@@ -822,7 +822,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const root = projectRootOf(session)
   const detached = root ? await relocateProjectMedia(loaded, root) : null
   const document = detached ?? loaded
-  const codeMetadata = await prepareVideoEditCodeMetadata(document)
+  invalidateCodeSourceReads((document.codeMaterials ?? []).flatMap(definition => definition.versions))
   if (session.isEnded) throw new Error('剪辑在打开期间已关闭。')
   const view = defaultSequenceView(document.sequences[0])
   const instance = {
@@ -833,7 +833,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
     dirty: { get: () => session.dirty, enumerable: true },
     error: { get: () => sessionError(session), enumerable: true },
   })
-  installVideoEditCodeMetadata(instance, codeMetadata)
+  installVideoEditCodeMetadata(instance, new Map())
   const listeners = new Set<() => void>()
   contentListeners.set(instance, listeners)
   const adapter: DocumentContentAdapter<VideoEditDocumentContent> = {
@@ -841,7 +841,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
     getContent: () => {
       const document = withVideoEditCurrentMetadata(gestures.get(instance)?.before ?? instance.document, instance.document)
       if (document.creativeIntents) document.creativeIntents = { ...document.creativeIntents, resources: creativeIntentLiveResources([document.creativeIntents, ...instance.past.map(d => d.creativeIntents), ...instance.future.map(d => d.creativeIntents)]) }
-      return videoEditDocumentContent(document)
+      return videoEditDocumentContent(withActualCodeSourceHashes(document))
     },
     receiveContent: (content) => {
       // 冲突后“重新载入”、收集素材改写了引用：按新内容重建，撤销历史不跨版本
@@ -850,6 +850,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
       const received = videoEditDocumentFromContent(content, { id: before.id, name: session.documentMeta.name }, before.revision + 1)
       const receivedRoot = projectRootOf(session)
       instance.document = received
+      invalidateCodeSourceReads((received.codeMaterials ?? []).flatMap(definition => definition.versions))
       if (receivedRoot) void relocateProjectMedia(received, receivedRoot).then(next => {
         if (!next || session.isEnded || instance.document !== received) return
         instance.document = next; instance.version++; instance.contentVersion++
@@ -857,7 +858,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
       }).catch(error => logger.warn('重新载入后项目素材身份未刷新', { event: 'video_edit.document.media_relocate_failed', error }))
       instance.past = []; instance.future = []; instance.playing = false; instance.version++; instance.contentVersion++
       reconcileSequenceView(instance)
-      void ensureVideoEditCodeDocumentMetadata(instance, instance.document).catch(error => logger.warn('重新载入后代码素材检查未完成', { event: 'video_edit.document.code_metadata_failed', error }))
+      installVideoEditCodeMetadata(instance, new Map())
       publishVideoEdit(true)
       void import('./videoEditInPlaceGeneration').then(inPlace => {
         if (!session.isEnded && instances.get(session.id) === instance) inPlace.restoreVideoEditInPlaceJobs(session.id)
@@ -870,6 +871,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const dispose = (): void => {
     if (disposed) return
     disposed = true
+    releaseVideoEditCodeMetadata(instance)
     endVideoEditTiming(session.id)
     unsubscribe(); detach(); cancelVideoEditGesture(instance); instance.playing = false
     if (instances.get(session.id) === instance) instances.delete(session.id)

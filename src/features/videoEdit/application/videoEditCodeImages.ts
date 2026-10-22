@@ -4,7 +4,7 @@ import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMateria
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import type { VideoEditCodeTarget } from './videoEditCodeParameters'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { importVideoEditSources } from './videoEditMedia'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 
@@ -17,6 +17,7 @@ export async function prepareVideoEditCodeImageBinding(target: VideoEditCodeTarg
   const clip = sequence?.clips.find(clip => clip.id === target.clipId)
   const code = target.effectId ? clip?.effects?.find(effect => effect.id === target.effectId)?.code : clip?.code
   if (!code || !clip || !sequence || code.versionId !== target.versionId) throw new Error('原代码片段或源码版本已改变，请重新选择。')
+  await ensureVideoEditCodeParameterMetadata(owner, document, code.definitionId, code.versionId)
   const declaration = readVideoEditCodeMetadata(owner, document)(code).parameters.find(parameter => parameter.key === key)
   if (!declaration || !['image', 'audio'].includes(declaration.type)) throw new Error('此参数不是媒体引用。')
   const media = mediaId ? document.media.find(media => media.id === mediaId) : undefined

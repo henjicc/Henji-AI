@@ -4,20 +4,21 @@ import { collectVideoEditFonts, missingVideoEditFonts, type VideoEditFontUse } f
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialSource, codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { fontLibrarySnapshot, loadFontLibrary, prepareFontPayloads, validateFontName, type FontPayload } from '@/platform/fonts'
-import { CODE_PREPARATION_CONCURRENCY, compileVideoEditCode } from './videoEditCodeState'
+import { compileVideoEditCode } from './videoEditCodeState'
 import { mapWithConcurrency } from '@/utils/mapWithConcurrency'
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 import { createLogger } from '@/core/logging'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
+import { videoEditEffectCodes } from '@/core/videoEdit/compositing'
 const logger = createLogger('features.videoEdit.fonts')
 export async function videoEditFontUses(document: VideoEditDocument | VideoEditComposition): Promise<VideoEditFontUse[]> {
   initializeVideoEditCodeSourceRuntime()
   const metadata = new Map<string, Awaited<ReturnType<typeof compileVideoEditCode>>>()
   const read: CodeMaterialMetadataReader = instance => metadata.get(instance.versionId)!
-  // Collect only font parameter declarations; compile through the existing cached compiler worker.
+  // 只读取传入范围内的字体声明，与参数面板共用按源码内容缓存的元数据。
   const codes = [...document.items.flatMap(item => item.code ? [item.code] : []), ...('clips' in document ? [document, ...(document.sequences ?? [])] : document.sequences).flatMap(sequence => sequence.clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...(clip.effects ?? []).flatMap(effect => effect.code ? [effect.code] : [])]))]
   const unique = [...new Map(codes.map(instance => [instance.versionId, instance])).values()]
-  const programs = await mapWithConcurrency(unique, CODE_PREPARATION_CONCURRENCY, async instance => {
+  const programs = await mapWithConcurrency(unique, 4, async instance => {
     await loadCodeSourceReferences(codeMaterialVersion(document, instance), { reuseVerifiedWithinMs: CODE_SOURCE_REVERIFY_MS })
     return [instance.versionId, await compileVideoEditCode(codeMaterialSource(document, instance).compilation)] as const
   })
@@ -42,8 +43,13 @@ export async function prepareVideoEditFonts(document: VideoEditDocument | VideoE
 }
 /** Validate only newly written names. Existing missing fonts remain inspectable and editable. */
 export function changedVideoEditFonts(before: VideoEditDocument, next: VideoEditDocument, readBefore: CodeMaterialMetadataReader, readNext = readBefore): VideoEditFontUse[] {
-  const previous = new Map(collectVideoEditFonts(before, readBefore).map(use => [use.ownerId, use.font]))
-  return collectVideoEditFonts(next, readNext).filter(use => previous.get(use.ownerId) !== use.font)
+  // 只读本次改动涉及的对象，避免改普通片段时顺带读取全工程代码参数。
+  const signature = (value: VideoEditDocument['items'][number] | VideoEditDocument['sequences'][number]['clips'][number]): string => JSON.stringify([value.code, value.graphic, 'textStyle' in value ? value.textStyle : undefined, 'effects' in value ? videoEditEffectCodes(value.effects) : []])
+  const old = new Map([...before.items, ...before.sequences.flatMap(sequence => sequence.clips)].map(value => [value.id, signature(value)]))
+  const changed = new Set([...next.items, ...next.sequences.flatMap(sequence => sequence.clips)].filter(value => old.get(value.id) !== signature(value)).map(value => value.id))
+  const scope = (document: VideoEditDocument): VideoEditDocument => ({ ...document, items: document.items.filter(item => changed.has(item.id)), sequences: document.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.filter(clip => changed.has(clip.id)) })) })
+  const previous = new Map(collectVideoEditFonts(scope(before), readBefore).map(use => [use.ownerId, use.font]))
+  return collectVideoEditFonts(scope(next), readNext).filter(use => previous.get(use.ownerId) !== use.font)
 }
 export function validateVideoEditFontChanges(before: VideoEditDocument, next: VideoEditDocument, readBefore: CodeMaterialMetadataReader, readNext = readBefore): void {
   for (const use of changedVideoEditFonts(before, next, readBefore, readNext)) validateFontName(use.font)

@@ -4,7 +4,7 @@ import { mapWithConcurrency } from '../../../utils/mapWithConcurrency'
 import { CODE_MATERIAL_LIMITS, CodeMaterialError } from './contract'
 
 export interface CodeMaterialFiles { entry: string; files: Record<string, string>; resolvedImports?: Record<string, Record<string, string>> }
-export interface CodeSourceResolver { read(hash: string, location?: string, path?: string): string }
+export interface CodeSourceResolver { read(hash: string, location?: string, path?: string): string; contentKey?(hash: string, location: string): string }
 export interface CodeSource { hash: string; source: string }
 export interface CodeFileReference { path: string; location: string; hash: string }
 export interface CodeComponentPin { name: string; version: number; location: string; hash: string; imports: CodeComponentPin[] }
@@ -59,17 +59,27 @@ export function codeFilesFromInput(input: { source?: string; files?: Record<stri
 }
 // Source content is session memory, never part of a video document. I/O is injected by the host.
 const contents = new Map<string, string>()
+// 路径只指向实际内容键；两个原来相同的文件在磁盘上改成不同内容时不能互相覆盖。
+const locationHashes = new Map<string, string>()
+const readingLocations = new Map<string, Promise<void>>()
 const transient = new Set<string>()
-/** 位置与内容最近一次读盘核对通过的时刻。 */
+/** 最近一次成功读盘时刻；哈希只作内容寻址，不是外部编辑拦截条件。 */
 const verifiedLocations = new Map<string, number>()
-/** 打开剪辑后紧接着的内部准备步骤复用核对结果的时长。 */
+/** 同一轮参数、字体准备复用已读取文本的时长。 */
 export const CODE_SOURCE_REVERIFY_MS = 30_000
 let reader: ((file: CodeFileReference) => Promise<string>) | undefined
 export function installCodeSourceReader(read: (file: CodeFileReference) => Promise<string>): void { reader = read }
+/** 新打开的会话首次使用源码时必须重新读盘，不沿用上个会话的短时 I/O 复用。 */
+export function invalidateCodeSourceReads(versions: Iterable<{ files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }>): void {
+  for (const version of versions) for (const file of [...version.files, ...componentFileReferences(version.imports)]) verifiedLocations.delete(JSON.stringify([file.location, file.hash]))
+}
+export function codeSourceReferencesLoaded(version: { files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }): boolean {
+  return [...version.files, ...componentFileReferences(version.imports)].every(file => transient.has(file.location) || verifiedLocations.has(JSON.stringify([file.location, file.hash])))
+}
 export function rememberCodeSource(hash: string, source: string): void { contents.set(hash, source) }
 export function rememberTransientCodeSource(hash: string, source: string): string { const location = `memory:${hash}`; transient.add(location); rememberCodeSource(hash, source); return location }
 export function documentCodeSourceResolver(_document?: unknown): CodeSourceResolver {
-  return { read(hash, _location, path): string { const source = contents.get(hash); if (source === undefined) throw new CodeMaterialError('COMPATIBILITY', `${path ?? '源码文件'} 尚未读取，请重新打开剪辑；若文件缺失，请从项目备份恢复原文件。`); return source } }
+  return { contentKey: (hash, location) => locationHashes.get(location) ?? hash, read(hash, location, path): string { const source = contents.get(location && locationHashes.get(location) || hash); if (source === undefined) throw new CodeMaterialError('COMPATIBILITY', `${path ?? '源码文件'} 尚未读取；若文件缺失，请从项目备份恢复原文件后重试。`); return source } }
 }
 export function componentFileReferences(imports: readonly CodeComponentPin[] = []): CodeFileReference[] {
   const files: CodeFileReference[] = []; const stack = [...imports]; const seen = new Set<string>()
@@ -81,9 +91,8 @@ export function componentFileReferences(imports: readonly CodeComponentPin[] = [
   return files
 }
 /**
- * 读取并核对一个版本引用的源码。默认每次都读盘核对位置与内容（外部修改、缺失要及时报出）；
- * `reuseVerifiedWithinMs` 只给紧跟在一次完整核对之后的内部步骤用（打开剪辑后的字体与渲染准备），
- * 同一位置与内容在这段时间内核对过就不再重读。
+ * 按需读取版本引用的源码，以实际读到的内容寻址。缺失文件保留可恢复错误。
+ * `reuseVerifiedWithinMs` 让同一轮参数、字体准备复用读取结果；新打开会话会清除此时间窗。
  */
 export async function loadCodeSourceReferences(version: { files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }, options: { reuseVerifiedWithinMs?: number } = {}): Promise<void> {
   const pending = new Map<string, CodeFileReference>()
@@ -92,21 +101,27 @@ export async function loadCodeSourceReferences(version: { files: readonly CodeFi
     const key = JSON.stringify([file.location, file.hash])
     if (pending.has(key) || transient.has(file.location)) continue
     const verifiedAt = verifiedLocations.get(key)
-    if (options.reuseVerifiedWithinMs && verifiedAt !== undefined && now - verifiedAt <= options.reuseVerifiedWithinMs && contents.has(file.hash)) continue
+    if (options.reuseVerifiedWithinMs && verifiedAt !== undefined && now - verifiedAt <= options.reuseVerifiedWithinMs && contents.has(locationHashes.get(file.location) ?? file.hash)) continue
     // 渲染 Worker 没有读取服务，使用主线程已校验并发来的源码。
     if (!reader && contents.has(file.hash)) continue
     if (!reader) throw new CodeMaterialError('COMPATIBILITY', '源码文件读取服务尚未就绪，请重新打开剪辑。')
     pending.set(key, file)
   }
-  // 每次读取都核对磁盘上的位置与内容（外部修改、缺失要及时报出）；同一版本的文件并发读取。
-  await Promise.all([...pending.values()].map(async file => {
-    const source = await reader!(file)
-    if (await sha256HexString(source) !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 已被外部修改，请从项目备份恢复原文件，或将改动保存为新版本。`)
-    rememberCodeSource(file.hash, source)
-    verifiedLocations.set(JSON.stringify([file.location, file.hash]), Date.now())
+  // 同一路径合并并发 I/O，两个不同路径即使原哈希相同也分别读取。
+  await Promise.all([...pending.values()].map(file => {
+    const known = readingLocations.get(file.location)
+    if (known) return known
+    const pending = (async () => {
+      const source = await reader!(file)
+      const hash = await sha256HexString(source)
+      rememberCodeSource(hash, source); locationHashes.set(file.location, hash)
+      verifiedLocations.set(JSON.stringify([file.location, file.hash]), Date.now())
+    })().finally(() => { readingLocations.delete(file.location) })
+    readingLocations.set(file.location, pending)
+    return pending
   }))
 }
-/** 渲染 Worker 不读盘：主线程读好并校验后，把尚未发送的源码随文档一起发过去。 */
+/** 需要显式传输内容表的调用方按实际内容键收集；正常渲染已改为按需请求路径。 */
 export async function collectCodeSourceTexts(versions: Iterable<{ files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }>, sent?: Set<string>): Promise<Record<string, string>> {
   const result: Record<string, string> = {}
   // 已发送过的版本内容不可变，编辑时不再逐次读盘；其余版本并发读取，再按原顺序收集。
@@ -114,9 +129,10 @@ export async function collectCodeSourceTexts(versions: Iterable<{ files: readonl
   await mapWithConcurrency(pending, 8, ({ version }) => loadCodeSourceReferences(version, { reuseVerifiedWithinMs: CODE_SOURCE_REVERIFY_MS }))
   for (const { files } of pending) {
     for (const file of files) {
-      const source = contents.get(file.hash)
-      if (source === undefined || sent?.has(file.hash)) continue
-      result[file.hash] = source; sent?.add(file.hash)
+      const source = documentCodeSourceResolver().read(file.hash, file.location, file.path)
+      const hash = locationHashes.get(file.location) ?? file.hash
+      if (source === undefined || sent?.has(hash)) continue
+      result[hash] = source; sent?.add(hash)
     }
   }
   return result
@@ -127,11 +143,14 @@ export function resolveCodeMaterialFiles(version: { entry: string; files: readon
   return normalizeCodeMaterialFiles({ entry: version.entry, files: Object.fromEntries(version.files.map(file => [file.path, resolver.read(file.hash, file.location, file.path)])) })
 }
 export async function verifyCodeSourceReferences(version: { files: readonly CodeFileReference[] }, resolver: CodeSourceResolver): Promise<void> {
-  const checked = new Set<string>()
-  for (const file of version.files) if (!checked.has(file.hash)) {
-    if (await sha256HexString(resolver.read(file.hash, file.location, file.path)) !== file.hash) throw new CodeMaterialError('COMPATIBILITY', `${file.path} 的源码内容与固定哈希不一致，请从项目备份恢复原文件。`)
-    checked.add(file.hash)
-  }
+  // 兼容资产导入调用方：只确认可读，内容身份由实际读到的文本决定。
+  for (const file of version.files) resolver.read(file.hash, file.location, file.path)
+}
+
+/** 仅保存快照更新已有 hash；读取不改文档、不标脏，也不写原文件。 */
+export function withActualCodeSourceHashes<T extends { codeMaterials?: { versions: { files: CodeFileReference[]; imports?: CodeComponentPin[] }[] }[] }>(document: T): T {
+  const pin = (value: CodeComponentPin): CodeComponentPin => ({ ...value, hash: locationHashes.get(value.location) ?? value.hash, imports: value.imports.map(pin) })
+  return { ...document, ...(document.codeMaterials ? { codeMaterials: document.codeMaterials.map(definition => ({ ...definition, versions: definition.versions.map(version => ({ ...version, files: version.files.map(file => ({ ...file, hash: locationHashes.get(file.location) ?? file.hash })), ...(version.imports ? { imports: version.imports.map(pin) } : {}) })) })) } : {}) }
 }
 export function assertCodeSourcesUnchanged(before: { codeMaterials?: { versions: { id: string }[] }[] }, after: { codeMaterials?: { versions: { id: string }[] }[] }): void {
   const known = new Map(before.codeMaterials?.flatMap(definition => definition.versions.map(version => [version.id, JSON.stringify(version)])))
@@ -152,7 +171,7 @@ export function mergeCodeSources(...groups: readonly (readonly CodeSource[] | un
 }
 /** Cleanup never deletes ordinary source files visible to the user, including abandoned candidates. */
 export function pruneCodeSources<T>(document: T): T { return document }
-export function codeMaterialFilesKey(input: CodeMaterialFiles): string { return JSON.stringify([input.entry, Object.entries(input.files).sort(([a], [b]) => a.localeCompare(b))]) }
+export function codeMaterialFilesKey(input: CodeMaterialFiles): string { return JSON.stringify([input.entry, Object.entries(input.files).sort(([a], [b]) => a.localeCompare(b)), Object.entries(input.resolvedImports ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([path, imports]) => [path, Object.entries(imports).sort(([a], [b]) => a.localeCompare(b))])]) }
 
 /** Container relocation changes locations, never the immutable author content. */
 export function codeVersionContentKey(version: { entry: string; files: readonly CodeFileReference[]; imports?: readonly CodeComponentPin[] }): string {

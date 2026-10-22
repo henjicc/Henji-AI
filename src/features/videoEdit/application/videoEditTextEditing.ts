@@ -9,7 +9,7 @@ import { loadAudioEditProject } from '@/features/audioEdit/application/audioEdit
 import { videoEditSubtitleSequenceSignature } from './videoEditAutoSubtitles'
 import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
 import { editVideoProject, editVideoSequence, holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { resolveVideoEditTranscriptMatch } from './videoEditTranscriptQuery'
 import { verifyVideoEditSpeechMediaContent } from '../videoEditMediaContent'
 
@@ -31,7 +31,7 @@ export async function editVideoEditText(projectId: string, sequenceId: string, s
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('核对期间时间线已有修改，请重新选择文字。')
     const metadata = readVideoEditCodeMetadata(owner, document)
     let target = sequenceId
-    editVideoProject(projectId, snapshot => {
+    await withVideoEditCodeMetadata(() => editVideoProject(projectId, snapshot => {
       if (action === 'delete') return deleteVideoEditTextRanges(snapshot, sequenceId, ranges, metadata)
       if (action === 'insert') {
         if (frame === undefined) throw new Error('insert 必须指定插入帧。')
@@ -39,7 +39,7 @@ export async function editVideoEditText(projectId: string, sequenceId: string, s
       }
       const excerpt = extractVideoEditTextRanges(snapshot, sequenceId, ranges, name, metadata); target = excerpt.id
       return { ...snapshot, sequences: [...snapshot.sequences, excerpt] }
-    })
+    }))
     logger.info('文本剪辑完成', { event: 'video_edit.text.edit.completed', context: { projectId, sequenceId, action, ranges } })
     return { ranges, sequenceId: target, changed: owner.contentVersion !== contentVersion }
   } catch (error) {

@@ -3,11 +3,14 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { loadAuthorModule, type AuthorModule } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import { authorEffectMetadata } from './videoEditAuthorParameters'
+import { prepareAuthorModuleUrls } from './videoEditAuthorModules'
+
+const bundleBytes = (bundle: CodeAuthorBundle): number => 2 * (bundle.modules ? Object.values(bundle.modules.files).reduce((sum, text) => sum + text.length, 0) : bundle.code.length + bundle.map.length)
 
 /** Modules are immutable per source version; GPU resources belong to instances.
  * Owned by the timeline compositor, never a separate worker or device. */
 export class VideoEditAuthorPrograms {
-  private readonly modules = new Map<CodeAuthorBundle, { url: string; module: Promise<AuthorModule> }>()
+  private readonly modules = new Map<CodeAuthorBundle, { dispose(): void; module: Promise<AuthorModule> }>()
   private readonly instances = new Map<string, { program: CodeAuthorProgram; runtime: VideoEditAuthorRuntime }>()
   /** Instances warmed ahead of the playhead: kept until their clip is drawn, even while no current frame uses them. */
   private protectedKeys: ReadonlySet<string> = new Set()
@@ -26,13 +29,16 @@ export class VideoEditAuthorPrograms {
     if (this.closed) return Promise.reject(new Error('作者渲染会话已关闭。'))
     const known = this.modules.get(bundle)
     if (known) return known.module
-    const url = URL.createObjectURL(new Blob([bundle.code], { type: 'text/javascript' }))
-    const module = loadAuthorModule(url).catch(error => {
+    let release = (): void => undefined
+    const module = prepareAuthorModuleUrls(bundle).then(urls => {
+      release = urls.dispose
+      return loadAuthorModule(urls.url)
+    }).catch(error => {
       this.modules.delete(bundle)
-      URL.revokeObjectURL(url)
+      release()
       throw error
     })
-    this.modules.set(bundle, { url, module })
+    this.modules.set(bundle, { dispose: () => release(), module })
     return module
   }
 
@@ -42,12 +48,12 @@ export class VideoEditAuthorPrograms {
       if (this.closed) throw new Error('作者渲染会话已关闭。')
       const program: CodeAuthorProgram = { ...authorEffectMetadata(effect), seed: 0, apiVersion: 4, languageVersion: 4, bundle }
       const pinned = new Set([bundle, ...[...this.instances.values()].map(value => value.program.bundle)])
-      let bytes = [...this.modules.keys()].reduce((sum, value) => sum + 2 * (value.code.length + value.map.length), 0)
+      let bytes = [...this.modules.keys()].reduce((sum, value) => sum + bundleBytes(value), 0)
       for (const [source, entry] of this.modules) {
         if (this.modules.size <= 32 && bytes <= 64 * 1024 ** 2) break
         if (pinned.has(source)) continue
-        this.modules.delete(source); bytes -= 2 * (source.code.length + source.map.length)
-        try { await (await entry.module).dispose?.() } finally { URL.revokeObjectURL(entry.url) }
+        this.modules.delete(source); bytes -= bundleBytes(source)
+        try { await (await entry.module).dispose?.() } finally { entry.dispose() }
       }
       return program
     })
@@ -93,7 +99,7 @@ export class VideoEditAuthorPrograms {
     const modules = [...this.modules.values()]; this.modules.clear()
     const results = await Promise.allSettled(modules.map(async entry => {
       try { await (await entry.module).dispose?.() }
-      finally { URL.revokeObjectURL(entry.url) }
+      finally { entry.dispose() }
     }))
     for (const result of results) if (result.status === 'rejected') errors.push(result.reason)
     if (errors.length) throw new AggregateError(errors, '作者渲染会话释放失败。')

@@ -34,7 +34,7 @@ import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
 import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from './VideoEditAudioChannelsDialog'
 import { DockHeaderPortal } from '@/components/dockLayouts/DockHeaderPortal'
 import { VideoEditProjectDocumentsButton } from './VideoEditProjectDocuments'
-import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
+import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { selectVideoEditProjectItems, videoEditBinPath, videoEditProjectColumns, videoEditProjectRows, type VideoEditProjectEntry, type VideoEditProjectRow, type VideoEditProjectSort, type VideoEditProjectSortKey } from './videoEditProjectModel'
 import { videoEditKindIcon } from './videoEditKindIcons'
 
@@ -131,7 +131,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const media = useMemo(() => new Map(instance.document.media.map(value => [value.id, value])), [instance.document.media])
   const selectedIds = new Set(instance.selectedItemIds)
   const selectedItems = instance.document.items.filter(item => selectedIds.has(item.id))
-  const run = (operation: () => unknown | Promise<unknown>): void => { void Promise.resolve().then(operation).catch(error => {
+  const run = (operation: () => unknown | Promise<unknown>): void => { void withVideoEditCodeMetadata(operation).catch(error => {
     if (error instanceof Error && /源预览请求已被更新|源预览已关闭/.test(error.message)) return
     onError(error)
   }) }
@@ -170,13 +170,13 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'adjustment', label: '新建调整图层', icon: <Plus size={UI_ICON_SIZE.md} />, onClick: createAdjustment },
   ]
   const createFromItem = (id: string): void => {
-    try {
+    run(() => {
       const item = instance.document.items.find(item => item.id === id)!
       const source = media.get(item.mediaId ?? '')
       const requireFrameRate = source?.kind === 'video' && (!source.frameRate || source.frameRateMode !== 'sampled-constant')
       const settings = requireFrameRate ? { name: item.name, binId: item.binId, width: source.width >= 16 ? source.width : 1920, height: source.height >= 16 ? source.height : 1080 } : videoEditSequenceFromItem(instance.document, id, {}, readVideoEditCodeMetadata(instance, instance.document))
       setSequenceDialog({ kind: 'fromItem', id, settings, requireFrameRate })
-    } catch (error) { onError(error) }
+    })
   }
   const blankMenu = (): MenuItem[] => [
     { id: 'import', label: '导入文件', icon: <Import size={UI_ICON_SIZE.md} />, onClick: choose },

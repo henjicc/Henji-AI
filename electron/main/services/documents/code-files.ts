@@ -82,7 +82,9 @@ export class DocumentCodeFiles {
         if (!group.files.some(file => this.pending.get(file.location) === group)) continue
         if (group.files.some(file => retained.has(path.resolve(file.location).toLocaleLowerCase()))) continue
         if (group.files.some(file => !request.files.some(candidate => candidate.location === file.location && candidate.hash === file.hash))) continue
-        for (const file of group.files) await this.read(file)
+        // 补偿只能删除本次写入且内容未变的文件；磁盘上的后续编辑属于用户。
+        const unchanged = await Promise.all(group.files.map(async file => digest(await this.read(file)) === file.hash))
+        if (unchanged.some(value => !value)) continue
         await this.removeOwned(group)
         group.files.forEach(file => this.pending.delete(file.location)); removed.push(group)
       }
@@ -123,7 +125,7 @@ export class DocumentCodeFiles {
       const stat = await fsp.stat(location)
       if (!stat.isFile() || stat.size > CODE_AUTHOR_SOURCE_MAX_BYTES) throw new Error(`${file.path} 不是可读取的源码文件或超过16MiB，请恢复原文件。`)
       const bytes = await fsp.readFile(location); const hash = createHash('sha256').update(bytes).digest('hex')
-      if (hash !== file.hash) throw new Error(`${file.path} 已被外部修改，请先从项目备份恢复原文件；要保留改动，再将改动粘贴到源码编辑器保存为新版本。`)
+      if (hash !== file.hash) this.logger.debug('使用磁盘中的代码源码', { event: 'documents.code.content.changed', context: { file: file.path } })
       const known = this.cache.get(hash)
       const source = known?.source ?? new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
       if (known) this.cache.delete(hash)
@@ -205,7 +207,7 @@ export class DocumentCodeFiles {
   async list(target: DocumentTarget): Promise<CodeComponent[]> {
     const root = await this.root(target); const library = path.join(root, '代码', '组件库')
     const directories = await fsp.readdir(library, { withFileTypes: true }).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error })
-    const records: Array<{ location: string; source: string; hash: string; name: string; metadata: ReturnType<typeof componentSourceMetadata>['metadata'] }> = []
+    const records: Array<{ location: string; source: string; hash: string; previousHash: string | null; name: string; metadata: ReturnType<typeof componentSourceMetadata>['metadata'] }> = []
     for (const directory of directories) {
       if (!directory.isDirectory() || directory.isSymbolicLink()) continue
       for (const file of await fsp.readdir(path.join(library, directory.name))) {
@@ -215,9 +217,9 @@ export class DocumentCodeFiles {
         const source = await fsp.readFile(location, 'utf8'); const hash = digest(source)
         const integrity = `${location}.sha256`; await this.safe(root, integrity)
         const expected = await fsp.readFile(integrity, 'utf8').catch(() => null)
-        if (expected !== hash) throw new Error(`项目组件 ${directory.name}/${file} 缺失校验文件或已被外部修改，请从项目备份恢复原组件文件。`)
+        if (expected !== hash) this.logger.debug('使用磁盘中的项目组件', { event: 'documents.code.component.changed', context: { file } })
         const { metadata } = componentSourceMetadata(source)
-        records.push({ location, source, hash, name: directory.name, metadata })
+        records.push({ location, source, hash, previousHash: expected, name: directory.name, metadata })
       }
     }
     const recordsByHash = new Map(records.map(record => [record.hash, record]))
@@ -226,8 +228,11 @@ export class DocumentCodeFiles {
       if (chain.includes(record.hash) || chain.length >= 64) throw new Error('项目组件存在循环依赖或超出编译深度，请恢复原组件。')
       const key = `${record.location}:${record.hash}`; const known = pins.get(key); if (known) return known
       const result = { name: record.metadata.name, version: record.metadata.version, location: record.location, hash: record.hash, imports: record.metadata.imports.map(request => {
-        const child = recordsByHash.get(request.hash)
-        if (!child) throw new Error(`项目组件 ${record.metadata.name} 引用的 ${request.name}@${request.version} 缺失或被外部修改，请恢复原组件文件。`)
+        // 依赖文件可以在外部编辑；旧校验文件只用于找到原位置，不作为接受源码的条件。
+        const original = records.filter(value => value.previousHash === request.hash && value.metadata.name === request.name && value.metadata.version === request.version)
+        const named = records.filter(value => value.metadata.name === request.name && value.metadata.version === request.version)
+        const child = recordsByHash.get(request.hash) ?? (original.length === 1 ? original[0] : named.length === 1 ? named[0] : undefined)
+        if (!child) throw new Error(`项目组件 ${record.metadata.name} 引用的 ${request.name}@${request.version} 缺失或无法唯一定位，请恢复原组件文件。`)
         return { ...pin(child, [...chain, record.hash]), name: request.name, version: request.version }
       }) }
       pins.set(key, result); return result

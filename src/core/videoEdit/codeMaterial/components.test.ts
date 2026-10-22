@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { expandPinnedCodeComponents, portableCodeComponentFiles, pinCodeComponentImports, packageComponentSource, rewriteCodeComponentImports, componentSourceMetadata, type CodeComponent } from './components'
-import { addressCodeMaterialFiles, codeComponentPinsSchema, componentFileReferences, codeVersionContentKey, documentCodeSourceResolver, installCodeSourceReader, loadCodeSourceReferences, type CodeComponentPin } from './sources'
+import { addressCodeMaterialFiles, codeComponentPinsSchema, componentFileReferences, codeVersionContentKey, documentCodeSourceResolver, installCodeSourceReader, loadCodeSourceReferences, withActualCodeSourceHashes, type CodeComponentPin } from './sources'
 import { renameCodeMaterialFile } from './fileEdits'
 
 const entry = 'export default {languageVersion:3,apiVersion:1,name:"组件",kind:"generator",mode:"static",width:16,height:16,durationSeconds:1,seed:1,parameters:{},render(ctx){return [latest(),old()]}}'
@@ -24,7 +24,15 @@ describe('位置解析与固定组件依赖', () => {
     expect(read).toHaveBeenCalledTimes(2); expect(documentCodeSourceResolver().read(version.files[0].hash)).toBe('export const value=1;')
     const moved = { ...version, files: version.files.map(file => ({ ...file, location: '/另一个项目/代码/素材/v1/main.ts' })) }
     expect(codeVersionContentKey(moved)).toBe(codeVersionContentKey(version)); await loadCodeSourceReferences(moved)
-    read.mockResolvedValue('外部修改'); await expect(loadCodeSourceReferences(version)).rejects.toThrow('main.ts 已被外部修改')
+    read.mockResolvedValue('外部修改'); await loadCodeSourceReferences(version)
+    expect(documentCodeSourceResolver().read(version.files[0].hash, version.files[0].location)).toBe('外部修改')
+    expect(documentCodeSourceResolver().read(moved.files[0].hash, moved.files[0].location)).toBe('export const value=1;')
+    const document = { codeMaterials: [{ versions: [version, moved] }] }
+    const saved = withActualCodeSourceHashes(document)
+    expect(saved.codeMaterials[0].versions[0].files[0].hash).toBe(documentCodeSourceResolver().contentKey!(version.files[0].hash, version.files[0].location))
+    expect(saved.codeMaterials[0].versions[0].files[0].hash).not.toBe(version.files[0].hash)
+    expect(saved.codeMaterials[0].versions[1].files[0].hash).toBe(moved.files[0].hash)
+    expect(document.codeMaterials[0].versions[0]).toBe(version)
     read.mockRejectedValue(new Error('main.ts 缺失，请恢复备份')); await expect(loadCodeSourceReferences(version)).rejects.toThrow('main.ts 缺失')
   })
   it('紧跟完整核对的内部步骤可在时限内复用核对结果；默认仍每次读盘', async () => {

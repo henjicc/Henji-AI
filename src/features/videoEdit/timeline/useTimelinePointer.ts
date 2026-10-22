@@ -1,4 +1,5 @@
 import { isVideoEditContentCurrent } from '../application/videoEditDocumentAlgorithm'
+import { VideoEditCodeMetadataPending } from '../application/videoEditCodeState'
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from '@/core/videoEdit/time'
 import { selectVideoEditSubtitle } from '../application/videoEditSubtitleSelection'
 import { useLayoutEffect, useRef, useState } from 'react'
@@ -72,6 +73,16 @@ export function useTimelinePointer(options: Options) {
   const [box, setBox] = useState<TimelineBox | null>(null)
   const [resized, setResized] = useState<{ trackId: string; height: number } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const waiting = useRef(new WeakSet<Promise<void>>())
+  const resumeMetadata = (error: VideoEditCodeMetadataPending, gesture?: PointerGesture): void => {
+    setFailure(error.message)
+    if (waiting.current.has(error.ready)) return
+    waiting.current.add(error.ready)
+    void error.ready.then(() => {
+      setFailure(value => value === error.message ? null : value)
+      if (gesture && pointer.current === gesture && valid(gesture)) applyPointer(gesture)
+    }, error => { if (!gesture || pointer.current === gesture) current.current.onError(error) })
+  }
 
   const point = (client: Point): Point => {
     const host = viewport.current!; const rect = host.getBoundingClientRect()
@@ -140,6 +151,7 @@ export function useTimelinePointer(options: Options) {
         const next = previewVideoEditTimelineDrag(gesture.handle, adjustment)
         gesture.adjustment = adjustment; gesture.rearrange = undefined; gesture.error = undefined; setFailure(null); setPreview(next); reportClipSnap(next, gesture.mode)
       } catch (error) {
+        if (error instanceof VideoEditCodeMetadataPending) { gesture.adjustment = undefined; gesture.rearrange = undefined; gesture.error = undefined; setPreview(null); clearTimelineSnap(); resumeMetadata(error, gesture); return }
         gesture.adjustment = undefined; gesture.rearrange = undefined; gesture.error = error instanceof Error ? error : new Error(String(error)); setFailure(gesture.error.message); setPreview(null); clearTimelineSnap()
       }
     } else if (gesture.kind === 'transition' || gesture.kind === 'fade') {
@@ -176,7 +188,7 @@ export function useTimelinePointer(options: Options) {
         const trim: VideoEditTimelineTrimDrag = { mode: gesture.mode, ...(gesture.trimEdge ? { edge: gesture.trimEdge } : {}), delta: request.delta + offset }
         const next = previewVideoEditTimelineTrim(gesture.handle, trim)
         gesture.trim = trim; setFailure(null); setPreview(next)
-      } catch (error) { gesture.trim = undefined; setFailure(error instanceof Error ? error.message : String(error)); setPreview(null); clearTimelineSnap() }
+      } catch (error) { gesture.trim = undefined; setPreview(null); clearTimelineSnap(); if (error instanceof VideoEditCodeMetadataPending) resumeMetadata(error, gesture); else setFailure(error instanceof Error ? error.message : String(error)) }
     } else if (gesture.kind === 'zoom' || gesture.kind === 'box') setBox({ from: gesture.origin, to: at })
     else if (gesture.kind === 'height') {
       gesture.next = Math.max(24, Math.min(160, Math.round(gesture.height + gesture.client.y - gesture.origin.y)))
@@ -318,7 +330,7 @@ export function useTimelinePointer(options: Options) {
       const mode = target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'in' ? 'in' : target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'out' ? 'out' : 'move'
       // Validate even a stationary gesture so locked related clips cannot enter edit preview.
       const handle = beginVideoEditTimelineDrag(instance.document.id, sequence.id, ids)
-      try { previewVideoEditTimelineDrag(handle, { mode, delta: 0 }) } catch (error) { finishVideoEditTimelineDrag(handle); throw error }
+      try { previewVideoEditTimelineDrag(handle, { mode, delta: 0 }) } catch (error) { if (error instanceof VideoEditCodeMetadataPending) resumeMetadata(error); else { finishVideoEditTimelineDrag(handle); throw error } }
       capture({ ...base(event), kind: 'clip', handle, ids, primary: clip.id, mode, variant: clipDragVariant(event), moved: false, newTracks: [] })
       setVideoEditView(instance.document.id, { playing: false })
     } catch (error) { onError(error) }

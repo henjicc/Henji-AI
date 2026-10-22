@@ -33,13 +33,13 @@ describe('项目源码普通文件', () => {
     await fsp.symlink(env.outside, path.join(project.path, '代码', '链接'), 'junction')
     await expect(service.writeCodeVersion({ target, definitionId: 'x', name: '链接', contents })).rejects.toThrow('链接')
   })
-  it('按 hash 缓存仍核对磁盘，缺失与篡改给中文恢复提示', async () => {
+  it('按实际磁盘内容缓存，修改直接读回，缺失仍给恢复提示', async () => {
     const { service, target, write } = await setup(); const { files } = await write(); const file = files[0]
     const bom = await service.writeCodeVersion({ target, definitionId: 'bom', name: '带BOM', contents: { entry: 'main.ts', files: { 'main.ts': '\uFEFFexport const value=1;' } } })
     expect(await service.readCodeFile(bom.files[0])).toBe('\uFEFFexport const value=1;')
     expect(await service.readCodeFile(file)).toBe('export default {}'); expect(await service.readCodeFile(file)).toBe('export default {}')
     await fsp.writeFile(file.location, '改过的源码')
-    await expect(service.readCodeFile(file)).rejects.toThrow('外部修改')
+    expect(await service.readCodeFile(file)).toBe('改过的源码')
     await fsp.rm(file.location)
     await expect(service.readCodeFile(file)).rejects.toThrow('从项目备份恢复到原位置')
     await expect(service.readCodeFile({ ...file, location: path.join(env.outside, 'outside.ts') })).rejects.toThrow('源码位置无效')
@@ -71,7 +71,7 @@ describe('项目源码普通文件', () => {
     const copy = await service.duplicateDocument({ target, container: { kind: 'project', projectId: destination.id }, onConflict: 'keepBoth' })
     expect(await service.listCodeComponents({ id: copy.meta.id })).toEqual([])
     await fsp.writeFile(next.location, next.source.replace('value=1', 'value=2'))
-    await expect(service.listCodeComponents(target)).rejects.toThrow('已被外部修改')
+    expect((await service.listCodeComponents(target))[0].versions[0].source).toContain('value=2')
   })
   it('移动、复制、收集及项目/文档包都保留代码路径和组件文件', async () => {
     const { service, target, write, project } = await setup(); const stored = await write()
@@ -180,7 +180,7 @@ it('同批次多个新版本补偿后归属目录也消失，非本次新建文�
   expect(await fsp.readdir(path.join(project.path, '代码'))).toEqual([])
   const changed = await write()
   await fsp.writeFile(changed.files[0].location, '用户修改')
-  await expect(service.discardCodeFiles({ files: changed.files, retainedLocations: [] })).rejects.toThrow('外部修改')
+  await expect(service.discardCodeFiles({ files: changed.files, retainedLocations: [] })).resolves.toBeUndefined()
   expect(await fsp.readFile(changed.files[0].location, 'utf8')).toBe('用户修改')
   const unknown = path.join(project.path, '代码', '自建.ts')
   await fsp.writeFile(unknown, 'user')

@@ -15,7 +15,7 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 import { sameVideoEditAssetContent, videoEditAssetContentSnapshot } from './videoEditAssetReferences'
 import { inspectVideoEditMedia, sameVideoEditMediaPath } from './videoEditMedia'
 import { requireVideoEditInstance, type VideoEditInstance } from './videoEditService'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { collectVideoEditOutput, publishVideoEditOutput, verifyVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
@@ -82,6 +82,7 @@ export async function collectVideoEditCodeAsset(projectId: string, target: Video
     const selected = binding(owner, target)
     const fixed = baseline.codeMaterials!.find(definition => definition.id === selected.code.definitionId)!.versions.find(version => version.id === selected.code.versionId)!
     await loadCodeSourceReferences(fixed)
+    await ensureVideoEditCodeParameterMetadata(owner, baseline, selected.code.definitionId, selected.code.versionId)
     const source = codeMaterialSource(baseline, selected.code)
     prepareCodeMaterialParameters(readVideoEditCodeMetadata(owner, baseline)(selected.code), selected.code)
     const cached = latest.get(owner)

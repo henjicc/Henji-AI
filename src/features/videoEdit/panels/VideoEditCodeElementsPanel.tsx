@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { Diamond, RotateCcw } from 'lucide-react'
-import { UiButton, UiFormRow, UiGroup, UiIconButton, UiSwitch } from '@/components/ui'
+import { UiButton, UiError, UiLoading, UiFormRow, UiGroup, UiIconButton, UiSwitch } from '@/components/ui'
+import { useVideoEditCodeMetadata } from './useVideoEditCodeMetadata'
 import NumberInput from '@/components/ui/NumberInput'
 import type { CodeElementOverrideKey, CodeElementOverrideValues } from '@/core/videoEdit/codeElementOverrides'
 import { selectedVideoEditCodeElement, selectVideoEditCodeElement } from '../application/videoEditCodeElements'
@@ -25,11 +26,12 @@ export function VideoEditCodeElementsPanel({ instance, clipId, onError }: { inst
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision); useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   const clip = instance.document.sequences.find(sequence => sequence.id === instance.activeSequenceId)?.clips.find(clip => clip.id === clipId)
   const selected = selectedVideoEditCodeElement(instance)
+  const metadata = useVideoEditCodeMetadata(instance, clip?.code)
   const target = clip?.code ? { projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId, versionId: clip.code.versionId } : undefined
   const entries = target ? videoEditCodeElementOverrideSummary(target.projectId, target.sequenceId, clipId) : []
   const row = (index: number): React.ReactElement => { const value = entries[index]; return <div className="flex items-center gap-1"><UiButton size="sm" className="min-w-0 flex-1" disabled={!value.visible} onClick={() => selectVideoEditCodeElement(instance, clipId, value.elementId)}>{value.label}</UiButton><UiIconButton size="sm" aria-label={`重置${value.label}`} tooltip="清除该元素的覆盖" onClick={() => { try { resetVideoEditCodeElement({ ...target!, elementId: value.elementId }) } catch (error) { onError(error) } }}><RotateCcw /></UiIconButton></div> }
   return <UiGroup title="元素" titleTone="compact" divided>
-    {target && selected?.entry.clip.id === clipId && <CodeElementProperties key={`${target.versionId}:${selected.element.elementId}`} target={{ ...target, elementId: selected.element.elementId }} onError={onError} />}
+    {metadata.error ? <UiError title="代码参数读取失败" message={metadata.error instanceof Error ? metadata.error.message : '请恢复源码文件后重试。'} onRetry={metadata.retry} /> : !metadata.ready ? <UiLoading message="正在读取代码参数…" /> : target && selected?.entry.clip.id === clipId && <CodeElementProperties key={`${target.versionId}:${selected.element.elementId}`} target={{ ...target, elementId: selected.element.elementId }} onError={onError} />}
     {entries.length > 0 && <div className="h-40"><Virtuoso totalCount={entries.length} itemContent={row} /></div>}
   </UiGroup>
 }

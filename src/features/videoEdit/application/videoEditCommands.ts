@@ -14,7 +14,7 @@ import { chooseVideoEditMedia } from './videoEditMedia'
 import { openVideoEditAudioGainDialog, openVideoEditExportDialog } from './videoEditAudioDialogs'
 import { videoEditClipHasSound } from './videoEditLoudness'
 import { readVideoEditSource, updateVideoEditSource, pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceCommandIdentity, type VideoEditSourceState } from './videoEditSource'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipboard, resizeVideoEditTracks, separateVideoEditAudio } from './videoEditTimeline'
 import { videoEditTimelineViewport } from './videoEditTimelineViewport'
 import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, VIDEO_EDIT_TRACK_HEIGHT_MAX, VIDEO_EDIT_TRACK_HEIGHT_MIN, videoEditAdjacentPoint, videoEditClipsAtFrame, videoEditEditPoints } from '@/core/videoEdit/timelineNavigation'
@@ -292,7 +292,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   const transitionId = (id === 'delete' || id === 'ripple_delete') && !context.clipIds.length ? selectedVideoEditTransitionId(owner!) : undefined
   if (transitionId) { await deleteVideoEditTransition(projectId, sequenceId, transitionId); selectVideoEditTransition(projectId, null); return }
   const intent = timelineIntent(context, id)
-  if (intent) { executeVideoEditTimelineEdit(projectId, sequenceId, intent); if (intent.kind === 'place') focusVideoEditPanel(projectId, 'timeline'); return }
+  if (intent) { await withVideoEditCodeMetadata(() => executeVideoEditTimelineEdit(projectId, sequenceId, intent)); if (intent.kind === 'place') focusVideoEditPanel(projectId, 'timeline'); return }
   switch (id) {
     case 'export': openVideoEditExportDialog(projectId); return
     case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'rate_stretch_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'pen_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return

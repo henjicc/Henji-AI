@@ -58,12 +58,15 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const [savingPreset, setSavingPreset] = useState<VideoEditEffect[] | null>(null)
   const savableEffects = effects.filter(isVideoEditBuiltinEffect)
   const selected = effects.find(effect => effect.id === selectedId)
-  const definitions = useMemo(() => {
-    try {
-      const items = listVideoEditFilterDefinitions(document.id)
-      return { items, options: items.map(value => ({ value: value.id, label: value.name })), error: undefined }
-    } catch (error) { return { items: [], options: [], error } }
-  }, [document])
+  const [definitions, setDefinitions] = useState<{ items: Array<{ id: string; name: string; versionId: string }>; options: Array<{ value: string; label: string }>; error?: unknown; loading?: boolean }>({ items: [], options: [] })
+  useEffect(() => {
+    let current = true
+    setDefinitions({ items: [], options: [], loading: true })
+    void listVideoEditFilterDefinitions(document.id).then(items => {
+      if (current) setDefinitions({ items, options: items.map(value => ({ value: value.id, label: value.name })) })
+    }, error => { if (current) setDefinitions({ items: [], options: [], error }) })
+    return () => { current = false }
+  }, [document.id, document.codeMaterials])
   const definition = useMemo(() => definitions.items.find(value => value.id === definitionId) ?? definitions.items[0], [definitions.items, definitionId])
   const sources = useMemo(() => document.sequences.flatMap(sourceSequence => sourceSequence.clips.filter(sourceClip => (sourceClip.kind === 'audio') === sound && !!sourceClip.effects?.length && (sourceSequence.id !== sequenceId || sourceClip.id !== clipId)).map(sourceClip => ({ value: JSON.stringify([sourceSequence.id, sourceClip.id]), label: `${sourceSequence.name} · ${sourceClip.name}`, sequenceId: sourceSequence.id, clipId: sourceClip.id }))), [document, sequenceId, clipId, sound])
   const source = useMemo(() => sources.find(value => value.value === copySource), [sources, copySource])
@@ -129,6 +132,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
           <UiButton variant="secondary" size="sm" className="shrink-0" disabled={action.busy || !definition} onClick={() => { if (definition) void action.run(signal => createVideoEditEffect(target, { definitionId: definition.id, versionId: definition.versionId }, signal), setSelectedId) }}>添加到片段</UiButton>
         </div>}
         {createdFilter && <p className="text-2xs text-text3">滤镜源码已创建，选择“添加到片段”检查并应用。</p>}
+        {!sound && definitions.loading ? <UiLoading size="xs" message="正在读取代码效果…" /> : null}
         {!sound && definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}
         {sources.length > 0 && <div className="flex items-center gap-1">
           <div className="min-w-0 flex-1"><Dropdown ariaLabel="复制效果的来源片段" value={source?.value} display={source ? undefined : '从其他片段复制效果'} options={sources} disabled={action.busy} onSelect={setCopySource} buttonClassName="w-full" /></div>

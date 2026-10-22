@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { UiButton, UiError, UiGroup } from '@/components/ui'
+import { UiButton, UiError, UiGroup, UiLoading } from '@/components/ui'
+import { useVideoEditCodeMetadata } from './useVideoEditCodeMetadata'
 import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
@@ -58,6 +59,12 @@ function CollectCodeAsset({ editor, onError }: { editor: VideoEditCodeEditorStat
 
 export function CodeParameterPanel({ projectId, sequenceId, clipId, effectId, onError }: { projectId: string; sequenceId: string; clipId: string; effectId?: string; onError: (reason: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  const owner = requireVideoEditInstance(projectId)
+  const clip = owner.document.sequences.find(sequence => sequence.id === sequenceId)?.clips.find(clip => clip.id === clipId)
+  const code = effectId ? clip?.effects?.find(effect => effect.id === effectId)?.code : clip?.code
+  const metadata = useVideoEditCodeMetadata(owner, code)
+  if (metadata.error) return <UiError title="代码参数读取失败" message={metadata.error instanceof Error ? metadata.error.message : '请恢复源码文件后重试。'} onRetry={metadata.retry} />
+  if (!metadata.ready) return <UiLoading message="正在读取代码参数…" />
   let editor: VideoEditCodeEditorState
   try { editor = readVideoEditCodeEditor(projectId, sequenceId, clipId, effectId) } catch (error) { return <UiError title="代码参数暂不可用" message={error instanceof Error ? error.message : '请重新选择代码片段。'} /> }
   return <div key={videoEditParameterTargetIdentity(editor.target)}><VideoEditParameterFields editor={editor} onError={onError} /><CodeSourceEditor editor={editor} /><CollectCodeAsset editor={editor} onError={onError} /></div>

@@ -8,6 +8,7 @@ import { recordVideoEditMaskUpdate } from '../application/videoEditMaskEditing'
 import { videoEditClipSchema, videoEditComposition } from '@/core/videoEdit/document'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { VideoEditRenderTransport } from './videoEditRenderTransport'
 
 const proxyState = vi.hoisted(() => ({ sources: {} as Record<string, import('@/core/videoEdit/proxy').VideoProxyResult> }))
 vi.mock('../application/videoEditProxy', () => ({ verifiedVideoEditProxySources: async () => proxyState.sources }))
@@ -75,6 +76,28 @@ beforeEach(() => {
   platform.allowRoot.mockClear(); platform.dirname.mockClear()
 })
 afterEach(() => { vi.useRealTimers() })
+
+it('初始化不读取代码字体，逐帧只请求当前范围，连续帧复用字体准备', async () => {
+  const project = createVideoEditTestDocument('延迟字体')
+  project.items = [{ id: 'item', name: '占位', kind: 'text' }]
+  const sequence = project.sequences[0]
+  const base = makeVideoEditItemClip(project, 'item', sequence.id, { frame: 0, duration: 20 })
+  sequence.clips = [0, 60].map((start, index) => ({ ...base, id: `clip-${index}`, kind: 'code' as const, start, code: { definitionId: 'code', versionId: `version-${index}`, parameters: {} } }))
+  const fonts = vi.fn(async (_document: VideoEditComposition) => [])
+  const session = new VideoEditRenderTransport({ fonts, proxies: async () => ({}), maskUpdateTime: () => undefined }, videoEditComposition(project, sequence.id))
+  await session.prepareGpu()
+  expect(fonts.mock.calls[0][0].clips).toEqual([])
+  expect(fonts.mock.calls[0][0].items).toEqual([])
+  await session.present(0)
+  expect(fonts.mock.lastCall![0].clips.map(clip => clip.id)).toEqual(['clip-0'])
+  const calls = fonts.mock.calls.length
+  await session.present(1)
+  expect(fonts).toHaveBeenCalledTimes(calls)
+  await session.present(60)
+  expect(fonts.mock.lastCall![0].clips.map(clip => clip.id)).toEqual(['clip-1'])
+  expect(workers[0].messages.find(entry => entry.message.kind === 'init')!.message).toMatchObject({ codeSources: {} })
+  await session.dispose()
+})
 
 it('作者声明由现有渲染会话读取，不创建额外 Worker 或请求画面', async () => {
   const session = new VideoEditRenderSession(composition())
@@ -252,7 +275,7 @@ it('诊断强制浏览器或原生不可用时不建立通道；建立失败记�
   platform.status.mockResolvedValue({ available: true, forcedBackend: null }); platform.connect.mockRejectedValue(new Error('显卡帧通道建立超时。'))
   const failed = new VideoEditRenderSession(composition()); await failed.present(0)
   expect(workers[1].messages[0].message).toMatchObject({ kind: 'init', decode: { nativeAvailable: false } })
-  expect(platform.logs).toEqual([expect.objectContaining({ level: 'warn', meta: expect.objectContaining({ event: 'video_edit.decode.native.channel_failed' }) })])
+  expect(platform.logs.filter(entry => entry.level === 'warn')).toEqual([expect.objectContaining({ level: 'warn', meta: expect.objectContaining({ event: 'video_edit.decode.native.channel_failed' }) })])
   await Promise.all([forced.dispose(), failed.dispose()]); expect(platform.disconnect).not.toHaveBeenCalled()
 })
 

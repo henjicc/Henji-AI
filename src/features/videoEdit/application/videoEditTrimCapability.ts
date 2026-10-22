@@ -3,7 +3,7 @@ import type { trimVideoEditClipCapability } from '@/core/application-control/dom
 import { applyVideoEditTrim, videoEditTrimAvailability } from '@/core/videoEdit/timelineTrims'
 import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
 import { expandVideoEditSelection, videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { splitVideoEditRef } from './videoEditReflection'
 import { requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
@@ -27,7 +27,7 @@ export async function trimVideoEditClip(input: TrimInput) {
   const view = owner.activeSequenceId === sequence.id ? owner : owner.sequenceViews.get(sequence.id)
   const linked = videoEditPickRelations(view?.linkedSelection !== false)
   const trim = { mode: input.mode, ...(input.edge ? { edge: input.edge } : {}), delta: input.frames }
-  const result = applyVideoEditTrim(owner.document, sequence.id, { ...trim, clipIds: expandVideoEditSelection(sequence, [ref.childId], linked) }, readVideoEditCodeMetadata(owner, owner.document))
+  const result = await withVideoEditCodeMetadata(() => applyVideoEditTrim(owner.document, sequence.id, { ...trim, clipIds: expandVideoEditSelection(sequence, [ref.childId], linked) }, readVideoEditCodeMetadata(owner, owner.document)))
   if (!result.delta) {
     const availability = videoEditTrimAvailability(owner.document, sequence.id, { ...trim, clipIds: expandVideoEditSelection(sequence, [ref.childId], linked) }, readVideoEditCodeMetadata(owner, owner.document))
     throw new VideoEditOperationFailure(`${MODE_NAMES[input.mode]}已到边界；负方向可用 ${availability.negative.frames} 帧，正方向可用 ${availability.positive.frames} 帧，请按余量调整。`, { reason: 'trim_boundary', mode: input.mode, requestedFrames: input.frames, ...availability })

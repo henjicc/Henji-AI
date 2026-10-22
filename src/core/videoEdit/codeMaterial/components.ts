@@ -1,5 +1,5 @@
 import { CODE_COMPONENT_SCHEMA_VERSION } from '../../persistence/schemaVersions'
-import ts from 'typescript'
+import { parse } from 'es-module-lexer/js'
 import { migratePersistenceContent, PersistenceError } from '../../persistence/migrations'
 import { formatMigrations } from '../../persistence/formatMigrations'
 import { z } from 'zod'
@@ -30,13 +30,13 @@ export function componentSourceMetadata(source: string): { metadata: CodeCompone
 export function packageComponentSource(source: string, metadata: CodeComponentMetadata): string { return `${headerPrefix}${JSON.stringify(codeComponentMetadataSchema.parse(metadata))}\n${source}` }
 type CodeComponentImport = { specifier: string; name: string; version?: number }
 /**
- * 同一份源码的组件导入不变：按源码文本缓存解析结果。完整 TypeScript 解析在主线程上很重，
- * 打开剪辑、准备字体、每次呈现后安装代码元素都会经 codeMaterialSource 走到这里（39 个版本的工程实测打开时 1.9 秒）。
+ * 用轻量词法器读取导入并按源码文本缓存，参数、字体和 Worker 共用同一条路径。
  * 解析出错的源码不缓存，每次都照常报错。
  */
 const componentImportCache = new Map<string, readonly CodeComponentImport[]>()
 const COMPONENT_IMPORT_CACHE_LIMIT = 1024
 export function codeComponentImports(source: string, fileName = '组件.ts'): CodeComponentImport[] {
+  if (!/\.[cm]?[jt]sx?$/.test(fileName)) return []
   const cached = componentImportCache.get(source)
   if (cached) { componentImportCache.delete(source); componentImportCache.set(source, cached); return cached.map(entry => ({ ...entry })) }
   const parsed = parseCodeComponentImports(source, fileName)
@@ -45,10 +45,10 @@ export function codeComponentImports(source: string, fileName = '组件.ts'): Co
   return parsed
 }
 function parseCodeComponentImports(source: string, fileName: string): CodeComponentImport[] {
-  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2020, false, ts.ScriptKind.TS)
-  return file.statements.flatMap(statement => {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return []
-    const specifier = statement.moduleSpecifier.text
+  const [imports] = parse(source)
+  return imports.flatMap(request => {
+    const specifier = request.specifier
+    if (!specifier) return []
     if (!specifier.startsWith('@组件/')) return []
     const match = /^@组件\/(.+?)(?:@([1-9]\d*))?$/.exec(specifier)
     if (!match || !codeComponentNameSchema.safeParse(match[1]).success) throw new CodeMaterialError('SYNTAX', `${fileName} 的组件导入名称无效：${specifier}`)
@@ -56,31 +56,16 @@ function parseCodeComponentImports(source: string, fileName: string): CodeCompon
   })
 }
 export function rewriteCodeComponentImports(source: string, original: readonly CodeComponentPin[], replacement: readonly CodeComponentPin[]): string {
-  const file = ts.createSourceFile('模块.ts', source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS)
   const edits: Array<{ start: number; end: number; value: string }> = []
-  for (const statement of file.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
-    const request = codeComponentImports(statement.getText(file))[0]; if (!request) continue
+  for (const entry of parse(source)[0]) {
+    const request = codeComponentImports(source).find(request => request.specifier === entry.specifier); if (!request) continue
     const index = original.indexOf(selectPinnedComponent(original, request.name, request.version)!)
     const pin = replacement[index]; if (!pin) throw new Error(`组件 ${request.specifier} 的导入映射缺失。`)
-    edits.push({ start: statement.moduleSpecifier.getStart(file), end: statement.moduleSpecifier.end, value: JSON.stringify(`@组件/${pin.name}@${pin.version}`) })
+    const name = `@组件/${pin.name}@${pin.version}`
+    edits.push({ start: entry.start, end: entry.end, value: entry.type === 'dynamic' ? JSON.stringify(name) : name })
   }
   for (const edit of edits.sort((a, b) => b.start - a.start)) source = source.slice(0, edit.start) + edit.value + source.slice(edit.end)
   return source
-}
-export function codeComponentExportNames(source: string): string[] {
-  const file = ts.createSourceFile('组件.ts', source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS)
-  const names: string[] = []
-  for (const statement of file.statements) {
-    if (ts.isImportDeclaration(statement)) continue
-    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const) || statement.modifiers?.some(modifier => modifier.kind !== ts.SyntaxKind.ExportKeyword)) throw new CodeMaterialError('SYNTAX', '项目组件只允许 import、const、export const 与纯箭头函数，不能默认导出或执行副作用。')
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) throw new CodeMaterialError('SYNTAX', '组件声明必须有名称与静态值或箭头函数。')
-      if (statement.modifiers?.length) names.push(declaration.name.text)
-    }
-  }
-  if (!names.length) throw new CodeMaterialError('SYNTAX', '项目组件至少需要一个具名导出。')
-  return names
 }
 export function pinCodeComponentImports(files: CodeMaterialFiles, library: readonly CodeComponent[], publishingName?: string): CodeComponentPin[] {
   const pins = new Map<string, CodeComponentPin>()
@@ -104,18 +89,25 @@ export function pinCodeComponentImports(files: CodeMaterialFiles, library: reado
 export function expandPinnedCodeComponents(contents: CodeMaterialFiles, imports: readonly CodeComponentPin[], resolver: CodeSourceResolver): CodeMaterialFiles {
   const files = { ...contents.files }; const resolvedImports: Record<string, Record<string, string>> = {}
   const visited = new Set<string>(); const paths = new Map<string, string>()
+  const keys = new WeakMap<CodeComponentPin, string>()
+  const contentKey = (pin: CodeComponentPin): string => {
+    const known = keys.get(pin); if (known) return known
+    const key = JSON.stringify([pin.name, pin.version, resolver.contentKey?.(pin.hash, pin.location) ?? pin.hash, pin.imports.map(contentKey)])
+    keys.set(pin, key); return key
+  }
   const expand = (path: string, source: string, pins: readonly CodeComponentPin[], chain: string[]): void => {
     for (const request of codeComponentImports(source, path)) {
       const pin = selectPinnedComponent(pins, request.name, request.version)
       if (!pin) throw new CodeMaterialError('COMPATIBILITY', `${path} 的 ${request.specifier} 未钉住版本，请重新保存素材。`)
-      const key = `${pin.name}@${pin.version}:${pin.hash}`
+      const key = contentKey(pin)
       if (chain.includes(key)) throw new CodeMaterialError('COMPATIBILITY', `组件循环依赖：${[...chain, key].join(' → ')}`)
       if (chain.length >= CODE_MATERIAL_LIMITS.depth) throw new CodeMaterialError('BUDGET', '组件依赖深度超出编译预算。')
       let target = paths.get(key)
       if (!target) {
         const stem = pin.name.replace(/[^a-zA-Z0-9_\-.\u3400-\u9fff]/g, '_')
-        let suffix = 1; target = `项目组件/${stem}/v${pin.version}.ts`
-        while ([...paths.values()].includes(target)) target = `项目组件/${stem}_${++suffix}/v${pin.version}.ts`
+        const extension = /\.(mjs|js|tsx|ts)$/.exec(pin.location)?.[1] ?? 'ts'
+        let suffix = 1; target = `项目组件/${stem}/v${pin.version}.${extension}`
+        while ([...paths.values()].includes(target)) target = `项目组件/${stem}_${++suffix}/v${pin.version}.${extension}`
         paths.set(key, target)
       }
       if (contents.files[target] !== undefined) throw new CodeMaterialError('SYNTAX', '项目组件/ 是编译时的组件目录，请重命名作者文件。')
@@ -135,16 +127,17 @@ function selectPinnedComponent(pins: readonly CodeComponentPin[], name: string, 
 /** Standalone style samples contain their fixed modules, without requiring the source project's library. */
 export function portableCodeComponentFiles(compilation: CodeMaterialFiles): CodeMaterialFiles {
   const files = Object.fromEntries(Object.entries(compilation.files).map(([path, source]) => {
-    const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS)
+    if (!/\.[cm]?[jt]sx?$/.test(path)) return [path, source]
     const edits: Array<{ start: number; end: number; value: string }> = []
-    for (const statement of parsed.statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
-      const target = compilation.resolvedImports?.[path]?.[statement.moduleSpecifier.text]
+    for (const entry of parse(source)[0]) {
+      if (!entry.specifier) continue
+      const target = compilation.resolvedImports?.[path]?.[entry.specifier]
       if (!target) continue
       const from = path.split('/').slice(0, -1); const to = target.split('/')
       while (from.length && to.length && from[0] === to[0]) { from.shift(); to.shift() }
       const relative = [...from.map(() => '..'), ...to].join('/')
-      edits.push({ start: statement.moduleSpecifier.getStart(parsed), end: statement.moduleSpecifier.end, value: JSON.stringify(relative.startsWith('../') ? relative : `./${relative}`) })
+      const request = relative.startsWith('../') ? relative : `./${relative}`
+      edits.push({ start: entry.start, end: entry.end, value: entry.type === 'dynamic' ? JSON.stringify(request) : request })
     }
     for (const edit of edits.reverse()) source = source.slice(0, edit.start) + edit.value + source.slice(edit.end)
     return [path, source]

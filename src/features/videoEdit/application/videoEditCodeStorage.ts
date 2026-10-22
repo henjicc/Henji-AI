@@ -1,7 +1,7 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { getPlatform } from '@/platform/runtime'
 import { rememberCodeSource, loadCodeSourceReferences, addressCodeMaterialFiles, resolveCodeMaterialFiles, type CodeMaterialFiles, type CodeFileReference, type CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
-import { pinCodeComponentImports, expandPinnedCodeComponents, codeComponentExportNames, codeComponentNameSchema, componentSourceMetadata, rewriteCodeComponentImports, type CodeComponentVersion, type CodeComponent } from '@/core/videoEdit/codeMaterial/components'
+import { pinCodeComponentImports, expandPinnedCodeComponents, codeComponentNameSchema, componentSourceMetadata, rewriteCodeComponentImports, type CodeComponentVersion, type CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { assetCodeSourceResolver, type CodeAsset } from '@/core/videoEdit/codeAsset'
 import { documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
 import type { CodeVersionPublication } from '@/core/videoEdit/codeMaterialVersions'
@@ -56,6 +56,7 @@ export async function publishProjectCodeComponent(projectId: string, input: { na
   const name = codeComponentNameSchema.parse(input.name)
   const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
   const source = input.source.startsWith('// henji-component ') ? componentSourceMetadata(input.source).source : input.source
+  const { codeComponentExportNames } = await import('@/core/videoEdit/codeMaterial/componentValidation')
   const exports = codeComponentExportNames(source)
   const contents: CodeMaterialFiles = { entry: '__check.js', files: { '__check.js': 'import * as component from "./component.js"; export default {name:"组件检查",mode:"static",draw(){void component;}}', 'component.js': source } }
   const imports = pinCodeComponentImports(contents, await projectCodeComponents(projectId), name)

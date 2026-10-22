@@ -2,6 +2,7 @@ import { type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialErrorCode, CodeSourceSpan } from '@/core/videoEdit/codeMaterial/contract'
 import type { AuthorBundle } from './videoEditAuthorBundle'
+import { directAuthorBundle } from './videoEditAuthorModules'
 
 export type CodeCompilerResponse = { id: number; cacheHit?: boolean } & ({ bundle: AuthorBundle } | { error: { code: CodeMaterialErrorCode; message: string; sourceSpan?: CodeSourceSpan } })
 export interface CodeCompilerWorker {
@@ -56,7 +57,7 @@ export class VideoEditCodeCompiler {
   /** Shared preparation waits for the existing eight-job limit. It must not
    * turn independent sessions into a new user-visible global budget failure. */
   async bundleQueued(files: CodeMaterialFiles, signal?: AbortSignal): Promise<AuthorBundle> {
-    await this.waitForCapacity(signal)
+    if (!directAuthorBundle(files)) await this.waitForCapacity(signal)
     return this.bundle(files, signal)
   }
   private async waitForCapacity(signal?: AbortSignal): Promise<void> {
@@ -71,6 +72,13 @@ export class VideoEditCodeCompiler {
     }
   }
   bundle(files: CodeMaterialFiles, signal?: AbortSignal): Promise<AuthorBundle> {
+    if (this.disposed) return Promise.reject(new Error('源码读取会话已关闭。'))
+    if (signal?.aborted) return Promise.reject(signal.reason)
+    const direct = directAuthorBundle(files)
+    if (direct) return import('./videoEditAuthorJsLocations').then(({ authorJsLocations }) => {
+      signal?.throwIfAborted()
+      return { ...direct, locations: authorJsLocations(files) }
+    })
     return this.request(files, 'author.bundle', signal).then(response => { if ('bundle' in response) return response.bundle; throw new Error('模块打包返回了错误的结果类型。') })
   }
   private request(files: CodeMaterialFiles, kind: 'author.bundle', signal?: AbortSignal): Promise<CodeCompilerResponse> {

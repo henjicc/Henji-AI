@@ -29,7 +29,7 @@ export interface CodeAuthorSourceLocations {
   factories?: Record<string, Record<string, CodeSourceSpan>>
   fallback?: CodeSourceSpan
 }
-export interface CodeAuthorBundle { code: string; map: string; locations: CodeAuthorSourceLocations }
+export interface CodeAuthorBundle { code: string; map: string; locations: CodeAuthorSourceLocations; modules?: import('./codeMaterial/sources').CodeMaterialFiles }
 
 /** Rebuildable executable module plus declarations read in the render worker.
  * Source files, parameters and overrides remain the persisted truth. */

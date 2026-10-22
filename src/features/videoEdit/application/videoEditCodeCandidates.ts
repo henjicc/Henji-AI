@@ -1,3 +1,5 @@
+import { changedCodeMaterialVersions } from '@/core/videoEdit/codeMaterialDocument'
+import { ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { withVideoEditCurrentMetadata, editVideoProject, requireVideoEditInstance, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
@@ -69,6 +71,7 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     controller.signal.throwIfAborted(); newVersion = appended.versionId
     const version = appended.definition.versions.find(version => version.id === newVersion)!
     rememberVideoEditCodeMetadata(owner, definition.id, version, appended.program)
+    await ensureVideoEditCodeParameterMetadata(owner, baseline, definition.id, target.versionId)
     const read = readVideoEditCodeMetadata(owner, baseline)
     const impacts: VideoEditCodeCandidate['impacts'][number][] = []; let count = 0
     const selectedIds = new Set<string>()
@@ -95,7 +98,8 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
         else delete next.elementOverrides
         return next
     }) })) })
-    validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document))
+    await ensureVideoEditChangedCodeMetadata(owner, baseline, document, controller.signal)
+    validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document), changedCodeMaterialVersions(baseline, document))
     const requested = owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start
     const frame = videoEditTransitionsAt(videoEditComposition(document, target.sequenceId), requested).some(window => window.left.id === original.id || window.right.id === original.id) ? requested : Math.max(original.start, Math.min(original.start + original.duration - 1, requested))
     const uniqueFrames = videoEditCodeValidationFrames(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: selectedEffects.get(clip.id) } : {}) }))), { sequenceId: target.sequenceId, frame })

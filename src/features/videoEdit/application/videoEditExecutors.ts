@@ -1,3 +1,4 @@
+import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, ensureVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import { getVideoEditRenderPreference, setVideoEditRenderPreference, type VideoEditRenderPreference } from './videoEditRenderCache'
 import { discardVideoEditCodeFiles, codePublicationFiles } from './videoEditCodeStorage'
 import { codePerformanceMessage, type CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
@@ -199,7 +200,11 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const keys = step.mutations.map(mutation => mutation.propertyId)
     const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback', 'video_edit.document.playback_resolution', 'video_edit.document.proxy_preference', 'video_edit.document.render_preference'].includes(key))
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
-    const data = readVideoEditData(step.target)
+    if (this.entityType === 'video_edit.code_material' || this.entityType === 'video_edit.code_version') {
+      const definition = before.codeMaterials?.find(value => value.id === childId || value.versions.some(version => version.id === childId))
+      if (definition) await ensureVideoEditCodeParameterMetadata(owner, before, definition.id, this.entityType === 'video_edit.code_version' ? childId : definition.defaultVersionId)
+    }
+    const data = await withVideoEditCodeMetadata(() => readVideoEditData(step.target))
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
     const anchorSequence = this.entityType === 'video_edit.clip' && keys.includes('video_edit.clip.content_anchor') ? before.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId)) : undefined
     const expectedAnchor = anchorSequence ? resolveVideoEditContentAnchor(projectId, anchorSequence.id, childId, data.contentAnchor ?? null) : undefined
@@ -278,6 +283,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       }
     }
     const fontCandidate = update(structuredClone(before))
+    await ensureVideoEditChangedCodeMetadata(owner, before, fontCandidate, context?.signal)
     if (changedVideoEditFonts(before, fontCandidate, readVideoEditCodeMetadata(owner, before), readVideoEditCodeMetadata(owner, fontCandidate)).some(use => !GENERIC_FONT_FACES.some(face => face.family === use.font))) {
       await loadFontLibrary(true)
       context?.signal?.throwIfAborted()
@@ -470,7 +476,8 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       }
       return document
     }
-    const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
+    const next = await withVideoEditCodeMetadata(() => { refs.length = 0; return videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before)))) })
+    await ensureVideoEditChangedCodeMetadata(instance, before, next, context?.signal)
     assertVideoEditLockedTracks(before, next)
     if (['video_edit.effect', 'video_edit.transition'].includes(this.entityType)) {
       const clipIds = this.entityType === 'video_edit.effect' ? [parsed.childId] : [...new Set([...before.sequences, ...next.sequences].filter(sequence => sequence.id === parsed.childId).flatMap(sequence => (sequence.transitions ?? []).filter(transition => refs.some(ref => splitVideoEditRef(ref).childId === transition.id)).flatMap(videoEditTransitionClipIds)))]

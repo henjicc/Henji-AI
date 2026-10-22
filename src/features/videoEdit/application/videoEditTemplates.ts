@@ -16,7 +16,7 @@ import { videoEditTemplateSchema, type VideoEditTemplate } from '@/core/videoEdi
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { editVideoProject, requireVideoEditInstance, setVideoEditView, type VideoEditInstance } from './videoEditService'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditCodeVersions, createVideoEditPlacedCodeItems } from './videoEditCodeService'
 import { videoEditStyleLibrary } from './videoEditStyleLibrary'
 import type { VideoEditDropPlacement } from './videoEditDrop'
@@ -157,11 +157,11 @@ export async function applyVideoEditTemplate(projectId: string, sequenceId: stri
       }
     } else {
       const chosen = template
-      editVideoProject(projectId, document => {
+      await withVideoEditCodeMetadata(() => editVideoProject(projectId, document => {
         const sequence = document.sequences.find(value => value.id === sequenceId); if (!sequence) throw new Error('原模板落点序列不存在。')
         const prepared = chosen.body.kind === 'native' ? nativeClips(document, sequence, chosen, options) : [codeClip(owner, document, sequence, chosen.body.definitionId, options)]
         const placed = placeClips(owner, document, sequenceId, prepared, options.placement); clipIds = placed.clipIds; return placed.document
-      })
+      }))
     }
     if (owner.activeSequenceId === sequenceId) setVideoEditView(projectId, { selection: clipIds[0] ?? null })
     logger.info('template.apply.completed', '模板已加到时间线', { context: { projectId, sequenceId, copied, count: clipIds.length } })

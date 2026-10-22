@@ -38,6 +38,7 @@ class MediaProtocolError extends Error {
 
 export function inferMimeFromPath(targetPath: string): string {
   const lower = targetPath.toLowerCase()
+  if (lower.endsWith('.mjs') || lower.endsWith('.js')) return 'text/javascript'
   if (lower.endsWith('.png')) return 'image/png'
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
   if (lower.endsWith('.webp')) return 'image/webp'
@@ -246,6 +247,8 @@ function createHeaders(
   headers.set('Accept-Ranges', 'bytes')
   headers.set('Content-Type', mediaType ?? inferMimeFromPath(targetPath))
   headers.set('X-Content-Type-Options', 'nosniff')
+  // 作者模块由已授权目录提供，渲染 Worker 可跨协议原生加载循环 ESM 图。
+  if (inferMimeFromPath(targetPath) === 'text/javascript') headers.set('Access-Control-Allow-Origin', '*')
   headers.set(
     'Cache-Control',
     immutable || isContentAddressedPath(targetPath)

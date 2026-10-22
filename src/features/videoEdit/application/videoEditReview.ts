@@ -16,7 +16,7 @@ import { requireVideoEditInstance, type VideoEditInstance } from './videoEditSer
 import { splitVideoEditRef } from './videoEditReflection'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { analyzeVideoEditMotionStructure } from './videoEditMotionReviewWorkerClient'
-import { readVideoEditCodeProgram } from './videoEditCodeState'
+import { withVideoEditCodeMetadata, readVideoEditCodeProgram } from './videoEditCodeState'
 import { codeTextFontGeneration } from '../videoEditGlyphMetrics'
 import { readVideoEditPixelMotion, verifyVideoEditMotionSources } from './videoEditPixelMotion'
 import { readVideoEditCodeMotionAudio } from './videoEditCodeMotionAudio'
@@ -70,10 +70,10 @@ export async function queryVideoEditReview(raw: unknown, context: Pick<Capabilit
       const warnings = ['检查点是结构候选和优先抽样，不证明实际像素可见或其余时段无问题。', '跟踪区间来自原始采样；渲染可能插值或借用附近有效位置，跟丢不等于画面空白。']
       if (input.motion) {
         const programs: Record<string, CodeMaterialProgram> = {}
-        visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(_local, entry) {
+        await withVideoEditCodeMetadata(() => visitVideoEditPictureInstances(composition, range, { sequence() {}, clip(_local, entry) {
           const code = entry.path.at(-1)!.clip.code
           if (code && !programs[code.versionId]) programs[code.versionId] = readVideoEditCodeProgram(owner, owner.document, code)
-        } })
+        } }))
         const video = input.motion.videoPixels ? await readVideoEditPixelMotion(owner, composition, range, context.signal, assertCurrent) : undefined
         const sound = await readVideoEditCodeMotionAudio(owner, composition, range, programs, context.signal, assertCurrent)
         sources = [...(video?.sources ?? []), ...sound.sources]

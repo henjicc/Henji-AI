@@ -1,7 +1,8 @@
-import { VideoEditContentWarmup } from './videoEditContentWarmup'
 import { videoEditRenderFailure } from './videoEditGpuFailure'
 import { enableVideoEditFrameTrace, traceVideoEditFrame } from './videoEditFrameTrace'
 import { VideoEditSharedCompilation, type SharedCompilationResponse } from './videoEditSharedCompilation'
+import { installAuthorMetadataCache } from './videoEditAuthorMetadataCache'
+import { installAuthorNativeModules } from './videoEditAuthorModules'
 import { setVideoEditCodeCompilerWorkerFactory } from './videoEditCodeCompiler'
 import { videoEditPreparationSnapshot, recordVideoEditPreparation } from './videoEditPreparationTiming'
 import type { VideoEditTimingContext } from './videoEditFirstFrameTiming'
@@ -20,7 +21,7 @@ import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } fr
 import { readVideoEditTrackingRgb } from './videoEditTrackingPixels'
 import { setVideoEditMaskTimingObserver } from './videoEditEffectMasks'
 import { LoadedFontFaces } from '@/platform/fontFaces'
-import { receiveCodeSourceTexts } from '@/core/videoEdit/codeMaterial/sources'
+import { receiveCodeSourceTexts, installCodeSourceReader } from '@/core/videoEdit/codeMaterial/sources'
 import type { FontPayload } from '@/platform/fonts'
 import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
 
@@ -156,30 +157,24 @@ function handleNativeFrames(request: NativeFramesRequest): void {
     result => self.postMessage({ id: request.id, nativeFrames: result } satisfies NativeFramesResponse),
     error => self.postMessage({ id: request.id, error: error instanceof Error ? error.message : String(error) } satisfies NativeFramesResponse))
 }
-const contentWarmup = new VideoEditContentWarmup(
-  work => { queue = queue.then(work) },
-  async (frame, current) => { await renderer?.prepareContent(frame, current) },
-  (document, error) => log(error ? 'debug' : 'info', error ? '内容预热未完成，正式渲染按需准备' : '内容预热完成', error ? 'video_edit.content.warm.failed' : 'video_edit.content.warm.completed', { sequenceId: document.id, revision: document.revision, ...(error ? { reason: String(error) } : {}) }),
-)
-function warmContent(document: VideoEditComposition): void {
-  if (document.clips.some(clip => clip.kind === 'code' || clip.effects?.some(effect => effect.code))) log('debug', '内容预热开始', 'video_edit.content.warm.start', { sequenceId: document.id, revision: document.revision })
-  contentWarmup.replace(document)
-}
+// 只按当前帧和播放头前三秒预热，不在初始化时扫描整条序列。
 const sharedCompilation = new VideoEditSharedCompilation(message => self.postMessage(message))
 setVideoEditCodeCompilerWorkerFactory(() => sharedCompilation.worker())
+installCodeSourceReader(file => sharedCompilation.read(file))
+installAuthorMetadataCache({ read: key => sharedCompilation.metadata(key), write: async (key, metadata) => { await sharedCompilation.metadata(key, metadata) } })
+installAuthorNativeModules(files => sharedCompilation.modules(files))
 self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | SharedCompilationResponse>) => {
-  if (event.data.kind === 'code.compiled') { sharedCompilation.receive(event.data); return }
+  if (event.data.kind === 'code.compiled' || event.data.kind === 'code.source' || event.data.kind === 'code.metadataResult' || event.data.kind === 'code.moduleUrls') { sharedCompilation.receive(event.data); return }
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
   const receivedAt = performance.now()
   if (request.kind === 'init') enableVideoEditFrameTrace(request.traceFrames === true)
-  if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'fonts'].includes(request.kind)) { contentWarmup.cancel(); warmingAhead?.abort(); warmingAhead = undefined; if (request.kind !== 'parameters') warmedAhead.clear() }
-  if (request.kind === 'render') contentWarmup.defer()
+  if (['init', 'update', 'replaceContent', 'parameters', 'dispose', 'fonts'].includes(request.kind)) { warmingAhead?.abort(); warmingAhead = undefined; if (request.kind !== 'parameters') warmedAhead.clear() }
   if (request.kind === 'preopen') { preopenMedia(request); return }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'renderCache') { renderCachePaths.clear(); for (const [url, path] of Object.entries(request.localPaths)) renderCachePaths.set(url, path); renderCacheWindows = request.windows; renderer?.setRenderCache(renderCacheWindows); return }
-  if (request.kind === 'invalidate') { if (revision !== request.revision) { contentWarmup.cancel(); revision = request.revision; renderer?.cancelPresentation() } return }
+  if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
   if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
   if (request.kind === 'init' || request.kind === 'update' || request.kind === 'replaceContent') { timing = 'timing' in request ? request.timing : undefined; timedStages.clear(); timingEvent(`worker.${request.kind}`); receiveCodeSourceTexts(request.codeSources) }
   if (request.kind === 'init' || request.kind === 'replaceContent') revision = request.document.revision
@@ -218,7 +213,6 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
       } else if (request.kind === 'init') {
         await disposeRenderer(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode), undefined, [request.document.id], timingEvent); direct = !!request.surface
         renderer.setRenderCache(renderCacheWindows)
-        if (direct) warmContent(request.document)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'replaceContent') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
@@ -230,10 +224,10 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         setProxies(request.proxies)
         setLocalPaths(request.localPaths)
-        await renderer.updateDocument(request.document); if (direct) warmContent(request.document); self.postMessage({ id: request.id } satisfies RenderResponse)
+        await renderer.updateDocument(request.document); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'parameters') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
-        renderer.updateParameters(request.update); if (direct) warmContent(renderer.document); self.postMessage({ id: request.id } satisfies RenderResponse)
+        renderer.updateParameters(request.update); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         const renderStarted = performance.now()

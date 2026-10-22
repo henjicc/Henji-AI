@@ -2,10 +2,11 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { protocol } from 'electron'
 
 const roots = vi.hoisted(() => ({ base: '', user: '' }))
 vi.mock('electron', () => ({ app: { getPath: () => roots.user }, protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() } }))
-vi.mock('./services/appPaths', () => ({ CONTENT_ADDRESSED_FOLDER_NAMES: [], getAppBaseDir: () => roots.base, getUserRootDir: () => roots.user }))
+vi.mock('./services/appPaths', () => ({ CONTENT_ADDRESSED_FOLDER_NAMES: new Set(), getAppBaseDir: () => roots.base, getUserRootDir: () => roots.user }))
 vi.mock('./services/image-editor-v3/resource-media-url', () => ({ IMAGE_EDITOR_V3_MEDIA_HOST: 'image-editor-v3', resolveImageEditorV3ResourceMediaUrl: vi.fn() }))
 vi.mock('./services/media/rootGrants', () => ({ persistMediaRootGrant: vi.fn(), restorePersistedMediaRoots: vi.fn(() => []) }))
 
@@ -27,4 +28,17 @@ it('白名单目录经链接或重定向时，按真实位置比较仍判为授�
   expect(isPathWithinAllowedMediaRoots(resolved)).toBe(false)
   expect(await isRealPathWithinAllowedMediaRoots(resolved)).toBe(true)
   expect(await isRealPathWithinAllowedMediaRoots(path.join(directory, 'elsewhere.wav'))).toBe(false)
+})
+
+it('授权临时目录的原生 ESM 返回 JavaScript 类型与跨协议加载头', async () => {
+  roots.base = directory; roots.user = directory
+  const file = path.join(directory, 'module.mjs')
+  await writeFile(file, 'export const value = 3;')
+  const { registerMediaProtocolHandler } = await import('./protocol')
+  registerMediaProtocolHandler()
+  const handler = vi.mocked(protocol.handle).mock.calls.at(-1)![1]
+  const response = await handler(new Request(`henji-media://local/${encodeURIComponent(file)}`))
+  expect(response.headers.get('Content-Type')).toBe('text/javascript')
+  expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+  expect(await response.text()).toBe('export const value = 3;')
 })

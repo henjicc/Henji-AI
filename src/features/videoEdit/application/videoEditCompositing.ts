@@ -13,7 +13,7 @@ import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransit
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { withVideoEditCodeMetadata, ensureVideoEditChangedCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import type { VideoEditGraphicClipTarget as VideoEditCompositeTarget } from './videoEditGraphics'
 
@@ -40,6 +40,8 @@ export async function editComposite(projectId: string, sequenceId: string, endpo
   clipIds.forEach(id => requireClip(sequence, id)); change(sequence)
   const next = videoEditDocumentSchema.parse(draft)
   assertVideoEditLockedTracks(baseline, next)
+  await ensureVideoEditChangedCodeMetadata(owner, baseline, next, signal)
+  if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已改变，请重试。')
   if (!clipIds.length || !videoEditIntroducesCodeEffects(baseline, next)) { signal?.throwIfAborted(); editVideoProject(projectId, current => withVideoEditCurrentMetadata(next, current)); return }
   const requested = owner.activeSequenceId === sequenceId ? owner.frame : owner.sequenceViews.get(sequenceId)?.frame ?? 0
   const active = clipIds.some(id => { const clip = requireClip(sequence, id); return requested >= clip.start && requested < clip.start + clip.duration }) || videoEditTransitionsAt(sequence, requested).some(window => clipIds.includes(window.left.id) || clipIds.includes(window.right.id))
@@ -49,9 +51,9 @@ export async function editComposite(projectId: string, sequenceId: string, endpo
   if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已改变，请重新检查此编辑。')
   editVideoProject(projectId, current => withVideoEditCurrentMetadata(next, current))
 }
-export function listVideoEditFilterDefinitions(projectId: string): Array<{ id: string; name: string; versionId: string }> {
-  const owner = requireVideoEditInstance(projectId); const read = readVideoEditCodeMetadata(owner, owner.document)
-  return (owner.document.codeMaterials ?? []).filter(definition => read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} }).kind === 'filter').map(definition => ({ id: definition.id, name: definition.name, versionId: definition.defaultVersionId }))
+export async function listVideoEditFilterDefinitions(projectId: string): Promise<Array<{ id: string; name: string; versionId: string }>> {
+  const owner = requireVideoEditInstance(projectId); const document = owner.document; const read = readVideoEditCodeMetadata(owner, document)
+  return withVideoEditCodeMetadata(() => (document.codeMaterials ?? []).filter(definition => read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} }).kind === 'filter').map(definition => ({ id: definition.id, name: definition.name, versionId: definition.defaultVersionId })))
 }
 export interface VideoEditEffectInput { definitionId: string; versionId?: string; name?: string; parameters?: CodeMaterialInstance['parameters'] }
 export function makeVideoEditEffect(document: VideoEditDocument, input: VideoEditEffectInput, read: CodeMaterialMetadataReader): VideoEditEffect {
@@ -64,7 +66,7 @@ export function makeVideoEditEffect(document: VideoEditDocument, input: VideoEdi
 }
 export async function createVideoEditEffect(target: VideoEditCompositeTarget, input: VideoEditEffectInput, signal?: AbortSignal): Promise<string> {
   const owner = requireVideoEditInstance(target.projectId)
-  const effect = makeVideoEditEffect(owner.document, input, readVideoEditCodeMetadata(owner, owner.document))
+  const effect = await withVideoEditCodeMetadata(() => makeVideoEditEffect(owner.document, input, readVideoEditCodeMetadata(owner, owner.document)))
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => { const clip = requireClip(sequence, target.clipId); clip.effects = [...(clip.effects ?? []), effect] }, signal)
   return effect.id
 }
@@ -88,7 +90,7 @@ export async function resetVideoEditEffect(target: VideoEditCompositeTarget, eff
   const effect = sequence && requireEffectClip(sequence, target.clipId).effects?.find(effect => effect.id === effectId)
   if (!effect) throw new Error('原效果已移除。')
   if (effect.builtin) { updateVideoEditBuiltinEffect(target, effectId, { enabled: true, amount: 1, curves: {}, params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect(effect.builtin.id)) }); return }
-  const metadata = readVideoEditCodeMetadata(owner, owner.document)(effect.code!)
+  const metadata = await withVideoEditCodeMetadata(() => readVideoEditCodeMetadata(owner, owner.document)(effect.code!))
   await updateVideoEditEffect(target, effectId, { enabled: true, amount: 1, parameters: validateCodeMaterialParameters(metadata), curves: {} }, signal)
 }
 /** 新建一项内置效果（参数按登记校验）。默认存完整参数表；`sparse` 时只存给出的键（助手创建，读回与写入一致，缺的键按默认值渲染）。 */

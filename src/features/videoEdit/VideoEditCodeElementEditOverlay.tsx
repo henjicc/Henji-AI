@@ -1,7 +1,8 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { EyeOff, FileCode, MessageSquare, RotateCcw, RotateCw, CornerUpLeft } from 'lucide-react'
-import { UiIconButton, UiTextArea, UiSwitch } from '@/components/ui'
+import { UiIconButton, UiTextArea, UiSwitch, UiLoading, UiError } from '@/components/ui'
+import { useVideoEditCodeMetadata } from './panels/useVideoEditCodeMetadata'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { codeElementAuthorPoint } from '@/core/videoEdit/codeElementSelection'
@@ -28,6 +29,7 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
   const sequence = getActiveVideoEditSequence(instance)
   const target: VideoEditCodeElementTarget = { projectId: instance.document.id, sequenceId: sequence.id, clipId: selected.entry.clip.id, versionId: selected.entry.clip.code!.versionId, elementId: selected.element.elementId }
   const scope = JSON.stringify(target)
+  const metadata = useVideoEditCodeMetadata(instance, selected.entry.clip.code)
   const points = codeElementOrientedPolygon(selected.element, selected.entry.clip, selected.entry.picture, sequence)
   const finish = (commit: boolean): void => {
     const current = drag.current; drag.current = undefined; setGuides({})
@@ -101,6 +103,8 @@ export function VideoEditCodeElementEditOverlay({ instance, selected, onError }:
   }
   const cornerStyle = (point: CodeEditPoint) => ({ left: `${point.x * 100}%`, top: `${point.y * 100}%` })
   const rotationPoint = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }
+  if (metadata.error) return <UiError title="代码参数读取失败" message={metadata.error instanceof Error ? metadata.error.message : '请恢复源码文件后重试。'} onRetry={metadata.retry} />
+  if (!metadata.ready) return <UiLoading message="正在读取代码参数…" />
   return <div ref={root} tabIndex={0} aria-label="代码元素变换层" data-code-element-edit className="pointer-events-none absolute inset-0 outline-none" onPointerMove={move} onPointerUp={up} onPointerCancel={event => { if (event.pointerId === drag.current?.pointerId) finish(false) }} onLostPointerCapture={event => { if (drag.current && event.pointerId === drag.current.pointerId) finish(false) }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) { finish(false); endNudge(true) } }}
     onKeyDown={event => {

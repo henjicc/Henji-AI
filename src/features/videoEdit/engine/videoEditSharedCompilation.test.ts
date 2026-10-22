@@ -32,3 +32,22 @@ it('sessions multiplex independent ids and cancellation only removes that owner'
   transport.receive({ kind: 'code.compiled', token: second, result })
   expect(b.onmessage).toHaveBeenCalledOnce()
 })
+
+it('源码按请求读取，缺失错误可恢复，循环图在模块释放时回收宿主文件', async () => {
+  const send = vi.fn(); const transport = new VideoEditSharedCompilation(send)
+  const read = transport.read({ path: 'main.js', location: '/source/main.js', hash: 'old' })
+  const first = send.mock.lastCall![0].token
+  transport.receive({ kind: 'code.source', token: first, source: '磁盘实际文本' })
+  expect(await read).toBe('磁盘实际文本')
+  const missing = transport.read({ path: 'lost.js', location: '/source/lost.js', hash: 'old' })
+  const rejected = expect(missing).rejects.toThrow('请恢复')
+  transport.receive({ kind: 'code.source', token: send.mock.lastCall![0].token, error: '请恢复源码文件' })
+  await rejected
+  const graph = transport.modules({ entry: 'main.js', files: { 'main.js': 'import "./main.js";' } })
+  const token = send.mock.lastCall![0].token
+  transport.receive({ kind: 'code.moduleUrls', token, url: 'henji-media://local/module.mjs' })
+  const module = await graph
+  expect(module.url).toContain('henji-media:')
+  module.dispose()
+  expect(send).toHaveBeenLastCalledWith({ kind: 'code.releaseModules', token })
+})

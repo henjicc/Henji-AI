@@ -1,4 +1,5 @@
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { readAuthorMetadataCache, writeAuthorMetadataCache } from './videoEditAuthorMetadataCache'
 import { codeMediaFrameParameters } from '@/core/videoEdit/codeMediaInput'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialContext } from '@/core/videoEdit/codeMaterial/contract'
@@ -184,7 +185,9 @@ export class VideoEditCodeSources {
       const started = performance.now()
       const bundle = await this.compiler.bundle(files, signal); signal.throwIfAborted()
       this.runtime ??= await this.acquireRuntime(); signal.throwIfAborted()
-      const program = await this.runtime.inspectAuthor(bundle); signal.throwIfAborted()
+      const metadata = await readAuthorMetadataCache(source); signal.throwIfAborted()
+      const program = metadata ? { ...metadata, bundle } : await this.runtime.inspectAuthor(bundle); signal.throwIfAborted()
+      if (!metadata) writeAuthorMetadataCache(source, program)
       recordVideoEditPreparation('sourceCompilation', performance.now() - started)
       if (program.apiVersion !== version.apiVersion || program.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '代码源码协议与固定版本声明不一致。')
       const bytes = new TextEncoder().encode(source).byteLength + new TextEncoder().encode(JSON.stringify(program)).byteLength

@@ -4,7 +4,7 @@ import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditComposition, videoEditDuration, videoEditVisibleTracks, type VideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { ensureVideoEditCodeDocumentMetadata } from './videoEditCodeState'
+import { ensureVideoEditChangedCodeMetadata } from './videoEditCodeState'
 import { subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
 import { videoEditTransitionClipIds, videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 
@@ -152,7 +152,7 @@ export async function trialVideoEditCodeDocument(owner: VideoEditInstance, conte
   const assert = (): void => { if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('原剪辑已关闭或内容已改变，请重新编辑。') }
   const off = subscribeVideoEditDomain(() => { try { assert() } catch (error) { controller.abort(error) } })
   try {
-    assert(); await ensureVideoEditCodeDocumentMetadata(owner, document, controller.signal)
+    assert(); await ensureVideoEditChangedCodeMetadata(owner, owner.document, document, controller.signal)
     await trialVideoEditCodeFrames(targets ? videoEditCodeValidationFrames(document, targets, { sequenceId, frame }) : [{ document: videoEditComposition(document, sequenceId), frame }], controller.signal)
     controller.signal.throwIfAborted(); assert()
   } finally { off(); signal?.removeEventListener('abort', cancel) }

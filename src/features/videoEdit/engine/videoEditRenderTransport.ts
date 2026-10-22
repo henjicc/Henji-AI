@@ -9,7 +9,6 @@ import { activeVideoEditClips, videoEditClipMedia, type VideoEditComposition } f
 import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSource'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
-import { collectCodeSourceTexts } from '@/core/videoEdit/codeMaterial/sources'
 import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, RenderRequest, RenderResponse } from './videoEditWorker'
 import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
 import type { VideoEditTrackResults } from './videoEditTrackResults'
@@ -17,6 +16,12 @@ import type { VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
 import { fontLibrarySnapshot, subscribeFontLibrary } from '@/platform/fonts'
 import { loadDocumentFont, pinDocumentFonts, releaseDocumentFonts } from '@/platform/fontFaces'
 import { videoEditParameterUpdate, videoEditParameterNeedsFonts } from './videoEditParameterUpdate'
+import { documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
+import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
+import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
+import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
+import type { AuthorModuleUrls } from './videoEditAuthorModules'
+import type { CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 
 const logger = createLogger('features.videoEdit.render')
 let nativeWarmup: Promise<void> | undefined
@@ -38,10 +43,14 @@ export interface VideoEditRenderHost {
   fonts(document: VideoEditComposition): Promise<import('@/platform/fonts').FontPayload[]>
   proxies(projectId: string, forExport: boolean): Promise<Record<string, VideoProxyResult>>
   maskUpdateTime(sequenceId: string, revision: number): number | undefined
+  readCodeMetadata?(key: string): Promise<import('./videoEditAuthorMetadataCache').AuthorCachedMetadata | undefined>
+  writeCodeMetadata?(key: string, metadata: import('./videoEditAuthorMetadataCache').AuthorCachedMetadata): Promise<void>
+  loadCodeModules?(files: CodeMaterialFiles): Promise<AuthorModuleUrls>
 }
 
 export class VideoEditRenderTransport {
   private readonly compilations = new Map<number, AbortController>()
+  private readonly moduleGraphs = new Map<number, AuthorModuleUrls>()
   private readonly worker = new Worker(new URL('./videoEditWorker.ts', import.meta.url), { type: 'module' })
   private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void; timer?: ReturnType<typeof setTimeout> }>()
   private nextId = 0
@@ -64,11 +73,34 @@ export class VideoEditRenderTransport {
   private readonly lutRoots = new Set<string>()
   private fontsRevision = -1
   private fontIds = new Set<string>()
-  /** 已发给 Worker 的源码哈希；源码不可变，同一哈希只发一次。 */
-  private readonly sentCodeSources = new Set<string>()
   private stopFonts?: () => void
   private fontSync = Promise.resolve()
   private fontRefresh?: Promise<void>
+  private frame = -1
+  private fontScope = ''
+  private fontDocument?: VideoEditComposition
+  /** 字体声明只取当前帧。嵌套序列使用对应源时间，转场两侧同时保留。 */
+  private fontsDocument(document: VideoEditComposition): VideoEditComposition {
+    const sequences: NonNullable<VideoEditComposition['sequences']> = []
+    const visit = (sequence: VideoEditComposition, frame: number, seen: Set<string>): VideoEditComposition['clips'] => {
+      if (seen.has(sequence.id)) return []
+      seen.add(sequence.id)
+      const visible = frame < 0 ? sequence.clips.filter(clip => !clip.code && !clip.effects?.some(effect => effect.code)) : [...new Map([...activeVideoEditClips(sequence, frame), ...videoEditTransitionsAt(sequence, frame).flatMap(window => [window.left, window.right])].map(clip => [clip.id, clip])).values()]
+      const clips = visible.map(clip => clip.effects?.length ? { ...clip, effects: activeVideoEditEffects(clip) } : clip)
+      for (const clip of clips) {
+        const id = document.items.find(item => item.id === clip.itemId)?.sequenceId
+        const nested = id && document.sequences?.find(sequence => sequence.id === id)
+        if (nested) {
+          const composition = { ...document, ...nested, fps: nested.frameRate.numerator / nested.frameRate.denominator }
+          const nestedFrame = frame < 0 ? -1 : videoEditNestedFrame(sequence, clip, composition, frame)
+          sequences.push({ ...nested, clips: visit(composition, nestedFrame, new Set(seen)) })
+        }
+      }
+      return clips
+    }
+    const clips = visit(document, this.frame, new Set())
+    return { ...document, clips, items: [], sequences }
+  }
   /** The view schedules font redraws through its existing frame loop, never an independent request stream. */
   fontPresentationRevision = 0
   private syncFonts(document: VideoEditComposition): Promise<void> {
@@ -77,7 +109,10 @@ export class VideoEditRenderTransport {
     return result
   }
   private async applyFonts(document: VideoEditComposition): Promise<void> {
-    const fonts = await this.host.fonts(document)
+    const scoped = this.fontsDocument(document)
+    const key = JSON.stringify([scoped.clips.map(clip => clip.id), scoped.sequences?.map(sequence => [sequence.id, sequence.clips.map(clip => clip.id)]), fontLibrarySnapshot().revision])
+    if (document === this.fontDocument && key === this.fontScope) return
+    const fonts = await this.host.fonts(scoped)
     if (this.disposed) return
     pinDocumentFonts(this, fonts.map(payload => payload.face.id))
     await Promise.all(fonts.map(loadDocumentFont))
@@ -89,6 +124,8 @@ export class VideoEditRenderTransport {
     if (additions.length || removed || changed && this.fontsRevision >= 0) await this.request({ kind: 'fonts', fonts: additions, availableIds: [...usedIds], reset: changed && this.fontsRevision >= 0 })
     this.fontsRevision = revision
     this.fontIds = usedIds
+    this.fontScope = key
+    this.fontDocument = document
     if (additions.length || removed || changed) this.fontPresentationRevision++
   }
   private async authorizeLuts(document: VideoEditComposition): Promise<void> {
@@ -137,6 +174,33 @@ export class VideoEditRenderTransport {
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage | SharedCompilationRequest>) => {
+      if ('kind' in event.data && event.data.kind === 'code.releaseModules') {
+        this.moduleGraphs.get(event.data.token)?.dispose(); this.moduleGraphs.delete(event.data.token); return
+      }
+      if ('kind' in event.data && event.data.kind === 'code.modules') {
+        const { token, files } = event.data
+        const prepared = this.host.loadCodeModules ? this.host.loadCodeModules(files) : Promise.reject(new Error('此会话未提供循环模块加载入口。'))
+        void prepared.then(modules => {
+          if (this.disposed) { modules.dispose(); return }
+          this.moduleGraphs.set(token, modules)
+          this.worker.postMessage({ kind: 'code.moduleUrls', token, url: modules.url } satisfies SharedCompilationResponse)
+        }, error => { if (!this.disposed) this.worker.postMessage({ kind: 'code.moduleUrls', token, error: error instanceof Error ? error.message : String(error) } satisfies SharedCompilationResponse) })
+        return
+      }
+      if ('kind' in event.data && event.data.kind === 'code.metadata') {
+        const { token, key, metadata } = event.data
+        const work = metadata ? Promise.resolve(this.host.writeCodeMetadata?.(key, metadata)).then(() => undefined) : Promise.resolve(this.host.readCodeMetadata?.(key))
+        void work.catch(() => undefined).then(metadata => { if (!this.disposed) this.worker.postMessage({ kind: 'code.metadataResult', token, metadata } satisfies SharedCompilationResponse) })
+        return
+      }
+      if ('kind' in event.data && event.data.kind === 'code.read') {
+        const { token, file } = event.data
+        void (file.location.startsWith('memory:') ? Promise.resolve(documentCodeSourceResolver().read(file.hash, file.location, file.path)) : getPlatform().documents.readCodeFile(file)).then(
+          source => ({ kind: 'code.source' as const, token, source }),
+          error => ({ kind: 'code.source' as const, token, error: error instanceof Error ? error.message : String(error) }),
+        ).then(result => { if (!this.disposed) this.worker.postMessage(result satisfies SharedCompilationResponse) })
+        return
+      }
       if ('kind' in event.data && event.data.kind === 'code.cancel') {
         this.compilations.get(event.data.token)?.abort(); this.compilations.delete(event.data.token); return
       }
@@ -194,6 +258,8 @@ export class VideoEditRenderTransport {
     if (this.disposed) return
     this.failure = error; this.disposed = true
     this.worker.terminate()
+    for (const modules of this.moduleGraphs.values()) modules.dispose()
+    this.moduleGraphs.clear()
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error) }
     this.pending.clear()
     for (const controller of this.compilations.values()) controller.abort()
@@ -218,7 +284,8 @@ export class VideoEditRenderTransport {
       catch (error) { this.fail(error instanceof Error ? error : new Error(String(error))) }
     })
   }
-  private codeSources(document: VideoEditComposition): Promise<Record<string, string>> { return collectCodeSourceTexts((document.codeMaterials ?? []).flatMap(definition => definition.versions), this.sentCodeSources) }
+  // 初始化只传清单，Worker 在当前帧或预热窗口真正需要时请求文件。
+  private codeSources(_document: VideoEditComposition): Promise<Record<string, string>> { return Promise.resolve({}) }
   async updateDocument(document: VideoEditComposition, original = false): Promise<void> {
     await this.ready
     this.timing = videoEditTimingContext(this.proxyProjectId, document.id)
@@ -275,6 +342,8 @@ export class VideoEditRenderTransport {
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false): Promise<RenderResponse> {
     await this.ready
+    this.frame = frame
+    await this.syncFonts(this.document)
     const document = this.document
     const result = await this.request({ kind: 'render', frame, sequential, scrubbing, deadline, quality, ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
     const at = result.presented ? this.host.maskUpdateTime(document.id, document.revision) : undefined
@@ -320,6 +389,8 @@ export class VideoEditRenderTransport {
     const limit = new Promise<void>(resolve => { timer = setTimeout(resolve, 2000) })
     await Promise.allSettled([Promise.race([closed, limit])])
     clearTimeout(timer); this.worker.terminate(); this.pending.clear(); this.canvas.width = 1; this.canvas.height = 1
+    for (const modules of this.moduleGraphs.values()) modules.dispose()
+    this.moduleGraphs.clear()
     // Closes the port and any native session the worker could not close itself.
     this.disconnectNative()
   }

@@ -8,7 +8,7 @@ import { placeVideoEditItems, makeVideoEditItemSequence, videoEditSequenceFromIt
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from '@/core/videoEdit/document'
 import { applyVideoEditTimelineEditResult } from '@/core/videoEdit/timelineEdits'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { VIDEO_EDIT_SOURCE_DRAG_MIME, videoEditSourceRangeSchema, placeVideoEditSourceRange, type VideoEditSourceRange } from './videoEditSourceRange'
 import { CODE_ASSET_DRAG_MIME, readCodeAssetDrag } from '@/features/assets/drag/assetDragPayload'
 import { importVideoEditCodeAsset } from './videoEditCodeAssets'
@@ -174,7 +174,7 @@ async function applyVideoEditDropInput(projectId: string, input: VideoEditDropIn
     ids = result.itemIds
     if (result.skipped) options.onSkipped?.(result.skipped)
   } else ids = await importVideoEditSources(projectId, input.sources, binId, options.signal, apply)
-  if (input.kind === 'items') editVideoProject(projectId, document => apply(document, ids))
+  if (input.kind === 'items') await withVideoEditCodeMetadata(() => editVideoProject(projectId, document => apply(document, ids)))
   if (selectedClip && owner.activeSequenceId === sequenceId) setVideoEditView(projectId, { selection: selectedClip })
   return ids
 }
