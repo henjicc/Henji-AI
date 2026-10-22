@@ -40,8 +40,8 @@ export function encodeAudioRepairMask(bytes: Uint8Array, width: number, height: 
   view.setUint32(8, width, true); view.setUint32(12, height, true); output.set(bytes, 16)
   return output
 }
-export async function runSpectrogram(input: string, output: string, options: { startFrame: number; endFrame: number; fftSize: number; hop: number; channel?: number }, signal?: AbortSignal): Promise<void> {
-  const metadata = await invokeAudioWorker<unknown>({ type: 'spectrogram', input_path: input, output_path: output, fft_size: options.fftSize, hop: options.hop, start_frame: options.startFrame, end_frame: options.endFrame, ...(options.channel === undefined ? {} : { channel: options.channel }) }, 120000, signal)
+export async function runSpectrogram(input: string, output: string, options: { startFrame: number; endFrame: number; fftSize: number; windowSize?: number; timePooling?: boolean; hop: number; channel?: number }, signal?: AbortSignal): Promise<void> {
+  const metadata = await invokeAudioWorker<unknown>({ type: 'spectrogram', input_path: input, output_path: output, fft_size: options.fftSize, window_size: options.windowSize, time_pooling: options.timePooling, hop: options.hop, start_frame: options.startFrame, end_frame: options.endFrame, ...(options.channel === undefined ? {} : { channel: options.channel }) }, 120000, signal)
   // 校验后原样发布 Worker 的 HJSP，避免 JSON/base64 编解码和一次整块拷贝。
   parseSpectrogram(await fs.readFile(output), metadata, options.endFrame)
 }

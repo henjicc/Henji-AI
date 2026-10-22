@@ -1,6 +1,7 @@
 import type { AudioEditSpectrogramChunk } from './regions'
 
-export const SPECTROGRAM_FFT_SIZE = 2048
+export const SPECTROGRAM_WINDOW_SIZE = 2048
+export const SPECTROGRAM_FFT_SIZE = SPECTROGRAM_WINDOW_SIZE * 4
 export const SPECTROGRAM_MAX_BYTES = 8 * 1024 * 1024
 export const SPECTROGRAM_TILE_COLUMNS = 1024
 export interface SpectrogramTile { index: number; startFrame: number; endFrame: number }

@@ -174,6 +174,8 @@ fn spectrogram_header_peak_channel_range_and_quantization() {
     for channel in [None, Some(1)] {
         let output = dir.path().join(format!("spec{channel:?}.bin"));
         let result = spectrogram(SpectrogramRequest {
+            window_size: None,
+            time_pooling: false,
             input_path: input.clone(),
             output_path: output.clone(),
             fft_size: 2048,
@@ -223,6 +225,8 @@ fn spectrogram_stride_columns_match_dense_columns() {
     let run = |hop: usize, name: &str| {
         let output = dir.path().join(name);
         spectrogram(SpectrogramRequest {
+            window_size: None,
+            time_pooling: false,
             input_path: input.clone(),
             output_path: output.clone(),
             fft_size: 1024,
@@ -243,6 +247,101 @@ fn spectrogram_stride_columns_match_dense_columns() {
         let a = &stride[64 + t * bins..64 + (t + 1) * bins];
         let b = &dense[64 + t * 16 * bins..64 + (t * 16 + 1) * bins];
         assert_eq!(a, b, "column {t}");
+    }
+}
+
+#[test]
+fn spectrogram_padding_preserves_gain_and_tile_context() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("谐波.wav");
+    let samples: Vec<_> = (0..32768)
+        .flat_map(|i| {
+            [
+                0.5 * (TAU * 32.0 * i as f32 / 2048.0).sin(),
+                0.25 * (TAU * 7.25 * i as f32 / 2048.0).sin(),
+            ]
+        })
+        .collect();
+    write_wav(&input, &samples, 2);
+    let run = |name: &str, fft: usize, start: u64, end: u64, hop: usize, pooling: bool| {
+        let output = dir.path().join(name);
+        let request = serde_json::from_value(json!({
+            "input_path":input,"output_path":output,"fft_size":fft,"window_size":2048,
+            "hop":hop,"time_pooling":pooling,"start_frame":start,"end_frame":end
+        }))
+        .unwrap();
+        spectrogram(request).unwrap();
+        fs::read(output).unwrap()
+    };
+    let original = run("原始.bin", 2048, 4096, 8192, 512, false);
+    let padded = run("补零.bin", 8192, 4096, 8192, 512, false);
+    for c in 0..2 {
+        for t in 0..8 {
+            for bin in 0..1025 {
+                let old = original[64 + (c * 8 + t) * 1025 + bin];
+                let new = padded[64 + (c * 8 + t) * 4097 + bin * 4];
+                assert!(
+                    (old as i16 - new as i16).abs() <= 1,
+                    "补零前后同频率幅度应相等"
+                );
+            }
+        }
+    }
+    assert_eq!(padded[64 + 128], 242);
+    // 分块不能重置窗上下文；低 hop、普通 hop、大 hop 均与整段逐字节相等。
+    for (hop, pooling) in [(16, false), (512, false), (4096, true)] {
+        let whole = run(&format!("整段-{hop}.bin"), 8192, 0, 32768, hop, pooling);
+        let left = run(&format!("左块-{hop}.bin"), 8192, 0, 16384, hop, pooling);
+        let right = run(&format!("右块-{hop}.bin"), 8192, 16384, 32768, hop, pooling);
+        let columns = 16384 / hop;
+        for c in 0..2 {
+            let a = 64 + c * columns * 4097;
+            let b = 64 + c * columns * 2 * 4097;
+            assert_eq!(&left[a..a + columns * 4097], &whole[b..b + columns * 4097]);
+            assert_eq!(
+                &right[a..a + columns * 4097],
+                &whole[b + columns * 4097..b + columns * 2 * 4097]
+            );
+        }
+    }
+}
+
+#[test]
+fn spectrogram_overview_keeps_click_between_sparse_windows() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("爆音.wav");
+    let mut samples = vec![0.0; 32768];
+    samples[10240] = 0.9;
+    // 落在旧末列覆盖区之外，同时对齐 Hann 中心，单独验证尾段覆盖而非窗边衰减。
+    samples[32256] = 0.9;
+    write_wav(&input, &samples, 1);
+    let run = |pooling: bool| {
+        let output = dir.path().join(format!("{pooling}.bin"));
+        let request = serde_json::from_value(json!({
+            "input_path":input,"output_path":output,"fft_size":8192,"window_size":2048,
+            "hop":8192,"time_pooling":pooling
+        }))
+        .unwrap();
+        spectrogram(request).unwrap();
+        fs::read(output).unwrap()
+    };
+    assert!(run(false)[64..].iter().all(|&v| v == 0));
+    let pooled = run(true);
+    assert!(pooled[64 + 4097..64 + 2 * 4097].iter().all(|&v| v >= 110));
+    assert!(pooled[64 + 3 * 4097..64 + 4 * 4097].iter().all(|&v| v >= 110));
+    // 可选参数缺省仍按旧协议，非法窗长必须在发布文件前失败。
+    let old: SpectrogramRequest =
+        serde_json::from_value(json!({"input_path":input,"output_path":"unused"})).unwrap();
+    assert_eq!(old.window_size, None);
+    assert!(!old.time_pooling);
+    for size in [0, 1000, 4096] {
+        let output = dir.path().join(format!("非法-{size}.bin"));
+        let request = serde_json::from_value(
+            json!({"input_path":input,"output_path":output,"fft_size":2048,"window_size":size}),
+        )
+        .unwrap();
+        assert!(spectrogram(request).is_err());
+        assert!(!output.exists());
     }
 }
 
@@ -352,6 +451,8 @@ fn wav_formats_and_failure_atomicity() {
         .unwrap();
         assert_eq!(read_wav(&path), read_wav(&output));
         spectrogram(SpectrogramRequest {
+            window_size: None,
+            time_pooling: false,
             input_path: path,
             output_path: dir.path().join(format!("pcm{bits}.bin")),
             fft_size: 256,
@@ -427,6 +528,8 @@ fn dc_nyquist_silence_short_files_and_invalid_requests() {
         write_wav(&input, &data, 1);
         let output = dir.path().join(format!("{name}.bin"));
         spectrogram(SpectrogramRequest {
+            window_size: None,
+            time_pooling: false,
             input_path: input.clone(),
             output_path: output.clone(),
             fft_size: 256,
@@ -453,6 +556,8 @@ fn dc_nyquist_silence_short_files_and_invalid_requests() {
         ] {
             let bad = dir.path().join("bad.bin");
             assert!(spectrogram(SpectrogramRequest {
+                window_size: None,
+                time_pooling: false,
                 input_path: input.clone(),
                 output_path: bad.clone(),
                 fft_size,
@@ -469,6 +574,8 @@ fn dc_nyquist_silence_short_files_and_invalid_requests() {
     write_wav(&input, &[0.25], 1);
     let output = dir.path().join("short.bin");
     let result = spectrogram(SpectrogramRequest {
+        window_size: None,
+        time_pooling: false,
         input_path: input,
         output_path: output,
         fft_size: 2048,
@@ -650,6 +757,8 @@ fn benchmark() {
         generation.elapsed().as_secs_f64()
     );
     let result = spectrogram(SpectrogramRequest {
+        window_size: None,
+        time_pooling: false,
         input_path: input,
         output_path: output,
         fft_size: 2048,

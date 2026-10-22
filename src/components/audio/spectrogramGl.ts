@@ -1,4 +1,4 @@
-import { buildSpectrumTexture } from '@/core/audio/spectrogramTexture'
+import { buildSpectrumTexture, SPECTRUM_PEAK_WEIGHT, SPECTRUM_TIME_SAMPLES, SPECTRUM_BIN_SAMPLES } from '@/core/audio/spectrogramTexture'
 import type { SpectrogramData, SpectrogramRasterRequest } from '@/core/audio/spectrogram'
 
 const vertex = `#version 300 es
@@ -26,34 +26,53 @@ float hz(float p) {
   float low = max(20.0, frequency.x);
   return exp(mix(log(low), log(max(low * 1.0001, frequency.y)), p));
 }
-float sampleAt(int frame, int bin, int level) {
+vec2 sampleAt(int frame, int bin, int level) {
   ivec3 m = levels[level];
-  int address = channelBase + m.x + frame * m.z + bin;
-  return texelFetch(spectrum, ivec3(address % packing.x, (address / packing.x) % packing.y, address / (packing.x * packing.y)), 0).r;
+  int address = channelBase + m.x + clamp(frame, 0, m.y - 1) * m.z + clamp(bin, 0, m.z - 1);
+  return texelFetch(spectrum, ivec3(address % packing.x, (address / packing.x) % packing.y, address / (packing.x * packing.y)), 0).rg * 255.0;
+}
+vec2 interpolate(float frame, float bin, int level) {
+  ivec2 p = ivec2(floor(vec2(frame, bin)));
+  vec2 t = fract(vec2(frame, bin));
+  return mix(mix(sampleAt(p.x, p.y, level), sampleAt(p.x, p.y + 1, level), t.y),
+    mix(sampleAt(p.x + 1, p.y, level), sampleAt(p.x + 1, p.y + 1, level), t.y), t.x);
 }
 void main() {
   float x = floor(gl_FragCoord.x);
   float y = floor(gl_FragCoord.y - viewportSize.z);
-  float first = floor((timeRange.x + timeRange.y * x / viewportSize.x - timeRange.z) / timeRange.w);
-  float last = max(first, ceil((timeRange.x + timeRange.y * (x + 1.0) / viewportSize.x - timeRange.z) / timeRange.w) - 1.0);
-  if (last < 0.0 || first >= float(levels[0].y)) { color = texelFetch(lut, ivec2(0), 0); return; }
-  first = max(0.0, first); last = min(float(levels[0].y - 1), last);
-  float low = clamp(floor(hz(y / viewportSize.y) / frequency.w), 0.0, float(levels[0].z - 1));
-  float highHz = hz((y + 1.0) / viewportSize.y) / frequency.w;
-  float high = clamp(y == viewportSize.y - 1.0 ? floor(highHz) : ceil(highHz) - 1.0, low, float(levels[0].z - 1));
-  int level = int(clamp(ceil(log2(max(last - first + 1.0, high - low + 1.0) / 7.0)), 0.0, float(levelCount - 1)));
+  float left = (timeRange.x + timeRange.y * x / viewportSize.x - timeRange.z) / timeRange.w;
+  float right = (timeRange.x + timeRange.y * (x + 1.0) / viewportSize.x - timeRange.z) / timeRange.w;
+  if (right <= 0.0 || left >= float(levels[0].y)) { color = texelFetch(lut, ivec2(0), 0); return; }
+  float timeSpan = right - left;
+  float low = hz(y / viewportSize.y) / frequency.w;
+  // 顶行显式取上限，避免 GPU 除法近似把 Nyquist 边界算成略小于整数而漏一频点。
+  float upperHz = frequency.z == 0.0 ? frequency.y : max(max(20.0, frequency.x) * 1.0001, frequency.y);
+  float high = (y == viewportSize.y - 1.0 ? upperHz : hz((y + 1.0) / viewportSize.y)) / frequency.w;
+  float centerBin = hz((y + 0.5) / viewportSize.y) / frequency.w;
+  int level = int(clamp(ceil(log2(timeSpan / ${SPECTRUM_TIME_SAMPLES - 1}.0)), 0.0, float(levelCount - 1)));
   float divisor = exp2(float(level));
-  ivec2 begin = ivec2(floor(vec2(first, low) / divisor));
-  ivec2 end = ivec2(floor(vec2(last, high) / divisor));
-  float peak = 0.0;
-  for (int t = 0; t < 8; t++) {
-    if (begin.x + t > end.x) break;
-    for (int b = 0; b < 8; b++) {
-      if (begin.y + b > end.y) break;
-      peak = max(peak, sampleAt(begin.x + t, begin.y + b, level));
+  int first = max(0, int(floor(left / divisor)));
+  int last = min(levels[level].y - 1, int(ceil(right / divisor)) - 1);
+  int firstBin = clamp(int(floor(low)), 0, levels[level].z - 1);
+  int lastBin = clamp(int(high >= float(levels[level].z - 1) ? floor(high) : ceil(high) - 1.0), firstBin, levels[level].z - 1);
+  int binCount = min(${SPECTRUM_BIN_SAMPLES}, lastBin - firstBin + 1);
+  float peak = 0.0, energy = 0.0, weight = 0.0;
+  for (int t = 0; t < ${SPECTRUM_TIME_SAMPLES}; t++) {
+    if (t >= (timeSpan <= 1.0 ? 1 : last - first + 1)) break;
+    float frame = timeSpan <= 1.0 ? (left + right) / 2.0 - 0.5 : float(first + t);
+    float w = timeSpan <= 1.0 ? 1.0 : max(0.0, min(min(right, (frame + 1.0) * divisor), float(levels[0].y)) - max(left, frame * divisor));
+    for (int b = 0; b < ${SPECTRUM_BIN_SAMPLES}; b++) {
+      if (b >= (high - low <= 1.0 ? 1 : binCount)) break;
+      float bin = high - low <= 1.0 ? centerBin : float(firstBin) + floor(float(b * (lastBin - firstBin)) / float(max(1, binCount - 1)) + 0.5);
+      vec2 value = interpolate(frame, bin, level);
+      peak = max(peak, value.r);
+      energy += pow(10.0, (value.g / 255.0 * 120.0 - 120.0) / 10.0) * w;
+      weight += w;
     }
   }
-  color = texelFetch(lut, ivec2(int(clamp(round(peak * 255.0) + boost, 0.0, 255.0)), 0), 0);
+  float mean = clamp((10.0 * log(max(1e-12, energy / max(1e-12, weight))) / log(10.0) + 120.0) * 255.0 / 120.0, 0.0, 255.0);
+  float value = mix(mean, peak, ${SPECTRUM_PEAK_WEIGHT});
+  color = texelFetch(lut, ivec2(int(clamp(floor(value + 0.5) + boost, 0.0, 255.0)), 0), 0);
 }`
 
 export interface SpectrogramGl {
@@ -102,7 +121,7 @@ export function createSpectrogramGl(gl: WebGL2RenderingContext, lut: Uint8Clampe
         if (data === next) return
         const packed = buildSpectrumTexture(next, gl.getParameter(gl.MAX_TEXTURE_SIZE) as number, gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) as number)
         gl.activeTexture(gl.TEXTURE0)
-        gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.R8, packed.width, packed.height, packed.layers, 0, gl.RED, gl.UNSIGNED_BYTE, packed.values)
+        gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RG8, packed.width, packed.height, packed.layers, 0, gl.RG, gl.UNSIGNED_BYTE, packed.values)
         if (gl.getError() !== gl.NO_ERROR) throw new Error('频谱纹理上传失败')
         gl.uniform3i(uniform('packing'), packed.width, packed.height, packed.layers)
         gl.uniform3iv(uniform('levels[0]'), new Int32Array(packed.levels.flatMap(level => [level.offset, level.frames, level.bins])))

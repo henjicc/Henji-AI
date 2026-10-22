@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SpectrogramData } from '@/core/audio/spectrogram'
 import type { AudioEditSpectrogramChunk } from '@/core/audioEdit/regions'
-import { joinSpectrogramChunks, planSpectrogramTiles, spectrogramOverviewHop, SpectrogramTileLru, SPECTROGRAM_FFT_SIZE } from '@/core/audioEdit/spectrogramTiles'
+import { joinSpectrogramChunks, planSpectrogramTiles, spectrogramOverviewHop, SpectrogramTileLru, SPECTROGRAM_FFT_SIZE, SPECTROGRAM_WINDOW_SIZE } from '@/core/audioEdit/spectrogramTiles'
 import { createLogger } from '@/core/logging'
 import { getAudioEditSpectrogram } from '../application/audioEditRegions'
 import type { WaveformViewport } from '../waveformViewport'
@@ -13,7 +13,7 @@ export interface AudioEditSpectrogramState { data?: SpectrogramData; status: 'id
 export function planSpectrogramRequest(view: WaveformViewport, columns: number, duration: number): { startFrame: number; endFrame: number; hop: number } {
   const span = Math.max(1, view.end - view.start)
   const hop = span >= duration * 0.9 ? spectrogramOverviewHop(duration)
-    : Math.min(1 << 24, Math.max(128, 2 ** Math.ceil(Math.log2(Math.max(1, span / Math.max(64, columns))))))
+    : Math.min(1 << 24, Math.max(16, 2 ** Math.ceil(Math.log2(Math.max(1, span / Math.max(64, columns))))))
   const tiles = planSpectrogramTiles(Math.max(0, view.start - span / 2), Math.min(duration, view.end + span / 2), duration, hop)
   return { startFrame: tiles[0]?.startFrame ?? 0, endFrame: tiles[tiles.length - 1]?.endFrame ?? duration, hop }
 }
@@ -21,7 +21,22 @@ export function planSpectrogramRequest(view: WaveformViewport, columns: number, 
 export function chunkToSpectrogram(chunks: readonly AudioEditSpectrogramChunk[]): SpectrogramData {
   const chunk = joinSpectrogramChunks(chunks)
   // STFT 列以采样帧为中心，显示时左移半个间隔。
-  return { sampleRate: chunk.sampleRate, fftSize: chunk.fftSize, hop: chunk.hop, startFrame: chunk.startFrame - chunk.hop / 2, frameCount: chunk.timeBins, binCount: chunk.frequencyBins, channelCount: chunk.channels, values: chunk.values }
+  const startFrame = chunk.startFrame - chunk.hop / 2
+  const padTail = startFrame + chunk.timeBins * chunk.hop < chunk.endFrame
+  const frameCount = chunk.timeBins + (padTail ? 1 : 0)
+  let values = chunk.values
+  if (padTail) {
+    // 左移后末尾最多有半个 hop 未覆盖，不能把这段有效音频画成黑竖条。
+    // 只在所有块拼好后延展最后一列；内部接缝始终使用相邻块的真实列。
+    const size = chunk.timeBins * chunk.frequencyBins
+    values = new Uint8Array(frameCount * chunk.frequencyBins * chunk.channels)
+    for (let channel = 0; channel < chunk.channels; channel++) {
+      const target = channel * frameCount * chunk.frequencyBins
+      values.set(chunk.values.subarray(channel * size, (channel + 1) * size), target)
+      values.set(chunk.values.subarray((channel + 1) * size - chunk.frequencyBins, (channel + 1) * size), target + size)
+    }
+  }
+  return { sampleRate: chunk.sampleRate, fftSize: chunk.fftSize, hop: chunk.hop, startFrame, frameCount, binCount: chunk.frequencyBins, channelCount: chunk.channels, values }
 }
 
 /** 后端可能因声道数拆小块；只保留当前逻辑块的列，防止拼接重复边缘。 */
@@ -63,7 +78,7 @@ export function useAudioEditSpectrogram(projectId: string, view: WaveformViewpor
       const chunks: AudioEditSpectrogramChunk[] = []
       let start = startFrame
       while (start < endFrame) {
-        const chunk = await getAudioEditSpectrogram({ projectId, startFrame: start, endFrame, mode, fftSize: SPECTROGRAM_FFT_SIZE, hop })
+        const chunk = await getAudioEditSpectrogram({ projectId, startFrame: start, endFrame, mode, fftSize: SPECTROGRAM_FFT_SIZE, windowSize: SPECTROGRAM_WINDOW_SIZE, timePooling: true, hop })
         if (chunk.endFrame <= start || chunk.startFrame > start) throw new Error('频谱块没有覆盖请求范围')
         chunks.push(clipChunk(chunk, start, endFrame))
         start = chunk.endFrame

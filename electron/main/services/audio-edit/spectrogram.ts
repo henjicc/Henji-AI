@@ -8,8 +8,8 @@ import { readSpectrogram, runSpectrogram } from './dsp-adapter'
 import { runAudioEditTask } from './task-store'
 import { prepareAudioEditRenderSource } from './render'
 
-export function spectrogramTileKey(source: unknown, mode: string, edited: unknown, fftSize: number, hop: number, channel: number | undefined, tile: number): string {
-  return audioRenderKey(['spectrogram-tile-v2', source, mode, edited, fftSize, hop, channel, tile])
+export function spectrogramTileKey(source: unknown, mode: string, edited: unknown, fftSize: number, hop: number, channel: number | undefined, tile: number, windowSize = fftSize, timePooling = false): string {
+  return audioRenderKey(['spectrogram-tile-v3', source, mode, edited, fftSize, windowSize, timePooling, hop, channel, tile])
 }
 
 /** 返回固定块对齐的连续范围，最多 8 MiB；长范围从 endFrame 继续。 */
@@ -31,13 +31,13 @@ export async function getAudioEditSpectrogram(raw: AudioEditSpectrogramRequest):
     const result: string[] = []
     for (const tile of tiles) {
       signal.throwIfAborted()
-      const key = spectrogramTileKey([identity.digest, project.source.audioStreamIndex, project.source.sampleRate, channels, project.source.durationFrames], request.mode, edited, request.fftSize, hop, request.channel, tile.index)
+      const key = spectrogramTileKey([identity.digest, project.source.audioStreamIndex, project.source.sampleRate, channels, project.source.durationFrames], request.mode, edited, request.fftSize, hop, request.channel, tile.index, request.windowSize, request.timePooling)
       result.push(await cachedAudioFile(audioEditCacheDirectory(project.id), key, 'spectrum', async output => {
-        await runSpectrogram(edited ?? await prepareAudioEditAudio(project, signal), output, { startFrame: tile.startFrame, endFrame: tile.endFrame, fftSize: request.fftSize, hop, channel: request.channel }, signal)
+        await runSpectrogram(edited ?? await prepareAudioEditAudio(project, signal), output, { startFrame: tile.startFrame, endFrame: tile.endFrame, fftSize: request.fftSize, windowSize: request.windowSize, timePooling: request.timePooling, hop, channel: request.channel }, signal)
       }, signal))
     }
     return result
-  }, request.requestId, JSON.stringify(['spectrogram-tile-v2', project.source, request.mode === 'edited' ? project.revision : undefined, request]), true)
+  }, request.requestId, JSON.stringify(['spectrogram-tile-v3', project.source, request.mode === 'edited' ? project.revision : undefined, request]), true)
   // 回执只存文件引用；IPC 保持 Uint8Array 契约，不做数组化或 base64 中转。
   return joinSpectrogramChunks(await Promise.all(files.map(async file => readSpectrogram(await fs.readFile(file)))))
 }

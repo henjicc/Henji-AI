@@ -75,8 +75,13 @@ pub fn spectrogram(req: SpectrogramRequest) -> Result<Value> {
     let began = Instant::now();
     validate_fft(req.fft_size)?;
     let n = req.fft_size;
+    let window_size = req.window_size.unwrap_or(n);
+    validate_fft(window_size)?;
+    if window_size > n {
+        return Err("window_size must not exceed fft_size".into());
+    }
     let hop = req.hop.unwrap_or(n / 4);
-    // hop > fft_size samples one window per column (overview of long audio at screen resolution).
+    // 旧调用允许 hop 大于窗长；启用聚合后仍按输出列数控制 IPC 数据量。
     if hop == 0 || hop > MAX_HOP {
         return Err(format!("hop must be in 1..={MAX_HOP}").into());
     }
@@ -115,70 +120,114 @@ pub fn spectrogram(req: SpectrogramRequest) -> Result<Value> {
     writer.write_all(&req.channel.map_or(-1, |c| c as i32).to_le_bytes())?;
     writer.write_all(&0_u32.to_le_bytes())?;
     let mut fft = Transform::new(n);
-    let gain = fft.window.iter().sum::<f32>();
-    let mut ring = vec![0_f32; n];
+    let window: Vec<f32> = (0..window_size)
+        .map(|i| 0.5 - 0.5 * (TAU * i as f32 / window_size as f32).cos())
+        .collect();
+    // 以实际窗的相干增益归一化，补零不会让画面变暗。
+    let gain = window.iter().sum::<f32>();
+    let mut ring = vec![0_f32; window_size];
     let mut buffer = vec![Complex32::default(); n];
     let mut row = vec![0_u8; bins];
-    // Channel-major passes trade sequential reads for bounded memory O(N),
-    // independent of file duration and the number of spectrogram columns.
+    let mut peak = vec![0_u8; bins];
+    let mut energy = vec![0_f64; bins];
+    let powers: Vec<f64> = (0..256)
+        .map(|v| 10_f64.powf((v as f64 / 255.0 * 120.0 - 120.0) / 10.0))
+        .collect();
+    // 与显示端相同：65% 峰值 dB + 35% 能量均值 dB，长总览也保留爆音。
+    const PEAK_WEIGHT: f64 = 0.65;
+    let pooled = req.time_pooling && hop > window_size / 4;
+    let step = if pooled { window_size / 4 } else { hop };
     for &channel in &channels {
         let total = input.frames as i64;
-        if hop > n {
-            for t in 0..frames {
-                let begin = start as i64 + t as i64 * hop as i64 - (n / 2) as i64;
-                ring.fill(0.0);
-                let first = begin.max(0);
-                if first < total {
-                    input.seek(first as u64)?;
-                    let mut samples = input.samples();
-                    let mut frame = first;
-                    while frame < begin + n as i64 && frame < total {
+        let first_center = if pooled {
+            (start as i64 - hop as i64 / 2).max(0)
+        } else {
+            start as i64
+        };
+        let first_begin = first_center - (window_size / 2) as i64;
+        input.seek(first_begin.max(0) as u64)?;
+        let mut samples = input.samples();
+        let mut next_frame = first_begin;
+        let mut head = 0;
+        let mut previous_center: Option<i64> = None;
+        ring.fill(0.0);
+        for t in 0..frames {
+            let center = start as i64 + t as i64 * hop as i64;
+            // 以全文件为上下文，绝不能把 tile 边界当作文件边界补零。
+            let begin = if pooled {
+                (center - hop as i64 / 2).max(0)
+            } else {
+                center
+            };
+            let limit = if pooled && t == frames - 1 && end == total as u64 {
+                // 最后一格延展到真实文件末尾，不能漏掉半 hop 尾段里的瞬态。
+                total
+            } else if pooled {
+                (center + (hop as i64 + 1) / 2).min(total)
+            } else {
+                center + 1
+            };
+            peak.fill(0);
+            energy.fill(0.0);
+            let mut count = 0;
+            for position in (begin..limit).step_by(step) {
+                let delta =
+                    previous_center.map_or(window_size, |previous| (position - previous) as usize);
+                let read_count = delta.min(window_size);
+                let target = position - (window_size / 2) as i64;
+                // 稀疏旧协议跳过两窗之间的样本；连续总览只顺序读，内存与音频长度无关。
+                while next_frame < target {
+                    if (0..total).contains(&next_frame) {
+                        for _ in 0..source_channels {
+                            samples.next().ok_or("unexpected end of WAV")??;
+                        }
+                    }
+                    next_frame += 1;
+                }
+                if delta >= window_size {
+                    head = 0;
+                }
+                for j in 0..read_count {
+                    let mut value = 0.0;
+                    if (0..total).contains(&next_frame) {
                         for c in 0..source_channels {
                             let x = samples.next().ok_or("unexpected end of WAV")??;
                             if c == channel {
-                                ring[(frame - begin) as usize] = x;
+                                value = x;
                             }
                         }
-                        frame += 1;
                     }
+                    ring[(head + j) % window_size] = value;
+                    next_frame += 1;
                 }
-                for j in 0..n {
-                    buffer[j] = Complex32::new(ring[j] * fft.window[j], 0.0);
+                if delta < window_size {
+                    head = (head + delta) % window_size;
+                }
+                buffer.fill(Complex32::default());
+                for j in 0..window_size {
+                    buffer[j] = Complex32::new(ring[(head + j) % window_size] * window[j], 0.0);
                 }
                 fft.forward(&mut buffer);
                 quantize_row(&buffer, n, gain, &mut row);
-                writer.write_all(&row)?;
-            }
-            continue;
-        }
-        input.seek(start.saturating_sub((n / 2) as u64))?;
-        let mut samples = input.samples();
-        let mut next_frame = start as i64 - (n / 2) as i64;
-        let mut head = 0;
-        ring.fill(0.0);
-        for t in 0..frames {
-            let count = if t == 0 { n } else { hop };
-            for j in 0..count {
-                let mut value = 0.0;
-                if (0..total).contains(&next_frame) {
-                    for c in 0..source_channels {
-                        let x = samples.next().ok_or("unexpected end of WAV")??;
-                        if c == channel {
-                            value = x;
-                        }
+                if pooled {
+                    for k in 0..bins {
+                        peak[k] = peak[k].max(row[k]);
+                        energy[k] += powers[row[k] as usize];
                     }
                 }
-                ring[(head + j) % n] = value;
-                next_frame += 1;
+                count += 1;
+                previous_center = Some(position);
             }
-            if t != 0 {
-                head = (head + hop) % n;
+            if pooled {
+                for k in 0..bins {
+                    let mean = ((10.0 * (energy[k] / count as f64).max(1e-12).log10() + 120.0)
+                        * 255.0
+                        / 120.0)
+                        .clamp(0.0, 255.0);
+                    row[k] =
+                        (peak[k] as f64 * PEAK_WEIGHT + mean * (1.0 - PEAK_WEIGHT)).round() as u8;
+                }
             }
-            for j in 0..n {
-                buffer[j] = Complex32::new(ring[(head + j) % n] * fft.window[j], 0.0);
-            }
-            fft.forward(&mut buffer);
-            quantize_row(&buffer, n, gain, &mut row);
             writer.write_all(&row)?;
         }
     }
@@ -189,7 +238,7 @@ pub fn spectrogram(req: SpectrogramRequest) -> Result<Value> {
     Ok(
         json!({"outputPath":req.output_path,"format":"HJSP","formatVersion":1,"headerBytes":64,
         "sampleRate":input.spec.sample_rate,"channels":channels.len(),"sourceChannels":source_channels,
-        "channel":req.channel,"fftSize":n,"hop":hop,"frames":frames,"bins":bins,
+        "channel":req.channel,"fftSize":n,"windowSize":window_size,"timePooling":req.time_pooling,"hop":hop,"frames":frames,"bins":bins,
         "startFrame":start,"endFrame":end,"minDb":-120,"maxDb":0,"bytes":written,
         "elapsedMs":began.elapsed().as_secs_f64()*1000.0}),
     )
