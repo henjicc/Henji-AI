@@ -74,7 +74,8 @@ it('等待前台播放时关闭原实例，及时取消并释放会话', async (
 })
 
 
-it('仅节目正放实时合成进入观测：红段被needed选择，实测流畅覆盖黄色预测', async () => {
+it('仅节目正放进入观测：单帧超预算但按时呈现不标红，跳帧超过5%标红并被needed选择', async () => {
+  state.windows = [{ key: 'content', startFrame: 0, endFrame: 80, heavy: true }]
   const owner = state.instances[0]
   owner.playing = true; owner.playbackDirection = 1
   const composition = state.composition as Parameters<typeof recordVideoEditProgramRender>[1]
@@ -85,8 +86,10 @@ it('仅节目正放实时合成进入观测：红段被needed选择，实测流�
     recordVideoEditProgramRender(owner.document.id, composition, 0, { ...sample, presented: false }, true)
   }
   expect(readVideoEditRenderCache(owner.document.id).windows[0].performance).toBeUndefined()
-  for (let frame = 0; frame < 20; frame++) recordVideoEditProgramRender(owner.document.id, composition, 0, sample, true)
-  expect(readVideoEditRenderCache(owner.document.id).windows[0]).toMatchObject({ state: 'dropped', performance: { sampleFrames: 20, overBudgetFrames: 20 } })
+  for (let frame = 0; frame < 20; frame++) recordVideoEditProgramRender(owner.document.id, composition, frame, sample, true)
+  expect(readVideoEditRenderCache(owner.document.id).windows[0]).toMatchObject({ state: 'realtime', performance: { sampleFrames: 20, droppedFrames: 0 } })
+  for (let frame = 21; frame < 60; frame += 2) recordVideoEditProgramRender(owner.document.id, composition, frame, sample, true)
+  expect(readVideoEditRenderCache(owner.document.id).windows[0]).toMatchObject({ state: 'dropped', performance: { sampleFrames: 60, droppedFrames: 20 } })
   owner.playing = false
   expect((await renderVideoEditRenderCache(owner.document.id, { scope: 'needed' })).renderedWindows).toBe(1)
   expect(readVideoEditRenderCache(owner.document.id).windows[0].state).toBe('ready')

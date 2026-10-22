@@ -179,30 +179,49 @@ function measuredState(window: VideoEditRenderWindow): 'dropped' | 'predicted' |
 }
 const slowSamples = new Map<string, { elapsedMs: number; frame: number; stages: Record<string, number> }>()
 
-/** 只有节目正向播放的实时合成回执进入统计；迟到的旧文档、预览文件、拖动和观察一律排除。 */
+/** 每个剪辑上一次正向呈现的帧：与本次之间被播放时钟跳过的帧就是没按时出现的画面。 */
+const lastShown = new Map<string, { composition: VideoEditComposition; frame: number; at: number }>()
+
+/**
+ * 只有节目正向播放的回执进入统计；迟到的旧文档、拖动和观察一律排除。
+ * 实时合成的帧记渲染耗时；两次呈现之间被跳过的帧记为未按时出现，算在它们所在的段上（预览文件呈现的帧只用来接续）。
+ */
 export function recordVideoEditProgramRender(projectId: string, composition: VideoEditComposition, frame: number, result: RenderResponse, forward: boolean): void {
-  if (!forward || result.presented !== true || result.renderCached !== false || result.renderElapsedMs === undefined || !Number.isFinite(result.renderElapsedMs)) return
+  if (!forward || result.presented !== true) return
   const instance = requireVideoEditInstance(projectId)
-  if (!instance.playing || instance.playbackDirection !== 1 || instance.scrubbing || findActiveVideoEditSequence(instance) !== composition) return
-  const window = videoEditRenderCacheWindows(composition).find(window => window.startFrame <= frame && window.endFrame > frame)
+  if (!instance.playing || instance.playbackDirection !== 1 || instance.scrubbing || findActiveVideoEditSequence(instance) !== composition) { lastShown.delete(projectId); return }
+  const now = performance.now(), previous = lastShown.get(projectId)
+  lastShown.set(projectId, { composition, frame, at: now })
+  const windows = videoEditRenderCacheWindows(composition)
+  const windowAt = (at: number): VideoEditRenderWindow | undefined => windows.find(window => window.startFrame <= at && window.endFrame > at)
+  // 同一次连续播放（一秒内、向前不超过一秒）才算跳帧；起播、跳转或停顿后的第一帧只作为新的起点。
+  if (previous && previous.composition === composition && frame > previous.frame && frame - previous.frame <= composition.fps && now - previous.at < 1000) {
+    for (let missing = previous.frame + 1; missing < frame; missing++) {
+      const window = windowAt(missing)
+      if (window) observe(projectId, composition, window, missing, null)
+    }
+  }
+  if (result.renderCached !== false || result.renderElapsedMs === undefined || !Number.isFinite(result.renderElapsedMs)) return
+  const window = windowAt(frame)
   if (!window) return
-  const before = measuredState(window)
   if (result.renderElapsedMs > 1000 / composition.fps && result.renderElapsedMs > (slowSamples.get(window.key)?.elapsedMs ?? 0)) {
     slowSamples.set(window.key, { elapsedMs: result.renderElapsedMs, frame, stages: result.renderStages ?? {} })
     if (slowSamples.size > 256) slowSamples.delete(slowSamples.keys().next().value!)
   }
-  const measurement = recordVideoEditRenderPerformance(window.key, composition.fps, result.renderElapsedMs)
+  observe(projectId, composition, window, frame, result.renderElapsedMs)
+}
+function observe(projectId: string, composition: VideoEditComposition, window: VideoEditRenderWindow, frame: number, elapsedMs: number | null): void {
+  const before = measuredState(window)
+  const measurement = recordVideoEditRenderPerformance(window.key, composition.fps, elapsedMs)
   const after = videoEditMeasuredRenderState(window.heavy, measurement)
-  if (after !== before) {
-    publishVideoEdit()
-    if (after === 'dropped') {
-      const slow = slowSamples.get(window.key)
-      const stages = Object.entries(slow?.stages ?? {}).filter(([stage]) => stage !== 'presentDeadline').sort((a, b) => b[1] - a[1])
-      logger.info('实时播放段落超出帧预算', { event: 'video_edit.render_cache.dropped', context: { projectId, sequenceId: composition.id,
-        startFrame: window.startFrame, endFrame: window.endFrame, frame, frameBudgetMs: 1000 / composition.fps, ...measurement,
-        slowestFrame: slow?.frame, slowestElapsedMs: slow?.elapsedMs, slowestStage: stages[0]?.[0], stages: Object.fromEntries(stages) } })
-    }
-  }
+  if (after === before) return
+  publishVideoEdit()
+  if (after !== 'dropped') return
+  const slow = slowSamples.get(window.key)
+  const stages = Object.entries(slow?.stages ?? {}).filter(([stage]) => stage !== 'presentDeadline').sort((a, b) => b[1] - a[1])
+  logger.info('实时播放段落跳帧', { event: 'video_edit.render_cache.dropped', context: { projectId, sequenceId: composition.id,
+    startFrame: window.startFrame, endFrame: window.endFrame, frame, frameBudgetMs: 1000 / composition.fps, ...measurement,
+    slowestFrame: slow?.frame, slowestElapsedMs: slow?.elapsedMs, slowestStage: stages[0]?.[0], stages: Object.fromEntries(stages) } })
 }
 
 /** 渲染条由就绪文件、任务与实测共同派生；实测样本足够时覆盖启发式。 */

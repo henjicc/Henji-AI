@@ -6,7 +6,8 @@ import { VIDEO_EDIT_RENDER_SAMPLE_LIMIT, videoEditRenderMeasurementSchema, video
 
 const logger = createLogger('features.videoEdit.renderCache')
 // 与代码元数据缓存共用配置数据库；只是一份可重建的本机观测，不属于工程或用户设置。
-const key = `cache.video-edit.render-performance.v${VIDEO_EDIT_RENDER_CACHE_VERSION}`
+// 样本含义改为“是否按时呈现”后换键，旧的耗时样本不再参与判断。
+const key = `cache.video-edit.render-performance.v${VIDEO_EDIT_RENDER_CACHE_VERSION}.shown`
 const MAX_SEGMENTS = 256
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const cacheSchema = z.array(z.tuple([z.string().max(200), videoEditRenderMeasurementSchema])).max(MAX_SEGMENTS)
@@ -38,10 +39,11 @@ export function readVideoEditRenderPerformance(content: string): VideoEditRender
   return summary
 }
 
-export function recordVideoEditRenderPerformance(content: string, fps: number, elapsedMs: number): VideoEditRenderPerformance {
+/** 记一帧观测：呈现的帧传渲染耗时，被播放时钟跳过的帧传 null。 */
+export function recordVideoEditRenderPerformance(content: string, fps: number, elapsedMs: number | null): VideoEditRenderPerformance {
   let value = measurements.get(content)
   if (!value || value.fps !== fps || Date.now() - value.updatedAt > MAX_AGE_MS) value = { fps, updatedAt: Date.now(), samples: [] }
-  value.samples.push(Math.round(elapsedMs * 100) / 100)
+  value.samples.push(elapsedMs === null ? null : Math.round(elapsedMs * 100) / 100)
   if (value.samples.length > VIDEO_EDIT_RENDER_SAMPLE_LIMIT) value.samples.shift()
   value.updatedAt = Date.now()
   measurements.delete(content); measurements.set(content, value)

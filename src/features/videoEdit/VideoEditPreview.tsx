@@ -484,7 +484,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           // 固定刷新周期合流最新快照，避免计时器误差及 Worker 往返耗时逐帧累加。
           if (parameterUpdate) lastParameterUpdate = parameterTick
           // 内容或位置改变必须立即撤下旧映射，不能等下一次 250ms 缓存轮询才更新。
-          renderer.setRenderCache([]); appliedRenderCache = ''; renderCacheCheckedAt = -Infinity
+          if (appliedRenderCache) { renderer.setRenderCache([]); appliedRenderCache = '' }
+          renderCacheCheckedAt = -Infinity
           await renderer.updateDocument(document, useOriginal); await audioRenderer?.updateDocument(document); appliedDocument = document; appliedSequence = sequence; appliedProxy = useOriginal ? 'original' : proxyState(availableProxies); lastRequested = -1
           if (!parameterUpdate && !liveProjection) lastFrame = -1
           if (stopped) return
@@ -497,7 +498,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (performance.now() - renderCacheCheckedAt > 250) {
           renderCacheCheckedAt = performance.now()
           const ready = readyVideoEditRenderWindows(instance.document.id, document)
-          const signature = JSON.stringify(ready)
+          const signature = ready.length ? JSON.stringify(ready) : ''
           if (signature !== appliedRenderCache) { appliedRenderCache = signature; renderer.setRenderCache(ready) }
         }
         const divisor = captureFull > 0 ? 1 : videoEditPreviewDivisor(getVideoEditPlaybackResolution(instance.document.id), current.playing)
