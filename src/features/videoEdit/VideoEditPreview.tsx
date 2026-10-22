@@ -321,7 +321,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           meter ??= createVideoEditAudioMeter(context, document.channels)
           return { context, destination: meter.input }
         },
-        mix: (from, duration) => (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration),
+        mix: (from, duration) => (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration, true),
         isCurrent: () => !stopped && !instance.playing && videoMotionComposition(instance) === document && appliedDocument === document,
         onError,
       })
@@ -619,7 +619,9 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
           }
         }
         // 首帧后的第一秒留给用户操作；停稳且没有输入时再准备声音与前向解码，播放命令仍可按需准备。
-        if (!playing && performance.now() - firstPresentationAt >= 1100 && (armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && (!current.scrubbing || performance.now() - lastPresentation > PLAY_ARM_SCRUB_REST_MS) && captureFull === 0) {
+        // 拖动播放头期间只在指针真正停住（PLAY_ARM_SCRUB_REST_MS 内没有输入）时预热：按“距上次出图多久”判断时，
+        // 复杂工程每帧渲染慢于该阈值，会在拖动中逐帧打开又撤掉连续解码与首段混音，与拖动取帧争用解码服务（实测一次拖动约 16 次）。
+        if (!playing && performance.now() - firstPresentationAt >= 1100 && (current.scrubbing ? performance.now() - lastInteractionAt >= PLAY_ARM_SCRUB_REST_MS : armedDocument !== undefined || performance.now() - lastInteractionAt >= 180) && lastFrame === current.frame && current.frame === lastRequested && !!current.scrubbing === lastScrubbing && (armedDocument !== document || armedFrame !== current.frame) && captureFull === 0) {
           await preparePlayback(document, current.frame)
           if (stopped) return
           // 刷新周期在后台量，不挡住紧接着的起播。

@@ -1018,6 +1018,22 @@ it('片段声音读取器随源释放而关闭，原生会话只关一次，打�
   } finally { await renderer.dispose() }
   expect(closed).toBe(2); expect(released.sort()).toEqual(opened.sort())
 })
+it('拖动播放头的声音颗粒（retainIdle）离开片段后保留其声音会话，回来时不重开；普通混音仍立即释放', async () => {
+  let closed = 0
+  const { backend, opened, released } = nativeSoundBackend(() => pcmSession(48000, 2, () => .5, () => { closed++ }))
+  const renderer = new VideoEditRenderer(fixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    expect((await renderer.mixAudio(0, .01, true))[0][0]).toBe(.5)
+    expect((await renderer.mixAudio(5, .01, true))[0].every(value => value === 0)).toBe(true)
+    expect(closed).toBe(0)
+    expect((await renderer.mixAudio(0, .01, true))[0][0]).toBe(.5)
+    expect(opened).toHaveLength(1)
+    // 颗粒结束后的普通混音（播放）不再保留空闲来源。
+    await renderer.mixAudio(5, .01)
+    expect(closed).toBe(1)
+  } finally { await renderer.dispose() }
+  expect(released.sort()).toEqual(opened.sort())
+})
 it('混音把序列采样率交给声音读取器；序列采样率改变后按新采样率读取', async () => {
   const rates: Array<number | undefined> = []
   const backend: VideoEditFrameBackend = {
@@ -1303,4 +1319,15 @@ it('同一原片在时间线空档后复用时分开排程，不在空档中扣�
     await renderer.render(90, true)
     expect(boundary.scheduled).toHaveLength(2)
   } finally { await renderer.dispose() }
+})
+it('拖动时的空闲会话按最近使用保留，超出上限释放最旧的；用到的键离开空闲表', async () => {
+  const { retireIdle } = await import('./videoEditRenderer')
+  const table = new Map<string, true>()
+  expect(retireIdle(table, ['a', 'b'], 2)).toEqual([])
+  expect(retireIdle(table, ['a', 'b', 'c'], 2)).toEqual(['a'])
+  expect([...table.keys()]).toEqual(['b', 'c'])
+  // b 重新用到：离开空闲表；再空闲时排在最新
+  expect(retireIdle(table, ['c'], 2)).toEqual([])
+  expect(retireIdle(table, ['c', 'b', 'd'], 2)).toEqual(['c'])
+  expect(retireIdle(table, ['b', 'd'], 0)).toEqual(['b', 'd'])
 })

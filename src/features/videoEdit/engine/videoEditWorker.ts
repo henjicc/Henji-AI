@@ -50,7 +50,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'renderCache'; windows: import('./videoEditRenderer').VideoEditRenderCacheWindow[]; localPaths: Record<string, string> }
   | { kind: 'dispose' }
   | { kind: 'render'; observeElements?: boolean; quality?: EffectQuality; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number; readRgb?: { width: number; height: number }; history?: boolean }
-  | { kind: 'audio'; start: number; duration: number }
+  | { kind: 'audio'; start: number; duration: number; retainIdle?: boolean }
   /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
   | { kind: 'precision'; row?: number })
 export type RenderResponse = { gpuDeviceLost?: string; authorElements?: import('@/core/videoEdit/codeAuthorProgram').CodeAuthorFrameObservation; authorMetadata?: import('./videoEditAuthorParameters').AuthorEffectMetadata; elements?: import('./videoEditAuthorElements').AuthorElementObservation[]; preparationStages?: ReturnType<typeof videoEditPreparationSnapshot>; codePerformance?: import('@/core/videoEdit/codeMaterial/performance').CodeFramePerformance[]; id: number; phase?: 'submitted'; error?: string; effectErrors?: string[]; bitmap?: ImageBitmap; history?: ImageBitmap; rgb?: Uint8Array; sourceTimestamps?: number[]; blankPictures?: number; singleFrameReads?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
@@ -304,7 +304,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest | Shar
         self.postMessage({ id: request.id, precision } satisfies RenderResponse, { transfer: precision.row ? [precision.row.buffer as ArrayBuffer] : [] })
       } else {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
-        const channels = await renderer.mixAudio(request.start, request.duration)
+        const channels = await renderer.mixAudio(request.start, request.duration, request.retainIdle === true)
         self.postMessage({ id: request.id, channels } satisfies RenderResponse, { transfer: channels.map(channel => channel.buffer as ArrayBuffer) })
       }
     } catch (error) { self.postMessage({ id: request.id, ...videoEditRenderFailure(error) } satisfies RenderResponse) }

@@ -58,6 +58,59 @@ async function profileStop(cdp, file) {
   return [...self].sort((left, right) => right[1] - left[1]).slice(0, 25).map(([name, ms]) => ({ name, ms: Math.round(ms) }))
 }
 
+const scrubPercentile = (values, q) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))]) : null }
+
+/**
+ * 在节目时间定位条上按给定方式拖动，统计节目实际呈现的帧数、节目 Worker 每帧往返/解码/GPU 耗时与原生取帧请求。
+ * `offset(t)`：t∈[0,1] 时播放头相对起点（时间线 30% 处）的秒数；`sweep`：从开头扫到一半。
+ */
+async function measureScrub(page, pattern, pct) {
+  const slider = page.getByRole('slider', { name: '剪辑时间定位' }).first()
+  // 整条序列适配窗口（PR 的 \），再在可见范围内点两处读帧号，标定“每像素多少帧”，不依赖标尺内部数值。
+  await page.locator('[data-video-edit-timeline-viewport]').first().focus(); await page.keyboard.press('Backslash'); await page.waitForTimeout(400)
+  const viewport = await page.locator('[data-video-edit-timeline-viewport]').first().boundingBox()
+  const box = await slider.boundingBox()
+  const y = box.y + box.height / 2
+  const left = Math.max(box.x, viewport.x + 140), right = Math.min(box.x + box.width, viewport.x + viewport.width - 20)
+  const frameAt = async px => { await page.mouse.click(px, y); await page.waitForTimeout(150); return Number(await slider.getAttribute('aria-valuenow')) }
+  const f1 = await frameAt(left + (right - left) * 0.2), f2 = await frameAt(left + (right - left) * 0.8)
+  const framesPerPx = (f2 - f1) / ((right - left) * 0.6)
+  const fps = 60
+  const x = seconds => Math.max(left, Math.min(right, left + (right - left) * 0.2 + (seconds * fps - f1) / framesPerPx))
+  const start = (f1 + (f2 - f1) * 0.4) / fps
+  const total = f2
+  const position = t => pattern.sweep ? x(f1 / fps + (f2 - f1) / fps * t) : x(start + pattern.offset(t))
+  await page.mouse.click(position(0), box.y + box.height / 2); await page.waitForTimeout(1500)
+  await page.evaluate(() => { window.__scrubFrames = 0; const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); window.__scrubMo = new MutationObserver(() => window.__scrubFrames++); window.__scrubMo.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] }) })
+  const cpu = pattern.profile ? await profileStart(page) : null
+  const from = await page.evaluate(() => performance.now()); const after = new Date().toISOString(); const startedAt = performance.now()
+  await page.mouse.move(position(0), box.y + box.height / 2); await page.mouse.down()
+  // 按真实鼠标的节奏（约 60 次/秒）发送移动：直接走浏览器输入协议且不等每次往返，测试工具本身不成为瓶颈。
+  const input = await page.context().newCDPSession(page)
+  let moves = 0
+  while (performance.now() - startedAt < pattern.ms) {
+    void input.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: position((performance.now() - startedAt) / pattern.ms), y: box.y + box.height / 2, button: 'left', buttons: 1 }).catch(() => undefined)
+    moves++
+    await new Promise(resolve => setTimeout(resolve, 16))
+  }
+  await input.detach().catch(() => undefined)
+  const midValue = await slider.getAttribute('aria-valuenow')
+  await page.mouse.up()
+  const presentedFrames = await page.evaluate(() => { window.__scrubMo.disconnect(); return window.__scrubFrames })
+  const profilePath = path.resolve('node_modules/.cache/video-edit-open-picture', `scrub-${pattern.name}.cpuprofile`)
+  const top = cpu ? await profileStop(cpu, profilePath) : undefined
+  const debug = { total, box: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) }, startX: Math.round(position(0)), midValue, endValue: await slider.getAttribute('aria-valuenow') }
+  const snapshot = await workerSnapshot(page)
+  const program = new Set(snapshot.workers.filter(worker => worker.direct && !worker.terminated).map(worker => worker.id))
+  const renders = snapshot.events.filter(event => event.kind === 'render.completed' && event.at >= from && program.has(event.worker))
+  const stat = key => ({ p50: pct(renders.map(event => event[key] ?? 0), .5), p90: pct(renders.map(event => event[key] ?? 0), .9) })
+  const decoderEvents = await page.evaluate(async after => (await window.henjiNative.logging.queryLogEvents({ date: after.slice(0, 10), afterTimestamp: after, keyword: 'video_decoder.request.completed', limit: 5000 })).events, after)
+  const decoder = {}
+  for (const entry of decoderEvents) { const type = entry.context?.type ?? '?'; decoder[type] ??= { count: 0, totalMs: 0 }; decoder[type].count++; decoder[type].totalMs += Math.round(entry.context?.elapsedMs ?? 0) }
+  await page.waitForTimeout(1500)
+  return { ...(top ? { top: top.slice(0, 15), profilePath } : {}), debug, movesPerSecond: Math.round(moves / (pattern.ms / 1000) * 10) / 10, requests: snapshot.events.filter(event => event.kind === 'render' && event.at >= from && program.has(event.worker)).length, fps: Math.round(presentedFrames / (pattern.ms / 1000) * 10) / 10, presentedFrames, renders: renders.length, elapsedMs: stat('elapsedMs'), decodeMs: stat('decodeMs'), gpuMs: stat('gpuMs'), decoder }
+}
+
 function summarizeSamples(samples) {
   // “正在准备画面”浮层本身有文字和图标，出现时不算画面上屏。
   const visible = sample => sample.spread !== null && sample.spread >= VISIBLE_SPREAD && !sample.preparing
@@ -118,16 +171,15 @@ function createVideoEditOpenPictureScene() {
           const samples = await sampleProgram(page, startedAt, durationMs)
           if (openProfile) evidence[`profileOpen${evidence.runs.length}`] = await profileStop(openProfile, path.join(root, `open-${evidence.runs.length}.cpuprofile`))
           if (profiling) {
-            // 拖动播放头 4 秒：记录主线程长任务与节目实际呈现的帧数。
-            const slider = page.getByRole('slider', { name: '剪辑时间定位' }).first(); const box = await slider.boundingBox()
-            await page.evaluate(() => { window.__scrubLong = []; window.__scrubObserver = new PerformanceObserver(list => { for (const entry of list.getEntries()) window.__scrubLong.push(Math.round(entry.duration)) }); window.__scrubObserver.observe({ type: 'longtask' }); window.__scrubFrames = 0; const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); window.__scrubMo = new MutationObserver(() => window.__scrubFrames++); window.__scrubMo.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] }) })
-            const scrubProfile = await profileStart(page)
-            await page.mouse.move(box.x + 20, box.y + box.height / 2); await page.mouse.down()
-            for (let step = 0; step <= 240; step++) { await page.mouse.move(box.x + 20 + (box.width - 40) * (step / 240) * 0.5, box.y + box.height / 2); await page.waitForTimeout(16) }
-            await page.mouse.up()
-            evidence[`profileScrub${evidence.runs.length}`] = await profileStop(scrubProfile, path.join(root, `scrub-${evidence.runs.length}.cpuprofile`))
-            evidence[`scrub${evidence.runs.length}`] = await page.evaluate(() => { window.__scrubObserver.disconnect(); window.__scrubMo.disconnect(); return { presentedFrames: window.__scrubFrames, longTasks: window.__scrubLong } })
-            console.log('[open-picture-profile]', JSON.stringify({ open: evidence[`profileOpen${evidence.runs.length}`]?.slice(0, 12), scrub: evidence[`scrub${evidence.runs.length}`], scrubTop: evidence[`profileScrub${evidence.runs.length}`].slice(0, 12) }))
+            // 三种拖动方式：附近来回找帧、中速向前、快速扫过半条时间线（后者几乎每帧都是新镜头，主要测首次打开成本）。
+            const patterns = [
+              { name: '附近来回找帧', ms: 6000, offset: t => Math.sin(t * Math.PI * 2 * 3) * 3, profile: true },
+              { name: '中速向前', ms: 5000, offset: t => t * 10 },
+              { name: '快速扫过', ms: 4000, sweep: true },
+            ]
+            evidence[`scrub${evidence.runs.length}`] = {}
+            for (const pattern of patterns) evidence[`scrub${evidence.runs.length}`][pattern.name] = await measureScrub(page, pattern, scrubPercentile)
+            console.log('[open-picture-scrub]', JSON.stringify(evidence[`scrub${evidence.runs.length}`]))
           }
           const worker = await workerSnapshot(page)
           const renders = worker.events.filter(event => event.kind === 'render.completed' || event.kind === 'init.completed' || event.kind === 'update.completed').slice(0, 30).map(({ kind, at, frame, elapsedMs, presented, decodeMs, gpuMs, error, preparationStages }) => ({ kind, at: Math.round(at), frame, elapsedMs: Math.round(elapsedMs), presented, decodeMs, gpuMs, error, preparationStages }))

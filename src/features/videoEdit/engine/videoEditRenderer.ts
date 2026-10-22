@@ -63,6 +63,26 @@ interface PlaybackStream {
 /** `plan`: the planned frames of a nested schedule (ascending) and the parent clip they belong to; undefined means every frame in [start, endFrame). */
 interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream>; plan?: { key: string; frames: readonly number[] }; cacheRevision: number }
 /** A ready pre-rendered window: its file (fetchable URL for the worker) and the frames it covers. */
+/** 拖动播放头时相邻两次请求相差超过它（秒）视为快速拖动，只解码目标画面。 */
+export const VIDEO_EDIT_FAST_SCRUB_SECONDS = 0.25
+/** 拖动播放头混音时保留的空闲声音来源（含嵌套序列的声音渲染器）上限。 */
+export const VIDEO_EDIT_IDLE_AUDIO_SOURCES = 8
+/** 拖动播放头时保留的空闲素材定位会话与嵌套序列渲染器上限（4K 硬件解码会话占用显存，不宜更多）。 */
+export const VIDEO_EDIT_IDLE_SCRUB_RENDERERS = 4
+
+/**
+ * 按最近使用维护空闲表：`idle` 是本次未用到的键（按当前顺序），返回超出 `limit` 后应释放的最旧键，并把它们从表中移除。
+ * 本次用到的键不在 `idle` 里，会从表中移除（再次变空闲时重新计为最近）。
+ */
+export function retireIdle(table: Map<string, true>, idle: readonly string[], limit: number): string[] {
+  const current = new Set(idle)
+  for (const key of [...table.keys()]) if (!current.has(key)) table.delete(key)
+  for (const key of idle) if (!table.has(key)) table.set(key, true)
+  const evict = [...table.keys()].slice(0, Math.max(0, table.size - limit))
+  for (const key of evict) table.delete(key)
+  return evict
+}
+
 export interface VideoEditRenderCacheWindow { key: string; startFrame: number; endFrame: number; url: string; width: number; height: number; fps: number }
 interface CodeInputSession { renderer: VideoEditRenderer; tail: Promise<unknown>; document: VideoEditComposition; sourceKey: string; lastKey?: string; lastPicture?: VideoEditCodePicture; ownerKey: string }
 interface NestedFrameContext { pictures: Map<string, Promise<VideoEditCodePicture>>; keys: Map<string, Set<string>>; inputs: Map<VideoEditRenderer, Map<string, Promise<VideoEditCodePicture>>>; bytes: number }
@@ -111,6 +131,11 @@ interface VideoSource {
 export class VideoEditRenderer {
   private readonly nestedPictures = new Map<string, { renderer: VideoEditRenderer; tail: Promise<unknown> }>()
   private readonly nestedSounds = new Map<string, VideoEditRenderer>()
+  /** 最近一次混音时仍在用的声音来源与嵌套声音（键：'audio:…' 来源键或嵌套片段 ID）按最近使用排序，空闲超出上限才释放。 */
+  private readonly idleAudio = new Map<string, true>()
+  /** 拖动播放头时暂留的空闲素材定位会话（按素材路径）与嵌套序列渲染器（按片段键），按最近使用排序。 */
+  private readonly idleSeekers = new Map<string, true>()
+  private readonly idleNested = new Map<string, true>()
   private readonly codeInputs = new Map<string, CodeInputSession>()
   private readonly filterInputs = new Map<string, CodeInputSession>()
   private readonly sources = new Map<string, Promise<VideoSource>>()
@@ -902,8 +927,13 @@ export class VideoEditRenderer {
         await source.iterator?.return(); source.iterator = undefined
         let seeker = this.seekers.get(media.path)
         if (!seeker) { seeker = this.frames.seeker(media, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
-        const direction = source.previousTime < 0 || Math.abs(time - source.previousTime) > 1 ? 0 : Math.sign(time - source.previousTime)
-        const result = await seeker.sample(time, direction, source.previousTime < 0 && !_scrubbing && !sequential)
+        const jump = source.previousTime < 0 ? Infinity : Math.abs(time - source.previousTime)
+        const direction = jump > 1 ? 0 : Math.sign(time - source.previousTime)
+        // 快速拖动播放头（相邻两次相差超过 VIDEO_EDIT_FAST_SCRUB_SECONDS）时只取这一幅：原生会话从关键帧解到目标、
+        // 同一 GOP 内继续向前解，但不把中间各幅导入 GPU 缓存；整窗解码并缓存只给逐帧步进与小幅来回拖动用。
+        // 实测 4K 长 GOP 原片快速拖动时整窗方式每帧约 250ms，大部分导入的画面从未被用到。
+        const single = !sequential && (source.previousTime < 0 ? !_scrubbing : _scrubbing && jump > VIDEO_EDIT_FAST_SCRUB_SECONDS)
+        const result = await seeker.sample(time, direction, single)
         if (result.hit) cacheHits++
         source.current?.close(); source.current = result.sample
       } else if (sequential && !this.previewWidth) {
@@ -1000,10 +1030,18 @@ export class VideoEditRenderer {
     // cache: closing a native seek decoder held the GPU for about 100ms, a dropped frame at every start of playback.
     const keepLive = !!cachedWindow
     const activePaths = new Set(canPresent() ? active.map(clip => this.clipMedia(document, clip)?.path) : this.seekers.keys())
-    if (!keepLive) for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
-    if (!nestedRender && !keepLive) for (const [id, entry] of this.nestedPictures) {
-      if (!nestedContext.keys.has(id)) { this.nestedPictures.delete(id); await entry.renderer.dispose() }
-      else (await entry.renderer.compositor?.code())?.releaseNestedFrames(nestedContext.keys.get(id)!)
+    // 拖动播放头时镜头来回切换：不在画面里的素材定位会话与嵌套序列渲染器按最近使用保留至多
+    // VIDEO_EDIT_IDLE_SCRUB_RENDERERS 个，拖回来时不必重开（4K 原片每次重开解码会话约 120ms，复杂工程一次拖动约 16 次）。
+    // 非拖动时照旧立即释放，空闲会话占用的显存不随停留时间累积。
+    const scrubLimit = _scrubbing ? VIDEO_EDIT_IDLE_SCRUB_RENDERERS : 0
+    if (!keepLive) for (const path of retireIdle(this.idleSeekers, [...this.seekers.keys()].filter(path => !activePaths.has(path)), scrubLimit)) {
+      const seeker = this.seekers.get(path); this.seekers.delete(path); await seeker?.dispose()
+    }
+    if (!nestedRender && !keepLive) {
+      for (const [id, entry] of this.nestedPictures) if (nestedContext.keys.has(id)) (await entry.renderer.compositor?.code())?.releaseNestedFrames(nestedContext.keys.get(id)!)
+      for (const id of retireIdle(this.idleNested, [...this.nestedPictures.keys()].filter(id => !nestedContext.keys.has(id)), scrubLimit)) {
+        const entry = this.nestedPictures.get(id); this.nestedPictures.delete(id); await entry?.renderer.dispose()
+      }
     }
     return { canvas: this.canvas, ...(nestedPicture ? { nestedPicture } : {}), sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, effectErrors, completion }
   }
@@ -1059,7 +1097,7 @@ export class VideoEditRenderer {
     await mixVideoEditStretchedSound({ ...request, stretcher: await pending!, semitones: clip.pitchSemitones ?? 0, preservePitch: Boolean(clip.preservePitch) })
   }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
-  async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {
+  async mixAudio(startSeconds: number, durationSeconds: number, retainIdle = false): Promise<Float32Array[]> {
     const rate = this.document.sampleRate
     const firstSample = Math.ceil(startSeconds * rate - 1e-7)
     const length = Math.max(1, Math.ceil((startSeconds + durationSeconds) * rate - 1e-7) - firstSample)
@@ -1107,7 +1145,7 @@ export class VideoEditRenderer {
         activeAudio.add(clip.id)
         let renderer = this.nestedSounds.get(clip.id)
         if (!renderer) { renderer = new VideoEditRenderer(nested, this.previewWidth, undefined, 1, this.frames, undefined, [...this.sequencePath, nested.id]); this.nestedSounds.set(clip.id, renderer) }
-        const audio = videoEditNestedAudio(nested.sampleRate, sourceDuration, (start, duration) => renderer!.mixAudio(start, duration))
+        const audio = videoEditNestedAudio(nested.sampleRate, sourceDuration, (start, duration) => renderer!.mixAudio(start, duration, retainIdle))
         await this.mixRetimedSound(clip, { clip, fps, rate, channels: this.document.channels, from, to, base, targets, gainAt, reads: [{ audio }] }, audioMode === 'stretch' ? 'stretch' : 'resample', activeStretchers)
         return
       }
@@ -1210,12 +1248,18 @@ export class VideoEditRenderer {
         for (let channel = 0; channel < result.length; channel++) result[channel][sample] += input[channel][plan.discard + sample] * shape
       }
     }
-    for (const [key, pending] of this.sources) if (key.startsWith('audio:') && !activeAudio.has(key)) {
-      this.sources.delete(key); this.release(await pending)
+    // 拖动播放头的声音颗粒（retainIdle）每次落在不同位置、用到不同片段：本次没用到的来源不立即关掉，按最近使用保留至多
+    // VIDEO_EDIT_IDLE_AUDIO_SOURCES 个空闲的，否则每个颗粒都要重开解码与声音会话（复杂工程实测一次拖动约 20 次、每次约 100ms，
+    // 与节目取帧争用同一个原生解码服务）。连续播放与导出不保留，用完即关。
+    const idle = [...this.sources.keys()].filter(key => key.startsWith('audio:') && !activeAudio.has(key)).concat([...this.nestedSounds.keys()].filter(id => !activeAudio.has(id)))
+    for (const key of retireIdle(this.idleAudio, idle, retainIdle ? VIDEO_EDIT_IDLE_AUDIO_SOURCES : 0)) {
+      const pending = this.sources.get(key)
+      if (pending) { this.sources.delete(key); this.release(await pending) }
+      const renderer = this.nestedSounds.get(key)
+      if (renderer) { this.nestedSounds.delete(key); await renderer.dispose() }
     }
-    for (const [id, chain] of this.audioChains) if (!activeChains.has(id)) { chain.dispose(); this.audioChains.delete(id) }
+    for (const [id, chain] of this.audioChains) if (!activeChains.has(id) && !this.idleAudio.has(id)) { chain.dispose(); this.audioChains.delete(id) }
     for (const id of this.stretchers.keys()) if (!activeStretchers.has(id)) this.stretchers.delete(id)
-    for (const [id, renderer] of this.nestedSounds) if (!activeAudio.has(id)) { this.nestedSounds.delete(id); await renderer.dispose() }
     return result
   }
   async dispose(): Promise<void> {

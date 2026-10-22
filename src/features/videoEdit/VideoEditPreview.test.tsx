@@ -376,7 +376,7 @@ it('单击节目定位不发声，拖动和逐帧试听不等待画面返回，�
   expect(graph.nodes).toHaveLength(0)
   await act(async () => { setVideoEditView(owner.document.id, { frame: 6, scrubbing: true }); await vi.advanceTimersByTimeAsync(5) })
   expect(graph.nodes).toHaveLength(1); expect(pixel.requests).toHaveLength(1)
-  expect(pixel.mixAudio).toHaveBeenLastCalledWith(.2, .08)
+  expect(pixel.mixAudio).toHaveBeenLastCalledWith(.2, .08, true)
   expect(onError).not.toHaveBeenCalled()
 })
 it('音频启动等待后隐藏，晚到resume不新建退役节点', async () => {
