@@ -11,6 +11,8 @@ vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   render = state.render
   async dispose() {}
   cancelPresentation() {}
+  retainLookahead() {}
+  async prepareLookahead() { return false }
   codeDiagnostics() { return {} }
   codePerformance() { return state.performance }
   captureCodePerformance() { const frames = state.performance; return () => frames }
