@@ -70,7 +70,8 @@ export class PiEngine implements EmbeddedAgentEngine {
     await runtime.setRuntimeApiKey(provider, selected.apiKey)
     const resolved = runtime.getModel(provider, model.modelId)
     if (!resolved) throw new Error('所选模型无法初始化，请检查模型设置。')
-    const settings = this.sdk.SettingsManager.inMemory({ retry: { enabled: false } })
+    // 关掉 Pi 的安装统计，请求不再以 pi.dev 名义给 OpenRouter 等供应商带归因头。
+    const settings = this.sdk.SettingsManager.inMemory({ retry: { enabled: false }, enableInstallTelemetry: false })
     const loader = new this.sdk.DefaultResourceLoader({ cwd: this.directory, agentDir: this.directory, settingsManager: settings,
       noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, systemPrompt: instructions })
     await loader.reload()
